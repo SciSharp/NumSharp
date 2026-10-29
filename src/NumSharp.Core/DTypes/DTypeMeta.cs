@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Threading;
 using NumSharp.Backends.Iteration;
+using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp
 {
@@ -25,9 +26,11 @@ namespace NumSharp
     ///     <see cref="common_dtype"/>, …). C function names keep NumPy's PascalCase after the <c>PyArray_</c> prefix
     ///     (<see cref="GetCastingImpl"/> is <c>PyArray_GetCastingImpl</c>, <see cref="AddCastingImpl"/> is
     ///     <c>PyArray_AddCastingImplementation</c>). PascalCase members (<see cref="Name"/>, <see cref="TypeCode"/>,
-    ///     <see cref="Kind"/>, …) are NumSharp's own and have no NumPy name. NumPy's slots <c>setitem</c>,
-    ///     <c>getitem</c>, <c>finalize_descr</c> and <c>get_constant</c>, the legacy <c>PyArray_ArrFuncs</c> table and
-    ///     the 2.4 <c>sort_meth</c> / <c>argsort_meth</c> are not ported: NumSharp's kernels select on
+    ///     <see cref="Kind"/>, …) are NumSharp's own and have no NumPy name. NumPy's slots <c>setitem</c> and
+    ///     <c>getitem</c> and three functions of the legacy <c>PyArray_ArrFuncs</c> table (<c>copyswapn</c>,
+    ///     <c>fill</c>, <c>nonzero</c>) are internal members the array object's code calls (the np-layer dtype plan's
+    ///     P3); <c>finalize_descr</c>, <c>get_constant</c>, the rest of the ArrFuncs table and the 2.4
+    ///     <c>sort_meth</c> / <c>argsort_meth</c> are not ported: NumSharp's kernels select on
     ///     <see cref="NPTypeCode"/> instead.
     ///     </para>
     ///     <para>
@@ -354,6 +357,120 @@ namespace NumSharp
         ///     returned.
         /// </summary>
         public const int NPY_NEEDS_INIT = 0x08;
+
+        // ---------------------------------------------------------------------------------------------
+        // Element slots: NEP 42's setitem / getitem and the legacy ArrFuncs copyswapn, fill and nonzero
+        // (np-layer dtype plan, P3's batch 1). They answer, per class, the questions the array object's code asks
+        // today by testing the dtype's name; P3's later batches route those questions here. Internal until a
+        // user-defined DType needs them public.
+        // ---------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's slot <c>setitem</c> (NEP 42's slot 7, <c>PyArrayDTypeMeta_SetItem</c>; the legacy
+        ///     <c>PyArray_ArrFuncs.setitem</c>): stores one Python value into one element of this class, with NumPy's
+        ///     conversions and refusals for the value. It is the last step of <c>PyArray_Pack</c>.
+        /// </summary>
+        /// <param name="descr">The element's descriptor: its width for a parametric class, its byte order (a non-native
+        ///     descriptor stores the swapped bytes, as NumPy's setitem swaps for a byte-swapped array).</param>
+        /// <param name="value">The value in the C# boundary map: a C# number is a Python scalar, a <see cref="string"/> a
+        ///     Python str, a <c>byte[]</c> Python bytes, null Python's <c>None</c>, a 0-d <see cref="NDArray"/> an array
+        ///     scalar.</param>
+        /// <param name="item">The element's first byte.</param>
+        /// <param name="buffer">The buffer the element lives in, or null. NumSharp keeps a <c>StringDType</c> array's
+        ///     string allocator on its buffer where NumPy keeps it on the descriptor, so that class needs the buffer; the
+        ///     others ignore it.</param>
+        /// <exception cref="NotSupportedException">The class has no element storage (an abstract class, the datetime
+        ///     classes until their storage lands). The overrides document the conversions' own errors.</exception>
+        /// <remarks>Called once per Python value, as NumPy's is, never inside a bulk move: a typed kernel stays the way to
+        ///     copy or convert many elements.</remarks>
+        internal virtual unsafe void setitem(DType descr, object value, byte* item, IArraySlice buffer)
+            => throw NoSlot(nameof(setitem));
+
+        /// <summary>
+        ///     NumPy's slot <c>getitem</c> (NEP 42's slot 8, <c>PyArrayDTypeMeta_GetItem</c>; the legacy
+        ///     <c>PyArray_ArrFuncs.getitem</c>): reads one element as the Python value NumPy returns for it, in the C#
+        ///     boundary map (the element's exact CLR type for a number, a <see cref="string"/> for <c>U</c> and
+        ///     <c>StringDType</c> text, a <c>byte[]</c> for <c>S</c>).
+        /// </summary>
+        /// <param name="descr">The element's descriptor (its width and byte order).</param>
+        /// <param name="item">The element's first byte.</param>
+        /// <param name="buffer">The buffer the element lives in, or null; <c>StringDType</c> needs it (see
+        ///     <see cref="setitem"/>).</param>
+        /// <returns>The element's value.</returns>
+        /// <exception cref="NotSupportedException">The class has no element storage.</exception>
+        internal virtual unsafe object getitem(DType descr, byte* item, IArraySlice buffer)
+            => throw NoSlot(nameof(getitem));
+
+        /// <summary>
+        ///     NumPy's <c>PyArray_ArrFuncs.copyswapn</c>, the byte-order copy that <c>PyArray_FromBuffer</c>'s and
+        ///     <c>PyArray_FromFile</c>'s byte-swapped reads and the <c>.npy</c> reader still call: copies
+        ///     <paramref name="n"/> elements from <paramref name="src"/> to <paramref name="dst"/> (each at its own stride)
+        ///     and, when <paramref name="swap"/> is true, reverses each element's byte-order units in the destination.
+        /// </summary>
+        /// <param name="descr">The elements' descriptor (their width).</param>
+        /// <param name="dst">The first destination element.</param>
+        /// <param name="dstride">The destination's stride in bytes.</param>
+        /// <param name="src">The first source element, or null to swap the destination in place.</param>
+        /// <param name="sstride">The source's stride in bytes.</param>
+        /// <param name="n">The number of elements.</param>
+        /// <param name="swap">True to reverse the byte order of each unit (a number's whole item, a complex number's two
+        ///     halves, a <c>U</c> element's 4-byte code units).</param>
+        /// <exception cref="NotSupportedException">The class has no byte-order copy: no element storage, or items that hold
+        ///     references (NumPy refuses a buffer for such a dtype).</exception>
+        internal virtual unsafe void copyswapn(DType descr, byte* dst, long dstride, byte* src, long sstride, long n, bool swap)
+            => throw NoSlot(nameof(copyswapn));
+
+        /// <summary>
+        ///     NumPy's <c>PyArray_ArrFuncs.fill</c>, which <c>PyArray_Arange</c> fills through: given the first two elements
+        ///     of a contiguous buffer, writes the arithmetic progression they start into elements 2 to
+        ///     <paramref name="length"/> - 1, in NumPy's arithmetic (<c>start + i * delta</c>, with <c>delta</c> the second
+        ///     element minus the first, both already in this class).
+        /// </summary>
+        /// <param name="descr">The buffer's descriptor.</param>
+        /// <param name="buffer">The first element of a contiguous run of <paramref name="length"/> elements; elements 0 and 1
+        ///     are set.</param>
+        /// <param name="length">The number of elements in the run.</param>
+        /// <returns>False when the class has no fill function (NumPy's <c>no fill-function for data-type.</c>, which the
+        ///     caller raises); true after the fill.</returns>
+        /// <exception cref="TypeError">The bool class with more than two elements (NumPy's <c>BOOL_fill</c>).</exception>
+        internal virtual unsafe bool fill(DType descr, byte* buffer, long length) => false;
+
+        /// <summary>
+        ///     NumPy's <c>PyArray_ArrFuncs.nonzero</c> (a slot <c>StringDType</c> defines too): the truth of one element as
+        ///     <c>np.nonzero</c>, <c>np.argwhere</c>, <c>np.count_nonzero</c> and <c>np.trim_zeros</c> read it.
+        /// </summary>
+        /// <param name="descr">The element's descriptor (its width, byte order and, for <c>StringDType</c>, its NA
+        ///     object).</param>
+        /// <param name="item">The element's first byte.</param>
+        /// <returns>True when the element is nonzero (a NaN is; a <c>U</c> / <c>S</c> element is when any unit is).</returns>
+        /// <exception cref="NotSupportedException">The class has no element storage.</exception>
+        internal virtual unsafe bool nonzero(DType descr, byte* item) => throw NoSlot(nameof(nonzero));
+
+        /// <summary>The refusal of an element slot this class does not have.</summary>
+        /// <param name="slot">The slot's name.</param>
+        /// <returns>The exception to throw (NumSharp's: NumPy's classes all define the slots a storage class needs).</returns>
+        private NotSupportedException NoSlot(string slot)
+            => new NotSupportedException($"{this} has no '{slot}' slot: it has no element storage in NumSharp.");
+
+        /// <summary>
+        ///     Reverses the byte order of each <paramref name="unit"/>-byte unit of one element in place: NumPy's
+        ///     <c>_strided_byte_swap</c> over an element (a number's whole item, a complex number's two halves, a <c>U</c>
+        ///     element's code units).
+        /// </summary>
+        /// <param name="item">The element's first byte.</param>
+        /// <param name="size">The element's size in bytes, a multiple of <paramref name="unit"/>.</param>
+        /// <param name="unit">The unit size in bytes; 1 leaves the element as it is.</param>
+        internal static unsafe void ReverseUnits(byte* item, int size, int unit)
+        {
+            if (unit <= 1)
+                return;
+            for (byte* u = item, end = item + size; u < end; u += unit)
+            {
+                // Swap the unit's bytes pairwise from both ends towards the middle.
+                for (int lo = 0, hi = unit - 1; lo < hi; lo++, hi--)
+                    (u[lo], u[hi]) = (u[hi], u[lo]);
+            }
+        }
 
         // ---------------------------------------------------------------------------------------------
         // Registry and descriptor-layout policy

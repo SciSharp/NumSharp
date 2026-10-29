@@ -1,5 +1,6 @@
 using System;
 using NumSharp.Backends.Strings;
+using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp
 {
@@ -231,6 +232,79 @@ namespace NumSharp
             if (size > int.MaxValue)
                 throw new TypeError("Strings too large to store inside array.");
             return new DType(this, DType.NPY_NATIVE, null, (int)size, TypeChar);
+        }
+
+        // ---------------------------------------------------------------------------------------------
+        // Element slots (np-layer dtype plan, P3's batch 1): NumPy's STRING_* / UNICODE_* functions of
+        // arraytypes.c.src, from the element codec every S / U store and read already goes through.
+        // ---------------------------------------------------------------------------------------------
+
+        /// <inheritdoc/>
+        /// <remarks>
+        ///     NumPy's <c>STRING_setitem</c> / <c>UNICODE_setitem</c>: <see cref="NDStringStorage.WriteElement"/> (a str
+        ///     encoded, bytes decoded, None stored as <c>'None'</c>, a number as its <c>str()</c>, truncated to the width and
+        ///     NUL-padded), then the code units swapped for a non-native <c>U</c> descriptor.
+        /// </remarks>
+        /// <exception cref="UnicodeEncodeError">Non-ASCII text into <c>S</c>.</exception>
+        /// <exception cref="UnicodeDecodeError">Non-ASCII bytes into <c>U</c>.</exception>
+        /// <exception cref="ValueError">A sequence (<c>setting an array element with a sequence</c>).</exception>
+        /// <exception cref="NotSupportedException">A value with no Python <c>str()</c> NumSharp can give.</exception>
+        internal override unsafe void setitem(DType descr, object value, byte* item, IArraySlice buffer)
+        {
+            NDStringStorage.WriteElement(item, IsUnicode, descr.itemsize / UnitSize, value);
+            if (IsUnicode && !descr.isnative)
+                ReverseUnits(item, descr.itemsize, UnitSize);
+        }
+
+        /// <inheritdoc/>
+        /// <remarks>NumPy's <c>STRING_getitem</c> / <c>UNICODE_getitem</c>: the text without its trailing NULs, a
+        ///     <c>byte[]</c> for <c>S</c> and a <see cref="string"/> for <c>U</c> (read from a swapped copy for a
+        ///     non-native descriptor).</remarks>
+        /// <exception cref="SystemError">A <c>U</c> unit above <c>U+10FFFF</c>.</exception>
+        internal override unsafe object getitem(DType descr, byte* item, IArraySlice buffer)
+        {
+            int chars = descr.itemsize / UnitSize;
+            if (!IsUnicode)
+                return NDStringCodec.ReadBytes(item, chars);
+            if (descr.isnative)
+                return NDStringCodec.ReadUcs4((uint*)item, chars);
+            // A byte-swapped U element: read a swapped copy, the element itself stays as it is.
+            var copy = new uint[chars];
+            fixed (uint* c = copy)
+            {
+                Buffer.MemoryCopy(item, c, descr.itemsize, descr.itemsize);
+                ReverseUnits((byte*)c, descr.itemsize, UnitSize);
+                return NDStringCodec.ReadUcs4(c, chars);
+            }
+        }
+
+        /// <inheritdoc/>
+        /// <remarks>NumPy's <c>STRING_copyswapn</c> (a copy; bytes have no order) and <c>UNICODE_copyswapn</c> (a copy,
+        ///     then each 4-byte code unit reversed).</remarks>
+        internal override unsafe void copyswapn(DType descr, byte* dst, long dstride, byte* src, long sstride, long n, bool swap)
+        {
+            int size = descr.itemsize;
+            if (src != null)
+            {
+                for (long i = 0; i < n; i++)
+                    Buffer.MemoryCopy(src + i * sstride, dst + i * dstride, size, size);
+            }
+            if (swap && IsUnicode)
+            {
+                for (long i = 0; i < n; i++)
+                    ReverseUnits(dst + i * dstride, size, UnitSize);
+            }
+        }
+
+        /// <inheritdoc/>
+        /// <remarks>NumPy's <c>STRING_nonzero</c> / <c>UNICODE_nonzero</c>: true when any byte of the element is not zero
+        ///     (a byte order cannot change that).</remarks>
+        internal override unsafe bool nonzero(DType descr, byte* item)
+        {
+            for (int i = 0; i < descr.itemsize; i++)
+                if (item[i] != 0)
+                    return true;
+            return false;
         }
     }
 }

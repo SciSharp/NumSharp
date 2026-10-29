@@ -1,5 +1,6 @@
 using System;
 using NumSharp.Backends.Strings;
+using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp
 {
@@ -188,5 +189,79 @@ namespace NumSharp
         /// <summary>The class call with no arguments, <c>StringDType()</c>: a fresh default descriptor.</summary>
         /// <returns>A new <c>StringDType()</c>.</returns>
         public override DType Instantiate() => default_descr();
+
+        // ---------------------------------------------------------------------------------------------
+        // Element slots (np-layer dtype plan, P3's batch 1): NumPy's stringdtype_setitem / stringdtype_getitem and the
+        // dtype's nonzero, through the buffer's string allocator (NumPy keeps the allocator on the descriptor, NumSharp
+        // on the buffer, so the slots take the buffer the element lives in).
+        // ---------------------------------------------------------------------------------------------
+
+        /// <inheritdoc/>
+        /// <remarks>
+        ///     NumPy's <c>stringdtype_setitem</c>, by <see cref="VStringArraySlice.SetIndex"/>: the descriptor's NA object packs
+        ///     an NA cell, any other value its <c>str()</c> under coercion (a non-text value is refused without it), the old
+        ///     string freed and the new one packed through the buffer's allocator. The buffer's descriptor rules the store: a
+        ///     NumSharp <c>StringDType</c> buffer carries the descriptor of its array, as NumPy's array does.
+        /// </remarks>
+        /// <exception cref="ArgumentException"><paramref name="buffer"/> is not the <c>StringDType</c> buffer
+        ///     <paramref name="item"/> is a cell of.</exception>
+        /// <exception cref="ValueError">A non-text value into a descriptor with coercion off (<c>StringDType only allows
+        ///     string data when string coercion is disabled.</c>).</exception>
+        /// <exception cref="UnicodeEncodeError">A text with a lone surrogate.</exception>
+        /// <exception cref="OutOfMemoryException">The allocator cannot hold the text (NumPy's <c>MemoryError</c>).</exception>
+        internal override unsafe void setitem(DType descr, object value, byte* item, IArraySlice buffer)
+            => Cells(buffer, item, out long index).SetIndex(index, value);
+
+        /// <inheritdoc/>
+        /// <remarks>NumPy's <c>stringdtype_getitem</c>, by <see cref="VStringArraySlice.GetIndex(long)"/>: the text as a
+        ///     <see cref="string"/>, the descriptor's NA object for an NA cell (<c>''</c> when it has none), read under the
+        ///     allocator's lock.</remarks>
+        /// <exception cref="ArgumentException"><paramref name="buffer"/> is not the <c>StringDType</c> buffer
+        ///     <paramref name="item"/> is a cell of.</exception>
+        /// <exception cref="OutOfMemoryException">A corrupt cell (<c>Failed to load string in StringDType getitem</c>).</exception>
+        internal override unsafe object getitem(DType descr, byte* item, IArraySlice buffer)
+            => Cells(buffer, item, out long index).GetIndex(index);
+
+        /// <inheritdoc/>
+        /// <remarks>A cell points into its buffer's allocator, so it has no byte order to swap and no meaning outside its
+        ///     buffer: NumPy refuses a buffer for a dtype that holds references, and NumSharp has no byte-order copy for
+        ///     this class.</remarks>
+        /// <exception cref="NotSupportedException">Always.</exception>
+        internal override unsafe void copyswapn(DType descr, byte* dst, long dstride, byte* src, long sstride, long n, bool swap)
+            => throw new NotSupportedException(
+                "StringDType cells hold references into their buffer's allocator: they cannot be copied or byte-swapped as raw bytes.");
+
+        /// <inheritdoc/>
+        /// <remarks>NumPy's <c>nonzero</c> of <c>stringdtype/dtype.c</c>: an NA cell of a descriptor with an NA object is
+        ///     nonzero when that object is NaN-like, or when it is a non-empty string (<see cref="NDVStringCells.NaTruth"/>'s
+        ///     nonzero route); any other cell when its text is not empty. The cell's flags and size are in the cell itself,
+        ///     so no allocator is needed.</remarks>
+        internal override unsafe bool nonzero(DType descr, byte* item)
+        {
+            if (descr.VString.HasNAObject && VStringAllocator.isnull(item))
+                return NDVStringCells.NaTruth(descr, cast: false) != 0;
+            return VStringAllocator.size(item) != 0;
+        }
+
+        /// <summary>The <c>StringDType</c> buffer <paramref name="item"/> is a cell of, and the cell's index in it.</summary>
+        /// <param name="buffer">The buffer the caller names.</param>
+        /// <param name="item">The cell's first byte.</param>
+        /// <param name="index">Receives the cell's index in the buffer.</param>
+        /// <returns>The buffer as a <see cref="VStringArraySlice"/>.</returns>
+        /// <exception cref="ArgumentException"><paramref name="buffer"/> is not a <c>StringDType</c> buffer, or
+        ///     <paramref name="item"/> is not one of its cells.</exception>
+        private static unsafe VStringArraySlice Cells(IArraySlice buffer, byte* item, out long index)
+        {
+            if (buffer is not VStringArraySlice cells)
+                throw new ArgumentException(
+                    "A StringDType element is stored and read through its buffer's string allocator: pass the VStringArraySlice it lives in.",
+                    nameof(buffer));
+            // The cell must be one of the buffer's: an allocator only owns the strings of its own cells.
+            long offset = item - cells.Address;
+            if (offset < 0 || offset % SIZEOF_NPY_PACKED_STATIC_STRING != 0 || offset / SIZEOF_NPY_PACKED_STATIC_STRING >= cells.Count)
+                throw new ArgumentException("The element is not a cell of the given StringDType buffer.", nameof(buffer));
+            index = offset / SIZEOF_NPY_PACKED_STATIC_STRING;
+            return cells;
+        }
     }
 }

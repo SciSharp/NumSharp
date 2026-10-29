@@ -137,11 +137,11 @@ namespace NumSharp.Tests.DTypes
         /// </summary>
         private static readonly Dictionary<string, string> NotPortedSlots = new(StringComparer.Ordinal)
         {
-            ["setitem"] = "element packing goes through NPTypeCode switches (SetAtIndex / the cast kernels)",
-            ["getitem"] = "element reading goes through NPTypeCode switches (GetAtIndex)",
+            ["setitem"] = "an internal DTypeMeta member (the np-layer dtype plan's P3) until a user-defined DType needs it public",
+            ["getitem"] = "an internal DTypeMeta member (the np-layer dtype plan's P3) until a user-defined DType needs it public",
             ["finalize_descr"] = "no NumSharp class needs a per-array descriptor (NumPy uses it for StringDType)",
             ["get_constant"] = "finfo / iinfo compute their constants per NPTypeCode",
-            ["f"] = "the legacy PyArray_ArrFuncs table: NumSharp's kernels select on NPTypeCode",
+            ["f"] = "the legacy PyArray_ArrFuncs table: NumSharp's kernels select on NPTypeCode (copyswapn, fill and nonzero are internal DTypeMeta members)",
             ["sort_meth"] = "sorting selects its kernel on NPTypeCode",
             ["argsort_meth"] = "sorting selects its kernel on NPTypeCode",
             ["dt_slots"] = "the C struct's indirection to its slot table; the slots are members of DTypeMeta itself",
