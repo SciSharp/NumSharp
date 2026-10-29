@@ -476,5 +476,143 @@ namespace NumSharp
 
             return true;
         }
+
+        /// <summary>
+        ///     NumPy's <c>NPY_MAXARGS</c>: the most operands one <c>np.broadcast</c> call takes, hence the size of the first
+        ///     group <see cref="BroadcastShape"/> broadcasts (each later group holds one fewer, the shape found so far).
+        /// </summary>
+        private const int MaxBroadcastArgs = 64;
+
+        /// <summary>
+        ///     NumPy's <c>_broadcast_shape(*args)</c> (<c>lib/_stride_tricks_impl.py</c>): the shape <c>np.broadcast</c>'s
+        ///     multi-iterator gives the operands, with NumPy's mismatch text naming the two operands that disagree. Use it
+        ///     where NumPy broadcasts arguments through <c>np.broadcast_arrays</c> or <c>np.broadcast_shapes</c> (np.select's two
+        ///     groups) and the error text is part of the contract; <see cref="ResolveReturnShape(Shape[])"/> computes the same
+        ///     shape with a generic text.
+        /// </summary>
+        /// <param name="shapes">The operand shapes in argument order; only their dimensions are read.</param>
+        /// <returns>A C-ordered shape of the broadcast dimensions; the scalar shape when there is no operand or every operand is
+        ///     0-d.</returns>
+        /// <exception cref="IncorrectShapeException">Two operands disagree on an axis: NumPy's ValueError text, verbatim
+        ///     (<c>shape mismatch: objects cannot be broadcast to a single shape.  Mismatch is between arg 0 with shape (7,) and
+        ///     arg 1 with shape (3, 4).</c>), under the house exception type of a broadcast failure.</exception>
+        /// <exception cref="ValueError">The broadcast shape's element count does not fit a 64-bit integer
+        ///     (<c>broadcast dimensions too large.</c>).</exception>
+        /// <remarks>
+        ///     <para>
+        ///     The scan is <c>PyArray_Broadcast</c>'s (<c>iterators.c</c>): axis by axis from the first, the operands in order
+        ///     within each axis, so a mismatch names the operand that first set the axis's length and the first one that
+        ///     disagrees with it, on the LEFTMOST axis that has a conflict. A scan that walks operand by operand instead
+        ///     reports another pair when two axes conflict: <c>np.broadcast_shapes((1,4), (1,5), (2,1), (3,1))</c> names args 2
+        ///     and 3 in NumPy, not 0 and 1.
+        ///     </para>
+        ///     <para>
+        ///     <c>np.broadcast</c> takes at most 64 operands, so NumPy broadcasts the first 64, then each further group of 63
+        ///     together with the shape found so far (<c>broadcast_to(0, b.shape)</c>), which is that call's argument 0: past 64
+        ///     operands a mismatch numbers the operands within their group, as NumPy's text does
+        ///     (<c>Mismatch is between arg 0 with shape (4,) and arg 3 with shape (5,).</c> for the 67th operand).
+        ///     </para>
+        /// </remarks>
+        internal static Shape BroadcastShape(params Shape[] shapes)
+        {
+            // b = np.broadcast(*args[:64])
+            int count = shapes?.Length ?? 0;
+            long[] dims = MultiIterDims(null, shapes, 0, Math.Min(count, MaxBroadcastArgs));
+            // for pos in range(64, len(args), 63): b = broadcast_to(0, b.shape); b = np.broadcast(b, *args[pos:pos + 63])
+            for (int pos = MaxBroadcastArgs; pos < count; pos += MaxBroadcastArgs - 1)
+                dims = MultiIterDims(dims, shapes, pos, Math.Min(count, pos + MaxBroadcastArgs - 1));
+            return Shape.Adopt(dims);
+        }
+
+        /// <summary>
+        ///     One <c>np.broadcast</c> call of <see cref="BroadcastShape"/>: <c>PyArray_Broadcast</c>'s scan over an optional
+        ///     leading operand (the dimensions the previous group broadcast to, this call's argument 0) followed by
+        ///     <c>shapes[from..to)</c>, then its overflow check of the element count.
+        /// </summary>
+        /// <param name="lead">The previous group's broadcast dimensions, or null for the first group.</param>
+        /// <param name="shapes">All the operand shapes (null only when the group is empty).</param>
+        /// <param name="from">The first operand of this group.</param>
+        /// <param name="to">One past the last operand of this group.</param>
+        /// <returns>This call's broadcast dimensions (a new array).</returns>
+        /// <exception cref="IncorrectShapeException">See <see cref="BroadcastShape"/>.</exception>
+        /// <exception cref="ValueError">See <see cref="BroadcastShape"/>.</exception>
+        private static long[] MultiIterDims(long[] lead, Shape[] shapes, int from, int to)
+        {
+            // The argument numbers of this call: the lead (when there is one) is 0, shapes[from] the next.
+            int first = lead is null ? 0 : 1;
+            int count = first + (to - from);
+
+            // Discover the broadcast number of dimensions.
+            int nd = lead?.Length ?? 0;
+            for (int j = from; j < to; j++)
+                nd = Math.Max(nd, shapes[j].NDim);
+
+            var result = new long[nd];
+            // PyArray_Broadcast's src_iter: the operand that set the current axis's length (every axis starts at 1, so a
+            // conflict on an axis always follows the operand that set that axis).
+            int src = -1;
+            for (int i = 0; i < nd; i++)
+            {
+                result[i] = 1;
+                for (int j = 0; j < count; j++)
+                {
+                    long[] d = j < first ? lead : shapes[from + j - first].dimensions;
+                    // This prepends 1 to shapes shorter than nd (right alignment).
+                    int k = i + d.Length - nd;
+                    if (k < 0)
+                        continue;
+                    long tmp = d[k];
+                    if (tmp == 1)
+                        continue;
+                    if (result[i] == 1)
+                    {
+                        result[i] = tmp;
+                        src = j;
+                    }
+                    else if (result[i] != tmp)
+                    {
+                        // set_shape_mismatch_exception: both operands' WHOLE shapes, as Python tuple reprs.
+                        long[] s = src < first ? lead : shapes[from + src - first].dimensions;
+                        throw new IncorrectShapeException(
+                            "shape mismatch: objects cannot be broadcast to a single shape.  " +
+                            $"Mismatch is between arg {src} with shape {PythonTupleRepr(s)} and arg {j} with shape {PythonTupleRepr(d)}.");
+                    }
+                }
+            }
+
+            // PyArray_OverflowMultiplyList over the broadcast dimensions, left to right: a zero length ends the product (no
+            // overflow past it), a product past the 64-bit range is the error.
+            long product = 1;
+            for (int i = 0; i < nd; i++)
+            {
+                if (result[i] == 0)
+                    break;
+                if (product > long.MaxValue / result[i])
+                    throw new ValueError("broadcast dimensions too large.");
+                product *= result[i];
+            }
+
+            return result;
+        }
+
+        /// <summary>A shape tuple as Python's <c>repr</c> writes it: <c>()</c>, <c>(4,)</c>, <c>(2, 3)</c> (a space after each
+        ///     comma, unlike <see cref="PythonTuple"/>).</summary>
+        /// <param name="dims">The dimensions (not null).</param>
+        /// <returns>The tuple text.</returns>
+        private static string PythonTupleRepr(long[] dims)
+        {
+            if (dims.Length == 0)
+                return "()";
+            if (dims.Length == 1)
+                return "(" + dims[0] + ",)";
+            var sb = new System.Text.StringBuilder("(");
+            for (int i = 0; i < dims.Length; i++)
+            {
+                if (i > 0)
+                    sb.Append(", ");
+                sb.Append(dims[i]);
+            }
+            return sb.Append(')').ToString();
+        }
     }
 }

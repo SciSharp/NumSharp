@@ -1,5 +1,4 @@
 using System;
-using System.Text;
 
 namespace NumSharp
 {
@@ -15,13 +14,12 @@ namespace NumSharp
         //
         //  NumPy materialises one zero-byte array per shape and asks np.broadcast for the joint
         //  shape. NumSharp computes the joint shape DIRECTLY — no allocation — because the answer is
-        //  a pure function of the dimension extents. The accumulation loop below reproduces
-        //  np.broadcast's multi-iterator exactly, INCLUDING its error text: the multi-iterator adds
-        //  arguments left to right, and when a non-1 extent conflicts with the extent an EARLIER
-        //  argument already established for that (right-aligned) dimension, it names that earlier
-        //  argument and the current one — never the running/accumulated shape. Getting the two named
-        //  args right is the only reason this is not a one-liner over Shape.ResolveReturnShape (which
-        //  throws the generic family message without arg indices).
+        //  a pure function of the dimension extents: Shape.BroadcastShape is _broadcast_shape, the
+        //  multi-iterator's scan INCLUDING its error text. The scan walks the axes from the first and,
+        //  within an axis, the arguments left to right; a conflict names the argument that set that
+        //  axis's extent and the one that disagrees — never the running/accumulated shape — on the
+        //  leftmost axis that has a conflict. Shape.ResolveReturnShape runs the same scan with the
+        //  generic family message, without the argument numbers.
         // =====================================================================
 
         /// <summary>
@@ -76,83 +74,10 @@ namespace NumSharp
                         throw new ValueError(AllocationGuard.NegativeDimensionsMessage);
             }
 
-            // The broadcast rank is the largest input rank; shorter shapes are right-aligned (their
-            // missing leading axes act as size 1).
-            int nd = 0;
-            for (int a = 0; a < len; a++)
-                nd = Math.Max(nd, shapes[a].NDim);
-
-            var result = new long[nd];       // running broadcast extents, seeded to the size-1 identity
-            var setter = new int[nd];        // which arg first pushed result[dim] above 1 (for the error)
-            for (int i = 0; i < nd; i++)
-            {
-                result[i] = 1;
-                setter[i] = -1;
-            }
-
-            // Add arguments left to right, exactly as np.broadcast's multi-iterator does, so the
-            // FIRST conflict encountered — and the pair of args it names — matches NumPy.
-            for (int a = 0; a < len; a++)
-            {
-                Shape shape = shapes[a];
-                int snd = shape.NDim;
-                int off = nd - snd;          // right-alignment offset into the result
-                long[] dims = shape.dimensions;
-                for (int d = 0; d < snd; d++)
-                {
-                    long extent = dims[d];
-                    int rd = off + d;
-                    long cur = result[rd];
-
-                    // A size-1 axis always yields to the other operand and never establishes an extent.
-                    if (extent == 1)
-                        continue;
-
-                    if (cur == 1)
-                    {
-                        result[rd] = extent;
-                        setter[rd] = a;      // this arg owns the extent; a later clash points back here
-                    }
-                    else if (cur != extent)
-                    {
-                        // Conflict: name the establishing arg and this one, with their ORIGINAL shapes,
-                        // in NumPy's exact wording (two spaces before "Mismatch", Python-repr tuples).
-                        throw new IncorrectShapeException(
-                            "shape mismatch: objects cannot be broadcast to a single shape.  " +
-                            $"Mismatch is between arg {setter[rd]} with shape {PyReprShape(shapes[setter[rd]].dimensions)} " +
-                            $"and arg {a} with shape {PyReprShape(shape.dimensions)}.");
-                    }
-                    // cur == extent: compatible, nothing to record.
-                }
-            }
-
-            return Shape.Adopt(result);
-        }
-
-        /// <summary>
-        ///     Renders dimension extents as a Python tuple repr — <c>()</c> for rank 0, <c>(4,)</c>
-        ///     with a trailing comma for rank 1, <c>(2, 3)</c> with a space after each comma otherwise.
-        ///     This is the exact spelling NumPy's broadcast error uses; it is neither
-        ///     <see cref="Shape.ToString"/> (no trailing comma on a 1-tuple) nor
-        ///     <c>Shape.ToPythonTuple</c> (no space after the comma), hence the dedicated helper.
-        /// </summary>
-        /// <param name="dims">The dimension extents to render; a null or empty array renders <c>()</c>.</param>
-        /// <returns>The Python-repr tuple string for <paramref name="dims"/>.</returns>
-        private static string PyReprShape(long[] dims)
-        {
-            if (dims == null || dims.Length == 0)
-                return "()";
-            if (dims.Length == 1)
-                return "(" + dims[0] + ",)";
-            var sb = new StringBuilder("(");
-            for (int i = 0; i < dims.Length; i++)
-            {
-                if (i > 0)
-                    sb.Append(", ");
-                sb.Append(dims[i]);
-            }
-            sb.Append(')');
-            return sb.ToString();
+            // The broadcast itself is NumPy's _broadcast_shape over the (zero-byte) arrays: np.broadcast's multi-iterator,
+            // axis by axis, naming the operand that set an axis's length and the first one that disagrees with it, in groups
+            // of 64 operands (Shape.BroadcastShape).
+            return Shape.BroadcastShape(shapes);
         }
     }
 }

@@ -138,5 +138,76 @@ namespace NumSharp.Tests.Creation
                 .Should().ThrowExactly<ValueError>()
                 .WithMessage("negative dimensions are not allowed");
         }
+
+        // ================================================================
+        //  The pair a mismatch names: np.broadcast's multi-iterator scan
+        // ================================================================
+
+        /// <summary>
+        ///     Two axes conflict: NumPy's PyArray_Broadcast scans axis by axis, so it names the pair of the FIRST axis (args 2
+        ///     and 3 disagree on axis 0) — not the first operand that conflicts anywhere (arg 1 against arg 0 on axis 1), which
+        ///     an operand-by-operand scan reported.
+        /// </summary>
+        [TestMethod]
+        public void TwoConflictingAxes_NamesTheLeftmostAxisPair()
+        {
+            // np.broadcast_shapes((1,4), (1,5), (2,1), (3,1))
+            ((Action)(() => np.broadcast_shapes((1, 4), (1, 5), (2, 1), (3, 1))))
+                .Should().ThrowExactly<IncorrectShapeException>()
+                .WithMessage("shape mismatch: objects cannot be broadcast to a single shape.  " +
+                             "Mismatch is between arg 2 with shape (2, 1) and arg 3 with shape (3, 1).");
+        }
+
+        /// <summary>
+        ///     Past 64 operands NumPy broadcasts in groups (np.broadcast takes 64): the 67th operand is argument 3 of the second
+        ///     call, whose argument 0 is the shape the first 64 broadcast to.
+        /// </summary>
+        [TestMethod]
+        public void PastSixtyFourOperands_NumbersTheOperandsWithinTheirGroup()
+        {
+            // shapes = [(1,)] * 70; shapes[3] = (4,); shapes[66] = (5,); np.broadcast_shapes(*shapes)
+            var shapes = new Shape[70];
+            for (int i = 0; i < shapes.Length; i++)
+                shapes[i] = new Shape(1);
+            shapes[3] = new Shape(4);
+            shapes[66] = new Shape(5);
+            ((Action)(() => np.broadcast_shapes(shapes)))
+                .Should().ThrowExactly<IncorrectShapeException>()
+                .WithMessage("shape mismatch: objects cannot be broadcast to a single shape.  " +
+                             "Mismatch is between arg 0 with shape (4,) and arg 3 with shape (5,).");
+
+            // Both operands in the second group: shapes[66] = (4,), shapes[68] = (5,) are its arguments 3 and 5.
+            for (int i = 0; i < shapes.Length; i++)
+                shapes[i] = new Shape(1);
+            shapes[66] = new Shape(4);
+            shapes[68] = new Shape(5);
+            ((Action)(() => np.broadcast_shapes(shapes)))
+                .Should().ThrowExactly<IncorrectShapeException>()
+                .WithMessage("shape mismatch: objects cannot be broadcast to a single shape.  " +
+                             "Mismatch is between arg 3 with shape (4,) and arg 5 with shape (5,).");
+
+            // 130 operands are three groups (64, 63, 3): shapes[129] is argument 3 of the third call.
+            shapes = new Shape[130];
+            for (int i = 0; i < shapes.Length; i++)
+                shapes[i] = new Shape(1);
+            shapes[2] = new Shape(3, 1);
+            shapes[129] = new Shape(2, 5);
+            ((Action)(() => np.broadcast_shapes(shapes)))
+                .Should().ThrowExactly<IncorrectShapeException>()
+                .WithMessage("shape mismatch: objects cannot be broadcast to a single shape.  " +
+                             "Mismatch is between arg 0 with shape (3, 1) and arg 3 with shape (2, 5).");
+        }
+
+        /// <summary>
+        ///     A broadcast whose element count does not fit 64 bits is np.broadcast's ValueError, though each operand exists:
+        ///     <c>np.broadcast_shapes((2**40,), (2**40, 1))</c>.
+        /// </summary>
+        [TestMethod]
+        public void ElementCountOverflow_ThrowsValueError()
+        {
+            ((Action)(() => np.broadcast_shapes(new Shape(1L << 40), new Shape(1L << 40, 1))))
+                .Should().ThrowExactly<ValueError>()
+                .WithMessage("broadcast dimensions too large.");
+        }
     }
 }
