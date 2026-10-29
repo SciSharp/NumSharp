@@ -439,5 +439,41 @@ namespace NumSharp
         /// <remarks>The sort runs in the original dtype, so an int64 past 2^53 orders by its exact value, not by its
         ///     double image; only the sorted result is widened.</remarks>
         public abstract NDArray SortComplex(NDArray a);
+
+        /// <summary>
+        ///     NumPy's <c>np.trim_zeros(filt, trim='fb', axis=None)</c>: <paramref name="filt"/> cut to the bounding box of
+        ///     its nonzero elements along the trimmed axes - the leading (<c>'f'</c>) and / or trailing (<c>'b'</c>)
+        ///     hyperplanes that hold only zeros removed. The values decide which view comes back, so it is a computation
+        ///     (the plan's borderline decision), though nothing is computed into a new buffer.
+        /// </summary>
+        /// <param name="filt">
+        ///     The input, a plain array: <c>np.trim_zeros</c> decides the <c>numpy.matrix</c> and
+        ///     <c>numpy.char.chararray</c> classes before it calls this member. A text array is trimmed by its truth values
+        ///     (an empty string is a zero), as NumPy's <c>argwhere</c> reads them through the dtype's <c>nonzero</c>.
+        /// </param>
+        /// <param name="trim">
+        ///     The sides to trim: <c>"f"</c> (front), <c>"b"</c> (back), <c>"fb"</c> or <c>"bf"</c> (both), in any case;
+        ///     null reads as the empty string, which is refused.
+        /// </param>
+        /// <param name="axis">The axes to trim (a negative axis counts from the end), or null for every axis; an empty
+        ///     array trims nothing.</param>
+        /// <returns>
+        ///     A view of <paramref name="filt"/> with the zero hyperplanes cut from the sides <paramref name="trim"/> names
+        ///     (an axis without a nonzero element is cut to length 0, whatever <paramref name="trim"/> says), or
+        ///     <paramref name="filt"/> itself when no axis is trimmed (an empty <paramref name="axis"/>, or a 0-d
+        ///     <paramref name="filt"/> with <paramref name="axis"/> null). The dtype and the number of dimensions are
+        ///     <paramref name="filt"/>'s.
+        /// </returns>
+        /// <exception cref="ValueError"><paramref name="trim"/> holds another spelling (<c>unexpected character(s) in
+        ///     `trim`: 'fx'</c>, checked first), or an axis is repeated (<c>repeated axis in `axis` argument</c>).</exception>
+        /// <exception cref="AxisError">An axis is out of range for <paramref name="filt"/> (<c>axis: axis 3 is out of
+        ///     bounds for array of dimension 2</c>), checked for every axis before the repeat.</exception>
+        /// <exception cref="NullReferenceException"><paramref name="filt"/> is null (read after the trim check).</exception>
+        /// <remarks>
+        ///     NumPy's <c>_arg_trim_zeros</c> takes the edges from <c>argwhere(filt)</c>'s minimum and maximum. The
+        ///     bounding box is separable, so DefaultEngine takes each trimmed axis' first and last index from
+        ///     <c>nonzero(any(filt, other axes))</c> instead: the same view, without every nonzero coordinate.
+        /// </remarks>
+        public abstract NDArray TrimZeros(NDArray filt, string trim = "fb", int[] axis = null);
     }
 }

@@ -62,7 +62,6 @@ Manipulation/np.copyto.Strings.cs	1	0
 Manipulation/np.copyto.cs	1	0
 Manipulation/np.delete.cs	0	20
 Manipulation/np.pad.cs	12	33
-Manipulation/np.trim_zeros.cs	2	0
 Math/NDArray.ComplexAccessors.cs	1	2
 Math/np.imag.cs	0	1
 Math/np.real.cs	0	1
