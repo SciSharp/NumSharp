@@ -7489,9 +7489,9 @@ code gives NumPy's text.
   values' pack even with no indices, then an empty values array is a NO-OP — it raised ArgumentException), `putmask` /
   `place` / `put_along_axis` / `insert` / `fill_diagonal` (packs before its early returns, so an empty array still
   refuses) / the flat iterator (`flat[i]` reports any pack failure as NumPy's `ValueError: Error setting single item of
-  array.`) / `np.asarray(literal, dtype)`; `np.pad` stores each constant as a NumPy scalar
+  array.`) / `np.asarray(literal, dtype)`; `np.pad` stores one or two constants as NumPy scalars
   (`ReductionInitial.PackNumPyScalar`: `_as_pairs` runs `np.array(constant_values)`, so int8 refuses 1000 where uint8
-  pads with 232).
+  pads with 232) and a larger table as the Python scalars of its `tolist()` (`TryPack`: `-1` into uint8 raises).
 - **Kept as casts:** `SetValue` / `itemset` (NumSharp's low-level typed setters; `itemset` is gone from NumPy 2.0),
   an unmarked 0-d array everywhere, and a 0-d view from integer indexing (`a[i] = b[j]`: NumPy's `b[j]` is a NumPy
   scalar, which a SIGNED integer destination would range-check — `[Misaligned]`). Text into a numeric store is parsed

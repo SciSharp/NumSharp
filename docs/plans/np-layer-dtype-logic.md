@@ -48,13 +48,14 @@ fixed per D4 (`f048ad69`, `4d1a0d02`, `253b8f45`). Batch 9, the computing functi
 (2026-10-29): np.linspace / np.logspace / np.geomspace are `TensorEngine` members in `TensorEngine.CoreFunctionBase.cs`,
 np.vander in `TensorEngine.TwoDimBase.cs`, np.trim_zeros in `TensorEngine.FunctionBase.cs`, and the six divergences a
 replay of their snapshot through NumPy found are fixed per D4. Batch 7, NumPy's Python functions of the array object,
-has its first two parts done (2026-10-29): np.where's body is `NDArray.Where` in `NDArray.Multiarray.cs` (every engine
+has its first three parts done (2026-10-29): np.where's body is `NDArray.Where` in `NDArray.Multiarray.cs` (every engine
 np.where call, the fixed-width text route's included, calls it), np.real / np.imag's are `NDArray.RealPart` / `ImagPart`
 in the new `NDArray.TypeCheck.cs` with ndarray.imag's setter, ndarray.conjugate's is `NDArray.Conjugate`, np.extract's,
 np.asarray_chkfinite's, np.select's and np.piecewise's statements and np.delete's helpers are `NDArray.FunctionBase.cs`
-members, and the divergences a replay of their snapshot through NumPy found are fixed per D4 (np.where's result dtype
-and order, np.select's broadcast and cast texts, np.piecewise's constants, np.delete's error axis, np.broadcast_shapes'
-pair). P5 is done (2026-10-29): its six
+members, np.pad's are `NDArray.Pad` / `NDArray.PadCallable` in the new `NDArray.ArrayPad.cs`, and the divergences a
+replay of their snapshot through NumPy found are fixed per D4 (np.where's result dtype and order, np.select's
+broadcast and cast texts, np.piecewise's constants, np.delete's error axis, np.broadcast_shapes' pair, np.pad's check
+order, values and computations). P5 is done (2026-10-29): its six
 families and, handed over by the coordinator, the lines first assigned to PE (np.argmax's out= pair, np.unravel_index,
 np.packbits / np.unpackbits, np.bincount, and the text lines of np.kron and np.median) are engine members or engine
 partials, and the two divergences found on the way are fixed per D4 (np.argmax / np.argmin check a text operand's
@@ -823,7 +824,8 @@ first, as it did for np.fft.
    np.real / np.imag with ndarray.imag's setter and ndarray.conjugate, np.extract and np.asarray_chkfinite (see the
    state log); np.extract's fast path asks `HasReferences`. Second part done (`3f06e8a4`, `c0ac4ef5`, `582ddced`,
    `a318249e`): np.select, np.piecewise and np.delete's rest, with the D4 fixes their replay and the first part's found
-   (`4fa16cbf`, `a186234e`, `8f86bd03`, `d3d4a01a`, `3c68f7cd`).
+   (`4fa16cbf`, `a186234e`, `8f86bd03`, `d3d4a01a`, `3c68f7cd`). Third part done (`f4816d56`, `3023494e`): np.pad,
+   with the D4 fixes its replay found (`33fd5151`, `839950c2`, `54ad9427`).
 8. **The indexers** (8 files, 98 lines; `Selection/NDArray.Indexing.*.cs`, NumPy's `mapping.c`; already the array
    object): the `StringDType` routes behind `HasReferences`, the typed fetch / store switches into
    `UnmanagedStorage.Mapping.cs`. The index-kind tests stay.
@@ -1072,6 +1074,48 @@ candidate.
 
 ## 9. State log
 
+- **2026-10-29, P3: batch 7, third part (np.pad).** Five commits on `strings` from the parallel session (developed in the
+  scratch worktree on `61063970` and landed by fast-forward). R1: `np.pad.cs`' 9 text and 33 numeric lines leave (the
+  file has no row now); R2: unchanged (np.pad's home is not under `Backends/`).
+  - `f4816d56`: the snapshot tool reaches np.pad (every overload was SKIP): pad_width in each C# form (an int, an
+    `int[]`, an `int[,]` built from the operand's rank, a (before, after) tuple, a dict), the mode (every name NumPy has,
+    one it refuses, two callables from a menu NumPy names alike, null), constant_values / end_values / stat_length /
+    reflect_type and a callable's kwargs: 93,720 cases.
+  - `3023494e`, the pure move: np.pad's statements are `NDArray.Pad` (a named mode, still `[NDScoped]`) and
+    `NDArray.PadCallable` (a callable, unscoped so no scope reaches into the caller's function) in the new
+    `Manipulation/NDArray.ArrayPad.cs` (NumPy's `lib/_arraypad_impl.py`), with every helper whole; the ten facades keep
+    their numpy.matrix regions. The snapshot is byte-identical under `NUMSHARP_DEBUG_GUARD_PAGES=1`; the rebind check
+    found no moved name binding to another `NDArray` member (`Array.Empty` needed `System.`: inside `NDArray`, `Array` is
+    the instance property).
+  - No slot conversion: np.pad's dtype lines choose a route inside the moved body (the text constants' route, the text
+    refusals of linear_ramp and the stat modes, a statistic's rounding into an integer array); its text casts are batch
+    9b's.
+  - D4, from the replay of the snapshot through NumPy 2.4.2 (91,160 cases replayed, char and decimal skipped; 55,325
+    differed):
+    - `33fd5151`: the check order (the widths through np.asarray's integral test and `_as_pairs` over the TRUE rank, then
+      the mode and its keywords) and NumPy's texts (`mode 'None' is not supported` and the keyword set
+      `{'constant_values', 'stat_length'}` as ValueErrors, `np.broadcast_to`'s and `x.min()`'s texts); reflect_type (any
+      value but 'odd' reflects as 'even'; given when neither null nor "even"); `_as_pairs` for the widths and stat_length
+      (a (2, 1) table is one width per axis, the negative test before the broadcast, a real stat_length rounded half to
+      even); the result object (a zero-width pad keeps `_pad_simple`'s F order, the callable runs for every vector, a 0-d
+      input keeps its value).
+    - `839950c2`: constant_values / end_values through NumPy's `_as_pairs`: one or two values are NumPy scalars, a larger
+      table `tolist()`'s Python scalars (range-checked into every integer dtype; an `int[,]` raised InvalidCastException),
+      an array of any shape is the (ndim, 2) table.
+    - `54ad9427`: the statistics are np.mean / np.median of the chunk view (a uint64 'mean' wrapped its sum), and
+      linear_ramp is linspace's arithmetic in its computation dtype with NumPy's whole-call zero-step guard (a bool input
+      pads; it raised the bool subtract's TypeError).
+  - After the D4s 2,489 replay cases differ from NumPy, none in np.pad's own computation: 2,016 keyword sets of two names
+    in another order (NumPy's set order follows Python's randomized string hashes), 411 `mode='empty'` results
+    (uninitialized memory on both sides), and 62 'median' pads of a complex128 chunk holding a NaN, which are np.median's:
+    NumPy's `_median_nancheck` returns the NaN element (`np.median([1+2j, nan+1j, 3, 4+1j])` is `nan+1j`, NumSharp's
+    `2+1j`). Reported, not this batch's.
+  - Core's doc warnings 3,840 -> 3,834 (the moved file's six, fixed with the D4s).
+  - Gates (on the landed tree): NumSharp.Tests 20,807 / 20,806 passed on net10.0 / net8.0 (11 skipped) and the oracle suite 414 / 414 (2 skipped), Release, `TestCategory!=OpenBugs&TestCategory!=HighMemory`.
+  - Left for batch 7: np.r_, np.ix_ and np.fill_diagonal (`IndexTricks`); np.indices (`Numeric`); np.diag (`TwoDimBase`,
+    with the diagonal scatter it shares with np.fill_diagonal); np.take_along_axis, np.put_along_axis and
+    np.apply_along_axis (`ShapeBase`, with the two np.apply_along_axis pins of `NDVStringStatistics.Quantile.cs`); the
+    lines of np.mgrid, np.ogrid and np.ravel_multi_index.
 - **2026-10-29, P3: batch 7, second part (np.where's D4, np.select, np.piecewise, np.delete's rest).** Ten commits on
   `strings` from the parallel session (developed in the scratch worktree on `d8c7d00a`, rebased over batch 5's landing
   and `0854f1ca`, and landed by fast-forward). R1: 3 text and 37 numeric lines leave (np.select.cs 3 / 10,
