@@ -353,8 +353,10 @@ namespace NumSharp
         /// <returns>The selected string array.</returns>
         private NDArray StringFetchIndices(object[] normalized)
         {
-            if (Storage.IsVString)
-                return VStringFetchIndices(normalized); // cells + duplication, never the unit route (NDArray.Indexing.VString.cs)
+            // Elements that hold references (the descriptor answers, as NumPy's PyDataType_REFCHK: StringDType) take the
+            // cells + duplication route, never the unit route (NDArray.Indexing.VString.cs).
+            if (dtype.Meta.HasReferences)
+                return VStringFetchIndices(normalized);
             if (normalized.Length == 1 && normalized[0] is NDArray only)
             {
                 // A lone boolean mask over leading axes: the direct mask gather, else whole unit-view rows
@@ -478,9 +480,11 @@ namespace NumSharp
         /// <param name="value">The value.</param>
         private void StringSetIndices(object[] normalized, NDArray value)
         {
-            if (Storage.IsVString)
+            // Elements that hold references (the descriptor answers, as NumPy's PyDataType_REFCHK: StringDType) take the
+            // marks + duplication route (NDArray.Indexing.VString.cs).
+            if (dtype.Meta.HasReferences)
             {
-                VStringSetIndices(normalized, value); // marks + duplication (NDArray.Indexing.VString.cs)
+                VStringSetIndices(normalized, value);
                 return;
             }
             StringAdvancedSet(value, (u, v) => u.SetIndices(WithCharacterAxis(normalized), v), (p, v) => p.SetIndices((object[])normalized.Clone(), v));

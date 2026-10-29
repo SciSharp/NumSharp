@@ -378,9 +378,10 @@ namespace NumSharp
                 // A view assignment: PyArray_CopyObject discovers the list with at most the view's rank.
                 Backends.UnmanagedStorage.ThrowIfSequenceExceedsDims(value, prepared.NewNdim);
             }
-            else if (fancy && Storage.IsVString)
+            else if (fancy && dtype.Meta.HasReferences)
             {
-                // PyDataType_REFCHK: MapIter allocates the result-shaped temporary and PyArray_CopyObject fills it — before
+                // PyDataType_REFCHK (the descriptor answers: StringDType's elements hold references): MapIter allocates the
+                // result-shaped temporary and PyArray_CopyObject fills it — before
                 // MapIter checks the index values, so the result's shape comes from the prepared index, not from a gather —
                 // and the list is bounded by the result's rank and must broadcast to its shape with AssignArray's text.
                 long[] resultDims = MapIterResultDims(Shape, prepared);
