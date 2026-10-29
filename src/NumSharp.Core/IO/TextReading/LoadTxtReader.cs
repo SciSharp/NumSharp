@@ -319,10 +319,11 @@ namespace NumSharp.IO
         [NDScoped]
         internal static NDArray LoadTxtCore(LoadTxtStream stream, LoadTxtConfig cfg, bool unpack)
         {
-            // An unsized string dtype ('U', 'S') is _read's chunked object read: `while max_rows != 0` reads chunks with the C
-            // reader and casts each. With max_rows == 0 the loop never runs, so the C reader checks nothing and _read
-            // concatenates an empty chunk list.
-            if (cfg.MaxRows == 0 && cfg.Descr.Meta is StringDTypeMeta && cfg.Descr.itemsize == 0)
+            // An unsized string dtype ('U', 'S') is _read's chunked object read - NumPy's test is the descriptor's kind and its
+            // size (`dtype.kind in 'SUM' and (dtype == "S0" or dtype == "U0" ...)`; the datetime kind 'M' has no storage in
+            // NumSharp): `while max_rows != 0` reads chunks with the C reader and casts each. With max_rows == 0 the loop never
+            // runs, so the C reader checks nothing and _read concatenates an empty chunk list.
+            if (cfg.MaxRows == 0 && cfg.Descr.kind is 'S' or 'U' && cfg.Descr.itemsize == 0)
                 throw new ValueError("need at least one array to concatenate");
             CheckLoadTxtControlCharacters(cfg);
             var tokenizer = new LoadTxtTokenizer(cfg.Delimiter, cfg.Quote, cfg.Comment);

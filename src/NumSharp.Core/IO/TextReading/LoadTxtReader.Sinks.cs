@@ -278,11 +278,14 @@ namespace NumSharp.IO
         ///     A numeric dtype's fields (NumPy's <c>npy_to_bool</c> / <c>npy_to_int*</c> / <c>npy_to_uint*</c> /
         ///     <c>npy_to_float</c> / <c>npy_to_double</c> / <c>npy_to_cfloat</c> / <c>npy_to_cdouble</c>, the strict parsers of
         ///     <c>LoadTxtReader.Conversions.cs</c>), each element written in the dtype's own bytes; a converter's value is stored by
-        ///     <c>PyArray_Pack</c> (<see cref="ReductionInitial.PackStore"/>).
+        ///     <c>PyArray_Pack</c>, the class's <see cref="DTypeMeta.setitem"/> (NumPy's <c>npy_to_generic_with_converter</c>).
         /// </summary>
         private sealed unsafe class LoadTxtNumericSink : LoadTxtSink
         {
             private readonly DType _descr;
+            // The descriptor the elements are written in: the requested one, or its native twin for a non-native request
+            // (NumSharp reads a non-native dtype into the native lane, its documented rule), so setitem swaps nothing.
+            private readonly DType _storeDescr;
             private readonly NPTypeCode _tc;
             private readonly int _itemSize;
             private readonly bool _byteConverters;
@@ -298,6 +301,7 @@ namespace NumSharp.IO
             internal LoadTxtNumericSink(DType descr, bool byteConverters)
             {
                 _descr = descr;
+                _storeDescr = descr.isnative ? descr : descr.Meta.ensure_canonical(descr);
                 _tc = descr.GetTypeCode();
                 _itemSize = _tc.SizeOf();
                 _byteConverters = byteConverters;
@@ -368,10 +372,9 @@ namespace NumSharp.IO
                 else
                 {
                     object value = converter(ConverterInput(field, _byteConverters));
-                    // PyArray_Pack into a slot of the widest element, then the element's own bytes into the row.
-                    Span<byte> slot = stackalloc byte[ReductionInitial.SlotBytes];
-                    ReductionInitial.PackStore(value, _tc, slot);
-                    slot.Slice(0, _itemSize).CopyTo(element);
+                    // NumPy's npy_to_generic_with_converter: PyArray_Pack(descr, dataptr, res), the class's setitem, which
+                    // writes exactly the element's bytes (it packs into a slot of the widest element itself).
+                    _storeDescr.Meta.setitem(_storeDescr, value, _buffer + _used, null);
                 }
                 _used += _itemSize;
                 return true;

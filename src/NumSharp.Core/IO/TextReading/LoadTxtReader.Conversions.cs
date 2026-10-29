@@ -11,7 +11,8 @@ namespace NumSharp.IO
     {
         // The numeric field parsers of np.loadtxt (NumPy's per-dtype set_from_ucs4 functions, textreading/conversions.c
         // and str_to_int.c). They read one field's characters; the numeric sink (LoadTxtReader.Sinks.cs) calls them for every
-        // field of a numeric dtype that has no converter (a converter's value is stored by ReductionInitial.PackStore).
+        // field of a numeric dtype that has no converter (a converter's value is stored by the class's setitem slot, NumPy's
+        // npy_to_generic_with_converter).
 
         #region numeric field parsers (loadtxt semantics)
 
@@ -57,16 +58,16 @@ namespace NumSharp.IO
         }
 
         /// <summary>
-        ///     A float16 field, as NumPy's <c>npy_to_generic</c> stores it: <c>PyArray_Pack(float16, str(field))</c>, which
-        ///     reaches <c>HALF_setitem</c> and Python's <c>float()</c> of the text (<see cref="ReductionInitial.PackStore"/>
-        ///     carries that grammar), then <c>npy_double_to_half</c>.
+        ///     A float16 field, as NumPy's <c>npy_to_generic</c> stores it: <c>PyArray_Pack(float16, str(field))</c>, the
+        ///     float16 class's <see cref="DTypeMeta.setitem"/> (<c>HALF_setitem</c>: Python's <c>float()</c> of the text,
+        ///     then <c>npy_double_to_half</c>).
         /// </summary>
         /// <param name="tok">The field's characters, unstripped (<c>float()</c> strips its own whitespace).</param>
         /// <param name="dst">The element slot (at least 2 bytes).</param>
         /// <returns>True (a failure raises).</returns>
         /// <exception cref="ValueError"><c>could not convert string to float: '…'</c>, which the reader chains as the cause of
         ///     its own message.</exception>
-        private static bool LoadtxtWriteGenericHalf(ReadOnlySpan<char> tok, Span<byte> dst)
+        private static unsafe bool LoadtxtWriteGenericHalf(ReadOnlySpan<char> tok, Span<byte> dst)
         {
             // Fast path, exact for the text it accepts: an ASCII field (below 127) without '_' is a str that float() reads
             // as PyOS_string_to_double of the field stripped of Py_ISSPACE (the six ASCII whitespace characters), or as
@@ -78,9 +79,11 @@ namespace NumSharp.IO
                 MemoryMarshal.Write(dst, in h);
                 return true;
             }
-            Span<byte> slot = stackalloc byte[ReductionInitial.SlotBytes];
-            ReductionInitial.PackStore(tok.ToString(), NPTypeCode.Half, slot);
-            slot.Slice(0, 2).CopyTo(dst);
+            // The element is written in the native lane (the sink reads a non-native request natively), so the native
+            // float16 descriptor's setitem: it writes the element's two bytes and nothing past them.
+            DType half = DType.Half;
+            fixed (byte* element = dst)
+                half.Meta.setitem(half, tok.ToString(), element, null);
             return true;
         }
 

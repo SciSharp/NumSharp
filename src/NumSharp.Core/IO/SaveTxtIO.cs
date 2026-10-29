@@ -376,8 +376,11 @@ namespace NumSharp.IO
             else { nrows = X.Shape.dimensions[0]; ncol = X.Shape.dimensions[1]; }
 
             NPTypeCode tc = X.typecode;
-            bool iscomplex = tc == NPTypeCode.Complex;
-            bool pyObjects = X.Storage.IsVString;
+            // NumPy: iscomplex_x = np.iscomplexobj(X), the descriptor's kind.
+            bool iscomplex = X.dtype.kind == 'c';
+            // A row's elements are what the class's getitem returns: Python objects for a dtype whose items hold references
+            // (StringDType's str / NA object; NumPy's REFCHK, HasReferences), NumPy scalars for every other.
+            bool pyObjects = X.dtype.Meta.HasReferences;
 
             string format = ResolveSaveTxtFormat(fmt, ncol, iscomplex, delimiter);
 
