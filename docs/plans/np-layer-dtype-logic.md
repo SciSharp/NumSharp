@@ -989,6 +989,13 @@ The 255 text lines are P3's K4 files, np.evaluate's two (P2's) and np.fft.RawFft
       `broadcast_to`, the buffer size). R2 ends at zero computations; any structural call left is listed with its
       reason. Then `DefaultEngine`'s partials of NumPy's Python layer move under `Backends/Default/`, the array object's
       beside their classes (C3), and the shape math `DefaultEngine` holds moves to `Shape` partials (E7).
+  - [x] The computational part (2026-10-29, see the state log): R2's computations 132 -> 16, each converted call the
+        engine member its facade dispatches to, every family snapshot-identical. The 16 left are pinned in
+        `engine_upcall_allowlist.tsv` with their reasons: np.where (5) and np.apply_along_axis (2) are the array
+        object's (§1, decided 2026-10-28) and leave when P3's batch 7 gives them their `NDArray` homes;
+        `Backends/Strings/NDStringMethods.cs` (9) holds numpy.strings' own statements, the text API's pass (§8).
+  - [ ] The structural calls (264, unchanged), once P3's homes exist.
+  - [ ] The moves under `Backends/Default/`, beside their classes and into `Shape` partials.
 
 ### P7. The class boundary
 
@@ -1025,6 +1032,53 @@ candidate.
 ---
 
 ## 9. State log
+
+- **2026-10-29, P6: the computational part.** Ten commits on `strings` from the parallel session (developed in a
+  scratch worktree, rebased onto `ce5d6ce3` and then onto P3's batch 3, `f90b131f`, landed by fast-forward). R2's
+  computations 132 -> 16, its structural calls 264 unchanged. Each converted call is the engine member its facade
+  dispatches to (a facade is its class boundaries plus `x1.TensorEngine.X(x1, x2, dtype, out, where)`), in the
+  engine's argument order: `this` in an instance method, the operand's engine in a static one; np.evaluate becomes
+  `TensorEngine.Evaluate` with default options (the facade's for a call without keywords); np.real / np.imag of a known
+  complex array the lane aliases they build. No class rule fired at a converted call: the operands are scratch arrays
+  of the route, or sit in a `PlainFor` region, or meet a call that refuses; the regions stay and their comments name
+  what they guard.
+  - `75e61cae` np.var / np.std / np.nanvar / np.nanstd / np.nanmean (`Default.Reduction.VarStd.cs`, `.NanVarStd.cs`,
+    `.NanMean.cs`), 44 calls; SqrtLikeNumPy's decimal walk is an index loop instead of `np.nditer<decimal>`. Snapshot
+    48,192 lines identical; one NDW012 fewer.
+  - `01a86de4` np.sum's bool axis counts and its logical-OR loop, np.count_nonzero's sum, np.nansum / np.nanprod's NaN
+    mask and `NDArray.Contains`, 5 calls; 27,804 lines.
+  - `3a6c820b` np.isclose / np.allclose, np.power's fast paths, np.evaluate's delegated reductions (ptp, nanmin,
+    nanmax, argmax, argmin) and its logical streams, 25 calls; 116,222 lines. `d56859d6` follows it: the flat argmax /
+    argmin index it left to the finalizer (two new NDW012) is read and disposed by a helper (60,888 np.evaluate lines
+    identical).
+  - `5c17faec` numpy.linalg's empty-operand lstsq residuals and the conjugating products' `Conjugate` (a pointer loop
+    over the fresh copy instead of `np.nditer<Complex>`), 8 calls; 45,810 lines.
+  - `d19c237f` the text routes of the core functions (`Backends/Strings`), 34 calls. Read against §8 file by file: a
+    helper that serves a core function's text route is engine work (np.where's and np.copyto's / astype's ASCII checks,
+    the logical ufuncs over text, the bool-loop scans of text, `StringDType`'s mean / var / average / ptp and order
+    statistics; np.flatnonzero computes indices from values, the engine's by §1); `NDStringMethods.cs` is numpy.strings'
+    own Python statements (the computed-width wrappers' sizing), left for the text API's pass. 664,893 lines identical.
+    The snapshot's text pools are ASCII digits and plain `StringDType`, so a probe of 3,395 calls covered the rest (S
+    bytes at or above 0x80 through both of np.where's decode loops and np.copyto's masked verdicts, the unit above
+    U+10FFFF, NaN-like NAs, 600-element lines, a numeric NA object as q), identical as well.
+  - The snapshot tool, taught before each family: `6b141173` NDArray.Contains's value (`ContainsValue`), `30a449d8`
+    np.evaluate's expression (23 forms that reach every root reduction it runs or delegates), `3aa56f41` zeroes the
+    masked-off elements of a fresh elementwise result under where= before hashing (they are uninitialized, NumPy's
+    ufunc rule: 590 np.power lines differed between two runs of one build). Some messages cite hashes from before the
+    two rebases: `2090acde` (`6b141173`, cited by `01a86de4` and `30a449d8`), `d7b572b7` (`30a449d8`, cited by
+    `3aa56f41` and `3a6c820b`), `ffeab6a4` (`3aa56f41`, cited by `3a6c820b`) and `e63755d2` (`3a6c820b`, cited by
+    `d56859d6`).
+    Across the first rebase the merged tool gives `ce5d6ce3`'s 75,416 lines of np.copyto / NDArray.fill /
+    np.concatenate and the pre-rebase lines of np.evaluate and NDArray.Contains byte for byte; the second rebase
+    touched no file of the stack but the plan.
+  - Left, pinned in `engine_upcall_allowlist.tsv` with their reasons: np.where in `Default.Reduction.Nan.cs`,
+    `.NanScan.cs` (NumPy's `_replace_nan` is `np.copyto(a, val, where=mask)`), `NDStringArrays.cs` and
+    `NDVStringMove.cs` (2), and np.apply_along_axis in `NDVStringStatistics.Quantile.cs` (2): the array object's (§1,
+    decided 2026-10-28), for P3's batch 7; `NDStringMethods.cs`' 9 (§8).
+  - Gates, every code commit: the snapshot identical to the parent's; R2 tightened; Core's Release warnings
+    (`--no-incremental`, `-p:WarningLevel=4`) 3,854 -> 3,853 (VarStd.cs's NDW012), none up; NumSharp.Tests and
+    NumSharp.Tests.Oracle green on net10.0 and net8.0 (on the stack rebased onto `ce5d6ce3`, on its tip, and on the
+    tip rebased onto `f90b131f`).
 
 - **2026-10-29, P3: batch 3 (assignment).** Five commits on `strings`, landed by fast-forward:
   - `ce5d6ce3`: the snapshot tool reaches np.copyto (its three non-generic overloads were SKIP; the generic one was not
