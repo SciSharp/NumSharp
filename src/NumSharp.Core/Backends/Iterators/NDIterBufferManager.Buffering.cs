@@ -550,6 +550,40 @@ namespace NumSharp.Backends.Iteration
             }
         }
 
+        /// <summary>
+        ///     NumPy's <c>npyiter_clear_buffers</c>: drops the held buffers of an iteration that failed, so nothing of
+        ///     the failed fill is written back. A <c>StringDType</c> buffer loses its reuse mark (its cells reference
+        ///     strings of the failed fill; <see cref="FreeBuffers"/> releases them with the buffer), and the transfer
+        ///     size becomes 0, NumPy's "the buffers are empty", so a later <see cref="CopyFromBuffers"/> writes
+        ///     nothing.
+        /// </summary>
+        /// <param name="state">The buffered iterator's state.</param>
+        /// <remarks>A no-op when no buffer is held (<see cref="NDIterState.BufTransferSize"/> already 0). The fills
+        ///     that completed before the failure were written back when the iteration moved past them, as in
+        ///     NumPy.</remarks>
+        internal static void ClearBuffers(ref NDIterState state)
+        {
+            if (state.BufTransferSize == 0)
+                return;
+
+            // NumPy trashes a buffer whose dtype holds references: it is never reused (the next fill reads it again).
+            var vstrings = NDIterVStringContext.Of(ref state);
+            if (vstrings != null)
+            {
+                int nop = state.NOp;
+                for (int op = 0; op < nop; op++)
+                {
+                    var flags = state.GetOpFlags(op);
+                    if ((flags & NDIterOpFlags.BUFNEVER) == 0 && vstrings.IsBufferVString(op)
+                        && (flags & NDIterOpFlags.BUF_REUSABLE) != 0)
+                        state.SetOpFlags(op, flags & ~NDIterOpFlags.BUF_REUSABLE);
+                }
+            }
+
+            // Signal that the buffers are empty.
+            state.BufTransferSize = 0;
+        }
+
         // =====================================================================
         // npyiter_fill_buffercopy_params + the N-D transfers
         // =====================================================================

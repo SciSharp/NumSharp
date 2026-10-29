@@ -99,6 +99,21 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         public bool IsCIndex;
 
+        /// <summary>
+        /// The iteration failed: an exception left one of <see cref="NDIterRef"/>'s drivers (a kernel, an inner loop, a
+        /// buffer fill or write-back they ran), or the success path's own write-back in <see
+        /// cref="NDIterRef.Dispose"/>. It is NumPy's <c>PyErr_Occurred()</c> at <c>NpyIter_Deallocate</c>: Dispose then
+        /// clears the held buffers instead of writing them back and discards the COPY_IF_OVERLAP write-backs, so the
+        /// operands keep what the completed fills wrote and nothing of the failed one.
+        /// </summary>
+        /// <remarks>
+        /// Set by the drivers' exception filter (<see cref="NDIterRef.MarkFailed"/>), never cleared until the state
+        /// block is recycled (<see cref="ResetForRecycle"/> resets the whole header). A loop a caller drives itself
+        /// (np.nditer's element walk, a hand-written <c>Iternext</c> loop) does not set it, so an exception in such a
+        /// loop's body still writes the buffers back, as NumPy's <c>with np.nditer(...)</c> block does on the way out.
+        /// </remarks>
+        internal bool Failed;
+
         // =========================================================================
         // Legacy compatibility fields
         // =========================================================================

@@ -248,98 +248,112 @@ namespace NumSharp.Backends.Iteration
         /// so strides scale by SrcElementSizes exactly as NDIter.ExternalLoopNext does (identical
         /// to ElementSizes on this unbuffered path).
         /// </summary>
+        /// <remarks>
+        ///     An exception that leaves it marks the iteration failed (<see cref="MarkFailed"/>), so
+        ///     <see cref="Dispose"/> clears the held buffers and discards the COPY_IF_OVERLAP write-backs instead of
+        ///     writing them into the operands, as NumPy's <c>NpyIter_Deallocate</c> does when an error is set.
+        /// </remarks>
         private bool TryExecute2DElementwise(
             NPTypeCode[] operandTypes,
             Action<ILGenerator> scalarBody,
             Action<ILGenerator>? vectorBody,
             in InnerLoopKernelKey key)
         {
-            if (!DirectILKernelGenerator.Enabled) return false;
-
-            // An empty iteration runs no block (see ForEach): with an empty LEADING axis the block below would still be
-            // innerCount x outerCount elements of operands that hold none. Handled: there is nothing to compute.
-            if (_state->IterSize == 0) return true;
-
-            int nop = _state->NOp;
-            if (operandTypes.Length != nop) return false;                 // defensive (mask already excluded)
-
-            int ndim = _state->NDim;
-            int inner = ndim - 1;
-            long* shape = _state->Shape;
-            int* srcSizes = _state->SrcElementSizes;
-
-            // The block starts at the innermost outer axis and grows outward while every operand
-            // walks the next axis out as a continuation of it.
-            int first = inner - 1;
-            while (first > 0)
+            try
             {
-                bool contiguous = true;
+                if (!DirectILKernelGenerator.Enabled) return false;
+
+                // An empty iteration runs no block (see ForEach): with an empty LEADING axis the block below would
+                // still be innerCount x outerCount elements of operands that hold none. Handled: there is nothing to
+                // compute.
+                if (_state->IterSize == 0) return true;
+
+                int nop = _state->NOp;
+                if (operandTypes.Length != nop) return false;                 // defensive (mask already excluded)
+
+                int ndim = _state->NDim;
+                int inner = ndim - 1;
+                long* shape = _state->Shape;
+                int* srcSizes = _state->SrcElementSizes;
+
+                // The block starts at the innermost outer axis and grows outward while every operand
+                // walks the next axis out as a continuation of it.
+                int first = inner - 1;
+                while (first > 0)
+                {
+                    bool contiguous = true;
+                    for (int op = 0; op < nop; op++)
+                    {
+                        if (_state->GetStride(first - 1, op) != _state->GetStride(first, op) * shape[first])
+                        {
+                            contiguous = false;
+                            break;
+                        }
+                    }
+                    if (!contiguous) break;
+                    first--;
+                }
+
+                long innerCount = shape[inner];
+                long outerCount = 1;
+                for (int d = first; d < inner; d++)
+                    outerCount *= shape[d];
+
+                long* innerStrides = stackalloc long[nop];
+                long* outerStrides = stackalloc long[nop];
                 for (int op = 0; op < nop; op++)
                 {
-                    if (_state->GetStride(first - 1, op) != _state->GetStride(first, op) * shape[first])
-                    {
-                        contiguous = false;
-                        break;
-                    }
+                    innerStrides[op] = _state->GetStride(inner, op) * srcSizes[op];
+                    outerStrides[op] = _state->GetStride(inner - 1, op) * srcSizes[op];
                 }
-                if (!contiguous) break;
-                first--;
-            }
 
-            long innerCount = shape[inner];
-            long outerCount = 1;
-            for (int d = first; d < inner; d++)
-                outerCount *= shape[d];
+                if (!DirectILKernelGenerator.TryGet2DKernel(key, out var kernel))
+                    kernel = DirectILKernelGenerator.Compile2DElementwiseKernel(
+                        operandTypes, scalarBody, vectorBody, key);
 
-            long* innerStrides = stackalloc long[nop];
-            long* outerStrides = stackalloc long[nop];
-            for (int op = 0; op < nop; op++)
-            {
-                innerStrides[op] = _state->GetStride(inner, op) * srcSizes[op];
-                outerStrides[op] = _state->GetStride(inner - 1, op) * srcSizes[op];
-            }
+                void** basePtrs = GetDataPtrArray();
+                if (first == 0)
+                {
+                    kernel(basePtrs, innerStrides, innerCount, outerStrides, outerCount);
+                    return true;
+                }
 
-            if (!DirectILKernelGenerator.TryGet2DKernel(key, out var kernel))
-                kernel = DirectILKernelGenerator.Compile2DElementwiseKernel(operandTypes, scalarBody, vectorBody, key);
+                // Leading axes 0..first-1: a per-block odometer over a private copy of the pointers
+                // (the iterator's own DataPtrs stay at the iteration start, as on the single-block
+                // path).
+                void** ptrs = stackalloc void*[nop];
+                for (int op = 0; op < nop; op++)
+                    ptrs[op] = basePtrs[op];
+                long* coords = stackalloc long[first];
+                for (int d = 0; d < first; d++)
+                    coords[d] = 0;
 
-            void** basePtrs = GetDataPtrArray();
-            if (first == 0)
-            {
-                kernel(basePtrs, innerStrides, innerCount, outerStrides, outerCount);
+                while (true)
+                {
+                    kernel(ptrs, innerStrides, innerCount, outerStrides, outerCount);
+
+                    int axis = first - 1;
+                    for (; axis >= 0; axis--)
+                    {
+                        if (++coords[axis] < shape[axis])
+                        {
+                            for (int op = 0; op < nop; op++)
+                                ptrs[op] = (byte*)ptrs[op] + _state->GetStride(axis, op) * srcSizes[op];
+                            break;
+                        }
+                        coords[axis] = 0;
+                        for (int op = 0; op < nop; op++)
+                            ptrs[op] = (byte*)ptrs[op] - _state->GetStride(axis, op) * (shape[axis] - 1) * srcSizes[op];
+                    }
+                    if (axis < 0)
+                        break;
+                }
                 return true;
             }
-
-            // Leading axes 0..first-1: a per-block odometer over a private copy of the pointers
-            // (the iterator's own DataPtrs stay at the iteration start, as on the single-block
-            // path).
-            void** ptrs = stackalloc void*[nop];
-            for (int op = 0; op < nop; op++)
-                ptrs[op] = basePtrs[op];
-            long* coords = stackalloc long[first];
-            for (int d = 0; d < first; d++)
-                coords[d] = 0;
-
-            while (true)
+            catch (Exception) when (MarkFailed())   // never entered: the filter only records the failure
             {
-                kernel(ptrs, innerStrides, innerCount, outerStrides, outerCount);
-
-                int axis = first - 1;
-                for (; axis >= 0; axis--)
-                {
-                    if (++coords[axis] < shape[axis])
-                    {
-                        for (int op = 0; op < nop; op++)
-                            ptrs[op] = (byte*)ptrs[op] + _state->GetStride(axis, op) * srcSizes[op];
-                        break;
-                    }
-                    coords[axis] = 0;
-                    for (int op = 0; op < nop; op++)
-                        ptrs[op] = (byte*)ptrs[op] - _state->GetStride(axis, op) * (shape[axis] - 1) * srcSizes[op];
-                }
-                if (axis < 0)
-                    break;
+                throw;
             }
-            return true;
         }
 
         // =====================================================================
@@ -416,82 +430,94 @@ namespace NumSharp.Backends.Iteration
         /// operand (mask included) walks contiguously into one block and walk any leading axes
         /// per block — the <see cref="TryExecute2DElementwise"/> structure over all NOp operands.
         /// </summary>
+        /// <remarks>
+        ///     An exception that leaves it marks the iteration failed (<see cref="MarkFailed"/>), so
+        ///     <see cref="Dispose"/> clears the held buffers and discards the COPY_IF_OVERLAP write-backs instead of
+        ///     writing them into the operands, as NumPy's <c>NpyIter_Deallocate</c> does when an error is set.
+        /// </remarks>
         private void Run2DMaskedBlocks(ND2DElementwiseKernel kernel)
         {
-            // An empty iteration runs no block (see ForEach and TryExecute2DElementwise).
-            if (_state->IterSize == 0) return;
-
-            int nop = _state->NOp;                                        // data operands + the mask
-            int ndim = _state->NDim;
-            int inner = ndim - 1;
-            long* shape = _state->Shape;
-            int* srcSizes = _state->SrcElementSizes;
-
-            int first = inner - 1;
-            while (first > 0)
+            try
             {
-                bool contiguous = true;
+                // An empty iteration runs no block (see ForEach and TryExecute2DElementwise).
+                if (_state->IterSize == 0) return;
+
+                int nop = _state->NOp;                                        // data operands + the mask
+                int ndim = _state->NDim;
+                int inner = ndim - 1;
+                long* shape = _state->Shape;
+                int* srcSizes = _state->SrcElementSizes;
+
+                int first = inner - 1;
+                while (first > 0)
+                {
+                    bool contiguous = true;
+                    for (int op = 0; op < nop; op++)
+                    {
+                        if (_state->GetStride(first - 1, op) != _state->GetStride(first, op) * shape[first])
+                        {
+                            contiguous = false;
+                            break;
+                        }
+                    }
+                    if (!contiguous) break;
+                    first--;
+                }
+
+                long innerCount = shape[inner];
+                long outerCount = 1;
+                for (int d = first; d < inner; d++)
+                    outerCount *= shape[d];
+
+                long* innerStrides = stackalloc long[nop];
+                long* outerStrides = stackalloc long[nop];
                 for (int op = 0; op < nop; op++)
                 {
-                    if (_state->GetStride(first - 1, op) != _state->GetStride(first, op) * shape[first])
-                    {
-                        contiguous = false;
-                        break;
-                    }
+                    innerStrides[op] = _state->GetStride(inner, op) * srcSizes[op];
+                    outerStrides[op] = _state->GetStride(inner - 1, op) * srcSizes[op];
                 }
-                if (!contiguous) break;
-                first--;
-            }
-
-            long innerCount = shape[inner];
-            long outerCount = 1;
-            for (int d = first; d < inner; d++)
-                outerCount *= shape[d];
-
-            long* innerStrides = stackalloc long[nop];
-            long* outerStrides = stackalloc long[nop];
-            for (int op = 0; op < nop; op++)
-            {
-                innerStrides[op] = _state->GetStride(inner, op) * srcSizes[op];
-                outerStrides[op] = _state->GetStride(inner - 1, op) * srcSizes[op];
-            }
 
 
-            void** basePtrs = GetDataPtrArray();
-            if (first == 0)
-            {
-                kernel(basePtrs, innerStrides, innerCount, outerStrides, outerCount);
+                void** basePtrs = GetDataPtrArray();
+                if (first == 0)
+                {
+                    kernel(basePtrs, innerStrides, innerCount, outerStrides, outerCount);
+                    return;
+                }
+
+                void** ptrs = stackalloc void*[nop];
+                for (int op = 0; op < nop; op++)
+                    ptrs[op] = basePtrs[op];
+                long* coords = stackalloc long[first];
+                for (int d = 0; d < first; d++)
+                    coords[d] = 0;
+
+                while (true)
+                {
+                    kernel(ptrs, innerStrides, innerCount, outerStrides, outerCount);
+
+                    int axis = first - 1;
+                    for (; axis >= 0; axis--)
+                    {
+                        if (++coords[axis] < shape[axis])
+                        {
+                            for (int op = 0; op < nop; op++)
+                                ptrs[op] = (byte*)ptrs[op] + _state->GetStride(axis, op) * srcSizes[op];
+                            break;
+                        }
+                        coords[axis] = 0;
+                        for (int op = 0; op < nop; op++)
+                            ptrs[op] = (byte*)ptrs[op] - _state->GetStride(axis, op) * (shape[axis] - 1) * srcSizes[op];
+                    }
+                    if (axis < 0)
+                        break;
+                }
                 return;
             }
-
-            void** ptrs = stackalloc void*[nop];
-            for (int op = 0; op < nop; op++)
-                ptrs[op] = basePtrs[op];
-            long* coords = stackalloc long[first];
-            for (int d = 0; d < first; d++)
-                coords[d] = 0;
-
-            while (true)
+            catch (Exception) when (MarkFailed())   // never entered: the filter only records the failure
             {
-                kernel(ptrs, innerStrides, innerCount, outerStrides, outerCount);
-
-                int axis = first - 1;
-                for (; axis >= 0; axis--)
-                {
-                    if (++coords[axis] < shape[axis])
-                    {
-                        for (int op = 0; op < nop; op++)
-                            ptrs[op] = (byte*)ptrs[op] + _state->GetStride(axis, op) * srcSizes[op];
-                        break;
-                    }
-                    coords[axis] = 0;
-                    for (int op = 0; op < nop; op++)
-                        ptrs[op] = (byte*)ptrs[op] - _state->GetStride(axis, op) * (shape[axis] - 1) * srcSizes[op];
-                }
-                if (axis < 0)
-                    break;
+                throw;
             }
-            return;
         }
 
         /// <summary>Convenience: 1-input + 1-output (unary).</summary>

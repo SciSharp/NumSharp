@@ -92,94 +92,107 @@ namespace NumSharp.Backends.Iteration
         ///     The iterator's own position is not moved: the blocks run over private copies of its start pointers, as the
         ///     numeric 2-D block route does, so the iterator is finished only in the sense that every element has been
         ///     visited. A caller disposes it afterwards as usual. An empty iteration makes no kernel call.
+        ///     <para>
+        ///     An exception that leaves it marks the iteration failed (<see cref="MarkFailed"/>), so
+        ///     <see cref="Dispose"/> clears the held buffers and discards the COPY_IF_OVERLAP write-backs instead of
+        ///     writing them into the operands, as NumPy's <c>NpyIter_Deallocate</c> does when an error is set.
+        ///     </para>
         /// </remarks>
         internal void ForEachRows(NDInnerLoop2DFunc kernel, void* auxdata = null)
         {
-            if (kernel is null)
-                throw new ArgumentNullException(nameof(kernel));
-            if (!CanRunRows)
-                throw new InvalidOperationException(
-                    "ForEachRows needs an unbuffered, unmasked EXTERNAL_LOOP iteration of at least two axes at its start.");
-
-            // An empty iteration runs no block (see ForEach: NumPy's callers never enter the loop of an empty iteration).
-            if (_state->IterSize == 0)
-                return;
-
-            int nop = _state->NOp;
-            int ndim = _state->NDim;
-            int inner = ndim - 1;
-            long* shape = _state->Shape;
-            // The data pointers walk SOURCE memory, so element strides scale by the source element sizes (the string
-            // operands' descriptor widths among them), exactly as ExternalLoopNext scales them.
-            int* sizes = _state->SrcElementSizes;
-
-            // The block grows outward from the innermost outer axis while every operand walks the next axis out as a
-            // continuation of it (a broadcast operand's 0 == 0 * extent continues too).
-            int first = inner - 1;
-            while (first > 0)
+            try
             {
-                bool continues = true;
+                if (kernel is null)
+                    throw new ArgumentNullException(nameof(kernel));
+                if (!CanRunRows)
+                    throw new InvalidOperationException(
+                        "ForEachRows needs an unbuffered, unmasked EXTERNAL_LOOP iteration of at least two axes at its start.");
+
+                // An empty iteration runs no block (see ForEach: NumPy's callers never enter the loop of an empty iteration).
+                if (_state->IterSize == 0)
+                    return;
+
+                int nop = _state->NOp;
+                int ndim = _state->NDim;
+                int inner = ndim - 1;
+                long* shape = _state->Shape;
+                // The data pointers walk SOURCE memory, so element strides scale by the source element sizes (the
+                // string operands' descriptor widths among them), exactly as ExternalLoopNext scales them.
+                int* sizes = _state->SrcElementSizes;
+
+                // The block grows outward from the innermost outer axis while every operand walks the next axis out as
+                // a continuation of it (a broadcast operand's 0 == 0 * extent continues too).
+                int first = inner - 1;
+                while (first > 0)
+                {
+                    bool continues = true;
+                    for (int op = 0; op < nop; op++)
+                    {
+                        if (_state->GetStride(first - 1, op) != _state->GetStride(first, op) * shape[first])
+                        {
+                            continues = false;
+                            break;
+                        }
+                    }
+                    if (!continues)
+                        break;
+                    first--;
+                }
+
+                long innerCount = shape[inner];
+                long outerCount = 1;
+                for (int d = first; d < inner; d++)
+                    outerCount *= shape[d];
+
+                long* innerStrides = stackalloc long[nop];
+                long* outerStrides = stackalloc long[nop];
                 for (int op = 0; op < nop; op++)
                 {
-                    if (_state->GetStride(first - 1, op) != _state->GetStride(first, op) * shape[first])
-                    {
-                        continues = false;
-                        break;
-                    }
+                    innerStrides[op] = _state->GetStride(inner, op) * sizes[op];
+                    outerStrides[op] = _state->GetStride(inner - 1, op) * sizes[op];
                 }
-                if (!continues)
-                    break;
-                first--;
-            }
 
-            long innerCount = shape[inner];
-            long outerCount = 1;
-            for (int d = first; d < inner; d++)
-                outerCount *= shape[d];
-
-            long* innerStrides = stackalloc long[nop];
-            long* outerStrides = stackalloc long[nop];
-            for (int op = 0; op < nop; op++)
-            {
-                innerStrides[op] = _state->GetStride(inner, op) * sizes[op];
-                outerStrides[op] = _state->GetStride(inner - 1, op) * sizes[op];
-            }
-
-            void** start = GetDataPtrArray();
-            if (first == 0)
-            {
-                kernel(start, innerStrides, innerCount, outerStrides, outerCount, auxdata);
-                return;
-            }
-
-            // Leading axes 0 .. first-1: an odometer over private pointer copies. The innermost of them advances by its
-            // stride; when an axis wraps, its pointers step back by (extent - 1) strides and the next axis out advances.
-            void** ptrs = stackalloc void*[nop];
-            for (int op = 0; op < nop; op++)
-                ptrs[op] = start[op];
-            long* coords = stackalloc long[first];
-            for (int d = 0; d < first; d++)
-                coords[d] = 0;
-
-            while (true)
-            {
-                kernel(ptrs, innerStrides, innerCount, outerStrides, outerCount, auxdata);
-
-                int axis = first - 1;
-                for (; axis >= 0; axis--)
+                void** start = GetDataPtrArray();
+                if (first == 0)
                 {
-                    if (++coords[axis] < shape[axis])
-                    {
-                        for (int op = 0; op < nop; op++)
-                            ptrs[op] = (byte*)ptrs[op] + _state->GetStride(axis, op) * sizes[op];
-                        break;
-                    }
-                    coords[axis] = 0;
-                    for (int op = 0; op < nop; op++)
-                        ptrs[op] = (byte*)ptrs[op] - _state->GetStride(axis, op) * (shape[axis] - 1) * sizes[op];
-                }
-                if (axis < 0)
+                    kernel(start, innerStrides, innerCount, outerStrides, outerCount, auxdata);
                     return;
+                }
+
+                // Leading axes 0 .. first-1: an odometer over private pointer copies. The innermost of them advances by
+                // its stride; when an axis wraps, its pointers step back by (extent - 1) strides and the next axis out
+                // advances.
+                void** ptrs = stackalloc void*[nop];
+                for (int op = 0; op < nop; op++)
+                    ptrs[op] = start[op];
+                long* coords = stackalloc long[first];
+                for (int d = 0; d < first; d++)
+                    coords[d] = 0;
+
+                while (true)
+                {
+                    kernel(ptrs, innerStrides, innerCount, outerStrides, outerCount, auxdata);
+
+                    int axis = first - 1;
+                    for (; axis >= 0; axis--)
+                    {
+                        if (++coords[axis] < shape[axis])
+                        {
+                            for (int op = 0; op < nop; op++)
+                                ptrs[op] = (byte*)ptrs[op] + _state->GetStride(axis, op) * sizes[op];
+                            break;
+                        }
+                        coords[axis] = 0;
+                        for (int op = 0; op < nop; op++)
+                            ptrs[op] = (byte*)ptrs[op] - _state->GetStride(axis, op) * (shape[axis] - 1) * sizes[op];
+                    }
+                    if (axis < 0)
+                        return;
+                }
+            }
+            catch (Exception) when (MarkFailed())   // never entered: the filter only records the failure
+            {
+                throw;
             }
         }
     }

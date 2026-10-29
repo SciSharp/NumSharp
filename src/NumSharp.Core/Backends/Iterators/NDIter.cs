@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.CompilerServices;
+using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using NumSharp.Backends.Kernels;
 using NumSharp.Backends.Strings;
@@ -2237,11 +2238,17 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>
-        /// Resolve pending COPY_IF_OVERLAP write-backs: copy each temporary
-        /// operand back into the user's original array. Idempotent. NumPy
-        /// resolves WRITEBACKIFCOPY in NDIter_Deallocate.
+        /// Resolve pending COPY_IF_OVERLAP write-backs: copy each temporary operand back into the user's original array
+        /// (NumPy's <c>PyArray_ResolveWritebackIfCopy</c>), or, for a failed iteration, discard it
+        /// (<c>PyArray_DiscardWritebackIfCopy</c>): the original keeps its contents. Either way the temporary is
+        /// released and the operand slot reverts to the original. Idempotent. NumPy resolves WRITEBACKIFCOPY in
+        /// NpyIter_Deallocate.
         /// </summary>
-        private void ResolveWritebacks()
+        /// <param name="discard">True for a failed iteration (<see cref="NDIterState.Failed"/>): no temporary is copied
+        ///     back.</param>
+        /// <exception cref="ValueError">A copy back between a text and a number does not convert (the success path's
+        ///     <see cref="UnmanagedStorage.Copyto"/>).</exception>
+        private void ResolveWritebacks(bool discard)
         {
             // The read-only copy routes first: their temporaries go back to the pool and the slots to the originals,
             // with nothing copied back (they were only read).
@@ -2264,9 +2271,11 @@ namespace NumSharp.Backends.Iteration
                 if (original is null)
                     continue;
                 var temp = ops[iop];
-                // NumPy's PyArray_ResolveWritebackIfCopy copies with UNSAFE casting (PyArray_CopyAnyInto): a temporary in
-                // its iteration dtype (an updateifcopy cast) writes back whatever the construction-time rule was.
-                UnmanagedStorage.Copyto(original, temp, NPY_CASTING.NPY_UNSAFE_CASTING);
+                // NumPy's PyArray_ResolveWritebackIfCopy copies with UNSAFE casting (PyArray_CopyAnyInto): a temporary
+                // in its iteration dtype (an updateifcopy cast) writes back whatever the construction-time rule was. A
+                // failed iteration's temporary is dropped instead (PyArray_DiscardWritebackIfCopy).
+                if (!discard)
+                    UnmanagedStorage.Copyto(original, temp, NPY_CASTING.NPY_UNSAFE_CASTING);
 
                 // The forced-copy temporary has served its purpose: put the user's original
                 // back in the operand slot (NumPy's operands revert to the originals once
@@ -4595,23 +4604,72 @@ namespace NumSharp.Backends.Iteration
         // =========================================================================
 
         /// <summary>
-        /// Deallocate iterator resources.
+        /// Deallocate iterator resources: NumPy's <c>NpyIter_Deallocate</c>. When the iteration succeeded, a held
+        /// buffer is written back and the COPY_IF_OVERLAP temporaries are copied into the caller's arrays; when it
+        /// failed (<see cref="NDIterState.Failed"/>: one of this iterator's drivers threw) the buffers are cleared and
+        /// the temporaries discarded, so the operands keep what the completed fills wrote and nothing of the failed
+        /// one.
         /// </summary>
+        /// <exception cref="ValueError">The success path's write-back of the held buffer does not convert (a number
+        ///     into a text, or a text into a number); raised after the iterator's resources are released.</exception>
+        /// <exception cref="OverflowException">That write-back puts a text's number outside an integer
+        ///     dtype.</exception>
+        /// <exception cref="UnicodeEncodeError">That write-back puts a non-ASCII text into <c>S</c>.</exception>
+        /// <exception cref="OutOfMemoryException">That write-back cannot allocate a <c>StringDType</c>
+        ///     string.</exception>
+        /// <remarks>
+        ///     <para>
+        ///     A write-back that throws is a failure too, as in NumPy (<c>success = NPY_FAIL</c>): the buffers are
+        ///     cleared, the temporaries discarded and the memory released before the exception is raised again, where
+        ///     it used to leave the temporaries and the state block behind.
+        ///     </para>
+        ///     <para>
+        ///     The flag is set only by the drivers (<see cref="MarkFailed"/>). An exception in a loop the caller writes
+        ///     around the iterator (np.nditer's element walk) is not seen here, and the buffers are written back, as
+        ///     NumPy's <c>with</c> block writes them back when its body raises.
+        ///     </para>
+        /// </remarks>
         public void Dispose()
         {
-            // A buffered iteration stopped before its end still holds a buffer: write it back (NumPy's NpyIter_Deallocate
-            // runs npyiter_copy_from_buffers; after the end nothing is held, so this writes nothing). Must run BEFORE
-            // ResolveWritebacks so the buffer contents reach a forced-copy temp before that temp is copied to the user's array.
+            // NumPy's `success = PyErr_Occurred() == NULL`: a driver that threw marked the state (MarkFailed).
+            bool failed = _state != null && _state->Failed;
+            ExceptionDispatchInfo writeBackError = null;
+
+            // A buffered iteration stopped before its end still holds a buffer. On success it is written back (NumPy's
+            // npyiter_copy_from_buffers; after the end nothing is held, so this writes nothing); on failure it is
+            // cleared (npyiter_clear_buffers), so no element of the failed fill reaches an operand - a kernel that
+            // threw leaves a buffer it filled only in part, and a write-back that threw must not be tried again. Must
+            // run BEFORE ResolveWritebacks so the buffer contents reach a forced-copy temp before that temp is copied
+            // to the user's array.
             if (_state != null &&
                 (_state->ItFlags & (uint)NDIterFlags.BUFFER) != 0 &&
                 (_state->ItFlags & (uint)NDIterFlags.DELAYBUF) == 0)
             {
-                NDIterBufferManager.CopyFromBuffers(ref *_state);
+                if (failed)
+                {
+                    NDIterBufferManager.ClearBuffers(ref *_state);
+                }
+                else
+                {
+                    try
+                    {
+                        NDIterBufferManager.CopyFromBuffers(ref *_state);
+                    }
+                    catch (Exception e)
+                    {
+                        // NumPy: `if (npyiter_copy_from_buffers(iter) < 0) success = NPY_FAIL;` and the deallocation
+                        // goes on - the write-backs are discarded and the memory freed - before the error is raised.
+                        writeBackError = ExceptionDispatchInfo.Capture(e);
+                        failed = true;
+                        _state->Failed = true;
+                        NDIterBufferManager.ClearBuffers(ref *_state);
+                    }
+                }
             }
 
-            // COPY_IF_OVERLAP write-backs must resolve regardless of state
-            // ownership (NumPy resolves WRITEBACKIFCOPY in NDIter_Deallocate).
-            ResolveWritebacks();
+            // COPY_IF_OVERLAP write-backs must resolve regardless of state ownership (NumPy resolves WRITEBACKIFCOPY in
+            // NpyIter_Deallocate): copied into the originals on success, discarded on failure.
+            ResolveWritebacks(discard: failed);
 
             if (_ownsState && _state != null)
             {
@@ -4631,6 +4689,26 @@ namespace NumSharp.Backends.Iteration
                 _state = null;
                 _ownsState = false;
             }
+
+            // The success path's write-back failed: raised now, with its own stack trace, the resources released.
+            writeBackError?.Throw();
+        }
+
+        /// <summary>
+        /// The drivers' exception filter: records that the iteration failed (<see cref="NDIterState.Failed"/>) and lets
+        /// the exception go on, so <see cref="Dispose"/> takes NumPy's error branch of <c>NpyIter_Deallocate</c>.
+        /// </summary>
+        /// <returns>Always false, so the filter never catches: written <c>catch (Exception) when (MarkFailed()) {
+        ///     throw; }</c>, the exception keeps its stack trace and unwinds exactly as before.</returns>
+        /// <remarks>An exception filter runs in the first pass of exception handling, before any <c>finally</c> block
+        ///     or <c>using</c> disposal, so the flag is set by the time the caller's <c>using</c> disposes the
+        ///     iterator. A caller that catches a driver's exception and goes on with the same iterator keeps the flag:
+        ///     its later write-backs are dropped too.</remarks>
+        internal bool MarkFailed()
+        {
+            if (_state != null)
+                _state->Failed = true;
+            return false;
         }
 
         /// <summary>
