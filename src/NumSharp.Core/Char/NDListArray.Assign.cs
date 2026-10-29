@@ -690,17 +690,18 @@ namespace NumSharp
         ///     UTF-8 as Windows' file-system encoding) or a <see cref="FileSystemInfo"/> (Python's <c>os.PathLike</c>) — which
         ///     is created or truncated first, as NumPy opens it with <c>"wb"</c>; or an open <see cref="Stream"/> (NumPy's
         ///     file object), written from its position and left open.</param>
-        /// <param name="sep">The separator; <c>""</c> is binary mode.</param>
+        /// <param name="sep">The separator; <c>""</c> is binary mode. Null is Python's <c>None</c>, which NumPy refuses.</param>
         /// <param name="format">CPython's <c>%</c> format applied to each list (<c>%s</c> / <c>%r</c> its repr, <c>%a</c> its
-        ///     ascii(), width and precision as for a str).</param>
+        ///     ascii(), width and precision as for a str). Null is Python's <c>None</c>, which NumPy refuses.</param>
         /// <exception cref="AttributeError"><paramref name="fid"/> is neither a file name nor a stream: NumPy calls its
         ///     <c>flush()</c> first (<c>'NoneType' object has no attribute 'flush'</c> for null).</exception>
         /// <exception cref="OSError"><c>cannot write object arrays to a file in binary mode</c> (an empty array too), after the
         ///     file is created, as in NumPy.</exception>
         /// <exception cref="ValueError">A NUL in <paramref name="sep"/> or <paramref name="format"/> (checked before the file
         ///     is opened); a malformed format.</exception>
-        /// <exception cref="TypeError">A conversion a list does not take (<c>%d format: a real number is required, not
-        ///     list</c>), or the wrong number of conversions.</exception>
+        /// <exception cref="TypeError">A null <paramref name="sep"/> or <paramref name="format"/> (<c>tofile() argument 2 must
+        ///     be str, not None</c>, argument 3 for the format; checked before the file is opened), a conversion a list does
+        ///     not take (<c>%d format: a real number is required, not list</c>), or the wrong number of conversions.</exception>
         /// <exception cref="UnicodeEncodeError">A list whose text is not ASCII (NumPy 2.4.2 crashes the process there); a
         ///     lone surrogate in <paramref name="sep"/> or <paramref name="format"/>.</exception>
         /// <exception cref="IOException">The file cannot be created (.NET's exception for NumPy's OSError).</exception>
@@ -712,9 +713,9 @@ namespace NumSharp
         public void tofile(object fid, string sep = "", string format = "%s")
         {
             ThrowIfDisposed();
-            // array_tofile parses sep and format with the "s" converter before it touches the file.
-            NDArray.CheckToFileArgument(sep);
-            NDArray.CheckToFileArgument(format);
+            // array_tofile parses sep and format (its arguments 2 and 3) with the "s" converter before it touches the file.
+            NDArray.CheckToFileArgument(sep, 2);
+            NDArray.CheckToFileArgument(format, 3);
             switch (fid)
             {
                 case Stream stream:

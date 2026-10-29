@@ -639,6 +639,15 @@ namespace NumSharp.Tests.Backends.Strings
             using var number = new MemoryStream();
             Action d = () => r.tofile(number, "|", "%d");
             d.Should().Throw<TypeError>().WithMessage("%d format: a real number is required, not list");
+            // A null sep / format is Python's None, which tofile's "s" arguments refuse before the file is touched (NumPy
+            // 2.4.2: np.array([[1], [2, 3]], dtype=object).tofile(f, sep=None) is "tofile() argument 2 must be str, not
+            // None").
+            using var none = new MemoryStream();
+            Action noSep = () => r.tofile(none, null);
+            noSep.Should().Throw<TypeError>().WithMessage("tofile() argument 2 must be str, not None");
+            Action noFormat = () => r.tofile(none, "|", null);
+            noFormat.Should().Throw<TypeError>().WithMessage("tofile() argument 3 must be str, not None");
+            none.Length.Should().Be(0);
         }
     }
 }
