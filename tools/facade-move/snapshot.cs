@@ -105,8 +105,13 @@
 // produces no line), with np.full's fill value (CtorFillLabels: C# numbers of every kind, text, bytes, None, a Python int
 // past every C# integer, NaN and -0.0, 0-d and broadcast arrays, a C# array), np.eye's M and k, the creation order (C
 // first: NumPy's creation functions refuse A and K) and np.ndarray's buffer, offset and strides varied; the _like forms'
-// fill value and shape= take the same variants); an overload with a required parameter of another kind is reported once
-// as SKIP. An int
+// fill value and shape= take the same variants), and np.frombuffer's (which takes no array either: its operand is a
+// BUFFER holding the pool operand's C-order bytes in the C# form its first parameter takes - a byte[], NumSharp's MemoryView
+// of the operand itself, an ArraySegment / a Memory of bytes inside a larger array, a Memory over unmanaged memory, an
+// address with its byte length, the generic overload's typed C# array of the operand's values (instantiated for every
+// element type NumSharp stores) - see BufferForms, with the count, the byte offset, the address overloads' byte length and
+// the dtype as a descriptor, an NPTypeCode or a name varied; its ReadOnlySpan overloads cannot be called by reflection); an
+// overload with a required parameter of another kind is reported once as SKIP. An int
 // axis
 // starts from its default when it has one. A search function (np.searchsorted) runs on pools of 1-D haystacks: sorted,
 // strided, reversed, unsorted and empty ones beside one 2-D operand; np.convolve / np.correlate run on the same 1-D pools
@@ -444,6 +449,12 @@ static class Snapshot
         // forms (base: the prototype's own), np.eye's M and k, the creation order (C first, unlike the general Order role:
         // NumPy's creation functions refuse A and K), and np.ndarray's buffer, byte offset and byte strides.
         CtorShape, CtorFill, CtorShapeArg, EyeM, EyeK, CtorOrder, NdBuffer, NdOffset, NdStrides,
+        // np.frombuffer takes no array: its operand is a BUFFER, its first parameter (a byte[], a MemoryView, an
+        // ArraySegment / a Memory of bytes, an address, a typed C# array), built in Call from the pool operand's C-order
+        // bytes in the parameter's C# form (BufferForms, TryMakeBufferOperand). The address overloads' byte length is built
+        // from that buffer (BufferLengthLabels: never past its end, the memory being the tool's); the count, the byte offset
+        // and the dtype as a descriptor, an NPTypeCode or a name take their own variants.
+        BufferOperand, BufferLength, BufferCount, BufferOffset, BufferDType, BufferTypeCode, BufferDTypeName,
         // np.where's x / y given as a C# value (its object overloads): NumPy's array_like - a Python int / float / complex /
         // bool / str, a NumPy scalar, a 0-d array, a C# array - which np.where converts as NDArray.FromPythonOperand does.
         WhereScalar,
@@ -989,14 +1000,16 @@ static class Snapshot
     ///     the coercion family's generic overloads (np.array&lt;T&gt;, np.asarray&lt;T&gt;, NDArray.Scalar&lt;T&gt;) for
     ///     every element type NumSharp stores (<see cref="HostElementTypes"/>), each fed only the pool operands of its own
     ///     dtype; the constructor family's (np.empty&lt;T&gt;, np.zeros&lt;T&gt;, np.ones&lt;T&gt;, np.full&lt;T&gt;) for the
-    ///     same element types, each over every shape; none for any other generic method, whose targets keep their snapshots.
+    ///     same element types, each over every shape; np.frombuffer&lt;TSource&gt;'s for the same element types, each fed
+    ///     only the pool operands of its own dtype (its buffer is their values as a <c>TSource[]</c>); none for any other
+    ///     generic method, whose targets keep their snapshots.
     /// </summary>
     /// <param name="m">A generic method definition.</param>
     /// <returns>Its closed instances, or none.</returns>
     private static IEnumerable<MethodInfo> SnapshotInstantiations(MethodInfo m) =>
         m.DeclaringType == typeof(np) && m.Name == "copyto"
             ? CopytoScalarLabels.Keys.Select(t => m.MakeGenericMethod(t))
-            : IsCoercion(m) || IsCtor(m)
+            : IsCoercion(m) || IsCtor(m) || IsFromBuffer(m)
                 ? HostElementTypes.Select(t => m.MakeGenericMethod(t))
                 : Enumerable.Empty<MethodInfo>();
 
@@ -1094,6 +1107,19 @@ static class Snapshot
     /// <param name="p">The parameter.</param>
     /// <returns>True for a parameter of np.empty_like / np.zeros_like / np.ones_like / np.full_like.</returns>
     private static bool IsLike(ParameterInfo p) => p.Member.Name.EndsWith("_like", StringComparison.Ordinal);
+
+    /// <summary>
+    ///     Whether an overload is np.frombuffer (NumPy's <c>PyArray_FromBuffer</c>, <c>ctors.c</c>), which takes no array: its
+    ///     operand is the buffer its first parameter names (<see cref="BufferForms"/>).
+    /// </summary>
+    /// <param name="m">The overload (the generic one closed or not).</param>
+    /// <returns>True for a public static overload of np.frombuffer.</returns>
+    private static bool IsFromBuffer(MethodInfo m) => m.DeclaringType == typeof(np) && m.Name == "frombuffer";
+
+    /// <summary>Whether a parameter belongs to np.frombuffer (<see cref="IsFromBuffer(MethodInfo)"/>).</summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True when its method is an np.frombuffer overload.</returns>
+    private static bool IsFromBuffer(ParameterInfo p) => p.Member is MethodInfo m && IsFromBuffer(m);
 
     /// <summary>
     ///     The shapes the constructor family runs on (its operand pool): 0-d, a vector, a matrix, an empty vector, an empty
@@ -1713,6 +1739,18 @@ static class Snapshot
             if (n == "offset" && t == typeof(long)) return Role.NdOffset;
             if (n == "strides" && t == typeof(long[])) return Role.NdStrides;
             if (n == "device" && t == typeof(string)) return Role.CoerceDevice;
+        }
+        // np.frombuffer's own parameters (only its; its buffer is the operand, set in RunOverload, and its dispose keeps its
+        // default null: the memory stays the tool's): the address overloads' byte length (built from the buffer), the count,
+        // the byte offset, and the dtype as a descriptor, an NPTypeCode or a name.
+        if (IsFromBuffer(p))
+        {
+            if (n == "byteLength" && t == typeof(long)) return Role.BufferLength;
+            if (n == "count" && t == typeof(long)) return Role.BufferCount;
+            if (n == "offset" && t == typeof(long)) return Role.BufferOffset;
+            if (n == "dtype" && t == typeof(DType)) return Role.BufferDType;
+            if (n == "dtype" && t == typeof(NPTypeCode)) return Role.BufferTypeCode;
+            if (n == "dtype" && t == typeof(string)) return Role.BufferDTypeName;
         }
         // np.where's x / y as a C# value (only its object overloads: its NDArray x / y take the second-operand role below).
         if (IsWhere(p) && n is "x" or "y" && t == typeof(object))
@@ -2400,6 +2438,49 @@ static class Snapshot
                 Add("null", () => null);
                 foreach (var s in new[] { new long[] { 24, 8 }, new long[] { 8, 16 }, new long[] { 8 }, new long[] { -8 }, new long[] { 4 }, new long[] { 8, 8, 8 } })
                     Add("[" + string.Join(",", s) + "]", () => s);
+                break;
+            case Role.BufferLength:
+                // Built from the buffer in Call (MakeBufferLength); the factory here is never called.
+                Add(BufferLengthLabels[0], () => null);
+                break;
+            case Role.BufferCount:
+                // Every element of the buffer first, then none, one, a few, more than any pool operand's bytes hold, and
+                // another negative count (NumPy reads every negative count as "all").
+                foreach (var c in new[] { -1L, 0L, 1L, 3L, 100L, -2L })
+                    Add(c.ToString(CultureInfo.InvariantCulture), () => c);
+                break;
+            case Role.BufferOffset:
+                // No offset first, then byte offsets that keep and break each element size's alignment, a negative offset and
+                // one past every pool operand's bytes.
+                foreach (var off in new[] { 0L, 1L, 2L, 4L, 8L, 16L, -1L, 1000L })
+                    Add(off.ToString(CultureInfo.InvariantCulture), () => off);
+                break;
+            case Role.BufferDType:
+                // The default (null: float64) first, then numeric descriptors of every item size, two non-native ones (the
+                // bytes read big-endian), the fixed-width strings (one-byte S3, UCS-4 U2 and a non-native U2, NumPy's 'c', which
+                // is S1), the unsized S NumPy refuses, and StringDType, whose cells hold references.
+                Add("null", () => null);
+                foreach (var d in new[] { "float64", "int32", "int8", "uint16", "bool", "float16", "complex128", ">i4", ">f8", "S3", "U2", ">U2", "c", "S", "T" })
+                    Add(d, () => np.dtype(d));
+                break;
+            case Role.BufferTypeCode:
+                // The required type code: float64 first, then the other storage lanes (decimal and char are NumSharp's), the
+                // unsized String lane (NumPy's np.str_, refused) and Empty (read as float64).
+                foreach (var c in new[]
+                         {
+                             NPTypeCode.Double, NPTypeCode.Int32, NPTypeCode.SByte, NPTypeCode.UInt16, NPTypeCode.Boolean,
+                             NPTypeCode.Half, NPTypeCode.Complex, NPTypeCode.Int64, NPTypeCode.Decimal, NPTypeCode.Char,
+                             NPTypeCode.String, NPTypeCode.Empty,
+                         })
+                    Add(c.ToString(), () => c);
+                break;
+            case Role.BufferDTypeName:
+                // The required dtype name: float64 first, then sized codes under each byte-order prefix, one-letter codes, the
+                // complex64 code NumSharp refuses, a NumPy name, the fixed-width strings and NumPy's 'c', StringDType, a name
+                // nothing parses, the empty name and null.
+                foreach (var d in new[] { "float64", "<f8", ">f8", "=i4", ">i4", "|u1", "b1", "?", ">u2", "f2", ">f2", "c16", ">c16", "c8", "int32", "S3", "<U2", ">U2", "c", "T", "bogus", "" })
+                    Add(d, () => d);
+                Add("null", () => null);
                 break;
             case Role.CoerceSize:
             {
@@ -3105,6 +3186,15 @@ static class Snapshot
                 sawArray = true;
                 continue;
             }
+            // np.frombuffer's operand: its buffer, every overload's first parameter, built per call from the pool operand's
+            // bytes in the parameter's C# form (TryMakeBufferOperand). A ReadOnlySpan<byte> cannot be passed by reflection,
+            // so that overload is reported as SKIP.
+            if (i == 0 && !instance && IsFromBuffer(m))
+            {
+                roles[i] = ps[0].ParameterType.IsByRefLike ? Role.Unsupported : Role.BufferOperand;
+                sawArray = true;
+                continue;
+            }
             // np.histogramdd's sequence form: its NDArray[] sample is built from the pool operand (its columns), and the
             // NDArray parameters after it (weights) keep their own roles.
             if (!sawArray && ps[i].ParameterType == typeof(NDArray[]) && ps[i].Name == "sample")
@@ -3174,7 +3264,7 @@ static class Snapshot
             yield return $"{signature}\tSKIP unsupported required parameter {TypeName(ps[unsupported].ParameterType)} {ps[unsupported].Name}";
             yield break;
         }
-        var variants = ps.Select((p, i) => roles[i] is Role.Operand or Role.HostOperand or Role.SpacePair or Role.CtorShape ? null : Variants(p, roles[i])).ToArray();
+        var variants = ps.Select((p, i) => roles[i] is Role.Operand or Role.HostOperand or Role.SpacePair or Role.CtorShape or Role.BufferOperand ? null : Variants(p, roles[i])).ToArray();
         int operandIndex = Array.IndexOf(roles, Role.Operand);
         // A coercion overload's operand is its host operand, built per call from the pool operand.
         int hostIndex = Array.IndexOf(roles, Role.HostOperand);
@@ -3191,6 +3281,11 @@ static class Snapshot
         bool ctor = operandIndex < 0 && shapeIndex >= 0;
         if (ctor)
             operandIndex = shapeIndex;
+        // np.frombuffer's operand is its buffer.
+        int bufferIndex = Array.IndexOf(roles, Role.BufferOperand);
+        bool buffer = operandIndex < 0 && bufferIndex >= 0;
+        if (buffer)
+            operandIndex = bufferIndex;
         var none = Array.Empty<(int, int)>();
 
         // The number of non-base variants per parameter (0 for the operand and for parameters kept at their default).
@@ -3200,6 +3295,8 @@ static class Snapshot
             Role.HostOperand => 0,
             Role.SpacePair => 0,
             Role.CtorShape => 0,
+            Role.BufferOperand => 0,
+            Role.BufferLength => BufferLengthLabels.Length - 1,
             Role.Out => OutVariantLabels.Length,
             Role.Weights => WeightVariantLabels.Length,
             Role.Where => WhereVariantLabels.Length,
@@ -3271,6 +3368,22 @@ static class Snapshot
             dtypes = new[] { "shape" };
             pairDtypes = dtypes;
         }
+        if (buffer)
+        {
+            // A buffer takes every form its parameter type admits ("layout:form", see BufferForms), and the generic
+            // overload's typed array only the pool operands of its element type: the other dtypes have no such C# array.
+            string[] forms = BufferForms(ps[operandIndex]);
+            string[] WithBufferForms(string[] layouts) => layouts.SelectMany(l => forms.Select(f => l + ":" + f)).ToArray();
+            fullLayouts = WithBufferForms(fullLayouts);
+            reducedLayouts = WithBufferForms(reducedLayouts);
+            pairLayouts = WithBufferForms(pairLayouts);
+            if (m.IsGenericMethod)
+            {
+                Type element = ps[operandIndex].ParameterType.GetElementType();
+                dtypes = Dtypes.Where(d => HostElementType(d) == element).ToArray();
+                pairDtypes = dtypes;
+            }
+        }
         // A host operand form the pool operand does not have (Call returns null) produces no line; an overload whose host
         // parameter no pool operand fits (np.array<T>(T[,,,,]): no pool operand has rank 5) reports that once.
         int produced = 0;
@@ -3312,6 +3425,188 @@ static class Snapshot
         if (produced == 0)
             yield return $"{signature}\tSKIP no pool operand has a host form this parameter takes";
     }
+
+    /// <summary>
+    ///     The memory the buffer forms <c>native</c> and <c>ptr</c> lay their bytes in (NumSharp uint8 arrays, so a read past
+    ///     a buffer's end meets a guard page under <c>NUMSHARP_DEBUG_GUARD_PAGES=1</c>), kept alive for the whole run: a result
+    ///     of np.frombuffer over an address views that memory without owning it, as it would the caller's memory.
+    /// </summary>
+    private static readonly List<NDArray> BufferMemory = new();
+
+    /// <summary>
+    ///     The forms np.frombuffer's buffer operand takes, by the type of its first parameter: each a C# value built from the
+    ///     pool operand by <see cref="TryMakeBufferOperand"/>.
+    ///     <list type="bullet">
+    ///         <item><c>bytes</c>: a <c>byte[]</c> of the operand's C-order bytes (NumPy's <c>bytearray</c>: writable).</item>
+    ///         <item><c>data</c>: the operand's own <see cref="np.MemoryView"/> (<c>ndarray.data</c>: np.frombuffer refuses a
+    ///             non-contiguous operand's, and a read-only operand's makes a read-only result).</item>
+    ///         <item><c>segment</c>: an <c>ArraySegment&lt;byte&gt;</c> of the bytes at offset 3 of a larger array, junk bytes
+    ///             after them; <c>whole</c>: one over exactly the bytes.</item>
+    ///         <item><c>memory</c>: a <c>Memory&lt;byte&gt;</c> of the bytes at offset 3 of a larger array; <c>native</c>:
+    ///             one over unmanaged memory (no array behind it: np.frombuffer copies it through a span).</item>
+    ///         <item><c>ptr</c>: the address of unmanaged memory holding the bytes (an <c>IntPtr</c>, or a <c>void*</c> boxed
+    ///             for reflection).</item>
+    ///         <item><c>flat</c>: the generic overload's <c>TSource[]</c> of the operand's values in C order.</item>
+    ///         <item><c>null</c> / <c>default</c> / <c>nullptr</c>: null, a default <c>ArraySegment</c> / <c>Memory</c>, a null
+    ///             address, built once (the float64 0-d slot).</item>
+    ///     </list>
+    /// </summary>
+    /// <param name="p">The buffer parameter.</param>
+    /// <returns>The form names, in the order the pools try them.</returns>
+    /// <exception cref="ArgumentException">A buffer type the tool does not know (a new overload: give it its forms).</exception>
+    private static string[] BufferForms(ParameterInfo p)
+    {
+        Type t = p.ParameterType;
+        // The generic overload first: its TSource[] closed over byte is a byte[] too, and takes the operand's VALUES.
+        if (p.Member is MethodInfo { IsGenericMethod: true } && t.IsArray) return new[] { "flat", "null" };
+        if (t == typeof(byte[])) return new[] { "bytes", "null" };
+        if (t == typeof(np.MemoryView)) return new[] { "data", "null" };
+        if (t == typeof(ArraySegment<byte>)) return new[] { "segment", "whole", "default" };
+        if (t == typeof(Memory<byte>)) return new[] { "memory", "native", "default" };
+        if (t == typeof(IntPtr) || t.IsPointer) return new[] { "ptr", "nullptr" };
+        throw new ArgumentException("unknown np.frombuffer buffer type " + TypeName(t));
+    }
+
+    /// <summary>
+    ///     Builds np.frombuffer's buffer operand: <paramref name="form"/> (<see cref="BufferForms"/>) of the pool operand for a
+    ///     buffer parameter of type <paramref name="t"/>, or false when the operand has no such form (a StringDType operand has
+    ///     no bytes and no memoryview, a typed array takes only the operands of its element type, a value is built once).
+    /// </summary>
+    /// <param name="t">The buffer parameter's type.</param>
+    /// <param name="form">The form.</param>
+    /// <param name="dt">The operand's pool dtype.</param>
+    /// <param name="baseLayout">The operand's pool layout.</param>
+    /// <param name="operand">The pool operand.</param>
+    /// <param name="value">Receives the buffer (a <c>void*</c> boxed by <see cref="Pointer.Box"/>).</param>
+    /// <param name="length">Receives the buffer's length in bytes, which the address overloads' byte length is built from
+    ///     (<see cref="MakeBufferLength"/>); 0 for the once-built forms and the typed array, whose overloads take none.</param>
+    /// <returns>Whether the form exists for this operand.</returns>
+    /// <exception cref="ArgumentException">An unknown form (a bug in the tool).</exception>
+    private static unsafe bool TryMakeBufferOperand(Type t, string form, string dt, string baseLayout, NDArray operand,
+        out object value, out long length)
+    {
+        value = null;
+        length = 0;
+        // The once-built forms take one slot: the float64 0-d operand.
+        bool onceSlot = dt == "float64" && baseLayout == "0d";
+        switch (form)
+        {
+            case "null":
+            case "default":
+            case "nullptr":
+                if (!onceSlot)
+                    return false;
+                value = form == "null" ? null
+                    : form == "default" ? (t == typeof(ArraySegment<byte>) ? default(ArraySegment<byte>) : (object)default(Memory<byte>))
+                    : t.IsPointer ? Pointer.Box(null, t) : IntPtr.Zero;
+                return true;
+            case "data":
+                // ndarray.data refuses a dtype that holds references (StringDType, as NumPy refuses its buffer): that operand
+                // has no MemoryView, so no line.
+                try
+                {
+                    var view = operand.data;
+                    value = view;
+                    length = view.nbytes;
+                }
+                catch (ValueError)
+                {
+                    return false;
+                }
+                return true;
+            case "flat":
+            {
+                // The generic overload's TSource[]: only the operands whose values are TSource (RunOverload filters the
+                // dtypes, so this holds for every operand it hands over).
+                Type e = t.GetElementType();
+                if (HostElementType(dt) != e)
+                    return false;
+                object[] items = Enumerable.Range(0, (int)operand.size).Select(i => operand.GetAtIndex(i)).ToArray();
+                value = Rectangular(e, new[] { items.Length }, items);
+                return true;
+            }
+        }
+        // The remaining forms carry the operand's C-order bytes; a StringDType operand has none.
+        byte[] bytes = BufferBytesOf(operand);
+        if (bytes is null)
+            return false;
+        length = bytes.LongLength;
+        switch (form)
+        {
+            case "bytes":
+                value = bytes;
+                return true;
+            case "whole":
+                value = new ArraySegment<byte>(bytes);
+                return true;
+            case "segment":
+            case "memory":
+            {
+                // The bytes at offset 3 of a larger array with junk after them: the segment or memory, not the array behind it,
+                // bounds the buffer.
+                var larger = Enumerable.Repeat((byte)0xA5, bytes.Length + 8).ToArray();
+                Buffer.BlockCopy(bytes, 0, larger, 3, bytes.Length);
+                value = form == "segment"
+                    ? new ArraySegment<byte>(larger, 3, bytes.Length)
+                    : (object)new Memory<byte>(larger, 3, bytes.Length);
+                return true;
+            }
+            case "native":
+            case "ptr":
+            {
+                // Unmanaged memory holding the bytes: a NumSharp uint8 array one byte longer (an empty buffer still has an
+                // address), kept alive for the run (BufferMemory).
+                var memory = np.empty(new Shape(bytes.Length + 1), np.uint8);
+                BufferMemory.Add(memory);
+                byte* address = memory.Unsafe.Pointer<byte>();
+                bytes.AsSpan().CopyTo(new Span<byte>(address, bytes.Length));
+                if (form == "native")
+                {
+                    // A Memory<byte> over exactly the bytes, backed by a memory manager (no array behind it).
+                    var window = memory[$":{bytes.Length}"];
+                    BufferMemory.Add(window);
+                    value = window.Unsafe.Memory<byte>();
+                }
+                else
+                {
+                    value = t.IsPointer ? Pointer.Box(address, t) : (object)(IntPtr)address;
+                }
+                return true;
+            }
+            default:
+                throw new ArgumentException("unknown buffer form " + form);
+        }
+    }
+
+    /// <summary>
+    ///     The pool operand's bytes in C order, the content of every buffer form but the memoryview and the typed array: the
+    ///     raw <c>size * itemsize</c> bytes of a C-contiguous copy (NumPy's <c>arr.tobytes()</c>, read without NumSharp's
+    ///     tobytes, a batch 6 function), or null for a StringDType operand, whose cells hold pointers.
+    /// </summary>
+    /// <param name="operand">The pool operand.</param>
+    /// <returns>A new array of the bytes, or null.</returns>
+    private static byte[] BufferBytesOf(NDArray operand) =>
+        operand.dtype.hasobject ? null : np.ascontiguousarray(operand).Unsafe.ReadOnlyBytes().ToArray();
+
+    /// <summary>
+    ///     The address overloads' <c>byteLength</c> variants, built from the buffer's length (<see cref="MakeBufferLength"/>):
+    ///     the exact length first, then one byte less (a partial element for every multi-byte dtype) and none. No variant
+    ///     reaches past the buffer: the memory is the tool's, and a view past its end would read whatever follows it.
+    /// </summary>
+    private static readonly string[] BufferLengthLabels = { "exact", "less1", "zero" };
+
+    /// <summary>A byte length of <see cref="BufferLengthLabels"/> for a buffer of <paramref name="length"/> bytes.</summary>
+    /// <param name="label">The variant.</param>
+    /// <param name="length">The buffer's length in bytes.</param>
+    /// <returns>The byte length, never negative.</returns>
+    /// <exception cref="ArgumentException">An unknown variant (a bug in the tool).</exception>
+    private static long MakeBufferLength(string label, long length) => label switch
+    {
+        "exact" => length,
+        "less1" => Math.Max(0, length - 1),
+        "zero" => 0L,
+        _ => throw new ArgumentException("unknown byte length " + label),
+    };
 
     /// <summary>
     ///     The element type a typed host parameter pins (<c>T</c> of <c>T</c>, <c>T[]</c>, <c>T[][]</c>, <c>T[,]</c> or
@@ -3361,12 +3656,13 @@ static class Snapshot
     /// <param name="operandIndex">The operand parameter's index (static overloads), or -1.</param>
     /// <param name="dt">The operand dtype.</param>
     /// <param name="layout">The operand layout; for a host operand <c>layout:form</c> (the pool layout, then the C# form of
-    ///     <see cref="HostForms"/>).</param>
+    ///     <see cref="HostForms"/>), for np.frombuffer's buffer likewise (<see cref="BufferForms"/>).</param>
     /// <param name="variants">Per parameter, its variants (null for the operand).</param>
     /// <param name="roles">Per parameter, its role.</param>
     /// <param name="assignments">The varied parameters and their 1-based variant indices; empty for phase A.</param>
-    /// <returns>One output line; null when the overload's host operand (the coercion family's) has no value in the form
-    ///     the layout names for this operand (<see cref="TryMakeHostOperand"/>), which RunOverload skips.</returns>
+    /// <returns>One output line; null when the overload's host operand (the coercion family's) or buffer (np.frombuffer's)
+    ///     has no value in the form the layout names for this operand (<see cref="TryMakeHostOperand"/>,
+    ///     <see cref="TryMakeBufferOperand"/>), which RunOverload skips.</returns>
     /// <remarks>
     ///     An <c>out=</c> variant is sized from the call's result with every OTHER assignment applied and <c>out</c>
     ///     null; when that call throws, the operand's shape and dtype stand in. A <c>weights=</c> or <c>where=</c> variant
@@ -3408,6 +3704,7 @@ static class Snapshot
             Role.EvalExpr or Role.EvalExprPositional => EvalExprVariantLabels[v],
             Role.ItemArg => ItemArgLabels(ps[p])[v],
             Role.AssignArg => AssignArgLabels(ps[p])[v],
+            Role.BufferLength => BufferLengthLabels[v],
             Role.SampleSeq or Role.BinsInts or Role.BinsArrays or Role.BinsObjects or Role.RangeArray => DdLabels(roles[p])[v],
             _ => variants[p][v].Label,
         };
@@ -3441,6 +3738,13 @@ static class Snapshot
                     oneElement: m.Name == "Scalar", out operandArg))
                 return null;
         }
+        // np.frombuffer's buffer, built from the operand's bytes ("layout:form" as a host operand's); a form this operand
+        // does not have makes no line at all. Its length is the address overloads' exact byte length.
+        long bufferLength = 0;
+        if (operandIndex >= 0 && roles[operandIndex] == Role.BufferOperand
+            && !TryMakeBufferOperand(ps[operandIndex].ParameterType, layout.Substring(formAt + 1), dt, baseLayout, operand,
+                out operandArg, out bufferLength))
+            return null;
         string inBefore = HashOf(operand);
         var argv = new object[ps.Length];
         NDArray outArray = null;
@@ -3463,6 +3767,7 @@ static class Snapshot
                     : roles[i] == Role.ItemArg ? MakeItemArg(ps[i], ItemArgLabels(ps[i])[0], operand)
                     : roles[i] == Role.AssignArg ? MakeAssignArg(ps[i], AssignArgLabels(ps[i])[0], operand)
                     : roles[i] == Role.SpaceStop ? MakeSpaceValue(ps[i].ParameterType, layout, start: false)
+                    : roles[i] == Role.BufferLength ? MakeBufferLength(BufferLengthLabels[0], bufferLength)
                     : IsDdRole(roles[i]) ? MakeDd(roles[i], DdLabels(roles[i])[0], operand, m)
                     : variants[i][0].Make();
             int outParam = -1, outVariant = 0;
@@ -3540,6 +3845,9 @@ static class Snapshot
                         break;
                     case Role.AssignArg:
                         argv[p] = MakeAssignArg(ps[p], AssignArgLabels(ps[p])[v], operand);
+                        break;
+                    case Role.BufferLength:
+                        argv[p] = MakeBufferLength(BufferLengthLabels[v], bufferLength);
                         break;
                     case Role.EvalExpr:
                     case Role.EvalExprPositional:
