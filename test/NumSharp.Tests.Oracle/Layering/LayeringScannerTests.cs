@@ -95,5 +95,41 @@ namespace NumSharp.Tests.Layering
                     Directory.Delete(root, recursive: true);
             }
         }
+
+        /// <summary>
+        ///     The facade scan reads the <c>np.*</c> files and the <c>NDArray.*</c> files of the ndarray methods, but not the
+        ///     array object's homes (<see cref="LayeringScanner.ArrayObjectHomes"/>), whose statements are NumPy's.
+        /// </summary>
+        [TestMethod]
+        [TestCategory("Layering")]
+        public void FacadeScan_LeavesOutTheArrayObjectHomes()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "layering_homes_" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                string core = Path.Combine(root, "src", "NumSharp.Core");
+                // the scan reads Backends/Strings for the text-backend type names, so the tree needs the folder
+                Directory.CreateDirectory(Path.Combine(core, "Backends", "Strings"));
+                Directory.CreateDirectory(Path.Combine(core, "Creation"));
+                Directory.CreateDirectory(Path.Combine(core, "Manipulation"));
+                const string test = "if (a.typecode == NPTypeCode.Double) y();\n";
+                File.WriteAllText(Path.Combine(core, "Creation", "np.thing.cs"), test);
+                File.WriteAllText(Path.Combine(core, "Creation", "NDArray.Multiarray.cs"), test);
+                File.WriteAllText(Path.Combine(core, "Manipulation", "NDArray.FunctionBase.cs"), test);
+                File.WriteAllText(Path.Combine(core, "Manipulation", "NDArray.fill.cs"), test);
+
+                var files = LayeringScanner.FacadeFiles(core).ToList();
+                CollectionAssert.AreEqual(new[] { "Creation/np.thing.cs", "Manipulation/NDArray.fill.cs" }, files,
+                    "the homes must be left out, a facade and an ndarray method's file kept: " + string.Join(", ", files));
+                var counts = LayeringScanner.CountFacadeDtypeTests(core, out _);
+                Assert.AreEqual((0, 1), counts["Creation/np.thing.cs"]);
+                Assert.IsFalse(counts.ContainsKey("Creation/NDArray.Multiarray.cs"), "a home must not be counted");
+            }
+            finally
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, recursive: true);
+            }
+        }
     }
 }

@@ -244,8 +244,23 @@ namespace NumSharp.Tests.Layering
         }
 
         /// <summary>
+        ///     The array object's homes for NumPy's statements (Appendix D of <c>docs/plans/np-layer-dtype-logic.md</c>): the
+        ///     <c>NDArray</c> partials named after the NumPy source of the functions they hold (<c>NDArray.Multiarray.cs</c> for
+        ///     the C functions of the multiarray module, <c>NDArray.FunctionBase.cs</c> for <c>lib/_function_base_impl.py</c>,
+        ///     ...). Their statements are NumPy's (the plan's kind A), not facade logic, so <see cref="FacadeFiles"/> leaves
+        ///     them out, as the <c>Default.*.cs</c> partials beside the facades are left out by their names. A partial joins
+        ///     the scan's blind spot only through this list: name a new home here when Appendix D gains one.
+        /// </summary>
+        internal static readonly HashSet<string> ArrayObjectHomes = new(StringComparer.Ordinal)
+        {
+            "NDArray.Multiarray.cs", "NDArray.FunctionBase.cs", "NDArray.Numeric.cs", "NDArray.ShapeBase.cs",
+            "NDArray.TwoDimBase.cs", "NDArray.CoreShapeBase.cs", "NDArray.TypeCheck.cs", "NDArray.IndexTricks.cs",
+            "NDArray.StrideTricks.cs", "NDArray.ArrayPad.cs", "NDArray.CoreAsArray.cs",
+        };
+
+        /// <summary>
         ///     The facade files R1 scans: every <c>np.*.cs</c> and <c>NDArray.*.cs</c> file outside <c>Backends/</c>, and
-        ///     <c>Matrixlib/NDMatrix*.cs</c>.
+        ///     <c>Matrixlib/NDMatrix*.cs</c>, but the array object's homes (<see cref="ArrayObjectHomes"/>).
         /// </summary>
         /// <param name="core">The <c>src/NumSharp.Core</c> directory.</param>
         /// <returns>Paths relative to <paramref name="core"/>, with forward slashes, in ordinal order.</returns>
@@ -264,6 +279,9 @@ namespace NumSharp.Tests.Layering
                 if (path.StartsWith("APIs/np.strings", StringComparison.Ordinal) || path.StartsWith("APIs/np.char", StringComparison.Ordinal))
                     continue;
                 string file = path.Substring(path.LastIndexOf('/') + 1);
+                // An NDArray partial named after a NumPy source holds NumPy's statements: the array object, not a facade.
+                if (ArrayObjectHomes.Contains(file))
+                    continue;
                 if (file.StartsWith("np.", StringComparison.Ordinal) || file.StartsWith("NDArray.", StringComparison.Ordinal)
                     || (path.StartsWith("Matrixlib/", StringComparison.Ordinal) && file.StartsWith("NDMatrix", StringComparison.Ordinal)))
                     yield return path;

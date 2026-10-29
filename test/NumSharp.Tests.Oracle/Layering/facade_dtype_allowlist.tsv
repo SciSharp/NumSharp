@@ -29,8 +29,6 @@ Creation/np.array.string.cs	1	0
 Creation/np.asanyarray.cs	4	0
 Creation/np.asarray.cs	2	0
 Creation/np.asarray_chkfinite.cs	0	1
-Creation/np.concatenate.Strings.cs	4	0
-Creation/np.concatenate.cs	0	2
 Creation/np.dtype.cs	0	2
 Creation/np.eye.cs	1	4
 Creation/np.frombuffer.Strings.cs	4	0
@@ -68,7 +66,6 @@ Logic/np.find_common_type.cs	2	10
 Logic/np.isreal_iscomplex.cs	0	3
 Logic/np.min_scalar_type.cs	1	0
 Logic/np.type_checks.cs	2	15
-Manipulation/NDArray.FunctionBase.cs	7	8	# np.insert's and np.delete's statements, moved into the array object by phase PE (7408f707) from the operation class InsertEngine (never scanned) and np.delete.cs; the array object's per-dtype element semantics go to the DType slots in P3 (D1 (6), E7)
 Manipulation/np.apply_along_axis.cs	0	1
 Manipulation/np.asscalar.cs	0	1
 Manipulation/np.copyto.Strings.cs	1	0
