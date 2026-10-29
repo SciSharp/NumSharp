@@ -137,7 +137,9 @@
 // name NumPy has, one it refuses, two callables from a menu NumPy names alike, null), its constant_values / end_values /
 // stat_length / reflect_type and a callable's kwargs (PadArgLabels), np.ix_'s sequences (IxArgsLabels: the operand, its
 // flattened values, masks, C# arrays and lists, empty ones of both kinds, refused ranks, None) and np.r_ / np.c_'s key
-// (ConcatKeyLabels: the operand beside C# scalars of every kind, arrays, slices and every directive form); an overload
+// (ConcatKeyLabels: the operand beside C# scalars of every kind, arrays, slices and every directive form), and
+// np.apply_along_axis's func1d from a fixed menu NumPy names alike and its extra args (ApplyFuncLabels,
+// ApplyArgsLabels); an overload
 // with a required parameter of another
 // kind is reported once as SKIP. An int
 // axis
@@ -580,7 +582,8 @@ static class Snapshot
          && p.Member.Name is "take" or "put" or "putmask" or "place" or "repeat" or "choose" or "compress" or "resize")
         || (p.Member.DeclaringType == typeof(NDArray)
             && p.Member.Name is "take" or "put" or "repeat" or "choose" or "compress" or "resize")
-        || IsAlongAxis(p) || IsFillDiagonal(p) || IsSelect(p) || IsPiecewise(p) || IsPad(p) || IsIndexTricks(p);
+        || IsAlongAxis(p) || IsFillDiagonal(p) || IsSelect(p) || IsPiecewise(p) || IsPad(p) || IsIndexTricks(p)
+        || IsApplyAlongAxis(p);
 
     /// <summary>Whether a parameter belongs to np.select, whose condition list, choice list and default are all built from
     ///     the pool operand (<see cref="SelectCondLabels"/>, <see cref="SelectChoiceLabels"/>, <see cref="SelectDefaultLabels"/>):
@@ -608,6 +611,16 @@ static class Snapshot
     /// <returns>True for a parameter of a public static np.take_along_axis / np.put_along_axis overload.</returns>
     private static bool IsAlongAxis(ParameterInfo p) =>
         p.Member.DeclaringType == typeof(np) && p.Member.Name is "take_along_axis" or "put_along_axis";
+
+    /// <summary>
+    ///     Whether a parameter belongs to np.apply_along_axis, whose <c>func1d</c> comes from a fixed menu NumPy names alike
+    ///     (<see cref="ApplyFuncLabels"/>, <see cref="ApplyArgsFuncLabels"/>) and whose extra <c>args</c> take
+    ///     <see cref="ApplyArgsLabels"/>; its <c>arr</c> is the operand and its <c>axis</c> takes the general int axis role.
+    /// </summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True for a parameter of a public static np.apply_along_axis overload.</returns>
+    private static bool IsApplyAlongAxis(ParameterInfo p) =>
+        p.Member.DeclaringType == typeof(np) && p.Member.Name == "apply_along_axis";
 
     /// <summary>Whether a parameter belongs to np.fill_diagonal, whose <c>val</c> takes
     ///     <see cref="FillDiagValueLabels"/> through the item-selection wiring.</summary>
@@ -651,6 +664,11 @@ static class Snapshot
             return PadArgLabels(p);
         if (IsIndexTricks(p))
             return IndexTricksArgLabels(p);
+        if (IsApplyAlongAxis(p))
+            return n == "func1d" && t == typeof(Func<NDArray, NDArray>) ? ApplyFuncLabels
+                : n == "func1d" && t == typeof(Func<NDArray, object[], NDArray>) ? ApplyArgsFuncLabels
+                : n == "args" && t == typeof(object[]) ? ApplyArgsLabels
+                : null;
         if (IsAlongAxis(p) || IsFillDiagonal(p)) return null;
         if (n == "indices" && t == typeof(NDArray)) return ItemIndicesLabels;
         if (n == "index" && t == typeof(long)) return ItemIndexLabels;
@@ -692,6 +710,92 @@ static class Snapshot
     /// <summary>np.put_along_axis's values: the operand's own copy (the ramp's shape), a 0-d int64, a one-element float, a
     ///     0-d text value, an empty array (no broadcast), and null.</summary>
     private static readonly string[] AlongValuesLabels = { "same", "0d_7", "f64[2.5]", "0d_text", "i64[]", "null" };
+
+    /// <summary>
+    ///     np.apply_along_axis's one-argument functions, a menu NumPy names alike (the Python twin in each delegate's
+    ///     comment): a 0-d result (the axis is dropped: np.sum, the first element, a constant int64, a constant str), a 1-D
+    ///     result as long as the slice (negate, np.cumsum, a cast to float32, the slice itself) or shorter (the first two
+    ///     elements), and a 2-D result (np.outer of the slice with itself: two dims replace the axis).
+    /// </summary>
+    private static readonly string[] ApplyFuncLabels =
+        { "sum", "neg", "cumsum", "head2", "outer", "same", "first", "const", "text", "f32" };
+
+    /// <summary>np.apply_along_axis's function with extra args: the slice plus the Python sum of the args
+    ///     (<c>lambda v, *a: v + sum(a)</c>).</summary>
+    private static readonly string[] ApplyArgsFuncLabels = { "addargs" };
+
+    /// <summary>np.apply_along_axis's extra args: none (the base; NumPy's sum of none is the Python int 0), one Python
+    ///     int, two Python ints.</summary>
+    private static readonly string[] ApplyArgsLabels = { "none", "one", "two" };
+
+    /// <summary>
+    ///     Builds an np.apply_along_axis argument: a function of the menu (static delegates, so no call captures the
+    ///     operand) or the extra args.
+    /// </summary>
+    /// <param name="p">The parameter (<c>func1d</c> or <c>args</c>).</param>
+    /// <param name="label">The variant.</param>
+    /// <returns>The delegate, or the <c>object[]</c> the params parameter receives.</returns>
+    /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
+    private static object MakeApplyArg(ParameterInfo p, string label)
+    {
+        if (p.Name == "args")
+            return label switch
+            {
+                "none" => Array.Empty<object>(),
+                "one" => new object[] { 1 },
+                "two" => new object[] { 1, 2 },
+                _ => throw new ArgumentException("unknown apply_along_axis args variant " + label),
+            };
+        if (p.ParameterType == typeof(Func<NDArray, object[], NDArray>))
+            return label == "addargs" ? ApplyAddArgs : throw new ArgumentException("unknown apply_along_axis func1d variant " + label);
+        return label switch
+        {
+            "sum" => ApplySum,
+            "neg" => ApplyNeg,
+            "cumsum" => ApplyCumsum,
+            "head2" => ApplyHead2,
+            "outer" => ApplyOuter,
+            "same" => ApplySame,
+            "first" => ApplyFirst,
+            "const" => ApplyConst,
+            "text" => ApplyText,
+            "f32" => ApplyF32,
+            _ => throw new ArgumentException("unknown apply_along_axis func1d variant " + label),
+        };
+    }
+
+    /// <summary><c>lambda v: np.sum(v)</c></summary>
+    private static readonly Func<NDArray, NDArray> ApplySum = v => np.sum(v);
+
+    /// <summary><c>lambda v: -v</c></summary>
+    private static readonly Func<NDArray, NDArray> ApplyNeg = v => -v;
+
+    /// <summary><c>lambda v: np.cumsum(v)</c></summary>
+    private static readonly Func<NDArray, NDArray> ApplyCumsum = v => np.cumsum(v);
+
+    /// <summary><c>lambda v: v[:2]</c></summary>
+    private static readonly Func<NDArray, NDArray> ApplyHead2 = v => v[":2"];
+
+    /// <summary><c>lambda v: np.outer(v, v)</c></summary>
+    private static readonly Func<NDArray, NDArray> ApplyOuter = v => np.outer(v, v);
+
+    /// <summary><c>lambda v: v</c></summary>
+    private static readonly Func<NDArray, NDArray> ApplySame = v => v;
+
+    /// <summary><c>lambda v: v[0]</c></summary>
+    private static readonly Func<NDArray, NDArray> ApplyFirst = v => v[0];
+
+    /// <summary><c>lambda v: np.array(7)</c> (int64)</summary>
+    private static readonly Func<NDArray, NDArray> ApplyConst = v => np.array(7L);
+
+    /// <summary><c>lambda v: np.array('ab')</c></summary>
+    private static readonly Func<NDArray, NDArray> ApplyText = v => np.array("ab");
+
+    /// <summary><c>lambda v: v.astype(np.float32)</c></summary>
+    private static readonly Func<NDArray, NDArray> ApplyF32 = v => v.astype(np.float32);
+
+    /// <summary><c>lambda v, *a: v + sum(a)</c> (the args are Python ints)</summary>
+    private static readonly Func<NDArray, object[], NDArray> ApplyAddArgs = (v, a) => v + a.Sum(x => (int)x);
 
     /// <summary>np.fill_diagonal's val (NumPy's <c>a.flat[...] = val</c>): a Python int first, then a float, a bool, a
     ///     complex, a str, None, an int past int8 and one past every C# integer, a NumPy float16, a C# array (tiled
@@ -1386,6 +1490,8 @@ static class Snapshot
             return MakePadArg(p, label, operand);
         if (IsIndexTricks(p))
             return MakeIndexTricksArg(p, label, operand);
+        if (IsApplyAlongAxis(p))
+            return MakeApplyArg(p, label);
         if (n == "indices")
             return label switch
             {
