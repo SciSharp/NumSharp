@@ -46,6 +46,8 @@ namespace NumSharp.Backends.Strings
         /// <returns>The filled array.</returns>
         /// <exception cref="UnicodeEncodeError">Non-ASCII text into <c>S</c>.</exception>
         /// <exception cref="UnicodeDecodeError">Non-ASCII bytes into <c>U</c>.</exception>
+        /// <exception cref="ValueError">An array fill value that does not broadcast into the result (NumPy's copyto text,
+        ///     <c>could not broadcast input array from shape (3,) into shape (3,4)</c>); the result is disposed.</exception>
         public static NDArray Full(Shape shape, object fillValue, DType dtype)
         {
             using var value = fillValue is NDArray nd
@@ -60,7 +62,14 @@ namespace NumSharp.Backends.Strings
             var result = NDArray.ForOverwrite(descr, layout);
             try
             {
-                Iteration.NDIter.Copy(result.Storage, value.Storage);
+                // NumPy's copyto(a, fill_value, casting='unsafe') is PyArray_AssignArray: the fill value broadcasts into the
+                // result once its leading extent-1 axes beyond the result's rank are dropped, else NumPy's "could not
+                // broadcast input array from shape (3,) into shape (3,4)" - the copy iterator's own refusal named its
+                // remapped shapes instead. The iterator then reads the value without the dropped axes.
+                Shape.AssignmentBroadcastStrides(result.Shape.dimensions, value.Shape.dimensions, value.Shape.strides,
+                    "input array", stripLeadingUnitAxes: true);
+                var source = value.ndim > result.ndim ? value.Storage.AliasWithoutLeadingAxes(result.ndim) : value.Storage;
+                Iteration.NDIter.Copy(result.Storage, source);
             }
             catch
             {

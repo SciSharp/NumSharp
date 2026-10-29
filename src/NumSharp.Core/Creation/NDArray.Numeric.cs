@@ -1,4 +1,5 @@
 using System;
+using System.Numerics;
 using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
@@ -30,14 +31,17 @@ namespace NumSharp
         ///     order.</param>
         /// <param name="fill_value">The fill value: a scalar, or an array (an <see cref="NDArray"/> of rank ≥ 1, a C# array)
         ///     that broadcasts into the result; null is Python's <c>None</c>.</param>
-        /// <param name="dtype">The requested dtype, or null for the fill value's own: an array fill value's dtype, else the
-        ///     storage lane of the value's C# type.</param>
+        /// <param name="dtype">The requested dtype, or null for the fill value's own: an array fill value's dtype (a 0-d
+        ///     array's too), NumPy's discovery of a C# <see cref="BigInteger"/> (a Python int), else the storage lane of the
+        ///     value's C# type.</param>
         /// <returns>A new array of <paramref name="shape"/>'s dimensions with <paramref name="fill_value"/> cast into every
         ///     element, labelled with the requested lane-sharing C-type class when there is one
         ///     (<see cref="WithLaneSharingDescr"/>).</returns>
-        /// <exception cref="NotSupportedException"><paramref name="fill_value"/> and <paramref name="dtype"/> are both null:
-        ///     NumPy builds an object array there, a dtype NumSharp does not have.</exception>
-        /// <exception cref="ArgumentNullException">The dtype has no storage lane (<see cref="NPTypeCode.Empty"/>).</exception>
+        /// <exception cref="NotSupportedException"><paramref name="fill_value"/> and <paramref name="dtype"/> are both null,
+        ///     or the fill value is a <see cref="BigInteger"/> past 64 bits and <paramref name="dtype"/> is null: NumPy builds
+        ///     an object array there, a dtype NumSharp does not have.</exception>
+        /// <exception cref="ArgumentNullException">The fill value's C# type has no storage lane (<see cref="NPTypeCode.Empty"/>:
+        ///     a collection that is not a C# array) and no dtype is given.</exception>
         /// <exception cref="TypeError"><c>None</c> into a non-empty integer (or <c>decimal</c>) array: Python's
         ///     <c>int(None)</c>.</exception>
         /// <exception cref="ValueError"><c>None</c> into a <c>StringDType(coerce=False)</c>; an array fill value that does not
@@ -53,6 +57,18 @@ namespace NumSharp
             // into the result (FullFromArrayFill). Without dtype= the result takes the fill value's dtype.
             if (IsBroadcastFillValue(fill_value))
                 return FullFromArrayFill(shape, fill_value, dtype);
+            // Without dtype=, NumPy's `fill_value = asarray(fill_value); dtype = fill_value.dtype`: a 0-d array keeps its own
+            // dtype (np.full(3, np.array(5)) is int64, a 0-d text array fills its text dtype), and a Python int (a C#
+            // BigInteger) is discovered by its value - int64, uint64 past int64, and past 64 bits NumPy's object array,
+            // which _PyLongDType's discovery refuses (NumSharp has no object dtype). A C# number keeps its C# type, as
+            // np.asarray(7) does in NumSharp. Both failed with ArgumentNullException (no storage lane for the type).
+            if (dtype is null)
+            {
+                if (fill_value is NDArray zeroD)
+                    dtype = zeroD.dtype;
+                else if (fill_value is BigInteger)
+                    dtype = DTypeRegistry.PyLong.discover_descr_from_pyobject(fill_value);
+            }
             // A class whose items hold references (PyDataType_REFCHK; StringDType is the only one): every element is stored
             // through the class, never as copied bytes, in NumPy's empty + copyto(unsafe) (NDVStringMove.Full).
             if (dtype is not null && dtype.Meta.HasReferences)

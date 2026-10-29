@@ -619,14 +619,17 @@ namespace NumSharp.Backends.Strings
         ///     NumPy's <c>a = empty(shape, dtype); copyto(a, fill_value, casting='unsafe')</c>. The fill value becomes an array
         ///     (a C# string a 0-d <c>U</c>, a <c>byte[]</c> a 0-d <c>S</c>, a number a numeric 0-d, a list its array) and is CAST
         ///     into every element (a number's <c>str()</c> even under <c>coerce=False</c>); <c>None</c> is NumPy's object array,
-        ///     stored by setitem (the NA object, or <c>'None'</c>).
+        ///     stored by setitem (the NA object, or <c>'None'</c>). A Python int (a C# <see cref="System.Numerics.BigInteger"/>)
+        ///     is a number when it fits 64 bits (int64, or uint64 past int64) and an object array past them, stored like
+        ///     <c>None</c> (its <c>str()</c>).
         /// </summary>
         /// <param name="shape">The result's dimensions (a fresh dense layout is kept, a view's layout re-laid out in C order).</param>
         /// <param name="fillValue">The fill value (null is <c>None</c>).</param>
         /// <param name="descr">The <c>StringDType</c> descriptor.</param>
         /// <returns>The filled array.</returns>
-        /// <exception cref="ValueError"><c>None</c> under <c>coerce=False</c> when the result has an element to write, or a
-        ///     fill value that does not broadcast.</exception>
+        /// <exception cref="ValueError"><c>None</c> or a Python int past 64 bits under <c>coerce=False</c> when the result has an
+        ///     element to write (<c>StringDType only allows string data when string coercion is disabled.</c>), or a fill value
+        ///     that does not broadcast.</exception>
         /// <exception cref="System.Exception">The cast's own errors (a non-UTF-8 <c>bytes</c> value).</exception>
         internal static NDArray Full(Shape shape, object fillValue, DType descr)
         {
@@ -641,6 +644,24 @@ namespace NumSharp.Backends.Strings
                     if (result.size > 0)
                         Fill(result, null);
                     return result;
+                }
+                if (fillValue is System.Numerics.BigInteger big)
+                {
+                    // A Python int: np.asarray discovers int64 for one that fits it and uint64 for one that fits only that, and
+                    // the copy CASTS those (its str(), under coerce=False too: np.full(2, 2**63, dtype=StringDType(coerce=False))
+                    // is '9223372036854775808'); past 64 bits it is an OBJECT array, whose cast stores the object through the
+                    // class like None - its str(), or the coerce=False refusal - per element written (probed 2.4.2). The
+                    // asanyarray below refused every BigInteger ("Unable to resolve asanyarray").
+                    if (big >= long.MinValue && big <= long.MaxValue)
+                        fillValue = (long)big;
+                    else if (big.Sign > 0 && big <= ulong.MaxValue)
+                        fillValue = (ulong)big;
+                    else
+                    {
+                        if (result.size > 0)
+                            Fill(result, big);
+                        return result;
+                    }
                 }
                 if (fillValue is NDArray nd)
                 {

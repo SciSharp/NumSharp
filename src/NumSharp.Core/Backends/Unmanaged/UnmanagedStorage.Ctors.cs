@@ -289,12 +289,21 @@ namespace NumSharp.Backends
         ///     an empty result never converts it (<c>np.full((0,), None, dtype=int)</c> returns an empty array) while one
         ///     element of an integer dtype raises <c>int(None)</c>'s TypeError (probed 2.4.2). It used to fall to the
         ///     house conversion below, which turned null into ZERO.</para>
+        ///     <para>The same holds for every value but a Python int, float or complex (<see cref="IsPackedBeforeCopy"/>):
+        ///     NumPy's copyto packs only those before the copy, and casts anything else per element written, so text that
+        ///     does not parse into an EMPTY numeric result raises nothing (<c>np.full((0,), 'x', dtype=int)</c> is an empty
+        ///     array, probed 2.4.2; it raised the parse's ValueError).</para>
         /// </remarks>
         internal static object FullFillElement(object fill_value, NPTypeCode typeCode, long size)
         {
+            // An EMPTY result writes no element, so NumPy's copyto converts only what it converts BEFORE the copy: a Python
+            // int, float or complex is packed first (np.full((0,), 300, dtype=np.int8) raises), while None, text and every
+            // other value is cast per element written. The dtype's zero stands for the element (a fresh slot is zeroed).
+            if (size == 0 && !IsPackedBeforeCopy(fill_value))
+                return ReductionInitial.Box(new byte[ReductionInitial.SlotBytes], typeCode);
+
             if (fill_value is null)
-                // The empty result never writes its fill element, so the dtype's zero stands for it (a fresh slot is zeroed).
-                return size == 0 ? ReductionInitial.Box(new byte[ReductionInitial.SlotBytes], typeCode) : ReductionInitial.BoxNone(typeCode);
+                return ReductionInitial.BoxNone(typeCode);
 
             // Only a number qualifies (Type.GetTypeCode unwraps an array type to its element type).
             if (NDArray.IsStoreScalar(fill_value) && fill_value.GetType().GetTypeCode() == typeCode)
@@ -305,6 +314,20 @@ namespace NumSharp.Backends
                 return ReductionInitial.Box(element, typeCode);
             return Converts.ChangeType(fill_value, typeCode);
         }
+
+        /// <summary>
+        ///     Whether NumPy's <c>copyto(a, value, casting='unsafe')</c> converts <paramref name="value"/> BEFORE its copy: a
+        ///     Python int, float or complex is packed into <c>npy_find_descr_for_scalar</c>'s descriptor up front (its range
+        ///     checked even for an empty result), while every other value - None, text, a NumPy scalar, an array - is cast
+        ///     per element written, so it is never converted for an empty result.
+        /// </summary>
+        /// <param name="value">The fill value, in the C# boundary map: a C# integer, <see cref="BigInteger"/>,
+        ///     <c>float</c>, <c>double</c> or <see cref="Complex"/> is a Python scalar, and so is a C# literal's 0-d array
+        ///     (<see cref="NDArray.WasPythonLiteral"/>); null is <c>None</c>.</param>
+        /// <returns>True for the Python scalars <see cref="TryCopytoUnsafeScalarElement"/> packs first.</returns>
+        private static bool IsPackedBeforeCopy(object value)
+            => value is sbyte or byte or short or ushort or int or uint or long or ulong or BigInteger or float or double or Complex
+               || value is NDArray { WasPythonLiteral: true };
 
         /// <summary>
         ///     The storage-lane core behind every public <c>ones(..., dtype)</c> overload (which all take the single
