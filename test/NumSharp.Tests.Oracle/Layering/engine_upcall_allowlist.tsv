@@ -6,7 +6,7 @@
 Backends/Default/Indexing/Default.Argwhere.cs	0	2
 Backends/Default/Indexing/Default.BooleanMask.cs	0	2
 Backends/Default/Indexing/Default.FlatNonZero.cs	0	2
-Backends/Default/Indexing/Default.NonZero.cs	1	2
+Backends/Default/Indexing/Default.NonZero.cs	0	2
 Backends/Default/Indexing/Default.Trace.cs	0	1	# np.trace's body moved by P1b: np.ascontiguousarray(diag) before the sum until P6 gives the engine its own copy (the out= route's np.copyto went with P1d: ReduceAdd's out operand)
 Backends/Default/LinearAlgebra/GufuncGuard.cs	0	1	# moved from the np layer by P2: Deliver's np.copyto stores a gufunc's answer into out= until P6 gives the engine its own copy
 Backends/Default/LinearAlgebra/LinAlgEmpty.cs	7	25
@@ -36,14 +36,13 @@ Backends/Default/Math/DefaultEngine.Evaluate.cs	7	9
 Backends/Default/Math/DefaultEngine.ReductionOp.cs	0	1
 Backends/Default/Math/DefaultEngine.UfuncInnerSteps.cs	0	1
 Backends/Default/Math/Reduction/Default.Reduction.Add.Exact.cs	0	3
-Backends/Default/Math/Reduction/Default.Reduction.Add.Identity.cs	1	0
-Backends/Default/Math/Reduction/Default.Reduction.Add.cs	1	3
+Backends/Default/Math/Reduction/Default.Reduction.Add.cs	0	3
 Backends/Default/Math/Reduction/Default.Reduction.ArgMax.cs	0	3
 Backends/Default/Math/Reduction/Default.Reduction.ArgMin.cs	0	3
 Backends/Default/Math/Reduction/Default.Reduction.Mean.cs	0	2
 Backends/Default/Math/Reduction/Default.Reduction.MinMax.Exact.cs	0	2
 Backends/Default/Math/Reduction/Default.Reduction.MinMax.Keywords.cs	0	10
-Backends/Default/Math/Reduction/Default.Reduction.Nan.cs	2	0
+Backends/Default/Math/Reduction/Default.Reduction.Nan.cs	1	0
 Backends/Default/Math/Reduction/Default.Reduction.NanMean.cs	0	1
 Backends/Default/Math/Reduction/Default.Reduction.NanScan.cs	1	0	# ReplaceNanForScan moved from np.nancumsum by P1b: np.where(isnan(a), fill, a) replaces the NaNs of a non-contiguous or float16 / complex operand until P6 gives the engine its own select
 Backends/Default/Math/Reduction/Default.Reduction.NanVarStd.cs	0	6
@@ -64,7 +63,7 @@ Backends/Kernels/BinaryKernel.cs	0	1
 Backends/Kernels/ComparisonRun.cs	0	1
 Backends/Kernels/ILKernelGenerator.Polynomial.Typing.cs	0	1
 Backends/NDArray.AdoptLayout.cs	0	2
-Backends/NDArray.Container.cs	1	1
+Backends/NDArray.Container.cs	0	1
 Backends/NDArray.PythonLiteral.cs	0	2
 Backends/NDArray.cs	0	2
 Backends/Strings/NDCharObjectPath.Codec.cs	0	1

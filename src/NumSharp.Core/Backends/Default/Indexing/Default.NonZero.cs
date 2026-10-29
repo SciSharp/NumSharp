@@ -312,7 +312,7 @@ namespace NumSharp.Backends
             NDArray truth = nd.typecode == NPTypeCode.Boolean ? nd : nd.astype(np.@bool, false);
             try
             {
-                return np.sum(truth, axis, keepdims, np.int64);
+                return Sum(truth, axis, np.int64, keepdims);
             }
             finally
             {

@@ -60,11 +60,11 @@ namespace NumSharp
             var scalar = value is string text && typecode == NPTypeCode.Char ? NDArray.FromString(text) : np.asanyarray(value);
 
             // `comparison` IS using-bound: operator== always allocates a fresh bool
-            // NDArray sized broadcast(this, scalar); after np.any reads it, the buffer
+            // NDArray sized broadcast(this, scalar); after the engine's Any reads it, the buffer
             // is dead. This is the hot path for `value in arr` so atomic release
             // matters in tight loops.
             using var comparison = this == scalar;
-            return np.any(comparison);
+            return comparison.TensorEngine.Any(comparison);
         }
 
         /// <summary>

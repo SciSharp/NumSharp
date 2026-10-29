@@ -416,8 +416,8 @@ namespace NumSharp.Backends
                 axis = null;
             }
 
-            using var plain = NDMatrixBoundary.PlainFor(arr, @out);   // an engine method computes plain: np.any below must not apply its matrix rule
-            return np.any(arr, axis, @out, keepdims);
+            using var plain = NDMatrixBoundary.PlainFor(arr, @out);   // an engine method computes plain: no matrix rule may apply inside the engine member called below
+            return arr.TensorEngine.Any(arr, axis, @out, keepdims);
         }
 
         /// <summary>

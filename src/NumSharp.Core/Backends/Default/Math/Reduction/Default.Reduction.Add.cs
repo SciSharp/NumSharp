@@ -390,7 +390,7 @@ namespace NumSharp.Backends
             // The counts are taken WITHOUT keepdims: np.evaluate's keepdims form is a reshaped view of its counts, where
             // NumPy's np.sum(..., keepdims=True) owns its result (OWNDATA). The axis is re-inserted below on the fresh
             // counts instead.
-            var counts = np.evaluate(NDExpr.CountNonzero(NDExpr.Arr(arr), axis, false));
+            var counts = arr.TensorEngine.Evaluate(NDExpr.CountNonzero(NDExpr.Arr(arr), axis, false));
             if (loopType == NPTypeCode.Double)
             {
                 // Exact: a count is an integer below 2^53. astype keeps the counts' layout (order 'K').
