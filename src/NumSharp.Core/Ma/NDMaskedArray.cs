@@ -8545,7 +8545,7 @@ namespace NumSharp
                 // ma.put: `a.put(indices, values, mode=mode)`, or `np.asarray(a).put(...)` when `a` has no put. For an
                 // ndarray that is ndarray.put, which reads a masked values' DATA (np.arange(4) put masked at [0, 2] is
                 // [0, 1, 0, 3]); any other operand is a converted temporary the caller never sees.
-                np.PutTo(AsData(a), indices, PutValuesOperand(values), mode);
+                UnmanagedStorage.PutTo(AsData(a), indices, PutValuesOperand(values), mode);
                 return;
             }
 
@@ -8573,7 +8573,7 @@ namespace NumSharp
             }
 
             // self._data.put(indices, values, mode=mode): ndarray.put's checks, packing, cycling and overlap copy.
-            np.PutTo(x._data, dataIndices, PutValuesOperand(dataValues), mode);
+            UnmanagedStorage.PutTo(x._data, dataIndices, PutValuesOperand(dataValues), mode);
 
             // "short circuit if neither self nor values are masked"
             var valuesMask = PutValuesMask(dataValues);
@@ -8588,9 +8588,9 @@ namespace NumSharp
             // m.put(indices, False, mode=mode) for plain values, m.put(indices, values._mask, mode=mode) (cycled) for
             // masked ones — the same indices and mode as the data, so the same slots.
             if (valuesMask is null)
-                np.PutTo(m, dataIndices, false, mode);
+                UnmanagedStorage.PutTo(m, dataIndices, false, mode);
             else
-                np.PutTo(m, dataIndices, valuesMask, mode);
+                UnmanagedStorage.PutTo(m, dataIndices, valuesMask, mode);
 
             // m = make_mask(m, copy=False, shrink=True); self._mask = m. An all-False mask collapses to nomask; a kept
             // fresh mask becomes a field and leaves the scope.
@@ -8603,7 +8603,7 @@ namespace NumSharp
         /// <summary>
         ///     The values operand <c>ndarray.put</c> receives (<c>PyArray_FromAny(values, ...)</c>): a masked array's DATA,
         ///     masked slots included (the masked constant's 0-d 0.0 too); any other value as it is, for
-        ///     <see cref="np.PutTo"/> to convert.
+        ///     <see cref="UnmanagedStorage.PutTo"/> to convert.
         /// </summary>
         /// <param name="values">The values of a put.</param>
         /// <returns>The masked array's data array, or <paramref name="values"/> itself.</returns>
@@ -8635,7 +8635,7 @@ namespace NumSharp
         ///     (<see cref="ResizeCallerValues"/>); and anything else as a NEW array — a C# number as NumPy's Python scalar
         ///     (its strong default dtype: an int is int64), a C# array as its typed array, a C# literal's marked 0-d
         ///     array as the literal — which <c>ndarray.resize</c> grows with zeros or truncates (refcount 2: the check
-        ///     passes). The new array is of the VALUES' dtype; <see cref="np.PutTo"/> casts it into the target afterwards
+        ///     passes). The new array is of the VALUES' dtype; <see cref="UnmanagedStorage.PutTo"/> casts it into the target afterwards
         ///     (unsafe), which is why a literal past the target's range wraps on this branch.
         /// </remarks>
         private static NDArray ResizeValuesForHardPut(object values, NDArray indices)

@@ -81,15 +81,16 @@ namespace NumSharp.Tests.Lifetime
         /// </summary>
         /// <param name="gap">The fixed gap id (for the failure message).</param>
         /// <param name="owner">The declaring type's name: <c>np</c>, <c>np.linalg</c>, <c>NDArray</c>, <c>DefaultEngine</c>,
-        ///     <c>TensorEngine</c>, <c>NDIter</c>, <c>PowerSeriesModule</c> or <c>StringArraySlice</c>.</param>
+        ///     <c>TensorEngine</c>, <c>NDIter</c>, <c>PowerSeriesModule</c>, <c>StringArraySlice</c> or
+        ///     <c>UnmanagedStorage</c>.</param>
         /// <param name="name">The method name.</param>
         /// <param name="signature">The parameter type names, comma-separated (<c>Nullable`1</c> for an <c>int?</c>).</param>
         /// <exception cref="AssertFailedException">The entry point is missing, ambiguous, or does not root its operands.</exception>
         [TestMethod]
         [DataRow("LT01", "np", "take", "NDArray,NDArray,Nullable`1,NDArray,String")]
         [DataRow("LT02", "np", "put", "NDArray,NDArray,NDArray,String")]
-        [DataRow("LT03", "np", "PlaceCore", "NDArray,NDArray,NDArray,Boolean")]
-        [DataRow("LT04", "np", "PutMaskCore", "NDArray,NDArray,NDArray,Boolean")]
+        [DataRow("LT03", "UnmanagedStorage", "PlaceCore", "NDArray,NDArray,NDArray,Boolean")]
+        [DataRow("LT04", "UnmanagedStorage", "PutMaskCore", "NDArray,NDArray,NDArray,Boolean")]
         [DataRow("LT05", "np", "take_along_axis", "NDArray,NDArray,Nullable`1")]
         [DataRow("LT06", "np", "put_along_axis", "NDArray,NDArray,NDArray,Nullable`1")]
         [DataRow("LT07", "np", "where_internal", "NDArray,NDArray,NDArray")]
@@ -143,6 +144,7 @@ namespace NumSharp.Tests.Lifetime
                 "NDIter" => typeof(NDIter),
                 "PowerSeriesModule" => typeof(NDArray).Assembly.GetTypes().Single(t => t.Name == "PowerSeriesModule"),
                 "StringArraySlice" => typeof(NumSharp.Backends.Unmanaged.StringArraySlice),
+                "UnmanagedStorage" => typeof(NumSharp.Backends.UnmanagedStorage),
                 _ => throw new AssertFailedException($"unknown owner {owner}")
             };
             var wanted = signature.Length == 0 ? Array.Empty<string>() : signature.Split(',');

@@ -47,8 +47,6 @@ Creation/np.ones.cs	6	4
 Creation/np.r_.cs	1	8
 Creation/np.vander.cs	3	0
 DTypes/np.dtypes.cs	2	0
-Indexing/np.choose.cs	7	7
-Indexing/np.compress.cs	0	1
 Indexing/np.diag.cs	1	0
 Indexing/np.extract.cs	0	1
 Indexing/np.fill_diagonal.cs	3	0
@@ -56,14 +54,12 @@ Indexing/np.indices.cs	0	3
 Indexing/np.ix_.cs	0	2
 Indexing/np.ndenumerate.cs	0	1
 Indexing/np.piecewise.cs	0	7
-Indexing/np.place.cs	9	2
-Indexing/np.put.cs	2	0
+Indexing/np.place.cs	1	0
 Indexing/np.put_along_axis.cs	2	1
-Indexing/np.putmask.cs	4	2
+Indexing/np.putmask.cs	1	0
 Indexing/np.ravel_multi_index.cs	0	1
 Indexing/np.select.cs	3	10
 Indexing/np.take.FancyAxis.cs	0	1
-Indexing/np.take.cs	3	4
 Indexing/np.take_along_axis.cs	1	9
 Indexing/np.unravel_index.cs	0	1
 Logic/np.can_cast.cs	1	80
@@ -74,7 +70,6 @@ Logic/np.min_scalar_type.cs	1	0
 Logic/np.type_checks.cs	2	15
 Manipulation/NDArray.FunctionBase.cs	7	8	# np.insert's and np.delete's statements, moved into the array object by phase PE (7408f707) from the operation class InsertEngine (never scanned) and np.delete.cs; the array object's per-dtype element semantics go to the DType slots in P3 (D1 (6), E7)
 Manipulation/NDArray.fill.cs	3	1
-Manipulation/NDArray.resize.cs	3	0
 Manipulation/np.apply_along_axis.cs	0	1
 Manipulation/np.asscalar.cs	0	1
 Manipulation/np.copyto.Strings.cs	15	2
@@ -82,8 +77,6 @@ Manipulation/np.copyto.VString.cs	7	0
 Manipulation/np.copyto.cs	7	5
 Manipulation/np.delete.cs	0	20
 Manipulation/np.pad.cs	12	33
-Manipulation/np.repeat.cs	2	9
-Manipulation/np.resize.cs	1	0
 Manipulation/np.trim_zeros.cs	2	0
 Math/NDArray.ComplexAccessors.cs	1	2
 Math/np.imag.cs	0	1
