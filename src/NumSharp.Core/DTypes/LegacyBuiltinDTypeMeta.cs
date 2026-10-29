@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
+using NumSharp.Utilities;
 
 namespace NumSharp
 {
@@ -177,21 +178,39 @@ namespace NumSharp
         }
 
         /// <inheritdoc/>
-        /// <remarks>NumPy's <c>@TYPE@_copyswapn</c>: a copy per element (overlap-safe, as NumPy's memmove), then each
-        ///     element's units reversed — the whole item, or each half of a complex number.</remarks>
+        /// <remarks>NumPy's <c>@TYPE@_copyswapn</c>: its <c>_basic_copyn</c> (one block copy when both strides are the item
+        ///     size, else a copy per element; <see cref="Buffer.MemoryCopy(void*, void*, long, long)"/> is overlap-safe, as
+        ///     NumPy's memmove), then each element's units reversed — the whole item, or each half of a complex number.</remarks>
         internal override unsafe void copyswapn(DType descr, byte* dst, long dstride, byte* src, long sstride, long n, bool swap)
         {
             int size = ItemSize;
             if (src != null)
             {
-                for (long i = 0; i < n; i++)
-                    Buffer.MemoryCopy(src + i * sstride, dst + i * dstride, size, size);
+                if (sstride == size && dstride == size)
+                {
+                    // Contiguous items on both sides: one copy of the whole run (NumPy's memcpy branch).
+                    Buffer.MemoryCopy(src, dst, n * size, n * size);
+                }
+                else
+                {
+                    for (long i = 0; i < n; i++)
+                        Buffer.MemoryCopy(src + i * sstride, dst + i * dstride, size, size);
+                }
             }
             if (swap && size > 1)
             {
                 int unit = SwapUnit;
-                for (long i = 0; i < n; i++)
-                    ReverseUnits(dst + i * dstride, size, unit);
+                if (dstride == size)
+                {
+                    // Contiguous items: their units are one contiguous run of unit-byte groups (a complex number's two
+                    // halves included), reversed with SIMD as NumPy's _strided_byte_swap reverses them one by one.
+                    NDByteOrder.ReverseRun(dst, n * size, unit);
+                }
+                else
+                {
+                    for (long i = 0; i < n; i++)
+                        ReverseUnits(dst + i * dstride, size, unit);
+                }
             }
         }
 

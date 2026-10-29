@@ -167,9 +167,10 @@ namespace NumSharp.Backends
         /// <param name="offset">The byte offset of the first item.</param>
         /// <param name="dispose">Frees the memory when the array is released, or null when the caller keeps it alive (the
         ///     result then does not own its data, as NumPy's array over a foreign buffer).</param>
-        /// <returns>The 1-D array; for a non-native descriptor a decoded native copy (the memory is then released at once
-        ///     when <paramref name="dispose"/> was given); for zero items with <paramref name="dispose"/> a fresh empty array
-        ///     (the memory is released at once), without it an empty view that does not own its data.</returns>
+        /// <returns>The 1-D array; for a non-native descriptor a native copy decoded by the class's
+        ///     <see cref="DTypeMeta.copyswapn"/> (the memory is then released at once when <paramref name="dispose"/> was
+        ///     given); for zero items with <paramref name="dispose"/> a fresh empty array (the memory is released at once),
+        ///     without it an empty view that does not own its data.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="address"/> is null (after the descriptor checks).</exception>
         /// <exception cref="ValueError">A descriptor holding references or without a width, or the range checks of
         ///     <see cref="FromBufferCount"/>.</exception>
@@ -186,9 +187,18 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(address));
 
             long elements = FromBufferCount(byteLength, dtype.itemsize, count, offset);
-            // NumSharp stores native values only: the array is allocated or laid out with the native descriptor, and a
-            // non-native request is decoded below.
+            // NumSharp stores native values only: the array is allocated or laid out with the native descriptor.
             DType native = dtype.isnative ? dtype : dtype.Meta.ensure_canonical(dtype);
+            if (!dtype.isnative)
+            {
+                // A non-native descriptor: the items are decoded into a new array by the class's byte-order copy (NumPy's
+                // copyswapn with swap), and nothing of the memory is kept, so it is released at once.
+                var decoded = new NDArray(native, Shape.Vector(elements), false);
+                dtype.Meta.copyswapn(dtype, (byte*)decoded.Storage.Address, dtype.itemsize, address + offset, dtype.itemsize,
+                    elements, swap: true);
+                dispose?.Invoke();
+                return decoded;
+            }
             if (elements == 0 && dispose != null)
             {
                 // Nothing of the memory is used and the caller handed it over: it is released at once, and the result is a
@@ -216,13 +226,7 @@ namespace NumSharp.Backends
                 storage.OnReshaped();
             }
 
-            var view = new NDArray(storage);
-            if (dtype.isnative)
-                return view;
-
-            // A non-native descriptor: a native decoded copy; the view (and, through dispose, the memory) goes at once.
-            using (view)
-                return view.byteswap();
+            return new NDArray(storage);
         }
 
         /// <summary>
@@ -234,7 +238,8 @@ namespace NumSharp.Backends
         /// <param name="dtype">The descriptor the bytes are read as; null is float64.</param>
         /// <param name="count">Items to read, or a negative number for all.</param>
         /// <param name="offset">The byte offset of the first item.</param>
-        /// <returns>A new 1-D array (native byte order: a non-native request is decoded).</returns>
+        /// <returns>A new 1-D array (native byte order: a non-native request is decoded by the class's
+        ///     <see cref="DTypeMeta.copyswapn"/>).</returns>
         /// <exception cref="ValueError">A descriptor holding references or without a width, or the range checks of
         ///     <see cref="FromBufferCount"/>.</exception>
         /// <exception cref="NotSupportedException"><paramref name="dtype"/> has no NumSharp storage.</exception>
@@ -250,12 +255,11 @@ namespace NumSharp.Backends
             if (elements == 0)
                 return result;
 
-            long bytes = elements * dtype.itemsize;
-            // The count check put [offset, offset + bytes) inside the span, so offset indexes a real byte.
+            // The count check put the items inside the span, so offset indexes a real byte. The class's byte-order copy
+            // (NumPy's copyswapn) copies them and, for a non-native descriptor, reverses each item's units into host order.
             fixed (byte* src = &buffer[(int)offset])
-                Buffer.MemoryCopy(src, (void*)result.Storage.Address, bytes, bytes);
-            if (!dtype.isnative)
-                result.byteswap(inplace: true); // the non-native items into host order, per item
+                dtype.Meta.copyswapn(dtype, (byte*)result.Storage.Address, dtype.itemsize, src, dtype.itemsize, elements,
+                    swap: !dtype.isnative);
             return result;
         }
 
@@ -277,14 +281,15 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     NumPy's first check of <c>PyArray_FromBuffer</c>: a dtype holding references (<c>PyDataType_REFCHK</c> — the NEP 55
-        ///     <c>StringDType</c>, whose cells are arena offsets and heap pointers) cannot be laid over a buffer's bytes.
+        ///     NumPy's first check of <c>PyArray_FromBuffer</c>: a dtype whose items hold references
+        ///     (<c>PyDataType_REFCHK</c>, the class's <see cref="DTypeMeta.HasReferences"/> - NEP 55's <c>StringDType</c>, whose
+        ///     cells are arena offsets and heap pointers) cannot be laid over a buffer's bytes.
         /// </summary>
         /// <param name="dtype">The requested descriptor (null is the default float64).</param>
         /// <exception cref="ValueError">NumPy's <c>cannot create an OBJECT array from memory buffer</c>.</exception>
         internal static void ThrowIfReferenceDType(DType dtype)
         {
-            if (dtype?.Meta is VStringDTypeMeta)
+            if (dtype is not null && dtype.Meta.HasReferences)
                 throw new ValueError("cannot create an OBJECT array from memory buffer");
         }
     }

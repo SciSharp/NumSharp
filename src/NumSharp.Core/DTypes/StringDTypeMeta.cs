@@ -1,6 +1,7 @@
 using System;
 using NumSharp.Backends.Strings;
 using NumSharp.Backends.Unmanaged;
+using NumSharp.Utilities;
 
 namespace NumSharp
 {
@@ -285,19 +286,36 @@ namespace NumSharp
 
         /// <inheritdoc/>
         /// <remarks>NumPy's <c>STRING_copyswapn</c> (a copy; bytes have no order) and <c>UNICODE_copyswapn</c> (a copy,
-        ///     then each 4-byte code unit reversed).</remarks>
+        ///     then each 4-byte code unit reversed). The copy is NumPy's <c>_basic_copyn</c>: one block copy when both
+        ///     strides are the item size, else a copy per element.</remarks>
         internal override unsafe void copyswapn(DType descr, byte* dst, long dstride, byte* src, long sstride, long n, bool swap)
         {
             int size = descr.itemsize;
             if (src != null)
             {
-                for (long i = 0; i < n; i++)
-                    Buffer.MemoryCopy(src + i * sstride, dst + i * dstride, size, size);
+                if (sstride == size && dstride == size)
+                {
+                    // Contiguous items on both sides: one copy of the whole run (NumPy's memcpy branch).
+                    Buffer.MemoryCopy(src, dst, n * size, n * size);
+                }
+                else
+                {
+                    for (long i = 0; i < n; i++)
+                        Buffer.MemoryCopy(src + i * sstride, dst + i * dstride, size, size);
+                }
             }
             if (swap && IsUnicode)
             {
-                for (long i = 0; i < n; i++)
-                    ReverseUnits(dst + i * dstride, size, UnitSize);
+                if (dstride == size)
+                {
+                    // Contiguous elements: their 4-byte code units are one contiguous run, reversed with SIMD.
+                    NDByteOrder.ReverseRun(dst, n * size, UnitSize);
+                }
+                else
+                {
+                    for (long i = 0; i < n; i++)
+                        ReverseUnits(dst + i * dstride, size, UnitSize);
+                }
             }
         }
 
