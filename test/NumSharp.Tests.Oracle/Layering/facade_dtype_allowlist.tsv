@@ -69,7 +69,6 @@ Logic/np.isreal_iscomplex.cs	0	3
 Logic/np.min_scalar_type.cs	1	0
 Logic/np.type_checks.cs	2	15
 Manipulation/NDArray.FunctionBase.cs	7	8	# np.insert's and np.delete's statements, moved into the array object by phase PE (7408f707) from the operation class InsertEngine (never scanned) and np.delete.cs; the array object's per-dtype element semantics go to the DType slots in P3 (D1 (6), E7)
-Manipulation/NDArray.fill.cs	3	1
 Manipulation/np.apply_along_axis.cs	0	1
 Manipulation/np.asscalar.cs	0	1
 Manipulation/np.copyto.Strings.cs	1	0
