@@ -272,11 +272,11 @@ namespace NumSharp
                         // single empty fancy (which matches only by coincidence for a 1-D mask) gives
                         // the wrong rank for a multi-dim empty mask.
                         if (nd.size == 0 && nd.ndim >= 1 && nd.typecode != NPTypeCode.Boolean)
-                            return FetchIndices(this, new NDArray[] { nd }, null, true);
+                            return Backends.UnmanagedStorage.MapIterGet(this, new NDArray[] { nd }, null, true);
                         // Boolean mask indexing: delegate to the specialized NDArray<bool> indexer
                         if (nd.typecode == NPTypeCode.Boolean)
                             return this[nd.MakeGeneric<bool>()];
-                        return FetchIndices(this, new NDArray[] {nd}, null, true);
+                        return Backends.UnmanagedStorage.MapIterGet(this, new NDArray[] {nd}, null, true);
                     case int i:
                         return new NDArray(Storage.GetData(i));
                     case ulong ui:
@@ -301,11 +301,11 @@ namespace NumSharp
                         // treats int[]/long[] as fancy via the _NDArrayFound scan below.)
                         if (this.ndim == 0)
                             throw new IndexError("too many indices for array: array is 0-dimensional, but 1 were indexed");
-                        return FetchIndices(this, new NDArray[] { np.array(coords, copy: false) }, null, true);
+                        return Backends.UnmanagedStorage.MapIterGet(this, new NDArray[] { np.array(coords, copy: false) }, null, true);
                     case long[] coords:
                         if (this.ndim == 0)
                             throw new IndexError("too many indices for array: array is 0-dimensional, but 1 were indexed");
-                        return FetchIndices(this, new NDArray[] { np.array(coords, copy: false) }, null, true);
+                        return Backends.UnmanagedStorage.MapIterGet(this, new NDArray[] { np.array(coords, copy: false) }, null, true);
                     case NDArray[] nds:
                         return this[nds];
                     case object[] objs:
@@ -362,7 +362,7 @@ namespace NumSharp
             // np.take fast path mishandled for newaxis / negative slices / non-contiguous sources) as
             // well as multi-advanced.
             if (TryBuildMultiAdvancedGrid(indicesObjects, out var multiGrid))
-                return FetchIndices(this, multiGrid, null, true);
+                return Backends.UnmanagedStorage.MapIterGet(this, multiGrid, null, true);
 
             int ints = 0;
             int bools = 0;
@@ -545,7 +545,7 @@ namespace NumSharp
             }
 
             //TODO: we can use a slice as null indice instead of expanding it, then we use PrepareIndexGetters to actually simulate that.
-            var ret = FetchIndices(@this, indicesArray, null, !(indicesObjects[0] is int));
+            var ret = Backends.UnmanagedStorage.MapIterGet(@this, indicesArray, null, !(indicesObjects[0] is int));
 
             if (foundNewAxis)
             {
@@ -1258,513 +1258,30 @@ namespace NumSharp
             return true;
         }
 
-        [NDScoped]
+        /// <inheritdoc cref="Backends.UnmanagedStorage.MapIterGet(NDArray, NDArray[], NDArray, bool)"/>
+        /// <remarks>Forwards to <see cref="Backends.UnmanagedStorage.MapIterGet(NDArray, NDArray[], NDArray, bool)"/>, the
+        ///     typed fetch's home since 2026-10-29 (the np-layer dtype plan's batch 8 moved mapping.c's typed fetch to the
+        ///     array object's storage). Kept under its old name for types that derive from <see cref="NDArray"/>; the
+        ///     indexers call the storage member.</remarks>
         protected static NDArray FetchIndices(NDArray src, NDArray[] indices, NDArray @out, bool extraDim)
-        {
-            // #region Compute
-		    // switch (src.typecode)
-		    // {
-			    // %foreach supported_dtypes,supported_dtypes_lowercase%
-			    // case NPTypeCode.#1: return FetchIndices<#2>(src.MakeGeneric<#2>(), indices, @out, extraDim);
-			    // %
-			    // default:
-				    // throw new NotSupportedException();
-		    // }
-            // #endregion
+            => Backends.UnmanagedStorage.MapIterGet(src, indices, @out, extraDim);
 
-#region Compute
+        /// <inheritdoc cref="Backends.UnmanagedStorage.MapIterGet{T}(NDArray{T}, NDArray[], NDArray, bool)"/>
+        /// <remarks>Forwards to <see cref="Backends.UnmanagedStorage.MapIterGet{T}(NDArray{T}, NDArray[], NDArray, bool)"/>
+        ///     (moved there 2026-10-29); kept under its old name for types that derive from <see cref="NDArray"/>.</remarks>
+        protected static NDArray<T> FetchIndices<T>(NDArray<T> source, NDArray[] indices, NDArray @out, bool extraDim) where T : unmanaged
+            => Backends.UnmanagedStorage.MapIterGet<T>(source, indices, @out, extraDim);
 
-            // NDScoped: reclaims the per-dispatch MakeGeneric alias, the computed-offsets
-            // buffer, and every gather temp inside FetchIndices<T>; the yielded result (or the
-            // caller's untracked @out) is the only survivor.
+        /// <inheritdoc cref="Backends.UnmanagedStorage.MapIterGetSubspace{T}(NDArray{T}, NDArray{long}, NDArray[], int, long[], long[], NDArray)"/>
+        /// <remarks>Forwards to <see cref="Backends.UnmanagedStorage.MapIterGetSubspace{T}(NDArray{T}, NDArray{long}, NDArray[], int, long[], long[], NDArray)"/>
+        ///     (moved there 2026-10-29); kept under its old name for types that derive from <see cref="NDArray"/>.</remarks>
+        protected static NDArray<T> FetchIndicesND<T>(NDArray<T> src, NDArray<long> offsets, NDArray[] indices, int ndsCount, long[] retShape, long[] subShape, NDArray @out) where T : unmanaged
+            => Backends.UnmanagedStorage.MapIterGetSubspace(src, offsets, indices, ndsCount, retShape, subShape, @out);
 
-            switch (src.typecode)
-            {
-                case NPTypeCode.Boolean: return FetchIndices<bool>(src.MakeGeneric<bool>(), indices, @out, extraDim);
-                case NPTypeCode.Byte:    return FetchIndices<byte>(src.MakeGeneric<byte>(), indices, @out, extraDim);
-                case NPTypeCode.SByte:   return FetchIndices<sbyte>(src.MakeGeneric<sbyte>(), indices, @out, extraDim);
-                case NPTypeCode.Int16:   return FetchIndices<short>(src.MakeGeneric<short>(), indices, @out, extraDim);
-                case NPTypeCode.UInt16:  return FetchIndices<ushort>(src.MakeGeneric<ushort>(), indices, @out, extraDim);
-                case NPTypeCode.Int32:   return FetchIndices<int>(src.MakeGeneric<int>(), indices, @out, extraDim);
-                case NPTypeCode.UInt32:  return FetchIndices<uint>(src.MakeGeneric<uint>(), indices, @out, extraDim);
-                case NPTypeCode.Int64:   return FetchIndices<long>(src.MakeGeneric<long>(), indices, @out, extraDim);
-                case NPTypeCode.UInt64:  return FetchIndices<ulong>(src.MakeGeneric<ulong>(), indices, @out, extraDim);
-                case NPTypeCode.Char:    return FetchIndices<char>(src.MakeGeneric<char>(), indices, @out, extraDim);
-                case NPTypeCode.Half:    return FetchIndices<Half>(src.MakeGeneric<Half>(), indices, @out, extraDim);
-                case NPTypeCode.Double:  return FetchIndices<double>(src.MakeGeneric<double>(), indices, @out, extraDim);
-                case NPTypeCode.Single:  return FetchIndices<float>(src.MakeGeneric<float>(), indices, @out, extraDim);
-                case NPTypeCode.Decimal: return FetchIndices<decimal>(src.MakeGeneric<decimal>(), indices, @out, extraDim);
-                case NPTypeCode.Complex: return FetchIndices<System.Numerics.Complex>(src.MakeGeneric<System.Numerics.Complex>(), indices, @out, extraDim);
-                default:
-                    throw new NotSupportedException();
-            }
-
-#endregion
-
-        }
-
-        protected static unsafe NDArray<T> FetchIndices<T>(NDArray<T> source, NDArray[] indices, NDArray @out, bool extraDim) where T : unmanaged
-        {
-            if (source is null)
-                throw new ArgumentNullException(nameof(source));
-
-            if (indices is null)
-                throw new ArgumentNullException(nameof(indices));
-
-            if (indices.Length == 0)
-                throw new ArgumentException("Value cannot be an empty collection.", nameof(indices));
-
-            if (source.Shape.IsScalar)
-                source = source.reshape(1);
-
-            if (source.Shape.IsBroadcasted)
-                source = np.copy(source).MakeGeneric<T>();
-
-            long[] retShape = null, subShape = null;
-
-            long indicesSize = indices.Max(nd => nd.size);
-            var srcShape = source.Shape;
-            var ndsCount = indices.Length;
-            // More advanced indices than the array has axes is NEVER valid: the subshape would
-            // be sized `srcShape.NDim - ndsCount` (negative) and the offset/getter loops would
-            // walk strides[i] past the end — an OOB read/write (memory corruption). NumPy raises.
-            if (ndsCount > source.ndim)
-                throw new IndexError($"too many indices for array: array is {source.ndim}-dimensional, but {ndsCount} were indexed");
-            bool isSubshaped = ndsCount != source.ndim;
-            NDArray idxs;
-            long[] indicesImpliedShape = null;
-            //preprocess indices -----------------------------------------------------------------------------------------------
-            //handle non-flat indices and detect if broadcasting required
-            if (indices.Length == 1)
-            {
-                //fast-lane for 1-d.
-                idxs = indices[0];
-                if (idxs.Shape.IsEmpty)
-                    return new NDArray<T>();
-
-                //handle non-flat index
-                if (idxs.ndim != 1)
-                {
-                    // A 0-D index contributes NO output axis: its shape () is prepended to the
-                    // subshape, so a[np.array(0)] matches a[0] -> (subshape), NOT a length-1
-                    // leading axis. Keep the natural (possibly empty) implied shape instead of
-                    // forcing (1,), which left a spurious size-1 axis (NumPy parity).
-                    indicesImpliedShape = idxs.Shape.dimensions;
-                    idxs = idxs.flat;
-                }
-
-                //normalize index dtype (accepts all integer types, rejects float/decimal/etc.)
-                idxs = NormalizeIndexArray(idxs);
-                indices[0] = idxs;
-            }
-            else
-            {
-                idxs = indices[0];
-                bool broadcastRequired = false;
-                for (int i = 0; i < indices.Length; i++)
-                {
-                    var nd = indices[i];
-
-                    if (nd.Shape.IsEmpty)
-                        return new NDArray<T>();
-
-                    // Broadcasting is required when the index arrays are not ALL the same
-                    // shape — NumPy broadcasts them together (e.g. (2,) with (2,1) -> (2,2),
-                    // result (2,2)+trailing). A size-only check missed equal-size-but-different-
-                    // shape pairs like (2,) vs (2,1) (both size 2), leaving them un-broadcast
-                    // and producing a wrong (2,1,...) result instead of (2,2,...).
-                    if (!nd.Shape.dimensions.SequenceEqual(idxs.Shape.dimensions))
-                        broadcastRequired = true;
-
-                    //normalize index dtype (accepts all integer types, rejects float/decimal/etc.)
-                    indices[i] = NormalizeIndexArray(nd);
-                }
-
-                //handle broadcasting
-                if (broadcastRequired)
-                {
-                    indices = np.broadcast_arrays(indices);
-                    indicesSize = indices[0].size;
-                    idxs = indices[0];
-                }
-
-                //handle non-flat shapes post (possibly) broadcasted
-                for (int i = 0; i < indices.Length; i++)
-                {
-                    var nd = indices[i];
-                    if (nd.ndim != 1)
-                    {
-                        // 0-D operand (e.g. broadcast of all-scalar advanced indices) -> empty
-                        // implied shape, no spurious leading size-1 axis: a[np.array(0), np.array(1)]
-                        // -> scalar, matching NumPy.
-                        indicesImpliedShape = nd.Shape.dimensions;
-                        indices[i] = nd = np.atleast_1d(nd).flat;
-                    }
-                }
-            }
-
-            //resolve retShape
-            if (!isSubshaped)
-            {
-                retShape = indicesImpliedShape ?? (long[])idxs.Shape.dimensions.Clone();
-            }
-            else
-            {
-                if (indicesImpliedShape == null)
-                {
-                    retShape = new long[idxs.ndim + srcShape.NDim - ndsCount];
-                    for (int i = 0; i < idxs.ndim; i++)
-                        retShape[i] = idxs.Shape.dimensions[i];
-
-                    subShape = new long[srcShape.NDim - ndsCount];
-                    for (int dst_i = idxs.ndim, src_i = ndsCount, i = 0; src_i < srcShape.NDim; dst_i++, src_i++, i++)
-                    {
-                        retShape[dst_i] = srcShape[src_i];
-                        subShape[i] = srcShape[src_i];
-                    }
-                }
-                else
-                {
-                    retShape = indicesImpliedShape;
-
-                    subShape = new long[srcShape.NDim - ndsCount];
-                    for (int src_i = ndsCount, i = 0; src_i < srcShape.NDim; src_i++, i++)
-                    {
-                        subShape[i] = srcShape[src_i];
-                    }
-
-                    if (isSubshaped)
-                        retShape = Arrays.Concat(indicesImpliedShape, subShape);
-                }
-            }
-
-            // Kernel route — ONE index array over a C-contiguous source (a[idx], m[ridx], a[idx2d]):
-            // the take kernels gather straight from the index buffer at its own width (int32 or
-            // int64, offset honoured), one typed MOV (or one slab cpblk) per index, no offset
-            // delegate, no materialised offset array, no second pass — NumPy's mapiter_trivial_get
-            // shape, ~3-4x the route below at 100K (docs/NDITER_PERF_DISCOVERY.md §7 lever 1). The
-            // general route stays for everything else: several index arrays, a non-contiguous
-            // source, a strided / reversed / narrow-dtype index view, a caller-supplied @out, or a
-            // zero-byte slab (an empty trailing axis — nothing to gather, shape only).
-            if (ndsCount == 1 && @out is null && source.Shape.IsContiguous && DirectILKernelGenerator.Enabled
-                && FancyIndexKernelRoute.TryGetIndexPointer(indices[0], out void* kernelIdxPtr, out bool kernelIdx32))
-            {
-                long slabElements = 1;
-                if (isSubshaped)
-                    for (int i = 0; i < subShape.Length; i++)
-                        slabElements *= subShape[i];
-                long slabBytes = slabElements * InfoOf<T>.Size;
-                long indexCount = indices[0].size;
-                long axisLength = srcShape.dimensions[0];
-                if (slabBytes > 0)
-                {
-                    // Allocated at the FINAL retShape (fresh, C-contiguous, owned — flags.owndata=True
-                    // like NumPy's fancy result); the kernel fills it flat.
-                    var gathered = new NDArray<T>(Shape.Adopt(retShape), false);
-                    byte* srcBase = (byte*)source.Storage.Address + srcShape.offset * InfoOf<T>.Size;
-                    long fail = FancyIndexKernelRoute.Gather(srcBase, kernelIdxPtr, kernelIdx32, indexCount, axisLength, slabBytes, (byte*)gathered.Address);
-                    if (fail == -1)
-                        return gathered;
-                    if (fail >= 0)
-                    {
-                        // Same NumPy-verbatim text the general route raises (the single index array is
-                        // axis 0); the partially filled result is a scope-reclaimed temp.
-                        long badIndex = FancyIndexKernelRoute.ReadIndex(kernelIdxPtr, kernelIdx32, fail);
-                        throw new IndexError($"index {badIndex} is out of bounds for axis 0 with size {axisLength}");
-                    }
-                    // -2: the IL kernels are unavailable on this host — fall through to the general route.
-                }
-            }
-
-            //when -----------------------------------------
-            //indices point to an ndarray
-            if (isSubshaped && (!source.Shape.IsContiguous || (!(@out is null) && !@out.Shape.IsContiguous)))
-            {
-                var ret = FetchIndicesNDNonLinear(source, indices, ndsCount, retShape: retShape, subShape: subShape, @out);
-                return ret;
-            }
-
-            //by now all indices are flat, relative indices, might be subshaped, might be non-linear ---------------
-            //we flatten to linear absolute points -----------------------------------------------------------------
-            var computedOffsets = new NDArray<long>(Shape.Vector(indicesSize), false);
-            var computedAddr = computedOffsets.Address;
-
-            //prepare indices getters
-            var indexGetters = PrepareIndexGetters(srcShape, indices);
-
-            //figure out the largest possible abosulte offset (disengaged for a zero-sized source,
-            //which dereferences nothing — see OffsetBackstopUpperBound)
-            long largestOffset = OffsetBackstopUpperBound(srcShape, source.size);
-
-            //compute coordinates
-            if (indices.Length > 1)
-            {
-                var index = stackalloc long[ndsCount];
-                for (long i = 0; i < indicesSize; i++)
-                {
-                    for (int ndIdx = 0; ndIdx < ndsCount; ndIdx++)
-                        index[ndIdx] = indexGetters[ndIdx](i); //replace with memory access or iterators
-
-                    // Bound BOTH ends: a negative computed offset (an exotic strided / negative-stride
-                    // source view whose GetOffset underflows below the buffer base) would otherwise pass
-                    // the upper-bound check and read/write BEFORE the buffer — a wild access that can land
-                    // in the GC heap (silent corruption). Fault here, like the block-copy guards do.
-                    if ((computedAddr[i] = srcShape.GetOffset(index, ndsCount)) > largestOffset || computedAddr[i] < 0)
-                        throw new IndexOutOfRangeException($"Index [{string.Join(", ", new Span<long>(index, ndsCount).ToArray())}] exceeds given NDArray's bounds. NDArray is shaped {srcShape}.");
-                }
-            }
-            else
-            {
-                var getter = indexGetters[0];
-                for (long i = 0; i < indicesSize; i++)
-                {
-                    if ((computedAddr[i] = srcShape.GetOffset_1D(getter(i))) > largestOffset || computedAddr[i] < 0)
-                        throw new IndexOutOfRangeException($"Index [{getter(i)}] exceeds given NDArray's bounds. NDArray is shaped {srcShape}.");
-                }
-            }
-
-            //based on recently made `computedOffsets` we retreive data -----------------------------------------
-
-            if (!isSubshaped)
-            {
-                var idxAddr = computedOffsets.Address;
-                var srcAddr = source.Address;
-                // Allocate at the FINAL retShape and fill flat (the fresh buffer is C-contiguous either
-                // way) — a terminal dst.reshape(retShape) would hand back a VIEW of the hidden temp and
-                // misreport flags.owndata=False, where NumPy's fancy result OWNS its data.
-                var dst = new NDArray<T>(Shape.Adopt(retShape ?? new[] { computedOffsets.size }), false);
-                T* dstAddr = dst.Address;
-                //indices point to a scalar
-                var len = dst.size;
-                for (long i = 0; i < len; i++)
-                    dstAddr[i] = srcAddr[idxAddr[i]];
-
-                return dst;
-            }
-            else
-            {
-                //non linear is handled before calculating computedOffsets
-                var ret = FetchIndicesND(source, computedOffsets, indices, ndsCount, retShape: retShape, subShape: subShape, @out);
-
-                return ret;
-            }
-        }
-
-        /// <summary>
-        ///     Accepts collapsed 
-        /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <param name="src"></param>
-        /// <param name="offsets"></param>
-        /// <param name="retShape"></param>
-        /// <param name="absolute">Is the given <paramref name="offsets"/> already point to the offset of <paramref name="src"/>.</param>
-        /// <returns></returns>
-        protected static unsafe NDArray<T> FetchIndicesND<T>(NDArray<T> src, NDArray<long> offsets, NDArray[] indices, int ndsCount, long[] retShape, long[] subShape, NDArray @out) where T : unmanaged
-        {
-            //facts:
-            //indices are always offsetted to
-            Debug.Assert(offsets.ndim == 1);
-            Debug.Assert(retShape != null);
-
-            //handle pointers pointing to subshape
-            long subShapeSize = 1;
-            for (int i = 0; i < subShape.Length; i++)
-                subShapeSize *= subShape[i];
-
-            long* offsetAddr = offsets.Address;
-            var offsetsSize = offsets.size;
-            T* srcAddr = src.Address;
-
-            NDArray dst;
-            if (@out is null)
-                dst = new NDArray<T>(Shape.Adopt(retShape), false);
-            else
-            {
-                //compare computed retShape vs given @out
-                if (!retShape.SequenceEqual(@out.Shape.dimensions))
-                    throw new ArgumentException($"Given @out NDArray is expected to be shaped [{string.Join(", ", retShape)}] but is instead [{string.Join(", ", @out.Shape.dimensions)}]");
-                if (@out.dtype != typeof(T))
-                    throw new ArgumentException($"Given @out NDArray is expected to be dtype '{typeof(T).Name}' but is instead '{@out.dtype.type.Name}'");
-
-                dst = @out;
-            }
-
-            T* dstAddr = (T*)dst.Address;
-            long copySize = subShapeSize * InfoOf<T>.Size;
-            long srcBuf = src.Shape.BufferSize;    // element capacity of the source buffer (offsets index into it)
-            long dstBuf = dst.size;                // fresh retShape buffer (or validated contiguous @out)
-
-            for (long i = 0; i < offsetsSize; i++)
-            {
-                long so = *(offsetAddr + i);
-                long doff = i * subShapeSize;
-                // Memory-safety guard: each copy spans subShapeSize elements but the upstream bound
-                // check validated only the block START. A miscomputed retShape/subShape (an exotic
-                // mixed-advanced combo the Try* stack mishandles) would copy past either pinned
-                // buffer -> silent GC-heap corruption. Fault here instead (catchable).
-                if (so < 0 || so + subShapeSize > srcBuf || doff + subShapeSize > dstBuf)
-                    throw new IndexOutOfRangeException(IndexingOobMessage("FetchIndicesND", so, doff, subShapeSize, srcBuf, dstBuf, retShape, subShape));
-                Buffer.MemoryCopy(srcAddr + so, dstAddr + doff, copySize, copySize);
-            }
-
-            // Return the owned result INSTANCE, not a MakeGeneric alias of it — the alias is pure
-            // type-plumbing but it chains _baseStorage to the (invisible) fresh buffer, misreporting
-            // flags.owndata=False where NumPy's fancy result owns its data. A caller-supplied @out that
-            // is not already generic still needs the typed wrapper (a view of the user's array — its
-            // owndata=False is then genuinely true).
-            return dst as NDArray<T> ?? dst.MakeGeneric<T>();
-        }
-
-        /// <summary>
-        ///     Accepts collapsed 
-        /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <param name="source"></param>
-        /// <param name="offsets"></param>
-        /// <param name="retShape"></param>
-        /// <param name="absolute">Is the given <paramref name="offsets"/> already point to the offset of <paramref name="source"/>.</param>
-        /// <returns></returns>
-        [SuppressMessage("ReSharper", "SuggestVarOrType_Elsewhere")]
-        protected static unsafe NDArray<T> FetchIndicesNDNonLinear<T>(NDArray<T> source, NDArray[] indices, int ndsCount, long[] retShape, long[] subShape, NDArray @out) where T : unmanaged
-        {
-            // Subshaped fancy gather (ndsCount < source.ndim) from a NON-contiguous source
-            // (transposed / row- or col-strided / negative-stride). The contiguous fast path
-            // (FetchIndicesND) block-copies one CONTIGUOUS subShape per offset, but a strided
-            // source's sub-arrays are not contiguous, so gather element-by-element through the
-            // source strides into the C-contiguous result. NumPy likewise gathers a strided
-            // source straight into a fresh contiguous array.
-            //
-            // (Was broken: it sized the result as subShape instead of retShape and did
-            //  `ret[i] = source[index, ndsCount]` — assigning a whole sub-array into a scalar
-            //  slot — so every single-fancy-on-strided-view threw an IncorrectShapeException.)
-            long subShapeSize = 1;
-            for (int s = 0; s < subShape.Length; s++)
-                subShapeSize *= subShape[s];
-
-            long size = indices[0].size; // number of selected (broadcast) fancy multi-indices
-
-            NDArray<T> ret;
-            if (@out is null)
-                ret = new NDArray<T>(Shape.Adopt(retShape), false);
-            else
-            {
-                //compare computed retShape vs given @out
-                if (!retShape.SequenceEqual(@out.Shape.dimensions))
-                    throw new ArgumentException($"Given @out NDArray is expected to be shaped [{string.Join(", ", retShape)}] but is instead [{string.Join(", ", @out.Shape.dimensions)}]");
-                if (@out.dtype != typeof(T))
-                    throw new ArgumentException($"Given @out NDArray is expected to be dtype '{typeof(T).Name}' but is instead '{@out.dtype.type.Name}'");
-
-                ret = @out.MakeGeneric<T>();
-            }
-
-            var srcShape = source.Shape;
-            int srcNdim = source.ndim;
-            int subNdim = subShape.Length;
-            var indexGetters = PrepareIndexGetters(srcShape, indices);
-
-            T* srcAddr = source.Address;       // buffer base; GetOffset adds the source offset
-            T* dstAddr = ret.Address;          // contiguous result (or @out), written in C-order
-            long srcBuf = source.Shape.BufferSize;  // element capacity of the source buffer
-            long dstBuf = ret.size;                 // contiguous result element capacity
-
-            long* coord = stackalloc long[srcNdim];
-            for (long i = 0; i < size; i++)
-            {
-                // Leading coordinates from the fancy index arrays (one per consumed axis);
-                // PrepareIndexGetters has validated/wrapped each to [0, dim-1].
-                for (int k = 0; k < ndsCount; k++)
-                    coord[k] = indexGetters[k](i);
-
-                // Walk the trailing subShape axes as an odometer (last axis fastest), copying
-                // each element through the source strides into the contiguous result block.
-                for (int s = 0; s < subNdim; s++)
-                    coord[ndsCount + s] = 0;
-
-                long baseDst = i * subShapeSize;
-                for (long j = 0; j < subShapeSize; j++)
-                {
-                    long so = srcShape.GetOffset(coord, srcNdim);
-                    // Memory-safety guard (see FetchIndicesND): a miscomputed retShape/subShape
-                    // would write past the pinned result buffer or read past the source buffer.
-                    if (so < 0 || so >= srcBuf || baseDst + j >= dstBuf)
-                        throw new IndexOutOfRangeException(IndexingOobMessage("FetchIndicesNDNonLinear", so, baseDst + j, 1, srcBuf, dstBuf, retShape, subShape));
-                    dstAddr[baseDst + j] = srcAddr[so];
-
-                    for (int s = subNdim - 1; s >= 0; s--)
-                    {
-                        if (++coord[ndsCount + s] < subShape[s])
-                            break;
-                        coord[ndsCount + s] = 0;
-                    }
-                }
-            }
-
-            return ret;
-        }
-
-        /// <summary>
-        /// Diagnostic message for the indexing block-copy bounds guards (shared by the getter
-        /// gather and setter scatter). Names the exact copy that would overrun a pinned buffer
-        /// together with the computed <c>retShape</c>/<c>subShape</c> so a divergence is traced to
-        /// the mishandled index combination instead of corrupting the GC heap silently.
-        /// </summary>
-        /// <summary>
-        ///     The largest buffer offset REACHABLE by any coordinate of <paramref name="shape"/>:
-        ///     its base offset plus, per axis, only the positive-stride contribution (a negative
-        ///     stride reaches its maximum at index 0, contributing nothing). For a contiguous view
-        ///     this is <c>size-1</c>. Used as the upper bound when validating gather/scatter offsets;
-        ///     the previous <c>GetOffset(size-1 corner)</c> was the MINIMUM corner for a negative-stride
-        ///     view, so valid early-row offsets were falsely rejected as out of bounds.
-        /// </summary>
-        /// <summary>
-        ///     Upper bound for the gather/scatter offset backstop — <see cref="LargestReachableOffset"/>,
-        ///     except DISENGAGED for a source that holds no element.
-        /// </summary>
-        /// <remarks>
-        ///     That flat-offset comparison is NOT what makes a fancy index valid: every index value has
-        ///     already been checked against ITS OWN axis extent (<c>-dim &lt;= idx &lt; dim</c>) — up front and
-        ///     axis-major by <c>ScanFancyBounds</c> (<c>NDArray.Indexing.PrepareIndex.cs</c>, NumPy's
-        ///     <c>mapping.c</c> order and verbatim <c>IndexError</c>), and again per value inside
-        ///     <see cref="PrepareIndexGetters"/>. That layer is what rejects <c>np.zeros((3,0))[[5]]</c> and
-        ///     <c>np.zeros((0,3))[[0]]</c>, and it keeps doing so. This bound is only the memory-safety
-        ///     backstop for the DEREFERENCE that follows.
-        ///
-        ///     A zero-sized source has no dereference to guard, so the backstop has nothing to say. The
-        ///     empty extent is either an INDEXED axis — where the per-axis layer above already rejected
-        ///     every possible index value, leaving only an empty index array whose loop body never runs —
-        ///     or a TRAILING one, which makes every gathered/scattered block <c>subShapeSize == 0</c>: zero
-        ///     bytes copied, no address read. Meanwhile <see cref="LargestReachableOffset"/> reports
-        ///     <c>size - 1 == -1</c> there, below every offset it is compared against, so leaving it engaged
-        ///     rejected every VALID empty gather — <c>np.zeros((3,0))[[0,1]]</c> threw
-        ///     <c>IndexOutOfRangeException</c> where NumPy returns <c>(2,0)</c>.
-        ///
-        ///     Only the UPPER half is disengaged. The <c>&lt; 0</c> half stays live unconditionally: a negative
-        ///     computed offset (an exotic strided / negative-stride view whose <c>GetOffset</c> underflows
-        ///     below the buffer base) would read or write BEFORE the buffer — a wild access that can land in
-        ///     the GC heap.
-        /// </remarks>
-        private static long OffsetBackstopUpperBound(Shape shape, long size)
-            => size == 0 ? long.MaxValue : LargestReachableOffset(shape, size);
-
-        private static long LargestReachableOffset(Shape shape, long size)
-        {
-            if (shape.IsContiguous)
-                return size - 1;
-
-            long largest = shape.offset;
-            var strides = shape.strides;
-            var dims = shape.dimensions;
-            for (int i = 0; i < dims.Length; i++)
-            {
-                long stride = strides[i];
-                if (stride > 0)
-                    largest += (dims[i] - 1) * stride;
-            }
-            return largest;
-        }
-
-        private static string IndexingOobMessage(string where, long srcOff, long dstOff, long span, long srcCap, long dstCap, long[] retShape, long[] subShape)
-            => $"[indexing OOB guard] {where}: copy src[{srcOff},+{span}) of {srcCap} -> dst[{dstOff},+{span}) of {dstCap} out of bounds " +
-               $"(retShape=[{(retShape == null ? "" : string.Join(",", retShape))}] subShape=[{(subShape == null ? "" : string.Join(",", subShape))}]).";
+        /// <inheritdoc cref="Backends.UnmanagedStorage.MapIterGetSubspaceStrided{T}(NDArray{T}, NDArray[], int, long[], long[], NDArray)"/>
+        /// <remarks>Forwards to <see cref="Backends.UnmanagedStorage.MapIterGetSubspaceStrided{T}(NDArray{T}, NDArray[], int, long[], long[], NDArray)"/>
+        ///     (moved there 2026-10-29); kept under its old name for types that derive from <see cref="NDArray"/>.</remarks>
+        protected static NDArray<T> FetchIndicesNDNonLinear<T>(NDArray<T> source, NDArray[] indices, int ndsCount, long[] retShape, long[] subShape, NDArray @out) where T : unmanaged
+            => Backends.UnmanagedStorage.MapIterGetSubspaceStrided(source, indices, ndsCount, retShape, subShape, @out);
     }
 }

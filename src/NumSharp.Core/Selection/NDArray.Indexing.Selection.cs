@@ -74,8 +74,12 @@ namespace NumSharp
         ///     (<c>arrays used as indices must be of integer (or boolean) type</c>). It used to be an
         ///     <see cref="IndexOutOfRangeException"/> with that text; every other index path raises
         ///     <see cref="IndexError"/>.</exception>
+        /// <remarks>An index-kind test (the INDEX's dtype, which NumPy's <c>prepare_index</c> tests too), so it stays with
+        ///     the indexers; <c>protected internal</c> since 2026-10-29 for the typed fetch and store
+        ///     (<see cref="Backends.UnmanagedStorage.MapIterGet(NDArray, NDArray[], NDArray, bool)"/> and
+        ///     <see cref="Backends.UnmanagedStorage.MapIterSet(NDArray, NDArray[], NDArray)"/>), which call it.</remarks>
         [MethodImpl(Inline)]
-        protected static NDArray NormalizeIndexArray(NDArray indices)
+        protected internal static NDArray NormalizeIndexArray(NDArray indices)
         {
             var tc = indices.typecode;
 
@@ -101,7 +105,15 @@ namespace NumSharp
         /// </summary>
         /// <param name="srcShape">The shape to get indice from</param>
         /// <param name="indices">The indices trying to index.</param>
-        protected static unsafe Func<long, long>[] PrepareIndexGetters(Shape srcShape, NDArray[] indices)
+        /// <returns>One getter per index array: the k-th selected position's coordinate along that array's axis, wrapped
+        ///     into <c>[0, dim)</c>.</returns>
+        /// <exception cref="IndexError">(From a getter, when called.) An index value outside <c>[-dim, dim)</c> for its
+        ///     axis, NumPy's text.</exception>
+        /// <remarks>Reads each index array through a raw pointer (int64, else int32 — the two dtypes
+        ///     <see cref="NormalizeIndexArray"/> leaves), so the arrays must stay alive while the getters run.
+        ///     <c>protected internal</c> since 2026-10-29 for the typed fetch and store in
+        ///     <c>Selection/UnmanagedStorage.Mapping.cs</c>, which call it.</remarks>
+        protected internal static unsafe Func<long, long>[] PrepareIndexGetters(Shape srcShape, NDArray[] indices)
         {
             var indexGetters = new Func<long, long>[indices.Length];
             for (int i = 0; i < indices.Length; i++)

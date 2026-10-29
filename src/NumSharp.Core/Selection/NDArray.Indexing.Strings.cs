@@ -497,12 +497,12 @@ namespace NumSharp
             if (selection.Length > ndim)
             {
                 using (var proxy = np.broadcast_to(NDArray.Scalar((byte)0), new Shape((long[])Shape.dimensions.Clone())))
-                    FetchIndices(proxy, selection, null, true)?.Dispose();
+                    Backends.UnmanagedStorage.MapIterGet(proxy, selection, null, true)?.Dispose();
                 throw new IndexError($"too many indices for array: array is {ndim}-dimensional, but {selection.Length} were indexed");
             }
             if (selection.Length == 1 && TryStringGatherRows(selection[0], out var gathered))
                 return gathered;
-            return StringAdvancedGet(u => FetchIndices(u, selection, null, true), p => FetchIndices(p, selection, null, true));
+            return StringAdvancedGet(u => Backends.UnmanagedStorage.MapIterGet(u, selection, null, true), p => Backends.UnmanagedStorage.MapIterGet(p, selection, null, true));
         }
 
         /// <summary>
@@ -515,10 +515,10 @@ namespace NumSharp
             if (selection.Length > ndim)
             {
                 using (var proxy = np.zeros(new Shape((long[])Shape.dimensions.Clone()), NPTypeCode.Byte))
-                    SetIndices(proxy, selection, NDArray.Scalar((byte)0));
+                    Backends.UnmanagedStorage.MapIterSet(proxy, selection, NDArray.Scalar((byte)0));
                 throw new IndexError($"too many indices for array: array is {ndim}-dimensional, but {selection.Length} were indexed");
             }
-            StringAdvancedSet(value, (u, v) => SetIndices(u, selection, v), (p, v) => SetIndices(p, selection, v));
+            StringAdvancedSet(value, (u, v) => Backends.UnmanagedStorage.MapIterSet(u, selection, v), (p, v) => Backends.UnmanagedStorage.MapIterSet(p, selection, v));
         }
     }
 }
