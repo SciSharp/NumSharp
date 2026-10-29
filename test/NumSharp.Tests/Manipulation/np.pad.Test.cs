@@ -387,12 +387,17 @@ namespace NumSharp.Tests.Manipulation
             act.Should().Throw<ArgumentException>();
         }
 
+        /// <summary>
+        ///     NumPy has no check of <c>reflect_type</c>'s value: its loop tests <c>method == "odd"</c> and reflects every
+        ///     other value as <c>'even'</c> (NumPy 2.4.2: <c>np.pad([1, 2, 4], 2, 'reflect', reflect_type='weird')</c> is
+        ///     <c>[4, 2, 1, 2, 4, 2, 1]</c>). NumSharp used to refuse anything but 'even' / 'odd'.
+        /// </summary>
         [TestMethod]
-        public void ReflectType_Invalid_Throws()
+        public void ReflectType_OtherThanOdd_IsEven()
         {
-            var arr = np.array(new long[] { 1, 2, 3 });
-            Action act = () => np.pad(arr, 1, mode: "reflect", reflect_type: "weird");
-            act.Should().Throw<ArgumentException>();
+            var arr = np.array(new long[] { 1, 2, 4 });
+            var r = np.pad(arr, 2, mode: "reflect", reflect_type: "weird");
+            r.ToArray<long>().Should().Equal(4L, 2L, 1L, 2L, 4L, 2L, 1L);
         }
 
         [TestMethod]

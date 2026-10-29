@@ -34,36 +34,51 @@ namespace NumSharp
         /// <param name="constant_values">The fill of <c>'constant'</c>, or null for NumPy's default 0.</param>
         /// <param name="end_values">The ends of <c>'linear_ramp'</c>, or null for 0.</param>
         /// <param name="stat_length">The window of the statistic modes, or null for the whole axis.</param>
-        /// <param name="reflect_type"><c>'even'</c> or <c>'odd'</c> for <c>'reflect'</c> / <c>'symmetric'</c>.</param>
+        /// <param name="reflect_type"><c>'odd'</c> for the odd reflection of <c>'reflect'</c> / <c>'symmetric'</c>; any other
+        ///     value is the even one, as in NumPy, whose loop tests only <c>method == "odd"</c>.</param>
         /// <returns>A new padded array of <paramref name="array"/>'s dtype.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="array"/> or <paramref name="mode"/> is null.</exception>
-        /// <exception cref="ArgumentException">An unsupported mode, a keyword the mode does not take, a negative width, an
-        ///     empty axis padded by a mode other than constant / empty.</exception>
-        /// <remarks>Scoped: every value-mode overload funnels through it, so one scope reclaims the whole mode-body call
-        ///     tree's temporaries.</remarks>
+        /// <exception cref="ArgumentNullException"><paramref name="array"/> is null.</exception>
+        /// <exception cref="TypeError">A null <paramref name="pad_width"/> (NumPy's <c>np.asarray(None)</c> is an object
+        ///     array: "`pad_width` must be of integral type."), or a dict of widths that is no integer table.</exception>
+        /// <exception cref="ValueError">A negative width ("index can't contain negative values"), widths that do not
+        ///     broadcast to <c>(ndim, 2)</c>, an empty width array; then a mode NumPy does not know, null included ("mode
+        ///     'None' is not supported"); a keyword the mode does not take ("unsupported keyword arguments for mode
+        ///     'edge': {'constant_values'}"); an empty axis padded by a mode other than constant / empty.</exception>
+        /// <remarks>
+        ///     <para>
+        ///     Scoped: every value-mode overload funnels through it, so one scope reclaims the whole mode-body call tree's
+        ///     temporaries.
+        ///     </para>
+        ///     <para>
+        ///     The checks run in NumPy's order: the dict branch, <c>np.asarray(pad_width)</c>'s integral test and
+        ///     <c>_as_pairs</c> over the array's TRUE rank (0 for a 0-d array: a pad_width that does not broadcast to
+        ///     <c>(0, 2)</c> is refused there too), then the mode and its keywords. A C# keyword left at its default — null,
+        ///     or <c>"even"</c> for <paramref name="reflect_type"/> — is a keyword NumPy did not receive.
+        ///     </para>
+        /// </remarks>
         [NDScoped]
         internal static NDArray Pad(NDArray array, object pad_width, string mode,
             object constant_values, object end_values, object stat_length, string reflect_type)
         {
             if (array is null) throw new ArgumentNullException(nameof(array));
-            if (mode is null) throw new ArgumentNullException(nameof(mode));
 
-            int ndim = Math.Max(array.ndim, 1); // 0-D treated as 1-D for pad_width normalization
             // A dict pad_width runs NumPy's dict branch first, against the array's TRUE rank (a 0-d array's list has no
             // slot, so every key is an IndexError there); the (ndim, 2) table it builds then goes through _as_pairs
             // like any other pad_width.
             if (pad_width is IDictionary<int, object> widths)
                 pad_width = DictPadWidth(widths, array.ndim);
-            long[,] padPairs = _AsPairs(pad_width, ndim, asIndex: true);
+            long[,] padPairs = PadWidthPairs(pad_width, array.ndim);
 
+            // NumPy looks the mode up only now, after the widths (np.pad(a, -1, None) is the negative-width error).
             ValidateModeKwargs(mode, constant_values, end_values, stat_length, reflect_type);
 
-            // No-op fast path: every pad value is zero. Still allocates a new array per NumPy. NumPy itself has no such
-            // shortcut — its mode bodies run for every axis, widths of 0 included — so the copy is taken only where no
-            // mode body can raise (ZeroWidthIsCopy): linear_ramp's linspace over text, the stat modes' reductions over
-            // text or with stat_length=0, and a constant_values array that does not broadcast all raise in NumPy.
+            // No-op fast path: every pad value is zero. NumPy itself has no such shortcut — its mode bodies run for every
+            // axis, widths of 0 included — so it is taken only where no mode body can raise (ZeroWidthIsCopy):
+            // linear_ramp's linspace over text, the stat modes' reductions over text or with stat_length=0, and a
+            // constant_values array that does not broadcast all raise in NumPy. The result is _pad_simple's array, the
+            // one every zero-width mode body returns unchanged: an F-ordered input (F-contiguous, not C) stays F-ordered.
             if (AllPairsZero(padPairs) && ZeroWidthIsCopy(mode, constant_values))
-                return array.copy();
+                return _PadSimple(array, padPairs, fillValue: null).padded;
 
             // Empty-axis guard: only 'constant' and 'empty' may extend an empty axis. Past it NumPy returns _pad_simple's
             // array as it is ("_pad_simple already returned the correct result"): no other mode body runs over an empty
@@ -73,7 +88,7 @@ namespace NumSharp
                 for (int ax = 0; ax < array.ndim; ax++)
                 {
                     if (array.Shape.dimensions[ax] == 0 && (padPairs[ax, 0] != 0 || padPairs[ax, 1] != 0))
-                        throw new ArgumentException(
+                        throw new ValueError(
                             $"can't extend empty axis {ax} using modes other than 'constant' or 'empty'");
                 }
                 if (mode is "edge" or "wrap" or "reflect" or "symmetric" or "maximum" or "minimum" or "mean" or "median"
@@ -103,7 +118,8 @@ namespace NumSharp
                 case "linear_ramp":
                     return PadLinearRamp(array, padPairs, end_values);
                 default:
-                    throw new ArgumentException($"mode '{mode}' is not supported", nameof(mode));
+                    // Unreachable: ValidateModeKwargs refused every name outside NumPy's table above.
+                    throw new ValueError($"mode '{mode}' is not supported");
             }
         }
 
@@ -114,23 +130,36 @@ namespace NumSharp
         /// </summary>
         /// <param name="array">The array to pad (not null).</param>
         /// <param name="pad_width">The widths in any C# form the facades take.</param>
-        /// <param name="func">The callable (not null).</param>
+        /// <param name="func">The callable; null is NumPy's <c>mode=None</c>, refused after the widths are read.</param>
         /// <param name="kwargs">Handed to <paramref name="func"/> unchanged.</param>
-        /// <returns>The padded array.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="array"/> or <paramref name="func"/> is null.</exception>
-        /// <exception cref="ArgumentException">A negative width.</exception>
-        /// <remarks>Deliberately not scoped: a scope would reach into <paramref name="func"/> and dispose the arrays it
-        ///     creates for its own use; the walk disposes what it creates itself.</remarks>
+        /// <returns>The padded array: F-ordered for an F-ordered input (F-contiguous and not C), as
+        ///     <c>_pad_simple</c> allocates it.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="array"/> is null.</exception>
+        /// <exception cref="TypeError">A null <paramref name="pad_width"/>, or a dict of widths that is no integer
+        ///     table.</exception>
+        /// <exception cref="ValueError">A negative width or widths that do not broadcast to <c>(ndim, 2)</c>; then a null
+        ///     <paramref name="func"/> ("mode 'None' is not supported").</exception>
+        /// <remarks>
+        ///     <para>
+        ///     Deliberately not scoped: a scope would reach into <paramref name="func"/> and dispose the arrays it creates
+        ///     for its own use; the walk disposes what it creates itself.
+        ///     </para>
+        ///     <para>
+        ///     NumPy calls the function for EVERY 1-D vector along every axis, widths of 0 included, so there is no
+        ///     zero-width shortcut: a callable that writes outside the pad area, or counts its calls, sees each vector. A
+        ///     0-d input has no axis: its result is the value itself (<c>_pad_simple</c> copies it over the zero fill).
+        ///     </para>
+        /// </remarks>
         internal static NDArray PadCallable(NDArray array, object pad_width, np.PadFunc func, object kwargs)
         {
             if (array is null) throw new ArgumentNullException(nameof(array));
-            if (func is null) throw new ArgumentNullException(nameof(func));
-            int ndim = Math.Max(array.ndim, 1);
-            // The dict branch first, as in PadImpl (NumPy's pad runs it before it looks at the mode).
+            // The dict branch first, as in Pad (NumPy's pad runs it before it looks at the mode).
             if (pad_width is IDictionary<int, object> widths)
                 pad_width = DictPadWidth(widths, array.ndim);
-            long[,] padPairs = _AsPairs(pad_width, ndim, asIndex: true);
-            if (AllPairsZero(padPairs)) return array.copy();
+            long[,] padPairs = PadWidthPairs(pad_width, array.ndim);
+            // NumPy's callable(mode) is false for None, which then fails the mode table's lookup ("mode 'None' is not
+            // supported") - after the widths, so a bad width is reported first.
+            if (func is null) throw new ValueError("mode 'None' is not supported");
 
             // NumPy: zero-fill the padded buffer, then visit each 1-D vector along
             // each axis (via ndindex over view.shape[:-1]) and let user code mutate.
@@ -563,7 +592,7 @@ namespace NumSharp
             if (rightLength < 0 || maxLength < rightLength) rightLength = maxLength;
 
             if ((leftLength == 0 || rightLength == 0) && (mode == "maximum" || mode == "minimum"))
-                throw new ArgumentException("stat_length of 0 yields no value for padding");
+                throw new ValueError("stat_length of 0 yields no value for padding");
 
             // Left stat
             var leftSlices = _SliceAtAxis(new Slice(leftIndex, leftIndex + leftLength), axis, padded.ndim);
@@ -1053,18 +1082,21 @@ namespace NumSharp
         ///     <c>originalAreaSlice</c> identifies the unpadded region for later
         ///     <see cref="_ViewRoi"/> calls.
         /// </summary>
+        /// <param name="array">The input.</param>
+        /// <param name="padPairs">The (before, after) widths per axis (no row for a 0-d input).</param>
+        /// <param name="fillValue">The pad area's value (null leaves it uninitialized, NumPy's <c>fill_value=None</c>).</param>
+        /// <returns>The padded array (F-ordered when the input is F-contiguous and not C-contiguous, else C-ordered) and the
+        ///     slices of its original area.</returns>
+        /// <remarks>A 0-d input is its own padded array: NumPy fills the 0-d result and then copies the value over the
+        ///     fill (<c>padded[()] = array</c>), so the value always survives - <c>np.pad(np.array(5), 2, func)</c> is 5,
+        ///     never the callable's zero fill.</remarks>
         private static (NDArray padded, Slice[] originalSlice) _PadSimple(
             NDArray array, long[,] padPairs, object fillValue)
         {
             int ndim = array.ndim;
-            // NumPy: 0-D input → newShape is empty tuple, padded == array.copy()
+            // NumPy: 0-D input → newShape is the empty tuple; the fill is overwritten by the copy of the value.
             if (ndim == 0)
-            {
-                var clone = array.copy();
-                if (fillValue != null)
-                    clone.SetAtIndex(CastBoxToDType(fillValue, array.GetTypeCode), 0);
-                return (clone, System.Array.Empty<Slice>());
-            }
+                return (array.copy(), System.Array.Empty<Slice>());
 
             var newDims = new long[ndim];
             var originalSlice = new Slice[ndim];
@@ -1114,11 +1146,17 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Writes <paramref name="leftValue"/> into the left pad band and
-        ///     <paramref name="rightValue"/> into the right pad band of
+        ///     Writes <c>values.left</c> into the left pad band and
+        ///     <c>values.right</c> into the right pad band of
         ///     <paramref name="padded"/> along <paramref name="axis"/>. Values may
         ///     be scalars (broadcast-fill) or NDArrays (broadcast across non-axis dims).
         /// </summary>
+        /// <param name="padded">The array (or region-of-interest view) whose pad bands are written.</param>
+        /// <param name="axis">The padded axis.</param>
+        /// <param name="width">The (before, after) widths: the bands are the first <c>width.left</c> and the last
+        ///     <c>width.right</c> positions along <paramref name="axis"/> (an empty band is not written at all).</param>
+        /// <param name="values">The (before, after) values: scalars (cast into the dtype by <see cref="AssignSliceValue"/>)
+        ///     or arrays that broadcast into the band.</param>
         private static void _SetPadArea(NDArray padded, int axis, (long left, long right) width,
             (object left, object right) values)
         {
@@ -1302,20 +1340,64 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     NumPy <c>_as_pairs</c> port for integer pair specs (pad_width / stat_length).
-        ///     Broadcasts <paramref name="x"/> to a <c>long[ndim, 2]</c> table.
-        ///     Accepts: <c>null</c>, scalar int, <c>int[]</c> / <c>long[]</c>,
-        ///     <c>int[,]</c> / <c>long[,]</c>, <c>(int, int)</c>, or
-        ///     <c>IDictionary&lt;int, object&gt;</c> (stat_length only: a pad_width dict is converted first by
-        ///     <see cref="DictPadWidth"/>).
+        ///     NumPy's three statements after the dict branch of <c>np.pad</c>: <c>np.asarray(pad_width)</c>, its integral
+        ///     test, and <c>_as_pairs(pad_width, array.ndim, as_index=True)</c>.
         /// </summary>
-        /// <param name="x">The spec.</param>
-        /// <param name="ndim">The number of pairs (the array's rank, at least 1).</param>
-        /// <param name="asIndex">The pairs are widths / lengths: a negative one is NumPy's ValueError.</param>
-        /// <returns>The <c>(ndim, 2)</c> table.</returns>
+        /// <param name="padWidth">The widths in a form the facades take (an <see cref="int"/>, an <c>int[]</c>, an
+        ///     <c>int[,]</c>, a <c>(before, after)</c> tuple, or the <c>long[,]</c> table <see cref="DictPadWidth"/> built),
+        ///     or null.</param>
+        /// <param name="ndim">The padded array's TRUE rank (0 for a 0-d array).</param>
+        /// <returns>The <c>(ndim, 2)</c> width table.</returns>
+        /// <exception cref="TypeError">A null <paramref name="padWidth"/>: NumPy's <c>np.asarray(None)</c> is an object
+        ///     array, "`pad_width` must be of integral type.".</exception>
+        /// <exception cref="ValueError">See <see cref="_AsPairs"/>.</exception>
+        /// <remarks>Every C# form the facades take is an integer array (a C# integer is a Python int, a typed C# array an
+        ///     ndarray of its own dtype), so only null fails the integral test here; the dict branch raises its own
+        ///     TypeError for the tables that are not integer arrays.</remarks>
+        private static long[,] PadWidthPairs(object padWidth, int ndim)
+        {
+            if (padWidth is null)
+                throw new TypeError("`pad_width` must be of integral type.");
+            return _AsPairs(padWidth, ndim, asIndex: true);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>_as_pairs(x, ndim, as_index=True)</c> for the integer pair arguments (<c>pad_width</c> after its
+        ///     integral test, <c>stat_length</c>), statement for statement: <c>np.array(x)</c> rounded to <c>intp</c>; for
+        ///     an array of fewer than 3 dimensions, ONE value pads both sides of every axis and TWO values (unless shaped
+        ///     (2, 1)) are the (before, after) pair of every axis; otherwise the negative test over every value and
+        ///     <c>np.broadcast_to(x, (ndim, 2))</c>.
+        /// </summary>
+        /// <param name="x">The argument: null (<c>stat_length=None</c>), a C# integer or real scalar, a two-item tuple, an
+        ///     integer or real C# array of rank 1 or 2, an integer or real <see cref="NDArray"/>, or a dictionary (a
+        ///     <c>stat_length</c> extension of NumSharp: NumPy refuses a dict there).</param>
+        /// <param name="ndim">The number of pairs: the padded array's TRUE rank (0 for a 0-d array).</param>
+        /// <param name="asIndex">The pairs are widths or lengths: a negative one is NumPy's ValueError. Every caller passes
+        ///     true.</param>
+        /// <returns>The <c>(ndim, 2)</c> table; for a null <paramref name="x"/> every entry is -1, the "whole axis"
+        ///     sentinel of a <c>stat_length</c> of None.</returns>
         /// <exception cref="ValueError">A negative value with <paramref name="asIndex"/> ("index can't contain negative
-        ///     values").</exception>
-        /// <exception cref="ArgumentException">A spec that does not broadcast to <c>(ndim, 2)</c>, or an unsupported type.</exception>
+        ///     values"; a NaN or out-of-range real rounds to <c>intp</c>'s minimum, which is negative too); an empty array
+        ///     ("zero-size array to reduction operation minimum which has no identity", its <c>x.min()</c>); values that do
+        ///     not broadcast to <c>(ndim, 2)</c> (<c>np.broadcast_to</c>'s "operands could not be broadcast together with
+        ///     remapped shapes [original-&gt;remapped]: (3,)  and requested shape (2,2)", or "input operand has more
+        ///     dimensions than allowed by the axis remapping" for 3 or more dimensions).</exception>
+        /// <exception cref="ArgumentException">A value of a kind NumSharp does not read as an integer array, or a dictionary
+        ///     axis out of range.</exception>
+        /// <remarks>
+        ///     <para>
+        ///     The order is NumPy's: the one-value and pair shortcuts test their own values only and return, so a 3-D
+        ///     array of one element skips them (NumPy's <c>x.ndim &lt; 3</c>); the negative test runs over every value
+        ///     BEFORE the broadcast, so <c>[[1], [-2]]</c> is the negative-value error even where it would not broadcast,
+        ///     and an empty array is <c>min()</c>'s error. A (2, 1) table is one width per axis for both sides
+        ///     (<c>[[1], [2]]</c> pads axis 0 by 1 and axis 1 by 2), never a pair.
+        ///     </para>
+        ///     <para>
+        ///     <c>np.round(x).astype(np.intp)</c> is the identity for integers; a real <c>stat_length</c> rounds half to even
+        ///     (2.5 is 2, 3.5 is 4), and a NaN, an infinity or a value past int64 becomes int64's minimum, as x86's
+        ///     conversion makes it in NumPy - which the negative test then refuses.
+        ///     </para>
+        /// </remarks>
         internal static long[,] _AsPairs(object x, int ndim, bool asIndex)
         {
             var result = new long[ndim, 2];
@@ -1344,122 +1426,153 @@ namespace NumSharp
                 return result;
             }
 
-            // Tuple path
-            if (x is ValueTuple<int, int> vti)
-            {
-                long b = vti.Item1, a = vti.Item2;
-                if (asIndex && (b < 0 || a < 0))
-                    throw new ValueError("index can't contain negative values");
-                for (int i = 0; i < ndim; i++) { result[i, 0] = b; result[i, 1] = a; }
-                return result;
-            }
-            if (x is ValueTuple<long, long> vtl)
-            {
-                long b = vtl.Item1, a = vtl.Item2;
-                if (asIndex && (b < 0 || a < 0))
-                    throw new ValueError("index can't contain negative values");
-                for (int i = 0; i < ndim; i++) { result[i, 0] = b; result[i, 1] = a; }
-                return result;
-            }
+            // np.array(x) as intp: the values in C order and the array's shape.
+            if (!TryIndexArray(x, out long[] values, out long[] shape))
+                throw new ArgumentException($"`pad_width` must be of integral type (got {x.GetType().Name})");
 
-            // 2-D rectangular: int[,] / long[,]
-            if (x is int[,] i2)
+            if (shape.Length < 3)
             {
-                int rows = i2.GetLength(0), cols = i2.GetLength(1);
-                if (cols != 2)
-                    throw new ArgumentException("pad_width 2D array must have shape (N, 2)");
-                if (rows == 1)
+                // x was supplied as a single value: both sides of every axis.
+                if (values.Length == 1)
                 {
-                    if (asIndex && (i2[0, 0] < 0 || i2[0, 1] < 0))
+                    if (asIndex && values[0] < 0)
                         throw new ValueError("index can't contain negative values");
-                    for (int i = 0; i < ndim; i++) { result[i, 0] = i2[0, 0]; result[i, 1] = i2[0, 1]; }
+                    for (int i = 0; i < ndim; i++) { result[i, 0] = values[0]; result[i, 1] = values[0]; }
                     return result;
                 }
-                if (rows != ndim)
-                    throw new ArgumentException($"pad_width shape ({rows},{cols}) is not broadcastable to ({ndim},2)");
-                for (int i = 0; i < rows; i++)
+                // x was supplied with a value for each side - except the (2, 1) table, one value per axis for both sides.
+                if (values.Length == 2 && !(shape.Length == 2 && shape[0] == 2 && shape[1] == 1))
                 {
-                    long b = i2[i, 0], a = i2[i, 1];
-                    if (asIndex && (b < 0 || a < 0))
+                    if (asIndex && (values[0] < 0 || values[1] < 0))
                         throw new ValueError("index can't contain negative values");
-                    result[i, 0] = b; result[i, 1] = a;
-                }
-                return result;
-            }
-            if (x is long[,] l2)
-            {
-                int rows = l2.GetLength(0), cols = l2.GetLength(1);
-                if (cols != 2)
-                    throw new ArgumentException("pad_width 2D array must have shape (N, 2)");
-                if (rows == 1)
-                {
-                    if (asIndex && (l2[0, 0] < 0 || l2[0, 1] < 0))
-                        throw new ValueError("index can't contain negative values");
-                    for (int i = 0; i < ndim; i++) { result[i, 0] = l2[0, 0]; result[i, 1] = l2[0, 1]; }
+                    for (int i = 0; i < ndim; i++) { result[i, 0] = values[0]; result[i, 1] = values[1]; }
                     return result;
                 }
-                if (rows != ndim)
-                    throw new ArgumentException($"pad_width shape ({rows},{cols}) is not broadcastable to ({ndim},2)");
-                for (int i = 0; i < rows; i++)
-                {
-                    long b = l2[i, 0], a = l2[i, 1];
-                    if (asIndex && (b < 0 || a < 0))
+            }
+
+            // x.min() < 0: over every value, before the broadcast (an empty array has no minimum).
+            if (asIndex)
+            {
+                if (values.Length == 0)
+                    throw new ValueError("zero-size array to reduction operation minimum which has no identity");
+                foreach (long v in values)
+                    if (v < 0)
                         throw new ValueError("index can't contain negative values");
-                    result[i, 0] = b; result[i, 1] = a;
-                }
-                return result;
             }
 
-            // 1-D array: int[] / long[]. Sized 1 ⇒ scalar broadcast, sized 2 ⇒ pair broadcast.
-            if (x is int[] i1)
+            // np.broadcast_to(x, (ndim, 2)).tolist()
+            var (rowStride, colStride) = BroadcastToPairs(shape, ndim);
+            for (int i = 0; i < ndim; i++)
             {
-                return From1DLong(LongFromInt(i1), ndim, asIndex);
+                result[i, 0] = values[i * rowStride];
+                result[i, 1] = values[i * rowStride + colStride];
             }
-            if (x is long[] l1)
-            {
-                return From1DLong(l1, ndim, asIndex);
-            }
-
-            // Scalar integer (and unsigned variants — accept what NumPy accepts).
-            if (TryToInt64(x, out long scalar))
-            {
-                if (asIndex && scalar < 0)
-                    throw new ValueError("index can't contain negative values");
-                for (int i = 0; i < ndim; i++) { result[i, 0] = scalar; result[i, 1] = scalar; }
-                return result;
-            }
-
-            throw new ArgumentException($"`pad_width` must be of integral type (got {x.GetType().Name})");
+            return result;
         }
 
-        private static long[,] From1DLong(long[] arr, int ndim, bool asIndex)
+        /// <summary>
+        ///     <c>np.broadcast_to(x, (ndim, 2))</c> for an array of shape <paramref name="shape"/>: the C-order element
+        ///     strides of the broadcast table's rows and columns, or NumPy's refusal.
+        /// </summary>
+        /// <param name="shape">The array's shape.</param>
+        /// <param name="ndim">The number of rows (the padded array's true rank).</param>
+        /// <returns>The flat-index step per row and per column (0 where the array's axis has length 1 or is missing).</returns>
+        /// <exception cref="ValueError">The shape has more than 2 dimensions ("input operand has more dimensions than
+        ///     allowed by the axis remapping"), or an axis is neither 1 nor the requested length (the nditer's text,
+        ///     "operands could not be broadcast together with remapped shapes [original-&gt;remapped]: (3,)  and requested
+        ///     shape (2,2)", whose two spaces are NumPy's: the operand's shape ends in a space before " and requested
+        ///     shape ").</exception>
+        private static (long rowStride, long colStride) BroadcastToPairs(long[] shape, int ndim)
         {
-            var result = new long[ndim, 2];
-            if (arr.Length == 1)
+            if (shape.Length > 2)
+                throw new ValueError("input operand has more dimensions than allowed by the axis remapping");
+            // The shape right-aligned against (ndim, 2): a missing leading axis broadcasts like a length-1 one.
+            long rows = shape.Length == 2 ? shape[0] : 1;
+            long cols = shape.Length >= 1 ? shape[shape.Length - 1] : 1;
+            if (cols != 1 && cols != 2 || rows != 1 && rows != ndim)
+                throw new ValueError(
+                    "operands could not be broadcast together with remapped shapes [original->remapped]: "
+                    + Shape.ConvertShapeToString(shape) + "  and requested shape (" + ndim + ",2)");
+            return (rows == 1 ? 0 : cols, cols == 1 ? 0 : 1);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>np.round(np.array(x)).astype(np.intp)</c> for the C# forms of an integer pair argument: the values
+        ///     in C order and the array's shape.
+        /// </summary>
+        /// <param name="x">The argument (not null, not a dictionary).</param>
+        /// <param name="values">The values as int64.</param>
+        /// <param name="shape">The shape of NumPy's array: empty for a scalar.</param>
+        /// <returns>False for a value NumSharp does not read as an integer or real array (text, complex, an object
+        ///     sequence).</returns>
+        /// <remarks>A C# integer or a <see cref="bool"/> is a Python int (a bool is 0 or 1), a real scalar a Python float
+        ///     (rounded half to even); a two-item tuple is a Python tuple; a typed C# array of rank 1 or 2 is an ndarray of
+        ///     its own dtype; an <see cref="NDArray"/> is read through its logical C order whatever its layout.</remarks>
+        private static bool TryIndexArray(object x, out long[] values, out long[] shape)
+        {
+            switch (x)
             {
-                if (asIndex && arr[0] < 0)
-                    throw new ValueError("index can't contain negative values");
-                for (int i = 0; i < ndim; i++) { result[i, 0] = arr[0]; result[i, 1] = arr[0]; }
-                return result;
-            }
-            if (arr.Length == 2)
-            {
-                if (asIndex && (arr[0] < 0 || arr[1] < 0))
-                    throw new ValueError("index can't contain negative values");
-                for (int i = 0; i < ndim; i++) { result[i, 0] = arr[0]; result[i, 1] = arr[1]; }
-                return result;
-            }
-            if (arr.Length == ndim)
-            {
-                for (int i = 0; i < ndim; i++)
+                case NDArray nd when nd.typecode != NPTypeCode.String && nd.typecode != NPTypeCode.Complex:
                 {
-                    if (asIndex && arr[i] < 0)
-                        throw new ValueError("index can't contain negative values");
-                    result[i, 0] = arr[i]; result[i, 1] = arr[i];
+                    shape = nd.shape;
+                    values = new long[nd.size];
+                    for (long i = 0; i < values.Length; i++)
+                        if (!TryIndexValue(nd.GetAtIndex(i), out values[i]))
+                            return false;
+                    return true;
                 }
-                return result;
+                case System.Runtime.CompilerServices.ITuple t when t.Length == 2:
+                {
+                    shape = new long[] { 2 };
+                    values = new long[2];
+                    return TryIndexValue(t[0], out values[0]) && TryIndexValue(t[1], out values[1]);
+                }
+                case Array arr when arr.Rank <= 2 && (arr.Rank == 1 || arr.GetType().GetElementType() != typeof(object)):
+                {
+                    shape = arr.Rank == 1 ? new long[] { arr.Length } : new long[] { arr.GetLength(0), arr.GetLength(1) };
+                    values = new long[arr.Length];
+                    int k = 0;
+                    // A rectangular C# array enumerates in row-major order, NumPy's C order.
+                    foreach (var item in arr)
+                        if (!TryIndexValue(item, out values[k++]))
+                            return false;
+                    return true;
+                }
+                default:
+                    shape = System.Array.Empty<long>();
+                    values = new long[1];
+                    return TryIndexValue(x, out values[0]);
             }
-            throw new ArgumentException($"pad_width length {arr.Length} is not broadcastable to (ndim={ndim}, 2)");
+        }
+
+        /// <summary>
+        ///     One value of <c>np.round(x).astype(np.intp)</c>: an integer as it is (a <c>ulong</c> past int64 wraps, as
+        ///     NumPy's cast of a uint64 does), a bool as 0 / 1, a real rounded half to even (NaN, infinities and values past
+        ///     int64 become int64's minimum, x86's conversion result in NumPy).
+        /// </summary>
+        /// <param name="v">The boxed value.</param>
+        /// <param name="result">The int64.</param>
+        /// <returns>False for anything else (text, complex, null, a nested sequence).</returns>
+        private static bool TryIndexValue(object v, out long result)
+        {
+            if (TryToInt64(v, out result))
+                return true;
+            double d;
+            switch (v)
+            {
+                case bool b: result = b ? 1 : 0; return true;
+                case char c: result = c; return true;
+                case Half h: d = (double)h; break;
+                case float f: d = f; break;
+                case double dd: d = dd; break;
+                case decimal m: d = (double)m; break;
+                default: result = 0; return false;
+            }
+            double r = Math.Round(d, MidpointRounding.ToEven);
+            // .NET's conversion saturates; NumPy's astype(intp) on x86 (cvttsd2si) gives int64's minimum for a NaN, an
+            // infinity or a value outside int64.
+            result = double.IsNaN(r) || r >= 9223372036854775808.0 || r < -9223372036854775808.0 ? long.MinValue : (long)r;
+            return true;
         }
 
         /// <summary>
@@ -1761,17 +1874,21 @@ namespace NumSharp
         /// <summary>
         ///     Assign <paramref name="value"/> (scalar or NDArray) into the slice
         ///     <paramref name="slices"/> of <paramref name="padded"/>. Scalars are
-        ///     wrapped in a 0-D NDArray and broadcast via <see cref="NDIter.Copy"/>'s
+        ///     wrapped in a 0-D NDArray and broadcast via <see cref="NDIter.Copy(NDArray, NDArray)"/>'s
         ///     broadcast fast path (convert-once + memcpy per outer row).
         ///
-        ///     Routes through <see cref="NDIter.Copy"/> directly rather than the
+        ///     Routes through <see cref="NDIter.Copy(NDArray, NDArray)"/> directly rather than the
         ///     <c>padded[slices] = value</c> indexer — the indexer's contiguous
         ///     fast path skips broadcast stretching when both shapes are contig
         ///     but sizes differ, which truncates broadcast writes (e.g. a
         ///     <c>(1, N)</c> edge view into a <c>(pad_width, N)</c> band only
-        ///     fills the first row). <see cref="NDIter.Copy"/> always honours
+        ///     fills the first row). <see cref="NDIter.Copy(NDArray, NDArray)"/> always honours
         ///     broadcasting.
         /// </summary>
+        /// <param name="padded">The array written into.</param>
+        /// <param name="slices">The band: one slice per axis of <paramref name="padded"/>.</param>
+        /// <param name="value">A boxed scalar already converted to <paramref name="padded"/>'s dtype, or an array that
+        ///     broadcasts into the band (cast by the copy).</param>
         private static void AssignSliceValue(NDArray padded, Slice[] slices, object value)
         {
             var view = padded[slices];
@@ -1790,46 +1907,64 @@ namespace NumSharp
 
         // ---------------------------- validation ----------------------------
 
+        /// <summary>
+        ///     NumPy's mode lookup and keyword check, statement for statement: <c>set(kwargs) - set(allowed_kwargs[mode])</c>,
+        ///     whose missing key is "mode '...' is not supported" and whose non-empty difference names the keywords the mode
+        ///     does not take.
+        /// </summary>
+        /// <param name="mode">The mode's name; null is NumPy's <c>None</c>.</param>
+        /// <param name="constantValues">The <c>constant_values</c> argument (null: not given).</param>
+        /// <param name="endValues">The <c>end_values</c> argument (null: not given).</param>
+        /// <param name="statLength">The <c>stat_length</c> argument (null: not given).</param>
+        /// <param name="reflectType">The <c>reflect_type</c> argument (null or the facades' default <c>"even"</c>: not
+        ///     given).</param>
+        /// <exception cref="ValueError">"mode 'None' is not supported" / "mode 'Constant' is not supported" for a name outside
+        ///     NumPy's table; "unsupported keyword arguments for mode 'edge': {'constant_values', 'stat_length'}" for keywords
+        ///     the mode does not take.</exception>
+        /// <remarks>
+        ///     <para>
+        ///     C# cannot tell a keyword left at its default from one given with that value, so the facades' defaults stand for
+        ///     "not given": a null <c>constant_values</c> / <c>end_values</c> / <c>stat_length</c> (NumPy's defaults 0, 0 and
+        ///     None follow from it in the mode bodies) and a <c>reflect_type</c> of null or <c>"even"</c> (NumPy's
+        ///     <c>kwargs.get("reflect_type", "even")</c>). Any other <c>reflect_type</c> is given, and accepted by
+        ///     <c>'reflect'</c> / <c>'symmetric'</c> whatever it says: NumPy has no check of its value, its loop tests
+        ///     <c>method == "odd"</c> and reads everything else as even.
+        ///     </para>
+        ///     <para>
+        ///     The keyword set is Python's: <c>{'end_values', 'stat_length'}</c>. With two or more names NumPy's order follows
+        ///     the strings' hashes, which Python randomizes per process, so no order is NumPy's; NumSharp lists them in the
+        ///     signature's order (constant_values, end_values, stat_length, reflect_type).
+        ///     </para>
+        /// </remarks>
         private static void ValidateModeKwargs(string mode, object constantValues, object endValues,
             object statLength, string reflectType)
         {
-            // Reject unsupported kwargs the way NumPy does. We just check that the
-            // value supplied to an irrelevant kwarg is null/default.
-            switch (mode)
+            // allowed_kwargs[mode]: a KeyError for any other name, None included (NumPy's f-string prints it as 'None').
+            string[] allowed = mode switch
             {
-                case "constant":
-                    if (endValues != null) throw new ArgumentException("unsupported keyword arguments for mode 'constant': end_values");
-                    if (statLength != null) throw new ArgumentException("unsupported keyword arguments for mode 'constant': stat_length");
-                    break;
-                case "edge":
-                case "wrap":
-                case "empty":
-                    if (constantValues != null) throw new ArgumentException($"unsupported keyword arguments for mode '{mode}': constant_values");
-                    if (endValues != null) throw new ArgumentException($"unsupported keyword arguments for mode '{mode}': end_values");
-                    if (statLength != null) throw new ArgumentException($"unsupported keyword arguments for mode '{mode}': stat_length");
-                    break;
-                case "linear_ramp":
-                    if (constantValues != null) throw new ArgumentException("unsupported keyword arguments for mode 'linear_ramp': constant_values");
-                    if (statLength != null) throw new ArgumentException("unsupported keyword arguments for mode 'linear_ramp': stat_length");
-                    break;
-                case "maximum":
-                case "minimum":
-                case "mean":
-                case "median":
-                    if (constantValues != null) throw new ArgumentException($"unsupported keyword arguments for mode '{mode}': constant_values");
-                    if (endValues != null) throw new ArgumentException($"unsupported keyword arguments for mode '{mode}': end_values");
-                    break;
-                case "reflect":
-                case "symmetric":
-                    if (constantValues != null) throw new ArgumentException($"unsupported keyword arguments for mode '{mode}': constant_values");
-                    if (endValues != null) throw new ArgumentException($"unsupported keyword arguments for mode '{mode}': end_values");
-                    if (statLength != null) throw new ArgumentException($"unsupported keyword arguments for mode '{mode}': stat_length");
-                    if (reflectType != "even" && reflectType != "odd")
-                        throw new ArgumentException($"reflect_type must be 'even' or 'odd' (got '{reflectType}')");
-                    break;
-                default:
-                    throw new ArgumentException($"mode '{mode}' is not supported");
+                "empty" or "edge" or "wrap" => System.Array.Empty<string>(),
+                "constant" => new[] { "constant_values" },
+                "linear_ramp" => new[] { "end_values" },
+                "maximum" or "mean" or "median" or "minimum" => new[] { "stat_length" },
+                "reflect" or "symmetric" => new[] { "reflect_type" },
+                _ => null,
+            };
+            if (allowed is null)
+                throw new ValueError($"mode '{mode ?? "None"}' is not supported");
+
+            // set(kwargs) - set(allowed): the keywords the caller gave that the mode does not take.
+            var unsupported = new List<string>(4);
+            void Check(bool given, string name)
+            {
+                if (given && System.Array.IndexOf(allowed, name) < 0)
+                    unsupported.Add("'" + name + "'");
             }
+            Check(constantValues != null, "constant_values");
+            Check(endValues != null, "end_values");
+            Check(statLength != null, "stat_length");
+            Check(reflectType != null && reflectType != "even", "reflect_type");
+            if (unsupported.Count > 0)
+                throw new ValueError($"unsupported keyword arguments for mode '{mode}': {{{string.Join(", ", unsupported)}}}");
         }
 
         // ---------------------------- predicates ----------------------------
