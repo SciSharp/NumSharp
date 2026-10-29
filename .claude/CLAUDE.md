@@ -1712,6 +1712,23 @@ C-or-F rule, the dimensions), and the `_like` forms check the order before the d
 snapshot (`tools/facade-move/snapshot.cs`, 42,635 lines) and `Creation/np.{eye.NumPyOrder,like.OrderBeforeDevice,
 full.FillValues}.Test.cs`.
 
+**`np.frombuffer` is NumPy's `PyArray_FromBuffer`, one body for every kind of buffer** (2026-10-29, plan
+np-layer-dtype-logic P3 batch 6). The overloads (`Creation/np.frombuffer.cs`) are NumPy's `array_frombuffer`: they
+convert their C# arguments - an `NPTypeCode` (`Empty` is the default, `String` is NumPy's unsized `np.str_`, refused),
+a dtype name through `np.dtype` (a null name is None, float64) - and call `UnmanagedStorage.FromBufferObject` (every
+buffer np.ndarray takes: a `byte[]` or typed C# array, a `MemoryView`, a `Memory<byte>`, an `ArraySegment<byte>`),
+`FromBufferPointer` (an address) or `FromBufferSpan` (a `ReadOnlySpan<byte>`: a copy) in
+`Backends/Unmanaged/UnmanagedStorage.Buffer.cs`. The checks run in NumPy's order: REFCHK (`HasReferences`: `cannot
+create an OBJECT array from memory buffer`), ISUNSIZED, the buffer (a C# null; a memoryview must be C-contiguous:
+`BufferError`), the offset, then the count (the buffer-size rule only for a negative count; a count past the buffer
+is refused, never capped). The result is np.ndarray's view: it does not own its data, it is writeable exactly when
+the buffer is (a read-only memoryview's result for good), and a segment or memory ends at its own end. A non-native
+descriptor is decoded into a native copy by the class's `copyswapn` (NumPy keeps the order in the descriptor), whose
+contiguous runs copy in one block and swap with `byteswap`'s SIMD kernels (`Utilities/NDByteOrder.cs`). The generic
+overload's default dtype is its element type (a NumSharp extension: NumPy's is float64). Gate: the snapshot of
+np.frombuffer (`tools/facade-move/snapshot.cs`, 137,388 lines) and
+`Creation/np.frombuffer.{PyArrayFromBuffer,DtypeNames}.Test.cs`.
+
 **`np.logspace` / `np.geomspace` — the log-scale linspace family** (NumPy 2.4.2 `numpy/_core/function_base.py`;
 all probed against 2.4.2; gates `Creation/np.logspace.geomspace.Test.cs` (20) + the `creation` oracle tier —
 28 logspace + 13 geomspace cases, 343/343 bit-exact). **Scalar `start`/`stop`/`base` (double), like NumSharp's

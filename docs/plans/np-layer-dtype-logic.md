@@ -44,7 +44,11 @@ Python list). Batch 5, constructors, is done (`8bbd4e4c`, `e23cef2b`): the bodie
 and np.ones are `NDArray.Numeric.cs` members, np.eye's is `NDArray.Eye` in `NDArray.TwoDimBase.cs`, np.ndarray's is
 `UnmanagedStorage.ArrayNew` in `UnmanagedStorage.Ctors.cs` beside the storage-lane fills, the ones are the Python
 int 1 converted by the class's `setitem`, and the divergences a replay of their snapshot through NumPy found are
-fixed per D4 (`f048ad69`, `4d1a0d02`, `253b8f45`). Batch 9, the computing functions in P3's files, is done
+fixed per D4 (`f048ad69`, `4d1a0d02`, `253b8f45`). Batch 6's first part, np.frombuffer, is done (`87263eb9`,
+`ebff0b12`): its body is NumPy's `PyArray_FromBuffer` in `UnmanagedStorage.Buffer.cs` (one member for the buffers
+np.ndarray takes, one for an address, one for a span), its REFCHK asks `HasReferences` and a non-native descriptor is
+decoded by the class's `copyswapn`; the replay's divergences were fixed first (`32bfa4a7`, `271f24d0`), so the move
+took one body instead of seven copies. Batch 9, the computing functions in P3's files, is done
 (2026-10-29): np.linspace / np.logspace / np.geomspace are `TensorEngine` members in `TensorEngine.CoreFunctionBase.cs`,
 np.vander in `TensorEngine.TwoDimBase.cs`, np.trim_zeros in `TensorEngine.FunctionBase.cs`, and the six divergences a
 replay of their snapshot through NumPy found are fixed per D4. Batch 7, NumPy's Python functions of the array object,
@@ -816,6 +820,14 @@ first, as it did for np.fft.
    non-native descriptor); np.fromfile, np.fromstring, ndarray.tofile, tobytes, getfield and byteswap; np.loadtxt's
    converters into `IO/TextReading/` (NumPy's `textreading/conversions.c`: a converter per type, the generic one through
    `setitem`).
+   First part done, np.frombuffer (`0854f1ca`, `32bfa4a7`, `271f24d0`, `87263eb9`, `ebff0b12`), with one change to
+   the method: the D4 fixes came before the move. The numeric overloads were seven copies of NumPy's checks with rules of
+   their own, and the fix that gives every overload `PyArray_FromBuffer` (the string route's checks and np.ndarray's
+   view) collapses them into one body: moving the seven copies first would have moved code the next commit deletes.
+   The body moved to `UnmanagedStorage.Buffer.cs`, with the address and span routes as members of their own;
+   `copyswapn` decodes a non-native descriptor, and got `byteswap`'s SIMD swap for contiguous runs
+   (`Utilities/NDByteOrder.cs`). R1: 16 text and 93 numeric lines left (np.frombuffer.cs, np.frombuffer.Strings.cs). The
+   rest (np.fromfile, np.fromstring, ndarray.tofile, tobytes, getfield and byteswap, np.loadtxt's converters) is next.
 7. **NumPy's Python functions of the array object** (22 files, 152 lines) into their `NDArray` homes: np.where,
    np.select, np.piecewise, np.extract and np.delete's rest; np.pad (`ArrayPad`); np.r_, np.ix_ and np.fill_diagonal
    (`IndexTricks`); np.indices (`Numeric`); np.diag (`TwoDimBase`); np.take_along_axis and np.put_along_axis
@@ -1073,6 +1085,50 @@ candidate.
 ---
 
 ## 9. State log
+
+- **2026-10-29, P3: batch 6, first part (np.frombuffer).** Five commits on `strings`: the tool commit landed first, the
+  others were developed in the scratch worktree on `61063970`, rebased onto `ef80958a` (batch 7's third part, np.pad)
+  and landed by fast-forward:
+  - `0854f1ca`: the snapshot tool reaches np.frombuffer. Its BUFFER is the operand, in every C# form of the overload's
+    first parameter: a byte[], the operand's own MemoryView, an ArraySegment / a Memory of bytes inside a larger array, a
+    Memory over unmanaged memory, an address with its byte length, the generic overload's typed array. The count, the
+    byte offset, the address overloads' byte length and the dtype (a descriptor, an NPTypeCode, a name) get roles, and
+    np.frombuffer<TSource> is instantiated for every element type. That gives 137,388 lines; before, the 16 non-generic
+    overloads were one SKIP line each and the two generic ones made no line. The other batch 6 names' lines are kept
+    byte for byte, and the run is deterministic under `NUMSHARP_DEBUG_GUARD_PAGES=1`.
+  - The replay of those lines through NumPy 2.4.2 (`replay6a.py`): of the 120,476 lines NumPy can express (16,910
+    C#-only or decimal / char), 30,558 were identical and 89,918 differed. The numeric overloads were seven copies of the
+    checks with rules of their own, so the D4 fixes came before the move (the change to the method, see batch 6's item):
+    - `32bfa4a7`: every overload runs `PyArray_FromBuffer` - the string route's checks and np.ndarray's view, for every
+      dtype. It removes ArgumentException where NumPy raises ValueError (32,349 lines), views reporting OWNDATA (30,487),
+      a segment or array-backed memory read to the end of the array behind it (12,869), the buffer-size rule for every
+      count (7,184), a count past the buffer capped (2,477), InvalidOperationException for BufferError (1,200) and a
+      non-contiguous memoryview reaching the bytes (120), a non-native descriptor read as native by the address, Memory and
+      typed-array overloads (1,096), and a memoryview reinterpreted through views of the source's elements (189). 89,918
+      lines -> 1,308.
+    - `271f24d0`: the dtype names are read by np.dtype (array_frombuffer's `PyArray_DescrConverter`): 'bogus' raises
+      np.dtype's text with NumPy's words, the empty name is refused (it read float64), '!' is no byte-order prefix.
+      1,308 lines -> 0.
+    After them every line matches NumPy 2.4.2 or a documented class: 6,675 non-native results (decoded into a native
+    copy, compared with NumPy's `astype(native)`), 2,314 of the generic overload's default dtype (its element type),
+    1,308 refused names under np.dtype's house type (NotSupportedException with NumPy's TypeError text), 654 complex64
+    names (one complex width).
+  - `87263eb9`, the pure move: the body - `FromBufferObject`, `FromBufferPointer`, `FromBufferSpan`, `FromBufferCount`,
+    `FromBufferDescr`, `ThrowIfReferenceDType` - moves into `UnmanagedStorage.Buffer.cs`. The facade keeps its overloads
+    and the name conversion through np.dtype. The call np.ndarray(...) becomes its body, `ArrayNew`, so no np.* call
+    reaches Backends/.
+  - `ebff0b12`, the conversion: REFCHK asks `HasReferences`. The address and span routes decode a non-native descriptor
+    with the class's `copyswapn`, its first production caller. The slot gets NumPy's `_basic_copyn` block copy and
+    `byteswap`'s SIMD swap for contiguous runs, moved into the new `Utilities/NDByteOrder.cs`: through the per-item slot
+    the decode of 1M float64 items took 4.3 ms against 0.9 for the old copy + byteswap, and now takes the same.
+  - Gates: the snapshot was byte-identical through the move and the conversion. R1: 16 text and 93 numeric lines
+    leave (np.frombuffer.cs, np.frombuffer.Strings.cs, gone); R2 is unchanged; doc warnings lose one NDW012. The 11 new
+    tests are NumPy-probed: `Creation/np.frombuffer.PyArrayFromBuffer.Test.cs` (7, all fail on their parent) and
+    `Creation/np.frombuffer.DtypeNames.Test.cs` (4, 3 fail on theirs). The four suites passed, and so did the 114 interop
+    tests over np.frombuffer, live against NumPy 2.4.2. After the rebase: both test projects built, R1 / R2 and
+    NumSharp.Tests (net10.0, net8.0) passed again.
+  - Next: batch 6's rest (np.fromfile, np.fromstring, ndarray.tofile, tobytes, getfield, byteswap, np.loadtxt's
+    converters), batch 8 (the indexers), 9b and 10; batch 7's rest is the parallel session's.
 
 - **2026-10-29, P3: batch 7, third part (np.pad).** Five commits on `strings` from the parallel session (developed in the
   scratch worktree on `61063970` and landed by fast-forward). R1: `np.pad.cs`' 9 text and 33 numeric lines leave (the
