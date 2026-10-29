@@ -43,7 +43,11 @@ it found is fixed per D4 (`3518c7cd`: np.array and np.asanyarray of a C# object 
 Python list). Batch 9, the computing functions in P3's files, is done
 (2026-10-29): np.linspace / np.logspace / np.geomspace are `TensorEngine` members in `TensorEngine.CoreFunctionBase.cs`,
 np.vander in `TensorEngine.TwoDimBase.cs`, np.trim_zeros in `TensorEngine.FunctionBase.cs`, and the six divergences a
-replay of their snapshot through NumPy found are fixed per D4. P5 is done (2026-10-29): its six
+replay of their snapshot through NumPy found are fixed per D4. Batch 7, NumPy's Python functions of the array object,
+has its first part done (2026-10-29): np.where's body is `NDArray.Where` in `NDArray.Multiarray.cs` (the engine's
+np.where calls call it), np.real / np.imag's are `NDArray.RealPart` / `ImagPart` in the new `NDArray.TypeCheck.cs`
+with ndarray.imag's setter, ndarray.conjugate's is `NDArray.Conjugate`, and np.extract's and np.asarray_chkfinite's are
+`NDArray.FunctionBase.cs` members. P5 is done (2026-10-29): its six
 families and, handed over by the coordinator, the lines first assigned to PE (np.argmax's out= pair, np.unravel_index,
 np.packbits / np.unpackbits, np.bincount, and the text lines of np.kron and np.median) are engine members or engine
 partials, and the two divergences found on the way are fixed per D4 (np.argmax / np.argmin check a text operand's
@@ -803,7 +807,9 @@ first, as it did for np.fft.
    np.select, np.piecewise, np.extract and np.delete's rest; np.pad (`ArrayPad`); np.r_, np.ix_ and np.fill_diagonal
    (`IndexTricks`); np.indices (`Numeric`); np.diag (`TwoDimBase`); np.take_along_axis and np.put_along_axis
    (`ShapeBase`); np.real and np.imag (`TypeCheck`); np.asarray_chkfinite; np.mgrid, np.ogrid, np.apply_along_axis and
-   np.ravel_multi_index's lines.
+   np.ravel_multi_index's lines. First part done (`953af9f3`, `d6f814d8`, `e8ee6dab`, `00aa4cff`, `ecf4ad9c`): np.where,
+   np.real / np.imag with ndarray.imag's setter and ndarray.conjugate, np.extract and np.asarray_chkfinite (see the
+   state log); np.extract's fast path asks `HasReferences`.
 8. **The indexers** (8 files, 98 lines; `Selection/NDArray.Indexing.*.cs`, NumPy's `mapping.c`; already the array
    object): the `StringDType` routes behind `HasReferences`, the typed fetch / store switches into
    `UnmanagedStorage.Mapping.cs`. The index-kind tests stay.
@@ -1051,6 +1057,50 @@ candidate.
 ---
 
 ## 9. State log
+
+- **2026-10-29, P3: batch 7, first part (np.where, np.real / np.imag, ndarray.conjugate, np.extract,
+  np.asarray_chkfinite).** Seven commits on `strings` from the parallel session (developed in the scratch worktree on
+  `a5ba156b`, rebased over batch 4's landing and `87bd99c1`, landed by fast-forward). R1: 3 text and 14 numeric lines
+  leave; R2: 4 computations leave.
+  - `54905a89`: the snapshot tool reaches the first families: np.where's x / y given as C# values (its three object
+    overloads were SKIP: a weak Python int, the other Python scalars, NumPy scalars, a strong 0-d array, a decimal, a C#
+    array, null), np.extract's arr and ndarray.real / imag's setters' value (SKIP: required arrays the tool did not
+    name). The batch's first snapshot (np.where, np.extract, np.real, np.imag, the four real / imag accessors,
+    np.asarray_chkfinite, np.diag): 21,540 lines, deterministic with and without guard pages. The rebase kept both
+    sides of `87bd99c1`'s constructor roles.
+  - `953af9f3`, the pure move: np.where(condition, x, y)'s body is `NDArray.Where` (NumPy's `PyArray_Where`) with its ten
+    kernel helpers, appended at the class end of `NDArray.Multiarray.cs`; the four facades keep their numpy.matrix
+    regions and their operand conversions. R1: 2 text and 8 numeric lines leave.
+  - `d6f814d8`: the engine's four np.where calls (`Default.Reduction.Nan.cs`, `Default.Reduction.NanScan.cs`,
+    `NDVStringMove.cs` twice), which P6 had pinned for this home, call `NDArray.Where`. R2: 4 computations leave. Its
+    message names the move by its hash before the rebase, `3b410248` (now `953af9f3`). The np.where of the fixed-width
+    text route in `NDStringArrays.cs` (batch 4's file) stays pinned.
+  - `e8ee6dab`: np.real / np.imag's statements (NumPy's `val.real` / `val.imag`, `getset.c`) are `NDArray.RealPart` /
+    `ImagPart` in the new `Math/NDArray.TypeCheck.cs`, ndarray.imag's setter's are `NDArray.ImagSet` beside them, and
+    ndarray.conjugate's are `NDArray.Conjugate` (`PyArray_Conjugate`, appended to `NDArray.Multiarray.cs`). np.real
+    applies the numpy.matrix rule first now, as np.imag does: a real matrix passes through `Wrapped` and comes back as
+    itself (probed, with the parts of a complex matrix and a real matrix's read-only imaginary zeros). R1: 1 text and 4
+    numeric lines leave (`NDArray.ComplexAccessors.cs`, np.real, np.imag).
+  - `00aa4cff`: np.extract's and np.asarray_chkfinite's statements are `NDArray.Extract` and `NDArray.AsarrayChkfinite`
+    in `NDArray.FunctionBase.cs`, with `TryExtractFast` and `IsFloatFamily`. R1: 2 numeric lines leave.
+  - `67ddb6c4`: OperandRootsTests' LT07 row names `NDArray.Where` (the suite's one failure after the move; the message
+    cites the move as `c486593d`, its hash after the first rebase).
+  - `ecf4ad9c`, the slot conversion: np.extract's fast path asks `DTypeMeta.HasReferences` instead of testing the
+    storage for a `StringDType` slice (the message cites the move as `22d953a0`, now `00aa4cff`). The other lines that
+    left choose a route by dtype inside the moved bodies (np.where's text route and its bool and promotion tests, the
+    complex tests of the real / imag / conjugate statements, the AllFloat test), which the homes keep: no slot answers
+    them.
+  - Each move: the snapshot byte-identical under `NUMSHARP_DEBUG_GUARD_PAGES=1` (the 21,540 cases; 29,550 for np.nansum,
+    np.nanprod, np.nancumsum, np.nancumprod and np.where around the engine switch; 1,908 for ndarray.conjugate / conj);
+    the rebind checks found no moved name binding to another `NDArray` member; Core's doc warnings 3,848 -> 3,847. No
+    divergence from NumPy was found in these families, so no D4 commit.
+  - Gates (on the rebased tree): NumSharp.Tests 20,759 / 20,758 passed on net10.0 and net8.0; NumSharp.Tests.Oracle 414
+    passed on both.
+  - Left for batch 7: np.select, np.piecewise and np.delete's rest (`FunctionBase`); np.pad (`ArrayPad`); np.r_, np.ix_
+    and np.fill_diagonal (`IndexTricks`); np.indices (`Numeric`); np.diag (`TwoDimBase`, with the diagonal scatter it
+    shares with np.fill_diagonal); np.take_along_axis, np.put_along_axis and np.apply_along_axis (`ShapeBase`, with the
+    two np.apply_along_axis pins of `NDVStringStatistics.Quantile.cs`); the lines of np.mgrid, np.ogrid and
+    np.ravel_multi_index. Of these the snapshot tool reaches only np.diag so far.
 
 - **2026-10-29, P3: batch 4 (coercion).** Seven commits on `strings`, developed in the scratch worktree and landed by
   fast-forward (the four after `8a2d53fe` were rebased over batch 9's landing, which touched no file of theirs but the
