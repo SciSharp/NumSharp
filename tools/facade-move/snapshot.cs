@@ -405,6 +405,18 @@ static class Snapshot
         p.Member.DeclaringType == typeof(np) && p.Member.Name == "evaluate";
 
     /// <summary>
+    ///     Whether an overload is elementwise with a where= mask: it takes an NDArray <c>where</c> and an <c>out</c> and no
+    ///     <c>axis</c> (a ufunc, np.clip, np.evaluate). Such a call's fresh result has uninitialized masked-off elements;
+    ///     a reduction's where= (np.sum, np.max, ...) excludes elements instead and defines every output.
+    /// </summary>
+    /// <param name="ps">The overload's parameters.</param>
+    /// <returns>True for an elementwise overload with a where= mask.</returns>
+    private static bool IsElementwiseWithWhere(ParameterInfo[] ps) =>
+        ps.Any(q => q.Name == "where" && q.ParameterType == typeof(NDArray))
+        && ps.Any(q => q.Name == "out")
+        && !ps.Any(q => q.Name == "axis");
+
+    /// <summary>
     ///     Whether a parameter is NDArray.Contains's <c>value</c>: other members name an object parameter <c>value</c> with
     ///     other meanings (np.insert, np.can_cast, np.min_scalar_type), and their snapshots must not change.
     /// </summary>
@@ -2611,13 +2623,14 @@ static class Snapshot
         try
         {
             object result = Invoke(m, instance, operand, argv);
-            // np.evaluate with a where= mask and no out= leaves the masked-off elements of its fresh result uninitialized
-            // (NumPy's ufunc rule), so their bytes differ from run to run: zero them first, and the line depends only on the
-            // elements the call defines.
-            if (result is NDArray fresh && outArray is null && m.DeclaringType == typeof(np) && m.Name == "evaluate")
+            // An elementwise call with a where= mask and no out= (a ufunc such as np.power, np.evaluate) leaves the
+            // masked-off elements of its fresh result uninitialized (NumPy's ufunc rule), so their bytes differ from run to
+            // run: zero them first, and the line depends only on the elements the call defines. A text result starts zeroed
+            // (its dtype needs init) and is left alone.
+            if (result is NDArray fresh && outArray is null && fresh.typecode != NPTypeCode.String && IsElementwiseWithWhere(ps))
             {
                 int whereIndex = Array.FindIndex(ps, q => q.Name == "where");
-                if (whereIndex >= 0 && argv[whereIndex] is NDArray mask)
+                if (argv[whereIndex] is NDArray mask)
                     np.copyto(fresh, 0, casting: "unsafe", where: np.logical_not(mask));
             }
             outcome = Render(result, outArray);
