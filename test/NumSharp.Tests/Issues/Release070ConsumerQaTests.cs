@@ -30,8 +30,9 @@ namespace NumSharp.Tests.Issues
             np.frombuffer(new byte[] { 1, 0 }, "bool").typecode.Should().Be(NPTypeCode.Boolean);
             np.frombuffer(new byte[16], "complex128").typecode.Should().Be(NPTypeCode.Complex);
             np.frombuffer(new byte[2], "float16").typecode.Should().Be(NPTypeCode.Half);
-            // Unknown strings keep the verbatim rejection; complex64 keeps np.dtype's own refusal.
-            Assert.ThrowsException<NotSupportedException>(() => np.frombuffer(bytes, "quaternion")).Message.Should().Contain("dtype string 'quaternion' is not supported");
+            // Unknown strings are np.dtype's refusal with NumPy's text (NumPy raises TypeError); complex64 keeps np.dtype's own
+            // refusal.
+            Assert.ThrowsException<NotSupportedException>(() => np.frombuffer(bytes, "quaternion")).Message.Should().Be("data type 'quaternion' not understood");
             Assert.ThrowsException<NotSupportedException>(() => np.frombuffer(bytes, "complex64"));
         }
 

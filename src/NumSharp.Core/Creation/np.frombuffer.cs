@@ -14,7 +14,8 @@ namespace NumSharp
         // ctors.c's PyArray_FromBuffer. NumPy has ONE frombuffer over any object that exports a buffer; NumSharp's
         // overloads are the C# spellings of a buffer (a byte[] or any unmanaged-element C# array, a MemoryView, a
         // Memory<byte> or ArraySegment<byte>, an address with a byte length, a ReadOnlySpan<byte>) and of a dtype
-        // (a descriptor, an NPTypeCode, a name). Every overload converts its arguments and runs the same body:
+        // (a descriptor, an NPTypeCode, a name read by np.dtype as PyArray_DescrConverter reads it). Every overload
+        // converts its arguments and runs the same body:
         //   - the descriptor checks, in NumPy's order: a dtype holding references (PyDataType_REFCHK), then an unsized
         //     one (PyDataType_ISUNSIZED);
         //   - the buffer: a C# null is refused here, a memoryview must be C-contiguous (PyBUF_SIMPLE's BufferError);
@@ -119,14 +120,17 @@ namespace NumSharp
         /// (e.g. <c>"&lt;i4"</c>, <c>"&gt;u4"</c> for big-endian uint32, <c>"S3"</c>).
         /// </summary>
         /// <param name="buffer">A <see cref="MemoryView"/> over a C-contiguous array.</param>
-        /// <param name="dtype">The dtype's name: a sized or one-letter code with an optional byte-order prefix, a NumPy name, a
-        ///     fixed-width string; null or empty is float64.</param>
+        /// <param name="dtype">The dtype's name, read by <see cref="np.dtype(string, bool, bool, System.Collections.Generic.IReadOnlyDictionary{string, object})"/>
+        ///     (NumPy's <c>PyArray_DescrConverter</c>: a sized or one-letter code with an optional byte-order prefix, a
+        ///     NumPy name, a fixed-width string); null is float64 (NumPy's <c>None</c>).</param>
         /// <param name="count">Number of items to read. A negative number reads every whole item after <paramref name="offset"/>.</param>
         /// <param name="offset">Start reading the buffer from this offset (in bytes). Default is 0.</param>
         /// <returns>A 1-D array that views the buffer; a decoded native copy for a non-native name.</returns>
         /// <exception cref="ValueError"><paramref name="dtype"/> spells NEP 55 <c>StringDType</c> (<c>"T"</c>): NumPy's <c>cannot
         ///     create an OBJECT array from memory buffer</c>; or the texts of <see cref="frombuffer(byte[], DType, long, long)"/>.</exception>
-        /// <exception cref="NotSupportedException"><paramref name="dtype"/> names no dtype NumSharp has.</exception>
+        /// <exception cref="NotSupportedException"><paramref name="dtype"/> names no dtype (np.dtype's <c>data type 'x' not
+        ///     understood</c>, NumPy's TypeError, the empty name included) or one NumSharp does not have (complex64); raised
+        ///     before the buffer is read.</exception>
         /// <exception cref="BufferError">The memoryview is not C-contiguous.</exception>
         /// <exception cref="ArgumentNullException"><paramref name="buffer"/> is null.</exception>
         public static NDArray frombuffer(MemoryView buffer, string dtype, long count = -1, long offset = 0)
@@ -136,14 +140,17 @@ namespace NumSharp
         /// Interpret a buffer as a 1-dimensional array, given a dtype STRING (e.g. <c>"&gt;u4"</c> for big-endian uint32).
         /// </summary>
         /// <param name="buffer">The bytes (writable: the result is writeable).</param>
-        /// <param name="dtype">The dtype's name: a sized or one-letter code with an optional byte-order prefix, a NumPy name, a
-        ///     fixed-width string; null or empty is float64.</param>
+        /// <param name="dtype">The dtype's name, read by <see cref="np.dtype(string, bool, bool, System.Collections.Generic.IReadOnlyDictionary{string, object})"/>
+        ///     (NumPy's <c>PyArray_DescrConverter</c>: a sized or one-letter code with an optional byte-order prefix, a
+        ///     NumPy name, a fixed-width string); null is float64 (NumPy's <c>None</c>).</param>
         /// <param name="count">Number of items to read. A negative number reads every whole item after <paramref name="offset"/>.</param>
         /// <param name="offset">Start reading the buffer from this offset (in bytes). Default is 0.</param>
         /// <returns>A 1-D array that views the buffer; a decoded native copy for a big-endian name (<c>"&gt;u4"</c>).</returns>
         /// <exception cref="ValueError"><paramref name="dtype"/> spells NEP 55 <c>StringDType</c> (<c>"T"</c>): NumPy's <c>cannot
         ///     create an OBJECT array from memory buffer</c>; or the texts of <see cref="frombuffer(byte[], DType, long, long)"/>.</exception>
-        /// <exception cref="NotSupportedException"><paramref name="dtype"/> names no dtype NumSharp has.</exception>
+        /// <exception cref="NotSupportedException"><paramref name="dtype"/> names no dtype (np.dtype's <c>data type 'x' not
+        ///     understood</c>, NumPy's TypeError, the empty name included) or one NumSharp does not have (complex64); raised
+        ///     before the buffer is read.</exception>
         /// <exception cref="ArgumentNullException"><paramref name="buffer"/> is null.</exception>
         public static NDArray frombuffer(byte[] buffer, string dtype, long count = -1, long offset = 0)
             => FromBufferObject(buffer, buffer?.LongLength ?? 0, FromBufferNameDescr(dtype), count, offset, nameof(buffer));
@@ -581,55 +588,14 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     The descriptor a dtype NAME names for the string-spelled overloads: a fixed-width string (<see cref="StringDescrOrNull"/>),
-        ///     else the code table of <see cref="ParseDtypeString"/>, whose big-endian codes give a non-native descriptor.
+        ///     The descriptor a dtype NAME names (array_frombuffer's <c>PyArray_DescrConverter</c>): np.dtype's reading of
+        ///     the name, and null for a null name (NumPy's <c>None</c>), which the body reads as the default float64.
         /// </summary>
-        /// <param name="dtype">The dtype name; null or empty is float64.</param>
-        /// <returns>The descriptor.</returns>
-        /// <exception cref="ValueError"><c>"T"</c> (StringDType): <c>cannot create an OBJECT array from memory buffer</c>.</exception>
-        /// <exception cref="NotSupportedException">A name the table does not know.</exception>
-        private static DType FromBufferNameDescr(string dtype)
-        {
-            // A string dtype ('S3', '<U2', 'c', 'a5') reads fixed-width string elements; its width is the descriptor's, which
-            // the code table cannot express.
-            var stringDescr = StringDescrOrNull(dtype);
-            if (stringDescr != null)
-                return stringDescr;
-
-            var (typeCode, needsByteSwap) = ParseDtypeString(dtype);
-            var descr = DType.From(typeCode);
-            // A big-endian code on a little-endian host: the bytes are read big-endian (a one-byte type keeps '|').
-            return needsByteSwap ? descr.newbyteorder('>') : descr;
-        }
-
-        /// <summary>
-        ///     The string descriptor a dtype STRING names (<c>'S3'</c>, <c>'&lt;U2'</c>, <c>'c'</c>, <c>'a5'</c>,
-        ///     <c>'str'</c>), or null when it names another dtype or nothing <see cref="np.dtype(string, bool, bool, System.Collections.Generic.IReadOnlyDictionary{string, object})"/> parses. The
-        ///     string-spelled overloads ask this before their own parser, which knows only the fixed-size codes and once
-        ///     read <c>'c'</c> and <c>'S1'</c> as NumSharp's 2-byte <c>Char</c> (NumPy: one-byte strings).
-        /// </summary>
-        /// <param name="dtype">The dtype string.</param>
-        /// <returns>The string descriptor, or null.</returns>
-        /// <exception cref="ValueError"><c>'T'</c> (StringDType), whose items hold references: NumPy's <c>cannot create an
-        ///     OBJECT array from memory buffer</c>.</exception>
-        private static DType StringDescrOrNull(string dtype)
-        {
-            if (string.IsNullOrEmpty(dtype))
-                return null;
-            DType descr;
-            try
-            {
-                descr = np.dtype(dtype);
-            }
-            catch (Exception e) when (e is NotSupportedException || e is ArgumentException || e is TypeError)
-            {
-                // Not a dtype np.dtype knows: the numeric parser reports it with frombuffer's own text.
-                return null;
-            }
-            // 'T' (StringDType) is a reference dtype: PyArray_FromBuffer's first check refuses it.
-            ThrowIfReferenceDType(descr);
-            return NDStringStorage.IsString(descr) ? descr : null;
-        }
+        /// <param name="dtype">The dtype name, or null.</param>
+        /// <returns>The descriptor, or null for the default.</returns>
+        /// <exception cref="NotSupportedException">A name np.dtype does not understand (NumPy's TypeError text, the empty
+        ///     name included) or a dtype NumSharp does not have.</exception>
+        private static DType FromBufferNameDescr(string dtype) => dtype is null ? null : np.dtype(dtype);
 
         /// <summary>
         ///     NumPy's first check of <c>PyArray_FromBuffer</c>: a dtype holding references (<c>PyDataType_REFCHK</c> — the NEP 55
@@ -641,104 +607,6 @@ namespace NumSharp
         {
             if (dtype?.Meta is VStringDTypeMeta)
                 throw new ValueError("cannot create an OBJECT array from memory buffer");
-        }
-
-        #endregion
-
-        #region Helpers
-
-        /// <summary>
-        ///     The code table of the string-spelled overloads: an optional byte-order prefix (<c>&gt;</c> / <c>!</c> big,
-        ///     <c>&lt;</c> little, <c>=</c> / <c>|</c> native), then a sized code (<c>i4</c>), a one-letter code (<c>i</c>) or,
-        ///     through <see cref="ParseDtypeName"/>, a name (<c>"float64"</c>).
-        /// </summary>
-        /// <param name="dtype">The dtype string; null or empty is float64.</param>
-        /// <returns>The storage lane and whether the bytes are big-endian on this little-endian host.</returns>
-        /// <exception cref="NotSupportedException">A complex64 code (NumSharp ships complex128 only) or a name nothing parses.</exception>
-        private static (NPTypeCode typeCode, bool needsByteSwap) ParseDtypeString(string dtype)
-        {
-            if (string.IsNullOrEmpty(dtype))
-                return (NPTypeCode.Double, false);
-
-            // Check for byte order prefix
-            bool isBigEndian = false;
-            bool isLittleEndian = false;
-            int startIndex = 0;
-
-            if (dtype[0] == '>' || dtype[0] == '!')
-            {
-                isBigEndian = true;
-                startIndex = 1;
-            }
-            else if (dtype[0] == '<')
-            {
-                isLittleEndian = true;
-                startIndex = 1;
-            }
-            else if (dtype[0] == '=' || dtype[0] == '|')
-            {
-                // Native or not applicable
-                startIndex = 1;
-            }
-
-            // System is little-endian on most platforms
-            bool needsByteSwap = isBigEndian && BitConverter.IsLittleEndian;
-
-            string typeStr = dtype.Substring(startIndex);
-
-            // Parse type character and size. NumPy reference:
-            //   https://numpy.org/doc/stable/reference/arrays.dtypes.html#arrays-dtypes-constructing
-            NPTypeCode typeCode = typeStr switch
-            {
-                "b1" or "?"        => NPTypeCode.Boolean,
-                "u1" or "B"        => NPTypeCode.Byte,
-                "i1" or "b"        => NPTypeCode.SByte,   // signed 8-bit integer (int8)
-                "i2" or "h"        => NPTypeCode.Int16,
-                "u2" or "H"        => NPTypeCode.UInt16,
-                "i4" or "i" or "l" => NPTypeCode.Int32,
-                "u4" or "I" or "L" => NPTypeCode.UInt32,
-                "i8" or "q"        => NPTypeCode.Int64,
-                "u8" or "Q"        => NPTypeCode.UInt64,
-                "f2" or "e"        => NPTypeCode.Half,    // half-precision float (float16)
-                "f4" or "f"        => NPTypeCode.Single,
-                "f8" or "d"        => NPTypeCode.Double,
-                // NumSharp only ships complex128. 'c8'/'F'/'complex64' (single-precision complex)
-                // are REJECTED — consistent with np.dtype() — rather than silently widening to
-                // complex128. Silent widening misreads genuine complex64 bytes (8B/elem) as
-                // complex128 (16B/elem), halving the element count and corrupting the values.
-                "c8"  or "F" or "complex64"
-                                   => throw new NotSupportedException($"NumPy dtype '{typeStr}' is not supported by NumSharp"),
-                "c16" or "D"       => NPTypeCode.Complex, // complex128
-                // 'c' and 'S1' are NumPy's ONE-byte strings (np.dtype('c') is |S1); the string overloads route every string
-                // dtype to the descriptor route before this parser, which used to read them as the 2-byte Char.
-                _ => ParseDtypeName(typeStr, dtype)
-            };
-
-            return (typeCode, needsByteSwap);
-        }
-
-        /// <summary>
-        ///     The NAME spellings — <c>"float64"</c>, <c>"int32"</c>, <c>"bool"</c>, <c>"complex128"</c>, <c>"float16"</c>
-        ///     (NumPy's most common way to write <c>np.frombuffer(b, dtype="float64")</c>) — parse through the same
-        ///     parser <see cref="np.dtype(string, bool, bool, System.Collections.Generic.IReadOnlyDictionary{string, object})"/> uses, so they behave exactly like their sized codes
-        ///     (<c>"&lt;f8"</c>). The sized/char codes above keep their own table because <see cref="np.dtype(string, bool, bool, System.Collections.Generic.IReadOnlyDictionary{string, object})"/>
-        ///     rejects <c>complex64</c> with its own message and the frombuffer parser must reject it identically;
-        ///     anything neither table knows keeps the verbatim "dtype string … is not supported".
-        /// </summary>
-        /// <param name="typeStr">The name without its byte-order prefix.</param>
-        /// <param name="dtype">The whole dtype string, for the message.</param>
-        /// <returns>The name's storage lane.</returns>
-        /// <exception cref="NotSupportedException">A name np.dtype does not parse.</exception>
-        private static NPTypeCode ParseDtypeName(string typeStr, string dtype)
-        {
-            try
-            {
-                return np.dtype(typeStr).typecode;
-            }
-            catch (Exception e) when (e is NotSupportedException || e is ArgumentException)
-            {
-                throw new NotSupportedException($"dtype string '{dtype}' is not supported");
-            }
         }
 
         #endregion
