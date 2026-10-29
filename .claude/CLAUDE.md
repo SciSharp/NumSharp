@@ -1685,15 +1685,24 @@ all probed against 2.4.2; gates `Creation/np.logspace.geomspace.Test.cs` (20) + 
 28 logspace + 13 geomspace cases, 343/343 bit-exact). **Scalar `start`/`stop`/`base` (double), like NumSharp's
 existing scalar `linspace`** — array-like `start`/`stop`/`base` is OUT of scope (the whole family is scalar-only;
 that's a separate, larger feature). Full parameter parity otherwise: `num=50`, `endpoint=true`, `base=10.0`
-(logspace only), `dtype=null`, `axis=0` (int + long `num` overloads). `axis` is a **no-op for scalar inputs** (the
-output is always 1-D) but is still validated exactly like NumPy's trailing `moveaxis(y, 0, axis)`: only 0 and -1
+(logspace only), `dtype=null`, `axis=0` (int + long `num` overloads). `axis` changes **no value for scalar inputs**
+(the output is always 1-D) but is still validated exactly like NumPy's trailing `moveaxis(y, 0, axis)`: only 0 and -1
 are in range, else `AxisError("destination: axis {a} is out of bounds for array of dimension 1")` (verbatim,
-reporting the original axis). `num<0` → `ValueError("Number of samples, {num}, must be non-negative.")`.
+reporting the original axis); geomspace's `axis=-1` returns NumPy's moveaxis VIEW (OWNDATA false) unless the final
+dtype cast copies. `num<0` → `ValueError("Number of samples, {num}, must be non-negative.")`.
+- **`linspace(start, stop, num, endpoint, dtype, device)`** runs NumPy's statements in NumPy's order: the count's
+  ValueError first, then the device, then `arange(num) * step + start` with NumPy's three observable branches (one
+  sample is `0 * (stop - start) + start` — NaN for an infinite or NaN end, +0.0 for a start of -0.0; a step that
+  underflows to zero takes gh-5437's `(i / div) * delta + start`; `y[-1] = stop` for two or more samples), integer
+  dtypes FLOORED, a text dtype formatted by `astype` (`dtype='U5'` → `['0.0', '0.25', ...]`), and NumPy's float64 view
+  (OWNDATA false) wherever NumPy's in-place ramp is one (P3 batch 9's replay against NumPy, `a7c23095`, `88afce1d`,
+  `fb17feec`).
 - **`logspace(start, stop, num, endpoint, base, dtype, axis)`** = `power(base, linspace(start, stop, num,
   endpoint))` then `.astype(dtype)`. The computation is ALWAYS float64 (scalar-double inputs) and only THEN cast —
   so an integer dtype **TRUNCATES toward zero** (unlike `linspace`, which FLOORS), and even `dtype=complex128` is
   float64-compute-then-cast (real + 0j), NOT a complex-domain computation. **BIT-EXACT vs NumPy** at every dtype:
-  `Math.Pow`==`npy_pow` and the `start + i*step` interior commutes with NumPy's `arange*step + start` (win-amd64).
+  `Math.Pow`==`npy_pow` and the exponents are NumPy's linspace values (`LinspaceValue`, the branches above; the
+  `start + i*step` interior commutes with NumPy's `arange*step + start`) (win-amd64).
   A negative `base` with fractional exponents yields NaN (real power of a negative base), matching NumPy. Fused
   single-pass fill loop — no intermediate `linspace` array (`LogspaceCore`).
 - **`geomspace(start, stop, num, endpoint, dtype, axis)`** — a geometric progression, endpoints given directly.
@@ -1703,7 +1712,10 @@ reporting the original axis). `num<0` → `ValueError("Number of samples, {num},
   the original `start`/`stop` byte-for-byte); decreasing, all-negative, and **mixed-sign** inputs (`geomspace(-1,1)
   → [-1, nan, nan, 1]`, log10 of the rotated-negative endpoint poisoning the interior) all fall out automatically.
   Zero endpoints → `ValueError("Geometric sequence cannot include zero")`, checked FIRST (before num, before axis —
-  NumPy's order). A `Complex` start/stop **overload** and a real-input **`dtype=complex128`** both compute in the
+  NumPy's order); a text dtype then fails NumPy's next statements, still before num and axis (`StringDType`:
+  `result_type(start, stop, float(num), zeros((), dtype))`'s `DTypePromotionError`; `S` / `U`: the ends promote to
+  text and `sign(start)` has no string loop, NumPy's UFuncTypeError text; `5de82c92`). A `Complex` start/stop
+  **overload** and a real-input **`dtype=complex128`** both compute in the
   complex128 domain (the interior genuinely differs — `geomspace(1,8,4,dtype=complex)[1]==1.9999999999999998`, not
   the real path's exact 2.0 — so the domain is load-bearing); these compose NumSharp's NumPy-tuned complex power
   (`npy_cpow` port) + complex log10, so they are **ACCURATE within the documented ≤3-ULP complex-unary envelope but
@@ -1713,7 +1725,9 @@ reporting the original axis). `num<0` → `ValueError("Number of samples, {num},
   (the single-pass fusion avoids NumPy's intermediate `linspace` passes). This is the **physical ceiling**: both
   are `Math.Pow`-bound (a bare `Math.Pow` loop of 1M measures 8.17 ms vs logspace's 8.29 ms — 98 % pure pow), and
   no bit-exact SIMD `pow` exists, so the 1.5× target is unreachable without abandoning parity — the same class as
-  `arcsinh`/`float_power`-general/`gcd`. See `Creation/np.{logspace,geomspace}.cs`.
+  `arcsinh`/`float_power`-general/`gcd`. See `Creation/np.{linspace,logspace,geomspace}.cs` (the facades) and
+  `Creation/Default.CoreFunctionBase.cs` (`TensorEngine.Linspace` / `Logspace` / `Geomspace` of
+  `Backends/TensorEngine.CoreFunctionBase.cs`, DefaultEngine's fills; np-layer dtype plan, P3 batch 9).
 
 **`np.matrix(data, dtype=None, copy=True)` → `NDMatrix` — NumPy's `numpy.matrix`** (2026-10-09; port of
 `numpy/matrixlib/defmatrix.py`; `src/NumSharp.Core/Matrixlib/`; probed against 2.4.2). The CLR type is `NDMatrix`
@@ -2121,7 +2135,7 @@ the scalar (NumPy's `m[()]`), `flip(m, 0)` raises AxisError. `fliplr` requires n
 
 `rot90(m, k=1, axes=(0,1))` rotates in the plane of two axes by `90°·k` (counterclockwise from the first axis toward the second). Like NumPy it is a **pure view composition** of axis-flips + a transpose — no data moves, so the result shares memory with `m` (read-only when the source is, e.g. a broadcast view). `k` is taken mod 4 (Python-style, so negatives wrap); `k∈{0}` returns a full view, `k∈{2}` flips both axes, `k∈{1,3}` flip-then-transpose. Validation mirrors NumPy verbatim (`ValueError`, NumPy's own type — not normalize_axis_index's AxisError): `len(axes)!=2` → "len(axes) must be 2.", `axes[0]==axes[1] || |axes[0]-axes[1]|==ndim` → "Axes must be different." (this fires *before* the range check, so e.g. `axes=(0,2)` on 2-D reports "different", not out-of-range), else out-of-range. See `Manipulation/np.rot90.cs`.
 
-`np.trim_zeros(filt, trim="fb", axis=null)` crops leading/trailing all-zero hyperplanes (NumPy 2.2.0+ N-dimensional bounding box; probed against 2.4.2). `trim` is case-insensitive ('f'=front, 'b'=back, "fb"/"bf"=both) and validated (`ArgumentException "unexpected character(s) in \`trim\`: '…'"`). `axis=null` trims the smallest bounding box over all axes; an explicit axis/axis-list (int overload + `int[]` overload) trims only those (NumPy's `normalize_axis_tuple(axis, ndim, argname="axis")`: every axis range-checked first → `AxisError "axis: axis 2 is out of bounds for array of dimension 2"`, then `ValueError "repeated axis in \`axis\` argument"`); an **empty** axis list or a **0-d** input returns the input unmodified. Always returns a **view** (dtype & ndim preserved); all-zero/empty inputs collapse the trimmed axes to length 0 (trim spec ignored, matching NumPy). Implementation is NOT NumPy's `argwhere.min/max` (which materializes every non-zero coordinate) — the bounding box is separable, so it takes the first/last non-zero index from `np.nonzero` (1-D) or `np.nonzero(np.any(filt, other_axes))` (N-D), touching only the trimmed axes. Measured **3.4×–361× faster than NumPy 2.4.2** (min on tiny 1-D, up to 361× on 3-D single-axis). Differential-fuzzed 400/400 bit-exact across 1–3D × {int/uint/float/bool} × sparsity × trim × axis. See `Manipulation/np.trim_zeros.cs`.
+`np.trim_zeros(filt, trim="fb", axis=null)` crops leading/trailing all-zero hyperplanes (NumPy 2.2.0+ N-dimensional bounding box; probed against 2.4.2). `trim` is case-insensitive ('f'=front, 'b'=back, "fb"/"bf"=both) and validated (`ValueError "unexpected character(s) in \`trim\`: '…'"`). `axis=null` trims the smallest bounding box over all axes; an explicit axis/axis-list (int overload + `int[]` overload) trims only those (NumPy's `normalize_axis_tuple(axis, ndim, argname="axis")`: every axis range-checked first → `AxisError "axis: axis 2 is out of bounds for array of dimension 2"`, then `ValueError "repeated axis in \`axis\` argument"`); an **empty** axis list or a **0-d** input returns the input unmodified. Always returns a **view** (dtype & ndim preserved); all-zero/empty inputs collapse the trimmed axes to length 0 (trim spec ignored, matching NumPy). Implementation is NOT NumPy's `argwhere.min/max` (which materializes every non-zero coordinate) — the bounding box is separable, so it takes the first/last non-zero index from `np.nonzero` (1-D) or `np.nonzero(np.any(filt, other_axes))` (N-D), touching only the trimmed axes. Measured **3.4×–361× faster than NumPy 2.4.2** (min on tiny 1-D, up to 361× on 3-D single-axis). Differential-fuzzed 400/400 bit-exact across 1–3D × {int/uint/float/bool} × sparsity × trim × axis. See `Manipulation/np.trim_zeros.cs` (the facade) and `Manipulation/Default.TrimZeros.cs` (`TensorEngine.TrimZeros`: a test of the values decides the view, so it is the engine's; np-layer dtype plan, P3 batch 9).
 
 `permute_dims` and `matrix_transpose` are the NumPy 2.x / Array-API transpose aliases (both pure O(1) views). `np.permute_dims(a, axes=null)` is a straight alias of `transpose` (delegates to `TensorEngine.Transpose`). `np.matrix_transpose(x)` swaps the two innermost axes (`(..., M, N)→(..., N, M)`, i.e. `swapaxes(x, -1, -2)`) and requires `ndim ≥ 2`, else `ArgumentException "Input array must be at least 2-dimensional, but it is {ndim}"`; the companion property `ndarray.mT` does the same but raises the NumPy-verbatim `"matrix transpose with ndim < 2 is undefined"` (distinct message, both probed against 2.4.2). Read-only/broadcast inputs stay non-writeable through the alias. See `Manipulation/np.permute_dims.cs`, `Manipulation/np.matrix_transpose.cs`, `Backends/NDArray.cs` (`mT`).
 

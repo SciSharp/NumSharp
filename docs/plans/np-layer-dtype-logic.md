@@ -35,7 +35,10 @@ np.resize are `UnmanagedStorage` members, ndarray.resize's is `UnmanagedStorage.
 reference-holding route by one `HasReferences` decision. Batch 3, assignment, is done (`794fa292`, `448bde50`,
 `fd1fa7af`, `713fbaf3`): np.copyto's internals and ndarray.fill's body are `UnmanagedStorage.Assign*.cs` members,
 np.concatenate's body is `NDArray.ConcatenateInto` in `NDArray.Multiarray.cs`, and R1 leaves the array object's homes
-out; the text casts got a batch of their own, 9b. P5 is done (2026-10-29): its six
+out; the text casts got a batch of their own, 9b. Batch 9, the computing functions in P3's files, is done
+(2026-10-29): np.linspace / np.logspace / np.geomspace are `TensorEngine` members in `TensorEngine.CoreFunctionBase.cs`,
+np.vander in `TensorEngine.TwoDimBase.cs`, np.trim_zeros in `TensorEngine.FunctionBase.cs`, and the six divergences a
+replay of their snapshot through NumPy found are fixed per D4. P5 is done (2026-10-29): its six
 families and, handed over by the coordinator, the lines first assigned to PE (np.argmax's out= pair, np.unravel_index,
 np.packbits / np.unpackbits, np.bincount, and the text lines of np.kron and np.median) are engine members or engine
 partials, and the two divergences found on the way are fixed per D4 (np.argmax / np.argmin check a text operand's
@@ -793,7 +796,10 @@ first, as it did for np.fft.
    `UnmanagedStorage.Mapping.cs`. The index-kind tests stay.
 9. **The computing functions in P3's files** (5 files, 30 lines) become `TensorEngine` members (Appendix D):
    np.linspace, np.logspace and np.geomspace (`TensorEngine.CoreFunctionBase.cs`), np.vander
-   (`TensorEngine.TwoDimBase.cs`), np.trim_zeros (`TensorEngine.FunctionBase.cs`).
+   (`TensorEngine.TwoDimBase.cs`), np.trim_zeros (`TensorEngine.FunctionBase.cs`). Done (`ca9a0246`, `315b2f0e`,
+   `7c93e25a`), and the six divergences a replay against NumPy found are fixed per D4 (`a7c23095`, `88afce1d`,
+   `fb17feec` with `beb55575`, `5de82c92`, `681f9608`); no slot conversion (np.trim_zeros' text truth stays a bulk
+   kernel, see the state log).
 9b. **The text casts through the casting impls.** The text classes' `CastingImpl`s (`StringCastingImpls.cs`,
     `VStringCastingImpls.cs`; their `resolve_descriptors` exist) gain `get_strided_loop`: the converters NumSharp
     calls by name today (`NDTextConversion` for text and numbers, `NDStringTruth`'s cast flavor for text to bool, the
@@ -1032,6 +1038,52 @@ candidate.
 ---
 
 ## 9. State log
+
+- **2026-10-29, P3: batch 9 (the computing functions in P3's files).** Ten commits on `strings` from the parallel
+  session (developed in a scratch worktree on `8a2d53fe`, landed by fast-forward):
+  - `6a7f4bf9`: the snapshot tool reaches the batch. np.linspace / np.logspace / np.geomspace take a (start, stop) pair
+    as their operand (all eight overloads were SKIP: no array parameter), with their own roles for num, base, axis and
+    device; np.trim_zeros' trim spec and np.vander's N get roles; np.vander runs on the 1-D pools of np.convolve and
+    np.trim_zeros on operands with zero borders. 11,788 calls, deterministic with and without guard pages.
+  - `ca9a0246`, the pure move: np.linspace / np.logspace / np.geomspace (real and complex ends) are the abstract
+    `TensorEngine.Linspace` / `Logspace` / `Geomspace` in the new `TensorEngine.CoreFunctionBase.cs`
+    (`numpy/_core/function_base.py`), implemented in `Creation/Default.CoreFunctionBase.cs` with their eight helpers.
+    The facades have no operand, so they call `np.EngineOf(null)`: the default engine (np.fft.fftfreq's precedent).
+    R1: 25 numeric lines leave.
+  - `315b2f0e`: np.vander is `TensorEngine.Vander` in the new `TensorEngine.TwoDimBase.cs`, implemented in
+    `Creation/Default.TwoDimBase.cs`, `[NDScoped]` as the facade is. R1: 3 text lines leave. Its message counts 2,826
+    np.vander calls; the snapshot holds 1,456 (`7c93e25a`'s message corrects it).
+  - `7c93e25a`: np.trim_zeros is `TensorEngine.TrimZeros` in `TensorEngine.FunctionBase.cs`, implemented in
+    `Manipulation/Default.TrimZeros.cs`. R1: 2 text lines leave.
+  - Each move: the snapshot byte-identical to the parent's under `NUMSHARP_DEBUG_GUARD_PAGES=1`; no moved name binding
+    to a `DefaultEngine` / `TensorEngine` member; R2 unchanged; doc warnings unchanged at 3,850.
+  - No slot conversion. np.trim_zeros' text truth stays the bulk truth kernel (`NDStringTruth`'s nonzero flavor)
+    inside `DefaultEngine.TrimZeros`: the `nonzero` slot reads one element, and "a slot replaces a test of the dtype's
+    name, never a typed kernel". The batch's other lines (np.linspace's typed fill, the dtype requests, np.vander's
+    ufunc refusals) were to become engine members, which they are.
+  - A replay of the snapshot through NumPy 2.4.2 (each call's arguments to NumPy; dtype, shape, flags, C-order bytes or
+    the error compared) and an edge probe of 160 calls the pools do not hold found six divergences, fixed per D4 with
+    tests built from NumPy's output (`Creation/np.spacing.NumPyEdges.Test.cs`):
+    - `a7c23095` np.linspace's negative count is NumPy's ValueError, checked first (NumSharp raised the allocation's
+      text, or the device's): `TensorEngine.Linspace` gains `device=`, checked after the count. 140 snapshot calls.
+    - `88afce1d` np.linspace / np.logspace: one sample is `0 * (stop - start) + start` (NaN for an infinite or NaN end,
+      +0.0 for a start of -0.0), and a step that underflows to zero takes gh-5437's `(i / div) * delta + start`
+      (`LinspaceValue`). The pools hold finite ends only; the edge probe found both.
+    - `fb17feec` np.linspace's text dtypes are NumPy's `astype` of the float64 samples (NumSharp refused them). 172
+      snapshot calls. `beb55575` releases the samples with a using declaration instead: `fb17feec`'s CastSpacingResult
+      call added an NDW012.
+    - `5de82c92` np.geomspace's text dtypes fail NumPy's statements right after the zero check (`StringDType`:
+      `result_type`'s DTypePromotionError; `S` / `U`: `sign`'s no-loop error), before the count and the axis. 212 calls.
+    - `681f9608` np.geomspace's `axis=-1` returns NumPy's moveaxis view (OWNDATA false unless the cast copies). 80
+      calls.
+  - Left, documented: the complex path of np.geomspace differs from NumPy in the last bits of 40 snapshot calls (its
+    documented composition through NumSharp's complex power and log10, accurate but not byte-reproducible); the device
+    error's type stays the house `ArgumentException` (NumPy's text). The replay shows no other difference for
+    np.linspace (1,164 calls), np.logspace (1,442) or np.geomspace (1,528).
+  - Gates: NumSharp.Tests 20,752 passed on net10.0 and net8.0 (on net10.0 one concurrency gun of the dictionary tests,
+    `Gun_SwapBackRacing_BitTaggedIntKeys_KeyPathNeverTears`, did not fire under the machine's load and passed alone
+    three times); NumSharp.Tests.Oracle 414 passed on both; Core's doc warnings 3,850 -> 3,848.
+  - Next on this session's side: batch 7.
 
 - **2026-10-29, P6: the computational part.** Ten commits on `strings` from the parallel session (developed in a
   scratch worktree, rebased onto `ce5d6ce3` and then onto P3's batch 3, `f90b131f`, landed by fast-forward). R2's
