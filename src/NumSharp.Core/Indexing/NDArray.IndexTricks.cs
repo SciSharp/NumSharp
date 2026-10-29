@@ -913,7 +913,7 @@ namespace NumSharp
             var sizes = new BigInteger[n];
             for (int k = 0; k < n; k++)
                 sizes[k] = GridAxisSize(specs[k], k, "mgrid");
-            NPTypeCode typ = GridMeshDtype(specs);
+            DType typ = GridMeshDtype(specs);
 
             // nn = indices(size, typ): NumPy's empty() converts every dimension before it checks any, so a size past
             // int64 is "Maximum allowed dimension exceeded" even beside a negative one. The empty key gives indices([]),
@@ -1055,11 +1055,14 @@ namespace NumSharp
                     GridPyNumber.Float(GridPyNumber.IntToFloat(length - 1)));
             }
 
-            // typ = result_type(start, stop, step_float) is float64 (step_float is a Python float); arange(0, length, 1,
-            // dtype=typ) refuses a length past npy_intp before allocating anything.
+            // typ = result_type(start, stop, step_float): float64, since step_float is a Python float (a missing stop is
+            // None, float64 too). arange(0, length, 1, dtype=typ) refuses a length past npy_intp before allocating anything.
+            DType typ = DTypePromotion.ResultType(
+                GridResultTypeOperand(true, spec.StartIsInt), GridResultTypeOperand(spec.HasStop, spec.StopIsInt),
+                DTypeRegistry.PyFloat);
             if (!np.AxisConcatenator.SliceSpec.FitsInt64(length))
                 throw new ValueError("Maximum allowed size exceeded");
-            var points = new NDArray(NPTypeCode.Double, (long)length, false);
+            var points = new NDArray(typ, (long)length, false);
             // arange * step: the step is a float, nothing to convert; + start: a Python int start converts here, so an
             // int past the float range raises after the allocation, as NumPy's does.
             GridFillFloat(points, step, GridPyNumber.StartOf(spec).AsFloat());
@@ -1101,20 +1104,50 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     The ONE dtype a multi-slice mesh shares — NumPy's <c>result_type(*num_list)</c> over every slice's
-        ///     start, stop and step (an imaginary step contributes its magnitude, a Python float; a missing stop is
-        ///     None, float64): int64 when every field of every slice is a Python int, else float64.
+        ///     The ONE dtype a multi-slice mesh shares — NumPy's <c>typ = result_type(*num_list)</c>, asked of the dtype
+        ///     system: <c>num_list</c> is <c>[0]</c> and every slice's start, stop and step, each a weak Python scalar
+        ///     (an imaginary step contributes its magnitude, a Python float) or, for a missing stop, None (float64). So
+        ///     int64 when every field of every slice is a Python int (the default of NEP 50's <c>_PyLongDType</c>, whatever
+        ///     the ints' sizes), else float64.
         /// </summary>
         /// <param name="specs">The slices.</param>
-        /// <returns><see cref="NPTypeCode.Int64"/> or <see cref="NPTypeCode.Double"/>.</returns>
-        private static NPTypeCode GridMeshDtype(List<np.AxisConcatenator.SliceSpec> specs)
+        /// <returns>The descriptor: int64 or float64.</returns>
+        /// <remarks>
+        ///     <c>num_list</c> holds at most three distinct operands (a Python int, a Python float, None), and NumPy's
+        ///     promotion of a sequence is order-independent with <c>common_dtype(T, T) == T</c>, so the call passes each
+        ///     distinct one once: the same answer as the whole list, for a sixth of <see cref="DTypePromotion.ResultType"/>'s
+        ///     cost on a two-slice key (115 ns for seven operands).
+        /// </remarks>
+        private static DType GridMeshDtype(List<np.AxisConcatenator.SliceSpec> specs)
         {
-            bool integral = true;
+            // num_list = [0]: a Python int is always there.
+            bool sawFloat = false, sawNone = false;
             foreach (var spec in specs)
-                integral &= spec.Integral;
+            {
+                // An imaginary step is abs(step) here, a Python float (StepIsInt is false for it).
+                sawFloat |= !spec.StartIsInt || (spec.HasStop && !spec.StopIsInt) || !spec.StepIsInt;
+                sawNone |= !spec.HasStop;
+            }
 
-            return integral ? NPTypeCode.Int64 : NPTypeCode.Double;
+            if (sawFloat && sawNone)
+                return DTypePromotion.ResultType(DTypeRegistry.PyLong, DTypeRegistry.PyFloat, GridResultTypeOperand(false, false));
+            if (sawFloat)
+                return DTypePromotion.ResultType(DTypeRegistry.PyLong, DTypeRegistry.PyFloat);
+            if (sawNone)
+                return DTypePromotion.ResultType(DTypeRegistry.PyLong, GridResultTypeOperand(false, false));
+            return DTypePromotion.ResultType(DTypeRegistry.PyLong);
         }
+
+        /// <summary>
+        ///     One entry of the <c>result_type</c> calls of NumPy's <c>nd_grid.__getitem__</c>: a Python int is the abstract
+        ///     <c>_PyLongDType</c> and a Python float <c>_PyFloatDType</c> (weak: they contribute a class, no width), and
+        ///     Python's None — a missing stop — is <c>np.result_type</c>'s float64 descriptor (strong).
+        /// </summary>
+        /// <param name="present">Whether the field was given (false: None).</param>
+        /// <param name="isInt">Whether the given field is a Python int (else a float).</param>
+        /// <returns>The operand for <see cref="DTypePromotion.ResultType"/>.</returns>
+        private static object GridResultTypeOperand(bool present, bool isInt) =>
+            !present ? DType.Double : isInt ? DTypeRegistry.PyLong : DTypeRegistry.PyFloat;
 
         /// <summary>
         ///     The rescale statement of NumPy's <c>nd_grid.__getitem__</c> for axis <paramref name="k"/>,
@@ -1125,17 +1158,19 @@ namespace NumSharp
         /// <param name="line">A fresh C-contiguous 1-D array of the mesh dtype, the axis's size long; written in place.</param>
         /// <param name="spec">The axis's slice.</param>
         /// <param name="k">The axis, for the missing-stop error.</param>
-        /// <param name="typ">The mesh dtype, int64 or float64 (<see cref="GridMeshDtype"/>).</param>
+        /// <param name="typ">The mesh dtype, int64 or float64 (<see cref="GridMeshDtype"/>): an integer kind computes in int64,
+        ///     the float one in float64.</param>
         /// <param name="caller">The public entry's name, for the missing-stop error.</param>
         /// <exception cref="ValueError">An imaginary step of other than one point without a stop (NumSharp's text; NumPy's
         ///     <c>kk.stop - start</c> TypeError ends in its except branch's AttributeError).</exception>
         /// <exception cref="OverflowException">A Python int step or start past int64 in an int64 mesh (NumPy's
         ///     <c>Python int too large to convert to C long</c>, the LP64 text), or past the float range in a float64 mesh
         ///     (<c>int too large to convert to float</c>) — raised before any element, even of an empty axis.</exception>
-        private static void GridFillLine(NDArray line, in np.AxisConcatenator.SliceSpec spec, int k, NPTypeCode typ,
+        private static void GridFillLine(NDArray line, in np.AxisConcatenator.SliceSpec spec, int k, DType typ,
             string caller)
         {
-            if (typ == NPTypeCode.Int64)
+            // result_type over Python scalars is the default int (int64, kind 'i') or the default float (float64).
+            if (typ.kind == 'i')
             {
                 // Every slice is ints with a real step (GridMeshDtype). nn[k] * step converts the step to int64 first, then
                 // + start the start: NEP 50's Python-int conversion, whose failure does not depend on the axis's size.
@@ -1370,7 +1405,7 @@ namespace NumSharp
             var sizes = new BigInteger[n];
             for (int k = 0; k < n; k++)
                 sizes[k] = GridAxisSize(specs[k], k, caller);
-            NPTypeCode typ = GridMeshDtype(specs);
+            DType typ = GridMeshDtype(specs);
 
             // nn = [arange(size, dtype=typ) for ...], in key order: a size past npy_intp is arange's "Maximum allowed size
             // exceeded" (its length computation overflows), a negative size an empty axis.
