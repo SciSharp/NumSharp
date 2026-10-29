@@ -30,7 +30,9 @@
 // "NDArray.op_X" every public static operator overload declared on NDArray (op_Equality, op_UnaryPlus, ...), whose first
 // NDArray parameter is the operand; "NDMatrix.f" every public instance overload declared on NDMatrix, called on
 // np.asmatrix of each operand (a layout asmatrix refuses, the 3-D ones, is SKIP) with an out= variant made a matrix too;
-// "np.r_" and "np.c_" the indexer of the object (np.AxisConcatenator's this[params object[] key]), called on it.
+// "np.r_" and "np.c_" the indexer of the object (np.AxisConcatenator's this[params object[] key]), called on it;
+// "np.mgrid" and "np.ogrid" the indexer of the nd_grid object (np.MGridClass / np.OGridClass), whose key is its operand
+// (GridKeyLabels: the operand label "key/<slices>").
 // Each output line is "<case id> TAB <outcome>":
 //   case id  = the overload's signature | the operand's label | the varied parameter and its value label
 //   outcome  = ARR class dtype (shape) flags hash [is_out] [OUT hash] [MUTATED in=hash]   for an NDArray result
@@ -299,6 +301,11 @@ static class Snapshot
         bool onConcatenator = target is "np.r_" or "np.c_";
         if (onConcatenator)
             IndexerReceiver = target == "np.r_" ? np.r_ : np.c_;
+        // np.mgrid / np.ogrid name the indexer of the nd_grid object (np.MGridClass / np.OGridClass's get_Item), called on
+        // that object; the key is their only argument, so it is the operand (GridKeyLabels).
+        bool onGrid = target is "np.mgrid" or "np.ogrid";
+        if (onGrid)
+            IndexerReceiver = target == "np.mgrid" ? np.mgrid : np.ogrid;
         // An operator is a static method of NDArray whose first NDArray parameter is the operand, as np.f's is; so is a
         // static factory of NDArray (NDArray.Scalar, NDArrayStaticTargets), whose first parameter is the coercion family's
         // host operand.
@@ -306,6 +313,9 @@ static class Snapshot
                         || onMatrix;
         var methods = (onConcatenator
                 ? typeof(np.AxisConcatenator).GetMethods(BindingFlags.Public | BindingFlags.Instance).Where(m => m.Name == "get_Item")
+                : onGrid
+                ? (target == "np.mgrid" ? typeof(np.MGridClass) : typeof(np.OGridClass))
+                    .GetMethods(BindingFlags.Public | BindingFlags.Instance).Where(m => m.Name == "get_Item")
                 : onMatrix
                 ? typeof(NDMatrix).GetMethods(BindingFlags.Public | BindingFlags.Instance).Where(m => m.DeclaringType == typeof(NDMatrix))
                 : instance
@@ -319,7 +329,7 @@ static class Snapshot
                                 : onFft
                                     ? typeof(FourierModule).GetMethods(BindingFlags.Public | BindingFlags.Instance).Where(m => m.DeclaringType == typeof(FourierModule))
                                     : typeof(np).GetMethods(BindingFlags.Public | BindingFlags.Static))
-            .Where(m => onConcatenator || m.Name == name)
+            .Where(m => onConcatenator || onGrid || m.Name == name)
             // a generic overload runs closed over the types the snapshot gives it (np.copyto<T>), else not at all
             .SelectMany(m => m.IsGenericMethodDefinition ? SnapshotInstantiations(m) : new[] { m })
             .Select(m => (Method: m, Signature: Signature(target, m)))
@@ -515,6 +525,10 @@ static class Snapshot
         // np.where's x / y given as a C# value (its object overloads): NumPy's array_like - a Python int / float / complex /
         // bool / str, a NumPy scalar, a 0-d array, a C# array - which np.where converts as NDArray.FromPythonOperand does.
         WhereScalar,
+        // np.mgrid / np.ogrid take no array: the KEY of their indexer is all they take, so it is the operand
+        // (GridKeyLabels: slices as strings, Slice objects, the empty key, entries that are no slice), built in Call
+        // (MakeGridKey).
+        GridKey,
         Default, Unsupported,
     }
 
@@ -1275,6 +1289,63 @@ static class Snapshot
             _ => throw new ArgumentException("unknown concatenator key variant " + label),
         };
     }
+
+    /// <summary>
+    ///     Whether an overload is the indexer of np.mgrid or np.ogrid (<see cref="np.MGridClass"/> /
+    ///     <see cref="np.OGridClass"/>'s <c>this[params object[] key]</c>, NumPy's <c>nd_grid.__getitem__</c>): its key is
+    ///     all it takes, so the key is the operand (<see cref="GridKeyLabels"/>).
+    /// </summary>
+    /// <param name="m">The overload.</param>
+    /// <returns>True for the two indexers.</returns>
+    private static bool IsGridIndexer(MethodInfo m) =>
+        m.Name == "get_Item" && (m.DeclaringType == typeof(np.MGridClass) || m.DeclaringType == typeof(np.OGridClass));
+
+    /// <summary>
+    ///     The keys np.mgrid / np.ogrid run on, spelled as the indexer reads them (a slice is a string with a colon; several
+    ///     entries are a Python tuple of slices). Single slices (NumPy's except branch: arange, or for an imaginary step
+    ///     <c>arange(0, n) * step + start</c>): ints, a missing stop (the start is the stop), a step, a reversed range, a
+    ///     negative step, float bounds, a float step whose arange delta is not the step, imaginary steps over an exact and an
+    ///     inexact range, descending, one point and none, a zero step. Meshes (NumPy's <c>indices</c> / <c>arange</c> scaled
+    ///     by <c>nn * step + start</c>): two int slices, one string holding both, a float bound, an imaginary axis, the
+    ///     float-step and inexact imaginary axes, a float step that is exact, a reversed axis (the dense grid's negative
+    ///     size, the open grid's empty axis), an empty axis, three axes, a slice without its stop, Slice objects (several and
+    ///     one), the empty key, and entries that are no slice (a string without a colon, an int). Then the edges NumPy's
+    ///     Python arithmetic decides: zero steps over Python ints and floats (<c>division by zero</c> / <c>float division by
+    ///     zero</c>), an imaginary step without its stop (one point works, more need the stop), the error order of a zero
+    ///     step, a missing stop and a negative size, a <c>-0.0</c> start, fractional and negative imaginary steps, float
+    ///     steps whose <c>i * step + start</c> differs from arange, NaN / infinite / huge sizes, underflowed quotients, and
+    ///     Python ints past 2**53 and past int64.
+    /// </summary>
+    private static readonly string[] GridKeyLabels =
+    {
+        "0:5", "5:", "2:8:2", "5:0", "0:5:-1", "0.5:3", "0.5:1.5:0.1", "0:1:5j", "0.1:0.7:7j", "-1:1:5j", "1:0:5j",
+        "1:4:1j", "0:5:0j", "0:5:0",
+        "0:3,0:4", "one:0:3,0:4", "0:2,0.0:2", "0:3,0:1:3j", "0.5:1.5:0.1,0:2", "0.1:0.7:7j,0:2", "0:2:0.5,0:3", "5:0,0:3",
+        "0:3,0:0", "0:2,0:3,0:4", "0:3,2:", "slice(0,3),slice(1,5,2)", "slice(1,4)", "none", "x", "5",
+        "0:3:0,0:2", "0.0:3:0,0:2", "0:3:0.0,0:2", "0:5:0.0", "3:3:0", "3.0:3:0", "::0",
+        "5::1j", "5::3j", "5.5::3j", "0:2,5::1j", "0:2,5::3j", "0:3:0,0:", "0:,0:3:0", "0:-1,5::3j",
+        "-0.0:5:1j", "-0.0:5", "-0.0:2,0:1.5", "0:1:2.5j", "0:1:-3j", "0:1:-3j,0:2", "0.3:0.9:7j", "0.3:0.9:7j,0:2",
+        "1:2:0.1,0:1", "0.1:0.2:0.01,0:1", "0:10:3,0:2", "1:0.5:-0.2,0:2",
+        "0:nan,0:2", "0:Infinity,0:2", "0:nan", "0:Infinity", "0:1:nanj,0:2", "0:1:Infinityj", "0:1e300", "0:1e300,0:2",
+        "0:-1e300,0:2", "0:4e18,0:2", "0:1e-300:1e300", "0:1e-300:1e300,0:2", "0:1:Infinity,0:2", "0:1:Infinity",
+        "9007199254740993:9007199254740995", "9007199254740993:9007199254740995,0:2",
+        "9007199254740993:9007199254740995:1.0,0:2", "0:9223372036854775808:4611686018427387904,0:2",
+        "9223372036854775808:9223372036854775810,0:2", "-9223372036854775808:-9223372036854775806,0:1",
+    };
+
+    /// <summary>The key of a <see cref="GridKeyLabels"/> label: the <c>object[]</c> the indexer's params parameter receives.</summary>
+    /// <param name="label">The label: comma-separated slices (each its own string entry), <c>one:</c> for one string holding
+    ///     them all, <c>slice(...)</c> entries for <see cref="Slice"/> objects, <c>none</c> for the empty key.</param>
+    /// <returns>The key entries.</returns>
+    private static object[] MakeGridKey(string label) => label switch
+    {
+        "none" => Array.Empty<object>(),
+        "5" => new object[] { 5 },
+        "slice(0,3),slice(1,5,2)" => new object[] { new Slice(0, 3), new Slice(1, 5, 2) },
+        "slice(1,4)" => new object[] { new Slice(1, 4) },
+        _ when label.StartsWith("one:", StringComparison.Ordinal) => new object[] { label.Substring("one:".Length) },
+        _ => label.Split(',').Cast<object>().ToArray(),
+    };
 
     /// <summary>
     ///     Builds an np.select / np.piecewise argument for an operand (see the label sets above).
@@ -4221,6 +4292,14 @@ static class Snapshot
                 sawArray = true;
                 continue;
             }
+            // np.mgrid / np.ogrid's key (the params object[] of their indexer): the operand, built per call from its label
+            // (MakeGridKey).
+            if (i == 0 && !instance && IsGridIndexer(m))
+            {
+                roles[i] = Role.GridKey;
+                sawArray = true;
+                continue;
+            }
             // The coercion family's host operand: its first parameter when that is not an NDArray (np.array's C# arrays,
             // strs and scalars, np.asanyarray's object, NDArray.Scalar's value, a conversion operator's C# source). It is
             // built from the pool operand (TryMakeHostOperand), and an NDArray parameter after it (like=) is no operand.
@@ -4324,7 +4403,7 @@ static class Snapshot
             yield return $"{signature}\tSKIP unsupported required parameter {TypeName(ps[unsupported].ParameterType)} {ps[unsupported].Name}";
             yield break;
         }
-        var variants = ps.Select((p, i) => roles[i] is Role.Operand or Role.HostOperand or Role.SpacePair or Role.CtorShape or Role.BufferOperand or Role.TextSource or Role.FileSource ? null : Variants(p, roles[i])).ToArray();
+        var variants = ps.Select((p, i) => roles[i] is Role.Operand or Role.HostOperand or Role.SpacePair or Role.CtorShape or Role.BufferOperand or Role.TextSource or Role.FileSource or Role.GridKey ? null : Variants(p, roles[i])).ToArray();
         int operandIndex = Array.IndexOf(roles, Role.Operand);
         // A coercion overload's operand is its host operand, built per call from the pool operand.
         int hostIndex = Array.IndexOf(roles, Role.HostOperand);
@@ -4341,6 +4420,11 @@ static class Snapshot
         bool ctor = operandIndex < 0 && shapeIndex >= 0;
         if (ctor)
             operandIndex = shapeIndex;
+        // np.mgrid / np.ogrid's operand is their key.
+        int keyIndex = Array.IndexOf(roles, Role.GridKey);
+        bool gridKey = operandIndex < 0 && keyIndex >= 0;
+        if (gridKey)
+            operandIndex = keyIndex;
         // np.frombuffer's operand is its buffer.
         int bufferIndex = Array.IndexOf(roles, Role.BufferOperand);
         bool buffer = operandIndex < 0 && bufferIndex >= 0;
@@ -4365,6 +4449,7 @@ static class Snapshot
             Role.HostOperand => 0,
             Role.SpacePair => 0,
             Role.CtorShape => 0,
+            Role.GridKey => 0,
             Role.BufferOperand => 0,
             Role.BufferLength => BufferLengthLabels.Length - 1,
             Role.TextSource or Role.FileSource => 0,
@@ -4443,6 +4528,16 @@ static class Snapshot
             reducedLayouts = grid ? fullLayouts : fullLayouts.Take(5).ToArray();
             pairLayouts = fullLayouts.Take(3).ToArray();
             dtypes = new[] { "shape" };
+            pairDtypes = dtypes;
+        }
+        if (gridKey)
+        {
+            // np.mgrid / np.ogrid take no pool operand: their pool is the keys, one stand-in dtype label ("key"). The key is
+            // their only argument, so only phase A runs; the reduced and small pools are kept for symmetry.
+            fullLayouts = GridKeyLabels;
+            reducedLayouts = fullLayouts;
+            pairLayouts = fullLayouts.Take(3).ToArray();
+            dtypes = new[] { "key" };
             pairDtypes = dtypes;
         }
         if (buffer)
@@ -5347,10 +5442,13 @@ static class Snapshot
         bool spacingCall = operandIndex >= 0 && roles[operandIndex] == Role.SpacePair;
         // A constructor's operand is its shape: a fresh 0-d array stands in for the same MUTATED check.
         bool ctorCall = operandIndex >= 0 && roles[operandIndex] == Role.CtorShape;
+        // np.mgrid / np.ogrid's operand is their key: a fresh 0-d array stands in for the same MUTATED check. Its label holds
+        // colons, so it is never split into "layout:form".
+        bool gridKeyCall = operandIndex >= 0 && roles[operandIndex] == Role.GridKey;
         // A host operand's layout is "layout:form" (RunOverload): the pool operand of the layout, then its C# form.
-        int formAt = layout.IndexOf(':');
+        int formAt = gridKeyCall ? -1 : layout.IndexOf(':');
         string baseLayout = formAt < 0 ? layout : layout.Substring(0, formAt);
-        NDArray operand = spacingCall || ctorCall ? np.array(0.0) : MakeOperand(dt, baseLayout);
+        NDArray operand = spacingCall || ctorCall || gridKeyCall ? np.array(0.0) : MakeOperand(dt, baseLayout);
         // A matrix receiver is np.asmatrix's view of the pool operand (0-d -> (1, 1), 1-D -> (1, N)); a layout it refuses
         // (more than two long axes: "shape too large to be a matrix.") has no matrix to call the member on.
         if (matrix && operand is not null)
@@ -5363,6 +5461,8 @@ static class Snapshot
         // A shape with no value in the parameter's form (a 2-D shape as an int) makes no line at all.
         if (ctorCall && !TryMakeCtorShape(ps[operandIndex], layout, out operandArg))
             return null;
+        if (gridKeyCall)
+            operandArg = MakeGridKey(layout);
         if (operandIndex >= 0 && roles[operandIndex] == Role.HostOperand)
         {
             // The coercion family's C# value of the operand; a form this operand does not have makes no line at all.
@@ -5614,7 +5714,8 @@ static class Snapshot
     /// <exception cref="ArgumentException">A module class the tool does not know: its module object would have to be named
     ///     here first.</exception>
     private static object ModuleReceiver(MethodInfo m) =>
-        m.DeclaringType == typeof(np.AxisConcatenator)
+        m.DeclaringType == typeof(np.AxisConcatenator) || m.DeclaringType == typeof(np.MGridClass)
+        || m.DeclaringType == typeof(np.OGridClass)
             ? IndexerReceiver
             : m.DeclaringType == typeof(EmathModule)
             ? np.emath
@@ -7145,6 +7246,14 @@ static class Snapshot
                 // for NumPy's bare ndarray (one requested axis), GRADN for its tuple, each component in axis order.
                 return (g.IsSingle ? "GRAD1(" : "GRADN(") +
                        string.Join("; ", Enumerable.Range(0, g.Length).Select(k => Render(g[k], outArray))) + ")";
+            case np.MGridResult mg:
+                // np.mgrid's result is NumPy's ndarray (the dense grid, or a single slice's 1-D array): rendered as that
+                // array, so the line reads like NumPy's.
+                return Render(mg.Grid, outArray);
+            case np.OGridResult og:
+                // np.ogrid's result is NumPy's bare ndarray for one slice (its except branch) and its tuple otherwise (the
+                // empty key's empty tuple included).
+                return og.Length == 1 ? Render(og[0], outArray) : Render(og.ToArray(), outArray);
             case np.NDIterator iterator:
                 // Before the IEnumerable case: an iterator is enumerable, and its per-step views rendered one by one would
                 // make lines of kilobytes.
