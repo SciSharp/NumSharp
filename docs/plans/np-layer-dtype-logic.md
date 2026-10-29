@@ -48,10 +48,13 @@ fixed per D4 (`f048ad69`, `4d1a0d02`, `253b8f45`). Batch 9, the computing functi
 (2026-10-29): np.linspace / np.logspace / np.geomspace are `TensorEngine` members in `TensorEngine.CoreFunctionBase.cs`,
 np.vander in `TensorEngine.TwoDimBase.cs`, np.trim_zeros in `TensorEngine.FunctionBase.cs`, and the six divergences a
 replay of their snapshot through NumPy found are fixed per D4. Batch 7, NumPy's Python functions of the array object,
-has its first part done (2026-10-29): np.where's body is `NDArray.Where` in `NDArray.Multiarray.cs` (the engine's
-np.where calls call it), np.real / np.imag's are `NDArray.RealPart` / `ImagPart` in the new `NDArray.TypeCheck.cs`
-with ndarray.imag's setter, ndarray.conjugate's is `NDArray.Conjugate`, and np.extract's and np.asarray_chkfinite's are
-`NDArray.FunctionBase.cs` members. P5 is done (2026-10-29): its six
+has its first two parts done (2026-10-29): np.where's body is `NDArray.Where` in `NDArray.Multiarray.cs` (every engine
+np.where call, the fixed-width text route's included, calls it), np.real / np.imag's are `NDArray.RealPart` / `ImagPart`
+in the new `NDArray.TypeCheck.cs` with ndarray.imag's setter, ndarray.conjugate's is `NDArray.Conjugate`, np.extract's,
+np.asarray_chkfinite's, np.select's and np.piecewise's statements and np.delete's helpers are `NDArray.FunctionBase.cs`
+members, and the divergences a replay of their snapshot through NumPy found are fixed per D4 (np.where's result dtype
+and order, np.select's broadcast and cast texts, np.piecewise's constants, np.delete's error axis, np.broadcast_shapes'
+pair). P5 is done (2026-10-29): its six
 families and, handed over by the coordinator, the lines first assigned to PE (np.argmax's out= pair, np.unravel_index,
 np.packbits / np.unpackbits, np.bincount, and the text lines of np.kron and np.median) are engine members or engine
 partials, and the two divergences found on the way are fixed per D4 (np.argmax / np.argmin check a text operand's
@@ -818,7 +821,9 @@ first, as it did for np.fft.
    (`ShapeBase`); np.real and np.imag (`TypeCheck`); np.asarray_chkfinite; np.mgrid, np.ogrid, np.apply_along_axis and
    np.ravel_multi_index's lines. First part done (`953af9f3`, `d6f814d8`, `e8ee6dab`, `00aa4cff`, `ecf4ad9c`): np.where,
    np.real / np.imag with ndarray.imag's setter and ndarray.conjugate, np.extract and np.asarray_chkfinite (see the
-   state log); np.extract's fast path asks `HasReferences`.
+   state log); np.extract's fast path asks `HasReferences`. Second part done (`3f06e8a4`, `c0ac4ef5`, `582ddced`,
+   `a318249e`): np.select, np.piecewise and np.delete's rest, with the D4 fixes their replay and the first part's found
+   (`4fa16cbf`, `a186234e`, `8f86bd03`, `d3d4a01a`, `3c68f7cd`).
 8. **The indexers** (8 files, 98 lines; `Selection/NDArray.Indexing.*.cs`, NumPy's `mapping.c`; already the array
    object): the `StringDType` routes behind `HasReferences`, the typed fetch / store switches into
    `UnmanagedStorage.Mapping.cs`. The index-kind tests stay.
@@ -1066,6 +1071,77 @@ candidate.
 ---
 
 ## 9. State log
+
+- **2026-10-29, P3: batch 7, second part (np.where's D4, np.select, np.piecewise, np.delete's rest).** Ten commits on
+  `strings` from the parallel session (developed in the scratch worktree on `d8c7d00a`, rebased over batch 5's landing
+  and `0854f1ca`, and landed by fast-forward). R1: 3 text and 37 numeric lines leave (np.select.cs 3 / 10,
+  np.piecewise.cs 0 / 7, np.delete.cs 0 / 20); R2: 1 computation leaves (`NDStringArrays.cs`). A correction to the first
+  part's entry below: its "no divergence from NumPy was found" was written before the replay of its snapshot through
+  NumPy 2.4.2 ran; the replay found np.where's three, fixed here (`4fa16cbf`). The messages cite their commits by the
+  hashes before the rebases: `e2815667` = `569b1850`, `2278724b` = `c0ac4ef5`, `33730826` = `582ddced`, `dec91a2c` =
+  `a318249e`, `e929947b` = `a186234e`.
+  - `4fa16cbf` (D4): np.where(condition, x, y) is NumPy's `PyArray_Where` in its result dtype and its order. The result
+    dtype is `PyArray_ResultType` under NEP 50 (a 0-d array and a NumPy scalar are strong, two weak C# literals give the
+    default dtype: np.where(c, 7, 7) is int64, np.where(c, np.array(2), int8 array) int64, np.where(c, np.float16(1.5),
+    7) float16; NumSharp's legacy rule read every 0-d array as weak), the dtype is resolved before the broadcast
+    (`StringDType` beside a number raises `DTypePromotionError`, not the shape error), and a broadcast failure is
+    NumPy's iterator text (`operands could not be broadcast together with shapes (3,4) (7,) (3,4) `). Five tests that
+    pinned the C# type of two literals take NumPy's answers; `Logic/np.where.NumPyOrder.Test.cs` (6) is new.
+  - `3f06e8a4`: the fixed-width text route of np.where (`NDStringArrays.Where`, batch 4's file, released by the
+    coordinator for this line) calls `NDArray.Where` instead of np.where - the last np.where call P6 pinned in the engine.
+    R2: 1 computation leaves.
+  - `569b1850`: the snapshot tool reaches np.select, np.piecewise (every overload was SKIP), np.delete's boolean mask,
+    np.take_along_axis / np.put_along_axis's indices and values and np.fill_diagonal's val (through the item-selection
+    wiring, gated by function: no other target's case changed).
+  - `c0ac4ef5`, np.delete's rest: the seven helpers np.insert's and np.delete's statements share (`WithSourceOrder`,
+    `PrepareAxisContext`, `ToInt64Scalar`, `ToInt64Vector`, `DuplicateArray`, `SliceAlongAxis`, `PythonSliceIndices`)
+    join them in `NDArray.FunctionBase.cs`; np.diff / np.ediff1d / np.gradient / np.unwrap's engine partials call
+    `NDArray.SliceAlongAxis`. R1: np.delete.cs 0 / 20 leave.
+  - `582ddced`, `a318249e`, the pure moves: np.select's statements are `NDArray.Select` with its six helpers, and
+    np.piecewise's are `NDArray.Piecewise` (one member per C# form of condlist) with `PiecewiseCore` and its ten
+    helpers, appended to `NDArray.FunctionBase.cs`; the facades keep their numpy.matrix rules and null checks. R1:
+    np.select.cs 3 / 10 and np.piecewise.cs 0 / 7 leave.
+  - No slot conversion: the lines that left choose a route by dtype inside the moved bodies (np.select's weak-literal
+    ranks and its text descriptor, np.piecewise's constant coercion), which the home keeps or the D4s below replaced.
+  - D4, from the replay of the select / piecewise / delete snapshot (38,358 cases; 2,775 differed):
+    - `a186234e`: `Shape.BroadcastShape` is NumPy's `_broadcast_shape` (np.broadcast's axis-by-axis scan, which names
+      the pair that disagrees on the leftmost conflicting axis; NumPy's groups of 64 operands; "broadcast dimensions too
+      large." past the 64-bit element count), and np.broadcast_shapes uses it: it scanned operand by operand, so with
+      two conflicting axes it named another pair (np.broadcast_shapes((1,4), (1,5), (2,1), (3,1)) names args 2 and 3).
+      np.broadcast and np.broadcast_arrays still raise the text without the pair (reported).
+    - `8f86bd03`: np.select's three np.broadcast_arrays calls raise that text (718 cases), and a C# number literal
+      reaches np.copyto as the array np.broadcast_arrays makes of the Python scalar (int64 / float64 / complex128, of the
+      choice group's shape): an int beside a uint8 array is "Cannot cast array data from dtype('int64') ..." (it was
+      "Cannot cast scalar from dtype('int32') ...", 45 cases), and a C# byte there is refused as NumPy's Python int is
+      (it was copied in). `NDArray.Select` is `[NDScoped]`.
+    - `d3d4a01a`: np.piecewise stores a constant as NumPy's `y[cond] = func` through the mask setter's own Python-scalar
+      packing: the index is checked first (8 cases), a complex into an integer array is int()'s text (192), into bool /
+      text its truth / str() (168), None is stored (536 cases of `[None, 0]`: NaN into float, int()'s TypeError into
+      int; it was an ArgumentNullException), np.float16(300) into int8 is cast to 44, and the fused path declines a C#
+      array constant (it stored the array's first element). `CoerceScalarConstant` and `CheckFloatFitsInteger` are gone.
+    - `3c68f7cd`: np.delete's out-of-bounds error of several indices names the keep mask's axis 0 (NumPy's
+      `keep[obj,] = False`; 184 cases), and an integer list of one element takes the single-value path, which names the
+      deletion axis.
+  - After the D4s 924 replay cases differ from NumPy, every one in a documented class: np.delete's result object of a
+    mask deletion (NumPy's MapIter view, OWNDATA false and F-ordered or permuted behind a slice, against NumSharp's
+    owning C-ordered copy: the fancy-index layout gap, 856), NumSharp's single complex width (np.select with a Python
+    complex beside float16 / float32: NumPy's complex64, 50), the string ufunc's no-loop text naming a weak C# int int32
+    where NumPy names int64 (np.add inside a piecewise callable, 12; reported), and the complex multiply's NaN choice in
+    the callable `v * v` (6). None of them matched before; 1,851 cases are fixed.
+  - Each move: the snapshot byte-identical under `NUMSHARP_DEBUG_GUARD_PAGES=1` (98,808 cases for np.delete and
+    np.insert, 9,564 for np.select, 9,570 for np.piecewise); the rebind checks found no moved name binding to another
+    `NDArray` member; Core's doc warnings 3,847 -> 3,842 on `d8c7d00a` (3,840 after the rebase; the D4s' docs, and the
+    moves' two unresolved kernel crefs resolve again).
+  - Gates (on the rebased tree): NumSharp.Tests 20,796 / 20,795 passed on net10.0 and net8.0, NumSharp.Tests.Oracle 414
+    on net10.0, and on net8.0 413 with the R1 ratchet failing only because the next family's move sat uncommitted in the
+    working tree during the run (the ratchets rerun on the committed sources pass, 7 / 7); run on the tree rebased over
+    `95f69a70` (`0854f1ca`, landed since, changes only the snapshot tool, and the snapshot of these families is
+    byte-identical through the merged tool).
+  - Left for batch 7: np.pad (`ArrayPad`); np.r_, np.ix_ and np.fill_diagonal (`IndexTricks`); np.indices (`Numeric`);
+    np.diag (`TwoDimBase`, with the diagonal scatter it shares with np.fill_diagonal); np.take_along_axis,
+    np.put_along_axis and np.apply_along_axis (`ShapeBase`, with the two np.apply_along_axis pins of
+    `NDVStringStatistics.Quantile.cs`); the lines of np.mgrid, np.ogrid and np.ravel_multi_index. The snapshot tool
+    reaches np.diag, np.fill_diagonal and the along-axis pair; the others need their roles first.
 
 - **2026-10-29, P3: batch 5 (constructors).** Six commits on `strings`, developed in the scratch worktrees and landed by
   fast-forward (the move rebased over batch 7's first part, which touched none of its files but the R1 allowlist):

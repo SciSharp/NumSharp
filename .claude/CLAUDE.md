@@ -4080,13 +4080,18 @@ output element from the choice whose condition is true, FIRST matching condition
 where every condition is false take `default`. C# shapes: `condlist` is `NDArray[]` (boolean arrays),
 `choicelist` is `object[]` (an `NDArray[]` binds via array covariance; scalar choices need
 `new object[]{…}`), `default` is `object` (`null` ≙ NumPy's `0`). **NEP50 weak scalars, select's own
-rule:** only `int`/`float`/`double`/`Complex` literals are weak (adopt the other operands' dtype) —
+rule:** every C# integer primitive, `float`, `double` and `Complex` literal is weak (adopts the other operands' dtype) —
 `bool`, `char`, `Half`, `decimal`, arrays and every `NDArray` are strong (NumPy's
 `type(x) in (int,float,complex) else asarray(x)`), so a weak-int default that overflows the resolved
 dtype WRAPS (`int8` choice + `1000` default → int8, 1000→−24) rather than raising; the result dtype
-is `result_type(*choices, default)` folded via `NDExprTypeRules.PromoteStrong`. Conditions and choices
-broadcast in two SEPARATE groups; a non-bool condition is `TypeError("invalid entry {i} in condlist:
-should be boolean ndarray")`, length mismatch / empty condlist are `ValueError` (verbatim). Two code
+is `result_type(*choices, default)` folded via `NDExprTypeRules.PromoteStrong`. The copies receive what NumPy's
+`np.broadcast_arrays` makes of a weak literal — `np.asarray` of the Python scalar (int64 / float64 / complex128), of the
+choice group's shape — so a C# `byte` beside a uint8 array is refused as NumPy's Python int is (`Cannot cast array data
+from dtype('int64') to dtype('uint8') according to the rule 'same_kind'`). Conditions and choices
+broadcast in two SEPARATE groups (NumPy's `np.broadcast_arrays`, `Shape.BroadcastShape`: a mismatch names the two
+operands of its group, the two group shapes being arguments 0 and 1 of the last broadcast); a non-bool condition is
+`TypeError("invalid entry {i} in condlist: should be boolean ndarray")`, length mismatch / empty condlist are
+`ValueError` (verbatim). Two code
 paths, both NumPy-exact in VALUE, split by layout: the **contiguous / no-cast / full-size-array-choice**
 case (the one NumPy leaves memory-bound) runs a **fused single-pass IL kernel**
 (`DirectILKernelGenerator.Select.cs`) — a reverse `Vector.ConditionalSelect` chain (seed = default;
@@ -4102,8 +4107,9 @@ copytos each re-read AND re-write the whole 80 MB result; the fused kernel cuts 
 traffic and lifts those cells to **1.6–2.4×** (min 1.60× at int64 n=1 10M with an ARRAY default — the
 irreducible 4-array-traffic memory-bound floor). **Perf (NPY/NS, Release, best-of-rounds):** array
 choices **1K 3.3–5.0× · 100K 8–18× · 10M 1.6–5.8×**; scalar choices (composition) **3.3–3.8×** — no
-measured cell below 1.5×. See `Indexing/np.select.cs`; gates: `Indexing/np.select.Test.cs` (21 — incl.
-the fused SIMD-body/unroll/remainder/offset-slice pins) + the `select` op in the `groupa`
+measured cell below 1.5×. See `Indexing/np.select.cs` (the facade) and `NDArray.Select` in
+`Manipulation/NDArray.FunctionBase.cs` (NumPy's statements); gates: `Indexing/np.select.Test.cs` (21 — incl.
+the fused SIMD-body/unroll/remainder/offset-slice pins), `Indexing/np.select.NumPyOrder.Test.cs` + the `select` op in the `groupa`
 differential-fuzz tier (11 cases, dtype × precedence × broadcast × transposed).
 
 **`np.take` / `np.put` negative indices under `mode='raise'`** now match NumPy's
