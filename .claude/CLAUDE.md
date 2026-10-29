@@ -1636,6 +1636,19 @@ Tested against NumPy 2.x.
 ### Array Creation
 `arange`, `array`, `asanyarray`, `asarray`, `asarray_chkfinite`, `ascontiguousarray`, `asfortranarray`, `asmatrix`, `bmat`, `copy`, `empty`, `empty_like`, `eye`, `frombuffer`, `full`, `full_like`, `geomspace`, `identity`, `linspace`, `logspace`, `matrix`, `meshgrid`, `mgrid`, `ndarray`, `ogrid`, `ones`, `ones_like`, `require`, `tri`, `zeros`, `zeros_like`
 
+**`np.arange` is NumPy's `PyArray_ArangeObj`** (2026-10-29, `8be47c75`; `Backends/Unmanaged/UnmanagedStorage.Ctors.cs`,
+`ctors.c`). The steps:
+- The length is `ceil((stop - start) / step)` in Python's arithmetic on the bounds. The `double` overloads are Python
+  floats; the `long` / `int` overloads are Python ints: exact, with the correctly rounded true division.
+- A quotient that underflows to zero counts one element for +0 and none for -0.
+- A ceiling of exactly `2**63` is NumPy's x86 empty array.
+- `start` and `start + step` are stored through the dtype's `setitem` slot (NumPy's errors: `Python integer 130 out of
+  bounds for int8`), and the rest is filled by its `fill` slot in the dtype's own arithmetic.
+- NumPy's dtype checks run first (a text dtype is NumPy's TypeError), then Python's ZeroDivisionError for a zero step.
+
+The old ramp `(T)(start + i * step)` in double differed on 68 % / 92 % / 91 % of random float64 / float32 / float16 calls.
+Gate: the `arange_full` oracle tier (475 cases, zero excuses) and `Creation/np.arange.NumPyPort.Test.cs`.
+
 **`np.ndarray(shape, dtype=float64, buffer=None, offset=0, strides=None, order='C')`** is NumPy's low-level
 constructor (`ndarray.__new__`, `array_new` in `arrayobject.c`; plan `docs/plans/np-ndarray-parity.md`; probed against
 2.4.2). Without a buffer it is `np.empty`'s allocation (uninitialized; C or F strides; an EMPTY result has all-zero
@@ -3907,6 +3920,35 @@ the most used NumPy names NumSharp lacked (`np.integer` ~203K GitHub files,
 - **Perf (NPY/NS, two pinned P-cores, a loaded host):** issubdtype 38–140×, isdtype 69–658×, isinstance 5.2–8.8×,
   issubclass 11×, `np.dtype(cls)` 52×, `__subclasses__()` 10× (was 1.3× before its cache), typecodes / sctypeDict lookups
   ~8×.
+
+**The DType element slots (2026-10-29; np-layer dtype plan P3, batch 1, `95b7167e`).** `DTypeMeta` carries NumPy's
+per-element questions under NumPy's names, internal until a user-defined DType needs them public. They run once per call
+or per Python value; bulk moves keep their typed kernels.
+- `setitem(descr, value, item, buffer)` / `getitem(descr, item, buffer)` are NEP 42's slots 7 and 8 (`PyArray_Pack`'s last
+  step).
+  - The numeric classes go through `ReductionInitial.PackStore` / `Box`; a non-native descriptor stores and reads the
+    swapped bytes.
+  - `S` / `U` go through the text element codec.
+  - `StringDType` goes through its buffer's allocator. NumSharp keeps that allocator on the buffer (`VStringArraySlice`),
+    not on the descriptor as NumPy does, hence `buffer`; the cell must be one of the buffer's.
+- `copyswapn(descr, dst, dstride, src, sstride, n, swap)` is the legacy ArrFuncs byte-order copy. It swaps each unit:
+  the item, a complex number's halves, a `U` element's code units. `StringDType` refuses it.
+- `fill(descr, buffer, length)` is `PyArray_Arange`'s fill, NumPy's `@NAME@_fill` operation for operation:
+  - C's promotion for the integers;
+  - `HALF_fill` in float32;
+  - complex numbers by parts;
+  - `BOOL_fill`'s TypeError.
+
+  `HasFill` is NumPy's `funcs->fill != NULL` (false for `S`, `U` and `StringDType`).
+- `nonzero(descr, item)` is the truth `np.nonzero` reads:
+  - float16 by its bits, a NaN nonzero, a signed zero not;
+  - decimal by its value;
+  - an NA cell of `StringDType` only for a NaN-like NA object.
+
+The classes without storage (the datetime pair, the abstract Python scalar classes) refuse every slot but `fill`.
+Gate `DTypes/DTypeSlotTests.cs` (16): every class against the path its slot comes from (the flat iterator's store,
+`ndarray.byteswap`, `np.nonzero`, the slices' `SetIndex` / `GetIndex`) and NumPy's bytes. P3's later batches route the
+array object's dtype-name tests to these slots.
 
 ### Selection
 `choose`, `compress`, `extract`, `index_exp`, `indices`, `ix_`, `place`, `put`, `put_along_axis`, `putmask`, `ravel_multi_index`, `s_`, `select`, `take`, `take_along_axis`, `unravel_index`, `where`

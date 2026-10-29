@@ -27,8 +27,10 @@ the twelve operation classes are `TensorEngine` members implemented by `DefaultE
 internal members of `NDArray`), np.diagonal's view left the engine for `NDArray` and `Shape`, and the sort family and
 the max / min keywords are members; numpy.linalg and numpy.fft are the `TensorEngine.Linalg` and `TensorEngine.Fft`
 sub-engines (`LinalgEngine` / `FftEngine`, defaults `DefaultLinalgEngine` / `DefaultFftEngine`; E3 on 2026-10-29), so
-PE is done. P3's design is written ([§7](#p3-the-array-object-and-values-entering-storage-k4-153-lines-in-52-files)),
-its batches open. Progress goes into the [§9 state log](#9-state-log), newest entry first.
+PE is done. P3's design is written ([§7](#p3-the-array-object-and-values-entering-storage-k4-153-lines-in-52-files));
+batch 1, the `DType` element slots, is done (`95b7167e`, 2026-10-29), and the np.arange divergence its gate found is
+fixed per D4: np.arange is NumPy's `PyArray_ArangeObj` through the slots (`8be47c75`). Progress goes into the
+[§9 state log](#9-state-log), newest entry first.
 
 **The engine layout (the owner's decision of 2026-10-28, D1 in [§5](#5-decisions-for-the-owner)).** Every NumPy function
 NumSharp moves that computes values becomes a `TensorEngine` member. Those NumPy writes in Python are declared in
@@ -700,10 +702,12 @@ batch re-reads its lines):
 | not classified | 13 | | read in its batch |
 
 **The slots.** On `DTypeMeta`, NumPy's names; internal until a user-defined DType needs them public.
-- `setitem(DType descr, object value, byte* item)` and `getitem(DType descr, byte* item)`, NEP 42's slots 7 and 8
-  (`PyArrayDTypeMeta_SetItem` / `GetItem`):
-  - the numeric builtins by today's `PyArray_Pack` port, `ReductionInitial.PackStore` and `Box`, which move from
-    `Backends/Default/Math/Reduction/` into `LegacyBuiltinDTypeMeta`;
+- `setitem(DType descr, object value, byte* item, IArraySlice buffer)` and
+  `getitem(DType descr, byte* item, IArraySlice buffer)`, NEP 42's slots 7 and 8 (`PyArrayDTypeMeta_SetItem` /
+  `GetItem`). `buffer` is NumSharp's: a `StringDType` array keeps its string allocator on its buffer
+  (`VStringArraySlice`) where NumPy keeps it on the descriptor; the other classes ignore it.
+  - the numeric builtins by today's `PyArray_Pack` port, `ReductionInitial.PackStore` and `Box` (batch 1 calls them
+    where they are; they move from `Backends/Default/Math/Reduction/` with `Pack`, batch 4);
   - `S` / `U` by `NDStringStorage.WriteElement` and the element reader of `UnmanagedStorage.Strings.cs`;
   - `StringDType` through its allocator (`SetVStringItem`, `NDVStringMove.StoreScalar`).
   `PyArray_Pack` itself (a known scalar, a 0-d array's cast, discovery, then `setitem`) becomes
@@ -712,7 +716,8 @@ batch re-reads its lines):
   `.npy` reader still call: by item size for numbers (by half for complex), per 4-byte unit for `U`, nothing for `S`.
   `StringDType` has none: NumPy refuses a buffer for a dtype that holds references.
 - `fill`, ArrFuncs (`PyArray_Arange` fills through it): the builtins' ramps of np.arange; null for the text classes,
-  which is NumPy's refusal.
+  which is NumPy's refusal. `HasFill` is NumPy's `funcs->fill != NULL`, the test `PyArray_ArangeObj` makes before
+  it computes anything.
 - `nonzero`, ArrFuncs (`StringDType` defines it too): the truth `np.argwhere` and np.trim_zeros read, today
   `NDStringTruth`'s nonzero flavor.
 - `HasReferences` (exists; `VStringDTypeMeta` answers true) with `get_clear_loop` / `get_fill_zero_loop` (exist, null
@@ -755,7 +760,8 @@ first, as it did for np.fft.
    and the implicit conversions from C# arrays into `UnmanagedStorage.Coercion.cs`, with `NDPolySequence.cs`'s port and
    `NDStringArrays`' text collection; discovery through `discover_descr_from_pyobject`, stores through `setitem`.
 5. **Constructors** (6 files, 60 lines): np.empty, np.zeros, np.ones, np.full and their `_like` forms, np.ndarray,
-   np.eye's ones and np.arange (through `fill`) into `UnmanagedStorage.Ctors.cs`.
+   np.eye's ones into `UnmanagedStorage.Ctors.cs`, where np.arange already is (`8be47c75`: NumPy's
+   `PyArray_ArangeObj` through `setitem` and `fill`, the D4 fix batch 1's gate called for).
 6. **Buffers and IO** (12 files, 175 lines): np.frombuffer into `UnmanagedStorage.Buffer.cs` (`copyswapn` for a
    non-native descriptor); np.fromfile, np.fromstring, ndarray.tofile, tobytes, getfield and byteswap; np.loadtxt's
    converters into `IO/TextReading/` (NumPy's `textreading/conversions.c`: a converter per type, the generic one through
@@ -991,6 +997,42 @@ candidate.
 ---
 
 ## 9. State log
+
+- **2026-10-29, P3: batch 1 (the slots) and the np.arange fix it found.** Two commits on `strings`, landed by
+  fast-forward:
+  - `95b7167e`: `DTypeMeta.setitem` / `getitem` (NEP 42's slots 7 and 8) and the ArrFuncs `copyswapn` / `fill` /
+    `nonzero`, internal, implemented by every class with storage from the code each question is answered by today:
+    - the 19 numeric classes: `ReductionInitial.PackStore` / `Box` with the swap of a non-native descriptor, NumPy's
+      `@NAME@_fill` operation for operation (C's promotion, `HALF_fill` in float32, complex by parts, `BOOL_fill`'s
+      TypeError), `@fname@_nonzero` (a float16 by its bits, a swapped copy for a non-native float);
+    - `S` / `U`: the element codec of every text store and read;
+    - `StringDType`: its buffer's allocator, the cell checked to be one of the buffer's, `nonzero` NumPy's (an NA cell
+      is nonzero only for a NaN-like NA object), `copyswapn` refused;
+    - the classes without storage refuse.
+    The signatures gained `IArraySlice buffer` (the `StringDType` allocator lives on its buffer in NumSharp).
+    Gate: `DTypeSlotTests` (16). Every class is held beside the path the slot comes from: the flat iterator's store,
+    the element read, `ndarray.byteswap`, `np.nonzero`, `StringArraySlice` / `VStringArraySlice`. It is also held to
+    NumPy 2.4.2's bytes: the stores and their errors, non-native descriptors, `fill` against np.arange's ramps
+    (integer wraps, the float bits, HALF_fill's tie at 0.2998), and the nonzero indices of the specials.
+  - The gate's np.arange comparison failed for float16. NumSharp's np.arange computed every float ramp as
+    `start + i * step` in double. NumPy stores `start` and `start + step` and fills `start + i * delta` in the
+    dtype's own arithmetic. Over 2,000 random calls per dtype, 68 % of float64, 92 % of float32 and 91 % of
+    float16 results differed. The oracle's 14 arange cases were all `arange(0, 7, 1)`.
+  - `8be47c75` (D4): np.arange is NumPy's `PyArray_ArangeObj`, ported into
+    `Backends/Unmanaged/UnmanagedStorage.Ctors.cs` (`ctors.c`, Appendix D's home):
+    - the length from Python's arithmetic on the bounds (float and Python-int overloads, the underflow and
+      divide-by-inf counts, the 2**63 case NumPy's x86 cast makes empty);
+    - `start` and `start + step` stored through `setitem`, the rest through `fill`; `HasFill` (NumPy's
+      `funcs->fill != NULL`) checked first.
+    Divergences removed with it: the long overloads were exact only below 2**53; out-of-range stores wrapped instead
+    of raising NumPy's OverflowError; a zero step (and any step below 1e-15) raised NumSharp's own ArgumentException
+    instead of Python's ZeroDivisionError; text dtypes had no NumPy text. np.ma.arange's zero-step gap MS21 closed with
+    it: the ma surface tier's two cells returned to the gate.
+    Gate: the oracle tier `arange_full.jsonl` (475 cases, zero excuses; 272 fail on the parent), `np.arange.NumPyPort`
+    (7), the battle tests' zero-step texts. R1 lost `np.arange.cs`'s 18 lines; R2 is unchanged.
+    Cost: np.arange(10) 0.41 -> 0.49 us (the two slot stores; NumPy 0.54); the large ramps unchanged within the host's
+    noise.
+  - Next: batch 2 (item selection).
 
 - **2026-10-29, P3: the design.** Written into P3's section and Appendix E, before any code (the plan's rule):
   - Scope at `1fcb4663`: R1 counts 702 lines (469 numeric, 233 text) in P3's 80 facade files; K4 adds 20 text lines in
