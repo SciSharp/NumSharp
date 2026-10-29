@@ -4,8 +4,8 @@ namespace NumSharp.Backends
 {
     // ---------------------------------------------------------------------------------------------------------------------
     // An array into a C# value: the side of NumPy's convert.c (PyArray_ToList, ndarray.tolist) that NumSharp's explicit
-    // conversion to a C# array runs. The array object's own member (the np-layer dtype plan's D1); the conversion operator
-    // is the facade over it.
+    // conversion to a C# array runs, and PyArray_ToString (ndarray.tobytes). The array object's own members (the np-layer
+    // dtype plan's D1); the conversion operator and NDArray.tobytes are the facades over them.
     // ---------------------------------------------------------------------------------------------------------------------
     public partial class UnmanagedStorage
     {
@@ -106,6 +106,93 @@ namespace NumSharp.Backends
                 }
             }
             return result;
+        }
+
+        /// <summary>
+        ///     NumPy's <c>PyArray_ToString</c> (<c>convert.c</c>), the body of <c>ndarray.tobytes</c>: the array's logical
+        ///     elements as raw bytes in the requested order - its own memory when it already lays them out that way, else a
+        ///     copy in that order (for a dtype whose items hold references, NumPy's ravel route: the copy's cells).
+        /// </summary>
+        /// <param name="a">The array (any layout).</param>
+        /// <param name="order">NumPy's order letter, either case: C, F, A (F for an F-contiguous-and-not-C array) or K
+        ///     (C).</param>
+        /// <returns>A fresh, detached byte array of length <c>size * itemsize</c>.</returns>
+        /// <exception cref="ValueError">An order other than C / F / A / K (<c>order must be one of 'C', 'F', 'A', or 'K' (got
+        ///     'Z')</c>), checked first.</exception>
+        /// <exception cref="OverflowException">The bytes would exceed a byte array's length.</exception>
+        internal static byte[] ToBytes(NDArray a, char order)
+        {
+            // NumPy's array_tobytes converts its order (PyArray_OrderConverter) while it parses its arguments, before
+            // PyArray_ToString looks at the array: an invalid order raises whatever the size.
+            // Resolve the NumPy order char to a physical layout ('C' or 'F').
+            //   C/F/A -> OrderResolver (A picks F only when this view is F-contiguous-and-not-C-contiguous,
+            //            exactly NumPy's PyArray_ISFORTRAN test). Invalid chars raise here.
+            //   K     -> 'C'. NumPy's tobytes routes the (non-reference) numeric dtypes through CopyInto
+            //            into a C-contiguous destination, so tobytes('K') == tobytes('C') for every dtype
+            //            NumSharp supports. This deliberately differs from OrderResolver's 'K' (which keeps
+            //            an F-contiguous source as 'F') because tobytes never preserves F for 'K'.
+            char physical = (order == 'K' || order == 'k')
+                ? 'C'
+                : OrderResolver.Resolve(order, a.Shape);
+
+            if (a.size == 0)
+                return System.Array.Empty<byte>();
+
+            // A dtype whose items hold references (PyDataType_REFCHK, the route NumPy's PyArray_ToString takes for it): a
+            // StringDType array's bytes are 16-byte cells. A buffer that already lays its
+            // elements out in the requested order gives its OWN cells — arena offsets and heap pointers of this buffer —,
+            // any other layout is first RAVELLED (the "has references / needs init" path: PyArray_Ravel copies, duplicating
+            // every string into a new buffer and arena in the requested order) and that copy's cells are returned.
+            if (a.dtype.Meta.HasReferences)
+            {
+                bool own = physical == 'C' ? a.Shape.IsContiguous : a.Shape.IsFContiguous;
+                using var flat = own ? null : Strings.NDVStringMove.Flatten(a, physical);
+                var cellSource = flat ?? a;
+                using var cells = new NDArray(cellSource.Storage.VStringCellView()) { TensorEngine = a.TensorEngine };
+                return cells.tobytes(physical);
+            }
+
+            // Fast path: read the logical bytes straight from this view's buffer when its memory already
+            // lays elements out in the requested order AND its data starts at Storage.Address. The
+            // offset==0 guard matters: simple contiguous slices are re-based (offset folded into Address),
+            // but strided/negative-stride/F-sliced views keep their start in Shape.offset, so Address would
+            // point at the wrong first element (e.g. a reversed [::-1] view, or an F-contiguous T[...,1:]).
+            bool directable = physical == 'C'
+                ? (a.Shape.IsContiguous && a.Shape.offset == 0)
+                : (a.Shape.IsFContiguous && a.Shape.offset == 0);
+
+            // Otherwise materialize a fresh contiguous copy in the target order. copy() drives the layout
+            // resolution + fill through the NDIter copy primitive (handles scalar/(1,)/strided/broadcast/
+            // transposed); copy('F') leaves a buffer whose linear bytes are exactly the column-major readout.
+            NDArray src = directable ? a : a.copy(physical);
+
+            try
+            {
+                unsafe
+                {
+                    var addr = src.Storage.Address;
+                    long len = checked((long)src.size * src.dtypesize);
+
+                    // Allocate uninitialized: every byte is overwritten by the copy below, so the CLR's
+                    // default zero-fill would be pure waste (a redundant 2nd write over the whole buffer).
+                    // This mirrors NumPy's PyBytes_FromStringAndSize(NULL, n) — uninitialized then memcpy'd.
+                    // A byte[] is capped at int.MaxValue length anyway, so the checked (int) cast is the
+                    // real allocatable bound (a >2GB result throws OverflowException, as new byte[len] would).
+                    byte[] bytes = GC.AllocateUninitializedArray<byte>(checked((int)len));
+                    fixed (byte* @out = bytes)
+                        Buffer.MemoryCopy(addr, @out, len, len);
+                    return bytes;
+                }
+            }
+            finally
+            {
+                // The materialized reorder copy is this method's own intermediate — the caller only
+                // ever sees the detached byte[] — so it must return its pooled buffer here rather
+                // than strand it for the finalizer (caught by UndisposedIntermediateTests once the
+                // instance oracle tier began replaying tobytes over non-directable layouts).
+                if (!ReferenceEquals(src, a))
+                    src.Dispose();
+            }
         }
     }
 }

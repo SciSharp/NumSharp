@@ -15,8 +15,6 @@ APIs/np.savetxt.cs	1	1
 APIs/np.vectorize.cs	0	2
 Casting/Implicit/NDArray.Implicit.ValueTypes.cs	4	3
 Casting/NDArray.ToString.cs	0	1
-Casting/NDArray.byteswap.cs	1	1
-Casting/NDArray.tobytes.cs	1	0
 Creation/np.dtype.cs	0	2
 Creation/np.mgrid.cs	0	1
 Creation/np.ogrid.cs	0	1
