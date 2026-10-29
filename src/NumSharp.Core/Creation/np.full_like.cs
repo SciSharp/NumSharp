@@ -41,20 +41,28 @@ namespace NumSharp
         ///     NumPy's finalize error (<c>Can only create a chararray from string
         ///     data.</c>), before anything is filled; or an array fill value that does not broadcast into the result, or
         ///     whose text does not parse into a numeric result.</exception>
+        /// <exception cref="ValueError"><paramref name="order"/> is not one of C, F, A, K in either case (<c>order must be one
+        ///     of 'C', 'F', 'A', or 'K' (got 'Z')</c>), reported before the device, as NumPy's empty_like converts its
+        ///     arguments in order.</exception>
+        /// <exception cref="ArgumentException"><paramref name="device"/> is neither null nor <c>"cpu"</c>.</exception>
         public static NDArray full_like(NDArray a, object fill_value, DType dtype, char order, string device = null)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Wrapped((a, fill_value, dtype, order, device), static s => full_like(s.a, s.fill_value, s.dtype, s.order, s.device));
             // a numpy.char.chararray operand: NumPy's res = empty_like(a, ...) allocates the result as the subclass, so its
-            // dtype meets __array_finalize__ after the device and order checks and BEFORE the fill (NDCharArrayBoundary)
+            // dtype meets __array_finalize__ after the order and device checks and BEFORE the fill (NDCharArrayBoundary)
             if (NDCharArrayBoundary.Sees(a))
             {
+                Shape.NewLikeLayout(a.Shape, order, (long[])a.Shape.dimensions.Clone());   // the order check, before the device
                 ValidateDevice(device);
-                Shape.NewLikeLayout(a.Shape, order, (long[])a.Shape.dimensions.Clone());   // the order check
                 NDCharArrayBoundary.RequireStringResult(dtype ?? a.dtype);
                 return NDCharArrayBoundary.Kept((a, fill_value, dtype, order, device), static s => full_like(s.a, s.fill_value, s.dtype, s.order, s.device));
             }
+            // NumPy's empty_like converts its arguments in order (npy_parse_arguments): the order's letter before the device,
+            // so an unknown order is reported first (np.zeros_like(a, order='Z', device='cuda') raises the order's ValueError,
+            // probed 2.4.2). The layout itself is resolved after the device, as before.
+            OrderResolver.Convert(order);
             ValidateDevice(device);
             return NDArray.FullLike(a, fill_value, dtype, order);
         }
