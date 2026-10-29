@@ -299,21 +299,70 @@ namespace NumSharp
         ///     shape <c>(len(dimensions), *dimensions)</c> whose d-th sub-array holds each position's d-th coordinate.
         /// </summary>
         /// <param name="dimensions">The grid's sizes. An empty array gives NumPy's <c>(0,)</c> result. Never mutated.</param>
-        /// <param name="dtype">The element type, or null for int64 (NumPy's <c>dtype=int</c>, intp).</param>
-        /// <returns>The dense coordinate grid, a new array.</returns>
-        /// <exception cref="ArgumentException">A dimension is negative, or the running product of the sizes overflows
-        ///     <see cref="long"/>.</exception>
-        /// <exception cref="NotSupportedException">The IL fill kernel is unavailable (dynamic code generation disabled).</exception>
+        /// <param name="dtype">The element type, or null for int64 (NumPy's <c>dtype=int</c>, intp). The result carries this
+        ///     descriptor itself: a text dtype's width, a C-type class that shares a storage lane.</param>
+        /// <returns>The dense coordinate grid, a new array that owns its data.</returns>
+        /// <exception cref="ValueError">A dimension is negative (<c>negative dimensions are not allowed</c>) or the grid's
+        ///     byte count overflows (<c>array is too big; `arr.size * arr.dtype.itemsize` is larger than the maximum possible
+        ///     size.</c>): NumPy's <c>empty((N,) + dimensions)</c>, which runs before any arange.</exception>
+        /// <exception cref="TypeError">An arange of the dtype refuses, in axis order and whatever the other sizes (a 0 among
+        ///     them included): a class without NumPy's arange fill - a text dtype, <c>arange() not supported for inputs with
+        ///     DType &lt;class 'numpy.dtypes.StrDType'&gt;.</c>, whatever its length - or bool with a dimension longer than two
+        ///     (<c>arange() is only supported for booleans when the result has at most length 2.</c>).</exception>
+        /// <exception cref="NotSupportedException">The dtype's class has no NumSharp storage yet (datetime64, timedelta64), or
+        ///     the IL fill kernel is unavailable (dynamic code generation disabled).</exception>
+        /// <remarks>
+        ///     NumPy's statements: <c>res = empty((N,) + dimensions, dtype=dtype)</c>, then for every axis
+        ///     <c>res[i] = arange(dim, dtype=dtype).reshape(shape[:i] + (dim,) + shape[i+1:])</c>. A result of the int64 storage
+        ///     lane (int64 and the C-type classes that share it) is filled by the IL kernel in one pass instead: an int64
+        ///     arange never refuses and its values are the kernel's. Every other dtype assigns its own aranges, broadcast
+        ///     along the other axes, so the values are NumPy's arange fill (an int8 grid wraps past 127, a float16 one is
+        ///     each position rounded once).
+        /// </remarks>
         [NDScoped]
-        internal static NDArray Indices(long[] dimensions, DType dtype)
+        internal static unsafe NDArray Indices(long[] dimensions, DType dtype)
         {
-            var typeCode = dtype?.GetTypeCode() ?? NPTypeCode.Int64;
+            DType descr = dtype ?? DType.Int64;
+            int ndim = dimensions.Length;
 
-            // Special case: empty dimensions tuple → numpy returns shape (0,).
-            if (dimensions.Length == 0)
-                return new NDArray(typeCode, new Shape(0), false);
+            // `res = empty((N,) + dimensions, dtype=dtype)`: the allocation's checks run before any arange - a negative
+            // dimension, then a byte count past the address space, NumPy's two ValueErrors in its scan order - and the
+            // result keeps the descriptor (an empty tuple gives the (0,) array of a text dtype too).
+            var resultShape = new long[ndim + 1];
+            resultShape[0] = ndim;
+            for (int d = 0; d < ndim; d++)
+                resultShape[d + 1] = dimensions[d];
+            var res = new NDArray(descr, Shape.Adopt(resultShape), false);
+            if (ndim == 0)
+                return res;
 
-            return BuildDenseIndices(dimensions, typeCode);
+            try
+            {
+                if (descr.Meta.TypeCode == NPTypeCode.Int64)
+                    FillIndicesInt64(res, dimensions);
+                else
+                    for (int i = 0; i < ndim; i++)
+                    {
+                        // `idx = arange(dim, dtype=dtype)`: NumPy's arange refuses a class without a fill function before
+                        // it computes a length, and bool past two elements - so an empty grid still raises, in axis order.
+                        using var idx = UnmanagedStorage.ArangeObj(0, dimensions[i], 1, descr);
+                        var axisShape = new long[ndim];
+                        for (int k = 0; k < ndim; k++)
+                            axisShape[k] = k == i ? dimensions[i] : 1;
+                        // `res[i] = idx.reshape(...)`: the coordinate runs along axis i and broadcasts along the others.
+                        using var line = idx.reshape(Shape.Adopt(axisShape));
+                        using var slab = res[i];
+                        np.copyto(slab, line);
+                    }
+            }
+            catch
+            {
+                // An arange refused: the grid never reaches the caller, as NumPy drops its res.
+                res.Dispose();
+                throw;
+            }
+
+            return res;
         }
 
         /// <summary>
@@ -323,70 +372,58 @@ namespace NumSharp
         /// </summary>
         /// <param name="dimensions">The grid's sizes. An empty array gives an empty tuple. Never mutated.</param>
         /// <param name="dtype">The element type of each array, or null for int64.</param>
-        /// <returns>One array per dimension.</returns>
-        /// <exception cref="ArgumentException">A dimension is negative.</exception>
+        /// <returns>One array per dimension, each a VIEW of its arange (its <c>flags.owndata</c> is False, as NumPy's
+        ///     reshape result is).</returns>
+        /// <exception cref="TypeError">An arange of the dtype refuses, in axis order: a text dtype (no arange fill), whatever
+        ///     the length, or bool with a dimension longer than two.</exception>
+        /// <exception cref="NotSupportedException">The dtype's class has no NumSharp storage yet.</exception>
+        /// <remarks>
+        ///     NumPy's statements: <c>res = ()</c>, then for every axis
+        ///     <c>res = res + (arange(dim, dtype=dtype).reshape(shape[:i] + (dim,) + shape[i+1:]),)</c>. There is no
+        ///     <c>empty</c> to refuse a negative dimension: its arange is empty and the reshape reads the negative entry as
+        ///     the unknown dimension, so that axis is 0 long (the sparse grid of <c>(2, -3)</c> is a <c>(2, 1)</c> and a
+        ///     <c>(1, 0)</c> array).
+        /// </remarks>
         [NDScoped]
         internal static NDArray[] IndicesSparse(long[] dimensions, DType dtype)
         {
-            if (dimensions.Length == 0)
-                return System.Array.Empty<NDArray>();
+            DType descr = dtype ?? DType.Int64;
+            int ndim = dimensions.Length;
+            var res = new NDArray[ndim];
+            for (int i = 0; i < ndim; i++)
+            {
+                // `arange(dim, dtype=dtype)`, then the reshape, which keeps a view of it: the aranges own the buffers.
+                using var idx = UnmanagedStorage.ArangeObj(0, dimensions[i], 1, descr);
+                var axisShape = new long[ndim];
+                for (int k = 0; k < ndim; k++)
+                    axisShape[k] = k == i ? dimensions[i] : 1;
+                // reshape(long[]): a negative entry is the unknown dimension (np.reshape's _fix_unknown_dimension).
+                res[i] = idx.reshape(axisShape);
+            }
 
-            return BuildSparseIndicesAsArray(dimensions, dtype?.GetTypeCode() ?? NPTypeCode.Int64);
+            return res;
         }
 
         /// <summary>
-        ///     Fills the dense <c>(ndim, *dims)</c> coordinate grid. Allocates the buffer as
-        ///     Int64 (the fill kernel's native dtype) and casts to <paramref name="dtype"/> only
-        ///     when it differs, so the common intp request pays no copy.
+        ///     Fills a fresh int64-lane <c>(ndim, *dims)</c> coordinate grid with the IL kernel: each slab's runs written as
+        ///     block stores, no per-element coordinate arithmetic.
         /// </summary>
-        /// <param name="dimensions">Grid sizes — length ≥ 1 (the empty case is handled by the
-        ///     public overload before reaching here). Read-only; never mutated.</param>
-        /// <param name="dtype">Result element type.</param>
-        /// <returns>The dense coordinate grid.</returns>
-        /// <exception cref="ArgumentException">A dimension is negative, or the running product of
-        ///     sizes overflows <see cref="long"/> (the grid can't be represented).</exception>
-        /// <exception cref="NotSupportedException">The IL fill kernel is unavailable (e.g. AOT
-        ///     with dynamic codegen disabled).</exception>
-        private static unsafe NDArray BuildDenseIndices(long[] dimensions, NPTypeCode dtype)
+        /// <param name="res">The fresh C-contiguous grid of the int64 storage lane, of shape <c>(ndim, *dimensions)</c>.</param>
+        /// <param name="dimensions">The grid's sizes: at least one, none negative (the allocation of
+        ///     <paramref name="res"/> checked them). Never mutated.</param>
+        /// <exception cref="NotSupportedException">The IL fill kernel is unavailable (dynamic code generation disabled).</exception>
+        private static unsafe void FillIndicesInt64(NDArray res, long[] dimensions)
         {
             int ndim = dimensions.Length;
-
-            // Compute prod = total elements per slab and validate non-negative dims. The product
-            // is long-native, so a dimension that only fits in 64 bits is honoured rather than
-            // truncated — and its overflow is caught (a wrapped byte/element count reads as a
-            // small, silently-wrong allocation otherwise).
+            // The element count of one slab. It cannot overflow: the allocation of N such slabs of 8 bytes succeeded.
             long prod = 1;
             for (int d = 0; d < ndim; d++)
-            {
-                long dim = dimensions[d];
-                if (dim < 0)
-                    throw new ArgumentException(
-                        $"negative dimensions are not allowed (got dim[{d}] = {dim}).",
-                        nameof(dimensions));
-                long next = unchecked(prod * dim);
-                // A non-zero dim whose multiply doesn't divide back out has wrapped int64.
-                if (dim != 0 && next / dim != prod)
-                    throw new ArgumentException(
-                        "invalid dimensions: array size larger than the maximum possible size.",
-                        nameof(dimensions));
-                prod = next;
-            }
-
-            // Result shape: (ndim, *dimensions).
-            var resultShape = new long[ndim + 1];
-            resultShape[0] = ndim;
-            for (int d = 0; d < ndim; d++) resultShape[d + 1] = dimensions[d];
-
-            // Allocate as Int64 first (the kernel's native dtype). If the caller asked for a
-            // different dtype, astype afterwards — the dense-fill IL kernel only emits long stores.
-            var int64Result = new NDArray(NPTypeCode.Int64, Shape.Adopt(resultShape), false);
-
-            // Fast-exit for shapes with size 0 — the buffer is already zero-allocated and no
-            // slab fill is needed.
+                prod *= dimensions[d];
+            // An empty grid has nothing to write.
             if (prod == 0)
-                return dtype == NPTypeCode.Int64 ? int64Result : int64Result.astype(dtype);
+                return;
 
-            // Compute dimStrides: dimStrides[ndim-1] = 1; dimStrides[d] = dimStrides[d+1] * dims[d+1].
+            // dimStrides[ndim-1] = 1; dimStrides[d] = dimStrides[d+1] * dims[d+1].
             Span<long> dimStrides = stackalloc long[ndim];
             dimStrides[ndim - 1] = 1;
             for (int d = ndim - 2; d >= 0; d--)
@@ -396,53 +433,14 @@ namespace NumSharp
             if (kernel == null)
                 throw new NotSupportedException("np.indices: IL kernel unavailable");
 
-            long* resPtr = (long*)int64Result.Storage.Address;
-            // `dimensions` is already long[], so the kernel's dims pointer pins it directly —
-            // no per-call copy into a scratch span is needed (the int[] path widened once, up front).
+            long* resPtr = (long*)res.Storage.Address;
+            // `dimensions` is already long[], so the kernel's dims pointer pins it directly — no per-call copy into a
+            // scratch span is needed (the int[] path widened once, up front).
             fixed (long* dsPtr = dimStrides)
             fixed (long* dPtr = dimensions)
             {
                 kernel(resPtr, dsPtr, dPtr, ndim, prod);
             }
-
-            return dtype == NPTypeCode.Int64 ? int64Result : int64Result.astype(dtype);
-        }
-
-        /// <summary>
-        ///     Builds the sparse form: one <c>(1, …, 1, dim, 1, …, 1)</c> arange per axis. Each
-        ///     axis is an <c>arange(0, dim)</c> reshaped to broadcast along its own dimension.
-        /// </summary>
-        /// <param name="dimensions">Grid sizes — length ≥ 1 (empty handled by the public overload).
-        ///     Read-only; never mutated.</param>
-        /// <param name="dtype">Result element type for each array.</param>
-        /// <returns>One broadcast-shaped array per dimension.</returns>
-        /// <exception cref="ArgumentException">A dimension is negative.</exception>
-        private static NDArray[] BuildSparseIndicesAsArray(long[] dimensions, NPTypeCode dtype)
-        {
-            int ndim = dimensions.Length;
-            var result = new NDArray[ndim];
-
-            for (int d = 0; d < ndim; d++)
-            {
-                long dim = dimensions[d];
-                if (dim < 0)
-                    throw new ArgumentException(
-                        $"negative dimensions are not allowed (got dim[{d}] = {dim}).",
-                        nameof(dimensions));
-
-                // axis-d array has shape (1, ..., 1, dim, 1, ..., 1) with `dim` along axis d.
-                var axisShape = new long[ndim];
-                for (int k = 0; k < ndim; k++) axisShape[k] = (k == d) ? dim : 1;
-
-                // Build via arange then reshape. arange(0L, dim) picks the long overload, so a
-                // 64-bit dimension is honoured rather than truncated.
-                var arr = np.arange(0L, dim).reshape(Shape.Adopt(axisShape));
-                if (arr.GetTypeCode != dtype)
-                    arr = arr.astype(dtype);
-                result[d] = arr;
-            }
-
-            return result;
         }
     }
 }

@@ -31,8 +31,12 @@ namespace NumSharp
         /// <returns>Single dense array of shape <c>(len(dimensions), *dimensions)</c>; the
         ///     d-th sub-array holds the d-th coordinate of each output position.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="dimensions"/> is null.</exception>
-        /// <exception cref="ArgumentException">A dimension is negative, or the grid size
-        ///     overflows the maximum representable element count.</exception>
+        /// <exception cref="ValueError">A dimension is negative (<c>negative dimensions are not allowed</c>), or the grid's
+        ///     byte count overflows (<c>array is too big; ...</c>): NumPy's allocation of the result, which comes before any
+        ///     arange.</exception>
+        /// <exception cref="TypeError">An arange of <paramref name="dtype"/> refuses, even for an empty grid: a text dtype
+        ///     (<c>arange() not supported for inputs with DType ...</c>), or bool with a dimension longer than two
+        ///     (<c>arange() is only supported for booleans when the result has at most length 2.</c>).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.indices.html</remarks>
         public static NDArray indices(int[] dimensions, DType dtype = null)
         {
@@ -55,8 +59,12 @@ namespace NumSharp
         ///     implicitly. Default (null) is <see cref="long"/> / <see cref="int64"/>.</param>
         /// <returns>Single dense array of shape <c>(len(dimensions), *dimensions)</c>.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="dimensions"/> is null.</exception>
-        /// <exception cref="ArgumentException">A dimension is negative, or the grid size
-        ///     overflows the maximum representable element count.</exception>
+        /// <exception cref="ValueError">A dimension is negative (<c>negative dimensions are not allowed</c>), or the grid's
+        ///     byte count overflows (<c>array is too big; ...</c>): NumPy's allocation of the result, which comes before any
+        ///     arange.</exception>
+        /// <exception cref="TypeError">An arange of <paramref name="dtype"/> refuses, even for an empty grid: a text dtype
+        ///     (<c>arange() not supported for inputs with DType ...</c>), or bool with a dimension longer than two
+        ///     (<c>arange() is only supported for booleans when the result has at most length 2.</c>).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.indices.html</remarks>
         [NDScoped]
         public static NDArray indices(long[] dimensions, DType dtype = null)
@@ -76,8 +84,12 @@ namespace NumSharp
         /// <param name="dtype">Element type of the result — any dtype spelling converts
         ///     implicitly. Default (null) is <see cref="long"/> / <see cref="int64"/>.</param>
         /// <returns>Single dense array of shape <c>(ndim, *dimensions)</c>.</returns>
-        /// <exception cref="ArgumentException">A dimension is negative, or the grid size
-        ///     overflows the maximum representable element count.</exception>
+        /// <exception cref="ValueError">A dimension is negative (<c>negative dimensions are not allowed</c>), or the grid's
+        ///     byte count overflows (<c>array is too big; ...</c>): NumPy's allocation of the result, which comes before any
+        ///     arange.</exception>
+        /// <exception cref="TypeError">An arange of <paramref name="dtype"/> refuses, even for an empty grid: a text dtype
+        ///     (<c>arange() not supported for inputs with DType ...</c>), or bool with a dimension longer than two
+        ///     (<c>arange() is only supported for booleans when the result has at most length 2.</c>).</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.indices.html
         ///     <para>
@@ -107,9 +119,11 @@ namespace NumSharp
         /// <param name="dimensions">Shape of the grid. Empty → an empty tuple.</param>
         /// <param name="dtype">Element type of each array — any dtype spelling converts
         ///     implicitly. Default (null) is <see cref="long"/> / <see cref="int64"/>.</param>
-        /// <returns>One 1-along-axis-d array per dimension.</returns>
+        /// <returns>One 1-along-axis-d array per dimension, each a view of its arange (<c>flags.owndata</c> False, as
+        ///     NumPy's reshape result is); a negative dimension's axis is 0 long.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="dimensions"/> is null.</exception>
-        /// <exception cref="ArgumentException">A dimension is negative.</exception>
+        /// <exception cref="TypeError">An arange of <paramref name="dtype"/> refuses: a text dtype (<c>arange() not supported
+        ///     for inputs with DType ...</c>), whatever the length, or bool with a dimension longer than two.</exception>
         /// <remarks>
         ///     NumPy's <c>sparse=True</c> mode is exposed as a separate method because C# can't
         ///     change return type based on a parameter the way Python's dynamic typing does, so
@@ -129,10 +143,19 @@ namespace NumSharp
         /// <param name="dimensions">Shape of the grid. Empty → an empty tuple.</param>
         /// <param name="dtype">Element type of each array — any dtype spelling converts
         ///     implicitly. Default (null) is <see cref="long"/> / <see cref="int64"/>.</param>
-        /// <returns>One <c>(1, …, 1, dimensions[d], 1, …, 1)</c> array per dimension.</returns>
+        /// <returns>One <c>(1, …, 1, dimensions[d], 1, …, 1)</c> array per dimension, each a view of its arange
+        ///     (<c>flags.owndata</c> False).</returns>
         /// <exception cref="ArgumentNullException"><paramref name="dimensions"/> is null.</exception>
-        /// <exception cref="ArgumentException">A dimension is negative.</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.indices.html</remarks>
+        /// <exception cref="TypeError">An arange of <paramref name="dtype"/> refuses: a text dtype (<c>arange() not supported
+        ///     for inputs with DType ...</c>), whatever the length, or bool with a dimension longer than two.</exception>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.indices.html
+        ///     <para>
+        ///     NumPy's sparse grid allocates nothing but its aranges, so a negative dimension is not refused: its arange is
+        ///     empty and the reshape reads the negative entry as the unknown dimension (<c>(2, -3)</c> gives a <c>(2, 1)</c>
+        ///     and a <c>(1, 0)</c> array), where the dense form raises.
+        ///     </para>
+        /// </remarks>
         [NDScoped]
         public static NDArray[] indices_sparse(long[] dimensions, DType dtype = null)
         {
@@ -149,8 +172,9 @@ namespace NumSharp
         /// <param name="dimensions">Grid shape. A 0-dimensional shape → an empty tuple.</param>
         /// <param name="dtype">Element type of each array — any dtype spelling converts
         ///     implicitly. Default (null) is <see cref="long"/> / <see cref="int64"/>.</param>
-        /// <returns>One array per dimension.</returns>
-        /// <exception cref="ArgumentException">A dimension is negative.</exception>
+        /// <returns>One array per dimension, each a view of its arange; a negative dimension's axis is 0 long.</returns>
+        /// <exception cref="TypeError">An arange of <paramref name="dtype"/> refuses: a text dtype (<c>arange() not supported
+        ///     for inputs with DType ...</c>), whatever the length, or bool with a dimension longer than two.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.indices.html</remarks>
         public static NDArray[] indices_sparse(Shape dimensions, DType dtype = null)
         {
