@@ -768,12 +768,26 @@ namespace NumSharp
         // @formatter:on — enable formatter after this line
 
         /// <summary>
-        ///     Determine common type following standard coercion rules.
+        ///     Determine common type following standard coercion rules — NumPy 1.x's
+        ///     <c>np.find_common_type(array_types, scalar_types)</c>. Kept on purpose, so code written against NumPy 1.x
+        ///     compiles and runs unchanged, although NumPy 2.0 removed it (<c>AttributeError: `np.find_common_type` was
+        ///     removed in the NumPy 2.0 release. Use `numpy.promote_types` or `numpy.result_type` instead. To achieve
+        ///     semantics for the `scalar_types` argument, use `numpy.result_type` and pass the Python values `0`, `0.0`, or
+        ///     `0j`.</c>). New code writes <see cref="promote_types(DType, DType)"/> or <see cref="result_type(object[])"/>.
         /// </summary>
         /// <param name="array_types">A list of dtypes or dtype convertible objects representing arrays. Can be null.</param>
         /// <param name="scalar_types">A list of dtypes or dtype convertible objects representing scalars.Can be null.</param>
         /// <returns>The common data type, which is the maximum of array_types ignoring scalar_types, unless the maximum of scalar_types is of a different kind (dtype.kind). If the kind is not understood, then None is returned.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.result_type.html</remarks>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.result_type.html (the replacement; NumPy 1.x's page:
+        ///     https://numpy.org/doc/1.26/reference/generated/numpy.find_common_type.html)
+        ///     <para>
+        ///     The rule is NumPy 1.x's, not NEP 50's: a scalar type counts only when its KIND is higher than every array
+        ///     type's, and then by its type, never by a value. <c>np.result_type</c> is the NumPy 2 rule, where a C#
+        ///     literal is a weak Python scalar (<c>np.result_type(int8_array, 300)</c> is int8) and a dtype is always
+        ///     strong (<c>np.result_type(np.int8, np.int64)</c> is int64).
+        ///     </para>
+        /// </remarks>
         public static DType find_common_type(NPTypeCode[] array_types, NPTypeCode[] scalar_types)
         {
             return _FindCommonType(array_types ?? Array.Empty<NPTypeCode>(), scalar_types ?? Array.Empty<NPTypeCode>());
@@ -787,7 +801,14 @@ namespace NumSharp
         /// <param name="array_types">A list of dtypes or dtype convertible objects representing arrays. Can be null.</param>
         /// <param name="scalar_types">A list of dtypes or dtype convertible objects representing scalars.Can be null.</param>
         /// <returns>The common data type, which is the maximum of array_types ignoring scalar_types, unless the maximum of scalar_types is of a different kind (dtype.kind). If the kind is not understood, then None is returned.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.result_type.html</remarks>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.result_type.html
+        ///     <para>
+        ///     NumPy 1.x's <c>np.find_common_type</c>, which NumPy 2.0 removed; kept on purpose for code written against
+        ///     NumPy 1.x. See <see cref="find_common_type(NPTypeCode[], NPTypeCode[])"/> for NumPy's removal text, the
+        ///     NumPy 2 replacement and how its rule differs from <c>np.result_type</c>'s.
+        ///     </para>
+        /// </remarks>
         public static DType find_common_type(Type[] array_types)
         {
             return _FindCommonType(array_types?.Select(v => v.GetTypeCode()).ToArray() ?? Array.Empty<NPTypeCode>(), Array.Empty<NPTypeCode>());
@@ -799,7 +820,14 @@ namespace NumSharp
         /// <param name="array_types">A list of dtypes or dtype convertible objects representing arrays. Can be null.</param>
         /// <param name="scalar_types">A list of dtypes or dtype convertible objects representing scalars.Can be null.</param>
         /// <returns>The common data type, which is the maximum of array_types ignoring scalar_types, unless the maximum of scalar_types is of a different kind (dtype.kind). If the kind is not understood, then None is returned.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.result_type.html</remarks>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.result_type.html
+        ///     <para>
+        ///     NumPy 1.x's <c>np.find_common_type</c>, which NumPy 2.0 removed; kept on purpose for code written against
+        ///     NumPy 1.x. See <see cref="find_common_type(NPTypeCode[], NPTypeCode[])"/> for NumPy's removal text, the
+        ///     NumPy 2 replacement and how its rule differs from <c>np.result_type</c>'s.
+        ///     </para>
+        /// </remarks>
         public static DType find_common_type(Type[] array_types, Type[] scalar_types)
         {
             return _FindCommonType(array_types?.Select(v => v.GetTypeCode()).ToArray() ?? Array.Empty<NPTypeCode>(), scalar_types?.Select(v => v.GetTypeCode()).ToArray() ?? Array.Empty<NPTypeCode>());
@@ -811,7 +839,14 @@ namespace NumSharp
         /// <param name="array_types">A list of dtypes or dtype convertible objects representing arrays. Can be null.</param>
         /// <param name="scalar_types">A list of dtypes or dtype convertible objects representing scalars.Can be null.</param>
         /// <returns>The common data type, which is the maximum of array_types ignoring scalar_types, unless the maximum of scalar_types is of a different kind (dtype.kind). If the kind is not understood, then None is returned.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.result_type.html</remarks>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.result_type.html
+        ///     <para>
+        ///     NumPy 1.x's <c>np.find_common_type</c>, which NumPy 2.0 removed; kept on purpose for code written against
+        ///     NumPy 1.x. See <see cref="find_common_type(NPTypeCode[], NPTypeCode[])"/> for NumPy's removal text, the
+        ///     NumPy 2 replacement and how its rule differs from <c>np.result_type</c>'s.
+        ///     </para>
+        /// </remarks>
         public static DType find_common_type(string[] array_types, string[] scalar_types)
         {
             return _FindCommonType(array_types?.Select(v => np.dtype(v).typecode).ToArray() ?? Array.Empty<NPTypeCode>(), scalar_types?.Select(v => np.dtype(v).typecode).ToArray() ?? Array.Empty<NPTypeCode>());
@@ -823,7 +858,14 @@ namespace NumSharp
         /// <param name="array_types">A list of dtypes or dtype convertible objects representing arrays. Can be null.</param>
         /// <param name="scalar_types">A list of dtypes or dtype convertible objects representing scalars.Can be null.</param>
         /// <returns>The common data type, which is the maximum of array_types ignoring scalar_types, unless the maximum of scalar_types is of a different kind (dtype.kind). If the kind is not understood, then None is returned.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.result_type.html</remarks>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.result_type.html
+        ///     <para>
+        ///     NumPy 1.x's <c>np.find_common_type</c>, which NumPy 2.0 removed; kept on purpose for code written against
+        ///     NumPy 1.x. See <see cref="find_common_type(NPTypeCode[], NPTypeCode[])"/> for NumPy's removal text, the
+        ///     NumPy 2 replacement and how its rule differs from <c>np.result_type</c>'s.
+        ///     </para>
+        /// </remarks>
         public static DType find_common_type(Type[] array_types, NPTypeCode[] scalar_types)
         {
             return _FindCommonType(array_types?.Select(v => v.GetTypeCode()).ToArray() ?? Array.Empty<NPTypeCode>(), scalar_types ?? Array.Empty<NPTypeCode>());
@@ -835,7 +877,14 @@ namespace NumSharp
         /// <param name="array_types">A list of dtypes or dtype convertible objects representing arrays. Can be null.</param>
         /// <param name="scalar_types">A list of dtypes or dtype convertible objects representing scalars.Can be null.</param>
         /// <returns>The common data type, which is the maximum of array_types ignoring scalar_types, unless the maximum of scalar_types is of a different kind (dtype.kind). If the kind is not understood, then None is returned.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.result_type.html</remarks>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.result_type.html
+        ///     <para>
+        ///     NumPy 1.x's <c>np.find_common_type</c>, which NumPy 2.0 removed; kept on purpose for code written against
+        ///     NumPy 1.x. See <see cref="find_common_type(NPTypeCode[], NPTypeCode[])"/> for NumPy's removal text, the
+        ///     NumPy 2 replacement and how its rule differs from <c>np.result_type</c>'s.
+        ///     </para>
+        /// </remarks>
         public static DType find_common_type(NPTypeCode[] array_types, Type[] scalar_types)
         {
             return _FindCommonType(array_types ?? Array.Empty<NPTypeCode>(), scalar_types?.Select(v => v.GetTypeCode()).ToArray() ?? Array.Empty<NPTypeCode>());
@@ -847,7 +896,14 @@ namespace NumSharp
         /// </summary>
         /// <param name="array_types">A list of dtype descriptors representing arrays. Can be null.</param>
         /// <returns>The common data type of <paramref name="array_types"/> (no scalar types).</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.result_type.html</remarks>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.result_type.html
+        ///     <para>
+        ///     NumPy 1.x's <c>np.find_common_type</c>, which NumPy 2.0 removed; kept on purpose for code written against
+        ///     NumPy 1.x. See <see cref="find_common_type(NPTypeCode[], NPTypeCode[])"/> for NumPy's removal text, the
+        ///     NumPy 2 replacement and how its rule differs from <c>np.result_type</c>'s.
+        ///     </para>
+        /// </remarks>
         public static DType find_common_type(DType[] array_types)
         {
             return _FindCommonType(array_types?.Select(v => v.GetTypeCode()).ToArray() ?? Array.Empty<NPTypeCode>(), Array.Empty<NPTypeCode>());
@@ -860,7 +916,14 @@ namespace NumSharp
         /// <param name="array_types">A list of dtype descriptors representing arrays. Can be null.</param>
         /// <param name="scalar_types">A list of dtype descriptors representing scalars. Can be null.</param>
         /// <returns>The common data type, which is the maximum of array_types ignoring scalar_types, unless the maximum of scalar_types is of a different kind (dtype.kind). If the kind is not understood, then None is returned.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.result_type.html</remarks>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.result_type.html
+        ///     <para>
+        ///     NumPy 1.x's <c>np.find_common_type</c>, which NumPy 2.0 removed; kept on purpose for code written against
+        ///     NumPy 1.x. See <see cref="find_common_type(NPTypeCode[], NPTypeCode[])"/> for NumPy's removal text, the
+        ///     NumPy 2 replacement and how its rule differs from <c>np.result_type</c>'s.
+        ///     </para>
+        /// </remarks>
         public static DType find_common_type(DType[] array_types, DType[] scalar_types)
         {
             return _FindCommonType(array_types?.Select(v => v.GetTypeCode()).ToArray() ?? Array.Empty<NPTypeCode>(), scalar_types?.Select(v => v.GetTypeCode()).ToArray() ?? Array.Empty<NPTypeCode>());
@@ -1007,8 +1070,20 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Resolves to which type should the output be.
+        ///     Resolves to which type should the output be: the common type of dtype strings that all stand for ARRAY
+        ///     types (<c>np.find_common_type("i4", "f8")</c> is float64).
         /// </summary>
+        /// <param name="involvedTypes">The dtype strings, every one an array type.</param>
+        /// <returns>The common data type of <paramref name="involvedTypes"/>.</returns>
+        /// <exception cref="NotSupportedException">A string that is no NumSharp dtype (NumPy's texts).</exception>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.result_type.html
+        ///     <para>
+        ///     NumPy 1.x's <c>np.find_common_type</c>, which NumPy 2.0 removed; kept on purpose for code written against
+        ///     NumPy 1.x. See <see cref="find_common_type(NPTypeCode[], NPTypeCode[])"/> for NumPy's removal text, the
+        ///     NumPy 2 replacement and how its rule differs from <c>np.result_type</c>'s.
+        ///     </para>
+        /// </remarks>
         [MethodImpl(Optimize)]
         public static DType find_common_type(params string[] involvedTypes)
         {

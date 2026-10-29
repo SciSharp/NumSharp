@@ -39,6 +39,17 @@ namespace NumSharp
         // one dtype currency: every `dtype=` parameter takes a DType, and a C# Type / NPTypeCode / dtype string converts
         // to it implicitly. `Type t = np.float64` still works (implicit DType → Type), as does `typeof(double) == np.float64`.
         public static readonly DType bool_ = typeof(bool);
+
+        /// <summary>
+        ///     NumPy 1.x's <c>np.bool8</c>: the <see cref="bool_"/> descriptor. Kept on purpose, so code written against
+        ///     NumPy 1.x compiles and runs unchanged, although NumPy 1.24 deprecated the name and NumPy 2.0 removed it
+        ///     (<c>np.bool8</c> raises <c>AttributeError: module 'numpy' has no attribute 'bool8'</c>). New code writes
+        ///     <see cref="bool_"/>.
+        /// </summary>
+        /// <remarks>
+        ///     Only the member is kept: the dtype STRING follows NumPy 2.x, so <c>np.dtype("bool8")</c> raises NumPy's
+        ///     <c>Alias 'bool8' was removed in NumPy 2.0. Use a name without a digit at the end.</c>
+        /// </remarks>
         public static readonly DType bool8 = bool_;
         public static readonly DType @bool = bool_;
 
@@ -81,9 +92,33 @@ namespace NumSharp
         public static readonly DType int64 = int_;
         public static readonly DType intp = IntPtr.Size == 8 ? typeof(long) : typeof(int);
         public static readonly DType uintp = IntPtr.Size == 8 ? typeof(ulong) : typeof(uint);
+
+        /// <summary>
+        ///     NumPy 1.x's <c>np.int0</c> (an alias of <c>np.intp</c>): the int64 descriptor, <see cref="intp"/>'s width on a
+        ///     64-bit host. Kept on purpose, so code written against NumPy 1.x compiles and runs unchanged, although NumPy
+        ///     1.24 deprecated the name and NumPy 2.0 removed it (<c>np.int0</c> raises
+        ///     <c>AttributeError: module 'numpy' has no attribute 'int0'</c>). New code writes <see cref="intp"/> or
+        ///     <see cref="int64"/>.
+        /// </summary>
+        /// <remarks>
+        ///     Only the member is kept: the dtype STRING follows NumPy 2.x, so <c>np.dtype("int0")</c> raises NumPy's
+        ///     <c>Alias 'int0' was removed in NumPy 2.0. Use a name without a digit at the end.</c>
+        /// </remarks>
         public static readonly DType int0 = int_;
 
         public static readonly DType uint64 = typeof(ulong);
+
+        /// <summary>
+        ///     NumPy 1.x's <c>np.uint0</c> (an alias of <c>np.uintp</c>): the uint64 descriptor, <see cref="uintp"/>'s width
+        ///     on a 64-bit host. Kept on purpose, so code written against NumPy 1.x compiles and runs unchanged, although
+        ///     NumPy 1.24 deprecated the name and NumPy 2.0 removed it (<c>np.uint0</c> raises
+        ///     <c>AttributeError: module 'numpy' has no attribute 'uint0'</c>). New code writes <see cref="uintp"/> or
+        ///     <see cref="uint64"/>.
+        /// </summary>
+        /// <remarks>
+        ///     Only the member is kept: the dtype STRING follows NumPy 2.x, so <c>np.dtype("uint0")</c> raises NumPy's
+        ///     <c>Alias 'uint0' was removed in NumPy 2.0. Use a name without a digit at the end.</c>
+        /// </remarks>
         public static readonly DType uint0 = uint64;
         public static readonly DType @uint = uintp;  // NumPy 2.x: np.uint == np.uintp (pointer-sized)
 
@@ -93,6 +128,16 @@ namespace NumSharp
         public static readonly DType float32 = typeof(float);
         public static readonly DType single = float32;
 
+        /// <summary>
+        ///     NumPy 1.x's <c>np.float_</c>: the <see cref="float64"/> descriptor. Kept on purpose, so code written against
+        ///     NumPy 1.x compiles and runs unchanged, although NumPy 2.0 removed it (<c>np.float_</c> raises
+        ///     <c>AttributeError: `np.float_` was removed in the NumPy 2.0 release. Use `np.float64` instead.</c>). New code
+        ///     writes <see cref="float64"/>.
+        /// </summary>
+        /// <remarks>
+        ///     Only the member is kept: the dtype STRING follows NumPy 2.x, which has no such name, so
+        ///     <c>np.dtype("float_")</c> is NumPy's <c>data type 'float_' not understood</c>.
+        /// </remarks>
         public static readonly DType float_ = typeof(double);
         public static readonly DType float64 = float_;
         public static readonly DType @double = float_;
@@ -109,6 +154,17 @@ namespace NumSharp
         // ---- Complex ----
         // NumSharp's Complex = System.Numerics.Complex = two 64-bit floats (complex128).
         // There is NO complex64 in NumSharp — any attempt to use it throws.
+
+        /// <summary>
+        ///     NumPy 1.x's <c>np.complex_</c>: the <see cref="complex128"/> descriptor. Kept on purpose, so code written
+        ///     against NumPy 1.x compiles and runs unchanged, although NumPy 2.0 removed it (<c>np.complex_</c> raises
+        ///     <c>AttributeError: `np.complex_` was removed in the NumPy 2.0 release. Use `np.complex128` instead.</c>). New
+        ///     code writes <see cref="complex128"/>.
+        /// </summary>
+        /// <remarks>
+        ///     Only the member is kept: the dtype STRING follows NumPy 2.x, which has no such name, so
+        ///     <c>np.dtype("complex_")</c> is NumPy's <c>data type 'complex_' not understood</c>.
+        /// </remarks>
         public static readonly DType complex_ = typeof(Complex);
         public static readonly DType complex128 = complex_;
         public static readonly DType cdouble = complex_;      // NumPy alias for complex128

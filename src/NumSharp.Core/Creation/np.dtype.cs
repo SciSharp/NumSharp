@@ -302,7 +302,8 @@ namespace NumSharp
         ///     (<c>"i4"</c>, <c>"f8"</c>, <c>"c16"</c>, <c>"b1"</c>), a name (<c>"float64"</c>, <c>"intc"</c>, <c>"longlong"</c>,
         ///     <c>"complex128"</c>), a datetime typestr (<c>"M8[ns]"</c>, <c>"m8"</c>, <c>"datetime64[10ns]"</c>,
         ///     <c>"timedelta64[s/2]"</c>), optionally prefixed with a byte order (<c>"&lt;i4"</c>, <c>"&gt;f8"</c>, <c>"=u2"</c>,
-        ///     <c>"|b1"</c>), or one of NumSharp's PascalCase aliases (<c>"Int32"</c>, <c>"Single"</c>).
+        ///     <c>"|b1"</c>), or one of NumSharp's PascalCase aliases (<c>"Int32"</c>, <c>"Single"</c>). Null is NumPy's
+        ///     <c>None</c>: the default float64 descriptor (<see cref="DefaultTypeDescr"/>).
         /// </param>
         /// <param name="align">
         ///     NumPy's <c>align=</c>: pad a STRUCTURED dtype like a C struct. Every NumSharp dtype is non-structured, where
@@ -324,9 +325,8 @@ namespace NumSharp
         ///     <c>byteorder == '&gt;'</c>, <c>isnative == false</c>) and for every datetime64/timedelta64 descriptor — or a
         ///     fresh copy when <paramref name="copy"/> or <paramref name="metadata"/> asks for one. An explicit host byte
         ///     order is read as native (<c>"&lt;f8"</c> is the <c>float64</c> singleton on a little-endian host), as NumPy's
-        ///     parser reads it.
+        ///     parser reads it. A null string gives the float64 singleton (NumPy's <c>np.dtype(None)</c>).
         /// </returns>
-        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
         /// <exception cref="NotSupportedException">
         ///     A valid NumPy dtype NumSharp does not implement — bytes/str (S, U, a, c), void, object, complex64,
         ///     structured / sub-array / comma-string dtypes — or an invalid string, reported with NumPy's own
@@ -347,10 +347,16 @@ namespace NumSharp
         ///     <c>"|bool"</c>) is "not understood" while it is accepted before a code (<c>"&lt;f8"</c>, <c>"&gt;d"</c>).
         ///     Case matters everywhere (<c>"I4"</c> is not <c>"i4"</c>), whitespace is never stripped. The keywords then
         ///     apply in <c>arraydescr_new</c>'s order: <paramref name="copy"/>, then <paramref name="metadata"/>.
+        ///     <para>
+        ///     Null is NumPy's <c>None</c> in every <c>np.dtype</c> overload: the float64 singleton, before the keywords
+        ///     (<c>copy: true</c> gives a fresh float64, <c>metadata</c> a fresh float64 carrying it). A bare <c>null</c>
+        ///     literal matches the string and <see cref="Type"/> overloads alike (CS0121), so write it typed:
+        ///     <c>np.dtype((string)null)</c>, <c>np.dtype((DType)null)</c>.
+        ///     </para>
         ///     <para>https://numpy.org/doc/stable/reference/arrays.dtypes.html</para>
         /// </remarks>
         public static DType dtype(string dtype, bool align = false, bool copy = false, IReadOnlyDictionary<string, object> metadata = null)
-            => ApplyDescrKeywords(ConvertFromStr(dtype), copy, metadata);
+            => ApplyDescrKeywords(dtype == null ? DefaultTypeDescr : ConvertFromStr(dtype), copy, metadata);
 
         /// <summary>The parse half of <see cref="dtype(string, bool, bool, IReadOnlyDictionary{string, object})"/> — NumPy's <c>_convert_from_str</c>.</summary>
         /// <param name="dtype">The dtype string.</param>
@@ -488,15 +494,14 @@ namespace NumSharp
         }
 
         /// <summary>The descriptor of a C# <see cref="System.Type"/> — <c>np.dtype(typeof(int))</c> (NumPy's <c>np.dtype(np.int32)</c>).</summary>
-        /// <param name="type">The C# element type.</param>
+        /// <param name="type">The C# element type, or null — NumPy's <c>None</c>, the default float64 descriptor (<see cref="DefaultTypeDescr"/>).</param>
         /// <param name="align">NumPy's <c>align=</c>; no effect on a non-structured dtype (see <see cref="dtype(string, bool, bool, IReadOnlyDictionary{string, object})"/>).</param>
         /// <param name="copy">NumPy's <c>copy=</c>: a fresh copy of the class singleton instead of the singleton.</param>
         /// <param name="metadata">NumPy's <c>metadata=</c>: a dictionary to attach (always gives a fresh descriptor); null means "not given".</param>
-        /// <returns>The class's canonical instance, or a fresh copy when <paramref name="copy"/> or <paramref name="metadata"/> asks for one.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="type"/> is null.</exception>
+        /// <returns>The class's canonical instance (float64 for a null type), or a fresh copy when <paramref name="copy"/> or <paramref name="metadata"/> asks for one.</returns>
         /// <exception cref="NotSupportedException"><paramref name="type"/> is not one of NumSharp's element types.</exception>
         public static DType dtype(Type type, bool align = false, bool copy = false, IReadOnlyDictionary<string, object> metadata = null)
-            => ApplyDescrKeywords(DType.From(type ?? throw new ArgumentNullException(nameof(type))), copy, metadata);
+            => ApplyDescrKeywords(type == null ? DefaultTypeDescr : DType.From(type), copy, metadata);
 
         /// <summary>The descriptor of an <see cref="NPTypeCode"/> — NumSharp's storage enum spelling.</summary>
         /// <param name="typecode">The storage code.</param>
@@ -510,14 +515,17 @@ namespace NumSharp
             => ApplyDescrKeywords(DType.From(typecode), copy, metadata);
 
         /// <summary>A descriptor converts to itself — <c>np.dtype(np.dtype('f8'))</c> is the same object, unless a keyword asks for a copy.</summary>
-        /// <param name="dtype">The descriptor.</param>
+        /// <param name="dtype">
+        ///     The descriptor, or null — NumPy's <c>None</c>, the default float64 descriptor (<see cref="DefaultTypeDescr"/>).
+        ///     A null <see cref="Nullable{T}"/> <see cref="NPTypeCode"/> reaches this overload through its implicit conversion
+        ///     and reads the same way.
+        /// </param>
         /// <param name="align">NumPy's <c>align=</c>; no effect on a non-structured dtype.</param>
         /// <param name="copy">NumPy's <c>copy=</c>: a fresh copy when <paramref name="dtype"/> is a class singleton (any other descriptor comes back as itself, as in NumPy).</param>
         /// <param name="metadata">NumPy's <c>metadata=</c>: merged into the descriptor's own metadata without overwriting its keys, in a fresh descriptor; null means "not given".</param>
-        /// <returns><paramref name="dtype"/> itself, or a fresh copy when a keyword asks for one.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
+        /// <returns><paramref name="dtype"/> itself (the float64 singleton for null), or a fresh copy when a keyword asks for one.</returns>
         public static DType dtype(DType dtype, bool align = false, bool copy = false, IReadOnlyDictionary<string, object> metadata = null)
-            => ApplyDescrKeywords(dtype ?? throw new ArgumentNullException(nameof(dtype)), copy, metadata);
+            => ApplyDescrKeywords(dtype ?? DefaultTypeDescr, copy, metadata);
 
         /// <summary>
         ///     The descriptor of a NumPy scalar CLASS — <c>np.dtype(np.float64)</c> where <c>np.float64</c> is the class: a
@@ -525,12 +533,15 @@ namespace NumSharp
         ///     <c>dtype('&lt;M8')</c> singleton for <c>datetime64</c>), and an ABSTRACT class raises NumPy's
         ///     <see cref="TypeError"/>, since it has no dtype.
         /// </summary>
-        /// <param name="sctype">The scalar class (<c>(NDScalarType)np.float64</c>, an element of <c>np.floating.__subclasses__()</c>, <see cref="integer"/>, ...).</param>
+        /// <param name="sctype">
+        ///     The scalar class (<c>(NDScalarType)np.float64</c>, an element of <c>np.floating.__subclasses__()</c>,
+        ///     <see cref="integer"/>, ...), or null — NumPy's <c>None</c>, the default float64 descriptor
+        ///     (<see cref="DefaultTypeDescr"/>).
+        /// </param>
         /// <param name="align">NumPy's <c>align=</c>; no effect on a non-structured dtype.</param>
         /// <param name="copy">NumPy's <c>copy=</c>: a fresh copy of the class singleton instead of the singleton.</param>
         /// <param name="metadata">NumPy's <c>metadata=</c>: a dictionary to attach (always gives a fresh descriptor); null means "not given".</param>
-        /// <returns>The class's canonical descriptor, or a fresh copy when <paramref name="copy"/> or <paramref name="metadata"/> asks for one.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="sctype"/> is null.</exception>
+        /// <returns>The class's canonical descriptor (float64 for null), or a fresh copy when <paramref name="copy"/> or <paramref name="metadata"/> asks for one.</returns>
         /// <exception cref="TypeError">
         ///     <paramref name="sctype"/> is abstract — NumPy's texts, verbatim: <c>Converting 'np.integer' or
         ///     'np.signedinteger' to a dtype is not allowed</c>, <c>Converting `np.inexact` or `np.floating` to a dtype not
@@ -539,7 +550,25 @@ namespace NumSharp
         ///     allowed</c>, <c>Converting `np.generic` to a dtype is not allowed.</c> (also for <c>np.flexible</c>).
         /// </exception>
         public static DType dtype(NDScalarType sctype, bool align = false, bool copy = false, IReadOnlyDictionary<string, object> metadata = null)
-            => ApplyDescrKeywords((sctype ?? throw new ArgumentNullException(nameof(sctype))).ToDescriptor(), copy, metadata);
+            => ApplyDescrKeywords(sctype is null ? DefaultTypeDescr : sctype.ToDescriptor(), copy, metadata);
+
+        /// <summary>
+        ///     NumPy's <c>None</c> as a dtype — the first test of <c>descriptor.c</c>'s <c>_convert_from_any</c>
+        ///     (<c>if (obj == Py_None) return PyArray_DescrFromType(NPY_DEFAULT_TYPE)</c>, <c>NPY_DEFAULT_TYPE</c> being
+        ///     <c>NPY_DOUBLE</c>): the float64 class singleton, so <c>np.dtype(None)</c> is the same object as
+        ///     <c>np.dtype('f8')</c>. NumSharp reads a null argument this way wherever NumPy runs that converter
+        ///     (<c>PyArray_DescrConverter</c>): every <c>np.dtype</c> overload and every <c>np.result_type</c> operand
+        ///     (<c>np.result_type(None, np.int8)</c> is float64, a STRONG operand).
+        /// </summary>
+        /// <remarks>
+        ///     Not everywhere a dtype is read: NumPy's <c>PyArray_DescrConverter2</c> turns None into NO descriptor, which
+        ///     <c>np.promote_types</c> and <c>np.can_cast</c> refuse with their TypeErrors (NumSharp does the same), and a
+        ///     <c>DType dtype = null</c> PARAMETER is "not given", whose default each function decides
+        ///     (<c>np.array</c> infers). Equality cannot read it either: <see cref="DType.Equals(object)"/> answers false
+        ///     for null where NumPy's <c>np.dtype('f8') == None</c> is True, because <c>descr == null</c> is the engine's
+        ///     null test.
+        /// </remarks>
+        internal static DType DefaultTypeDescr => DType.Double;
 
         /// <summary>
         ///     The keyword half of NumPy's <c>arraydescr_new</c> (<c>np.dtype(obj, align, copy, metadata)</c>), applied to the

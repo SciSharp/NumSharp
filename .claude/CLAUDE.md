@@ -2350,6 +2350,14 @@ folded into `'='` by the parser (`np.dtype("<f8")` is the float64 singleton). Bu
 (class + canonical byte order + unit: `M8[ns] != M8[s]`, `M8[1s] == M8[s]`, `>i4 != i4`, an explicit `'<'` equals `'='`
 on a little-endian host; hash = class + canonical byte order so `hash(M8[ns]) == hash(M8[s])` as in NumPy); `Equals(object/string/Type/NPTypeCode)` COERCES like
 `dtype.__eq__` (`d.Equals("garbage")` is false, never an error). `<`/`<=`/`>`/`>=` are NumPy's safe-cast ordering.
+**Null is NumPy's `None` wherever NumPy runs `PyArray_DescrConverter`** (`_convert_from_any`'s first test,
+`PyArray_DescrFromType(NPY_DEFAULT_TYPE)`): every `np.dtype` overload (`np.dtype((DType)null)` IS the float64 singleton;
+`copy: true` / `metadata:` then apply as for any argument) and every `np.result_type` operand (a STRONG float64:
+`np.result_type((DType)null, np.int8)` is float64) — one rule, `np.DefaultTypeDescr`. Not in `np.promote_types` /
+`np.can_cast` (NumPy's `DescrConverter2` refuses None with TypeErrors, ported), not in equality (`descr == null` is the
+engine's null test, so `DType.Double.Equals(null)` is false where NumPy's `np.dtype('f8') == None` is True), and not in a
+`DType dtype = null` PARAMETER (that is "not given"; each function picks its default). A bare `null` literal is CS0121
+between `np.dtype(string)` and `np.dtype(Type)`: write it typed.
 
 **Traps pinned by tests:** (1) NEVER add `==(DType, string)` operators — a `null` literal binds them over
 `==(DType, DType)` and every `descr == null` inside the engine silently answers false (it NRE'd the whole promotion

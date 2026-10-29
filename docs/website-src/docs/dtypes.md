@@ -665,6 +665,7 @@ On `NDArray` itself the key properties are `.dtype` (a `DType`, NumPy's `ndarray
 | `np.dtype("int32").name` | `string` | NumPy's dtype name (`"int32"`, `"datetime64[s]"`) |
 | `np.dtype("int32").byteorder` | `char` | `'='` native, `'\|'` for 1-byte dtypes, `'>'` / `'<'` when given explicitly non-native (`np.dtype(">i4")`) |
 | `DType d = typeof(int);` | `DType` | A C# type, an `NPTypeCode` or a dtype string converts to `DType` implicitly |
+| `np.dtype((DType)null)` | `DType` | NumPy's `np.dtype(None)`: the float64 descriptor, for every `np.dtype` overload and every `np.result_type` operand. Write the null typed: a bare `null` matches the string and `Type` overloads alike |
 | `InfoOf<T>.Size` | `int` | Byte size of CLR type `T` (correct for all 15 types, including Decimal/Char) |
 | `InfoOf<T>.NPTypeCode` | `NPTypeCode` | `NPTypeCode` for CLR type `T` |
 
@@ -679,10 +680,9 @@ On `NDArray` itself the key properties are `.dtype` (a `DType`, NumPy's `ndarray
 
 | Exception | When |
 |-----------|------|
-| `NotSupportedException` | dtype string unrecognized, or NumPy dtype NumSharp doesn't implement (`S`/`U`/`M`/`complex64`/…); access to `np.complex64` / `np.csingle` class-level aliases |
+| `NotSupportedException` | dtype string unrecognized, or NumPy dtype NumSharp doesn't implement (`S`/`U`/`complex64`/…); access to `np.complex64` / `np.csingle` class-level aliases |
 | `TypeError` | Complex → non-complex scalar cast (`(int)complexScalar`, etc.) |
 | `IncorrectShapeException` | NDArray → scalar cast on non-0-d array (matches NumPy 2.x's strict 0-d requirement) |
-| `ArgumentNullException` | `np.dtype(null)` |
 
 ---
 

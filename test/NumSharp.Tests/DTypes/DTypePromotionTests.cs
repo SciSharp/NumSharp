@@ -376,6 +376,37 @@ namespace NumSharp.Tests.DTypes
             new Action(() => np.result_type(Array.Empty<string>())).Should().Throw<ValueError>().WithMessage(Empty);
         }
 
+        /// <summary>
+        ///     <c>np.result_type</c> converts an operand that is neither an array nor a scalar with
+        ///     <c>PyArray_DescrConverter</c>, whose None is the default float64 descriptor — a STRONG operand, so it wins
+        ///     over narrower floats and weak literals alike. Probed against 2.4.2: <c>result_type(None)</c>,
+        ///     <c>(None, 1)</c>, <c>(None, 1.5)</c>, <c>(None, np.float32)</c>, <c>(None, np.float16)</c>,
+        ///     <c>(int8_array, None)</c> and <c>(None, None)</c> are float64; <c>(None, np.complex128)</c> is complex128;
+        ///     <c>(None, 'M8[s]')</c> raises the DTypePromotionError naming Float64DType first.
+        /// </summary>
+        [TestMethod]
+        public void ResultType_NullOperand_IsNumPysNone_StrongFloat64()
+        {
+            np.result_type((DType)null).Should().BeSameAs(DType.Double);
+            np.result_type((DType)null, DType.SByte).Should().BeSameAs(DType.Double);
+            np.result_type((DType)null, DType.Single).Should().BeSameAs(DType.Double);
+            np.result_type((DType)null, DType.Half).Should().BeSameAs(DType.Double);
+            np.result_type((DType)null, DType.Complex).Should().BeSameAs(DType.Complex);
+            np.result_type((DType)null, (DType)null).Should().BeSameAs(DType.Double);
+            np.result_type(new object[] { null, 1 }).Should().BeSameAs(DType.Double, "None is strong, the weak int adds nothing");
+            np.result_type(new object[] { null, 1.5 }).Should().BeSameAs(DType.Double);
+            np.result_type((string)null, "i1").Should().BeSameAs(DType.Double);
+            np.result_type((Type)null, typeof(sbyte)).Should().BeSameAs(DType.Double);
+
+            var a8 = np.array(new sbyte[] { 1, 2 });
+            np.result_type(a8, (NDArray)null).Should().BeSameAs(DType.Double);
+            np.result_type((NDArray)null).Should().BeSameAs(DType.Double);
+            np.result_type(a8, (NDArray)null, a8).Should().BeSameAs(DType.Double);
+
+            new Action(() => np.result_type((DType)null, np.dtype("M8[s]"))).Should().Throw<DTypePromotionError>()
+                .WithMessage("The DType <class 'numpy.dtypes.Float64DType'> could not be promoted by <class 'numpy.dtypes.DateTime64DType'>.*");
+        }
+
         [TestMethod]
         public void CastDescrToDType_AdaptsInstances()
         {

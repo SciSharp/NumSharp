@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Numerics;
 using NumSharp.Backends.Iteration;
 
@@ -469,10 +470,43 @@ namespace NumSharp.Tests.DTypes
             np.dtype(typeof(string)).ToString(true).Should().Be("dtype('<U')", "the vestigial string slot is NumPy's unsized U");
             np.dtype("String").str.Should().Be("<U0");
             np.dtype("String").name.Should().Be("str");
-            Action nullType = () => np.dtype((Type)null);
-            nullType.Should().Throw<ArgumentNullException>();
+            np.dtype((Type)null).Should().BeSameAs(DType.Double, "a null type is NumPy's None");
             Action foreign = () => np.dtype(typeof(DTypeDescriptorTests));
             foreign.Should().Throw<NotSupportedException>();
+        }
+
+        /// <summary>
+        ///     Null is NumPy's <c>None</c> in every <c>np.dtype</c> overload (NumPy 2.4.2: <c>np.dtype(None) is
+        ///     np.dtype('f8')</c>, <c>isbuiltin</c> 1), and the keywords then apply as for any argument:
+        ///     <c>np.dtype(None, copy=True)</c> is a fresh float64 (<c>isbuiltin</c> 0, equal to float64),
+        ///     <c>np.dtype(None, metadata={'a': 1})</c> a fresh float64 carrying it, <c>align=True</c> the singleton.
+        ///     <see cref="NPTypeCode.Empty"/> is NumSharp's "no type" code, not None, and keeps its ArgumentException.
+        /// </summary>
+        [TestMethod]
+        public void Dtype_Null_IsNumPysNone()
+        {
+            np.dtype((string)null).Should().BeSameAs(DType.Double);
+            np.dtype((Type)null).Should().BeSameAs(DType.Double);
+            np.dtype((DType)null).Should().BeSameAs(DType.Double);
+            np.dtype((NDScalarType)null).Should().BeSameAs(DType.Double);
+            np.dtype((NPTypeCode?)null).Should().BeSameAs(DType.Double, "a null NPTypeCode? converts to a null DType");
+            np.dtype((DType)null).isbuiltin.Should().Be(1);
+            np.dtype((DType)null, align: true).Should().BeSameAs(DType.Double);
+
+            var copied = np.dtype((DType)null, copy: true);
+            copied.Should().NotBeSameAs(DType.Double);
+            copied.Equals(DType.Double).Should().BeTrue();
+            copied.isbuiltin.Should().Be(0);
+
+            var tagged = np.dtype((string)null, metadata: new Dictionary<string, object> { ["a"] = 1 });
+            tagged.Should().NotBeSameAs(DType.Double);
+            tagged.Equals(DType.Double).Should().BeTrue();
+            tagged.metadata.Should().ContainKey("a").WhoseValue.Should().Be(1);
+
+            new Action(() => np.dtype(NPTypeCode.Empty)).Should().Throw<ArgumentException>();
+            // Equality stays a null test (the engine's `descr == null`), where NumPy's np.dtype('f8') == None is True.
+            DType.Double.Equals((object)null).Should().BeFalse();
+            (DType.Double == null).Should().BeFalse();
         }
 
         // ---- issubdtype / isdtype over descriptors ----------------------------------------------------------------

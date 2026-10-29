@@ -298,13 +298,16 @@ namespace NumSharp.Tests.Creation
         [TestMethod] public void Invalid_None()       => ExpectThrow("None");
         [TestMethod] public void Invalid_Random()     => ExpectThrow("not_a_dtype");
 
+        /// <summary>
+        ///     A null string is NumPy's <c>None</c>: <c>np.dtype(None) is np.dtype('f8')</c> (NumPy 2.4.2,
+        ///     <c>_convert_from_any</c>'s first test). np.dtype has string / Type / NPTypeCode / DType / NDScalarType
+        ///     overloads, so a bare <c>null</c> literal is ambiguous at compile time; the string spelling is the one this
+        ///     suite exercises.
+        /// </summary>
         [TestMethod]
-        public void NullInput_Throws()
+        public void NullInput_IsNumPysNone_Float64()
         {
-            // np.dtype now has string / Type / NPTypeCode / DType overloads, so a bare `null` literal is ambiguous at
-            // compile time; the string spelling is the one this suite exercises.
-            Action act = () => np.dtype((string)null);
-            act.Should().Throw<ArgumentNullException>();
+            np.dtype((string)null).Should().BeSameAs(DType.Double);
         }
 
         // ---------------------------------------------------------------------
