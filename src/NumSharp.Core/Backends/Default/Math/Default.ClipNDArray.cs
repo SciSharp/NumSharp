@@ -931,7 +931,7 @@ namespace NumSharp.Backends
             }
             // Broadcast to the target shape and convert dtype. On the flat route the bound already has the
             // target dims and is C-contiguous, so this is a plain dtype conversion (astype keeps C order).
-            return np.broadcast_to(bound, targetShape).astype(outType);
+            return NDArray.BroadcastTo(bound, targetShape).astype(outType);
         }
 
         // True when a scalar (0-d) bound is already a value of outType at buffer offset 0,

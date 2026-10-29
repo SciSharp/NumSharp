@@ -140,7 +140,7 @@ namespace NumSharp.Backends.Strings
                 shapes.Add(enc.BroadcastShape);
             if (err is not null)
                 shapes.Add(err.BroadcastShape);
-            var outer = np.broadcast_shapes(shapes.ToArray());
+            var outer = Shape.BroadcastShape(shapes.ToArray());
             // _to_bytes_or_str_array: an empty result is result.astype(np.asarray(np.bytes_(b'')).dtype) — S1 (U1).
             if (outer.size == 0)
                 return new NDArray(encode ? DTypeRegistry.Bytes.Descr(1) : DTypeRegistry.Str.Descr(1), outer.Clean(), true);

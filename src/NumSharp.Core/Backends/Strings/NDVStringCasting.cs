@@ -67,7 +67,7 @@ namespace NumSharp.Backends.Strings
                 throw new ValueError("assignment destination is read-only");
             // np.broadcast_to's validation (its error names the arrays' own shapes), as every NumSharp copy.
             if (!SameDimensions(src.Shape, dst.Shape))
-                np.broadcast_to(src.Shape, dst.Shape);
+                Shape.BroadcastTo(src.Shape, dst.Shape);
             if (dst.Shape.size == 0)
                 return;
 

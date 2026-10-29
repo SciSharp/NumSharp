@@ -56,7 +56,7 @@ namespace NumSharp.Backends.Strings
                 throw new ValueError("assignment destination is read-only");
 
             // np.broadcast_to's validation and stride-0 view, as NDIter.Copy's numeric path (CreateCopyState) uses.
-            var bshape = ShapesMatch(src.Shape, dst.Shape) ? src.Shape : np.broadcast_to(src.Shape, dst.Shape);
+            var bshape = ShapesMatch(src.Shape, dst.Shape) ? src.Shape : Shape.BroadcastTo(src.Shape, dst.Shape);
             if (dst.Shape.size == 0)
                 return;
             // PyArray_AssignArray's shortcut: the same data pointer, dimensions and strides of one buffer (a[...] = a, two views
@@ -77,7 +77,7 @@ namespace NumSharp.Backends.Strings
                         // source's strings, then the copy reads from it.
                         temp = src.Clone();
                         src = temp;
-                        bshape = ShapesMatch(src.Shape, dst.Shape) ? src.Shape : np.broadcast_to(src.Shape, dst.Shape);
+                        bshape = ShapesMatch(src.Shape, dst.Shape) ? src.Shape : Shape.BroadcastTo(src.Shape, dst.Shape);
                     }
                     else if (dst.Shape.NDim == 1)
                     {

@@ -227,7 +227,7 @@ namespace NumSharp.Backends
             // One identity broadcast over the batch and materialized in C order: the copy owns its buffer, the
             // read-only broadcast view and the single identity are released right after.
             using (eye)
-            using (var view = np.broadcast_to(eye, shape))
+            using (var view = NDArray.BroadcastTo(eye, shape))
                 return view.copy();
         }
 

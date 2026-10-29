@@ -109,7 +109,7 @@ namespace NumSharp.Backends
                 ? iterShape
                 : Shape.Adopt((long[])iterShape.dimensions.Clone());
 
-            NDArray broadcastView = SameDims(nd.Shape, iterShape) ? null : np.broadcast_to(nd, ccShape);
+            NDArray broadcastView = SameDims(nd.Shape, iterShape) ? null : NDArray.BroadcastTo(nd, ccShape);
             NDArray readFrom = broadcastView ?? nd;
 
             // A C-contiguous input (including a 0-d scalar and any C-contiguous slice) is already in logical

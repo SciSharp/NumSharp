@@ -1218,7 +1218,7 @@ namespace NumSharp.Backends
                 // np.average contract — needs no broadcast; wForDen is then wRt itself).
                 NDArray wForDen = SameDims(wRt.Shape, prod.Shape)
                     ? wRt
-                    : np.broadcast_to(wRt, prod.Shape).copy();
+                    : NDArray.BroadcastTo(wRt, prod.Shape).copy();
 
                 // np.average's normalize_axis_tuple(axis, a.ndim, argname="axis"): NumPy's AxisError names the argument
                 // ("axis: axis 2 is out of bounds for array of dimension 2").
@@ -1891,7 +1891,7 @@ namespace NumSharp.Backends
                                 if (same)
                                     for (int d = 0; d < ndim; d++)
                                         if (ops[i].Shape.dimensions[d] != inputShape[d]) { same = false; break; }
-                                operands[i] = same ? ops[i] : np.broadcast_to(ops[i], inputShape);
+                                operands[i] = same ? ops[i] : NDArray.BroadcastTo(ops[i], inputShape);
                             }
                             operands[ops.Length] = outAcc;
 

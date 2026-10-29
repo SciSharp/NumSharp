@@ -77,8 +77,8 @@ namespace NumSharp.Backends.Strings
                 if (tab.Lists is not null || (del is not null && del.Lists is not null))
                     throw new NotSupportedException("An object array of lists as a translate argument has no NumSharp form.");
                 var outer = del is null
-                    ? np.broadcast_shapes(a.Shape, tab.BroadcastShape)
-                    : np.broadcast_shapes(a.Shape, tab.BroadcastShape, del.BroadcastShape);
+                    ? Shape.BroadcastShape(a.Shape, tab.BroadcastShape)
+                    : Shape.BroadcastShape(a.Shape, tab.BroadcastShape, del.BroadcastShape);
                 // PyArray_SimpleNewFromDescr: C order whatever a's layout. S / U elements are written whole by every route;
                 // a StringDType result starts with all-zero cells, as every fresh T array does.
                 var result = vstring

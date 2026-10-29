@@ -674,7 +674,7 @@ namespace NumSharp.Backends.Strings
                     throw empty;
             }
             // The lanes read the mask along the reduced axis: a mask that broadcasts is viewed at the input's shape.
-            using var mask = where is null || where.Shape.Equals(a.Shape) ? null : np.broadcast_to(where, a.Shape);
+            using var mask = where is null || where.Shape.Equals(a.Shape) ? null : NDArray.BroadcastTo(where, a.Shape);
             return MaxMin(ufunc == "maximum", a, axis, keepdims, @out, init, mask ?? where);
         }
 
@@ -1230,7 +1230,7 @@ namespace NumSharp.Backends.Strings
                 target = outView.Shape.dimensions[ax] == count ? outView : AxisPrefixView(outView, ax, count);
                 NDArray src = input;
                 if (!SameDims(target, input))
-                    src = broadcastInput = np.broadcast_to(input, new Shape((long[])target.Shape.dimensions.Clone()));
+                    src = broadcastInput = NDArray.BroadcastTo(input, new Shape((long[])target.Shape.dimensions.Clone()));
                 // The iterator's buffered input cast: every shape check passed, so the cells the accumulation reads are cast
                 // to the default StringDType() now (a U input and a StringDType out never share memory).
                 DType inputDescr = a.dtype;

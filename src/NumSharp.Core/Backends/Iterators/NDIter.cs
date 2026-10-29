@@ -820,10 +820,10 @@ namespace NumSharp.Backends.Iteration
                     int elemBytes = _state->SrcElementSizes[i];
 
                     // Fast path (per-call construction cost): when the operand's
-                    // shape already equals the iteration shape, np.broadcast_to is
+                    // shape already equals the iteration shape, Shape.BroadcastTo is
                     // an identity transform — same offset, same strides, no stride-0
                     // insertion. Detect that and copy the operand's own offset/strides
-                    // directly, skipping the broadcast_to call and its Shape allocation.
+                    // directly, skipping the BroadcastTo call and its Shape allocation.
                     // This is the dominant elementwise case (a OP b, both same shape)
                     // and was ~25% of the iterator's setup overhead.
                     bool sameAsIter = arrShape.NDim == _state->NDim;
@@ -849,7 +849,7 @@ namespace NumSharp.Backends.Iteration
                     }
                     else
                     {
-                        var broadcastArr = np.broadcast_to(arrShape, NumSharp.Shape.Adopt(broadcastShape));
+                        var broadcastArr = NumSharp.Shape.BroadcastTo(arrShape, NumSharp.Shape.Adopt(broadcastShape));
                         basePtr = (byte*)arr.Address + (broadcastArr.offset * elemBytes);
 
                         for (int d = 0; d < _state->NDim; d++)
@@ -5279,15 +5279,15 @@ namespace NumSharp.Backends.Iteration
         {
             // Fast path: when src and dst have identical dimensions, no broadcast
             // is needed — the broadcast result is just src.Shape (same dims, same
-            // strides, same offset). Skip np.broadcast_to entirely to avoid the
-            // ValidateBroadcastTo loop and function-dispatch overhead per call.
+            // strides, same offset). Skip Shape.BroadcastTo entirely to avoid its
+            // validation loop and its Shape allocation per call.
             //
             // Strides are intentionally NOT compared: the iterator uses src.strides
             // for reads and dst.strides for writes, regardless of how each side's
             // memory is laid out. As long as the dimensions match position-by-position,
             // no broadcast stretching is required.
             //
-            // Falls through to np.broadcast_to for:
+            // Falls through to Shape.BroadcastTo for:
             //   - Different NDim (e.g. src=(N,), dst=(M,N) requires dim prepend)
             //   - Any axis where src=1 but dst>1 (broadcast stretch → stride 0)
             //   - Any axis where src!=dst (validation throws)
@@ -5295,7 +5295,7 @@ namespace NumSharp.Backends.Iteration
             if (ShapesMatchExactly(src.Shape, dst.Shape))
                 broadcastSrcShape = src.Shape;
             else
-                broadcastSrcShape = np.broadcast_to(src.Shape, dst.Shape);
+                broadcastSrcShape = Shape.BroadcastTo(src.Shape, dst.Shape);
 
             int ndim = checked((int)dst.Shape.NDim);
 

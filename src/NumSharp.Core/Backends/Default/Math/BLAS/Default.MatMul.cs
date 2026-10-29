@@ -99,8 +99,8 @@ namespace NumSharp.Backends
             // Broadcast each operand's stack dims up to the common batch, keeping its matrix dims.
             var lhsFull = Shape.Adopt(batch.Concat(new[] { n, k }).ToArray());
             var rhsFull = Shape.Adopt(batch.Concat(new[] { k, m }).ToArray());
-            var lhsB = np.broadcast_to(lhs, lhsFull);
-            var rhsB = np.broadcast_to(rhs, rhsFull);
+            var lhsB = NDArray.BroadcastTo(lhs, lhsFull);
+            var rhsB = NDArray.BroadcastTo(rhs, rhsFull);
 
             var resultType = np._FindCommonArrayType(lhs.GetTypeCode, rhs.GetTypeCode);
             var resultShape = Shape.Adopt(batch.Concat(new[] { n, m }).ToArray());

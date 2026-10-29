@@ -702,11 +702,11 @@ namespace NumSharp.Backends.Strings
                 {
                     // out_dtype = f"{a.dtype.char}{width.max()}"; shape = np.broadcast_shapes(a.shape, width.shape, fillchar.shape)
                     outDescr = PadDescriptor(a, width, dims, ref w64);
-                    shape = np.broadcast_shapes(a.Shape, Shape.Adopt(dims), fill.Shape);
+                    shape = Shape.BroadcastShape(a.Shape, Shape.Adopt(dims), fill.Shape);
                 }
                 else
                 {
-                    shape = np.broadcast_shapes(a.Shape, Shape.Adopt(dims), fill.Shape);
+                    shape = Shape.BroadcastShape(a.Shape, Shape.Adopt(dims), fill.Shape);
                     outDescr = PadDescriptor(a, width, dims, ref w64);
                 }
                 var @out = NDArray.ForOverwrite(outDescr, Shape.NewLikeLayout(a.Shape, 'K', (long[])shape));

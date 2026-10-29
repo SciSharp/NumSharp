@@ -338,7 +338,7 @@ namespace NumSharp.Backends.Strings
 
             // Element by element: the taken element of a bytes operand is the only one converted.
             using var condInLayout = new NDArray(NPTypeCode.Boolean, Shape.Adopt((long[])layout.dimensions.Clone(), (long[])layout.strides.Clone()), false);
-            using (var cb = np.broadcast_to(cond, Shape.Adopt((long[])dims.Clone())))
+            using (var cb = NDArray.BroadcastTo(cond, Shape.Adopt((long[])dims.Clone())))
                 Iteration.NDIter.Copy(condInLayout.Storage, cb.Storage);
             long first = FirstTakenBad(condInLayout, xBad, yBad);
             if (first >= 0)
@@ -374,7 +374,7 @@ namespace NumSharp.Backends.Strings
             // Each element's largest unit: maximum.reduce over the unit axis (np.amax(units, -1)'s engine member).
             using var max = units.TensorEngine.ReduceAMax(units, -1);
             using var bad = max >= (byte)0x80;
-            using var spread = np.broadcast_to(bad, Shape.Adopt((long[])dims.Clone()));
+            using var spread = NDArray.BroadcastTo(bad, Shape.Adopt((long[])dims.Clone()));
             var laid = new NDArray(NPTypeCode.Boolean, Shape.Adopt((long[])layout.dimensions.Clone(), (long[])layout.strides.Clone()), false);
             Iteration.NDIter.Copy(laid.Storage, spread.Storage);
             return laid;
@@ -445,7 +445,7 @@ namespace NumSharp.Backends.Strings
             long flat = 0;
             for (int d = 0; d < dims.Length; d++)
                 flat = flat * dims[d] + coords[d];
-            using var spread = np.broadcast_to(a, Shape.Adopt((long[])dims.Clone()));
+            using var spread = NDArray.BroadcastTo(a, Shape.Adopt((long[])dims.Clone()));
             var value = (byte[])spread.Storage.GetAtIndex(flat);
             for (int i = 0; i < value.Length; i++)
                 if (value[i] >= 0x80)

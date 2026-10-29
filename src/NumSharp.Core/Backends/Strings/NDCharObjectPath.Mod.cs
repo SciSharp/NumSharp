@@ -173,7 +173,7 @@ namespace NumSharp.Backends.Strings
         {
             if (vals.Lists is not null)
                 throw new NotSupportedException("An object array of lists as np.strings.mod's values has no NumSharp form.");
-            var outer = np.broadcast_shapes(a.Shape, vals.BroadcastShape);
+            var outer = Shape.BroadcastShape(a.Shape, vals.BroadcastShape);
             // _to_bytes_or_str_array: an empty result is result.astype(a.dtype) — a's dtype whole, nothing formatted.
             if (outer.size == 0)
                 return new NDArray(a.dtype, outer.Clean(), true);

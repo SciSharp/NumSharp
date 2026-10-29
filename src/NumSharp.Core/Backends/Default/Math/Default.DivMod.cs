@@ -117,7 +117,7 @@ namespace NumSharp.Backends
         /// </summary>
         private NDArray MaterializeContiguous(NDArray x, Shape shape, NPTypeCode rt)
         {
-            var v = x.Shape.Equals(shape) && !x.Shape.IsBroadcasted ? x : np.broadcast_to(x, shape);
+            var v = x.Shape.Equals(shape) && !x.Shape.IsBroadcasted ? x : NDArray.BroadcastTo(x, shape);
             if (v.GetTypeCode == rt && v.Shape.IsContiguous && v.Shape.offset == 0 && !v.Shape.IsBroadcasted)
                 return v;
             // asarray(order='C') materializes a C-contiguous resultType copy through any layout,

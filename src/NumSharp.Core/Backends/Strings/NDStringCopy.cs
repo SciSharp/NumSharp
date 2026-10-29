@@ -69,7 +69,7 @@ namespace NumSharp.Backends.Strings
             // Validate the broadcast at the STRING level so a mismatch reports the arrays' own shapes, not the unit
             // views' (which carry one extra axis).
             if (!ShapesMatch(src.Shape, dst.Shape))
-                np.broadcast_to(src.Shape, dst.Shape);
+                Shape.BroadcastTo(src.Shape, dst.Shape);
             if (dst.Shape.size == 0)
                 return;
             // Numbers <-> text: NumPy reaches the per-element conversion only now (after the shape checks, with an element
@@ -153,7 +153,7 @@ namespace NumSharp.Backends.Strings
 
             var dstShape = dst.Shape;
             int nd = dstShape.NDim;
-            using var spread = np.broadcast_to(bad, new Shape((long[])dstShape.dimensions.Clone()));
+            using var spread = NDArray.BroadcastTo(bad, new Shape((long[])dstShape.dimensions.Clone()));
             using var hit = where is null ? spread.view() : spread.TensorEngine.LogicalAnd(spread, where);
 
             // NumPy's visiting order: axes by |dst stride| descending (stable: ties keep ascending axis), negative strides

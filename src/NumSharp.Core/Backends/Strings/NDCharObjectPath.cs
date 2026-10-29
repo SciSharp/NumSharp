@@ -1719,7 +1719,7 @@ namespace NumSharp.Backends.Strings
             var shapes = new List<Shape> { a.BroadcastShape, sep?.BroadcastShape ?? Shape.NewScalar() };
             if (maxsplit is not null)
                 shapes.Add(maxsplit.BroadcastShape);
-            var outer = np.broadcast_shapes(shapes.ToArray());
+            var outer = Shape.BroadcastShape(shapes.ToArray());
 
             var ops = new List<NDArray> { a.Array };
             if (sep is not null)
@@ -1964,7 +1964,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="IncorrectShapeException">The arguments do not broadcast (NumPy's multi-iterator text).</exception>
         internal static NDListArray Splitlines(VecArg a, VecArg keepends)
         {
-            var outer = keepends is null ? a.BroadcastShape.Clean() : np.broadcast_shapes(a.BroadcastShape, keepends.BroadcastShape);
+            var outer = keepends is null ? a.BroadcastShape.Clean() : Shape.BroadcastShape(a.BroadcastShape, keepends.BroadcastShape);
             var ops = new List<NDArray> { a.Array };
             if (keepends is not null)
                 ops.Add(keepends.Array);
@@ -2075,7 +2075,7 @@ namespace NumSharp.Backends.Strings
         internal static NDArray Join(VecArg sep, VecArg seq, out NDListArray emptyObject)
         {
             emptyObject = null;
-            var outer = np.broadcast_shapes(sep.BroadcastShape, seq.BroadcastShape);
+            var outer = Shape.BroadcastShape(sep.BroadcastShape, seq.BroadcastShape);
             long size = outer.size;
             bool objectSeq = seq.Objects is not null || seq.Lists is not null;
             if (size == 0)
