@@ -1015,10 +1015,10 @@ namespace NumSharp.Backends
                     NDExprReduceKind.NanMax => NanMax(materialized, reduce.Axis, axisKd),
                     NDExprReduceKind.ArgMax => reduce.Axis is int axMax
                         ? ArgMax(materialized, axMax, reduce.Keepdims)
-                        : NDArray.Scalar((long)ArgMax(materialized)),
+                        : FlatArgIndex(materialized, isMax: true),
                     NDExprReduceKind.ArgMin => reduce.Axis is int axMin
                         ? ArgMin(materialized, axMin, reduce.Keepdims)
-                        : NDArray.Scalar((long)ArgMin(materialized)),
+                        : FlatArgIndex(materialized, isMax: false),
                     _ => throw new NotSupportedException(
                         $"EvaluateDelegatingReduce reached with non-delegating kind {reduce.Kind} — dispatch bug."),
                 };
@@ -1042,6 +1042,26 @@ namespace NumSharp.Backends
             // matching the axis fold path's `np.copyto(@out, reduced)` tail.
             np.copyto(@out, computed);
             return @out;
+        }
+
+        /// <summary>
+        ///     np.argmax / np.argmin's flat form over a materialized child, as <see cref="EvaluateDelegatingReduce"/> returns
+        ///     it: the engine's 0-d index (<see cref="ArgMax(NDArray)"/> / <see cref="ArgMin(NDArray)"/>, the members
+        ///     np.argmax's and np.argmin's <c>long</c> forms read) read as a <c>long</c> and wrapped into a fresh 0-d int64
+        ///     array.
+        /// </summary>
+        /// <param name="materialized">The materialized child.</param>
+        /// <param name="isMax">True for the index of the maximum, false for the minimum's.</param>
+        /// <returns>A fresh 0-d int64 array holding the flat index (the first occurrence, NaN first, as NumPy's).</returns>
+        /// <exception cref="ValueError">An empty child: <c>attempt to get argmax of an empty sequence</c> (argmin likewise),
+        ///     raised by the engine member.</exception>
+        private NDArray FlatArgIndex(NDArray materialized, bool isMax)
+        {
+            // The engine's 0-d index is a temporary of this call, released once its value is read: np.argmax's long form
+            // left it to its caller's scope, and not every route into this host runs under one (the engine's
+            // compiled-program and positional Evaluate overloads open none).
+            using var index = isMax ? ArgMax(materialized) : ArgMin(materialized);
+            return NDArray.Scalar((long)index);
         }
 
         // =====================================================================================
