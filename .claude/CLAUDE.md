@@ -4718,6 +4718,19 @@ step yields a FRESH index array, never a recycled buffer.
   buffered `external_loop` a chunk view HELD past the next step aliases a refilled buffer (hence its
   `[x.copy() for x in it]` idiom).
 
+**A failed iteration is not written back (2026-10-30, np-layer dtype plan D4, `dc807d59`).** `NDIterRef.Dispose` is
+NumPy's `NpyIter_Deallocate`: when one of `NDIterRef`'s drivers threw (`ForEach`, `ForEachRows`, `ExecuteGeneric`,
+`ExecuteReducing`, `BufferedReduce`, `ExecuteBinary` / `ExecuteUnary` / `ExecuteReduction` / `ExecuteComparison` /
+`ExecuteScan` / `ExecuteCopy` and the 2-D block kernels), the held buffers are cleared
+(`NDIterBufferManager.ClearBuffers`, NumPy's `npyiter_clear_buffers`) and the COPY_IF_OVERLAP temporaries discarded;
+the fills completed before the error stay written. The flag is `NDIterState.Failed`, set by the drivers' exception filter
+`catch (Exception) when (MarkFailed()) { throw; }`, which never catches. **A new driver must wrap its loop the same
+way**, or a kernel that throws in the middle of a fill writes the half-filled buffer into the operands (a decimal
+`np.true_divide` with a zero divisor into a float64 `out=` did, and now and then its write-back raised
+`IndexOutOfRangeException` over the `DivideByZeroException`). A loop a caller writes AROUND the iterator (np.nditer's
+element walk, a hand-written `Iternext` loop) is not a failure by this rule: its buffers are written back, as NumPy's
+`with` block writes them back. Gate: `Backends/Iterators/NDIterFailedIterationTests.cs`.
+
 `np.nditer` also fills a gap `NDIterRef` leaves: an ALLOCATE operand with no `op_dtypes` entry throws
 in the engine, while NumPy INFERS the dtype by promoting the operands that have one — so
 `np.nditer([a, null])` allocates `int64` for an `int64` input and `np.nditer([int_a, float_b, null])`

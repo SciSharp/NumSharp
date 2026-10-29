@@ -94,9 +94,11 @@ families and, handed over by the coordinator, the lines first assigned to PE (np
 np.packbits / np.unpackbits, np.bincount, and the text lines of np.kron and np.median) are engine members or engine
 partials, and the two divergences found on the way are fixed per D4 (np.argmax / np.argmin check a text operand's
 `out=` before they compare, `127c3c98`; np.nan_to_num refuses text and complex fills as NumPy's copyto does,
-`d313e41b`). P6's structural part is under way (2026-10-29): the engine's np.copyto, allocation,
-np.broadcast_to / np.broadcast_shapes, buffer-size and one-call view / copy calls are the array object's
-members (R2's structural calls 263 -> 82). Progress goes into the
+`d313e41b`). P6's structural part is under way (2026-10-29 / 30): the engine's np.copyto, allocation,
+np.broadcast_to / np.broadcast_shapes, buffer-size and view / copy calls are the array object's members (R2's
+structural calls 263 -> 47, the indexers' four with batch 8), and the two defects its snapshots found are fixed per D4
+(a failed iteration's buffers are not written back, `dc807d59`; `np.array(IEnumerable<T>, size)` of a shorter
+enumeration raises np.fromiter's error, `f48b5677`). Progress goes into the
 [§9 state log](#9-state-log), newest entry first.
 
 **The engine layout (the owner's decision of 2026-10-28, D1 in [§5](#5-decisions-for-the-owner)).** Every NumPy function
@@ -1110,7 +1112,10 @@ The 255 text lines are P3's K4 files, np.evaluate's two (P2's) and np.fft.RawFft
         object's (§1, decided 2026-10-28) and leave when P3's batch 7 gives them their `NDArray` homes;
         `Backends/Strings/NDStringMethods.cs` (9) holds numpy.strings' own statements, the text API's pass (§8).
   - [ ] The structural calls: 263 at `c4cc72d9`, 82 after families 1 to 5 (2026-10-29, see the state log: the
-        copies, the allocations, the broadcasts, the buffer size, the one-call views and copies).
+        copies, the allocations, the broadcasts, the buffer size, the one-call views and copies), 78 after P3's batch 8
+        took the indexers' four, 47 after family 6 (2026-10-30: np.ascontiguousarray, np.expand_dims, np.flip and
+        np.ravel, whose statements became array-object members). Left: the coercion calls, the promotion helpers, the
+        text API's statements, the write-once policy and the `flatiter` object.
   - [ ] The moves under `Backends/Default/`, beside their classes and into `Shape` partials.
 
 ### P7. The class boundary
@@ -1148,6 +1153,47 @@ candidate.
 ---
 
 ## 9. State log
+
+- **2026-10-30, P6: the structural calls, family 6, and the two defects the family snapshots found (D4).** Three
+  commits on `strings` from the parallel session, developed in the scratch worktree and landed by fast-forward:
+  `dc807d59` first (on `932cef87`), then family 6 and the second fix, rebased onto `b60cce17`. R2's structural calls
+  78 -> 47 (batch 8 took 82 -> 78), 46 -> 30 files; its 9 computations are unchanged.
+  - `dc807d59` (D4; the snapshot class "np.true_divide of a decimal operand with a zero divisor into a float64 `out=`"
+    of the families 1 to 5 entry): `NDIterRef.Dispose` is NumPy's `NpyIter_Deallocate`. When one of the iterator's
+    drivers threw, the held buffers are cleared (`NDIterBufferManager.ClearBuffers`, NumPy's `npyiter_clear_buffers`)
+    and the COPY_IF_OVERLAP temporaries discarded; the fills completed before the error stay written, and a write-back
+    that throws on the success path is a failure too. The flag, `NDIterState.Failed`, is set by the drivers' exception
+    filter `NDIterRef.MarkFailed` (ForEach, ForEachRows, ExecuteGeneric, ExecuteReducing, BufferedReduce,
+    ExecuteBinary, ExecuteUnary, ExecuteReduction, ExecuteComparison, ExecuteScan, ExecuteCopy and the 2-D block
+    kernels). A loop a caller writes around the iterator (np.nditer's element walk) is not a failure: its buffers are
+    written back, as NumPy's `with` block writes them back. Tests `Backends/Iterators/NDIterFailedIterationTests.cs`
+    (4; three fail on the parent). The drivers' try / catch-when costs nothing measurable (six small calls, 350 to
+    3,094 ns, within the runs' spread).
+  - `4baf2671` family 6, 31 calls. np.ascontiguousarray, np.expand_dims, np.flip and np.ravel held statements of their
+    own after their class boundaries, so the statements moved into the array object's homes (Appendix D) and the
+    facades call them: `NDArray.AsContiguousArray(a, dtype)` (`Creation/NDArray.Multiarray.cs`, NumPy's
+    `array_ascontiguousarray`; 14 calls), `NDArray.ExpandDims(a, axis)` (`Manipulation/NDArray.ShapeBase.cs`; 13),
+    `NDArray.FlipAxes(m, axes)` (np.flip's view, moved into `Manipulation/NDArray.FunctionBase.cs`; 1) and
+    `NDArray.Ravel(a, order)` (NumPy's `PyArray_Ravel`, moved from np.ravel, which np.ravel and ndarray.ravel call; its
+    KEEPORDER test is `Shape.IsDenseInSomeAxisOrder`; 3). The snapshot of the 36 functions that reach the sites
+    (572,583 lines) is the parent's but for np.divmod's `where=` results: 92 keys after the rebase, all np.divmod
+    `where=` cases, whose masked-off elements of a fresh result are uninitialized (as in NumPy; 435 keys differ
+    between two runs of the parent).
+  - `f48b5677` (D4; the snapshot class "`np.array<T>(IEnumerable<T>, size)` of a shorter enumerable"): the overload is
+    NumPy's `np.fromiter(data, dtype=T, count=size)`. Fewer items raise NumPy's `ValueError: iterator too short:
+    Expected N but iterator had only M items.` (it returned `size` elements whose tail was heap contents), a longer
+    enumeration is advanced exactly `size` times, an exception of the enumeration propagates, and a failed call frees
+    its buffer at once. A negative size keeps its ValueError, the documented divergence (NumPy's `count=-1` reads every
+    item, which is `np.array(IEnumerable<T>)` here). No caller in the repository: an `[Obsolete]` probe over the test
+    projects, benchmarks, examples and tools found none. Tests `Creation/np.array.SizedEnumerable.Test.cs` (4; two fail
+    on the parent).
+  - The snapshot-noise list of the families 1 to 5 entry loses its two defects; the masked bool -> StringDType store,
+    the 2**32 - 1 text repetition and np.divmod's `where=` results stay (pre-existing, the last as in NumPy).
+  - Gates: NumSharp.Tests (20,904 on net10.0, 20,903 on net8.0) and the oracle gates IndexOracleTests,
+    UndisposedIntermediateTests and Layering (42 on net10.0) pass at `f48b5677`
+    (`TestCategory!=OpenBugs&TestCategory!=HighMemory`).
+  - Next on P6's structural part: the coercion calls (np.array 4, np.asanyarray 3), the promotion helpers, the text
+    API's pins, `np.PrefersWriteOnce` and `np.FlatIterator`.
 
 - **2026-10-30, P3: batch 8 (the indexers) - batch 8 is done.** Eighteen commits on `strings`: the tool commit and the
   thirteen D4 fixes landed first by fast-forward (2026-10-29, rebased onto `780cca88`, tip `932cef87`), then the move,
