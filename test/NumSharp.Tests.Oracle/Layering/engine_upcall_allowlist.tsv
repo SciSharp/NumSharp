@@ -10,10 +10,8 @@ Backends/Default/Indexing/Default.NonZero.cs	0	2
 Backends/Default/Indexing/Default.Trace.cs	0	1	# np.trace's body moved by P1b: np.ascontiguousarray(diag) before the sum until P6 gives the engine its own copy (the out= route's np.copyto went with P1d: ReduceAdd's out operand)
 Backends/Default/LinearAlgebra/GufuncGuard.cs	0	1	# moved from the np layer by P2: Deliver's np.copyto stores a gufunc's answer into out= until P6 gives the engine its own copy
 Backends/Default/LinearAlgebra/LinAlgEmpty.cs	7	25
-Backends/Default/Logic/Default.AllClose.cs	2	0
-Backends/Default/Logic/Default.IsClose.cs	6	0
 Backends/Default/Logic/Default.LogicalReduction.Keywords.cs	0	1	# WriteLogicalToOut moved from np.all by P1b: np.copyto(out, reduced, 'unsafe') stores the bool result into out= until P6 gives the engine its own copy
-Backends/Default/Logic/Default.LogicalReduction.cs	1	2
+Backends/Default/Logic/Default.LogicalReduction.cs	0	2
 Backends/Default/Math/BLAS/Default.Dot.NDMD.cs	0	1
 Backends/Default/Math/BLAS/Default.MatMul.2D2D.cs	0	1
 Backends/Default/Math/BLAS/Default.MatMul.cs	0	5
@@ -25,14 +23,13 @@ Backends/Default/Math/Default.GcdLcm.cs	0	1
 Backends/Default/Math/Default.Ldexp.cs	0	1
 Backends/Default/Math/Default.Modf.cs	0	3
 Backends/Default/Math/Default.Power.StrideZero.cs	0	6
-Backends/Default/Math/Default.Power.cs	5	3
+Backends/Default/Math/Default.Power.cs	0	3
 Backends/Default/Math/Default.Shift.cs	0	1
 Backends/Default/Math/DefaultEngine.BinaryOp.cs	0	2
 Backends/Default/Math/DefaultEngine.BitwiseOp.cs	0	3
-Backends/Default/Math/DefaultEngine.Evaluate.ArgStream.cs	4	0
 Backends/Default/Math/DefaultEngine.Evaluate.MinMaxAxis.cs	0	2
 Backends/Default/Math/DefaultEngine.Evaluate.Stream.cs	0	1
-Backends/Default/Math/DefaultEngine.Evaluate.cs	7	9
+Backends/Default/Math/DefaultEngine.Evaluate.cs	0	9
 Backends/Default/Math/DefaultEngine.ReductionOp.cs	0	1
 Backends/Default/Math/DefaultEngine.UfuncInnerSteps.cs	0	1
 Backends/Default/Math/Reduction/Default.Reduction.Add.Exact.cs	0	3

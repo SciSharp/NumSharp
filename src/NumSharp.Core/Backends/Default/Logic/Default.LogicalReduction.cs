@@ -191,7 +191,7 @@ namespace NumSharp.Backends
                 return null;
             var source = NDExpr.Arr(nd);
             // Taken WITHOUT keepdims: np.evaluate's keepdims form is a reshaped view, where NumPy's reduction owns its result.
-            var result = np.evaluate(reduceAll ? NDExpr.All(source, axis) : NDExpr.Any(source, axis));
+            var result = nd.TensorEngine.Evaluate(reduceAll ? NDExpr.All(source, axis) : NDExpr.Any(source, axis));
             if (keepdims)
                 result.Storage.ExpandDimension(axis);
             return result.AsGeneric<bool>() ?? throw new InvalidOperationException("np.all/np.any expected a Boolean result.");

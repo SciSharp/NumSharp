@@ -22,11 +22,11 @@
         {
             // allclose is all(isclose(...)) in NumPy, so a string operand reports isclose's refusal.
             Strings.NDStringUfuncs.ThrowIfIsClose(a, b);
-            // np.isclose materializes a bool array the size of broadcast(a, b). Once np.all
-            // collapses it to a single bool, the array is dead — release atomically rather
-            // than letting it ride the finalizer queue (mattered in tight comparison loops).
-            using var closeness = np.isclose(a, b, rtol, atol, equal_nan);
-            return np.all(closeness);
+            // IsClose materializes a bool array the size of broadcast(a, b) (np.isclose's facade adds only a PlainFor
+            // region, which IsClose opens itself). Once All collapses it to a single bool, the array is dead — release
+            // atomically rather than letting it ride the finalizer queue (mattered in tight comparison loops).
+            using var closeness = IsClose(a, b, rtol, atol, equal_nan);
+            return All(closeness);
         }
     }
 }

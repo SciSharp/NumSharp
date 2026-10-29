@@ -996,8 +996,9 @@ namespace NumSharp.Backends
             {
                 // Materialize the child once (fresh + contiguous). `using` releases it at the end of this block,
                 // after the delegated reduction has read it; every delegated reduction allocates a FRESH result
-                // (np.ptp is a subtract, np.nanmin/nanmax are reductions, np.argmax/argmin allocate their index
-                // array), so `computed` never aliases `materialized`.
+                // (Ptp is a subtract, NanMin/NanMax are reductions, ArgMax/ArgMin allocate their index array), so
+                // `computed` never aliases `materialized`. Each is the engine member np.ptp / np.nanmin / np.nanmax /
+                // np.argmax / np.argmin dispatch to.
                 using var materialized = EvaluateCore(program.ChildElementwiseProgram, inputs, null);
                 childNdim = materialized.ndim;
 
@@ -1009,15 +1010,15 @@ namespace NumSharp.Backends
                 bool axisKd = reduce.Axis is int && reduce.Keepdims;
                 computed = reduce.Kind switch
                 {
-                    NDExprReduceKind.Ptp    => np.ptp(materialized, reduce.Axis, keepdims: axisKd),
-                    NDExprReduceKind.NanMin => np.nanmin(materialized, reduce.Axis, keepdims: axisKd),
-                    NDExprReduceKind.NanMax => np.nanmax(materialized, reduce.Axis, keepdims: axisKd),
+                    NDExprReduceKind.Ptp    => Ptp(materialized, reduce.Axis, null, axisKd),
+                    NDExprReduceKind.NanMin => NanMin(materialized, reduce.Axis, axisKd),
+                    NDExprReduceKind.NanMax => NanMax(materialized, reduce.Axis, axisKd),
                     NDExprReduceKind.ArgMax => reduce.Axis is int axMax
-                        ? np.argmax(materialized, axMax, reduce.Keepdims)
-                        : NDArray.Scalar(np.argmax(materialized)),
+                        ? ArgMax(materialized, axMax, reduce.Keepdims)
+                        : NDArray.Scalar((long)ArgMax(materialized)),
                     NDExprReduceKind.ArgMin => reduce.Axis is int axMin
-                        ? np.argmin(materialized, axMin, reduce.Keepdims)
-                        : NDArray.Scalar(np.argmin(materialized)),
+                        ? ArgMin(materialized, axMin, reduce.Keepdims)
+                        : NDArray.Scalar((long)ArgMin(materialized)),
                     _ => throw new NotSupportedException(
                         $"EvaluateDelegatingReduce reached with non-delegating kind {reduce.Kind} — dispatch bug."),
                 };

@@ -51,7 +51,7 @@ namespace NumSharp.Backends
         [NDScoped]
         public override NDArray<bool> IsClose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8, bool equal_nan = false)
         {
-            using var plain = NDMatrixBoundary.PlainFor(a, b);   // an engine method computes plain: np.abs / np.isfinite below must not apply its matrix rule
+            using var plain = NDMatrixBoundary.PlainFor(a, b);   // an engine method computes plain: no matrix rule may apply inside the operators and engine members below
             // NumPy promotes y with a weak Python float first (text refuses), then a string x meets subtract with no loop.
             Strings.NDStringUfuncs.ThrowIfIsClose(a, b);
             // NumPy implementation (from numpy/_core/numeric.py):
@@ -83,17 +83,17 @@ namespace NumSharp.Backends
 
             // Vectorized computation using existing np operations
             var xMinusY = x - y;
-            var diff = np.abs(xMinusY);            // |a - b|
-            var absY = np.abs(y);
+            var diff = Abs(xMinusY);               // |a - b|
+            var absY = Abs(y);
             var rtolAbsY = rtol * absY;
             var tolerance = atol + rtolAbsY;       // atol + rtol * |b|
 
             // Core formula: |a - b| <= tolerance AND diff is finite AND y is finite, OR exact equality
             // Note: We explicitly check diffFinite because NumSharp's <= operator has a bug where
             // NaN <= value returns True instead of False (IEEE 754 requires False for all NaN comparisons)
-            var diffFinite = np.isfinite(diff);      // diff must be finite for tolerance check
+            var diffFinite = IsFinite(diff);         // diff must be finite for tolerance check
             var withinTolerance = diff <= tolerance; // |a - b| <= (atol + rtol * |b|)
-            var yFinite = np.isfinite(y);            // Only apply tolerance to finite values
+            var yFinite = IsFinite(y);               // Only apply tolerance to finite values
             var exactEqual = x == y;                 // Handles infinities (inf == inf is true)
 
             // Combine: (within tolerance & diff finite & y finite) | exact equality
@@ -111,8 +111,8 @@ namespace NumSharp.Backends
 
             // Handle NaN comparison if requested: result | (isnan(x) & isnan(y))
             var toleranceClose = toleranceMet | exactEqual;
-            var nanX = np.isnan(x);
-            var nanY = np.isnan(y);
+            var nanX = IsNan(x);
+            var nanY = IsNan(y);
             var bothNan = nanX & nanY;
             var close2 = toleranceClose | bothNan;
             return close2.MakeGeneric<bool>();

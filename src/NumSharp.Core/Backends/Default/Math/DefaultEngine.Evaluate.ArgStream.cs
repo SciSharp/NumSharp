@@ -72,7 +72,7 @@ namespace NumSharp.Backends
             if (child.Bound is InputNode && ops.Length == 1 && ops[0].typecode == child.ResultType)
             {
                 var leaf = ops[0];
-                using var plain = NDMatrixBoundary.PlainFor(leaf);   // np.evaluate computes plain: no matrix rule in np.argmax / np.argmin
+                using var plain = NDMatrixBoundary.PlainFor(leaf);   // np.evaluate computes plain: no matrix rule may apply inside ArgMax / ArgMin
                 int lnd = leaf.ndim;
                 if (leaf.size == 0)
                     return null;   // the materialize route raises NumPy's empty-sequence error
@@ -83,12 +83,12 @@ namespace NumSharp.Backends
                         return null;   // the materialize route raises NumPy's AxisError
                     childNdim = lnd;
                     NDExpr.StreamingReductions++;
-                    return isMax ? np.argmax(leaf, lax, reduce.Keepdims) : np.argmin(leaf, lax, reduce.Keepdims);
+                    return isMax ? ArgMax(leaf, lax, reduce.Keepdims) : ArgMin(leaf, lax, reduce.Keepdims);
                 }
 
                 childNdim = lnd;
                 NDExpr.StreamingReductions++;
-                return NDArray.Scalar(isMax ? np.argmax(leaf) : np.argmin(leaf));
+                return NDArray.Scalar(isMax ? (long)ArgMax(leaf) : (long)ArgMin(leaf));
             }
 
             // A computed child streams over all-C-contiguous operands only: there, flat memory index k IS logical C

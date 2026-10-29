@@ -212,15 +212,15 @@ namespace NumSharp.Backends
                 double v = ReadScalarAsDouble(rhs);
                 if (v == 0.5)
                 {
-                    // np.sqrt promotes int -> float64 the same way as power would,
+                    // Sqrt promotes int -> float64 the same way as power would,
                     // and preserves float dtypes (f32 -> f32, f64 -> f64).
-                    return np.sqrt(lhs);
+                    return Sqrt(lhs);
                 }
                 if (v == -1.0 && lhsTc.IsFloatingPoint())
                 {
-                    // np.reciprocal preserves float dtype. For integer base we'd need to
+                    // Reciprocal preserves float dtype. For integer base we'd need to
                     // promote, which the general path handles — let it through.
-                    return np.reciprocal(lhs);
+                    return Reciprocal(lhs);
                 }
             }
 
@@ -321,9 +321,9 @@ namespace NumSharp.Backends
                 return false;
             try
             {
-                using var negative = np.less(nd, NDArray.Scalar(0L));
-                using var selected = np.logical_and(negative, where);
-                return np.any(selected);
+                using var negative = nd.TensorEngine.Less(nd, NDArray.Scalar(0L));
+                using var selected = negative.TensorEngine.LogicalAnd(negative, where);
+                return selected.TensorEngine.Any(selected);
             }
             catch (Exception e) when (e is IncorrectShapeException or ArgumentException)
             {
