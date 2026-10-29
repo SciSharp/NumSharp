@@ -34,7 +34,6 @@ Creation/np.ndarray.cs	10	1
 Creation/np.ogrid.cs	0	1
 Creation/np.ones.cs	6	4
 Creation/np.r_.cs	1	8
-Creation/np.vander.cs	3	0
 DTypes/np.dtypes.cs	2	0
 Indexing/np.diag.cs	1	0
 Indexing/np.extract.cs	0	1
