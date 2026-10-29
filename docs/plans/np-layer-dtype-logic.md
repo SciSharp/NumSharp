@@ -80,7 +80,15 @@ texts, np.piecewise's constants, np.delete's error axis, np.broadcast_shapes' pa
 computations, np.ix_'s result object, np.r_'s matrix copy and Python int entries, np.fill_diagonal's value conversion,
 np.apply_along_axis's text scalar width, np.indices' allocation order, arange refusals and sparse views, the slice
 fields' Python numbers, np.mgrid / np.ogrid's nd_grid statements, np.ravel_multi_index's null coordinate array);
-R1 has no batch 7 row left. P5 is done
+R1 has no batch 7 row left. Batch 8, the indexers, is done (2026-10-29 / 30): the typed fetch and store an advanced
+index ends in are `UnmanagedStorage.MapIterGet` / `MapIterSet` in the new `Selection/UnmanagedStorage.Mapping.cs`
+(NumPy's mapping.c below the indexers), the StringDType route decisions ask `HasReferences`, the indexers' four up-calls
+under `Backends/` are array-object members, and the thirteen divergences a replay of the indexers' snapshot and a
+6,000-key getter / setter differential against NumPy found are fixed per D4 (prepare_index's entry classification and
+error order, the store's value conversion and order, Python bools and 0-d integer arrays as NumPy reads them,
+`PyArray_AssignArray`'s strip, list values, GetIndices / SetIndices, the caller's key left unchanged, integer slices as
+integers, the advanced block's placement); R1's lines left in the indexer files are index-kind tests and the string
+routes' representation. P5 is done
 (2026-10-29): its six
 families and, handed over by the coordinator, the lines first assigned to PE (np.argmax's out= pair, np.unravel_index,
 np.packbits / np.unpackbits, np.bincount, and the text lines of np.kron and np.median) are engine members or engine
@@ -889,7 +897,12 @@ first, as it did for np.fft.
    descriptor's kind. Batch 7 is done.
 8. **The indexers** (8 files, 98 lines; `Selection/NDArray.Indexing.*.cs`, NumPy's `mapping.c`; already the array
    object): the `StringDType` routes behind `HasReferences`, the typed fetch / store switches into
-   `UnmanagedStorage.Mapping.cs`. The index-kind tests stay.
+   `UnmanagedStorage.Mapping.cs`. The index-kind tests stay. Done (`09d818fa`, `8a102c92`, `25ae1802`, `3aa50b5d`),
+   with the thirteen D4 fixes the replay and a getter / setter differential found (`086b6d0c` .. `932cef87`, before
+   the move): the typed fetch and store with their subspace copies are `UnmanagedStorage.MapIterGet` / `MapIterSet`
+   (protected forwarders keep NDArray's old names), the five StringDType decisions ask `HasReferences`, and R1's eight
+   files 98 -> 58 lines (the fixed-width text routes' unit view and the StringDType route bodies stay, see the state
+   log).
 9. **The computing functions in P3's files** (5 files, 30 lines) become `TensorEngine` members (Appendix D):
    np.linspace, np.logspace and np.geomspace (`TensorEngine.CoreFunctionBase.cs`), np.vander
    (`TensorEngine.TwoDimBase.cs`), np.trim_zeros (`TensorEngine.FunctionBase.cs`). Done (`ca9a0246`, `315b2f0e`,
@@ -1135,6 +1148,90 @@ candidate.
 ---
 
 ## 9. State log
+
+- **2026-10-30, P3: batch 8 (the indexers) - batch 8 is done.** Eighteen commits on `strings`: the tool commit and the
+  thirteen D4 fixes landed first by fast-forward (2026-10-29, rebased onto `780cca88`, tip `932cef87`), then the move,
+  the conversion, the indexers' R2 up-calls and this docs commit (rebased onto `dc807d59`). The D4 fixes come before the
+  move, so the move is pure over NumPy's statements. R1: the eight indexer files 98 -> 58 lines (14 -> 11 text, 84 -> 47
+  numeric; 43 files, 36 text and 254 numeric lines over all facades). R2: 4 calls leave (three rows).
+  - `09d818fa`: the snapshot tool reaches NDArray's indexers - the accessors `get_Item` / `set_Item`, the protocol
+    member `__setitem__` and the fancy pair `GetIndices` / `SetIndices` - with index keys built from the operand's rank,
+    the fancy pair's index lists and the stored values, through the item-selection wiring. 74,296 cases. Replayed
+    through NumPy 2.4.2: 2,573 lines differed.
+  - D4, before the move, each with NumPy-probed tests that fail on its parent (`test/NumSharp.Tests/Selection/*.NumPyPort.Test.cs`):
+    - `086b6d0c` an index entry is classified as `prepare_index` walks it: a double / float16 / decimal is refused with
+      NumPy's text (a double was rounded: `a[0.6, ":"]` returned row 1), an integer beside another entry on a 0-d
+      array is "too many indices", a 0-d string array names a refused entry before the rank is counted;
+    - `0978e4c2` a store converts its value with the array's descriptor after the index (`__setitem__` of a Python int
+      past every C# integer packs it; a list or array into one element is the dtype's setitem's; None after the
+      index's checks; a `ulong` index basic; a 0-d integer array per axis a full integer index);
+    - `e4b4b8d5` a Python bool is NumPy's 0-d bool array: alone the 0-d mask, beside other entries the advanced block;
+    - `798804a3` a 0-d integer array with no index array beside it is `HAS_SCALAR_ARRAY`: a view, copied with
+      KEEPORDER by the getter, assigned through by the setter;
+    - `ed09b132` a store's order: the index, the value's conversion, the index arrays' values;
+    - `6683ede9` a view store is `PyArray_AssignArray`, its leading unit dimensions stripped;
+    - `31608c83` a list into a selection is converted with the array's descriptor by NumPy's route (every item by its
+      setitem; a view's discovery limited to its rank; a StringDType fancy store through MapIter's temporary);
+    - `734b06e7` `GetIndices` / `SetIndices` are `a[tuple(indices)]`;
+    - `87e85f4d` the StringDType fancy store's temporary takes its shape from the index (`MapIterResultDims`, no proxy
+      gather), so the broadcast error wins over an out-of-bounds index as in NumPy.
+    - After them the replay differed in 681 lines, every class one NumSharp keeps: 660 "flags only" (an advanced
+      result's layout and ownership flags: NumPy returns MapIter's result as a view of its buffer - transposed for an
+      index behind a slice -, NumSharp a C-ordered array that owns its data; the values are equal; the layout class is
+      pinned in `OpenBugs.FancyIndex.cs`), 14 stores whose
+      OverflowError texts follow the platform's C long (Windows NumPy against NumSharp's LP64 pin) and 7 stores through
+      an F-ordered index array that repeats a position (NumPy documents the last write to a repeated position as
+      unpredictable).
+    - Then a differential of the getter and the setter against NumPy over 6,000 random advanced keys (index arrays of 0
+      to 2 dims, an empty one, a column, slices, integers, the ellipsis, new axes, C# and 0-d bools, a mask, on 0-d to
+      4-D and empty arrays; the store writes an arange of the getter's shape through the same key), replayed with the
+      integers spelled as C# integers, `Slice.Index(n)`, `"n"` and longs: `8bdc78a0` the errors in NumPy's order
+      (prepare_index's boolean shapes, the integers' bounds, the index arrays' broadcast with NumPy's text, a space after
+      every shape, then their values; 742 -> 16 of 12,000 outcomes), `7dfc898c` the caller's key array is never written
+      (the conversions left arrays in it that the `[NDScoped]` dispatch had disposed, their buffers released, and a
+      reused key read them; found while auditing the key forms), `2efc4ad9` an integer slice and an integer's notation
+      beside an advanced entry are NumPy's integer (1,693 -> 16 in that spelling), `932cef87` the advanced block goes in
+      front whenever a slice, a new axis or the ellipsis separates the advanced entries, a zero-span ellipsis included,
+      in the getter's routes and the setter's single-index-array route (16 -> 0). After them 0 of the 12,000 differ in
+      each spelling, and the replay is the same 681 lines.
+  - `8a102c92`, the move: the typed fetch and store the indexers end in are `UnmanagedStorage` members in the new
+    `Selection/UnmanagedStorage.Mapping.cs` (NumPy's mapping.c below the indexers; beside them because their statements
+    call np.copy, np.broadcast_arrays, np.broadcast_to, np.atleast_1d, np.zeros, np.ones and np.any): `MapIterGet` (the
+    typed dispatcher) with `MapIterGet<T>`, `MapIterGetSubspace<T>` and `MapIterGetSubspaceStrided<T>`; `MapIterSet`
+    with `MapIterSetFromText`, `MapIterSet<T>`, `TryScatterKernel<T>`, `MapIterSetSubspace<T>` and
+    `MapIterSetSubspaceStrided<T>`; the offset backstop and its message. The bodies are the old ones, extracted by a
+    script, renamed, made internal and calling `NDArray.NormalizeIndexArray` / `PrepareIndexGetters` /
+    `PrepareAssignedValue` qualified; the two index-array helpers stay with the indexers (index-kind tests) and are
+    protected internal. NDArray keeps the eight protected members under their old names as forwarders (`<inheritdoc
+    cref>`): types deriving from NDArray could call them, and AuditV2's T1_15a invokes `SetIndicesNDNonLinear` by
+    reflection. The 19 internal call sites call the storage members. Every moved member is documented in full (most had
+    no docs, or a copy-pasted summary naming a parameter that does not exist). Snapshot byte-identical to the parent's;
+    the rebind check found only the moved members binding to each other, `Shape` in its Color Color form and type
+    arguments; no doc warning in the touched files with Core's NoWarn cleared.
+  - `25ae1802`, the conversion: the five StringDType route decisions (the masked get and set, the advanced get and
+    set's string entry, `__setitem__`'s MapIter temporary) ask `dtype.Meta.HasReferences`, NumPy's
+    `PyDataType_REFCHK`, instead of `Storage.IsVString`. Snapshot byte-identical (StringDType, `U` and `S` operands in
+    its pools).
+  - `3aa50b5d`: the four up-calls P6's families left for this batch - np.broadcast_to in `Default.BooleanMask.cs` (2)
+    and `UnmanagedStorage.Setters.cs` (1), np.asanyarray in `NDArray.Contains` (1) - are `NDArray.BroadcastTo` and
+    `NDArray.AnyArrayFromObject`. Snapshot of the indexers and `Contains` / `__contains__` (75,251 cases)
+    byte-identical.
+  - What the batch leaves in R1's indexer files, by mechanism: 46 index-kind tests (an index array's bool or integer
+    dtype, the index-op kinds) and `KeepLaneSharingClass`' descriptor-class test (a result allocated by its lane takes
+    the source's lane-sharing class, which NumPy's allocation from the source's descriptor gives for free; it goes when
+    the typed allocations take a descriptor); the fixed-width text routes' decisions (`typecode == NPTypeCode.String`:
+    an `S` / `U` element has no typed kernel wider than 16 bytes, so the index runs on the array's unit view - a
+    representation of the storage, not a NumPy decision) and their None store's class singleton; the StringDType route
+    bodies' calls into the text backend (`NDVStringMove`). AssignThroughView's StringDType item store
+    (`view.IsVString`) is the setitem slot's question and stays with batch 4's packing.
+  - Errata of P6's family commits (the parallel session's; commit messages cannot be amended): `effad8e6` says 42
+    functions where it converted 41, `ac6cbacb` 37 where 36.
+  - P3's tool commits (this batch's `09d818fa` among them) join the 0.71.0 notes' snapshot-tool line when P3 ends.
+  - Gates: NumSharp.Tests (20,896 on net10.0, 20,895 on net8.0) and the oracle gates IndexOracleTests,
+    UndisposedIntermediateTests, BufferReleaseSweep and Layering (42 on net10.0) pass after each commit
+    (`TestCategory!=OpenBugs&TestCategory!=HighMemory`; one wall-clock test, T2_NonZero_Is_Much_Slower_Than_NumPy,
+    failed once under the parallel session's load and passed three reruns alone).
+  - Next on P3: batch 9b (the text casts through the casting impls) and batch 10 (what stays).
 
 - **2026-10-29, P6: the structural calls, families 1 to 5.** Five commits on `strings` from the parallel session
   (developed in the scratch worktree on `c4cc72d9`, landed by fast-forward). Each family is one commit: the engine's
