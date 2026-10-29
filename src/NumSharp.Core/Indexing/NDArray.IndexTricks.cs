@@ -154,9 +154,12 @@ namespace NumSharp
             // (NaN, nan+nanj, False, 'None' truncated to an S / U width), converted HERE — after the read-only check and
             // before the empty-diagonal return, so an integer array raises int(None)'s TypeError even when nothing is
             // written (np.fill_diagonal(np.zeros((0, 0), int), None) raises, probed 2.4.2). A StringDType array stores None
-            // through its own branch below (the NA object, 'None', or coerce=False's refusal).
+            // through its own branch below (the NA object, 'None', or coerce=False's refusal). The descriptor answers which
+            // arrays those are: the ones whose elements hold references (NumPy's PyDataType_REFCHK), as the item-selection
+            // family's one HasReferences decision does.
+            bool references = a.dtype.Meta.HasReferences;
             NDArray scalarValue = null;
-            if (val is null && !a.Storage.IsVString)
+            if (val is null && !references)
                 scalarValue = NDArray.NoneForStore(a.dtype);
 
             // The overwhelmingly common call is a SCALAR fill. A C# number is a Python (or NumPy) scalar in the
@@ -173,7 +176,7 @@ namespace NumSharp
             // A StringDType target: NumPy's a.flat[...] = val converts val with the array's descriptor — Python objects (and
             // a list's elements) by setitem, an ndarray by the cast (NDVStringMove.StoreValue) — BEFORE the slice is walked,
             // so a value coerce=False refuses (None included) raises even for an empty diagonal.
-            NDArray text = a.Storage.IsVString ? Backends.Strings.NDVStringMove.StoreValue(val, a.dtype) : null;
+            NDArray text = references ? Backends.Strings.NDVStringMove.StoreValue(val, a.dtype) : null;
 
             if (end <= 0 || step <= 0)
                 return;
