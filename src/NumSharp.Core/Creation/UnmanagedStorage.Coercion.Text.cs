@@ -43,7 +43,7 @@ namespace NumSharp.Backends
         ///     (<see cref="string"/>), the requested dtype is a string dtype, or an <c>object</c> array holds text at any
         ///     nesting depth (a C# spelling of a Python list of lists: <c>new object[] { new[] { "a", "b" }, new[] { "c" } }</c>)
         ///     — or holds a <c>null</c> (Python's <c>None</c>) under a requested numeric dtype: that list too is built element
-        ///     by element with the dtype's setitem (<see cref="BuildNumeric"/>: <c>np.array([None, 1.0], dtype=float)</c> is
+        ///     by element with the dtype's setitem (<see cref="Build"/>: <c>np.array([None, 1.0], dtype=float)</c> is
         ///     <c>[nan, 1.]</c>, an integer dtype raises <c>int(None)</c>'s TypeError at the first <c>None</c> in C order).
         /// </summary>
         /// <param name="array">The managed input (any rank, rectangular or jagged).</param>
@@ -216,68 +216,54 @@ namespace NumSharp.Backends
         internal static NDArray FromValues(long[] dims, IReadOnlyList<object> values, DType dtype, char order) => Build(dims, values, dtype, order);
 
         /// <summary>
-        ///     Discovers the descriptor, allocates, and encodes <paramref name="values"/> (already in C order): a
-        ///     <c>StringDType</c> through <see cref="BuildVString"/>, a numeric dtype through
-        ///     <see cref="BuildNumeric"/>, a fixed-width string class by the discovered descriptor
-        ///     (<see cref="Discover"/>) and each element's text encoding.
+        ///     NumPy's <c>PyArray_FromAny</c> over values already collected in C order (<c>PyArray_DiscoverDTypeAndShape</c>,
+        ///     then <c>PyArray_AssignFromCache</c>): the descriptor is the requested one unless it is unsized
+        ///     (<c>PyDataType_ISUNSIZED</c>: an unsized string class, or no request), when <see cref="Discover"/> finds the
+        ///     string class and the widest value; the array is allocated with it, and every value is stored by the class's
+        ///     <c>setitem</c> (<see cref="DTypeMeta.setitem"/>, NumPy's <c>PyArray_Pack</c>): a numeric class packs a Python
+        ///     value with NumPy's checks (a str parsed by CPython's <c>int()</c> / <c>float()</c> / <c>complex()</c>, None as
+        ///     NaN, <c>nan+nanj</c> or False), a fixed-width string class encodes its text (truncated, None as <c>'None'</c>,
+        ///     a number as its <c>str()</c>), <c>StringDType</c> packs it through the buffer's allocator (its NA object as an
+        ///     NA cell, a non-text value refused without coercion). The stores run as the class's
+        ///     <see cref="DTypeMeta.SetFreshItems"/> over the new elements: <c>setitem</c> per value, <c>StringDType</c>'s
+        ///     in one run that reserves its arena once (the same cells and arena bytes).
         /// </summary>
         /// <param name="dims">The result dimensions.</param>
-        /// <param name="values">The elements, C order, <c>product(dims)</c> of them.</param>
+        /// <param name="values">The elements, C order, <c>product(dims)</c> of them; null is Python's None.</param>
         /// <param name="dtype">The requested dtype or null.</param>
-        /// <param name="order">The requested memory layout.</param>
-        /// <returns>The new array (laid out in F order for an <c>'F'</c> request of two or more dimensions).</returns>
-        /// <exception cref="UnicodeEncodeError">Non-ASCII text into <c>S</c>.</exception>
-        /// <exception cref="UnicodeDecodeError">Non-ASCII bytes into <c>U</c>.</exception>
-        /// <exception cref="NotSupportedException">None without a dtype, or a value of no text form.</exception>
-        /// <exception cref="TypeError">The discovered width exceeds the class's maximum.</exception>
+        /// <param name="order">The requested memory layout: <c>'F'</c> / <c>'f'</c> lays a result of two or more
+        ///     dimensions out in column-major order (a copy of the C-ordered fill); any other (already validated) order is
+        ///     C.</param>
+        /// <returns>The new array, which owns its data.</returns>
+        /// <exception cref="UnicodeEncodeError">Non-ASCII text into <c>S</c>, or a text with a lone surrogate into a
+        ///     <c>StringDType</c>.</exception>
+        /// <exception cref="UnicodeDecodeError">Non-ASCII bytes into <c>U</c>, or bytes that are not UTF-8 into a
+        ///     <c>StringDType</c>.</exception>
+        /// <exception cref="ValueError">A text that is not a number of a numeric class's kind (quoting it), a NaN into an
+        ///     integer class, or a non-text value into a <c>coerce=False</c> <c>StringDType</c>.</exception>
+        /// <exception cref="OverflowException">A value that does not fit an integer class.</exception>
+        /// <exception cref="TypeError">None into an integer or decimal class, a value NumPy cannot convert, or a discovered
+        ///     width past the string class's maximum.</exception>
+        /// <exception cref="NotSupportedException">None without a dtype (NumPy's object array), or a value with no text
+        ///     form.</exception>
         private static NDArray Build(long[] dims, IReadOnlyList<object> values, DType dtype, char order)
         {
-            // StringDType: every element is a Python object stored by stringdtype_setitem (BuildVString).
-            if (dtype?.Meta is VStringDTypeMeta)
-                return BuildVString(dims, values, dtype, order);
-            // A numeric dtype: NumPy's discovery keeps the requested dtype and packs each element with its setitem.
-            if (dtype != null && dtype.Meta is not StringDTypeMeta)
-                return BuildNumeric(dims, values, dtype, order);
-
-            var descr = Discover(values, dtype);
-            var storage = UnmanagedStorage.AllocateString(new Shape(dims), descr, fillZeros: false);
-            var slice = storage.StringSlice;
-            byte* p = slice.Address;
-            int itemsize = slice.ItemSize;
-            for (int i = 0; i < values.Count; i++)
-                NDStringStorage.WriteElement(p + (long)i * itemsize, slice.IsUnicode, slice.Chars, values[i]);
-
-            var result = new NDArray(storage);
-            if (dims.Length > 1 && (order == 'F' || order == 'f'))
-            {
-                var f = result.copy('F');
-                result.Dispose();
-                return f;
-            }
-            return result;
-        }
-
-        /// <summary>
-        ///     <c>np.array(values, dtype=StringDType)</c> for collected Python objects: NumPy's discovery keeps the requested
-        ///     descriptor and stores each element with <c>stringdtype_setitem</c> — the NA object packs an NA element, a
-        ///     <see cref="string"/> is itself, a <c>byte[]</c> is decoded as UTF-8, any other value is its <c>str()</c> when the
-        ///     descriptor coerces (<c>np.array([1, 2.5, True], dtype=T)</c> is <c>['1', '2.5', 'True']</c>).
-        /// </summary>
-        /// <param name="dims">The discovered dimensions.</param>
-        /// <param name="values">The element values in C order.</param>
-        /// <param name="descr">The <c>StringDType</c> descriptor.</param>
-        /// <param name="order">The memory layout (<c>'F'</c> for a column-major result; anything else C).</param>
-        /// <returns>The new array.</returns>
-        /// <exception cref="ValueError">A non-text value under <c>coerce=False</c>.</exception>
-        /// <exception cref="UnicodeDecodeError">A <c>bytes</c> value that is not UTF-8.</exception>
-        /// <exception cref="UnicodeEncodeError">A text with a lone surrogate.</exception>
-        private static NDArray BuildVString(long[] dims, IReadOnlyList<object> values, DType descr, char order)
-        {
-            var result = new NDArray(descr, new Shape(dims), true);
+            // PyDataType_ISUNSIZED: no request, or an unsized string class, discovers the descriptor from the values; any
+            // other request (a numeric class, a sized string class, StringDType) is the descriptor.
+            var descr = dtype is null || dtype.itemsize == 0 ? Discover(values, dtype) : dtype;
+            // NPY_NEEDS_INIT: a cell that holds a reference must be valid (empty) before setitem replaces it; every other
+            // element's bytes are all written by its store, so the buffer is not zeroed first.
+            var result = descr.Meta.HasReferences ? new NDArray(descr, new Shape(dims), true) : NDArray.ForOverwrite(descr, new Shape(dims));
             try
             {
-                // Every element by setitem, the allocator locked once for the whole fill (VStringArraySlice.SetRange).
-                result.Storage.VStringSlice.SetRange(values);
+                // The ALLOCATED descriptor stores (the allocation gives an unsized string class one character, and it is the
+                // native form of a byte-swapped request), and the buffer goes along (StringDType's setitem finds the
+                // allocator its cell belongs to there). PyArray_AssignFromCache's loop of PyArray_Pack is the class's run
+                // over the new elements: setitem per value, StringDType's in one run that reserves its arena once.
+                var stored = result.dtype;
+                stored.Meta.SetFreshItems(stored, values, (byte*)result.Storage.Address, result.Storage.InternalArray);
+                // The stores wrote through a raw pointer: the array must stay reachable until they are done.
+                GC.KeepAlive(result);
                 if (dims.Length > 1 && (order == 'F' || order == 'f'))
                 {
                     var f = result.copy('F');
@@ -288,6 +274,7 @@ namespace NumSharp.Backends
             }
             catch
             {
+                // A refused value leaves a partly filled array: it is never handed out.
                 result.Dispose();
                 throw;
             }
@@ -413,64 +400,6 @@ namespace NumSharp.Backends
             };
             return NDTextFormat.RequiredWidth(discovered);
         }
-
-        /// <summary>
-        ///     <c>np.array(values, dtype)</c> with a NUMERIC dtype over values that hold text: every element packed by the
-        ///     dtype's setitem (<see cref="ReductionInitial.TryPack"/>), so a text is parsed by CPython's <c>int()</c> /
-        ///     <c>float()</c> / <c>complex()</c> (a bool dtype takes its truth value) and a number is range-checked as NumPy
-        ///     packs a Python scalar.
-        /// </summary>
-        /// <param name="dims">The result dimensions.</param>
-        /// <param name="values">The elements, C order.</param>
-        /// <param name="dtype">The numeric dtype.</param>
-        /// <param name="order">The requested memory layout.</param>
-        /// <returns>The new array.</returns>
-        /// <exception cref="ValueError">A text is not a number of the dtype's kind (quoting <c>'…'</c>).</exception>
-        /// <exception cref="OverflowException">A value does not fit an integer dtype.</exception>
-        /// <exception cref="TypeError">None into an integer dtype, or a value of a type NumPy cannot convert.</exception>
-        private static NDArray BuildNumeric(long[] dims, IReadOnlyList<object> values, DType dtype, char order)
-        {
-            NPTypeCode tc = dtype.typecode;
-            var result = new NDArray(dtype, new Shape(dims), false);
-            try
-            {
-                int size = tc.SizeOf();
-                byte* p = (byte*)result.Address;
-                Span<byte> slot = stackalloc byte[ReductionInitial.SlotBytes];
-                for (int i = 0; i < values.Count; i++)
-                {
-                    PackNumeric(values[i], tc, slot);
-                    slot.Slice(0, size).CopyTo(new Span<byte>(p + (long)i * size, size));
-                }
-                GC.KeepAlive(result);
-                if (dims.Length > 1 && (order == 'F' || order == 'f'))
-                {
-                    var f = result.copy('F');
-                    result.Dispose();
-                    return f;
-                }
-                return result;
-            }
-            catch
-            {
-                result.Dispose();
-                throw;
-            }
-        }
-
-        /// <summary>
-        ///     NumPy's setitem of one creation value into a numeric dtype: <see cref="ReductionInitial.PackStore"/> —
-        ///     <see cref="ReductionInitial.TryPack"/> for a value, <see cref="ReductionInitial.PackNone"/> for <c>None</c>
-        ///     (<c>MyPyFloat_AsDouble(None)</c> is the positive NaN for a float dtype, <c>CDOUBLE_setitem(None)</c> NaN+NaNj,
-        ///     <c>PyObject_IsTrue(None)</c> False, and <c>int(None)</c> a TypeError).
-        /// </summary>
-        /// <param name="value">The value (null is None).</param>
-        /// <param name="tc">The numeric dtype.</param>
-        /// <param name="slot">Receives the element.</param>
-        /// <exception cref="TypeError">None into an integer or <c>decimal</c> dtype (a decimal holds no NaN: Python's
-        ///     <c>decimal.Decimal(None)</c> text), or a value <see cref="ReductionInitial.TryPack"/> refuses.</exception>
-        private static void PackNumeric(object value, NPTypeCode tc, Span<byte> slot)
-            => ReductionInitial.PackStore(value, tc, slot);
 
         /// <summary>
         ///     Flattens a managed array of any rank into C-ordered element values and records its shape: a rectangular

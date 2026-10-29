@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using NumSharp.Backends.Strings;
 using NumSharp.Backends.Unmanaged;
 
@@ -211,6 +212,36 @@ namespace NumSharp
         /// <exception cref="OutOfMemoryException">The allocator cannot hold the text (NumPy's <c>MemoryError</c>).</exception>
         internal override unsafe void setitem(DType descr, object value, byte* item, IArraySlice buffer)
             => Cells(buffer, item, out long index).SetIndex(index, value);
+
+        /// <inheritdoc/>
+        /// <remarks>
+        ///     <see cref="VStringArraySlice.SetRange"/>: the cells and arena bytes NumPy's <c>stringdtype_setitem</c> leaves
+        ///     element by element, with the allocator locked once for the run and the arena reserved once for its medium and
+        ///     long texts, each encoded straight into its arena slot (SetRange's remarks measure it at 1.3x to 4x the
+        ///     per-element stores, the gain growing with the texts' length). Only the arena's capacity differs from the
+        ///     per-element stores, and no NumPy API reads it. SetRange fills a buffer from its first cell, so a run that
+        ///     starts at a later cell takes the per-element default.
+        /// </remarks>
+        /// <exception cref="ArgumentException"><paramref name="buffer"/> is not the <c>StringDType</c> buffer
+        ///     <paramref name="first"/> is a cell of.</exception>
+        /// <exception cref="ValueError">A non-text value into a descriptor with coercion off (<c>StringDType only allows
+        ///     string data when string coercion is disabled.</c>).</exception>
+        /// <exception cref="UnicodeDecodeError"><c>bytes</c> that are not UTF-8.</exception>
+        /// <exception cref="UnicodeEncodeError">A text with a lone surrogate.</exception>
+        /// <exception cref="OutOfMemoryException">The allocator cannot hold the texts (NumPy's <c>MemoryError</c>).</exception>
+        internal override unsafe void SetFreshItems(DType descr, IReadOnlyList<object> values, byte* first, IArraySlice buffer)
+        {
+            // An empty array has no cell to name (Cells refuses an index at or past the count) and nothing to store.
+            if (values.Count == 0)
+                return;
+            var cells = Cells(buffer, first, out long index);
+            if (index != 0)
+            {
+                base.SetFreshItems(descr, values, first, buffer);
+                return;
+            }
+            cells.SetRange(values);
+        }
 
         /// <inheritdoc/>
         /// <remarks>NumPy's <c>stringdtype_getitem</c>, by <see cref="VStringArraySlice.GetIndex(long)"/>: the text as a

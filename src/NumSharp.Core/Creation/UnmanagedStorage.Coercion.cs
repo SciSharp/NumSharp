@@ -38,12 +38,11 @@ namespace NumSharp.Backends
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static NDArray ScalarFromObject(object value, DType dtype)
         {
-            // StringDType: one Python object through setitem (its str(), the NA object, coerce=False's refusal).
-            if (dtype.Meta is VStringDTypeMeta)
-                return Backends.Strings.NDVStringMove.StoreScalar(value, dtype);
-            // A string dtype holds text: the value is encoded (str / bytes), not converted through IConvertible.
-            if (dtype.Meta is StringDTypeMeta)
-                return Backends.UnmanagedStorage.FromAnyScalar(value, dtype);
+            // The text lane (a fixed-width string class or StringDType) stores the value through its class's setitem: NumPy's
+            // PyArray_Pack (its str() or its encoding, the NA object, coerce=False's refusal), never IConvertible. The numeric
+            // lanes keep NDArray.Scalar's documented C# conversion below.
+            if (dtype.typecode == NPTypeCode.String)
+                return FromAnyScalar(value, dtype);
             return new NDArray(UnmanagedStorage.Scalar(value, dtype.GetTypeCode()));
         }
 
@@ -60,7 +59,7 @@ namespace NumSharp.Backends
         {
             // Text values are 0-d fixed-width strings: a string is U (np.array('ab')), a byte[] is S (np.array(b'ab')).
             if (value is string || value is byte[])
-                return Backends.UnmanagedStorage.FromAnyScalar(value, null);
+                return FromAnyScalar(value, null);
             return new NDArray(UnmanagedStorage.Scalar(value));
         }
 

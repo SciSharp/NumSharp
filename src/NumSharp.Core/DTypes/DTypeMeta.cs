@@ -382,9 +382,51 @@ namespace NumSharp
         /// <exception cref="NotSupportedException">The class has no element storage (an abstract class, the datetime
         ///     classes until their storage lands). The overrides document the conversions' own errors.</exception>
         /// <remarks>Called once per Python value, as NumPy's is, never inside a bulk move: a typed kernel stays the way to
-        ///     copy or convert many elements.</remarks>
+        ///     copy or convert many elements. A run of Python values into a NEW array goes through
+        ///     <see cref="SetFreshItems"/>, whose default is this call per value.</remarks>
         internal virtual unsafe void setitem(DType descr, object value, byte* item, IArraySlice buffer)
             => throw NoSlot(nameof(setitem));
+
+        /// <summary>
+        ///     NumSharp's run of <see cref="setitem"/> over a NEW array: stores <paramref name="values"/> into the consecutive
+        ///     elements that start at <paramref name="first"/>, in order. It is the loop of <c>PyArray_Pack</c> that NumPy's
+        ///     <c>PyArray_AssignFromCache</c> runs over the array <c>np.array</c> has just allocated, and the default is that
+        ///     loop, one <see cref="setitem"/> per value. A class overrides it only where the whole run can be stored faster
+        ///     with the same element bytes: <c>StringDType</c> locks its allocator once and reserves its arena once for every
+        ///     text of the run, where a store per value grows the arena step by step.
+        /// </summary>
+        /// <param name="descr">The array's descriptor (see <see cref="setitem"/>).</param>
+        /// <param name="values">The values in element order, in <see cref="setitem"/>'s C# boundary map (null is
+        ///     <c>None</c>).</param>
+        /// <param name="first">The first element to store; the others follow at the descriptor's item size.</param>
+        /// <param name="buffer">The buffer the elements live in (see <see cref="setitem"/>).</param>
+        /// <exception cref="NotSupportedException">The class has no element storage, or a value has no form the class can
+        ///     store.</exception>
+        /// <exception cref="ValueError">A value <see cref="setitem"/> refuses (a text that is not a number of a numeric
+        ///     class's kind, a non-text value into a <c>coerce=False</c> <c>StringDType</c>).</exception>
+        /// <exception cref="TypeError">A value the class cannot convert (None into an integer class).</exception>
+        /// <exception cref="OverflowException">A value that does not fit an integer class.</exception>
+        /// <exception cref="UnicodeEncodeError">A text the class cannot encode.</exception>
+        /// <exception cref="UnicodeDecodeError">Bytes the class cannot decode.</exception>
+        /// <remarks>
+        ///     <para>
+        ///     <b>New elements only.</b> The elements must be untouched elements of a new allocation, zeroed when the class
+        ///     holds references (NumPy's <c>NPY_NEEDS_INIT</c>). An override may rely on it: <c>StringDType</c>'s run tells a
+        ///     text still to be stored from a stored one by the cell's zero flags, so over cells that already hold strings it
+        ///     would drop texts. To store into an array that already holds values, call <see cref="setitem"/> per element.
+        ///     </para>
+        ///     <para>
+        ///     A refused value raises at the element NumPy's loop raises at, after every earlier element is stored. The
+        ///     later elements may be partly written (an override can prepare them first), which is why the caller discards
+        ///     the array on any error, as NumPy discards its half-built one.
+        ///     </para>
+        /// </remarks>
+        internal virtual unsafe void SetFreshItems(DType descr, IReadOnlyList<object> values, byte* first, IArraySlice buffer)
+        {
+            long itemsize = descr.itemsize;
+            for (int i = 0; i < values.Count; i++)
+                setitem(descr, values[i], first + i * itemsize, buffer);
+        }
 
         /// <summary>
         ///     NumPy's slot <c>getitem</c> (NEP 42's slot 8, <c>PyArrayDTypeMeta_GetItem</c>; the legacy

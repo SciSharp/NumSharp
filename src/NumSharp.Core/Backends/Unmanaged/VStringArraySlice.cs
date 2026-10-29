@@ -325,7 +325,8 @@ namespace NumSharp.Backends.Unmanaged
             try
             {
                 // The passes rely on a fresh buffer: a pass-1 mark is told from a stored cell by byte 15, and AppendFresh writes
-                // a cell that held nothing. BuildVString's zero-filled allocation is the only caller.
+                // a cell that held nothing. The only caller is VStringDTypeMeta.SetFreshItems, the coercion's run over the
+                // zero-filled allocation it has just made.
                 System.Diagnostics.Debug.Assert(!Allocator.HoldsLongStrings, "SetRange fills a fresh StringDType buffer.");
 
                 // Pass 1: every leading string that needs no arena is stored; a medium / long one is marked and counted.
