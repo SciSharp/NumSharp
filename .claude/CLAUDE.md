@@ -1680,6 +1680,23 @@ excuses) and `Creation/np.ndarray.Test.cs` (39). See `Creation/np.ndarray.cs`.
 
 The `as*` conversion family mirrors NumPy: `asarray_chkfinite(a, dtype=None, order='K')` = `asarray` then raise `ValueError("array must not contain infs or NaNs")` if a **float-family** dtype (Half/Single/Double/Complex — NumPy's `typecodes['AllFloat']`; Decimal/int/bool skip the check) holds any inf/NaN, via a **fused single-pass NaN-poison SIMD reduction** (`Backends/Kernels/FiniteScan.cs`: `acc += v - v` — +0 for finite, absorbing-NaN for non-finite; AVX2 gather + reversed-contiguous fast path for strided/negative-stride views; ~2–27× NumPy contiguous, ≥1× strided). `require(a, dtype=None, requirements=None)` parses C/F/A/W/O/E flags (+aliases; single-string requirements iterate by char like NumPy, so `"F_CONTIGUOUS"` as one string raises), resolves an order and copies only if a remaining ALIGNED/WRITEABLE/OWNDATA flag is unsatisfied (ALIGNED fails after `setflags(align=False)` or over a caller's buffer at a misaligning byte offset; WRITEABLE for broadcast views; OWNDATA for views). `asmatrix(data, dtype=None)` is `matrix(data, dtype, copy=False)` and returns an **`NDMatrix`** (see `np.matrix` below): a new VIEW of an array (never the operand itself), 0-D→(1,1), 1-D→(1,N), 2-D unchanged, >2-D drops length-1 axes and must land on 2-D else `ValueError("shape too large to be a matrix.")`; also parses matrix literals (`"1 2; 3 4"`). See `Creation/np.{asarray_chkfinite,require,asmatrix}.cs`.
 
+**`np.array` / `np.asanyarray` of a C# object list are NumPy's coercion of a Python list** (2026-10-29, plan
+np-layer-dtype-logic P3 batch 4; `Creation/NDArray.Multiarray.cs`, `Creation/UnmanagedStorage.Coercion*.cs`). An
+`object[]`, a jagged `object[][]`, an `object[,]` grid (a list of rows), a tuple and a `List<object>` / `ArrayList`
+read as the boundary map says: a C# integer is a Python int, a `float` / `double` a Python float, `null` None, a typed
+C# array or an `NDArray` an ndarray item, `Half` / `char` / `decimal` NumPy scalars. Without a dtype NumPy's dtype is
+discovered (`[1, 2]` int64, `[1, 2.5]` float64, `[2**64-1, 1]` float64; None or a Python int past 64 bits is NumPy's
+object array, refused); with one every scalar item is stored by the class's `setitem` (NumPy's `PyArray_Pack`: 300
+into int8 raises `OverflowException`, a complex into float64 `TypeError`, None NaN or `int()`'s TypeError) and every
+array item cast. Two walks serve it: lists holding text (or under a text request) take the text builder
+(`UnmanagedStorage.Coercion.Text.cs`: discovery through `DiscoverDTypeFromPyObject` / `FindScalarDescriptor` /
+`DTypePromotion.PromoteTypes`, the stores through `DTypeMeta.SetFreshItems`, whose `StringDType` run reserves its
+arena once), the rest the sequence walk (`UnmanagedStorage.FromSequence(seq, requested)`, also numpy.polynomial's,
+numpy.char's, numpy.matrix's, np.histogramdd's and np.gradient's array_like reader). An ndarray item of a text dtype
+in a list is refused (the walk's dtype is an `NPTypeCode`); an empty object grid keeps its own dims (`object[0, 3]`
+is `(0, 3)`); the order is checked before anything is converted. Gate: `Creation/np.array.PythonList.Test.cs` and
+the coercion family's snapshot (`tools/facade-move/snapshot.cs`).
+
 **`np.logspace` / `np.geomspace` — the log-scale linspace family** (NumPy 2.4.2 `numpy/_core/function_base.py`;
 all probed against 2.4.2; gates `Creation/np.logspace.geomspace.Test.cs` (20) + the `creation` oracle tier —
 28 logspace + 13 geomspace cases, 343/343 bit-exact). **Scalar `start`/`stop`/`base` (double), like NumSharp's

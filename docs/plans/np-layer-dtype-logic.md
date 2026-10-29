@@ -35,7 +35,12 @@ np.resize are `UnmanagedStorage` members, ndarray.resize's is `UnmanagedStorage.
 reference-holding route by one `HasReferences` decision. Batch 3, assignment, is done (`794fa292`, `448bde50`,
 `fd1fa7af`, `713fbaf3`): np.copyto's internals and ndarray.fill's body are `UnmanagedStorage.Assign*.cs` members,
 np.concatenate's body is `NDArray.ConcatenateInto` in `NDArray.Multiarray.cs`, and R1 leaves the array object's homes
-out; the text casts got a batch of their own, 9b. Batch 9, the computing functions in P3's files, is done
+out; the text casts got a batch of their own, 9b. Batch 4, coercion, is done (`8a2d53fe`, `8889e868`,
+`a45a11f6`, `9eb1fe39`, `c8bc8396`): the bodies of np.array, np.asarray and np.asanyarray are `NDArray.Multiarray.cs`
+members, the coercion is `UnmanagedStorage.Coercion*.cs` (the text builder, and NumPy's coercion of a sequence moved
+from numpy.polynomial), its stores and its discovery go through the DType classes, and the object-list divergence
+it found is fixed per D4 (`3518c7cd`: np.array and np.asanyarray of a C# object list are NumPy's coercion of a
+Python list). Batch 9, the computing functions in P3's files, is done
 (2026-10-29): np.linspace / np.logspace / np.geomspace are `TensorEngine` members in `TensorEngine.CoreFunctionBase.cs`,
 np.vander in `TensorEngine.TwoDimBase.cs`, np.trim_zeros in `TensorEngine.FunctionBase.cs`, and the six divergences a
 replay of their snapshot through NumPy found are fixed per D4. P5 is done (2026-10-29): its six
@@ -779,6 +784,14 @@ first, as it did for np.fft.
 4. **Coercion** (6 files, 71 lines): np.array, np.asarray, np.asanyarray, the string-array overload, `NDArray.Scalar`
    and the implicit conversions from C# arrays into `UnmanagedStorage.Coercion.cs`, with `NDPolySequence.cs`'s port and
    `NDStringArrays`' text collection; discovery through `discover_descr_from_pyobject`, stores through `setitem`.
+   Done (`e07f3016`, `8a2d53fe`, `8889e868`, `a45a11f6`, `9eb1fe39`, `c8bc8396`, `3518c7cd`), with three changes to
+   this text: the bodies of np.array, np.asarray and np.asanyarray went to their Appendix D home `NDArray.Multiarray.cs`
+   (`_array_fromobject_generic`), the coercion to three files (`UnmanagedStorage.Coercion.cs`, `.Coercion.Text.cs` for
+   the text builder, `.Coercion.Sequence.cs` for `NDPolySequence.cs`'s port) and the export to a C# array to
+   `UnmanagedStorage.Convert.cs`; the stores run as a new slot, `DTypeMeta.SetFreshItems` (NumPy's
+   `PyArray_AssignFromCache` loop, `setitem` per value, `StringDType`'s arena reserved once); discovery is
+   `discover_dtype_from_pyobject` and `find_scalar_descriptor` over the slots. The two walks (the text builder and the
+   sequence walk) are not one yet: see the state log.
 5. **Constructors** (6 files, 60 lines): np.empty, np.zeros, np.ones, np.full and their `_like` forms, np.ndarray,
    np.eye's ones into `UnmanagedStorage.Ctors.cs`, where np.arange already is (`8be47c75`: NumPy's
    `PyArray_ArangeObj` through `setitem` and `fill`, the D4 fix batch 1's gate called for).
@@ -1038,6 +1051,73 @@ candidate.
 ---
 
 ## 9. State log
+
+- **2026-10-29, P3: batch 4 (coercion).** Seven commits on `strings`, developed in the scratch worktree and landed by
+  fast-forward (the four after `8a2d53fe` were rebased over batch 9's landing, which touched no file of theirs but the
+  allowlist and the docs):
+  - `e07f3016`: the snapshot tool reaches the coercion family - np.array, np.asarray, np.asanyarray, `NDArray.Scalar`
+    and the conversion operators take a C# value, which the tool builds from each pool operand in every form the
+    parameter takes (typed, jagged and object arrays, nested object lists and grids, rows, a List / an iterator / a
+    Memory / a tuple, a scalar, a str, a str array, a MemoryView, null); every overload whose first parameter is not an
+    NDArray was SKIP. 56,886 lines, deterministic under `NUMSHARP_DEBUG_GUARD_PAGES=1` (an uninitialized tail of
+    `np.array<T>(IEnumerable, size)` differed between runs without it).
+  - `8a2d53fe`, the pure move, part 1: the bodies of np.array, np.asarray and np.asanyarray are `NDArray` members in
+    `NDArray.Multiarray.cs` (NumPy's `_array_fromobject_generic`, by operand kind: `ArrayFromObject`, `ArrayFromManaged`,
+    `AnyArrayFromObject`, `ArrayFromTyped`); `NDArray.Scalar`'s, np.array(str)'s and the C# array conversions are
+    `UnmanagedStorage` members in the new `UnmanagedStorage.Coercion.cs` and `UnmanagedStorage.Convert.cs`. The facades
+    keep the class boundaries, the device and `like=` handling and the C# null checks.
+  - `8889e868`, part 2: `NDStringArrays`' text collection (the shape walk, the descriptor's discovery, the stores into a
+    fixed-width, `StringDType` or numeric result, np.asarray's request test) moves into the new
+    `UnmanagedStorage.Coercion.Text.cs`, its export to a C# array into `UnmanagedStorage.Convert.cs`.
+  - `a45a11f6`, part 3: the port of NumPy's coercion of a Python sequence (`PolySequence`,
+    `Polynomial/Package/NDPolySequence.cs`) is `UnmanagedStorage`'s, in `Creation/UnmanagedStorage.Coercion.Sequence.cs`
+    (git mv): `FromSequence` / `FromSequenceOrNonNumeric` / `SequenceItems` / `SequenceNDim`; its 26 callers (numpy.char,
+    numpy.matrix, numpy.polynomial, np.histogramdd, np.gradient) name the new members.
+  - `9eb1fe39`, the conversion's first part, stores through the classes: the text builder's three store loops (a
+    `StringDType` request's `VStringArraySlice.SetRange`, a numeric request's `PackStore` into a stack slot, the
+    fixed-width `WriteElement`) are one sequence, NumPy's `PyArray_FromAny`: the descriptor (requested, or discovered for
+    an unsized request), the allocation (zero-filled only for reference-holding cells, `NPY_NEEDS_INIT`), the values
+    through the class. The run is a new NumSharp slot, `DTypeMeta.SetFreshItems` (NumPy's `PyArray_AssignFromCache` loop
+    of `PyArray_Pack`: `setitem` per value by default; `StringDType` overrides it with `SetRange`, which reserves its arena
+    once - the per-value first version failed `StringDTypeFillTests.Array_ReservesTheArenaOnce`). `NDArray.Scalar`'s
+    text lane is that route too.
+  - `c8bc8396`, the conversion's second part, discovery through the classes: the text builder's `Discover` is the dtype
+    half of `PyArray_DiscoverDTypeAndShape` - `UnmanagedStorage.DiscoverDTypeFromPyObject` (`discover_dtype_from_pyobject`:
+    the requested class when it claims the value, else the value's own class), `FindScalarDescriptor`
+    (`find_scalar_descriptor`: the class's `discover_descr_from_pyobject`, cast to the requested class) and
+    `DTypePromotion.PromoteTypes` per value (`handle_promotion`). `NumberTextWidth`'s hand-kept table of
+    `REQUIRED_STR_LEN` is gone: the casting impls give the same widths for all 15 storage classes (probed).
+    `_PyLongDType.discover_descr_from_pyobject` is NumPy's `discover_descriptor_from_pylong` (int64, uint64, object by
+    value); the string classes size a C# char as one character.
+  - `3518c7cd`, D4: np.array and np.asanyarray of a C# object list (an `object[]`, a jagged `object[][]`, an `object[,]`
+    grid, a tuple, a `List<object>`) are NumPy's coercion of a Python list. np.array threw for every such list without
+    text, np.asanyarray read it with C#'s types (an `object[]` of ints was int32) and cast a dtype request after
+    discovery (300 into int8 wrapped to 44). `UnmanagedStorage.FromSequence(seq, requested)` is NumPy's walk with the
+    descriptor set: the shape alone, then `setitem` per scalar item and an unsafe cast per array item. A probe of 368
+    calls against NumPy: 181 identical before, 358 after (the rest: four object arrays refused as documented, four
+    OverflowError texts where NumPy's Windows build differs from the LP64 text NumSharp pins, two artefacts of the
+    probe). Breaking: np.asanyarray of C# ints in such a list is int64 (was int32), of C# floats float64 (was float32);
+    a dtype request packs every item (OverflowError, TypeError where values wrapped or lost their imaginary part); an
+    invalid order raises before the operand is converted. An empty object grid keeps its own dims (NumPy's lists cannot
+    state one with no rows). The old converters `ConvertNonGenericEnumerable`, `ConvertObjectGrid` and `ConvertTuple`
+    are gone.
+  - Gates, every commit: the coercion snapshot identical to the parent's (the pure moves and the first conversion),
+    or its changes classified line by line (the second conversion: 13 lines, the refusal text of a Python int past 64
+    bits; D4: 10,551 lines in the list forms of np.array and np.asanyarray); a probe of 5,608 np.array calls over mixed
+    object lists (text, bytes, char, None, Python and NumPy scalars, nested lists) under nine requests identical across
+    the moves and conversions; R1 / R2 tightened; the doc warnings unchanged by the moves and conversions, one fewer with D4 (the
+    deleted converters' NDW012); NumSharp.Tests and NumSharp.Tests.Oracle on net10.0 and net8.0.
+  - R1 for the batch: 76 lines leave (text 25, numeric 51): `NDArray.Implicit.Array.cs` 51, `NDArray.Scalar.cs` 5,
+    np.array.cs 8, np.asanyarray.cs 4, np.asarray.cs 2, np.array.string.cs 1, np.copyto.Strings.cs 1, np.pad.cs 3,
+    np.loadtxt.Sinks.cs 1. The facades left hold no dtype test.
+  - Left for later (recorded): the coercion still has two walks - the text builder (C# arrays, any value under a
+    request; text discovery through the slots) and the sequence walk (lists, tuples, enumerables, ndarray items; its
+    dtype an NPTypeCode, so an ndarray item of a text dtype is refused); one walk with descriptor promotion would serve
+    both. np.array of a ragged jagged TYPED array truncates silently (`[[97], [99]]` from `{97}, {99, 100}`: the typed
+    path's `Shape.ExtractShape`). `NDArray.Scalar(value, dtype)` keeps its documented C# conversion (an out-of-range
+    value wraps where NumPy's `np.array(300, int8)` raises). An `IEnumerator` keeps NumSharp's own reading (NumPy does
+    not iterate one).
+  - Next: batch 5 (constructors).
 
 - **2026-10-29, P3: batch 9 (the computing functions in P3's files).** Ten commits on `strings` from the parallel
   session (developed in a scratch worktree on `8a2d53fe`, landed by fast-forward):
