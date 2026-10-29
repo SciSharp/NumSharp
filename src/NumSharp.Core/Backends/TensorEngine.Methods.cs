@@ -391,8 +391,69 @@ namespace NumSharp
         ///     <c>DefaultEngine.MaxMinNumPy</c>, which the public functions called past the engine.</remarks>
         public abstract NDArray ReduceAMin(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null,
             NDArray @out = null, object initial = null, NDArray @where = null);
-        public abstract NDArray ReduceArgMax(NDArray arr, int? axis_, bool keepdims = false);
-        public abstract NDArray ReduceArgMin(NDArray arr, int? axis_, bool keepdims = false);
+        /// <summary>
+        ///     NumPy's <c>np.argmax(a, axis=None, out=None, *, keepdims=False)</c> (<c>PyArray_ArgMaxWithKeepdims</c>), the
+        ///     whole call: the int64 index of the largest element along <paramref name="axis_"/> (its first occurrence), or
+        ///     of the C-order flattened array, written into <paramref name="out"/> when one is given.
+        /// </summary>
+        /// <param name="arr">The array (any dtype: fixed-width text is compared as NumPy's
+        ///     <c>STRING_argmax</c> / <c>UNICODE_argmax</c> compare it, a <c>StringDType</c> array by its dtype's
+        ///     compare, a NaN-like NA greater than any text).</param>
+        /// <param name="axis_">The reduced axis (negative counts from the end), or null for the flattened array (a 0-d
+        ///     input ravels first, so it accepts 0 and -1).</param>
+        /// <param name="keepdims">Whether the reduced axis stays with length one (with <paramref name="axis_"/> null,
+        ///     every axis: the shape <c>(1,) * arr.ndim</c>).</param>
+        /// <param name="out">NumPy's <c>out=</c>: an array of exactly the result's shape whose dtype casts safely to int64
+        ///     (bool through uint32, and NumSharp's char); the int64 indices are cast into it unsafely (an int8 out wraps an
+        ///     index of 200 to -56, a bool out reads index != 0) and it is returned itself. Null for a fresh result.</param>
+        /// <returns><paramref name="out"/> itself when given; otherwise the int64 indices, a read-only 0-d array (NumPy's
+        ///     scalar) for the flattened form without keepdims.</returns>
+        /// <exception cref="AxisError"><paramref name="axis_"/> is outside the input's rank (rank 1 for a 0-d input),
+        ///     checked before anything else, for every dtype.</exception>
+        /// <exception cref="ValueError">An empty reduced line (<c>attempt to get argmax of an empty sequence</c>); an
+        ///     <paramref name="out"/> of another shape (<c>output array does not match result of np.argmax.</c>); a
+        ///     <c>StringDType</c> comparison that meets a None-like NA (<c>Cannot compare null that is not a nan-like
+        ///     value</c>).</exception>
+        /// <exception cref="TypeError"><paramref name="out"/>'s dtype does not cast safely to int64 (uint64, the
+        ///     floats, complex, text: NumPy's <c>Cannot cast array data from dtype('uint64') to dtype('int64') according to
+        ///     the rule 'safe'</c>, which names a 0-d out a <c>scalar</c>).</exception>
+        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
+        /// <remarks>Widened with <paramref name="out"/> in 0.71.0 (the np-layer dtype plan): NumPy's <c>out=</c> contract
+        ///     was np's <c>NanArgWriteOut</c>, which np.argmax and np.nanargmax called around this member. Its two checks run
+        ///     in NumPy's order, the shape before the dtype (<c>_PyArray_ArgMinMaxCommon</c>).</remarks>
+        public abstract NDArray ReduceArgMax(NDArray arr, int? axis_, bool keepdims = false, NDArray @out = null);
+
+        /// <summary>
+        ///     NumPy's <c>np.argmin(a, axis=None, out=None, *, keepdims=False)</c> (<c>PyArray_ArgMinWithKeepdims</c>), the
+        ///     whole call: the int64 index of the smallest element along <paramref name="axis_"/> (its first occurrence), or
+        ///     of the C-order flattened array, written into <paramref name="out"/> when one is given.
+        /// </summary>
+        /// <param name="arr">The array (any dtype: fixed-width text is compared as NumPy's
+        ///     <c>STRING_argmin</c> / <c>UNICODE_argmin</c> compare it, a <c>StringDType</c> array by its dtype's
+        ///     compare, a NaN-like NA greater than any text).</param>
+        /// <param name="axis_">The reduced axis (negative counts from the end), or null for the flattened array (a 0-d
+        ///     input ravels first, so it accepts 0 and -1).</param>
+        /// <param name="keepdims">Whether the reduced axis stays with length one (with <paramref name="axis_"/> null,
+        ///     every axis: the shape <c>(1,) * arr.ndim</c>).</param>
+        /// <param name="out">NumPy's <c>out=</c>: an array of exactly the result's shape whose dtype casts safely to int64
+        ///     (bool through uint32, and NumSharp's char); the int64 indices are cast into it unsafely (an int8 out wraps an
+        ///     index of 200 to -56, a bool out reads index != 0) and it is returned itself. Null for a fresh result.</param>
+        /// <returns><paramref name="out"/> itself when given; otherwise the int64 indices, a read-only 0-d array (NumPy's
+        ///     scalar) for the flattened form without keepdims.</returns>
+        /// <exception cref="AxisError"><paramref name="axis_"/> is outside the input's rank (rank 1 for a 0-d input),
+        ///     checked before anything else, for every dtype.</exception>
+        /// <exception cref="ValueError">An empty reduced line (<c>attempt to get argmin of an empty sequence</c>); an
+        ///     <paramref name="out"/> of another shape (<c>output array does not match result of np.argmin.</c>); a
+        ///     <c>StringDType</c> comparison that meets a None-like NA (<c>Cannot compare null that is not a nan-like
+        ///     value</c>).</exception>
+        /// <exception cref="TypeError"><paramref name="out"/>'s dtype does not cast safely to int64 (uint64, the
+        ///     floats, complex, text: NumPy's <c>Cannot cast array data from dtype('uint64') to dtype('int64') according to
+        ///     the rule 'safe'</c>, which names a 0-d out a <c>scalar</c>).</exception>
+        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
+        /// <remarks>Widened with <paramref name="out"/> in 0.71.0 (the np-layer dtype plan): NumPy's <c>out=</c> contract
+        ///     was np's <c>NanArgWriteOut</c>, which np.argmin and np.nanargmin called around this member. Its two checks run
+        ///     in NumPy's order, the shape before the dtype (<c>_PyArray_ArgMinMaxCommon</c>).</remarks>
+        public abstract NDArray ReduceArgMin(NDArray arr, int? axis_, bool keepdims = false, NDArray @out = null);
         /// <summary>
         ///     NumPy's <c>np.prod</c> (<c>np.multiply.reduce</c>), the whole call: the product over <paramref name="axis_"/>
         ///     (every axis when null), stored into <paramref name="out"/> when given.

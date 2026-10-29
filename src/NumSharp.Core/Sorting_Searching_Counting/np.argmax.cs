@@ -67,7 +67,7 @@
             // a numpy.char.chararray operand: NumPy creates the index as the subclass, so the finalize ValueError follows the plain checks (NDCharArrayBoundary)
             if (NDCharArrayBoundary.Sees(a))
                 return NDCharArrayBoundary.IndexResult((a, axis, @out, keepdims), static s => argmax(s.a, s.axis, s.@out, s.keepdims), @out);
-            return NanArgWriteOut(a.TensorEngine.ReduceArgMax(a, axis, keepdims), @out, "argmax");
+            return np.EngineOf(a).ReduceArgMax(a, axis, keepdims, @out);
         }
 
         /// <summary>
@@ -149,7 +149,7 @@
             // a numpy.char.chararray operand: NumPy creates the index as the subclass, so the finalize ValueError follows the plain checks (NDCharArrayBoundary)
             if (NDCharArrayBoundary.Sees(a))
                 return NDCharArrayBoundary.IndexResult((a, axis, @out, keepdims), static s => argmin(s.a, s.axis, s.@out, s.keepdims), @out);
-            return NanArgWriteOut(a.TensorEngine.ReduceArgMin(a, axis, keepdims), @out, "argmin");
+            return np.EngineOf(a).ReduceArgMin(a, axis, keepdims, @out);
         }
 
         /// <summary>

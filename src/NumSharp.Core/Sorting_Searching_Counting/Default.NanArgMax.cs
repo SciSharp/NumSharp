@@ -1,5 +1,6 @@
 // NumPy's np.nanargmax and np.nanargmin (numpy/lib/_nanfunctions_impl.py) as DefaultEngine's members: the axis check,
-// text's argmax / argmin checks, _replace_nan with the all-NaN slice guard, the arg reduction and NumPy's out= contract.
+// text's argmax / argmin checks, _replace_nan with the all-NaN slice guard, and the arg reduction with NumPy's out=
+// contract (ReduceArgMax / ReduceArgMin's).
 // The file sits beside its facade while it calls np.*: ratchet R2 counts np.* calls against every file under Backends/
 // (the np-layer dtype plan, C3); it moves under Backends/Default/ in P6.
 
@@ -22,11 +23,10 @@ namespace NumSharp.Backends
             if (Backends.Strings.NDStringUfuncs.IsVString(a) || Backends.Strings.NDStringUfuncs.IsString(a))
             {
                 NanArgTextChecks(a, axis, @out, keepdims, "argmax");
-                return np.NanArgWriteOut(a.TensorEngine.ReduceArgMax(a, axis, keepdims), @out, "argmax");
+                return a.TensorEngine.ReduceArgMax(a, axis, keepdims, @out);
             }
             var prepared = NanArgReplace(a, double.NegativeInfinity, axis);
-            var res = prepared.TensorEngine.ReduceArgMax(prepared, axis, keepdims);
-            return np.NanArgWriteOut(res, @out, "argmax");
+            return prepared.TensorEngine.ReduceArgMax(prepared, axis, keepdims, @out);
         }
 
         /// <inheritdoc />
@@ -40,17 +40,16 @@ namespace NumSharp.Backends
             if (Backends.Strings.NDStringUfuncs.IsVString(a) || Backends.Strings.NDStringUfuncs.IsString(a))
             {
                 NanArgTextChecks(a, axis, @out, keepdims, "argmin");
-                return np.NanArgWriteOut(a.TensorEngine.ReduceArgMin(a, axis, keepdims), @out, "argmin");
+                return a.TensorEngine.ReduceArgMin(a, axis, keepdims, @out);
             }
             var prepared = NanArgReplace(a, double.PositiveInfinity, axis);
-            var res = prepared.TensorEngine.ReduceArgMin(prepared, axis, keepdims);
-            return np.NanArgWriteOut(res, @out, "argmin");
+            return prepared.TensorEngine.ReduceArgMin(prepared, axis, keepdims, @out);
         }
 
         /// <summary>
         ///     NumPy's checks of <c>np.argmax</c> / <c>np.argmin</c> of text before it compares (what <c>nanargmax</c> /
         ///     <c>nanargmin</c> are for text: its <c>_replace_nan</c> leaves a non-inexact array alone), once the axis passed:
-        ///     an empty reduced length refuses, then <c>out=</c> is checked (<see cref="np.ValidateNanArgOut"/>).
+        ///     an empty reduced length refuses, then <c>out=</c> is checked (<see cref="ValidateArgOut"/>).
         /// </summary>
         /// <param name="a">The text array.</param>
         /// <param name="axis">The validated axis, or null for the flattened array.</param>
@@ -96,7 +95,7 @@ namespace NumSharp.Backends
             if (reduced == 0)
                 throw new ValueError($"attempt to get {name} of an empty sequence");
             if (@out is not null)
-                np.ValidateNanArgOut(@out, dims, name);
+                ValidateArgOut(@out, dims, name);
         }
 
         /// <summary>

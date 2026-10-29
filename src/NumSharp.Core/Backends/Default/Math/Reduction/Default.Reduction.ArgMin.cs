@@ -6,8 +6,18 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
+        /// <inheritdoc />
+        /// <remarks>
+        ///     DefaultEngine computes the indices (<see cref="ArgMinIndices"/>) and then writes them into
+        ///     <paramref name="out"/> (<see cref="WriteArgOut"/>). Every error the computation raises is one NumPy raises
+        ///     before it looks at the out (the axis, the empty length), so the out's checks after it report what NumPy
+        ///     reports.
+        /// </remarks>
+        public override NDArray ReduceArgMin(NDArray arr, int? axis_, bool keepdims = false, NDArray @out = null)
+            => WriteArgOut(ArgMinIndices(arr, axis_, keepdims), @out, "argmin");
+
         /// <summary>
-        ///     NumPy's <c>np.argmin</c>: the int64 index of the smallest element along
+        ///     The indices of NumPy's <c>np.argmin</c>, before <c>out=</c>: the int64 index of the smallest element along
         ///     <paramref name="axis_"/> (first occurrence), or of the flattened array.
         /// </summary>
         /// <param name="arr">The array.</param>
@@ -28,7 +38,7 @@ namespace NumSharp.Backends
         ///     (unsigned code units over the item width; the first minimum of each line
         ///     wins), by <see cref="Sorting.TextArgReduce"/>.
         /// </remarks>
-        public override NDArray ReduceArgMin(NDArray arr, int? axis_, bool keepdims = false)
+        private NDArray ArgMinIndices(NDArray arr, int? axis_, bool keepdims)
         {
             // StringDType first (the S / U test below refuses it): the dtype's ArgFunc over the cells (NumPy's `compare`, a
             // NaN-like NA greater than any text) once NumPy's checks passed (the axis, the empty-sequence error).
@@ -45,7 +55,7 @@ namespace NumSharp.Backends
                 if (!Strings.NDStringUfuncs.ShapeDecides("argmin", arr, axis_))
                     return Sorting.TextArgReduce.ArgReduce(arr, axis_, keepdims, max: false);
                 using var textStandIn = Strings.NDStringUfuncs.BoolStandIn(arr);
-                return ReduceArgMin(textStandIn, axis_, keepdims);
+                return ArgMinIndices(textStandIn, axis_, keepdims);
             }
             //in order to iterate an axis:
             //consider arange shaped (1,2,3,4) when we want to summarize axis 1 (2nd dimension which its value is 2)
