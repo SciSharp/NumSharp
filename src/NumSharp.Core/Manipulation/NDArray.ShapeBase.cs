@@ -503,7 +503,8 @@ namespace NumSharp
         /// <param name="func1d">The function of a 1-D slice (not null).</param>
         /// <param name="axis">The axis to slice along; negative counts from the end.</param>
         /// <param name="arr">The input (not null).</param>
-        /// <returns>A transposed view of a fresh buffer holding the results, of the first result's dtype.</returns>
+        /// <returns>A transposed view of a fresh buffer holding the results, of the first result's dtype (a text scalar's
+        ///     as wide as its value, <see cref="TextScalarAsArray"/>).</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> out of range (the original axis reported).</exception>
         /// <exception cref="ValueError">An iteration dimension is 0, or <paramref name="func1d"/> returned null.</exception>
         /// <remarks>Not scoped: every array <paramref name="func1d"/> returns, and every slice handed to it, stays the
@@ -544,6 +545,12 @@ namespace NumSharp
 
             long[] ind0 = inds.Current;
             NDArray res0 = InvokeFunc1d(func1d, inarr, ind0);
+            // NumPy: res = asanyarray(func1d(inarr_view[ind0])). A text SCALAR result becomes an array as wide as its value
+            // (np.asanyarray(np.str_('3')) is <U1), so the buffer takes that width and every later result is cast into it
+            // (truncated), as in NumPy; the array made here is this method's, released once its slot is written.
+            NDArray firstResult = res0;
+            res0 = TextScalarAsArray(res0);
+            bool res0Made = !ReferenceEquals(res0, firstResult);
 
             int resNd = res0.ndim;
             long[] resDims = res0.Shape.dimensions ?? System.Array.Empty<long>();
@@ -572,7 +579,17 @@ namespace NumSharp
             long resBytes = useSpanWrite ? res0.size * buff.dtypesize : 0;
             Span<byte> buffBytes = useSpanWrite ? buff.Unsafe.Bytes() : default;
 
-            WriteSlot(buff, buffBytes, useSpanWrite, 0, ind0, res0, resDims, resBytes);
+            try
+            {
+                WriteSlot(buff, buffBytes, useSpanWrite, 0, ind0, res0, resDims, resBytes);
+            }
+            finally
+            {
+                // The re-discovered text scalar is this method's own array (func1d's result stays the caller's): released
+                // once its slot is written, or when the write fails. Only its dims (resDims) and byte count are used later.
+                if (res0Made)
+                    res0.Dispose();
+            }
             long k = 1;
             while (inds.MoveNext())
             {
@@ -628,6 +645,35 @@ namespace NumSharp
             if (res is null)
                 throw new ValueError("apply_along_axis: func1d returned null");
             return res;
+        }
+
+        /// <summary>
+        ///     NumPy's <c>asanyarray</c> of a func1d result when the result is a TEXT SCALAR: an unmarked 0-d array of a
+        ///     string dtype stands for NumPy's <c>np.str_</c> / <c>np.bytes_</c> (an element of a fixed-width array, as
+        ///     <c>lambda v: v[0]</c> returns) or for StringDType's scalar, a Python <c>str</c> (what <c>np.sum</c> of a
+        ///     StringDType slice returns), and <c>np.asanyarray</c> of a text scalar is an array as wide as its value:
+        ///     <c>np.asanyarray(np.str_('3'))</c> is <c>&lt;U1</c> whatever array the element came from, an empty value
+        ///     <c>&lt;U1</c> / <c>|S1</c>. Every other result (an array of any rank, a number, an explicit 0-d array) is
+        ///     returned as it is.
+        /// </summary>
+        /// <param name="res">A func1d result (not null).</param>
+        /// <returns><paramref name="res"/> itself, or a NEW 0-d <c>U</c> / <c>S</c> array the caller disposes.</returns>
+        /// <remarks>
+        ///     This decides the buffer's dtype in <see cref="ApplyAlongAxis"/>: NumPy allocates <c>zeros_like(res)</c>, so a
+        ///     <c>&lt;U5</c> source whose first element is one character gives a <c>&lt;U1</c> result, and later, longer
+        ///     results are truncated to it (probed 2.4.2). A StringDType NA element is no str (NumPy's <c>na_object</c>): it
+        ///     keeps its array, as no NumSharp dtype holds NumPy's object scalar.
+        /// </remarks>
+        private static NDArray TextScalarAsArray(NDArray res)
+        {
+            // An explicit 0-d array (np.array<T>'s mark) is an ndarray in NumPy too: kept whole. A scalar stand-in of a number
+            // is its own dtype's array already.
+            if (res.ndim != 0 || res.IsExplicitZeroDimArray || res.dtype.kind is not ('U' or 'S' or 'T'))
+                return res;
+            // The value as NumPy's scalar holds it (trailing NULs stripped): a str for U and StringDType, bytes for S; the
+            // coercion discovers its class and width as np.asanyarray does.
+            object value = res.Storage.GetAtIndex(0);
+            return value is string or byte[] ? Backends.UnmanagedStorage.FromAnyScalar(value, null) : res;
         }
 
         /// <summary>

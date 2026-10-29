@@ -184,5 +184,54 @@ namespace NumSharp.Tests.Manipulation
             ((Action)(() => np.apply_along_axis(a => a, 0, (NDArray)null)))
                 .Should().Throw<ArgumentNullException>();
         }
+
+        /// <summary>
+        ///     A TEXT SCALAR result - an element <c>v[0]</c> of a fixed-width slice (NumPy's <c>np.str_</c> /
+        ///     <c>np.bytes_</c>) or <c>np.sum</c> of a StringDType slice (a Python <c>str</c>) - makes the buffer as wide as
+        ///     the FIRST value, as NumPy's <c>res = asanyarray(func1d(...))</c> does, and later, longer results are truncated
+        ///     to it. An explicit 0-d array keeps its dtype and a number is its own dtype. Every expectation is NumPy
+        ///     2.4.2's output.
+        /// </summary>
+        [TestMethod]
+        public void TextScalarResult_IsAsWideAsTheFirstValue()
+        {
+            // a = np.array([['3', 'abc'], ['-1x', 'd']], dtype='U5')
+            // np.apply_along_axis(lambda v: v[0], 0, a) -> array(['3', 'a'], dtype='<U1'), owndata False
+            using var a = np.array(new[] { "3", "abc", "-1x", "d" }, np.dtype("U5")).reshape(2, 2);
+            using var first = np.apply_along_axis(v => v[0], 0, a);
+            first.dtype.Should().Be(np.dtype("<U1"));
+            np.array_equal(first, np.array(new[] { "3", "a" }, np.dtype("U1"))).Should().BeTrue();
+            first.flags.owndata.Should().BeFalse();
+            // np.apply_along_axis(lambda v: v[0], 1, a) -> array(['3', '-'], dtype='<U1')
+            using var rows = np.apply_along_axis(v => v[0], 1, a);
+            np.array_equal(rows, np.array(new[] { "3", "-" }, np.dtype("U1"))).Should().BeTrue();
+
+            // the same over 'S5' -> array([b'3', b'a'], dtype='|S1')
+            using var s = np.array(new[] { "3", "abc", "-1x", "d" }, np.dtype("S5")).reshape(2, 2);
+            using var bytes = np.apply_along_axis(v => v[0], 0, s);
+            bytes.dtype.Should().Be(np.dtype("|S1"));
+            np.array_equal(bytes, np.array(new[] { "3", "a" }, np.dtype("S1"))).Should().BeTrue();
+
+            // t = np.array([['3', 'abc'], ['-1x', 'de']], dtype=StringDType())
+            // np.apply_along_axis(np.sum, 0, t) -> array(['3-1x', 'abcd'], dtype='<U4')  ('abcde' truncated to the first width)
+            using var t = np.array(new[] { "3", "abc", "-1x", "de" }, np.dtypes.StringDType()).reshape(2, 2);
+            using var sums = np.apply_along_axis(v => np.sum(v), 0, t);
+            sums.dtype.Should().Be(np.dtype("<U4"));
+            np.array_equal(sums, np.array(new[] { "3-1x", "abcd" }, np.dtype("U4"))).Should().BeTrue();
+
+            // an empty first value: np.array([['', 'xy'], ['z', 'w']], dtype='U5') -> array(['', 'x'], dtype='<U1')
+            using var e = np.array(new[] { "", "xy", "z", "w" }, np.dtype("U5")).reshape(2, 2);
+            using var fromEmpty = np.apply_along_axis(v => v[0], 0, e);
+            fromEmpty.dtype.Should().Be(np.dtype("<U1"));
+            np.array_equal(fromEmpty, np.array(new[] { "", "x" }, np.dtype("U1"))).Should().BeTrue();
+
+            // np.apply_along_axis(lambda v: np.array('ab'), 0, a) -> array(['ab', 'ab'], dtype='<U2')
+            using var constant = np.apply_along_axis(v => np.array("ab"), 0, a);
+            constant.dtype.Should().Be(np.dtype("<U2"));
+            // a number keeps its dtype: np.apply_along_axis(lambda v: v[0], 0, np.arange(6).reshape(2, 3)) -> [0, 1, 2]
+            using var numbers = np.apply_along_axis(v => v[0], 0, np.arange(6L).reshape(2, 3));
+            numbers.dtype.Should().Be(np.int64);
+            numbers.ToArray<long>().Should().Equal(0L, 1L, 2L);
+        }
     }
 }

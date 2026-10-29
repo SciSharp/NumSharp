@@ -26,9 +26,12 @@ namespace NumSharp
         /// </param>
         /// <param name="arr">Input array, of any rank (≥ 1) and any memory layout.</param>
         /// <returns>
-        ///     A freshly allocated array holding the reassembled results, with <paramref name="func1d"/>'s
-        ///     output dtype. The result is a transposed view over a fresh contiguous buffer (as in
-        ///     NumPy), so it owns its data.
+        ///     A freshly allocated array holding the reassembled results, with the first result's dtype -
+        ///     NumPy's <c>asanyarray</c> of it, so a TEXT SCALAR result (an element <c>v[0]</c> of a
+        ///     <c>&lt;U5</c> slice, <c>np.sum</c> of a StringDType slice) gives an array as wide as that first
+        ///     value (<c>&lt;U1</c> for <c>'3'</c>) and later, longer results are truncated to it, as in NumPy.
+        ///     The result is a transposed view over a fresh contiguous buffer (as in NumPy), so it does not
+        ///     own its data (<c>flags.owndata</c> is False).
         /// </returns>
         /// <exception cref="ArgumentNullException"><paramref name="func1d"/> or <paramref name="arr"/> is null.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds for <paramref name="arr"/>'s rank (reports the original axis).</exception>
