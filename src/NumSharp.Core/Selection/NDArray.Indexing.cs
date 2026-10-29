@@ -236,15 +236,25 @@ namespace NumSharp
         ///     selection included).</param>
         /// <param name="itemIndex">True when the index named one element by integers alone (<see cref="IsItemIndex"/>): a
         ///     <c>StringDType</c> element then takes a Python object by setitem, as NumPy's <c>array_assign_item</c> does.</param>
-        /// <exception cref="ValueError">The value does not broadcast to the selection, or a sequence into one element.</exception>
+        /// <exception cref="ValueError">The value does not broadcast to the selection (NumPy's AssignArray text, quoting the
+        ///     value's shape after its leading unit dimensions were stripped), or a sequence into one element.</exception>
         /// <exception cref="OverflowException">A C# literal out of this dtype's range.</exception>
         /// <exception cref="TypeError">A complex literal into a real dtype.</exception>
         /// <exception cref="OutOfMemoryException">A <c>StringDType</c> store's <c>MemoryError</c> texts.</exception>
         /// <remarks>
+        ///     <para>
         ///     The view is wrapped in an <see cref="NDArray"/> for the assignment and disposed after it, exceptions included:
         ///     the wrapper takes one counted reference on the view's slice and gives it back. A bare view storage was never
         ///     released, which stranded the empty selection's fresh buffer (one pooled buffer per <c>a[5:] = v</c>, found by
         ///     the zero-leak gate's store cases); a non-empty view shares the parent's buffer and is unaffected.
+        ///     </para>
+        ///     <para>
+        ///     A view assignment is NumPy's <c>PyArray_CopyObject</c> → <c>PyArray_AssignArray</c>, which strips an array
+        ///     value's leading unit dimensions while it has more than the view ("a special case for backwards compatibility")
+        ///     and broadcasts the rest (see <see cref="StripLeadingUnitDims"/>). The copy loop below refused every array value
+        ///     with dimensions into a 0-d view ("setting an array element with a sequence."): <c>a[..., 0] = np.zeros(1)</c>
+        ///     stores in NumPy.
+        ///     </para>
         /// </remarks>
         private static void AssignThroughView(UnmanagedStorage view, NDArray value, bool itemIndex = false)
         {
@@ -271,7 +281,46 @@ namespace NumSharp
                 }
                 return;
             }
-            target.Storage.SetData(value, new int[0]);
+            // PyArray_AssignArray: an array with more dimensions than the view loses its leading unit dimensions first (a
+            // (1,) or (1, 1) value fills a 0-d view); one that still has more raises its broadcast error. The stripped value
+            // is a reshape of the caller's array, this call's own.
+            NDArray stripped = value is not null && value.ndim > view.Shape.NDim ? StripLeadingUnitDims(value, view.Shape) : null;
+            try
+            {
+                target.Storage.SetData(stripped ?? value, new int[0]);
+            }
+            finally
+            {
+                if (!ReferenceEquals(stripped, value))
+                    stripped?.Dispose();
+            }
+        }
+
+        /// <summary>
+        ///     NumPy's <c>PyArray_AssignArray</c> for a source with more dimensions than its destination: the source's
+        ///     LEADING unit dimensions are stripped while it has more ("as a special case for backwards compatibility"), and a
+        ///     source that still has more cannot broadcast.
+        /// </summary>
+        /// <param name="value">The source: more dimensions than <paramref name="destination"/>.</param>
+        /// <param name="destination">The destination's shape.</param>
+        /// <returns><paramref name="value"/> reshaped to the dimensions left (a reshape: a view of a contiguous source, a copy
+        ///     otherwise); the caller disposes it.</returns>
+        /// <exception cref="ValueError"><c>could not broadcast input array from shape (2,2) into shape ()</c>: NumPy's
+        ///     <c>broadcast_strides</c> text, quoting the source's shape AFTER the strip ((1, 5) into a 0-d view reads
+        ///     <c>(5,)</c>).</exception>
+        private static NDArray StripLeadingUnitDims(NDArray value, Shape destination)
+        {
+            long[] dims = value.Shape.dimensions;
+            int ndim = destination.NDim;
+            int strip = 0;
+            while (dims.Length - strip > ndim && dims[strip] == 1)
+                strip++;
+            var kept = new long[dims.Length - strip];
+            System.Array.Copy(dims, strip, kept, 0, kept.Length);
+            if (kept.Length > ndim)
+                throw new ValueError($"could not broadcast input array from shape {PyShapeTuple(kept)} " +
+                                     $"into shape {PyShapeTuple(destination.dimensions)}");
+            return value.reshape(Shape.Adopt(kept));
         }
 
         /// <summary>
