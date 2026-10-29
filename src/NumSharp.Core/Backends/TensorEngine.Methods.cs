@@ -420,7 +420,9 @@ namespace NumSharp
         /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         /// <remarks>Widened with <paramref name="out"/> in 0.71.0 (the np-layer dtype plan): NumPy's <c>out=</c> contract
         ///     was np's <c>NanArgWriteOut</c>, which np.argmax and np.nanargmax called around this member. Its two checks run
-        ///     in NumPy's order, the shape before the dtype (<c>_PyArray_ArgMinMaxCommon</c>).</remarks>
+        ///     in NumPy's order, the shape before the dtype, and both before an element is compared
+        ///     (<c>_PyArray_ArgMinMaxCommon</c>): an out error comes before a <c>StringDType</c> comparison's
+        ///     refusal.</remarks>
         public abstract NDArray ReduceArgMax(NDArray arr, int? axis_, bool keepdims = false, NDArray @out = null);
 
         /// <summary>
@@ -452,7 +454,9 @@ namespace NumSharp
         /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         /// <remarks>Widened with <paramref name="out"/> in 0.71.0 (the np-layer dtype plan): NumPy's <c>out=</c> contract
         ///     was np's <c>NanArgWriteOut</c>, which np.argmin and np.nanargmin called around this member. Its two checks run
-        ///     in NumPy's order, the shape before the dtype (<c>_PyArray_ArgMinMaxCommon</c>).</remarks>
+        ///     in NumPy's order, the shape before the dtype, and both before an element is compared
+        ///     (<c>_PyArray_ArgMinMaxCommon</c>): an out error comes before a <c>StringDType</c> comparison's
+        ///     refusal.</remarks>
         public abstract NDArray ReduceArgMin(NDArray arr, int? axis_, bool keepdims = false, NDArray @out = null);
         /// <summary>
         ///     NumPy's <c>np.prod</c> (<c>np.multiply.reduce</c>), the whole call: the product over <paramref name="axis_"/>

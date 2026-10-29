@@ -49,9 +49,9 @@
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.argmax.html
         ///     <para>
-        ///     The order of NumPy's checks (<c>_PyArray_ArgMinMaxCommon</c>): the axis, the empty length, then the out —
-        ///     the engine raises the first two before it reads an element, and nothing it computes can raise, so checking the
-        ///     out afterwards reports the same error NumPy reports.
+        ///     The order of NumPy's checks (<c>_PyArray_ArgMinMaxCommon</c>): the axis, the empty length, then the out, all
+        ///     before an element is compared — so an out error comes before a <c>StringDType</c> comparison's refusal
+        ///     (until 0.71.0 NumSharp compared the text first).
         ///     </para>
         /// </remarks>
         /// <exception cref="ValueError">A <c>numpy.char.chararray</c> operand without <paramref name="out"/>: NumPy creates
@@ -131,9 +131,9 @@
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.argmin.html
         ///     <para>
-        ///     The order of NumPy's checks (<c>_PyArray_ArgMinMaxCommon</c>): the axis, the empty length, then the out —
-        ///     the engine raises the first two before it reads an element, and nothing it computes can raise, so checking the
-        ///     out afterwards reports the same error NumPy reports.
+        ///     The order of NumPy's checks (<c>_PyArray_ArgMinMaxCommon</c>): the axis, the empty length, then the out, all
+        ///     before an element is compared — so an out error comes before a <c>StringDType</c> comparison's refusal
+        ///     (until 0.71.0 NumSharp compared the text first).
         ///     </para>
         /// </remarks>
         /// <exception cref="ValueError">A <c>numpy.char.chararray</c> operand without <paramref name="out"/>: NumPy creates

@@ -10,12 +10,22 @@ namespace NumSharp.Backends
         /// <inheritdoc />
         /// <remarks>
         ///     DefaultEngine computes the indices (<see cref="ArgMaxIndices"/>) and then writes them into
-        ///     <paramref name="out"/> (<see cref="WriteArgOut"/>). Every error the computation raises is one NumPy raises
+        ///     <paramref name="out"/> (<see cref="WriteArgOut"/>). A numeric computation raises only what NumPy raises
         ///     before it looks at the out (the axis, the empty length), so the out's checks after it report what NumPy
-        ///     reports.
+        ///     reports; a text comparison can raise (a <c>StringDType</c> None-like NA), so a text operand's out is checked
+        ///     first (<see cref="ArgTextChecks"/>), as NumPy checks it before it compares.
         /// </remarks>
         public override NDArray ReduceArgMax(NDArray arr, int? axis_, bool keepdims = false, NDArray @out = null)
-            => WriteArgOut(ArgMaxIndices(arr, axis_, keepdims), @out, "argmax");
+        {
+            // NumPy's _PyArray_ArgMinMaxCommon: the axis (a 0-d input ravels first), the empty length and the out, all
+            // before its arg_func compares an element. Only a text comparison can raise, so only text needs them first.
+            if (@out is not null && (Strings.NDStringUfuncs.IsVString(arr) || Strings.NDStringUfuncs.IsString(arr)))
+            {
+                Strings.NDStringUfuncs.ValidateReduceAxis("argmax", arr.ndim, axis_);
+                ArgTextChecks(arr, axis_, @out, keepdims, "argmax");
+            }
+            return WriteArgOut(ArgMaxIndices(arr, axis_, keepdims), @out, "argmax");
+        }
 
         /// <summary>
         ///     The indices of NumPy's <c>np.argmax</c>, before <c>out=</c>: the int64 index of the largest element along

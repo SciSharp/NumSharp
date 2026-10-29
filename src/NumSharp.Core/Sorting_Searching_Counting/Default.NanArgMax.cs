@@ -22,7 +22,7 @@ namespace NumSharp.Backends
             // indices on a bool stand-in), and out= receives the indices as NumPy writes them.
             if (Backends.Strings.NDStringUfuncs.IsVString(a) || Backends.Strings.NDStringUfuncs.IsString(a))
             {
-                NanArgTextChecks(a, axis, @out, keepdims, "argmax");
+                ArgTextChecks(a, axis, @out, keepdims, "argmax");
                 return a.TensorEngine.ReduceArgMax(a, axis, keepdims, @out);
             }
             var prepared = NanArgReplace(a, double.NegativeInfinity, axis);
@@ -39,63 +39,11 @@ namespace NumSharp.Backends
             // compares, and out= receives the indices.
             if (Backends.Strings.NDStringUfuncs.IsVString(a) || Backends.Strings.NDStringUfuncs.IsString(a))
             {
-                NanArgTextChecks(a, axis, @out, keepdims, "argmin");
+                ArgTextChecks(a, axis, @out, keepdims, "argmin");
                 return a.TensorEngine.ReduceArgMin(a, axis, keepdims, @out);
             }
             var prepared = NanArgReplace(a, double.PositiveInfinity, axis);
             return prepared.TensorEngine.ReduceArgMin(prepared, axis, keepdims, @out);
-        }
-
-        /// <summary>
-        ///     NumPy's checks of <c>np.argmax</c> / <c>np.argmin</c> of text before it compares (what <c>nanargmax</c> /
-        ///     <c>nanargmin</c> are for text: its <c>_replace_nan</c> leaves a non-inexact array alone), once the axis passed:
-        ///     an empty reduced length refuses, then <c>out=</c> is checked (<see cref="ValidateArgOut"/>).
-        /// </summary>
-        /// <param name="a">The text array.</param>
-        /// <param name="axis">The validated axis, or null for the flattened array.</param>
-        /// <param name="out">The out array, or null.</param>
-        /// <param name="keepdims">Whether the reduced axes stay with length one (decides the expected out shape).</param>
-        /// <param name="name"><c>argmax</c> or <c>argmin</c>.</param>
-        /// <exception cref="ValueError">An empty reduced length (<c>attempt to get argmax of an empty sequence</c>), or an
-        ///     out of the wrong shape.</exception>
-        /// <exception cref="TypeError">An out that does not cast safely to int64.</exception>
-        private static void NanArgTextChecks(NDArray a, int? axis, NDArray @out, bool keepdims, string name)
-        {
-            int nd = a.ndim;
-            long[] dims;
-            long reduced;
-            if (axis is not int ax)
-            {
-                // The flattened array: a 0-d input ravels to one element.
-                reduced = nd == 0 ? 1 : a.size;
-                dims = new long[keepdims ? nd : 0];
-                Array.Fill(dims, 1L);
-            }
-            else if (nd == 0)
-            {
-                reduced = 1;
-                dims = Array.Empty<long>();
-            }
-            else
-            {
-                int norm = ax < 0 ? ax + nd : ax;
-                reduced = a.Shape.dimensions[norm];
-                dims = new long[keepdims ? nd : nd - 1];
-                for (int d = 0, k = 0; d < nd; d++)
-                {
-                    if (d == norm)
-                    {
-                        if (keepdims)
-                            dims[k++] = 1;
-                        continue;
-                    }
-                    dims[k++] = a.Shape.dimensions[d];
-                }
-            }
-            if (reduced == 0)
-                throw new ValueError($"attempt to get {name} of an empty sequence");
-            if (@out is not null)
-                ValidateArgOut(@out, dims, name);
         }
 
         /// <summary>

@@ -142,6 +142,35 @@ namespace NumSharp.Tests.Backends.Strings
             L(order).Should().Equal(0L, 4L, 8L, 2L, 6L, 10L, 1L, 5L, 9L, 3L, 7L, 11L);
         }
 
+        /// <summary>
+        ///     np.argmax / np.argmin check the out (its shape, then its safe cast to intp) before they compare an element
+        ///     (NumPy's <c>_PyArray_ArgMinMaxCommon</c>), so a bad out is reported over a None-like NA's comparison refusal;
+        ///     without an out the comparison refuses. np.nanargmax / np.nanargmin (np.argmax / np.argmin for text) agree.
+        ///     Probed against numpy 2.4.2; until 0.71.0 np.argmax / np.argmin compared first.
+        /// </summary>
+        [TestMethod]
+        public void ArgMax_Out_IsCheckedBeforeTheNAComparison()
+        {
+            using var a = A(TNone, "b", null, "a");
+            var calls = new (string Name, Func<NDArray, NDArray, NDArray> Call)[]
+            {
+                ("argmax", (x, o) => np.argmax(x, null, o)), ("argmin", (x, o) => np.argmin(x, null, o)),
+                ("argmax", (x, o) => np.nanargmax(x, null, o)), ("argmin", (x, o) => np.nanargmin(x, null, o)),
+            };
+            foreach (var (name, call) in calls)
+            {
+                using var wrongShape = np.zeros(new Shape(3L), np.int64);
+                Action shape = () => call(a, wrongShape);
+                shape.Should().Throw<ValueError>().WithMessage($"output array does not match result of np.{name}.");
+                using var wrongDtype = np.zeros(Shape.NewScalar(), np.uint64);
+                Action cast = () => call(a, wrongDtype);
+                cast.Should().Throw<TypeError>()
+                    .WithMessage("Cannot cast scalar from dtype('uint64') to dtype('int64') according to the rule 'safe'");
+                Action compare = () => call(a, null);
+                compare.Should().Throw<ValueError>().WithMessage("Cannot compare null that is not a nan-like value");
+            }
+        }
+
         // ------------------------------------------------------------------------------------------------------------
         // searches
         // ------------------------------------------------------------------------------------------------------------

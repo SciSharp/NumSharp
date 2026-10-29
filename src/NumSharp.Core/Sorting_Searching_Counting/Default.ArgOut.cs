@@ -1,7 +1,10 @@
 // NumPy's out= contract of np.argmax / np.argmin (PyArray_ArgMaxWithKeepdims / PyArray_ArgMinWithKeepdims: the out's shape,
 // then its safe cast to intp, then an unsafe copy of the indices), which DefaultEngine's ReduceArgMax / ReduceArgMin end
-// with. The file sits beside the facades while it calls np.copyto: ratchet R2 counts np.* calls against every file under
-// Backends/ (the np-layer dtype plan, C3); it moves under Backends/Default/ in P6.
+// with, and the checks they run before a text comparison. The file sits beside the facades while it calls np.copyto:
+// ratchet R2 counts np.* calls against every file under Backends/ (the np-layer dtype plan, C3); it moves under
+// Backends/Default/ in P6.
+
+using System;
 
 namespace NumSharp.Backends
 {
@@ -75,6 +78,61 @@ namespace NumSharp.Backends
                         $"Cannot cast {(@out.ndim == 0 ? "scalar" : "array data")} from {@out.dtype.ToString(true)} to " +
                         "dtype('int64') according to the rule 'safe'");
             }
+        }
+
+        /// <summary>
+        ///     NumPy's checks of <c>np.argmax</c> / <c>np.argmin</c> of text before it compares, once the axis passed: an
+        ///     empty reduced length refuses, then <c>out=</c> is checked (<see cref="ValidateArgOut"/>). A text
+        ///     comparison can raise (a <c>StringDType</c> None-like NA), and NumPy checks all of these first, so
+        ///     <see cref="ReduceArgMax"/> / <see cref="ReduceArgMin"/> run them for a text operand with an out, and
+        ///     np.nanargmax / np.nanargmin (which are np.argmax / np.argmin for text: <c>_replace_nan</c> leaves a
+        ///     non-inexact array alone) run them for every text operand.
+        /// </summary>
+        /// <param name="a">The text array.</param>
+        /// <param name="axis">The validated axis, or null for the flattened array.</param>
+        /// <param name="out">The out array, or null.</param>
+        /// <param name="keepdims">Whether the reduced axes stay with length one (decides the expected out shape).</param>
+        /// <param name="name"><c>argmax</c> or <c>argmin</c>.</param>
+        /// <exception cref="ValueError">An empty reduced length (<c>attempt to get argmax of an empty sequence</c>), or an
+        ///     out of the wrong shape.</exception>
+        /// <exception cref="TypeError">An out that does not cast safely to int64.</exception>
+        private static void ArgTextChecks(NDArray a, int? axis, NDArray @out, bool keepdims, string name)
+        {
+            int nd = a.ndim;
+            long[] dims;
+            long reduced;
+            if (axis is not int ax)
+            {
+                // The flattened array: a 0-d input ravels to one element.
+                reduced = nd == 0 ? 1 : a.size;
+                dims = new long[keepdims ? nd : 0];
+                Array.Fill(dims, 1L);
+            }
+            else if (nd == 0)
+            {
+                reduced = 1;
+                dims = Array.Empty<long>();
+            }
+            else
+            {
+                int norm = ax < 0 ? ax + nd : ax;
+                reduced = a.Shape.dimensions[norm];
+                dims = new long[keepdims ? nd : nd - 1];
+                for (int d = 0, k = 0; d < nd; d++)
+                {
+                    if (d == norm)
+                    {
+                        if (keepdims)
+                            dims[k++] = 1;
+                        continue;
+                    }
+                    dims[k++] = a.Shape.dimensions[d];
+                }
+            }
+            if (reduced == 0)
+                throw new ValueError($"attempt to get {name} of an empty sequence");
+            if (@out is not null)
+                ValidateArgOut(@out, dims, name);
         }
     }
 }
