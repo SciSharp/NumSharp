@@ -1,8 +1,4 @@
-using System;
-using NumSharp.Backends.Iteration;
-using NumSharp.Backends.Kernels;
 using NumSharp.Generic;
-using NumSharp.Utilities;
 
 namespace NumSharp
 {
@@ -32,7 +28,7 @@ namespace NumSharp
         public static NDArray where(NDArray condition, NDArray x, NDArray y)
         {
             using var plain = NDMatrixBoundary.PlainFor(condition, x, y);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return where_internal(condition, x, y);
+            return NDArray.Where(condition, x, y);
         }
 
         /// <summary>
@@ -43,7 +39,7 @@ namespace NumSharp
         public static NDArray where(NDArray condition, object x, NDArray y)
         {
             using var plain = NDMatrixBoundary.PlainFor(condition, y);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return where_internal(condition, NDArray.FromPythonOperand(x), y);
+            return NDArray.Where(condition, NDArray.FromPythonOperand(x), y);
         }
 
         /// <summary>
@@ -54,7 +50,7 @@ namespace NumSharp
         public static NDArray where(NDArray condition, NDArray x, object y)
         {
             using var plain = NDMatrixBoundary.PlainFor(condition, x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return where_internal(condition, x, NDArray.FromPythonOperand(y));
+            return NDArray.Where(condition, x, NDArray.FromPythonOperand(y));
         }
 
         /// <summary>
@@ -65,292 +61,7 @@ namespace NumSharp
         public static NDArray where(NDArray condition, object x, object y)
         {
             using var plain = NDMatrixBoundary.PlainFor(condition);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return where_internal(condition, NDArray.FromPythonOperand(x), NDArray.FromPythonOperand(y));
-        }
-
-        /// <summary>
-        /// Internal implementation of np.where.
-        /// </summary>
-        [NDScoped]
-        private static NDArray where_internal(NDArray condition, NDArray x, NDArray y)
-        {
-            // Boundary scope: reclaims the broadcast_arrays wrappers, the bool/dtype astype
-            // conversions and the scalar-promotion temps at exit; only `result` is yielded.
-
-            // Fixed-width strings: the result dtype is a DESCRIPTOR (result_type(x, y): the wider width) and the
-            // selection runs on unit views (NDStringArrays.Where). The broadcast is validated first, as NumPy's iterator
-            // does, and NumPy's result layout comes from the broadcast operands.
-            if (x.typecode == NPTypeCode.String || y.typecode == NPTypeCode.String)
-            {
-                var operands = broadcast_arrays(condition, x, y);
-                return Backends.Strings.NDStringArrays.Where(condition, x, y, (long[])operands[0].Shape.dimensions.Clone());
-            }
-
-            // Detect "originally scalar" on the user-supplied operands BEFORE broadcasting
-            // expands them into stride-0 views. The scalar fast path below dispatches
-            // specialised IL kernels that hoist the scalar into Vector.Create<T>(value) once
-            // outside the loop — avoiding the per-element broadcast view dereference that the
-            // NDIter expression kernel would otherwise perform.
-            bool xIsScalar = x.size == 1;
-            bool yIsScalar = y.size == 1;
-
-            // Skip broadcast_arrays (which allocates 3 NDArrays + helper arrays) when all three
-            // already share a shape — the frequent case of np.where(mask, arr, other_arr).
-            NDArray cond, xArr, yArr;
-            if (condition.Shape == x.Shape && x.Shape == y.Shape)
-            {
-                cond = condition;
-                xArr = x;
-                yArr = y;
-            }
-            else
-            {
-                var broadcasted = broadcast_arrays(condition, x, y);
-                cond = broadcasted[0];
-                xArr = broadcasted[1];
-                yArr = broadcasted[2];
-            }
-
-            // Resolve output layout before dtype casts. Casts of broadcasted scalars can
-            // materialize C-contiguous temporaries, but NumPy's iterator ignores those for
-            // output-order selection.
-            char resultOrder = ResolveWhereOrder(cond, xArr, yArr);
-
-            // Coerce the condition to boolean using NumPy's truthiness rules
-            // (0/0.0 → False, everything else including NaN/±Inf → True). The
-            // iterator-driven expression kernel requires a bool condition dtype.
-            if (cond.GetTypeCode != NPTypeCode.Boolean)
-                cond = cond.astype(NPTypeCode.Boolean, copy: false);
-
-            // When x and y already agree, skip the NEP50 promotion lookup. Otherwise defer to
-            // _FindCommonType which handles the scalar+array NEP50 rules.
-            var outType = x.GetTypeCode == y.GetTypeCode
-                ? x.GetTypeCode
-                : _FindCommonType(x, y);
-
-            if (xArr.GetTypeCode != outType)
-                xArr = xArr.astype(outType, copy: false);
-            if (yArr.GetTypeCode != outType)
-                yArr = yArr.astype(outType, copy: false);
-
-            // Use cond.shape (dimensions only) not cond.Shape (which may have broadcast strides).
-            // NumPy's iterator allocation preserves F-order when all full-size operands agree
-            // on F layout; any full C-contiguous or non-contiguous operand falls back to C.
-            var result = empty(Shape.Adopt((long[])cond.Shape.dimensions.Clone(), resultOrder), outType);
-
-            // Handle empty arrays - nothing to iterate
-            if (result.size == 0)
-                return result;
-
-            // -----------------------------------------------------------------
-            // Scalar-broadcast IL fast path
-            // -----------------------------------------------------------------
-            // When x or y was a Python literal / 0-d / size-1 array, broadcast_arrays expanded
-            // it into a stride-0 view that fails the IsContiguous gate below. Instead of
-            // materializing that view into a full contig copy (NDIter's behaviour) we read
-            // the single value, cast it to outType, and dispatch a kernel that broadcasts via
-            // V<T>.Create(value) once outside the SIMD loop.
-            //
-            // The non-scalar operand must be contig (its shape already matches the result
-            // because of the broadcast above). Two scalars + contig cond is also covered.
-            if (DirectILKernelGenerator.Enabled &&
-                cond.typecode == NPTypeCode.Boolean &&
-                cond.Shape.IsContiguous &&
-                (xIsScalar || yIsScalar))
-            {
-                // Promote scalars to outType once (cheap — these are 1-element NDArrays).
-                // For each, use the ORIGINAL operand (x/y) so we don't rely on the broadcast
-                // view; the cast yields a fresh 1-element NDArray of outType.
-                NDArray xScalarSrc = xIsScalar
-                    ? (x.GetTypeCode != outType ? x.astype(outType) : x)
-                    : null;
-                NDArray yScalarSrc = yIsScalar
-                    ? (y.GetTypeCode != outType ? y.astype(outType) : y)
-                    : null;
-
-                if (xIsScalar && yIsScalar)
-                {
-                    WhereScalarXYDispatch(cond, xScalarSrc, yScalarSrc, result, outType);
-                    return result;
-                }
-                if (xIsScalar && yArr.Shape.IsContiguous)
-                {
-                    WhereScalarXDispatch(cond, xScalarSrc, yArr, result, outType);
-                    return result;
-                }
-                if (yIsScalar && xArr.Shape.IsContiguous)
-                {
-                    WhereScalarYDispatch(cond, xArr, yScalarSrc, result, outType);
-                    return result;
-                }
-            }
-
-            // IL Kernel fast path: all arrays contiguous, bool condition, SIMD enabled
-            // Broadcasted arrays (stride=0) are NOT contiguous, so they use iterator path.
-            bool canUseKernel = DirectILKernelGenerator.Enabled &&
-                                cond.typecode == NPTypeCode.Boolean &&
-                                cond.Shape.IsContiguous &&
-                                xArr.Shape.IsContiguous &&
-                                yArr.Shape.IsContiguous;
-
-            if (canUseKernel)
-            {
-                WhereKernelDispatch(cond, xArr, yArr, result, outType);
-                return result;
-            }
-
-            // Iterator fallback for non-contiguous/broadcasted arrays.
-            WhereImpl(cond, xArr, yArr, result);
-
-            return result;
-        }
-
-        private static unsafe void WhereImpl(NDArray cond, NDArray x, NDArray y, NDArray result)
-        {
-            // Drive cond + x + y + result in lockstep via a 4-operand NDIter and a
-            // dedicated per-chunk multi-operand kernel (ILKernelGenerator.Where).
-            // C-order traversal matches NumPy element semantics; WRITEONLY on the
-            // output. Operands already share dtypes by here (cond is Boolean, x/y/
-            // result are the resolved output dtype), so no casting/buffering occurs.
-            //
-            // The kernel SIMD-selects (Vector.ConditionalSelect over an expanded
-            // bool mask) whenever the inner loop is contiguous for all four operands
-            // — e.g. a row-mask broadcast over a matrix — and scalar-walks per byte
-            // stride otherwise. Both beat the previous NDExpr.Where path, which was
-            // scalar-only AND cast cond to the output dtype on every element.
-            var dtype = result.GetTypeCode;
-            using var iter = NDIterRef.MultiNew(
-                4, new[] { cond, x, y, result },
-                NDIterGlobalFlags.EXTERNAL_LOOP,
-                NPY_ORDER.NPY_CORDER,
-                NPY_CASTING.NPY_SAFE_CASTING,
-                new[]
-                {
-                    NDIterPerOpFlags.READONLY,
-                    NDIterPerOpFlags.READONLY,
-                    NDIterPerOpFlags.READONLY,
-                    NDIterPerOpFlags.WRITEONLY,
-                });
-
-            iter.ForEach(ILKernelGenerator.GetWhereInnerLoop(dtype));
-        }
-
-        private static char ResolveWhereOrder(params NDArray[] operands)
-        {
-            bool sawStrictF = false;
-
-            foreach (var operand in operands)
-            {
-                var shape = operand.Shape;
-
-                // Scalar, 1-D, and broadcasted operands don't force the output layout.
-                if (shape.IsScalar || shape.NDim <= 1 || shape.IsBroadcasted)
-                    continue;
-
-                bool isC = shape.IsContiguous;
-                bool isF = shape.IsFContiguous;
-
-                if (isC && !isF)
-                    return 'C';
-
-                if (isF && !isC)
-                {
-                    sawStrictF = true;
-                    continue;
-                }
-
-                if (!isC && !isF)
-                    return 'C';
-            }
-
-            return sawStrictF ? 'F' : 'C';
-        }
-
-        /// <summary>
-        /// IL Kernel dispatch for contiguous arrays.
-        /// Uses IL-generated kernels with SIMD optimization.
-        /// </summary>
-        private static unsafe void WhereKernelDispatch(NDArray cond, NDArray x, NDArray y, NDArray result, NPTypeCode outType)
-        {
-            var condPtr = (nint)cond.Address;
-            var count = result.size;
-
-            NpFunc.Invoke(outType, WhereKernelExecute<int>, condPtr, (nint)x.Address, (nint)y.Address, (nint)result.Address, count);
-        }
-
-        private static unsafe void WhereKernelExecute<T>(nint condPtr, nint xAddr, nint yAddr, nint resultAddr, long count) where T : unmanaged
-            => DirectILKernelGenerator.WhereExecute((bool*)condPtr, (T*)xAddr, (T*)yAddr, (T*)resultAddr, count);
-
-        // -----------------------------------------------------------------
-        // Scalar-broadcast dispatch
-        // -----------------------------------------------------------------
-        // Reads the scalar value from the 1-element NDArray (already promoted to outType)
-        // and invokes the appropriate IL kernel. Returns true on success; false if no IL
-        // kernel was available (caller falls back to the NDIter path).
-
-        private static unsafe void WhereScalarXDispatch(NDArray cond, NDArray xScalar, NDArray y, NDArray result, NPTypeCode outType)
-        {
-            // Attempt the IL kernel; if it returns false (no SIMD / unsupported dtype),
-            // materialize the scalar to a broadcast view of cond's shape and fall back
-            // to the existing NDIter expression path.
-            bool ok = NpFunc.Invoke(outType, TryWhereScalarXExecute<int>,
-                (nint)cond.Address, (nint)xScalar.Address, (nint)y.Address, (nint)result.Address, result.size);
-            if (ok) return;
-
-            var xBroadcast = broadcast_to(xScalar, cond.Shape);
-            WhereImpl(cond, xBroadcast, y, result);
-        }
-
-        private static unsafe void WhereScalarYDispatch(NDArray cond, NDArray x, NDArray yScalar, NDArray result, NPTypeCode outType)
-        {
-            bool ok = NpFunc.Invoke(outType, TryWhereScalarYExecute<int>,
-                (nint)cond.Address, (nint)x.Address, (nint)yScalar.Address, (nint)result.Address, result.size);
-            if (ok) return;
-
-            var yBroadcast = broadcast_to(yScalar, cond.Shape);
-            WhereImpl(cond, x, yBroadcast, result);
-        }
-
-        private static unsafe void WhereScalarXYDispatch(NDArray cond, NDArray xScalar, NDArray yScalar, NDArray result, NPTypeCode outType)
-        {
-            bool ok = NpFunc.Invoke(outType, TryWhereScalarXYExecute<int>,
-                (nint)cond.Address, (nint)xScalar.Address, (nint)yScalar.Address, (nint)result.Address, result.size);
-            if (ok) return;
-
-            var xBroadcast = broadcast_to(xScalar, cond.Shape);
-            var yBroadcast = broadcast_to(yScalar, cond.Shape);
-            WhereImpl(cond, xBroadcast, yBroadcast, result);
-        }
-
-        private static unsafe bool TryWhereScalarXExecute<T>(nint condPtr, nint xScalarPtr, nint yPtr, nint resPtr, long count) where T : unmanaged
-        {
-            var kernel = DirectILKernelGenerator.GetWhereScalarXKernel<T>();
-            if (kernel == null) return false;
-
-            T scalarX = *(T*)xScalarPtr;
-            kernel((bool*)condPtr, scalarX, (T*)yPtr, (T*)resPtr, count);
-            return true;
-        }
-
-        private static unsafe bool TryWhereScalarYExecute<T>(nint condPtr, nint xPtr, nint yScalarPtr, nint resPtr, long count) where T : unmanaged
-        {
-            var kernel = DirectILKernelGenerator.GetWhereScalarYKernel<T>();
-            if (kernel == null) return false;
-
-            T scalarY = *(T*)yScalarPtr;
-            kernel((bool*)condPtr, (T*)xPtr, scalarY, (T*)resPtr, count);
-            return true;
-        }
-
-        private static unsafe bool TryWhereScalarXYExecute<T>(nint condPtr, nint xScalarPtr, nint yScalarPtr, nint resPtr, long count) where T : unmanaged
-        {
-            var kernel = DirectILKernelGenerator.GetWhereScalarXYKernel<T>();
-            if (kernel == null) return false;
-
-            T scalarX = *(T*)xScalarPtr;
-            T scalarY = *(T*)yScalarPtr;
-            kernel((bool*)condPtr, scalarX, scalarY, (T*)resPtr, count);
-            return true;
+            return NDArray.Where(condition, NDArray.FromPythonOperand(x), NDArray.FromPythonOperand(y));
         }
     }
 }
