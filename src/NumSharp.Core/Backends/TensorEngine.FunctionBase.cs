@@ -424,5 +424,20 @@ namespace NumSharp
         ///     complex</c>), raised after the operand and length checks.</exception>
         public abstract NDArray Interp(NDArray x, NDArray xp, NDArray fp, object left = null, object right = null,
             double? period = null);
+
+        /// <summary>
+        ///     NumPy's <c>np.sort_complex(a)</c>: a sorted copy along the last axis (<c>b = array(a, copy=True);
+        ///     b.sort()</c>), in the input's own dtype, then converted to complex (<c>astype('D')</c>) unless it is.
+        /// </summary>
+        /// <param name="a">The input (not null).</param>
+        /// <returns>A new complex128 array of <paramref name="a"/>'s shape, sorted along its last axis (complex values
+        ///     lexicographically: real part, then imaginary part).</returns>
+        /// <exception cref="AxisError">A 0-d array (<c>axis -1 is out of bounds for array of dimension 0</c>, which
+        ///     NumPy's <c>b.sort()</c> raises).</exception>
+        /// <exception cref="ValueError">Text that is not a complex number (<c>complex() arg is a malformed
+        ///     string</c>).</exception>
+        /// <remarks>The sort runs in the original dtype, so an int64 past 2^53 orders by its exact value, not by its
+        ///     double image; only the sorted result is widened.</remarks>
+        public abstract NDArray SortComplex(NDArray a);
     }
 }

@@ -42,13 +42,7 @@ namespace NumSharp
             // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
             if (NDCharArrayBoundary.Sees(a))
                 return NDCharArrayBoundary.Plain(a, static s => sort_complex(s));
-            // Text runs NumPy's two statements as they are: b.sort() orders the text along the last axis (a 0-d input
-            // refuses the axis), and astype('D') parses each string into a complex number with Python's complex() rules.
-            // np.sort == array(a, copy=True) + in-place sort along the default last axis; the sort
-            // runs in the ORIGINAL dtype (an int64 past 2^53 must order by its exact value, not by
-            // its double image), and only the sorted result is widened.
-            var b = np.sort(a, -1);
-            return b.typecode == NPTypeCode.Complex ? b : b.astype(NPTypeCode.Complex);
+            return np.EngineOf(a).SortComplex(a);
         }
     }
 }
