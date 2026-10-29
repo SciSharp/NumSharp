@@ -340,78 +340,81 @@ namespace NumSharp
                 }
             }
 
-            // Now that axis placement is known, validate per source axis (mapping.c:709–752 for the
-            // boolean dimensionality check; the integer/array VALUE bounds NumPy raises in the gather):
-            //   • a bool-derived fancy component's axis size must equal the source axis it acts on;
-            //   • a scalar-int / 0-d-array index must be within [-dim, dim) for its axis;
-            //   • every element of an integer fancy array must be within [-dim, dim) for its axis.
-            // These are exactly the IndexErrors NumPy raises; doing them here rejects the malformed
-            // combinations before any gather/scatter (memory safety + accepts-invalid parity).
+            // Now that axis placement is known, validate per source axis, in NumPy's ORDER (each check over every op
+            // before the next kind, as NumPy's run in separate passes):
+            //   1. a bool-derived fancy component's axis size must equal the source axis it acts on — the end of
+            //      prepare_index (mapping.c:709–752);
+            //   2. a scalar-int / 0-d-array index must be within [-dim, dim) for its axis — get_view_from_index, which
+            //      array_subscript / array_assign_subscript run after prepare_index;
+            //   3. the advanced indices must broadcast together — mapiter_fill_info, in PyArray_MapIterNew;
+            //   4. every element of an integer fancy array must be within [-dim, dim) for its axis —
+            //      PyArray_MapIterCheckIndices, last.
+            // So a[[0, 9], mask2] reports the mask, a[[0, 1], [0, 0, 0], 99] the integer, a[[0, 9], [0, 0, 0]] the
+            // broadcast (one pass in op order reported whichever came first in the tuple). These are exactly the
+            // IndexErrors NumPy raises; doing them here rejects the malformed combinations before any gather/scatter
+            // (memory safety + accepts-invalid parity).
             {
-                // NumPy bounds-checks integer ARRAY values at GATHER time, so when the advanced block
-                // broadcasts to an EMPTY result (some advanced index has size 0) nothing is gathered and
-                // the (possibly out-of-range) fancy values are never validated — e.g.
-                // a[arr([99]), np.array(False)] -> (0,4), a[arr([-3,1,2,3],(4,1)), np.array([],int)]
-                // -> (4,0). A SCALAR int index is still validated eagerly (NumPy checks it regardless of
-                // the empty block), as is a bool array's axis size. The block is empty iff a Fancy / 0-d
-                // bool op is itself size 0; broadcastability is still checked below, so an un-broadcastable
-                // empty combo (e.g. (2,2) with (0,)) raises shape-mismatch rather than silently passing.
-                bool advancedBlockEmpty = false;
-                foreach (var op in ops)
-                    if ((op.Kind == IndexKind.Fancy || op.Kind == IndexKind.ZeroDBool) && op.Array is not null && op.Array.size == 0)
-                    { advancedBlockEmpty = true; break; }
-
-                int axis = 0;
-                foreach (var op in ops)
+                // 1 and 2: the bool-derived axis sizes, then the integers' bounds — both checked whatever the advanced
+                // block's size (NumPy runs them before its MapIter exists), unlike step 4's index-array values.
+                for (int pass = 0; pass < 2; pass++)
                 {
-                    switch (op.Kind)
+                    int axis = 0;
+                    foreach (var op in ops)
                     {
-                        case IndexKind.Fancy when op.Value > 0:                 // bool-derived: axis-size check
-                            if (op.Value != dims[axis])
-                                throw new IndexError(
-                                    $"boolean index did not match indexed array along axis {axis}; size of axis is " +
-                                    $"{dims[axis]} but size of corresponding boolean axis is {op.Value}");
-                            break;
-                        case IndexKind.Fancy:                                   // integer array (Value == -1): value bounds
-                            if (!advancedBlockEmpty && scanFancyBounds)         // skipped for an empty broadcast result
-                                ScanFancyBounds(op.Array, dims[axis], axis);
-                            break;
-                        case IndexKind.Integer:                                 // scalar int / 0-d array: value bounds
-                            if (op.IntVal < -dims[axis] || op.IntVal >= dims[axis])
-                                throw new IndexError(
-                                    $"index {op.IntVal} is out of bounds for axis {axis} with size {dims[axis]}");
-                            break;
-                    }
+                        switch (op.Kind)
+                        {
+                            case IndexKind.Fancy when op.Value > 0 && pass == 0:  // bool-derived: axis-size check
+                                if (op.Value != dims[axis])
+                                    throw new IndexError(
+                                        $"boolean index did not match indexed array along axis {axis}; size of axis is " +
+                                        $"{dims[axis]} but size of corresponding boolean axis is {op.Value}");
+                                break;
+                            case IndexKind.Integer when pass == 1:              // scalar int / 0-d array: value bounds
+                                if (op.IntVal < -dims[axis] || op.IntVal >= dims[axis])
+                                    throw new IndexError(
+                                        $"index {op.IntVal} is out of bounds for axis {axis} with size {dims[axis]}");
+                                break;
+                        }
 
-                    switch (op.Kind)
+                        switch (op.Kind)
+                        {
+                            case IndexKind.Ellipsis: axis += (int)op.Value; break;
+                            case IndexKind.NewAxis:
+                            case IndexKind.ZeroDBool: break;     // consume no source axis
+                            default: axis += 1; break;
+                        }
+                    }
+                }
+
+                // 3: advanced indices broadcast TOGETHER into one block; if their shapes are incompatible NumPy raises
+                // (mapping.c:2617 "shape mismatch: indexing arrays could not be broadcast together with shapes (2,) (3,) " —
+                // every shape followed by a space, convert_shape_to_string's ending, the last one too). 0-d bools contribute
+                // a length-(1|0) axis; bool-derived components share one length. An EMPTY combination that does not
+                // broadcast ((2,2) with (0,)) raises here too: step 4's exemption is for values, not shapes.
+                if ((indexType & IndexType.Fancy) != 0)
+                {
+                    var advanced = new List<NDArray>();
+                    foreach (var op in ops)
+                        if (op.Kind == IndexKind.Fancy || op.Kind == IndexKind.ZeroDBool)
+                            advanced.Add(op.Array);
+                    if (advanced.Count > 1 && !np.are_broadcastable(advanced.ToArray()))
                     {
-                        case IndexKind.Ellipsis: axis += (int)op.Value; break;
-                        case IndexKind.NewAxis:
-                        case IndexKind.ZeroDBool: break;     // consume no source axis
-                        default: axis += 1; break;
+                        string Shp(NDArray a) => "(" + string.Join(",", a.Shape.dimensions) + (a.ndim == 1 ? ",) " : ") ");
+                        throw new IndexError("shape mismatch: indexing arrays could not be broadcast together with shapes " +
+                                             string.Concat(advanced.ConvertAll(Shp)));
                     }
                 }
             }
 
-            // Advanced indices broadcast TOGETHER into one block; if their shapes are incompatible
-            // NumPy raises (mapping.c:2617 "shape mismatch: indexing arrays could not be broadcast
-            // together"). 0-d bools contribute a length-(1|0) axis; bool-derived components share one
-            // length. Validate here so an un-broadcastable advanced combo is rejected up front.
-            if ((indexType & IndexType.Fancy) != 0)
-            {
-                var advanced = new List<NDArray>();
-                foreach (var op in ops)
-                    if (op.Kind == IndexKind.Fancy || op.Kind == IndexKind.ZeroDBool)
-                        advanced.Add(op.Array);
-                if (advanced.Count > 1 && !np.are_broadcastable(advanced.ToArray()))
-                {
-                    string Shp(NDArray a) => "(" + string.Join(",", a.Shape.dimensions) + (a.ndim == 1 ? ",)" : ")");
-                    throw new IndexError("shape mismatch: indexing arrays could not be broadcast together with shapes " +
-                                         string.Join(" ", advanced.ConvertAll(Shp)));
-                }
-            }
-
-            return new PreparedIndex(ops.ToArray(), indexType, newNdim, fancyNdim);
+            var prepared = new PreparedIndex(ops.ToArray(), indexType, newNdim, fancyNdim);
+            // 4: the integer index arrays' values. NumPy reads them in its MapIter, while it gathers or scatters, so when the
+            // advanced block broadcasts to an EMPTY result nothing is read and an out-of-range value passes —
+            // a[arr([99]), np.array(False)] is (0,4), a[arr([-3,1,2,3]).reshape(4,1), np.array([],int)] is (4,0) — which
+            // ScanIndexArrayBounds honours. A store that converts its value with the array's descriptor
+            // (scanFancyBounds false) scans them after that conversion instead, by its own ScanIndexArrayBounds call.
+            if (scanFancyBounds)
+                ScanIndexArrayBounds(dims, prepared.Ops);
+            return prepared;
         }
 
         /// <summary>
@@ -540,11 +543,19 @@ namespace NumSharp
         /// <exception cref="IndexError">An index-array value outside <c>[-dim, dim)</c> for the axis it acts on (NumPy's
         ///     text, <see cref="ScanFancyBounds"/>).</exception>
         /// <remarks>Walks the ops in order with <see cref="PrepareIndex"/>'s own axis bookkeeping (an ellipsis spans its fill,
-        ///     a new axis and a 0-d bool consume none) and, like its inline check, reads nothing when the advanced block
-        ///     broadcasts to an EMPTY result: nothing is gathered or scattered then, so NumPy never reads the values.</remarks>
+        ///     a new axis and a 0-d bool consume none) and reads nothing when the advanced block broadcasts to an EMPTY
+        ///     result: nothing is gathered or scattered then, so NumPy never reads the values. <see cref="PrepareIndex"/>
+        ///     runs the same scan as its own last check (after the broadcast check, NumPy's order) unless told not to.</remarks>
         internal static void ScanIndexArrayBounds(Shape shape, PreparedIndex prepared)
+            => ScanIndexArrayBounds(shape.dimensions, prepared.Ops);
+
+        /// <summary><see cref="ScanIndexArrayBounds(Shape, PreparedIndex)"/> over the dimensions and the classified ops
+        ///     themselves (<see cref="PrepareIndex"/>'s own last check).</summary>
+        /// <param name="dims">The array's dimensions.</param>
+        /// <param name="ops">The classified index ops.</param>
+        /// <exception cref="IndexError">An index-array value outside <c>[-dim, dim)</c> for its axis.</exception>
+        private static void ScanIndexArrayBounds(long[] dims, IndexOp[] ops)
         {
-            var ops = prepared.Ops;
             foreach (var op in ops)
             {
                 switch (op.Kind)
@@ -558,7 +569,6 @@ namespace NumSharp
                 }
             }
 
-            var dims = shape.dimensions;
             int axis = 0;
             foreach (var op in ops)
             {
