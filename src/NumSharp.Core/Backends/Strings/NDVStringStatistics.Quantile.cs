@@ -912,13 +912,22 @@ namespace NumSharp.Backends.Strings
 
         /// <summary>
         ///     <c>np.asanyarray(result)</c> as <c>np.apply_along_axis</c> applies it to each row's result: a Python str becomes
-        ///     a 0-d <c>&lt;U</c> array of its length (<c>&lt;U1</c> for the empty string), a float (the NaN NA object) a 0-d
-        ///     float64, an int / bool / complex its NumPy array; any array passes as it is.
+        ///     a 0-d <c>&lt;U</c> array of its length (<c>&lt;U1</c> for the empty string; a trailing NUL counted, as in a
+        ///     Python str), a float (the NaN NA object) a 0-d float64, an int / bool / complex its NumPy array; any array
+        ///     passes as it is.
         /// </summary>
         /// <param name="result">The row's result: a 0-d <c>StringDType</c> array is NumPy's Python object.</param>
-        /// <returns>The array the buffer receives.</returns>
+        /// <returns>The array the buffer receives. A 0-d array this method makes is marked as an explicit ARRAY
+        ///     (<see cref="NDArray.IsExplicitZeroDimArray"/>): it is <c>np.asanyarray</c>'s ndarray, not a NumPy scalar, so
+        ///     <see cref="NDArray.ApplyAlongAxis"/>'s own <c>asanyarray</c> of the first result keeps it as it is.</returns>
         /// <exception cref="NotSupportedException">An object NumPy would wrap in an OBJECT array (<c>None</c>, an integer
         ///     past int64, another object): NumSharp has no object dtype.</exception>
+        /// <remarks>
+        ///     The mark is what keeps the width: an unmarked 0-d <c>U</c> array stands for an <c>np.str_</c>, which
+        ///     <see cref="NDArray.ApplyAlongAxis"/> re-discovers from the value it reads back, and reading a <c>U</c> element
+        ///     drops its trailing NULs - so a first result <c>'ab\0'</c> would make a <c>&lt;U2</c> buffer where NumPy's is
+        ///     <c>&lt;U3</c> (NumPy applies <c>asanyarray</c> once, to the Python str).
+        /// </remarks>
         private static NDArray AsAnyArray(NDArray result)
         {
             if (result.ndim != 0 || result.typecode != NPTypeCode.String)
@@ -928,21 +937,21 @@ namespace NumSharp.Backends.Strings
             {
                 case string s:
                     // An unsized U discovers its width from the text (np.asanyarray('') is <U1).
-                    return Backends.UnmanagedStorage.FromAnyScalar(s, null);
+                    return Backends.UnmanagedStorage.FromAnyScalar(s, null).MarkExplicitZeroDimArray();
                 case double d:
-                    return NDArray.Scalar(PyFloatValue(d));
+                    return NDArray.Scalar(PyFloatValue(d)).MarkExplicitZeroDimArray();
                 case float f:
-                    return NDArray.Scalar(PyFloatValue(f));
+                    return NDArray.Scalar(PyFloatValue(f)).MarkExplicitZeroDimArray();
                 case bool b:
-                    return NDArray.Scalar(b);
+                    return NDArray.Scalar(b).MarkExplicitZeroDimArray();
                 case long l:
-                    return NDArray.Scalar(l);
+                    return NDArray.Scalar(l).MarkExplicitZeroDimArray();
                 case int i:
-                    return NDArray.Scalar((long)i);
+                    return NDArray.Scalar((long)i).MarkExplicitZeroDimArray();
                 case Complex c:
-                    return NDArray.Scalar(c);
+                    return NDArray.Scalar(c).MarkExplicitZeroDimArray();
                 case BigInteger big when big >= long.MinValue && big <= long.MaxValue:
-                    return NDArray.Scalar((long)big);
+                    return NDArray.Scalar((long)big).MarkExplicitZeroDimArray();
             }
             throw new NotSupportedException(
                 $"np.apply_along_axis over a row whose result is {NDPyObject.Repr(element)} builds an object array in NumPy, a " +

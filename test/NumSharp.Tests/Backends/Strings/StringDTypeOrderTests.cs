@@ -551,6 +551,24 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
+        ///     Along an axis each row's quantile goes through <c>np.apply_along_axis</c>, whose buffer is
+        ///     <c>np.asanyarray</c> of the FIRST row's result - a Python str, NULs counted - so a first result <c>'ab\0'</c>
+        ///     makes it <c>&lt;U3</c>. NumPy 2.4.2: <c>array(['ab', 'yy'], dtype='&lt;U3')</c>, bytes <c>a b \0 | y y \0</c>.
+        ///     Re-reading that 0-d <c>&lt;U3</c> array as an <c>np.str_</c> drops the NUL and gives <c>&lt;U2</c>.
+        /// </summary>
+        [TestMethod]
+        public void NanQuantile_AlongAxis_BufferIsAsWideAsTheFirstRowsStr()
+        {
+            using var flat = A(T, "ab\0", "c", "ab\0", "x", "yy", "z");
+            using var a = flat.reshape(2, 3);
+            using var r = np.nanquantile(a, 0.5, -1, method: "lower");
+            r.dtype.str.Should().Be("<U3");
+            V(r).Should().Equal("ab", "yy");
+            Convert.ToHexString(r.tobytes()).ToLowerInvariant()
+                .Should().Be("610000006200000000000000790000007900000000000000");
+        }
+
+        /// <summary>
         ///     <c>np.searchsorted</c> converts the keys to <c>PyArray_PromoteTypes(keys, haystack)</c>, whose
         ///     <c>common_instance</c> takes the present NA object and the FIRST operand's <c>coerce</c>, a <c>U</c> operand
         ///     counting as <c>StringDType()</c> — so a <c>U</c>-array key into a <c>coerce=False</c> haystack is refused naming
