@@ -39,9 +39,7 @@ Backends/Default/Math/Reduction/Default.Reduction.ArgMin.cs	0	3
 Backends/Default/Math/Reduction/Default.Reduction.Mean.cs	0	2
 Backends/Default/Math/Reduction/Default.Reduction.MinMax.Exact.cs	0	2
 Backends/Default/Math/Reduction/Default.Reduction.MinMax.Keywords.cs	0	10
-Backends/Default/Math/Reduction/Default.Reduction.Nan.cs	1	0	# NanReplacedReduction's np.where(isnan(a), fill, a) (NumPy's _replace_nan: np.copyto(a, val, where=mask)): np.where(cond, x, y) is the array object's (plan section 1, decided 2026-10-28), so P6 leaves it for P3 batch 7's np.where home
 Backends/Default/Math/Reduction/Default.Reduction.NanMean.cs	0	1
-Backends/Default/Math/Reduction/Default.Reduction.NanScan.cs	1	0	# ReplaceNanForScan moved from np.nancumsum by P1b: np.where(isnan(a), fill, a) replaces the NaNs of a non-contiguous or float16 / complex operand. np.where(cond, x, y) is the array object's (plan section 1, decided 2026-10-28), so P6 leaves it for P3 batch 7's np.where home
 Backends/Default/Math/Reduction/Default.Reduction.NanVarStd.cs	0	6
 Backends/Default/Math/Reduction/Default.Reduction.Product.cs	0	1
 Backends/Default/Math/Reduction/Default.Reduction.Ptp.cs	0	1	# PtpOut moved from np.ptp by P1b: np.copyto(out, diff) stores the range into out= until P6 gives the engine its own copy
@@ -79,7 +77,7 @@ Backends/Strings/NDVStringArithmetic.cs	0	2
 Backends/Strings/NDVStringCasting.cs	0	1
 Backends/Strings/NDVStringComparison.cs	0	1
 Backends/Strings/NDVStringCopy.cs	0	2
-Backends/Strings/NDVStringMove.cs	2	7	# np.where's StringDType route selects the cells and their sources with np.where: the array object's (plan section 1, decided 2026-10-28), for P3 batch 7's np.where home
+Backends/Strings/NDVStringMove.cs	0	7
 Backends/Strings/NDVStringReduction.cs	0	12
 Backends/Strings/NDVStringStatistics.Quantile.cs	2	12	# np.nanmedian / np.nanquantile drive their 1-D line function with np.apply_along_axis: a driver of the array object (plan section 1, decided 2026-10-28), for P3 batch 7's home
 Backends/Strings/NDVStringStatistics.cs	0	2

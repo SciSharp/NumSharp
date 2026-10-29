@@ -120,7 +120,7 @@ namespace NumSharp.Backends
                     NDArray fill = NDArray.Scalar(val);
                     if (fill.typecode != a.typecode)
                         fill = fill.astype(a.typecode);   // 0/1 -> (Half)0/1, 0+0j/1+0j — dtype-preserving
-                    return np.where(a.TensorEngine.IsNan(a), fill, a);
+                    return NDArray.Where(a.TensorEngine.IsNan(a), fill, a);
                 default:
                     return a;                             // integer / bool / decimal / char cannot be NaN
             }

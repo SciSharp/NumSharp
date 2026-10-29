@@ -433,10 +433,10 @@ namespace NumSharp.Backends.Strings
 
                 using var xc = CellArray(xt);
                 using var yc = CellArray(yt);
-                using var raw = np.where(cond, xc, yc);
+                using var raw = NDArray.Where(cond, xc, yc);
                 using var zero = NDArray.Scalar(0L);
                 using var one = NDArray.Scalar(1L);
-                using var which = np.where(cond, zero, one);
+                using var which = NDArray.Where(cond, zero, one);
                 // The result takes NumPy's layout for (condition, x, y) — the condition votes too (np.tril's mask over an F
                 // operand gives the strides NumPy's iterator chooses, not the operand's F order).
                 return RehomeMulti(raw, which, new[] { xt.Storage.VStringSlice, yt.Storage.VStringSlice }, descr, layout);
