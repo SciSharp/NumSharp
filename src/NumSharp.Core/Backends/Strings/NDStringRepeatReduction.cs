@@ -144,7 +144,7 @@ namespace NumSharp.Backends.Strings
                 UnmanagedStorage.Copyto(@out, counts, NPY_CASTING.NPY_UNSAFE_CASTING);
                 return;
             }
-            NDArray outLanes = keepdims ? @out : np.expand_dims(@out, axis);
+            NDArray outLanes = keepdims ? @out : NDArray.ExpandDims(@out, axis);
             // PyArray_CopyInitialReduceValues: the first count of every lane, cast from the counts' type into the OUT's.
             var first = new Slice[nd];
             for (int d = 0; d < nd; d++)
@@ -178,7 +178,7 @@ namespace NumSharp.Backends.Strings
                 return;
             }
             // The out with the input's rank (the reduced axis at length 1), as the lane walker visits it.
-            NDArray outLanes = keepdims ? @out : np.expand_dims(@out, axis);
+            NDArray outLanes = keepdims ? @out : NDArray.ExpandDims(@out, axis);
             // NumPy's PyArray_CopyInitialReduceValues: the first count of every lane through the integer-to-text cast (a
             // uint64 count prints as itself, not as its int64 reading).
             var first = new Slice[nd];

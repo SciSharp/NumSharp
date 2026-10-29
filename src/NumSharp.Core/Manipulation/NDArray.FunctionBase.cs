@@ -67,6 +67,84 @@ namespace NumSharp
     // System.Array in full (NDArray has an Array property); no other unqualified name of it is an NDArray member.
     public partial class NDArray
     {
+        // ---------------------------- np.flip ----------------------------
+
+        /// <summary>
+        ///     The reversing slice (::-1) placed on every flipped axis of <see cref="FlipAxes"/>' cold-path indexer.
+        /// </summary>
+        private static readonly Slice ReversedSlice = new Slice(null, null, -1);
+
+        /// <summary>
+        ///     Builds the flipped view: reversing an axis is stride negation plus moving the base
+        ///     offset to the last element along that axis — O(ndim), no data movement, exactly the
+        ///     view NumPy's m[..., ::-1, ...] basic indexing produces.
+        /// </summary>
+        /// <param name="m">Input array (any layout: contiguous, sliced, transposed, broadcast).</param>
+        /// <param name="axes">Normalized (non-negative, unique) axes to reverse; null reverses all axes.</param>
+        /// <returns>A new view over <paramref name="m"/>'s buffer (read-only when <paramref name="m"/> is); for a
+        ///     0-d or empty <paramref name="m"/> the general slice machinery's result.</returns>
+        /// <remarks>The axes are not validated: np.flip normalizes them (AxisError, repeated axis) before it calls
+        ///     this, and an engine caller passes axes it computed.</remarks>
+        internal static NDArray FlipAxes(NDArray m, int[] axes)
+        {
+            var shape = m.Shape;
+            int ndim = m.ndim;
+
+            // Cold path — 0-d (the empty indexer m[()] yields the scalar back) and size-0 arrays
+            // (nothing to reverse) go through the general slice machinery.
+            if (ndim == 0 || shape.size == 0)
+            {
+                var indexer = new Slice[ndim];
+                for (int i = 0; i < ndim; i++)
+                    indexer[i] = Slice.All;
+                if (axes == null)
+                    for (int i = 0; i < ndim; i++)
+                        indexer[i] = ReversedSlice;
+                else
+                    for (int i = 0; i < axes.Length; i++)
+                        indexer[axes[i]] = ReversedSlice;
+                return m[indexer];
+            }
+
+            var srcDims = shape.dimensions;
+            var srcStrides = shape.strides;
+
+            var dims = new long[ndim];
+            var strides = new long[ndim];
+            for (int i = 0; i < ndim; i++)
+            {
+                dims[i] = srcDims[i];
+                strides[i] = srcStrides[i];
+            }
+
+            // size > 0 guarantees every dim >= 1, so (dim - 1) never underflows the offset.
+            long offset = shape.offset;
+            if (axes == null)
+            {
+                for (int i = 0; i < ndim; i++)
+                {
+                    offset += srcStrides[i] * (srcDims[i] - 1);
+                    strides[i] = -srcStrides[i];
+                }
+            }
+            else
+            {
+                for (int i = 0; i < axes.Length; i++)
+                {
+                    int ax = axes[i];
+                    offset += srcStrides[ax] * (srcDims[ax] - 1);
+                    strides[ax] = -srcStrides[ax];
+                }
+            }
+
+            long bufferSize = shape.bufferSize > 0 ? shape.bufferSize : shape.size;
+            var flipped = new Shape(dims, strides, offset, bufferSize);
+
+            // Alias() inherits writeability from the source, so flipping a read-only array
+            // (broadcast / 'r' memmap) stays read-only — same pattern as Transpose.
+            return new NDArray(m.Storage.Alias(flipped)) {TensorEngine = m.TensorEngine};
+        }
+
         /// <summary>
         ///     <c>insert(arr, obj, values, axis)</c> with one position given as a number: the axis context, then the
         ///     single-index branch with NumPy's scalar-obj <c>moveaxis</c> of the values.

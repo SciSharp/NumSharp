@@ -38,8 +38,8 @@ namespace NumSharp.Backends
             // as a column (append 1: [k] -> [k,1]). The inserted dim is squeezed back out at the end.
             bool lhsWas1D = lhs.ndim == 1;
             bool rhsWas1D = rhs.ndim == 1;
-            if (lhsWas1D) lhs = np.expand_dims(lhs, 0);
-            if (rhsWas1D) rhs = np.expand_dims(rhs, 1);
+            if (lhsWas1D) lhs = NDArray.ExpandDims(lhs, 0);
+            if (rhsWas1D) rhs = NDArray.ExpandDims(rhs, 1);
 
             long K = lhs.Shape.dimensions[lhs.ndim - 1];
             long Kr = rhs.Shape.dimensions[rhs.ndim - 2];

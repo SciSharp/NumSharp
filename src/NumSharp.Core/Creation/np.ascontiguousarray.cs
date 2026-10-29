@@ -23,10 +23,7 @@ namespace NumSharp
                 return NDCharArrayBoundary.Plain((a, dtype), static s => ascontiguousarray(s.a, s.dtype));
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
-            var result = asarray(a, dtype, 'C');
-            // NumPy guarantees ndim >= 1: a 0-D input becomes a length-one VIEW sharing the
-            // scalar's storage (shape (1,), owndata=false), even when no dtype/layout copy is needed.
-            return result.ndim == 0 ? result.reshape(1) : result;
+            return NDArray.AsContiguousArray(a, dtype);
         }
 
         /// <summary>

@@ -123,7 +123,7 @@ namespace NumSharp.Backends
             // asarray(order='C') materializes a C-contiguous resultType copy through any layout,
             // preserving the (ndim>=1) shape — unlike ascontiguousarray it does not reshape 0-d,
             // but this path only runs for ndim>=1 (0-d routes to the compose fallback above).
-            return np.ascontiguousarray(v, rt);
+            return NDArray.AsContiguousArray(v, rt);
         }
     }
 }

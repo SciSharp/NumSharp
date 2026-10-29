@@ -127,7 +127,7 @@ namespace NumSharp.Backends
             }
             else
             {
-                source = np.ascontiguousarray(readFrom, loopType);
+                source = NDArray.AsContiguousArray(readFrom, loopType);
                 sourceIsFreshCopy = true;   // a non-contiguous input is always copied by ascontiguousarray
             }
 

@@ -856,6 +856,33 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     NumPy's <c>array_ascontiguousarray</c> (<c>multiarraymodule.c</c>) for an array operand, the body of
+        ///     <see cref="np.ascontiguousarray(NDArray, DType)"/> once its class boundaries and null check ran:
+        ///     <c>_array_fromobject_generic(op, dtype, copy-if-needed, NPY_CORDER, ndmin=1)</c>, the array itself
+        ///     when it already is C-contiguous in the requested dtype, else a C-ordered copy or cast, and a 0-d result
+        ///     raised to one dimension.
+        /// </summary>
+        /// <param name="a">The operand (not null).</param>
+        /// <param name="dtype">The requested dtype, or null to keep the operand's.</param>
+        /// <returns><paramref name="a"/> itself, a view of it (an equal but distinct descriptor, or the (1,) view of a
+        ///     0-d array), or a new C-contiguous array: the caller must not dispose the result unless it is not
+        ///     <paramref name="a"/> (<c>ReferenceEquals</c>), and a view keeps <paramref name="a"/>'s buffer
+        ///     alive.</returns>
+        /// <exception cref="OverflowException">A C# literal's 0-d array out of an integer <paramref name="dtype"/>'s
+        ///     range (<see cref="ArrayFromObject"/>'s Python-scalar packing).</exception>
+        /// <exception cref="ValueError">A NaN literal into an integer dtype.</exception>
+        /// <exception cref="TypeError">A complex literal into a real dtype.</exception>
+        /// <remarks>No class boundary runs here: an engine caller sits inside its public function's boundary, and the
+        ///     facade applies its numpy.matrix and numpy.char.chararray rules before it calls this.</remarks>
+        internal static NDArray AsContiguousArray(NDArray a, DType dtype)
+        {
+            var result = ArrayFromObject(a, dtype, 'C', null);
+            // NumPy guarantees ndim >= 1: a 0-D input becomes a length-one VIEW sharing the
+            // scalar's storage (shape (1,), owndata=false), even when no dtype/layout copy is needed.
+            return result.ndim == 0 ? result.reshape(1) : result;
+        }
+
+        /// <summary>
         ///     NumPy's <c>_array_fromobject_generic</c> for a C# ARRAY operand, the body of
         ///     <see cref="np.array(Array, DType, int, bool, char)"/> once its null check ran: text values (or a string dtype
         ///     over an object or bytes array, or None among an object array's values under a dtype) take the text array

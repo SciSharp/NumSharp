@@ -106,7 +106,7 @@ namespace NumSharp.Backends.Strings
             if (axis is not { } given || a.ndim == 0)
             {
                 // np.cumsum / np.cumprod ravel in C order (a copy for a non-contiguous input) and accumulate along axis 0.
-                input = (a.Shape.IsContiguous ? a : np.ascontiguousarray(a)).reshape(a.size);
+                input = (a.Shape.IsContiguous ? a : NDArray.AsContiguousArray(a, null)).reshape(a.size);
                 ax = 0;
             }
             else

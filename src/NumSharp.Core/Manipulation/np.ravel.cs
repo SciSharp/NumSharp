@@ -38,77 +38,7 @@ namespace NumSharp
             // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
             if (NDCharArrayBoundary.Sees(a))
                 return NDCharArrayBoundary.Kept((a, order), static s => ravel(s.a, s.order));
-            var s = a.Shape;
-            // PyArray_Ravel's order resolution: 'K' is C / F for a C- / F-contiguous array (0-d and size<=1 included);
-            // 'A' is F only for a strictly F-contiguous array.
-            char o;
-            switch (order)
-            {
-                case 'C':
-                case 'c':
-                    o = 'C';
-                    break;
-                case 'F':
-                case 'f':
-                    o = 'F';
-                    break;
-                case 'A':
-                case 'a':
-                    o = s.IsFContiguous && !s.IsContiguous ? 'F' : 'C';
-                    break;
-                case 'K':
-                case 'k':
-                    o = s.IsContiguous ? 'C' : s.IsFContiguous ? 'F' : 'K';
-                    break;
-                default:
-                    // The house error for an unknown order code.
-                    OrderResolver.Resolve(order, s);
-                    throw new ValueError($"order must be one of 'C', 'F', 'A', or 'K' (got '{order}')");
-            }
-
-            // PyArray_Ravel reshapes to (-1,), never to the array's own size: -1 skips PyArray_Newshape's same-shape shortcut
-            // (a plain view that keeps the strides), so the view gets fresh C strides — a one-element array with a negative
-            // or a stepped stride (np.arange(1)[::-1]) ravels to stride one element, as in NumPy.
-            if (o == 'C' && s.IsContiguous)
-                return a.reshape(-1L);
-
-            // An F-contiguous array read column-major, or an array dense in another axis order read in memory order, is
-            // its buffer from the view's first element on: one 1-D view with stride one element.
-            if ((o == 'F' && s.IsFContiguous) || (o == 'K' && IsDenseInSomeAxisOrder(s)))
-            {
-                var vec = new Shape(new long[] { a.size }, new long[] { 1 }, s.offset, s.bufferSize);
-                // NumPy builds the view with the input's flags: a read-only input gives a read-only view.
-                if (!s.IsWriteable)
-                    vec = vec.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
-                return new NDArray(a.Storage.Alias(vec)) { TensorEngine = a.TensorEngine };
-            }
-
-            // PyArray_Flatten: a copy, read in the resolved order.
-            return a.flatten(o);
-        }
-
-        /// <summary>
-        ///     <c>PyArray_Ravel</c>'s KEEPORDER view test: sorted by |stride| (<see cref="Shape.SortedStridePerm"/>), the axes
-        ///     of more than one element must have the strides of a dense C layout — 1, then the product of the faster axes'
-        ///     extents — compared SIGNED, so a negative or a stride-0 (broadcast) axis never qualifies.
-        /// </summary>
-        /// <param name="s">The array's shape.</param>
-        /// <returns>True when a 1-D view starting at the array's first element reads every element in memory order.</returns>
-        private static bool IsDenseInSomeAxisOrder(in Shape s)
-        {
-            var perm = Shape.SortedStridePerm(s.strides);
-            long expected = 1;
-            for (int i = perm.Length - 1; i >= 0; i--)
-            {
-                int axis = perm[i];
-                long extent = s.dimensions[axis];
-                if (extent == 1)
-                    continue; // a size-one axis is never stepped, so its stride does not matter
-                if (s.strides[axis] != expected)
-                    return false;
-                expected *= extent;
-            }
-            return true;
+            return NDArray.Ravel(a, order);
         }
     }
 }

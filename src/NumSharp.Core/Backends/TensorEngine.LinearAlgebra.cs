@@ -98,7 +98,7 @@ namespace NumSharp
             // that buffer, so the second reshape no longer asks for (-1,) but for (a.size,) — which
             // is why a length mismatch surfaces as a reshape error and never as the
             // "vectors have different lengths" the C code below it still carries.
-            var left = np.ravel(a);
+            var left = NDArray.Ravel(a, 'C');
             var right = b.reshape(new long[] {left.size});
             return Dot(LinAlgHelper.Conjugate(left), right);
         }
@@ -144,7 +144,7 @@ namespace NumSharp
 
             // (…,m,n) @ (…,n,1) -> (…,m,1), then drop the trailing length-1 axis. Promoting x2 to a
             // column first is what keeps matmul out of its own 1-D special case.
-            var product = Matmul(x1, np.expand_dims(x2, -1));
+            var product = Matmul(x1, NDArray.ExpandDims(x2, -1));
             return LinAlgHelper.DropAxis(product, product.ndim - 1);
         }
 
@@ -160,7 +160,7 @@ namespace NumSharp
                 return accelerated;
 
             // (…,1,n) @ (…,n,m) -> (…,1,m), then drop the length-1 axis at -2.
-            var product = Matmul(np.expand_dims(LinAlgHelper.Conjugate(x1), -2), x2);
+            var product = Matmul(NDArray.ExpandDims(LinAlgHelper.Conjugate(x1), -2), x2);
             return LinAlgHelper.DropAxis(product, product.ndim - 2);
         }
 

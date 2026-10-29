@@ -24,34 +24,7 @@ namespace NumSharp
             if (NDCharArrayBoundary.Sees(a))
                 return NDCharArrayBoundary.Kept((a, axis), static s => expand_dims(s.a, s.axis));
             using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // Only the uninitialized-shape sentinel is passed through. A genuine empty array
-            // (size == 0 but with real dimensions, e.g. (0, 3)) MUST still gain the new axis —
-            // NumPy: expand_dims((0, 3), 0) -> (1, 0, 3). Guarding on a.size == 0 here made
-            // expand_dims a no-op for every empty array (and, transitively, broke np.stack and
-            // np.atleast_2d / np.vstack, which build on it).
-            if (a.Shape.IsEmpty)
-                return a;
-
-            // NumPy normalizes the axis against the OUTPUT ndim (a.ndim + 1) and reports the axis
-            // AS GIVEN. Shape.ExpandDimension guards only the negative side, and does it against
-            // the already-normalized value, so all three of these were wrong:
-            //   expand_dims(arange(6), 5)  -> ArgumentOutOfRangeException "... (Parameter 'index')"
-            //                                 leaking out of Arrays.Insert, three frames down
-            //   expand_dims(arange(6), -3) -> "Effective axis -1 is less than 0" (the NORMALIZED
-            //                                 axis, not the -3 the caller passed)
-            //   expand_dims(scalar, 5)     -> silently returned shape (1); the 0-d branch never
-            //                                 looked at the axis at all
-            // NumPy answers all three with: axis N is out of bounds for array of dimension {outNdim}.
-            //
-            // The guard lives here rather than in Shape.ExpandDimension because that method has
-            // internal callers (keepdims reductions, fancy-index shaping, asmatrix) that are not
-            // bound by NumPy's axis contract. The sibling int[] overload already validates this way,
-            // and this reproduces its text exactly so both overloads agree.
-            // normalize_axis_tuple((axis,), out_ndim) raises NumPy's AxisError; the range test runs on the axis as given.
-            int outNdim = a.ndim + 1;
-            Backends.DefaultEngine.check_and_adjust_axis(outNdim, axis);
-
-            return new NDArray(a.Storage.Alias(a.Shape.ExpandDimension(axis))) { TensorEngine = a.TensorEngine };
+            return NDArray.ExpandDims(a, axis);
         }
 
         /// <summary>

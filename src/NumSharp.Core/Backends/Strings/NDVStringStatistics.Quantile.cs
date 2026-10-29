@@ -264,7 +264,7 @@ namespace NumSharp.Backends.Strings
             if (axis is null || work.ndim == 1)
             {
                 // `part = a.ravel()`; `_nanmedian1d(part)`, assigned into out when one is given.
-                r = NanMedian1D(work.ndim == 1 ? work : np.ravel(work));
+                r = NanMedian1D(work.ndim == 1 ? work : NDArray.Ravel(work, 'C'));
                 if (target is not null)
                 {
                     PyAssign(target, r);
@@ -397,7 +397,8 @@ namespace NumSharp.Backends.Strings
             NDArray r;
             if (axis is null || work.ndim == 1)
             {
-                r = NanQuantile1D(quantileOp, work.ndim == 1 ? work : np.ravel(work), q, qShape, qIsInteger, method, qType);
+                r = NanQuantile1D(quantileOp, work.ndim == 1 ? work : NDArray.Ravel(work, 'C'), q, qShape, qIsInteger,
+                    method, qType);
                 // `if out is not None: out[...] = result`.
                 if (target is not null)
                     PyAssign(target, r);

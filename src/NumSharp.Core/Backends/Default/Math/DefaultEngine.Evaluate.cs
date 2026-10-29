@@ -1247,7 +1247,7 @@ namespace NumSharp.Backends
 
             if (avg.Keepdims && nax is int kdAxis)
             {
-                NDArray kd = np.expand_dims(computed, kdAxis);
+                NDArray kd = NDArray.ExpandDims(computed, kdAxis);
                 computed = kd;
             }
             else if (avg.Axis is null)
@@ -1453,7 +1453,7 @@ namespace NumSharp.Backends
             // mean along axis, kept as size-1 for the broadcast subtract.
             NDArray meanReduced = ExactSumArray(w, ax, accT);
             DivideByConst(meanReduced, accT, axisSize);
-            NDArray meanKD = np.expand_dims(meanReduced, ax);
+            NDArray meanKD = NDArray.ExpandDims(meanReduced, ax);
             NDArray dOrig = w - meanKD;                            // broadcast subtract (elementwise-exact)
             NDArray d = dOrig.Shape.IsContiguous ? dOrig : dOrig.copy(); // the sq-dev loop reads memory order
             if (!ReferenceEquals(d, dOrig)) dOrig.Dispose();
@@ -1623,7 +1623,7 @@ namespace NumSharp.Backends
         /// <summary>Apply keepdims (re-insert the size-1 axis) and cast a fresh reduced array to <paramref name="resultT"/>.</summary>
         private static NDArray FinishReduced(NDArray reduced, int axis, bool keepdims, NPTypeCode fromT, NPTypeCode resultT)
         {
-            NDArray r = keepdims ? np.expand_dims(reduced, axis) : reduced;
+            NDArray r = keepdims ? NDArray.ExpandDims(reduced, axis) : reduced;
             return fromT == resultT ? r : r.astype(DType.From(resultT));
         }
 

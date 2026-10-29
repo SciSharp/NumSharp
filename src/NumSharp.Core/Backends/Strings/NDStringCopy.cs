@@ -167,7 +167,7 @@ namespace NumSharp.Backends.Strings
                 {
                     if (dstStrides[perm[j]] < 0)
                     {
-                        var flipped = np.flip(ordered, j);
+                        var flipped = NDArray.FlipAxes(ordered, new[] { j });
                         ordered.Dispose();
                         ordered = flipped;
                     }

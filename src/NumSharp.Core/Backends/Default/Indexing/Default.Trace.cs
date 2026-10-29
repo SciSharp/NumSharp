@@ -78,7 +78,7 @@ namespace NumSharp.Backends
             // than the contig path. Materialise the diagonal to a contig copy
             // before summing — the extra memcpy is dwarfed by the SIMD win
             // (4.4μs vs 22μs for 100×100, 5.8μs vs 198μs for 1000×1000).
-            var diagContig = np.ascontiguousarray(diag);
+            var diagContig = NDArray.AsContiguousArray(diag, null);
             try
             {
                 // Pick the axis arg that hits NumSharp's fastest reduction path:

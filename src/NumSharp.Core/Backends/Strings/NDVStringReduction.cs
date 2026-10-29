@@ -274,7 +274,7 @@ namespace NumSharp.Backends.Strings
                 {
                     // The lane walker wants the output with the input's rank (the reduced axis kept at length 1); a 0-d input
                     // is one lane of one element along a new axis 0. The views are this call's own and disposed here.
-                    using var keep = scalarInput || keepdims ? null : np.expand_dims(result, ax);
+                    using var keep = scalarInput || keepdims ? null : NDArray.ExpandDims(result, ax);
                     using var input1 = scalarInput ? source.reshape(1) : null;
                     using var out1 = scalarInput ? result.reshape(1) : null;
                     using var mask1 = scalarInput ? where?.reshape(1) : null;
@@ -968,7 +968,7 @@ namespace NumSharp.Backends.Strings
                 if (axis is not { } given || a.ndim == 0)
                 {
                     // The flattened array in C order (NumPy ravels; a non-C-contiguous input is copied, as NumPy copies it).
-                    contiguous = a.Shape.IsContiguous ? null : np.ascontiguousarray(a);
+                    contiguous = a.Shape.IsContiguous ? null : NDArray.AsContiguousArray(a, null);
                     flat = (contiguous ?? a).reshape(a.size);
                     input = flat;
                     ax = 0;
@@ -987,7 +987,7 @@ namespace NumSharp.Backends.Strings
                 if (axis is null || a.ndim == 0)
                     outLanes = result.reshape(1);
                 else
-                    outLanes = keepdims ? result : np.expand_dims(result, ax);
+                    outLanes = keepdims ? result : NDArray.ExpandDims(result, ax);
                 try
                 {
                     RunArg(isMax, input, outLanes, ax);
@@ -1187,7 +1187,7 @@ namespace NumSharp.Backends.Strings
                 if (axis is not { } given || a.ndim == 0)
                 {
                     // NumPy ravels in C order (a copy for a non-contiguous input) and accumulates along axis 0.
-                    contiguous = a.Shape.IsContiguous ? null : np.ascontiguousarray(a);
+                    contiguous = a.Shape.IsContiguous ? null : NDArray.AsContiguousArray(a, null);
                     flat = (contiguous ?? a).reshape(a.size);
                     input = flat;
                     ax = 0;

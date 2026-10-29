@@ -447,5 +447,28 @@ namespace NumSharp
             }
             return perm;
         }
+
+        /// <summary>
+        ///     <c>PyArray_Ravel</c>'s KEEPORDER view test: sorted by |stride| (<see cref="SortedStridePerm"/>), the axes
+        ///     of more than one element must have the strides of a dense C layout — 1, then the product of the faster axes'
+        ///     extents — compared SIGNED, so a negative or a stride-0 (broadcast) axis never qualifies.
+        /// </summary>
+        /// <returns>True when a 1-D view starting at the array's first element reads every element in memory order.</returns>
+        internal bool IsDenseInSomeAxisOrder()
+        {
+            var perm = SortedStridePerm(strides);
+            long expected = 1;
+            for (int i = perm.Length - 1; i >= 0; i--)
+            {
+                int axis = perm[i];
+                long extent = dimensions[axis];
+                if (extent == 1)
+                    continue; // a size-one axis is never stepped, so its stride does not matter
+                if (strides[axis] != expected)
+                    return false;
+                expected *= extent;
+            }
+            return true;
+        }
     }
 }

@@ -204,7 +204,7 @@ namespace NumSharp.Backends.Strings
                 // The common case selects whole elements in one pass; any broadcast or strided operand runs on the unit views.
                 if (TryWhereContiguous(cond, xs, ys, descr, dims, layout, out var selected))
                     return selected;
-                using var condUnits = np.expand_dims(cond, -1);
+                using var condUnits = NDArray.ExpandDims(cond, -1);
                 using var xu = UnitArray(xs);
                 using var yu = UnitArray(ys);
                 var result = FromUnitArray(NDArray.Where(condUnits, xu, yu), descr);
