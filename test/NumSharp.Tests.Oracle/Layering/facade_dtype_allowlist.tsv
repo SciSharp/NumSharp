@@ -20,7 +20,6 @@ Creation/np.mgrid.cs	0	1
 Creation/np.ogrid.cs	0	1
 DTypes/np.dtypes.cs	2	0
 Indexing/np.diag.cs	1	0
-Indexing/np.indices.cs	0	3
 Indexing/np.ndenumerate.cs	0	1
 Indexing/np.place.cs	1	0
 Indexing/np.putmask.cs	1	0

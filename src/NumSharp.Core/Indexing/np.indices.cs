@@ -1,5 +1,4 @@
 using System;
-using NumSharp.Backends.Kernels;
 
 namespace NumSharp
 {
@@ -63,13 +62,7 @@ namespace NumSharp
         public static NDArray indices(long[] dimensions, DType dtype = null)
         {
             if (dimensions == null) throw new ArgumentNullException(nameof(dimensions));
-            var typeCode = dtype?.GetTypeCode() ?? NPTypeCode.Int64;
-
-            // Special case: empty dimensions tuple → numpy returns shape (0,).
-            if (dimensions.Length == 0)
-                return new NDArray(typeCode, new Shape(0), false);
-
-            return BuildDenseIndices(dimensions, typeCode);
+            return NDArray.Indices(dimensions, dtype);
         }
 
         /// <summary>
@@ -144,11 +137,7 @@ namespace NumSharp
         public static NDArray[] indices_sparse(long[] dimensions, DType dtype = null)
         {
             if (dimensions == null) throw new ArgumentNullException(nameof(dimensions));
-
-            if (dimensions.Length == 0)
-                return Array.Empty<NDArray>();
-
-            return BuildSparseIndicesAsArray(dimensions, dtype?.GetTypeCode() ?? NPTypeCode.Int64);
+            return NDArray.IndicesSparse(dimensions, dtype);
         }
 
         /// <summary>
@@ -184,117 +173,6 @@ namespace NumSharp
             for (int i = 0; i < dimensions.Length; i++)
                 widened[i] = dimensions[i];
             return widened;
-        }
-
-        /// <summary>
-        ///     Fills the dense <c>(ndim, *dims)</c> coordinate grid. Allocates the buffer as
-        ///     Int64 (the fill kernel's native dtype) and casts to <paramref name="dtype"/> only
-        ///     when it differs, so the common intp request pays no copy.
-        /// </summary>
-        /// <param name="dimensions">Grid sizes — length ≥ 1 (the empty case is handled by the
-        ///     public overload before reaching here). Read-only; never mutated.</param>
-        /// <param name="dtype">Result element type.</param>
-        /// <returns>The dense coordinate grid.</returns>
-        /// <exception cref="ArgumentException">A dimension is negative, or the running product of
-        ///     sizes overflows <see cref="long"/> (the grid can't be represented).</exception>
-        /// <exception cref="NotSupportedException">The IL fill kernel is unavailable (e.g. AOT
-        ///     with dynamic codegen disabled).</exception>
-        private static unsafe NDArray BuildDenseIndices(long[] dimensions, NPTypeCode dtype)
-        {
-            int ndim = dimensions.Length;
-
-            // Compute prod = total elements per slab and validate non-negative dims. The product
-            // is long-native, so a dimension that only fits in 64 bits is honoured rather than
-            // truncated — and its overflow is caught (a wrapped byte/element count reads as a
-            // small, silently-wrong allocation otherwise).
-            long prod = 1;
-            for (int d = 0; d < ndim; d++)
-            {
-                long dim = dimensions[d];
-                if (dim < 0)
-                    throw new ArgumentException(
-                        $"negative dimensions are not allowed (got dim[{d}] = {dim}).",
-                        nameof(dimensions));
-                long next = unchecked(prod * dim);
-                // A non-zero dim whose multiply doesn't divide back out has wrapped int64.
-                if (dim != 0 && next / dim != prod)
-                    throw new ArgumentException(
-                        "invalid dimensions: array size larger than the maximum possible size.",
-                        nameof(dimensions));
-                prod = next;
-            }
-
-            // Result shape: (ndim, *dimensions).
-            var resultShape = new long[ndim + 1];
-            resultShape[0] = ndim;
-            for (int d = 0; d < ndim; d++) resultShape[d + 1] = dimensions[d];
-
-            // Allocate as Int64 first (the kernel's native dtype). If the caller asked for a
-            // different dtype, astype afterwards — the dense-fill IL kernel only emits long stores.
-            var int64Result = new NDArray(NPTypeCode.Int64, Shape.Adopt(resultShape), false);
-
-            // Fast-exit for shapes with size 0 — the buffer is already zero-allocated and no
-            // slab fill is needed.
-            if (prod == 0)
-                return dtype == NPTypeCode.Int64 ? int64Result : int64Result.astype(dtype);
-
-            // Compute dimStrides: dimStrides[ndim-1] = 1; dimStrides[d] = dimStrides[d+1] * dims[d+1].
-            Span<long> dimStrides = stackalloc long[ndim];
-            dimStrides[ndim - 1] = 1;
-            for (int d = ndim - 2; d >= 0; d--)
-                dimStrides[d] = dimStrides[d + 1] * dimensions[d + 1];
-
-            var kernel = DirectILKernelGenerator.GetIndicesKernel();
-            if (kernel == null)
-                throw new NotSupportedException("np.indices: IL kernel unavailable");
-
-            long* resPtr = (long*)int64Result.Storage.Address;
-            // `dimensions` is already long[], so the kernel's dims pointer pins it directly —
-            // no per-call copy into a scratch span is needed (the int[] path widened once, up front).
-            fixed (long* dsPtr = dimStrides)
-            fixed (long* dPtr = dimensions)
-            {
-                kernel(resPtr, dsPtr, dPtr, ndim, prod);
-            }
-
-            return dtype == NPTypeCode.Int64 ? int64Result : int64Result.astype(dtype);
-        }
-
-        /// <summary>
-        ///     Builds the sparse form: one <c>(1, …, 1, dim, 1, …, 1)</c> arange per axis. Each
-        ///     axis is an <c>arange(0, dim)</c> reshaped to broadcast along its own dimension.
-        /// </summary>
-        /// <param name="dimensions">Grid sizes — length ≥ 1 (empty handled by the public overload).
-        ///     Read-only; never mutated.</param>
-        /// <param name="dtype">Result element type for each array.</param>
-        /// <returns>One broadcast-shaped array per dimension.</returns>
-        /// <exception cref="ArgumentException">A dimension is negative.</exception>
-        private static NDArray[] BuildSparseIndicesAsArray(long[] dimensions, NPTypeCode dtype)
-        {
-            int ndim = dimensions.Length;
-            var result = new NDArray[ndim];
-
-            for (int d = 0; d < ndim; d++)
-            {
-                long dim = dimensions[d];
-                if (dim < 0)
-                    throw new ArgumentException(
-                        $"negative dimensions are not allowed (got dim[{d}] = {dim}).",
-                        nameof(dimensions));
-
-                // axis-d array has shape (1, ..., 1, dim, 1, ..., 1) with `dim` along axis d.
-                var axisShape = new long[ndim];
-                for (int k = 0; k < ndim; k++) axisShape[k] = (k == d) ? dim : 1;
-
-                // Build via arange then reshape. arange(0L, dim) picks the long overload, so a
-                // 64-bit dimension is honoured rather than truncated.
-                var arr = np.arange(0L, dim).reshape(Shape.Adopt(axisShape));
-                if (arr.GetTypeCode != dtype)
-                    arr = arr.astype(dtype);
-                result[d] = arr;
-            }
-
-            return result;
         }
     }
 }
