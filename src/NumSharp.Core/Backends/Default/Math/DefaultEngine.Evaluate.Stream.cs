@@ -643,7 +643,7 @@ namespace NumSharp.Backends
         private unsafe void ExactIntegerMeanSumInto(NDExprProgram program, NDArray[] inputs, long n, byte* slot)
         {
             var cast = program.ChildAsFloat64Program;
-            long chunk = np.getbufsize();
+            long chunk = NDIterBufferManager.CurrentBufferSize;
             var ops = cast.IteratorOperands(inputs);
 
             if (CanStreamChild(cast, ops, allowF: true, allowPermuted: true))

@@ -1159,7 +1159,7 @@ namespace NumSharp.Backends
                 return BroadcastNaNRule.PerCall();                // trivial loop / unbuffered iterator: one call (per mask run)
             if (masked)
                 return default;                                   // buffered chunks crossed with mask runs: not modeled
-            return BroadcastNaNRule.PerCall(np.getbufsize());
+            return BroadcastNaNRule.PerCall(NDIterBufferManager.CurrentBufferSize);
         }
 
         /// <summary>

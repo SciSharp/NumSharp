@@ -1788,7 +1788,8 @@ namespace NumSharp.Backends
                 // base with a non-zero offset — Address + offset·itemsize is right for both.
                 byte* x = (byte*)arr.Address + shape.offset * es;
                 byte* o = (byte*)result.Address + result.Shape.offset * es;
-                NumPyMinMaxReduce.ReduceAxis(t, op, x, dims, shape.strides, o, os, axis, np.getbufsize(), seed);
+                NumPyMinMaxReduce.ReduceAxis(t, op, x, dims, shape.strides, o, os, axis,
+                    NDIterBufferManager.CurrentBufferSize, seed);
                 NDExpr.ExactMinMaxRuns++;
                 return result;
             }
@@ -1839,7 +1840,8 @@ namespace NumSharp.Backends
 
             // Logical element 0 (Address + offset·itemsize is right for a re-seated contiguous slice and a strided view).
             byte* x = (byte*)arr.Address + shape.offset * t.SizeOf();
-            NumPyMinMaxReduce.ReduceFlat(t, op, x, shape.dimensions, shape.strides, np.getbufsize(), slot, seed);
+            NumPyMinMaxReduce.ReduceFlat(t, op, x, shape.dimensions, shape.strides,
+                NDIterBufferManager.CurrentBufferSize, slot, seed);
             NDExpr.ExactMinMaxRuns++;
             return true;
         }

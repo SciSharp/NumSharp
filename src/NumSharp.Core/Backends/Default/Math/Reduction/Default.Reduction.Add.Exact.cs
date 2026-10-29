@@ -2,6 +2,7 @@ using System;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 
 // =============================================================================
@@ -822,7 +823,7 @@ namespace NumSharp.Backends
         private unsafe NDArray TryExactFlatSum(NDArray arr, bool keepdims, NPTypeCode loopType, NDArray @out)
         {
             byte* slot = stackalloc byte[16];
-            if (!NumPyAddReduce.TryReduceFlat(arr, loopType, np.getbufsize(), slot))
+            if (!NumPyAddReduce.TryReduceFlat(arr, loopType, NDIterBufferManager.CurrentBufferSize, slot))
                 return null;
 
             if (@out is not null)
@@ -870,7 +871,7 @@ namespace NumSharp.Backends
         private unsafe NDArray TryExactOneOutputAxisSum(NDArray arr, int axis, bool keepdims, NPTypeCode loopType)
         {
             byte* slot = stackalloc byte[16];
-            if (!NumPyAddReduce.TryReduceFlat(arr, loopType, np.getbufsize(), slot))
+            if (!NumPyAddReduce.TryReduceFlat(arr, loopType, NDIterBufferManager.CurrentBufferSize, slot))
                 return null;
 
             // The axis result's shape: the operand's dims (all 1 but the axis) with the axis kept as 1 or removed.
@@ -951,7 +952,7 @@ namespace NumSharp.Backends
             }
 
             byte* slot = stackalloc byte[16];
-            if (!NumPyAddReduce.TryReduceFlat(arr, loop, np.getbufsize(), slot))
+            if (!NumPyAddReduce.TryReduceFlat(arr, loop, NDIterBufferManager.CurrentBufferSize, slot))
                 return null;
 
             long count = arr.size;

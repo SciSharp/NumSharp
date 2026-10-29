@@ -71,7 +71,8 @@ namespace NumSharp.Backends.Strings
             NPTypeCode loopT = loop.GetTypeCode();
             bool outCast = !IsLoopDtype(@out, loopT);
             bool inCast = !IsLoopDtype(input, loopT);
-            var it = NumPyReduceIterator.Build(input.Shape, axisFlags, keepdims, @out.Shape, null, outCast, inCast, np.getbufsize());
+            var it = NumPyReduceIterator.Build(input.Shape, axisFlags, keepdims, @out.Shape, null, outCast, inCast,
+                NDIterBufferManager.CurrentBufferSize);
             Run(it, ufunc, @out, input, loopT, new Transfers(input, @out, loop));
             return @out;
         }

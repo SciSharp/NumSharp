@@ -19,18 +19,14 @@ Backends/Default/Math/Default.Modf.cs	0	1
 Backends/Default/Math/Default.Power.StrideZero.cs	0	2
 Backends/Default/Math/Default.Power.cs	0	2
 Backends/Default/Math/Default.Shift.cs	0	1
-Backends/Default/Math/DefaultEngine.BinaryOp.cs	0	2
+Backends/Default/Math/DefaultEngine.BinaryOp.cs	0	1
 Backends/Default/Math/DefaultEngine.BitwiseOp.cs	0	3
-Backends/Default/Math/DefaultEngine.Evaluate.MinMaxAxis.cs	0	2
-Backends/Default/Math/DefaultEngine.Evaluate.Stream.cs	0	1
+Backends/Default/Math/DefaultEngine.Evaluate.MinMaxAxis.cs	0	1
 Backends/Default/Math/DefaultEngine.Evaluate.cs	0	3
 Backends/Default/Math/DefaultEngine.ReductionOp.cs	0	1
-Backends/Default/Math/DefaultEngine.UfuncInnerSteps.cs	0	1
-Backends/Default/Math/Reduction/Default.Reduction.Add.Exact.cs	0	3
-Backends/Default/Math/Reduction/Default.Reduction.MinMax.Exact.cs	0	2
-Backends/Default/Math/Reduction/Default.Reduction.MinMax.Keywords.cs	0	4
+Backends/Default/Math/Reduction/Default.Reduction.MinMax.Keywords.cs	0	1
 Backends/Default/Math/Reduction/Default.Reduction.NanVarStd.cs	0	2
-Backends/Default/Math/Reduction/Default.Reduction.VarStd.cs	0	7
+Backends/Default/Math/Reduction/Default.Reduction.VarStd.cs	0	5
 Backends/Default/Sorting/AxisSort.cs	0	1
 Backends/Default/Sorting/TextSearch.cs	0	1
 Backends/Default/Sorting/VStringDistinct.cs	0	2
@@ -46,12 +42,12 @@ Backends/NDArray.PythonLiteral.cs	0	2
 Backends/NDArray.cs	0	2
 Backends/Strings/NDCharObjectPath.Mod.cs	0	1
 Backends/Strings/NDCharObjectPath.cs	0	2
-Backends/Strings/NDStringArrays.cs	0	2
+Backends/Strings/NDStringArrays.cs	0	1
 Backends/Strings/NDStringCopy.cs	0	2
 Backends/Strings/NDStringMethods.cs	9	5	# numpy.strings' own Python statements (the computed-width wrappers' sizing: np.amax, np.where, np.minimum, np.subtract, np.multiply, np.add, np.less): the text API's own pass (plan section 8), not the engine's
 Backends/Strings/NDStringRepeatReduction.cs	0	2
 Backends/Strings/NDStringUfuncs.VString.cs	0	1
-Backends/Strings/NDTextNumericReduction.cs	0	2
+Backends/Strings/NDTextNumericReduction.cs	0	1
 Backends/Strings/NDVStringArithmetic.cs	0	1
 Backends/Strings/NDVStringMove.cs	0	3
 Backends/Strings/NDVStringReduction.cs	0	6

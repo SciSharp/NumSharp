@@ -316,7 +316,7 @@ namespace NumSharp.Backends
                 // Integer lanes serve FMax / FMin through the max / min lanes (identical results, see MinMaxOp); only the
                 // float P rules read the buffer size (their SLAB calls follow NumPy's call tiling).
                 bool isMax = NumPyMinMaxReduce.IsMaxLike(op);
-                long bufsize = np.getbufsize();
+                long bufsize = NDIterBufferManager.CurrentBufferSize;
                 switch (t)
                 {
                     case NPTypeCode.Double:

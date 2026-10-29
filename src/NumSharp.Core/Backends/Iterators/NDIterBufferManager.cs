@@ -40,11 +40,17 @@ namespace NumSharp.Backends.Iteration
 
         /// <summary>
         /// The current default NDIter/ufunc buffer size for the calling thread — exactly the
-        /// value <see cref="NumSharp.np.getbufsize"/> returns. Equals the last
+        /// value <see cref="NumSharp.np.getbufsize"/> returns (its whole body), and what the engine
+        /// reads where NumPy's C code reads the extobj's buffer size. Equals the last
         /// <see cref="NumSharp.np.setbufsize(long)"/> value on this thread, or
-        /// <see cref="DefaultBufferSize"/> (8192) when none was set. Changing it alters only the
-        /// buffer/chunk size of buffered iteration, never any computed result.
+        /// <see cref="DefaultBufferSize"/> (8192) when none was set.
         /// </summary>
+        /// <remarks>
+        /// Changing it changes the buffer and chunk size of buffered iteration, and with it every
+        /// answer that follows NumPy's inner-loop calls, as it does in NumPy: the summation order of
+        /// a buffered flat sum, which call of the min / max reductions decides a tie or a NaN's bits,
+        /// the fills a cast reduction or an out= round trip runs in, np.power's zero-exponent-step test.
+        /// </remarks>
         public static long CurrentBufferSize
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]

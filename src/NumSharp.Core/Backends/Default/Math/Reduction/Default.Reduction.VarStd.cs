@@ -625,7 +625,7 @@ namespace NumSharp.Backends
             for (int d = 0; d < dims.Length; d++)
                 if (d != axis && dims[d] > 1 && strides[d] < strides[axis])
                     return true; // a kept axis inside the reduced one: a SLAB
-            return dims[axis] <= np.getbufsize();
+            return dims[axis] <= NDIterBufferManager.CurrentBufferSize;
         }
 
         /// <summary>
@@ -656,7 +656,7 @@ namespace NumSharp.Backends
             NPTypeCode xT, NPTypeCode sqT, DeviationSquare square, long chunkBytes)
         {
             long n = arr.size;
-            long fill = np.getbufsize();
+            long fill = NDIterBufferManager.CurrentBufferSize;
             long fillsPer = Math.Max(1, chunkBytes / Math.Max(1, fill * sqT.SizeOf()));
             long per = fillsPer * fill;
             if (per >= n)

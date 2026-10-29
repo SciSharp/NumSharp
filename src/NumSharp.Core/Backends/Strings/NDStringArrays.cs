@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 
 namespace NumSharp.Backends.Strings
@@ -328,7 +329,7 @@ namespace NumSharp.Backends.Strings
             int itemsize = descr.itemsize;
             if (itemsize == 1 || itemsize == 2 || itemsize == 4 || itemsize == 8 || itemsize == 16)
             {
-                long ix = FirstTrue(xBad), iy = FirstTrue(yBad), buf = np.getbufsize();
+                long ix = FirstTrue(xBad), iy = FirstTrue(yBad), buf = NDIterBufferManager.CurrentBufferSize;
                 if (ix >= 0 && (iy < 0 || ix / buf <= iy / buf))
                     throw DecodeErrorAt(x, dims, layout, ix);
                 if (iy >= 0)

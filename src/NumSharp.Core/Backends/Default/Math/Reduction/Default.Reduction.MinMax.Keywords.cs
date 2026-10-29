@@ -1686,7 +1686,7 @@ namespace NumSharp.Backends
             if (loop is NPTypeCode.Single or NPTypeCode.Double)
             {
                 var probe = NumPyReduceIterator.Build(a.Shape, flags, keepdims, @out?.Shape, null, false, a.GetTypeCode != loop,
-                    np.getbufsize());
+                    NDIterBufferManager.CurrentBufferSize);
                 if (probe.IterSize == 0 || probe.InnerStride[NumPyReduceIterator.OpOut] == 0)
                     return null;
                 using var cut = CutStrideZeroAxes(a, flags, reducedOnly: true, out _);
@@ -1722,7 +1722,8 @@ namespace NumSharp.Backends
                 return @out;
             }
 
-            var it = NumPyReduceIterator.Build(a.Shape, flags, keepdims, null, null, false, a.GetTypeCode != loop, np.getbufsize());
+            var it = NumPyReduceIterator.Build(a.Shape, flags, keepdims, null, null, false, a.GetTypeCode != loop,
+                NDIterBufferManager.CurrentBufferSize);
             var result = new NDArray(loop, it.ResultDims.Length == 0 ? Shape.Scalar : Shape.Adopt(it.ResultDims, it.ResultStrides), false);
             UnmanagedStorage.Copyto(result, part, NPY_CASTING.NPY_SAME_KIND_CASTING);
             return result;
@@ -1825,7 +1826,7 @@ namespace NumSharp.Backends
                 NPTypeCode inT = input.GetTypeCode;
                 bool outCast = @out is not null && @out.GetTypeCode != loop;
                 var it = NumPyReduceIterator.Build(input.Shape, flags, keepdims, @out?.Shape, mask?.Shape,
-                    outCast, inT != loop, np.getbufsize());
+                    outCast, inT != loop, NDIterBufferManager.CurrentBufferSize);
 
                 // The result: the out, or a fresh array in the loop dtype laid out in the iteration order
                 // (npyiter_new_temp_array).

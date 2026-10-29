@@ -64,7 +64,7 @@ namespace NumSharp.Backends
         internal static void NumPyUfuncInputSteps(UfuncLoopOperand[] inputs, NDArray @out, NDArray where,
                                                   NPTypeCode loop, long[] dims, Span<long> steps)
         {
-            long bufsize = np.getbufsize();
+            long bufsize = NDIterBufferManager.CurrentBufferSize;
             int loopSize = loop.SizeOf();
             int nin = inputs.Length;
             // The copies check_for_trivial_loop makes replace the operand for the rest of the call (NumPy
