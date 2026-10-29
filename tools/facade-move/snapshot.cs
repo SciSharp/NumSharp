@@ -381,8 +381,21 @@ static class Snapshot
         // their variants chosen by the parameter's name and type (AssignArgLabels) and built from the destination where
         // they must fit it (MakeAssignArg); dst, casting and where take the general roles.
         AssignArg,
+        // NDArray.Contains (C#'s `value in arr`, NumPy's ndarray.__contains__: (self == value).any()): the value searched
+        // for, an object - a C# int / double / bool, a string (a char array searches its characters), null, NaN, a C#
+        // int[] and an NDArray, so the comparison's broadcast and its refusals are reached.
+        ContainsValue,
         Default, Unsupported,
     }
+
+    /// <summary>
+    ///     Whether a parameter is NDArray.Contains's <c>value</c>: other members name an object parameter <c>value</c> with
+    ///     other meanings (np.insert, np.can_cast, np.min_scalar_type), and their snapshots must not change.
+    /// </summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True for the parameter of the public instance method NDArray.Contains.</returns>
+    private static bool IsContains(ParameterInfo p) =>
+        p.Member.DeclaringType == typeof(NDArray) && p.Member.Name == "Contains";
 
     /// <summary>
     ///     Whether a parameter belongs to the item-selection family - np.take, np.put, np.putmask, np.place, np.repeat,
@@ -1139,6 +1152,8 @@ static class Snapshot
             if (n == "obj" && (t == typeof(int[]) || t == typeof(long[]))) return Role.InsertObjSeq;
             if (n == "value" && t == typeof(object)) return Role.InsertValue;
         }
+        // NDArray.Contains's value (only its: see IsContains).
+        if (n == "value" && t == typeof(object) && IsContains(p)) return Role.ContainsValue;
         // np.isin's algorithm name (only its: the sort family's kind takes the roles below).
         if (n == "kind" && t == typeof(string) && IsIsin(p)) return Role.IsinKind;
         // The max / min family's initial= (an object: NumPy's array_like scalar).
@@ -2053,6 +2068,18 @@ static class Snapshot
                              ("7", () => 7), ("1.5", () => 1.5), ("'7'", () => "7"), ("true", () => true),
                              ("null", () => null), ("1000", () => 1000), ("int[7,8]", () => new[] { 7, 8 }),
                              ("obj[7,'x']", () => new object[] { 7, "x" }), ("nd[7,8]", () => np.array(new long[] { 7, 8 })),
+                         })
+                    Add(label, value);
+                break;
+            case Role.ContainsValue:
+                // 0 first (most pools hold a zero, so the search finds it), then a value most do not hold, a double, a bool,
+                // a string (a char array's character search; a text array's element), null (None), NaN (never equal), a
+                // C# int[] (a Python list, compared element-wise and broadcast) and an NDArray of two values.
+                foreach (var (label, value) in new (string, Func<object>)[]
+                         {
+                             ("0", () => 0), ("7", () => 7), ("1.5", () => 1.5), ("true", () => true), ("'a'", () => "a"),
+                             ("null", () => null), ("nan", () => double.NaN), ("int[0,1]", () => new[] { 0, 1 }),
+                             ("nd[0,1]", () => np.array(new long[] { 0, 1 })),
                          })
                     Add(label, value);
                 break;
