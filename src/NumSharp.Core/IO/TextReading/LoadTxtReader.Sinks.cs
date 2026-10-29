@@ -5,11 +5,10 @@ using NumSharp.Backends;
 using NumSharp.Backends.Strings;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Backends.Unmanaged.Pooling;
-using NumSharp.IO;
 
-namespace NumSharp
+namespace NumSharp.IO
 {
-    public static partial class np
+    internal static partial class LoadTxtReader
     {
         // Where read_rows puts the fields it converts. NumPy writes each field straight into its growing result array through
         // the dtype's set_from_ucs4 function (textreading/field_types.c: npy_to_double, npy_to_int64, …, npy_to_string,
@@ -278,7 +277,7 @@ namespace NumSharp
         /// <summary>
         ///     A numeric dtype's fields (NumPy's <c>npy_to_bool</c> / <c>npy_to_int*</c> / <c>npy_to_uint*</c> /
         ///     <c>npy_to_float</c> / <c>npy_to_double</c> / <c>npy_to_cfloat</c> / <c>npy_to_cdouble</c>, the strict parsers of
-        ///     <c>np.loadtxt.Parsers.cs</c>), each element written in the dtype's own bytes; a converter's value is stored by
+        ///     <c>LoadTxtReader.Conversions.cs</c>), each element written in the dtype's own bytes; a converter's value is stored by
         ///     <c>PyArray_Pack</c> (<see cref="ReductionInitial.PackStore"/>).
         /// </summary>
         private sealed unsafe class LoadTxtNumericSink : LoadTxtSink

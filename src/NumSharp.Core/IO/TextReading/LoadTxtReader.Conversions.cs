@@ -5,12 +5,12 @@ using System.Runtime.InteropServices;
 using NumSharp.Backends;
 using NumSharp.Utilities;
 
-namespace NumSharp
+namespace NumSharp.IO
 {
-    public static partial class np
+    internal static partial class LoadTxtReader
     {
         // The numeric field parsers of np.loadtxt (NumPy's per-dtype set_from_ucs4 functions, textreading/conversions.c
-        // and str_to_int.c). They read one field's characters; the numeric sink (np.loadtxt.Sinks.cs) calls them for every
+        // and str_to_int.c). They read one field's characters; the numeric sink (LoadTxtReader.Sinks.cs) calls them for every
         // field of a numeric dtype that has no converter (a converter's value is stored by ReductionInitial.PackStore).
 
         #region numeric field parsers (loadtxt semantics)
@@ -326,7 +326,7 @@ namespace NumSharp
         /// <param name="value">The value, when the field parsed.</param>
         /// <returns>True when the stripped field is one decimal number.</returns>
         private static bool TryDecimalLT(ReadOnlySpan<char> tok, out decimal value)
-            => decimal.TryParse(TrimLoadtxtWs(tok), NumberStyles.Float, CI, out value);
+            => decimal.TryParse(TrimLoadtxtWs(tok), NumberStyles.Float, CultureInfo.InvariantCulture, out value);
 
         /// <summary>
         ///     Parses a complex field as NumPy's <c>to_complex_int</c> (conversions.c) does with its default

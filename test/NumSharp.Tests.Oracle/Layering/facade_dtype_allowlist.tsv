@@ -6,12 +6,8 @@ APIs/np.evaluate.cs	2	0
 APIs/np.finfo.cs	1	11
 APIs/np.flatiter.cs	1	1
 APIs/np.iinfo.cs	1	21
-APIs/np.loadtxt.Parsers.cs	0	15
-APIs/np.loadtxt.Sinks.cs	23	0
-APIs/np.loadtxt.cs	2	0
 APIs/np.memoryview.cs	2	16
 APIs/np.nditer.Typed.cs	0	1
-APIs/np.savetxt.cs	1	1
 APIs/np.vectorize.cs	0	2
 Casting/Implicit/NDArray.Implicit.ValueTypes.cs	4	3
 Casting/NDArray.ToString.cs	0	1
