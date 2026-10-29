@@ -89,8 +89,14 @@
 // np.resize / ndarray.resize's new shapes; np.choose runs on the non-negative 1-D pools too), and the assignment family's
 // (see AssignArgLabels: np.copyto's sources - arrays of the operand's shape in other dtypes, 0-d and broadcast ones, views
 // of the destination itself, None, Python ints past every C# integer, strs, and the C# numbers of the generic overload,
-// which is instantiated for every unmanaged type NumSharp stores - and ndarray.fill's value); an overload with a required
-// parameter of another kind is reported once as SKIP. An int axis
+// which is instantiated for every unmanaged type NumSharp stores - and ndarray.fill's value), and the coercion family's
+// HOST operand (see HostForms: np.array / np.asarray / np.asanyarray, NDArray.Scalar and NDArray's conversion operators,
+// whose first parameter is a C# value rather than an NDArray - a typed, jagged or object array, a nested object list or
+// grid, a List / an iterator / a Memory / a tuple, a scalar, a str, a str array, a MemoryView, null - built from each pool
+// operand in every form its parameter type admits, a combination without such a value producing no line; their generic
+// overloads are instantiated for every element type NumSharp stores; ndmin / ndim, copy, device, a dtype name and a read
+// size take their own variants); an overload with a required parameter of another kind is reported once as SKIP. An int
+// axis
 // starts from its default when it has one. A search function (np.searchsorted) runs on pools of 1-D haystacks: sorted,
 // strided, reversed, unsorted and empty ones beside one 2-D operand; np.convolve / np.correlate run on the same 1-D pools
 // and a 24-element one (long1d), whose float products reach the BLAS-shaped vector regimes. An np.linalg function runs on pools of matrices
@@ -102,7 +108,10 @@
 // property, null for an output not requested; np.gradient's GradientResult renders as GRAD1(array) or GRADN(array; ...).
 // An np.nditer iterator is pulled to its end and renders as ITER nop=N dtypes=[...] steps=S with, per operand, its views'
 // dtype, the run-length list of their shapes, their flag sets and one hash over every step's view (RenderIterator); take
-// nditer snapshots under NUMSHARP_DEBUG_GUARD_PAGES=1, where an allocated output's memory reads as zeros.
+// nditer snapshots under NUMSHARP_DEBUG_GUARD_PAGES=1, where an allocated output's memory reads as zeros. Take the coercion
+// family's under it too: np.array<T>(IEnumerable<T>, size) allocates size elements and leaves those past the sequence's
+// end as allocated, which differs from run to run in the pooled allocator. A rectangular C# array result (the explicit
+// conversion to Array) renders as MDARRAY elementType[dims] LIST[...] (its dimensions, then its elements in C order).
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -236,8 +245,11 @@ static class Snapshot
         string name = target.Substring((onLinalg || onEmath || onFft ? target.LastIndexOf('.') : target.IndexOf('.')) + 1);
         bool onNDArray = target.StartsWith("NDArray.", StringComparison.Ordinal);
         bool onMatrix = target.StartsWith("NDMatrix.", StringComparison.Ordinal);
-        // An operator is a static method of NDArray whose first NDArray parameter is the operand, as np.f's is.
-        bool instance = (onNDArray && !name.StartsWith("op_", StringComparison.Ordinal)) || onMatrix;
+        // An operator is a static method of NDArray whose first NDArray parameter is the operand, as np.f's is; so is a
+        // static factory of NDArray (NDArray.Scalar, NDArrayStaticTargets), whose first parameter is the coercion family's
+        // host operand.
+        bool instance = (onNDArray && !name.StartsWith("op_", StringComparison.Ordinal) && !NDArrayStaticTargets.Contains(name))
+                        || onMatrix;
         var methods = (onMatrix
                 ? typeof(NDMatrix).GetMethods(BindingFlags.Public | BindingFlags.Instance).Where(m => m.DeclaringType == typeof(NDMatrix))
                 : instance
@@ -264,12 +276,24 @@ static class Snapshot
                 yield return line;
     }
 
-    /// <summary>A stable text for an overload: the target and its parameter types and names.</summary>
+    /// <summary>
+    ///     The static members of NDArray a target <c>NDArray.name</c> names (instead of its instance members, which every
+    ///     other NDArray target names): the factories of the coercion family, whose first parameter is the host operand.
+    ///     The operators are static too, but they are named <c>op_X</c>, which already selects them.
+    /// </summary>
+    private static readonly HashSet<string> NDArrayStaticTargets = new(StringComparer.Ordinal) { "Scalar" };
+
+    /// <summary>A stable text for an overload: the target, a closed generic overload's type arguments, and its parameter
+    ///     types and names.</summary>
     /// <param name="target">The target as given on the command line.</param>
     /// <param name="m">The overload.</param>
-    /// <returns>For example <c>np.cumsum(NDArray arr, Int32? axis, DType typeCode, NDArray out)</c>.</returns>
+    /// <returns>For example <c>np.cumsum(NDArray arr, Int32? axis, DType typeCode, NDArray out)</c>, or
+    ///     <c>NDArray.Scalar&lt;Double&gt;(Object value)</c> for a closed generic one (whose parameters alone can read like
+    ///     another overload's: <c>Scalar&lt;T&gt;(object)</c> closed over every element type beside
+    ///     <c>Scalar(object)</c>).</returns>
     private static string Signature(string target, MethodInfo m) =>
-        target + "(" + string.Join(", ", m.GetParameters().Select(p => TypeName(p.ParameterType) + " " + p.Name)) + ")";
+        target + (m.IsGenericMethod ? "<" + string.Join(",", m.GetGenericArguments().Select(a => a.Name)) + ">" : "") +
+        "(" + string.Join(", ", m.GetParameters().Select(p => TypeName(p.ParameterType) + " " + p.Name)) + ")";
 
     /// <summary>A short type name: <c>Int32?</c> for a nullable, <c>Double[]</c> for an array.</summary>
     /// <param name="t">The type.</param>
@@ -391,6 +415,13 @@ static class Snapshot
         // root reduction the engine runs itself or delegates (sum, ptp, nanmin / nanmax, argmax / argmin, any / all), flat,
         // along axis 0 and with keepdims (see EvalExprVariantLabels and MakeEvalExpr).
         EvalExpr, EvalExprPositional, EvalOperands,
+        // The coercion family (np.array / np.asarray / np.asanyarray, NDArray.Scalar and NDArray's implicit / explicit
+        // conversion operators): the HOST operand - the first parameter when it is not an NDArray, a C# value built from
+        // the pool operand in one of the forms its type admits (HostForms, MakeHostOperand) - and the parameters only
+        // this family declares: copy as NumPy's tri-state (bool?), the device name, the dtype as a name (np.asarray's
+        // np.MemoryView overload), and the item count np.array reads from an IEnumerable. Its ndmin / ndim take IntArg, its
+        // dtype, order and bool copy the general roles.
+        HostOperand, CoerceCopy, CoerceDevice, CoerceDTypeName, CoerceSize,
         Default, Unsupported,
     }
 
@@ -909,14 +940,366 @@ static class Snapshot
     /// <summary>
     ///     The closed instances of a generic overload the snapshot calls: np.copyto&lt;T&gt; for every type of
     ///     <see cref="CopytoScalarLabels"/> (NumPy's Python scalars and the NumPy scalars NumSharp's C# types stand for);
-    ///     none for any other generic method, whose targets keep their snapshots.
+    ///     the coercion family's generic overloads (np.array&lt;T&gt;, np.asarray&lt;T&gt;, NDArray.Scalar&lt;T&gt;) for
+    ///     every element type NumSharp stores (<see cref="HostElementTypes"/>), each fed only the pool operands of its own
+    ///     dtype; none for any other generic method, whose targets keep their snapshots.
     /// </summary>
     /// <param name="m">A generic method definition.</param>
     /// <returns>Its closed instances, or none.</returns>
     private static IEnumerable<MethodInfo> SnapshotInstantiations(MethodInfo m) =>
         m.DeclaringType == typeof(np) && m.Name == "copyto"
             ? CopytoScalarLabels.Keys.Select(t => m.MakeGenericMethod(t))
-            : Enumerable.Empty<MethodInfo>();
+            : IsCoercion(m)
+                ? HostElementTypes.Select(t => m.MakeGenericMethod(t))
+                : Enumerable.Empty<MethodInfo>();
+
+    /// <summary>
+    ///     The C# element types of the 15 dtypes NumSharp stores, in the pool's dtype order: the types the coercion
+    ///     family's generic overloads are closed over (every one satisfies their <c>unmanaged</c> / <c>struct</c>
+    ///     constraints).
+    /// </summary>
+    private static readonly Type[] HostElementTypes =
+    {
+        typeof(bool), typeof(sbyte), typeof(byte), typeof(short), typeof(ushort), typeof(int), typeof(uint), typeof(long),
+        typeof(ulong), typeof(char), typeof(Half), typeof(float), typeof(double), typeof(decimal), typeof(Complex),
+    };
+
+    /// <summary>
+    ///     Whether an overload belongs to the coercion family: np.array, np.asarray and np.asanyarray (NumPy's
+    ///     <c>_array_fromobject_generic</c> over <c>PyArray_FromAny</c>: <c>array_coercion.c</c>'s discovery and fill),
+    ///     NDArray.Scalar (NumSharp's <c>np.array(scalar, dtype)</c>) and NDArray's implicit / explicit conversion operators
+    ///     (a C# array, a str or a C# scalar into an array, an array into a C# array or scalar).
+    /// </summary>
+    /// <param name="m">The overload.</param>
+    /// <returns>True for a public static overload of one of those names on np or NDArray.</returns>
+    private static bool IsCoercion(MethodInfo m) =>
+        (m.DeclaringType == typeof(np) && m.Name is "array" or "asarray" or "asanyarray")
+        || (m.DeclaringType == typeof(NDArray) && m.Name is "Scalar" or "op_Implicit" or "op_Explicit");
+
+    /// <summary>Whether a parameter belongs to a coercion overload (<see cref="IsCoercion(MethodInfo)"/>).</summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True when its method is one of the coercion family's.</returns>
+    private static bool IsCoercion(ParameterInfo p) => p.Member is MethodInfo m && IsCoercion(m);
+
+    /// <summary>
+    ///     The element type a pool dtype's operand holds as a C# value: the storage type of the 15 numeric dtypes (the
+    ///     order of <see cref="HostElementTypes"/>), <see cref="string"/> for the Unicode and <c>StringDType</c> pools,
+    ///     <c>byte[]</c> for the bytes pool (one Python <c>bytes</c> value).
+    /// </summary>
+    /// <param name="dt">A pool dtype name (<see cref="Dtypes"/>).</param>
+    /// <returns>The element type.</returns>
+    /// <exception cref="ArgumentException">An unknown dtype name (a bug in the tool).</exception>
+    private static Type HostElementType(string dt) => dt switch
+    {
+        "bool" => typeof(bool),
+        "int8" => typeof(sbyte),
+        "uint8" => typeof(byte),
+        "int16" => typeof(short),
+        "uint16" => typeof(ushort),
+        "int32" => typeof(int),
+        "uint32" => typeof(uint),
+        "int64" => typeof(long),
+        "uint64" => typeof(ulong),
+        "char" => typeof(char),
+        "float16" => typeof(Half),
+        "float32" => typeof(float),
+        "float64" => typeof(double),
+        "decimal" => typeof(decimal),
+        "complex128" => typeof(Complex),
+        "U5" or "T" => typeof(string),
+        "S5" => typeof(byte[]),
+        _ => throw new ArgumentException("unknown pool dtype " + dt),
+    };
+
+    /// <summary>
+    ///     The forms a coercion overload's host operand takes, by the parameter's type (and, for an <c>object</c>
+    ///     parameter, by the method): each a C# value built from the pool operand by <see cref="TryMakeHostOperand"/>.
+    ///     <list type="bullet">
+    ///         <item><c>nd</c>: the NDArray itself (np.asanyarray's array case; a 0-d one passed to NDArray.Scalar).</item>
+    ///         <item><c>typed</c>: a rectangular C# array of the operand's shape and element type (rank 1 or more; a text
+    ///             operand gives a <c>string</c> or <c>byte[]</c> array) - NumSharp's ndarray-like C# array.</item>
+    ///         <item><c>jagged</c>: the same values as nested typed arrays (rank 2 or more).</item>
+    ///         <item><c>list</c>: nested <c>object[]</c> of boxed values - NumPy's list of lists (rank 1 or more).</item>
+    ///         <item><c>grid</c>: a rectangular <c>object</c> array (rank 2 or more), NumSharp's nested list of rows.</item>
+    ///         <item><c>rows</c>: an <c>object[]</c> holding the operand's rows as NDArrays (rank 2 or more).</item>
+    ///         <item><c>glist</c> / <c>linq</c> / <c>memory</c>: a <c>List&lt;T&gt;</c>, an iterator that is no collection,
+    ///             a <c>Memory&lt;T&gt;</c> of a 1-D operand's values.</item>
+    ///         <item><c>tuple</c>: a ValueTuple of a 1-D operand's boxed values (seven at most).</item>
+    ///         <item><c>scalar</c>: a 0-d operand's value as its C# scalar (<c>string</c> / <c>byte[]</c> for text).</item>
+    ///         <item><c>flat</c>: the values in C order as a <c>T[]</c> (a generic <c>T[]</c> parameter; any rank).</item>
+    ///         <item><c>str</c> / <c>strs</c> / <c>withnull</c>: a 0-d operand's value as a str, every value's str as a
+    ///             <c>string[]</c>, that array with its first entry null.</item>
+    ///         <item><c>empty</c> / <c>null</c>: the empty str and null, built once (the float64 0-d slot).</item>
+    ///         <item><c>data</c>: the operand's <see cref="np.MemoryView"/> (<c>ndarray.data</c>).</item>
+    ///     </list>
+    /// </summary>
+    /// <param name="p">The host operand parameter.</param>
+    /// <returns>The form names, in the order the pools try them.</returns>
+    private static string[] HostForms(ParameterInfo p)
+    {
+        Type t = p.ParameterType.IsByRef ? p.ParameterType.GetElementType() : p.ParameterType;
+        if (t == typeof(object))
+            // NDArray.Scalar builds ONE element: its object value is a scalar, None, or a 0-d array passed as an object.
+            return p.Member.Name == "Scalar"
+                ? new[] { "scalar", "nd", "null" }
+                : new[] { "nd", "typed", "jagged", "list", "grid", "rows", "glist", "linq", "memory", "tuple", "scalar", "null" };
+        if (t == typeof(Array)) return new[] { "typed", "jagged", "list", "grid" };
+        if (t == typeof(string)) return new[] { "str", "empty", "null" };
+        if (t == typeof(string[])) return new[] { "strs", "withnull", "null" };
+        if (t == typeof(np.MemoryView)) return new[] { "data", "null" };
+        if (t.IsArray && t.GetArrayRank() > 1) return new[] { "typed" };
+        if (t.IsArray && t.GetElementType().IsArray) return new[] { "jagged" };
+        if (t.IsArray) return new[] { "flat" };
+        if (t.IsGenericType && t.GetGenericTypeDefinition() == typeof(IEnumerable<>)) return new[] { "glist", "linq" };
+        return new[] { "scalar" };
+    }
+
+    /// <summary>
+    ///     Builds the coercion family's host operand: <paramref name="form"/> (<see cref="HostForms"/>) of the pool operand
+    ///     for a parameter of type <paramref name="t"/>, or false when the operand has no such form (a rank the form
+    ///     needs, an element type the parameter does not take, a value built only once).
+    /// </summary>
+    /// <param name="t">The parameter type (a by-ref <c>in object</c> already unwrapped).</param>
+    /// <param name="form">The form.</param>
+    /// <param name="dt">The operand's pool dtype.</param>
+    /// <param name="baseLayout">The operand's pool layout.</param>
+    /// <param name="operand">The pool operand.</param>
+    /// <param name="oneElement">Whether the parameter is ONE element's value (NDArray.Scalar's): its <c>nd</c> form is a
+    ///     0-d operand only.</param>
+    /// <param name="value">Receives the host value.</param>
+    /// <returns>Whether the form exists for this operand and parameter.</returns>
+    /// <exception cref="ArgumentException">An unknown form (a bug in the tool).</exception>
+    private static bool TryMakeHostOperand(Type t, string form, string dt, string baseLayout, NDArray operand, bool oneElement,
+        out object value)
+    {
+        value = null;
+        Type e = HostElementType(dt);
+        int rank = operand.ndim;
+        long size = operand.size;
+        bool scalarLayout = baseLayout is "0d" or "0d_special";
+        // The once-built forms (null, the empty str) take one slot: the float64 0-d operand.
+        bool onceSlot = dt == "float64" && baseLayout == "0d";
+        // A typed parameter (T, T[], T[][], T[,], IEnumerable<T>) takes only the operands of its own element type.
+        if (PinnedHostElement(t) is { } pinned && pinned != e)
+            return false;
+        object[] items = Enumerable.Range(0, (int)size).Select(i => operand.GetAtIndex(i)).ToArray();
+        int[] dims = operand.shape.Select(d => (int)d).ToArray();
+        switch (form)
+        {
+            case "nd":
+                // NDArray.Scalar's value is ONE element, so only a 0-d array reaches it as an object; np.asanyarray takes
+                // every operand.
+                if (oneElement && !scalarLayout)
+                    return false;
+                value = operand;
+                return true;
+            case "typed":
+                if (rank == 0 || (t.IsArray && t.GetArrayRank() != rank))
+                    return false;
+                value = Rectangular(e, dims, items);
+                return true;
+            case "jagged":
+                if (rank < 2 || (t.IsArray && JaggedDepth(t) != rank))
+                    return false;
+                value = Jagged(e, dims, items, 0, 0);
+                return true;
+            case "list":
+                if (rank == 0)
+                    return false;
+                value = Jagged(typeof(object), dims, items, 0, 0);
+                return true;
+            case "grid":
+                if (rank < 2)
+                    return false;
+                value = Rectangular(typeof(object), dims, items);
+                return true;
+            case "rows":
+                if (rank < 2)
+                    return false;
+                value = Enumerable.Range(0, dims[0]).Select(i => (object)operand[i]).ToArray();
+                return true;
+            case "glist":
+            case "linq":
+            case "memory":
+                if (rank != 1)
+                    return false;
+                Array typedItems = Rectangular(e, dims, items);
+                value = form switch
+                {
+                    "glist" => Activator.CreateInstance(typeof(List<>).MakeGenericType(e), typedItems),
+                    "linq" => typeof(Snapshot).GetMethod(nameof(Iterate), BindingFlags.NonPublic | BindingFlags.Static)
+                        .MakeGenericMethod(e).Invoke(null, new object[] { typedItems }),
+                    _ => Activator.CreateInstance(typeof(Memory<>).MakeGenericType(e), typedItems),
+                };
+                return true;
+            case "tuple":
+                if (rank != 1 || size > 7)
+                    return false;
+                value = TupleOf(items);
+                return true;
+            case "scalar":
+                if (!scalarLayout)
+                    return false;
+                value = items[0];
+                return true;
+            case "flat":
+                value = Rectangular(e, new[] { (int)size }, items);
+                return true;
+            case "str":
+                if (!scalarLayout)
+                    return false;
+                value = TextOf(items[0]);
+                return true;
+            case "strs":
+                if (rank == 0)
+                    return false;
+                value = items.Select(TextOf).ToArray();
+                return true;
+            case "withnull":
+                if (rank != 1 || size == 0 || e != typeof(string))
+                    return false;
+                var withNull = items.Select(TextOf).ToArray();
+                withNull[0] = null;
+                value = withNull;
+                return true;
+            case "empty":
+                if (!onceSlot)
+                    return false;
+                value = "";
+                return true;
+            case "null":
+                if (!onceSlot)
+                    return false;
+                value = null;
+                return true;
+            case "data":
+                // ndarray.data refuses a dtype that holds references (StringDType, as NumPy refuses its buffer): that operand
+                // has no MemoryView, so no line.
+                try
+                {
+                    value = operand.data;
+                }
+                catch (ValueError)
+                {
+                    return false;
+                }
+                return true;
+            default:
+                throw new ArgumentException("unknown host operand form " + form);
+        }
+    }
+
+    /// <summary>The innermost element type of an array type (<c>double</c> for <c>double[][]</c> and <c>double[,]</c>).</summary>
+    /// <param name="t">An array type.</param>
+    /// <returns>Its innermost element type.</returns>
+    private static Type InnermostElement(Type t)
+    {
+        while (t.IsArray)
+            t = t.GetElementType();
+        return t;
+    }
+
+    /// <summary>How many single-rank array levels a jagged array type nests (<c>double[][]</c>: 2).</summary>
+    /// <param name="t">An array type.</param>
+    /// <returns>The nesting depth.</returns>
+    private static int JaggedDepth(Type t)
+    {
+        int depth = 0;
+        while (t.IsArray && t.GetArrayRank() == 1)
+        {
+            depth++;
+            t = t.GetElementType();
+        }
+        return depth;
+    }
+
+    /// <summary>A rectangular C# array of <paramref name="e"/> elements and <paramref name="dims"/>, filled in C order.</summary>
+    /// <param name="e">The element type.</param>
+    /// <param name="dims">The dimensions (rank 1 or more).</param>
+    /// <param name="items">The values in C order (each assignable to <paramref name="e"/>).</param>
+    /// <returns>The array.</returns>
+    private static Array Rectangular(Type e, int[] dims, object[] items)
+    {
+        var result = Array.CreateInstance(e, dims);
+        var coords = new int[dims.Length];
+        for (int flat = 0; flat < items.Length; flat++)
+        {
+            result.SetValue(items[flat], coords);
+            for (int d = coords.Length - 1; d >= 0; d--)
+            {
+                if (++coords[d] < dims[d])
+                    break;
+                coords[d] = 0;
+            }
+        }
+        return result;
+    }
+
+    /// <summary>
+    ///     A jagged C# array (nested single-rank arrays) of <paramref name="e"/> leaves for the axes from
+    ///     <paramref name="axis"/> on, starting at flat position <paramref name="start"/>: <c>double[][]</c> for a 2-D
+    ///     operand, <c>object[]</c> holding <c>object[]</c> rows when <paramref name="e"/> is <c>object</c> (NumPy's nested
+    ///     list).
+    /// </summary>
+    /// <param name="e">The leaf element type.</param>
+    /// <param name="dims">The operand's dimensions.</param>
+    /// <param name="items">The values in C order.</param>
+    /// <param name="axis">The axis this level spans.</param>
+    /// <param name="start">The flat position of this level's first value.</param>
+    /// <returns>The nested array.</returns>
+    private static Array Jagged(Type e, int[] dims, object[] items, int axis, int start)
+    {
+        int stride = 1;
+        for (int d = axis + 1; d < dims.Length; d++)
+            stride *= dims[d];
+        Type levelElement = e;
+        // The element type of this level: e for the last axis, an array of the next level's type above it (object stays
+        // object at every level, NumPy's list of lists).
+        if (e != typeof(object))
+            for (int d = axis + 1; d < dims.Length; d++)
+                levelElement = levelElement.MakeArrayType();
+        var level = Array.CreateInstance(levelElement, dims[axis]);
+        for (int i = 0; i < dims[axis]; i++)
+            level.SetValue(axis == dims.Length - 1 ? items[start + i] : Jagged(e, dims, items, axis + 1, start + i * stride), i);
+        return level;
+    }
+
+    /// <summary>A ValueTuple of up to seven boxed values (<see cref="System.Runtime.CompilerServices.ITuple"/>), the
+    ///     empty <see cref="ValueTuple"/> for none.</summary>
+    /// <param name="items">The values.</param>
+    /// <returns>The tuple.</returns>
+    private static object TupleOf(object[] items)
+    {
+        if (items.Length == 0)
+            return ValueTuple.Create();
+        var create = typeof(ValueTuple).GetMethods(BindingFlags.Public | BindingFlags.Static)
+            .Single(m => m.Name == "Create" && m.GetGenericArguments().Length == items.Length);
+        return create.MakeGenericMethod(Enumerable.Repeat(typeof(object), items.Length).ToArray()).Invoke(null, items);
+    }
+
+    /// <summary>An iterator over <paramref name="items"/> that is no collection (no <c>Count</c>, no <c>CopyTo</c>): the
+    ///     <c>linq</c> host form, NumPy's generator argument.</summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="items">The values.</param>
+    /// <returns>The lazy sequence.</returns>
+    private static IEnumerable<T> Iterate<T>(T[] items)
+    {
+        foreach (var item in items)
+            yield return item;
+    }
+
+    /// <summary>A value's text as a C# str: a <c>string</c> itself, a <c>byte[]</c> decoded as Latin-1, a number in the
+    ///     invariant culture, null as null.</summary>
+    /// <param name="v">The value.</param>
+    /// <returns>Its text.</returns>
+    private static string TextOf(object v) => v switch
+    {
+        null => null,
+        string s => s,
+        byte[] b => Encoding.Latin1.GetString(b),
+        IFormattable f => f.ToString(null, CultureInfo.InvariantCulture),
+        _ => v.ToString(),
+    };
 
     /// <summary>
     ///     Whether a parameter belongs to np.einsum, whose <c>subscripts</c> / <c>operands</c> / <c>optimize</c> roles are its
@@ -1247,6 +1630,17 @@ static class Snapshot
             if (n == "n" && (t == typeof(int) || t == typeof(long) || t == typeof(double))) return Role.FftFreqN;
             if (n == "d" && t == typeof(double)) return Role.FftD;
             if (n == "device" && t == typeof(string)) return Role.FftDevice;
+        }
+        // The coercion family's own parameters (only its: the other targets keep their snapshots, and np.fft's device has a
+        // role of its own): ndmin / ndim around their defaults, copy as NumPy's tri-state, the device, the dtype given by
+        // name (np.asarray's MemoryView overload) and the count np.array reads from an IEnumerable.
+        if (IsCoercion(p))
+        {
+            if (n is "ndmin" or "ndim" && t == typeof(int)) return Role.IntArg;
+            if (n == "copy" && t == typeof(bool?)) return Role.CoerceCopy;
+            if (n == "device" && t == typeof(string)) return Role.CoerceDevice;
+            if (n == "dtype" && t == typeof(string)) return Role.CoerceDTypeName;
+            if (n == "size" && (t == typeof(int) || t == typeof(long))) return Role.CoerceSize;
         }
         if (t == typeof(DType)) return Role.DType;
         if (t == typeof(bool)) return Role.Bool;
@@ -1600,6 +1994,34 @@ static class Snapshot
                 Add("true", () => (bool?)true);
                 Add("false", () => (bool?)false);
                 break;
+            case Role.CoerceCopy:
+                // NumPy's copy=None first (a copy only when the dtype or the layout needs one), then always and never (which
+                // raises "Unable to avoid copy" when one is needed).
+                Add("null", () => null);
+                Add("true", () => (bool?)true);
+                Add("false", () => (bool?)false);
+                break;
+            case Role.CoerceDevice:
+                // None first, NumPy's one device, and one it refuses.
+                Add("null", () => null);
+                Add("cpu", () => "cpu");
+                Add("cuda", () => "cuda");
+                break;
+            case Role.CoerceDTypeName:
+                // No dtype first, then names of a number, an integer and a sized text dtype, and a name np.dtype refuses.
+                Add("null", () => null);
+                foreach (var name in new[] { "float64", "int32", "<U5", "bogus" })
+                    Add(name, () => name);
+                break;
+            case Role.CoerceSize:
+            {
+                // The number of items np.array reads from an IEnumerable: a prefix first, then none, more than a pool
+                // operand holds (the rest of the array stays as allocated) and a negative count.
+                bool isLong = p.ParameterType == typeof(long);
+                foreach (var count in new[] { 3, 0, 100, -1 })
+                    Add(count.ToString(CultureInfo.InvariantCulture), () => isLong ? (object)(long)count : count);
+                break;
+            }
             case Role.Casting:
             {
                 // The default first, then the other rules and a name NumPy refuses.
@@ -2246,6 +2668,15 @@ static class Snapshot
         bool sawArray = instance;
         for (int i = 0; i < ps.Length; i++)
         {
+            // The coercion family's host operand: its first parameter when that is not an NDArray (np.array's C# arrays,
+            // strs and scalars, np.asanyarray's object, NDArray.Scalar's value, a conversion operator's C# source). It is
+            // built from the pool operand (TryMakeHostOperand), and an NDArray parameter after it (like=) is no operand.
+            if (i == 0 && !instance && IsCoercion(m) && ps[0].ParameterType != typeof(NDArray))
+            {
+                roles[i] = Role.HostOperand;
+                sawArray = true;
+                continue;
+            }
             // np.histogramdd's sequence form: its NDArray[] sample is built from the pool operand (its columns), and the
             // NDArray parameters after it (weights) keep their own roles.
             if (!sawArray && ps[i].ParameterType == typeof(NDArray[]) && ps[i].Name == "sample")
@@ -2315,14 +2746,20 @@ static class Snapshot
             yield return $"{signature}\tSKIP unsupported required parameter {TypeName(ps[unsupported].ParameterType)} {ps[unsupported].Name}";
             yield break;
         }
-        var variants = ps.Select((p, i) => roles[i] == Role.Operand ? null : Variants(p, roles[i])).ToArray();
+        var variants = ps.Select((p, i) => roles[i] is Role.Operand or Role.HostOperand ? null : Variants(p, roles[i])).ToArray();
         int operandIndex = Array.IndexOf(roles, Role.Operand);
+        // A coercion overload's operand is its host operand, built per call from the pool operand.
+        int hostIndex = Array.IndexOf(roles, Role.HostOperand);
+        bool host = operandIndex < 0 && hostIndex >= 0;
+        if (host)
+            operandIndex = hostIndex;
         var none = Array.Empty<(int, int)>();
 
         // The number of non-base variants per parameter (0 for the operand and for parameters kept at their default).
         int Count(int i) => roles[i] switch
         {
             Role.Operand => 0,
+            Role.HostOperand => 0,
             Role.Out => OutVariantLabels.Length,
             Role.Weights => WeightVariantLabels.Length,
             Role.Where => WhereVariantLabels.Length,
@@ -2356,29 +2793,79 @@ static class Snapshot
 
         // The operand layouts of the three phases: the general pools, or the 1-D pools of a search function (below).
         var (fullLayouts, reducedLayouts, pairLayouts) = PoolsFor(m);
+        string[] dtypes = Dtypes, pairDtypes = PairDtypes;
+        if (host)
+        {
+            // A host operand takes every form its parameter type admits ("layout:form", see HostForms), and a typed
+            // parameter (T, T[], T[,], IEnumerable<T>) only the pool operands of its element type: the other dtypes have
+            // no such C# value, so they would produce no line anyway.
+            string[] forms = HostForms(ps[operandIndex]);
+            string[] WithForms(string[] layouts) => layouts.SelectMany(l => forms.Select(f => l + ":" + f)).ToArray();
+            fullLayouts = WithForms(fullLayouts);
+            reducedLayouts = WithForms(reducedLayouts);
+            pairLayouts = WithForms(pairLayouts);
+            Type hostType = ps[operandIndex].ParameterType.IsByRef ? ps[operandIndex].ParameterType.GetElementType() : ps[operandIndex].ParameterType;
+            if (PinnedHostElement(hostType) is { } pinned)
+            {
+                dtypes = Dtypes.Where(d => HostElementType(d) == pinned).ToArray();
+                pairDtypes = dtypes;
+            }
+        }
+        // A host operand form the pool operand does not have (Call returns null) produces no line; an overload whose host
+        // parameter no pool operand fits (np.array<T>(T[,,,,]): no pool operand has rank 5) reports that once.
+        int produced = 0;
 
         // phase A: every operand, every other parameter at its base
-        foreach (var dt in Dtypes)
+        foreach (var dt in dtypes)
             foreach (var layout in fullLayouts)
-                yield return Call(m, signature, instance, matrix, operandIndex, dt, layout, variants, roles, none);
+                if (Call(m, signature, instance, matrix, operandIndex, dt, layout, variants, roles, none) is { } lineA)
+                {
+                    produced++;
+                    yield return lineA;
+                }
 
         // phase B: one parameter varied at a time, on the reduced pool
         for (int p = 0; p < ps.Length; p++)
             for (int v = 1; v <= Count(p); v++)
-                foreach (var dt in Dtypes)
+                foreach (var dt in dtypes)
                     foreach (var layout in reducedLayouts)
-                        yield return Call(m, signature, instance, matrix, operandIndex, dt, layout, variants, roles, new[] { (p, v) });
+                        if (Call(m, signature, instance, matrix, operandIndex, dt, layout, variants, roles, new[] { (p, v) }) is { } lineB)
+                        {
+                            produced++;
+                            yield return lineB;
+                        }
 
         // phase C: every pair of parameters varied together, on the small pool
         for (int p1 = 0; p1 < ps.Length; p1++)
             for (int p2 = p1 + 1; p2 < ps.Length; p2++)
                 for (int v1 = 1; v1 <= Count(p1); v1++)
                     for (int v2 = 1; v2 <= Count(p2); v2++)
-                        foreach (var dt in PairDtypes)
+                        foreach (var dt in pairDtypes)
                             foreach (var layout in pairLayouts)
-                                yield return Call(m, signature, instance, matrix, operandIndex, dt, layout, variants, roles,
-                                    new[] { (p1, v1), (p2, v2) });
+                                if (Call(m, signature, instance, matrix, operandIndex, dt, layout, variants, roles,
+                                        new[] { (p1, v1), (p2, v2) }) is { } lineC)
+                                {
+                                    produced++;
+                                    yield return lineC;
+                                }
+
+        if (produced == 0)
+            yield return $"{signature}\tSKIP no pool operand has a host form this parameter takes";
     }
+
+    /// <summary>
+    ///     The element type a typed host parameter pins (<c>T</c> of <c>T</c>, <c>T[]</c>, <c>T[][]</c>, <c>T[,]</c> or
+    ///     <c>IEnumerable&lt;T&gt;</c>), or null for a parameter that takes any element type (<c>object</c>, <c>Array</c>,
+    ///     a str or str array, a <see cref="np.MemoryView"/>).
+    /// </summary>
+    /// <param name="t">The host parameter's type (by-ref unwrapped).</param>
+    /// <returns>The pinned element type, or null.</returns>
+    private static Type PinnedHostElement(Type t) =>
+        t == typeof(object) || t == typeof(Array) || t == typeof(string) || t == typeof(string[]) || t == typeof(np.MemoryView)
+            ? null
+            : t.IsArray ? InnermostElement(t)
+            : t.IsGenericType && t.GetGenericTypeDefinition() == typeof(IEnumerable<>) ? t.GetGenericArguments()[0]
+            : t;
 
     /// <summary>The out= variants, built from the base call's result.</summary>
     private static readonly string[] OutVariantLabels = { "same", "float64", "int8", "bool", "U5", "T", "wrongshape", "readonly" };
@@ -2413,11 +2900,13 @@ static class Snapshot
     ///     variant.</param>
     /// <param name="operandIndex">The operand parameter's index (static overloads), or -1.</param>
     /// <param name="dt">The operand dtype.</param>
-    /// <param name="layout">The operand layout.</param>
+    /// <param name="layout">The operand layout; for a host operand <c>layout:form</c> (the pool layout, then the C# form of
+    ///     <see cref="HostForms"/>).</param>
     /// <param name="variants">Per parameter, its variants (null for the operand).</param>
     /// <param name="roles">Per parameter, its role.</param>
     /// <param name="assignments">The varied parameters and their 1-based variant indices; empty for phase A.</param>
-    /// <returns>One output line.</returns>
+    /// <returns>One output line; null when the overload's host operand (the coercion family's) has no value in the form
+    ///     the layout names for this operand (<see cref="TryMakeHostOperand"/>), which RunOverload skips.</returns>
     /// <remarks>
     ///     An <c>out=</c> variant is sized from the call's result with every OTHER assignment applied and <c>out</c>
     ///     null; when that call throws, the operand's shape and dtype stand in. A <c>weights=</c> or <c>where=</c> variant
@@ -2463,20 +2952,32 @@ static class Snapshot
             _ => variants[p][v].Label,
         };
 
-        NDArray operand = MakeOperand(dt, layout);
+        // A host operand's layout is "layout:form" (RunOverload): the pool operand of the layout, then its C# form.
+        int formAt = layout.IndexOf(':');
+        string baseLayout = formAt < 0 ? layout : layout.Substring(0, formAt);
+        NDArray operand = MakeOperand(dt, baseLayout);
         // A matrix receiver is np.asmatrix's view of the pool operand (0-d -> (1, 1), 1-D -> (1, N)); a layout it refuses
         // (more than two long axes: "shape too large to be a matrix.") has no matrix to call the member on.
         if (matrix && operand is not null)
             operand = AsMatrixOrNull(operand);
         if (operand is null)
             return $"{signature}|{dt}/{layout}|{varied}\tSKIP operand unavailable";
+        object operandArg = operand;
+        if (operandIndex >= 0 && roles[operandIndex] == Role.HostOperand)
+        {
+            // The coercion family's C# value of the operand; a form this operand does not have makes no line at all.
+            Type hostType = ps[operandIndex].ParameterType.IsByRef ? ps[operandIndex].ParameterType.GetElementType() : ps[operandIndex].ParameterType;
+            if (!TryMakeHostOperand(hostType, layout.Substring(formAt + 1), dt, baseLayout, operand,
+                    oneElement: m.Name == "Scalar", out operandArg))
+                return null;
+        }
         string inBefore = HashOf(operand);
         var argv = new object[ps.Length];
         NDArray outArray = null;
         try
         {
             for (int i = 0; i < ps.Length; i++)
-                argv[i] = i == operandIndex ? operand
+                argv[i] = i == operandIndex ? operandArg
                     : roles[i] == Role.Operand2 ? MakeOperand2(Operand2VariantLabels[0], operand)
                     : roles[i] == Role.Keys ? MakeKeys(KeysVariantLabels[0], operand)
                     : roles[i] == Role.SlidingKernel ? MakeSlidingKernel(SlidingKernelVariantLabels[0], operand)
@@ -4186,6 +4687,12 @@ static class Snapshot
                 // Before the IEnumerable case: an iterator is enumerable, and its per-step views rendered one by one would
                 // make lines of kilobytes.
                 return RenderIterator(iterator);
+            case Array md when md.Rank > 1:
+                // A rectangular C# array (an NDArray's explicit conversion to Array): its element type and dimensions, which
+                // the flat enumeration below would lose, then its elements in C order.
+                return "MDARRAY " + md.GetType().GetElementType().Name + "[" +
+                       string.Join(",", Enumerable.Range(0, md.Rank).Select(md.GetLength)) + "] LIST[" +
+                       string.Join("; ", md.Cast<object>().Select(o => Render(o, outArray))) + "]";
             case IEnumerable e:
                 return "LIST[" + string.Join("; ", e.Cast<object>().Select(o => Render(o, outArray))) + "]";
             default:
