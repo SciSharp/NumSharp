@@ -367,11 +367,14 @@ namespace NumSharp
         /// <param name="matrix">The object's matrix flag (false for both; a "r" / "c" directive sets it).</param>
         /// <param name="ndmin">The object's minimum rank of every entry (<c>np.r_</c>: 1, <c>np.c_</c>: 2).</param>
         /// <param name="trans1d">Where an upgraded entry's original axes start (<c>np.r_</c>: -1, <c>np.c_</c>: 0).</param>
-        /// <returns>The concatenation; an <see cref="NDMatrix"/> under a "r" / "c" directive.</returns>
+        /// <returns>The concatenation; an <see cref="NDMatrix"/> under a "r" / "c" directive, C-contiguous and owning its data
+        ///     as NumPy's <c>matrix(res)</c> copy is.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="key"/> or one of its entries is null.</exception>
         /// <exception cref="ValueError">A directive after the first entry ("special directives must be the first
         ///     entry."), or an unknown one ("unknown special directive").</exception>
-        /// <exception cref="OverflowException">A C# integer literal outside the adopted integer dtype.</exception>
+        /// <exception cref="OverflowException">A C# integer literal outside the adopted integer dtype, in NumPy's setitem
+        ///     texts with the LP64 C <c>long</c> ("Python integer 1000 out of bounds for int8"; "Python int too large to
+        ///     convert to C long" past the long range, and past 2**64 - 1 for uint32 / uint64).</exception>
         /// <exception cref="DTypePromotionError">A C# number beside text (no common DType).</exception>
         /// <exception cref="ArgumentException">A malformed slice string, or np.concatenate's refusals (no entry, entries
         ///     of different ranks or shapes).</exception>
@@ -491,7 +494,12 @@ namespace NumSharp
                 // NDMatrix, and for the 'c' directive the transpose is the matrix's own (.T of a row is a
                 // column matrix). matrix() copies; the concatenation is fresh, so the matrix takes its
                 // storage over instead of copying again (the scope reclaims the plain wrapper).
+                // The copy is matrix.__new__'s `new.copy()`, ndarray.copy's C ORDER: a concatenation np.concatenate laid
+                // out in F order (np.r_['r', f2d], every input F-contiguous) becomes a C-contiguous matrix in NumPy, so only
+                // a result that is not C-contiguous already is copied; any other one is taken over as it is.
                 int oldndim = res.ndim;
+                if (!res.Shape.IsContiguous)
+                    res = res.copy('C');
                 NDMatrix mat = NDMatrix.From(res);
                 res = oldndim == 1 && col ? mat.T : mat;
             }
@@ -709,11 +717,20 @@ namespace NumSharp
                     if (keepsRank)
                         return arr;
                 }
+                else if (_weak != ConcatWeakKind.Strong)
+                {
+                    // NumPy: array(item, dtype=final_dtype, ndmin=ndmin) of a Python scalar is PyArray_FromAny with the
+                    // dtype requested, i.e. the dtype's setitem (PyArray_Pack): a Python int is range-checked, never
+                    // wrapped, with the LP64 texts NumSharp pins (np.r_[int8_a, 1000] raises "Python integer 1000 out of
+                    // bounds for int8", np.r_[int64_a, 2**64 - 1] "Python int too large to convert to C long", which Linux
+                    // NumPy says for every integer dtype but uint32 / uint64), a float or a complex rounds through a double,
+                    // a bool is an int. A NEW 0-d array of the result dtype.
+                    arr = NDArray.AsStoreValue(_scalar, final);
+                }
                 else
                 {
-                    if (_weak == ConcatWeakKind.Int)
-                        CheckWeakIntFits(_scalar, final);
-
+                    // A NumPy scalar (char, Half, decimal) is CAST like a 0-d array (PyArray_FromAny casts a NumPy
+                    // scalar of another dtype).
                     arr = np.asanyarray(_scalar);
                     if (arr.typecode != final)
                         arr = arr.astype(final);
@@ -807,24 +824,6 @@ namespace NumSharp
             for (int i = 0; i < objs.Count; i++)
                 operands[i] = objs[i].PromotionOperand;
             return DTypePromotion.ResultType(operands);
-        }
-
-        /// <summary>
-        ///     NumPy raises <c>OverflowError</c> — never wraps — when a weak integer literal does not fit
-        ///     the dtype it adopted: <c>np.r_[uint8Array, -1]</c> is an error, not 255.
-        /// </summary>
-        private static void CheckWeakIntFits(object value, NPTypeCode final)
-        {
-            if (value is ulong big && big > long.MaxValue)
-            {
-                if (final != NPTypeCode.UInt64 && NDExprTypeRules.IsIntegerKind(final))
-                    throw new OverflowException(
-                        $"Python integer {big} out of bounds for {final.AsNumpyDtypeName()}");
-                return;
-            }
-
-            NDExprTypeRules.CheckIntLiteralFits(
-                Convert.ToInt64(value, CultureInfo.InvariantCulture), final);
         }
 
         #endregion
