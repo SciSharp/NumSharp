@@ -1,5 +1,4 @@
 using System;
-using System.Numerics;
 using NumSharp.Backends;
 
 namespace NumSharp
@@ -86,7 +85,8 @@ namespace NumSharp
         ///     Port of NumPy 2.x <c>numpy.mgrid</c> (the <c>sparse=False</c> instance of
         ///     <c>numpy.lib.index_tricks.nd_grid</c>). It is the DENSE twin of <see cref="ogrid"/> and shares
         ///     its whole grammar and dtype/edge-case behaviour (see <see cref="OGridClass"/>; both run
-        ///     NumPy's <c>nd_grid.__getitem__</c> statements): slices are written as strings
+        ///     NumPy's <c>nd_grid.__getitem__</c> statements, <see cref="NDArray.MGrid"/> and
+        ///     <see cref="NDArray.OGrid"/>): slices are written as strings
         ///     (<c>np.mgrid["0:5", "0:3"]</c> ≙ <c>np.mgrid[0:5, 0:3]</c>); one string may carry comma-separated
         ///     slices; <see cref="Slice"/> objects work; there are NO directives. A field written as digits is a
         ///     Python int (exact at any size), anything else a Python float. The mesh shares ONE dtype (int64
@@ -140,85 +140,7 @@ namespace NumSharp
             ///     Slice-expression strings (a colon-bearing <c>"start:stop[:step]"</c>, or several such
             ///     comma-separated), and/or <see cref="Slice"/> objects.
             /// </param>
-            public MGridResult this[params object[] key] => new MGridResult(Build(key));
-
-            /// <summary>
-            ///     NumPy's <c>nd_grid.__getitem__</c> with <c>sparse=False</c>: a key of one slice is the bare 1-D array of
-            ///     the except branch; a key of several computes every size, the shared dtype, the dense
-            ///     <c>indices(size, typ)</c> grid, then <c>nn[k] = nn[k] * step + start</c> layer by layer.
-            /// </summary>
-            /// <param name="key">The indexer's key: slice strings (one may hold several, comma-separated) and
-            ///     <see cref="Slice"/> objects.</param>
-            /// <returns>The dense grid, of shape <c>(N, size_0, ..., size_{N-1})</c>; the 1-D array of one slice; an empty
-            ///     int64 array for the empty key (NumPy's <c>indices([])</c>).</returns>
-            /// <exception cref="ArgumentNullException"><paramref name="key"/> or an entry is null.</exception>
-            /// <exception cref="ArgumentException">An entry that is neither a slice string nor a <see cref="Slice"/>.</exception>
-            /// <exception cref="TypeError">See <see cref="GridSingleSlice"/>.</exception>
-            /// <exception cref="ValueError">A missing stop (<see cref="GridAxisSize"/>, <see cref="GridFillLine"/>); a NaN
-            ///     size; a size past int64 (<c>Maximum allowed dimension exceeded</c>); a negative one (np.indices'
-            ///     <c>negative dimensions are not allowed</c>); the allocation guard's.</exception>
-            /// <exception cref="DivideByZeroException">A zero real step.</exception>
-            /// <exception cref="OverflowException">An infinite size; a Python int NumPy cannot convert (see
-            ///     <see cref="GridFillLine"/>).</exception>
-            [NDScoped] // reclaims each rescale pass's line/reshape/broadcast temps and the grid[k] layer views
-            private static NDArray Build(object[] key)
-            {
-                // Shared nd_grid parsing (same grammar/errors as ogrid).
-                var specs = ParseGridSpecs(key, "mgrid");
-                int n = specs.Count;
-
-                // A key of one slice takes NumPy's except branch: a bare 1-D array, NOT a stacked grid.
-                if (n == 1)
-                    return GridSingleSlice(specs[0]);
-
-                // Every size first, in key order: a zero step, a missing (real-step) stop or a NaN size is raised where
-                // NumPy's size loop meets it. The sizes are ceil((stop-start)/step) (imaginary: the point count) and MAY be
-                // negative - indices then raises "negative dimensions are not allowed", exactly as NumPy's mgrid does (its
-                // ogrid twin instead gets an empty axis from arange).
-                var sizes = new BigInteger[n];
-                for (int k = 0; k < n; k++)
-                    sizes[k] = GridAxisSize(specs[k], k, "mgrid");
-                NPTypeCode typ = GridMeshDtype(specs);
-
-                // nn = indices(size, typ): NumPy's empty() converts every dimension before it checks any, so a size past
-                // int64 is "Maximum allowed dimension exceeded" even beside a negative one. The empty key gives indices([]),
-                // an empty int64 array.
-                long[] dims = new long[n];
-                for (int k = 0; k < n; k++)
-                {
-                    if (!AxisConcatenator.SliceSpec.FitsInt64(sizes[k]))
-                        throw new ValueError("Maximum allowed dimension exceeded");
-                    dims[k] = (long)sizes[k];
-                }
-
-                NDArray grid = indices(dims, typ);   // (n, size_0, ..., size_{n-1})
-
-                // nn[k] = nn[k] * step + start, layer by layer. A layer holds its coordinate at every position, so the
-                // statement is its axis's line broadcast across the grid: the line is computed once and copied in. A "pure"
-                // axis (real step 1, start 0) is skipped: nn[k] * 1 + 0 leaves int64 coordinates as they are, and float64
-                // ones too (a coordinate is >= 0, so even a -0.0 start adds to +0.0) - the common np.mgrid[0:a, 0:b] case is
-                // the single indices fill.
-                var fullShape = Shape.Adopt(dims);
-
-                for (int k = 0; k < n; k++)
-                {
-                    var spec = specs[k];
-                    if (spec.Start == 0d && spec.Step == 1d && !spec.ImaginaryStep)
-                        continue;
-
-                    NDArray line = new NDArray(typ, dims[k], false);
-                    GridFillLine(line, spec, k, typ, "mgrid");
-
-                    long[] lineShape = new long[n];
-                    for (int d = 0; d < n; d++)
-                        lineShape[d] = 1L;
-                    lineShape[k] = dims[k];
-
-                    copyto(grid[k], broadcast_to(line.reshape(Shape.Adopt(lineShape)), fullShape));
-                }
-
-                return grid;
-            }
+            public MGridResult this[params object[] key] => new MGridResult(NDArray.MGrid(key));
         }
 
         /// <summary>
