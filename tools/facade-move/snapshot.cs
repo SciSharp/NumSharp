@@ -95,7 +95,11 @@
 // grid, a List / an iterator / a Memory / a tuple, a scalar, a str, a str array, a MemoryView, null - built from each pool
 // operand in every form its parameter type admits, a combination without such a value producing no line; their generic
 // overloads are instantiated for every element type NumSharp stores; ndmin / ndim, copy, device, a dtype name and a read
-// size take their own variants); an overload with a required parameter of another kind is reported once as SKIP. An int
+// size take their own variants), and the spacing generators' (np.linspace / np.logspace / np.geomspace, which take no
+// array: their operand is a (start, stop) PAIR from SpacePairLabels - increasing, decreasing, equal, mixed-sign, zero,
+// NaN, infinite, signed-zero and extreme pairs, complex ones for geomspace's Complex overload - with the sample count,
+// the log base, the moveaxis destination and the device varied), np.trim_zeros' trim spec and np.vander's column count
+// N; an overload with a required parameter of another kind is reported once as SKIP. An int
 // axis
 // starts from its default when it has one. A search function (np.searchsorted) runs on pools of 1-D haystacks: sorted,
 // strided, reversed, unsorted and empty ones beside one 2-D operand; np.convolve / np.correlate run on the same 1-D pools
@@ -422,6 +426,11 @@ static class Snapshot
         // np.MemoryView overload), and the item count np.array reads from an IEnumerable. Its ndmin / ndim take IntArg, its
         // dtype, order and bool copy the general roles.
         HostOperand, CoerceCopy, CoerceDevice, CoerceDTypeName, CoerceSize,
+        // The spacing generators (np.linspace / np.logspace / np.geomspace) take no array: their operand is a (start, stop)
+        // PAIR (SpacePairLabels; the stop parameter is the pair's second value, built in Call), with the sample count, the
+        // log base and the moveaxis destination of their own; endpoint and dtype take the general roles, the device the
+        // coercion family's. np.trim_zeros' trim spec (required on its axis-list overload) and np.vander's column count N.
+        SpacePair, SpaceStop, SpaceNum, SpaceBase, SpaceAxis, TrimSpec, VanderN,
         Default, Unsupported,
     }
 
@@ -952,6 +961,80 @@ static class Snapshot
             : IsCoercion(m)
                 ? HostElementTypes.Select(t => m.MakeGenericMethod(t))
                 : Enumerable.Empty<MethodInfo>();
+
+    /// <summary>
+    ///     Whether an overload is a spacing generator - np.linspace, np.logspace or np.geomspace (NumPy's
+    ///     <c>_core/function_base.py</c>) - whose operand is a (start, stop) pair rather than an array.
+    /// </summary>
+    /// <param name="m">The overload.</param>
+    /// <returns>True for a public static overload of one of those names on np.</returns>
+    private static bool IsSpacing(MethodInfo m) =>
+        m.DeclaringType == typeof(np) && m.Name is "linspace" or "logspace" or "geomspace";
+
+    /// <summary>Whether a parameter belongs to a spacing generator (<see cref="IsSpacing(MethodInfo)"/>).</summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True when its method is one of the spacing generators.</returns>
+    private static bool IsSpacing(ParameterInfo p) => p.Member is MethodInfo m && IsSpacing(m);
+
+    /// <summary>
+    ///     The (start, stop) pairs of the real spacing overloads: increasing, decreasing and equal pairs, zero at either end
+    ///     (geomspace's "Geometric sequence cannot include zero"), all-negative and mixed-sign pairs (geomspace's rotation
+    ///     and its NaN interior), a NaN and an infinite end, signed zeros, the extremes of float64, fractions.
+    /// </summary>
+    private static readonly string[] RealSpacePairs =
+    {
+        "0,1", "1,10", "-5,5", "2,2", "10,0", "1,1000", "-1,-1000", "-1,1", "0.5,-0.5", "nan,1", "1,inf", "-0,0",
+        "1e-300,1e300", "3.5,-2.25", "100,1",
+    };
+
+    /// <summary>
+    ///     The (start, stop) pairs of geomspace's Complex overload: real, purely imaginary and general complex ends, an
+    ///     all-negative and a mixed-sign real pair, a zero end, a NaN end, an equal pair.
+    /// </summary>
+    private static readonly string[] ComplexSpacePairs =
+        { "1,8", "1j,8j", "1+1j,1000+1000j", "-1,-8", "1,-1", "0,1", "nan,1", "1,1", "2-3j,-4+5j" };
+
+    /// <summary>The pair labels for a spacing overload's start parameter type.</summary>
+    /// <param name="t">The type of the start parameter (double, float or Complex).</param>
+    /// <returns>The pair labels, phase A's pool; phase B takes the first five, phase C the first three.</returns>
+    private static string[] SpacePairLabels(Type t) => t == typeof(Complex) ? ComplexSpacePairs : RealSpacePairs;
+
+    /// <summary>
+    ///     One end of a spacing pair as the parameter's type: the label's text before the comma (start) or after it
+    ///     (stop), parsed as a real (<c>nan</c>, <c>inf</c>, <c>-0</c>, a number) or, for a Complex parameter, as
+    ///     <c>a</c>, <c>bj</c> or <c>a+bj</c> / <c>a-bj</c>.
+    /// </summary>
+    /// <param name="t">The parameter type: double, float or Complex.</param>
+    /// <param name="label">The pair label (<c>"start,stop"</c>).</param>
+    /// <param name="start">True for the start value, false for the stop value.</param>
+    /// <returns>The boxed value of type <paramref name="t"/>.</returns>
+    /// <exception cref="ArgumentException">A parameter type the generators do not take (a bug in the tool).</exception>
+    private static object MakeSpaceValue(Type t, string label, bool start)
+    {
+        string text = label.Split(',')[start ? 0 : 1];
+        static double Real(string s) => s switch
+        {
+            "nan" => double.NaN,
+            "inf" => double.PositiveInfinity,
+            "-inf" => double.NegativeInfinity,
+            "-0" => -0.0,
+            _ => double.Parse(s, CultureInfo.InvariantCulture),
+        };
+        if (t == typeof(double))
+            return Real(text);
+        if (t == typeof(float))
+            return (float)Real(text);
+        if (t != typeof(Complex))
+            throw new ArgumentException("no spacing value of type " + t.Name);
+        if (!text.EndsWith("j", StringComparison.Ordinal))
+            return new Complex(Real(text), 0.0);
+        // a+bj / a-bj: the sign that starts the imaginary part is the last + or - after the first character
+        string body = text.Substring(0, text.Length - 1);
+        int split = Math.Max(body.LastIndexOf('+'), body.LastIndexOf('-'));
+        if (split <= 0)
+            return new Complex(0.0, Real(body));
+        return new Complex(Real(body.Substring(0, split)), Real(body.Substring(split)));
+    }
 
     /// <summary>
     ///     The C# element types of the 15 dtypes NumSharp stores, in the pool's dtype order: the types the coercion
@@ -1503,6 +1586,20 @@ static class Snapshot
                 : n == "q" ? Role.QArray
                 : n == "bins" ? Role.BinsArray
                 : p.HasDefaultValue ? Role.Default : Role.Unsupported;
+        // The spacing generators' own parameters (only theirs, and before the general axis rule: their axis is the moveaxis
+        // destination of a 1-D result, not an axis of an operand): the sample count, the log base, the destination and the
+        // device. np.trim_zeros' trim spec and np.vander's column count (only theirs: no other target names them).
+        if (IsSpacing(p))
+        {
+            if (n == "num" && (t == typeof(int) || t == typeof(long))) return Role.SpaceNum;
+            if (n == "base" && t == typeof(double)) return Role.SpaceBase;
+            if (n == "axis" && t == typeof(int)) return Role.SpaceAxis;
+            if (n == "device" && t == typeof(string)) return Role.CoerceDevice;
+        }
+        if (p.Member.DeclaringType == typeof(np) && p.Member.Name == "trim_zeros" && n == "trim" && t == typeof(string))
+            return Role.TrimSpec;
+        if (p.Member.DeclaringType == typeof(np) && p.Member.Name == "vander" && n == "N" && t == typeof(int?))
+            return Role.VanderN;
         // The histogram family's bins in its other C# forms, and its range.
         if (n == "bins" && t == typeof(int)) return Role.Bins;
         if (n == "bins" && t == typeof(string)) return Role.BinsName;
@@ -2012,6 +2109,44 @@ static class Snapshot
                 Add("null", () => null);
                 foreach (var name in new[] { "float64", "int32", "<U5", "bogus" })
                     Add(name, () => name);
+                break;
+            case Role.SpacePair:
+            case Role.SpaceStop:
+                // Built from the pair label in Call (MakeSpaceValue); the factory here is never called.
+                Add("pair", () => null);
+                break;
+            case Role.SpaceNum:
+            {
+                // NumPy's default count first, then none, one, two (the endpoints only), an odd count and a negative one
+                // (NumPy's "Number of samples, -1, must be non-negative.").
+                bool isLong = p.ParameterType == typeof(long);
+                foreach (var count in new[] { 50, 0, 1, 2, 7, -1 })
+                    Add(count.ToString(CultureInfo.InvariantCulture), () => isLong ? (object)(long)count : count);
+                break;
+            }
+            case Role.SpaceBase:
+                // The default base first, then two, a base below one, a negative one (NaN for a fractional exponent), one,
+                // zero and e.
+                foreach (var b in new[] { 10.0, 2.0, 0.5, -2.0, 1.0, 0.0, Math.E })
+                    Add(b.ToString("R", CultureInfo.InvariantCulture), () => b);
+                break;
+            case Role.SpaceAxis:
+                // The scalar generators' result is 1-D: NumPy's moveaxis destination accepts 0 and -1 and refuses the rest.
+                foreach (var a in new[] { 0, -1, 1, -2 })
+                    Add(a.ToString(CultureInfo.InvariantCulture), () => a);
+                break;
+            case Role.TrimSpec:
+                // The default first, then each spelling NumPy accepts (either case, either order) and three it refuses: an
+                // unknown letter, the empty spec, and null (read as the empty spec).
+                foreach (var s in new[] { "fb", "f", "b", "BF", "bf", "fx", "", "null" })
+                    Add(s == "" ? "empty" : s, () => s == "null" ? null : s);
+                break;
+            case Role.VanderN:
+                // None (a square matrix) first, then no column, one, three, more columns than any pool operand has rows, and
+                // a negative count (the allocation's "negative dimensions are not allowed").
+                Add("null", () => null);
+                foreach (var nCols in new[] { 0, 1, 3, 9, -1 })
+                    Add(nCols.ToString(CultureInfo.InvariantCulture), () => (int?)nCols);
                 break;
             case Role.CoerceSize:
             {
@@ -2600,6 +2735,20 @@ static class Snapshot
     private static readonly string[] SlidingPairLayouts = { "1d", "long1d", "0d", "c2d" };
 
     /// <summary>
+    ///     The layouts np.trim_zeros adds to the general pool (phase A): operands with zero borders - a 1-D one with two
+    ///     zeros at each end, a 2-D one inside a zero frame, a 3-D one inside a zero box - and an all-zero 2-D one (every
+    ///     axis trims to nothing). The general pool's operands have no zero edge, so on them nothing is trimmed.
+    /// </summary>
+    private static readonly string[] TrimLayouts = { "zpad1d", "zpad2d", "zpad3d", "allzero2d" };
+
+    /// <summary>The reduced pool of np.trim_zeros (phase B, where trim and axis vary): the zero-border operands, a plain
+    ///     2-D one, a 0-d one (returned as it is) and an empty one.</summary>
+    private static readonly string[] TrimReducedLayouts = { "zpad1d", "zpad2d", "zpad3d", "allzero2d", "c2d", "0d", "empty" };
+
+    /// <summary>The small pool of np.trim_zeros (phase C).</summary>
+    private static readonly string[] TrimPairLayouts = { "zpad1d", "zpad2d", "0d" };
+
+    /// <summary>
     ///     The 1-D layouts np.bincount adds to the general pool (phase A): the plain prefix's magnitudes, contiguous, every
     ///     other element and reversed. The general pool's 1-D operands hold negative values, which a signed dtype refuses
     ///     at once and an unsigned one wraps into a bin count of up to 2^32 (an array of 32 GB), so only these reach the
@@ -2627,7 +2776,9 @@ static class Snapshot
     ///     NDArray.searchsorted, pools of 1-D haystacks (every other operand of the general pools fails NumPy's 1-D check
     ///     before anything else is read, so the varied keys, sides and sorters would never reach the search); for
     ///     np.convolve / np.correlate and their NDArray members, the same 1-D layouts and a 24-element one (a general pool's
-    ///     2-D operand fails their depth check first); for np.bincount, the general pool and 1-D operands of non-negative
+    ///     2-D operand fails their depth check first), and for np.vander too (its 1-D check comes first); for np.trim_zeros,
+    ///     the general pool and operands with zero borders (<see cref="TrimLayouts"/>); for np.bincount, the general pool
+    ///     and 1-D operands of non-negative
     ///     values (<see cref="BincountLayouts"/>); for np.choose and NDArray.choose, the general pool and the same
     ///     non-negative 1-D operands (index arrays whose indices mostly name a choice); for np.linalg, pools of square
     ///     matrices, stacks and rectangles (<see cref="LinalgLayouts"/>).
@@ -2637,8 +2788,11 @@ static class Snapshot
     private static (string[] Full, string[] Reduced, string[] Pair) PoolsFor(MethodInfo m) =>
         m.Name == "searchsorted"
             ? (Layouts.Concat(SortedLayouts).ToArray(), SortedReducedLayouts, SortedPairLayouts)
-            : m.Name is "convolve" or "correlate" && (m.DeclaringType == typeof(np) || m.DeclaringType == typeof(NDArray))
+            : (m.Name is "convolve" or "correlate" && (m.DeclaringType == typeof(np) || m.DeclaringType == typeof(NDArray)))
+              || (m.Name == "vander" && m.DeclaringType == typeof(np))
                 ? (Layouts.Concat(SortedLayouts).Append("long1d").ToArray(), SlidingReducedLayouts, SlidingPairLayouts)
+                : m.Name == "trim_zeros" && m.DeclaringType == typeof(np)
+                    ? (Layouts.Concat(TrimLayouts).ToArray(), TrimReducedLayouts, TrimPairLayouts)
                 : m.Name == "choose" && (m.DeclaringType == typeof(np) || m.DeclaringType == typeof(NDArray))
                     ? (Layouts.Concat(BincountLayouts).ToArray(), ChooseReducedLayouts, ChoosePairLayouts)
                     : m.Name == "bincount" && m.DeclaringType == typeof(np)
@@ -2668,6 +2822,19 @@ static class Snapshot
         bool sawArray = instance;
         for (int i = 0; i < ps.Length; i++)
         {
+            // A spacing generator's operand: its (start, stop) pair, built per call from the pair label (SpacePairLabels);
+            // the stop parameter is the pair's second value, so it is not varied on its own.
+            if (IsSpacing(m) && ps[i].Name == "start")
+            {
+                roles[i] = Role.SpacePair;
+                sawArray = true;
+                continue;
+            }
+            if (IsSpacing(m) && ps[i].Name == "stop")
+            {
+                roles[i] = Role.SpaceStop;
+                continue;
+            }
             // The coercion family's host operand: its first parameter when that is not an NDArray (np.array's C# arrays,
             // strs and scalars, np.asanyarray's object, NDArray.Scalar's value, a conversion operator's C# source). It is
             // built from the pool operand (TryMakeHostOperand), and an NDArray parameter after it (like=) is no operand.
@@ -2746,13 +2913,18 @@ static class Snapshot
             yield return $"{signature}\tSKIP unsupported required parameter {TypeName(ps[unsupported].ParameterType)} {ps[unsupported].Name}";
             yield break;
         }
-        var variants = ps.Select((p, i) => roles[i] is Role.Operand or Role.HostOperand ? null : Variants(p, roles[i])).ToArray();
+        var variants = ps.Select((p, i) => roles[i] is Role.Operand or Role.HostOperand or Role.SpacePair ? null : Variants(p, roles[i])).ToArray();
         int operandIndex = Array.IndexOf(roles, Role.Operand);
         // A coercion overload's operand is its host operand, built per call from the pool operand.
         int hostIndex = Array.IndexOf(roles, Role.HostOperand);
         bool host = operandIndex < 0 && hostIndex >= 0;
         if (host)
             operandIndex = hostIndex;
+        // A spacing generator's operand is its (start, stop) pair.
+        int pairIndex = Array.IndexOf(roles, Role.SpacePair);
+        bool spacing = operandIndex < 0 && pairIndex >= 0;
+        if (spacing)
+            operandIndex = pairIndex;
         var none = Array.Empty<(int, int)>();
 
         // The number of non-base variants per parameter (0 for the operand and for parameters kept at their default).
@@ -2760,6 +2932,7 @@ static class Snapshot
         {
             Role.Operand => 0,
             Role.HostOperand => 0,
+            Role.SpacePair => 0,
             Role.Out => OutVariantLabels.Length,
             Role.Weights => WeightVariantLabels.Length,
             Role.Where => WhereVariantLabels.Length,
@@ -2810,6 +2983,16 @@ static class Snapshot
                 dtypes = Dtypes.Where(d => HostElementType(d) == pinned).ToArray();
                 pairDtypes = dtypes;
             }
+        }
+        if (spacing)
+        {
+            // A generator takes no pool operand: its pools are (start, stop) pairs of the start parameter's type, one
+            // stand-in dtype label ("pair"), the first five pairs for phase B and the first three for phase C.
+            fullLayouts = SpacePairLabels(ps[operandIndex].ParameterType);
+            reducedLayouts = fullLayouts.Take(5).ToArray();
+            pairLayouts = fullLayouts.Take(3).ToArray();
+            dtypes = new[] { "pair" };
+            pairDtypes = dtypes;
         }
         // A host operand form the pool operand does not have (Call returns null) produces no line; an overload whose host
         // parameter no pool operand fits (np.array<T>(T[,,,,]): no pool operand has rank 5) reports that once.
@@ -2952,10 +3135,13 @@ static class Snapshot
             _ => variants[p][v].Label,
         };
 
+        // A spacing generator's operand is its (start, stop) pair, not a pool operand: a fresh 0-d array stands in for the
+        // MUTATED check, which then never fires.
+        bool spacingCall = operandIndex >= 0 && roles[operandIndex] == Role.SpacePair;
         // A host operand's layout is "layout:form" (RunOverload): the pool operand of the layout, then its C# form.
         int formAt = layout.IndexOf(':');
         string baseLayout = formAt < 0 ? layout : layout.Substring(0, formAt);
-        NDArray operand = MakeOperand(dt, baseLayout);
+        NDArray operand = spacingCall ? np.array(0.0) : MakeOperand(dt, baseLayout);
         // A matrix receiver is np.asmatrix's view of the pool operand (0-d -> (1, 1), 1-D -> (1, N)); a layout it refuses
         // (more than two long axes: "shape too large to be a matrix.") has no matrix to call the member on.
         if (matrix && operand is not null)
@@ -2963,6 +3149,8 @@ static class Snapshot
         if (operand is null)
             return $"{signature}|{dt}/{layout}|{varied}\tSKIP operand unavailable";
         object operandArg = operand;
+        if (spacingCall)
+            operandArg = MakeSpaceValue(ps[operandIndex].ParameterType, layout, start: true);
         if (operandIndex >= 0 && roles[operandIndex] == Role.HostOperand)
         {
             // The coercion family's C# value of the operand; a form this operand does not have makes no line at all.
@@ -2992,6 +3180,7 @@ static class Snapshot
                     : roles[i] == Role.EvalOperands ? new[] { operand }
                     : roles[i] == Role.ItemArg ? MakeItemArg(ps[i], ItemArgLabels(ps[i])[0], operand)
                     : roles[i] == Role.AssignArg ? MakeAssignArg(ps[i], AssignArgLabels(ps[i])[0], operand)
+                    : roles[i] == Role.SpaceStop ? MakeSpaceValue(ps[i].ParameterType, layout, start: false)
                     : IsDdRole(roles[i]) ? MakeDd(roles[i], DdLabels(roles[i])[0], operand, m)
                     : variants[i][0].Make();
             int outParam = -1, outVariant = 0;
@@ -3215,6 +3404,12 @@ static class Snapshot
             case "sorted1d": return SortedOrNull(Values(6));
             case "strided1d": return SortedOrNull(Values(12))?["::2"];
             case "reversed1d": return SortedOrNull(Values(6))?["::-1"];
+            // np.trim_zeros' operands with zero borders (TrimLayouts): the values written inside a zero frame of the dtype
+            // (an empty string for the text dtypes, False for bool, '\0' for char), so every trimmed axis has zeros to cut.
+            case "zpad1d": return ZeroFramed(dt, Values(5), new Shape(9), "2:7");
+            case "zpad2d": return ZeroFramed(dt, Values(12).reshape(new Shape(3, 4)), new Shape(5, 6), "1:4, 1:5");
+            case "zpad3d": return ZeroFramed(dt, Values(12).reshape(new Shape(1, 3, 4)), new Shape(3, 5, 6), "1:2, 1:4, 1:5");
+            case "allzero2d": return np.zeros(new Shape(3, 4), np.dtype(dt));
             // np.convolve / np.correlate's long sequence: the whole 24-value prefix, so a product of it with a long kernel
             // reaches the vector regimes of NumPy's dot functions (ddot from 16 terms, zdotu from 8).
             case "long1d": return Values(24);
@@ -3241,6 +3436,22 @@ static class Snapshot
             case "emptybatch": return Values(0).reshape(new Shape(0, 3, 3));
             default: throw new ArgumentException("unknown layout " + layout);
         }
+    }
+
+    /// <summary>
+    ///     A zero array of the pool dtype with <paramref name="inner"/> written into the region <paramref name="region"/>
+    ///     selects: np.trim_zeros' zero-border operands.
+    /// </summary>
+    /// <param name="dt">The pool dtype name.</param>
+    /// <param name="inner">The values (of <paramref name="dt"/>) written inside the frame.</param>
+    /// <param name="shape">The framed array's shape.</param>
+    /// <param name="region">The slice string of the region the values fill.</param>
+    /// <returns>A fresh C-contiguous array whose border is the dtype's zero.</returns>
+    private static NDArray ZeroFramed(string dt, NDArray inner, Shape shape, string region)
+    {
+        var framed = np.zeros(shape, np.dtype(dt));
+        framed[region] = inner;
+        return framed;
     }
 
     /// <summary>The symmetric positive definite (3, 3) matrix of the <c>spd</c> layout, row by row (its leading minors
