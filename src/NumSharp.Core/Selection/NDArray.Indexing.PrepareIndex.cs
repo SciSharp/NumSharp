@@ -160,8 +160,19 @@ namespace NumSharp
                         continue;
 
                     case bool b:
-                        // A raw C# bool behaves like a 0-d boolean (HAS_0D_BOOL): adds a size-1 (True)
-                        // or size-0 (False) axis, consumes no source axis.
+                        // A raw C# bool is the 0-d bool array NumPy's PyArray_FROM_O makes of a Python bool. Alone on a 0-d
+                        // array that array has the array's own (empty) shape: the single full mask, HAS_BOOL — the boolean
+                        // assignment's route, as for an np.array(True) entry below. (It was classified HAS_0D_BOOL there,
+                        // which sent a StringDType store's list through MapIter's temporary instead.)
+                        if (indexNdim == 1 && arrayNdim == 0)
+                        {
+                            ops.Add(IndexOp.FullBool(NDArray.Scalar(b)));
+                            indexType = IndexType.Bool;
+                            return FinishPrepare(ops, indexType, ref usedNdim, ref newNdim, ref fancyNdim,
+                                                 arrayNdim, dims, ellipsisPos, ellipsisSeen, indexNdim, brokeOnFullBool: true,
+                                                 scanFancyBounds);
+                        }
+                        // Anywhere else HAS_0D_BOOL: adds a size-1 (True) or size-0 (False) axis, consumes no source axis.
                         indexType |= IndexType.ZeroDBool;
                         ops.Add(IndexOp.ZeroBool(np.array(new long[b ? 1 : 0], copy: false), b ? 1 : 0));
                         if (fancyNdim < 1) fancyNdim = 1;

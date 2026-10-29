@@ -408,6 +408,37 @@ namespace NumSharp.Backends
             return d.MaxDims;
         }
 
+        /// <summary>
+        ///     NumPy's shape discovery of a Python sequence stored into an array of rank <paramref name="maxDims"/> by
+        ///     <c>PyArray_CopyObject</c> — a view assignment, or a <c>StringDType</c> array's fancy store into MapIter's
+        ///     temporary of the result shape: <c>PyArray_DiscoverDTypeAndShape</c> limited to <paramref name="maxDims"/> dims,
+        ///     with the destination's descriptor set (shapes only: the items are the descriptor's setitem's at the fill).
+        /// </summary>
+        /// <param name="seq">A value <see cref="IsSequence"/> accepts.</param>
+        /// <param name="maxDims">The destination's rank (0 or more).</param>
+        /// <exception cref="ValueError">The sequence nests deeper than <paramref name="maxDims"/> — <c>setting an array element
+        ///     with a sequence. The requested array would exceed the maximum number of dimension of 1.</c>, NumPy's text, which
+        ///     a ragged walk that ends at the limit gives too — or is ragged within it (the inhomogeneous-shape text).</exception>
+        /// <remarks>
+        ///     The bound is NumPy's and is observable: <c>a[1:] = [[1, 2, 3]]</c> on a 1-D array raises, while the same value as
+        ///     an ndarray is broadcast after its leading unit dimension is stripped, and a list into a 0-d view raises for ANY
+        ///     list, an empty one included. The conversion itself runs afterwards, unbounded: a sequence that passes has at
+        ///     most <paramref name="maxDims"/> dims, which the unbounded discovery finds the same.
+        /// </remarks>
+        internal static void ThrowIfSequenceExceedsDims(object seq, int maxDims)
+        {
+            using var d = new Discovery(shapeOnly: true, maxDims);
+            Walk(d, seq, 0);
+            if (!d.Ragged)
+                return;
+            // NumPy's `too_deep = ndim == max_dims`: the walk ended at the limit (a sequence met there), else the input is
+            // ragged below it.
+            if (d.MaxDims == d.Limit)
+                throw new ValueError("setting an array element with a sequence. The requested array would exceed the maximum " +
+                                     $"number of dimension of {maxDims}.");
+            throw Inhomogeneous(d);
+        }
+
         // ---------------------------------------------------------------------------------------------
         //  The walk (PyArray_DiscoverDTypeAndShape_Recursive)
         // ---------------------------------------------------------------------------------------------
@@ -420,8 +451,14 @@ namespace NumSharp.Backends
         {
             /// <summary>The discovered dims (grown on demand; entries past <see cref="MaxDims"/> are stale).</summary>
             public long[] Shape = new long[8];
-            /// <summary>NumPy's <c>max_dims</c>: unbounded until the first leaf fixes it (NumSharp has no 64-dim cap).</summary>
+            /// <summary>NumPy's <c>max_dims</c>: unbounded until the first leaf fixes it (NumSharp has no 64-dim cap), or the
+            ///     caller's <see cref="Limit"/> for a bounded walk.</summary>
             public int MaxDims = int.MaxValue;
+            /// <summary>
+            ///     The <c>max_dims</c> the walk started from: unbounded (<see cref="int.MaxValue"/>), or a destination's rank for
+            ///     <c>PyArray_CopyObject</c>'s walk. A ragged walk that ends at it was TOO DEEP, not inhomogeneous.
+            /// </summary>
+            public readonly int Limit = int.MaxValue;
             /// <summary><c>MAX_DIMS_WAS_REACHED</c>: a leaf fixed the dims, later leaves are compared against them.</summary>
             public bool Reached;
             /// <summary><c>FOUND_RAGGED_ARRAY</c>.</summary>
@@ -449,6 +486,11 @@ namespace NumSharp.Backends
             /// <summary>A fresh walk.</summary>
             /// <param name="shapeOnly">Discover shapes only (np.ndim).</param>
             public Discovery(bool shapeOnly) { ShapeOnly = shapeOnly; }
+
+            /// <summary>A fresh walk limited to <paramref name="limit"/> dims (NumPy's <c>max_dims</c> argument).</summary>
+            /// <param name="shapeOnly">Discover shapes only.</param>
+            /// <param name="limit">The most dims the input may have (0 or more).</param>
+            public Discovery(bool shapeOnly, int limit) { ShapeOnly = shapeOnly; MaxDims = limit; Limit = limit; }
 
             /// <summary>A fresh walk under a requested descriptor (<see cref="Descriptor"/>).</summary>
             /// <param name="descriptor">The requested descriptor; not null.</param>
@@ -490,6 +532,16 @@ namespace NumSharp.Backends
         /// <returns>The node, or null when the sequence itself was ragged (its items are not visited).</returns>
         private static Node Walk(Discovery d, object seq, int curr)
         {
+            // NumPy's recursion takes a sequence at the dim limit as a SCALAR (handle_scalar: a leaf at this depth) and flags
+            // the input ragged — too deep, when the walk ends at the limit. Before a leaf fixed the dims only a bounded walk
+            // (PyArray_CopyObject's, limited to the destination's rank) gets here; once one did, a sequence at the fixed
+            // depth is ragged either way, and this is the same state the sequence's own update reached.
+            if (curr == d.MaxDims)
+            {
+                UpdateShape(d, curr, 0, null, sequence: false);
+                d.Ragged = true;
+                return null;
+            }
             object[] items = SequenceItems(seq);
             long size = items.Length;
             if (!UpdateShape(d, curr, 1, &size, sequence: true))
@@ -520,8 +572,8 @@ namespace NumSharp.Backends
                     // (the top level's fast path, nested: the 2-D / 3-D point stacks, the rows of an N-D series) — takes the
                     // same shape updates in two calls and fills as one array. Not under a requested descriptor: the flat
                     // array is a discovered dtype that the fill would CAST, where NumPy packs each item (300 into int8
-                    // raises).
-                    if (!d.ShapeOnly && d.Descriptor is null && TryFlatLeaf(o, out var flatLeaf))
+                    // raises). Not at the dim limit either: there the list is a scalar leaf of a ragged input (Walk).
+                    if (curr + 1 != d.MaxDims && !d.ShapeOnly && d.Descriptor is null && TryFlatLeaf(o, out var flatLeaf))
                     {
                         FlatLeaf(d, node, i, flatLeaf, curr + 1);
                         continue;

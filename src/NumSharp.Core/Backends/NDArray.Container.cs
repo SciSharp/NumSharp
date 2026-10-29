@@ -327,8 +327,19 @@ namespace NumSharp
         ///     (<c>array_assign_item</c> → <c>PyArray_Pack</c>), so a list is the setitem's to answer. None and a Python int
         ///     are packed the same way for any selection: <c>PyArray_FromAny(value, descr)</c> of a scalar is that pack into a
         ///     0-d array, which the store broadcasts — before it looks at the selection, so an empty selection still raises
-        ///     (<c>int32[False] = None</c> is the TypeError). A list into a selection of several elements becomes the array
-        ///     NumSharp's coercion makes of it, cast by the store.
+        ///     (<c>int32[False] = None</c> is the TypeError).
+        ///     </para>
+        ///     <para>
+        ///     <b>A list into a selection of several elements</b> is converted with this array's descriptor too — every item
+        ///     by its setitem (a Python int range-checked, a str parsed, None NaN or <c>int()</c>'s TypeError) — by the route
+        ///     NumPy's assignment takes for the index: a view assignment's <c>PyArray_CopyObject</c>, whose discovery stops at
+        ///     the view's rank (<see cref="Backends.UnmanagedStorage.ThrowIfSequenceExceedsDims"/>: <c>a[1:] = [[1, 2, 3]]</c> raises);
+        ///     for a <c>StringDType</c> array's fancy index the same CopyObject into MapIter's temporary of the result shape
+        ///     (<c>PyDataType_REFCHK</c>: its broadcast text, "could not broadcast input array from shape (2,) into shape
+        ///     (2,4)"); for any other fancy index and a mask of this array's shape <c>PyArray_FromAny(value, descr)</c>,
+        ///     unlimited. Until 2026-10-29 the list became the array NumSharp's coercion discovers, cast by the store:
+        ///     <c>uint8[0:2] = [1, -1]</c> stored 255 where NumPy raises the OverflowError, a list nested deeper than a view
+        ///     was broadcast, and None in a list was refused.
         ///     </para>
         ///     <para>
         ///     <b>The order.</b> The index is validated by <see cref="PrepareIndex"/> without its index-array value scan:
@@ -358,7 +369,67 @@ namespace NumSharp
                 this[key] = PackForStore(value);
                 return;
             }
-            this[key] = SetItemValue(value);
+
+            // A Python list into a selection of several elements (the remarks): converted with this array's descriptor, by
+            // the route NumPy's assignment takes for this index.
+            bool fancy = (prepared.Flags & IndexType.Fancy) != 0;
+            if (!fancy && prepared.Flags != IndexType.Bool)
+            {
+                // A view assignment: PyArray_CopyObject discovers the list with at most the view's rank.
+                Backends.UnmanagedStorage.ThrowIfSequenceExceedsDims(value, prepared.NewNdim);
+            }
+            else if (fancy && Storage.IsVString)
+            {
+                // PyDataType_REFCHK: MapIter allocates the result-shaped temporary and PyArray_CopyObject fills it, so the
+                // list is bounded by the result's rank and must broadcast to its shape with AssignArray's text.
+                long[] resultDims = AdvancedResultDims(key);
+                Backends.UnmanagedStorage.ThrowIfSequenceExceedsDims(value, resultDims.Length);
+                var filled = AnyArrayFromObject(value, Storage.Descr, 'K');
+                ThrowIfCannotAssignInto(filled, resultDims);
+                this[key] = filled;
+                return;
+            }
+            this[key] = AnyArrayFromObject(value, Storage.Descr, 'K');
+        }
+
+        /// <summary>
+        ///     The shape an ADVANCED index gives as a getter (<c>a[key].shape</c>): MapIter's result shape, read from the same
+        ///     index applied to a one-byte array of this array's shape (no element of this array is read or copied).
+        /// </summary>
+        /// <param name="key">The index tuple (validated already).</param>
+        /// <returns>The result's dimensions.</returns>
+        /// <remarks>The proxy and its selection are this call's own: the caller's <see cref="NDScopedAttribute"/> scope
+        ///     reclaims them. A byte proxy, not this array: a <c>StringDType</c> getter duplicates every selected string.</remarks>
+        [NDScopedCovered] // caller: the [NDScoped] SetItemConverted
+        private long[] AdvancedResultDims(object[] key)
+        {
+            var proxy = new NDArray(NPTypeCode.Byte, new Shape(Shape.dimensions), false);
+            return proxy[key].Shape.dimensions;
+        }
+
+        /// <summary>
+        ///     NumPy's <c>PyArray_AssignArray</c> check of a converted value against a destination it is copied into: the
+        ///     value's leading unit dimensions are dropped while it has more than the destination, then each remaining axis
+        ///     must be 1 or the destination's length (right-aligned).
+        /// </summary>
+        /// <param name="value">The converted value.</param>
+        /// <param name="destination">The destination's dimensions.</param>
+        /// <exception cref="ValueError"><c>could not broadcast input array from shape (3,) into shape (2,)</c>, NumPy's
+        ///     <c>broadcast_strides</c> text (the value's shape after the strip).</exception>
+        private static void ThrowIfCannotAssignInto(NDArray value, long[] destination)
+        {
+            long[] dims = value.Shape.dimensions;
+            int strip = 0;
+            while (dims.Length - strip > destination.Length && dims[strip] == 1)
+                strip++;
+            var kept = new long[dims.Length - strip];
+            System.Array.Copy(dims, strip, kept, 0, kept.Length);
+            bool fits = kept.Length <= destination.Length;
+            for (int i = kept.Length - 1, j = destination.Length - 1; fits && i >= 0; i--, j--)
+                fits = kept[i] == 1 || kept[i] == destination[j];
+            if (!fits)
+                throw new ValueError($"could not broadcast input array from shape {PyShapeTuple(kept)} " +
+                                     $"into shape {PyShapeTuple(destination)}");
         }
 
         /// <summary>
