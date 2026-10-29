@@ -1963,11 +1963,13 @@ signalling, or payload-bearing — to that single value, while **float16 and com
 negative NaN before, which also flipped `{p}fromroots`' NaN sign), but `unique` preserves payloads, so
 `union1d`/`setxor1d`/`setdiff1d` run a guarded NaN-rewrite pass on a float32/float64 result — `np.where(np.isnan(r),
 canonical, r)`, entered only when `np.any(np.isnan(r))` (≈0.3 ms on a 490 K result, skipped when no NaN survives) —
-to stay bit-identical (`CanonicalizeSetOpNaN` in `np.setops.cs`; verified across neg/payload/multi-NaN × f16/f32/f64
+to stay bit-identical (`DefaultEngine.CanonicalizeSetOpNaN` beside the `Union1d` / `Setxor1d` / `Setdiff1d` members in
+`Manipulation/Default.SetOps.cs`; verified across neg/payload/multi-NaN × f16/f32/f64
 + complex against NumPy 2.4.2). `isin` (bool result) and `intersect1d` (NaN never shared) need no pass.
 **Perf (NPY/NS, Release, best-of-21, warm):** **2.2–13.5×** — NumSharp's `unique`/`sort` outrun NumPy's at every
 measured size (the wins widen at 1M, where NumPy's set-ops cost 60–400 ms); the NaN pass is O(result) and does not
-move these numbers. See `Manipulation/np.{setops,union1d,intersect1d,setxor1d,setdiff1d}.cs`.
+move these numbers. See `Manipulation/np.{union1d,intersect1d,setxor1d,setdiff1d}.cs` (the facades) and
+`Manipulation/Default.SetOps.cs` (the engine members).
 
 **`np.static unique` returns `np.UniqueResult`** (the shared core the set routines reuse) — NumPy's bare-array-OR-tuple
 return expressed as ONE type, because C# cannot pick a return type from a runtime flag. **ONE** static overload
@@ -5185,7 +5187,8 @@ introselect (`Utilities/QuickSelect.cs`, the median/percentile primitive), the s
   0-d leaks `ndarray.sort()`'s own `axis -1 is out of bounds for array of dimension 0`, exactly as NumPy leaks it.
   See `Sorting_Searching_Counting/np.{partition,argpartition,lexsort,nanargmax,sort_complex}.cs` (the facades),
   `Default.NanArgMax.cs` (`TensorEngine.NanArgMax` / `NanArgMin`: the axis check, the text route, `_replace_nan` and
-  the arg reduction; np.argmax's out= pair stays in np.nanargmax.cs) and
+  the arg reduction, whose out= contract is `TensorEngine.ReduceArgMax` / `ReduceArgMin`'s, in `Default.ArgOut.cs`:
+  the out's shape, its safe cast to intp, then the unsafe copy, a text operand's out checked before its comparison) and
   `Default.{Sort,LexSort}.cs` (DefaultEngine's `TensorEngine.Sort` / `SortInPlace` / `ArgSort` / `Partition` /
   `PartitionInPlace` / `ArgPartition` / `LexSort`, over the AxisSort / AxisPartition kernels; np-layer dtype plan,
   phase PE, E5).

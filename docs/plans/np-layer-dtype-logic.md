@@ -29,7 +29,12 @@ the max / min keywords are members; numpy.linalg and numpy.fft are the `TensorEn
 sub-engines (`LinalgEngine` / `FftEngine`, defaults `DefaultLinalgEngine` / `DefaultFftEngine`; E3 on 2026-10-29), so
 PE is done. P3's design is written ([§7](#p3-the-array-object-and-values-entering-storage-k4-153-lines-in-52-files));
 batch 1, the `DType` element slots, is done (`95b7167e`, 2026-10-29), and the np.arange divergence its gate found is
-fixed per D4: np.arange is NumPy's `PyArray_ArangeObj` through the slots (`8be47c75`). Progress goes into the
+fixed per D4: np.arange is NumPy's `PyArray_ArangeObj` through the slots (`8be47c75`). P5 is done (2026-10-29): its six
+families and, handed over by the coordinator, the lines first assigned to PE (np.argmax's out= pair, np.unravel_index,
+np.packbits / np.unpackbits, np.bincount, and the text lines of np.kron and np.median) are engine members or engine
+partials, and the two divergences found on the way are fixed per D4 (np.argmax / np.argmin check a text operand's
+`out=` before they compare, `127c3c98`; np.nan_to_num refuses text and complex fills as NumPy's copyto does,
+`d313e41b`). Progress goes into the
 [§9 state log](#9-state-log), newest entry first.
 
 **The engine layout (the owner's decision of 2026-10-28, D1 in [§5](#5-decisions-for-the-owner)).** Every NumPy function
@@ -795,7 +800,8 @@ first, as it did for np.fft.
 ### P5. Numeric-only functions
 
 - [x] (2026-10-29) Classify the numeric lines left in facade files after P1 to P4 (C9): below.
-- [ ] Move P5's families, one per commit, by the method of [§6](#6-method-per-batch).
+- [x] (2026-10-29) Move P5's families, one per commit, by the method of [§6](#6-method-per-batch), and the
+      coordinator's lines below, handed over the same day ([§9](#9-state-log)).
 
 **The classification (2026-10-29, at `ab206a01`).** R1's own scanner (`LayeringScanner.CountFacadeDtypeTests`, copied
 into a file-based app that prints every counted line) finds 717 numeric and 255 text lines in 121 facade files. C9's
@@ -814,7 +820,8 @@ Where the numeric lines go:
   - np.sort_complex (`FunctionBase`) and np.roots (`Polynomial`);
   - np.conjugate's loop resolution (NumPy's conjugate has no bool loop) and np.isposinf / np.isneginf's complex
     refusal, into the members they already call (`DefaultEngine.Conjugate`, `IsPosInf`, `IsNegInf`).
-- **The coordinator's engine files, 25 lines.** np.argmax's out= pair, which np.nanargmax shares (`Methods`),
+- **The coordinator's engine files, 25 lines** (handed to P5 on 2026-10-29 and moved; the table's last column says
+  so). np.argmax's out= pair, which np.nanargmax shares (`Methods`),
   np.bincount, np.packbits and np.unravel_index (`Multiarray`), and the text lines of np.kron and np.median.
 - **E3, 4 lines:** np.fft.RawFft.
 - **P3, 469 lines:** the array object, Creation/, IO, the indexers, the C# conversions and DTypes/. P3's own design
@@ -834,20 +841,20 @@ The 255 text lines are P3's K4 files, np.evaluate's two (P2's) and np.fft.RawFft
 |---|---|---|---|---|---|
 | `Logic/np.isneginf.cs` | 1 | 0 | A (the complex refusal) | `DefaultEngine.IsNegInf` (`TensorEngine.UfuncLike.cs`) | P5 |
 | `Logic/np.isposinf.cs` | 1 | 0 | A (the complex refusal) | `DefaultEngine.IsPosInf` (`TensorEngine.UfuncLike.cs`) | P5 |
-| `Logic/np.isreal_iscomplex.cs` | 5 | 1 | A (isreal, iscomplex); D (isrealobj, iscomplexobj: 2 lines) | `TensorEngine.TypeCheck.cs` `IsReal` / `IsComplex`; the two *obj predicates are dtype routines and stay | P5 |
+| `Logic/np.isreal_iscomplex.cs` | 5 | 1 | A (isreal, iscomplex); D (isrealobj, iscomplexobj) | `TensorEngine.TypeCheck.cs` `Isreal` / `Iscomplex`; the two *obj predicates are dtype routines and stay (R1 keeps their 3 lines) | P5 |
 | `Logic/np.nan_to_num.cs` | 10 | 0 | A, B | `TensorEngine.TypeCheck.cs` `NanToNum` (new partial, `lib/_type_check_impl.py`) | P5 |
-| `Manipulation/np.setops.cs` | 2 | 0 | B (the NaN rewrite after unique) | `TensorEngine.ArraySetOps.cs` `Union1d` / `Intersect1d` / `Setxor1d` / `Setdiff1d` | P5 |
+| `Manipulation/np.setops.cs` | 2 | 0 | B (the NaN rewrite after unique) | `TensorEngine.ArraySetOps.cs` `Union1d` / `Setxor1d` / `Setdiff1d` (np.intersect1d needs no NaN pass) | P5 |
 | `Math/np.conjugate.cs` | 1 | 0 | A (the ufunc's loop resolution: no bool loop) | `DefaultEngine.Conjugate` (`TensorEngine.Umath.cs`) | P5 |
 | `Math/np.real_if_close.cs` | 1 | 0 | A | `TensorEngine.TypeCheck.cs` `RealIfClose` | P5 |
 | `Polynomial/np.roots.cs` | 1 | 0 | A | `TensorEngine.Polynomial.cs` `Roots` | P5 |
 | `Sorting_Searching_Counting/np.sort_complex.cs` | 1 | 0 | A | `TensorEngine.FunctionBase.cs` `SortComplex` | P5 |
 | `APIs/np.evaluate.cs` | 0 | 2 | text | P2's last lines: needs a keyword-taking `TensorEngine.Evaluate` (see P2) | P2 (open) |
-| `Indexing/np.unravel_index.cs` | 2 | 0 | A, B | `TensorEngine.Multiarray.cs` `UnravelIndex` | PE (coordinator) |
-| `LinearAlgebra/np.kron.cs` | 0 | 1 | text | `TensorEngine.ShapeBase.cs` `Kron` (file under LinearAlgebra/) | PE (coordinator) |
-| `Manipulation/np.packbits.cs` | 11 | 0 | A, B | `TensorEngine.Multiarray.cs` `Packbits` / `Unpackbits` | PE (coordinator) |
-| `Sorting_Searching_Counting/np.bincount.cs` | 3 | 1 | A | `TensorEngine.Multiarray.cs` `Bincount` | PE (coordinator) |
-| `Sorting_Searching_Counting/np.nanargmax.cs` | 9 | 0 | A (np.argmax's out= contract, shared with np.argmax) | `TensorEngine.Methods.cs` (`ArgMax` / `ArgMin` with out=) | PE (coordinator) |
-| `Statistics/np.median.cs` | 0 | 2 | text | the quantile family's facade | PE (coordinator) |
+| `Indexing/np.unravel_index.cs` | 2 | 0 | A, B | `TensorEngine.Multiarray.cs` `UnravelIndex`; `ThrowIfNotIntIndices` (NumPy's `astype_anyint`, 1 line) is shared with np.ravel_multi_index and moves with it | P5 (handed over) |
+| `LinearAlgebra/np.kron.cs` | 0 | 1 | text | `TensorEngine.ShapeBase.cs` `Kron` (file under LinearAlgebra/) | P5 (handed over) |
+| `Manipulation/np.packbits.cs` | 11 | 0 | A, B | `TensorEngine.Multiarray.cs` `Packbits` / `Unpackbits` | P5 (handed over) |
+| `Sorting_Searching_Counting/np.bincount.cs` | 3 | 1 | A | `TensorEngine.Multiarray.cs` `Bincount` | P5 (handed over) |
+| `Sorting_Searching_Counting/np.nanargmax.cs` | 9 | 0 | A (np.argmax's out= contract, shared with np.argmax) | `TensorEngine.Methods.cs` (`ReduceArgMax` / `ReduceArgMin` with out=) | P5 (handed over) |
+| `Statistics/np.median.cs` | 0 | 2 | text (the chararray rule's answer) | `DefaultEngine.MedianOfChararray` in the quantile family's engine partial (`Statistics/Default.Quantile.Median.cs`) | P5 (handed over) |
 | `Fourier/np.fft.RawFft.cs` | 4 | 1 | A | `TensorEngine.Fft` | E3 (coordinator) |
 | `APIs/np.fromfile.cs` | 0 | 6 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
 | `APIs/np.fromstring.cs` | 0 | 2 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
@@ -997,6 +1004,64 @@ candidate.
 ---
 
 ## 9. State log
+
+- **2026-10-29, P5: done.** Commits on `strings`, developed in the scratch worktree and landed by fast-forward, with
+  P2's referees (the snapshot under `DOTNET_TieredCompilation=0` and `NUMSHARP_DEBUG_GUARD_PAGES=1`, each family's
+  unit tests on net10.0 and net8.0, its oracle tiers):
+  - `28869e8b` the classification (P5's section). The snapshot tool: `8abc0910` varies np.nan_to_num's fills and
+    np.real_if_close's tol; `722a2efc` varies np.unravel_index's dimensions, order and flat index (both overloads were
+    SKIP), np.packbits / np.unpackbits' bitorder and count and np.bincount's minlength, and runs np.bincount on 1-D
+    operands of valid bins (`Magnitudes`): its old pool held only negative 1-D values, so 15 of its 1,224 lines reached
+    the kernels, against 647 of 2,964 now.
+  - The six families, each byte-identical on its snapshot, R1's row gone (np.isreal_iscomplex.cs's reduced to the
+    three dtype-routine lines of isrealobj / iscomplexobj), R2 unchanged, each member abstract and documented in the
+    partial of its NumPy file, `DefaultEngine`'s override beside the facade:
+    - `ec16612f` np.nan_to_num: `NanToNum` in the new `TensorEngine.TypeCheck.cs`, `Logic/Default.TypeCheck.cs` (the
+      fused pass and the copyto composition); 12,798 calls.
+    - `b499bf98` np.isreal / np.iscomplex / np.real_if_close: `Isreal` / `Iscomplex` / `RealIfClose`; 1,152 calls.
+    - `595e112c` np.union1d / np.setxor1d / np.setdiff1d: `Union1d` / `Setxor1d` / `Setdiff1d`
+      (`TensorEngine.ArraySetOps.cs`), `Manipulation/Default.SetOps.cs` with `CanonicalizeSetOpNaN`; np.setops.cs is
+      gone; 3,426 calls.
+    - `f0fd683d` np.sort_complex: `SortComplex` (`TensorEngine.FunctionBase.cs`); 234 calls.
+    - `a6dae9ea` np.roots: `Roots` (`TensorEngine.Polynomial.cs`), its body in `Polynomial/Default.Polynomial.cs`; the
+      facade keeps NumPy's dispatcher refusal; 234 calls.
+    - `e7d7869a` np.conjugate's loop resolution (NumPy's conjugate has no bool loop: int8 without `dtype=`) and
+      `203b28ef` np.isposinf / np.isneginf's complex refusal, into the members the facades already called; 12,108 and
+      1,908 calls.
+  - The coordinator's lines, handed over the same day:
+    - `d1675ec5` np.argmax / np.argmin's out= contract: `ReduceArgMax` / `ReduceArgMin` (`TensorEngine.Methods.cs`)
+      take `out=`, as `ReduceAMax` took its keywords in E5; `DefaultEngine` computes the indices (`ArgMaxIndices` /
+      `ArgMinIndices`, the old bodies) and writes them through `WriteArgOut` / `ValidateArgOut`
+      (`Sorting_Searching_Counting/Default.ArgOut.cs`, beside the facades because it calls np.copyto). np.nanargmax.cs's
+      row (0 / 9) is gone; 15,240 calls.
+    - `28773dcc` np.unravel_index: `UnravelIndex` (`TensorEngine.Multiarray.cs`), `Indexing/Default.UnravelIndex.cs`;
+      3,114 calls of the array overload. Its row goes from 0 / 2 to 0 / 1: the line left is `ThrowIfNotIntIndices`
+      (NumPy's `astype_anyint`), which np.ravel_multi_index shares; it moves with that function (P3's batch 7 names its
+      lines, and Appendix D puts both in `Multiarray`).
+    - `a4d0d69a` np.packbits / np.unpackbits: `Packbits` / `Unpackbits`, `Manipulation/Default.PackBits.cs`. Their
+      (n_outer, axisLen, nel) collapse came from np.repeat.cs's private `ComputeAxisGeometry` (P3's batch 2 file); it is
+      the internal `Shape.SplitAtAxis` now (`View/Shape.AxisGeometry.cs`), and np.repeat can take it when it moves;
+      2,646 + 6,054 calls.
+    - `81074517` np.bincount: `Bincount`, `Sorting_Searching_Counting/Default.Bincount.cs`; 2,964 calls.
+    - `82abb696` np.kron: `Kron` in the new `TensorEngine.ShapeBase.cs` (kron is `_shape_base_impl.py`'s only computing
+      function), `LinearAlgebra/Default.Kron.cs`; 954 calls.
+    - `73dfcd07` np.median's chararray answer: `DefaultEngine.MedianOfChararray` (internal) beside the quantile
+      family's text statements in `Statistics/Default.Quantile.Median.cs`; the facades decide the class and throw what
+      it returns. 7,374 calls (plain operands) identical; the string oracle's chararray cases pass.
+  - Two D4 fixes, each pinned by unit tests that carry NumPy's probed texts:
+    - `127c3c98` np.argmax / np.argmin check a text operand's out (its shape, then its cast) before they compare, as
+      `_PyArray_ArgMinMaxCommon` does: a `StringDType` None-like NA raised its comparison error over a bad out
+      (np.nanargmax already checked first; its pre-check is now `ArgTextChecks` in `Default.ArgOut.cs`). The snapshot
+      is unchanged: its text pool holds no None-like NA.
+    - `d313e41b` np.nan_to_num refuses a text or complex fill as NumPy's copyto refuses it (same_kind into a float
+      array: `Cannot cast scalar from dtype('<U1') to dtype('float64') according to the rule 'same_kind'`), at the
+      statement that meets the fill; it parsed the text ('1.5' filled 1.5, 'x' raised .NET's FormatException). A char
+      fill is its code unit. 654 of 12,798 snapshot lines change, every one a text-fill case, each NumPy's answer (27 of
+      them are an earlier row fill's broadcast error, NumPy's order).
+  - R1 after P5: 106 files, 249 text and 651 numeric lines (121 / 255 / 717 at the classification; E3's and
+    np.arange's lines left with them). R2 unchanged. Left of P5's classification: np.evaluate's two text lines (P2, an
+    owner decision), np.unravel_index's `astype_anyint` line (with np.ravel_multi_index), P3's files, and the lines
+    that stay (C, D).
 
 - **2026-10-29, P3: batch 1 (the slots) and the np.arange fix it found.** Two commits on `strings`, landed by
   fast-forward:
