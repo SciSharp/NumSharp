@@ -66,7 +66,7 @@ Backends/Strings/NDCharObjectPath.Mod.cs	0	2
 Backends/Strings/NDCharObjectPath.Translate.cs	0	2
 Backends/Strings/NDCharObjectPath.cs	0	6
 Backends/Strings/NDStringArithmetic.cs	0	1
-Backends/Strings/NDStringArrays.cs	1	5	# np.where's text route selects over the unit views with np.where (WhereText): the array object's (plan section 1, decided 2026-10-28), for P3 batch 7's np.where home
+Backends/Strings/NDStringArrays.cs	0	5
 Backends/Strings/NDStringCopy.cs	0	4
 Backends/Strings/NDStringMethods.cs	9	7	# numpy.strings' own Python statements (the computed-width wrappers' sizing: np.amax, np.where, np.minimum, np.subtract, np.multiply, np.add, np.less): the text API's own pass (plan section 8), not the engine's
 Backends/Strings/NDStringRepeatReduction.cs	0	7

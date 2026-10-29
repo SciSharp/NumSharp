@@ -206,7 +206,7 @@ namespace NumSharp.Backends.Strings
                 using var condUnits = np.expand_dims(cond, -1);
                 using var xu = UnitArray(xs);
                 using var yu = UnitArray(ys);
-                var result = FromUnitArray(np.where(condUnits, xu, yu), descr);
+                var result = FromUnitArray(NDArray.Where(condUnits, xu, yu), descr);
                 if (result.Shape.IsContiguous && layout.IsContiguous)
                     return result;
                 // NumPy's layout: the values move into an array laid out like the iterator's output.
