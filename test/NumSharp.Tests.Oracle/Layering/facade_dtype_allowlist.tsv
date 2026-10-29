@@ -22,7 +22,6 @@ Casting/NDArray.byteswap.cs	1	1
 Casting/NDArray.getfield.cs	1	0
 Casting/NDArray.tobytes.cs	1	0
 Creation/np.dtype.cs	0	2
-Creation/np.frombuffer.cs	3	1
 Creation/np.mgrid.cs	0	1
 Creation/np.ogrid.cs	0	1
 Creation/np.r_.cs	1	8
