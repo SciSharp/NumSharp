@@ -118,6 +118,13 @@
 // operand's C-order bytes or that text, a stream that cannot seek, a missing file; the stream's final position joins the
 // outcome) and NDArray.tofile's (its sink, a MemoryStream or a temporary file, whose bytes join the outcome), with the
 // separator, the count, the offset and tofile's format varied,
+// np.loadtxt's (its SOURCE: the pool's value sequence written as rows of text in the C# form its first parameter takes - a
+// temporary file, also gzip-compressed, a missing one, a byte stream, a TextReader, a list of lines - plain, comma-
+// separated, with comments, with blank lines, with a ragged last row, quoted; see LoadTxtSourceForms) with its dtype,
+// comments, delimiter, converters (from a menu NumPy names alike), skiprows, usecols, unpack, ndmin, encoding, max_rows and
+// quotechar varied, and np.savetxt's (X is the pool operand; its sink - a temporary file, a MemoryStream, a StringWriter -
+// joins the outcome) with fmt (a string, or a list built from X's columns), delimiter, newline, header, footer, comments
+// and encoding varied,
 // np.where's x / y given as C# values (WhereScalar) and np.extract's arr
 // and ndarray.real / imag's setters' value (the second operand's role), and - through the item-selection wiring, built
 // from the pool operand - np.take_along_axis / np.put_along_axis's indices and values (AlongIndicesLabels,
@@ -154,6 +161,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Numerics;
 using System.Reflection;
@@ -492,6 +500,12 @@ static class Snapshot
         // NDArray.tofile writes into a SINK (a MemoryStream or a temporary file) whose bytes join the outcome. Their
         // separator, np.fromfile's offset, tofile's format take their own variants; the count takes np.frombuffer's.
         TextSource, FileSource, IoSep, ToFileFormat, SinkStream, SinkFile,
+        // np.loadtxt takes no array: its operand is a SOURCE of text rows (a file name, a byte stream, a TextReader, a list
+        // of lines), built in Call from the pool operand (LoadTxtSourceForms, TryMakeLoadTxtSource). np.savetxt writes X (the
+        // pool operand) into a SINK - a temporary file or a MemoryStream (tofile's roles) or a StringWriter (SinkWriter) -
+        // whose bytes join the outcome. Their other parameters take TextIOArg's variants (TextIOArgVariants, by function and
+        // name), except savetxt's fmt list, built from X's column count (SaveTxtFmtsLabels, MakeSaveTxtFmts).
+        LoadTxtSource, TextIOArg, SaveTxtFmts, SinkWriter,
         // np.where's x / y given as a C# value (its object overloads): NumPy's array_like - a Python int / float / complex /
         // bool / str, a NumPy scalar, a 0-d array, a C# array - which np.where converts as NDArray.FromPythonOperand does.
         WhereScalar,
@@ -1867,6 +1881,19 @@ static class Snapshot
     private static bool IsFileIO(ParameterInfo p) => p.Member is MethodInfo m && IsFileIO(m);
 
     /// <summary>
+    ///     Whether an overload reads or writes NumPy's text files: np.loadtxt (NumPy's <c>_read</c> over
+    ///     <c>_load_from_filelike</c>) or np.savetxt.
+    /// </summary>
+    /// <param name="m">The overload.</param>
+    /// <returns>True for one of the two.</returns>
+    private static bool IsTextIO(MethodInfo m) => m.DeclaringType == typeof(np) && m.Name is "loadtxt" or "savetxt";
+
+    /// <summary>Whether a parameter belongs to np.loadtxt or np.savetxt (<see cref="IsTextIO(MethodInfo)"/>).</summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True when its method is np.loadtxt or np.savetxt.</returns>
+    private static bool IsTextIO(ParameterInfo p) => p.Member is MethodInfo m && IsTextIO(m);
+
+    /// <summary>
     ///     The shapes the constructor family runs on (its operand pool): 0-d, a vector, a matrix, an empty vector, an empty
     ///     axis between others, a unit matrix, a 3-D shape, a negative dim alone and after a positive one (NumPy's
     ///     "negative dimensions are not allowed"), and two dims whose float64 byte count overflows (NumPy's "array is too
@@ -2510,6 +2537,18 @@ static class Snapshot
             if (n == "format" && t == typeof(string)) return Role.ToFileFormat;
             if (n == "stream" && t == typeof(Stream) && p.Member.Name == "tofile") return Role.SinkStream;
             if (n == "fid" && t == typeof(string)) return Role.SinkFile;
+        }
+        // np.loadtxt's and np.savetxt's own parameters (np.loadtxt's first parameter is the operand, set in RunOverload, and
+        // savetxt's X the general operand): savetxt's sink (a file name, a stream, a TextWriter), its fmt as a list (built
+        // from X's columns), the dtype (np.frombuffer's variants), unpack (a bool), every other one TextIOArg's variants.
+        if (IsTextIO(p) && n != "X")
+        {
+            if (p.Member.Name == "savetxt" && p.Position == 0)
+                return t == typeof(Stream) ? Role.SinkStream : t == typeof(TextWriter) ? Role.SinkWriter : Role.SinkFile;
+            if (n == "fmt" && t == typeof(string[])) return Role.SaveTxtFmts;
+            if (n == "dtype" && t == typeof(DType)) return Role.BufferDType;
+            if (n == "unpack" && t == typeof(bool)) return Role.Bool;
+            return Role.TextIOArg;
         }
         // np.where's x / y as a C# value (only its object overloads: its NDArray x / y take the second-operand role below).
         if (IsWhere(p) && n is "x" or "y" && t == typeof(object))
@@ -3232,8 +3271,18 @@ static class Snapshot
                 break;
             case Role.SinkStream:
             case Role.SinkFile:
-                // Built per call in Call (a fresh MemoryStream, a temporary file name); the factory here is never called.
+            case Role.SinkWriter:
+                // Built per call in Call (a fresh MemoryStream, a temporary file name, a fresh StringWriter); the factory here
+                // is never called.
                 Add("sink", () => null);
+                break;
+            case Role.SaveTxtFmts:
+                // Built from the operand in Call (MakeSaveTxtFmts); the factory here is never called.
+                Add(SaveTxtFmtsLabels[0], () => null);
+                break;
+            case Role.TextIOArg:
+                foreach (var (label, value) in TextIOArgVariants(p))
+                    Add(label, () => value);
                 break;
             case Role.BufferCount:
                 // Every element of the buffer first, then none, one, a few, more than any pool operand's bytes hold, and
@@ -3899,6 +3948,16 @@ static class Snapshot
     private static readonly string[] IndexTricksPairLayouts = { "1d", "c2d", "0d" };
 
     /// <summary>
+    ///     The reduced pool of np.savetxt (phase B): the layouts it writes - a matrix, an F-ordered one, a vector and an
+    ///     empty matrix. A 0-d or 3-D X is refused before any other parameter is read (<c>Expected 1D or 2D array</c>), so
+    ///     phase A's line for those layouts is all they can tell.
+    /// </summary>
+    private static readonly string[] SaveTxtReducedLayouts = { "c2d", "f2d", "1d", "empty" };
+
+    /// <summary>The small pool of np.savetxt (phase C): a matrix and a vector, the two shapes it writes.</summary>
+    private static readonly string[] SaveTxtPairLayouts = { "c2d", "1d" };
+
+    /// <summary>
     ///     The 1-D layouts np.bincount adds to the general pool (phase A): the plain prefix's magnitudes, contiguous, every
     ///     other element and reversed. The general pool's 1-D operands hold negative values, which a signed dtype refuses
     ///     at once and an unsigned one wraps into a bin count of up to 2^32 (an array of 32 GB), so only these reach the
@@ -3931,7 +3990,8 @@ static class Snapshot
     ///     and 1-D operands of non-negative
     ///     values (<see cref="BincountLayouts"/>); for np.choose and NDArray.choose, the general pool and the same
     ///     non-negative 1-D operands (index arrays whose indices mostly name a choice); for np.linalg, pools of square
-    ///     matrices, stacks and rectangles (<see cref="LinalgLayouts"/>).
+    ///     matrices, stacks and rectangles (<see cref="LinalgLayouts"/>); for np.savetxt, the general pool in phase A and
+    ///     the 1-D and 2-D layouts it writes when another parameter varies (<see cref="SaveTxtReducedLayouts"/>).
     /// </summary>
     /// <param name="m">The overload.</param>
     /// <returns>The layouts of phase A, phase B and phase C.</returns>
@@ -3952,7 +4012,9 @@ static class Snapshot
                             : (m.Name == "ix_" && m.DeclaringType == typeof(np))
                               || (m.Name == "get_Item" && m.DeclaringType == typeof(np.AxisConcatenator))
                                 ? (Layouts, IndexTricksReducedLayouts, IndexTricksPairLayouts)
-                                : (Layouts, ReducedLayouts, PairLayouts);
+                                : m.Name == "savetxt" && m.DeclaringType == typeof(np)
+                                    ? (Layouts, SaveTxtReducedLayouts, SaveTxtPairLayouts)
+                                    : (Layouts, ReducedLayouts, PairLayouts);
 
     /// <summary>
     ///     Snapshots one overload: phase A over the full operand pool, phase B varying each parameter on the reduced pool,
@@ -4019,6 +4081,14 @@ static class Snapshot
             if (i == 0 && !instance && IsFileIO(m) && m.Name is "fromstring" or "fromfile")
             {
                 roles[i] = m.Name == "fromstring" ? Role.TextSource : Role.FileSource;
+                sawArray = true;
+                continue;
+            }
+            // np.loadtxt's source (a file name, a byte stream, a TextReader, a list of lines), built per call from the pool
+            // operand (TryMakeLoadTxtSource).
+            if (i == 0 && !instance && IsTextIO(m) && m.Name == "loadtxt")
+            {
+                roles[i] = Role.LoadTxtSource;
                 sawArray = true;
                 continue;
             }
@@ -4118,6 +4188,11 @@ static class Snapshot
         bool source = operandIndex < 0 && sourceIndex >= 0;
         if (source)
             operandIndex = sourceIndex;
+        // np.loadtxt's is its source.
+        int loadIndex = Array.IndexOf(roles, Role.LoadTxtSource);
+        bool loadSource = operandIndex < 0 && loadIndex >= 0;
+        if (loadSource)
+            operandIndex = loadIndex;
         var none = Array.Empty<(int, int)>();
 
         // The number of non-base variants per parameter (0 for the operand and for parameters kept at their default).
@@ -4130,7 +4205,9 @@ static class Snapshot
             Role.BufferOperand => 0,
             Role.BufferLength => BufferLengthLabels.Length - 1,
             Role.TextSource or Role.FileSource => 0,
-            Role.SinkStream or Role.SinkFile => 0,
+            Role.SinkStream or Role.SinkFile or Role.SinkWriter => 0,
+            Role.LoadTxtSource => 0,
+            Role.SaveTxtFmts => SaveTxtFmtsLabels.Length - 1,
             Role.Out => OutVariantLabels.Length,
             Role.Weights => WeightVariantLabels.Length,
             Role.Where => WhereVariantLabels.Length,
@@ -4233,6 +4310,19 @@ static class Snapshot
                 dtypes = new[] { "float64", "U5" };
                 pairDtypes = dtypes;
             }
+        }
+        if (loadSource)
+        {
+            // np.loadtxt's source takes every form its parameter type admits in phase A, and only data forms when another
+            // parameter varies - the plain rows and the comma-separated ones in phase B, the plain rows in phase C (a form
+            // built once, null or a missing file, would repeat one refusal for every variant). The text depends on the pool's
+            // value SEQUENCE only, so it runs on one numeric and one text pool.
+            string[] forms = LoadTxtSourceForms(ps[operandIndex]);
+            fullLayouts = fullLayouts.SelectMany(l => forms.Select(f => l + ":" + f)).ToArray();
+            reducedLayouts = reducedLayouts.SelectMany(l => new[] { l + ":rows", l + ":csv" }).ToArray();
+            pairLayouts = pairLayouts.Select(l => l + ":rows").ToArray();
+            dtypes = new[] { "float64", "U5" };
+            pairDtypes = dtypes;
         }
         // A host operand form the pool operand does not have (Call returns null) produces no line; an overload whose host
         // parameter no pool operand fits (np.array<T>(T[,,,,]): no pool operand has rank 5) reports that once.
@@ -4463,16 +4553,268 @@ static class Snapshot
     }
 
     /// <summary>
-    ///     The bytes a sink received, for the outcome: <c> WROTE &lt;hash&gt;/&lt;length&gt;</c> (the first 16 hex digits of
-    ///     their SHA-256), read from the MemoryStream or the temporary file (then deleted), or <c> WROTE none</c> when the
-    ///     call created no file.
+    ///     The forms np.loadtxt's source takes, by its parameter's type: <c>rows</c> (the pool's items as rows, fields joined
+    ///     by a space), <c>csv</c> (joined by a comma), <c>comments</c> (a comment line first and a comment after each row),
+    ///     <c>blank</c> (a blank line before each row and at the end), <c>ragged</c> (the last row one field short),
+    ///     <c>quoted</c> (every field in double quotes); for a file name also <c>gz</c> (the rows gzip-compressed under a
+    ///     <c>.gz</c> name, which NumPy's DataSource decompresses) and <c>missing</c> (a name no file has); <c>null</c> once.
     /// </summary>
-    /// <param name="sink">The MemoryStream or the file name the call received.</param>
+    /// <param name="p">The source parameter.</param>
+    /// <returns>The form names.</returns>
+    private static string[] LoadTxtSourceForms(ParameterInfo p) =>
+        p.ParameterType == typeof(string)
+            ? new[] { "rows", "csv", "comments", "blank", "ragged", "quoted", "gz", "missing", "null" }
+            : new[] { "rows", "csv", "comments", "blank", "ragged", "quoted", "null" };
+
+    /// <summary>
+    ///     The name of np.loadtxt's <c>missing</c> form: relative and fixed, as np.fromfile's (<see cref="MissingFileName"/>),
+    ///     because NumPy's <c>not found</c> text carries it.
+    /// </summary>
+    private const string MissingTextName = "numsharp-snapshot-no-such-file.txt";
+
+    /// <summary>
+    ///     The lines of a np.loadtxt source form over the pool operand's items (<see cref="PoolTextItems"/>, in C order): a
+    ///     0-d operand is one row of one field, a 1-D one a column, an N-D one its first axis' rows of the remaining
+    ///     elements. The replay builds the same lines from the same items.
+    /// </summary>
+    /// <param name="form">The form (<see cref="LoadTxtSourceForms"/>; <c>gz</c> holds the plain rows).</param>
+    /// <param name="items">The items.</param>
+    /// <param name="operand">The pool operand (its shape).</param>
+    /// <returns>The lines without their newlines, or null when the operand has no such form (a ragged row needs two rows of
+    ///     two fields).</returns>
+    /// <exception cref="ArgumentException">An unknown form (a bug in the tool).</exception>
+    private static string[] LoadTxtLines(string form, string[] items, NDArray operand)
+    {
+        int rows = operand.ndim == 0 ? 1 : (int)operand.shape[0];
+        int cols = rows == 0 ? 0 : items.Length / rows;
+        IEnumerable<string> Row(int r) => items.Skip(r * cols).Take(cols);
+        var lines = new List<string>();
+        switch (form)
+        {
+            case "rows":
+            case "gz":
+                for (int r = 0; r < rows; r++)
+                    lines.Add(string.Join(" ", Row(r)));
+                break;
+            case "csv":
+                for (int r = 0; r < rows; r++)
+                    lines.Add(string.Join(",", Row(r)));
+                break;
+            case "comments":
+                lines.Add("# header line");
+                for (int r = 0; r < rows; r++)
+                    lines.Add(string.Join(" ", Row(r)) + " # note");
+                break;
+            case "blank":
+                for (int r = 0; r < rows; r++)
+                {
+                    lines.Add("");
+                    lines.Add(string.Join(" ", Row(r)));
+                }
+                lines.Add("");
+                break;
+            case "ragged":
+                if (rows < 2 || cols < 2)
+                    return null;
+                for (int r = 0; r < rows; r++)
+                    lines.Add(string.Join(" ", r == rows - 1 ? Row(r).Take(cols - 1) : Row(r)));
+                break;
+            case "quoted":
+                for (int r = 0; r < rows; r++)
+                    lines.Add(string.Join(" ", Row(r).Select(s => "\"" + s + "\"")));
+                break;
+            default:
+                throw new ArgumentException("unknown loadtxt form " + form);
+        }
+        return lines.ToArray();
+    }
+
+    /// <summary>
+    ///     Builds np.loadtxt's source: <paramref name="form"/> (<see cref="LoadTxtSourceForms"/>) of the pool operand's items
+    ///     in the parameter's C# form - a temporary file of the UTF-8 text (gzip-compressed under a <c>.gz</c> name for
+    ///     <c>gz</c>; rewritten per call), a MemoryStream of the UTF-8 text, a StringReader, an array of the lines - or
+    ///     false when the operand has no such form (a ragged row, or a form built once).
+    /// </summary>
+    /// <param name="t">The source parameter's type.</param>
+    /// <param name="form">The form.</param>
+    /// <param name="dt">The pool dtype.</param>
+    /// <param name="baseLayout">The pool layout.</param>
+    /// <param name="operand">The pool operand.</param>
+    /// <param name="value">Receives the source.</param>
+    /// <returns>Whether the form exists for this operand.</returns>
+    /// <exception cref="ArgumentException">An unknown form or parameter type (a bug in the tool).</exception>
+    private static bool TryMakeLoadTxtSource(Type t, string form, string dt, string baseLayout, NDArray operand, out object value)
+    {
+        value = null;
+        bool onceSlot = dt == "float64" && baseLayout == "0d";
+        switch (form)
+        {
+            case "null":
+                return onceSlot;
+            case "missing":
+                if (!onceSlot)
+                    return false;
+                value = MissingTextName;
+                return true;
+        }
+        string[] lines = LoadTxtLines(form, PoolTextItems(dt, baseLayout, operand.size), operand);
+        if (lines is null)
+            return false;
+        byte[] utf8 = Encoding.UTF8.GetBytes(lines.Length == 0 ? "" : string.Join("\n", lines) + "\n");
+        if (t == typeof(string))
+        {
+            string name = Path.Combine(FileIODir, form == "gz" ? "source.txt.gz" : "source.txt");
+            if (form == "gz")
+            {
+                using var file = File.Create(name);
+                using var zip = new GZipStream(file, CompressionLevel.Optimal);
+                zip.Write(utf8);
+            }
+            else
+            {
+                File.WriteAllBytes(name, utf8);
+            }
+            value = name;
+            return true;
+        }
+        if (t == typeof(Stream))
+            value = new MemoryStream(utf8, writable: false);
+        else if (t == typeof(TextReader))
+            value = new StringReader(Encoding.UTF8.GetString(utf8));
+        else if (t == typeof(IEnumerable<string>))
+            value = lines;
+        else
+            throw new ArgumentException("unknown loadtxt source type " + t);
+        return true;
+    }
+
+    /// <summary>
+    ///     np.savetxt's fmt as a list (its <c>string[]</c> overloads), built from X's column count (NumPy's <c>ncol</c>: the
+    ///     second axis of a 2-D X, 1 otherwise): <c>each</c> (one <c>%.3f</c> per column, the base), <c>long</c> (one more:
+    ///     NumPy's <c>fmt has wrong shape.</c>), <c>mixed</c> (<c>%d</c> and <c>%.2f</c> by turns), <c>empty</c> and
+    ///     <c>null</c>.
+    /// </summary>
+    private static readonly string[] SaveTxtFmtsLabels = { "each", "long", "mixed", "empty", "null" };
+
+    /// <summary>Builds np.savetxt's fmt list <paramref name="label"/> (<see cref="SaveTxtFmtsLabels"/>) for X.</summary>
+    /// <param name="label">The variant.</param>
+    /// <param name="operand">The pool operand (X).</param>
+    /// <returns>The list, or null.</returns>
+    /// <exception cref="ArgumentException">An unknown variant (a bug in the tool).</exception>
+    private static string[] MakeSaveTxtFmts(string label, NDArray operand)
+    {
+        int cols = operand.ndim == 2 ? (int)operand.shape[1] : 1;
+        return label switch
+        {
+            "each" => Enumerable.Repeat("%.3f", cols).ToArray(),
+            "long" => Enumerable.Repeat("%.3f", cols + 1).ToArray(),
+            "mixed" => Enumerable.Range(0, cols).Select(i => i % 2 == 0 ? "%d" : "%.2f").ToArray(),
+            "empty" => Array.Empty<string>(),
+            "null" => null,
+            _ => throw new ArgumentException("unknown savetxt fmt list " + label),
+        };
+    }
+
+    /// <summary>np.loadtxt's <c>len</c> converter: the field's length (Python's <c>len(s)</c>, a Python int).</summary>
+    private static readonly Func<string, object> LoadTxtConvLen = s => (long)s.Length;
+
+    /// <summary>np.loadtxt's <c>upper</c> converter: the field upper-cased (Python's <c>s.upper()</c> over ASCII).</summary>
+    private static readonly Func<string, object> LoadTxtConvUpper = s => s.ToUpperInvariant();
+
+    /// <summary>np.loadtxt's <c>zero</c> converter: the Python int 0, whatever the field.</summary>
+    private static readonly Func<string, object> LoadTxtConvZero = _ => 0L;
+
+    /// <summary>np.loadtxt's <c>raise</c> converter: a ValueError for every field (NumPy chains it as the conversion
+    ///     error's cause).</summary>
+    private static readonly Func<string, object> LoadTxtConvRaise = _ => throw new ValueError("converter refused");
+
+    /// <summary>
+    ///     The variants of np.loadtxt's and np.savetxt's parameters (<see cref="Role.TextIOArg"/>), by function and name: each
+    ///     list starts with the parameter's default (so the base call is the default call), then values NumPy reads and values
+    ///     it refuses. The converters come from a menu the replay names alike (<see cref="LoadTxtConvLen"/> and its
+    ///     siblings). Labels hold no comma: the case id's variant list is comma-separated.
+    /// </summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>The (label, value) pairs.</returns>
+    /// <exception cref="ArgumentException">A parameter the tool has no variants for (a new parameter: give it its
+    ///     variants).</exception>
+    private static (string Label, object Value)[] TextIOArgVariants(ParameterInfo p) => (p.Member.Name, p.Name) switch
+    {
+        ("loadtxt", "comments") => new (string, object)[]
+        {
+            ("hash", "#"), ("percent", "%"), ("slashes", "//"), ("null", null), ("list", new[] { "#", "%" }), ("empty", ""),
+            ("int", 5),
+        },
+        ("loadtxt", "delimiter") => new (string, object)[]
+        {
+            ("null", null), ("comma", ","), ("semicolon", ";"), ("tab", "\t"), ("space", " "), ("two", ",,"),
+            ("newline", "\n"), ("hash", "#"),
+        },
+        ("loadtxt", "converters") => new (string, object)[]
+        {
+            ("null", null), ("len", LoadTxtConvLen), ("upper", LoadTxtConvUpper), ("raise", LoadTxtConvRaise),
+            ("d0zero", new Dictionary<int, Func<string, object>> { [0] = LoadTxtConvZero }),
+            ("dneglen", new Dictionary<int, Func<string, object>> { [-1] = LoadTxtConvLen }),
+            ("d9len", new Dictionary<int, Func<string, object>> { [9] = LoadTxtConvLen }),
+            ("dnull", new Dictionary<int, Func<string, object>> { [0] = null }),
+            ("int", 5),
+        },
+        ("loadtxt", "skiprows") => new (string, object)[] { ("0", 0), ("1", 1), ("2", 2), ("100", 100), ("-1", -1) },
+        ("loadtxt", "usecols") => new (string, object)[]
+        {
+            ("null", null), ("0", new[] { 0 }), ("-1", new[] { -1 }), ("0;0", new[] { 0, 0 }), ("1;0", new[] { 1, 0 }),
+            ("9", new[] { 9 }), ("empty", Array.Empty<int>()),
+        },
+        ("loadtxt", "ndmin") => new (string, object)[] { ("0", 0), ("1", 1), ("2", 2), ("3", 3) },
+        ("loadtxt", "encoding") => new (string, object)[]
+        {
+            ("null", null), ("utf-8", "utf-8"), ("latin1", "latin1"), ("bytes", "bytes"), ("ascii", "ascii"),
+            ("utf-16", "utf-16"), ("bogus", "bogus"),
+        },
+        ("loadtxt", "max_rows") => new (string, object)[] { ("null", null), ("0", 0), ("1", 1), ("2", 2), ("-1", -1) },
+        ("loadtxt", "quotechar") => new (string, object)[]
+        {
+            ("null", null), ("dq", "\""), ("sq", "'"), ("two", "qq"), ("hash", "#"),
+        },
+        ("savetxt", "fmt") => new (string, object)[]
+        {
+            ("%.18e", "%.18e"), ("%d", "%d"), ("%s", "%s"), ("%.3f", "%.3f"), ("%x", "%x"), ("%5.2f", "%5.2f"),
+            ("abc", "abc"), ("%", "%"), ("pair", "%d;%d"), ("null", null),
+        },
+        ("savetxt", "delimiter") => new (string, object)[]
+        {
+            ("space", " "), ("comma", ","), ("tab", "\t"), ("empty", ""), ("two", ";;"), ("null", null),
+        },
+        ("savetxt", "newline") => new (string, object)[]
+        {
+            ("lf", "\n"), ("crlf", "\r\n"), ("semicolon", ";"), ("empty", ""), ("null", null),
+        },
+        ("savetxt", "header") => new (string, object)[] { ("empty", ""), ("h", "h"), ("twolines", "two\nlines"), ("null", null) },
+        ("savetxt", "footer") => new (string, object)[] { ("empty", ""), ("f", "f"), ("twolines", "two\nlines"), ("null", null) },
+        ("savetxt", "comments") => new (string, object)[] { ("hash", "# "), ("slashes", "//"), ("empty", ""), ("null", null) },
+        ("savetxt", "encoding") => new (string, object)[]
+        {
+            ("null", null), ("utf-8", "utf-8"), ("latin1", "latin1"), ("ascii", "ascii"), ("utf-16", "utf-16"),
+            ("bogus", "bogus"),
+        },
+        _ => throw new ArgumentException($"no text IO variants for {p.Member.Name}'s {p.Name}"),
+    };
+
+    /// <summary>
+    ///     The bytes a sink received, for the outcome: <c> WROTE &lt;hash&gt;/&lt;length&gt;</c> (the first 16 hex digits of
+    ///     their SHA-256), read from the MemoryStream, the StringWriter (its text as UTF-8) or the temporary file (then
+    ///     deleted), or <c> WROTE none</c> when the call created no file.
+    /// </summary>
+    /// <param name="sink">The MemoryStream, the StringWriter or the file name the call received.</param>
     /// <returns>The suffix.</returns>
     private static string WrittenBytes(object sink)
     {
         byte[] bytes;
-        if (sink is MemoryStream ms)
+        if (sink is StringWriter text)
+        {
+            bytes = Encoding.UTF8.GetBytes(text.ToString());
+        }
+        else if (sink is MemoryStream ms)
         {
             bytes = ms.ToArray();
         }
@@ -4829,6 +5171,7 @@ static class Snapshot
             Role.ItemArg => ItemArgLabels(ps[p])[v],
             Role.AssignArg => AssignArgLabels(ps[p])[v],
             Role.BufferLength => BufferLengthLabels[v],
+            Role.SaveTxtFmts => SaveTxtFmtsLabels[v],
             Role.SampleSeq or Role.BinsInts or Role.BinsArrays or Role.BinsObjects or Role.RangeArray => DdLabels(roles[p])[v],
             _ => variants[p][v].Label,
         };
@@ -4877,6 +5220,10 @@ static class Snapshot
         if (operandIndex >= 0 && roles[operandIndex] == Role.FileSource
             && !TryMakeFileSource(ps[operandIndex].ParameterType, layout.Substring(formAt + 1), dt, baseLayout, operand, out operandArg))
             return null;
+        // np.loadtxt's source ("layout:form" as a host operand's); a form this operand does not have makes no line at all.
+        if (operandIndex >= 0 && roles[operandIndex] == Role.LoadTxtSource
+            && !TryMakeLoadTxtSource(ps[operandIndex].ParameterType, layout.Substring(formAt + 1), dt, baseLayout, operand, out operandArg))
+            return null;
         string inBefore = HashOf(operand);
         var argv = new object[ps.Length];
         NDArray outArray = null;
@@ -4902,6 +5249,8 @@ static class Snapshot
                     : roles[i] == Role.BufferLength ? MakeBufferLength(BufferLengthLabels[0], bufferLength)
                     : roles[i] == Role.SinkStream ? new MemoryStream()
                     : roles[i] == Role.SinkFile ? Path.Combine(FileIODir, "sink.bin")
+                    : roles[i] == Role.SinkWriter ? new StringWriter(CultureInfo.InvariantCulture)
+                    : roles[i] == Role.SaveTxtFmts ? MakeSaveTxtFmts(SaveTxtFmtsLabels[0], operand)
                     : IsDdRole(roles[i]) ? MakeDd(roles[i], DdLabels(roles[i])[0], operand, m)
                     : variants[i][0].Make();
             int outParam = -1, outVariant = 0;
@@ -4983,6 +5332,9 @@ static class Snapshot
                     case Role.BufferLength:
                         argv[p] = MakeBufferLength(BufferLengthLabels[v], bufferLength);
                         break;
+                    case Role.SaveTxtFmts:
+                        argv[p] = MakeSaveTxtFmts(SaveTxtFmtsLabels[v], operand);
+                        break;
                     case Role.EvalExpr:
                     case Role.EvalExprPositional:
                         argv[p] = MakeEvalExpr(EvalExprVariantLabels[v], operand, positional: roles[p] == Role.EvalExprPositional);
@@ -5057,7 +5409,7 @@ static class Snapshot
         }
         // A sink's bytes (NDArray.tofile), written before a refusal too, and a read stream's final position (np.fromfile
         // leaves a file where its read stopped), join the outcome.
-        int sinkIndex = Array.FindIndex(roles, r => r is Role.SinkStream or Role.SinkFile);
+        int sinkIndex = Array.FindIndex(roles, r => r is Role.SinkStream or Role.SinkFile or Role.SinkWriter);
         if (sinkIndex >= 0)
             outcome += WrittenBytes(argv[sinkIndex]);
         if (operandIndex >= 0 && roles[operandIndex] == Role.FileSource && operandArg is Stream read)
