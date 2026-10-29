@@ -278,7 +278,9 @@ namespace NumSharp
             for (int axis = 0; axis < encoded.GetLength(0); axis++)
                 for (int side = 0; side < 2; side++)
                 {
-                    object v = valuePairs[axis, side];
+                    // A Python scalar of tolist() and the NumPy scalar of the same value print alike (str(1) and
+                    // str(np.int32(1)) are both '1'; a float16 element reached tolist() as the Python float of its value).
+                    object v = UnwrapPyListItem(valuePairs[axis, side]);
                     // Text stays text; a number becomes its 0-d array, which the area assignment writes as its str()
                     // (NumPy's _as_pairs makes every constant a NumPy scalar through np.array).
                     encoded[axis, side] = v is NDArray given ? given
@@ -1606,15 +1608,37 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Same as <see cref="_AsPairs"/> but for value pairs (constant_values, end_values)
-        ///     where the per-axis value is a scalar of any dtype (not necessarily integer).
-        ///     Returns <c>object[ndim, 2]</c> with each cell holding the boxed scalar.
+        ///     NumPy's <c>_as_pairs(x, ndim)</c> for the value pair arguments (<c>constant_values</c>, <c>end_values</c>),
+        ///     statement for statement: <c>np.array(x)</c>; for an array of fewer than 3 dimensions, ONE value is both sides
+        ///     of every axis and TWO values (unless shaped (2, 1)) the (before, after) pair of every axis - handed out as
+        ///     NumPy SCALARS (<c>x[0]</c>, <c>x[1]</c>); any other array goes through <c>np.broadcast_to(x, (ndim,
+        ///     2)).tolist()</c>, whose values are PYTHON scalars (<see cref="PyListItem"/>).
         /// </summary>
-        /// <param name="x">The argument (null, a scalar, a pair, a dictionary, a C# array or an <c>object[,]</c>).</param>
-        /// <param name="ndim">The number of axes.</param>
-        /// <returns>The (ndim, 2) table.</returns>
-        /// <exception cref="ValueError">The values do not broadcast to (ndim, 2) (NumPy's <c>np.broadcast_to</c> text).</exception>
-        /// <exception cref="ArgumentException">A dictionary axis out of bounds, or an <c>object[,]</c> that is not (N, 2).</exception>
+        /// <param name="x">The argument: null (not given), a C# scalar, a string or <c>byte[]</c>, a tuple, a C# array or
+        ///     collection, an <see cref="NDArray"/>, or a dictionary (a NumSharp form: NumPy refuses a dict here).</param>
+        /// <param name="ndim">The number of axes: the padded array's TRUE rank (0 for a 0-d array, whose values are still
+        ///     checked against (0, 2)).</param>
+        /// <returns>The (ndim, 2) table: null cells for a null <paramref name="x"/>; a boxed C# value for a NumPy scalar
+        ///     (a C# number of its own type, a string for <c>np.str_</c>, a <c>byte[]</c> for <c>np.bytes_</c>); a
+        ///     <see cref="PyListItem"/> for a Python scalar of <c>tolist()</c>.</returns>
+        /// <exception cref="ValueError">The values do not broadcast to (ndim, 2): NumPy's <c>np.broadcast_to</c> texts
+        ///     (<see cref="BroadcastToPairs"/>).</exception>
+        /// <exception cref="ArgumentException">A dictionary axis out of bounds.</exception>
+        /// <exception cref="NotSupportedException">A value NumSharp has no array form for (np.asanyarray's refusal).</exception>
+        /// <remarks>
+        ///     <para>
+        ///     The kind of each value decides how NumPy's <c>padded[...] = value</c> stores it (<see cref="CastBoxToDType"/>):
+        ///     a NumPy scalar is int()-converted with the range check into a SIGNED integer array and CAST into every other
+        ///     (<c>np.int32(-1)</c> into uint8 is 255), while a Python scalar is range-checked into EVERY integer array
+        ///     (<c>-1</c> into uint8 is "Python integer -1 out of bounds for uint8") and a Python str's error quotes the str
+        ///     (<c>'x'</c>, not <c>np.str_('x')</c>). So <c>constant_values=[[1, -1]]</c> pads a uint8 array with 1 and 255
+        ///     where <c>[[1, -1], [2, -2]]</c> raises: probed against 2.4.2.
+        ///     </para>
+        ///     <para>
+        ///     A (2, 1) table is one value per axis for both sides (<c>[[10], [30]]</c> pads axis 0 with 10 and axis 1 with
+        ///     30), and a 3-D array of one element skips the shortcuts and fails the broadcast, as in NumPy.
+        ///     </para>
+        /// </remarks>
         internal static object[,] _AsPairsValues(object x, int ndim)
         {
             var result = new object[ndim, 2];
@@ -1646,68 +1670,98 @@ namespace NumSharp
                 return result;
             }
 
-            // object[,] shape (N,2) or (1,2)
-            if (x is object[,] o2)
+            // A scalar: np.array(x) is 0-d, its one value the NumPy scalar x[0] on both sides of every axis (CastBoxToDType
+            // packs a boxed C# number as the NumPy scalar of its own type, a string as np.str_, a byte[] as np.bytes_).
+            if (IsStoreScalar(x) || x is string || x is byte[])
             {
-                int rows = o2.GetLength(0), cols = o2.GetLength(1);
-                if (cols != 2)
-                    throw new ArgumentException("constant_values 2D array must have shape (N, 2)");
-                if (rows == 1)
+                for (int i = 0; i < ndim; i++) { result[i, 0] = x; result[i, 1] = x; }
+                return result;
+            }
+
+            // np.array(x): an NDArray as it is; a C# array, tuple or collection through NumPy's coercion of a sequence (a
+            // tuple of C# ints is int64, an object[] promotes its items in NumPy's order).
+            NDArray arr = x as NDArray;
+            bool owned = arr is null;
+            if (owned)
+                arr = np.asanyarray(x);
+            try
+            {
+                if (arr.ndim < 3)
                 {
-                    for (int i = 0; i < ndim; i++) { result[i, 0] = o2[0, 0]; result[i, 1] = o2[0, 1]; }
-                    return result;
+                    // x was supplied as a single value: the NumPy scalar x[0] on both sides of every axis.
+                    if (arr.size == 1)
+                    {
+                        object v = arr.GetAtIndex(0);
+                        for (int i = 0; i < ndim; i++) { result[i, 0] = v; result[i, 1] = v; }
+                        return result;
+                    }
+                    // A value for each side - except the (2, 1) table, one value per axis for both sides.
+                    if (arr.size == 2 && !(arr.ndim == 2 && arr.Shape.dimensions[0] == 2 && arr.Shape.dimensions[1] == 1))
+                    {
+                        object before = arr.GetAtIndex(0), after = arr.GetAtIndex(1);
+                        for (int i = 0; i < ndim; i++) { result[i, 0] = before; result[i, 1] = after; }
+                        return result;
+                    }
                 }
-                // NumPy's _as_pairs ends in np.broadcast_to(x, (ndim, 2)), whose refusal names both shapes.
-                if (rows != ndim)
-                    throw new ValueError(
-                        $"operands could not be broadcast together with remapped shapes [original->remapped]: ({rows},{cols})  and requested shape ({ndim},2)");
-                for (int i = 0; i < rows; i++) { result[i, 0] = o2[i, 0]; result[i, 1] = o2[i, 1]; }
+
+                // np.broadcast_to(x, (ndim, 2)).tolist(): every value a Python scalar.
+                var (rowStride, colStride) = BroadcastToPairs(arr.shape, ndim);
+                for (int i = 0; i < ndim; i++)
+                {
+                    result[i, 0] = new PyListItem(arr.GetAtIndex(i * rowStride));
+                    result[i, 1] = new PyListItem(arr.GetAtIndex(i * rowStride + colStride));
+                }
                 return result;
             }
-
-            // 1-D arrays
-            if (x is object[] o1) return FromValues1D(o1, ndim);
-            if (x is int[] iv) return FromValues1D(BoxIntArray(iv), ndim);
-            if (x is long[] lv) return FromValues1D(BoxLongArray(lv), ndim);
-            if (x is double[] dv) return FromValues1D(BoxDoubleArray(dv), ndim);
-
-            // Recognised tuple of two scalar primitives — extract.
-            if (TryExtractPair(x, out object pb, out object pa))
+            finally
             {
-                for (int i = 0; i < ndim; i++) { result[i, 0] = pb; result[i, 1] = pa; }
-                return result;
+                if (owned)
+                    arr.Dispose();
             }
-
-            // Bare scalar
-            for (int i = 0; i < ndim; i++) { result[i, 0] = x; result[i, 1] = x; }
-            return result;
         }
 
         /// <summary>
-        ///     <c>_as_pairs</c> for a 1-D list of values: one value for both sides of every axis, two values for (before,
-        ///     after) of every axis.
+        ///     A value of NumPy's <c>ndarray.tolist()</c> inside <see cref="_AsPairsValues"/>: the Python scalar of an array
+        ///     element - a Python int for every integer dtype, a Python float for every real float dtype (float16 included),
+        ///     a Python complex, a Python bool, a Python str or bytes - which NumPy's store packs by its Python-scalar rules.
         /// </summary>
-        /// <param name="arr">The values.</param>
-        /// <param name="ndim">The number of axes.</param>
-        /// <returns>The (ndim, 2) table of boxed values.</returns>
-        /// <exception cref="ValueError">Any other length: NumPy's <c>np.broadcast_to(x, (ndim, 2))</c> refusal.</exception>
-        private static object[,] FromValues1D(object[] arr, int ndim)
+        /// <remarks>
+        ///     A marker type, because the boxed C# values of the two kinds coincide (a boxed <see cref="int"/> is both the
+        ///     element of an int32 array and that element's Python int): <see cref="CastBoxToDType"/> packs a marked value
+        ///     with <see cref="ReductionInitial.TryPack"/>, an unmarked one with <see cref="ReductionInitial.PackNumPyScalar"/>.
+        /// </remarks>
+        private sealed class PyListItem
         {
-            var result = new object[ndim, 2];
-            if (arr.Length == 1)
-            {
-                for (int i = 0; i < ndim; i++) { result[i, 0] = arr[0]; result[i, 1] = arr[0]; }
-                return result;
-            }
-            if (arr.Length == 2)
-            {
-                for (int i = 0; i < ndim; i++) { result[i, 0] = arr[0]; result[i, 1] = arr[1]; }
-                return result;
-            }
-            // NumPy's _as_pairs ends in np.broadcast_to(x, (ndim, 2)): a 1-D array of any other length cannot broadcast.
-            throw new ValueError(
-                $"operands could not be broadcast together with remapped shapes [original->remapped]: ({arr.Length},)  and requested shape ({ndim},2)");
+            /// <summary>
+            ///     Wraps one array element as the Python scalar <c>tolist()</c> makes of it.
+            /// </summary>
+            /// <param name="element">The boxed element (<see cref="NDArray.GetAtIndex(long)"/>).</param>
+            /// <remarks>A <see cref="Half"/> becomes the <see cref="double"/> of its value (a Python float: the house map reads
+            ///     a boxed Half as the NumPy scalar np.float16) and a <c>char</c> its code point (NumSharp's uint16 proxy, an
+            ///     integer). Every other boxed type already reads as the Python scalar of the house map.</remarks>
+            public PyListItem(object element)
+                => Value = element switch
+                {
+                    Half h => (double)h,
+                    char c => (long)c,
+                    _ => element,
+                };
+
+            /// <summary>The Python scalar, in the house boundary map's C# form.</summary>
+            public object Value { get; }
+
+            /// <summary>The value's own text, for debugging.</summary>
+            /// <returns><see cref="Value"/>'s text.</returns>
+            public override string ToString() => Value?.ToString() ?? "None";
         }
+
+        /// <summary>
+        ///     A constant or end value as the plain C# value the computation reads: a <see cref="PyListItem"/> unwrapped to its
+        ///     Python scalar, anything else as it is.
+        /// </summary>
+        /// <param name="value">A cell of <see cref="_AsPairsValues"/>.</param>
+        /// <returns>The value.</returns>
+        private static object UnwrapPyListItem(object value) => value is PyListItem py ? py.Value : value;
 
         private static (object before, object after) ExtractValuePair(object v)
         {
@@ -1766,34 +1820,6 @@ namespace NumSharp
             throw new ArgumentException($"pad_width dict key must be int (got {key?.GetType().Name})");
         }
 
-        private static long[] LongFromInt(int[] src)
-        {
-            var result = new long[src.Length];
-            for (int i = 0; i < src.Length; i++) result[i] = src[i];
-            return result;
-        }
-
-        private static object[] BoxIntArray(int[] src)
-        {
-            var r = new object[src.Length];
-            for (int i = 0; i < src.Length; i++) r[i] = src[i];
-            return r;
-        }
-
-        private static object[] BoxLongArray(long[] src)
-        {
-            var r = new object[src.Length];
-            for (int i = 0; i < src.Length; i++) r[i] = src[i];
-            return r;
-        }
-
-        private static object[] BoxDoubleArray(double[] src)
-        {
-            var r = new object[src.Length];
-            for (int i = 0; i < src.Length; i++) r[i] = src[i];
-            return r;
-        }
-
         private static object BoxedZero(NPTypeCode tc)
         {
             switch (tc)
@@ -1825,21 +1851,38 @@ namespace NumSharp
         ///     (<see cref="ReductionInitial.PackNumPyScalar"/>).
         /// </summary>
         /// <param name="value">One constant: a C# number (a NumPy scalar of its own C# type), a one-element
-        ///     <see cref="NDArray"/> (its element), or <c>null</c> (NumPy's default 0).</param>
+        ///     <see cref="NDArray"/> (its element), a <see cref="PyListItem"/> (a Python scalar of <c>tolist()</c>), or
+        ///     <c>null</c> (NumPy's default 0).</param>
         /// <param name="tc">The padded array's dtype.</param>
         /// <returns>The constant boxed as <paramref name="tc"/>'s exact CLR type; an array of several elements or a value
-        ///     that is not a number returns through the house conversion (<see cref="Converts.ChangeType(object, NPTypeCode)"/>)
+        ///     that is not a number returns through the house conversion (<see cref="NumSharp.Utilities.Converts.ChangeType(object, NPTypeCode)"/>)
         ///     or as is (an array), for the broadcast-assignment route.</returns>
         /// <exception cref="OverflowException">A signed integer array and a constant whose int() does not fit it:
         ///     <c>np.pad(int8, 1, constant_values=1000)</c> raises "Python integer 1000 out of bounds for int8", as in NumPy
         ///     (an unsigned array casts instead: <c>np.pad(uint8, 1, constant_values=1000)</c> pads with 232); a float
-        ///     infinity into a signed integer.</exception>
+        ///     infinity into a signed integer; a Python int of <c>tolist()</c> out of ANY integer array's range
+        ///     ("Python integer -1 out of bounds for uint8").</exception>
         /// <exception cref="ValueError">A float NaN constant into a signed integer array ("cannot convert float NaN to
         ///     integer"); a text constant into a numeric array whose text does not parse (the cast of NumPy's
-        ///     <c>np.str_</c> scalar: "invalid literal for int() with base 10: np.str_('z')").</exception>
+        ///     <c>np.str_</c> scalar: "invalid literal for int() with base 10: np.str_('z')"; a Python str of
+        ///     <c>tolist()</c> quotes the str itself, <c>'z'</c>).</exception>
+        /// <exception cref="TypeError">A Python complex of <c>tolist()</c> into a real or integer array (float()'s /
+        ///     int()'s text).</exception>
         private static unsafe object CastBoxToDType(object value, NPTypeCode tc)
         {
             if (value is null) return BoxedZero(tc);
+            // A Python scalar of _as_pairs' tolist() packs by PyArray_Pack's Python-scalar rules: an int is range-checked
+            // into every integer dtype (a NumPy scalar only into a signed one), a str parses quoting the str itself. A text
+            // array converts its constants on its own route, so it receives the plain value.
+            if (value is PyListItem py)
+            {
+                if (tc == NPTypeCode.String)
+                    return py.Value;
+                byte* pySlot = stackalloc byte[ReductionInitial.SlotBytes];
+                var pySpan = new Span<byte>(pySlot, ReductionInitial.SlotBytes);
+                ReductionInitial.TryPack(py.Value, tc, pySpan);
+                return ReductionInitial.Box(pySpan, tc);
+            }
             // A one-element array constant is the NumPy scalar np.array(...) indexes out of it; a larger one keeps the
             // broadcast-assignment route.
             if (value is NDArray nd)

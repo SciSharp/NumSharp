@@ -135,6 +135,42 @@ namespace NumSharp.Tests.Manipulation
             r.ToArray<long>().Should().Equal(5L);
         }
 
+        /// <summary>
+        ///     <c>constant_values</c> through <c>_as_pairs</c>: one or two values are NumPy SCALARS (cast into an unsigned
+        ///     array), a larger table goes through <c>tolist()</c> - PYTHON scalars, range-checked into every integer array.
+        /// </summary>
+        [TestMethod]
+        public void ConstantValues_FollowAsPairs()
+        {
+            // np.pad(np.zeros(2, np.uint8), 1, constant_values=np.array([[1, -1]], np.int32)) -> [1, 0, 0, 255]
+            np.pad(np.zeros(new Shape(2), np.uint8), 1, constant_values: new int[,] { { 1, -1 } })
+                .ToArray<byte>().Should().Equal((byte)1, (byte)0, (byte)0, (byte)255);
+
+            // np.pad(np.zeros((2, 2), np.uint8), 1, constant_values=np.array([[1, -1], [2, -2]], np.int32))
+            Action table = () => np.pad(np.zeros(new Shape(2, 2), np.uint8), 1, constant_values: new int[,] { { 1, -1 }, { 2, -2 } });
+            table.Should().Throw<OverflowException>().WithMessage("Python integer -1 out of bounds for uint8");
+
+            // np.pad(np.arange(6).reshape(2, 3), 1, constant_values=np.array([[10, 20], [30, 40]]))
+            np.pad(M, 1, constant_values: np.array(new long[,] { { 10, 20 }, { 30, 40 } })).ToArray<long>().Should().Equal(
+                30L, 10L, 10L, 10L, 40L, 30L, 0L, 1L, 2L, 40L, 30L, 3L, 4L, 5L, 40L, 30L, 20L, 20L, 20L, 40L);
+
+            // np.array([[10], [30]]): one value per axis
+            np.pad(M, 1, constant_values: np.array(new long[,] { { 10 }, { 30 } })).ToArray<long>().Should().Equal(
+                30L, 10L, 10L, 10L, 30L, 30L, 0L, 1L, 2L, 30L, 30L, 3L, 4L, 5L, 30L, 30L, 10L, 10L, 10L, 30L);
+
+            // np.ones((1, 1, 1)): three dimensions skip the shortcuts and fail the broadcast
+            Action threeD = () => np.pad(M, 1, constant_values: np.ones(new Shape(1, 1, 1)));
+            threeD.Should().ThrowExactly<ValueError>().WithMessage("input operand has more dimensions than allowed by the axis remapping");
+
+            // A Python str of tolist() quotes itself: invalid literal for int() with base 10: 'x'
+            Action text = () => np.pad(M, 1, constant_values: new object[,] { { "1", "2" }, { "x", "4" } });
+            text.Should().ThrowExactly<ValueError>().WithMessage("invalid literal for int() with base 10: 'x'");
+
+            // A Python complex into a float array: float()'s TypeError
+            Action complex = () => np.pad(M.astype(np.float64), 1, constant_values: new object[,] { { 1, 2 }, { 3, new Complex(0, 4) } });
+            complex.Should().ThrowExactly<TypeError>().WithMessage("float() argument must be a string or a real number, not 'complex'");
+        }
+
         /// <summary><c>stat_length</c> is <c>np.round(x).astype(np.intp)</c>: a real rounds half to even.</summary>
         [TestMethod]
         public void StatLength_RoundsToIntp()
