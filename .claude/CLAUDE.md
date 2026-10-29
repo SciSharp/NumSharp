@@ -1722,6 +1722,22 @@ is an empty axis (the reshape's unknown dimension), as NumPy's. np.diag's and np
 scatter are `NDArray.Diag` / `DiagFlat` (`Creation/NDArray.TwoDimBase.cs`, beside `NDArray.Eye`); the StringDType route
 asks `HasReferences`. Gate: their snapshot (2,772 lines) and `Indexing/np.indices.NumPyPort.Test.cs`.
 
+**`np.mgrid` / `np.ogrid` are the array object's too, NumPy's `nd_grid.__getitem__` statements** (2026-10-29, plan
+np-layer-dtype-logic P3 batch 7). Their bodies are `NDArray.MGrid` / `NDArray.OGrid` (`Indexing/NDArray.IndexTricks.cs`,
+beside np.r_'s): a key of one slice is the except branch (`GridSingleSlice`: arange, or for an imaginary step
+`arange(0, n) * step + start`, a fresh array), a key of several the try branch - every size first, in key order
+(`GridAxisSize`: `int(abs(step))` / `math.ceil((stop - start) / step)` in Python's arithmetic over the slice's Python
+numbers), `typ = result_type(*num_list)` (`GridMeshDtype`, asked of `DTypePromotion.ResultType` over the weak Python
+scalar classes), `indices(size, typ)` or one arange per axis, then `nn[k] = nn[k] * step + start` (`GridFillLine`: the
+step and start converted as NumPy's ufunc calls convert them, then `i * step + start`, a product and a sum, never
+fused). So a zero step is Python's `division by zero` / `float division by zero`, an imaginary step of one point needs
+no stop (with more, a single slice is Python's TypeError), a mesh's missing stop is raised where NumPy's AttributeError
+is (the documented divergence: NumSharp's ValueError naming the slice), NaN / infinite / past-int64 sizes raise NumPy's
+texts, and an int64 mesh's start or step past int64 is NEP 50's conversion error (the LP64 text). The slice fields are
+the Python numbers they spell (`np.AxisConcatenator.SliceSpec`: digits are an int, kept exactly, anything else a float),
+which np.r_ / np.c_ share. Gate: the snapshot (`tools/facade-move/snapshot.cs`, 154 grid keys) and
+`Creation/np.{mgrid.NumPyPort,r_.PythonNumbers}.Test.cs`.
+
 **`np.frombuffer` is NumPy's `PyArray_FromBuffer`, one body for every kind of buffer** (2026-10-29, plan
 np-layer-dtype-logic P3 batch 6). The overloads (`Creation/np.frombuffer.cs`) are NumPy's `array_frombuffer`: they
 convert their C# arguments - an `NPTypeCode` (`Empty` is the default, `String` is NumPy's unsized `np.str_`, refused),
@@ -4297,7 +4313,9 @@ works as an entry too, so `np.s_[…]` composes into `np.r_[…]`.
   POST-pended (a 1-D entry becomes a **column**) and stacked on the last axis. Slice entries become
   `arange(start, stop, step)`, or — for an **imaginary step** (`"−1:1:6j"`) — `linspace(start, stop, N)`
   with the stop **inclusive**. Integer-ness follows the LITERAL, not the value: `"0:5"` is int64 while
-  `"0.0:5"` is float64. A **missing stop re-reads start as stop** (NumPy's `arange(start, None, step)`
+  `"0.0:5"` is float64; an integer literal is a Python int, exact at any size (arange's int route:
+  `np.r_["9007199254740993:9007199254740995"]` has NumPy's two elements, a zero step is `division by zero`). A **missing
+  stop re-reads start as stop** (NumPy's `arange(start, None, step)`
   IS `arange(0, start, step)`), so `np.r_["2:"]` is `[0, 1]` and `np.r_["5::2"]` is `[0, 2, 4]`.
   Directives are reproduced whole: axis, `axis,ndmin`, `axis,ndmin,trans1d` (with NumPy's two DIFFERENT
   upgrade paths — the array branch's `defaxes` permutation vs the slice branch's `swapaxes(-1, trans1d)`),
@@ -4394,25 +4412,26 @@ See `Creation/np.{r_,c_}.cs`, `Indexing/np.{ix_,s_}.cs`.
 `nd_grid`). It is NOT an `AxisConcatenator` — it is its own class — but it borrows the SAME slice
 grammar via `AxisConcatenator.ParseSliceToken`/`SliceSpec`, so slices are spelled as strings
 (`np.ogrid["0:3", "0:5"]` ≙ `np.ogrid[0:3, 0:5]`; one string may carry comma-separated slices;
-`Slice` objects work too) with NO directives. A **single** slice returns a bare 1-D array (arange, or
-linspace for an imaginary `Nj` step — stop inclusive); **multiple** slices return an open mesh — N
-arrays each shape 1 in every axis but its own, built by `arange`→(astype)→`reshape`-to-`(1,…,size,…,1)`.
-The whole mesh shares ONE dtype (NumPy's single `result_type` over every slice bound): int64 iff every
-field of every slice is an integer literal, else float64 — so `np.ogrid["0:2", "0.0:2"]` yields TWO
-float64 arrays, and an imaginary step floats the whole mesh. A single slice may omit its stop
-(`np.ogrid["5:"]` = `arange(0, 5)`); a **multi** slice may NOT (NumPy sizes each axis from `stop-start`
-and leaks an `AttributeError` — NumSharp raises a clear `ValueError`), and an imaginary step always
-needs a stop. **Return type** `OGridResult` stands in for NumPy's array-or-tuple polymorphism (C#
+`Slice` objects work too) with NO directives. A **single** slice returns a bare 1-D array (arange, or for an imaginary
+`Nj` step NumPy's `arange(0, N) * step + start` — stop inclusive, not linspace's forced endpoint); **multiple** slices
+return an open mesh — N arrays each shape 1 in every axis but its own, built by
+`arange(size) * step + start`→`reshape`-to-`(1,…,size,…,1)`. The whole mesh shares ONE dtype (NumPy's single
+`result_type` over every slice bound): int64 iff every field of every slice is a Python int, else float64 — so
+`np.ogrid["0:2", "0.0:2"]` yields TWO float64 arrays, and an imaginary step floats the whole mesh. A single slice may
+omit its stop (`np.ogrid["5:"]` = `arange(0, 5)`) unless its imaginary step has more than one point (Python's TypeError,
+as in NumPy); a **multi** slice may NOT, but for an imaginary step of one point (NumPy sizes each axis from `stop-start`
+and leaks an `AttributeError` — NumSharp raises a `ValueError` naming the slice, at the same point). **Return type**
+`OGridResult` stands in for NumPy's array-or-tuple polymorphism (C#
 cannot return both from one indexer): it converts implicitly to a bare `NDArray` for a single slice,
 to `NDArray[]` for a mesh, and `Deconstruct`s (`var (y, x) = np.ogrid["0:3", "0:5"];`) — collapsing
 NumPy's bare-array-vs-1-tuple trailing-comma distinction. Imaginary/float grids are **bit-exact** with
-NumPy (same `linspace`/`arange` code path as `r_`). Values/shapes/dtypes verified against NumPy 2.4.2;
+NumPy (its `i * step + start`, not arange's `start + i * delta`). Values/shapes/dtypes verified against NumPy 2.4.2;
 **≥1.5× faster on every measured variation** (geomean ~4.5×; NPY/NS). Gate:
 `Creation/np.ogrid.Test.cs` (18). See `Creation/np.ogrid.cs`.
 
 **`np.mgrid` — the dense-mesh twin of `ogrid`.** Port of NumPy 2.x `numpy.mgrid` (the `sparse=False`
-`nd_grid`). Shares `ogrid`'s parsing and grammar via the extracted `np.ParseGridSpecs` / `GridMeshDtype`
-helpers (same string-slice spelling, same shared-dtype rule, same missing-stop/imaginary `ValueError`s
+`nd_grid`). Shares `ogrid`'s statements (`NDArray.MGrid` / `NDArray.OGrid`, `ParseGridSpecs`,
+`GridMeshDtype`: same string-slice spelling, same shared-dtype rule, same missing-stop / imaginary errors
 with `mgrid` wording). A **single** slice returns a bare 1-D array (identical to `ogrid` single);
 **multiple** slices return ONE dense stacked array of shape `(N, size_0, …, size_{N-1})` — `result[k]`
 is the k-th coordinate broadcast across the grid. Built NumPy's way — `np.indices(sizes, typ)` then
@@ -7611,7 +7630,7 @@ code gives NumPy's text.
 | numpy.polynomial companion / roots (U7) | `Polynomial/Package/NDPolyAlgebra.Roots.cs` (`{p}companion`/`{p}roots`: NumPy's statements over U2's arena — as_series, the length checks, the linear root's scalarmath, the write-once zero matrix, the diagonals through `GetDiagWriteKernel`, the last-column update through the house ufunc / cast / sqrt / cumprod kernels, the rotated `np.linalg.eigvals` + in-place sort; object series: `ObjectTrimLength`, `ObjectLinearRoot`, `ObjectCompanionArithmetic`), `Backends/Unmanaged/UnmanagedMemoryBlock`1.cs` (`AllocationType.Forward`: a reinterpreting alias's ARC forwards to its owner — `ArraySlice.WrapShared`), `Backends/Kernels/Direct/DirectILKernelGenerator.PolyRoots.cs` (the int64 ramp IL kernel behind np.arange), `LinearAlgebra/linalg/np.linalg.eig.cs` (`RoundComponentsToSingle`: a float32 operand's complex result carries NumPy's complex64 values). Oracle `polyroots.jsonl` + host-pinned `polyroots_parity.jsonl` via `OpRegistry.PolySeries.cs`; benchmark `benchmark/polynomial/polyroots_*` |
 | numpy.polynomial weights / points / quadrature / interpolation (U8, U9) | `Polynomial/Package/NDPolyWeight.cs` (the five `{p}weight` statements: fused `np.evaluate` trees, eager float16 / decimal), `Polynomial/Package/NDPolyChebPoints.cs` + `Backends/Kernels/Direct/DirectILKernelGenerator.PolyChebPoints.cs` (`chebpts1` / `chebpts2` / `chebgauss`: one emitted fill per formula, chebpts1 mirrored over the odd C-runtime sin), `Polynomial/Package/NDPolyGauss.cs` (`leggauss` / `laggauss` / `hermgauss` / `hermegauss`: U7's companion → `eigvalsh` → one Newton step through U3 / U4, or for the Hermite pair through NumPy's normalised recurrences) + `Backends/Kernels/Direct/DirectILKernelGenerator.PolyNormedHermite.cs` (`_normed_hermite_n` / `_normed_hermite_e_n` as one emitted pass per point, NumPy's NaN rule, plus the step-table kernel), `Polynomial/Package/NDPolyInterpolate.cs` (`chebinterpolate`: chebpts1 → the delegate → chebvander → `np.dot` → two in-place divides). Oracle `polyweight` / `polypts` / `polygauss` / `polyinterp` tiers (the last two with host-pinned `_parity` files) via `OpRegistry.PolySeries.cs` + `OpRegistry.PolyInterp.cs`; benchmarks `benchmark/polynomial/{polyweight,polypts,polygauss,polyinterp}_*` |
 | numpy.polynomial least-squares fits (U6) | `Polynomial/Package/NDPolyFit.cs` (`{p}fit`: `_fit`'s statements — `+ 0.0`, U5's `{p}vander`, `np.take` for a degree list, the fused norm, the C-ordered scaling over lhs, `np.linalg.lstsq`, the zeros re-expansion), `Polynomial/Package/NDPolyFitResult.cs` (the coefficient array carrying the `full=True` statistics, NumPy's tuple deconstruction). Oracle `polyfit.jsonl` + host-pinned `polyfit_parity.jsonl` via `OpRegistry.PolyFit.cs`; benchmark `benchmark/polynomial/polyfit_*` (with the per-cell lstsq ceiling) |
-| Grid / slice-expression DSL | `Creation/np.r_.cs` (`AxisConcatenator` + `RClass`; its indexer's statements and np.ix_'s are `Indexing/NDArray.IndexTricks.cs`), `Creation/np.c_.cs`, `Creation/np.ogrid.cs` (`OGridClass` + `OGridResult` + shared `nd_grid` helpers), `Creation/np.mgrid.cs` (`MGridClass` + `MGridResult`), `Creation/np.meshgrid.cs` (`MeshgridResult`), `Indexing/np.{ix_,s_}.cs` |
+| Grid / slice-expression DSL | `Creation/np.r_.cs` (`AxisConcatenator` + `RClass`; its indexer's statements and np.ix_'s are `Indexing/NDArray.IndexTricks.cs`), `Creation/np.c_.cs`, `Creation/np.ogrid.cs` (`OGridClass` + `OGridResult`; the `nd_grid` statements are `Indexing/NDArray.IndexTricks.cs`'s `MGrid` / `OGrid`), `Creation/np.mgrid.cs` (`MGridClass` + `MGridResult`), `Creation/np.meshgrid.cs` (`MeshgridResult`), `Indexing/np.{ix_,s_}.cs` |
 | Array printing (NumPy parity) | `Backends/Printing/{PrintOptions,Dragon4,ElementFormatters,ArrayFormatter}.cs`, `APIs/np.array2string.cs`, `Casting/NDArray.ToString.cs` |
 | Scalar float formatters (NumPy's `dragon4.c`, ported) | `Backends/Printing/Dragon4.Port.cs` (argument kinds, the formatters, the fast path, the `BigInteger` reference loop), `Backends/Printing/Dragon4.BigInt.cs` (NumPy's BigInt on 64-bit blocks, the digit loop, the 19-digit chunk step); `np.format_float_*` in `APIs/np.array2string.cs` |
 | numpy.polynomial printing helpers (U11) | `Polynomial/Package/NDPolyPrinting.cs` (`format_float`, `set_default_printstyle`, the print-style flag); facades in `np.polynomial.cs` and `np.polynomial.polyutils.cs` |

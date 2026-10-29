@@ -61,7 +61,8 @@ names a non-native dtype). R1 has no batch 6 row left. Batch 9, the computing fu
 (2026-10-29): np.linspace / np.logspace / np.geomspace are `TensorEngine` members in `TensorEngine.CoreFunctionBase.cs`,
 np.vander in `TensorEngine.TwoDimBase.cs`, np.trim_zeros in `TensorEngine.FunctionBase.cs`, and the six divergences a
 replay of their snapshot through NumPy found are fixed per D4. Batch 7, NumPy's Python functions of the array object,
-has its first six parts done (2026-10-29): np.where's body is `NDArray.Where` in `NDArray.Multiarray.cs` (every engine
+has its first six parts and the seventh's first half done (2026-10-29): np.where's body is `NDArray.Where` in
+`NDArray.Multiarray.cs` (every engine
 np.where call, the fixed-width text route's included, calls it), np.real / np.imag's are `NDArray.RealPart` / `ImagPart`
 in the new `NDArray.TypeCheck.cs` with ndarray.imag's setter, ndarray.conjugate's is `NDArray.Conjugate`, np.extract's,
 np.asarray_chkfinite's, np.select's and np.piecewise's statements and np.delete's helpers are `NDArray.FunctionBase.cs`
@@ -70,11 +71,13 @@ np.fill_diagonal's and np.r_ / np.c_'s indexer's are `NDArray.Ix`, `NDArray.Fill
 `NDArray.AxisConcatenate` in the new `NDArray.IndexTricks.cs`, the along-axis trio's are `NDArray.TakeAlongAxis`,
 `NDArray.PutAlongAxis` and `NDArray.ApplyAlongAxis` in the new `NDArray.ShapeBase.cs`, np.indices' are
 `NDArray.Indices` / `NDArray.IndicesSparse` in `NDArray.Numeric.cs`, np.diag's and np.diagflat's `NDArray.Diag` /
-`NDArray.DiagFlat` in `NDArray.TwoDimBase.cs`, and the divergences a replay of
+`NDArray.DiagFlat` in `NDArray.TwoDimBase.cs`, np.mgrid's and np.ogrid's `NDArray.MGrid` / `NDArray.OGrid` in
+`NDArray.IndexTricks.cs`, and the divergences a replay of
 their snapshot through NumPy found are fixed per D4 (np.where's result dtype and order, np.select's broadcast and cast
 texts, np.piecewise's constants, np.delete's error axis, np.broadcast_shapes' pair, np.pad's check order, values and
 computations, np.ix_'s result object, np.r_'s matrix copy and Python int entries, np.fill_diagonal's value conversion,
-np.apply_along_axis's text scalar width, np.indices' allocation order, arange refusals and sparse views). P5 is done
+np.apply_along_axis's text scalar width, np.indices' allocation order, arange refusals and sparse views, the slice
+fields' Python numbers, np.mgrid / np.ogrid's nd_grid statements). P5 is done
 (2026-10-29): its six
 families and, handed over by the coordinator, the lines first assigned to PE (np.argmax's out= pair, np.unravel_index,
 np.packbits / np.unpackbits, np.bincount, and the text lines of np.kron and np.median) are engine members or engine
@@ -873,7 +876,9 @@ first, as it did for np.fft.
    np.apply_along_axis (`ShapeBase`) with `NDVStringStatistics.Quantile.cs`' two pins, and the D4 fixes its replay
    and the full test run found (`10626746`, `62683028`). Sixth part done (`37ac64c2`, `1d375850`, `3df20fb6`,
    `aa7b3f77`): np.indices (`Numeric`) and np.diag / np.diagflat (`TwoDimBase`), with the D4 fix the replay found
-   (`408644f1`); np.diag's StringDType route asks `HasReferences`.
+   (`408644f1`); np.diag's StringDType route asks `HasReferences`. Seventh part, first half, done (`c89c5dc3`,
+   `646a15a0`, `4a634a37`, `dc1ce4f6`): np.mgrid / np.ogrid (`IndexTricks`), with the D4 fixes the replay found
+   (`e0d2f1ef`, `6f0f2e33`, before the move); their mesh dtype asks `result_type`. Left: np.ravel_multi_index.
 8. **The indexers** (8 files, 98 lines; `Selection/NDArray.Indexing.*.cs`, NumPy's `mapping.c`; already the array
    object): the `StringDType` routes behind `HasReferences`, the typed fetch / store switches into
    `UnmanagedStorage.Mapping.cs`. The index-kind tests stay.
@@ -1121,6 +1126,56 @@ candidate.
 ---
 
 ## 9. State log
+
+- **2026-10-29, P3: batch 7, seventh part, first half (np.mgrid, np.ogrid).** Six commits on `strings` from the parallel
+  session (developed in the scratch worktree on top of the sixth part, rebased onto `a0bf3516` and landed by
+  fast-forward). The D4 fixes come before the move, so the move is pure over NumPy's statements. R1: 2 numeric lines
+  leave (np.mgrid.cs 0 / 1 with the D4, np.ogrid.cs 0 / 1 with the move; neither file has a row now); R2: unchanged (the
+  home is under `Indexing/`).
+  - `c89c5dc3`: the snapshot tool reaches np.mgrid / np.ogrid: the indexer of each nd_grid object (np.MGridClass /
+    np.OGridClass's get_Item) is called on that object and its key is the operand (role `GridKey`), built per call from
+    77 labels (`GridKeyLabels`): single slices, meshes, Slice objects, the empty key, entries that are no slice, and the
+    edges NumPy's Python arithmetic decides (zero steps over ints and floats, imaginary steps without a stop, the error
+    order, -0.0, NaN / infinite / huge / underflowed sizes, Python ints past 2**53 and past int64). 154 cases, the same
+    with and without `NUMSHARP_DEBUG_GUARD_PAGES=1`. Replayed through NumPy 2.4.2 on Windows and on Linux: 78 diverged.
+  - D4, two commits before the move:
+    - `e0d2f1ef`: a slice expression's fields are the Python numbers they spell (SliceSpec keeps a Python int exactly,
+      `IntStart` / `IntStop` / `IntStep`, BigInteger; digits are an int, Infinity / NaN floats), and np.r_ / np.c_'s
+      slice branch (np.mgrid / np.ogrid's single slice too) takes arange's int route over Python ints within int64: a
+      zero step is `division by zero` (it was `float division by zero`), ints past 2**53 are exact
+      (np.r_[2**53+1:2**53+3] had four elements of two). np.mgrid's mesh sizes divide Python ints exactly. 16 of the 78.
+    - `6f0f2e33`: np.mgrid / np.ogrid are NumPy's `nd_grid.__getitem__` statements: the except branch for a key of one
+      slice (`GridSingleSlice`: arange, or `arange(0, n) * step + start` for an imaginary step, a fresh array where
+      linspace gave a view and forced the last point onto the stop), and the try branch for several (`GridAxisSize`:
+      `int(abs(step))` / `math.ceil((stop - start) / step)` in Python's arithmetic, in key order; `GridMeshDtype`;
+      indices or one arange per axis; `GridFillLine`: `i * step + start` in the mesh dtype, the step and start converted
+      as NumPy's ufunc calls convert them). A zero step is Python's text, an imaginary step of one point needs no stop
+      (with more, a single slice is Python's TypeError), a mesh's missing stop is raised where NumPy's AttributeError is
+      (NumSharp's ValueError, now naming the slice), NaN / infinite / past-int64 sizes raise NumPy's texts where
+      `(long)Math.Ceiling` was undefined, and an int64 mesh's start or step past int64 is NEP 50's conversion error (the
+      LP64 text). The other 62.
+  - `646a15a0`, the pure move: np.MGridClass's Build is `NDArray.MGrid`, np's NdGridLines `NDArray.OGrid`, with their
+    helpers, in `Indexing/NDArray.IndexTricks.cs` (beside np.r_ / np.c_'s `AxisConcatenate`). The facades keep their
+    result types, docs and the indexers' one call. Snapshot of np.mgrid, np.ogrid, np.r_ and np.c_ (7,426 cases)
+    byte-identical; the rebind check found `Shape.Adopt` only.
+  - `4a634a37`, the conversion: the mesh dtype is NumPy's `result_type(*num_list)` asked of `DTypePromotion.ResultType`
+    over NEP 50's weak Python scalar classes (each distinct operand once), the single imaginary slice's
+    `result_type(start, stop, step_float)` likewise, and the fills dispatch on the descriptor's kind. Snapshot
+    byte-identical.
+  - `dc1ce4f6`: a slice field's int literal is read in one scan (`ScanIntLiteral`), and the sizes are exact doubles with
+    CPython's fast path for small ints; a `-0` field is the int 0 (+0.0 where it meets a float, np.r_[-0:3.0]).
+  - After the D4 no replay case differs on Linux but the 7 missing-stop AttributeError cases (the documented
+    divergence); Windows NumPy also says `int too big to convert` for the 2 int64-conversion cases.
+  - Perf (two pinned P-cores; before the D4 / now / NumPy, us): every cell at parity or faster - mgrid[0:5, 0:3] 0.950 /
+    0.931 / 12.79, mgrid[0:100, 0:100] 11.83 / 11.79 / 40.6, mgrid[0:1:100j, 0:1:100j] 20.14 / 19.51 / 33.5, ogrid[0:5,
+    0:3] 2.31 / 1.94 / 10.69, ogrid[0:1:1000j, 0:1:1000j] 6.56 / 3.13 / 14.20, mgrid[0:1:100000j] 201.5 / 55.6 / 550.9,
+    mgrid[0:5:0.5] 0.736 / 0.713 / 1.771; NPY/NS 1.7 to 13.7.
+  - Core's doc warnings 3,828 -> 3,824.
+  - Gates: NumSharp.Tests (20,850 on net10.0, 20,849 on net8.0) and NumSharp.Tests.Oracle (414 on both) pass
+    (`TestCategory!=OpenBugs&TestCategory!=HighMemory`, run before the rebase onto `a0bf3516`); after it, the layering
+    ratchets and the Creation tests on both frameworks, the snapshot of np.mgrid / np.ogrid / np.r_ / np.c_
+    byte-identical.
+  - Left for batch 7: np.ravel_multi_index (`TensorEngine.Multiarray.cs` with `astype_anyint`), the second half.
 
 - **2026-10-29, P3: batch 6, third part (np.loadtxt, np.savetxt) - batch 6 is done.** Five commits on `strings`: the
   tool commit landed first (`0f092c78`), the others were developed in the scratch worktree on it, rebased onto
