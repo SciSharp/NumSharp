@@ -295,9 +295,12 @@ namespace NumSharp
 
             // Phase C gate (see the getter): NumPy prepare_index classification + validation up front,
             // so a structurally invalid assignment tuple raises the NumPy IndexError instead of letting
-            // the Try* stack scatter through a malformed shape.
-            if (indicesLen != 1)
-                PrepareIndex(this.Shape, indicesObjects);
+            // the Try* stack scatter through a malformed shape. Every key that reaches this point is validated, a
+            // lone entry the switch above does not serve too (a float, a float16, a complex: NumPy's invalid-index
+            // IndexError, which the value's conversion below used to pre-empt — np.zeros(3, uint8)[1.5] = -1 raised
+            // the OverflowError). The index ARRAYS' values are not scanned yet: NumPy checks them in its MapIter,
+            // after the value's conversion (ScanIndexArrayBounds below).
+            var prepared = PrepareIndex(this.Shape, indicesObjects, scanFancyBounds: false);
 
             // A C# literal (NDArray.WasPythonLiteral) is NumPy's Python scalar, packed into this dtype with NumPy's range
             // checks (PyArray_Pack) once, here: after prepare_index (its integer-bounds IndexError comes first, as
@@ -306,6 +309,10 @@ namespace NumSharp
             // component is NumPy's PyArray_FromAny route (a NumPy scalar is cast); a basic-only tuple is a view
             // assignment, PyArray_Pack's route.
             values = PackForStore(values, typecode, pyArrayPackRoute: !HasAdvancedIndex(indicesObjects));
+
+            // MapIter's check of the index arrays' values, after the conversion as in NumPy (a[[0, 99], 0] = 1000 on int8
+            // is the OverflowError above, not this IndexError) and before any Try* route below scatters.
+            ScanIndexArrayBounds(this.Shape, prepared);
 
             // A 0-d boolean (np.array(True)/np.array(False)) mixed with basic indices: True
             // assigns through the size-1 newaxis view (which aliases this, value broadcasting

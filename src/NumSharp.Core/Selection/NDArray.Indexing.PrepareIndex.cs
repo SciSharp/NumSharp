@@ -518,6 +518,54 @@ namespace NumSharp
             }
         }
 
+        /// <summary>
+        ///     The bounds check of the integer index ARRAYS' values that <see cref="PrepareIndex"/> skips under
+        ///     <c>scanFancyBounds: false</c>: NumPy runs it in its MapIter, which a store reaches only AFTER converting its
+        ///     value — so the setter calls this between the conversion and the scatter (<c>a[[0, 99], 0] = 1000</c> on an int8
+        ///     array is the conversion's OverflowError, not this IndexError).
+        /// </summary>
+        /// <param name="shape">The shape the index was prepared against.</param>
+        /// <param name="prepared">What <see cref="PrepareIndex"/> returned for it.</param>
+        /// <exception cref="IndexError">An index-array value outside <c>[-dim, dim)</c> for the axis it acts on (NumPy's
+        ///     text, <see cref="ScanFancyBounds"/>).</exception>
+        /// <remarks>Walks the ops in order with <see cref="PrepareIndex"/>'s own axis bookkeeping (an ellipsis spans its fill,
+        ///     a new axis and a 0-d bool consume none) and, like its inline check, reads nothing when the advanced block
+        ///     broadcasts to an EMPTY result: nothing is gathered or scattered then, so NumPy never reads the values.</remarks>
+        internal static void ScanIndexArrayBounds(Shape shape, PreparedIndex prepared)
+        {
+            var ops = prepared.Ops;
+            foreach (var op in ops)
+            {
+                switch (op.Kind)
+                {
+                    case IndexKind.Fancy:
+                    case IndexKind.ZeroDBool:
+                        // An advanced entry of size 0 makes the whole broadcast block empty: no value is read.
+                        if (op.Array is not null && op.Array.size == 0)
+                            return;
+                        break;
+                }
+            }
+
+            var dims = shape.dimensions;
+            int axis = 0;
+            foreach (var op in ops)
+            {
+                switch (op.Kind)
+                {
+                    // An integer index array (Value -1); a bool-derived one (Value > 0) had its axis size checked already.
+                    case IndexKind.Fancy when op.Value <= 0:
+                        ScanFancyBounds(op.Array, dims[axis], axis);
+                        axis += 1;
+                        break;
+                    case IndexKind.Ellipsis: axis += (int)op.Value; break;
+                    case IndexKind.NewAxis:
+                    case IndexKind.ZeroDBool: break;     // consume no source axis
+                    default: axis += 1; break;
+                }
+            }
+        }
+
         private static bool DimsEqual(long[] a, long[] b)
         {
             if (a.Length != b.Length) return false;
