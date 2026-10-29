@@ -29,7 +29,8 @@
 // FourierModule, called on np.fft; "NDArray.f" every public instance overload declared on NDArray;
 // "NDArray.op_X" every public static operator overload declared on NDArray (op_Equality, op_UnaryPlus, ...), whose first
 // NDArray parameter is the operand; "NDMatrix.f" every public instance overload declared on NDMatrix, called on
-// np.asmatrix of each operand (a layout asmatrix refuses, the 3-D ones, is SKIP) with an out= variant made a matrix too.
+// np.asmatrix of each operand (a layout asmatrix refuses, the 3-D ones, is SKIP) with an out= variant made a matrix too;
+// "np.r_" and "np.c_" the indexer of the object (np.AxisConcatenator's this[params object[] key]), called on it.
 // Each output line is "<case id> TAB <outcome>":
 //   case id  = the overload's signature | the operand's label | the varied parameter and its value label
 //   outcome  = ARR class dtype (shape) flags hash [is_out] [OUT hash] [MUTATED in=hash]   for an NDArray result
@@ -126,7 +127,10 @@
 // extra args, constants) and its extra args, np.delete's boolean-mask obj (a C# bool[]), and np.pad's pad_width in each
 // C# form (an int, an int[], an int[,] built from the operand's rank, a (before, after) tuple, a dict), its mode (every
 // name NumPy has, one it refuses, two callables from a menu NumPy names alike, null), its constant_values / end_values /
-// stat_length / reflect_type and a callable's kwargs (PadArgLabels); an overload with a required parameter of another
+// stat_length / reflect_type and a callable's kwargs (PadArgLabels), np.ix_'s sequences (IxArgsLabels: the operand, its
+// flattened values, masks, C# arrays and lists, empty ones of both kinds, refused ranks, None) and np.r_ / np.c_'s key
+// (ConcatKeyLabels: the operand beside C# scalars of every kind, arrays, slices and every directive form); an overload
+// with a required parameter of another
 // kind is reported once as SKIP. An int
 // axis
 // starts from its default when it has one. A search function (np.searchsorted) runs on pools of 1-D haystacks: sorted,
@@ -277,12 +281,18 @@ static class Snapshot
         string name = target.Substring((onLinalg || onEmath || onFft ? target.LastIndexOf('.') : target.IndexOf('.')) + 1);
         bool onNDArray = target.StartsWith("NDArray.", StringComparison.Ordinal);
         bool onMatrix = target.StartsWith("NDMatrix.", StringComparison.Ordinal);
+        // np.r_ / np.c_ name the indexer of the object (np.AxisConcatenator's get_Item), called on that object.
+        bool onConcatenator = target is "np.r_" or "np.c_";
+        if (onConcatenator)
+            IndexerReceiver = target == "np.r_" ? np.r_ : np.c_;
         // An operator is a static method of NDArray whose first NDArray parameter is the operand, as np.f's is; so is a
         // static factory of NDArray (NDArray.Scalar, NDArrayStaticTargets), whose first parameter is the coercion family's
         // host operand.
         bool instance = (onNDArray && !name.StartsWith("op_", StringComparison.Ordinal) && !NDArrayStaticTargets.Contains(name))
                         || onMatrix;
-        var methods = (onMatrix
+        var methods = (onConcatenator
+                ? typeof(np.AxisConcatenator).GetMethods(BindingFlags.Public | BindingFlags.Instance).Where(m => m.Name == "get_Item")
+                : onMatrix
                 ? typeof(NDMatrix).GetMethods(BindingFlags.Public | BindingFlags.Instance).Where(m => m.DeclaringType == typeof(NDMatrix))
                 : instance
                     ? typeof(NDArray).GetMethods(BindingFlags.Public | BindingFlags.Instance).Where(m => m.DeclaringType == typeof(NDArray))
@@ -295,7 +305,7 @@ static class Snapshot
                                 : onFft
                                     ? typeof(FourierModule).GetMethods(BindingFlags.Public | BindingFlags.Instance).Where(m => m.DeclaringType == typeof(FourierModule))
                                     : typeof(np).GetMethods(BindingFlags.Public | BindingFlags.Static))
-            .Where(m => m.Name == name)
+            .Where(m => onConcatenator || m.Name == name)
             // a generic overload runs closed over the types the snapshot gives it (np.copyto<T>), else not at all
             .SelectMany(m => m.IsGenericMethodDefinition ? SnapshotInstantiations(m) : new[] { m })
             .Select(m => (Method: m, Signature: Signature(target, m)))
@@ -314,6 +324,9 @@ static class Snapshot
     ///     The operators are static too, but they are named <c>op_X</c>, which already selects them.
     /// </summary>
     private static readonly HashSet<string> NDArrayStaticTargets = new(StringComparer.Ordinal) { "Scalar" };
+
+    /// <summary>The object a target <c>np.r_</c> / <c>np.c_</c> calls its indexer on (set by <see cref="Run"/>).</summary>
+    private static object IndexerReceiver;
 
     /// <summary>A stable text for an overload: the target, a closed generic overload's type arguments, and its parameter
     ///     types and names.</summary>
@@ -552,7 +565,7 @@ static class Snapshot
          && p.Member.Name is "take" or "put" or "putmask" or "place" or "repeat" or "choose" or "compress" or "resize")
         || (p.Member.DeclaringType == typeof(NDArray)
             && p.Member.Name is "take" or "put" or "repeat" or "choose" or "compress" or "resize")
-        || IsAlongAxis(p) || IsFillDiagonal(p) || IsSelect(p) || IsPiecewise(p) || IsPad(p);
+        || IsAlongAxis(p) || IsFillDiagonal(p) || IsSelect(p) || IsPiecewise(p) || IsPad(p) || IsIndexTricks(p);
 
     /// <summary>Whether a parameter belongs to np.select, whose condition list, choice list and default are all built from
     ///     the pool operand (<see cref="SelectCondLabels"/>, <see cref="SelectChoiceLabels"/>, <see cref="SelectDefaultLabels"/>):
@@ -621,6 +634,8 @@ static class Snapshot
                 : null;
         if (IsPad(p))
             return PadArgLabels(p);
+        if (IsIndexTricks(p))
+            return IndexTricksArgLabels(p);
         if (IsAlongAxis(p) || IsFillDiagonal(p)) return null;
         if (n == "indices" && t == typeof(NDArray)) return ItemIndicesLabels;
         if (n == "index" && t == typeof(long)) return ItemIndexLabels;
@@ -1022,6 +1037,118 @@ static class Snapshot
     }
 
     /// <summary>
+    ///     Whether a parameter belongs to NumPy's index tricks with no array parameter of their own: np.ix_'s sequences and the
+    ///     key of np.r_ / np.c_'s indexer (<see cref="np.AxisConcatenator"/>'s <c>this[params object[] key]</c>, a target
+    ///     <c>np.r_</c> or <c>np.c_</c>), both built from the pool operand (<see cref="IxArgsLabels"/>,
+    ///     <see cref="ConcatKeyLabels"/>).
+    /// </summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True for np.ix_'s <c>args</c> and the concatenator's <c>key</c>.</returns>
+    private static bool IsIndexTricks(ParameterInfo p) =>
+        (p.Member.DeclaringType == typeof(np) && p.Member.Name == "ix_")
+        || (p.Member.DeclaringType == typeof(np.AxisConcatenator) && p.Member.Name == "get_Item");
+
+    /// <summary>
+    ///     np.ix_'s sequences, each built from the pool operand: the operand itself (1-D works, any other rank is NumPy's
+    ///     "Cross index must be 1 dimensional"), its flattened values twice, beside a bool mask of its size, a bool mask
+    ///     alone, an int32 C# array (an ndarray of the house map), an EMPTY int32 C# array (an ndarray: no intp cast), an
+    ///     EMPTY object[] (a Python list: float64 cast to intp), a float C# array, an object[] of C# ints (a list: int64), a
+    ///     2-D C# array, a 0-d array, null (NumPy's None), and no sequence at all.
+    /// </summary>
+    private static readonly string[] IxArgsLabels =
+    {
+        "op", "flat,flat", "flat,mask", "mask", "i32[0,2]", "i32[]", "obj[]", "f64[0.5,1.5]", "obj[1,2]", "i32[,]", "0d",
+        "null", "none",
+    };
+
+    /// <summary>
+    ///     The key of np.r_ / np.c_, built from the pool operand (a slice is a string with a colon, a special directive a
+    ///     string without one, as the indexer reads them): the operand alone (the base), twice, beside each kind of C#
+    ///     scalar (a Python int, a negative one, one past int8, a float, a bool, a complex, an int past int64, the NumPy
+    ///     scalar np.float16 a Half is, a strong 0-d array), beside an int8 array and a text array, after an int slice,
+    ///     beside a float slice, an imaginary-step slice and an open slice, each directive form (an axis, a negative axis,
+    ///     axis and ndmin, axis / ndmin / trans1d, the matrix letters, two refused ones), a directive alone, no entry at all,
+    ///     and a non-colon string after the first entry (NumPy's "special directives must be the first entry.").
+    /// </summary>
+    private static readonly string[] ConcatKeyLabels =
+    {
+        "op", "op,op", "op,5", "op,-1", "op,1000", "op,2.5", "op,true", "op,c128", "op,u64max", "op,f16", "op,0d_i64",
+        "op,i8[1,2]", "op,U[ab]", "0:3,op", "op,0.5:2:0.5", "op,0:1:3j", "op,2:", "d0,op,op", "d-1,op,op", "d0,2,op,op",
+        "d1,2,0,op", "dr,op", "dc,op", "dq,op", "d0,q,op", "d0", "none", "op,x",
+    };
+
+    /// <summary>The labels of an index-tricks parameter (<see cref="IsIndexTricks"/>).</summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>The labels <see cref="MakeIndexTricksArg"/> builds.</returns>
+    private static string[] IndexTricksArgLabels(ParameterInfo p) =>
+        p.Member.Name == "ix_" ? IxArgsLabels : ConcatKeyLabels;
+
+    /// <summary>
+    ///     Builds np.ix_'s sequences or the concatenator's key for an operand (see <see cref="IxArgsLabels"/>,
+    ///     <see cref="ConcatKeyLabels"/>).
+    /// </summary>
+    /// <param name="p">The parameter.</param>
+    /// <param name="label">The variant label.</param>
+    /// <param name="operand">The pool operand.</param>
+    /// <returns>The <c>object[]</c> the params parameter receives.</returns>
+    /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
+    private static object MakeIndexTricksArg(ParameterInfo p, string label, NDArray operand)
+    {
+        long size = operand.size;
+        NDArray Mask() => np.array(Enumerable.Range(0, (int)size).Select(i => i % 2 == 0).ToArray());
+        if (p.Member.Name == "ix_")
+            return label switch
+            {
+                "op" => new object[] { operand },
+                "flat,flat" => new object[] { operand.flatten(), operand.flatten() },
+                "flat,mask" => new object[] { operand.flatten(), Mask() },
+                "mask" => new object[] { Mask() },
+                "i32[0,2]" => new object[] { new[] { 0, 2 } },
+                "i32[]" => new object[] { Array.Empty<int>() },
+                "obj[]" => new object[] { Array.Empty<object>() },
+                "f64[0.5,1.5]" => new object[] { new[] { 0.5, 1.5 } },
+                "obj[1,2]" => new object[] { new object[] { 1, 2 } },
+                "i32[,]" => new object[] { new[,] { { 0, 1 }, { 1, 0 } } },
+                "0d" => new object[] { np.array(5L) },
+                "null" => new object[] { null },
+                "none" => Array.Empty<object>(),
+                _ => throw new ArgumentException("unknown ix_ variant " + label),
+            };
+        return label switch
+        {
+            "op" => new object[] { operand },
+            "op,op" => new object[] { operand, operand },
+            "op,5" => new object[] { operand, 5 },
+            "op,-1" => new object[] { operand, -1 },
+            "op,1000" => new object[] { operand, 1000 },
+            "op,2.5" => new object[] { operand, 2.5 },
+            "op,true" => new object[] { operand, true },
+            "op,c128" => new object[] { operand, new Complex(1, 2) },
+            "op,u64max" => new object[] { operand, ulong.MaxValue },
+            "op,f16" => new object[] { operand, (Half)1.5 },
+            "op,0d_i64" => new object[] { operand, NDArray.Scalar(1L) },
+            "op,i8[1,2]" => new object[] { operand, np.array(new sbyte[] { 1, 2 }) },
+            "op,U[ab]" => new object[] { operand, np.array(new[] { "ab" }) },
+            "0:3,op" => new object[] { "0:3", operand },
+            "op,0.5:2:0.5" => new object[] { operand, "0.5:2:0.5" },
+            "op,0:1:3j" => new object[] { operand, "0:1:3j" },
+            "op,2:" => new object[] { operand, "2:" },
+            "d0,op,op" => new object[] { "0", operand, operand },
+            "d-1,op,op" => new object[] { "-1", operand, operand },
+            "d0,2,op,op" => new object[] { "0,2", operand, operand },
+            "d1,2,0,op" => new object[] { "1,2,0", operand },
+            "dr,op" => new object[] { "r", operand },
+            "dc,op" => new object[] { "c", operand },
+            "dq,op" => new object[] { "q", operand },
+            "d0,q,op" => new object[] { "0,q", operand },
+            "d0" => new object[] { "0" },
+            "none" => Array.Empty<object>(),
+            "op,x" => new object[] { operand, "x" },
+            _ => throw new ArgumentException("unknown concatenator key variant " + label),
+        };
+    }
+
+    /// <summary>
     ///     Builds an np.select / np.piecewise argument for an operand (see the label sets above).
     /// </summary>
     /// <param name="p">The parameter (condlist, choicelist, default, funclist or args).</param>
@@ -1232,6 +1359,8 @@ static class Snapshot
             return MakeSelectArg(p, label, operand);
         if (IsPad(p))
             return MakePadArg(p, label, operand);
+        if (IsIndexTricks(p))
+            return MakeIndexTricksArg(p, label, operand);
         if (n == "indices")
             return label switch
             {
@@ -3750,6 +3879,14 @@ static class Snapshot
     /// <summary>The small pool of np.trim_zeros (phase C).</summary>
     private static readonly string[] TrimPairLayouts = { "zpad1d", "zpad2d", "0d" };
 
+    /// <summary>The reduced pool of np.ix_ and np.r_ / np.c_ (phase B, where their sequences and keys vary): 1-D operands
+    ///     first (np.ix_ takes only 1-D sequences, and the concatenators join a 1-D operand with the 1-D arrays their scalars
+    ///     and slices become), then the general reduced pool.</summary>
+    private static readonly string[] IndexTricksReducedLayouts = { "1d", "empty1d", "c2d", "f2d", "0d", "empty", "3d" };
+
+    /// <summary>The small pool of np.ix_ and np.r_ / np.c_ (phase C).</summary>
+    private static readonly string[] IndexTricksPairLayouts = { "1d", "c2d", "0d" };
+
     /// <summary>
     ///     The 1-D layouts np.bincount adds to the general pool (phase A): the plain prefix's magnitudes, contiguous, every
     ///     other element and reversed. The general pool's 1-D operands hold negative values, which a signed dtype refuses
@@ -3801,7 +3938,10 @@ static class Snapshot
                         ? (Layouts.Concat(BincountLayouts).ToArray(), BincountReducedLayouts, BincountPairLayouts)
                         : m.DeclaringType == typeof(np.linalg)
                             ? (LinalgLayouts, LinalgReducedLayouts, LinalgPairLayouts)
-                            : (Layouts, ReducedLayouts, PairLayouts);
+                            : (m.Name == "ix_" && m.DeclaringType == typeof(np))
+                              || (m.Name == "get_Item" && m.DeclaringType == typeof(np.AxisConcatenator))
+                                ? (Layouts, IndexTricksReducedLayouts, IndexTricksPairLayouts)
+                                : (Layouts, ReducedLayouts, PairLayouts);
 
     /// <summary>
     ///     Snapshots one overload: phase A over the full operand pool, phase B varying each parameter on the reduced pool,
@@ -4945,7 +5085,9 @@ static class Snapshot
     /// <exception cref="ArgumentException">A module class the tool does not know: its module object would have to be named
     ///     here first.</exception>
     private static object ModuleReceiver(MethodInfo m) =>
-        m.DeclaringType == typeof(EmathModule)
+        m.DeclaringType == typeof(np.AxisConcatenator)
+            ? IndexerReceiver
+            : m.DeclaringType == typeof(EmathModule)
             ? np.emath
             : m.DeclaringType == typeof(FourierModule)
                 ? np.fft
