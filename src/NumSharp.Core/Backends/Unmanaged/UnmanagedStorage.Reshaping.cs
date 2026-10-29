@@ -226,7 +226,10 @@ namespace NumSharp.Backends
                 byte* src = self.Storage.Address + shape.offset * itemsize;
                 byte* dst = fresh.Storage.Address;
                 long copyBytes = Math.Min(oldBytes, newBytes);
-                if (self.Storage.IsVString)
+                // PyArray_ClearBuffer's PyDataType_REFCHK(PyArray_DESCR(self)), which PyArray_Resize calls on the
+                // dropped tail: the items of a reference-holding dtype (StringDType) are released through the dtype, and
+                // as this reallocation moves the kept items to a new buffer, they are duplicated, never copied as raw bytes.
+                if (self.dtype.Meta.HasReferences)
                 {
                     // A StringDType buffer: the surviving cells are DUPLICATED into the fresh buffer's own allocator (a raw
                     // copy would leave arena offsets and heap pointers that only the old allocator can read, and the old

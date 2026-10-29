@@ -110,7 +110,9 @@ namespace NumSharp.Backends
             if (@out is not null)
                 ValidateTakeOut(a, @out, outDims);
 
-            if (a.Storage.IsVString)
+            // npy_fasttake's needs_refcounting, PyDataType_REFCHK(PyArray_DESCR(self)): the items of a reference-holding
+            // dtype (StringDType is the only one) are copied by the dtype, never as raw bytes.
+            if (a.dtype.Meta.HasReferences)
             {
                 // A StringDType source, after every check NumPy runs before its gather: the same take runs on the source's
                 // cell view (it repeats those checks and raises the empty-axis and bounds errors with this array's shapes),
@@ -451,7 +453,9 @@ namespace NumSharp.Backends
             bool overlaps =
                 NDMemOverlap.SolveMayShareMemory(a, vals, maxWork: 0) != MemOverlap.No ||
                 NDMemOverlap.SolveMayShareMemory(a, idx64, maxWork: 0) != MemOverlap.No;
-            if (a.Storage.IsVString)
+            // PyArray_PutTo's has_references, PyDataType_REFCHK(PyArray_DESCR(self)): a reference-holding target
+            // (StringDType) receives its items through the dtype's copy, never as raw bytes.
+            if (a.dtype.Meta.HasReferences)
             {
                 // A StringDType target: the same put runs on marks (the values' element numbers, cycled by the numeric put
                 // with its mode), and the marked elements receive the strings. NumPy writes a contiguous target that
@@ -682,7 +686,9 @@ namespace NumSharp.Backends
 
             // The values in a's element type, C-contiguous (the conversion above already is).
             NDArray valsCast = source.Shape.IsContiguous ? source : np.ascontiguousarray(source);
-            if (a.Storage.IsVString)
+            // PyArray_PutMask's PyDataType_REFCHK(PyArray_DESCR(self)): a reference-holding target (StringDType) receives
+            // its items through the dtype's copy, never as raw bytes.
+            if (a.dtype.Meta.HasReferences)
             {
                 // A StringDType target: the same putmask runs on marks (the values' element numbers, cycled by position)
                 // and the marked elements receive the strings.
@@ -802,7 +808,9 @@ namespace NumSharp.Backends
                 return;   // mask all-false and empty vals — NumPy treats as no-op
 
             NDArray valsCast = converted ?? (vals.Shape.IsContiguous ? vals : np.ascontiguousarray(vals));
-            if (arr.Storage.IsVString)
+            // The reference-holding route PyArray_PutMask takes (PyDataType_REFCHK of the target's descriptor). NumPy's
+            // arr_place has none: it copies each item with the dtype's ArrFuncs copyswap, which StringDType lacks.
+            if (arr.dtype.Meta.HasReferences)
             {
                 // A StringDType target: the same place runs on marks (the values' element numbers, cycled over the True
                 // positions) and the marked elements receive the strings. (NumPy 2.4.2 crashes the process here.)
@@ -939,9 +947,10 @@ namespace NumSharp.Backends
         {
             if (repeats < 0)
                 throw new ArgumentException("repeats may not contain negative values");
-            // A StringDType source: the same repeat runs on its cell view (NumPy's checks, this array's shapes) and the cells
+            // PyArray_Repeat's needs_custom_copy, PyDataType_REFCHK(PyArray_DESCR(ret)) (ret has a's descriptor). A
+            // StringDType source: the same repeat runs on its cell view (NumPy's checks, this array's shapes) and the cells
             // are duplicated (NDVStringMove) — never the raw byte kernels below.
-            if (a.Storage.IsVString)
+            if (a.dtype.Meta.HasReferences)
                 return Backends.Strings.NDVStringMove.Gather(a, cells => np.repeat(cells, repeats, axis));
 
             if (axis is null)
@@ -971,9 +980,10 @@ namespace NumSharp.Backends
         /// </remarks>
         internal static NDArray Repeat(NDArray a, NDArray repeats, int? axis)
         {
-            // A StringDType source: the same repeat runs on its cell view (the repeats' checks and the axis check are the
+            // PyArray_Repeat's needs_custom_copy, PyDataType_REFCHK(PyArray_DESCR(ret)) (ret has a's descriptor). A
+            // StringDType source: the same repeat runs on its cell view (the repeats' checks and the axis check are the
             // numeric route's, in NumPy's order) and the cells are duplicated (NDVStringMove).
-            if (a.Storage.IsVString)
+            if (a.dtype.Meta.HasReferences)
                 return Backends.Strings.NDVStringMove.Gather(a, cells => np.repeat(cells, repeats, axis));
 
             // NumPy parity: the repeats' rank is checked before its dtype (PyArray_FromAny's depth check, then the cast).
@@ -1447,7 +1457,10 @@ namespace NumSharp.Backends
             // element came from); every cell is then duplicated through its own choice's allocator. (NumPy 2.4.2 copies the
             // raw cells of a StringDType choose, so strings longer than 15 bytes from any choice but the result's own
             // descriptor read garbage there; this gives the values NumPy's choose means.)
-            if (stringDescr?.Meta is VStringDTypeMeta)
+            // PyArray_Choose's PyDataType_REFCHK(dtype), on the common descriptor: a reference-holding result
+            // (StringDType) is assembled through the dtype's copy.
+            DType resultDescr = stringDescr ?? (DType)dtype;
+            if (resultDescr.Meta.HasReferences)
             {
                 var cellChoices = new object[n];
                 var numbers = new object[n];
@@ -1460,12 +1473,12 @@ namespace NumSharp.Backends
                 }
                 var raw = ChooseCore(idx64, cellChoices, null, mode);
                 var which = ChooseCore(idx64, numbers, null, mode);
-                var chosen = Backends.Strings.NDVStringMove.RehomeMulti(raw, which, slices, stringDescr);
+                var chosen = Backends.Strings.NDVStringMove.RehomeMulti(raw, which, slices, resultDescr);
                 return FinishChoose(chosen, @out);
             }
 
             // ── 6) allocate the fresh C-contiguous result (common dtype) ──────────────────
-            var result = new NDArray(stringDescr ?? (DType)dtype, Shape.Adopt((long[])resultDims.Clone()), false);
+            var result = new NDArray(resultDescr, Shape.Adopt((long[])resultDims.Clone()), false);
             long totalSize = result.size;
 
             if (totalSize == 0)
@@ -1729,9 +1742,9 @@ namespace NumSharp.Backends
             NDArray condition, NDArray a, int? axis, NDArray @out, out NDArray result)
         {
             result = null;
-            // A StringDType source takes the generic path (flatnonzero + np.take, whose StringDType gather duplicates the
-            // cells); this kernel copies elements as raw bytes.
-            if (a.Storage.IsVString) return false;
+            // A reference-holding source (PyDataType_REFCHK; StringDType) takes the generic path (flatnonzero + np.take,
+            // whose StringDType gather duplicates the cells); this kernel copies elements as raw bytes.
+            if (a.dtype.Meta.HasReferences) return false;
             if (condition.GetTypeCode != NPTypeCode.Boolean) return false;
             if (!condition.Shape.IsContiguous) return false;
             if (!a.Shape.IsContiguous) return false;
@@ -1888,9 +1901,10 @@ namespace NumSharp.Backends
             // so normalize to C-order dims — independent of any strides carried by new_shape.
             var outShape = Shape.Adopt(newDims);
 
-            // A StringDType source: the same tiling runs on its cell view and the cells are duplicated (NDVStringMove); an
-            // empty source or result is NumPy's zeros_like ('' elements).
-            if (a.Storage.IsVString)
+            // A reference-holding source (PyDataType_REFCHK; StringDType): the same tiling runs on its cell view and the
+            // cells are duplicated (NDVStringMove), as NumPy's concatenate copies them through the dtype; an empty source or
+            // result is NumPy's zeros_like ('' elements).
+            if (a.dtype.Meta.HasReferences)
             {
                 if (a.size == 0 || newSize == 0)
                     return np.zeros(outShape, a.dtype);
