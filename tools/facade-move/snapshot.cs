@@ -26,7 +26,8 @@
 // pools of square matrices, stacks, rectangles and empties, see LinalgLayouts); "np.emath.f" every public instance overload
 // declared on the module class EmathModule, called on np.emath (its first array parameter is the operand, logn's x and
 // power's exponent p are the second operand); "np.fft.f" every public instance overload declared on the module class
-// FourierModule, called on np.fft; "NDArray.f" every public instance overload declared on NDArray;
+// FourierModule, called on np.fft; "NDArray.f" every public instance overload declared on NDArray (its indexer's
+// accessors are "NDArray.get_Item" and "NDArray.set_Item");
 // "NDArray.op_X" every public static operator overload declared on NDArray (op_Equality, op_UnaryPlus, ...), whose first
 // NDArray parameter is the operand; "NDMatrix.f" every public instance overload declared on NDMatrix, called on
 // np.asmatrix of each operand (a layout asmatrix refuses, the 3-D ones, is SKIP) with an out= variant made a matrix too;
@@ -146,7 +147,12 @@
 // flattened values, masks, C# arrays and lists, empty ones of both kinds, refused ranks, None) and np.r_ / np.c_'s key
 // (ConcatKeyLabels: the operand beside C# scalars of every kind, arrays, slices and every directive form), and
 // np.apply_along_axis's func1d from a fixed menu NumPy names alike and its extra args (ApplyFuncLabels,
-// ApplyArgsLabels); an overload
+// ApplyArgsLabels), and NDArray's indexers' (get_Item / set_Item, __setitem__ and the fancy pair GetIndices / SetIndices:
+// the key, built from the operand's rank - integers of every C# kind, slice notation, Slice objects, the ellipsis and new
+// axes, C# bools and tuples, index arrays of several dtypes, ranks and layouts, masks, mixed advanced indices and the
+// entries NumPy or C# refuses; IndexKeyLabels -, the fancy pair's index list, and the stored value - the selection's own
+// values reversed, C# literals, text, 0-d and one-element arrays, None, a Python int past every C# integer, a list, a shape
+// that does not broadcast; IndexValueLabels / IndexObjectValueLabels); an overload
 // with a required parameter of another
 // kind is reported once as SKIP. An int
 // axis
@@ -612,7 +618,7 @@ static class Snapshot
         || (p.Member.DeclaringType == typeof(NDArray)
             && p.Member.Name is "take" or "put" or "repeat" or "choose" or "compress" or "resize")
         || IsAlongAxis(p) || IsFillDiagonal(p) || IsSelect(p) || IsPiecewise(p) || IsPad(p) || IsIndexTricks(p)
-        || IsApplyAlongAxis(p);
+        || IsApplyAlongAxis(p) || IsIndexer(p);
 
     /// <summary>Whether a parameter belongs to np.select, whose condition list, choice list and default are all built from
     ///     the pool operand (<see cref="SelectCondLabels"/>, <see cref="SelectChoiceLabels"/>, <see cref="SelectDefaultLabels"/>):
@@ -666,6 +672,304 @@ static class Snapshot
     private static bool IsPad(ParameterInfo p) =>
         p.Member.DeclaringType == typeof(np) && p.Member.Name == "pad";
 
+    // ---- NDArray's indexers (P3 batch 8): get_Item / set_Item, __setitem__, GetIndices / SetIndices ------------------
+
+    /// <summary>
+    ///     Whether a parameter belongs to an indexer member of NDArray: the indexer's accessors <c>get_Item</c> /
+    ///     <c>set_Item</c> (NumPy's <c>ndarray.__getitem__</c> / <c>__setitem__</c> with an NDArray value), the protocol
+    ///     member <c>__setitem__</c> (any C# value, Python's None included) and the public fancy pair <c>GetIndices</c> /
+    ///     <c>SetIndices</c>. Their key, index list and stored value take <see cref="IndexerArgLabels"/> through the
+    ///     item-selection wiring (<see cref="MakeIndexerArg"/>); GetIndices' <c>out</c> takes the general out role, whose
+    ///     variants follow the result of the same call without it.
+    /// </summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True for a parameter of one of those public instance members declared on NDArray. <c>__getitem__</c> is left
+    ///     out on purpose: it is <c>this[ItemKey(key)]</c>, the getter's own lines again.</returns>
+    private static bool IsIndexer(ParameterInfo p) =>
+        p.Member.DeclaringType == typeof(NDArray)
+        && p.Member.Name is "get_Item" or "set_Item" or "__setitem__" or "GetIndices" or "SetIndices";
+
+    /// <summary>
+    ///     The variant labels of an indexer parameter, the base first.
+    /// </summary>
+    /// <param name="p">The parameter (of an <see cref="IsIndexer"/> member).</param>
+    /// <returns><see cref="IndexKeyLabels"/> for a key, <see cref="IndexListLabels"/> for the fancy pair's index list,
+    ///     <see cref="IndexValueLabels"/> for an NDArray value, <see cref="IndexObjectValueLabels"/> for
+    ///     <c>__setitem__</c>'s object value; null for GetIndices' <c>out</c>, which takes the general out role.</returns>
+    private static string[] IndexerArgLabels(ParameterInfo p)
+    {
+        Type t = p.ParameterType;
+        if (p.Name == "key")
+            return IndexKeyLabels;
+        if (p.Name == "indices" && t == typeof(NDArray[]))
+            return IndexListLabels;
+        if (p.Name is "value" or "values" && t == typeof(NDArray))
+            return IndexValueLabels;
+        if (p.Name == "value" && t == typeof(object))
+            return IndexObjectValueLabels;
+        return null;
+    }
+
+    /// <summary>
+    ///     The indexer's keys, the base first, each an index tuple built from the operand's rank and dimensions
+    ///     (<see cref="MakeIndexKey"/>).
+    ///     Basic: integers of each C# kind (an int, a negative one, one past every axis, a long, a short, a ulong, a char),
+    ///     slice notation (<c>":"</c>, <c>"1:"</c>, <c>"::-1"</c>, <c>"::2"</c>, <c>"1:3"</c>, and the lone <c>"..., 0"</c>
+    ///     that holds a whole index), the ellipsis, a new axis, one zero per axis and one more than the rank, a C# tuple entry,
+    ///     C# true / false (NumPy's 0-d bools), a <see cref="Slice"/> object, and the entries NumPy refuses or C# alone has
+    ///     (a double, null, text that is not slice notation).
+    ///     Advanced: integer index arrays (int64, int32, uint8; an int[], a long[], a List of int; empty, out of bounds, 2-D,
+    ///     0-d, F-ordered 2-D, a strided view and a C-contiguous view at an offset), two arrays, an array beside a slice on
+    ///     either side, split by a slice, after an ellipsis, a new axis or an integer, an F-ordered 2-D array after a slice,
+    ///     masks (of the operand's shape, of the first axis as an NDArray and as a bool[], a wrong length, 0-d, beside a slice
+    ///     on either side), and the index arrays NumPy refuses (float64, text).
+    /// </summary>
+    private static readonly string[] IndexKeyLabels =
+    {
+        "int0", "intneg1", "int99", "long1", "short1", "ulong1", "char1",
+        "colon", "from1", "rev", "step2", "s1to3", "lone", "ell", "new", "allzero", "toomany", "tuple", "true", "false",
+        "sliceobj", "double", "null", "badtext",
+        "ia", "ia32", "iau8", "intarr", "longarr", "list", "iaempty", "iaoob", "ia2d", "ia0d", "iaf", "iastrided",
+        "iaoffset", "twoia", "colonia", "iacolon", "split", "ellia", "newia", "intia", "coloniaf",
+        "mask", "mask0", "boolarr", "maskbad", "mask0d", "maskcolon", "colonmask", "fia", "tia",
+    };
+
+    /// <summary>
+    ///     The fancy pair's index lists (one array per leading axis), the base first: one int64 array, two, an empty one, an
+    ///     out-of-bounds index, an int32 array, the float64 array NumPy refuses, a bool array (a mask of the first axis), one
+    ///     more array than the operand has axes, no array, and null.
+    /// </summary>
+    private static readonly string[] IndexListLabels =
+        { "one", "two", "empty", "oob", "i32", "f64", "bool", "toomany", "none", "null" };
+
+    /// <summary>
+    ///     The NDArray values the indexer setters store, the base first: the selection's own values reversed along its first
+    ///     axis (<c>"selrev"</c>, built from the key of the same call by <see cref="ResolveIndexerSelection"/>), C# literals
+    ///     through NDArray's implicit conversions (NumPy's Python int 7, Python float 2.5 and the str <c>"3"</c>), a 0-d
+    ///     array of the operand's dtype (a strong value), a one-element array of it, an int64 array of five elements (which
+    ///     broadcasts only to a last axis of 5 or 1), a one-element float64 array, and null.
+    /// </summary>
+    private static readonly string[] IndexValueLabels =
+        { "selrev", "lit7", "lit2_5", "littext", "zero_d", "one", "five", "f64", "null" };
+
+    /// <summary>
+    ///     <c>__setitem__</c>'s values, the base first: the selection's values reversed (an NDArray, see
+    ///     <see cref="IndexValueLabels"/>), C# numbers as Python's int and float, a bool, a negative int (out of range for
+    ///     the unsigned dtypes), a str, a Python int past every C# integer (a <see cref="BigInteger"/>), a Python list, and
+    ///     None.
+    /// </summary>
+    private static readonly string[] IndexObjectValueLabels =
+        { "selrev", "int7", "dbl", "bool", "neg", "str", "big", "list", "none" };
+
+    /// <summary>
+    ///     The reduced pool of the indexer members (phase B): every layout of the full pool but two of the special-value ones,
+    ///     because indexing moves elements whatever their values, while strides, offsets, broadcasting and the rank decide
+    ///     which elements move.
+    /// </summary>
+    private static readonly string[] IndexerReducedLayouts =
+        { "c2d", "f2d", "strided", "reversed", "bcast", "0d", "empty", "empty1d", "1d", "3d", "3d_special" };
+
+    /// <summary>The pair pool of the indexer members (phase C: key x value, index list x out or values).</summary>
+    private static readonly string[] IndexerPairLayouts = { "c2d", "3d", "0d", "1d" };
+
+    /// <summary>
+    ///     The stand-in <see cref="MakeIndexerArg"/> returns for a <c>"selrev"</c> value: the value depends on the key of the
+    ///     same call, which the builder does not see, so <see cref="ResolveIndexerSelection"/> replaces it before the call.
+    /// </summary>
+    private static readonly object IndexSelectionPending = new();
+
+    /// <summary>
+    ///     Builds an indexer argument (<see cref="Role.ItemArg"/>) for an operand.
+    /// </summary>
+    /// <param name="p">The parameter, whose name and type select the label set (<see cref="IndexerArgLabels"/>).</param>
+    /// <param name="label">The variant.</param>
+    /// <param name="operand">The pool operand (the keys, masks and index lists are built from its rank and dimensions, the
+    ///     zero and one-element values from its dtype).</param>
+    /// <returns>The key as the <c>object[]</c> tuple (<c>__setitem__</c>'s object key receives the same tuple, which
+    ///     <c>NDArray.ItemKey</c> keeps whole), the index list as an <c>NDArray[]</c>, or the value (for <c>"selrev"</c>,
+    ///     <see cref="IndexSelectionPending"/>).</returns>
+    /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
+    private static object MakeIndexerArg(ParameterInfo p, string label, NDArray operand)
+    {
+        if (p.Name == "key")
+            return MakeIndexKey(label, operand);
+        if (p.Name == "indices")
+            return MakeIndexList(label, operand);
+        if (p.ParameterType == typeof(object))
+            return label switch
+            {
+                "selrev" => IndexSelectionPending,
+                "int7" => 7,
+                "dbl" => 2.5,
+                "bool" => true,
+                "neg" => -1,
+                "str" => "3",
+                "big" => BigInteger.Pow(2, 70),
+                "list" => new object[] { 1, 2 },
+                "none" => null,
+                _ => throw new ArgumentException("unknown __setitem__ value variant " + label),
+            };
+        return label switch
+        {
+            "selrev" => IndexSelectionPending,
+            // NDArray's implicit conversions, as C# source passes a literal to the setter: marked as the Python int, float
+            // and str they stand for (NDArray.PythonLiteral, PythonStrLiteral).
+            "lit7" => (NDArray)7,
+            "lit2_5" => (NDArray)2.5,
+            "littext" => (NDArray)"3",
+            "zero_d" => np.zeros(Shape.Scalar, operand.dtype),
+            "one" => np.zeros(new Shape(1), operand.dtype),
+            "five" => np.arange(5L),
+            "f64" => np.array(new[] { 0.5 }),
+            "null" => null,
+            _ => throw new ArgumentException("unknown indexer value variant " + label),
+        };
+    }
+
+    /// <summary>
+    ///     Builds an index tuple of <see cref="IndexKeyLabels"/> for an operand: the keys that need the rank (one zero per
+    ///     axis, one more than the rank) or a length (a mask of the operand's shape or of its first or second axis) read them
+    ///     from the operand; a 0-d operand's first-axis length is taken as 1.
+    /// </summary>
+    /// <param name="label">The variant.</param>
+    /// <param name="operand">The pool operand.</param>
+    /// <returns>The index tuple, one entry per C# argument of the indexer.</returns>
+    /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
+    private static object[] MakeIndexKey(string label, NDArray operand)
+    {
+        int nd = operand.ndim;
+        long[] dims = operand.Shape.Dimensions;
+        long d0 = nd >= 1 ? dims[0] : 1, d1 = nd >= 2 ? dims[1] : 1;
+        NDArray Longs(params long[] v) => np.array(v);
+        NDArray Alternating(long count) => np.array(Enumerable.Range(0, (int)count).Select(i => i % 2 == 0).ToArray());
+        object[] Zeros(int count) => Enumerable.Repeat((object)0, count).ToArray();
+        // [[0, 1], [1, 0]] laid out in F order: its memory order differs from its C order, which a gather that reads an
+        // index array by memory instead of by position gets wrong.
+        NDArray FOrderedIndex() => np.asfortranarray(Longs(0, 1, 1, 0).reshape(new Shape(2, 2)));
+        return label switch
+        {
+            "int0" => new object[] { 0 },
+            "intneg1" => new object[] { -1 },
+            "int99" => new object[] { 99 },
+            "long1" => new object[] { 1L },
+            "short1" => new object[] { (short)1 },
+            "ulong1" => new object[] { 1UL },
+            "char1" => new object[] { (char)1 },
+            "colon" => new object[] { ":" },
+            "from1" => new object[] { "1:" },
+            "rev" => new object[] { "::-1" },
+            "step2" => new object[] { "::2" },
+            "s1to3" => new object[] { "1:3" },
+            "lone" => new object[] { "..., 0" },
+            "ell" => new object[] { Slice.Ellipsis },
+            "new" => new object[] { Slice.NewAxis },
+            "allzero" => Zeros(nd),
+            "toomany" => Zeros(nd + 1),
+            "tuple" => new object[] { (0, ":") },
+            "true" => new object[] { true },
+            "false" => new object[] { false },
+            "sliceobj" => new object[] { new Slice(1, null, 2) },
+            "double" => new object[] { 1.5 },
+            "null" => new object[] { null },
+            "badtext" => new object[] { "x" },
+            "ia" => new object[] { Longs(0, -1) },
+            "ia32" => new object[] { np.array(new[] { 1, 0 }) },
+            "iau8" => new object[] { np.array(new byte[] { 1 }) },
+            "intarr" => new object[] { new[] { 0, 0 } },
+            "longarr" => new object[] { new[] { -1L } },
+            "list" => new object[] { new List<int> { 0, 1 } },
+            "iaempty" => new object[] { np.array(Array.Empty<long>()) },
+            "iaoob" => new object[] { Longs(0, 99) },
+            "ia2d" => new object[] { Longs(0, -1).reshape(new Shape(2, 1)) },
+            "ia0d" => new object[] { np.array(1L) },
+            "iaf" => new object[] { FOrderedIndex() },
+            "iastrided" => new object[] { Longs(0, 9, 1, 9)["::2"] },
+            "iaoffset" => new object[] { Longs(9, 0, 1)["1:"] },
+            "twoia" => new object[] { Longs(0, 1), Longs(1, 0) },
+            "colonia" => new object[] { ":", Longs(0, -1) },
+            "iacolon" => new object[] { Longs(0, -1), ":" },
+            "split" => new object[] { Longs(0), ":", Longs(0) },
+            "ellia" => new object[] { Slice.Ellipsis, Longs(0, -1) },
+            "newia" => new object[] { Slice.NewAxis, Longs(0, -1) },
+            "intia" => new object[] { 0, Longs(0, -1) },
+            "coloniaf" => new object[] { ":", FOrderedIndex() },
+            "mask" => new object[] { nd == 0 ? np.array(true) : Alternating(operand.size).reshape(new Shape(dims)) },
+            "mask0" => new object[] { Alternating(d0) },
+            "boolarr" => new object[] { Enumerable.Range(0, (int)d0).Select(i => i % 2 == 0).ToArray() },
+            "maskbad" => new object[] { Alternating(d0 + 1) },
+            "mask0d" => new object[] { np.array(true) },
+            "maskcolon" => new object[] { Alternating(d0), ":" },
+            "colonmask" => new object[] { ":", Alternating(d1) },
+            "fia" => new object[] { np.array(new[] { 0.0 }) },
+            "tia" => new object[] { np.array(new[] { "0" }) },
+            _ => throw new ArgumentException("unknown index key variant " + label),
+        };
+    }
+
+    /// <summary>
+    ///     Builds an index list of <see cref="IndexListLabels"/> for GetIndices / SetIndices.
+    /// </summary>
+    /// <param name="label">The variant.</param>
+    /// <param name="operand">The pool operand (its rank sizes the over-long list, its first axis the bool array).</param>
+    /// <returns>The index arrays, one per leading axis, or null.</returns>
+    /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
+    private static NDArray[] MakeIndexList(string label, NDArray operand)
+    {
+        int nd = operand.ndim;
+        long d0 = nd >= 1 ? operand.Shape.Dimensions[0] : 1;
+        NDArray Longs(params long[] v) => np.array(v);
+        return label switch
+        {
+            "one" => new[] { Longs(0, -1) },
+            "two" => new[] { Longs(0, 1), Longs(1, 0) },
+            "empty" => new[] { np.array(Array.Empty<long>()) },
+            "oob" => new[] { Longs(0, 99) },
+            "i32" => new[] { np.array(new[] { 1, 0 }) },
+            "f64" => new[] { np.array(new[] { 0.0 }) },
+            "bool" => new[] { np.array(Enumerable.Range(0, (int)d0).Select(i => i % 2 == 0).ToArray()) },
+            "toomany" => Enumerable.Range(0, nd + 1).Select(_ => Longs(0)).ToArray(),
+            "none" => Array.Empty<NDArray>(),
+            "null" => null,
+            _ => throw new ArgumentException("unknown index list variant " + label),
+        };
+    }
+
+    /// <summary>
+    ///     Replaces a pending <c>"selrev"</c> value (<see cref="IndexSelectionPending"/>) with the selection's own values,
+    ///     reversed along their first axis, for the key or index list of the same call: the store then writes the selection's
+    ///     values back in another order, so a store that drops, repeats or misplaces an element changes the operand's hash.
+    /// </summary>
+    /// <param name="ps">The member's parameters (the key is named <c>key</c>, the index list <c>indices</c>).</param>
+    /// <param name="argv">The call's arguments, the key already in place; a pending value is replaced in place.</param>
+    /// <param name="operand">The pool operand the selection is read from (a copy: the call's store has not run).</param>
+    /// <remarks>
+    ///     A key the getter refuses (null, an out-of-bounds index, a refused entry) has no selection: its value is then a 0-d
+    ///     zero of the operand's dtype, so the setter still meets the key and refuses it as it would any value.
+    /// </remarks>
+    private static void ResolveIndexerSelection(ParameterInfo[] ps, object[] argv, NDArray operand)
+    {
+        for (int i = 0; i < argv.Length; i++)
+        {
+            if (!ReferenceEquals(argv[i], IndexSelectionPending))
+                continue;
+            int keyAt = Array.FindIndex(ps, q => q.Name is "key" or "indices");
+            // An NDArray[] index list is the indexer's tuple of index arrays (array covariance), as SetIndices' own
+            // StringDType route reads it.
+            object[] key = keyAt < 0 ? null : argv[keyAt] as object[];
+            NDArray value;
+            try
+            {
+                NDArray selection = operand[key].copy();
+                value = selection.ndim >= 1 ? np.flip(selection, 0).copy() : selection;
+            }
+            catch (Exception)
+            {
+                value = np.zeros(Shape.Scalar, operand.dtype);
+            }
+            argv[i] = value;
+        }
+    }
+
     /// <summary>
     ///     The variant labels of an item-selection parameter (<see cref="Role.ItemArg"/>), the base first, or null for a
     ///     parameter the family's roles do not read (its <c>a</c> / <c>arr</c> operand, <c>axis</c>, <c>out</c>,
@@ -677,6 +981,8 @@ static class Snapshot
     {
         Type t = p.ParameterType;
         string n = p.Name;
+        // NDArray's indexers first: their key, indices and value names are their own (IndexerArgLabels).
+        if (IsIndexer(p)) return IndexerArgLabels(p);
         // The along-axis pair and np.fill_diagonal first: their parameter names are the item-selection family's own.
         if (IsAlongAxis(p) && n == "indices" && t == typeof(NDArray)) return AlongIndicesLabels;
         if (IsAlongAxis(p) && n == "values" && t == typeof(NDArray)) return AlongValuesLabels;
@@ -1651,6 +1957,8 @@ static class Snapshot
             return MakeIndexTricksArg(p, label, operand);
         if (IsApplyAlongAxis(p))
             return MakeApplyArg(p, label);
+        if (IsIndexer(p))
+            return MakeIndexerArg(p, label, operand);
         if (n == "indices")
             return label switch
             {
@@ -4378,6 +4686,9 @@ static class Snapshot
                                     ? (Layouts, SaveTxtReducedLayouts, SaveTxtPairLayouts)
                                 : m.DeclaringType == typeof(np) && m.Name is "diag" or "diagflat"
                                     ? (Layouts.Concat(DiagExtraLayouts).ToArray(), DiagReducedLayouts, DiagPairLayouts)
+                                : m.DeclaringType == typeof(NDArray)
+                                  && m.Name is "get_Item" or "set_Item" or "__setitem__" or "GetIndices" or "SetIndices"
+                                    ? (Layouts, IndexerReducedLayouts, IndexerPairLayouts)
                                     : (Layouts, ReducedLayouts, PairLayouts);
 
     /// <summary>
@@ -5798,6 +6109,8 @@ static class Snapshot
                         break;
                 }
             }
+            // The indexer setters' "selrev" value: the selection's own values, which depend on the key of the same call.
+            ResolveIndexerSelection(ps, argv, operand);
             if (outParam >= 0)
             {
                 // out= follows the result of the same call without it; a call that throws leaves the operand's shape
