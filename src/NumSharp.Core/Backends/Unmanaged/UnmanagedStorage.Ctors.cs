@@ -308,41 +308,38 @@ namespace NumSharp.Backends
 
         /// <summary>
         ///     The storage-lane core behind every public <c>ones(..., dtype)</c> overload (which all take the single
-        ///     <see cref="NumSharp.DType"/> descriptor parameter, like NumPy's <c>dtype=</c>) and <c>ones_like</c>.
+        ///     <see cref="NumSharp.DType"/> descriptor parameter, like NumPy's <c>dtype=</c>) and <c>ones_like</c>: NumPy's
+        ///     <c>copyto(a, 1, casting='unsafe')</c> for a class whose elements are plain bytes, the Python int 1 converted
+        ///     ONCE by the class's <c>setitem</c> and then written into every element by the lane fill.
         /// </summary>
         /// <param name="shape">Shape of the new array. A dense layout (C, F or a KEEPORDER permutation at offset 0) is
         ///     kept, which is how <c>ones_like(a, order='K')</c> gets <c>a</c>'s memory order; any view layout is re-laid out
         ///     in C order (<see cref="Shape.ForFreshAllocation"/>).</param>
-        /// <param name="typeCode">The desired data-type for the array.</param>
-        /// <returns>A fresh, owned, writeable array of <paramref name="shape"/>'s dimensions with every element one.</returns>
+        /// <param name="dtype">The array's descriptor: a class with a storage lane whose element fits
+        ///     <see cref="ReductionInitial.SlotBytes"/> (every numeric class). The text classes take
+        ///     <c>NDArray.OnesOfText</c> instead: a fixed-width string has no lane fill, and a <c>StringDType</c> element is
+        ///     a reference into its array's allocator.</param>
+        /// <returns>A fresh, owned, writeable array of <paramref name="shape"/>'s dimensions with every element the class's
+        ///     one (True for bool, 1+0j for complex, U+0001 for NumSharp's char, 1 otherwise).</returns>
         /// <exception cref="ValueError">A dimension is negative, or the byte count overflows (<see cref="AllocationGuard"/>).</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ones.html</remarks>
-        internal static NDArray OnesCore(Shape shape, NPTypeCode typeCode)
+        /// <exception cref="NotSupportedException">The class has no storage yet (datetime64): its <c>setitem</c> and its
+        ///     storage lane do not exist.</exception>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.ones.html. The one was a switch over the storage lanes
+        ///     (a typed constant per lane); the class's <c>setitem</c> answers it now (<c>PyArray_Pack</c> of the Python
+        ///     int 1), and <c>getitem</c> boxes it as the lane's exact CLR type for the fill. A non-native descriptor stores
+        ///     swapped bytes and reads them back unswapped, so the fill value is the native one, as NumSharp stores it.
+        /// </remarks>
+        internal static unsafe NDArray OnesCore(Shape shape, DType dtype)
         {
-            object one = null;
-            switch (typeCode)
-            {
-                case NPTypeCode.Complex:
-                    one = new Complex(1d, 0d);
-                    break;
-                case NPTypeCode.Half:
-                    one = (Half)1;
-                    break;
-                case NPTypeCode.SByte:
-                    one = (sbyte)1;
-                    break;
-                case NPTypeCode.String:
-                    one = "1";
-                    break;
-                case NPTypeCode.Char:
-                    // Char is NumSharp's uint16-like numeric dtype. Numeric one is U+0001;
-                    // the printable character '1' is 0x0031 and violates the uint16 oracle.
-                    one = (char)1;
-                    break;
-                default:
-                    one = Converts.ChangeType((byte)1, typeCode);
-                    break;
-            }
+            // GetTypeCode raises the descriptive "no storage yet" for a class without one, before anything is allocated.
+            var typeCode = dtype.GetTypeCode();
+            // NumPy's copyto(a, 1, casting='unsafe') converts the Python int once and writes that one element into every
+            // slot: the class's setitem gives the element (for bool the True that NumPy's cast of the packed int64 1
+            // gives), stored into a stack slot once; getitem boxes it as the lane's CLR type for the lane fill.
+            byte* slot = stackalloc byte[ReductionInitial.SlotBytes];
+            dtype.Meta.setitem(dtype, 1L, slot, null);
+            object one = dtype.Meta.getitem(dtype, slot, null);
 
             // Allocates from shape.size directly (not via UnmanagedStorage.Allocate), so the
             // dimension guard has to be explicit here — see np.full.
@@ -404,11 +401,12 @@ namespace NumSharp.Backends
             dtype ??= NumSharp.DType.Double;
             NPTypeCode typeCode = dtype.GetTypeCode();
 
-            // An unsized string class: NumPy's array_new passes _NPY_ARRAY_ALLOW_EMPTY_STRING, so it builds an S0/U0 array
+            // An unsized descriptor (NumPy's PyDataType_ISUNSIZED: an item size of 0; in NumSharp only the S and U classes'
+            // unsized descriptors): NumPy's array_new passes _NPY_ARRAY_ALLOW_EMPTY_STRING, so it builds an S0/U0 array
             // (every element '' and every stride 0) - and over a buffer with the shape (-1,) it divides by the zero item size.
             // A NumSharp string buffer holds at least one character per element, so the request is refused here, before a
             // managed buffer is pinned, rather than silently widened to S1/U1 (np.empty's rule, which np.ndarray skips).
-            if (typeCode == NPTypeCode.String && dtype.itemsize == 0)
+            if (dtype.itemsize == 0)
                 throw new NotSupportedException(
                     $"np.ndarray with the unsized string dtype {dtype.ToString(true)}: NumPy builds a zero-width (itemsize 0) " +
                     "array here, which NumSharp's fixed-width string buffers cannot hold. Give a width: 'S1', '<U5'.");
@@ -492,9 +490,10 @@ namespace NumSharp.Backends
                 layout = layout.WithFlags(flagsToSet: ArrayFlags.WRITEABLE);
 
             // A string array allocates its descriptor's bytes (the lane alone has no width); a non-native string descriptor
-            // is allocated native, as np.empty allocates it. A StringDType array allocates zeroed cells and its own
-            // allocator (NumPy's NPY_NEEDS_INIT: every element reads as '').
-            IArraySlice slice = dtype.Meta is VStringDTypeMeta
+            // is allocated native, as np.empty allocates it. A class whose items hold references (PyDataType_REFCHK;
+            // StringDType is the only one) allocates zeroed cells and its own allocator (NumPy's NPY_NEEDS_INIT: every
+            // element reads as '').
+            IArraySlice slice = dtype.Meta.HasReferences
                 ? VStringArraySlice.Allocate(dtype, size)
                 : typeCode == NPTypeCode.String
                 ? StringArraySlice.Allocate(Backends.Strings.NDStringStorage.AllocationDescr(dtype), size, false)
@@ -555,10 +554,11 @@ namespace NumSharp.Backends
             if (!Shape.TryElementStrides(byteStrides, dims, itemSize, out long[] elementStrides, out int badAxis))
                 throw StrideSplitsElement(byteStrides, badAxis, itemSize);
 
-            // StringDType on either side of the buffer: NumPy lays any dtype over any bytes, NumSharp lays only a
-            // StringDType view over a StringDType array's cells (sharing their allocator). Raised here, after every check
-            // NumPy makes, as the exact bounds check above is.
-            if (dtype.Meta is VStringDTypeMeta || buf.VStringCells is not null)
+            // Items that hold references on either side of the buffer (the requested class's PyDataType_REFCHK, or the
+            // cells of a StringDType array buffer): NumPy lays any dtype over any bytes, NumSharp lays only a StringDType
+            // view over a StringDType array's cells (sharing their allocator). Raised here, after every check NumPy makes,
+            // as the exact bounds check above is.
+            if (dtype.Meta.HasReferences || buf.VStringCells is not null)
                 return NdarrayOverVStringCells(buf, dims, dtype, offset, elementStrides, (long)(upper - lower));
 
             // Every check has passed: from here on the buffer belongs to the result.

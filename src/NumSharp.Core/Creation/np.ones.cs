@@ -90,7 +90,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ones.html</remarks>
         public static NDArray ones(Shape shape)
         {
-            return UnmanagedStorage.OnesCore(shape, NPTypeCode.Double);
+            return UnmanagedStorage.OnesCore(shape, DType.Double);
         }
 
         /// <summary>

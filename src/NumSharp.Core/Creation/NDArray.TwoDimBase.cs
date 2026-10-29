@@ -1,6 +1,6 @@
 using System;
 using NumSharp.Backends;
-using NumSharp.Utilities;
+using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp
 {
@@ -24,13 +24,16 @@ namespace NumSharp
         /// <param name="k">The diagonal: 0 the main one, a positive value an upper one, a negative value a lower one. A
         ///     diagonal outside the matrix leaves it all zeros.</param>
         /// <param name="dtype">The dtype, or null for float64.</param>
-        /// <param name="order"><c>'C'</c> or <c>'F'</c> (<c>'A'</c> and <c>'K'</c> mean C).</param>
+        /// <param name="order"><c>'C'</c> or <c>'F'</c>, in either case.</param>
         /// <returns>A new (N, M) array: one on the diagonal, zero elsewhere.</returns>
         /// <exception cref="ArgumentException"><paramref name="N"/> or the column count is negative (<c>negative dimensions
         ///     are not allowed</c>).</exception>
-        /// <exception cref="ValueError">An order other than C, F, A or K.</exception>
+        /// <exception cref="ValueError">An order other than C or F (<c>'A'</c> and <c>'K'</c>: <c>only 'C' or 'F' order is
+        ///     permitted</c>, as NumPy's zeros refuses them); or a dtype whose <c>setitem</c> refuses the Python int 1 (a
+        ///     <c>StringDType(coerce=False)</c>), raised after the zeros are allocated and before any diagonal element is
+        ///     written.</exception>
         /// <remarks>An F-order result is the C result copied (<c>m.copy('F')</c>), so it costs a second allocation.</remarks>
-        internal static NDArray Eye(int N, int? M, int k, DType dtype, char order)
+        internal static unsafe NDArray Eye(int N, int? M, int k, DType dtype, char order)
         {
             int cols = M ?? N;
             if (N < 0)
@@ -51,24 +54,39 @@ namespace NumSharp
             if (rowEnd <= rowStart)
                 return physical == 'F' ? m.copy('F') : m;
 
-            var typeCode = resolvedType.GetTypeCode();
-            object one;
-            switch (typeCode)
+            // NumPy's `m[:M-k].flat[i::M+1] = 1`: the flat iterator's assignment converts the Python int 1 ONCE through the
+            // class's setitem (PyArray_Pack: True, 1, 1.0, 1+0j, '1' for text; a StringDType(coerce=False) refuses it, as
+            // NumPy's does) and copies that element into the other diagonal slots. Element (i, i+k) of the fresh C-ordered
+            // (N, cols) array is flat element i*cols + (i+k).
+            var descr = m.dtype;
+            var meta = descr.Meta;
+            long itemsize = descr.itemsize;
+            byte* data = m.Storage.Address;
+            IArraySlice buffer = m.Storage.InternalArray;
+            byte* first = data + ((long)rowStart * cols + (rowStart + k)) * itemsize;
+            try
             {
-                case NPTypeCode.Complex: one = new System.Numerics.Complex(1d, 0d); break;
-                case NPTypeCode.Half:    one = (Half)1; break;
-                case NPTypeCode.SByte:   one = (sbyte)1; break;
-                case NPTypeCode.String:  one = "1"; break;
-                case NPTypeCode.Char:    one = (char)1; break;
-                default:                 one = Converts.ChangeType((byte)1, typeCode); break;
+                meta.setitem(descr, 1L, first, buffer);
+                // A class whose items hold references (PyDataType_REFCHK: StringDType, whose cell points into the array's
+                // allocator) makes its copies through the class too, as NumPy's copy loop for it allocates a string per
+                // element: each slot is stored by setitem. Every other class copies the converted element's bytes.
+                bool references = meta.HasReferences;
+                for (int i = rowStart + 1; i < rowEnd; i++)
+                {
+                    byte* slot = data + ((long)i * cols + (i + k)) * itemsize;
+                    if (references)
+                        meta.setitem(descr, 1L, slot, buffer);
+                    else
+                        Buffer.MemoryCopy(first, slot, itemsize, itemsize);
+                }
             }
-
-            // Flat index of element (i, i+k) in row-major (N, cols) layout = i*cols + (i+k).
-            // `flat` is an owning view wrapper around `m`'s storage — used only to drive
-            // SetAtIndex over the diagonal, never returned.
-            using var flat = m.flat;
-            for (int i = rowStart; i < rowEnd; i++)
-                flat.SetAtIndex(one, (long)i * cols + (i + k));
+            catch
+            {
+                // The class refused the one (a StringDType(coerce=False)): the zeros never reach the caller, as NumPy drops
+                // its m when the assignment raises.
+                m.Dispose();
+                throw;
+            }
 
             return physical == 'F' ? m.copy('F') : m;
         }

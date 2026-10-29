@@ -53,8 +53,9 @@ namespace NumSharp
             // into the result (FullFromArrayFill). Without dtype= the result takes the fill value's dtype.
             if (IsBroadcastFillValue(fill_value))
                 return FullFromArrayFill(shape, fill_value, dtype);
-            // StringDType: NumPy's empty + copyto(unsafe) (NDVStringMove.Full).
-            if (dtype?.Meta is VStringDTypeMeta)
+            // A class whose items hold references (PyDataType_REFCHK; StringDType is the only one): every element is stored
+            // through the class, never as copied bytes, in NumPy's empty + copyto(unsafe) (NDVStringMove.Full).
+            if (dtype is not null && dtype.Meta.HasReferences)
                 return Backends.Strings.NDVStringMove.Full(shape, fill_value, dtype);
             // Fixed-width strings: NumPy's `a = empty(shape, dtype); copyto(a, fill_value, casting='unsafe')` — the dtype is
             // the fill value's own (np.full(2, 'abc') is <U3) or the requested one, an unsized request is ONE character
@@ -112,8 +113,9 @@ namespace NumSharp
             try
             {
                 var descr = resultDescr ?? fill.dtype;
-                // Text results: their routes are NumPy's empty + copyto(unsafe) already, broadcasting included.
-                if (descr.Meta is VStringDTypeMeta)
+                // Text results: their routes are NumPy's empty + copyto(unsafe) already, broadcasting included; a class whose
+                // items hold references (PyDataType_REFCHK: StringDType) stores each element through the class.
+                if (descr.Meta.HasReferences)
                     return Backends.Strings.NDVStringMove.Full(shape, fill, descr);
                 if (Backends.Strings.NDStringStorage.IsString(descr))
                     return Backends.Strings.NDStringArrays.Full(shape, fill, descr);
@@ -178,7 +180,8 @@ namespace NumSharp
             // (np.full_like(f3, [1, 2, 3]) is [1., 2., 3.]; a StringDType fill value is parsed per element).
             if (IsBroadcastFillValue(fill_value))
                 return FullFromArrayFill(shape, fill_value, resultDescr);
-            if (resultDescr.Meta is VStringDTypeMeta)
+            // A class whose items hold references (PyDataType_REFCHK: StringDType) stores each element through the class.
+            if (resultDescr.Meta.HasReferences)
                 return Backends.Strings.NDVStringMove.Full(shape, fill_value, resultDescr);
             if (Backends.Strings.NDStringStorage.IsString(resultDescr))
                 return Backends.Strings.NDStringArrays.Full(shape, fill_value, resultDescr);
@@ -200,8 +203,8 @@ namespace NumSharp
         /// <summary>
         ///     NumPy's <c>np.ones</c> (<c>numeric.py</c>: <c>a = empty(shape, dtype, order); multiarray.copyto(a, 1,
         ///     casting='unsafe')</c>), the body of <see cref="np.ones(Shape, DType, string)"/> once the device was checked: a
-        ///     text dtype gets the text <c>'1'</c> in every element (<see cref="OnesOfText"/>), any other dtype its storage
-        ///     lane's one (<see cref="UnmanagedStorage.OnesCore"/>).
+        ///     text dtype gets the text <c>'1'</c> in every element (<see cref="OnesOfText"/>), any other dtype the Python int
+        ///     1 as its class's <c>setitem</c> converts it, written into every element (<see cref="UnmanagedStorage.OnesCore"/>).
         /// </summary>
         /// <param name="shape">The dimensions. A dense layout (C, F or a KEEPORDER permutation at offset 0) is kept, which is
         ///     how <c>ones_like(a, order='K')</c> gets <paramref name="shape"/>'s memory order; a view's layout is re-laid out
@@ -213,9 +216,11 @@ namespace NumSharp
         ///     (<see cref="AllocationGuard"/>).</exception>
         internal static NDArray Ones(Shape shape, DType dtype)
         {
-            if (Backends.Strings.NDStringStorage.IsString(dtype) || dtype?.Meta is VStringDTypeMeta)
+            // Text has no lane fill: a fixed-width string class, and a class whose items hold references (StringDType),
+            // take the text routes; every other class converts the Python int 1 through its setitem (OnesCore).
+            if (dtype is not null && (dtype.Meta.HasReferences || Backends.Strings.NDStringStorage.IsString(dtype)))
                 return OnesOfText(shape, dtype);
-            return WithLaneSharingDescr(UnmanagedStorage.OnesCore(shape, dtype?.GetTypeCode() ?? NPTypeCode.Double), dtype);
+            return WithLaneSharingDescr(UnmanagedStorage.OnesCore(shape, dtype ?? DType.Double), dtype);
         }
 
         /// <summary>
@@ -234,9 +239,10 @@ namespace NumSharp
         {
             char physical = OrderResolver.Resolve(order);
             var orderedShape = Shape.Adopt(shape.dimensions, physical);
-            if (Backends.Strings.NDStringStorage.IsString(dtype) || dtype?.Meta is VStringDTypeMeta)
+            // The text routes as in Ones(Shape, DType): text has no lane fill.
+            if (dtype is not null && (dtype.Meta.HasReferences || Backends.Strings.NDStringStorage.IsString(dtype)))
                 return OnesOfText(orderedShape, dtype);
-            return WithLaneSharingDescr(UnmanagedStorage.OnesCore(orderedShape, dtype?.GetTypeCode() ?? NPTypeCode.Double), dtype);
+            return WithLaneSharingDescr(UnmanagedStorage.OnesCore(orderedShape, dtype ?? DType.Double), dtype);
         }
 
         /// <summary>
@@ -248,8 +254,10 @@ namespace NumSharp
         /// <param name="dtype">The string dtype (sized or not).</param>
         /// <returns>The new string array.</returns>
         private static NDArray OnesOfText(Shape shape, DType dtype)
-            => dtype.Meta is VStringDTypeMeta
-                ? Backends.Strings.NDVStringMove.Full(shape, 1L, dtype) // the int 1 cast: '1' (coerce does not apply to a cast)
+            // A class whose items hold references (StringDType) stores each element through the class; the int 1 is cast,
+            // '1' (coerce does not apply to a cast). A fixed-width class takes the string copy route.
+            => dtype.Meta.HasReferences
+                ? Backends.Strings.NDVStringMove.Full(shape, 1L, dtype)
                 : Backends.Strings.NDStringArrays.Full(shape, 1L, dtype);
 
         /// <summary>
