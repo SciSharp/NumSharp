@@ -1697,6 +1697,21 @@ in a list is refused (the walk's dtype is an `NPTypeCode`); an empty object grid
 is `(0, 3)`); the order is checked before anything is converted. Gate: `Creation/np.array.PythonList.Test.cs` and
 the coercion family's snapshot (`tools/facade-move/snapshot.cs`).
 
+**`np.full` / `np.full_like` / `np.ones` / `np.eye` / `np.ndarray` are the array object's** (2026-10-29, plan
+np-layer-dtype-logic P3 batch 5). Their bodies are `NDArray.Full` / `FullLike` / `Ones` (`Creation/NDArray.Numeric.cs`,
+numeric.py's `a = empty(...); copyto(a, fill_value, casting='unsafe')`), `NDArray.Eye` (`Creation/NDArray.TwoDimBase.cs`)
+and `UnmanagedStorage.ArrayNew` (`Backends/Unmanaged/UnmanagedStorage.Ctors.cs`, arrayobject.c's `array_new`), beside
+the storage-lane fills `FullCore` / `FullFillElement` / `OnesCore`. The fill value is read as NumPy's
+`asarray(fill_value)` without a dtype - a 0-d array keeps its dtype, a `BigInteger` is a Python int (int64, uint64,
+or the object-array refusal) - except that a C# number keeps its C# type, as `np.asarray(7)` does (`np.full(3, 7)` is
+int32 where NumPy's is int64). An empty result converts nothing but a Python int, float or complex (NumPy's copyto
+packs those before the copy and casts the rest per element written). The ones of np.ones and np.eye are the Python
+int 1 stored by the class's `setitem` (np.eye of a `StringDType(coerce=False)` raises, as NumPy's does), and the
+`StringDType` routes ask `HasReferences`. np.eye checks in np.zeros' order (the order's letter, the device, the
+C-or-F rule, the dimensions), and the `_like` forms check the order before the device. Gate: the constructors'
+snapshot (`tools/facade-move/snapshot.cs`, 42,635 lines) and `Creation/np.{eye.NumPyOrder,like.OrderBeforeDevice,
+full.FillValues}.Test.cs`.
+
 **`np.logspace` / `np.geomspace` — the log-scale linspace family** (NumPy 2.4.2 `numpy/_core/function_base.py`;
 all probed against 2.4.2; gates `Creation/np.logspace.geomspace.Test.cs` (20) + the `creation` oracle tier —
 28 logspace + 13 geomspace cases, 343/343 bit-exact). **Scalar `start`/`stop`/`base` (double), like NumSharp's

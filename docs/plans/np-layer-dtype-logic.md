@@ -40,7 +40,11 @@ out; the text casts got a batch of their own, 9b. Batch 4, coercion, is done (`8
 members, the coercion is `UnmanagedStorage.Coercion*.cs` (the text builder, and NumPy's coercion of a sequence moved
 from numpy.polynomial), its stores and its discovery go through the DType classes, and the object-list divergence
 it found is fixed per D4 (`3518c7cd`: np.array and np.asanyarray of a C# object list are NumPy's coercion of a
-Python list). Batch 9, the computing functions in P3's files, is done
+Python list). Batch 5, constructors, is done (`8bbd4e4c`, `e23cef2b`): the bodies of np.full, np.full_like
+and np.ones are `NDArray.Numeric.cs` members, np.eye's is `NDArray.Eye` in `NDArray.TwoDimBase.cs`, np.ndarray's is
+`UnmanagedStorage.ArrayNew` in `UnmanagedStorage.Ctors.cs` beside the storage-lane fills, the ones are the Python
+int 1 converted by the class's `setitem`, and the divergences a replay of their snapshot through NumPy found are
+fixed per D4 (`f048ad69`, `4d1a0d02`, `253b8f45`). Batch 9, the computing functions in P3's files, is done
 (2026-10-29): np.linspace / np.logspace / np.geomspace are `TensorEngine` members in `TensorEngine.CoreFunctionBase.cs`,
 np.vander in `TensorEngine.TwoDimBase.cs`, np.trim_zeros in `TensorEngine.FunctionBase.cs`, and the six divergences a
 replay of their snapshot through NumPy found are fixed per D4. Batch 7, NumPy's Python functions of the array object,
@@ -799,6 +803,11 @@ first, as it did for np.fft.
 5. **Constructors** (6 files, 60 lines): np.empty, np.zeros, np.ones, np.full and their `_like` forms, np.ndarray,
    np.eye's ones into `UnmanagedStorage.Ctors.cs`, where np.arange already is (`8be47c75`: NumPy's
    `PyArray_ArangeObj` through `setitem` and `fill`, the D4 fix batch 1's gate called for).
+   Done (`87bd99c1`, `8bbd4e4c`, `e23cef2b`, `f048ad69`, `4d1a0d02`, `253b8f45`), with two changes to this
+   text: the bodies went to their Appendix D homes, np.full's, np.full_like's and np.ones' to `NDArray.Numeric.cs`,
+   np.eye's to `NDArray.TwoDimBase.cs`, np.ndarray's (arrayobject.c's `array_new`) and the storage-lane fills to
+   `UnmanagedStorage.Ctors.cs`; np.empty, np.zeros, np.empty_like, np.zeros_like and np.ones_like had nothing to move
+   (one call into the allocating constructor or into np.ones), so R1 counted 42 lines in 5 files.
 6. **Buffers and IO** (12 files, 175 lines): np.frombuffer into `UnmanagedStorage.Buffer.cs` (`copyswapn` for a
    non-native descriptor); np.fromfile, np.fromstring, ndarray.tofile, tobytes, getfield and byteswap; np.loadtxt's
    converters into `IO/TextReading/` (NumPy's `textreading/conversions.c`: a converter per type, the generic one through
@@ -1057,6 +1066,53 @@ candidate.
 ---
 
 ## 9. State log
+
+- **2026-10-29, P3: batch 5 (constructors).** Six commits on `strings`, developed in the scratch worktrees and landed by
+  fast-forward (the move rebased over batch 7's first part, which touched none of its files but the R1 allowlist):
+  - `87bd99c1`: the snapshot tool reaches the constructors - np.empty / np.zeros / np.ones / np.full / np.eye /
+    np.identity / np.ndarray take a SHAPE as their operand (every overload without an array parameter was SKIP), built
+    per call in the C# form of the parameter; np.full / np.full_like's fill value, the `_like` forms' `shape=`, np.eye's M
+    and k, the creation order and np.ndarray's buffer / offset / strides get roles, and the family's generic overloads
+    are instantiated for every element type. 42,635 lines for the eleven names (the 7,055 lines before kept byte for
+    byte), deterministic under `NUMSHARP_DEBUG_GUARD_PAGES=1`.
+  - `8bbd4e4c`, the pure move: np.full's, np.full_like's and np.ones' bodies are `NDArray.Full` / `FullLike` / `Ones` in
+    the new `Creation/NDArray.Numeric.cs` (numeric.py's `a = empty(...); copyto(a, fill_value, casting='unsafe')`), with
+    their helpers and `WithLaneSharingDescr` (`NDArray.flatten.cs` names it unqualified now); np.eye's is `NDArray.Eye` in
+    the new `Creation/NDArray.TwoDimBase.cs`; np.ndarray's is `UnmanagedStorage.ArrayNew` (arrayobject.c's `array_new`)
+    in `UnmanagedStorage.Ctors.cs` with its helpers, beside the storage-lane fills `FullCore` / `FullFillElement` /
+    `OnesCore` and np.arange's `PyArray_ArangeObj`. np.empty, np.zeros and the other `_like` forms were one call into the
+    allocating constructor or into np.ones already: nothing of theirs moved. R1: 42 lines leave (29 text, 13 numeric:
+    np.eye.cs, np.full.cs, np.full_like.cs, np.ndarray.cs, np.ones.cs).
+  - `e23cef2b`, the conversion: the one of np.ones and np.eye is the Python int 1 converted once by the class's
+    `setitem` (`getitem` boxes it for np.ones' lane fill; np.eye copies the converted element into the other diagonal
+    slots, or stores each through `setitem` for a class that `HasReferences`), replacing two switches over the storage
+    lanes; the `StringDType` routes of np.full / np.full_like / np.ones and np.ndarray's ask `HasReferences`;
+    np.ndarray's unsized-string refusal asks the item size (`PyDataType_ISUNSIZED`). Snapshot identical. It carries one
+    change, NumPy's: np.eye of a `StringDType(coerce=False)` raises where it stored '1' (the class's setitem refuses the
+    Python int; np.ones of it still casts an int64 1).
+  - The replay of the snapshot through NumPy 2.4.2 (`replay5.py`: every line's call rebuilt from its key in the boundary
+    map): of the 38,682 lines NumPy can express (3,952 decimal and char lines skipped), 37,830 were identical and 852
+    differed. Fixed per D4, each with NumPy-probed tests:
+    - `f048ad69`: np.eye raises in np.zeros' order with its texts - the order's letter, the device, the C-or-F rule, then
+      the dimensions ("negative dimensions are not allowed", without NumSharp's "(N=-1)" suffix). 45 lines, and
+      np.identity's 1.
+    - `4d1a0d02`: np.empty_like / np.zeros_like / np.ones_like / np.full_like check the order's letter before the device, as
+      NumPy's empty_like parses its arguments in order. 96 lines.
+    - `253b8f45`: np.full / np.full_like's fill value - without a dtype a 0-d array keeps its dtype and a `BigInteger` (a
+      Python int) is discovered by value (both raised ArgumentNullException; 18 lines), an empty result converts no text
+      (144), a `StringDType` result stores a Python int as its text (76), a fill array that does not broadcast into a
+      fixed-width text result raises copyto's text (192). 430 lines, and 18 that raise the object-array refusal now
+      instead of ArgumentNullException.
+    After them 280 lines differ, each a class NumSharp documents: 126 OverflowError texts (NumPy's Windows build;
+    NumSharp pins the LP64 text), 62 C# ints that keep int32 (np.asarray(7) is int32 in NumSharp), 47 np.ndarray
+    refusals (26 strides that split an element, 13 negative offsets, 8 `StringDType` arrays over raw bytes), 36 object
+    arrays (None or a Python int past 64 bits without a dtype), and 9 MemoryError texts of the allocator past 2**62
+    bytes, whose text is .NET's where NumPy's names the size (left for the allocator, not the constructors).
+  - Gates: the snapshot byte-identical through the move and the conversion; no moved name binding to another member;
+    R1 tightened by the move, then unchanged; R2 unchanged; doc warnings unchanged (the five NDW012 moved with their
+    lines); the 12 new tests (9 fail on the conversion); NumSharp.Tests and NumSharp.Tests.Oracle on net10.0 and net8.0
+    after the move, the conversion and the fixes.
+  - Next: batch 6 (buffers and IO), batch 8 (the indexers), 9b and 10; batch 7's rest is the parallel session's.
 
 - **2026-10-29, P3: batch 7, first part (np.where, np.real / np.imag, ndarray.conjugate, np.extract,
   np.asarray_chkfinite).** Seven commits on `strings` from the parallel session (developed in the scratch worktree on
