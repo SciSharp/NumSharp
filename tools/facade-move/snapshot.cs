@@ -444,6 +444,9 @@ static class Snapshot
         // forms (base: the prototype's own), np.eye's M and k, the creation order (C first, unlike the general Order role:
         // NumPy's creation functions refuse A and K), and np.ndarray's buffer, byte offset and byte strides.
         CtorShape, CtorFill, CtorShapeArg, EyeM, EyeK, CtorOrder, NdBuffer, NdOffset, NdStrides,
+        // np.where's x / y given as a C# value (its object overloads): NumPy's array_like - a Python int / float / complex /
+        // bool / str, a NumPy scalar, a 0-d array, a C# array - which np.where converts as NDArray.FromPythonOperand does.
+        WhereScalar,
         Default, Unsupported,
     }
 
@@ -468,6 +471,27 @@ static class Snapshot
         ps.Any(q => q.Name == "where" && q.ParameterType == typeof(NDArray))
         && ps.Any(q => q.Name == "out")
         && !ps.Any(q => q.Name == "axis");
+
+    /// <summary>Whether a parameter belongs to np.where, whose object <c>x</c> / <c>y</c> take <see cref="Role.WhereScalar"/>.</summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True for a parameter of a public static np.where overload.</returns>
+    private static bool IsWhere(ParameterInfo p) =>
+        p.Member.DeclaringType == typeof(np) && p.Member.Name == "where";
+
+    /// <summary>Whether a parameter belongs to np.extract, whose <c>arr</c> is a second operand (only its).</summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True for a parameter of a public static np.extract overload.</returns>
+    private static bool IsExtract(ParameterInfo p) =>
+        p.Member.DeclaringType == typeof(np) && p.Member.Name == "extract";
+
+    /// <summary>
+    ///     Whether a parameter belongs to NDArray.real's or NDArray.imag's setter, whose <c>value</c> (the array copied into
+    ///     the real or imaginary part) is a second operand.
+    /// </summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True for the value parameter of <c>set_real</c> / <c>set_imag</c>.</returns>
+    private static bool IsComplexPartSetter(ParameterInfo p) =>
+        p.Member.DeclaringType == typeof(NDArray) && p.Member.Name is "set_real" or "set_imag";
 
     /// <summary>
     ///     Whether a parameter is NDArray.Contains's <c>value</c>: other members name an object parameter <c>value</c> with
@@ -1690,6 +1714,9 @@ static class Snapshot
             if (n == "strides" && t == typeof(long[])) return Role.NdStrides;
             if (n == "device" && t == typeof(string)) return Role.CoerceDevice;
         }
+        // np.where's x / y as a C# value (only its object overloads: its NDArray x / y take the second-operand role below).
+        if (IsWhere(p) && n is "x" or "y" && t == typeof(object))
+            return Role.WhereScalar;
         // An NDMatrix parameter (numpy.matrix's out=, typed as the matrix NumPy requires) takes the array roles too; other
         // NDArray subclasses (NDArray<bool> masks, ...) keep falling through, so the snapshots of the np.* and NDArray targets
         // are unchanged by the NDMatrix support.
@@ -1729,6 +1756,10 @@ static class Snapshot
                 // np.interp's sample points and values (required, fixed arrays: see the InterpXp / InterpFp variants).
                 : n == "xp" && IsInterp(p) ? Role.InterpXp
                 : n == "fp" && IsInterp(p) ? Role.InterpFp
+                // np.extract's arr (condition, the first array, is the operand) and the value NDArray.real / NDArray.imag's
+                // setters copy into the array (the array is the operand).
+                : n == "arr" && IsExtract(p) ? Role.Operand2
+                : n == "value" && IsComplexPartSetter(p) ? Role.Operand2
                 : n == "q" ? Role.QArray
                 : n == "bins" ? Role.BinsArray
                 : p.HasDefaultValue ? Role.Default : Role.Unsupported;
@@ -2286,6 +2317,21 @@ static class Snapshot
                 // unknown letter, the empty spec, and null (read as the empty spec).
                 foreach (var s in new[] { "fb", "f", "b", "BF", "bf", "fx", "", "null" })
                     Add(s == "" ? "empty" : s, () => s == "null" ? null : s);
+                break;
+            case Role.WhereScalar:
+                // A weak Python int first, then the other Python scalars (float, complex, bool, str), NumPy scalars (float16,
+                // char), a strong 0-d int64 array, a decimal and a C# array (both through np.asanyarray), and null (refused).
+                Add("7", () => 7);
+                Add("2.5", () => 2.5);
+                Add("c128", () => new Complex(1, -2));
+                Add("true", () => true);
+                Add("ab", () => "ab");
+                Add("f16", () => (Half)1.5);
+                Add("char", () => 'z');
+                Add("0d", () => NDArray.Scalar(3L));
+                Add("dec", () => 2.5m);
+                Add("arr", () => new[] { 1.0, -2.0 });
+                Add("null", () => null);
                 break;
             case Role.VanderN:
                 // None (a square matrix) first, then no column, one, three, more columns than any pool operand has rows, and
