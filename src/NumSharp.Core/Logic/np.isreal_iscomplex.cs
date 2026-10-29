@@ -28,25 +28,7 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Wrapped(a, static s => isreal(s));
-            if (a is null)
-                throw new ArgumentNullException(nameof(a));
-
-            // NumPy (_type_check_impl.isreal): `return imag(x) == 0`.
-            // For a real/int/bool dtype the imaginary part is identically zero, so the answer is
-            // all-True regardless of value — emit a fresh C-contiguous bool array from the DIMENSIONS
-            // only (never `a.Shape`, whose strides/offset for a sliced/broadcast/strided view make
-            // np.ones read past the logical window and return garbage bytes).
-            // Text: imag(x) is the empty string, and `'' == 0` has no comparison loop, so NumPy's == answers False
-            // everywhere (_failed_comparison_workaround) — a string array is never "real" (probed 2.4.2).
-            if (a.GetTypeCode == NPTypeCode.String)
-                return np.zeros(Shape.Adopt(a.Shape.dimensions), NPTypeCode.Boolean);
-
-            if (a.GetTypeCode != NPTypeCode.Complex)
-                return np.ones(Shape.Adopt(a.Shape.dimensions), NPTypeCode.Boolean);
-
-            // Complex: the imaginary lane (a strided float64 view via np.imag) compared to zero.
-            // IEEE `==` gives NumPy's semantics exactly: -0.0 == 0 (real), NaN/Inf != 0 (not real).
-            return np.equal(np.imag(a), NDArray.Scalar(0d));
+            return np.EngineOf(a).Isreal(a);
         }
 
         /// <summary>
@@ -76,28 +58,7 @@ namespace NumSharp
                 return a.GetTypeCode == NPTypeCode.Complex
                     ? NDMatrixBoundary.Wrapped(a, static s => iscomplex(s))
                     : NDMatrixBoundary.Plain(a, static s => iscomplex(s));
-            if (a is null)
-                throw new ArgumentNullException(nameof(a));
-
-            // NumPy (_type_check_impl.iscomplex): complex dtype -> `ax.imag != 0`, otherwise
-            // `zeros(shape, bool)`. What is tested is the VALUE of the imaginary part, not the dtype.
-            // Non-complex short-circuits to all-False from the DIMENSIONS only (not `a.Shape`, whose
-            // view strides/offset would make np.zeros emit garbage bytes on a strided/broadcast input).
-            if (a.GetTypeCode != NPTypeCode.Complex)
-            {
-                // NumPy returns `res[()]` of `res = zeros(shape, bool)`: for an array that is a VIEW of the fresh buffer
-                // (flags.owndata false), for a 0-d input the scalar; the view takes its own reference on the buffer.
-                var res = np.zeros(Shape.Adopt((long[])a.Shape.dimensions.Clone()), NPTypeCode.Boolean);
-                if (res.ndim == 0)
-                    return res;
-                var view = new NDArray(res.Storage.Alias(res.Shape));
-                res.Dispose();
-                return view;
-            }
-
-            // Complex: the imaginary lane (a strided float64 view via np.imag) compared to zero.
-            // IEEE `!=` gives NumPy's semantics exactly: -0.0 != 0 is False, NaN/Inf != 0 is True.
-            return np.not_equal(np.imag(a), NDArray.Scalar(0d));
+            return np.EngineOf(a).Iscomplex(a);
         }
 
         /// <summary>

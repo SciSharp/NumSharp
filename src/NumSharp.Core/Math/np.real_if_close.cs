@@ -6,14 +6,6 @@ namespace NumSharp
     public static partial class np
     {
         /// <summary>
-        ///     The float64 machine epsilon (2^-52), i.e. <c>np.finfo(np.complex128).eps</c> ==
-        ///     <c>np.finfo(np.float64).eps</c>. NumSharp has only complex128, so this is the ONLY epsilon
-        ///     <see cref="real_if_close(NDArray, double)"/> ever multiplies <c>tol</c> by — matching
-        ///     NumPy's <c>getlimits.finfo(a.dtype.type).eps</c> for the sole complex dtype.
-        /// </summary>
-        private const double Float64Eps = 2.220446049250313e-16;
-
-        /// <summary>
         ///     If the input is complex with EVERY imaginary part close to zero, return the (float64) real
         ///     parts; otherwise return the input unchanged. "Close to zero" is <c>tol</c> multiples of the
         ///     machine epsilon of the complex type (float64 eps here) when <paramref name="tol"/> &gt; 1,
@@ -61,25 +53,7 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Wrapped((a, tol), static s => real_if_close(s.a, s.tol));
-            // NumPy's `asanyarray(a)` is already satisfied by the NDArray parameter. A non-complex dtype
-            // is returned unchanged (the real part of a real number is itself) — the same instance, as
-            // NumPy returns `a` untouched for a non-complexfloating type.
-            if (a.typecode != NPTypeCode.Complex)
-                return a;
-
-            // tol > 1 is interpreted in machine epsilons of the complex type (float64 eps for complex128);
-            // tol <= 1 stays an absolute tolerance. IEEE-identical to NumPy's `f.eps * tol` double multiply.
-            if (tol > 1)
-                tol = Float64Eps * tol;
-
-            // Collapse to the real lane iff EVERY imaginary part is strictly within tol of zero. The scan
-            // returns true for an empty array (vacuous all -> empty complex collapses) and false the moment
-            // it sees a magnitude >= tol, a NaN, or an infinity.
-            if (ImagCloseScan.AllImagWithinTol(a, tol))
-                return np.real(a); // float64 view onto the real lane (shares memory), == NumPy's a.real
-
-            // Some imaginary part is out of band (or NaN/inf): the array stays complex, unchanged.
-            return a;
+            return np.EngineOf(a).RealIfClose(a, tol);
         }
     }
 }

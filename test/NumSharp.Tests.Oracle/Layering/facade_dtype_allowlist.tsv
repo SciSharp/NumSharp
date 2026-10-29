@@ -73,7 +73,7 @@ Logic/np.common_type.cs	1	6
 Logic/np.find_common_type.cs	2	10
 Logic/np.isneginf.cs	0	1
 Logic/np.isposinf.cs	0	1
-Logic/np.isreal_iscomplex.cs	1	5
+Logic/np.isreal_iscomplex.cs	0	3
 Logic/np.min_scalar_type.cs	1	0
 Logic/np.type_checks.cs	2	15
 Manipulation/NDArray.FunctionBase.cs	7	8	# np.insert's and np.delete's statements, moved into the array object by phase PE (7408f707) from the operation class InsertEngine (never scanned) and np.delete.cs; the array object's per-dtype element semantics go to the DType slots in P3 (D1 (6), E7)
@@ -95,7 +95,6 @@ Math/NDArray.ComplexAccessors.cs	1	2
 Math/np.conjugate.cs	0	1
 Math/np.imag.cs	0	1
 Math/np.real.cs	0	1
-Math/np.real_if_close.cs	0	1
 Matrixlib/NDMatrix.Construction.cs	0	8
 Matrixlib/NDMatrix.Indexing.cs	0	3
 Matrixlib/NDMatrix.Methods.cs	0	1
