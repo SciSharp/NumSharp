@@ -90,61 +90,7 @@ namespace NumSharp
             if (array == null)
                 throw new ArgumentNullException(nameof(array));
 
-            // Text values (string elements, an object array holding text, or a string dtype over object / byte[][] data)
-            // build a fixed-width S/U array: NumPy's discovery of the class and the longest value, then setitem per element.
-            if (Backends.Strings.NDStringArrays.IsTextInput(array, dtype))
-                return Backends.Strings.NDStringArrays.FromManaged(array, dtype, ndmin, order);
-            // A string dtype over a TYPED numeric C# array: the array is an ndarray of its element dtype (the house rule for
-            // typed arrays), so NumPy's np.array(arr, dtype='U') casts it — the unsized class adapted to the array
-            // (PyArray_AdaptDescriptorToArray: int32 -> <U11), each number written as its scalar's str().
-            if (Backends.Strings.NDStringStorage.IsString(dtype))
-            {
-                using var numbers = np.array(array, null, 0, true, order);
-                var text = numbers.astype(dtype, copy: true, order: 'K', casting: "unsafe");
-                if (ndmin <= text.ndim)
-                    return text;
-                var raised = AtLeastNdView(text, ndmin);
-                text.Dispose();
-                return raised;
-            }
-
-            var arrType = array.ResolveElementType();
-
-            //handle dim expansion and extract shape
-            Shape shape;
-            var dims = array.ResolveRank();
-            var missing = dims - ndmin;
-
-            if (missing < 0)
-            {
-                shape = Arrays.Concat(Enumerable.Repeat(1, Math.Abs(missing)).ToArray(), Shape.ExtractShape(array));
-            }
-            else
-            {
-                shape = Shape.ExtractShape(array);
-            }
-
-            //flatten
-            if (shape.NDim > 1)
-            {
-                array = Arrays.Flatten(array);
-                copy = false;
-            }
-
-            if (dtype != null && !dtype.Equals(arrType))
-            {
-                array = ArrayConvert.To(array, (Type)dtype);
-                copy = false;
-            }
-
-            // C-contiguous materialization from the managed array.
-            var result = new NDArray(copy ? (Array)array.Clone() : array, shape, 'C');
-
-            // Honor F-order request: relay out into F-contig layout.
-            char physical = OrderResolver.Resolve(order, result.Shape);
-            if (physical == 'F' && result.Shape.NDim > 1 && !result.Shape.IsFContiguous)
-                result = result.copy('F');
-            return result;
+            return NDArray.ArrayFromManaged(array, dtype, ndmin, copy, order);
         }
 
         /// <summary>
@@ -170,10 +116,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
         public static NDArray array<T>(T[] data, DType dtype) where T : unmanaged
         {
-            var arr = new NDArray(ArraySlice.FromArray(data, true), Shape.Vector(data.Length));
-            if (dtype != null && dtype.GetTypeCode() != InfoOf<T>.NPTypeCode)
-                return arr.astype(dtype);
-            return arr;
+            return NDArray.ArrayFromTyped(data, dtype);
         }
 
         /// <summary>
@@ -254,7 +197,7 @@ namespace NumSharp
         {
             if (value == null)
                 throw new ArgumentNullException(nameof(value));
-            return Backends.Strings.NDStringArrays.FromScalar(value, null);
+            return UnmanagedStorage.FromAnyScalar(value, null);
         }
 
         /// <summary>
@@ -273,7 +216,7 @@ namespace NumSharp
         {
             if (value == null)
                 throw new ArgumentNullException(nameof(value));
-            return Backends.Strings.NDStringArrays.FromScalar(value, dtype);
+            return UnmanagedStorage.FromAnyScalar(value, dtype);
         }
 
         /// <summary>
@@ -549,10 +492,7 @@ namespace NumSharp
             if (data == null)
                 throw new ArgumentNullException(nameof(data));
 
-            var arr = new NDArray(ArraySlice.FromArray(data, true), new Shape(data.GetLength(0), data.GetLength(1)));
-            if (dtype != null && dtype.GetTypeCode() != InfoOf<T>.NPTypeCode)
-                return arr.astype(dtype);
-            return arr;
+            return NDArray.ArrayFromTyped(data, dtype);
         }
 
         /// <summary>

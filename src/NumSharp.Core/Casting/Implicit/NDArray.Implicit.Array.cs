@@ -47,104 +47,12 @@ namespace NumSharp
             if (array is null)
                 return null;
 
-            // Text values build a fixed-width string array (the same discovery as np.array); everything else is numeric.
-            if (Backends.Strings.NDStringArrays.IsTextInput(array, null))
-                return Backends.Strings.NDStringArrays.FromManaged(array, null, 0, 'C');
-
-            bool isJaggedArray = array.GetType().GetElementType().IsArray;
-            var underlying = array.ResolveElementType();
-            if (isJaggedArray)
-            {
-                var nd = new NDArray(underlying);
-                switch (nd.GetTypeCode)
-                {
-	                // %foreach supported_dtypes,supported_dtypes_lowercase%
-	                // case NPTypeCode.#1: return NDArray.FromJaggedArray<#2>(array);
-	                // %
-	                // default:
-		                // throw new NotSupportedException();
-                    case NPTypeCode.Boolean: return NDArray.FromJaggedArray<bool>(array);
-	                case NPTypeCode.Byte: return NDArray.FromJaggedArray<byte>(array);
-	                case NPTypeCode.SByte: return NDArray.FromJaggedArray<sbyte>(array);
-	                case NPTypeCode.Int16: return NDArray.FromJaggedArray<short>(array);
-	                case NPTypeCode.UInt16: return NDArray.FromJaggedArray<ushort>(array);
-	                case NPTypeCode.Int32: return NDArray.FromJaggedArray<int>(array);
-	                case NPTypeCode.UInt32: return NDArray.FromJaggedArray<uint>(array);
-	                case NPTypeCode.Int64: return NDArray.FromJaggedArray<long>(array);
-	                case NPTypeCode.UInt64: return NDArray.FromJaggedArray<ulong>(array);
-	                case NPTypeCode.Char: return NDArray.FromJaggedArray<char>(array);
-	                case NPTypeCode.Half: return NDArray.FromJaggedArray<Half>(array);
-	                case NPTypeCode.Double: return NDArray.FromJaggedArray<double>(array);
-	                case NPTypeCode.Single: return NDArray.FromJaggedArray<float>(array);
-	                case NPTypeCode.Decimal: return NDArray.FromJaggedArray<decimal>(array);
-	                case NPTypeCode.Complex: return NDArray.FromJaggedArray<System.Numerics.Complex>(array);
-	                default:
-		                throw new NotSupportedException();
-                }
-            }
-            else
-            {
-
-                var nd = new NDArray(underlying);
-                switch (nd.GetTypeCode)
-                {
-	                // %foreach supported_dtypes,supported_dtypes_lowercase%
-	                // case NPTypeCode.#1: return NDArray.FromMultiDimArray<#2>(array);
-	                // %
-	                // default:
-		                // throw new NotSupportedException();
-                    case NPTypeCode.Boolean: return NDArray.FromMultiDimArray<bool>(array);
-	                case NPTypeCode.Byte: return NDArray.FromMultiDimArray<byte>(array);
-	                case NPTypeCode.SByte: return NDArray.FromMultiDimArray<sbyte>(array);
-	                case NPTypeCode.Int16: return NDArray.FromMultiDimArray<short>(array);
-	                case NPTypeCode.UInt16: return NDArray.FromMultiDimArray<ushort>(array);
-	                case NPTypeCode.Int32: return NDArray.FromMultiDimArray<int>(array);
-	                case NPTypeCode.UInt32: return NDArray.FromMultiDimArray<uint>(array);
-	                case NPTypeCode.Int64: return NDArray.FromMultiDimArray<long>(array);
-	                case NPTypeCode.UInt64: return NDArray.FromMultiDimArray<ulong>(array);
-	                case NPTypeCode.Char: return NDArray.FromMultiDimArray<char>(array);
-	                case NPTypeCode.Half: return NDArray.FromMultiDimArray<Half>(array);
-	                case NPTypeCode.Double: return NDArray.FromMultiDimArray<double>(array);
-	                case NPTypeCode.Single: return NDArray.FromMultiDimArray<float>(array);
-	                case NPTypeCode.Decimal: return NDArray.FromMultiDimArray<decimal>(array);
-	                case NPTypeCode.Complex: return NDArray.FromMultiDimArray<System.Numerics.Complex>(array);
-	                default:
-		                throw new NotSupportedException();
-                }
-            }
-
-            throw new NotImplementedException("implicit operator NDArray(Array array)");
+            return UnmanagedStorage.FromManagedArray(array);
         }
 
         public static explicit operator Array(NDArray nd)
         {
-            switch (nd.GetTypeCode)
-            {
-	            // %foreach supported_dtypes,supported_dtypes_lowercase%
-	            // case NPTypeCode.#1: return nd.ToMuliDimArray<#2>();
-	            // %
-	            // default:
-		            // throw new NotSupportedException();
-	            case NPTypeCode.Boolean: return nd.ToMuliDimArray<bool>();
-	            case NPTypeCode.Byte: return nd.ToMuliDimArray<byte>();
-	            case NPTypeCode.SByte: return nd.ToMuliDimArray<sbyte>();
-	            case NPTypeCode.Int16: return nd.ToMuliDimArray<short>();
-	            case NPTypeCode.UInt16: return nd.ToMuliDimArray<ushort>();
-	            case NPTypeCode.Int32: return nd.ToMuliDimArray<int>();
-	            case NPTypeCode.UInt32: return nd.ToMuliDimArray<uint>();
-	            case NPTypeCode.Int64: return nd.ToMuliDimArray<long>();
-	            case NPTypeCode.UInt64: return nd.ToMuliDimArray<ulong>();
-	            case NPTypeCode.Char: return nd.ToMuliDimArray<char>();
-	            case NPTypeCode.Half: return nd.ToMuliDimArray<Half>();
-	            case NPTypeCode.Double: return nd.ToMuliDimArray<double>();
-	            case NPTypeCode.Single: return nd.ToMuliDimArray<float>();
-	            case NPTypeCode.Decimal: return nd.ToMuliDimArray<decimal>();
-	            case NPTypeCode.Complex: return nd.ToMuliDimArray<System.Numerics.Complex>();
-	            // Text: a C# array of the decoded elements (string for U, byte[] for S) in the array's own shape.
-	            case NPTypeCode.String: return Backends.Strings.NDStringArrays.ToManagedArray(nd);
-	            default:
-		            throw new NotSupportedException();
-            }
+            return UnmanagedStorage.ToManagedArray(nd);
         }
 
         /// <summary>

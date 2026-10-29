@@ -1,16 +1,23 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
+using System.Runtime.CompilerServices;
 using NumSharp.Backends;
 using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Strings;
+using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
 
 namespace NumSharp
 {
     // ---------------------------------------------------------------------------------------------------------------------
     // The C functions of NumPy's multiarray module over arrays (Appendix D's NDArray.Multiarray.cs): np.concatenate's
-    // PyArray_ConcatenateInto with its copy paths and its fixed-width string route. They are the array object's own members
-    // (the np-layer dtype plan's D1: a function that joins arrays), and the np.* functions are facades over them.
+    // PyArray_ConcatenateInto with its copy paths and its fixed-width string route, and _array_fromobject_generic, the body
+    // of np.array / np.asarray / np.asanyarray, by operand kind (an array, a C# array, any C# value). They are the array
+    // object's own members (the np-layer dtype plan's D1: functions that create and join arrays), and the np.* functions
+    // are facades over them.
     //
     // The file sits beside its facades (Creation/) rather than under Backends/ because its statements still call np.*
     // functions (np.result_type, np.can_cast), which ratchet R2 forbids under Backends/ (plan C3).
@@ -748,6 +755,395 @@ namespace NumSharp
             if (!(requested.itemsize == 0 && requested.Meta is StringDTypeMeta))
                 return requested;
             return DTypePromotion.CastToDTypeAndPromoteDescriptors(arrays.Select(a => a.dtype).ToArray(), requested.Meta);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>_array_fromobject_generic</c> (<c>multiarraymodule.c</c>) for an ARRAY operand, the body of
+        ///     <see cref="np.asarray(NDArray, DType, char, bool?, NDArray, string)"/> once the class boundaries, the device and
+        ///     <c>like=</c> were handled: Python's <c>None</c> (a new 0-d array of the dtype's setitem value), a C# literal
+        ///     packed as the Python scalar it stands for (<c>PyArray_Pack</c>, with its range checks), then the request - the
+        ///     array itself when its dtype and layout satisfy it, a view when the requested descriptor is an equal but
+        ///     distinct object, else a copy or a cast in the requested order, which <c>copy=false</c> refuses.
+        /// </summary>
+        /// <param name="a">The operand; null is Python's <c>None</c>, and a C# literal's 0-d array
+        ///     (<see cref="NDArray.WasPythonLiteral"/>) is NumPy's Python scalar.</param>
+        /// <param name="dtype">The requested dtype, or null to keep the operand's.</param>
+        /// <param name="order"><c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c>: only C and F can force a copy.</param>
+        /// <param name="copy">NumPy's tri-state: null copies only when needed, true always, false never (raising when
+        ///     needed).</param>
+        /// <returns><paramref name="a"/> itself, a view of it, or a new array.</returns>
+        /// <exception cref="NotSupportedException"><paramref name="a"/> is null and <paramref name="dtype"/> is null (NumPy
+        ///     builds an object array, which NumSharp has no storage for).</exception>
+        /// <exception cref="ArgumentException"><paramref name="copy"/> is false and a copy, a cast or a literal's / None's
+        ///     conversion is needed (NumPy's "Unable to avoid copy" ValueError).</exception>
+        /// <exception cref="OverflowException">A C# literal out of an integer <paramref name="dtype"/>'s range.</exception>
+        /// <exception cref="ValueError">A NaN literal into an integer dtype, or an unknown <paramref name="order"/>.</exception>
+        /// <exception cref="TypeError">A complex literal into a real dtype, or None into an integer (or decimal) one.</exception>
+        /// <remarks>An explicit 0-d array (<see cref="NDArray.IsExplicitZeroDimArray"/>) stays one through the copy, the cast
+        ///     and the view: the mark is per object, so every new object receives it.</remarks>
+        internal static NDArray ArrayFromObject(NDArray a, DType dtype, char order, bool? copy)
+        {
+            // Python's None: a Python object, so np.asarray(None, dtype) builds a NEW 0-d array of its setitem value (NaN,
+            // nan+nanj, False, 'None', a StringDType NA object; int(None)'s TypeError) — which copy=false refuses before
+            // anything is converted (PyArray_FromAny's NPY_ARRAY_ENSURENOCOPY check precedes the pack). Without a dtype
+            // NumPy's discovery gives the object dtype.
+            if (a is null)
+            {
+                if (dtype is null)
+                    throw NDArray.NoneWithoutDtype("np.asarray");
+                if (copy == false)
+                    throw new ArgumentException(UnableToAvoidCopyText, nameof(copy));
+                return NDArray.NoneForStore(dtype);
+            }
+
+            // A C# literal (NDArray.WasPythonLiteral) is NumPy's Python scalar, which np.asarray(value, dtype=...) converts
+            // with PyArray_Pack into a NEW array: np.asarray(1000, dtype=np.int8) raises "Python integer 1000 out of bounds
+            // for int8" and np.asarray(1.5, dtype=np.int8) is 1 — where a 0-d ndarray would be cast. A fresh array can never
+            // satisfy copy=false (NumPy's "Unable to avoid copy" for any Python scalar).
+            if (a.WasPythonLiteral && dtype is not null && !Backends.Strings.NDStringStorage.IsString(dtype))
+            {
+                var packed = NDArray.PackForStore(a, dtype.GetTypeCode(), pyArrayPackRoute: false);
+                if (!ReferenceEquals(packed, a))
+                {
+                    if (copy == false)
+                    {
+                        packed.Dispose();
+                        throw new ArgumentException(UnableToAvoidCopyText, nameof(copy));
+                    }
+
+                    return packed;
+                }
+            }
+
+            // A string request is satisfied only by a string array of that class AND width (an unsized 'U' adapts to the
+            // array first); the storage lane alone would let a <U4 array pass for 'S' or 'U2'.
+            bool typeMatches = dtype == null || Backends.Strings.NDStringArrays.SatisfiesRequest(a, dtype);
+            bool layoutMatches = LayoutAlreadyOK(a.Shape, order);
+            bool noCopyNeeded = typeMatches && layoutMatches;
+
+            // A copy or a cast of an explicit 0-d ARRAY is an explicit 0-d array again (NumPy returns a 0-d ndarray
+            // from np.asarray(np.array(2), dtype=float)); the mark is per object, so it is carried over by hand.
+            bool explicitZeroDim = a.IsExplicitZeroDimArray;
+
+            // The copies keep NumPy's order code as given: astype / copy resolve 'K' to the source's own axis order
+            // (a transposed or broadcast source keeps its layout), which resolving to C-or-F first would lose.
+            if (copy == true)
+            {
+                NDArray copied = !typeMatches ? a.astype(dtype, copy: true, order: order) : a.copy(order);
+                return explicitZeroDim ? copied.MarkExplicitZeroDimArray() : copied;
+            }
+
+            if (copy == false && !noCopyNeeded)
+                throw new ArgumentException(UnableToAvoidCopyText, nameof(copy));
+
+            // NumPy (_array_fromobject_generic) returns the array itself when no dtype was given or the requested descriptor
+            // IS the array's — a builtin singleton, or an unsized string class, which adapts to the array's own descriptor;
+            // an EQUAL descriptor that is another object (every sized string descriptor is a fresh object) gets a view of
+            // the array with that descriptor: np.asarray(u, dtype='<U2') shares u's memory but is not u (owndata false).
+            if (noCopyNeeded)
+            {
+                if (dtype is null || ReferenceEquals(dtype, a.dtype) || dtype.itemsize == 0)
+                    return a;
+                // The view is a new object, and the explicit-0-d mark is per object: NumPy's view of an explicit 0-d array
+                // is an explicit 0-d array too, so the mark is carried over like on the copy paths.
+                var view = new NDArray(a.Storage.Alias(a.Shape)) { TensorEngine = a.TensorEngine };
+                return explicitZeroDim ? view.MarkExplicitZeroDimArray() : view;
+            }
+
+            // copy == null && !noCopyNeeded: copy / cast as required.
+            NDArray converted = !typeMatches ? a.astype(dtype, copy: true, order: order) : a.copy(order);
+            return explicitZeroDim ? converted.MarkExplicitZeroDimArray() : converted;
+        }
+
+        /// <summary>
+        ///     NumPy's <c>_array_fromobject_generic</c> for a C# ARRAY operand, the body of
+        ///     <see cref="np.array(Array, DType, int, bool, char)"/> once its null check ran: text values (or a string dtype
+        ///     over an object or bytes array, or None among an object array's values under a dtype) take the text array
+        ///     builder (the class and width discovered, every element stored by its setitem); a string dtype over a typed
+        ///     numeric array casts the numbers to text (NumPy's <c>PyArray_AdaptDescriptorToArray</c>); any other array gives
+        ///     its shape and element type, is flattened and converted to the requested dtype, laid out in C order (or F on
+        ///     request) and raised to <paramref name="ndmin"/> dimensions.
+        /// </summary>
+        /// <param name="array">The C# array (any rank, rectangular or jagged); not null.</param>
+        /// <param name="dtype">The requested dtype, or null to discover it.</param>
+        /// <param name="ndmin">The minimum number of dimensions: leading ones are prepended.</param>
+        /// <param name="copy">False lets a rank-1 array of the requested element type be wrapped instead of copied.</param>
+        /// <param name="order">The memory layout: <c>'C'</c>, <c>'F'</c>, or <c>'A'</c> / <c>'K'</c>.</param>
+        /// <returns>A new array (a view of one when <paramref name="ndmin"/> prepends axes to a text result, as NumPy's).</returns>
+        /// <exception cref="ValueError">A ragged jagged array of text (NumPy's inhomogeneous-shape text).</exception>
+        /// <exception cref="UnicodeEncodeError">Non-ASCII text into <c>S</c>.</exception>
+        /// <exception cref="NotSupportedException">An element type NumSharp has no dtype for, or None without a dtype.</exception>
+        /// <exception cref="InvalidCastException">An element that does not convert to <paramref name="dtype"/>.</exception>
+        internal static NDArray ArrayFromManaged(Array array, DType dtype, int ndmin, bool copy, char order)
+        {
+            // Text values (string elements, an object array holding text, or a string dtype over object / byte[][] data)
+            // build a fixed-width S/U array: NumPy's discovery of the class and the longest value, then setitem per element.
+            if (Backends.Strings.NDStringArrays.IsTextInput(array, dtype))
+                return Backends.Strings.NDStringArrays.FromManaged(array, dtype, ndmin, order);
+            // A string dtype over a TYPED numeric C# array: the array is an ndarray of its element dtype (the house rule for
+            // typed arrays), so NumPy's np.array(arr, dtype='U') casts it — the unsized class adapted to the array
+            // (PyArray_AdaptDescriptorToArray: int32 -> <U11), each number written as its scalar's str().
+            if (Backends.Strings.NDStringStorage.IsString(dtype))
+            {
+                using var numbers = np.array(array, null, 0, true, order);
+                var text = numbers.astype(dtype, copy: true, order: 'K', casting: "unsafe");
+                if (ndmin <= text.ndim)
+                    return text;
+                var raised = np.AtLeastNdView(text, ndmin);
+                text.Dispose();
+                return raised;
+            }
+
+            var arrType = array.ResolveElementType();
+
+            //handle dim expansion and extract shape
+            Shape shape;
+            var dims = array.ResolveRank();
+            var missing = dims - ndmin;
+
+            if (missing < 0)
+            {
+                shape = Arrays.Concat(Enumerable.Repeat(1, Math.Abs(missing)).ToArray(), Shape.ExtractShape(array));
+            }
+            else
+            {
+                shape = Shape.ExtractShape(array);
+            }
+
+            //flatten
+            if (shape.NDim > 1)
+            {
+                array = Arrays.Flatten(array);
+                copy = false;
+            }
+
+            if (dtype != null && !dtype.Equals(arrType))
+            {
+                array = ArrayConvert.To(array, (Type)dtype);
+                copy = false;
+            }
+
+            // C-contiguous materialization from the managed array.
+            var result = new NDArray(copy ? (Array)array.Clone() : array, shape, 'C');
+
+            // Honor F-order request: relay out into F-contig layout.
+            char physical = OrderResolver.Resolve(order, result.Shape);
+            if (physical == 'F' && result.Shape.NDim > 1 && !result.Shape.IsFContiguous)
+                result = result.copy('F');
+            return result;
+        }
+
+        /// <summary>
+        ///     NumPy's <c>_array_fromobject_generic</c> with <c>subok</c> for any C# value, the body of
+        ///     <see cref="np.asanyarray(in object, DType, char, string)"/> once the device and the class boundaries were
+        ///     checked: Python's <c>None</c>, an array (<see cref="np.asarray(NDArray, DType, char, bool?, NDArray, string)"/>),
+        ///     text arrays and sequences (the text array builder), object arrays and grids, typed C# arrays, a str, typed
+        ///     sequences, scalars, <c>Memory&lt;T&gt;</c>, tuples and any other enumerable; then the dtype request and the
+        ///     memory layout.
+        /// </summary>
+        /// <param name="a">The value: null is Python's None.</param>
+        /// <param name="dtype">The requested dtype, or null to discover it.</param>
+        /// <param name="order"><c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c>.</param>
+        /// <returns>An array: the operand itself when it is an array that satisfies the request.</returns>
+        /// <exception cref="NotSupportedException">None without a dtype, an object sequence of no NumSharp dtype, or a value
+        ///     of a type this conversion does not read.</exception>
+        /// <exception cref="TypeError">None into an integer (or decimal) dtype.</exception>
+        internal static NDArray AnyArrayFromObject(object a, DType dtype, char order)
+        {
+            NDArray ret;
+            switch (a) {
+                case null:
+                    // Python's None: np.array(None, dtype) packs it with the dtype's setitem; without a dtype NumPy's
+                    // discovery gives the object dtype.
+                    if (dtype is null)
+                        throw NDArray.NoneWithoutDtype("np.asanyarray");
+                    return NDArray.NoneForStore(dtype);
+                case NDArray nd:
+                    return np.asarray(nd, dtype, order);
+                case Array textArr when Backends.Strings.NDStringArrays.IsTextInput(textArr, dtype):
+                    // Text (string[], an object[] holding str/bytes, or any array under a string dtype): NumPy's
+                    // np.asanyarray of a list of str — a fixed-width string array.
+                    ret = Backends.Strings.NDStringArrays.FromManaged(textArr, dtype, 0, 'C');
+                    break;
+                case IEnumerable<string> texts:
+                    ret = Backends.Strings.NDStringArrays.FromManaged(texts.ToArray(), dtype, 0, 'C');
+                    break;
+                case object[] objArr:
+                    // object[] has no fixed dtype — route through type-promotion path.
+                    // new NDArray(object[]) throws NotSupportedException since object isn't a
+                    // supported element type.
+                    ret = UnmanagedStorage.ConvertNonGenericEnumerable(objArr);
+                    if (ret is null)
+                        throw new NotSupportedException($"Unable to resolve asanyarray for object[] (length {objArr.Length}): element type is not a supported NumSharp dtype.");
+                    break;
+                case Array grid when grid.Rank > 1 && grid.GetType().GetElementType() == typeof(object):
+                    // A rectangular object array (object[,], object[,,]) is NumPy's nested list of its rows,
+                    // np.asarray([[1, 2], [3, 4]]): its leaves promoted as a flat list's, laid out with its dims
+                    // (new NDArray(grid) cannot read an object element type).
+                    ret = UnmanagedStorage.ConvertObjectGrid(grid);
+                    break;
+                case Array array:
+                    ret = new NDArray(array);
+                    break;
+                case string str:
+                    ret = str; //implicit cast located in NDArray.Implicit.Array
+                    break;
+
+                case IEnumerable<bool> e: ret = np.array(UnmanagedStorage.ToArrayFast(e)); break;
+                case IEnumerable<byte> e: ret = np.array(UnmanagedStorage.ToArrayFast(e)); break;
+                case IEnumerable<sbyte> e: ret = np.array(UnmanagedStorage.ToArrayFast(e)); break;
+                case IEnumerable<short> e: ret = np.array(UnmanagedStorage.ToArrayFast(e)); break;
+                case IEnumerable<ushort> e: ret = np.array(UnmanagedStorage.ToArrayFast(e)); break;
+                case IEnumerable<int> e: ret = np.array(UnmanagedStorage.ToArrayFast(e)); break;
+                case IEnumerable<uint> e: ret = np.array(UnmanagedStorage.ToArrayFast(e)); break;
+                case IEnumerable<long> e: ret = np.array(UnmanagedStorage.ToArrayFast(e)); break;
+                case IEnumerable<ulong> e: ret = np.array(UnmanagedStorage.ToArrayFast(e)); break;
+                case IEnumerable<char> e: ret = np.array(UnmanagedStorage.ToArrayFast(e)); break;
+                case IEnumerable<Half> e: ret = np.array(UnmanagedStorage.ToArrayFast(e)); break;
+                case IEnumerable<float> e: ret = np.array(UnmanagedStorage.ToArrayFast(e)); break;
+                case IEnumerable<double> e: ret = np.array(UnmanagedStorage.ToArrayFast(e)); break;
+                case IEnumerable<decimal> e: ret = np.array(UnmanagedStorage.ToArrayFast(e)); break;
+                case IEnumerable<Complex> e: ret = np.array(UnmanagedStorage.ToArrayFast(e)); break;
+
+                default:
+                    var type = a.GetType();
+                    //is it a scalar
+                    if (type.IsPrimitive || type == typeof(decimal) || type == typeof(Half) || type == typeof(System.Numerics.Complex))
+                    {
+                        ret = NDArray.Scalar(a);
+                        break;
+                    }
+
+                    // Memory<T>/ReadOnlyMemory<T> do not implement IEnumerable<T>.
+                    if (type.IsGenericType)
+                    {
+                        var genericDef = type.GetGenericTypeDefinition();
+                        if (genericDef == typeof(Memory<>) || genericDef == typeof(ReadOnlyMemory<>))
+                        {
+                            ret = UnmanagedStorage.ConvertMemory(a, type);
+                            if (ret is not null)
+                                break;
+                        }
+                    }
+
+                    if (a is ITuple tuple)
+                    {
+                        ret = UnmanagedStorage.ConvertTuple(tuple);
+                        if (ret is not null)
+                            break;
+                    }
+
+                    if (a is IEnumerable enumerable)
+                    {
+                        ret = UnmanagedStorage.ConvertNonGenericEnumerable(enumerable);
+                        if (ret is not null)
+                            break;
+                    }
+
+                    if (a is IEnumerator enumerator)
+                    {
+                        ret = UnmanagedStorage.ConvertEnumerator(enumerator);
+                        if (ret is not null)
+                            break;
+                    }
+
+                    throw new NotSupportedException($"Unable to resolve asanyarray for type {type.Name}");
+            }
+
+            if (dtype != null && !Backends.Strings.NDStringArrays.SatisfiesRequest(ret, dtype))
+                ret = ret.astype(dtype, true);
+
+            // Apply requested order (no-op for scalars / 1-D / already-matching layouts).
+            char physical = OrderResolver.Resolve(order, ret.Shape);
+            if (ret.Shape.NDim > 1 && ret.size > 1)
+            {
+                bool layoutMatches = physical == 'C' ? ret.Shape.IsContiguous : ret.Shape.IsFContiguous;
+                if (!layoutMatches)
+                    ret = ret.copy(physical);
+            }
+            return ret;
+        }
+
+        /// <summary>
+        ///     <see cref="np.array{T}(T[], DType)"/>'s body: a new 1-D array holding a copy of <paramref name="data"/>, then the
+        ///     dtype request NumPy's <c>_array_fromobject_generic</c> makes (<c>if dtype is not None and arr.dtype !=
+        ///     dtype</c>): the array as built when no dtype or its own was requested, else its cast.
+        /// </summary>
+        /// <typeparam name="T">The element type, one of NumSharp's dtypes.</typeparam>
+        /// <param name="data">The values; not null.</param>
+        /// <param name="dtype">The requested dtype, or null.</param>
+        /// <returns>The new array, or its cast to <paramref name="dtype"/>.</returns>
+        /// <exception cref="NotSupportedException"><paramref name="dtype"/> has no cast from <typeparamref name="T"/>'s
+        ///     dtype.</exception>
+        /// <remarks>The array built from <paramref name="data"/> is left to the garbage collector when it is cast.</remarks>
+        internal static NDArray ArrayFromTyped<T>(T[] data, DType dtype) where T : unmanaged
+        {
+            var arr = new NDArray(ArraySlice.FromArray(data, true), Shape.Vector(data.Length));
+            if (dtype != null && dtype.GetTypeCode() != InfoOf<T>.NPTypeCode)
+                return arr.astype(dtype);
+            return arr;
+        }
+
+        /// <summary>
+        ///     <see cref="np.array{T}(T[,], DType)"/>'s body: a new 2-D array holding a copy of <paramref name="data"/>, then
+        ///     the dtype request of <see cref="ArrayFromTyped{T}(T[], DType)"/>.
+        /// </summary>
+        /// <typeparam name="T">The element type, one of NumSharp's dtypes.</typeparam>
+        /// <param name="data">The values; not null.</param>
+        /// <param name="dtype">The requested dtype, or null.</param>
+        /// <returns>The new array, or its cast to <paramref name="dtype"/>.</returns>
+        /// <exception cref="NotSupportedException"><paramref name="dtype"/> has no cast from <typeparamref name="T"/>'s
+        ///     dtype.</exception>
+        /// <remarks>The array built from <paramref name="data"/> is left to the garbage collector when it is cast.</remarks>
+        internal static NDArray ArrayFromTyped<T>(T[,] data, DType dtype) where T : unmanaged
+        {
+            var arr = new NDArray(ArraySlice.FromArray(data, true), new Shape(data.GetLength(0), data.GetLength(1)));
+            if (dtype != null && dtype.GetTypeCode() != InfoOf<T>.NPTypeCode)
+                return arr.astype(dtype);
+            return arr;
+        }
+
+        /// <summary>
+        ///     NumPy's <c>ValueError</c> text (<c>npy_no_copy_err_msg</c>) for <c>copy=False</c> when the conversion has to
+        ///     make a new array — a cast, a relayout, a C# literal's pack or <c>None</c>'s; NumSharp raises it as an
+        ///     <see cref="ArgumentException"/> on the <c>copy</c> parameter.
+        /// </summary>
+        private const string UnableToAvoidCopyText =
+            "Unable to avoid copy while creating an array as requested.\n" +
+            "If using `np.array(obj, copy=False)` replace it with `np.asarray(obj)` " +
+            "to allow a copy when needed (no behavior change in NumPy 1.x).\n" +
+            "For more details, see " +
+            "https://numpy.org/devdocs/numpy_2_0_migration_guide.html#adapting-to-changes-in-the-copy-keyword.";
+
+        /// <summary>
+        ///     Returns true when <paramref name="shape"/>'s memory layout already satisfies the requested
+        ///     order ('C', 'F', 'A', 'K'). Mirrors NumPy's <c>STRIDING_OK</c> macro:
+        ///     'A' and 'K' impose no layout constraint, so a copy is never forced for layout reasons.
+        /// </summary>
+        /// <param name="shape">The array's shape (its layout flags are read).</param>
+        /// <param name="order">The requested order, either case.</param>
+        /// <returns>True when no copy is needed for the layout.</returns>
+        /// <exception cref="ValueError">An order other than C, F, A or K (NumPy's <c>PyArray_OrderConverter</c>
+        ///     text).</exception>
+        private static bool LayoutAlreadyOK(Shape shape, char order)
+        {
+            switch (order)
+            {
+                case 'C':
+                case 'c':
+                    return shape.IsContiguous;
+                case 'F':
+                case 'f':
+                    return shape.IsFContiguous;
+                case 'A':
+                case 'a':
+                case 'K':
+                case 'k':
+                    return true;
+                default:
+                    // NumPy's PyArray_OrderConverter text, verbatim.
+                    throw new ValueError($"order must be one of 'C', 'F', 'A', or 'K' (got '{order}')");
+            }
         }
     }
 }

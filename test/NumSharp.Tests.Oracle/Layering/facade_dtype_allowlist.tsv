@@ -17,17 +17,11 @@ APIs/np.savetxt.cs	1	1
 APIs/np.tofile.cs	5	6
 APIs/np.vectorize.cs	0	2
 APIs/np.where.cs	2	8
-Casting/Implicit/NDArray.Implicit.Array.cs	3	48
 Casting/Implicit/NDArray.Implicit.ValueTypes.cs	4	3
 Casting/NDArray.ToString.cs	0	1
 Casting/NDArray.byteswap.cs	1	1
 Casting/NDArray.getfield.cs	1	0
 Casting/NDArray.tobytes.cs	1	0
-Creation/NDArray.Scalar.cs	5	0
-Creation/np.array.cs	5	3
-Creation/np.array.string.cs	1	0
-Creation/np.asanyarray.cs	4	0
-Creation/np.asarray.cs	2	0
 Creation/np.asarray_chkfinite.cs	0	1
 Creation/np.dtype.cs	0	2
 Creation/np.eye.cs	1	4

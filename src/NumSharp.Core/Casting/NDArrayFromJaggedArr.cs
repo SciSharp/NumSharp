@@ -24,10 +24,19 @@ namespace NumSharp
     public partial class NDArray
     {
         /// <summary>
-        /// low performance due to loop element-wise
+        ///     A jagged C# array of <typeparamref name="T"/> (<c>T[][]</c> up to <c>T[][][][]</c>) into a new C-contiguous
+        ///     array: the shape is read from the FIRST child at every level (a ragged array is not detected: a shorter later
+        ///     child throws while it is copied, a longer one is truncated) and the elements are copied one by one, which is
+        ///     slow for large arrays. The implicit conversion from a C# array
+        ///     (<see cref="Backends.UnmanagedStorage.FromManagedArray(Array)"/>) dispatches here for a jagged array.
         /// </summary>
-        /// <param name="dotNetArray"></param>
-        private static NDArray FromJaggedArray<T>(Array dotNetArray)
+        /// <typeparam name="T">The innermost element type, one of NumSharp's dtypes.</typeparam>
+        /// <param name="dotNetArray">The jagged array (its element type is an array type).</param>
+        /// <returns>The new array.</returns>
+        /// <exception cref="Exception"><paramref name="dotNetArray"/> is not jagged (a rectangular array).</exception>
+        /// <exception cref="NotImplementedException">More than four levels of nesting.</exception>
+        /// <exception cref="InvalidCastException">An innermost element type other than <typeparamref name="T"/>.</exception>
+        internal static NDArray FromJaggedArray<T>(Array dotNetArray)
         {
             if (!dotNetArray.GetType().GetElementType().IsArray)
                 throw new Exception("Multi dim arrays are not allowed here!");

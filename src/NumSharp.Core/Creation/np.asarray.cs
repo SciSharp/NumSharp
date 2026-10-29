@@ -5,18 +5,6 @@ namespace NumSharp
     public static partial class np
     {
         /// <summary>
-        ///     NumPy's <c>ValueError</c> text (<c>npy_no_copy_err_msg</c>) for <c>copy=False</c> when the conversion has to
-        ///     make a new array — a cast, a relayout, a C# literal's pack or <c>None</c>'s; NumSharp raises it as an
-        ///     <see cref="ArgumentException"/> on the <c>copy</c> parameter.
-        /// </summary>
-        private const string UnableToAvoidCopyText =
-            "Unable to avoid copy while creating an array as requested.\n" +
-            "If using `np.array(obj, copy=False)` replace it with `np.asarray(obj)` " +
-            "to allow a copy when needed (no behavior change in NumPy 1.x).\n" +
-            "For more details, see " +
-            "https://numpy.org/devdocs/numpy_2_0_migration_guide.html#adapting-to-changes-in-the-copy-keyword.";
-
-        /// <summary>
         ///     NumPy's <c>np.asarray('abc')</c>: a 0-d fixed-width Unicode array holding <paramref name="data"/> (see
         ///     <see cref="array(string)"/>).
         /// </summary>
@@ -112,76 +100,7 @@ namespace NumSharp
             // no array-subclass dispatch, so the value is accepted but never read.
             _ = like;
 
-            // Python's None: a Python object, so np.asarray(None, dtype) builds a NEW 0-d array of its setitem value (NaN,
-            // nan+nanj, False, 'None', a StringDType NA object; int(None)'s TypeError) — which copy=false refuses before
-            // anything is converted (PyArray_FromAny's NPY_ARRAY_ENSURENOCOPY check precedes the pack). Without a dtype
-            // NumPy's discovery gives the object dtype.
-            if (a is null)
-            {
-                if (dtype is null)
-                    throw NDArray.NoneWithoutDtype("np.asarray");
-                if (copy == false)
-                    throw new ArgumentException(UnableToAvoidCopyText, nameof(copy));
-                return NDArray.NoneForStore(dtype);
-            }
-
-            // A C# literal (NDArray.WasPythonLiteral) is NumPy's Python scalar, which np.asarray(value, dtype=...) converts
-            // with PyArray_Pack into a NEW array: np.asarray(1000, dtype=np.int8) raises "Python integer 1000 out of bounds
-            // for int8" and np.asarray(1.5, dtype=np.int8) is 1 — where a 0-d ndarray would be cast. A fresh array can never
-            // satisfy copy=false (NumPy's "Unable to avoid copy" for any Python scalar).
-            if (a.WasPythonLiteral && dtype is not null && !Backends.Strings.NDStringStorage.IsString(dtype))
-            {
-                var packed = NDArray.PackForStore(a, dtype.GetTypeCode(), pyArrayPackRoute: false);
-                if (!ReferenceEquals(packed, a))
-                {
-                    if (copy == false)
-                    {
-                        packed.Dispose();
-                        throw new ArgumentException(UnableToAvoidCopyText, nameof(copy));
-                    }
-
-                    return packed;
-                }
-            }
-
-            // A string request is satisfied only by a string array of that class AND width (an unsized 'U' adapts to the
-            // array first); the storage lane alone would let a <U4 array pass for 'S' or 'U2'.
-            bool typeMatches = dtype == null || Backends.Strings.NDStringArrays.SatisfiesRequest(a, dtype);
-            bool layoutMatches = LayoutAlreadyOK(a.Shape, order);
-            bool noCopyNeeded = typeMatches && layoutMatches;
-
-            // A copy or a cast of an explicit 0-d ARRAY is an explicit 0-d array again (NumPy returns a 0-d ndarray
-            // from np.asarray(np.array(2), dtype=float)); the mark is per object, so it is carried over by hand.
-            bool explicitZeroDim = a.IsExplicitZeroDimArray;
-
-            // The copies keep NumPy's order code as given: astype / copy resolve 'K' to the source's own axis order
-            // (a transposed or broadcast source keeps its layout), which resolving to C-or-F first would lose.
-            if (copy == true)
-            {
-                NDArray copied = !typeMatches ? a.astype(dtype, copy: true, order: order) : a.copy(order);
-                return explicitZeroDim ? copied.MarkExplicitZeroDimArray() : copied;
-            }
-
-            if (copy == false && !noCopyNeeded)
-                throw new ArgumentException(UnableToAvoidCopyText, nameof(copy));
-
-            // NumPy (_array_fromobject_generic) returns the array itself when no dtype was given or the requested descriptor
-            // IS the array's — a builtin singleton, or an unsized string class, which adapts to the array's own descriptor;
-            // an EQUAL descriptor that is another object (every sized string descriptor is a fresh object) gets a view of
-            // the array with that descriptor: np.asarray(u, dtype='<U2') shares u's memory but is not u (owndata false).
-            if (noCopyNeeded)
-            {
-                if (dtype is null || ReferenceEquals(dtype, a.dtype) || dtype.itemsize == 0)
-                    return a;
-                // The view is a new object, and the explicit-0-d mark is per object: NumPy's view of an explicit 0-d array
-                // is an explicit 0-d array too, so the mark is carried over like on the copy paths.
-                var view = new NDArray(a.Storage.Alias(a.Shape)) { TensorEngine = a.TensorEngine };
-                return explicitZeroDim ? view.MarkExplicitZeroDimArray() : view;
-            }
-
-            // copy == null && !noCopyNeeded: copy / cast as required.
-            NDArray converted = !typeMatches ? a.astype(dtype, copy: true, order: order) : a.copy(order);
-            return explicitZeroDim ? converted.MarkExplicitZeroDimArray() : converted;
+            return NDArray.ArrayFromObject(a, dtype, order, copy);
         }
 
         /// <summary>
@@ -234,32 +153,6 @@ namespace NumSharp
             if (buffer is null)
                 throw new ArgumentNullException(nameof(buffer));
             return asarray(buffer.obj, dtype, order, copy, like, device);
-        }
-
-        /// <summary>
-        ///     Returns true when <paramref name="shape"/>'s memory layout already satisfies the requested
-        ///     order ('C', 'F', 'A', 'K'). Mirrors NumPy's <c>STRIDING_OK</c> macro:
-        ///     'A' and 'K' impose no layout constraint, so a copy is never forced for layout reasons.
-        /// </summary>
-        private static bool LayoutAlreadyOK(Shape shape, char order)
-        {
-            switch (order)
-            {
-                case 'C':
-                case 'c':
-                    return shape.IsContiguous;
-                case 'F':
-                case 'f':
-                    return shape.IsFContiguous;
-                case 'A':
-                case 'a':
-                case 'K':
-                case 'k':
-                    return true;
-                default:
-                    // NumPy's PyArray_OrderConverter text, verbatim.
-                    throw new ValueError($"order must be one of 'C', 'F', 'A', or 'K' (got '{order}')");
-            }
         }
     }
 }
