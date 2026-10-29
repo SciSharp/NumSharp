@@ -568,6 +568,44 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     Whether an advanced index's advanced entries are consecutive, as NumPy's <c>mapiter_fill_info</c> decides
+        ///     (<c>consec_status</c>), read from the index tuple AS GIVEN: integers, index arrays, masks and 0-d bools are the
+        ///     advanced entries; a slice, a new axis and the ellipsis separate them — the ellipsis whatever it spans, none
+        ///     included. When they are not consecutive the advanced block goes in FRONT of the result.
+        /// </summary>
+        /// <param name="normalized">The index tuple with slice notation parsed into <see cref="Slice"/>s, the ellipsis not
+        ///     expanded.</param>
+        /// <returns>False when a non-advanced entry stands between two advanced ones.</returns>
+        /// <remarks>
+        ///     NumPy counts an ellipsis as an entry of its own (<c>HAS_ELLIPSIS</c>) even when it spans no axis, so
+        ///     <c>a[1:3, np.array([], int), ..., np.array(True)]</c> on a 2-D array is <c>(0, 2)</c>, the block in front.
+        ///     The routes that decided on the ellipsis-expanded list (<see cref="ExpandEllipsisForMixed"/>), where such an
+        ///     ellipsis leaves no item, kept the block in place: <c>(2, 0)</c> (found 2026-10-29 by comparing
+        ///     <see cref="MapIterResultDims"/> with the getter over 10,744 random advanced keys: 6 differed, all this case,
+        ///     NumPy 2.4.2 on MapIterResultDims' side). An integer slice (<see cref="Slice.Index(long)"/>) is an integer, an
+        ///     advanced entry; the indexer's keys hold it as its <see cref="long"/> already (<see cref="NormalizeIndexInputs"/>).
+        /// </remarks>
+        private static bool AdvancedEntriesAreConsecutive(object[] normalized)
+        {
+            // NumPy's consec_status: -1 no advanced entry yet, 0 inside the block, 1 past it.
+            int status = -1;
+            foreach (var entry in normalized)
+            {
+                // A slice, the ellipsis and a new axis separate; an integer slice is an integer, an advanced entry.
+                if (entry is Slice slice && (!slice.IsIndex || slice.IsEllipsis || slice.IsNewAxis))
+                {
+                    if (status == 0)
+                        status = 1;
+                }
+                else if (status == -1)
+                    status = 0;
+                else if (status == 1)
+                    return false;
+            }
+            return true;
+        }
+
+        /// <summary>
         /// Expands a single <c>...</c> (ellipsis) in a normalized index tuple to the
         /// right number of full slices, counting EVERY axis-consuming item (slices,
         /// integers and advanced indices) — unlike <see cref="ExpandEllipsis"/>, which
@@ -701,7 +739,17 @@ namespace NumSharp
         /// and the merged value (<paramref name="boolValue"/>) so the caller returns the size-1
         /// newaxis view (True) or empties that axis (False). Shared by the getter and setter;
         /// returns false when there is no 0-d bool or any non-basic (advanced) index is present.
+        /// When a slice, a newaxis or the ellipsis separates the advanced entries (the 0-d bools
+        /// and the integers), the inserted axis is the FIRST, as NumPy moves the block to the front.
         /// </summary>
+        /// <param name="indicesObjects">The normalized index tuple (<see cref="NormalizeIndexInputs"/>, a C# bool already a
+        ///     0-d bool array).</param>
+        /// <param name="basicIndex">The basic index to apply, the merged bools' new axis included, when the result is
+        ///     true.</param>
+        /// <param name="boolAxis">The output position of that axis (0 when the block goes in front).</param>
+        /// <param name="boolValue">Whether every 0-d bool is True (the axis has length 1), else it has length 0.</param>
+        /// <returns>True for a key of 0-d bools among basic entries; false for any other key, or slice notation that
+        ///     does not parse.</returns>
         private bool TryBuild0dBoolWithBasic(object[] indicesObjects, out object[] basicIndex, out int boolAxis, out bool boolValue)
         {
             basicIndex = null;
@@ -725,14 +773,13 @@ namespace NumSharp
 
             int firstBoolPos = -1, boolCount = 0;
             bool allTrue = true;
-            // Track the advanced-block span. With a 0-d bool present (HAS_0D_BOOL ⇒ HAS_FANCY),
-            // scalar ints join the advanced block too (mapping.c). When those advanced items are
-            // CONSECUTIVE the merged block stays in place — exactly what this handler emits (a
-            // NewAxis at the first 0-d-bool position). When a slice / newaxis SEPARATES them the
-            // block moves to the FRONT (_get_transpose), which this handler does NOT model — bail
-            // so TryBuildMultiAdvancedGrid (which has the consec/front rule + MixKind.ZeroBool)
-            // owns it. e.g. [int,slice,True] -> NumPy (1,0) not (0,1); [slice,True,slice,False].
-            int minAdvPos = int.MaxValue, maxAdvPos = -1, advCount = 0;
+            // Count the advanced entries. With a 0-d bool present (HAS_0D_BOOL ⇒ HAS_FANCY), scalar
+            // ints join the advanced block too (mapping.c). When those advanced entries are CONSECUTIVE
+            // the merged block stays in place (a NewAxis at the first 0-d-bool position); when a slice,
+            // a newaxis or the ellipsis SEPARATES them the block moves to the FRONT (_get_transpose) —
+            // [int, slice, True] on (2, 3) is (1, 3), [slice, True, slice, False] on (2, 3) is (0, 2, 3).
+            // Both are emitted below.
+            int advCount = 0;
             for (int i = 0; i < items.Length; i++)
             {
                 switch (items[i])
@@ -741,8 +788,7 @@ namespace NumSharp
                         if (firstBoolPos < 0) firstBoolPos = i;
                         boolCount++;
                         if (!(bool)nd) allTrue = false;
-                        if (i < minAdvPos) minAdvPos = i;
-                        maxAdvPos = i; advCount++;
+                        advCount++;
                         break;
                     case NDArray _:        // n-d / non-bool array -> advanced; not this case
                     case int[] _:
@@ -752,8 +798,7 @@ namespace NumSharp
                         break;
                     case int _:
                     case long _:
-                        if (i < minAdvPos) minAdvPos = i;
-                        maxAdvPos = i; advCount++;
+                        advCount++;
                         break;
                     default:
                         return false;
@@ -762,19 +807,22 @@ namespace NumSharp
             if (boolCount == 0)
                 return false;
 
-            // Non-consecutive advanced block (a slice/newaxis separates the 0-d bools / ints):
-            // NumPy moves the merged advanced axis to the FRONT, which this in-place handler can't
-            // express. Defer to the grid. (Consecutive — incl. a single 0-d bool, or A[True,True] /
-            // A[True,False] — stays in place and is handled here.)
-            if (advCount > 1 && (maxAdvPos - minAdvPos + 1) != advCount)
-                return false;
+            // Non-consecutive advanced entries (a slice, a newaxis or the ellipsis between the 0-d bools /
+            // ints — read from the tuple as given: an ellipsis that spans no axis has no entry in the
+            // expanded items, yet separates them): NumPy moves the merged advanced axis to the FRONT. The
+            // block here is ONE axis of length 1 or 0 (no index array takes this route), so the front is
+            // the new axis emitted first. Consecutive entries — incl. a single 0-d bool, or A[True,True] /
+            // A[True,False] — keep it in place. (The front case used to defer to the grid, which has no
+            // per-axis index array to build for a 0-d source: a 0-d array's [False, ..., True] raised
+            // IndexOutOfRangeException there; NumPy answers (0,).)
+            bool front = advCount > 1 && !AdvancedEntriesAreConsecutive(normalized);
 
             boolValue = allTrue;
 
             // Output axis of the inserted bool axis = output axes contributed by the items
-            // BEFORE the first 0-d bool (a real slice or a newaxis adds one; an int reduces one).
+            // BEFORE the first 0-d bool (a real slice or a newaxis adds one; an int reduces one); 0 in front.
             int outAxis = 0;
-            for (int i = 0; i < firstBoolPos; i++)
+            for (int i = 0; !front && i < firstBoolPos; i++)
             {
                 switch (items[i])
                 {
@@ -788,8 +836,10 @@ namespace NumSharp
             }
             boolAxis = outAxis;
 
-            var basic = new List<object>(items.Length);
-            bool emitted = false;
+            var basic = new List<object>(items.Length + 1);
+            if (front)
+                basic.Add(Slice.NewAxis);
+            bool emitted = front;
             for (int i = 0; i < items.Length; i++)
             {
                 if (items[i] is NDArray nd2 && nd2.typecode == NPTypeCode.Boolean && nd2.ndim == 0)
@@ -946,7 +996,8 @@ namespace NumSharp
         /// <item>each slice / newaxis keeps its own output axis (outer product with the block);</item>
         /// <item>a scalar int is a 0-d advanced index (part of the block, no output axis);</item>
         /// <item>the block stays IN PLACE when the advanced indices are consecutive, or moves
-        /// to the FRONT when a slice / newaxis separates them.</item>
+        /// to the FRONT when a slice, a newaxis or the ellipsis separates them (the ellipsis
+        /// even when it spans no axis, <see cref="AdvancedEntriesAreConsecutive"/>).</item>
         /// </list>
         /// Emits one integer index array per source axis, each broadcast to the final
         /// output shape, so a single <c>FetchIndices</c> / <c>SetIndices</c> performs the
@@ -954,6 +1005,10 @@ namespace NumSharp
         /// (caller falls back) when there is no explicit slice/newaxis, fewer than two
         /// advanced axes, the tuple over-indexes the rank, or an item is unrecognized.
         /// </summary>
+        /// <param name="indicesObjects">The normalized index tuple (<see cref="NormalizeIndexInputs"/>).</param>
+        /// <param name="grid">One integer index array per source axis, broadcast to the result's shape, when the result
+        ///     is true.</param>
+        /// <returns>True when the grid was built; false to let the next route take the key.</returns>
         [NDScopedCovered] // only callers: the [NDScoped] FetchIndices(object[]) / SetIndices(object[], values) dispatches
         private bool TryBuildMultiAdvancedGrid(object[] indicesObjects, out NDArray[] grid)
         {
@@ -1081,15 +1136,10 @@ namespace NumSharp
                 axisOfItem[i] = (items[i].kind == MixKind.NewAxis || items[i].kind == MixKind.ZeroBool) ? -1 : axc++;
 
             // Consecutiveness: a slice/newaxis between the first and last advanced item (ints and
-            // 0-d bools count as advanced 0-d members of the block) moves the block to the front.
-            int firstAdv = -1, lastAdv = -1;
-            for (int i = 0; i < items.Count; i++)
-                if (items[i].kind == MixKind.Adv || items[i].kind == MixKind.Int || items[i].kind == MixKind.ZeroBool)
-                { if (firstAdv < 0) firstAdv = i; lastAdv = i; }
-            bool consecutive = true;
-            for (int i = firstAdv; i <= lastAdv; i++)
-                if (items[i].kind == MixKind.Slice || items[i].kind == MixKind.NewAxis)
-                { consecutive = false; break; }
+            // 0-d bools count as advanced 0-d members of the block) moves the block to the front. Read
+            // from the tuple as given (AdvancedEntriesAreConsecutive): an ellipsis separates them too,
+            // and one that spans no axis left no item in the expanded list.
+            bool consecutive = AdvancedEntriesAreConsecutive(normalized);
 
             // Broadcast ALL advanced indices together -> bshape (the block): the real fancy arrays AND
             // the 0-d-bool (1,)/(0,) arrays. advBOf[i] maps each block member back to its broadcast slot

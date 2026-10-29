@@ -36,7 +36,7 @@ Polynomial/Package/np.polynomial.polyutils.cs	1	1
 RandomSampling/np.random.multinomial.cs	0	1
 Selection/NDArray.Indexing.Masking.cs	3	0
 Selection/NDArray.Indexing.PrepareIndex.cs	0	11
-Selection/NDArray.Indexing.Selection.Getter.cs	0	41
+Selection/NDArray.Indexing.Selection.Getter.cs	0	39
 Selection/NDArray.Indexing.Selection.Setter.cs	1	23
 Selection/NDArray.Indexing.Selection.cs	0	4
 Selection/NDArray.Indexing.Strings.cs	1	3

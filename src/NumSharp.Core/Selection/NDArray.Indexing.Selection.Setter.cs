@@ -49,8 +49,13 @@ namespace NumSharp
         /// scalar ints broadcast) and scatters through the all-advanced assignment path.
         /// Returns <c>false</c> (caller falls back) when not applicable: no slice
         /// present, not exactly one advanced index, a multi-dim advanced index / k-D
-        /// mask, or a newaxis mixed in (not modelled for assignment).
+        /// mask, a newaxis mixed in (not modelled for assignment), or integers that a
+        /// slice separates from the index array (NumPy puts the block in front then).
         /// </summary>
+        /// <param name="indicesObjects">The normalized index tuple (<see cref="NormalizeIndexInputs"/>).</param>
+        /// <param name="values">The value to store, broadcast over the selection.</param>
+        /// <returns>True when the store was made here; false to let the next route take the key.</returns>
+        /// <exception cref="ValueError">The value does not broadcast to the selection (MapIter's text, from the scatter).</exception>
         [NDScopedCovered] // only caller: the [NDScoped] SetIndices(object[], values) dispatch
         private bool TrySetSliceWithSingleAdvanced(object[] indicesObjects, NDArray values)
         {
@@ -94,6 +99,11 @@ namespace NumSharp
             }
             if (advCount != 1 || !sawRealSlice)
                 return false;
+            // The index array and the integers are NumPy's advanced entries: when a slice, a newaxis or the ellipsis stands
+            // between them (a[0, :, ia]) the advanced block goes in FRONT of the selection, which the per-axis grid below
+            // does not express (it keeps each axis in place) — the multi-advanced grid's consecutiveness rule serves it.
+            if (!AdvancedEntriesAreConsecutive(normalized))
+                return false;
 
             // A 0-D BOOLEAN is NumPy's HAS_0D_BOOL: it consumes NO source axis and contributes an
             // axis of its own, length 1 (True) or 0 (False). This helper maps its one advanced item
@@ -102,9 +112,11 @@ namespace NumSharp
             // bool is silently DROPPED: `a[-1, 2:, -2, np.array(False)] = v`, a no-op in NumPy,
             // became a real write at `a[-1, 2:, -2]`. (It only looked correct when an axis was left
             // over, which placed the empty nonzero() index and emptied the grid by accident.)
-            // TryBuild0dBoolWithBasic deliberately hands a NON-CONSECUTIVE advanced block to
-            // TryBuildMultiAdvancedGrid, which carries MixKind.ZeroBool and models it properly —
-            // this helper runs in between and must not intercept it on the way there.
+            // TryBuild0dBoolWithBasic (which runs first) serves a 0-d bool among basic entries, its
+            // block in place or in front (a NON-CONSECUTIVE block went on to TryBuildMultiAdvancedGrid
+            // until 2026-10-29), and TryBuildMultiAdvancedGrid, which carries MixKind.ZeroBool, one
+            // beside an index array: a 0-d bool that still reaches this helper is refused for the
+            // reason above.
             if (advObj is NDArray adv0dBool && adv0dBool.typecode == NPTypeCode.Boolean && adv0dBool.ndim == 0)
                 return false;
 
