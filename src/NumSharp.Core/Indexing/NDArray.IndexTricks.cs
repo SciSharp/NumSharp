@@ -104,17 +104,23 @@ namespace NumSharp
         /// <summary>
         ///     NumPy's <c>numpy.fill_diagonal</c> after the facade's numpy.matrix region and null check: the diagonal's
         ///     <c>step</c> and <c>end</c> (a rectangular 2-D array, or a hyper-cube), then <c>a.flat[:end:step] = val</c> -
-        ///     the read-only check and the value's conversion before anything is written, then the values tiled to the
-        ///     diagonal's length and stored through the strided-store kernel.
+        ///     the read-only check and the value's conversion (<see cref="FlatStoreValue"/>) before the slice is walked, even
+        ///     when it selects nothing, then the values tiled to the diagonal's length and stored through the strided-store
+        ///     kernel.
         /// </summary>
         /// <param name="a">The array, filled in place (not null).</param>
         /// <param name="val">The value or values (null is Python's None).</param>
         /// <param name="wrap">Whether a tall matrix's diagonal wraps after N columns.</param>
         /// <exception cref="ArgumentException">Fewer than 2 dimensions, a non-hyper-cubic N-D array, or a read-only
         ///     array (NumPy's ValueError texts).</exception>
-        /// <exception cref="TypeError">None into an integer or decimal array (Python's <c>int(None)</c>).</exception>
-        /// <exception cref="ValueError">A <c>StringDType(coerce=False)</c> array given a value that is not text.</exception>
-        /// <exception cref="OverflowException">A Python int out of the dtype's range.</exception>
+        /// <exception cref="TypeError">None into an integer or decimal array (Python's <c>int(None)</c>), a complex into a
+        ///     real array, or a list item the dtype cannot convert.</exception>
+        /// <exception cref="ValueError">A <c>StringDType(coerce=False)</c> array given a value that is not text; a str
+        ///     that is not a number of a numeric dtype's kind (Python's <c>int()</c> / <c>float()</c> / <c>complex()</c>
+        ///     text, quoting the str); a NaN into an integer array.</exception>
+        /// <exception cref="OverflowException">A Python int, alone or in a list, out of the dtype's range (the LP64
+        ///     texts).</exception>
+        /// <exception cref="NotSupportedException">A value of no NumPy type.</exception>
         /// <remarks>Scoped: the packed value, its broadcast and the tiled values are temporaries of this call.</remarks>
         [NDScoped]
         internal static void FillDiagonal(NDArray a, object val, bool wrap)
@@ -152,39 +158,23 @@ namespace NumSharp
 
             if (end > a.size) end = a.size;
 
-            // NumPy's `a.flat[:end:step] = val` (iter_ass_subscript): the read-only check and the value's conversion come
-            // BEFORE anything is written, even when the slice selects nothing (an empty array still refuses a read-only
-            // target and an out-of-range Python int).
+            // NumPy's `a.flat[:end:step] = val` (iter_ass_subscript): the read-only check, then the value's conversion
+            // PyArray_FromAny(val, a.dtype, 0, 0, NPY_ARRAY_FORCECAST), then the slice - so the conversion's errors are raised
+            // even when the slice selects nothing: an empty array still refuses a read-only target, None into an integer
+            // dtype (np.fill_diagonal(np.zeros((0, 0), int), None)), an out-of-range Python int and a str that int() /
+            // float() refuses (np.fill_diagonal(np.zeros((0, 3), np.int8), 'x')), probed 2.4.2.
             if (!a.Shape.IsWriteable)
                 throw new ArgumentException("underlying array is read-only");
 
-            // Python's None: the flat setter's PyArray_FromAny(None, dtype, FORCECAST) is one element of None's setitem value
-            // (NaN, nan+nanj, False, 'None' truncated to an S / U width), converted HERE — after the read-only check and
-            // before the empty-diagonal return, so an integer array raises int(None)'s TypeError even when nothing is
-            // written (np.fill_diagonal(np.zeros((0, 0), int), None) raises, probed 2.4.2). A StringDType array stores None
-            // through its own branch below (the NA object, 'None', or coerce=False's refusal). The descriptor answers which
-            // arrays those are: the ones whose elements hold references (NumPy's PyDataType_REFCHK), as the item-selection
-            // family's one HasReferences decision does.
+            // A StringDType target converts with the array's descriptor — Python objects (None and a list's elements
+            // included) by setitem, an ndarray by the cast (NDVStringMove.StoreValue), so a value coerce=False refuses
+            // raises even for an empty diagonal; every other target through FlatStoreValue (a scalar packed into a 0-d
+            // array, anything else converted and raveled). The descriptor answers which arrays take the first route: the
+            // ones whose elements hold references (NumPy's PyDataType_REFCHK), as the item-selection family's one
+            // HasReferences decision does.
             bool references = a.dtype.Meta.HasReferences;
-            NDArray scalarValue = null;
-            if (val is null && !references)
-                scalarValue = NDArray.NoneForStore(a.dtype);
-
-            // The overwhelmingly common call is a SCALAR fill. A C# number is a Python (or NumPy) scalar in the
-            // boundary map, and the flat setter converts it with PyArray_FromAny(val, dtype, FORCECAST): PyArray_Pack's
-            // rules — a Python int range-checked (fill_diagonal(int8, 1000) raises "Python integer 1000 out of bounds for
-            // int8"), a float truncated then range-checked, a complex refused by a real dtype. The packed 0-d is built
-            // straight at the destination dtype (no dtype inference, no ravel/astype pair), and a stride-0 broadcast view
-            // supplies the `count` copies for free. A C# literal's 0-d array (an NDArray passed as object) packs the same
-            // way; any other array, and a C# array / List (NumPy's list-valued `val`, which must tile), take the general
-            // path below.
-            if (a.typecode != NPTypeCode.String && (NDArray.IsStoreScalar(val) || val is NDArray { WasPythonLiteral: true }))
-                scalarValue = NDArray.AsStoreValue(val, a.typecode);
-
-            // A StringDType target: NumPy's a.flat[...] = val converts val with the array's descriptor — Python objects (and
-            // a list's elements) by setitem, an ndarray by the cast (NDVStringMove.StoreValue) — BEFORE the slice is walked,
-            // so a value coerce=False refuses (None included) raises even for an empty diagonal.
             NDArray text = references ? Backends.Strings.NDVStringMove.StoreValue(val, a.dtype) : null;
+            NDArray converted = references ? null : FlatStoreValue(val, a);
 
             if (end <= 0 || step <= 0)
                 return;
@@ -207,28 +197,17 @@ namespace NumSharp
                 return;
             }
 
-            NDArray values;
-            if (scalarValue is not null)
-            {
-                values = np.broadcast_to(scalarValue, new Shape(count));
-            }
-            else
-            {
-                var source = val as NDArray ?? np.asanyarray(val);
-                if (source.size == 0)
-                    return; // NumPy: assigning an empty sequence leaves the diagonal untouched.
+            // NumPy: assigning an empty sequence leaves the diagonal untouched (iter_ass_subscript returns when the
+            // converted value has no element).
+            if (converted.size == 0)
+                return;
 
-                var flat = source.ravel();
-                // Convert unless the element type already matches (for strings: class AND width — a <U1 'Z' into a <U2
-                // array is padded first, never copied as two-unit elements).
-                if (!flat.HasSameElementType(a))
-                    flat = flat.astype(a.dtype);
-
-                // Ravel + cyclic tile/truncate to exactly `count` values (np.resize's rule).
-                values = flat.size == 1
-                    ? np.broadcast_to(flat, new Shape(count))
-                    : np.resize(flat, new[] {(int)count});
-            }
+            // One element (a packed scalar, or a one-element sequence): a stride-0 broadcast view supplies the `count`
+            // copies for free. More: the raveled values tiled cyclically / truncated to exactly `count` (np.resize's rule,
+            // the flat iterator's repetition of a short right-hand side).
+            NDArray values = converted.size == 1
+                ? np.broadcast_to(converted, new Shape(count))
+                : np.resize(converted, new[] {(int)count});
 
             var shape = a.Shape;
             long bufferSize = shape.BufferSize;
@@ -260,6 +239,71 @@ namespace NumSharp
 
                 WriteDiagonalBlock(a, values, written, len, offset, blockStride, bufferSize);
             }
+        }
+
+        /// <summary>
+        ///     NumPy's <c>PyArray_FromAny(val, a.dtype, 0, 0, NPY_ARRAY_FORCECAST)</c>, the conversion np.fill_diagonal's
+        ///     <c>a.flat[:end:step] = val</c> makes before it walks the slice, for an array whose elements hold no references
+        ///     (a <c>StringDType</c> array converts with its descriptor's own route): ONE Python or NumPy scalar is packed
+        ///     into a 0-d array of the dtype by its setitem, anything else is converted to the dtype and raveled.
+        /// </summary>
+        /// <param name="val">The value; null is Python's None.</param>
+        /// <param name="a">The destination array, whose dtype is the request.</param>
+        /// <returns>A 0-d array of <paramref name="a"/>'s dtype (a scalar), or a 1-D one (the raveled values, possibly
+        ///     empty, possibly a view of <paramref name="val"/> when it already has the dtype): an intermediate of the
+        ///     caller's scope.</returns>
+        /// <exception cref="TypeError">None into an integer or <c>decimal</c> array (Python's <c>int(None)</c>), a complex
+        ///     into a real one (<c>float()</c> / <c>int()</c> of a complex), or a list item the dtype cannot
+        ///     convert.</exception>
+        /// <exception cref="ValueError">A str that is not a number of the dtype's kind, quoted as the str (<c>invalid literal
+        ///     for int() with base 10: 'x'</c>, <c>could not convert string to float: 'x'</c>), a NaN into an integer array,
+        ///     a ragged list, or an array whose cast refuses its elements.</exception>
+        /// <exception cref="OverflowException">A Python int, alone or in a list, outside an integer dtype ("Python integer
+        ///     1000 out of bounds for int8"; the LP64 "Python int too large to convert to C long" past the C long), or past
+        ///     the double range into a float dtype.</exception>
+        /// <exception cref="NotSupportedException">A value of no NumPy type.</exception>
+        /// <remarks>
+        ///     <para>
+        ///     A scalar (a C# number, <c>bool</c>, <see cref="BigInteger"/> or <see cref="string"/>; a NumPy scalar
+        ///     <see cref="Half"/>, <c>char</c> or <c>decimal</c>) is the setitem's business: a numeric dtype packs it with
+        ///     <c>PyArray_Pack</c>'s rules (<see cref="AsStoreValue"/>: a Python int range-checked, a float truncated into an
+        ///     integer, a str parsed by Python's <c>int()</c> / <c>float()</c> / <c>complex()</c> - so the errors quote the
+        ///     str, where converting it to a <c>U</c> array first would quote <c>np.str_('x')</c> - and a NumPy scalar cast),
+        ///     an <c>S</c> / <c>U</c> dtype stores its <c>str()</c> (<see cref="Backends.UnmanagedStorage.FromAnyScalar"/>:
+        ///     <c>2**70</c> into <c>S5</c> is <c>b'11805'</c>). A C# literal's 0-d array (an <see cref="NDArray"/> passed as
+        ///     <c>object</c>) is the Python scalar it stands for.
+        ///     </para>
+        ///     <para>
+        ///     Anything else: an <see cref="NDArray"/> is raveled and CAST (FORCECAST: unsafe); a C# array (an ndarray in the
+        ///     boundary map), a list, a tuple or a collection goes through <see cref="np.asanyarray(in object, DType, string)"/>
+        ///     with the dtype requested, whose coercion of a Python list stores every item by the setitem (<c>[1000]</c> into
+        ///     int8 raises, as NumPy's <c>PyArray_AssignFromCache</c> does) and whose typed C# arrays are cast.
+        ///     </para>
+        /// </remarks>
+        private static NDArray FlatStoreValue(object val, NDArray a)
+        {
+            DType descr = a.dtype;
+            bool text = a.typecode == NPTypeCode.String;
+
+            // Python's None: one element of None's setitem value (NaN, nan+nanj, False, 'None' truncated to an S / U width),
+            // or int(None)'s TypeError.
+            if (val is null)
+                return NoneForStore(descr);
+
+            // One scalar: PyArray_Pack into the dtype, a numeric dtype by its setitem rules, a text dtype by str().
+            if (IsStoreScalar(val) || val is string)
+                return text ? Backends.UnmanagedStorage.FromAnyScalar(val, descr) : AsStoreValue(val, a.typecode);
+
+            // A C# literal's 0-d array (a number's or a str's implicit conversion) packs as the Python scalar it stands for;
+            // into a text dtype its cast below already gives the str() NumPy stores.
+            if (!text && val is NDArray { WasPythonLiteral: true } or NDArray { WasPythonStr: true })
+                return AsStoreValue(val, a.typecode);
+
+            // An array is raveled and cast; anything else converts through np.asanyarray with the dtype requested.
+            var flat = (val as NDArray ?? np.asanyarray(val, descr)).ravel();
+            // Convert unless the element type already matches (for strings: class AND width — a <U1 'Z' into a <U2 array is
+            // padded first, never copied as two-unit elements).
+            return flat.HasSameElementType(a) ? flat : flat.astype(descr);
         }
 
         /// <summary>

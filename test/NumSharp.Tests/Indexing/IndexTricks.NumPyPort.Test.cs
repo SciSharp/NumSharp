@@ -1,4 +1,5 @@
 using System;
+using System.Numerics;
 using NumSharp.Tests.Utilities;
 
 namespace NumSharp.Tests.Indexing
@@ -7,9 +8,10 @@ namespace NumSharp.Tests.Indexing
     ///     NumPy's index tricks (<c>lib/_index_tricks_impl.py</c>) as NumPy 2.4.2 runs them, found when the np-layer dtype
     ///     plan's P3 batch 7 moved their statements into <c>NDArray.IndexTricks.cs</c> and replayed the snapshot (11,514 cases)
     ///     against NumPy on Windows and on Linux: <c>np.ix_</c>'s result object for one sequence and its empty-sequence rule,
-    ///     the C-order copy of <c>np.r_</c> / <c>np.c_</c>'s matrix directive and the setitem conversion of a Python int
-    ///     entry. Every expectation is NumPy 2.4.2's output; where the platform's C <c>long</c> changes NumPy's text, Linux
-    ///     NumPy's is the one NumSharp pins.
+    ///     the C-order copy of <c>np.r_</c> / <c>np.c_</c>'s matrix directive, the setitem conversion of a Python int entry,
+    ///     and <c>np.fill_diagonal</c>'s value conversion (NumPy's <c>PyArray_FromAny(val, a.dtype, FORCECAST)</c>, made before
+    ///     the slice is walked). Every expectation is NumPy 2.4.2's output; where the platform's C <c>long</c> changes NumPy's
+    ///     text, Linux NumPy's is the one NumSharp pins.
     /// </summary>
     [TestClass]
     public class index_tricks_numpy_port_tests
@@ -110,6 +112,107 @@ namespace NumSharp.Tests.Indexing
             var half = np.r_[np.array(new[] { (Half)1 }), 70000];
             half.dtype.Should().Be(np.float16);
             half.ToArray<Half>().Should().Equal((Half)1, Half.PositiveInfinity);
+        }
+
+        /// <summary>A str value is parsed by the dtype's setitem: Python's int() / float() / complex(), quoting the str.</summary>
+        [TestMethod]
+        public void FillDiagonal_PythonStr_IsParsedBySetitem()
+        {
+            // np.fill_diagonal(np.zeros((3, 3), np.int8), 'x') -> ValueError: invalid literal for int() with base 10: 'x'
+            Action int8 = () => np.fill_diagonal(np.zeros(new Shape(3, 3), np.int8), "x");
+            int8.Should().ThrowExactly<ValueError>().WithMessage("invalid literal for int() with base 10: 'x'");
+            // float64: could not convert string to float: 'x'; complex128: complex() arg is a malformed string
+            Action float64 = () => np.fill_diagonal(np.zeros(new Shape(3, 3), np.float64), "x");
+            float64.Should().ThrowExactly<ValueError>().WithMessage("could not convert string to float: 'x'");
+            Action complex = () => np.fill_diagonal(np.zeros(new Shape(3, 3), np.complex128), "x");
+            complex.Should().ThrowExactly<ValueError>().WithMessage("complex() arg is a malformed string");
+
+            // np.fill_diagonal(np.zeros((3, 3), np.int64), '7') -> diagonal 7; float64 '2.5' -> diagonal 2.5
+            var i64 = np.zeros(new Shape(3, 3), np.int64);
+            np.fill_diagonal(i64, "7");
+            np.diagonal(i64).ToArray<long>().Should().Equal(7L, 7L, 7L);
+            i64.GetInt64(0, 1).Should().Be(0L);
+            var f64 = np.zeros(new Shape(3, 3), np.float64);
+            np.fill_diagonal(f64, "2.5");
+            np.diagonal(f64).ToArray<double>().Should().Equal(2.5, 2.5, 2.5);
+
+            // bool('x') is True, bool('') False
+            var truthy = np.zeros(new Shape(3, 3), np.@bool);
+            np.fill_diagonal(truthy, "x");
+            np.diagonal(truthy).ToArray<bool>().Should().Equal(true, true, true);
+            var falsy = np.ones(new Shape(3, 3), np.@bool);
+            np.fill_diagonal(falsy, "");
+            np.diagonal(falsy).ToArray<bool>().Should().Equal(false, false, false);
+        }
+
+        /// <summary>The value is converted before the slice is walked, so an empty diagonal still raises.</summary>
+        [TestMethod]
+        public void FillDiagonal_EmptyArray_StillConvertsTheValue()
+        {
+            // np.fill_diagonal(np.zeros((0, 3), np.int8), 'x') -> ValueError: invalid literal for int() with base 10: 'x'
+            Action text = () => np.fill_diagonal(np.zeros(new Shape(0, 3), np.int8), "x");
+            text.Should().ThrowExactly<ValueError>().WithMessage("invalid literal for int() with base 10: 'x'");
+            // np.fill_diagonal(np.zeros((0, 3), np.int8), [300]) -> OverflowError: Python integer 300 out of bounds for int8
+            Action list = () => np.fill_diagonal(np.zeros(new Shape(0, 3), np.int8), new object[] { 300 });
+            list.Should().ThrowExactly<OverflowException>().WithMessage("Python integer 300 out of bounds for int8");
+            // np.fill_diagonal(np.zeros((0, 3), np.int32), []) -> no error (an empty value assigns nothing)
+            np.fill_diagonal(np.zeros(new Shape(0, 3), np.int32), new object[0]);
+        }
+
+        /// <summary>A Python list stores every item by the setitem; an ndarray value is cast.</summary>
+        [TestMethod]
+        public void FillDiagonal_PythonList_StoresEveryItemBySetitem()
+        {
+            // np.fill_diagonal(np.zeros((3, 3), np.int8), [300, 2]) -> OverflowError: Python integer 300 out of bounds for int8
+            Action overflow = () => np.fill_diagonal(np.zeros(new Shape(3, 3), np.int8), new object[] { 300, 2 });
+            overflow.Should().ThrowExactly<OverflowException>().WithMessage("Python integer 300 out of bounds for int8");
+            // an ndarray is cast: np.fill_diagonal(np.zeros((3, 3), np.int8), np.array([300, 2])) -> diagonal [44, 2, 44]
+            var cast = np.zeros(new Shape(3, 3), np.int8);
+            np.fill_diagonal(cast, np.array(new long[] { 300, 2 }));
+            np.diagonal(cast).ToArray<sbyte>().Should().Equal((sbyte)44, (sbyte)2, (sbyte)44);
+
+            // np.fill_diagonal(np.zeros((3, 3)), [1.5, None]) -> diagonal [1.5, nan, 1.5]
+            var withNone = np.zeros(new Shape(3, 3), np.float64);
+            np.fill_diagonal(withNone, new object[] { 1.5, null });
+            withNone.GetDouble(0, 0).Should().Be(1.5);
+            double.IsNaN(withNone.GetDouble(1, 1)).Should().BeTrue();
+            withNone.GetDouble(2, 2).Should().Be(1.5);
+            // np.fill_diagonal(np.zeros((3, 3), np.int64), [1.5, 2.5]) -> diagonal [1, 2, 1] (int() truncates a float)
+            var truncated = np.zeros(new Shape(3, 3), np.int64);
+            np.fill_diagonal(truncated, new object[] { 1.5, 2.5 });
+            np.diagonal(truncated).ToArray<long>().Should().Equal(1L, 2L, 1L);
+            // np.fill_diagonal(np.zeros((3, 3), np.int64), [1.5, np.nan]) -> ValueError: cannot convert float NaN to integer
+            Action nan = () => np.fill_diagonal(np.zeros(new Shape(3, 3), np.int64), new object[] { 1.5, double.NaN });
+            nan.Should().ThrowExactly<ValueError>().WithMessage("cannot convert float NaN to integer");
+            // np.fill_diagonal(np.zeros((3, 3), np.int32), [None]) -> TypeError: int() argument must be ... not 'NoneType'
+            Action none = () => np.fill_diagonal(np.zeros(new Shape(3, 3), np.int32), new object[] { null });
+            none.Should().ThrowExactly<TypeError>()
+                .WithMessage("int() argument must be a string, a bytes-like object or a real number, not 'NoneType'");
+        }
+
+        /// <summary>Into a text array a Python scalar stores its str(), a Python int past int64 included.</summary>
+        [TestMethod]
+        public void FillDiagonal_PythonScalar_IntoText_StoresItsStr()
+        {
+            // a = np.zeros((2, 2), 'S5'); np.fill_diagonal(a, 2**70) -> [[b'11805', b''], [b'', b'11805']]
+            var bytes = np.zeros(new Shape(2, 2), np.dtype("S5"));
+            np.fill_diagonal(bytes, BigInteger.Pow(2, 70));
+            np.array_equal(bytes, np.array(new[] { "11805", "", "", "11805" }, np.dtype("S5")).reshape(2, 2))
+                .Should().BeTrue();
+            // 'U5' -> [['11805', ''], ['', '11805']]
+            var text = np.zeros(new Shape(2, 2), np.dtype("U5"));
+            np.fill_diagonal(text, BigInteger.Pow(2, 70));
+            np.array_equal(text, np.array(new[] { "11805", "", "", "11805" }, np.dtype("U5")).reshape(2, 2))
+                .Should().BeTrue();
+            // np.fill_diagonal(np.zeros((2, 2), 'S5'), 1.5) -> [[b'1.5', b''], [b'', b'1.5']]
+            var floats = np.zeros(new Shape(2, 2), np.dtype("S5"));
+            np.fill_diagonal(floats, 1.5);
+            np.array_equal(floats, np.array(new[] { "1.5", "", "", "1.5" }, np.dtype("S5")).reshape(2, 2))
+                .Should().BeTrue();
+            // np.fill_diagonal(np.zeros((3, 3), 'U5'), [300, 'ab']) -> diagonal ['300', 'ab', '300']
+            var mixed = np.zeros(new Shape(3, 3), np.dtype("U5"));
+            np.fill_diagonal(mixed, new object[] { 300, "ab" });
+            np.array_equal(np.diagonal(mixed), np.array(new[] { "300", "ab", "300" }, np.dtype("U5"))).Should().BeTrue();
         }
     }
 }
