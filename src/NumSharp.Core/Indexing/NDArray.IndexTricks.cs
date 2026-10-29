@@ -18,11 +18,14 @@ namespace NumSharp
 
         /// <summary>
         ///     NumPy's <c>numpy.ix_</c> after the facade: each sequence made an array (a non-ndarray one that comes out empty
-        ///     cast to <c>intp</c>), refused unless 1-D, a bool one replaced by its <c>nonzero()</c>, then reshaped to its
-        ///     own axis of the open mesh.
+        ///     cast to <c>intp</c>: an object[] or collection, never an <see cref="NDArray"/>, a typed C# array or a
+        ///     <c>Memory&lt;T&gt;</c>, which are ndarrays in the boundary map), refused unless 1-D, a bool one replaced by its
+        ///     <c>nonzero()</c>, then reshaped to its own axis of the open mesh.
         /// </summary>
         /// <param name="args">The sequences (the facade's <c>params</c> array; null or empty gives no arrays).</param>
-        /// <returns>One array per sequence, each a view of its sequence's array with length-1 axes inserted.</returns>
+        /// <returns>One array per sequence, each a NEW view of its sequence's array with length-1 axes inserted - also for a
+        ///     single sequence, which gets no axis: the result never is the operand or the array a conversion made, so it
+        ///     never owns its data.</returns>
         /// <exception cref="ValueError">A sequence that is not 1-D, null (NumPy's None) included: "Cross index must be 1
         ///     dimensional".</exception>
         /// <remarks>Scoped: the conversions of the sequences and the masks' index arrays are temporaries of this call (the
@@ -57,8 +60,12 @@ namespace NumSharp
                 else
                 {
                     New = np.asanyarray(item);
-                    // Explicitly type empty arrays to avoid the float default.
-                    if (New.size == 0 && New.typecode != NPTypeCode.Int64)
+                    // Explicitly type empty arrays to avoid the float default - NumPy's `if not isinstance(new, ndarray)`
+                    // branch: only a sequence that is NOT an ndarray is cast. A typed C# array or Memory<T> is an ndarray in
+                    // the boundary map (UnmanagedStorage.IsArrayLike) and keeps its dtype even when empty
+                    // (np.ix_(np.array([], np.int32))[0] is int32, probed 2.4.2); an empty object[] or collection is a
+                    // Python list, whose float64 [] becomes intp.
+                    if (New.size == 0 && New.typecode != NPTypeCode.Int64 && !Backends.UnmanagedStorage.IsArrayLike(item))
                         New = New.astype(NPTypeCode.Int64);
                 }
 
@@ -73,17 +80,18 @@ namespace NumSharp
                 // (broadcast) or otherwise read-only operand keeps its strides AND its
                 // non-writeable flag — reshape materializes those and would hand back a
                 // writeable copy, which NumPy does not do.
-                if (nd > 1)
+                // A single sequence inserts no axis, and NumPy's reshape to the same shape is still a NEW view
+                // (PyArray_Newshape's same-shape case is PyArray_View): never the operand itself, never the owning
+                // array a conversion made (np.ix_(a)[0] is not a, and np.ix_([1, 2])[0].flags.owndata is False, probed
+                // 2.4.2). expand_dims with no axes gives that view, so the call is made for every nd.
+                var axes = new int[nd - 1];
+                for (int i = 0, w = 0; i < nd; i++)
                 {
-                    var axes = new int[nd - 1];
-                    for (int i = 0, w = 0; i < nd; i++)
-                    {
-                        if (i != k)
-                            axes[w++] = i;
-                    }
-
-                    New = np.expand_dims(New, axes);
+                    if (i != k)
+                        axes[w++] = i;
                 }
+
+                New = np.expand_dims(New, axes);
 
                 @out[k] = New;
             }
