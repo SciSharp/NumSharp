@@ -153,6 +153,17 @@ namespace NumSharp
                         newNdim += 1;                // used += 0
                         continue;
 
+                    case Slice sl when sl.IsIndex && arrayNdim != 0:
+                        // NumSharp's integer slice (Slice.Index(n), the notation "n") is NumPy's integer: HAS_INTEGER, one
+                        // source axis consumed and none kept, an advanced entry beside an index array. The indexer's keys
+                        // arrive with it as its integer already (NormalizeIndexInputs); this case keeps the classification
+                        // right for any other caller. On a 0-d array it takes the slice case below, whose consumed axis
+                        // raises the same "too many indices" an integer does there.
+                        indexType |= IndexType.Integer;
+                        ops.Add(IndexOp.Int(sl.Start ?? 0));
+                        usedNdim += 1;               // new += 0
+                        continue;
+
                     case Slice sl:
                         indexType |= IndexType.Slice;
                         ops.Add(IndexOp.Sl(sl));

@@ -100,9 +100,13 @@ namespace NumSharp
         /// <item>Any OTHER non-array sequence (<see cref="System.Collections.IEnumerable"/> —
         /// <c>List&lt;int&gt;</c>, <c>ArrayList</c>, …) is coerced to a 1-D integer fancy index,
         /// mirroring NumPy's <c>PyArray_FROM_O</c>, which accepts any sequence.</item>
+        /// <item>An integer slice (<see cref="Slice.Index(long)"/>) and an integer's notation
+        /// (<c>"1"</c>, <see cref="TryIntegerNotation"/>) become the <see cref="long"/> they name:
+        /// NumPy's integer index, an advanced entry beside an index array (since 2026-10-29; the
+        /// routes read them as slices, so <c>a[Slice.Index(-1), []]</c> kept an axis).</item>
         /// </list>
         /// <see cref="NDArray"/>, raw <c>int[]</c>/<c>long[]</c>, other typed arrays,
-        /// <see cref="Slice"/>, strings and scalars are left untouched (handled directly by the
+        /// other <see cref="Slice"/>s and strings, and scalars are left untouched (handled directly by the
         /// dispatch). (A <em>jagged</em> <c>bool[][]</c>/<c>int[][]</c> never arrives as one item:
         /// C# array covariance spreads it through <c>params object[]</c> into per-row arguments
         /// before this runs — use a rectangular <c>T[,]</c>.) Returns a possibly new / resized
@@ -141,6 +145,16 @@ namespace NumSharp
                 object converted;
                 switch (result[i])
                 {
+                    // NumSharp's integer slice (Slice.Index(n)) and integer notation ("n", " -2 ") are NumPy's integer
+                    // index: beside an advanced entry an integer is an advanced entry itself (HAS_INTEGER joins the block
+                    // and decides where it goes), which the routes below and PrepareIndex read from an int or a long only.
+                    // A key of slices, strings and integers alone never gets here (TryBasicIndex serves it as slices).
+                    case Slice { IsIndex: true, IsEllipsis: false, IsNewAxis: false } index:
+                        converted = index.Start ?? 0L;                       // Slice.ToSliceDef's reading of an index slice
+                        break;
+                    case string notation when TryIntegerNotation(notation, out long integer):
+                        converted = integer;
+                        break;
                     case NDArray _:                                          // already an NDArray (mask/fancy by typecode)
                     case int[] _:                                            // raw int[]/long[] kept as-is (fancy, decision B)
                     case long[] _:
@@ -172,6 +186,32 @@ namespace NumSharp
             }
 
             return result;
+        }
+
+        /// <summary>
+        ///     Whether one index entry's slice notation names a single integer (<c>"1"</c>, <c>" -2 "</c>, <c>"+3"</c>: what
+        ///     <see cref="Slice.Slice(string)"/> parses into an index slice), and that integer.
+        /// </summary>
+        /// <param name="notation">The entry.</param>
+        /// <param name="integer">The integer when the result is true, else 0.</param>
+        /// <returns>True for integer notation; false for any other slice notation (<c>"1:3"</c>, <c>"..."</c>,
+        ///     <c>"newaxis"</c>) and for text that is not slice notation at all, which the dispatch refuses with NumPy's
+        ///     invalid-index text later (this method does not).</returns>
+        private static bool TryIntegerNotation(string notation, out long integer)
+        {
+            Slice parsed;
+            try
+            {
+                parsed = new Slice(notation);
+            }
+            catch (ArgumentException)
+            {
+                // Not slice notation: left as it came, for the dispatch's own refusal.
+                integer = 0;
+                return false;
+            }
+            integer = parsed.IsIndex ? parsed.Start ?? 0 : 0;
+            return parsed.IsIndex;
         }
 
         /// <summary>
