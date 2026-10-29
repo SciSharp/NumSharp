@@ -79,7 +79,7 @@ Backends/Strings/NDVStringComparison.cs	0	1
 Backends/Strings/NDVStringCopy.cs	0	2
 Backends/Strings/NDVStringMove.cs	0	7
 Backends/Strings/NDVStringReduction.cs	0	12
-Backends/Strings/NDVStringStatistics.Quantile.cs	2	12	# np.nanmedian / np.nanquantile drive their 1-D line function with np.apply_along_axis: a driver of the array object (plan section 1, decided 2026-10-28), for P3 batch 7's home
+Backends/Strings/NDVStringStatistics.Quantile.cs	0	12
 Backends/Strings/NDVStringStatistics.cs	0	2
 Backends/TensorEngine.LinearAlgebra.cs	0	5
 Backends/Unmanaged/UnmanagedStorage.Setters.cs	0	1

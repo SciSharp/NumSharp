@@ -23,11 +23,9 @@ Indexing/np.diag.cs	1	0
 Indexing/np.indices.cs	0	3
 Indexing/np.ndenumerate.cs	0	1
 Indexing/np.place.cs	1	0
-Indexing/np.put_along_axis.cs	2	1
 Indexing/np.putmask.cs	1	0
 Indexing/np.ravel_multi_index.cs	0	1
 Indexing/np.take.FancyAxis.cs	0	1
-Indexing/np.take_along_axis.cs	1	9
 Indexing/np.unravel_index.cs	0	1
 Logic/np.can_cast.cs	1	80
 Logic/np.common_type.cs	1	6
@@ -35,7 +33,6 @@ Logic/np.find_common_type.cs	2	10
 Logic/np.isreal_iscomplex.cs	0	3
 Logic/np.min_scalar_type.cs	1	0
 Logic/np.type_checks.cs	2	15
-Manipulation/np.apply_along_axis.cs	0	1
 Manipulation/np.asscalar.cs	0	1
 Manipulation/np.copyto.cs	1	0
 Matrixlib/NDMatrix.Construction.cs	0	8

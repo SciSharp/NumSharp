@@ -280,7 +280,7 @@ namespace NumSharp.Backends.Strings
             }
             else
             {
-                r = np.apply_along_axis(row => AsAnyArray(NanMedian1D(row)), axis.Value, work);
+                r = NDArray.ApplyAlongAxis(row => AsAnyArray(NanMedian1D(row)), axis.Value, work);
                 if (target is not null)
                 {
                     np.copyto(target, r, "unsafe");
@@ -404,7 +404,7 @@ namespace NumSharp.Backends.Strings
             else
             {
                 int ax = axis.Value;
-                r = np.apply_along_axis(row => AsAnyArray(NanQuantile1D(quantileOp, row, q, qShape, qIsInteger, method, qType)), ax, work);
+                r = NDArray.ApplyAlongAxis(row => AsAnyArray(NanQuantile1D(quantileOp, row, q, qShape, qIsInteger, method, qType)), ax, work);
                 // `from_ax = [axis + i for i in range(q.ndim)]; np.moveaxis(result, from_ax, list(range(q.ndim)))` with the
                 // axis _ureduce handed the function (prologue.NumPyAxis): the reduced axis, or the UNnormalized -1 for merged
                 // axes, which for a q of two or more dimensions moves q's last axis and the first kept axes to the front
