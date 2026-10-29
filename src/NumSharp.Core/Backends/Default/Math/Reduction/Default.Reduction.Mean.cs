@@ -83,10 +83,10 @@ namespace NumSharp.Backends
                 NDArray result;
                 if (shape[axis] == 0)
                 {
-                    result = np.empty(Shape.Adopt(resultShape), outputType);
+                    result = new NDArray(outputType, Shape.Adopt(resultShape), false);
                     for (long i = 0; i < result.size; i++) result.SetAtIndex(nan, i);
                 }
-                else result = np.empty(Shape.Adopt(resultShape), outputType);
+                else result = new NDArray(outputType, Shape.Adopt(resultShape), false);
                 if (keepdims)
                 {
                     var ks = new long[arr.ndim];

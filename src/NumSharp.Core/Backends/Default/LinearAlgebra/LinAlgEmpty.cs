@@ -36,7 +36,7 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="a">The operand, cast to <c>result_t</c>, with <c>a.size == 0</c> (validated square by the caller).</param>
         /// <returns>A fresh zero-size array of <paramref name="a"/>'s shape and dtype.</returns>
-        internal static NDArray Cholesky(NDArray a) => np.zeros(Shape.Adopt(a.shape), a.typecode);
+        internal static NDArray Cholesky(NDArray a) => new NDArray(a.typecode, Shape.Adopt(a.shape), true);
 
         /// <summary>
         ///     <c>np.linalg.eig</c> / <c>eigvals</c> of an empty operand, as the <c>geev</c> seam returns it: complex128
@@ -49,8 +49,8 @@ namespace NumSharp.Backends
         internal static (NDArray w, NDArray v) Eig(NDArray a, bool computeVectors)
         {
             long n = a.Shape.dimensions[a.ndim - 1];
-            var w = np.zeros(Stacked(a, n), NPTypeCode.Complex);
-            var v = computeVectors ? np.zeros(Stacked(a, n, n), NPTypeCode.Complex) : null;
+            var w = new NDArray(NPTypeCode.Complex, Stacked(a, n), true);
+            var v = computeVectors ? new NDArray(NPTypeCode.Complex, Stacked(a, n, n), true) : null;
             return (w, v);
         }
 
@@ -64,8 +64,8 @@ namespace NumSharp.Backends
         internal static (NDArray w, NDArray v) Eigh(NDArray a, bool computeVectors)
         {
             long n = a.Shape.dimensions[a.ndim - 1];
-            var w = np.zeros(Stacked(a, n), RealOf(a.typecode));
-            var v = computeVectors ? np.zeros(Shape.Adopt(a.shape), a.typecode) : null;
+            var w = new NDArray(RealOf(a.typecode), Stacked(a, n), true);
+            var v = computeVectors ? new NDArray(a.typecode, Shape.Adopt(a.shape), true) : null;
             return (w, v);
         }
 
@@ -89,17 +89,17 @@ namespace NumSharp.Backends
             long m = a.Shape.dimensions[a.ndim - 2];
             long n = a.Shape.dimensions[a.ndim - 1];
             long k = Math.Min(m, n);
-            var s = np.zeros(Stacked(a, k), RealOf(a.typecode));
+            var s = new NDArray(RealOf(a.typecode), Stacked(a, k), true);
             if (!computeUv)
                 return (null, s, null);
             if (fullMatrices)
             {
                 // `if ('A' == params.JOBZ && min_m_n == 0) { identity_matrix(U, M); identity_matrix(VT, N); }`.
-                var u = k == 0 ? IdentityStack(a, m, a.typecode) : np.zeros(Stacked(a, m, m), a.typecode);
-                var vh = k == 0 ? IdentityStack(a, n, a.typecode) : np.zeros(Stacked(a, n, n), a.typecode);
+                var u = k == 0 ? IdentityStack(a, m, a.typecode) : new NDArray(a.typecode, Stacked(a, m, m), true);
+                var vh = k == 0 ? IdentityStack(a, n, a.typecode) : new NDArray(a.typecode, Stacked(a, n, n), true);
                 return (u, s, vh);
             }
-            return (np.zeros(Stacked(a, m, k), a.typecode), s, np.zeros(Stacked(a, k, n), a.typecode));
+            return (new NDArray(a.typecode, Stacked(a, m, k), true), s, new NDArray(a.typecode, Stacked(a, k, n), true));
         }
 
         /// <summary>
@@ -125,19 +125,19 @@ namespace NumSharp.Backends
             switch (mode)
             {
                 case "reduced":
-                    return (np.zeros(Stacked(a, m, k), tc), np.zeros(Stacked(a, k, n), tc));
+                    return (new NDArray(tc, Stacked(a, m, k), true), new NDArray(tc, Stacked(a, k, n), true));
                 case "complete":
                     // NumPy's `mc = m if mode == 'complete' and m > n else mn`; with M > N the operand is empty only when
                     // N == 0 (an identity Q) or the batch is (an empty identity stack).
                     if (m > n)
-                        return (IdentityStack(a, m, tc), np.zeros(Stacked(a, m, n), tc));
-                    return (np.zeros(Stacked(a, m, k), tc), np.zeros(Stacked(a, k, n), tc));
+                        return (IdentityStack(a, m, tc), new NDArray(tc, Stacked(a, m, n), true));
+                    return (new NDArray(tc, Stacked(a, m, k), true), new NDArray(tc, Stacked(a, k, n), true));
                 case "r":
-                    return (null, np.zeros(Stacked(a, k, n), tc));
+                    return (null, new NDArray(tc, Stacked(a, k, n), true));
                 case "raw":
-                    return (np.zeros(Stacked(a, n, m), tc), np.zeros(Stacked(a, k), tc));
+                    return (new NDArray(tc, Stacked(a, n, m), true), new NDArray(tc, Stacked(a, k), true));
                 case "economic":
-                    return (np.zeros(Shape.Adopt(a.shape), tc), null);
+                    return (new NDArray(tc, Shape.Adopt(a.shape), true), null);
                 default:
                     throw new ArgumentException($"Unrecognized mode '{mode}'");
             }
@@ -167,8 +167,8 @@ namespace NumSharp.Backends
             long m = a.Shape.dimensions[0];
             long n = a.Shape.dimensions[1];
             long nrhs = b.Shape.dimensions[1];
-            var x = np.zeros(Shape.Adopt(new[] { n, nrhs }), a.typecode);
-            var s = np.zeros(Shape.Adopt(new long[] { 0 }), NPTypeCode.Double);
+            var x = new NDArray(a.typecode, Shape.Adopt(new[] { n, nrhs }), true);
+            var s = new NDArray(NPTypeCode.Double, Shape.Adopt(new long[] { 0 }), true);
             var rank = NDArray.Scalar(0);
             NDArray resids;
             if (n == 0 && m > 0)
@@ -181,7 +181,7 @@ namespace NumSharp.Backends
             }
             else
             {
-                resids = np.zeros(Shape.Adopt(new[] { nrhs }), NPTypeCode.Double);
+                resids = new NDArray(NPTypeCode.Double, Shape.Adopt(new[] { nrhs }), true);
             }
             return (x, resids, rank, s);
         }
@@ -220,8 +220,8 @@ namespace NumSharp.Backends
         {
             var shape = Stacked(a, k, k);
             if (shape.size == 0)
-                return np.zeros(shape, tc);
-            var eye = np.eye(checked((int)k), dtype: tc);
+                return new NDArray(tc, shape, true);
+            var eye = NDArray.Eye(checked((int)k), null, 0, tc, 'C');
             if (a.ndim == 2)
                 return eye;
             // One identity broadcast over the batch and materialized in C order: the copy owns its buffer, the

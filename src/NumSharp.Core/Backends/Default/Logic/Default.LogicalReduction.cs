@@ -417,8 +417,8 @@ namespace NumSharp.Backends
         private static NDArray<bool> CreateLogicalResult(Shape resultShape, bool fillTrue)
         {
             var result = fillTrue
-                ? np.ones(resultShape, NPTypeCode.Boolean)
-                : np.zeros(resultShape, NPTypeCode.Boolean);
+                ? NDArray.Ones(resultShape, NPTypeCode.Boolean)
+                : new NDArray(NPTypeCode.Boolean, resultShape, true);
 
             return result.AsGeneric<bool>() ?? throw new InvalidOperationException("np.all/np.any expected a Boolean result.");
         }

@@ -518,7 +518,7 @@ namespace NumSharp.Backends
         {
             var order = dims.Length >= 2 ? OrderResolver.Resolve('K', inputShape) : 'C';
             var zeroShape = order == 'F' ? Shape.Adopt(dims, 'F') : Shape.Adopt(dims);
-            return np.zeros(zeroShape, outputType);
+            return new NDArray(outputType, zeroShape, true);
         }
 
         /// <summary>
@@ -716,7 +716,7 @@ namespace NumSharp.Backends
             var axis = NormalizeAxis(axis_.Value, arr.ndim);
             var resultShape = Shape.GetAxis(shape, axis);
             var outputType = typeCode ?? arr.GetTypeCode.GetAccumulatingType();
-            var result = np.zeros(Shape.Adopt(resultShape), outputType);
+            var result = new NDArray(outputType, Shape.Adopt(resultShape), true);
             if (keepdims)
             {
                 var ks = new long[arr.ndim];

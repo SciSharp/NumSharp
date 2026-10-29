@@ -715,7 +715,7 @@ namespace NumSharp.Backends.Strings
         internal static NDArray ValueIndex(NDArray values)
         {
             var dims = (long[])values.Shape.dimensions.Clone();
-            using var flat = np.arange(values.size);
+            using var flat = UnmanagedStorage.ArangeObj(0L, values.size, 1L, null);
             return flat.reshape(Shape.Adopt(dims)).copy();
         }
 
@@ -726,7 +726,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="dst">The destination (only its shape is read).</param>
         /// <returns>The marks the caller disposes.</returns>
         internal static NDArray NewMarks(NDArray dst)
-            => np.full(new Shape((long[])dst.Shape.dimensions.Clone()), -1L, NPTypeCode.Int64);
+            => NDArray.Full(new Shape((long[])dst.Shape.dimensions.Clone()), -1L, NPTypeCode.Int64);
 
         /// <summary>
         ///     Applies a scatter decided on MARKS: for every element of <paramref name="dst"/> whose mark is not -1, the old string

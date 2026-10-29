@@ -104,7 +104,7 @@ namespace NumSharp.Backends
 
                 // Reducing along non-zero axis - return empty Int64 array with reduced shape
                 var resultShape = Shape.GetAxis(shape, emptyAxis);
-                var result = np.empty(Shape.Adopt(resultShape), NPTypeCode.Int64);
+                var result = new NDArray(NPTypeCode.Int64, Shape.Adopt(resultShape), false);
 
                 if (keepdims)
                 {
@@ -157,13 +157,13 @@ namespace NumSharp.Backends
                 if (keepdims)
                 {
                     // Keep the axis but reduce to size 1 (it's already 1)
-                    return np.zeros(Shape.Adopt(shape.dimensions), NPTypeCode.Int64);
+                    return new NDArray(NPTypeCode.Int64, Shape.Adopt(shape.dimensions), true);
                 }
                 // The reduced shape is allocated directly, so the result owns its data as NumPy's does (a squeeze view
                 // of a full-shape zeros array reported OWNDATA False). A 1-D input whose only axis has size 1 reduces to
                 // a fresh 0-d — a numpy SCALAR (read-only) at the boundary.
                 var reducedDims = Shape.GetAxis(shape, axis);
-                var reduced = np.zeros(reducedDims.Length == 0 ? Shape.Scalar : Shape.Adopt(reducedDims), NPTypeCode.Int64);
+                var reduced = new NDArray(NPTypeCode.Int64, reducedDims.Length == 0 ? Shape.Scalar : Shape.Adopt(reducedDims), true);
                 return reduced.MarkReductionScalar();
             }
 

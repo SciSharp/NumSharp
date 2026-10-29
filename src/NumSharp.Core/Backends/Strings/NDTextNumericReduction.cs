@@ -63,7 +63,7 @@ namespace NumSharp.Backends.Strings
 
             // raw_array_assign_scalar: the loop's identity (0 for add, 1 for multiply, in the loop dtype) cast into every out
             // element — for a text out, the identity's str() — before a single element is read.
-            NDArray identity = ufunc == "add" ? np.zeros(Shape.Scalar, loop) : np.ones(Shape.Scalar, loop);
+            NDArray identity = ufunc == "add" ? new NDArray(loop, Shape.Scalar, true) : NDArray.Ones(Shape.Scalar, loop);
             UnmanagedStorage.Copyto(@out, identity, NPY_CASTING.NPY_UNSAFE_CASTING);
             if (input.size == 0 || @out.size == 0)
                 return @out;

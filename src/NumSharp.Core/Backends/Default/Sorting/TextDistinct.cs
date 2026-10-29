@@ -121,7 +121,7 @@ namespace NumSharp.Backends.Sorting
             }
 
             // The distinct strings, copied in first-occurrence order into a fresh array the caller sorts in place.
-            NDArray distinct = np.empty(Shape.Vector(count), ar.dtype);
+            NDArray distinct = new NDArray(ar.dtype, Shape.Vector(count), false);
             byte* dst = (byte*)distinct.Address;
             for (int k = 0; k < count; k++)
                 Buffer.MemoryCopy(p + (long)firsts[k] * width, dst + (long)k * width, width, width);

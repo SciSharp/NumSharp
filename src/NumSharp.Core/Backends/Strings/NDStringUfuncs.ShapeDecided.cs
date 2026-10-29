@@ -46,7 +46,7 @@ namespace NumSharp.Backends.Strings
         internal static NDArray BoolStandIn(NDArray a)
         {
             var dims = (long[])a.Shape.dimensions.Clone();
-            return np.zeros(dims.Length == 0 ? Shape.NewScalar() : Shape.Adopt(dims), NPTypeCode.Boolean);
+            return new NDArray(NPTypeCode.Boolean, dims.Length == 0 ? Shape.NewScalar() : Shape.Adopt(dims), true);
         }
 
         /// <summary>

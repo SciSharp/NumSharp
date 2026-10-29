@@ -182,7 +182,7 @@ namespace NumSharp.Backends.Strings
                 }
                 if (TryObjectList(value, out var dims, out var items))
                 {
-                    var handles = np.arange((long)items.Length);
+                    var handles = UnmanagedStorage.ArangeObj(0L, (long)items.Length, 1L, null);
                     var shaped = dims.Length == 1 ? handles : handles.reshape(Shape.Adopt(dims));
                     if (!ReferenceEquals(shaped, handles))
                         handles.Dispose();

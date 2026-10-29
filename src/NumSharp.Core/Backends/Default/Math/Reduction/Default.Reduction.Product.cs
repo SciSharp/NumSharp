@@ -84,7 +84,7 @@ namespace NumSharp.Backends
                 }
                 var axis = NormalizeAxis(axis_.Value, arr.ndim);
                 var resultShape = Shape.GetAxis(shape, axis);
-                var result = np.ones(Shape.Adopt(resultShape), typeCode ?? arr.GetTypeCode.GetAccumulatingType());
+                var result = NDArray.Ones(Shape.Adopt(resultShape), typeCode ?? arr.GetTypeCode.GetAccumulatingType());
                 if (keepdims)
                 {
                     var ks = new long[arr.ndim];

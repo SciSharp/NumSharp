@@ -605,7 +605,7 @@ namespace NumSharp.Backends.Iteration
 
                     // Allocate the NDArray with the resolved dtype and shape
                     var shape = outputShape.Length == 0 ? new Shape() : NumSharp.Shape.Adopt(outputShape);
-                    op[opIdx] = stringAllocDescr is not null ? np.zeros(shape, stringAllocDescr) : np.zeros(shape, allocDtype);
+                    op[opIdx] = stringAllocDescr is not null ? new NDArray(stringAllocDescr, shape, true) : new NDArray(allocDtype, shape, true);
                     if (allocatedOps is not null)
                         allocatedOps[opIdx] = true;
                     // Remembered so that a construction failing after this point releases the array (see _allocatedSlots).

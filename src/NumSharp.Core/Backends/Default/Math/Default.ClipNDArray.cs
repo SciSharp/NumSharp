@@ -568,7 +568,7 @@ namespace NumSharp.Backends
                 // RunClipKernel reads the value through .Address, which is only correct at offset 0.
                 return ScalarBoundReady(bound, outType) ? bound : bound.astype(outType);
             if (bound.ndim == 0)
-                return np.full(Shape.Adopt(runDims), bound.astype(outType).GetAtIndex(0), outType);
+                return NDArray.Full(Shape.Adopt(runDims), bound.astype(outType).GetAtIndex(0), outType);
             return PrepareBound(bound, Shape.Adopt(runDims), outType);
         }
 

@@ -541,7 +541,7 @@ namespace NumSharp.Backends
             // The running sums, one per output, in the kept axes' memory order: the identity +0 (np.zeros), which NumPy
             // assigns before the first slab.
             NPTypeCode accT = loop?.GetTypeCode() ?? sqT;
-            var acc = np.zeros(new Shape(nOut), accT);
+            var acc = new NDArray(accT, new Shape(nOut), true);
             NDArray block = null;
             long blockRows = -1;
             for (long a0 = 0; a0 < rows; a0 += rowsPer)
