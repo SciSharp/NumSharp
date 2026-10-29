@@ -133,47 +133,92 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Creates a Vector <see cref="NDArray"/> from given <paramref name="data"/>.
+        ///     Creates a vector of exactly <paramref name="size"/> elements, the first <paramref name="size"/> items
+        ///     of <paramref name="data"/>: NumPy's <c>np.fromiter(data, dtype=T, count=size)</c>. Use it to read a
+        ///     known number of items from a long or endless sequence; an enumeration that holds fewer items is an
+        ///     error, not a shorter array.
         /// </summary>
-        /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
-        /// <param name="data">The enumeration of data to create <see cref="NDArray"/> from.</param>
-        /// <param name="size">Maximum number of items to read from <paramref name="data"/>.</param>
-        /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
-        /// <remarks>
-        ///     https://numpy.org/doc/stable/reference/generated/numpy.array.html <br></br>
-        ///     Always performs a copy.<br></br>
-        ///     <paramref name="size"/> can be used to limit the amount of items to read form <paramref name="data"/>. Reading stops on either size or <paramref name="data"/> ends.
-        /// </remarks>
+        /// <typeparam name="T">The element type, one of NumSharp's dtypes; the result's dtype.</typeparam>
+        /// <param name="data">The enumeration to read. It is enumerated once, and at most <paramref name="size"/>
+        ///     items are taken from it (<c>MoveNext</c> is called <paramref name="size"/> times when it holds that
+        ///     many).</param>
+        /// <param name="size">The number of items to read, and the result's length.</param>
+        /// <returns>A fresh 1-D array of <paramref name="size"/> elements.</returns>
+        /// <exception cref="ValueError"><paramref name="data"/> holds fewer than <paramref name="size"/> items
+        ///     (NumPy's text, <c>iterator too short: Expected 5 but iterator had only 2 items.</c>), or
+        ///     <paramref name="size"/> is negative (<c>negative dimensions are not allowed</c>).</exception>
+        /// <exception cref="NullReferenceException"><paramref name="data"/> is null.</exception>
+        /// <remarks>See <see cref="array{T}(IEnumerable{T}, long)"/>, which this overload calls.</remarks>
         public static NDArray array<T>(IEnumerable<T> data, int size) where T : unmanaged
             => array(data, (long)size);
 
         /// <summary>
-        ///     Creates a Vector <see cref="NDArray"/> from given <paramref name="data"/>.
+        ///     Creates a vector of exactly <paramref name="size"/> elements, the first <paramref name="size"/> items
+        ///     of <paramref name="data"/>: NumPy's <c>np.fromiter(data, dtype=T, count=size)</c>. Use it to read a
+        ///     known number of items from a long or endless sequence; an enumeration that holds fewer items is an
+        ///     error, not a shorter array.
         /// </summary>
-        /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
-        /// <param name="data">The enumeration of data to create <see cref="NDArray"/> from.</param>
-        /// <param name="size">Maximum number of items to read from <paramref name="data"/>.</param>
-        /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
+        /// <typeparam name="T">The element type, one of NumSharp's dtypes; the result's dtype.</typeparam>
+        /// <param name="data">The enumeration to read. It is enumerated once, and at most <paramref name="size"/>
+        ///     items are taken from it (<c>MoveNext</c> is called <paramref name="size"/> times when it holds that
+        ///     many).</param>
+        /// <param name="size">The number of items to read, and the result's length.</param>
+        /// <returns>A fresh 1-D array of <paramref name="size"/> elements.</returns>
+        /// <exception cref="ValueError"><paramref name="data"/> holds fewer than <paramref name="size"/> items
+        ///     (NumPy's text, <c>iterator too short: Expected 5 but iterator had only 2 items.</c>), or
+        ///     <paramref name="size"/> is negative (<c>negative dimensions are not allowed</c>).</exception>
+        /// <exception cref="NullReferenceException"><paramref name="data"/> is null.</exception>
         /// <remarks>
-        ///     https://numpy.org/doc/stable/reference/generated/numpy.array.html <br></br>
-        ///     Always performs a copy.<br></br>
-        ///     <paramref name="size"/> can be used to limit the amount of items to read form <paramref name="data"/>. Reading stops on either size or <paramref name="data"/> ends.
+        ///     <para>
+        ///         NumPy's <c>PyArray_FromIter</c> (<c>ctors.c</c>): the array of <c>count</c> elements is allocated
+        ///         first, one <c>PyIter_Next</c> fills each element and none runs past <c>count</c> (a longer iterator
+        ///         keeps its remaining items), and an iterator that ends early raises the <c>ValueError</c> above. An
+        ///         exception the enumeration throws propagates unchanged, as an iterator's error does in NumPy. Either
+        ///         way the buffer is released before the exception leaves, so a failed call holds no memory.
+        ///     </para>
+        ///     <para>
+        ///         Until 2026-10-30 a short enumeration returned an array of <paramref name="size"/> elements whose
+        ///         tail was never written (heap contents).
+        ///     </para>
+        ///     <para>
+        ///         Not NumPy's: a negative <paramref name="size"/> is refused. NumPy's <c>count=-1</c> reads every
+        ///         item, which is <see cref="array{T}(IEnumerable{T})"/> here, and its other negative counts return an
+        ///         empty array without reading.
+        ///     </para>
         /// </remarks>
         public static NDArray array<T>(IEnumerable<T> data, long size) where T : unmanaged
         {
             var slice = new ArraySlice<T>(new UnmanagedMemoryBlock<T>(size));
-            unsafe
+            // The items read so far; fewer than `size` once the enumeration ends is NumPy's "iterator too short".
+            long i = 0;
+            bool filled = false;
+            try
             {
-                using (var enumerator = data.GetEnumerator())
+                unsafe
                 {
-                    Func<bool> next = enumerator.MoveNext;
-
-                    var addr = slice.Address;
-                    for (long i = 0; i < size && next(); i++)
+                    using (var enumerator = data.GetEnumerator())
                     {
-                        addr[i] = enumerator.Current;
+                        Func<bool> next = enumerator.MoveNext;
+
+                        var addr = slice.Address;
+                        // `i < size` is tested first, so a longer enumeration is advanced exactly `size` times.
+                        for (; i < size && next(); i++)
+                        {
+                            addr[i] = enumerator.Current;
+                        }
                     }
                 }
+
+                if (i < size)
+                    throw new ValueError($"iterator too short: Expected {size} but iterator had only {i} items.");
+                filled = true;
+            }
+            finally
+            {
+                // Cleanup on failure: no NDArray holds the slice yet, so its only reference is this one. Freeing it
+                // here returns the buffer to the pool now rather than leaving it to the block's finalizer.
+                if (!filled)
+                    slice.DangerousFree();
             }
 
             return new NDArray(slice, Shape.Vector(slice.Count));
