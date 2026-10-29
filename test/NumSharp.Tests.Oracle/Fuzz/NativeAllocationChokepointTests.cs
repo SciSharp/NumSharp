@@ -42,7 +42,7 @@ namespace NumSharp.Tests.Fuzz
             ["Backends/Iterators/NDIter.cs"] = 1,                          // audit debt: the state block (header + inline arena, AllocateStateBlock), recycled through the per-thread cache — tightened 2 -> 1 (2026-09-23): 15154b00 folded the separate allocations into that single block
             ["Backends/Iterators/NDIter.State.cs"] = 2,                    // audit debt: iterator state blocks
             ["Backends/Iterators/NDIterBufferManager.cs"] = 3,             // audit debt: buffered-mode chunk buffers
-            ["Sorting_Searching_Counting/np.bincount.cs"] = 1,             // audit debt: privatized counting table
+            ["Sorting_Searching_Counting/Default.Bincount.cs"] = 1,        // audit debt: privatized counting table (moved with np.bincount's body, 81074517)
             ["Backends/Kernels/Direct/DirectILKernelGenerator.Histogram.cs"] = 1, // audit debt: histogram fused-count privatized accumulators (same pattern as bincount), alloc+free internal in try/finally
             ["Backends/Default/LinearAlgebra/ManagedLu.cs"] = 2,           // audit debt: LU scratch (factor copy + pivot vector), alloc+free per call in try/finally — landed 48b00e00 without this pin
             ["Backends/Default/Sorting/AxisSort.cs"] = 8,                  // audit debt: radix key/temp/histogram + argsort index columns, alloc+free per line in try/finally — UNMANAGED so a line may exceed int.MaxValue (64-bit sort core, ab15b165); the pool is int-capped
