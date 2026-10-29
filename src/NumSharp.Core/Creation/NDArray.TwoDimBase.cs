@@ -26,21 +26,18 @@ namespace NumSharp
         /// <param name="dtype">The dtype, or null for float64.</param>
         /// <param name="order"><c>'C'</c> or <c>'F'</c>, in either case.</param>
         /// <returns>A new (N, M) array: one on the diagonal, zero elsewhere.</returns>
-        /// <exception cref="ArgumentException"><paramref name="N"/> or the column count is negative (<c>negative dimensions
-        ///     are not allowed</c>).</exception>
         /// <exception cref="ValueError">An order other than C or F (<c>'A'</c> and <c>'K'</c>: <c>only 'C' or 'F' order is
-        ///     permitted</c>, as NumPy's zeros refuses them); or a dtype whose <c>setitem</c> refuses the Python int 1 (a
-        ///     <c>StringDType(coerce=False)</c>), raised after the zeros are allocated and before any diagonal element is
-        ///     written.</exception>
+        ///     permitted</c>, as NumPy's zeros refuses them), checked first; <paramref name="N"/> or the column count is
+        ///     negative (<c>negative dimensions are not allowed</c>, the allocation's text); or a dtype whose <c>setitem</c>
+        ///     refuses the Python int 1 (a <c>StringDType(coerce=False)</c>), raised after the zeros are allocated and before
+        ///     any diagonal element is written.</exception>
         /// <remarks>An F-order result is the C result copied (<c>m.copy('F')</c>), so it costs a second allocation.</remarks>
         internal static unsafe NDArray Eye(int N, int? M, int k, DType dtype, char order)
         {
             int cols = M ?? N;
-            if (N < 0)
-                throw new ArgumentException($"negative dimensions are not allowed (N={N})", nameof(N));
-            if (cols < 0)
-                throw new ArgumentException($"negative dimensions are not allowed (M={cols})", nameof(M));
-
+            // np.zeros' own order of checks once np.eye checked the order's letter and the device: A and K are refused
+            // (only C and F lay out a new array), then a negative dimension by the allocation (AllocationGuard's NumPy text,
+            // "negative dimensions are not allowed", for N or M alike).
             char physical = OrderResolver.Resolve(order);
 
             var resolvedType = dtype ?? DType.Double;
