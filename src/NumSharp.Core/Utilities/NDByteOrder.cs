@@ -140,7 +140,8 @@ namespace NumSharp.Utilities
         ///     <see cref="DTypeMeta.copyswapn"/>'s swap (NumPy's <c>_strided_byte_swap</c> over a run that is not
         ///     contiguous). The unit width is switched on once per call, and a 2-, 4- or 8-byte unit is one
         ///     <see cref="BinaryPrimitives"/> reversal (unaligned reads and writes: an element of a byte-offset view need
-        ///     not be aligned); any other width is reversed byte by byte.
+        ///     not be aligned); any other width is reversed byte by byte. An element of one unit, and a complex number's two
+        ///     8-byte halves, take a loop of one step per element.
         /// </summary>
         /// <param name="dst">The first element's first byte.</param>
         /// <param name="stride">The byte distance between elements (any sign).</param>
@@ -150,6 +151,39 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         internal static void ReverseStrided(byte* dst, long stride, long n, int size, int unit)
         {
+            // The common shapes get a loop of their own, one element per step, as NumPy's _strided_byte_swap is one loop per
+            // item size: the whole item one unit (every numeric class but complex), or a complex number's two 8-byte halves.
+            // The general loops below pay an inner loop over the units of every element - twice the time of NumPy's loop for
+            // a 2-, 4- or 8-byte item (measured on 1M items of a stride-2 view).
+            if (size == unit)
+            {
+                switch (unit)
+                {
+                    case 1:
+                        return;
+                    case 2:
+                        for (long i = 0; i < n; i++, dst += stride)
+                            Unsafe.WriteUnaligned(dst, BinaryPrimitives.ReverseEndianness(Unsafe.ReadUnaligned<ushort>(dst)));
+                        return;
+                    case 4:
+                        for (long i = 0; i < n; i++, dst += stride)
+                            Unsafe.WriteUnaligned(dst, BinaryPrimitives.ReverseEndianness(Unsafe.ReadUnaligned<uint>(dst)));
+                        return;
+                    case 8:
+                        for (long i = 0; i < n; i++, dst += stride)
+                            Unsafe.WriteUnaligned(dst, BinaryPrimitives.ReverseEndianness(Unsafe.ReadUnaligned<ulong>(dst)));
+                        return;
+                }
+            }
+            else if (unit == 8 && size == 16)
+            {
+                for (long i = 0; i < n; i++, dst += stride)
+                {
+                    Unsafe.WriteUnaligned(dst, BinaryPrimitives.ReverseEndianness(Unsafe.ReadUnaligned<ulong>(dst)));
+                    Unsafe.WriteUnaligned(dst + 8, BinaryPrimitives.ReverseEndianness(Unsafe.ReadUnaligned<ulong>(dst + 8)));
+                }
+                return;
+            }
             switch (unit)
             {
                 case 1:
