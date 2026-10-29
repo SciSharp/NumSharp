@@ -1465,9 +1465,10 @@ namespace NumSharp
         private static unsafe bool TryExtractFast(NDArray condition, NDArray arr, out NDArray result)
         {
             result = null;
-            // A StringDType source takes the generic path (ravel + np.take, whose StringDType gather duplicates the cells);
-            // this kernel copies elements as raw bytes.
-            if (arr.Storage.IsVString) return false;
+            // A source whose elements hold references (StringDType's cells; NumPy's PyDataType_REFCHK) takes the generic
+            // path (ravel + np.take, whose StringDType gather duplicates the cells); this kernel copies elements as raw
+            // bytes. The descriptor answers, as the item-selection family's one HasReferences decision does.
+            if (arr.dtype.Meta.HasReferences) return false;
             if (condition.GetTypeCode != NPTypeCode.Boolean) return false;
 
             // Materialise to a contig 1-D view of the bool mask and source. The
