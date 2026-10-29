@@ -1,3 +1,5 @@
+using System.Collections;
+using System.Collections.Generic;
 
 namespace NumSharp
 {
@@ -84,6 +86,58 @@ namespace NumSharp
             for (int i = 0; i < n; i++)
                 result[i] = ClipmodeConverter(modes[i]);
             return result;
+        }
+
+        /// <summary>
+        ///     NumPy's <c>PyArray_ConvertClipmodeSequence</c> for a <c>mode</c> argument as it arrives
+        ///     (<c>np.ravel_multi_index</c>'s Python object): a sequence gives one mode per dimension, anything else is one
+        ///     mode for every dimension.
+        /// </summary>
+        /// <param name="mode">A string (one mode for every dimension, parsed by <see cref="ClipmodeConverter"/>), null
+        ///     (NumPy's <c>None</c>: raise), a <c>string[]</c> (<see cref="ConvertClipmodeSequence(string[], int)"/>), or
+        ///     another non-string sequence of strings and nulls (NumPy's tuple or list: one mode per dimension).</param>
+        /// <param name="n">The number of dimensions the modes must cover.</param>
+        /// <returns>The <paramref name="n"/> parsed modes.</returns>
+        /// <exception cref="ValueError">A sequence of another length (<c>list of clipmodes has wrong length (1 instead of
+        ///     2)</c>), or a mode <see cref="ClipmodeConverter"/> refuses (a single mode is checked even when
+        ///     <paramref name="n"/> is 0, as NumPy checks it).</exception>
+        /// <exception cref="TypeError">An object that is neither a string, null nor a sequence, or a sequence entry that is
+        ///     neither a string nor null: <c>clipmode not understood</c> (NumPy's text for an object its converter cannot
+        ///     read; NumPy's integer modes - <c>np.RAISE</c> and its siblings - have no C# spelling here).</exception>
+        internal static int[] ConvertClipmodeSequence(object mode, int n)
+        {
+            switch (mode)
+            {
+                case string[] modes:
+                    return ConvertClipmodeSequence(modes, n);
+                case null:
+                case string _:
+                {
+                    // One mode for every dimension, parsed (and refused) once, whatever n is.
+                    int single = ClipmodeConverter((string)mode);
+                    var result = new int[n];
+                    for (int d = 0; d < n; d++)
+                        result[d] = single;
+                    return result;
+                }
+                case IEnumerable sequence:
+                {
+                    // NumPy's tuple or list: the length first, then each entry in order.
+                    var entries = new List<object>();
+                    foreach (object entry in sequence)
+                        entries.Add(entry);
+                    if (entries.Count != n)
+                        throw new ValueError($"list of clipmodes has wrong length ({entries.Count} instead of {n})");
+                    var result = new int[n];
+                    for (int i = 0; i < n; i++)
+                        result[i] = entries[i] is null or string
+                            ? ClipmodeConverter((string)entries[i])
+                            : throw new TypeError("clipmode not understood");
+                    return result;
+                }
+                default:
+                    throw new TypeError("clipmode not understood");
+            }
         }
 
         /// <summary><c>clipmode_parser</c>'s text for a mode whose first character selects a mode it does not spell.</summary>

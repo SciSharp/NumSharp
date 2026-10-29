@@ -36,7 +36,7 @@ namespace NumSharp.Backends
             // and only then — once the result buffer exists, before any index is read — is an 'A' / 'K' order refused.
             NPY_ORDER npyOrder = OrderResolver.Convert(order);
             long unravelSize = np.UnravelSize(shape);
-            np.ThrowIfNotIntIndices(indices);
+            ThrowIfNotIntIndices(indices);
             bool cOrder = np.RequireCOrFOrder(npyOrder);
 
             int ndims = shape.Length;

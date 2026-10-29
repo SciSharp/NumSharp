@@ -1,5 +1,5 @@
-// The C functions of NumPy's _multiarray_umath that compute (np.dot, np.lexsort, np.unravel_index, np.packbits,
-// np.unpackbits and np.bincount so far; Appendix D of docs/plans/np-layer-dtype-logic.md lists the rest). The C functions of the array object (np.array,
+// The C functions of NumPy's _multiarray_umath that compute (np.dot, np.lexsort, np.unravel_index, np.ravel_multi_index,
+// np.packbits, np.unpackbits and np.bincount so far; Appendix D of docs/plans/np-layer-dtype-logic.md lists the rest). The C functions of the array object (np.array,
 // np.copyto, np.concatenate, ...) are not engine members.
 
 using System;
@@ -80,6 +80,49 @@ namespace NumSharp
         /// <remarks>New in 0.71.0 (the np-layer dtype plan): the public <c>np.unravel_index(NDArray, int[], char)</c> computes
         ///     a <c>numpy.matrix</c> operand as a plain array and calls this.</remarks>
         public abstract NDArray<long>[] UnravelIndex(NDArray indices, int[] shape, char order = 'C');
+
+        /// <summary>
+        ///     NumPy's <c>np.ravel_multi_index(multi_index, dims, mode='raise', order='C')</c> (<c>arr_ravel_multi_index</c>,
+        ///     <c>numpy/_core/src/multiarray/compiled_base.c</c>), the whole call: the flat index each coordinate tuple has in
+        ///     an array of dimensions <paramref name="dims"/>, the inverse of <see cref="UnravelIndex"/>.
+        /// </summary>
+        /// <param name="multi_index">The coordinate arrays, one per dimension of <paramref name="dims"/>: integer or bool,
+        ///     any layout; they broadcast against each other, and the broadcast shape is the result's. A null entry is
+        ///     NumPy's <c>None</c>, refused.</param>
+        /// <param name="dims">The shape the coordinates index. An empty shape (NumPy's <c>()</c>) takes no coordinate array
+        ///     and gives the flat index 0.</param>
+        /// <param name="mode">NumPy's mode argument: a string for every axis - <c>"raise"</c> (an out-of-range coordinate
+        ///     raises), <c>"wrap"</c> (modulo, with sign correction) or <c>"clip"</c> (saturate) -, a sequence of such
+        ///     strings other than a string (NumPy's tuple or list: one mode per axis, a null entry raising on its axis), or
+        ///     null (NumPy's <c>None</c>: raise on every axis).</param>
+        /// <param name="order"><c>'C'</c> (row-major, the default) or <c>'F'</c> (column-major), in either case: the stride
+        ///     order the coordinates fold with.</param>
+        /// <returns>The int64 flat indices in the coordinates' broadcast shape, laid out as NumPy's iterator allocates them
+        ///     (KEEPORDER over the coordinate arrays: F-ordered coordinates give an F-ordered result, a transposed set the
+        ///     same permutation, mixed or broadcast ones C order). Coordinates that are all 0-d give NumPy's scalar: a fresh
+        ///     read-only 0-d array.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="multi_index"/> or <paramref name="dims"/> is
+        ///     null.</exception>
+        /// <exception cref="ValueError">In NumPy's order: an order letter that is not C / F / A / K in either case; a mode
+        ///     sequence of another length (<c>list of clipmodes has wrong length (1 instead of 2)</c>) or a mode string
+        ///     NumPy's clipmode parser refuses; an <c>'A'</c> or <c>'K'</c> order (<c>only 'C' or 'F' order is
+        ///     permitted</c>); a dims product that overflows int64 (<c>invalid dims: array size defined by dims is larger
+        ///     than the maximum possible size.</c>); a coordinate count that differs from <paramref name="dims"/>' length
+        ///     (<c>parameter multi_index must be a sequence of length N</c>); a zero dimension while there is a coordinate to
+        ///     fold (<c>cannot unravel if shape has zero entries (is empty).</c>, whatever the mode); and (mode
+        ///     <c>raise</c>) a coordinate out of range (<c>invalid entry in coordinates array</c>).</exception>
+        /// <exception cref="TypeError">A mode that is neither a string, null nor a sequence of strings and nulls
+        ///     (<c>clipmode not understood</c>; NumPy's integer modes have no C# spelling here), checked with the modes; a
+        ///     coordinate array that is neither integer nor bool, or a null entry (<c>only int indices permitted</c>),
+        ///     checked in order after the count.</exception>
+        /// <exception cref="IncorrectShapeException">The coordinate arrays do not broadcast together (NumPy's
+        ///     <c>ValueError</c> text from its iterator, every coordinate shape listed).</exception>
+        /// <exception cref="NotSupportedException">Runtime code generation is unavailable (the IL kernel cannot be
+        ///     emitted).</exception>
+        /// <remarks>New in 0.71.0 (the np-layer dtype plan): the public <c>np.ravel_multi_index</c> array overloads compute
+        ///     a <c>numpy.matrix</c> operand as a plain array and call this; the scalar overload
+        ///     <c>np.ravel_multi_index(long[], int[], string, char)</c> computes its one index itself.</remarks>
+        public abstract NDArray<long> RavelMultiIndex(NDArray[] multi_index, int[] dims, object mode = null, char order = 'C');
 
         /// <summary>
         ///     NumPy's <c>np.packbits(a, axis=None, bitorder='big')</c> (<c>io_pack</c> / <c>pack_bits</c>,

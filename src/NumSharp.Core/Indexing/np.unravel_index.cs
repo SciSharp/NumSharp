@@ -204,30 +204,5 @@ namespace NumSharp
                     "dimensions are too large; arrays and shapes with a total size greater than 'intp' are not supported.");
             return s;
         }
-
-        /// <summary>
-        ///     NumPy's <c>astype_anyint</c>: index arrays must hold integers or bools — a float, complex, decimal or text array
-        ///     is refused rather than truncated or parsed, and so is a null entry (NumPy's <c>None</c>).
-        /// </summary>
-        /// <param name="indices">The index (or coordinate) array; null is NumPy's <c>None</c>.</param>
-        /// <exception cref="TypeError">Null, or not integer or bool: <c>only int indices permitted</c>.</exception>
-        /// <remarks>
-        ///     NumSharp used to cast any dtype to int64 (<c>unravel_index(np.array(new[] { 1.7 }), …)</c> read index 1) and to
-        ///     refuse text as a later phase's work; NumPy refuses both before reading an element. NumSharp's char counts as an
-        ///     integer (its uint16 storage). A null entry of np.ravel_multi_index's coordinate list used to leak a
-        ///     NullReferenceException; NumPy's <c>None</c> there becomes a 0-d object array, which this same check refuses, in
-        ///     the list's order (np.unravel_index refuses a null index array with ArgumentNullException first).
-        /// </remarks>
-        internal static void ThrowIfNotIntIndices(NDArray indices)
-        {
-            // A null entry is NumPy's None: astype_anyint converts it to a 0-d object array, which is not integer.
-            if (indices is not null)
-            {
-                NPTypeCode t = indices.typecode;
-                if (t == NPTypeCode.Boolean || t == NPTypeCode.Char || t.IsInteger())
-                    return;
-            }
-            throw new TypeError("only int indices permitted");
-        }
     }
 }

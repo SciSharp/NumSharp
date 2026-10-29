@@ -16,9 +16,7 @@ DTypes/np.dtypes.cs	2	0
 Indexing/np.ndenumerate.cs	0	1
 Indexing/np.place.cs	1	0
 Indexing/np.putmask.cs	1	0
-Indexing/np.ravel_multi_index.cs	0	1
 Indexing/np.take.FancyAxis.cs	0	1
-Indexing/np.unravel_index.cs	0	1
 Logic/np.can_cast.cs	1	80
 Logic/np.common_type.cs	1	6
 Logic/np.find_common_type.cs	2	10
