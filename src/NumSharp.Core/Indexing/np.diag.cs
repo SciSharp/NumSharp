@@ -146,7 +146,7 @@ namespace NumSharp
             // diagonal length). v1d is 1-D, so its single stride (0-d guarded to 0) addresses any
             // layout, including a strided/negative-stride input.
             long srcStride = v1d.ndim >= 1 ? v1d.Shape.strides[0] : 0;
-            if (!TryDiagonalScatter(res, start, n + 1, v1d, v1d.Shape.offset, srcStride, s))
+            if (!NDArray.TryDiagonalScatter(res, start, n + 1, v1d, v1d.Shape.offset, srcStride, s))
             {
                 // Fallback: alias the diagonal as a 1-D view and route through the copy machinery.
                 var diagShape = new Shape(new[] {s}, new[] {n + 1}, start, res.Shape.BufferSize);

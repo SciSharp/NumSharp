@@ -24,12 +24,9 @@ Casting/NDArray.tobytes.cs	1	0
 Creation/np.dtype.cs	0	2
 Creation/np.mgrid.cs	0	1
 Creation/np.ogrid.cs	0	1
-Creation/np.r_.cs	1	8
 DTypes/np.dtypes.cs	2	0
 Indexing/np.diag.cs	1	0
-Indexing/np.fill_diagonal.cs	3	0
 Indexing/np.indices.cs	0	3
-Indexing/np.ix_.cs	0	2
 Indexing/np.ndenumerate.cs	0	1
 Indexing/np.place.cs	1	0
 Indexing/np.put_along_axis.cs	2	1

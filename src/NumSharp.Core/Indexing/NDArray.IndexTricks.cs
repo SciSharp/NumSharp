@@ -1,0 +1,821 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Numerics;
+using NumSharp.Backends;
+using NumSharp.Backends.Iteration;
+
+namespace NumSharp
+{
+    // ============================== lib/_index_tricks_impl.py ==============================
+    // NumPy's index tricks as members of the array object (P3's batch 7): np.ix_ (Ix), np.fill_diagonal (FillDiagonal,
+    // with the diagonal scatter np.diag shares) and the statements of np.r_ / np.c_'s indexer (AxisConcatenate, NumPy's
+    // AxisConcatenator.__getitem__) with their helpers. The facades keep their numpy.matrix rules and null checks, and
+    // np.AxisConcatenator keeps the C# spelling of a slice (SliceSpec, ParseSliceToken), which np.ogrid / np.mgrid share.
+    public partial class NDArray
+    {
+        // ---------------------------- np.ix_ ----------------------------
+
+        /// <summary>
+        ///     NumPy's <c>numpy.ix_</c> after the facade: each sequence made an array (a non-ndarray one that comes out empty
+        ///     cast to <c>intp</c>), refused unless 1-D, a bool one replaced by its <c>nonzero()</c>, then reshaped to its
+        ///     own axis of the open mesh.
+        /// </summary>
+        /// <param name="args">The sequences (the facade's <c>params</c> array; null or empty gives no arrays).</param>
+        /// <returns>One array per sequence, each a view of its sequence's array with length-1 axes inserted.</returns>
+        /// <exception cref="ValueError">A sequence that is not 1-D, null (NumPy's None) included: "Cross index must be 1
+        ///     dimensional".</exception>
+        /// <remarks>Scoped: the conversions of the sequences and the masks' index arrays are temporaries of this call (the
+        ///     facade keeps its own scope).</remarks>
+        [NDScoped]
+        internal static NDArray[] Ix(object[] args)
+        {
+            if (args is null || args.Length == 0)
+                return System.Array.Empty<NDArray>();
+
+            int nd = args.Length;
+            var @out = new NDArray[nd];
+
+            for (int k = 0; k < nd; k++)
+            {
+                var item = args[k];
+                NDArray New;
+
+                if (item is null)
+                {
+                    // NumPy reaches the same error by a different route: asarray(None) is a 0-d
+                    // object array, whose ndim is 0. NumSharp has no object dtype, so the outcome
+                    // is reproduced directly rather than letting asanyarray raise a bare
+                    // ArgumentNullException from three frames down.
+                    throw new ValueError("Cross index must be 1 dimensional");
+                }
+
+                if (item is NDArray already)
+                {
+                    New = already;
+                }
+                else
+                {
+                    New = np.asanyarray(item);
+                    // Explicitly type empty arrays to avoid the float default.
+                    if (New.size == 0 && New.typecode != NPTypeCode.Int64)
+                        New = New.astype(NPTypeCode.Int64);
+                }
+
+                if (New.ndim != 1)
+                    throw new ValueError("Cross index must be 1 dimensional");
+
+                if (New.typecode == NPTypeCode.Boolean)
+                    New = np.nonzero(New)[0];
+
+                // NumPy's reshape((1,)*k + (size,) + (1,)*(nd-k-1)), spelled as the equivalent
+                // insertion of length-1 axes. expand_dims aliases the storage, so a stride-0
+                // (broadcast) or otherwise read-only operand keeps its strides AND its
+                // non-writeable flag — reshape materializes those and would hand back a
+                // writeable copy, which NumPy does not do.
+                if (nd > 1)
+                {
+                    var axes = new int[nd - 1];
+                    for (int i = 0, w = 0; i < nd; i++)
+                    {
+                        if (i != k)
+                            axes[w++] = i;
+                    }
+
+                    New = np.expand_dims(New, axes);
+                }
+
+                @out[k] = New;
+            }
+
+            return @out;
+        }
+
+        // ---------------------------- np.fill_diagonal ----------------------------
+
+        /// <summary>
+        ///     NumPy's <c>numpy.fill_diagonal</c> after the facade's numpy.matrix region and null check: the diagonal's
+        ///     <c>step</c> and <c>end</c> (a rectangular 2-D array, or a hyper-cube), then <c>a.flat[:end:step] = val</c> -
+        ///     the read-only check and the value's conversion before anything is written, then the values tiled to the
+        ///     diagonal's length and stored through the strided-store kernel.
+        /// </summary>
+        /// <param name="a">The array, filled in place (not null).</param>
+        /// <param name="val">The value or values (null is Python's None).</param>
+        /// <param name="wrap">Whether a tall matrix's diagonal wraps after N columns.</param>
+        /// <exception cref="ArgumentException">Fewer than 2 dimensions, a non-hyper-cubic N-D array, or a read-only
+        ///     array (NumPy's ValueError texts).</exception>
+        /// <exception cref="TypeError">None into an integer or decimal array (Python's <c>int(None)</c>).</exception>
+        /// <exception cref="ValueError">A <c>StringDType(coerce=False)</c> array given a value that is not text.</exception>
+        /// <exception cref="OverflowException">A Python int out of the dtype's range.</exception>
+        /// <remarks>Scoped: the packed value, its broadcast and the tiled values are temporaries of this call.</remarks>
+        [NDScoped]
+        internal static void FillDiagonal(NDArray a, object val, bool wrap)
+        {
+
+            int ndim = a.ndim;
+            if (ndim < 2)
+                throw new ArgumentException("array must be at least 2-d");
+
+            long step;
+            long end;
+            if (ndim == 2)
+            {
+                // Explicit, fast formula for the common case; rectangular arrays are accepted.
+                long cols = a.Shape.dimensions[1];
+                step = cols + 1;
+                // Without wrapping, stop before a tall matrix's diagonal re-enters column 0.
+                end = wrap ? a.size : cols * cols;
+            }
+            else
+            {
+                // For d > 2 the strided formula is only valid when all dimensions are equal.
+                np.RequireEqualDimensions(a);
+
+                step = 1;
+                long cum = 1;
+                for (int d = 0; d < ndim - 1; d++)
+                {
+                    cum *= a.Shape.dimensions[d];
+                    step += cum;
+                }
+
+                end = a.size;
+            }
+
+            if (end > a.size) end = a.size;
+
+            // NumPy's `a.flat[:end:step] = val` (iter_ass_subscript): the read-only check and the value's conversion come
+            // BEFORE anything is written, even when the slice selects nothing (an empty array still refuses a read-only
+            // target and an out-of-range Python int).
+            if (!a.Shape.IsWriteable)
+                throw new ArgumentException("underlying array is read-only");
+
+            // Python's None: the flat setter's PyArray_FromAny(None, dtype, FORCECAST) is one element of None's setitem value
+            // (NaN, nan+nanj, False, 'None' truncated to an S / U width), converted HERE — after the read-only check and
+            // before the empty-diagonal return, so an integer array raises int(None)'s TypeError even when nothing is
+            // written (np.fill_diagonal(np.zeros((0, 0), int), None) raises, probed 2.4.2). A StringDType array stores None
+            // through its own branch below (the NA object, 'None', or coerce=False's refusal).
+            NDArray scalarValue = null;
+            if (val is null && !a.Storage.IsVString)
+                scalarValue = NDArray.NoneForStore(a.dtype);
+
+            // The overwhelmingly common call is a SCALAR fill. A C# number is a Python (or NumPy) scalar in the
+            // boundary map, and the flat setter converts it with PyArray_FromAny(val, dtype, FORCECAST): PyArray_Pack's
+            // rules — a Python int range-checked (fill_diagonal(int8, 1000) raises "Python integer 1000 out of bounds for
+            // int8"), a float truncated then range-checked, a complex refused by a real dtype. The packed 0-d is built
+            // straight at the destination dtype (no dtype inference, no ravel/astype pair), and a stride-0 broadcast view
+            // supplies the `count` copies for free. A C# literal's 0-d array (an NDArray passed as object) packs the same
+            // way; any other array, and a C# array / List (NumPy's list-valued `val`, which must tile), take the general
+            // path below.
+            if (a.typecode != NPTypeCode.String && (NDArray.IsStoreScalar(val) || val is NDArray { WasPythonLiteral: true }))
+                scalarValue = NDArray.AsStoreValue(val, a.typecode);
+
+            // A StringDType target: NumPy's a.flat[...] = val converts val with the array's descriptor — Python objects (and
+            // a list's elements) by setitem, an ndarray by the cast (NDVStringMove.StoreValue) — BEFORE the slice is walked,
+            // so a value coerce=False refuses (None included) raises even for an empty diagonal.
+            NDArray text = a.Storage.IsVString ? Backends.Strings.NDVStringMove.StoreValue(val, a.dtype) : null;
+
+            if (end <= 0 || step <= 0)
+                return;
+
+            long count = (end + step - 1) / step;
+            if (count <= 0)
+                return;
+
+            if (text is not null)
+            {
+                // A StringDType target: the value in its descriptor (a number becomes its str()), then the same fill on
+                // marks (the value's element numbers, tiled cyclically by the numeric fill) and the marked diagonal elements
+                // receive the strings — never the raw strided-store kernel.
+                if (text.size == 0)
+                    return; // NumPy: assigning an empty sequence leaves the diagonal untouched.
+                var flatText = text.ravel();
+                if (!flatText.HasSameElementType(a))
+                    flatText = flatText.astype(a.dtype);
+                Backends.Strings.NDVStringMove.ScatterVia(a, flatText, (marks, index) => np.fill_diagonal(marks, index, wrap));
+                return;
+            }
+
+            NDArray values;
+            if (scalarValue is not null)
+            {
+                values = np.broadcast_to(scalarValue, new Shape(count));
+            }
+            else
+            {
+                var source = val as NDArray ?? np.asanyarray(val);
+                if (source.size == 0)
+                    return; // NumPy: assigning an empty sequence leaves the diagonal untouched.
+
+                var flat = source.ravel();
+                // Convert unless the element type already matches (for strings: class AND width — a <U1 'Z' into a <U2
+                // array is padded first, never copied as two-unit elements).
+                if (!flat.HasSameElementType(a))
+                    flat = flat.astype(a.dtype);
+
+                // Ravel + cyclic tile/truncate to exactly `count` values (np.resize's rule).
+                values = flat.size == 1
+                    ? np.broadcast_to(flat, new Shape(count))
+                    : np.resize(flat, new[] {(int)count});
+            }
+
+            var shape = a.Shape;
+            long bufferSize = shape.BufferSize;
+
+            if (ndim > 2)
+            {
+                // Hyper-cubic: targets are (i, i, …, i) — one constant stride.
+                long diagStride = 0;
+                for (int d = 0; d < ndim; d++)
+                    diagStride += shape.strides[d];
+
+                WriteDiagonalBlock(a, values, 0, count, shape.Offset, diagStride, bufferSize);
+                return;
+            }
+
+            long s0 = shape.strides[0];
+            long s1 = shape.strides[1];
+            long colCount = a.Shape.dimensions[1];
+            long blockStride = s0 + s1;
+
+            // Each block of `cols` targets marches down the diagonal; the next block restarts
+            // `cols + 1` rows lower (that is the wrap). Without wrapping count <= cols, so
+            // this degenerates to a single block.
+            for (long written = 0; written < count; written += colCount)
+            {
+                long len = System.Math.Min(colCount, count - written);
+                long q = written / colCount;
+                long offset = shape.Offset + q * (colCount + 1) * s0;
+
+                WriteDiagonalBlock(a, values, written, len, offset, blockStride, bufferSize);
+            }
+        }
+
+        /// <summary>
+        ///     Write <paramref name="len"/> values into an equally-strided run of
+        ///     <paramref name="a"/>'s storage.
+        /// </summary>
+        /// <remarks>
+        ///     The fast path is the IL strided-store kernel (<see cref="TryDiagonalScatter"/>),
+        ///     which writes straight through <paramref name="a"/>'s real strides — no aliased
+        ///     view, no NDIter setup. The <paramref name="values"/> block is addressed by its own
+        ///     stride/offset, so a stride-0 broadcast (the scalar fill) and a contiguous tiled
+        ///     buffer (the sequence fill) both feed it without materialising a slice. When the
+        ///     kernel is unavailable the code falls back to the original alias + <c>SetData</c>.
+        /// </remarks>
+        [NDScopedCovered] // only reached from [NDScoped] FillDiagonal (the AOT-fallback alias + value slice are scope-reclaimed)
+        private static void WriteDiagonalBlock(
+            NDArray a, NDArray values, long valueStart, long len, long offset, long stride, long bufferSize)
+        {
+            if (len <= 0) return;
+
+            // The i-th target reads values[valueStart + i] = base + valuesOffset + (valueStart+i)*valuesStride.
+            long valuesStride = values.ndim >= 1 ? values.Shape.strides[0] : 0;
+            long valuesOffset = values.Shape.offset + valueStart * valuesStride;
+
+            if (TryDiagonalScatter(a, offset, stride, values, valuesOffset, valuesStride, len))
+                return;
+
+            // Fallback: alias a strided 1-D view and route through the copy machinery.
+            var targetShape = new Shape(new[] {len}, new[] {stride}, offset, bufferSize);
+            var target = new NDArray(a.Storage.Alias(targetShape)) {TensorEngine = a.TensorEngine};
+
+            var slice = valueStart == 0 && len == values.size
+                ? values
+                : values[$"{valueStart}:{valueStart + len}"];
+
+            target.SetData(slice);
+        }
+
+        /// <summary>
+        ///     Write <paramref name="count"/> elements from <paramref name="src"/> into an
+        ///     equally-strided run of <paramref name="dest"/>'s buffer through the IL
+        ///     strided-store kernel (<see cref="Backends.Kernels.DirectILKernelGenerator.GetDiagWriteKernel"/>).
+        ///     Shared by <see cref="np.fill_diagonal"/>, <see cref="np.diag"/>'s 1-D branch and
+        ///     <see cref="np.diagflat"/> — all three reduce to the same primitive: scatter a 1-D
+        ///     source along a constant-stride diagonal.
+        /// </summary>
+        /// <remarks>
+        ///     Both endpoints are addressed by REAL element strides/offsets (never memory order),
+        ///     so any destination layout — contiguous, transposed, sliced, F-order, negative-stride
+        ///     — writes to the correct positions, exactly as the aliased-view + <c>SetData</c> path
+        ///     did but without the ~5 μs NDIter setup. A <paramref name="srcStrideElems"/> of 0
+        ///     broadcasts a single source element (the scalar fill). <paramref name="dest"/> and
+        ///     <paramref name="src"/> MUST share the dtype (the callers guarantee it: diag/diagflat
+        ///     preserve the source dtype; fill_diagonal casts its values first), so the store is a
+        ///     same-width byte copy with no cast. Returns <c>false</c> — leaving the destination
+        ///     untouched — when the kernel is unavailable, so callers fall back to <c>SetData</c>.
+        /// </remarks>
+        internal static unsafe bool TryDiagonalScatter(
+            NDArray dest, long destOffsetElems, long destStrideElems,
+            NDArray src, long srcOffsetElems, long srcStrideElems, long count)
+        {
+            if (count <= 0) return true;
+
+            long eb = dest.dtypesize;
+            int copyKind = Backends.Kernels.DirectILKernelGenerator.CopyKindFor(eb);
+            if (copyKind == 0) return false; // every NumSharp dtype is 1/2/4/8/16 B; defensive only.
+
+            var kernel = Backends.Kernels.DirectILKernelGenerator.GetDiagWriteKernel(copyKind);
+            if (kernel == null) return false;
+
+            byte* dstPtr = (byte*)dest.Storage.Address + destOffsetElems * eb;
+            byte* srcPtr = (byte*)src.Storage.Address + srcOffsetElems * eb;
+            kernel(dstPtr, destStrideElems * eb, srcPtr, srcStrideElems * eb, count);
+            return true;
+        }
+
+        // ---------------------------- np.r_ / np.c_ ----------------------------
+
+        /// <summary>
+        ///     <c>array(a, ndmin=ndmin)</c>: pad with leading length-1 axes, as a view.
+        /// </summary>
+        /// <remarks>
+        ///     Deliberately UNCAPPED. NumPy validates <c>ndmin</c> against <c>NPY_MAXDIMS</c> (64) and
+        ///     raises <c>ndmin must be &lt;= ndmax (64)</c>; NumSharp has no 64-dimension ceiling
+        ///     anywhere, so importing one here would make the DSL refuse ranks the rest of the
+        ///     library accepts. <c>ndmin</c> does arrive from a user-typed directive string, so the
+        ///     padding must be cheap rather than merely bounded: <see cref="np.AtLeastNdView"/> prepends
+        ///     all the axes in one alias (O(ndim)), where the per-axis loop it replaced was quadratic
+        ///     — 27.6 s at ndmin=100 000, unbounded at 2**31-1. An ndmin genuinely too large to
+        ///     allocate a shape for surfaces as <see cref="OutOfMemoryException"/>, the same answer
+        ///     any other oversized NumSharp allocation gives. A ndmin of 0 or less stays a no-op,
+        ///     as it is upstream.
+        /// </remarks>
+        private static NDArray AtLeastNdmin(NDArray a, int ndmin) => np.AtLeastNdView(a, ndmin);
+
+        /// <summary>
+        ///     NumPy's <c>AxisConcatenator.__getitem__</c> for <c>np.r_</c> / <c>np.c_</c>, after the indexer's numpy.matrix
+        ///     rule: a leading directive string may override the object's attributes, every other entry becomes an array (a
+        ///     slice string its <c>arange</c> / <c>linspace</c>, a C# scalar a weak or strong 0-d value, anything else
+        ///     <c>array(item, ndmin=ndmin)</c> with the <c>trans1d</c> permutation), the result dtype is
+        ///     <c>result_type</c> of the entries, and the converted entries are concatenated along the axis.
+        /// </summary>
+        /// <param name="key">The index expression's entries (not null).</param>
+        /// <param name="axis">The object's axis (<c>np.r_</c>: 0, <c>np.c_</c>: -1).</param>
+        /// <param name="matrix">The object's matrix flag (false for both; a "r" / "c" directive sets it).</param>
+        /// <param name="ndmin">The object's minimum rank of every entry (<c>np.r_</c>: 1, <c>np.c_</c>: 2).</param>
+        /// <param name="trans1d">Where an upgraded entry's original axes start (<c>np.r_</c>: -1, <c>np.c_</c>: 0).</param>
+        /// <returns>The concatenation; an <see cref="NDMatrix"/> under a "r" / "c" directive.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="key"/> or one of its entries is null.</exception>
+        /// <exception cref="ValueError">A directive after the first entry ("special directives must be the first
+        ///     entry."), or an unknown one ("unknown special directive").</exception>
+        /// <exception cref="OverflowException">A C# integer literal outside the adopted integer dtype.</exception>
+        /// <exception cref="DTypePromotionError">A C# number beside text (no common DType).</exception>
+        /// <exception cref="ArgumentException">A malformed slice string, or np.concatenate's refusals (no entry, entries
+        ///     of different ranks or shapes).</exception>
+        /// <remarks>Scoped: the converted entries and the padded views are temporaries of this call. The parameters are the
+        ///     object's fields, passed as copies, which a leading directive overrides for this call only.</remarks>
+        [NDScoped]
+        internal static NDArray AxisConcatenate(object[] key, int axis, bool matrix, int ndmin, int trans1d)
+        {
+            if (key is null)
+                throw new ArgumentNullException(nameof(key));
+
+            // The attributes arrive as copies (the object's fields): the first entry may override them.
+            bool col = false;
+
+            var objs = new List<ConcatOperand>(key.Length);
+
+            for (int k = 0; k < key.Length; k++)
+            {
+                object item = key[k];
+                switch (item)
+                {
+                    case null:
+                        throw new ArgumentNullException($"key[{k}]",
+                            "index expression entries must not be null.");
+
+                    case string s:
+                        if (s.IndexOf(':') < 0)
+                        {
+                            // No colon ⇒ a NumPy special directive, which must lead.
+                            if (k != 0)
+                                throw new ValueError("special directives must be the first entry.");
+                            ApplyDirective(s, ref axis, ref ndmin, ref trans1d, ref matrix, ref col);
+                            break;
+                        }
+
+                        foreach (var token in s.Split(','))
+                        {
+                            if (string.IsNullOrWhiteSpace(token))
+                                continue;
+                            objs.Add(FromSlice(np.AxisConcatenator.ParseSliceToken(token), ndmin, trans1d));
+                        }
+
+                        break;
+
+                    case Slice slice:
+                        objs.Add(FromSlice(np.AxisConcatenator.SliceSpec.FromSlice(slice), ndmin, trans1d));
+                        break;
+
+                    case Slice[] slices:
+                        foreach (var one in slices)
+                            objs.Add(FromSlice(np.AxisConcatenator.SliceSpec.FromSlice(one), ndmin, trans1d));
+                        break;
+
+                    // Weak (NEP50 "python literal") scalars.
+                    case bool:
+                        objs.Add(ConcatOperand.Scalar(item, ConcatWeakKind.Bool));
+                        break;
+                    case sbyte or byte or short or ushort or int or uint or long or ulong:
+                        objs.Add(ConcatOperand.Scalar(item, ConcatWeakKind.Int));
+                        break;
+                    case float or double:
+                        objs.Add(ConcatOperand.Scalar(item, ConcatWeakKind.Float));
+                        break;
+                    case Complex:
+                        objs.Add(ConcatOperand.Scalar(item, ConcatWeakKind.Complex));
+                        break;
+
+                    // Strong scalars — NumSharp dtypes with no Python literal form.
+                    case char or Half or decimal:
+                        objs.Add(ConcatOperand.StrongScalar(item));
+                        break;
+
+                    // A C# number literal that reached the key as its implicit 0-d array (an NDArray-typed entry):
+                    // NumPy's Python scalar (`type(item) in ScalarType` → result_type takes the scalar itself, WEAK),
+                    // exactly as the boxed literal above — np.r_[int8Array, (NDArray)1] stays int8.
+                    case NDArray lit when lit.WasPythonLiteral:
+                        objs.Add(ConcatOperand.Scalar(lit.Storage.GetAtIndex(0),
+                            lit.typecode == NPTypeCode.Complex ? ConcatWeakKind.Complex
+                            : lit.typecode is NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Half ? ConcatWeakKind.Float
+                            : ConcatWeakKind.Int));
+                        break;
+
+                    default:
+                        objs.Add(FromArrayLike(item, ndmin, trans1d));
+                        break;
+                }
+            }
+
+            NDArray[] arrays;
+            if (objs.Count != 0 && AnyText(objs))
+            {
+                // A string entry: NumPy's result_type over DESCRIPTORS (the widest text, S + U giving U, a number widening
+                // it to its text width, a Python number refused with DTypePromotionError), every entry converted to it.
+                DType descr = ResolveTextDescr(objs);
+                arrays = new NDArray[objs.Count];
+                for (int i = 0; i < objs.Count; i++)
+                    arrays[i] = objs[i].MaterializeText(descr, ndmin);
+            }
+            else if (objs.Count != 0)
+            {
+                NPTypeCode final = ResolveDtype(objs);
+                arrays = new NDArray[objs.Count];
+                for (int i = 0; i < objs.Count; i++)
+                    arrays[i] = objs[i].Materialize(final, ndmin);
+            }
+            else
+            {
+                // Directives only — drops through to concatenate's own error, as in NumPy.
+                arrays = System.Array.Empty<NDArray>();
+            }
+
+            var res = np.concatenate(arrays, axis);
+
+            if (matrix)
+            {
+                // NumPy: res = self.makemat(res), where makemat is the matrix CLASS — the result is an
+                // NDMatrix, and for the 'c' directive the transpose is the matrix's own (.T of a row is a
+                // column matrix). matrix() copies; the concatenation is fresh, so the matrix takes its
+                // storage over instead of copying again (the scope reclaims the plain wrapper).
+                int oldndim = res.ndim;
+                NDMatrix mat = NDMatrix.From(res);
+                res = oldndim == 1 && col ? mat.T : mat;
+            }
+
+            return res;
+        }
+
+        #region directives
+
+        private static void ApplyDirective(string item, ref int axis, ref int ndmin,
+            ref int trans1d, ref bool matrix, ref bool col)
+        {
+            if (item == "r" || item == "c")
+            {
+                matrix = true;
+                col = item == "c";
+                return;
+            }
+
+            if (item.IndexOf(',') >= 0)
+            {
+                // "axis,ndmin" or "axis,ndmin,trans1d". NumPy reads only vec[:2] and vec[2],
+                // so a fourth field is silently ignored — including a non-numeric one.
+                var vec = item.Split(',');
+                if (!TryParseDirectiveInt(vec[0], out int a) || !TryParseDirectiveInt(vec[1], out int n))
+                    throw new ValueError($"unknown special directive '{item}'");
+
+                int t = trans1d;
+                if (vec.Length == 3 && !TryParseDirectiveInt(vec[2], out t))
+                    throw new ValueError($"unknown special directive '{item}'");
+
+                axis = a;
+                ndmin = n;
+                trans1d = t;
+                return;
+            }
+
+            if (TryParseDirectiveInt(item, out int only))
+            {
+                axis = only;
+                return;
+            }
+
+            throw new ValueError("unknown special directive");
+        }
+
+        private static bool TryParseDirectiveInt(string s, out int value)
+            => int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out value);
+
+        #endregion
+
+        #region entry conversion
+
+        /// <summary>
+        ///     NumPy's slice branch: <c>arange</c>/<c>linspace</c>, then <c>ndmin</c> padding and the
+        ///     <c>swapaxes(-1, trans1d)</c> that differs from the array branch's permutation.
+        /// </summary>
+        private static ConcatOperand FromSlice(in np.AxisConcatenator.SliceSpec spec, int ndmin, int trans1d)
+        {
+            NDArray newobj = spec.Materialize();
+            if (ndmin > 1)
+            {
+                newobj = AtLeastNdmin(newobj, ndmin);
+                if (trans1d != -1)
+                    newobj = np.swapaxes(newobj, -1, trans1d);
+            }
+
+            return ConcatOperand.Array(newobj);
+        }
+
+        /// <summary>
+        ///     NumPy's array branch: <c>array(item, ndmin=ndmin)</c> followed, when the entry was
+        ///     upgraded, by the <c>defaxes</c> permutation that places the original axes at
+        ///     <c>trans1d</c>.
+        /// </summary>
+        private static ConcatOperand FromArrayLike(object item, int ndmin, int trans1d)
+        {
+            NDArray arr = item as NDArray ?? np.asanyarray(item);
+            int itemNdim = arr.ndim;
+
+            // NumPy: array(item, subok=True, ndmin=ndmin) cannot give a numpy.matrix another axis (probed 2.4.2:
+            // np.r_['0,3', m, m] joins the two matrices as they are, a (4, 3) matrix).
+            NDArray newobj = NDMatrixBoundary.IsMatrix(arr) ? arr : AtLeastNdmin(arr, ndmin);
+            if (trans1d != -1 && itemNdim < ndmin)
+            {
+                int k2 = ndmin - itemNdim;
+                int k1 = trans1d;
+                if (k1 < 0)
+                    k1 += k2 + 1;
+                newobj = np.transpose(newobj, BuildTransposeAxes(ndmin, k1, k2));
+            }
+
+            return ConcatOperand.Array(newobj);
+        }
+
+        /// <summary>
+        ///     <c>defaxes[:k1] + defaxes[k2:] + defaxes[k1:k2]</c> over <c>defaxes = range(ndmin)</c>,
+        ///     with Python's forgiving list-slice clamping (an out-of-range <c>trans1d</c> yields a
+        ///     malformed permutation and lands on transpose's own "axes don't match array").
+        /// </summary>
+        private static int[] BuildTransposeAxes(int ndmin, int k1, int k2)
+        {
+            var axes = new List<int>(ndmin);
+            AppendRangeSlice(axes, ndmin, 0, k1);
+            AppendRangeSlice(axes, ndmin, k2, ndmin);
+            AppendRangeSlice(axes, ndmin, k1, k2);
+            return axes.ToArray();
+        }
+
+        /// <summary>Appends <c>list(range(n))[start:stop]</c> with Python's index clamping.</summary>
+        private static void AppendRangeSlice(List<int> into, int n, int start, int stop)
+        {
+            if (start < 0)
+                start = Math.Max(0, start + n);
+            else if (start > n)
+                start = n;
+
+            if (stop < 0)
+                stop = Math.Max(0, stop + n);
+            else if (stop > n)
+                stop = n;
+
+            for (int i = start; i < stop; i++)
+                into.Add(i);
+        }
+
+        #endregion
+
+        #region dtype resolution
+
+        /// <summary>
+        ///     NEP50 kinds an entry can contribute. Ordered by dominance so the winner is the maximum.
+        /// </summary>
+        private enum ConcatWeakKind : byte
+        {
+            Strong = 0,
+            Bool = 1,
+            Int = 2,
+            Float = 3,
+            Complex = 4
+        }
+
+        /// <summary>One entry of the index expression, kept unmaterialized until the dtype is known.</summary>
+        [NDBorrowed] // an entry references the caller's array until the concatenation reads it
+        private readonly struct ConcatOperand
+        {
+            private readonly NDArray _array;
+            private readonly object _scalar;
+            private readonly NPTypeCode _code;
+            private readonly ConcatWeakKind _weak;
+
+            private ConcatOperand(NDArray array, object scalar, NPTypeCode code, ConcatWeakKind weak)
+            {
+                _array = array;
+                _scalar = scalar;
+                _code = code;
+                _weak = weak;
+            }
+
+            public static ConcatOperand Array(NDArray a) => new ConcatOperand(a, null, a.typecode, ConcatWeakKind.Strong);
+
+            public static ConcatOperand Scalar(object value, ConcatWeakKind weak)
+                => new ConcatOperand(null, value, NPTypeCode.Empty, weak);
+
+            public static ConcatOperand StrongScalar(object value)
+                => new ConcatOperand(null, value, value.GetType().GetTypeCode(), ConcatWeakKind.Strong);
+
+            public bool IsStrong => _weak == ConcatWeakKind.Strong;
+            public NPTypeCode Code => _code;
+            public ConcatWeakKind Weak => _weak;
+
+            /// <summary>True for a string array entry (fixed-width <c>S</c> / <c>U</c> or <c>StringDType</c>).</summary>
+            public bool IsText => _array is not null && _array.typecode == NPTypeCode.String;
+
+            /// <summary>
+            ///     The entry as <see cref="DTypePromotion.ResultType"/> reads it — NumPy's <c>result_type_objs</c> entry: an
+            ///     array (strong), or the scalar itself (a C# integer / float / complex literal is WEAK; a bool, char,
+            ///     Half or decimal is a strong dtype).
+            /// </summary>
+            public object PromotionOperand => _array is not null ? _array : _scalar;
+
+            /// <summary>
+            ///     The entry converted to the text descriptor <paramref name="descr"/> (an array cast, a scalar formatted as
+            ///     its <c>str()</c>), then given <paramref name="ndmin"/> dimensions.
+            /// </summary>
+            /// <param name="descr">The result's string descriptor.</param>
+            /// <param name="ndmin">The minimum dimensionality of the directive.</param>
+            /// <returns>The converted entry (a new array, or the entry's own array when it already is
+            ///     <paramref name="descr"/>).</returns>
+            /// <exception cref="UnicodeDecodeError">An <c>S</c> entry converted to a <c>U</c> result holds a byte at or
+            ///     above 0x80 (NumPy's S → U decode).</exception>
+            public NDArray MaterializeText(DType descr, int ndmin)
+            {
+                NDArray arr = _array is not null
+                    ? (_array.dtype.Equals(descr) ? _array : _array.astype(descr))
+                    : np.asanyarray(_scalar).astype(descr);
+                return AtLeastNdmin(arr, ndmin);
+            }
+
+            /// <summary>
+            ///     A weak integer literal too large for int64 — which lifts an all-literal key's
+            ///     default from int64 to uint64, as NumPy's <c>result_type(2**64-1)</c> does.
+            /// </summary>
+            public bool ExceedsInt64 => _scalar is ulong u && u > long.MaxValue;
+
+            public NDArray Materialize(NPTypeCode final, int ndmin)
+            {
+                NDArray arr;
+                if (_array is not null)
+                {
+                    // A numpy.matrix entry keeps its two axes here too (FromArrayLike); astype gives a plain
+                    // array, so the class is read before the cast.
+                    bool keepsRank = NDMatrixBoundary.IsMatrix(_array);
+                    arr = _array.typecode == final ? _array : _array.astype(final);
+                    if (keepsRank)
+                        return arr;
+                }
+                else
+                {
+                    if (_weak == ConcatWeakKind.Int)
+                        CheckWeakIntFits(_scalar, final);
+
+                    arr = np.asanyarray(_scalar);
+                    if (arr.typecode != final)
+                        arr = arr.astype(final);
+                }
+
+                return AtLeastNdmin(arr, ndmin);
+            }
+        }
+
+        /// <summary>
+        ///     NumPy's <c>result_type(*result_type_objs)</c>: arrays and NumSharp-only scalars contribute
+        ///     their dtype, C# literals contribute a weak kind that adopts it.
+        /// </summary>
+        private static NPTypeCode ResolveDtype(List<ConcatOperand> objs)
+        {
+            bool anyStrong = false;
+            bool anyBeyondInt64 = false;
+            NPTypeCode strong = NPTypeCode.Empty;
+            ConcatWeakKind weak = ConcatWeakKind.Strong;
+
+            foreach (var op in objs)
+            {
+                if (op.IsStrong)
+                {
+                    strong = anyStrong ? NDExprTypeRules.PromoteStrong(strong, op.Code) : op.Code;
+                    anyStrong = true;
+                }
+                else
+                {
+                    if (op.Weak > weak)
+                        weak = op.Weak;
+                    anyBeyondInt64 |= op.ExceedsInt64;
+                }
+            }
+
+            if (!anyStrong)
+            {
+                // All literals — NEP50 defaults. An integer literal past int64 lifts the default
+                // to uint64 (NumPy: result_type(2**63) and result_type(2**64-1) are both uint64).
+                return weak switch
+                {
+                    ConcatWeakKind.Bool => NPTypeCode.Boolean,
+                    ConcatWeakKind.Int => anyBeyondInt64 ? NPTypeCode.UInt64 : NPTypeCode.Int64,
+                    ConcatWeakKind.Float => NPTypeCode.Double,
+                    _ => NPTypeCode.Complex
+                };
+            }
+
+            return weak switch
+            {
+                // No literal, or a bool literal (which adopts anything).
+                ConcatWeakKind.Strong or ConcatWeakKind.Bool => strong,
+                // An int literal adopts anything but bool, which it lifts to the default int.
+                ConcatWeakKind.Int => strong == NPTypeCode.Boolean ? NPTypeCode.Int64 : strong,
+                // A float literal keeps a float-kind dtype's width, else forces the default float.
+                ConcatWeakKind.Float => NDExprTypeRules.IsFloatKind(strong)
+                                  || strong == NPTypeCode.Decimal
+                                  || strong == NPTypeCode.Complex
+                    ? strong
+                    : NPTypeCode.Double,
+                // NumSharp has a single complex width, so complex64 collapses onto Complex.
+                _ => NPTypeCode.Complex
+            };
+        }
+
+        /// <summary>True when any entry is a string array (the result dtype is then a text descriptor).</summary>
+        /// <param name="objs">The entries.</param>
+        /// <returns>Whether an entry is text.</returns>
+        private static bool AnyText(List<ConcatOperand> objs)
+        {
+            foreach (var op in objs)
+                if (op.IsText)
+                    return true;
+            return false;
+        }
+
+        /// <summary>
+        ///     NumPy's <c>final_dtype = result_type(*result_type_objs)</c> when an entry is text: arrays and NumSharp-only
+        ///     scalars contribute their descriptor, a C# number literal is a weak Python scalar — which has no common DType
+        ///     with text, so <c>np.r_[u, 1]</c> raises NumPy's <c>DTypePromotionError</c>; a strong number (a 0-d array, a
+        ///     bool) widens the text to its <c>str()</c> width (<c>np.r_[u, np.int64(1)]</c> is <c>&lt;U21</c>,
+        ///     <c>np.r_[u, True]</c> <c>&lt;U5</c>), and <c>StringDType</c> promotes only with <c>U</c>.
+        /// </summary>
+        /// <param name="objs">The entries.</param>
+        /// <returns>The result descriptor.</returns>
+        /// <exception cref="DTypePromotionError">No common DType (a Python number beside text; StringDType beside bytes or
+        ///     a number), NumPy's verbatim text with the entries' DTypes in order.</exception>
+        private static DType ResolveTextDescr(List<ConcatOperand> objs)
+        {
+            var operands = new object[objs.Count];
+            for (int i = 0; i < objs.Count; i++)
+                operands[i] = objs[i].PromotionOperand;
+            return DTypePromotion.ResultType(operands);
+        }
+
+        /// <summary>
+        ///     NumPy raises <c>OverflowError</c> — never wraps — when a weak integer literal does not fit
+        ///     the dtype it adopted: <c>np.r_[uint8Array, -1]</c> is an error, not 255.
+        /// </summary>
+        private static void CheckWeakIntFits(object value, NPTypeCode final)
+        {
+            if (value is ulong big && big > long.MaxValue)
+            {
+                if (final != NPTypeCode.UInt64 && NDExprTypeRules.IsIntegerKind(final))
+                    throw new OverflowException(
+                        $"Python integer {big} out of bounds for {final.AsNumpyDtypeName()}");
+                return;
+            }
+
+            NDExprTypeRules.CheckIntLiteralFits(
+                Convert.ToInt64(value, CultureInfo.InvariantCulture), final);
+        }
+
+        #endregion
+    }
+}
