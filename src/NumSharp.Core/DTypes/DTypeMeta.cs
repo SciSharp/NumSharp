@@ -530,6 +530,17 @@ namespace NumSharp
             => new NotSupportedException($"{this} has no '{slot}' slot: it has no element storage in NumSharp.");
 
         /// <summary>
+        ///     Whether two runs of <paramref name="bytes"/> bytes share no byte: the condition of
+        ///     <see cref="copyswapn"/>'s fused copy-and-swap pass (<c>NDByteOrder.CopyReverseRun</c> reads each vector
+        ///     before it writes it, so only disjoint runs - or the same run - are safe; NumPy's copy is a memmove).
+        /// </summary>
+        /// <param name="a">The first run's first byte.</param>
+        /// <param name="b">The second run's first byte.</param>
+        /// <param name="bytes">The runs' length in bytes.</param>
+        /// <returns>True when the runs do not overlap.</returns>
+        internal static unsafe bool Disjoint(byte* a, byte* b, long bytes) => a + bytes <= b || b + bytes <= a;
+
+        /// <summary>
         ///     Reverses the byte order of each <paramref name="unit"/>-byte unit of one element in place: NumPy's
         ///     <c>_strided_byte_swap</c> over an element (a number's whole item, a complex number's two halves, a <c>U</c>
         ///     element's code units).

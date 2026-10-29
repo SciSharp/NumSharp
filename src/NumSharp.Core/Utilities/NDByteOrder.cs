@@ -1,4 +1,5 @@
 using System;
+using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
@@ -13,8 +14,8 @@ namespace NumSharp.Utilities
     /// </summary>
     /// <remarks>
     ///     The two users are the class slot <see cref="DTypeMeta.copyswapn"/> (NumPy's <c>PyArray_ArrFuncs.copyswapn</c>,
-    ///     whose contiguous runs it swaps) and <see cref="NDArray.byteswap(bool)"/>. A strided element is reversed one unit
-    ///     at a time (<see cref="ReverseUnit"/>): only a contiguous run has whole vectors to shuffle.
+    ///     whose contiguous runs it swaps) and <see cref="NDArray.byteswap(bool)"/>. Strided elements are reversed one unit
+    ///     at a time (<see cref="ReverseStrided"/>): only a contiguous run has whole vectors to shuffle.
     /// </remarks>
     internal static unsafe class NDByteOrder
     {
@@ -130,6 +131,49 @@ namespace NumSharp.Utilities
                 byte t = p[lo];
                 p[lo] = p[hi];
                 p[hi] = t;
+            }
+        }
+
+        /// <summary>
+        ///     Reverses each <paramref name="unit"/>-byte unit of <paramref name="n"/> elements of <paramref name="size"/>
+        ///     bytes that lie <paramref name="stride"/> bytes apart, in place: the strided half of
+        ///     <see cref="DTypeMeta.copyswapn"/>'s swap (NumPy's <c>_strided_byte_swap</c> over a run that is not
+        ///     contiguous). The unit width is switched on once per call, and a 2-, 4- or 8-byte unit is one
+        ///     <see cref="BinaryPrimitives"/> reversal (unaligned reads and writes: an element of a byte-offset view need
+        ///     not be aligned); any other width is reversed byte by byte.
+        /// </summary>
+        /// <param name="dst">The first element's first byte.</param>
+        /// <param name="stride">The byte distance between elements (any sign).</param>
+        /// <param name="n">The number of elements.</param>
+        /// <param name="size">An element's size in bytes, a multiple of <paramref name="unit"/>.</param>
+        /// <param name="unit">The unit width in bytes; 1 leaves the elements as they are.</param>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        internal static void ReverseStrided(byte* dst, long stride, long n, int size, int unit)
+        {
+            switch (unit)
+            {
+                case 1:
+                    return;
+                case 2:
+                    for (long i = 0; i < n; i++)
+                        for (byte* u = dst + i * stride, end = u + size; u < end; u += 2)
+                            Unsafe.WriteUnaligned(u, BinaryPrimitives.ReverseEndianness(Unsafe.ReadUnaligned<ushort>(u)));
+                    return;
+                case 4:
+                    for (long i = 0; i < n; i++)
+                        for (byte* u = dst + i * stride, end = u + size; u < end; u += 4)
+                            Unsafe.WriteUnaligned(u, BinaryPrimitives.ReverseEndianness(Unsafe.ReadUnaligned<uint>(u)));
+                    return;
+                case 8:
+                    for (long i = 0; i < n; i++)
+                        for (byte* u = dst + i * stride, end = u + size; u < end; u += 8)
+                            Unsafe.WriteUnaligned(u, BinaryPrimitives.ReverseEndianness(Unsafe.ReadUnaligned<ulong>(u)));
+                    return;
+                default:
+                    for (long i = 0; i < n; i++)
+                        for (byte* u = dst + i * stride, end = u + size; u < end; u += unit)
+                            ReverseUnit(u, unit);
+                    return;
             }
         }
 

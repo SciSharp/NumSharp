@@ -1,7 +1,4 @@
-using System;
-using System.Runtime.CompilerServices;
 using NumSharp.Backends.Iteration;
-using NumSharp.Utilities;
 
 namespace NumSharp.Backends
 {
@@ -17,11 +14,10 @@ namespace NumSharp.Backends
         //
         //   Reverse the bytes WITHIN each element, toggling the low/big-endian
         //   representation. The dtype is unchanged — only the raw bytes move, so the
-        //   *reinterpreted* values change (int32 1 -> 0x01000000). It is a pure
-        //   byte permutation: it depends ONLY on the element's byte width, never on
-        //   the dtype's numeric meaning, so ONE width-dispatched SIMD kernel covers
-        //   every dtype instead of a per-NPTypeCode path (Utilities/NDByteOrder.cs,
-        //   shared with the dtype classes' copyswapn slot).
+        //   *reinterpreted* values change (int32 1 -> 0x01000000). As in NumPy, the
+        //   swap is the dtype class's copyswapn slot, which knows its own byte-order
+        //   unit; its contiguous runs use the width-dispatched SIMD kernels of
+        //   Utilities/NDByteOrder.cs.
         //
         //   The "swap unit" is the element size, EXCEPT complex, whose real and
         //   imaginary halves are swapped independently (NumPy's copyswapn for a
@@ -56,8 +52,8 @@ namespace NumSharp.Backends
 
         /// <summary>
         ///     NumPy's <c>PyArray_Byteswap</c> (<c>methods.c</c>), the body of <c>ndarray.byteswap</c>: each element's bytes
-        ///     reversed, in place (the array itself, after NumPy's writeability check) or in a copy in NumPy's
-        ///     <c>ANYORDER</c> layout.
+        ///     reversed by the class's <see cref="DTypeMeta.copyswapn"/> (its own byte-order unit), in place (the array
+        ///     itself, after NumPy's writeability check) or in a copy in NumPy's <c>ANYORDER</c> layout.
         /// </summary>
         /// <param name="a">The array.</param>
         /// <param name="inplace">True to swap <paramref name="a"/>'s own elements and return it; false for a swapped
@@ -67,124 +63,75 @@ namespace NumSharp.Backends
         ///     read-only</c>).</exception>
         internal static NDArray Byteswap(NDArray a, bool inplace)
         {
-            // A StringDType cell is text in its buffer's allocator, never a byte-ordered number: the swap is the identity.
-            // The writeable check runs first, as NumPy's PyArray_FailUnlessWriteable does before the swap it cannot make.
-            if (a.Storage.IsVString)
-            {
-                if (!inplace)
-                    return a.copy(a.Shape.Order);
-                if (!a.Shape.IsWriteable)
-                    throw new ValueError("array to be byte-swapped is read-only");
-                return a;
-            }
-
-            int itemsize = a.itemsize;
-            // Complex swaps each component (real/imag) independently — half the itemsize per unit; a string swaps
-            // each character (4 bytes for 'U', 1 for 'S').
-            int unit = a.typecode == NPTypeCode.Complex ? itemsize / 2
-                : a.typecode == NPTypeCode.String ? ((StringDTypeMeta)a.dtype.Meta).UnitSize
-                : itemsize;
-
+            DType descr = a.dtype;
             if (inplace)
             {
-                // NumPy: PyArray_FailUnlessWriteable(self, "array to be byte-swapped").
+                // NumPy: PyArray_FailUnlessWriteable(self, "array to be byte-swapped"), then copyswapn over the array (a
+                // StringDType's is the identity: the owner's decision D14).
                 if (!a.Shape.IsWriteable)
                     throw new ValueError("array to be byte-swapped is read-only");
-
-                if (unit > 1 && a.size > 0)
-                    ByteswapInPlace(a, unit, itemsize);
+                if (a.size > 0)
+                    SwapInPlace(a, descr);
                 return a;
             }
 
-            // NumPy: PyArray_NewCopy(self, NPY_ANYORDER) then byteswap the copy in place — i.e. a
-            // copy pass THEN a swap pass. When the source is C-contiguous (the common case) both
-            // fuse into ONE pass: allocate an uninitialized C-contiguous result and read→shuffle→
-            // write straight across, halving the memory traffic and skipping the copy machinery.
-            // A 1-byte dtype has no bytes to swap, so it is a straight contiguous copy.
-            if (a.Shape.IsContiguous && a.size > 0)
+            // NumPy: PyArray_NewCopy(self, NPY_ANYORDER), then the copy swapped in place - a copy pass THEN a swap pass. A
+            // C-contiguous source whose items hold no references fuses both into ONE pass: copyswapn copies and swaps
+            // straight into an uninitialized C-contiguous result, halving the memory traffic. (A StringDType copy
+            // duplicates its strings through the allocator: the general route below.)
+            if (a.Shape.IsContiguous && a.size > 0 && !descr.Meta.HasReferences)
             {
                 // The descriptor allocates: a string's width lives on it, not on the storage lane.
-                var result = new NDArray(a.dtype, Shape.Adopt(a.Shape.dimensions), fillZeros: false);
+                var result = new NDArray(descr, Shape.Adopt(a.Shape.dimensions), fillZeros: false);
                 unsafe
                 {
+                    int itemsize = descr.itemsize;
                     byte* src = (byte*)a.Storage.Address + a.Shape.offset * (long)itemsize;
-                    byte* dst = (byte*)result.Storage.Address;   // fresh -> offset 0
-                    long bytes = (long)a.size * itemsize;
-                    if (unit > 1) NDByteOrder.CopyReverseRun(src, dst, bytes, unit);
-                    else Buffer.MemoryCopy(src, dst, bytes, bytes);
+                    // A fresh result: offset 0, its run disjoint from the source's.
+                    descr.Meta.copyswapn(descr, (byte*)result.Storage.Address, itemsize, src, itemsize, a.size, swap: true);
                 }
                 return result;
             }
 
-            // F-contiguous-and-not-C / strided / broadcast / empty: copy in NumPy's ANYORDER layout
-            // (F only for an F-contiguous-and-not-C source, via Shape.Order), then swap it.
-            NDArray fallback = a.copy(a.Shape.Order);
-            if (unit > 1 && fallback.size > 0)
-            {
-                unsafe
-                {
-                    byte* p = (byte*)fallback.Storage.Address + fallback.Shape.offset * (long)itemsize;
-                    NDByteOrder.ReverseRun(p, (long)fallback.size * itemsize, unit);
-                }
-            }
-            return fallback;
+            // F-contiguous-and-not-C / strided / broadcast / a StringDType: copy in NumPy's ANYORDER layout (F only for an
+            // F-contiguous-and-not-C source, via Shape.Order), then swap the copy in place.
+            NDArray copy = a.copy(a.Shape.Order);
+            if (copy.size > 0)
+                SwapInPlace(copy, descr);
+            return copy;
         }
 
-        /// <summary>In-place byteswap over any layout. One-segment arrays swap their whole contiguous
-        /// byte block; strided/transposed/reversed views drive a single-operand EXTERNAL_LOOP NDIter
-        /// (memory order) whose kernel swaps each chunk — NumPy's IterAllButAxis inplace path.</summary>
+        /// <summary>
+        ///     The in-place half of <c>PyArray_Byteswap</c> over any layout: one <see cref="DTypeMeta.copyswapn"/> call with
+        ///     no source over a one-segment array's whole run (NumPy's <c>PyArray_ISONESEGMENT</c> branch), else one call per
+        ///     inner run of a single-operand EXTERNAL_LOOP iterator in memory order (NumPy walks <c>IterAllButAxis</c>).
+        /// </summary>
         /// <param name="a">The array (writeable, not empty).</param>
-        /// <param name="unit">The byte-order unit: the item size, half of it for complex, a U element's code unit.</param>
-        /// <param name="itemsize">The item size in bytes.</param>
-        private static unsafe void ByteswapInPlace(NDArray a, int unit, int itemsize)
+        /// <param name="descr">Its descriptor, whose class swaps the elements.</param>
+        private static unsafe void SwapInPlace(NDArray a, DType descr)
         {
-            // One segment (C- OR F-contiguous): the logical elements occupy a single contiguous byte
-            // run of size*itemsize (column-major layout is still one block), so swap it wholesale.
+            int itemsize = descr.itemsize;
+            // One segment (C- OR F-contiguous): the logical elements occupy a single contiguous byte run of size * itemsize
+            // (a column-major layout is still one block), so one call swaps it wholesale.
             if (a.Shape.IsContiguous || a.Shape.IsFContiguous)
             {
                 byte* p = (byte*)a.Storage.Address + a.Shape.offset * (long)itemsize;
-                NDByteOrder.ReverseRun(p, (long)a.size * itemsize, unit);
+                descr.Meta.copyswapn(descr, p, itemsize, null, itemsize, a.size, swap: true);
                 return;
             }
 
-            // Non-contiguous: visit every element via a single READWRITE EXTERNAL_LOOP iterator in
-            // memory order (K), so a strided array's contiguous inner runs coalesce into large chunks.
-            var ctx = new SwapCtx { itemsize = itemsize, unit = unit };
+            // Non-contiguous: a single READWRITE EXTERNAL_LOOP iterator in memory order (K), so a strided array's contiguous
+            // inner runs coalesce into large chunks; each chunk is one copyswapn call at the chunk's byte stride (a
+            // unit-stride chunk is swapped with SIMD, any other element by element). The kernel is a closure over the
+            // descriptor: the iterator's auxdata is a raw pointer, which cannot carry a managed object.
+            DTypeMeta meta = descr.Meta;
+            NDInnerLoopFunc swapChunk = (dataptrs, strides, count, auxdata) =>
+                meta.copyswapn(descr, (byte*)dataptrs[0], strides[0], null, strides[0], count, swap: true);
             var iter = NDIterRef.AdvancedNew(1, new[] { a }, NDIterGlobalFlags.EXTERNAL_LOOP,
                 NPY_ORDER.NPY_KEEPORDER, NPY_CASTING.NPY_NO_CASTING,
                 new[] { NDIterPerOpFlags.READWRITE });
-            try { iter.ForEach(ByteswapStridedKernel, &ctx); }
+            try { iter.ForEach(swapChunk); }
             finally { iter.Dispose(); }
-        }
-
-        private struct SwapCtx { public int itemsize; public int unit; }
-
-        // NDInnerLoopFunc: swap one inner-loop chunk of `count` elements at byte stride strides[0].
-        // A unit-stride chunk (the coalesced inner axis) is a contiguous block -> SIMD; any other
-        // stride (non-unit / negative) reverses each element's bytes individually.
-        private static unsafe void ByteswapStridedKernel(void** dataptrs, long* strides, long count, void* auxdata)
-        {
-            byte* data = (byte*)dataptrs[0];
-            long s = strides[0];
-            SwapCtx* c = (SwapCtx*)auxdata;
-            int itemsize = c->itemsize, unit = c->unit;
-
-            if (s == itemsize)
-            {
-                NDByteOrder.ReverseRun(data, count * itemsize, unit);
-                return;
-            }
-            for (long i = 0; i < count; i++)
-                ReverseElement(data + i * s, itemsize, unit);
-        }
-
-        /// <summary>Reverse each of the <paramref name="unit"/>-byte components of one strided element
-        /// (one group for every dtype but complex, whose two halves reverse independently).</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ReverseElement(byte* e, int itemsize, int unit)
-        {
-            for (int u = 0; u < itemsize; u += unit)
-                NDByteOrder.ReverseUnit(e + u, unit);
         }
     }
 }

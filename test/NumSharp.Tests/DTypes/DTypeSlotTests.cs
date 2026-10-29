@@ -446,6 +446,13 @@ namespace NumSharp.Tests.DTypes
                 using var buf = new NativeBuffer(32);
                 Record(() => d.Meta.copyswapn(d, buf.P, 16, buf.P + 16, 16, 1, false)).Should().BeOfType<NotSupportedException>()
                     .Which.Message.Should().Contain("hold references");
+                // With no source the swap is the identity (the owner's decision D14: a cell has no byte order, and NumPy
+                // 2.4.2 crashes in ndarray.byteswap of a StringDType array): the cells are left exactly as they are.
+                for (int k = 0; k < 32; k++)
+                    buf.P[k] = (byte)(k * 13 + 5);
+                var before = buf.Bytes(0, 32);
+                d.Meta.copyswapn(d, buf.P, 16, null, 16, 2, swap: true);
+                buf.Bytes(0, 32).Should().Equal(before, $"{d}: in-place copyswapn");
                 d.Meta.fill(d, buf.P, 3).Should().BeFalse();
             }
         }
@@ -522,9 +529,29 @@ namespace NumSharp.Tests.DTypes
         // ------------------------------------------------------------------------------------------------------------
 
         /// <summary>
-        ///     <c>copyswapn</c> with a swap is <c>ndarray.byteswap</c> for every class with byte-ordered elements (the whole
-        ///     item, a complex number's halves apart, a <c>U</c> element's 4-byte code units, an <c>S</c> element unchanged); a
-        ///     second swap in place restores the source; without a swap it is a copy, and a source stride gathers.
+        ///     The bytes <c>copyswapn</c> must produce, computed here independently: each element's units reversed (the whole
+        ///     item, a complex number's halves apart, a <c>U</c> element's 4-byte code units, an <c>S</c> element unchanged).
+        /// </summary>
+        /// <param name="d">The descriptor.</param>
+        /// <param name="source">The elements' bytes.</param>
+        /// <returns>The swapped bytes.</returns>
+        private static byte[] SwappedReference(DType d, byte[] source)
+        {
+            int size = d.itemsize;
+            int unit = d.kind == 'S' || d.kind == 'b' ? 1 : d.kind == 'U' ? 4 : d.kind == 'c' ? size / 2 : size;
+            var r = (byte[])source.Clone();
+            for (int u = 0; u + unit <= r.Length; u += unit)
+                Array.Reverse(r, u, unit);
+            return r;
+        }
+
+        /// <summary>
+        ///     <c>copyswapn</c> with a swap reverses each element's units, for every class with byte-ordered elements (the
+        ///     whole item, a complex number's halves apart, a <c>U</c> element's 4-byte code units, an <c>S</c> element
+        ///     unchanged), held to an independent reference over its three swap paths - the fused copy of a contiguous run,
+        ///     the in-place swap of a contiguous run, the in-place swap of a strided run - and an overlapping source (the
+        ///     copy-then-swap fallback); <c>ndarray.byteswap</c>, which runs through it, gives the same bytes; a second swap in
+        ///     place restores the source; without a swap it is a copy, and a source stride gathers.
         /// </summary>
         [TestMethod]
         public void CopySwapN_IsByteswap_ForEveryClassWithBytes()
@@ -541,8 +568,31 @@ namespace NumSharp.Tests.DTypes
                 for (int k = 0; k < n * size; k++)
                     p[k] = (byte)(k * 37 + 11);
                 var source = new ReadOnlySpan<byte>(p, n * size).ToArray();
-                using var swapped = a.byteswap();
-                var expected = swapped.tobytes();
+                var expected = SwappedReference(d, source);
+                using (var swapped = a.byteswap())
+                    swapped.tobytes().Should().Equal(expected, $"{what}: ndarray.byteswap");
+
+                // The in-place swap of a strided run: every other element of a scratch copy, the others untouched.
+                using (var strided = new NativeBuffer(n * size))
+                {
+                    new ReadOnlySpan<byte>(source).CopyTo(new Span<byte>(strided.P, n * size));
+                    d.Meta.copyswapn(d, strided.P, 2 * size, null, 2 * size, (n + 1) / 2, swap: true);
+                    for (int i = 0; i < n; i++)
+                        strided.Bytes(i * size, size).Should().Equal(
+                            (i % 2 == 0 ? expected : source).Skip(i * size).Take(size), $"{what}: strided [{i}]");
+                }
+
+                // An overlapping source: the copy runs first (a memmove), then the swap - never the fused kernel.
+                using (var overlap = new NativeBuffer((n + 1) * size))
+                {
+                    new ReadOnlySpan<byte>(source).CopyTo(new Span<byte>(overlap.P + size, n * size));
+                    d.Meta.copyswapn(d, overlap.P, size, overlap.P + size, size, n, swap: true);
+                    overlap.Bytes(0, n * size).Should().Equal(expected, $"{what}: overlapping source above");
+                    // The other direction, where a forward pass would read bytes it already wrote.
+                    new ReadOnlySpan<byte>(source).CopyTo(new Span<byte>(overlap.P, n * size));
+                    d.Meta.copyswapn(d, overlap.P + size, size, overlap.P, size, n, swap: true);
+                    overlap.Bytes(size, n * size).Should().Equal(expected, $"{what}: overlapping source below");
+                }
 
                 using var dst = new NativeBuffer(n * size);
                 d.Meta.copyswapn(d, dst.P, size, p, size, n, swap: true);

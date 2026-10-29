@@ -287,7 +287,8 @@ namespace NumSharp
         /// <inheritdoc/>
         /// <remarks>NumPy's <c>STRING_copyswapn</c> (a copy; bytes have no order) and <c>UNICODE_copyswapn</c> (a copy,
         ///     then each 4-byte code unit reversed). The copy is NumPy's <c>_basic_copyn</c>: one block copy when both
-        ///     strides are the item size, else a copy per element.</remarks>
+        ///     strides are the item size, else a copy per element. A contiguous, disjoint <c>U</c> run that is swapped
+        ///     takes one fused copy-and-swap pass instead (the same bytes).</remarks>
         internal override unsafe void copyswapn(DType descr, byte* dst, long dstride, byte* src, long sstride, long n, bool swap)
         {
             int size = descr.itemsize;
@@ -295,7 +296,13 @@ namespace NumSharp
             {
                 if (sstride == size && dstride == size)
                 {
-                    // Contiguous items on both sides: one copy of the whole run (NumPy's memcpy branch).
+                    // Contiguous U items that are swapped: copy and swap in one pass when the runs are disjoint.
+                    if (swap && IsUnicode && Disjoint(src, dst, n * size))
+                    {
+                        NDByteOrder.CopyReverseRun(src, dst, n * size, UnitSize);
+                        return;
+                    }
+                    // Otherwise one copy of the whole run (NumPy's memcpy branch), swapped below.
                     Buffer.MemoryCopy(src, dst, n * size, n * size);
                 }
                 else
@@ -313,8 +320,8 @@ namespace NumSharp
                 }
                 else
                 {
-                    for (long i = 0; i < n; i++)
-                        ReverseUnits(dst + i * dstride, size, UnitSize);
+                    // Strided items: each element's 4-byte code units reversed in place.
+                    NDByteOrder.ReverseStrided(dst, dstride, n, size, UnitSize);
                 }
             }
         }

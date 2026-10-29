@@ -180,7 +180,10 @@ namespace NumSharp
         /// <inheritdoc/>
         /// <remarks>NumPy's <c>@TYPE@_copyswapn</c>: its <c>_basic_copyn</c> (one block copy when both strides are the item
         ///     size, else a copy per element; <see cref="Buffer.MemoryCopy(void*, void*, long, long)"/> is overlap-safe, as
-        ///     NumPy's memmove), then each element's units reversed — the whole item, or each half of a complex number.</remarks>
+        ///     NumPy's memmove), then each element's units reversed — the whole item, or each half of a complex number.
+        ///     Contiguous, disjoint runs that are swapped take one fused pass instead (<c>NDByteOrder.CopyReverseRun</c>: the
+        ///     same bytes, half the memory traffic), the pass <c>ndarray.byteswap</c>'s copy and a non-native
+        ///     <c>np.frombuffer</c> read run.</remarks>
         internal override unsafe void copyswapn(DType descr, byte* dst, long dstride, byte* src, long sstride, long n, bool swap)
         {
             int size = ItemSize;
@@ -188,7 +191,14 @@ namespace NumSharp
             {
                 if (sstride == size && dstride == size)
                 {
-                    // Contiguous items on both sides: one copy of the whole run (NumPy's memcpy branch).
+                    // Contiguous items on both sides that are swapped: copy and swap in one pass when the runs are
+                    // disjoint (the fused kernel reads each vector before it writes it).
+                    if (swap && size > 1 && Disjoint(src, dst, n * size))
+                    {
+                        NDByteOrder.CopyReverseRun(src, dst, n * size, SwapUnit);
+                        return;
+                    }
+                    // Otherwise one copy of the whole run (NumPy's memcpy branch), swapped below.
                     Buffer.MemoryCopy(src, dst, n * size, n * size);
                 }
                 else
@@ -208,8 +218,8 @@ namespace NumSharp
                 }
                 else
                 {
-                    for (long i = 0; i < n; i++)
-                        ReverseUnits(dst + i * dstride, size, unit);
+                    // Strided items: each item's units reversed in place, the unit width switched on once.
+                    NDByteOrder.ReverseStrided(dst, dstride, n, size, unit);
                 }
             }
         }

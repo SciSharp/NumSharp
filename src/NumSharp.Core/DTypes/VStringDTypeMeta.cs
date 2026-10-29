@@ -254,13 +254,21 @@ namespace NumSharp
             => Cells(buffer, item, out long index).GetIndex(index);
 
         /// <inheritdoc/>
-        /// <remarks>A cell points into its buffer's allocator, so it has no byte order to swap and no meaning outside its
-        ///     buffer: NumPy refuses a buffer for a dtype that holds references, and NumSharp has no byte-order copy for
-        ///     this class.</remarks>
-        /// <exception cref="NotSupportedException">Always.</exception>
+        /// <remarks>
+        ///     A cell points into its buffer's allocator, so it has no byte order and no meaning outside its buffer. With no
+        ///     source (in place) the swap is the identity - the owner's decision D14 for <c>ndarray.byteswap</c>, where
+        ///     NumPy 2.4.2 crashes the process: swapping a cell's bytes would corrupt its offset or pointer. A source is
+        ///     refused: cells cannot be copied as raw bytes (NumPy refuses a buffer for a dtype that holds references, and
+        ///     a copy of the array duplicates its strings through the allocator instead).
+        /// </remarks>
+        /// <exception cref="NotSupportedException">A source (<paramref name="src"/> not null).</exception>
         internal override unsafe void copyswapn(DType descr, byte* dst, long dstride, byte* src, long sstride, long n, bool swap)
-            => throw new NotSupportedException(
+        {
+            if (src == null)
+                return;
+            throw new NotSupportedException(
                 "StringDType cells hold references into their buffer's allocator: they cannot be copied or byte-swapped as raw bytes.");
+        }
 
         /// <inheritdoc/>
         /// <remarks>NumPy's <c>nonzero</c> of <c>stringdtype/dtype.c</c>: an NA cell of a descriptor with an NA object is
