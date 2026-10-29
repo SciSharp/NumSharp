@@ -1,5 +1,6 @@
-// TensorEngine's core file: the Blas seam, the Linalg sub-engine (numpy.linalg, LinalgEngine) and NumSharp's own
-// np.evaluate entry points. The members NumPy names live in partial files named after NumPy's sources:
+// TensorEngine's core file: the Blas seam, the Linalg and Fft sub-engines (numpy.linalg, LinalgEngine; numpy.fft,
+// FftEngine) and NumSharp's own np.evaluate entry points. The members NumPy names live in partial files named after
+// NumPy's sources:
 // TensorEngine.Umath.cs (the ufuncs), TensorEngine.Methods.cs (the ndarray methods that compute),
 // TensorEngine.Multiarray.cs (the C functions that compute), TensorEngine.Numeric.cs, TensorEngine.NanFunctions.cs,
 // TensorEngine.UfuncLike.cs, TensorEngine.LinearAlgebra.cs, and TensorEngine.ArrayObject.cs (the array-object members
@@ -64,6 +65,37 @@ namespace NumSharp
 
         /// <summary>The engine assigned to <see cref="Linalg"/>, or null for the shared default.</summary>
         private LinalgEngine _linalg;
+
+        /// <summary>
+        ///     numpy.fft's functions for the arrays bound to this engine: every <c>np.fft</c> transform and frequency helper
+        ///     calls one member of this sub-engine (<c>fftfreq</c> / <c>rfftfreq</c>, which take no array, through the
+        ///     default engine). <see cref="DefaultFftEngine"/> (NumPy's <c>_pocketfft.py</c> statements over kernels that run
+        ///     NumSharp's managed pocketfft port) until something else is assigned.
+        /// </summary>
+        /// <value>The assigned engine, or the shared <see cref="DefaultFftEngine"/>; never null. Assigning null restores the
+        ///     default.</value>
+        /// <remarks>
+        ///     <para>
+        ///     Assign a <see cref="DefaultFftEngine"/> subclass to compute the transforms another way (MKL, FFTW, cuFFT)
+        ///     while NumPy's length, norm, axis and <c>out=</c> checks and the N-D, real and Hermitian compositions stay
+        ///     (override its <c>protected virtual</c> kernels), or an <see cref="FftEngine"/> of your own to replace whole
+        ///     functions. <c>fftshift</c> and <c>ifftshift</c> are not members: they roll the array object.
+        ///     </para>
+        ///     <para>
+        ///     Engines are cached singletons (<see cref="BackendFactory"/>), so an assignment reaches every array bound to
+        ///     the engine, existing ones included, from the next <c>np.fft</c> call on: each call reads the property once,
+        ///     so one already running finishes with the engine it read. Do not assign it while another thread runs np.fft
+        ///     functions whose results you compare: they may straddle the change.
+        ///     </para>
+        /// </remarks>
+        public FftEngine Fft
+        {
+            get => _fft ?? DefaultFftEngine.Shared;
+            set => _fft = value;
+        }
+
+        /// <summary>The engine assigned to <see cref="Fft"/>, or null for the shared default.</summary>
+        private FftEngine _fft;
 
         /// <summary>
         ///     Fused evaluation of an <see cref="NDExpr"/> tree in one iterator

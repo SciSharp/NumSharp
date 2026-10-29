@@ -1,20 +1,22 @@
 using System;
 
-namespace NumSharp
+namespace NumSharp.Backends
 {
-    public partial class FourierModule
+    public partial class DefaultFftEngine
     {
         // =====================================================================================
         // Layer-3 port of numpy/fft/_pocketfft.py: _raw_fft, _raw_fftnd, _cook_nd_args,
         // _swap_direction, plus the axis/shape helpers (normalize_axis_index and the a.shape[axis]
-        // tuple-index used before _raw_fft). NumPy 2.4.2 is the source of truth.
+        // tuple-index used before _raw_fft). NumPy 2.4.2 is the source of truth. Until phase PE's E3
+        // these were FourierModule's private statements (Fourier/np.fft.RawFft.cs); _raw_fft now ends
+        // in this engine's c2c / r2c / c2r kernels instead of calling PocketFFTDriver itself.
         //
         // DTYPE POLICY (NumSharp has ONLY complex128 — no complex64): float64/complex128/int/bool
         // inputs -> complex128 output for the forward/complex transforms; irfft/hfft -> float64 real
         // output. float32/float16 promote to complex128 (compute-in-double) — a deliberate
         // [Misaligned] divergence from NumPy 2.x's native complex64 path (it matches NumPy's own
         // still-published "numpy.fft promotes float32 ... to ... complex128" docstring). The dtype is
-        // resolved by the engine seam when it allocates the output; the shell resolves the output
+        // resolved by the kernel when it allocates the output; these statements resolve the output
         // SHAPE (n_out along axis) for the out= validation.
         // =====================================================================================
 
@@ -24,6 +26,12 @@ namespace NumSharp
         ///     NumPy's KeyError-path message (note the space after the first comma — this is the
         ///     message the INVERSE transforms and <c>hfft/ihfft</c> surface for a bad norm).
         /// </summary>
+        /// <param name="norm">The caller's normalization mode: null, <c>"backward"</c>, <c>"ortho"</c> or
+        ///     <c>"forward"</c>.</param>
+        /// <returns>The mode of the opposite direction: <c>"forward"</c> for null / <c>"backward"</c>,
+        ///     <c>"ortho"</c> for <c>"ortho"</c>, <c>"backward"</c> for <c>"forward"</c>.</returns>
+        /// <exception cref="ValueError">Any other value: <c>Invalid norm value {norm}; should be "backward", "ortho" or
+        ///     "forward".</c> (with a space after the first comma, unlike the forward transforms' text).</exception>
         internal static string SwapDirection(string norm)
         {
             if (norm == null || norm == "backward") return "forward";
@@ -40,6 +48,11 @@ namespace NumSharp
         ///     when <c>n</c> is given (when <c>n</c> is <c>None</c> the public method's <c>a.shape[axis]</c>
         ///     raises the IndexError first — see <see cref="ShapeAt"/>).
         /// </summary>
+        /// <param name="axis">The caller's axis; negative counts from the end.</param>
+        /// <param name="ndim">The operand's number of dimensions.</param>
+        /// <returns>The axis in <c>[0, ndim)</c>.</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> outside <c>[-ndim, ndim)</c> (a 0-d operand has no
+        ///     axis).</exception>
         internal static int NormalizeAxisIndex(int axis, int ndim)
         {
             int ax = axis;
@@ -55,6 +68,12 @@ namespace NumSharp
         ///     <c>None</c>; an out-of-range axis raises the IndexError NumPy leaks there
         ///     (<c>"tuple index out of range"</c>), NOT an AxisError.
         /// </summary>
+        /// <param name="a">The operand.</param>
+        /// <param name="axis">The axis; negative counts from the end.</param>
+        /// <returns>The operand's length along the axis.</returns>
+        /// <exception cref="IndexError"><paramref name="axis"/> out of range: <c>tuple index out of range</c>.</exception>
+        /// <exception cref="NullReferenceException"><paramref name="a"/> is null (as before the move: the facades pass it
+        ///     on unchecked).</exception>
         internal static int ShapeAt(NDArray a, int axis)
         {
             int nd = a.ndim;
@@ -71,6 +90,11 @@ namespace NumSharp
         ///     message (<c>"index {i} is out of bounds for axis 0 with size {ndim}"</c>) — distinct from
         ///     <see cref="ShapeAt"/>'s "tuple index out of range".
         /// </summary>
+        /// <param name="a">The operand.</param>
+        /// <param name="axis">The axis; negative counts from the end.</param>
+        /// <returns>The operand's length along the axis.</returns>
+        /// <exception cref="IndexError">A 0-d operand (<c>cannot do a non-empty take from an empty axes.</c>), or an axis
+        ///     out of range (take's text, naming the original axis).</exception>
         internal static int TakeShape(NDArray a, int axis)
         {
             int nd = a.ndim;
@@ -90,8 +114,9 @@ namespace NumSharp
         ///     factor <c>fct</c> (inverse swaps the norm first) in the input's <c>real_dtype</c> (whose
         ///     promotion refuses text), resolves the output length along the axis (<c>rfft</c> →
         ///     <c>n//2+1</c>; others → <c>n</c>), normalizes the axis, validates a provided
-        ///     <paramref name="out"/>, then runs the ported pocketfft transform
-        ///     (<see cref="PocketFFTDriver"/>).
+        ///     <paramref name="out"/>, then hands the transform to the kernel that stands for NumPy's
+        ///     <c>_pocketfft_umath</c> ufunc of its kind (<see cref="C2CKernel"/>, <see cref="R2CKernel"/>,
+        ///     <see cref="C2RKernel"/>).
         /// </summary>
         /// <param name="a">Input array.</param>
         /// <param name="n">Transform length (already defaulted by the caller).</param>
@@ -100,7 +125,8 @@ namespace NumSharp
         /// <param name="isForward"><c>true</c> for the forward transforms (fft/rfft).</param>
         /// <param name="norm">One of <c>null</c>/"backward"/"ortho"/"forward".</param>
         /// <param name="out">Optional pre-allocated output; its shape is validated.</param>
-        /// <param name="name">The public API name for the seam message (e.g. "fft").</param>
+        /// <param name="name">The public API name (e.g. "fft"), kept for the callers' diagnostics; the statements do not
+        ///     read it.</param>
         /// <param name="floatPrec">
         ///     The ORIGINAL user input is float32/float16, so numpy 2.x returns complex64/float32/float16.
         ///     NumSharp has no complex64 (issue #569), so the result dtype stays complex128/float64 but the
@@ -120,7 +146,9 @@ namespace NumSharp
         /// <exception cref="TypeError">A complex input to <c>rfft</c> (no complex loop).</exception>
         /// <exception cref="AxisError">An axis outside the input (the caller's <c>a.shape[axis]</c> lookup reports
         ///     NumPy's IndexError first when <c>n</c> was omitted).</exception>
-        internal static NDArray RawFft(NDArray a, int n, int axis, bool isReal, bool isForward, string norm, NDArray @out, string name, bool floatPrec = false)
+        /// <exception cref="ArgumentException">An <paramref name="out"/> whose dtype the kernel's result cannot be cast to
+        ///     under same_kind (the kernel's refusal, NumPy's UFuncTypeError text).</exception>
+        internal NDArray RawFft(NDArray a, int n, int axis, bool isReal, bool isForward, string norm, NDArray @out, string name, bool floatPrec = false)
         {
             if (n < 1)
                 throw new ValueError($"Invalid number of FFT data points ({n}) specified.");
@@ -179,7 +207,7 @@ namespace NumSharp
                 // read-only out reports the shape error — _raw_fft's Python-level check fires
                 // before the ufunc's writeable validation, whose "output array is read-only" text
                 // this reproduces through the house guard, same as the elementwise ufunc out=
-                // path). Without it the driver writes @out's buffer directly and a non-writeable
+                // path). Without it the kernel writes @out's buffer directly and a non-writeable
                 // target (a setflags(write=False) array, a broadcast view, an 'r' memmap) is
                 // silently corrupted. One guard here covers the whole family — fft/ifft/rfft/
                 // irfft and the hfft/ihfft compositions all funnel through RawFft.
@@ -195,23 +223,32 @@ namespace NumSharp
                     $"ufunc '{(n % 2 == 0 ? "rfft_n_even" : "rfft_n_odd")}' not supported for the input types, " +
                     "and the inputs could not be safely coerced to any supported types according to the casting rule ''safe''");
 
-            // Wired to the ported pocketfft engine (PocketFFTDriver.cs). The driver resolves the
-            // output (a.shape with axis replaced by nOut, dtype per the policy above — complex128 for
-            // the complex/forward outputs, float64 for irfft), runs the strided all-but-axis 1-D
-            // transform, and scales by fct. `name` is retained for callers' diagnostics.
+            // NumPy's last statement is the _pocketfft_umath ufunc of the transform's kind; here it is
+            // that kind's kernel (by default the ported pocketfft engine, PocketFFTDriver.cs). The kernel
+            // resolves the output (a.shape with axis replaced by nOut, dtype per the policy above —
+            // complex128 for the complex/forward outputs, float64 for irfft), runs the strided
+            // all-but-axis 1-D transform, and scales by fct. `name` is retained for callers' diagnostics.
             // numpy's fft ufunc picks the SINGLE loop only when the fct operand is a float — i.e. for
             // ortho/forward norms (fct = reciprocal(...) in real_dtype). For backward/None the Python
             // fct is the INT 1, which nudges numpy's loop resolution to the DOUBLE loop, so even a
             // single-eligible operand (complex64 / rfft-float32) is computed in double + rounded.
             bool effNormUnity = effNorm == null || effNorm == "backward";
-            return PocketFFTDriver.Execute(a, n, axis, isReal, isForward, fct, @out, floatPrec, effNormUnity);
+            if (!isReal)
+                return C2CKernel(a, n, axis, isForward, fct, @out, floatPrec, effNormUnity);
+            return isForward
+                ? R2CKernel(a, n, axis, fct, @out, floatPrec, effNormUnity)
+                : C2RKernel(a, n, axis, fct, @out, floatPrec, effNormUnity);
         }
 
         /// <summary>
         ///     numpy's <c>reciprocal(sqrt(n, dtype=real_dtype))</c> (ortho) / <c>reciprocal(n, real_dtype)</c>
-        ///     (forward), computed in the operand's real_dtype then upcast to double. realKind: 0 = double,
-        ///     1 = float32, 2 = float16. float16 sqrt/reciprocal go via float32 exactly as numpy's half ufuncs.
+        ///     (forward), computed in the operand's real_dtype then upcast to double. float16 sqrt/reciprocal go via
+        ///     float32 exactly as numpy's half ufuncs.
         /// </summary>
+        /// <param name="n">The transform length.</param>
+        /// <param name="realKind">The real_dtype: 0 = double, 1 = float32, 2 = float16.</param>
+        /// <param name="ortho">True for <c>"ortho"</c> (<c>1/sqrt(n)</c>), false for <c>"forward"</c> (<c>1/n</c>).</param>
+        /// <returns>The factor, rounded to the real_dtype and carried as a double.</returns>
         private static double FftFct(int n, int realKind, bool ortho)
         {
             switch (realKind)
@@ -234,6 +271,8 @@ namespace NumSharp
         ///     result precision, except <c>rfft(float32)</c> which numpy runs single-precision. Complex128,
         ///     float64, integer and bool inputs are contractual double-precision (return false).
         /// </summary>
+        /// <param name="a">The operand of the public call.</param>
+        /// <returns>True for a float32 or float16 operand.</returns>
         internal static bool IsSinglePrecision(NDArray a)
             => a.typecode == NPTypeCode.Single || a.typecode == NPTypeCode.Half;
 
@@ -246,6 +285,15 @@ namespace NumSharp
         ///     (s-without-axes, None-in-s) are intentionally not modelled (NumSharp does not surface
         ///     Python warnings).
         /// </summary>
+        /// <param name="a">The operand.</param>
+        /// <param name="s">The caller's lengths, or null for the operand's shape along the axes.</param>
+        /// <param name="axes">The caller's axes, or null for all axes (or the last <c>len(s)</c>).</param>
+        /// <param name="invreal">True for irfftn / irfft2, whose shapeless last length is <c>2 * (m - 1)</c>.</param>
+        /// <returns>The resolved lengths (a fresh array; <c>-1</c> replaced) and axes (the caller's array when
+        ///     given).</returns>
+        /// <exception cref="ValueError"><paramref name="s"/> and <paramref name="axes"/> of different lengths.</exception>
+        /// <exception cref="IndexError">An axis out of range (take's or the tuple index's text), or no axis for the
+        ///     inverse real transform's default (<c>tuple</c> / <c>list index out of range</c>).</exception>
         internal static (int[] s, int[] axes) CookNdArgs(NDArray a, int[] s, int[] axes, bool invreal)
         {
             bool shapeless;
@@ -313,11 +361,21 @@ namespace NumSharp
 
         /// <summary>
         ///     Port of <c>_raw_fftnd</c> (numpy 2.4.2): decompose an N-D transform into a sequence of
-        ///     1-D transforms, applied over the axes in REVERSE order. Because each 1-D leaf currently
-        ///     throws at the engine seam, an N-D call over valid input surfaces that
-        ///     <see cref="NotImplementedException"/> (from the first leaf); over invalid <c>s</c>/<c>axes</c>
-        ///     it surfaces <see cref="CookNdArgs"/>'s validation error first — matching NumPy's ordering.
+        ///     1-D transforms, applied over the axes in REVERSE order. Over invalid <c>s</c>/<c>axes</c> it surfaces
+        ///     <see cref="CookNdArgs"/>'s validation error before any transform runs — matching NumPy's ordering.
         /// </summary>
+        /// <param name="a">The operand.</param>
+        /// <param name="s">The caller's lengths, or null.</param>
+        /// <param name="axes">The caller's axes, or null.</param>
+        /// <param name="function">The 1-D transform of each axis: <c>(operand, n, axis, norm, out)</c> to its result
+        ///     (the callers pass this engine's <see cref="RawFft"/> with the original operand's precision, where NumPy
+        ///     passes its module function).</param>
+        /// <param name="norm">The normalization mode handed to every transform.</param>
+        /// <param name="out">The output handed to every transform, or null.</param>
+        /// <returns>The last transform's result.</returns>
+        /// <exception cref="ValueError"><see cref="CookNdArgs"/>'s length mismatch, or the 1-D transforms'
+        ///     refusals.</exception>
+        /// <exception cref="IndexError">An axis out of range in <see cref="CookNdArgs"/>.</exception>
         internal static NDArray RawFftNd(NDArray a, int[] s, int[] axes,
             Func<NDArray, int, int, string, NDArray, NDArray> function, string norm, NDArray @out)
         {

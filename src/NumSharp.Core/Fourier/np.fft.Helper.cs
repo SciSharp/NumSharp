@@ -4,8 +4,9 @@ namespace NumSharp
 {
     public partial class FourierModule
     {
-        // Helper routines — ports of numpy/fft/_helper.py. These are pure compositions of existing
-        // np.* functions (roll / arange / concatenate / arithmetic) and compute FULLY (no engine seam).
+        // Helper routines — ports of numpy/fft/_helper.py. fftshift / ifftshift roll the array object
+        // (compositions over np.roll, kept here); fftfreq / rfftfreq compute values, so they are members of
+        // the TensorEngine.Fft sub-engine (Fourier/DefaultFftEngine.Helper.cs holds the default's statements).
 
         /// <summary>
         ///     Shift the zero-frequency component to the center of the spectrum. Rolls every axis by
@@ -140,6 +141,8 @@ namespace NumSharp
         /// <param name="d">Sample spacing (inverse of the sampling rate). Default 1.</param>
         /// <param name="device">Array-API device; must be <c>null</c> or <c>"cpu"</c>.</param>
         /// <returns>A float64 array of length <paramref name="n"/>.</returns>
+        /// <exception cref="DivideByZeroException"><c>n * d</c> is zero (<c>float division by zero</c>).</exception>
+        /// <exception cref="ValueError">A device other than <c>"cpu"</c>, then a negative <paramref name="n"/>.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.fftfreq.html</remarks>
         public NDArray fftfreq(int n, double d = 1.0, string device = null)
             => fftfreq((long)n, d, device);
@@ -149,26 +152,19 @@ namespace NumSharp
         ///     integer type (Python <c>int</c> / <c>np.integer</c>), so a C# <c>long</c> must compute
         ///     rather than fall to the float-rejecting overload.
         /// </summary>
-        [NDScoped]
+        /// <param name="n">Window length.</param>
+        /// <param name="d">Sample spacing (inverse of the sampling rate). Default 1.</param>
+        /// <param name="device">Array-API device; must be <c>null</c> or <c>"cpu"</c>.</param>
+        /// <returns>A float64 array of length <paramref name="n"/>.</returns>
+        /// <exception cref="DivideByZeroException"><c>n * d</c> is zero (<c>float division by zero</c>, checked
+        ///     first).</exception>
+        /// <exception cref="ValueError">A device other than <c>"cpu"</c> (<c>Device not understood. ...</c>), then a
+        ///     negative <paramref name="n"/> (<c>negative dimensions are not allowed</c>).</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.fftfreq.html
+        ///     <para>Computed by <see cref="TensorEngine.Fft"/> of the default engine (<see cref="FftEngine.Fftfreq"/>):
+        ///     there is no operand to choose another.</para></remarks>
         public NDArray fftfreq(long n, double d = 1.0, string device = null)
-        {
-            // NumPy's error ORDER (probed 2.4.2): val = 1.0/(n*d) FIRST — ZeroDivisionError when
-            // n*d == 0 (i.e. n == 0 OR d == 0, for ANY sign of n; .NET's float 1/0 is +inf, not a
-            // throw, so the divisor is checked explicitly). THEN empty(n, int, device=device), which
-            // validates the device before it rejects a negative length.
-            double nd = (double)n * d;
-            if (nd == 0.0)
-                throw new DivideByZeroException("float division by zero");
-            ValidateDevice(device);
-            if (n < 0)
-                throw new ValueError("negative dimensions are not allowed");
-            double val = 1.0 / nd;
-            long N = (n - 1) / 2 + 1;                     // n>=1 here, so int division == floor division.
-            var p1 = np.arange(0L, N);                    // [0 .. N-1]
-            var p2 = np.arange(-(n / 2), 0L);             // [-(n/2) .. -1]
-            var results = np.concatenate((p1, p2));       // length n
-            return results * val;                         // -> float64
-        }
+            => np.EngineOf(null).Fft.Fftfreq(n, d, device);
 
         /// <summary>
         ///     Non-integer <c>n</c> is rejected exactly like NumPy (which requires an <c>int</c>-typed
@@ -190,6 +186,8 @@ namespace NumSharp
         /// <param name="d">Sample spacing (inverse of the sampling rate). Default 1.</param>
         /// <param name="device">Array-API device; must be <c>null</c> or <c>"cpu"</c>.</param>
         /// <returns>A float64 array of length <c>n//2 + 1</c>.</returns>
+        /// <exception cref="DivideByZeroException"><c>n * d</c> is zero (<c>float division by zero</c>).</exception>
+        /// <exception cref="ValueError">A device other than <c>"cpu"</c>.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.rfftfreq.html</remarks>
         public NDArray rfftfreq(int n, double d = 1.0, string device = null)
             => rfftfreq((long)n, d, device);
@@ -198,25 +196,18 @@ namespace NumSharp
         ///     <see cref="rfftfreq(int, double, string)"/> for a 64-bit window length (see the
         ///     <c>long</c> rationale on <see cref="fftfreq(long, double, string)"/>).
         /// </summary>
-        [NDScoped]
+        /// <param name="n">Window length (a negative one gives an empty result, as NumPy's <c>arange</c> does).</param>
+        /// <param name="d">Sample spacing (inverse of the sampling rate). Default 1.</param>
+        /// <param name="device">Array-API device; must be <c>null</c> or <c>"cpu"</c>.</param>
+        /// <returns>A float64 array of length <c>n//2 + 1</c> (empty when that is not positive).</returns>
+        /// <exception cref="DivideByZeroException"><c>n * d</c> is zero (<c>float division by zero</c>, checked
+        ///     first).</exception>
+        /// <exception cref="ValueError">A device other than <c>"cpu"</c>.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.rfftfreq.html
+        ///     <para>Computed by <see cref="TensorEngine.Fft"/> of the default engine (<see cref="FftEngine.Rfftfreq"/>):
+        ///     there is no operand to choose another.</para></remarks>
         public NDArray rfftfreq(long n, double d = 1.0, string device = null)
-        {
-            // NumPy: val = 1.0/(n*d) FIRST (ZeroDivisionError when n*d == 0), THEN arange(0, n//2+1,
-            // device=device) (device validated here). There is NO negative-dimension check — a
-            // negative n makes n//2+1 <= 0 so arange yields an EMPTY float64 array
-            // (rfftfreq(-5) -> [] rather than an error; unlike fftfreq, which calls empty(n)).
-            double nd = (double)n * d;
-            if (nd == 0.0)
-                throw new DivideByZeroException("float division by zero");
-            ValidateDevice(device);
-            double val = 1.0 / nd;
-            // N = n//2 + 1. Arithmetic right-shift is floor-division-by-2 for two's-complement ints
-            // (n>>1 == n//2 for BOTH signs), so a negative n gives N<=0 exactly as NumPy's floor does
-            // (C#'s '/' truncates toward zero, which would wrongly make rfftfreq(-1) -> [0.0]).
-            long N = (n >> 1) + 1;
-            var results = np.arange(0L, Math.Max(0L, N)); // arange(0, N); empty float64 when N<=0
-            return results * val;                         // -> float64
-        }
+            => np.EngineOf(null).Fft.Rfftfreq(n, d, device);
 
         /// <summary>
         ///     Non-integer <c>n</c> is rejected exactly like NumPy: <c>ValueError("n should be an integer")</c>
@@ -228,16 +219,5 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.rfftfreq.html</remarks>
         public NDArray rfftfreq(double n, double d = 1.0, string device = null)
             => throw new ValueError("n should be an integer");
-
-        /// <summary>
-        ///     Array-API <c>device</c> validation shared by <c>fftfreq</c>/<c>rfftfreq</c>. NumPy accepts
-        ///     only <c>None</c> or <c>"cpu"</c>, else <c>ValueError</c> with the verbatim message.
-        /// </summary>
-        private static void ValidateDevice(string device)
-        {
-            if (device != null && device != "cpu")
-                throw new ValueError(
-                    $"Device not understood. Only \"cpu\" is allowed, but received: {device}");
-        }
     }
 }

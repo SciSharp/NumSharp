@@ -48,7 +48,6 @@ Creation/np.ones.cs	6	4
 Creation/np.r_.cs	1	8
 Creation/np.vander.cs	3	0
 DTypes/np.dtypes.cs	2	0
-Fourier/np.fft.RawFft.cs	1	4
 Indexing/np.choose.cs	7	7
 Indexing/np.compress.cs	0	1
 Indexing/np.diag.cs	1	0
