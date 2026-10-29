@@ -32,7 +32,10 @@ batch 1, the `DType` element slots, is done (`95b7167e`, 2026-10-29), and the np
 fixed per D4: np.arange is NumPy's `PyArray_ArangeObj` through the slots (`8be47c75`). Batch 2, item selection, is done
 (`f5547943`, `ac49b5b7`): the bodies of np.take, np.put, np.putmask, np.place, np.repeat, np.choose, np.compress and
 np.resize are `UnmanagedStorage` members, ndarray.resize's is `UnmanagedStorage.Resize`, and each chooses its
-reference-holding route by one `HasReferences` decision. P5 is done (2026-10-29): its six
+reference-holding route by one `HasReferences` decision. Batch 3, assignment, is done (`794fa292`, `448bde50`,
+`fd1fa7af`, `713fbaf3`): np.copyto's internals and ndarray.fill's body are `UnmanagedStorage.Assign*.cs` members,
+np.concatenate's body is `NDArray.ConcatenateInto` in `NDArray.Multiarray.cs`, and R1 leaves the array object's homes
+out; the text casts got a batch of their own, 9b. P5 is done (2026-10-29): its six
 families and, handed over by the coordinator, the lines first assigned to PE (np.argmax's out= pair, np.unravel_index,
 np.packbits / np.unpackbits, np.bincount, and the text lines of np.kron and np.median) are engine members or engine
 partials, and the two divergences found on the way are fixed per D4 (np.argmax / np.argmin check a text operand's
@@ -765,7 +768,11 @@ first, as it did for np.fft.
    `UnmanagedStorage.Reshaping.cs` (NumPy's `PyArray_Resize`, `shape.c`), and np.take.FancyAxis.cs's index line goes
    with batch 8 (mapping.c's fancy indexing).
 3. **Assignment** (6 files, 46 lines): np.copyto (three files), ndarray.fill, np.concatenate's text path and the store
-   behind the indexers into `UnmanagedStorage.Assign.cs`; the text casts through the casting impls.
+   behind the indexers into `UnmanagedStorage.Assign.cs`; the text casts through the casting impls. Done (`794fa292`,
+   `448bde50`, `fd1fa7af`, `713fbaf3`), with three changes to this text: np.concatenate's body went whole, its string
+   route included, to its Appendix D home `NDArray.Multiarray.cs` (that route is `PyArray_ConcatenateArrays` over
+   descriptors, the function's own statements), and R1 learned the home names with it; the store behind the indexers
+   is already `UnmanagedStorage.SetData` (`UnmanagedStorage.Setters.cs`) and stays there; the text casts are batch 9b.
 4. **Coercion** (6 files, 71 lines): np.array, np.asarray, np.asanyarray, the string-array overload, `NDArray.Scalar`
    and the implicit conversions from C# arrays into `UnmanagedStorage.Coercion.cs`, with `NDPolySequence.cs`'s port and
    `NDStringArrays`' text collection; discovery through `discover_descr_from_pyobject`, stores through `setitem`.
@@ -787,6 +794,15 @@ first, as it did for np.fft.
 9. **The computing functions in P3's files** (5 files, 30 lines) become `TensorEngine` members (Appendix D):
    np.linspace, np.logspace and np.geomspace (`TensorEngine.CoreFunctionBase.cs`), np.vander
    (`TensorEngine.TwoDimBase.cs`), np.trim_zeros (`TensorEngine.FunctionBase.cs`).
+9b. **The text casts through the casting impls.** The text classes' `CastingImpl`s (`StringCastingImpls.cs`,
+    `VStringCastingImpls.cs`; their `resolve_descriptors` exist) gain `get_strided_loop`: the converters NumSharp
+    calls by name today (`NDTextConversion` for text and numbers, `NDStringTruth`'s cast flavor for text to bool, the
+    unit copies of `NDStringCopy` between widths and between `S` and `U`) become their loops, and their refusals
+    (`NDStringCasting.InvalidCast`, `NDStringCopy.ThrowIfCannotConvert`) the impls' answers. The assignment
+    (`UnmanagedStorage.Assign*.cs`: NumPy's `raw_array_assign_array` and its masked form, chunked as NumPy's casts are),
+    np.concatenate's string route and the later batches' casts then get their loop from `DTypeCasting`
+    (`PyArray_GetDTypeTransferFunction`) instead of testing the `S` / `U` lane. It follows the moves because one set of
+    loops serves batches 3, 4, 6 and 8.
 10. **What stays** (5 files, 13 lines, and the index-kind tests of the other batches), listed by R1 after P3 with its
     reason: the C# conversions (`NDArray.Implicit.ValueTypes.cs`, `NDArray.ToString.cs`: a C# cast is not a NumPy
     statement; they call `getitem` and the coercion path), the DType layer's own files (`np.dtype.cs`, `np.dtypes.cs`)
@@ -1009,6 +1025,34 @@ candidate.
 ---
 
 ## 9. State log
+
+- **2026-10-29, P3: batch 3 (assignment).** Five commits on `strings`, landed by fast-forward:
+  - `ce5d6ce3`: the snapshot tool reaches np.copyto (its three non-generic overloads were SKIP; the generic one was not
+    enumerated: the tool now closes it over the 15 unmanaged types NumSharp stores) and NDArray.fill (Role.AssignArg).
+  - `794fa292`, the pure move, part 1: np.copyto's internals (`CopytoAssignArray` = `PyArray_AssignArray`,
+    `CopytoAssignRawScalar`, the weak-scalar half, the string and `StringDType` routes) into
+    `Manipulation/UnmanagedStorage.Assign.cs`, `.Assign.Strings.cs` and `.Assign.VString.cs`; the four public
+    overloads keep the argument parsing and the C# forms of the source. R1: the three files 36 -> 2 lines.
+  - `448bde50`, part 2: ndarray.fill's body is `UnmanagedStorage.FillWithScalar` (`PyArray_FillWithScalar`) in
+    `.Assign.Fill.cs`; its helpers, NDArray instance methods until then, take the array as `self`. R1: 4 -> 0.
+  - `fd1fa7af`, part 3: np.concatenate's body is `NDArray.ConcatenateInto` (`PyArray_ConcatenateInto`) in the new
+    `Creation/NDArray.Multiarray.cs`, with its copy paths and its string route (`np.concatenate.Strings.cs` is gone).
+    R1 learns the home names (`LayeringScanner.ArrayObjectHomes`: Appendix D's eleven `NDArray.<NumPy source>.cs`
+    partials, left out of the facade scan; a test holds the rule), and `NDArray.FunctionBase.cs`'s hand pin goes with
+    it.
+  - `713fbaf3`, the conversion's first part: the seven reference-holding decisions of the assignment ask
+    `HasReferences` of the descriptors NumPy tests (`PyDataType_REFCHK`) instead of `Storage.IsVString`.
+  - Gates for each: the snapshot of np.copyto, NDArray.fill and np.concatenate byte-identical to the parent's (75,416
+    lines, `StringDType` / `U5` / `S5` operands in its pools); no unqualified name of moved code binding to a member of
+    its new class; R2 unchanged; doc warnings 3,854 -> 3,851 (crefs that resolve in their new homes). NumSharp.Tests
+    and NumSharp.Tests.Oracle green on net10.0 and net8.0 after the moves and after the conversion.
+  - R1 for the batch's six files: 46 lines -> 2 (np.copyto.cs: the generic overload's char-into-text test;
+    np.copyto.Strings.cs: the str overload's 0-d text array, both coercion, batch 4), plus `NDArray.FunctionBase.cs`'s
+    15 lines with the home rule.
+  - Deferred, a design decision of this batch: the text casts move into the casting impls' loops as batch 9b, after
+    the moves (one set of loops serves batches 3, 4, 6 and 8); the values' packing into a text descriptor goes to
+    `setitem` with batch 4.
+  - Next: batch 4 (coercion).
 
 - **2026-10-29, P3: batch 2 (item selection).** Three commits on `strings`, landed by fast-forward:
   - `f5547943`, the pure move. Into `Indexing/UnmanagedStorage.ItemSelection.cs` (new; NumPy's `item_selection.c`,

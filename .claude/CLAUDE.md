@@ -7307,7 +7307,8 @@ code gives NumPy's text.
 `around`, `asscalar`, `copyto`, `round_`, `size`, `multithreading` (NumSharp extension — `np.multithreading(enabled, max_threads)` opt-in threaded kernels)
 
 **`np.copyto(dst, src, casting='same_kind', where=True)` is NumPy's `array_copyto` → `PyArray_AssignArray` /
-`PyArray_AssignRawScalar`, statement for statement** (`Manipulation/np.copyto.cs`; 2026-10-06, plan
+`PyArray_AssignRawScalar`, statement for statement** (`Manipulation/np.copyto.cs`, the facades over
+`UnmanagedStorage.CopytoAssignArray` / `CopytoAssignRawScalar` in `Manipulation/UnmanagedStorage.Assign*.cs`; 2026-10-06, plan
 `docs/plans/api-parameter-parity.md` X16 + X11; probed against 2.4.2):
 - **Arguments.** The casting name first (`ValueError` "casting must be one of …", `TypeError` for null), then the mask's
   dtype (NumPy's "Cannot cast array data|scalar from dtype('int64') to dtype('bool') according to the rule 'safe'" under
@@ -7330,7 +7331,7 @@ code gives NumPy's text.
   backward rule. An IL walker drives a run stage: a SIMD blend for contiguous runs (`ConditionalSelect`, AVX2 `vpmovzx`
   mask widening, a hoisted vector for a broadcast source), a branch-free select off running pointers for strided runs
   and tails, memmove / fill for a constant-true run. With more than one prepared axis the operands cannot overlap, so the
-  innermost axis is the one where most operands are contiguous (NumPy's order wins ties; `np.CopytoNumPyOrderOnly` is the
+  innermost axis is the one where most operands are contiguous (NumPy's order wins ties; `UnmanagedStorage.CopytoNumPyOrderOnly` is the
   A/B hook). A source of another dtype, or an overlapping one NumPy copies first, is staged in dst's memory order — one
   element per distinct source element, on the stack up to 16 KB, else a pooled buffer — through NDIter.Copy's cast
   kernels.
