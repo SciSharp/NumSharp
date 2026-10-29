@@ -29,9 +29,6 @@ Creation/np.frombuffer.Strings.cs	4	0
 Creation/np.frombuffer.cs	12	93
 Creation/np.full.cs	8	3
 Creation/np.full_like.cs	4	1
-Creation/np.geomspace.cs	0	1
-Creation/np.linspace.cs	0	23
-Creation/np.logspace.cs	0	1
 Creation/np.mgrid.cs	0	1
 Creation/np.ndarray.cs	10	1
 Creation/np.ogrid.cs	0	1
