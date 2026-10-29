@@ -57,18 +57,20 @@ np.loadtxt's converters are left. Batch 9, the computing functions in P3's files
 (2026-10-29): np.linspace / np.logspace / np.geomspace are `TensorEngine` members in `TensorEngine.CoreFunctionBase.cs`,
 np.vander in `TensorEngine.TwoDimBase.cs`, np.trim_zeros in `TensorEngine.FunctionBase.cs`, and the six divergences a
 replay of their snapshot through NumPy found are fixed per D4. Batch 7, NumPy's Python functions of the array object,
-has its first five parts done (2026-10-29): np.where's body is `NDArray.Where` in `NDArray.Multiarray.cs` (every engine
+has its first six parts done (2026-10-29): np.where's body is `NDArray.Where` in `NDArray.Multiarray.cs` (every engine
 np.where call, the fixed-width text route's included, calls it), np.real / np.imag's are `NDArray.RealPart` / `ImagPart`
 in the new `NDArray.TypeCheck.cs` with ndarray.imag's setter, ndarray.conjugate's is `NDArray.Conjugate`, np.extract's,
 np.asarray_chkfinite's, np.select's and np.piecewise's statements and np.delete's helpers are `NDArray.FunctionBase.cs`
 members, np.pad's are `NDArray.Pad` / `NDArray.PadCallable` in the new `NDArray.ArrayPad.cs`, np.ix_'s,
 np.fill_diagonal's and np.r_ / np.c_'s indexer's are `NDArray.Ix`, `NDArray.FillDiagonal` and
 `NDArray.AxisConcatenate` in the new `NDArray.IndexTricks.cs`, the along-axis trio's are `NDArray.TakeAlongAxis`,
-`NDArray.PutAlongAxis` and `NDArray.ApplyAlongAxis` in the new `NDArray.ShapeBase.cs`, and the divergences a replay of
+`NDArray.PutAlongAxis` and `NDArray.ApplyAlongAxis` in the new `NDArray.ShapeBase.cs`, np.indices' are
+`NDArray.Indices` / `NDArray.IndicesSparse` in `NDArray.Numeric.cs`, np.diag's and np.diagflat's `NDArray.Diag` /
+`NDArray.DiagFlat` in `NDArray.TwoDimBase.cs`, and the divergences a replay of
 their snapshot through NumPy found are fixed per D4 (np.where's result dtype and order, np.select's broadcast and cast
 texts, np.piecewise's constants, np.delete's error axis, np.broadcast_shapes' pair, np.pad's check order, values and
 computations, np.ix_'s result object, np.r_'s matrix copy and Python int entries, np.fill_diagonal's value conversion,
-np.apply_along_axis's text scalar width). P5 is done
+np.apply_along_axis's text scalar width, np.indices' allocation order, arange refusals and sparse views). P5 is done
 (2026-10-29): its six
 families and, handed over by the coordinator, the lines first assigned to PE (np.argmax's out= pair, np.unravel_index,
 np.packbits / np.unpackbits, np.bincount, and the text lines of np.kron and np.median) are engine members or engine
@@ -859,7 +861,9 @@ first, as it did for np.fft.
    replay found (`70646c73`, `cf75f39f`, `d6b4926e`); np.fill_diagonal's StringDType route asks `HasReferences`.
    Fifth part done (`19dbc34b`, `70533e1b`, `b25f717d`): np.take_along_axis, np.put_along_axis and
    np.apply_along_axis (`ShapeBase`) with `NDVStringStatistics.Quantile.cs`' two pins, and the D4 fixes its replay
-   and the full test run found (`10626746`, `62683028`).
+   and the full test run found (`10626746`, `62683028`). Sixth part done (`37ac64c2`, `1d375850`, `3df20fb6`,
+   `aa7b3f77`): np.indices (`Numeric`) and np.diag / np.diagflat (`TwoDimBase`), with the D4 fix the replay found
+   (`408644f1`); np.diag's StringDType route asks `HasReferences`.
 8. **The indexers** (8 files, 98 lines; `Selection/NDArray.Indexing.*.cs`, NumPy's `mapping.c`; already the array
    object): the `StringDType` routes behind `HasReferences`, the typed fetch / store switches into
    `UnmanagedStorage.Mapping.cs`. The index-kind tests stay.
@@ -1108,6 +1112,41 @@ candidate.
 
 ## 9. State log
 
+- **2026-10-29, P3: batch 7, sixth part (np.indices, np.diag).** Five commits on `strings` from the parallel session
+  (developed in the scratch worktree on top of the fifth part and landed by fast-forward). R1: 1 text and 3 numeric
+  lines leave (np.diag.cs 1 / 0, np.indices.cs 0 / 3; neither file has a row now); R2: unchanged (the homes are under
+  `Creation/`, not `Backends/`).
+  - `37ac64c2`: the snapshot tool reaches np.indices / np.indices_sparse, which take no array: their dimensions are a
+    shape operand built as a constructor's (an int[], a long[], a Shape) from a pool of their own (`IndicesShapeLabels`:
+    the constructor shapes plus a (2, 2) grid, whose aranges a bool dtype allows, and a (200,) one, whose int8 arange
+    wraps), every dtype over every shape; a sparse grid's overflowing shape makes no line (a 2**31-element arange on both
+    sides). np.diag / np.diagflat's k, which was never varied, takes np.eye's variants, over a pool with a strided and a
+    reversed vector. 2,772 cases (612 for np.indices, 2,160 for np.diag / np.diagflat).
+  - `1d375850` and `3df20fb6`, the pure moves: np.indices' builders are `NDArray.Indices` / `NDArray.IndicesSparse` in
+    `Creation/NDArray.Numeric.cs` (beside np.full / np.ones); np.diag's switch, np.diagflat's call and their diagonal
+    scatter `DiagonalEmbed` are `NDArray.Diag` / `NDArray.DiagFlat` in `Creation/NDArray.TwoDimBase.cs` (beside np.eye).
+    The facades keep their null checks, the int[] / Shape widening and np.diag / np.diagflat's numpy.matrix /
+    numpy.char rules. Snapshot byte-identical under `NUMSHARP_DEBUG_GUARD_PAGES=1` and without it; the rebind check
+    found the types `NDArray` / `Shape` / `TensorEngine` only.
+  - `aa7b3f77`, the slot conversion: the diagonal scatter's StringDType route asks `DTypeMeta.HasReferences`. Snapshot
+    byte-identical. np.indices had no class decision to convert (its typecode tests went with the D4).
+  - D4, from the replay of the 2,772 cases through NumPy 2.4.2 on Windows and on Linux (2,532 replayed, char and decimal
+    skipped): 369 of np.indices' 612 differed on both; np.diag / np.diagflat's 1,920 matched (on Linux 5 differ: the
+    host-dependent uint32 / uint64 special operands the pool builds).
+    - `408644f1`: np.indices is NumPy's statements. The dense grid is allocated first with the descriptor (a negative
+      dimension is the allocation's ValueError `negative dimensions are not allowed`, an empty tuple of a text dtype an
+      empty text array); one `arange(dim, dtype)` per axis refuses what NumPy's refuses (a text dtype at any length, bool
+      past two elements: TypeError, even for an empty grid) and is assigned with broadcasting; an int64-lane grid keeps
+      the IL kernel. The sparse grid is views of its aranges (`flags.owndata` False), a negative dimension an empty axis.
+      369 cases.
+  - After the D4 no replay case differs on Windows; on Linux the 5 host-dependent np.diag / np.diagflat operands.
+  - Perf (two pinned P-cores): a `(1000, 1000)` float64 grid 618 us (x7.01 NumPy; it was 3,887 us, x1.11), int32 x6.06,
+    float32 x6.03, a `(100, 100, 100)` float64 one x6.46; a `(30, 40)` grid of those dtypes x0.88-x0.92 (NumPy's fixed
+    cost, two aranges and two broadcast copies); int64 keeps the kernel (x2.3 at `(30, 40)`, x4.2 at `(1000, 1000)`),
+    where the arange route measures 616 us against the kernel's 1,036 us: a lever left for later.
+  - Core's doc warnings 3,829 -> 3,828 (the D4).
+  - Gates: NumSharp.Tests 20,837 / 20,836 passed on net10.0 / net8.0 (11 skipped) and the oracle suite 414 / 414 (2 skipped), Release, `TestCategory!=OpenBugs&TestCategory!=HighMemory`. Of the 6 new tests (`Indexing/np.indices.NumPyPort.Test.cs`, NumPy-probed on Windows and Linux), 5 fail on the parent of `408644f1`; the sixth pins the values the arange route assigns, which equal the old cast's.
+  - Left for batch 7: the lines of np.mgrid, np.ogrid and np.ravel_multi_index.
 - **2026-10-29, P3: batch 7, fifth part (np.take_along_axis, np.put_along_axis, np.apply_along_axis).** Five commits on
   `strings` from the parallel session (developed in the scratch worktree on `6f1da8dd`, rebased onto `0f092c78`,
   batch 6c's tool commit, and landed by fast-forward). R1: 3 text and 11 numeric lines leave (np.put_along_axis.cs 2 / 1,

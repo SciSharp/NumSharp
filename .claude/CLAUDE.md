@@ -1712,6 +1712,16 @@ C-or-F rule, the dimensions), and the `_like` forms check the order before the d
 snapshot (`tools/facade-move/snapshot.cs`, 42,635 lines) and `Creation/np.{eye.NumPyOrder,like.OrderBeforeDevice,
 full.FillValues}.Test.cs`.
 
+**`np.indices` and `np.diag` / `np.diagflat` are the array object's too** (2026-10-29, plan np-layer-dtype-logic P3
+batch 7). np.indices' grids are `NDArray.Indices` / `IndicesSparse` (`Creation/NDArray.Numeric.cs`), NumPy's
+`res = empty((N,) + dimensions, dtype)` then one `arange(dim, dtype)` per axis assigned with broadcasting: the
+allocation's ValueError comes first (a negative dimension), an arange's TypeError next (a text dtype at any length, bool
+past two elements, even in an empty grid), a text dtype's empty tuple is an empty text array, and an int64-lane grid
+keeps the IL fill kernel. The sparse grid is views of its aranges (`flags.owndata` False), and a negative dimension there
+is an empty axis (the reshape's unknown dimension), as NumPy's. np.diag's and np.diagflat's statements and their diagonal
+scatter are `NDArray.Diag` / `DiagFlat` (`Creation/NDArray.TwoDimBase.cs`, beside `NDArray.Eye`); the StringDType route
+asks `HasReferences`. Gate: their snapshot (2,772 lines) and `Indexing/np.indices.NumPyPort.Test.cs`.
+
 **`np.frombuffer` is NumPy's `PyArray_FromBuffer`, one body for every kind of buffer** (2026-10-29, plan
 np-layer-dtype-logic P3 batch 6). The overloads (`Creation/np.frombuffer.cs`) are NumPy's `array_frombuffer`: they
 convert their C# arguments - an `NPTypeCode` (`Empty` is the default, `String` is NumPy's unsized `np.str_`, refused),
@@ -7563,7 +7573,7 @@ code gives NumPy's text.
 | TensorEngine | `Backends/TensorEngine.cs` (Blas, Evaluate) + one partial per NumPy source file: `TensorEngine.{Umath,Methods,Multiarray,Numeric,NanFunctions,UfuncLike,ArrayObject,FunctionBase,ArraySetOps,LinearAlgebra,Threading,Histograms,Scimath,EinsumFunc,Polynomial}.cs` (np-layer dtype plan, phase PE) |
 | DefaultEngine | `Backends/Default/DefaultEngine.*.cs` |
 | np API | `APIs/np.cs` |
-| Diagonal / triangular family | `Creation/np.tri.cs`, `Indexing/np.{diag,tril,diag_indices,tril_indices,fill_diagonal}.cs`, `Indexing/NDArray.IndexTricks.cs` (np.fill_diagonal's statements, the diagonal scatter np.diag shares) |
+| Diagonal / triangular family | `Creation/np.tri.cs`, `Indexing/np.{diag,tril,diag_indices,tril_indices,fill_diagonal}.cs`, `Creation/NDArray.TwoDimBase.cs` (np.diag / np.diagflat's statements, beside np.eye's), `Indexing/NDArray.IndexTricks.cs` (np.fill_diagonal's statements, the diagonal scatter np.diag shares) |
 | unique family | `Manipulation/np.unique.cs` (`np.unique`: its class boundaries, then `TensorEngine.Unique`), `Manipulation/np.unique_values.cs` (Array-API `unique_values`/`unique_counts`/`unique_inverse`/`unique_all` + result structs), `Manipulation/NDArray.unique.cs` (the two instance members, one call each; the legacy protected `unique<T>()`), DefaultEngine's `Manipulation/Default.Unique.cs` (the statements after the boundaries, the text checks) + `Default.Unique.Kwargs.cs` (NumPy's `_unique1d` routes: the argsort-and-gather statements, the in-place-sort routes, the long-indexed fallback, the axis path) + `Default.Unique.Hash.cs` (int + complex hash fast path, splitmix64; the complex radix sort of the distinct values and the cardinality checkpoint) + `Default.Unique.{Radix,Text,VString}.cs`. Design + measured perf decisions: `docs/stale-docs/UNIQUE_DESIGN.md` |
 | Selection family | `Indexing/np.{take,take_along_axis,put,put_along_axis,place,putmask,select}.cs` (take_along_axis' and put_along_axis' statements, with np.apply_along_axis', are `Manipulation/NDArray.ShapeBase.cs`); the bodies of take / put / putmask / place / repeat / choose / compress / np.resize are `UnmanagedStorage` members in `Indexing/UnmanagedStorage.ItemSelection.cs` (NumPy's `item_selection.c`; each picks its `StringDType` route by `DTypeMeta.HasReferences`, NumPy's `PyDataType_REFCHK`); IL kernels `Backends/Kernels/Direct/DirectILKernelGenerator.{Take,TakeAlongAxis,Put,PutAlongAxis,Place,PutMask,Select}.cs` (`Select` = fused single-pass reverse-`ConditionalSelect` chain; `TakeAlongAxis` = whole-array strided-odometer gather, byte-width-keyed; `PutAlongAxis` = the scatter mirror — a dtype-agnostic validate pass + a bounds-free scatter pass for NumPy's all-or-nothing assignment; `PutMask` = Place's typed-MOV scatter with a by-position cursor + `nv==1` scalar fast path) |
 | numpy.matrix (`NDMatrix`) | `Matrixlib/NDMatrix.cs` (class, result forms, scalar conversions, T / H / I / A / A1), `.Construction.cs` (`matrix.__new__`, the literal parser), `.Indexing.cs`, `.Operators.cs`, `.Reductions.cs`, `.Methods.cs`, `Matrixlib/np.matrix.cs`, `Creation/np.{asmatrix,bmat}.cs`, `View/Shape.Matrix.cs` (the finalize rule), `Selection/NDArray.Indexing.AssignedValue.cs` (NumPy's value rule for index-array assignment) |
