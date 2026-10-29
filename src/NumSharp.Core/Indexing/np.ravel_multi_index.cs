@@ -15,7 +15,8 @@ namespace NumSharp
         /// </summary>
         /// <param name="multi_index">
         ///     The coordinate arrays, one per dimension of <paramref name="dims"/>: integer or bool, any layout; they
-        ///     broadcast against each other, and the broadcast shape is the result's shape.
+        ///     broadcast against each other, and the broadcast shape is the result's shape. A null entry is NumPy's
+        ///     <c>None</c>, which is refused (<see cref="TypeError"/>).
         /// </param>
         /// <param name="dims">The shape of the array the coordinates index. An empty shape (NumPy's <c>()</c>) takes no
         ///     coordinate array and gives the flat index 0.</param>
@@ -44,8 +45,8 @@ namespace NumSharp
         ///     to fold (<c>cannot unravel if shape has zero entries (is empty).</c>, whatever the mode); and (mode
         ///     <c>raise</c>) a coordinate out of range (<c>invalid entry in coordinates array</c>).
         /// </exception>
-        /// <exception cref="TypeError">A coordinate array that is neither integer nor bool (<c>only int indices
-        ///     permitted</c>), checked in order after the count.</exception>
+        /// <exception cref="TypeError">A coordinate array that is neither integer nor bool, or a null entry (NumPy's
+        ///     <c>None</c>): <c>only int indices permitted</c>, checked in order after the count.</exception>
         /// <exception cref="IncorrectShapeException">The coordinate arrays do not broadcast together (NumPy's
         ///     <c>ValueError</c> text from its iterator, every coordinate shape listed: <c>operands could not be broadcast
         ///     together with shapes (2,) (3,) </c>).</exception>
@@ -83,7 +84,8 @@ namespace NumSharp
         ///     Per-axis mode overload. <paramref name="modes"/> length must match
         ///     <paramref name="dims"/> length.
         /// </summary>
-        /// <param name="multi_index">Tuple of integer arrays, one per dimension.</param>
+        /// <param name="multi_index">The coordinate arrays, one per dimension (integer or bool; a null entry is NumPy's
+        ///     <c>None</c>, refused).</param>
         /// <param name="dims">Shape of the array the indices are unravelling into.</param>
         /// <param name="modes">One boundary mode per dimension (NumPy's <c>mode</c> tuple); <c>null</c> is NumPy's
         ///     <c>None</c>, which raises on every dimension.</param>
@@ -96,8 +98,8 @@ namespace NumSharp
         ///     an <c>'A'</c> / <c>'K'</c> order; a dims product overflow; a coordinate count that differs from
         ///     <paramref name="dims"/>' length; a zero dimension with a coordinate to fold; (mode <c>raise</c>) a coordinate
         ///     out of range.</exception>
-        /// <exception cref="TypeError">A coordinate array that is neither integer nor bool (<c>only int indices
-        ///     permitted</c>).</exception>
+        /// <exception cref="TypeError">A coordinate array that is neither integer nor bool, or a null entry (NumPy's
+        ///     <c>None</c>): <c>only int indices permitted</c>.</exception>
         /// <exception cref="IncorrectShapeException">The coordinate arrays do not broadcast together (NumPy's iterator
         ///     text).</exception>
         /// <exception cref="NotSupportedException">The IL kernel cannot be emitted.</exception>
@@ -169,7 +171,8 @@ namespace NumSharp
         /// <param name="ravelStrides">The C- or F-order ravel strides (<see cref="RavelStrides"/>).</param>
         /// <returns>The flat indices, in the coordinates' broadcast shape and NumPy's layout.</returns>
         /// <exception cref="TypeError">A coordinate array that is neither integer nor bool (<c>only int indices permitted</c>:
-        ///     a float, complex, decimal or text array — NumPy never truncates or parses coordinates).</exception>
+        ///     a float, complex, decimal or text array — NumPy never truncates or parses coordinates), or a null entry
+        ///     (NumPy's <c>None</c>, the same text).</exception>
         /// <exception cref="IncorrectShapeException">The coordinate arrays do not broadcast together.</exception>
         /// <exception cref="ValueError">A zero dimension while there is a coordinate to fold, or (mode <c>raise</c>) a
         ///     coordinate out of range.</exception>
