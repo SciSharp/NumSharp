@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Generic;
+using NumSharp.Backends;
+using NumSharp.Tests.Utilities;
 
 namespace NumSharp.Tests.Indexing
 {
@@ -53,6 +56,41 @@ namespace NumSharp.Tests.Indexing
             new Action(() => np.ravel_multi_index(new NDArray[] { np.arange(2), null }, new[] { int.MaxValue, int.MaxValue, 3 }))
                 .Should().Throw<ValueError>()
                 .WithMessage("invalid dims: array size defined by dims is larger than the maximum possible size.");
+        }
+
+        /// <summary>
+        ///     <see cref="TensorEngine.RavelMultiIndex"/> takes NumPy's mode argument as it arrives
+        ///     (<c>PyArray_ConvertClipmodeSequence</c> over a Python object): a list or tuple of strings - any non-string
+        ///     sequence here - gives each axis its mode, a None entry raises on its axis, the length is checked before the
+        ///     entries, and an object that is neither a string, None nor a sequence of them is <c>TypeError: clipmode not
+        ///     understood</c>, even for an empty dims. The public overloads pass only a string or a string[]; this calls the
+        ///     engine member.
+        /// </summary>
+        [TestMethod]
+        public void EngineMember_TakesNumPysModeObject()
+        {
+            var engine = BackendFactory.GetEngine();
+            NDArray[] mi = { np.array(new long[] { 0, 3, 5 }), np.array(new long[] { 1, -1, 4 }) };
+            var dims = new[] { 4, 4 };
+            // np.ravel_multi_index(mi, (4, 4), mode=['wrap', 'clip']) -> array([ 1, 12,  7])
+            engine.RavelMultiIndex(mi, dims, new List<string> { "wrap", "clip" }).Should().BeOfValues(1L, 12L, 7L);
+            // mode=['wrap', None] -> ValueError: invalid entry in coordinates array (None raises on axis 1: the -1)
+            new Action(() => engine.RavelMultiIndex(mi, dims, new object[] { "wrap", null }))
+                .Should().Throw<ValueError>().WithMessage("invalid entry in coordinates array");
+            // mode=3.5 / mode=['wrap', 3.5] / mode=object() -> TypeError: clipmode not understood
+            new Action(() => engine.RavelMultiIndex(mi, dims, 3.5))
+                .Should().Throw<TypeError>().WithMessage("clipmode not understood");
+            new Action(() => engine.RavelMultiIndex(mi, dims, new object[] { "wrap", 3.5 }))
+                .Should().Throw<TypeError>().WithMessage("clipmode not understood");
+            new Action(() => engine.RavelMultiIndex(mi, dims, new object()))
+                .Should().Throw<TypeError>().WithMessage("clipmode not understood");
+            // mode=[3.5] -> ValueError: list of clipmodes has wrong length (1 instead of 2) (the length first)
+            new Action(() => engine.RavelMultiIndex(mi, dims, new object[] { 3.5 }))
+                .Should().Throw<ValueError>().WithMessage("list of clipmodes has wrong length (1 instead of 2)");
+            // np.ravel_multi_index((), (), mode=3.5) -> TypeError: clipmode not understood (a single mode is checked
+            // even when there is no axis)
+            new Action(() => engine.RavelMultiIndex(Array.Empty<NDArray>(), Array.Empty<int>(), 3.5))
+                .Should().Throw<TypeError>().WithMessage("clipmode not understood");
         }
     }
 }
