@@ -86,7 +86,10 @@
 // refused letter) and the scalar overload's flat index, np.packbits / np.unpackbits' bitorder and count and np.bincount's
 // minlength, and the item-selection family's arguments (see ItemArgLabels: index arrays and scalar indices, the clip
 // mode, values, masks, repeat counts, choices, np.compress's condition, whose operand is its second parameter a, and
-// np.resize / ndarray.resize's new shapes; np.choose runs on the non-negative 1-D pools too); an overload with a required
+// np.resize / ndarray.resize's new shapes; np.choose runs on the non-negative 1-D pools too), and the assignment family's
+// (see AssignArgLabels: np.copyto's sources - arrays of the operand's shape in other dtypes, 0-d and broadcast ones, views
+// of the destination itself, None, Python ints past every C# integer, strs, and the C# numbers of the generic overload,
+// which is instantiated for every unmanaged type NumSharp stores - and ndarray.fill's value); an overload with a required
 // parameter of another kind is reported once as SKIP. An int axis
 // starts from its default when it has one. A search function (np.searchsorted) runs on pools of 1-D haystacks: sorted,
 // strided, reversed, unsorted and empty ones beside one 2-D operand; np.convolve / np.correlate run on the same 1-D pools
@@ -247,7 +250,9 @@ static class Snapshot
                                 : onFft
                                     ? typeof(FourierModule).GetMethods(BindingFlags.Public | BindingFlags.Instance).Where(m => m.DeclaringType == typeof(FourierModule))
                                     : typeof(np).GetMethods(BindingFlags.Public | BindingFlags.Static))
-            .Where(m => m.Name == name && !m.IsGenericMethodDefinition)
+            .Where(m => m.Name == name)
+            // a generic overload runs closed over the types the snapshot gives it (np.copyto<T>), else not at all
+            .SelectMany(m => m.IsGenericMethodDefinition ? SnapshotInstantiations(m) : new[] { m })
             .Select(m => (Method: m, Signature: Signature(target, m)))
             .OrderBy(t => t.Signature, StringComparer.Ordinal)
             .ToList();
@@ -371,6 +376,11 @@ static class Snapshot
         // shapes - takes this one role, its variants chosen by the parameter's name and type (ItemArgLabels) and built
         // from the operand where they must fit it (MakeItemArg).
         ItemArg,
+        // The assignment family (np.copyto and ndarray.fill): np.copyto's source in each of its C# forms (an array, a Python
+        // int past every C# integer, a str, a C# number of the generic overload) and ndarray.fill's value take this role,
+        // their variants chosen by the parameter's name and type (AssignArgLabels) and built from the destination where
+        // they must fit it (MakeAssignArg); dst, casting and where take the general roles.
+        AssignArg,
         Default, Unsupported,
     }
 
@@ -668,6 +678,206 @@ static class Snapshot
     }
 
     /// <summary>
+    ///     Whether a parameter belongs to the assignment family - np.copyto (NumPy's <c>array_copyto</c> over
+    ///     <c>array_assign_array.c</c> / <c>array_assign_scalar.c</c>) and ndarray.fill (<c>PyArray_FillWithScalar</c>) -
+    ///     whose <c>src</c> / <c>value</c> roles are theirs alone (see <see cref="AssignArgLabels"/>).
+    /// </summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True for a parameter of a public static np.copyto overload (closed generic ones included) or of the public
+    ///     instance NDArray.fill.</returns>
+    private static bool IsAssignment(ParameterInfo p) =>
+        (p.Member.DeclaringType == typeof(np) && p.Member.Name == "copyto")
+        || (p.Member.DeclaringType == typeof(NDArray) && p.Member.Name == "fill");
+
+    /// <summary>
+    ///     The variant labels of an assignment parameter (<see cref="Role.AssignArg"/>), the base first, or null for a
+    ///     parameter the family's role does not read (np.copyto's <c>dst</c> operand, <c>casting</c> and <c>where</c> take
+    ///     the general roles).
+    /// </summary>
+    /// <param name="p">The parameter (of an <see cref="IsAssignment"/> overload).</param>
+    /// <returns>The labels <see cref="MakeAssignArg"/> builds, or null.</returns>
+    private static string[] AssignArgLabels(ParameterInfo p)
+    {
+        Type t = p.ParameterType;
+        string n = p.Name;
+        if (n == "value" && t == typeof(object)) return FillValueLabels;
+        if (n != "src") return null;
+        if (t == typeof(NDArray)) return CopytoSrcLabels;
+        if (t == typeof(BigInteger)) return CopytoBigLabels;
+        if (t == typeof(string)) return CopytoStringLabels;
+        return CopytoScalarLabels.TryGetValue(t, out var labels) ? labels : null;
+    }
+
+    /// <summary>np.copyto's array sources, built from the destination: its own copy, arrays of its shape in other dtypes
+    ///     (int32, float64, complex128, bool, U5, S5, StringDType), 0-d sources (NumPy's <c>PyArray_AssignRawScalar</c>:
+    ///     int64, float64, U1, StringDType), a broadcast row, a copy with a leading length-1 axis (stripped by NumPy's
+    ///     backward-compatibility rule), a shape that broadcasts against no pool operand, the transposed copy, a reversed
+    ///     view of the destination itself (overlap), the destination itself (the redundant self-copy), and None.</summary>
+    private static readonly string[] CopytoSrcLabels =
+    {
+        "same", "int32", "float64", "complex128", "bool", "U5", "S5", "T", "0d", "0d_f64", "0d_U", "0d_T", "row", "lead1",
+        "badshape", "transposed", "overlap_rev", "self", "null",
+    };
+
+    /// <summary>np.copyto's Python ints of any size: small ones, the edges of int32 / int64 / uint64 and past them.</summary>
+    private static readonly string[] CopytoBigLabels =
+        { "5", "-1", "300", "2^31", "2^63-1", "2^63", "2^64-1", "2^64", "-2^63", "-2^63-1", "2^100", "-2^100" };
+
+    /// <summary>np.copyto's str sources: a number's text, a word, the empty string, a bool's text, a negative int's, NaN's,
+    ///     a non-ASCII character, and null.</summary>
+    private static readonly string[] CopytoStringLabels =
+        { "1.5", "abc", "", "True", "-7", "nan", "ü", "null" };
+
+    /// <summary>The C# numbers of np.copyto's generic overload, per type: the base first, then the edges NumPy's weak-scalar
+    ///     rule range-checks or rounds (an int past a narrow destination, the 64-bit limits, NaN, infinities, -0.0).</summary>
+    private static readonly Dictionary<Type, string[]> CopytoScalarLabels = new()
+    {
+        [typeof(sbyte)] = new[] { "5", "-128" },
+        [typeof(byte)] = new[] { "5", "255" },
+        [typeof(short)] = new[] { "5", "-300" },
+        [typeof(ushort)] = new[] { "5", "65535" },
+        [typeof(int)] = new[] { "5", "-1", "300", "2147483647" },
+        [typeof(uint)] = new[] { "5", "4294967295" },
+        [typeof(long)] = new[] { "5", "-1", "300", "9223372036854775807", "-9223372036854775808" },
+        [typeof(ulong)] = new[] { "5", "9223372036854775808", "18446744073709551615" },
+        [typeof(float)] = new[] { "1.5", "NaN", "-0.0", "3.4e38" },
+        [typeof(double)] = new[] { "1.5", "-2.5", "NaN", "inf", "-0.0", "1e300", "0.1" },
+        [typeof(Complex)] = new[] { "1+2j", "NaN+0j", "0+0j" },
+        [typeof(bool)] = new[] { "true", "false" },
+        [typeof(Half)] = new[] { "1.5", "NaN", "65504" },
+        [typeof(char)] = new[] { "a", "7", "ü" },
+        [typeof(decimal)] = new[] { "1.5", "-7", "79228162514264337593543950335" },
+    };
+
+    /// <summary>ndarray.fill's values: Python ints (small, negative, past a narrow dtype), floats (a fraction, NaN), a bool,
+    ///     a complex, NumPy scalars (float16, a decimal, a char), strs (a word, the empty string), None, a Python int past
+    ///     uint64, 0-d arrays (int64, U1), a one-element and a two-element array (refused), a C# long, float and ulong.</summary>
+    private static readonly string[] FillValueLabels =
+    {
+        "7", "-1", "300", "1.5", "NaN", "true", "1+2j", "h1.5", "m1.5", "c'a'", "abc", "empty", "null", "2^70", "0d_i64",
+        "0d_U", "1elem", "2elem", "l5", "f1.5", "u2^64-1",
+    };
+
+    /// <summary>
+    ///     Builds an assignment argument (<see cref="Role.AssignArg"/>) for a destination.
+    /// </summary>
+    /// <param name="p">The parameter, whose name and type select the label set (<see cref="AssignArgLabels"/>).</param>
+    /// <param name="label">The variant.</param>
+    /// <param name="operand">The pool operand, np.copyto's destination or the array filled (the array sources of its
+    ///     shape and the views of it are built from it).</param>
+    /// <returns>The argument: an array, a C# number of the parameter's type, a <see cref="BigInteger"/>, a string, or
+    ///     null.</returns>
+    /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
+    private static object MakeAssignArg(ParameterInfo p, string label, NDArray operand)
+    {
+        Type t = p.ParameterType;
+        long[] dims = operand.Shape.Dimensions;
+        long size = 1;
+        foreach (long d in dims) size *= d;
+        var shape = new Shape(dims);
+        NDArray Ramp(string dt) =>
+            np.array(Enumerable.Range(0, (int)size).Select(i => (double)(i % 4)).ToArray()).astype(np.dtype(dt)).reshape(shape);
+        NDArray Text(string dt) => size == 0
+            ? np.empty(shape, np.dtype(dt))
+            : np.array(Enumerable.Range(0, (int)size).Select(i => (i % 3).ToString(CultureInfo.InvariantCulture)).ToArray())
+                .astype(np.dtype(dt)).reshape(shape);
+        if (t == typeof(NDArray))
+            return label switch
+            {
+                "same" => operand.copy(),
+                "int32" or "float64" or "complex128" or "bool" => Ramp(label),
+                "U5" or "S5" or "T" => Text(label),
+                "0d" => np.array(2L),
+                "0d_f64" => np.array(2.5),
+                "0d_U" => np.array("7"),
+                "0d_T" => np.array("7").astype(np.dtype("T")),
+                "row" => np.array(Enumerable.Range(0, (int)(dims.Length == 0 ? 1 : dims[^1])).Select(i => (long)(i % 4)).ToArray()),
+                "lead1" => operand.copy().reshape(new Shape(new long[] { 1 }.Concat(dims).ToArray())),
+                "badshape" => np.array(Enumerable.Range(0, 7).Select(i => (long)i).ToArray()),
+                "transposed" => operand.T.copy(),
+                // a view of the destination itself, its first axis reversed: the overlap rule (a 0-d destination: itself)
+                "overlap_rev" => dims.Length == 0 ? operand : operand["::-1"],
+                "self" => operand,
+                "null" => null,
+                _ => throw new ArgumentException("unknown copyto source variant " + label),
+            };
+        if (t == typeof(BigInteger))
+            return label switch
+            {
+                "2^31" => BigInteger.Pow(2, 31),
+                "2^63-1" => BigInteger.Pow(2, 63) - 1,
+                "2^63" => BigInteger.Pow(2, 63),
+                "2^64-1" => BigInteger.Pow(2, 64) - 1,
+                "2^64" => BigInteger.Pow(2, 64),
+                "-2^63" => -BigInteger.Pow(2, 63),
+                "-2^63-1" => -BigInteger.Pow(2, 63) - 1,
+                "2^100" => BigInteger.Pow(2, 100),
+                "-2^100" => -BigInteger.Pow(2, 100),
+                _ => BigInteger.Parse(label, CultureInfo.InvariantCulture),
+            };
+        if (t == typeof(string))
+            return label == "null" ? null : label;
+        if (p.Name == "value")
+            return label switch
+            {
+                "7" => 7,
+                "-1" => -1,
+                "300" => 300,
+                "1.5" => 1.5,
+                "NaN" => double.NaN,
+                "true" => true,
+                "1+2j" => new Complex(1, 2),
+                "h1.5" => (Half)1.5,
+                "m1.5" => 1.5m,
+                "c'a'" => 'a',
+                "abc" => "abc",
+                "empty" => "",
+                "null" => null,
+                "2^70" => BigInteger.Pow(2, 70),
+                "0d_i64" => np.array(7L),
+                "0d_U" => np.array("7"),
+                "1elem" => np.array(new[] { 5L }),
+                "2elem" => np.array(new[] { 1L, 2L }),
+                "l5" => 5L,
+                "f1.5" => 1.5f,
+                "u2^64-1" => ulong.MaxValue,
+                _ => throw new ArgumentException("unknown fill value variant " + label),
+            };
+        // the generic copyto's C# number of the instantiated type
+        var inv = CultureInfo.InvariantCulture;
+        if (t == typeof(sbyte)) return sbyte.Parse(label, inv);
+        if (t == typeof(byte)) return byte.Parse(label, inv);
+        if (t == typeof(short)) return short.Parse(label, inv);
+        if (t == typeof(ushort)) return ushort.Parse(label, inv);
+        if (t == typeof(int)) return int.Parse(label, inv);
+        if (t == typeof(uint)) return uint.Parse(label, inv);
+        if (t == typeof(long)) return long.Parse(label, inv);
+        if (t == typeof(ulong)) return ulong.Parse(label, inv);
+        if (t == typeof(float)) return label == "NaN" ? float.NaN : float.Parse(label, inv);
+        if (t == typeof(double))
+            return label switch { "NaN" => double.NaN, "inf" => double.PositiveInfinity, _ => double.Parse(label, inv) };
+        if (t == typeof(Complex))
+            return label switch { "1+2j" => new Complex(1, 2), "NaN+0j" => new Complex(double.NaN, 0), _ => Complex.Zero };
+        if (t == typeof(bool)) return label == "true";
+        if (t == typeof(Half)) return label == "NaN" ? Half.NaN : (Half)double.Parse(label, inv);
+        if (t == typeof(char)) return label[0];
+        if (t == typeof(decimal)) return decimal.Parse(label, inv);
+        throw new ArgumentException($"unknown assignment parameter {t.Name} {p.Name}");
+    }
+
+    /// <summary>
+    ///     The closed instances of a generic overload the snapshot calls: np.copyto&lt;T&gt; for every type of
+    ///     <see cref="CopytoScalarLabels"/> (NumPy's Python scalars and the NumPy scalars NumSharp's C# types stand for);
+    ///     none for any other generic method, whose targets keep their snapshots.
+    /// </summary>
+    /// <param name="m">A generic method definition.</param>
+    /// <returns>Its closed instances, or none.</returns>
+    private static IEnumerable<MethodInfo> SnapshotInstantiations(MethodInfo m) =>
+        m.DeclaringType == typeof(np) && m.Name == "copyto"
+            ? CopytoScalarLabels.Keys.Select(t => m.MakeGenericMethod(t))
+            : Enumerable.Empty<MethodInfo>();
+
+    /// <summary>
     ///     Whether a parameter belongs to np.einsum, whose <c>subscripts</c> / <c>operands</c> / <c>optimize</c> roles are its
     ///     alone: no other snapshot target declares them.
     /// </summary>
@@ -823,6 +1033,10 @@ static class Snapshot
         // roles below), before the general array roles would read an index array or a mask as a second operand.
         if (IsItemSelection(p) && ItemArgLabels(p) is not null)
             return Role.ItemArg;
+        // The assignment family's sources and fill value (only theirs; np.copyto's dst, casting and where take the general
+        // roles below), before the general array roles would read an array source as a second operand.
+        if (IsAssignment(p) && AssignArgLabels(p) is not null)
+            return Role.AssignArg;
         // An NDMatrix parameter (numpy.matrix's out=, typed as the matrix NumPy requires) takes the array roles too; other
         // NDArray subclasses (NDArray<bool> masks, ...) keep falling through, so the snapshots of the np.* and NDArray targets
         // are unchanged by the NDMatrix support.
@@ -1138,6 +1352,10 @@ static class Snapshot
             case Role.ItemArg:
                 // Built by MakeItemArg (from the operand where a value must fit it); the factory here is never called.
                 Add(ItemArgLabels(p)[0], () => null);
+                break;
+            case Role.AssignArg:
+                // Built by MakeAssignArg (from the destination where a source must fit it); the factory is never called.
+                Add(AssignArgLabels(p)[0], () => null);
                 break;
             case Role.Initial:
                 // None first (no initial: a where= mask then meets NumPy's no-identity error), then C# numbers as Python's int
@@ -2051,6 +2269,7 @@ static class Snapshot
             Role.EinsumOps => EinsumOpsVariantLabels.Length - 1,
             Role.LexKeys => LexKeysVariantLabels.Length - 1,
             Role.ItemArg => ItemArgLabels(ps[i]).Length - 1,
+            Role.AssignArg => AssignArgLabels(ps[i]).Length - 1,
             Role.SampleSeq or Role.BinsInts or Role.BinsArrays or Role.BinsObjects or Role.RangeArray => DdLabels(roles[i]).Length - 1,
             _ => variants[i].Count - 1,
         };
@@ -2158,6 +2377,7 @@ static class Snapshot
             Role.EinsumOps => EinsumOpsVariantLabels[v],
             Role.LexKeys => LexKeysVariantLabels[v],
             Role.ItemArg => ItemArgLabels(ps[p])[v],
+            Role.AssignArg => AssignArgLabels(ps[p])[v],
             Role.SampleSeq or Role.BinsInts or Role.BinsArrays or Role.BinsObjects or Role.RangeArray => DdLabels(roles[p])[v],
             _ => variants[p][v].Label,
         };
@@ -2186,6 +2406,7 @@ static class Snapshot
                     : roles[i] == Role.EinsumOps ? MakeEinsumOps(EinsumOpsVariantLabels[0], operand)
                     : roles[i] == Role.LexKeys ? MakeLexKeys(LexKeysVariantLabels[0], operand)
                     : roles[i] == Role.ItemArg ? MakeItemArg(ps[i], ItemArgLabels(ps[i])[0], operand)
+                    : roles[i] == Role.AssignArg ? MakeAssignArg(ps[i], AssignArgLabels(ps[i])[0], operand)
                     : IsDdRole(roles[i]) ? MakeDd(roles[i], DdLabels(roles[i])[0], operand, m)
                     : variants[i][0].Make();
             int outParam = -1, outVariant = 0;
@@ -2260,6 +2481,9 @@ static class Snapshot
                         break;
                     case Role.ItemArg:
                         argv[p] = MakeItemArg(ps[p], ItemArgLabels(ps[p])[v], operand);
+                        break;
+                    case Role.AssignArg:
+                        argv[p] = MakeAssignArg(ps[p], AssignArgLabels(ps[p])[v], operand);
                         break;
                     case Role.NditerOpAxes:
                         argv[p] = MakeNditerOpAxes(NditerOpAxesVariantLabels[v], operand);
