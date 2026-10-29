@@ -81,18 +81,18 @@ namespace NumSharp.Tests.Creation
         public void NonContiguous_Buffer_Throws()
         {
             var t = np.arange(6).astype(np.int32).reshape(2, 3).T;   // F-contiguous, not C
-            var ex = Assert.ThrowsException<InvalidOperationException>(() => np.frombuffer(t.data, np.int32));
+            var ex = Assert.ThrowsException<BufferError>(() => np.frombuffer(t.data, np.int32));
             StringAssert.Contains(ex.Message, "not C-contiguous");    // numpy BufferError text
             var s = np.arange(10).astype(np.int32)["::2"];           // strided
-            Assert.ThrowsException<InvalidOperationException>(() => np.frombuffer(s.data, np.int32));
+            Assert.ThrowsException<BufferError>(() => np.frombuffer(s.data, np.int32));
         }
 
         [TestMethod]
         public void Offset_Misaligned_And_Count_TooBig_Throw()
         {
             var a = np.arange(3).astype(np.int32);
-            Assert.ThrowsException<ArgumentException>(() => np.frombuffer(a.data, np.int32, offset: 2)); // 10%4!=0
-            Assert.ThrowsException<ArgumentException>(() => np.frombuffer(a.data, np.int32, count: 10));
+            Assert.ThrowsException<ValueError>(() => np.frombuffer(a.data, np.int32, offset: 2)); // 10%4!=0
+            Assert.ThrowsException<ValueError>(() => np.frombuffer(a.data, np.int32, count: 10));
         }
 
         [TestMethod]

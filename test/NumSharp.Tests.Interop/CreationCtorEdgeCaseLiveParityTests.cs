@@ -355,14 +355,14 @@ namespace NumSharp.Tests.Interop
         [TestMethod]
         public void T1_54_Frombuffer_SizeNotMultipleOfItemsize_BothRaise_SameMessage()
         {
-            // NumSharp raises ArgumentException with numpy's verbatim text (numpy raises ValueError).
+            // NumSharp raises numpy's ValueError with its verbatim text.
             Action ns = () => np.frombuffer(new byte[3], "<i4");
-            ns.Should().Throw<ArgumentException>()
-                .WithMessage("*buffer size must be a multiple of element size*");
+            ns.Should().Throw<ValueError>()
+                .WithMessage("buffer size must be a multiple of element size");
 
             string npErr = NumpyErrorText("np.frombuffer(b'\\x00\\x00\\x00', dtype='<i4')");
             npErr.Should().Contain("buffer size must be a multiple of element size",
-                "NumSharp reproduces numpy's error text (as ArgumentException — the house convention)");
+                "NumSharp reproduces numpy's error type and text");
         }
 
         // ============================================================ T1.47 — promotion across starts
