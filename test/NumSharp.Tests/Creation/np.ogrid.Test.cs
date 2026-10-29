@@ -58,14 +58,14 @@ namespace NumSharp.Tests.Creation
         }
 
         [TestMethod]
-        public void OGrid_SingleSlice_ImaginaryStep_IsLinspaceInclusive()
+        public void OGrid_SingleSlice_ImaginaryStep_IsArangeTimesStepPlusStart()
         {
-            // np.ogrid[-1:1:5j] -> linspace(-1, 1, 5), stop INCLUSIVE, always float64.
+            // np.ogrid[-1:1:5j] -> arange(0, 5) * 0.5 + -1, stop INCLUSIVE, always float64.
             NDArray a = np.ogrid["-1:1:5j"];
             a.Should().BeOfType(NPTypeCode.Double).And.BeShaped(5)
                 .And.BeOfValues(-1.0, -0.5, 0.0, 0.5, 1.0);
 
-            // Interior points are the exact doubles NumPy 2.4.2 produces (fma-free start + i*delta).
+            // Interior points are the exact doubles NumPy 2.4.2 produces (fma-free i * step + start).
             NDArray b = np.ogrid["-1:1:6j"];
             b.Should().BeShaped(6).And.BeOfValues(-1.0, -0.6, -0.19999999999999996,
                 0.20000000000000018, 0.6000000000000001, 1.0);
@@ -213,8 +213,9 @@ namespace NumSharp.Tests.Creation
         [TestMethod]
         public void OGrid_SingleImaginary_MissingStop_Throws()
         {
+            // np.ogrid[5::3j]: NumPy's (key.stop - start) is Python's None - 5.
             new Action(() => { NDArray _ = np.ogrid["5::3j"]; })
-                .Should().Throw<ValueError>().WithMessage("*imaginary step requires a stop*");
+                .Should().Throw<TypeError>().WithMessage("unsupported operand type(s) for -: 'NoneType' and 'int'");
         }
 
         [TestMethod]
