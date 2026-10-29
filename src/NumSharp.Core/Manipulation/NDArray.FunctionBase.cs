@@ -1808,12 +1808,23 @@ namespace NumSharp
         /// <exception cref="TypeError">A condition is not bool ("invalid entry {i} in condlist: should be boolean
         ///     ndarray"), or the choices and the default have no common dtype (NumPy's "Choicelist and default value do not
         ///     have a common dtype" text around the promotion error).</exception>
-        /// <exception cref="IncorrectShapeException">A group does not broadcast, or the two groups against each other.</exception>
+        /// <exception cref="IncorrectShapeException">A group does not broadcast, or the two groups against each other: NumPy's
+        ///     np.broadcast_arrays text naming the two operands of the group that disagree (<c>shape mismatch: objects cannot
+        ///     be broadcast to a single shape.  Mismatch is between arg 0 with shape (7,) and arg 1 with shape (3, 4).</c>), the
+        ///     two groups being arguments 0 and 1 of the last broadcast.</exception>
+        /// <exception cref="InvalidCastException">A choice whose dtype does not cast to the result dtype under
+        ///     <c>same_kind</c> (np.copyto's TypeError text: a C# number literal is NumPy's int64 / float64 / complex128 array,
+        ///     so an int choice beside a uint8 array raises <c>Cannot cast array data from dtype('int64') to dtype('uint8')
+        ///     according to the rule 'same_kind'</c>, <c>Cannot cast scalar ...</c> when every choice and the default are
+        ///     0-d).</exception>
         /// <exception cref="ArgumentNullException">A null choice (NumPy's object array; NumSharp has no object dtype).</exception>
         /// <remarks>
         ///     The fused single-pass IL kernel serves the contiguous, no-cast, full-size-array case
-        ///     (<see cref="TrySelectFused"/>); every other shape takes NumPy's own composition through np.copyto.
+        ///     (<see cref="TrySelectFused"/>); every other shape takes NumPy's own composition through np.copyto. Scoped: the
+        ///     arrays a C# number becomes and the broadcast choices handed to np.copyto are this call's and are released on
+        ///     the way out.
         /// </remarks>
+        [NDScoped]
         internal static NDArray Select(NDArray[] condlist, object[] choicelist, object @default)
         {
             // NumPy's order: the length check precedes the empty check, so select([], [x])
@@ -1848,7 +1859,8 @@ namespace NumSharp
                         if (i < n)
                             throw new ArgumentNullException($"choicelist[{i}]",
                                 "choicelist entries must not be null.");
-                        mat = NDArray.Scalar(0);
+                        // np.broadcast_arrays makes np.asarray(0) of it: int64.
+                        mat = Scalar(0L);
                         weakRank = Math.Max(weakRank, 1);
                         break;
 
@@ -1857,7 +1869,9 @@ namespace NumSharp
                         // inside an NDArray[] choicelist): NumPy keeps a Python int / float / complex as the weak scalar
                         // (`choice if type(choice) in (int, float, complex) else np.asarray(choice)`), exactly as the boxed
                         // literal below — an int8 choice beside the default 1000 stays int8.
-                        mat = lit;
+                        // The dtype reads the literal; the copies read the array np.broadcast_arrays makes of the Python
+                        // scalar (int64 whatever the C# width), as NumPy's np.copyto receives it.
+                        mat = SelectPythonScalarArray(lit.Storage.GetAtIndex(0));
                         weakRank = Math.Max(weakRank, lit.typecode == NPTypeCode.Complex ? 3
                             : lit.typecode is NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Half ? 2 : 1);
                         if (lit.typecode == NPTypeCode.UInt64 && lit.GetAtIndex<ulong>(0) > long.MaxValue) anyBeyondInt64 = true;
@@ -1875,19 +1889,22 @@ namespace NumSharp
                     // Weak (NEP50 "python literal") scalars — the eight C# integer primitives, the two
                     // binary floats and Complex. These adopt the other operands' dtype instead of
                     // forcing promotion by their own width/value (int8 array + 1000 stays int8).
+                    // Each becomes the array np.broadcast_arrays makes of the Python scalar (np.asarray: int64, uint64 past
+                    // int64, float64, complex128), which is what np.copyto receives: a byte 5 beside a uint8 choice is an int64
+                    // array there, refused under same_kind as in NumPy.
                     case sbyte or byte or short or ushort or int or uint or long or ulong:
-                        mat = np.asanyarray(item);
+                        mat = SelectPythonScalarArray(item);
                         weakRank = Math.Max(weakRank, 1);
                         if (item is ulong u && u > long.MaxValue) anyBeyondInt64 = true;
                         break;
 
                     case float or double:
-                        mat = np.asanyarray(item);
+                        mat = SelectPythonScalarArray(item);
                         weakRank = Math.Max(weakRank, 2);
                         break;
 
                     case System.Numerics.Complex:
-                        mat = np.asanyarray(item);
+                        mat = SelectPythonScalarArray(item);
                         weakRank = Math.Max(weakRank, 3);
                         break;
 
@@ -1921,19 +1938,19 @@ namespace NumSharp
             // broadcast VIEWS is therefore skipped: it would allocate needlessly AND, for a group of
             // one, route through broadcast_arrays's single-array path (Shape.Clean(), which resets a
             // non-contiguous operand's strides to contiguous and would read a transposed/strided/
-            // reversed condition through the wrong elements).
-            Shape scShape = CommonBroadcastShape(condlist);   // validates conditions mutually
-            Shape schShape = CommonBroadcastShape(mats);       // validates choices + default mutually
+            // reversed condition through the wrong elements). Each group's shape is NumPy's
+            // _broadcast_shape, so a mismatch names the two operands of that group as NumPy does.
+            Shape scShape = Shape.BroadcastShape(GroupShapes(condlist));   // validates conditions mutually
+            Shape schShape = Shape.BroadcastShape(GroupShapes(mats));       // validates choices + default mutually
 
             // Conditions must be boolean — checked after the group broadcasts, reporting the index.
             for (int i = 0; i < n; i++)
                 if (condlist[i].GetTypeCode != NPTypeCode.Boolean)
                     throw new TypeError($"invalid entry {i} in condlist: should be boolean ndarray");
 
-            // Result shape = broadcast(condition-shape, choice-shape). NumPy special-cases all-scalar
-            // choices to skip this call, but broadcast(S, ()) == S so the general call is identical.
-            var (commonLeft, _) = Shape.Broadcast(scShape, schShape);
-            long[] resultDims = commonLeft.dimensions;
+            // Result shape: the condition shape when every choice is 0-d (NumPy skips the call), else
+            // np.broadcast_arrays(condlist[0], choicelist[0]) - the two GROUP shapes are its arguments 0 and 1.
+            long[] resultDims = schShape.NDim == 0 ? scShape.dimensions : Shape.BroadcastShape(scShape, schShape).dimensions;
 
             // Fused single-pass fast path for the contiguous, no-cast, full-size-array-choice case —
             // the one NumPy leaves memory-bound (its (n+1) masked copytos each re-read AND re-write the
@@ -1953,9 +1970,44 @@ namespace NumSharp
             // declines; every masked write rides NumSharp's SIMD masked-cast kernel.
             np.copyto(result, mats[n], casting: "unsafe");
             for (int i = n - 1; i >= 0; i--)
-                np.copyto(result, mats[i], casting: "same_kind", @where: condlist[i]);
+            {
+                // NumPy copies the choice np.broadcast_arrays gave the choice group's shape: a 0-d choice in a group with
+                // axes reaches np.copyto as an ARRAY, so a refused cast reads "Cannot cast array data", not "Cannot cast
+                // scalar" (the values are the same either way).
+                NDArray choice = mats[i].ndim == 0 && schShape.NDim > 0 ? np.broadcast_to(mats[i], schShape) : mats[i];
+                np.copyto(result, choice, casting: "same_kind", @where: condlist[i]);
+            }
 
             return result;
+        }
+
+        /// <summary>
+        ///     NumPy's <c>np.asarray</c> of a Python number: the array <c>np.broadcast_arrays</c> makes of a weak choice or default
+        ///     of np.select, and so what its np.copyto calls receive. A Python int is int64 (uint64 past int64, as NumPy discovers
+        ///     it), a float float64 and a complex complex128, whatever the C# width of the literal that stands for it.
+        /// </summary>
+        /// <param name="value">A boxed C# integer primitive, <c>float</c>, <c>double</c> or
+        ///     <see cref="System.Numerics.Complex"/> (the values the select loop classifies as weak).</param>
+        /// <returns>A new 0-d array; created inside <see cref="Select"/>'s scope, which releases it.</returns>
+        /// <exception cref="ArgumentException"><paramref name="value"/> is none of those (a caller defect).</exception>
+        private static NDArray SelectPythonScalarArray(object value) => value switch
+        {
+            ulong u when u > long.MaxValue => Scalar(u),
+            sbyte or byte or short or ushort or int or uint or long or ulong => Scalar(Convert.ToInt64(value)),
+            float or double => Scalar(Convert.ToDouble(value)),
+            System.Numerics.Complex c => Scalar(c),
+            _ => throw new ArgumentException($"{value?.GetType().Name ?? "null"} is not a Python number.", nameof(value)),
+        };
+
+        /// <summary>The shapes of a group of operands, in order, for <see cref="Shape.BroadcastShape"/>.</summary>
+        /// <param name="arrays">The operands (none null).</param>
+        /// <returns>A new array of their shapes.</returns>
+        private static Shape[] GroupShapes(NDArray[] arrays)
+        {
+            var shapes = new Shape[arrays.Length];
+            for (int i = 0; i < arrays.Length; i++)
+                shapes[i] = arrays[i].Shape;
+            return shapes;
         }
 
         /// <summary>
@@ -2003,7 +2055,7 @@ namespace NumSharp
         ///     condition and choice is C-contiguous at the full result shape and the result dtype
         ///     (no broadcast, no cast) — the case NumPy's copyto composition leaves memory-bound.
         ///     Delegates the whole select to one IL kernel
-        ///     (<see cref="DirectILKernelGenerator.GetSelectKernel"/>) that seeds each element with
+        ///     (<see cref="Backends.Kernels.DirectILKernelGenerator.GetSelectKernel"/>) that seeds each element with
         ///     the default then walks the conditions last-to-first, so the first true condition wins.
         ///     Returns false (and leaves <paramref name="result"/> null) for any other shape, dtype,
         ///     or layout, so the caller falls back to the composition.
@@ -2099,19 +2151,6 @@ namespace NumSharp
             void* resPtr = (byte*)res.Storage.Address + res.Shape.offset * elemSize;
 
             kernel(conds, choices, defPtr, resPtr, res.size);
-        }
-
-        /// <summary>
-        ///     The common broadcast shape of a group of operands (NumPy's <c>broadcast_arrays</c>
-        ///     shape). Only the DIMENSIONS are consumed by the caller, so the single-operand path's
-        ///     stride reset is harmless; every returned element carries the common dimensions.
-        /// </summary>
-        private static Shape CommonBroadcastShape(NDArray[] arrays)
-        {
-            var shapes = new Shape[arrays.Length];
-            for (int i = 0; i < arrays.Length; i++)
-                shapes[i] = arrays[i].Shape;
-            return Shape.Broadcast(shapes)[0];
         }
 
         /// <summary>
