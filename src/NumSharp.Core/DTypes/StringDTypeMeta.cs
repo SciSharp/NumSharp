@@ -151,11 +151,12 @@ namespace NumSharp
         /// <summary>
         ///     <c>string_discover_descr_from_pyobject</c>: the descriptor a C# scalar needs to be stored whole — a
         ///     <see cref="string"/> holds as many characters as it has CODE POINTS (Python's <c>len(str)</c>: a surrogate
-        ///     pair is one, a lone surrogate is one), a <c>byte[]</c> as many as it has bytes, any other value as many as its
+        ///     pair is one, a lone surrogate is one), a C# <see cref="char"/> one (Python's one-character str), a
+        ///     <c>byte[]</c> as many as it has bytes, any other value as many as its
         ///     <c>str()</c> has (<c>PyArray_DTypeFromObjectStringDiscovery</c>: <c>np.array([1, 22], dtype='U')</c> is
         ///     <c>&lt;U2</c>, None is <c>'None'</c>, 4). For <c>U</c> the item size is 4 bytes per character.
         /// </summary>
-        /// <param name="obj">An element value: text, bytes, a number or null (None).</param>
+        /// <param name="obj">An element value: text (a string or a char), bytes, a number or null (None).</param>
         /// <returns>A fresh sized descriptor of this class.</returns>
         /// <exception cref="TypeError">The value is too long for a descriptor of this class (NumPy's
         /// <c>string too large to store inside array.</c>).</exception>
@@ -168,6 +169,10 @@ namespace NumSharp
             {
                 case string s:
                     length = NDStringCodec.CodePointCount(s);
+                    break;
+                case char _:
+                    // A C# char is Python's one-character str (its store writes it as one character).
+                    length = 1;
                     break;
                 case byte[] b:
                     length = b.Length;

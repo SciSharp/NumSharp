@@ -83,6 +83,94 @@ namespace NumSharp.Backends
             => Build(Array.Empty<long>(), new List<object>(1) { op }, dtype, 'C');
 
         /// <summary>
+        ///     NumPy's <c>discover_dtype_from_pyobject</c> (<c>array_coercion.c</c>) over the C# boundary map: the DType
+        ///     CLASS a Python value is discovered as. A requested class that claims the value's type (its own scalar type,
+        ///     or its <see cref="DTypeMeta.is_known_scalar_type"/>: the string classes claim Python's str, bytes, int,
+        ///     float, complex and bool) discovers the value itself. Otherwise the value's own class
+        ///     (<c>npy_discover_dtype_from_pytype</c>): a str or a C# char (Python's one-character str) the <c>U</c>
+        ///     class, a <c>byte[]</c> the <c>S</c> class, a C# bool the bool class, a C# integer or
+        ///     <see cref="BigInteger"/> NumPy's abstract <c>_PyLongDType</c>, a float or double <c>_PyFloatDType</c>, a
+        ///     <see cref="Complex"/> <c>_PyComplexDType</c>, a NumPy scalar (<see cref="Half"/>, NumSharp's
+        ///     <see cref="decimal"/>) its dtype's class.
+        /// </summary>
+        /// <param name="obj">The value in the C# boundary map; null is Python's None.</param>
+        /// <param name="fixedDType">The requested class, or null.</param>
+        /// <returns>The class, or null where NumPy maps the value to no class (None, or an object NumSharp has no class
+        ///     for): <see cref="FindScalarDescriptor"/> then gives a requested class its second chance, and makes anything
+        ///     else NumPy's object descriptor, which NumSharp refuses.</returns>
+        /// <remarks>
+        ///     The class only, never a width or a value range: those are the class's
+        ///     <see cref="DTypeMeta.discover_descr_from_pyobject"/>, which <see cref="FindScalarDescriptor"/> asks next
+        ///     (a Python int is int64 or uint64 by its value there).
+        /// </remarks>
+        internal static DTypeMeta DiscoverDTypeFromPyObject(object obj, DTypeMeta fixedDType)
+        {
+            // None: NoneType maps to no DType class, with or without a request (a requested class still discovers it, as
+            // the second chance of find_scalar_descriptor).
+            if (obj is null)
+                return null;
+            Type type = obj.GetType();
+            // Let the requested class handle the discovery when the scalar type matches exactly or the class claims it.
+            if (fixedDType != null && (type == fixedDType.type || fixedDType.is_known_scalar_type(type)))
+                return fixedDType;
+            return obj switch
+            {
+                string or char => DTypeRegistry.Str,
+                byte[] => DTypeRegistry.Bytes,
+                bool => DTypeRegistry.FromTypeCode(NPTypeCode.Boolean),
+                sbyte or byte or short or ushort or int or uint or long or ulong or BigInteger => DTypeRegistry.PyLong,
+                float or double => DTypeRegistry.PyFloat,
+                Complex => DTypeRegistry.PyComplex,
+                Half => DTypeRegistry.FromTypeCode(NPTypeCode.Half),
+                decimal => DTypeRegistry.FromTypeCode(NPTypeCode.Decimal),
+                _ => null,
+            };
+        }
+
+        /// <summary>
+        ///     NumPy's <c>find_scalar_descriptor</c> (<c>array_coercion.c</c>): the descriptor of one Python value - its
+        ///     discovered class's <see cref="DTypeMeta.discover_descr_from_pyobject"/>, cast to the requested class when
+        ///     there is one (<see cref="DTypePromotion.CastDescrToDType"/>: a Python int under an unsized <c>U</c> request is
+        ///     <c>&lt;U21</c> through the int64-to-str cast). A value with no class of its own gets the requested class's
+        ///     discovery as a second chance (a string class takes the length of its <c>str()</c>: None is
+        ///     <c>'None'</c>).
+        /// </summary>
+        /// <param name="fixedDType">The requested class, or null.</param>
+        /// <param name="discovered">The value's class from <see cref="DiscoverDTypeFromPyObject"/>, or null.</param>
+        /// <param name="obj">The value; null is Python's None.</param>
+        /// <returns>The value's descriptor.</returns>
+        /// <exception cref="NotSupportedException">The value has no class and nothing is requested: NumPy's object
+        ///     descriptor, which NumSharp does not have (None, an object of no NumPy type); or a Python int past 64 bits
+        ///     (<c>_PyLongDType</c>'s object descriptor).</exception>
+        /// <exception cref="TypeError">A text too long for its string class (<c>string too large to store inside
+        ///     array.</c>), or a descriptor the requested class cannot hold (<c>cannot cast dtype %S to %S.</c>).</exception>
+        /// <exception cref="ValueError">A Python int of more than 4300 decimal digits under a string class (CPython
+        ///     refuses its <c>str()</c>).</exception>
+        internal static DType FindScalarDescriptor(DTypeMeta fixedDType, DTypeMeta discovered, object obj)
+        {
+            DType descr;
+            if (discovered == null && fixedDType == null)
+            {
+                // No known class and no request: NumPy goes to object.
+                throw new NotSupportedException(obj is null
+                    ? "None makes NumPy build an object array, which NumSharp does not have."
+                    : $"A {obj.GetType().Name} value has no NumPy dtype: NumPy would build an object array, which NumSharp does not have.");
+            }
+            else if (discovered == null)
+            {
+                // No class found: the requested class gets a second chance (a string class calls str(obj)).
+                descr = fixedDType.discover_descr_from_pyobject(obj);
+            }
+            else
+            {
+                descr = discovered.discover_descr_from_pyobject(obj);
+            }
+            if (fixedDType == null)
+                return descr;
+            return DTypePromotion.CastDescrToDType(descr, fixedDType);
+        }
+
+        /// <summary>
         ///     The implicit conversion of a C# array (<c>NDArray x = new[] { 1, 2 }</c>) once its null pass-through ran: text
         ///     values build NumPy's fixed-width string array (the discovery np.array makes), a jagged array of a NumSharp
         ///     element type its nested shape, a rectangular one its own shape; the data is copied.

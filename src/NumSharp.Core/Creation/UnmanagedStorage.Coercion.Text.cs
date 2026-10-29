@@ -281,83 +281,82 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     NumPy's dtype discovery for text values: the class (requested, or <c>U</c> when any value is text, <c>S</c>
-        ///     when the text is all bytes) and the width (requested, or the widest value).
+        ///     The dtype half of NumPy's <c>PyArray_DiscoverDTypeAndShape</c> over values already collected in C order: each
+        ///     value's class (<see cref="DiscoverDTypeFromPyObject"/>, NumPy's <c>discover_dtype_from_pyobject</c>), its
+        ///     descriptor (<see cref="FindScalarDescriptor"/>: the class's <c>discover_descr_from_pyobject</c>, cast to the
+        ///     requested class), and the promotion of every value's descriptor in order (<c>handle_promotion</c>,
+        ///     <see cref="DTypePromotion.PromoteTypes"/>).
         /// </summary>
         /// <param name="values">The element values.</param>
-        /// <param name="dtype">The requested string dtype or null.</param>
-        /// <returns>The descriptor to allocate (possibly unsized; the allocator grows 0 to one character).</returns>
-        /// <exception cref="NotSupportedException">None without a dtype (NumPy's object array), or a value that is neither
-        ///     text, bytes, a number nor None.</exception>
-        /// <exception cref="TypeError">The width exceeds the class's maximum (<c>string too large to store inside
+        /// <param name="dtype">The requested dtype: an unsized one (an unsized string class) is discovered under, a sized
+        ///     one is returned as it is; or null.</param>
+        /// <returns>The descriptor to allocate: an unsized string class's singleton when every text is empty (the
+        ///     allocation gives it one character), the requested class's singleton (or <c>U</c>'s) for no values.</returns>
+        /// <exception cref="NotSupportedException">None without a dtype (NumPy's object array), a value of no NumPy type
+        ///     without one, or a Python int past 64 bits without one.</exception>
+        /// <exception cref="TypeError">A text too long for its string class (<c>string too large to store inside
         ///     array.</c>).</exception>
+        /// <exception cref="ValueError">A Python int of more than 4300 decimal digits under a requested string class.</exception>
         /// <remarks>
-        ///     The width of a value: a string's code points, a byte[]'s length, 4 for <c>str(None)</c>; a Python number's is the
-        ///     length of its <c>str()</c> under a requested unsized class (<c>PyArray_DTypeFromObjectStringDiscovery</c>), and
-        ///     its descriptor's text width without one (NumPy discovers the number's own dtype, then
-        ///     <c>PyArray_PromoteTypes</c> widens the string class to that dtype's <c>REQUIRED_STR_LEN</c>). A NumPy scalar
-        ///     (<see cref="Half"/>, NumSharp's <see cref="decimal"/>) always takes its dtype's <c>REQUIRED_STR_LEN</c>: only the
-        ///     exact Python builtins are known scalars of the string classes.
+        ///     <para>
+        ///     What the slots give: a str holds its code points, a C# char one character, bytes their length; under a
+        ///     requested string class a Python builtin (str, bytes, int, float, complex, bool: the string classes'
+        ///     <c>is_known_scalar_type</c>) the length of its <c>str()</c>, and None <c>'None'</c>; any other value
+        ///     its own descriptor, which the cast to the string class sizes to its <c>REQUIRED_STR_LEN</c> (a Python int is
+        ///     int64, 21, or uint64, 20, by its value; a float or a NumPy float16 / decimal 32, a complex 64, a bool 5). The
+        ///     promotion of a text with a number keeps the string class and the longer width; <c>U</c> absorbs <c>S</c>.
+        ///     </para>
+        ///     <para>
+        ///     The callers pass values that hold text, bytes or a requested string class, so the result is a string
+        ///     descriptor; values of numbers alone would be discovered as NumPy discovers them (<c>[1, 2]</c> is int64).
+        ///     </para>
         /// </remarks>
         private static DType Discover(IReadOnlyList<object> values, DType dtype)
         {
-            StringDTypeMeta cls;
+            DTypeMeta fixedDType = null;
             if (dtype != null)
             {
-                var requested = (StringDTypeMeta)dtype.Meta;
+                // A sized request is the descriptor; an unsized one names the class the values are discovered under.
                 if (dtype.itemsize > 0)
                     return dtype;
-                cls = requested;
+                fixedDType = dtype.Meta;
             }
             else
             {
-                bool anyText = false, anyBytes = false;
+                // NumSharp's refusal, before any value is discovered: None without a request makes NumPy's array an object
+                // one, and a string class request is the way to store it as text.
                 foreach (var v in values)
                 {
-                    switch (v)
-                    {
-                        case string _:
-                        case char _:
-                            anyText = true;
-                            break;
-                        case byte[] _:
-                            anyBytes = true;
-                            break;
-                        case null:
-                            throw new NotSupportedException(
-                                "A null (None) among the values would make NumPy build an object array, which NumSharp does not have; " +
-                                "pass a string dtype (np.str_ / \"U\") to store it as the text 'None', or replace it.");
-                    }
+                    if (v is null)
+                        throw new NotSupportedException(
+                            "A null (None) among the values would make NumPy build an object array, which NumSharp does not have; " +
+                            "pass a string dtype (np.str_ / \"U\") to store it as the text 'None', or replace it.");
                 }
-                // Unicode absorbs bytes (string_unicode_common_dtype); an empty value set is NumPy's default U. A number
-                // never changes the class: the string class absorbs every numeric DType.
-                cls = anyText || !anyBytes ? DTypeRegistry.Str : DTypeRegistry.Bytes;
             }
 
-            long width = 0;
+            // handle_promotion: the first value's descriptor, then PyArray_PromoteTypes with each later one, in order.
+            DType descr = null;
             foreach (var v in values)
             {
-                long len = v switch
-                {
-                    string s => NDStringCodec.CodePointCount(s),
-                    char _ => 1,
-                    byte[] b => b.Length,
-                    null => 4, // str(None) == 'None'
-                    // Under a requested class only the exact Python builtins (python_builtins_are_known_scalar_types) take
-                    // their str() length; a NumPy scalar (a Half, NumSharp's decimal) is discovered as its own dtype and cast
-                    // to the class, which is that dtype's REQUIRED_STR_LEN (np.array([np.float16(0.5)], 'U') is <U32).
-                    _ => dtype != null && v is not (Half or decimal) ? NDStringStorage.StrLength(v) : NumberTextWidth(v),
-                };
-                if (len > width)
-                    width = len;
+                var discovered = DiscoverDTypeFromPyObject(v, fixedDType);
+                var d = FindScalarDescriptor(fixedDType, discovered, v);
+                descr = descr is null ? d : DTypePromotion.PromoteTypes(descr, d);
             }
-            return UnsizedTextDescr(cls, width);
+
+            // No values: the requested class's unsized singleton, or NumPy's default U.
+            if (descr is null)
+                return ((StringDTypeMeta)(fixedDType ?? DTypeRegistry.Str)).singleton;
+            // Every text empty: the class singleton (an unsized descriptor, which the allocation gives one character).
+            if (descr.Meta is StringDTypeMeta cls && descr.itemsize == 0)
+                return cls.singleton;
+            return descr;
         }
 
         /// <summary>
         ///     The descriptor an unsized string class takes for its widest element: <paramref name="cls"/>'s class of
-        ///     <paramref name="width"/> characters, or the class singleton for a width of zero (the discovery's last step,
-        ///     shared with <c>np.loadtxt</c>'s staged unsized read, which measures the same widths without the objects).
+        ///     <paramref name="width"/> characters, or the class singleton for a width of zero. It is <c>np.loadtxt</c>'s
+        ///     staged unsized read, which measures the widths without the objects; the coercion of objects reaches the same
+        ///     descriptor through the classes' discovery (<see cref="Discover"/>).
         /// </summary>
         /// <param name="cls">The string class (U or S).</param>
         /// <param name="width">The widest element's length: code points for U, bytes for S.</param>
@@ -369,36 +368,6 @@ namespace NumSharp.Backends
             if (width > cls.MaxChars)
                 throw new TypeError("string too large to store inside array.");
             return width == 0 ? cls.singleton : cls.Descr(width);
-        }
-
-        /// <summary>
-        ///     The text width a number contributes when NumPy promotes it with text (<c>np.array(['x', 1])</c>): its
-        ///     discovered descriptor's <c>REQUIRED_STR_LEN</c> — a Python int is int64 (21; uint64, 20, when only that holds
-        ///     it), a Python float / NumPy float16 / decimal 32, a complex 64, a bool 5.
-        /// </summary>
-        /// <param name="v">The number (boxed C# value).</param>
-        /// <returns>The width in characters.</returns>
-        /// <exception cref="NotSupportedException">A Python int past 64 bits (NumPy builds an object array), or a value that
-        ///     is not a number.</exception>
-        private static long NumberTextWidth(object v)
-        {
-            NPTypeCode discovered = v switch
-            {
-                bool => NPTypeCode.Boolean,
-                sbyte or byte or short or ushort or int or uint or long => NPTypeCode.Int64,
-                ulong u => u <= long.MaxValue ? NPTypeCode.Int64 : NPTypeCode.UInt64,
-                System.Numerics.BigInteger bi when bi >= long.MinValue && bi <= long.MaxValue => NPTypeCode.Int64,
-                System.Numerics.BigInteger bi when bi >= 0 && bi <= ulong.MaxValue => NPTypeCode.UInt64,
-                System.Numerics.BigInteger => throw new NotSupportedException(
-                    "A Python int past 64 bits among text values makes NumPy build an object array, which NumSharp does not have."),
-                float or double => NPTypeCode.Double,
-                Half => NPTypeCode.Half,
-                decimal => NPTypeCode.Decimal,
-                System.Numerics.Complex => NPTypeCode.Complex,
-                _ => throw new NotSupportedException(
-                    $"A {v.GetType().Name} value has no NumPy dtype: a text array takes text, bytes, numbers and None."),
-            };
-            return NDTextFormat.RequiredWidth(discovered);
         }
 
         /// <summary>

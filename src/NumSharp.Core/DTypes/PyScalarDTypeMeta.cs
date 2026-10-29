@@ -50,6 +50,38 @@ namespace NumSharp
         /// <returns>The singleton of the default class.</returns>
         public override DType default_descr() => DTypeRegistry.FromTypeCode(_defaultCode).singleton;
 
+        /// <summary>
+        ///     The slot <c>discover_descr_from_pyobject</c>: the descriptor array coercion gives a Python scalar of this
+        ///     category. For a Python int NumPy's <c>discover_descriptor_from_pylong</c>, which reads the VALUE: int64 when it
+        ///     fits (NumPy's <c>intp</c>), uint64 when only that holds it (<c>2**64 - 1</c>), and NumPy's object descriptor
+        ///     past 64 bits, which NumSharp refuses. A Python float is float64 and a Python complex complex128 whatever their
+        ///     value (<c>discover_descriptor_from_pyfloat</c> / <c>_pycomplex</c>).
+        /// </summary>
+        /// <param name="obj">A value of this category in the C# boundary map: an integer primitive or
+        ///     <see cref="System.Numerics.BigInteger"/> for <c>_PyLongDType</c>.</param>
+        /// <returns>The default descriptor, or uint64 for a Python int past int64 that uint64 holds.</returns>
+        /// <exception cref="NotSupportedException">A Python int past 64 bits (NumPy builds an object array, a dtype NumSharp
+        ///     does not have).</exception>
+        public override DType discover_descr_from_pyobject(object obj)
+        {
+            if (PyKind == PyScalarKind.Int)
+            {
+                switch (obj)
+                {
+                    case ulong u when u > long.MaxValue:
+                        return DTypeRegistry.FromTypeCode(NPTypeCode.UInt64).singleton;
+                    case System.Numerics.BigInteger big when big < long.MinValue || big > long.MaxValue:
+                        // PyLong_AsLongLong failed: PyLong_AsUnsignedLongLong, then object.
+                        if (big.Sign > 0 && big <= ulong.MaxValue)
+                            return DTypeRegistry.FromTypeCode(NPTypeCode.UInt64).singleton;
+                        throw new NotSupportedException(
+                            "A Python int past 64 bits makes NumPy build an object array, which NumSharp does not have.");
+                }
+            }
+            // Every other C# integer primitive fits int64; a Python float / complex has one descriptor.
+            return default_descr();
+        }
+
         /// <summary>Weak literals map onto the C# primitives of their category.</summary>
         /// <param name="type">The C# type of the literal.</param>
         /// <returns>True when <paramref name="type"/> is a C# primitive of this class's category.</returns>
