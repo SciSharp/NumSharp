@@ -49,7 +49,6 @@ Logic/np.type_checks.cs	2	15
 Manipulation/np.apply_along_axis.cs	0	1
 Manipulation/np.asscalar.cs	0	1
 Manipulation/np.copyto.cs	1	0
-Manipulation/np.pad.cs	9	33
 Matrixlib/NDMatrix.Construction.cs	0	8
 Matrixlib/NDMatrix.Indexing.cs	0	3
 Matrixlib/NDMatrix.Methods.cs	0	1
