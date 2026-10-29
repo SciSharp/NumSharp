@@ -24,13 +24,13 @@ namespace NumSharp
         ///     </list>
         /// </param>
         /// <returns>A fresh, detached <see cref="byte"/> array of length <c>size * dtypesize</c>.</returns>
-        /// <exception cref="ArgumentException">Thrown when <paramref name="order"/> is not one of C/F/A/K.</exception>
+        /// <exception cref="ValueError"><paramref name="order"/> is not one of C/F/A/K, either case (<c>order must be one of
+        ///     'C', 'F', 'A', or 'K' (got 'Z')</c>): checked first, so an empty array refuses it too.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.tobytes.html</remarks>
         public byte[] tobytes(char order = 'C')
         {
-            if (size == 0)
-                return System.Array.Empty<byte>();
-
+            // NumPy's array_tobytes converts its order (PyArray_OrderConverter) while it parses its arguments, before
+            // PyArray_ToString looks at the array: an invalid order raises whatever the size.
             // Resolve the NumPy order char to a physical layout ('C' or 'F').
             //   C/F/A -> OrderResolver (A picks F only when this view is F-contiguous-and-not-C-contiguous,
             //            exactly NumPy's PyArray_ISFORTRAN test). Invalid chars raise here.
@@ -41,6 +41,9 @@ namespace NumSharp
             char physical = (order == 'K' || order == 'k')
                 ? 'C'
                 : OrderResolver.Resolve(order, this.Shape);
+
+            if (size == 0)
+                return System.Array.Empty<byte>();
 
             // A StringDType array's bytes are 16-byte cells (NumPy 2.4.2's PyArray_ToString): a buffer that already lays its
             // elements out in the requested order gives its OWN cells — arena offsets and heap pointers of this buffer —,

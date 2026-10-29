@@ -159,6 +159,24 @@ namespace NumSharp.Tests.Casting
             }
         }
 
+        /// <summary>
+        ///     NumPy converts the order while it parses tobytes' arguments, before it looks at the array, so an EMPTY array
+        ///     refuses an invalid order too (NumSharp returned no bytes first). NumPy 2.4.2: <c>np.zeros(0).tobytes(order='Z')</c>
+        ///     raises <c>ValueError: order must be one of 'C', 'F', 'A', or 'K' (got 'Z')</c>; the four valid orders, either
+        ///     case, give <c>b''</c>.
+        /// </summary>
+        [TestMethod]
+        public void InvalidOrder_EmptyArray_StillThrows()
+        {
+            foreach (var empty in new[] { np.zeros(new Shape(0)), np.zeros(new Shape(0, 3)).astype(NPTypeCode.Int16) })
+            {
+                var ex = Assert.ThrowsException<ValueError>(() => empty.tobytes('Z'));
+                Assert.AreEqual("order must be one of 'C', 'F', 'A', or 'K' (got 'Z')", ex.Message);
+                foreach (char ok in new[] { 'C', 'F', 'A', 'K', 'c', 'f', 'a', 'k' })
+                    Assert.AreEqual(0, empty.tobytes(ok).Length, $"order '{ok}'");
+            }
+        }
+
         // ---- Edge cases ------------------------------------------------------------------
 
         [TestMethod]
