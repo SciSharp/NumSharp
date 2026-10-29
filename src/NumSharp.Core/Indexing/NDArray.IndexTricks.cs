@@ -910,7 +910,7 @@ namespace NumSharp
             // NumPy's size loop meets it. The sizes are ceil((stop-start)/step) (imaginary: the point count) and MAY be
             // negative - indices then raises "negative dimensions are not allowed", exactly as NumPy's mgrid does (its
             // ogrid twin instead gets an empty axis from arange).
-            var sizes = new BigInteger[n];
+            var sizes = new double[n];
             for (int k = 0; k < n; k++)
                 sizes[k] = GridAxisSize(specs[k], k, "mgrid");
             DType typ = GridMeshDtype(specs);
@@ -921,7 +921,7 @@ namespace NumSharp
             long[] dims = new long[n];
             for (int k = 0; k < n; k++)
             {
-                if (!np.AxisConcatenator.SliceSpec.FitsInt64(sizes[k]))
+                if (!GridSizeFitsInt64(sizes[k]))
                     throw new ValueError("Maximum allowed dimension exceeded");
                 dims[k] = (long)sizes[k];
             }
@@ -1041,10 +1041,10 @@ namespace NumSharp
                 return spec.Materialize();
 
             // step_float = abs(step); step = length = int(step_float): NaN and infinity are int()'s errors.
-            BigInteger length = PythonInt.From(Math.Abs(spec.Step));
+            double length = GridIntOfFloat(Math.Abs(spec.Step));
             // A Python int 1 when length == 1: arange(...) * 1 leaves the points as they are.
             double step = 1.0;
-            if (!length.IsOne)
+            if (length != 1d)
             {
                 // (key.stop - start) / float(step - 1): Python's None - start is its TypeError.
                 if (!spec.HasStop)
@@ -1052,7 +1052,8 @@ namespace NumSharp
                         $"unsupported operand type(s) for -: 'NoneType' and '{(spec.StartIsInt ? "int" : "float")}'");
                 step = GridPyNumber.TrueDivide(
                     GridPyNumber.Subtract(GridPyNumber.StopOf(spec), GridPyNumber.StartOf(spec)),
-                    GridPyNumber.Float(GridPyNumber.IntToFloat(length - 1)));
+                    // float(step - 1): the int minus one, rounded to a double as float() rounds it.
+                    GridPyNumber.Float(length - 1d));
             }
 
             // typ = result_type(start, stop, step_float): float64, since step_float is a Python float (a missing stop is
@@ -1060,7 +1061,7 @@ namespace NumSharp
             DType typ = DTypePromotion.ResultType(
                 GridResultTypeOperand(true, spec.StartIsInt), GridResultTypeOperand(spec.HasStop, spec.StopIsInt),
                 DTypeRegistry.PyFloat);
-            if (!np.AxisConcatenator.SliceSpec.FitsInt64(length))
+            if (!GridSizeFitsInt64(length))
                 throw new ValueError("Maximum allowed size exceeded");
             var points = new NDArray(typ, (long)length, false);
             // arange * step: the step is a float, nothing to convert; + start: a Python int start converts here, so an
@@ -1077,7 +1078,8 @@ namespace NumSharp
         /// <param name="spec">The slice.</param>
         /// <param name="k">The slice's position in the key, for the missing-stop error.</param>
         /// <param name="caller">The public entry's name (<c>"mgrid"</c> / <c>"ogrid"</c>), for the missing-stop error.</param>
-        /// <returns>The size, a Python int: negative for a range that runs against its step, possibly past int64.</returns>
+        /// <returns>The size, a Python int held exactly in a double (<c>math.ceil</c> and <c>int()</c> of a float give at most
+        ///     53 significant bits): negative for a range that runs against its step, possibly past int64.</returns>
         /// <exception cref="ValueError">A real step without a stop (NumSharp's text; NumPy's <c>None - start</c> TypeError
         ///     sends it to the except branch, whose <c>key.step</c> raises <c>AttributeError: 'tuple' object has no
         ///     attribute 'step'</c>); a NaN quotient or imaginary step (<c>cannot convert float NaN to integer</c>).</exception>
@@ -1086,22 +1088,61 @@ namespace NumSharp
         /// <exception cref="OverflowException">An infinite quotient or imaginary step (<c>cannot convert float infinity to
         ///     integer</c>); a Python int past the float range met by float arithmetic (<c>int too large to convert to
         ///     float</c>) or an int quotient past it (<c>integer division result too large for a float</c>).</exception>
-        private static BigInteger GridAxisSize(in np.AxisConcatenator.SliceSpec spec, int k, string caller)
+        private static double GridAxisSize(in np.AxisConcatenator.SliceSpec spec, int k, string caller)
         {
+            const double GridExactDifferenceBound = 4503599627370496.0; // 2**52: |stop - start| < 2**53, an exact double
             // size.append(int(abs(step))): an imaginary step's magnitude is a Python float.
             if (spec.ImaginaryStep)
-                return PythonInt.From(Math.Abs(spec.Step));
+                return GridIntOfFloat(Math.Abs(spec.Step));
             if (!spec.HasStop)
                 throw GridMissingStop(caller, k);
             // size.append(math.ceil((stop - start) / step)): math.ceil of a float, whose NaN and infinity are errors.
-            double quotient = GridPyNumber.TrueDivide(
-                GridPyNumber.Subtract(GridPyNumber.StopOf(spec), GridPyNumber.StartOf(spec)), GridPyNumber.StepOf(spec));
+            double quotient;
+            if (spec.Integral && Math.Abs(spec.Start) < GridExactDifferenceBound && Math.Abs(spec.Stop) < GridExactDifferenceBound
+                && Math.Abs(spec.Step) < GridExactDifferenceBound)
+            {
+                // Python ints this small are exact doubles and so is their difference (below 2**53), so CPython's
+                // long_true_divide is one IEEE division of the two (PyScalar.IntTrueDivide's own fast path), without the
+                // BigInteger round trip; a zero step is still int division's text.
+                if (spec.Step == 0d)
+                    throw new DivideByZeroException("division by zero");
+                quotient = (spec.Stop - spec.Start) / spec.Step;
+            }
+            else
+                quotient = GridPyNumber.TrueDivide(
+                    GridPyNumber.Subtract(GridPyNumber.StopOf(spec), GridPyNumber.StartOf(spec)), GridPyNumber.StepOf(spec));
             if (double.IsNaN(quotient))
                 throw new ValueError("cannot convert float NaN to integer");
             if (double.IsInfinity(quotient))
                 throw new OverflowException("cannot convert float infinity to integer");
-            return new BigInteger(Math.Ceiling(quotient));
+            return Math.Ceiling(quotient);
         }
+
+        /// <summary>
+        ///     Python's <c>int()</c> of a float: the value truncated toward zero, an exact integer (as a double: no float has
+        ///     more than 53 significant bits).
+        /// </summary>
+        /// <param name="value">The float.</param>
+        /// <returns>The integer, as an integer-valued double.</returns>
+        /// <exception cref="ValueError">A NaN (<c>cannot convert float NaN to integer</c>).</exception>
+        /// <exception cref="OverflowException">An infinity (<c>cannot convert float infinity to integer</c>).</exception>
+        private static double GridIntOfFloat(double value)
+        {
+            if (double.IsNaN(value))
+                throw new ValueError("cannot convert float NaN to integer");
+            if (double.IsInfinity(value))
+                throw new OverflowException("cannot convert float infinity to integer");
+            return Math.Truncate(value);
+        }
+
+        /// <summary>
+        ///     Whether a size (an integer-valued double, <see cref="GridAxisSize"/>) is an npy_intp: within
+        ///     <c>[-2**63, 2**63)</c>, where <c>(long)size</c> is exact. Past it NumPy's dimension conversion and arange's
+        ///     length both overflow.
+        /// </summary>
+        /// <param name="size">The size.</param>
+        /// <returns>True when it fits int64.</returns>
+        private static bool GridSizeFitsInt64(double size) => size >= -9223372036854775808.0 && size < 9223372036854775808.0;
 
         /// <summary>
         ///     The ONE dtype a multi-slice mesh shares — NumPy's <c>typ = result_type(*num_list)</c>, asked of the dtype
@@ -1183,8 +1224,8 @@ namespace NumSharp
             {
                 // step = int(abs(step)); if step != 1: step = (kk.stop - start) / float(step - 1). The size statement
                 // already converted abs(step), so int() cannot raise here.
-                BigInteger points = PythonInt.From(Math.Abs(spec.Step));
-                if (points.IsOne)
+                double points = Math.Truncate(Math.Abs(spec.Step));
+                if (points == 1d)
                     step = 1.0;
                 else
                 {
@@ -1192,7 +1233,7 @@ namespace NumSharp
                         throw GridMissingStop(caller, k);
                     step = GridPyNumber.TrueDivide(
                         GridPyNumber.Subtract(GridPyNumber.StopOf(spec), GridPyNumber.StartOf(spec)),
-                        GridPyNumber.Float(GridPyNumber.IntToFloat(points - 1)));
+                        GridPyNumber.Float(points - 1d));
                 }
             }
             else
@@ -1402,7 +1443,7 @@ namespace NumSharp
 
             // Every size first, in key order: a zero step, a missing (real-step) stop or a NaN size is raised where
             // NumPy's size loop meets it. The empty key has no slice: NumPy's empty tuple.
-            var sizes = new BigInteger[n];
+            var sizes = new double[n];
             for (int k = 0; k < n; k++)
                 sizes[k] = GridAxisSize(specs[k], k, caller);
             DType typ = GridMeshDtype(specs);
@@ -1412,7 +1453,7 @@ namespace NumSharp
             var lines = new NDArray[n];
             for (int k = 0; k < n; k++)
             {
-                if (!np.AxisConcatenator.SliceSpec.FitsInt64(sizes[k]))
+                if (!GridSizeFitsInt64(sizes[k]))
                     throw new ValueError("Maximum allowed size exceeded");
                 lines[k] = new NDArray(typ, Math.Max((long)sizes[k], 0L), false);
             }

@@ -301,15 +301,93 @@ namespace NumSharp
                         f = "-1";
                 }
 
+                // Digits with an optional sign are a Python int, kept exactly (a double rounds the integers past 2**53); its
+                // double is float(int), correctly rounded. Within int64 the scan is the whole parse: a C# long -> double
+                // conversion rounds to nearest, ties to even, as float() does - and "-0" is the int 0, so +0.0.
+                switch (ScanIntLiteral(f, out long small))
+                {
+                    case IntLiteral.Int64:
+                        asInt = small;
+                        return small;
+                    case IntLiteral.Big:
+                        asInt = BigInteger.Parse(f, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture);
+                        // Correctly rounded too; ±inf past the double range (where CPython's float(int) raises: the
+                        // computations that can meet such a field convert the int value instead).
+                        return double.Parse(f, NumberStyles.Float, CultureInfo.InvariantCulture);
+                }
+
                 if (!double.TryParse(f, NumberStyles.Float, CultureInfo.InvariantCulture, out double value))
                     throw new ArgumentException($"Invalid slice notation: '{token.Trim()}'", nameof(token));
-
-                // Digits (and a sign) are a Python int, kept exactly: a double rounds the integers past 2**53. The text
-                // was trimmed above, so no surrounding white space is left to allow.
-                asInt = BigInteger.TryParse(f, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out BigInteger i)
-                    ? i
-                    : null;
+                asInt = null;
                 return value;
+            }
+
+            /// <summary>What <see cref="ScanIntLiteral"/> found in a field.</summary>
+            private enum IntLiteral
+            {
+                /// <summary>Not a Python int literal (a float, or no number at all).</summary>
+                None,
+
+                /// <summary>An int literal whose value fits int64.</summary>
+                Int64,
+
+                /// <summary>An int literal past int64.</summary>
+                Big,
+            }
+
+            /// <summary>
+            ///     Scans a trimmed field for a Python int literal as NumSharp spells one — an optional sign, then ASCII digits
+            ///     only — and reads its value when it fits int64, in the same pass. Every float field (<c>0.5</c>,
+            ///     <c>1e3</c>, <c>Infinity</c>) is told apart without a parse attempt.
+            /// </summary>
+            /// <param name="f">The trimmed field.</param>
+            /// <param name="value">The value when the result is <see cref="IntLiteral.Int64"/>, else 0.</param>
+            /// <returns>The kind of field.</returns>
+            private static IntLiteral ScanIntLiteral(string f, out long value)
+            {
+                value = 0;
+                int i = 0;
+                bool negative = false;
+                if (f.Length > 0 && (f[0] == '+' || f[0] == '-'))
+                {
+                    negative = f[0] == '-';
+                    i = 1;
+                }
+
+                if (i == f.Length)
+                    return IntLiteral.None;
+
+                // The magnitude accumulates in a ulong until it would overflow; the digits after that only need checking.
+                ulong magnitude = 0;
+                bool big = false;
+                for (; i < f.Length; i++)
+                {
+                    uint digit = (uint)(f[i] - '0');
+                    if (digit > 9)
+                        return IntLiteral.None;
+                    if (big)
+                        continue;
+                    if (magnitude > (ulong.MaxValue - digit) / 10)
+                        big = true;
+                    else
+                        magnitude = magnitude * 10 + digit;
+                }
+
+                if (big)
+                    return IntLiteral.Big;
+                if (negative)
+                {
+                    // -2**63 is an int64 too: its magnitude's unchecked negation is long.MinValue.
+                    if (magnitude > 9223372036854775808UL)
+                        return IntLiteral.Big;
+                    value = unchecked(-(long)magnitude);
+                    return IntLiteral.Int64;
+                }
+
+                if (magnitude > long.MaxValue)
+                    return IntLiteral.Big;
+                value = (long)magnitude;
+                return IntLiteral.Int64;
             }
 
             #endregion

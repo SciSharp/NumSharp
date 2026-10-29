@@ -68,6 +68,21 @@ namespace NumSharp.Tests.Creation
         }
 
         /// <summary>
+        ///     <c>-0</c> is the Python int 0, so where it meets a float field it converts to +0.0 (arange stores the int
+        ///     start as 0.0); <c>-0.0</c> is a float and keeps its sign. The int field was read as the double -0.0.
+        /// </summary>
+        [TestMethod]
+        public void NegativeZeroIntField_IsTheInt0()
+        {
+            // np.r_[-0:3.0] -> [0., 1., 2.] (signbit False); np.r_[-0.0:3.0] -> [-0., 1., 2.]; np.mgrid[-0:3.0] -> [0., 1., 2.]
+            double first = np.r_["-0:3.0"].GetDouble(0);
+            BitConverter.DoubleToInt64Bits(first).Should().Be(0L);
+            BitConverter.DoubleToInt64Bits(np.r_["-0.0:3.0"].GetDouble(0)).Should().Be(BitConverter.DoubleToInt64Bits(-0.0));
+            NDArray m = np.mgrid["-0:3.0"];
+            BitConverter.DoubleToInt64Bits(m.GetDouble(0)).Should().Be(0L);
+        }
+
+        /// <summary>
         ///     <c>Infinity</c> and <c>NaN</c> are Python floats, not ints: np.r_[0:1:inf] is float64. They were read as
         ///     int literals (no point, no exponent), which made that slice int64.
         /// </summary>
