@@ -163,7 +163,7 @@ namespace NumSharp.Backends.Strings
             NDArray counts = ufunc == "add"
                 ? x.TensorEngine.ReduceCumAdd(x, axis, np.int64)
                 : x.TensorEngine.ReduceCumMul(x, axis, np.int64);
-            return np.not_equal(counts, NDArray.Scalar(0L));
+            return counts.TensorEngine.NotEqual(counts, NDArray.Scalar(0L));
         }
 
         // ---------------------------------------------------------------------------------------------

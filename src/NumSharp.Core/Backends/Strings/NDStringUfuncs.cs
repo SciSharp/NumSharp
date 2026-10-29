@@ -251,11 +251,13 @@ namespace NumSharp.Backends.Strings
                     fresh = new NDArray(DType.Boolean, NDStringComparison.ResultShape(dims, x1, x2, where), false);
                 }
                 NDArray target = @out ?? fresh;
+                // The bool loop is the engine's ufunc member (the facade's dispatch, without its class rules: the operands
+                // here are truth arrays or the caller's non-text operand, the target out= or a fresh bool array).
                 NDArray result = ufunc switch
                 {
-                    "logical_and" => np.logical_and(a, b, target, where),
-                    "logical_or" => np.logical_or(a, b, target, where),
-                    _ => np.logical_xor(a, b, target, where),
+                    "logical_and" => a.TensorEngine.LogicalAnd(a, b, null, target, where),
+                    "logical_or" => a.TensorEngine.LogicalOr(a, b, null, target, where),
+                    _ => a.TensorEngine.LogicalXor(a, b, null, target, where),
                 };
                 fresh = null;   // handed out
                 return result;

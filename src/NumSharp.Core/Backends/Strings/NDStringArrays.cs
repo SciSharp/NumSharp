@@ -569,7 +569,8 @@ namespace NumSharp.Backends.Strings
         internal static bool AllAscii(NDArray a)
         {
             using var units = UnitArray(a);
-            using var max = np.amax(units);
+            // np.amax's whole call over the unit view is the engine's maximum.reduce (TensorEngine.ReduceAMax).
+            using var max = units.TensorEngine.ReduceAMax(units, null);
             return Convert.ToInt32(max.GetAtIndex(0)) < 0x80;
         }
 
@@ -584,7 +585,8 @@ namespace NumSharp.Backends.Strings
         private static NDArray NonAsciiInLayout(NDArray a, long[] dims, Shape layout)
         {
             using var units = UnitArray(a);
-            using var max = np.amax(units, -1);
+            // Each element's largest unit: maximum.reduce over the unit axis (np.amax(units, -1)'s engine member).
+            using var max = units.TensorEngine.ReduceAMax(units, -1);
             using var bad = max >= (byte)0x80;
             using var spread = np.broadcast_to(bad, Shape.Adopt((long[])dims.Clone()));
             var laid = new NDArray(NPTypeCode.Boolean, Shape.Adopt((long[])layout.dimensions.Clone(), (long[])layout.strides.Clone()), false);

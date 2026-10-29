@@ -148,13 +148,13 @@ namespace NumSharp.Backends.Strings
 
             // Per-element verdict over the distinct elements: the largest unit of each element above 0x7F.
             using var units = new NDArray(distinct.StringUnitView());
-            using var elementMax = np.amax(units, -1);
+            using var elementMax = units.TensorEngine.ReduceAMax(units, -1);
             using var bad = unicode ? elementMax > 0x7Fu : elementMax > (byte)0x7F;
 
             var dstShape = dst.Shape;
             int nd = dstShape.NDim;
             using var spread = np.broadcast_to(bad, new Shape((long[])dstShape.dimensions.Clone()));
-            using var hit = where is null ? spread.view() : np.logical_and(spread, where);
+            using var hit = where is null ? spread.view() : spread.TensorEngine.LogicalAnd(spread, where);
 
             // NumPy's visiting order: axes by |dst stride| descending (stable: ties keep ascending axis), negative strides
             // walked backward. Viewing the verdicts in that order makes the flat C-order argmax the first visited hit.
@@ -173,7 +173,13 @@ namespace NumSharp.Backends.Strings
                     }
                 }
 
-                long first = nd == 0 ? 0 : np.argmax(ordered);
+                // np.argmax's flat form: the engine's 0-d index of the first true verdict, read as a long and released.
+                long first = 0;
+                if (nd != 0)
+                {
+                    using var index = ordered.TensorEngine.ArgMax(ordered);
+                    first = (long)index;
+                }
                 // Unravel over the ordered view, then undo the flips and the permutation: the destination coordinate.
                 var dims = ordered.Shape.dimensions;
                 var dstCoord = new long[nd];
@@ -264,7 +270,7 @@ namespace NumSharp.Backends.Strings
             }
 
             using var units = new NDArray(src.StringUnitView());
-            using var max = np.amax(units);
+            using var max = units.TensorEngine.ReduceAMax(units, null);
             return unicode ? max.GetAtIndex<uint>(0) > 0x7F : max.GetAtIndex<byte>(0) > 0x7F;
         }
 

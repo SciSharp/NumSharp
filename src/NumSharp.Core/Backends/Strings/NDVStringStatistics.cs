@@ -105,7 +105,7 @@ namespace NumSharp.Backends.Strings
             DType resultDtype = np.result_type(a.dtype, weights.dtype);
             // `scl = wgt.sum(axis=axis, dtype=result_dtype)`: a dtype= descriptor instance has no loop.
             int? axis = axes is { Length: 1 } ? axes[0] : null;
-            using var scl = np.sum(weights, axis, keepdims, resultDtype);
+            using var scl = weights.TensorEngine.Sum(weights, axis, resultDtype, keepdims);
             throw new InvalidOperationException("The weighted average of StringDType text reached a sum NumPy refuses.");
         }
 
@@ -136,7 +136,7 @@ namespace NumSharp.Backends.Strings
                 throw DivideRefusal(arrmean);
             // A 0-d input: the mean is the Python object `arrmean / rcount`, and `x = asanyarray(arr - arrmean)` follows.
             using var mean = PyDivide(arrmean.Storage.GetAtIndex(0), rcount);
-            using var x = np.subtract(a, mean);
+            using var x = a.TensorEngine.Subtract(a, mean);
             throw new InvalidOperationException("np.var of StringDType text reached a subtraction NumPy refuses.");
         }
 
@@ -231,7 +231,8 @@ namespace NumSharp.Backends.Strings
                 });
             using var x = maxIsArray ? null : PyOperand(maxObj);
             using var y = minIsArray ? null : PyOperand(minObj);
-            var diff = np.subtract(x ?? max, y ?? min, @out: @out);
+            NDArray minuend = x ?? max, subtrahend = y ?? min;
+            var diff = minuend.TensorEngine.Subtract(minuend, subtrahend, null, @out);
             return @out is null ? diff.MarkReductionScalar() : diff;
         }
 
@@ -332,7 +333,7 @@ namespace NumSharp.Backends.Strings
                     using var text = NDArray.PythonStrLiteral(s);
                     using var count = NDArray.Scalar(rcount);
                     // np.int64.__rtruediv__ hands the str to np.true_divide, whose legacy resolver refuses (U, int64).
-                    using var quotient = np.true_divide(text, count);
+                    using var quotient = text.TensorEngine.Divide(text, count);
                     throw new InvalidOperationException("np.true_divide of text and an integer returned.");
                 }
                 case null:

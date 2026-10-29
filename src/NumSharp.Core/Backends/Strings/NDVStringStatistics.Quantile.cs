@@ -105,7 +105,7 @@ namespace NumSharp.Backends.Strings
             }
             using var count = NDArray.Scalar(rcount);
             // `um.true_divide(ret, rcount, out=ret, casting='unsafe')`: no loop divides text.
-            using var quotient = np.true_divide(ret, count, ret);
+            using var quotient = ret.TensorEngine.Divide(ret, count, null, ret);
             throw new InvalidOperationException("np.true_divide of a text sum returned.");
         }
 
@@ -275,7 +275,7 @@ namespace NumSharp.Backends.Strings
                 // _nanmedian_small: `np.ma.median(np.ma.masked_array(a, np.isnan(a)), axis=axis)`. np.isnan computes (true
                 // for the NaN-like NAs), the mask is an array (never nomask), and the masked sort's argsort asks
                 // minimum_fill_value for the fill StringDType does not have.
-                using var mask = np.isnan(work);
+                using var mask = work.TensorEngine.IsNan(work);
                 throw new TypeError($"Unsuitable type {work.dtype} for calculating minimum.");
             }
             else
@@ -301,8 +301,8 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="Exception">The median's errors.</exception>
         private static NDArray NanMedian1D(NDArray line)
         {
-            using var nan = np.isnan(line);
-            long nans = np.count_nonzero(nan);
+            using var nan = line.TensorEngine.IsNan(line);
+            long nans = nan.TensorEngine.CountNonZero(nan);
             if (nans == line.size)
                 return ScalarElement(line, line.size - 1);
             // _remove_nan_1d's order (see RemoveNaN1D), as np.median then partitions it.
@@ -447,8 +447,8 @@ namespace NumSharp.Backends.Strings
         private static NDArray NanQuantile1D(string op, NDArray line, double[] q, long[] qShape, bool qIsInteger, string method,
             NPTypeCode qType)
         {
-            using var nan = np.isnan(line);
-            long nans = np.count_nonzero(nan);
+            using var nan = line.TensorEngine.IsNan(line);
+            long nans = nan.TensorEngine.CountNonZero(nan);
             if (nans == line.size)
             {
                 // Only a NaN-like NA is a NaN, so the line's descriptor has one: np.full stores its Python float nan as the NA.
@@ -485,12 +485,12 @@ namespace NumSharp.Backends.Strings
             var arr = line.copy();
             // enonan = arr1d[-s.size:][~c[-s.size:]]; arr1d[s[:enonan.size]] = enonan; return arr1d[:-s.size]
             using var tailMask = nan[$"{n - nans}:"];
-            using var tailKeep = np.logical_not(tailMask);
+            using var tailKeep = tailMask.TensorEngine.LogicalNot(tailMask);
             using var tail = arr[$"{n - nans}:"];
             using var enonan = tail[tailKeep];
             if (enonan.size > 0)
             {
-                using var positions = np.flatnonzero(nan);
+                using var positions = nan.TensorEngine.FlatNonZero(nan);
                 using var head = positions[$":{enonan.size}"];
                 arr[head] = enonan;
             }
@@ -532,7 +532,7 @@ namespace NumSharp.Backends.Strings
             long n = arr.Shape.dimensions[0];
             // `arr.partition(np.unique(np.concatenate(([0, -1], previous_indexes.ravel(), next_indexes.ravel()))), axis=0)`:
             // a sort of every line (StringDType has no selection loop); a line of one element compares nothing.
-            using var sorted = n > 1 ? np.sort(arr, 0) : null;
+            using var sorted = n > 1 ? arr.TensorEngine.Sort(arr, 0) : null;
             NDArray line = sorted ?? arr;
             // `previous = arr[previous_indexes]`, `next = arr[next_indexes]` are StringDType ARRAYS unless the result is a
             // scalar (a scalar q over a 1-D line): `b - a` is then np.subtract, which has no StringDType loop.
@@ -717,7 +717,7 @@ namespace NumSharp.Backends.Strings
             else
             {
                 // `if not (q.min() >= 0 and q.max() <= 1): return False` — StringDType's minimum / maximum reductions.
-                using (var min = np.amin(q))
+                using (var min = q.TensorEngine.ReduceAMin(q, null))
                 {
                     object m = min.Storage.GetAtIndex(0);
                     if (!TryPyNumber(m, out double v, out _, out bool isComplex) || isComplex)
@@ -725,7 +725,7 @@ namespace NumSharp.Backends.Strings
                     if (!(v >= 0))
                         return new ValueError("Quantiles must be in the range [0, 1]");
                 }
-                using (var max = np.amax(q))
+                using (var max = q.TensorEngine.ReduceAMax(q, null))
                 {
                     object m = max.Storage.GetAtIndex(0);
                     if (!TryPyNumber(m, out double v, out _, out bool isComplex) || isComplex)
@@ -795,7 +795,7 @@ namespace NumSharp.Backends.Strings
 
         /// <summary>
         ///     The method's <c>get_virtual_index(n, quantiles)</c> over a <c>StringDType</c> q, statement for statement with
-        ///     NumSharp's ufuncs (so their StringDType refusals and NA rules answer): <c>np.floor((n - 1) * q)</c> (linear's
+        ///     the engine's ufunc members (the loops of NumPy's ufuncs, so their StringDType refusals and NA rules answer): <c>np.floor((n - 1) * q)</c> (linear's
         ///     <c>_get_indexes</c>, lower, midpoint), <c>np.ceil</c> (higher), <c>np.around</c> (nearest: <c>rint</c>),
         ///     <c>(n * q) - 1</c> (the inverted-CDF family), <c>n * q + (alpha + q * (1 - alpha - beta)) - 1</c> (the
         ///     continuous methods).
@@ -815,10 +815,10 @@ namespace NumSharp.Backends.Strings
                 case QuantileMethod.Nearest:
                 {
                     using var nm1 = NDArray.PythonLiteral(n - 1);
-                    using var product = np.multiply(nm1, q);
-                    using var rounded = method == QuantileMethod.Higher ? np.ceil(product)
-                        : method == QuantileMethod.Nearest ? np.rint(product)
-                        : np.floor(product);
+                    using var product = nm1.TensorEngine.Multiply(nm1, q);
+                    using var rounded = method == QuantileMethod.Higher ? product.TensorEngine.Ceil(product)
+                        : method == QuantileMethod.Nearest ? product.TensorEngine.Rint(product)
+                        : product.TensorEngine.Floor(product);
                     return;
                 }
                 case QuantileMethod.InvertedCdf:
@@ -826,9 +826,9 @@ namespace NumSharp.Backends.Strings
                 case QuantileMethod.ClosestObservation:
                 {
                     using var count = NDArray.PythonLiteral(n);
-                    using var product = np.multiply(count, q);
+                    using var product = count.TensorEngine.Multiply(count, q);
                     using var one = NDArray.PythonLiteral(1L);
-                    using var shifted = np.subtract(product, one);
+                    using var shifted = product.TensorEngine.Subtract(product, one);
                     return;
                 }
                 default:
@@ -844,11 +844,11 @@ namespace NumSharp.Backends.Strings
                         _ => (3 / 8.0, 1 - 3 / 8.0 - 3 / 8.0),
                     };
                     using var count = NDArray.PythonLiteral(n);
-                    using var product = np.multiply(count, q);
+                    using var product = count.TensorEngine.Multiply(count, q);
                     using var w = weight is long lw ? NDArray.PythonLiteral(lw) : NDArray.PythonLiteral((double)weight);
-                    using var scaled = np.multiply(q, w);
+                    using var scaled = q.TensorEngine.Multiply(q, w);
                     using var al = alpha is long la ? NDArray.PythonLiteral(la) : NDArray.PythonLiteral((double)alpha);
-                    using var shifted = np.add(al, scaled);
+                    using var shifted = al.TensorEngine.Add(al, scaled);
                     return;
                 }
             }
