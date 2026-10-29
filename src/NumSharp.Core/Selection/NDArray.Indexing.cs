@@ -104,11 +104,13 @@ namespace NumSharp
                     SetMasked(mask, value);
                     return;
                 }
-                // A full integer index through a 0-d integer array (a[np.array(1)] on a 1-D array) is NumPy's element
-                // store, not advanced indexing: the value is packed into the one element (array_assign_item).
-                if (TryScalarArrayItemIndex(key, out Slice[] itemSlices))
+                // A 0-d integer array with no index array beside it (a[np.array(1)], a[np.array(1), 1:3]) is NumPy's
+                // HAS_SCALAR_ARRAY, not advanced indexing: its integer, and the index stays a view — for a full integer
+                // index the value packed into the one element (array_assign_item), else a view assignment
+                // (PyArray_CopyObject: the value checked against the view with its text).
+                if (TryScalarArrayBasicIndex(key, out Slice[] viewSlices))
                 {
-                    AssignThroughView(Storage.GetView(itemSlices), value, itemIndex: true);
+                    AssignThroughView(Storage.GetView(viewSlices), value, IsItemIndex(viewSlices));
                     return;
                 }
                 SetAdvanced(key, value);
@@ -273,21 +275,30 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Whether an index tuple is a full integer index holding a 0-d integer ARRAY: one entry per axis, each an integer
-        ///     scalar or a 0-d integer array, at least one of them an array (an all-scalar key is <see cref="TryBasicIndex"/>'s).
-        ///     NumPy's <c>prepare_index</c> cleans <c>HAS_SCALAR_ARRAY</c> off such an index (<c>index_type ==
-        ///     HAS_INTEGER</c>), so its assignment is <c>array_assign_item</c>: the value packed into one element.
+        ///     Whether an index tuple is NumPy's <c>HAS_SCALAR_ARRAY</c> index with no index array: entries that are each a
+        ///     basic index (an integer, a <see cref="Slice"/> — the ellipsis and a new axis included — or one slice of
+        ///     notation) or a 0-d integer ARRAY, at least one of them an array. NumPy's <c>prepare_index</c> reads such an
+        ///     array as the integer it holds (<c>PyArray_PyIntAsIntp</c>), and with no index array beside it the index stays a
+        ///     view: a full integer index is cleaned to <c>HAS_INTEGER</c> (<c>array_assign_item</c>, the value packed into
+        ///     one element), any other is <c>get_view_from_index</c> — copied by the getter
+        ///     (<c>PyArray_NewCopy(view, NPY_KEEPORDER)</c>, "to simulate fancy indexing") and assigned through by the setter
+        ///     (<c>PyArray_CopyObject</c>).
         /// </summary>
         /// <param name="key">The index tuple.</param>
-        /// <param name="slices">The index as integer slices, when the result is true.</param>
-        /// <returns>True for such an index of this array.</returns>
-        /// <remarks>With fewer entries than axes the 0-d array keeps NumPy's <c>HAS_SCALAR_ARRAY</c> (an ellipsis is
-        ///     appended), which is advanced indexing: those keys are not this method's.</remarks>
-        private bool TryScalarArrayItemIndex(object[] key, out Slice[] slices)
+        /// <param name="slices">The index as slices, each 0-d array as its integer slice, when the result is true.</param>
+        /// <returns>True for such an index.</returns>
+        /// <remarks>
+        ///     An all-scalar key is <see cref="TryBasicIndex"/>'s; a key with an index array, a mask, a bool or a nested
+        ///     tuple is advanced indexing, where the 0-d array joins the advanced block — not this method's. Until
+        ///     2026-10-29 only a full integer index took this route (2a21b0be); every other key with a 0-d integer array
+        ///     was a fancy index, whose store checked the value with MapIter's text ("shape mismatch: value array of shape
+        ///     (5,) could not be broadcast to indexing result of shape (4,)" where NumPy's view assignment says "could not
+        ///     broadcast input array from shape (5,) into shape (4,)") and whose result was C-ordered whatever the source's
+        ///     order.
+        /// </remarks>
+        private static bool TryScalarArrayBasicIndex(object[] key, out Slice[] slices)
         {
             slices = null;
-            if (key.Length != ndim || ndim == 0)
-                return false;
             bool sawArray = false;
             var parsed = new Slice[key.Length];
             for (int i = 0; i < key.Length; i++)
@@ -298,6 +309,13 @@ namespace NumSharp
                         // The 0-d array's value, read as the integer NumPy's PyArray_PyIntAsIntp makes of it.
                         parsed[i] = Slice.Index(Convert.ToInt64(nd.GetValue(0), CultureInfo.InvariantCulture));
                         sawArray = true;
+                        break;
+                    case Slice slice:
+                        parsed[i] = slice;
+                        break;
+                    case string one:
+                        // One entry of several: ONE slice, as TryBasicIndex reads it (a lone string holds no array).
+                        parsed[i] = new Slice(one);
                         break;
                     default:
                         if (!TryAsIntegerScalar(key[i], out long integer))
@@ -345,6 +363,14 @@ namespace NumSharp
             // 0-d array, the same answer — a copy of the array with one new leading axis of length 1 or 0.
             if (indicesObjects.Length == 1 && indicesObjects[0] is bool selected)
                 return ZeroDBoolSelection(selected);
+            // A 0-d integer array with no index array beside it: NumPy's HAS_SCALAR_ARRAY — the view of its integer, COPIED
+            // (get_view_from_index, then PyArray_NewCopy(view, NPY_KEEPORDER)): a copy in the source's memory order, never
+            // the view itself. The view is this call's own.
+            if (TryScalarArrayBasicIndex(indicesObjects, out Slice[] viewSlices))
+            {
+                using var view = new NDArray(Storage.GetView(viewSlices));
+                return KeepLaneSharingClass(view.copy('K'));
+            }
             // A string array's ADVANCED index (arrays, masks, bools) runs on its unit view; basic indices (slices,
             // integers) are views and take the ordinary path.
             if (typecode == NPTypeCode.String && TryStringAdvancedIndex(ref indicesObjects, out var normalized))
