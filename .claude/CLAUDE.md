@@ -1723,8 +1723,8 @@ create an OBJECT array from memory buffer`), ISUNSIZED, the buffer (a C# null; a
 `BufferError`), the offset, then the count (the buffer-size rule only for a negative count; a count past the buffer
 is refused, never capped). The result is np.ndarray's view: it does not own its data, it is writeable exactly when
 the buffer is (a read-only memoryview's result for good), and a segment or memory ends at its own end. A non-native
-descriptor is decoded into a native copy by the class's `copyswapn` (NumPy keeps the order in the descriptor), whose
-contiguous runs copy in one block and swap with `byteswap`'s SIMD kernels (`Utilities/NDByteOrder.cs`). The generic
+descriptor is decoded into a native copy by the class's `copyswapn` (NumPy keeps the order in the descriptor), which
+copies and swaps a contiguous run in one SIMD pass (`Utilities/NDByteOrder.cs`; see "The DType element slots"). The generic
 overload's default dtype is its element type (a NumSharp extension: NumPy's is float64). Gate: the snapshot of
 np.frombuffer (`tools/facade-move/snapshot.cs`, 137,388 lines) and
 `Creation/np.frombuffer.{PyArrayFromBuffer,DtypeNames}.Test.cs`.
@@ -3997,7 +3997,16 @@ or per Python value; bulk moves keep their typed kernels.
   - `StringDType` goes through its buffer's allocator. NumSharp keeps that allocator on the buffer (`VStringArraySlice`),
     not on the descriptor as NumPy does, hence `buffer`; the cell must be one of the buffer's.
 - `copyswapn(descr, dst, dstride, src, sstride, n, swap)` is the legacy ArrFuncs byte-order copy. It swaps each unit:
-  the item, a complex number's halves, a `U` element's code units. `StringDType` refuses it.
+  the item, a complex number's halves, a `U` element's code units.
+  - `ndarray.byteswap` runs through it, as NumPy's `PyArray_Byteswap` does (`UnmanagedStorage.Byteswap`: one call over a
+    one-segment array, one per inner run of an EXTERNAL_LOOP iterator otherwise), and so do the non-native decodes of
+    `np.frombuffer` and binary `np.fromfile`.
+  - Kernels (`Utilities/NDByteOrder.cs`): a contiguous run copied and swapped in ONE SIMD pass when source and
+    destination do not overlap (`CopyReverseRun`; an overlapping source keeps NumPy's memmove, then the swap), a
+    contiguous run in place with SIMD (`ReverseRun`), strided items one `BinaryPrimitives.ReverseEndianness` per unit
+    (`ReverseStrided`).
+  - `StringDType` refuses a source; in place its swap is the identity (the owner's decision D14: a cell has no byte
+    order, and NumPy 2.4.2 crashes the process in `ndarray.byteswap` of one).
 - `fill(descr, buffer, length)` is `PyArray_Arange`'s fill, NumPy's `@NAME@_fill` operation for operation:
   - C's promotion for the integers;
   - `HALF_fill` in float32;
@@ -4009,11 +4018,18 @@ or per Python value; bulk moves keep their typed kernels.
   - float16 by its bits, a NaN nonzero, a signed zero not;
   - decimal by its value;
   - an NA cell of `StringDType` only for a NaN-like NA object.
+- `HasScanFunc` / `HasFromStr` are NumPy's `scanfunc != NULL` / `fromstr != NULL`, the tests behind the text modes of
+  `np.fromfile` / `np.fromstring` (`Unable to read character files of that array type` / `don't know how to read
+  character strings with that array type`): true for the numeric classes, NumSharp's decimal and char included. The
+  scanners stay one typed kernel per scan family (`NumPyTextScan`), as NumPy's are one C routine per type.
+- `NPY_LIST_PICKLE` (0x02) is the descriptor flag that refuses `ndarray.tofile`'s binary mode (`PyArray_ToFile`'s
+  `PyDataType_FLAGCHK`); `StringDType` carries it.
 
 The classes without storage (the datetime pair, the abstract Python scalar classes) refuse every slot but `fill`.
-Gate `DTypes/DTypeSlotTests.cs` (16): every class against the path its slot comes from (the flat iterator's store,
-`ndarray.byteswap`, `np.nonzero`, the slices' `SetIndex` / `GetIndex`) and NumPy's bytes. P3's later batches route the
-array object's dtype-name tests to these slots.
+Gate `DTypes/DTypeSlotTests.cs` (17): every class against the path its slot comes from (the flat iterator's store,
+`np.nonzero`, the slices' `SetIndex` / `GetIndex`) and NumPy's bytes; `copyswapn` against an independent byte reversal
+over its three swap paths and an overlapping source in both directions (`ndarray.byteswap` runs through it, so it cannot
+be the reference). P3's later batches route the array object's dtype-name tests to these slots.
 
 ### Selection
 `choose`, `compress`, `extract`, `index_exp`, `indices`, `ix_`, `place`, `put`, `put_along_axis`, `putmask`, `ravel_multi_index`, `s_`, `select`, `take`, `take_along_axis`, `unravel_index`, `where`
@@ -7261,10 +7277,13 @@ pass); code in `IO/TextReading/` and `APIs/np.{loadtxt,loadtxt.Sinks,loadtxt.Par
   `TextIOCodec.Incremental`'s tail logic defers them itself. A one-shot `bytes.decode` raises at once.
 
 **`np.fromstring` / `np.fromfile` / `ndarray.tofile` are NumPy's C readers and writers, statement for statement**
-(`IO/TextReading/NumPyTextScan{,.File,.Reader}.cs`, `APIs/np.{fromstring,fromfile,tofile}.cs`; the strings phase-1
-validation pass, 2026-10-15). Signatures `fromstring(string | byte[] string, dtype=float, count=-1, sep, like)`,
-`fromfile(string file | Stream, dtype=float, count=-1, sep="", offset=0, like)`, `tofile(string | Stream, sep="",
-format="%s")`.
+(`IO/TextReading/NumPyTextScan{,.File,.Reader}.cs`; the strings phase-1 validation pass, 2026-10-15). Signatures
+`fromstring(string | byte[] string, dtype=float, count=-1, sep, like)`, `fromfile(string file | Stream, dtype=float,
+count=-1, sep="", offset=0, like)`, `tofile(string | Stream, sep="", format="%s")`. The facades
+(`APIs/np.{fromstring,fromfile,tofile}.cs`) are NumPy's `array_fromstring` / `array_fromfile` / `array_tofile`: the
+argument conversion and the file handling. The bodies, `PyArray_FromString` / `PyArray_FromFile` / `PyArray_ToFile`, are
+`IO/ArrayFileIO.cs` (2026-10-29, np-layer dtype plan P3 batch 6), and their dtype questions are the class slots (REFCHK
+`HasReferences`, `HasScanFunc` / `HasFromStr`, the `NPY_LIST_PICKLE` flag, `copyswapn`).
 - **`array_from_text`** (both text readers): elements and separators alternate (`fromstr_next_element` /
   `fromfile_next_element`, `fromstr_skip_separator` / `fromfile_skip_separator`, over NumPy's `swab_separator`: a
   whitespace run in `sep` is ONE wildcard space, a space is prepended when `sep` does not start with whitespace, a second
@@ -7289,7 +7308,8 @@ format="%s")`.
   `j`; a separator byte at or past 0x80 never matches (`fgetc`'s int against a signed `char`).
 - **Platform pin**: LP64 (Linux / macOS NumPy: a C `long` is 64 bits, glibc's `fscanf`). Windows NumPy (32-bit `long`,
   MSVC's `fscanf`) differs in 247 of 20,000 random cases, all integer parsing — the pin of the random module
-  (`NumPyRandom.LegacyLong`).
+  (`NumPyRandom.LegacyLong`). MSVC's `fscanf` also consumes the character that ends a failed integer scan, so Windows
+  NumPy leaves a stream one byte further on than NumSharp and Linux NumPy (the same values).
 - **Argument order** (`array_fromstring` / `array_fromfile` / `PyArray_FromString` / `PyArray_FromFile`): `string`'s
   `s#` (UTF-8; CPython's UnicodeEncodeError for a lone surrogate), `sep`'s `s` (UnicodeEncodeError, then `embedded null
   character`; a null `sep` is `fromfile() argument 4 must be str, not None`), fromstring's removed binary mode (an empty
@@ -7297,11 +7317,14 @@ format="%s")`.
   array from a string` / `Cannot read into object array` for StringDType), item size 0 (`zero-valued itemsize`), no
   `fromstr` / `scan` (`don't know how to read character strings with that array type` / `Unable to read character files
   of that array type`). `fromfile`'s `offset` with a separator is `TypeError` before the file is opened; a missing file
-  is `FileNotFoundException("[Errno 2] No such file or directory: 'x'")`.
+  is `FileNotFoundException("[Errno 2] No such file or directory: 'x'")`. `tofile`'s `sep` and `format` are `s`
+  arguments too: a null one is Python's None, `TypeError("tofile() argument 2 must be str, not None")` (3 for the
+  format, `sep` first) before the file is opened or the stream used.
 - **Binary**: `fread` straight into the result's buffer (count -1: every whole item, `(size - pos) / itemsize` in C's
   truncating division, so a position past the end is `negative dimensions are not allowed` and a partial trailing item
   stays unread; a count past the end consumes the partial item); spans of 1 GB, so files past 2 GB read; a non-native
-  byte order is swapped to native; a non-seekable stream is read to its end (NumPy cannot read one). `tofile` writes a
+  byte order is swapped to native in place by the class's `copyswapn`; a non-seekable stream is read to its end (NumPy
+  cannot read one). `tofile` writes a
   C-contiguous array, views at an offset included, straight from its buffer, any other layout through one C-order copy.
 - **Text `tofile`** writes each element's ASCII text and the separator's UTF-8 bytes through a pooled 32 KB byte buffer
   (it allocated a 64 K-character `StreamWriter` and builder per call: 240 µs of a 1K call).
@@ -7575,6 +7598,7 @@ code gives NumPy's text.
 | DirectILKernelGenerator | `Backends/Kernels/Direct/DirectILKernelGenerator.*.cs` (whole-array, 63 partials) |
 | Kernel shared infra | `Backends/Kernels/{VectorMethodCache,ScalarMethodCache,KernelOp,StrideDetector,SimdMatMul.*}.cs` |
 | .npy/.npz format (NEP-01) | `IO/NpyFormat.cs` (port of NumPy's `_format_impl.py`), `IO/NpzFile.cs` (lazy archive), `IO/PyLiteral.cs` (header parser ≙ `ast.literal_eval`), `APIs/np.{save,load}.cs` |
+| Raw array files and bytes | `IO/ArrayFileIO.cs` (NumPy's `PyArray_FromFile` / `PyArray_FromString` / `PyArray_ToFile`, the bodies of np.fromfile / np.fromstring / ndarray.tofile; their facades are `APIs/np.{fromfile,fromstring,tofile}.cs`), `IO/TextReading/NumPyTextScan*.cs` (the C scanners), `Backends/Unmanaged/UnmanagedStorage.Buffer.cs` (np.frombuffer's `PyArray_FromBuffer`), `UnmanagedStorage.Convert.cs` (`ToBytes`, ndarray.tobytes' `PyArray_ToString`), `UnmanagedStorage.Byteswap.cs` (ndarray.byteswap's `PyArray_Byteswap`), `Utilities/NDByteOrder.cs` (the byte-order kernels behind `DTypeMeta.copyswapn`) |
 | float32 NumPy-exact math (exp/log/sin/cos) | `Utilities/NDFloatMath.cs`, `Utilities/NDFloatMath.Simd.cs` |
 | Type info | `Utilities/InfoOf.cs` |
 | Generic NDArray | `Generics/NDArray\`1.cs` |

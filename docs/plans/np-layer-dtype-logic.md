@@ -48,7 +48,12 @@ fixed per D4 (`f048ad69`, `4d1a0d02`, `253b8f45`). Batch 6's first part, np.from
 `ebff0b12`): its body is NumPy's `PyArray_FromBuffer` in `UnmanagedStorage.Buffer.cs` (one member for the buffers
 np.ndarray takes, one for an address, one for a span), its REFCHK asks `HasReferences` and a non-native descriptor is
 decoded by the class's `copyswapn`; the replay's divergences were fixed first (`32bfa4a7`, `271f24d0`), so the move
-took one body instead of seven copies. Batch 9, the computing functions in P3's files, is done
+took one body instead of seven copies. Its second part is done too (`f41dab51`, `2b775799`, `1c5a20be`, `0edc1edc`):
+the bodies of np.fromfile, np.fromstring and ndarray.tofile are `IO/ArrayFileIO.cs` (NumPy's `PyArray_FromFile`,
+`PyArray_FromString`, `PyArray_ToFile`), tobytes' and byteswap's are `UnmanagedStorage` members, their dtype questions
+are class slots (`HasScanFunc`, `HasFromStr`, the `NPY_LIST_PICKLE` flag, and `copyswapn`, which ndarray.byteswap now
+swaps through), and the three divergences the replay found were fixed first (`79fe2630`, `c4c072d1`, `ac8ed7a4`);
+np.loadtxt's converters are left. Batch 9, the computing functions in P3's files, is done
 (2026-10-29): np.linspace / np.logspace / np.geomspace are `TensorEngine` members in `TensorEngine.CoreFunctionBase.cs`,
 np.vander in `TensorEngine.TwoDimBase.cs`, np.trim_zeros in `TensorEngine.FunctionBase.cs`, and the six divergences a
 replay of their snapshot through NumPy found are fixed per D4. Batch 7, NumPy's Python functions of the array object,
@@ -829,8 +834,15 @@ first, as it did for np.fft.
    view) collapses them into one body: moving the seven copies first would have moved code the next commit deletes.
    The body moved to `UnmanagedStorage.Buffer.cs`, with the address and span routes as members of their own;
    `copyswapn` decodes a non-native descriptor, and got `byteswap`'s SIMD swap for contiguous runs
-   (`Utilities/NDByteOrder.cs`). R1: 16 text and 93 numeric lines left (np.frombuffer.cs, np.frombuffer.Strings.cs). The
-   rest (np.fromfile, np.fromstring, ndarray.tofile, tobytes, getfield and byteswap, np.loadtxt's converters) is next.
+   (`Utilities/NDByteOrder.cs`). R1: 16 text and 93 numeric lines left (np.frombuffer.cs, np.frombuffer.Strings.cs).
+   Second part done (`592ee2c4`, `79fe2630`, `c4c072d1`, `ac8ed7a4`, `f41dab51`, `2b775799`, `1c5a20be`, `0edc1edc`,
+   `0d10b507`),
+   the D4 fixes again before the moves: np.fromfile, np.fromstring and ndarray.tofile into `IO/ArrayFileIO.cs`, tobytes
+   and byteswap into `UnmanagedStorage.Convert.cs` / the new `UnmanagedStorage.Byteswap.cs`, getfield converted where it
+   is. The text readers' refusals ask `HasScanFunc` / `HasFromStr`, tofile's binary refusal the `NPY_LIST_PICKLE` flag,
+   and ndarray.byteswap swaps through `copyswapn`, which gained a fused copy-and-swap pass and a strided kernel. R1: 16
+   text and 7 numeric lines left. Left: np.loadtxt's converters with np.savetxt's two lines (R1: 26 text and 16 numeric
+   lines in np.loadtxt.Sinks.cs, np.loadtxt.Parsers.cs, np.loadtxt.cs and np.savetxt.cs).
 7. **NumPy's Python functions of the array object** (22 files, 152 lines) into their `NDArray` homes: np.where,
    np.select, np.piecewise, np.extract and np.delete's rest; np.pad (`ArrayPad`); np.r_, np.ix_ and np.fill_diagonal
    (`IndexTricks`); np.indices (`Numeric`); np.diag (`TwoDimBase`); np.take_along_axis and np.put_along_axis
@@ -1090,6 +1102,94 @@ candidate.
 ---
 
 ## 9. State log
+
+- **2026-10-29, P3: batch 6, second part (np.fromfile, np.fromstring, ndarray.tofile, tobytes, getfield, byteswap).**
+  Ten commits on `strings`: the tool commit landed first (`592ee2c4`), the others were developed in the scratch worktree
+  on it, rebased onto `6f1da8dd` (batch 7's fourth part) and landed by fast-forward. R1: 16 text and 7 numeric lines
+  leave (np.fromfile.cs 6 / 0, np.fromstring.cs 2 / 0, np.tofile.cs 5 / 6, NDArray.byteswap.cs 1 / 1,
+  NDArray.getfield.cs 1 / 0, NDArray.tobytes.cs 1 / 0; the six files have no row now); R2: unchanged (the new homes are
+  `IO/`, `DTypes/` and `Backends/Unmanaged/`, and no np.* call moved into `Backends/`).
+  - `592ee2c4`: the snapshot tool reaches np.fromstring, np.fromfile and ndarray.tofile, whose first parameter is no
+    NDArray (each overload was one SKIP line). np.fromstring's TEXT and np.fromfile's FILE are the operand - the pool's
+    value sequence as text (a str or UTF-8 bytes; joined by a comma or a space, with unmatched data after it, with a
+    NUL), the operand's C-order bytes or that text in a stream (also one that cannot seek) or a temporary file, a
+    missing file, null - and tofile writes into a sink whose bytes join the outcome (" WROTE hash/length"), as a read
+    stream's final position does (" POS n"). The separator, the count, the dtype, np.fromfile's offset and tofile's
+    format get roles. np.fromstring 11,588 lines, np.fromfile 41,682, NDArray.tofile 6,372: batch 6's snapshot is
+    199,758 lines, the other names' lines byte for byte as before.
+  - The replay of the new lines and of tobytes / getfield / byteswap through NumPy 2.4.2 (`replay6b.py`): 62,360 lines,
+    14,319 of them C#-only or NumSharp-only (a stream that cannot seek 11,229, a C# null 1,364, char 854, decimal 854,
+    and 18 byteswap lines of a StringDType array, where NumPy 2.4.2 crashes the process). 46,565 were identical or in a
+    documented class and 1,476 differed, three faults fixed per D4 before the moves:
+    - `79fe2630`: ndarray.tofile's `sep` and `format` are CPython's `s` arguments - a null one is None, refused with
+      `TypeError("tofile() argument 2 must be str, not None")` (3 for the format, `sep` first) before the file is opened
+      or the stream used; NumSharp wrote binary for a null `sep` and `str()` for a null `format`. 992 lines.
+    - `c4c072d1`: ndarray.getfield and setfield read their dtype with `PyArray_DescrConverter`, so a null dtype is None,
+      float64 (a float64 view, or `new type is larger than original type`); NumSharp raised ArgumentNullException. 468
+      lines.
+    - `ac8ed7a4`: ndarray.tobytes converts its order before it looks at the array (array_tobytes'
+      `PyArray_OrderConverter`): an empty array with order 'Z' raises NumPy's ValueError where it returned no bytes. 16
+      lines.
+    After them 34 lines differed, all getfield of a `U5` array as a wider field at a byte stride NumSharp cannot lay out
+    (it stores strides in whole elements: its documented NotSupportedException), now a class of the replay. The final
+    replay: 48,041 lines identical to NumPy or in a documented class (a non-native dtype decoded into a native copy
+    2,172; a non-native dtype read from TEXT 420, where NumPy's scanners store native bytes under the swapped
+    descriptor; the integer text scan's final position 240, where Windows NumPy's MSVC `fscanf` consumes the character
+    that ends a failed scan and Linux NumPy, whose glibc `fscanf` NumSharp ports, does not - probed under WSL; the
+    unsized `S` with a count 216, NumPy's zero-width array; the getfield byte stride 34), np.fromstring's uninitialized
+    counted tail compared through poisoned allocations as NumSharp's 0, and 0 differing.
+  - `f41dab51`, the pure move: the bodies of np.fromfile, np.fromstring and ndarray.tofile - NumPy's `PyArray_FromFile`,
+    `PyArray_FromString` (`ctors.c`) and `PyArray_ToFile` (`convert.c`) - move into the new `IO/ArrayFileIO.cs`
+    (Appendix D: IO's bodies live in `IO/`), with CPython's `s` converter they share (`CStringArgument`, `Utf8Strict`).
+    The facades keep `array_fromfile` / `array_fromstring` / `array_tofile`: the argument conversion, the removed binary
+    mode of fromstring, the offset-with-a-separator TypeError, the file handling and its FileNotFoundException text.
+  - `2b775799`, the conversion: NumPy's text-reader slots join `DTypeMeta` as the questions NumPy asks of them
+    (`HasScanFunc`: `scanfunc != NULL`, `PyArray_FromFile`'s test; `HasFromStr`: `fromstr != NULL`,
+    `PyArray_FromString`'s; true for the numeric classes, decimal and char included), REFCHK asks `HasReferences`, a
+    non-native binary read is decoded in place by the class's `copyswapn` (it called byteswap and dropped the result:
+    one NDW012 fewer), tofile's binary refusal is NumPy's `NPY_LIST_PICKLE` flag test (StringDType carries the new
+    constant), tobytes routes by `HasReferences`, and getfield's descriptor route serves a parametric class (it tested for
+    a fixed-width string). Not converted, on purpose: tofile's text mode renders each element with typed code keyed on
+    the storage lane, the Python object NumPy's getitem returns (the plan's "typed dispatch moves with its body").
+  - `1c5a20be`, the second pure move: the bodies of ndarray.tobytes and ndarray.byteswap - `PyArray_ToString`
+    (`convert.c`) and `PyArray_Byteswap` (`methods.c`) - become `UnmanagedStorage.ToBytes` (in
+    `UnmanagedStorage.Convert.cs`, beside `ToManagedArray`) and `UnmanagedStorage.Byteswap` (the new
+    `UnmanagedStorage.Byteswap.cs`), the array object's own members.
+  - `0edc1edc`, the second conversion: ndarray.byteswap swaps through the class's `copyswapn`, as `PyArray_Byteswap`
+    calls `descr->f->copyswapn` - one call over a one-segment array, one per inner run of a single-operand EXTERNAL_LOOP
+    iterator otherwise - so the unit switch (the item, a complex number's halves, a `U` element's code units) and the
+    StringDType test leave the body. `copyswapn` gained a fused copy-and-swap pass for contiguous runs that do not
+    overlap (`NDByteOrder.CopyReverseRun`, the kernel byteswap's copy called directly; an overlapping source keeps the
+    memmove, then the swap), a strided kernel (`NDByteOrder.ReverseStrided`: the unit width switched on once, one
+    `BinaryPrimitives.ReverseEndianness` per unit, where the slot reversed bytes one at a time - routed through the old
+    slot, byteswap's strided in-place swap was ~10% slower), and StringDType's in-place identity (D14, which byteswap
+    decided itself before). Measured, 1M items, pinned to two P-cores: the in-place swap of a stride-2 view float64
+    3.24 -> 0.87 ms, int32 2.13 -> 0.76, float16 1.53 -> 0.76, complex128 5.9 -> 2.2; np.frombuffer's non-native decode
+    `>f8` 0.90 -> 0.41, `>c16` 1.95 -> 0.74; the other forms unchanged.
+  - `0d10b507`: timed against NumPy 2.4.2 before landing, that strided swap was still slower for the 2-, 4- and 8-byte
+    dtypes (NPY/NS 0.46-0.90): `ReverseStrided` ran an inner loop over the units of every element. An element of one
+    unit and a complex number's two halves now take a loop of one step per element, as NumPy's `_strided_byte_swap` is
+    one loop per item size: float64 0.685 ms (NPY/NS 1.15), int32 0.382 (0.97), float16 0.347 (1.00) - the memory floor
+    both share -, complex128 2.170 (1.92). Snapshot byte-identical.
+  - `b63f1193`: `NumPyTextScan`'s remark said Windows NumPy matched glibc on every probed input; it now names the
+    difference the replay found (the MSVC `fscanf` position above).
+  - Gates: the snapshot was byte-identical through both moves and both conversions (the second one also under
+    `NUMSHARP_DEBUG_GUARD_PAGES=1`); Core's warnings 15,732 -> 15,728 (the dropped byteswap result's NDW012). The tests
+    of the D4 fixes are NumPy-probed and fail on their parents (`Casting/NDArray.tofile.Test.cs`
+    `NullSepOrFormat_IsNone_RefusedBeforeAnythingIsWritten`, `Casting/NDArray.getfield.Test.cs`
+    `GetField_NullType_IsNoneFloat64`, `Casting/NDArray.tobytes.Order.Test.cs` `InvalidOrder_EmptyArray_StillThrows`, and
+    the object array's null checks in `ListArrayComputeTests`). `DTypes/DTypeSlotTests.cs` (17) asks the new slots of
+    all 27 classes, pins the `NPY_LIST_PICKLE` flag, and holds `copyswapn` to an independent byte reversal over its
+    three swap paths and an overlapping source in both directions (it compared with ndarray.byteswap, which now runs
+    through it); planting `Disjoint => true` fails it. The four suites on the rebased stack up to `b63f1193`:
+    NumSharp.Tests 20,829 / 20,828 passed on net10.0 / net8.0 (11 skipped) and the oracle suite 414 / 414 (2 skipped),
+    Release, `TestCategory!=OpenBugs&TestCategory!=HighMemory`; after `0d10b507` the byteswap, slot, buffer, file and
+    npy tests (263) passed again.
+  - Next: batch 6's third part, np.loadtxt's converters into `IO/TextReading/` with np.savetxt's two lines (R1: 26 text
+    and 16 numeric lines in np.loadtxt.Sinks.cs, np.loadtxt.Parsers.cs, np.loadtxt.cs and np.savetxt.cs); then batch 8
+    (the indexers), 9b and 10; batch 7's rest is the parallel session's. The 0.71.0 notes' snapshot-tool line (Testing &
+    Tooling) stops at `2c25668e` (np.interp): the eighteen tool commits since (np.fft, np.evaluate,
+    NDArray.Contains, the `where=` masks, P5's and P3's families) are added to it in one pass when P3 is done.
 
 - **2026-10-29, P3: batch 7, fourth part (np.r_ / np.c_, np.ix_, np.fill_diagonal).** Eight commits on `strings` from the
   parallel session (developed in the scratch worktree on `88426e34`, rebased onto `592ee2c4`, batch 6b's tool commit, and
