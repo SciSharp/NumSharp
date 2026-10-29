@@ -25,12 +25,6 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(x))
                 return NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => conjugate(s.x, s.@out, s.where, s.dtype), @out);
-            // NumPy's `conjugate` ufunc has NO bool loop: a plain bool input resolves to the smallest
-            // matching loop — int8 — so the result is int8 (values 0/1), NOT bool (probed against
-            // NumPy 2.4.2). Promote here to match. An explicit dtype= selects the loop instead, exactly
-            // as NumPy does (e.g. conjugate(bool, dtype: Double) -> float64).
-            if (dtype is null && x.typecode == NPTypeCode.Boolean)
-                x = x.astype(NPTypeCode.SByte);
             return x.TensorEngine.Conjugate(x, dtype, @out, where);
         }
 

@@ -122,9 +122,17 @@ namespace NumSharp
 
         /// <summary>
         ///     NumPy 'conjugate' / 'conj' — the complex conjugate, element-wise. Identity at every
-        ///     real dtype (values unchanged, dtype preserved); for Complex it flips the sign of the
-        ///     imaginary part. dtype selects the loop; out=/where= follow the ufunc contract.
+        ///     real dtype with a loop (values unchanged, dtype preserved); bool has none and resolves to
+        ///     the int8 loop when no dtype is given (an int8 result of 0 / 1); for Complex it flips the
+        ///     sign of the imaginary part. dtype selects the loop; out=/where= follow the ufunc contract.
         /// </summary>
+        /// <param name="nd">The input.</param>
+        /// <param name="dtype">The loop dtype, or null for the input's (int8 for bool).</param>
+        /// <param name="out">An array to write the result into and return, or null.</param>
+        /// <param name="where">A bool mask of the elements to compute, or null for all.</param>
+        /// <returns>The conjugate, or <paramref name="out"/>.</returns>
+        /// <exception cref="TypeError">A text input, or a <paramref name="dtype"/> / <paramref name="out"/> the loop
+        ///     cannot reach (NumPy's ufunc texts).</exception>
         public abstract NDArray Conjugate(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
 
         public abstract NDArray Matmul(NDArray lhs, NDArray rhs);

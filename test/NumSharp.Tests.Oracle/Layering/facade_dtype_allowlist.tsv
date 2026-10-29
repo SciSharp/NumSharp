@@ -91,7 +91,6 @@ Manipulation/np.repeat.cs	2	9
 Manipulation/np.resize.cs	1	0
 Manipulation/np.trim_zeros.cs	2	0
 Math/NDArray.ComplexAccessors.cs	1	2
-Math/np.conjugate.cs	0	1
 Math/np.imag.cs	0	1
 Math/np.real.cs	0	1
 Matrixlib/NDMatrix.Construction.cs	0	8
