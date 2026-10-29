@@ -306,8 +306,8 @@ namespace NumSharp.Tests.Logic
             var result = np.where(cond, 42, 0);
 
             Assert.AreEqual(1, result.size);
-            Assert.AreEqual(typeof(int), result.dtype);  // same-type scalars preserve type
-            Assert.AreEqual(42, (int)result[0]);
+            Assert.AreEqual(typeof(long), result.dtype);  // two weak Python ints: NumPy's default int64
+            Assert.AreEqual(42L, (long)result[0]);
         }
 
         [TestMethod]

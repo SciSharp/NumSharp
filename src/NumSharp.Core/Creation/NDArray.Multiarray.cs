@@ -1246,7 +1246,8 @@ namespace NumSharp
         ///     NumPy's <c>PyArray_Where</c> (<c>multiarraymodule.c</c>), the body of <c>np.where(condition, x, y)</c>: the
         ///     elements of <paramref name="x"/> where <paramref name="condition"/> is true and of <paramref name="y"/> elsewhere,
         ///     the three broadcast together, in <c>result_type(x, y)</c> (NEP 50: a weak Python scalar adopts the other
-        ///     operand's dtype). Fixed-width text selects on unit views (<c>NDStringArrays.Where</c>), whose result dtype is the
+        ///     operand's dtype, a 0-d array is strong, two weak literals give the default dtype - <c>np.where(c, 7, 7)</c> is
+        ///     int64). Fixed-width text selects on unit views (<c>NDStringArrays.Where</c>), whose result dtype is the
         ///     wider descriptor; the numbers take the IL kernels (a scalar operand hoisted once, contiguous operands in one
         ///     SIMD pass) or a four-operand NDIter pass.
         /// </summary>
@@ -1257,8 +1258,11 @@ namespace NumSharp
         /// <param name="y">The values where <paramref name="condition"/> is false.</param>
         /// <returns>A new array of the broadcast shape in NumPy's iterator layout (F order when every full-size operand is
         ///     F-contiguous, C otherwise).</returns>
-        /// <exception cref="IncorrectShapeException">The three operands do not broadcast together.</exception>
-        /// <exception cref="TypeError">x and y have no common dtype (a number with text, NumPy's promotion error).</exception>
+        /// <exception cref="IncorrectShapeException">The three operands do not broadcast together: NumPy's iterator text,
+        ///     "operands could not be broadcast together with shapes (3,4) (7,) (3,4) " (see BroadcastWhereOperands).
+        ///     Raised after the dtype check, as in NumPy.</exception>
+        /// <exception cref="TypeError">x and y have no common dtype (StringDType beside a number, a Python number beside
+        ///     fixed-width text: NumPy's DTypePromotionError), raised before any shape error.</exception>
         /// <remarks>The array object's member (the np-layer dtype plan's D1: np.where(cond, x, y) selects by the caller's
         ///     mask, plan section 1); np.where's single-argument form is np.nonzero, the engine's. The engine's own np.where
         ///     calls (the NaN replacement of the nan reductions and scans, StringDType's cell selection) call this member.
@@ -1270,14 +1274,22 @@ namespace NumSharp
             // Boundary scope: reclaims the broadcast_arrays wrappers, the bool/dtype astype
             // conversions and the scalar-promotion temps at exit; only `result` is yielded.
 
+            // NumPy's PyArray_Where, in its order: the common dtype of x and y first - PyArray_ResultType under NEP 50,
+            // where a C# number literal is a WEAK Python scalar (Nep50Operand) and every array, a 0-d one included, is
+            // strong - so a DTypePromotionError (StringDType beside a number) comes before any shape error; then the
+            // iterator's broadcast of (condition, x, y), refused with NpyIter's text. One dtype on both sides needs no
+            // lookup unless both are weak literals, whose common dtype is the default one (np.where(c, 7, 7) is int64).
+            bool text = x.typecode == NPTypeCode.String || y.typecode == NPTypeCode.String;
+            DType descr = text || x.GetTypeCode != y.GetTypeCode || (x.WasPythonLiteral && y.WasPythonLiteral)
+                ? DTypePromotion.ResultType(x.Nep50Operand, y.Nep50Operand)
+                : null;
+            long[] dims = BroadcastWhereOperands(condition, x, y);
+
             // Fixed-width strings: the result dtype is a DESCRIPTOR (result_type(x, y): the wider width) and the
             // selection runs on unit views (NDStringArrays.Where). The broadcast is validated first, as NumPy's iterator
             // does, and NumPy's result layout comes from the broadcast operands.
-            if (x.typecode == NPTypeCode.String || y.typecode == NPTypeCode.String)
-            {
-                var operands = np.broadcast_arrays(condition, x, y);
-                return Backends.Strings.NDStringArrays.Where(condition, x, y, (long[])operands[0].Shape.dimensions.Clone());
-            }
+            if (text)
+                return Backends.Strings.NDStringArrays.Where(condition, x, y, dims);
 
             // Detect "originally scalar" on the user-supplied operands BEFORE broadcasting
             // expands them into stride-0 views. The scalar fast path below dispatches
@@ -1315,11 +1327,9 @@ namespace NumSharp
             if (cond.GetTypeCode != NPTypeCode.Boolean)
                 cond = cond.astype(NPTypeCode.Boolean, copy: false);
 
-            // When x and y already agree, skip the NEP50 promotion lookup. Otherwise defer to
-            // _FindCommonType which handles the scalar+array NEP50 rules.
-            var outType = x.GetTypeCode == y.GetTypeCode
-                ? x.GetTypeCode
-                : np._FindCommonType(x, y);
+            // The result_type resolved above (NEP 50's; a 0-d array is strong, np.where(c, np.array(2), int8) is int64),
+            // or x's dtype when x and y agree and at most one of them is a weak literal (it adopts the other's dtype).
+            var outType = descr is null ? x.GetTypeCode : descr.GetTypeCode();
 
             if (xArr.GetTypeCode != outType)
                 xArr = xArr.astype(outType, copy: false);
@@ -1396,6 +1406,31 @@ namespace NumSharp
             WhereImpl(cond, xArr, yArr, result);
 
             return result;
+        }
+
+        /// <summary>
+        ///     The broadcast shape of <see cref="Where"/>'s three operands, refused with the text of NumPy's iterator
+        ///     (<c>PyArray_Where</c> broadcasts condition, x and y in one <c>NpyIter_MultiNew</c>, whose error names every
+        ///     operand's shape, a trailing space included), where np.broadcast_arrays' own text would name none.
+        /// </summary>
+        /// <param name="condition">The condition, as given.</param>
+        /// <param name="x">The true values, as converted (a C# literal's 0-d array).</param>
+        /// <param name="y">The false values, as converted.</param>
+        /// <returns>A new array of the broadcast dimensions.</returns>
+        /// <exception cref="IncorrectShapeException">The shapes do not broadcast: "operands could not be broadcast together
+        ///     with shapes (3,4) (7,) (3,4) " (NumPy's ValueError text, under the house type of every broadcast check).</exception>
+        private static long[] BroadcastWhereOperands(NDArray condition, NDArray x, NDArray y)
+        {
+            try
+            {
+                return Shape.ResolveReturnShape(condition.Shape, x.Shape, y.Shape).dimensions;
+            }
+            catch (IncorrectShapeException e)
+            {
+                throw new IncorrectShapeException(
+                    $"operands could not be broadcast together with shapes {condition.Shape.ToPythonTuple()} " +
+                    $"{x.Shape.ToPythonTuple()} {y.Shape.ToPythonTuple()} ", e);
+            }
         }
 
         /// <summary>
