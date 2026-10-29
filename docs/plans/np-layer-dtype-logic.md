@@ -86,7 +86,9 @@ families and, handed over by the coordinator, the lines first assigned to PE (np
 np.packbits / np.unpackbits, np.bincount, and the text lines of np.kron and np.median) are engine members or engine
 partials, and the two divergences found on the way are fixed per D4 (np.argmax / np.argmin check a text operand's
 `out=` before they compare, `127c3c98`; np.nan_to_num refuses text and complex fills as NumPy's copyto does,
-`d313e41b`). Progress goes into the
+`d313e41b`). P6's structural part is under way (2026-10-29): the engine's np.copyto, allocation,
+np.broadcast_to / np.broadcast_shapes, buffer-size and one-call view / copy calls are the array object's
+members (R2's structural calls 263 -> 82). Progress goes into the
 [§9 state log](#9-state-log), newest entry first.
 
 **The engine layout (the owner's decision of 2026-10-28, D1 in [§5](#5-decisions-for-the-owner)).** Every NumPy function
@@ -1094,7 +1096,8 @@ The 255 text lines are P3's K4 files, np.evaluate's two (P2's) and np.fft.RawFft
         `engine_upcall_allowlist.tsv` with their reasons: np.where (5) and np.apply_along_axis (2) are the array
         object's (§1, decided 2026-10-28) and leave when P3's batch 7 gives them their `NDArray` homes;
         `Backends/Strings/NDStringMethods.cs` (9) holds numpy.strings' own statements, the text API's pass (§8).
-  - [ ] The structural calls (264, unchanged), once P3's homes exist.
+  - [ ] The structural calls: 263 at `c4cc72d9`, 82 after families 1 to 5 (2026-10-29, see the state log: the
+        copies, the allocations, the broadcasts, the buffer size, the one-call views and copies).
   - [ ] The moves under `Backends/Default/`, beside their classes and into `Shape` partials.
 
 ### P7. The class boundary
@@ -1133,6 +1136,63 @@ candidate.
 
 ## 9. State log
 
+- **2026-10-29, P6: the structural calls, families 1 to 5.** Five commits on `strings` from the parallel session
+  (developed in the scratch worktree on `c4cc72d9`, landed by fast-forward). Each family is one commit: the engine's
+  calls of one kind become the array object's member that holds the facade's statements after its argument handling,
+  the snapshot of the functions that reach the sites is identical to the parent's, and R2 is regenerated. R2's
+  structural calls 263 -> 82 (264 when the item was written), 81 -> 49 files; its 9 computations are unchanged
+  (the pinned `NDStringMethods.cs` statements).
+  - `effad8e6` np.copyto, 63 calls: `UnmanagedStorage.Copyto(dst, src, casting, where)`
+    (`Manipulation/UnmanagedStorage.Assign.cs`) holds np.copyto's statements after its casting parse (the matrix
+    region, the null check, the mask's conversion, `PyArray_AssignArray` or a None source), and np.copyto's array
+    overload calls it; the engine passes the casting level it spelled (`NPY_UNSAFE_CASTING`, or `NPY_SAME_KIND_CASTING`
+    where it relied on the default). NanVarStd's weak-zero store is `CopytoPythonScalar`. 802,542 lines.
+  - `ac6cbacb` the allocations, 51 calls: np.zeros / np.empty are the allocation constructor
+    `new NDArray(dtype, shape, fillZeros)` (their facades' own statement), np.ones / np.full / np.eye `NDArray.Ones` /
+    `NDArray.Full` / `NDArray.Eye`, np.ones_like its plain operand's statements, np.arange(stop)
+    `UnmanagedStorage.ArangeObj`. 332,730 lines.
+  - `f727ebc1` np.broadcast_to / np.broadcast_shapes, 30 calls: `Shape.BroadcastTo` (np.broadcast_to's one-way check,
+    `ValidateBroadcastTo`, moved from np, and its layout; `View/Shape.Broadcasting.cs`) for a shape source,
+    `NDArray.BroadcastTo` (the read-only view, in the new `Creation/NDArray.StrideTricks.cs`) for an array source,
+    `Shape.BroadcastShape` (np.broadcast_shapes' body) for the text routes' joint shapes; np.broadcast_to's nine
+    overloads call the two members. 609,444 lines.
+  - `4cb1a1cd` the buffer size, 16 calls: `NDIterBufferManager.CurrentBufferSize`, np.getbufsize's whole body and what
+    NDIter's buffering already read; its doc no longer says the buffer size never changes a computed result. 260,049
+    lines.
+  - `7db8e5fc` the views and copies whose facade is one array-object call, 21 calls: np.transpose / np.moveaxis the
+    shipped `TensorEngine.Transpose` / `MoveAxis`, np.reshape `x.reshape(shape)`, np.copy `x.copy('K')` (np.copy's
+    default order, where the method's is C), np.take `UnmanagedStorage.TakeFrom` with mode raise, np.atleast_1d of a 0-d
+    array its `(1,)` view. 582,474 lines.
+  - Not converted yet: np.ascontiguousarray (14), np.expand_dims (13), np.flip (1) and np.ravel (3), whose statements
+    need an array-object member first; the coercion calls (np.array, np.asanyarray), the promotion helpers
+    (`_FindCommonType` and its relatives, np.result_type, np.promote_types, np.can_cast), the text API's statements
+    (`np.strings.OutputDescriptor`, `np.dtypes.StringDType`), the write-once policy (`np.PrefersWriteOnce`) and the
+    `flatiter` attribute's object (`np.FlatIterator`). Left for after batch 8: `Default.BooleanMask.cs`
+    (np.broadcast_to, 2), `UnmanagedStorage.Setters.cs` (np.broadcast_to, 1) and `NDArray.Container.cs`
+    (np.asanyarray, 1).
+  - The class boundaries do not fire at a converted call: the engine runs inside its public function's boundary, as
+    both boundaries' caller audits prove over the corpus.
+  - Snapshot noise: two runs of the parent differ on some keys, and those keys are left out of the comparison
+    (`snapcmp.py`: a key that varies between parent runs, or whose outcome a rerun of the change matches). Every class
+    is pre-existing:
+    - a masked bool -> StringDType store, whose staged cast reads the masked-off bytes of an uninitialized bool result
+      (it raises "invalid value encountered in bool to string cast" or not, by memory content);
+    - a text repetition of 2**32 - 1, which fails to allocate or not, by memory pressure;
+    - np.divmod's `where=` results, whose masked-off elements of a fresh result are uninitialized, as in NumPy;
+    - `np.array<T>(IEnumerable<T>, size)` of a shorter enumerable, whose tail is uninitialized memory (a defect: NumPy's
+      np.fromiter raises "iterator too short");
+    - np.true_divide of a decimal operand with a zero divisor into a float64 `out=` (a defect, reproduced by a
+      4,000-call probe): `NDIterRef.Dispose` writes a buffered iteration's buffers back even when its inner loop threw,
+      where NumPy's `NpyIter_Deallocate` clears them on error (`npyiter_clear_buffers`) and discards WRITEBACKIFCOPY.
+      The out receives the half-filled decimal buffer (3,982 of 4,000 calls), and when a garbage decimal's scale byte
+      passes 28 the write-back's `Decimal.VarR8FromDec` raises IndexOutOfRangeException in place of the
+      DivideByZeroException (15 of 4,000).
+  - Core's warnings: one NDW012 fewer (`Default.Reduction.VarStd.cs`, RowBlockDeviationSum's accumulator), a false
+    negative of the analyzer: the accumulator is still left to the finalizer, but its reshaped view now reaches
+    `TensorEngine.Transpose`, which NDW012 counts as egress where it knew np.transpose as a NumSharp op.
+  - Gates: NumSharp.Tests (20,855 on net10.0, 20,854 on net8.0) and the oracle gates IndexOracleTests,
+    UndisposedIntermediateTests and Layering (42 on net10.0) pass at `7db8e5fc`
+    (`TestCategory!=OpenBugs&TestCategory!=HighMemory`).
 - **2026-10-29, P3: batch 7, seventh part, second half (np.ravel_multi_index) - batch 7 is done.** Five commits on
   `strings` from the parallel session (developed in the scratch worktree on `c98a8245` and landed by fast-forward). The
   D4 fix comes before the move, so the move is pure over NumPy's statements. R1: 2 numeric lines leave with the move
