@@ -1,5 +1,3 @@
-using NumSharp.Backends;
-
 namespace NumSharp
 {
     public static partial class np
@@ -24,24 +22,9 @@ namespace NumSharp
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(val))
-                return NDMatrixBoundary.Wrapped(val, static s => imag(s));
-            // Complex: a strided float64 view onto the imaginary lane (writes through, shares memory).
-            if (val.typecode == NPTypeCode.Complex)
-                return new NDArray(val.Storage.AliasComplexLane(imaginary: true));
-
-            // Real / int / bool: NumPy returns a READ-ONLY all-zeros array of the SAME shape and dtype
-            // (probed: `np.imag(real).flags.writeable` is False, dtype preserved — and it OWNS its zeros:
-            // owndata=True, base=None, so clear WRITEABLE on the owned array itself rather than aliasing
-            // a view, which would misreport owndata=False. setflags(write=True) on it then succeeds,
-            // exactly as NumPy's _IsWriteable allows for an owner).
-            // The descriptor, not the storage lane: a string array's imaginary part is its own dtype filled with
-            // empty strings (all-zero bytes), which only the descriptor can allocate (probed: np.imag(U3) is <U3 '').
-            // The layout is array_imag_get's PyArray_ISFORTRAN(self): F order for an F-contiguous array that is not also
-            // C-contiguous (a transposed C block's imaginary part is F-contiguous), C otherwise.
-            bool fortran = val.Shape.IsFContiguous && !val.Shape.IsContiguous;
-            var zeros = np.zeros(Shape.Adopt(val.Shape.dimensions, fortran ? 'F' : 'C'), val.dtype);
-            zeros.Storage.SetShapeUnsafe(zeros.Shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE));
-            return zeros;
+                return NDMatrixBoundary.Wrapped(val, static s => NDArray.ImagPart(s));
+            // NumPy's `val.imag`: the statements are the array object's (NDArray.TypeCheck.cs)
+            return NDArray.ImagPart(val);
         }
     }
 }

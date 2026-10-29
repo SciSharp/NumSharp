@@ -1,5 +1,3 @@
-using NumSharp.Backends;
-
 namespace NumSharp
 {
     public static partial class np
@@ -22,20 +20,12 @@ namespace NumSharp
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray real(NDArray val)
         {
-            // Complex: a strided float64 view onto the real lane (writes through, shares memory) — the
-            // same strided complex->real lane read the FFT driver relies on, exposed as a view.
-            if (val.typecode == NPTypeCode.Complex)
-            {
-                // a complex numpy.matrix: NumPy's val.real is a matrix over the real lane (a real matrix is
-                // returned itself below, which is the matrix already)
-                if (NDMatrixBoundary.Sees(val))
-                    return NDMatrixBoundary.Wrapped(val, static s => real(s));
-                return new NDArray(val.Storage.AliasComplexLane(imaginary: false));
-            }
-
-            // Real / int / bool: NumPy's `val.real` IS `val` for a real array (same object, shared memory,
-            // dtype preserved). Return it unchanged.
-            return val;
+            // a numpy.matrix operand: NumPy's val.real is a matrix over the real lane for a complex matrix, and a real
+            // matrix itself (NDArray.RealPart hands the matrix object back, which Wrapped returns unchanged)
+            if (NDMatrixBoundary.Sees(val))
+                return NDMatrixBoundary.Wrapped(val, static s => NDArray.RealPart(s));
+            // NumPy's `val.real`: the statements are the array object's (NDArray.TypeCheck.cs)
+            return NDArray.RealPart(val);
         }
     }
 }

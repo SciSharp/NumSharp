@@ -60,9 +60,6 @@ Manipulation/np.asscalar.cs	0	1
 Manipulation/np.copyto.cs	1	0
 Manipulation/np.delete.cs	0	20
 Manipulation/np.pad.cs	9	33
-Math/NDArray.ComplexAccessors.cs	1	2
-Math/np.imag.cs	0	1
-Math/np.real.cs	0	1
 Matrixlib/NDMatrix.Construction.cs	0	8
 Matrixlib/NDMatrix.Indexing.cs	0	3
 Matrixlib/NDMatrix.Methods.cs	0	1

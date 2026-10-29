@@ -1615,5 +1615,45 @@ namespace NumSharp
             kernel((bool*)condPtr, scalarX, scalarY, (T*)resPtr, count);
             return true;
         }
+
+        // ----------------------------------------------------------------------------------------------------------------
+        // ndarray.conjugate: NumPy's PyArray_Conjugate (calculation.c). Appended by P3's batch 7; the member is
+        // Math/NDArray.ComplexAccessors.cs's conjugate / conj.
+        // ----------------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's <c>PyArray_Conjugate</c> (<c>calculation.c</c>), the statements of <c>ndarray.conjugate(out)</c> -
+        ///     NOT the <c>np.conjugate</c> ufunc: a complex array is conjugated by the ufunc; any other numeric array is
+        ///     already its own conjugate, so it comes back itself (or is copied into <paramref name="out"/>) with its dtype
+        ///     preserved, where the ufunc has no bool loop and promotes bool to int8.
+        /// </summary>
+        /// <param name="self">The array.</param>
+        /// <param name="out">The destination, or <c>null</c>.</param>
+        /// <returns>The ufunc's result for a complex array (<paramref name="out"/> itself when given); for any other dtype
+        ///     <paramref name="self"/> itself without <paramref name="out"/>, <paramref name="out"/> after the copy with
+        ///     it.</returns>
+        /// <exception cref="TypeError">A string array: "cannot conjugate non-numeric dtype" (NumPy's text).</exception>
+        /// <exception cref="System.InvalidCastException"><paramref name="out"/>'s dtype is not reachable under same_kind
+        ///     casting (np.copyto's check, or the ufunc's out cast).</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> is read-only or its shape does not take the result.</exception>
+        /// <remarks>The caller (the <c>conjugate</c> member) opens the numpy.matrix region; the returned
+        ///     <paramref name="self"/> is the caller's own array, never a copy to dispose.</remarks>
+        internal static NDArray Conjugate(NDArray self, NDArray @out)
+        {
+            if (self.typecode == NPTypeCode.Complex)
+                return np.conjugate(self, @out);
+
+            // PyArray_Conjugate accepts numbers only: text is "non-numeric" (NumPy's TypeError, verbatim).
+            if (self.typecode == NPTypeCode.String)
+                throw new TypeError("cannot conjugate non-numeric dtype");
+
+            // Non-complex: PyArray_Conjugate returns `self` (out==NULL) or copies self into `out` under
+            // NPY_DEFAULT_ASSIGN_CASTING (same_kind) — preserving the dtype (bool stays bool), NOT the
+            // ufunc's bool→int8 promotion.
+            if (@out is null)
+                return self;
+            np.copyto(@out, self);
+            return @out;
+        }
     }
 }

@@ -66,15 +66,13 @@ namespace NumSharp
                 using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
                 return np.imag(this);
             }
-            // The scope reclaims the imaginary-lane view the copy targets: a counted reference on this
-            // array's buffer (see the real setter), not a finalizer's job.
-            [NDScoped]
+            // NumPy's array_imag_set (ImagSet, NDArray.TypeCheck.cs): the dtype check and the copy into the
+            // imaginary lane; its scope reclaims the lane view the copy targets (a counted reference on this
+            // array's buffer, see the real setter), not a finalizer's job.
             set
             {
-                if (typecode != NPTypeCode.Complex)
-                    throw new TypeError("array does not have imaginary part to set");
                 using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
-                np.copyto(np.imag(this), value, casting: "unsafe");
+                ImagSet(this, value);
             }
         }
 
@@ -82,33 +80,25 @@ namespace NumSharp
         ///     Return the complex conjugate, element-wise (NumPy's <c>ndarray.conjugate</c> method — the port
         ///     of <c>PyArray_Conjugate</c>, which is NOT the <c>np.conjugate</c> ufunc). For a COMPLEX array
         ///     the imaginary sign is flipped. For a real / integer / <b>boolean</b> array the values are
-        ///     already their own conjugate, so — unlike the <see cref="np.conjugate(NDArray, NDArray, NDArray, NPTypeCode?)"/>
+        ///     already their own conjugate, so — unlike the <see cref="np.conjugate(NDArray, NDArray, NDArray, DType)"/>
         ///     FUNCTION, which has no bool loop and promotes bool→int8 — the method PRESERVES the dtype:
         ///     with no <paramref name="out"/> it returns THIS array itself (NumPy returns <c>self</c>), and
         ///     with an <paramref name="out"/> it copies the values there under NumPy's default (<c>same_kind</c>)
         ///     assignment casting.
         /// </summary>
         /// <param name="out">Optional destination. When given it receives the result and is returned.</param>
+        /// <returns>The conjugate: a new array, <paramref name="out"/> itself, or — for a non-complex array without
+        ///     <paramref name="out"/> — this array itself (not a copy: a caller must not dispose it as its own).</returns>
+        /// <exception cref="TypeError">A string array: "cannot conjugate non-numeric dtype" (NumPy's text).</exception>
+        /// <exception cref="System.InvalidCastException"><paramref name="out"/>'s dtype is not reachable under same_kind
+        ///     casting (np.copyto's, or the ufunc's out cast for a complex array).</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> is read-only or its shape does not take the result.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.conjugate.html</remarks>
         public NDArray conjugate(NDArray @out = null)
         {
-            if (typecode == NPTypeCode.Complex)
-            {
-                using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
-                return np.conjugate(this, @out);
-            }
-
-            // PyArray_Conjugate accepts numbers only: text is "non-numeric" (NumPy's TypeError, verbatim).
-            if (typecode == NPTypeCode.String)
-                throw new TypeError("cannot conjugate non-numeric dtype");
-
-            // Non-complex: PyArray_Conjugate returns `self` (out==NULL) or copies self into `out` under
-            // NPY_DEFAULT_ASSIGN_CASTING (same_kind) — preserving the dtype (bool stays bool), NOT the
-            // ufunc's bool→int8 promotion.
-            if (@out is null)
-                return this;
-            np.copyto(@out, this);
-            return @out;
+            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
+            // NumPy's PyArray_Conjugate: the statements are the array object's (NDArray.Multiarray.cs)
+            return Conjugate(this, @out);
         }
 
         /// <summary>
