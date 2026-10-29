@@ -45,11 +45,12 @@ namespace NumSharp
             if (size == 0)
                 return System.Array.Empty<byte>();
 
-            // A StringDType array's bytes are 16-byte cells (NumPy 2.4.2's PyArray_ToString): a buffer that already lays its
+            // A dtype whose items hold references (PyDataType_REFCHK, the route NumPy's PyArray_ToString takes for it): a
+            // StringDType array's bytes are 16-byte cells. A buffer that already lays its
             // elements out in the requested order gives its OWN cells — arena offsets and heap pointers of this buffer —,
             // any other layout is first RAVELLED (the "has references / needs init" path: PyArray_Ravel copies, duplicating
             // every string into a new buffer and arena in the requested order) and that copy's cells are returned.
-            if (Storage.IsVString)
+            if (dtype.Meta.HasReferences)
             {
                 bool own = physical == 'C' ? Shape.IsContiguous : Shape.IsFContiguous;
                 using var flat = own ? null : Backends.Strings.NDVStringMove.Flatten(this, physical);

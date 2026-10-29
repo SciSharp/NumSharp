@@ -358,6 +358,13 @@ namespace NumSharp
         /// </summary>
         public const int NPY_NEEDS_INIT = 0x08;
 
+        /// <summary>
+        ///     NumPy's <c>NPY_LIST_PICKLE</c> item flag (0x02, <c>ndarraytypes.h</c>): the items are Python objects, pickled as
+        ///     a list, so their bytes mean nothing outside the process - <c>PyArray_ToFile</c> refuses to write them in binary
+        ///     mode (<c>cannot write object arrays to a file in binary mode</c>). Set by <c>StringDType</c>.
+        /// </summary>
+        public const int NPY_LIST_PICKLE = 0x02;
+
         // ---------------------------------------------------------------------------------------------
         // Element slots: NEP 42's setitem / getitem and the legacy ArrFuncs copyswapn, fill and nonzero
         // (np-layer dtype plan, P3's batch 1). They answer, per class, the questions the array object's code asks
@@ -486,6 +493,24 @@ namespace NumSharp
         /// <remarks>A class that overrides <see cref="fill"/> overrides this too; the two answer one question, asked before
         ///     the array exists (this) and while filling it (<see cref="fill"/>'s false).</remarks>
         internal virtual bool HasFill => false;
+
+        /// <summary>
+        ///     Whether this class can read its items from a text FILE: NumPy's <c>PyArray_ArrFuncs.scanfunc != NULL</c>, the
+        ///     test <c>PyArray_FromFile</c> makes before a text read (<c>Unable to read character files of that array
+        ///     type</c> when it fails). True for the numeric classes, whose scanners are NumSharp's typed ports
+        ///     (<c>NumPyTextScan</c>, one per scan family); false for the text classes and the classes without storage.
+        /// </summary>
+        /// <remarks>The question only: the scanners stay typed kernels keyed on the storage lane, as NumPy's are one C
+        ///     routine per type. NumSharp's decimal and char classes read as the float64 and the uint16 they print as.</remarks>
+        internal virtual bool HasScanFunc => false;
+
+        /// <summary>
+        ///     Whether this class can read its items from a text STRING: NumPy's <c>PyArray_ArrFuncs.fromstr != NULL</c>, the
+        ///     test <c>PyArray_FromString</c> makes before its text read (<c>don't know how to read character strings with
+        ///     that array type</c> when it fails). The same classes as <see cref="HasScanFunc"/>: NumPy defines the two
+        ///     routines for the same types.
+        /// </summary>
+        internal virtual bool HasFromStr => false;
 
         /// <summary>
         ///     NumPy's <c>PyArray_ArrFuncs.nonzero</c> (a slot <c>StringDType</c> defines too): the truth of one element as

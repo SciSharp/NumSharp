@@ -55,9 +55,10 @@ namespace NumSharp
                 throw new TypeError("Cannot get/set field of an object array");
             }
 
-            // A fixed-width string on either side: the field's width is the descriptor's (not the lane's), and its item
-            // size need not divide the array's (S3 -> S1, int32 -> S2), so the descriptor route builds and checks the view.
-            if (Storage.IsString || Backends.Strings.NDStringStorage.IsString(dtype))
+            // A parametric class on either side (NPY_DT_PARAMETRIC: a fixed-width string): the field's width is the
+            // descriptor's (not the storage lane's), and its item size need not divide the array's (S3 -> S1, int32 -> S2),
+            // so the descriptor route builds and checks the view.
+            if (this.dtype.Meta._parametric || dtype.Meta._parametric)
                 return new NDArray(Storage.GetFieldAliasDescr(dtype, offset)) { TensorEngine = TensorEngine };
 
             return new NDArray(Storage.GetFieldAlias(dtype.GetTypeCode(), offset)) { TensorEngine = TensorEngine };

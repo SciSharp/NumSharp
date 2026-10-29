@@ -145,7 +145,25 @@ namespace NumSharp.Tests.DTypes
                 Overrides("fill").Should().Be(m is LegacyBuiltinDTypeMeta, $"{m.Name}.fill");
                 // NumPy's funcs->fill != NULL, the test np.arange makes before it computes anything
                 m.HasFill.Should().Be(m is LegacyBuiltinDTypeMeta, $"{m.Name}.HasFill");
+                // NumPy's funcs->scanfunc / fromstr != NULL, the tests np.fromfile's and np.fromstring's text reads make:
+                // the numeric classes have both, the text classes and the classes without storage neither
+                m.HasScanFunc.Should().Be(m is LegacyBuiltinDTypeMeta, $"{m.Name}.HasScanFunc");
+                m.HasFromStr.Should().Be(m is LegacyBuiltinDTypeMeta, $"{m.Name}.HasFromStr");
             }
+        }
+
+        /// <summary>
+        ///     <c>NPY_LIST_PICKLE</c> (0x02) is the flag <c>PyArray_ToFile</c> tests to refuse a binary write: StringDType's
+        ///     descriptors carry it (NumPy 2.4.2: <c>np.dtypes.StringDType().flags</c> is 107 = 1 + 2 + 8 + 32 + 64), no
+        ///     numeric, <c>S</c> or <c>U</c> descriptor does (<c>np.dtype('U5').flags</c> is 8, <c>NPY_NEEDS_INIT</c>).
+        /// </summary>
+        [TestMethod]
+        public void ListPickleFlag_IsStringDTypes()
+        {
+            DTypeMeta.NPY_LIST_PICKLE.Should().Be(0x02);
+            (np.dtypes.StringDType().flags & DTypeMeta.NPY_LIST_PICKLE).Should().Be(DTypeMeta.NPY_LIST_PICKLE);
+            foreach (var d in new[] { np.float64, np.int8, np.complex128, np.dtype("U5"), np.dtype("S3") })
+                (d.flags & DTypeMeta.NPY_LIST_PICKLE).Should().Be(0, d.ToString());
         }
 
         /// <summary>

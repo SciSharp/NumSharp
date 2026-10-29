@@ -40,9 +40,9 @@ namespace NumSharp.IO
             if (offset != 0)
                 SeekCurrent(stream, offset);
             dtype ??= np.float64;
-            // PyArray_FromFile refuses a dtype whose items hold references (a StringDType cell points into its buffer's
-            // allocator: no bytes of a file can be one) before it reads anything.
-            if (dtype.Meta is VStringDTypeMeta)
+            // PyArray_FromFile refuses a dtype whose items hold references (PyDataType_REFCHK: a StringDType cell points
+            // into its buffer's allocator, so no bytes of a file can be one) before it reads anything.
+            if (dtype.Meta.HasReferences)
                 throw new ValueError("Cannot read into object array");
             // An item size of 0 (an unsized string class) reads nothing and builds `count` zero-width elements.
             if (dtype.itemsize == 0)
@@ -55,8 +55,8 @@ namespace NumSharp.IO
             }
             if (sep.Length == 0)
                 return FromFileBinary(stream, dtype, count);
-            // The string classes have no element scanner (their scanfunc is NULL).
-            if (Backends.Strings.NDStringStorage.IsString(dtype))
+            // A class without a file scanner (NumPy's scanfunc == NULL: the text classes) cannot be read from text.
+            if (!dtype.Meta.HasScanFunc)
                 throw new ValueError("Unable to read character files of that array type");
             using var fp = new CFileReader(stream);
             try
@@ -141,14 +141,18 @@ namespace NumSharp.IO
                 want = count * itemsize;
             }
 
-            var native = Backends.Strings.NDStringStorage.IsString(dtype)
-                ? Backends.Strings.NDStringStorage.AllocationDescr(dtype)
-                : (DType)dtype.GetTypeCode();
+            // NumSharp stores native values only: the result is allocated with the native twin of a non-native descriptor
+            // (NumPy keeps the byte order in the descriptor), and its items are decoded below.
+            DType native = dtype.isnative ? dtype : dtype.Meta.ensure_canonical(dtype);
             NDArray result = stream.CanSeek
                 ? ReadSeekable(stream, native, want, itemsize)
                 : ReadUnseekable(stream, native, want, itemsize);
-            if (!dtype.isnative && itemsize > 1)
-                result.byteswap(inplace: true); // big-endian items into host order, per unit
+            if (!dtype.isnative && result.size > 0)
+            {
+                // The class's byte-order copy (NumPy's copyswapn, with no source: in place) reverses each item's units: a
+                // number's whole item, a complex number's halves, a U element's code units (an S element has no order).
+                dtype.Meta.copyswapn(dtype, (byte*)result.Storage.Address, itemsize, null, itemsize, result.size, swap: true);
+            }
             return result;
         }
 
@@ -318,15 +322,16 @@ namespace NumSharp.IO
         internal static NDArray FromString(byte[] data, DType dtype, long count, byte[] sep)
         {
             dtype ??= np.float64;
-            // A dtype whose items hold references (StringDType: a cell points into its buffer's allocator) cannot be filled
-            // from text, whatever the text or the count.
-            if (dtype.Meta is VStringDTypeMeta)
+            // A dtype whose items hold references (PyDataType_REFCHK: a StringDType cell points into its buffer's
+            // allocator) cannot be filled from text, whatever the text or the count.
+            if (dtype.Meta.HasReferences)
                 throw new ValueError("Cannot create an object array from a string");
-            // A fixed-width string dtype: an unsized class first, then any dtype without a text element reader.
-            if (Backends.Strings.NDStringStorage.IsString(dtype))
-                throw new ValueError(dtype.itemsize == 0
-                    ? "zero-valued itemsize"
-                    : "don't know how to read character strings with that array type");
+            // NumPy's order: an unsized dtype first, then a class without a string scanner (fromstr == NULL: the text
+            // classes).
+            if (dtype.itemsize == 0)
+                throw new ValueError("zero-valued itemsize");
+            if (!dtype.Meta.HasFromStr)
+                throw new ValueError("don't know how to read character strings with that array type");
             return NumPyTextScan.FromString(data, dtype, count, sep);
         }
 
@@ -366,9 +371,10 @@ namespace NumSharp.IO
         ///     heap pointer that means nothing outside its own buffer.</exception>
         private static void WriteBinary(NDArray a, Stream stream)
         {
-            // Checked first, as NumPy checks it before the size: and dtypesize itself refuses a StringDType storage (the
-            // phase-1 gate against reading 16-byte cells as raw bytes), so the size check must not run before this one.
-            if (a.Storage.IsVString)
+            // NumPy's test, PyDataType_FLAGCHK(descr, NPY_LIST_PICKLE), checked first as NumPy checks it before the size:
+            // and dtypesize itself refuses a StringDType storage (the phase-1 gate against reading 16-byte cells as raw
+            // bytes), so the size check must not run before this one.
+            if ((a.dtype.flags & DTypeMeta.NPY_LIST_PICKLE) != 0)
                 throw new OSError("cannot write object arrays to a file in binary mode");
             if (a.size == 0 || a.dtypesize == 0)
                 return;
