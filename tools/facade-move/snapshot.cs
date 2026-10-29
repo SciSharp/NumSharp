@@ -105,13 +105,20 @@
 // produces no line), with np.full's fill value (CtorFillLabels: C# numbers of every kind, text, bytes, None, a Python int
 // past every C# integer, NaN and -0.0, 0-d and broadcast arrays, a C# array), np.eye's M and k, the creation order (C
 // first: NumPy's creation functions refuse A and K) and np.ndarray's buffer, offset and strides varied; the _like forms'
-// fill value and shape= take the same variants), and np.frombuffer's (which takes no array either: its operand is a
+// fill value and shape= take the same variants), np.frombuffer's (which takes no array either: its operand is a
 // BUFFER holding the pool operand's C-order bytes in the C# form its first parameter takes - a byte[], NumSharp's MemoryView
 // of the operand itself, an ArraySegment / a Memory of bytes inside a larger array, a Memory over unmanaged memory, an
 // address with its byte length, the generic overload's typed C# array of the operand's values (instantiated for every
 // element type NumSharp stores) - see BufferForms, with the count, the byte offset, the address overloads' byte length and
-// the dtype as a descriptor, an NPTypeCode or a name varied; its ReadOnlySpan overloads cannot be called by reflection); an
-// overload with a required parameter of another kind is reported once as SKIP. An int
+// the dtype as a descriptor, an NPTypeCode or a name varied; its ReadOnlySpan overloads cannot be called by reflection),
+// np.where's x / y given as C# values (WhereScalar) and np.extract's arr
+// and ndarray.real / imag's setters' value (the second operand's role), and - through the item-selection wiring, built
+// from the pool operand - np.take_along_axis / np.put_along_axis's indices and values (AlongIndicesLabels,
+// AlongValuesLabels), np.fill_diagonal's val (FillDiagValueLabels), np.select's condition list, choice list and default
+// (np.select has no array parameter: all three come from the pool operand) and np.piecewise's condition list in its
+// NDArray[] and bare forms, its function list from a fixed menu NumPy names alike (negate, square, a callable of the
+// extra args, constants) and its extra args, and np.delete's boolean-mask obj (a C# bool[]); an overload with a required
+// parameter of another kind is reported once as SKIP. An int
 // axis
 // starts from its default when it has one. A search function (np.searchsorted) runs on pools of 1-D haystacks: sorted,
 // strided, reversed, unsorted and empty ones beside one 2-D operand; np.convolve / np.correlate run on the same 1-D pools
@@ -354,6 +361,8 @@ static class Snapshot
         // or boolean mask; np.insert's values as an array, or as any object (a C# number, string, bool, null, a C# array, an
         // NDArray passed as object).
         InsertObj, InsertObjSlice, InsertObjSeq, InsertObjArray, InsertValues, InsertValue,
+        // np.delete's boolean mask as a C# bool[] (its own overload; NumPy reads it as an index array of bools).
+        InsertObjMask,
         // np.isin: the test set test_elements (built from the operand: its own values, sets of other dtypes, sizes, ranges
         // and layouts, so NumPy's table, loop and sort paths are all reached) and the algorithm name kind.
         IsinTest, IsinKind,
@@ -528,7 +537,42 @@ static class Snapshot
         (p.Member.DeclaringType == typeof(np)
          && p.Member.Name is "take" or "put" or "putmask" or "place" or "repeat" or "choose" or "compress" or "resize")
         || (p.Member.DeclaringType == typeof(NDArray)
-            && p.Member.Name is "take" or "put" or "repeat" or "choose" or "compress" or "resize");
+            && p.Member.Name is "take" or "put" or "repeat" or "choose" or "compress" or "resize")
+        || IsAlongAxis(p) || IsFillDiagonal(p) || IsSelect(p) || IsPiecewise(p);
+
+    /// <summary>Whether a parameter belongs to np.select, whose condition list, choice list and default are all built from
+    ///     the pool operand (<see cref="SelectCondLabels"/>, <see cref="SelectChoiceLabels"/>, <see cref="SelectDefaultLabels"/>):
+    ///     it has no array parameter of its own.</summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True for a parameter of a public static np.select overload.</returns>
+    private static bool IsSelect(ParameterInfo p) =>
+        p.Member.DeclaringType == typeof(np) && p.Member.Name == "select";
+
+    /// <summary>Whether a parameter belongs to np.piecewise, whose x is the operand and whose condition list (in its
+    ///     <c>NDArray[]</c> and bare <c>NDArray</c> forms), function list and extra args take
+    ///     <see cref="PiecewiseCondListLabels"/>, <see cref="PiecewiseCondArrayLabels"/>, <see cref="PiecewiseFuncLabels"/> and
+    ///     <see cref="PiecewiseArgsLabels"/> (the <c>bool</c> form takes the general bool role).</summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True for a parameter of a public static np.piecewise overload.</returns>
+    private static bool IsPiecewise(ParameterInfo p) =>
+        p.Member.DeclaringType == typeof(np) && p.Member.Name == "piecewise";
+
+    /// <summary>
+    ///     Whether a parameter belongs to np.take_along_axis or np.put_along_axis, whose <c>indices</c> (and
+    ///     np.put_along_axis's <c>values</c>) are built from the operand (<see cref="AlongIndicesLabels"/>,
+    ///     <see cref="AlongValuesLabels"/>) through the item-selection wiring.
+    /// </summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True for a parameter of a public static np.take_along_axis / np.put_along_axis overload.</returns>
+    private static bool IsAlongAxis(ParameterInfo p) =>
+        p.Member.DeclaringType == typeof(np) && p.Member.Name is "take_along_axis" or "put_along_axis";
+
+    /// <summary>Whether a parameter belongs to np.fill_diagonal, whose <c>val</c> takes
+    ///     <see cref="FillDiagValueLabels"/> through the item-selection wiring.</summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True for a parameter of a public static np.fill_diagonal overload.</returns>
+    private static bool IsFillDiagonal(ParameterInfo p) =>
+        p.Member.DeclaringType == typeof(np) && p.Member.Name == "fill_diagonal";
 
     /// <summary>
     ///     The variant labels of an item-selection parameter (<see cref="Role.ItemArg"/>), the base first, or null for a
@@ -541,6 +585,19 @@ static class Snapshot
     {
         Type t = p.ParameterType;
         string n = p.Name;
+        // The along-axis pair and np.fill_diagonal first: their parameter names are the item-selection family's own.
+        if (IsAlongAxis(p) && n == "indices" && t == typeof(NDArray)) return AlongIndicesLabels;
+        if (IsAlongAxis(p) && n == "values" && t == typeof(NDArray)) return AlongValuesLabels;
+        if (IsFillDiagonal(p) && n == "val" && t == typeof(object)) return FillDiagValueLabels;
+        if (IsSelect(p))
+            return n switch { "condlist" => SelectCondLabels, "choicelist" => SelectChoiceLabels, "default" => SelectDefaultLabels, _ => null };
+        if (IsPiecewise(p))
+            return n == "condlist" && t == typeof(NDArray[]) ? PiecewiseCondListLabels
+                : n == "condlist" && t == typeof(NDArray) ? PiecewiseCondArrayLabels
+                : n == "funclist" ? PiecewiseFuncLabels
+                : n == "args" ? PiecewiseArgsLabels
+                : null;
+        if (IsAlongAxis(p) || IsFillDiagonal(p)) return null;
         if (n == "indices" && t == typeof(NDArray)) return ItemIndicesLabels;
         if (n == "index" && t == typeof(long)) return ItemIndexLabels;
         if (n == "mode" && t == typeof(string)) return ItemModeLabels;
@@ -566,6 +623,277 @@ static class Snapshot
     {
         "i64[1]", "i64[0,2]", "i32[2,0]", "i64[-1]", "i64[99]", "i64[-99]", "0d_i64_1", "i64[]", "2d_i64", "u64[1]",
         "u8[1]", "f64[1.0]", "bool[T,F]", "i64_strided", "U1[1]", "null",
+    };
+
+    /// <summary>
+    ///     np.take_along_axis / np.put_along_axis's index arrays, built from the operand along its last axis (the axis
+    ///     default): a permutation of every row ("ramp", reversed positions), one index per row (0, -1, and 99 past every
+    ///     axis), the ramp as a negative-stride view, in int32 and in the unsigned dtypes NumPy accepts, the float and bool
+    ///     dtypes it refuses ("`indices` must be an integer array"), a 1-D index (axis=None's form, a rank mismatch
+    ///     otherwise), one index broadcast over every other axis, and null.
+    /// </summary>
+    private static readonly string[] AlongIndicesLabels =
+        { "ramp", "zero", "neg1", "oob", "ramp_flip", "ramp_i32", "zero_u8", "zero_u64", "zero_f64", "zero_bool", "flat", "bcast", "null" };
+
+    /// <summary>np.put_along_axis's values: the operand's own copy (the ramp's shape), a 0-d int64, a one-element float, a
+    ///     0-d text value, an empty array (no broadcast), and null.</summary>
+    private static readonly string[] AlongValuesLabels = { "same", "0d_7", "f64[2.5]", "0d_text", "i64[]", "null" };
+
+    /// <summary>np.fill_diagonal's val (NumPy's <c>a.flat[...] = val</c>): a Python int first, then a float, a bool, a
+    ///     complex, a str, None, an int past int8 and one past every C# integer, a NumPy float16, a C# array (tiled
+    ///     cyclically), an empty one (a no-op), the operand's own copy (raveled and tiled) and a 0-d int64.</summary>
+    private static readonly string[] FillDiagValueLabels =
+        { "7", "2.5", "true", "1+2j", "x", "null", "300", "2**70", "half1.5", "f64{1,2}", "i32{}", "same", "0d_5" };
+
+    /// <summary>
+    ///     Builds an np.take_along_axis / np.put_along_axis argument for an operand: its index array (see
+    ///     <see cref="AlongIndicesLabels"/>) or np.put_along_axis's values (<see cref="AlongValuesLabels"/>).
+    /// </summary>
+    /// <param name="p">The parameter (<c>indices</c> or <c>values</c>).</param>
+    /// <param name="label">The variant.</param>
+    /// <param name="operand">The pool operand (the indices index its last axis; "same" copies it).</param>
+    /// <returns>The array, or null.</returns>
+    /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
+    private static object MakeAlongArg(ParameterInfo p, string label, NDArray operand)
+    {
+        long[] dims = operand.Shape.Dimensions;
+        long last = dims.Length == 0 ? 1 : dims[^1];
+        long size = 1;
+        foreach (long d in dims) size *= d;
+        // One index per row: the operand's dims with the last one 1 (a 0-d operand's index is 0-d).
+        long[] oneDims = dims.Length == 0 ? Array.Empty<long>() : dims[..^1].Append(1L).ToArray();
+        long oneSize = 1;
+        foreach (long d in oneDims) oneSize *= d;
+        NDArray Filled(long value) => np.array(Enumerable.Repeat(value, (int)oneSize).ToArray()).reshape(new Shape(oneDims));
+        NDArray Ramp()
+        {
+            // Every row reversed: position i of a row reads element last - 1 - i (a permutation along the last axis).
+            var v = new long[size];
+            for (long i = 0; i < size; i++)
+                v[i] = last - 1 - i % last;
+            return np.array(v).reshape(new Shape(dims));
+        }
+        if (p.Name == "indices")
+            return label switch
+            {
+                "ramp" => Ramp(),
+                "zero" => Filled(0),
+                "neg1" => Filled(-1),
+                "oob" => Filled(99),
+                "ramp_flip" => dims.Length == 0 ? Ramp() : Ramp()["..., ::-1"],
+                "ramp_i32" => Ramp().astype(np.int32),
+                "zero_u8" => Filled(0).astype(np.uint8),
+                "zero_u64" => Filled(0).astype(np.uint64),
+                "zero_f64" => Filled(0).astype(np.float64),
+                "zero_bool" => Filled(0).astype(np.@bool),
+                "flat" => np.array(new long[] { 0 }),
+                "bcast" => np.zeros(new Shape(Enumerable.Repeat(1L, dims.Length).ToArray()), np.int64),
+                "null" => null,
+                _ => throw new ArgumentException("unknown along-axis indices variant " + label),
+            };
+        return label switch
+        {
+            "same" => operand.copy(),
+            "0d_7" => np.array(7L),
+            "f64[2.5]" => np.array(new[] { 2.5 }),
+            "0d_text" => np.array("x"),
+            "i64[]" => np.array(Array.Empty<long>()),
+            "null" => null,
+            _ => throw new ArgumentException("unknown along-axis values variant " + label),
+        };
+    }
+
+    /// <summary>
+    ///     np.select's condition lists, built from the pool operand's shape: alternating True / False and its complement
+    ///     (the base: both choices win somewhere), all True twice (the first condition wins), none true (the default
+    ///     everywhere), an int64 first condition (NumPy's "invalid entry 0 in condlist" TypeError), rows of the last axis
+    ///     (broadcast), two 0-d conditions, conditions of a shape that does not broadcast, one condition and none (the
+    ///     length errors), and null.
+    /// </summary>
+    private static readonly string[] SelectCondLabels =
+        { "alt2", "first", "none", "int", "row", "0d", "badshape", "one", "empty", "null" };
+
+    /// <summary>
+    ///     np.select's choice lists: the operand's copy and its zeros (the base), two weak Python scalars (an int and a
+    ///     float), the operand beside a Python int past int8, the operand beside a strong 0-d float64, two strs, a NumPy
+    ///     float16 beside a Python int, float64 rows of the last axis, choices of a shape that does not broadcast, a null
+    ///     entry (NumPy's object array), one choice (the length error), and null.
+    /// </summary>
+    private static readonly string[] SelectChoiceLabels =
+        { "pair", "scalars", "big", "strong0d", "text", "half", "row", "badshape", "nullentry", "one", "null" };
+
+    /// <summary>np.select's default: null (NumPy's default=0) first, then a Python int, one past int8, a float, a complex,
+    ///     a bool, a str, a strong 0-d int64, the operand's copy, a float64 row of the last axis and an array of a shape
+    ///     that does not broadcast.</summary>
+    private static readonly string[] SelectDefaultLabels =
+        { "null", "0", "1000", "2.5", "c128", "true", "x", "0d_int64", "same", "row", "badshape" };
+
+    /// <summary>
+    ///     np.piecewise's condition lists (the NDArray[] form), built from the operand's shape: alternating True / False and
+    ///     its complement (the base), all True twice (the last condition wins), none true, int64 conditions (their truth),
+    ///     two 0-d conditions, one condition and three (the function-count errors against two functions), none (NumPy's
+    ///     condlist[0] IndexError), and null.
+    /// </summary>
+    private static readonly string[] PiecewiseCondListLabels = { "alt2", "first2", "none2", "int2", "0d2", "one", "three", "empty", "null" };
+
+    /// <summary>
+    ///     np.piecewise's bare condition array (NumPy's promotion of a non-list condlist), built from the operand's shape:
+    ///     the two conditions stacked on a new first axis (the base: split back into two), the operand-shaped mask (one
+    ///     condition for a 1-D x, its rows for a 2-D+ x), a 0-d condition (NumPy's "too many indices" IndexError), an empty
+    ///     first axis (NumPy's "index 0 is out of bounds" IndexError), and null.
+    /// </summary>
+    private static readonly string[] PiecewiseCondArrayLabels = { "stack2", "alt", "0d", "empty0", "null" };
+
+    /// <summary>
+    ///     np.piecewise's function lists, from a fixed menu NumPy can name the same way: negate and square (callables, the
+    ///     base), two weak constants (an int and a float, stored into x's dtype), three entries (the third is the default),
+    ///     a Python int past int8 (NumPy's OverflowError for a narrow integer x), a complex constant (its TypeError for a
+    ///     real x), two strong 0-d arrays, a callable that adds the first extra arg, one entry (the function-count error),
+    ///     a null entry, and null.
+    /// </summary>
+    private static readonly string[] PiecewiseFuncLabels =
+        { "neg_sq", "consts", "default3", "big", "c128", "arrays", "args", "one", "nullentry", "null" };
+
+    /// <summary>np.piecewise's extra args: none (the base), one Python int, two Python ints.</summary>
+    private static readonly string[] PiecewiseArgsLabels = { "none", "one", "two" };
+
+    /// <summary>np.piecewise's callable that negates its slice (NumPy's <c>lambda v: -v</c>).</summary>
+    private static readonly Func<NDArray, NDArray> PiecewiseNegate = v => -v;
+
+    /// <summary>np.piecewise's callable that squares its slice (NumPy's <c>lambda v: v * v</c>).</summary>
+    private static readonly Func<NDArray, NDArray> PiecewiseSquare = v => v * v;
+
+    /// <summary>np.piecewise's callable that adds the first extra arg (NumPy's <c>lambda v, *a: v + a[0] if a else v</c>,
+    ///     a Python int: the C# int converts to its weak literal array).</summary>
+    private static readonly Func<NDArray, object[], NDArray> PiecewiseAddArg =
+        (v, a) => a.Length == 0 ? v : v + (int)a[0];
+
+    /// <summary>
+    ///     Builds an np.select / np.piecewise argument for an operand (see the label sets above).
+    /// </summary>
+    /// <param name="p">The parameter (condlist, choicelist, default, funclist or args).</param>
+    /// <param name="label">The variant.</param>
+    /// <param name="operand">The pool operand: the conditions take its shape, the choices and the defaults its values.</param>
+    /// <returns>The argument: an array list, an object list, a boxed value, an array, or null.</returns>
+    /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
+    private static object MakeSelectArg(ParameterInfo p, string label, NDArray operand)
+    {
+        long[] dims = operand.Shape.Dimensions;
+        long size = 1;
+        foreach (long d in dims) size *= d;
+        long last = dims.Length == 0 ? 1 : dims[^1];
+        NDArray Mask(bool even, long count, long[] shape) =>
+            np.array(Enumerable.Range(0, (int)count).Select(i => (i % 2 == 0) == even).ToArray()).reshape(new Shape(shape));
+        NDArray Alt() => Mask(true, size, dims);
+        NDArray NotAlt() => Mask(false, size, dims);
+        NDArray Row(double start) => np.array(Enumerable.Range(0, (int)last).Select(i => start + i).ToArray());
+        string n = p.Name;
+        if (n == "condlist" && p.ParameterType == typeof(NDArray[]))
+            return label switch
+            {
+                "alt2" => new[] { Alt(), NotAlt() },
+                "first" or "first2" => new[] { np.ones(new Shape(dims), np.@bool), np.ones(new Shape(dims), np.@bool) },
+                "none" or "none2" => new[] { np.zeros(new Shape(dims), np.@bool), np.zeros(new Shape(dims), np.@bool) },
+                "int" => new[] { Alt().astype(np.int64), NotAlt() },
+                "int2" => new[] { Alt().astype(np.int64), NotAlt().astype(np.int64) },
+                "row" => new[] { Mask(true, last, new[] { last }), Mask(false, last, new[] { last }) },
+                "0d" or "0d2" => new[] { np.array(true), np.array(false) },
+                "badshape" => new[] { Mask(true, 7, new long[] { 7 }), Mask(false, 7, new long[] { 7 }) },
+                "one" => new[] { Alt() },
+                "three" => new[] { Alt(), NotAlt(), Alt() },
+                "empty" => Array.Empty<NDArray>(),
+                "null" => null,
+                _ => throw new ArgumentException("unknown condlist variant " + label),
+            };
+        if (n == "condlist")
+            return label switch
+            {
+                "stack2" => np.stack(new[] { Alt(), NotAlt() }),
+                "alt" => Alt(),
+                "0d" => np.array(true),
+                "empty0" => np.zeros(new Shape(new long[] { 0 }.Concat(dims).ToArray()), np.@bool),
+                "null" => null,
+                _ => throw new ArgumentException("unknown bare condlist variant " + label),
+            };
+        if (n == "choicelist")
+            return label switch
+            {
+                "pair" => new object[] { operand.copy(), np.zeros_like(operand) },
+                "scalars" => new object[] { 7, 2.5 },
+                "big" => new object[] { operand.copy(), 1000 },
+                "strong0d" => new object[] { operand.copy(), np.array(2.5) },
+                "text" => new object[] { "a", "bb" },
+                "half" => new object[] { (Half)1.5, 7 },
+                "row" => new object[] { Row(1.0), Row(-1.0) },
+                "badshape" => new object[] { np.zeros(new Shape(7)), np.zeros(new Shape(7)) },
+                "nullentry" => new object[] { operand.copy(), null },
+                "one" => new object[] { operand.copy() },
+                "null" => null,
+                _ => throw new ArgumentException("unknown choicelist variant " + label),
+            };
+        if (n == "default")
+            return label switch
+            {
+                "null" => null,
+                "0" => 0,
+                "1000" => 1000,
+                "2.5" => 2.5,
+                "c128" => new Complex(1, 2),
+                "true" => true,
+                "x" => "x",
+                "0d_int64" => np.array(5L),
+                "same" => operand.copy(),
+                "row" => Row(0.5),
+                "badshape" => np.zeros(new Shape(7)),
+                _ => throw new ArgumentException("unknown default variant " + label),
+            };
+        if (n == "funclist")
+            return label switch
+            {
+                "neg_sq" => new object[] { PiecewiseNegate, PiecewiseSquare },
+                "consts" => new object[] { 1, 2.5 },
+                "default3" => new object[] { 1, 2, 3 },
+                "big" => new object[] { 1000, 0 },
+                "c128" => new object[] { new Complex(1, 2), 0 },
+                "arrays" => new object[] { np.array(5L), np.array(2.5) },
+                "args" => new object[] { PiecewiseAddArg, 0 },
+                "one" => new object[] { 1 },
+                "nullentry" => new object[] { null, 0 },
+                "null" => null,
+                _ => throw new ArgumentException("unknown funclist variant " + label),
+            };
+        if (n == "args")
+            return label switch
+            {
+                "none" => Array.Empty<object>(),
+                "one" => new object[] { 1 },
+                "two" => new object[] { 1, 2 },
+                _ => throw new ArgumentException("unknown args variant " + label),
+            };
+        throw new ArgumentException($"no select / piecewise variants for {n}");
+    }
+
+    /// <summary>Builds np.fill_diagonal's val (see <see cref="FillDiagValueLabels"/>).</summary>
+    /// <param name="label">The variant.</param>
+    /// <param name="operand">The pool operand ("same" copies it).</param>
+    /// <returns>The boxed C# value, an array, or null (Python's None).</returns>
+    /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
+    private static object MakeFillDiagValue(string label, NDArray operand) => label switch
+    {
+        "7" => 7,
+        "2.5" => 2.5,
+        "true" => true,
+        "1+2j" => new Complex(1, 2),
+        "x" => "x",
+        "null" => null,
+        "300" => 300,
+        "2**70" => BigInteger.Pow(2, 70),
+        "half1.5" => (Half)1.5,
+        "f64{1,2}" => new[] { 1.0, 2.0 },
+        "i32{}" => Array.Empty<int>(),
+        "same" => operand.copy(),
+        "0d_5" => np.array(5L),
+        _ => throw new ArgumentException("unknown fill_diagonal value variant " + label),
     };
 
     /// <summary>np.take / np.put's scalar index: inside every pool axis first, the first, the last, and one past either
@@ -642,6 +970,13 @@ static class Snapshot
         foreach (long d in dims) size *= d;
         NDArray Alternating(long count) => np.array(Enumerable.Range(0, (int)count).Select(i => i % 2 == 0).ToArray());
         NDArray Longs(params long[] v) => np.array(v);
+        // The along-axis pair and np.fill_diagonal build their own (their names are the family's own).
+        if (IsAlongAxis(p))
+            return MakeAlongArg(p, label, operand);
+        if (IsFillDiagonal(p))
+            return MakeFillDiagValue(label, operand);
+        if (IsSelect(p) || IsPiecewise(p))
+            return MakeSelectArg(p, label, operand);
         if (n == "indices")
             return label switch
             {
@@ -1873,6 +2208,7 @@ static class Snapshot
             if (n == "obj" && (t == typeof(int) || t == typeof(long))) return Role.InsertObj;
             if (n == "obj" && t == typeof(Slice)) return Role.InsertObjSlice;
             if (n == "obj" && (t == typeof(int[]) || t == typeof(long[]))) return Role.InsertObjSeq;
+            if (n == "obj" && t == typeof(bool[])) return Role.InsertObjMask;
             if (n == "value" && t == typeof(object)) return Role.InsertValue;
         }
         // NDArray.Contains's value (only its: see IsContains).
@@ -2949,6 +3285,22 @@ static class Snapshot
                         asLong ? (Func<object>)(() => seq.Select(v => (long)v).ToArray()) : () => seq.ToArray());
                 break;
             }
+            case Role.InsertObjMask:
+                // A mask of three first (the first axis of the (3, 4) pools; NumPy's length check refuses it against the
+                // flattened axis=None operand), then four (their last axis), six, twelve and twenty-four (the 1-D, the
+                // flattened (3, 4) and the flattened 3-D operands), all False, and an empty mask.
+                foreach (var (name, mask) in new[]
+                         {
+                             ("[T,F,T]", new[] { true, false, true }),
+                             ("[F,T,F,T]", new[] { false, true, false, true }),
+                             ("alt6", Enumerable.Range(0, 6).Select(i => i % 2 == 0).ToArray()),
+                             ("alt12", Enumerable.Range(0, 12).Select(i => i % 2 == 0).ToArray()),
+                             ("alt24", Enumerable.Range(0, 24).Select(i => i % 3 == 0).ToArray()),
+                             ("none12", new bool[12]),
+                             ("[]", Array.Empty<bool>()),
+                         })
+                    Add(name, () => mask.ToArray());
+                break;
             case Role.InsertObjArray:
                 // An int64 pair first, then a 0-d index (NumPy's scalar branch), a one-element index (the single-index
                 // branch without the moveaxis), unsorted int32 and uint8 indices, a boolean mask of three (positions 0
