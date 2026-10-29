@@ -20,12 +20,19 @@ namespace NumSharp
         ///     If not given (null), the output is float64 (NumPy infers float from the other input arguments).
         /// </param>
         /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
+        /// <returns>A new 1-D array of <paramref name="num"/> samples (<see cref="TensorEngine.Linspace"/> describes its
+        ///     dtype and which results are views).</returns>
+        /// <exception cref="ValueError">A negative <paramref name="num"/> (<c>Number of samples, -1, must be
+        ///     non-negative.</c>), checked first, as NumPy checks it.</exception>
+        /// <exception cref="ArgumentException">A <paramref name="device"/> other than <c>"cpu"</c>, checked after the
+        ///     count.</exception>
+        /// <exception cref="NotSupportedException">A <paramref name="dtype"/> without a storage lane (a datetime descriptor)
+        ///     or a text dtype.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linspace.html
+        ///     <para>Computed by the default engine's <see cref="TensorEngine.Linspace"/>: there is no operand to choose
+        ///     another.</para></remarks>
         public static NDArray linspace(double start, double stop, long num, bool endpoint = true, DType dtype = null, string device = null)
-        {
-            ValidateDevice(device);
-            return np.EngineOf(null).Linspace(start, stop, num, endpoint, dtype);
-        }
+            => np.EngineOf(null).Linspace(start, stop, num, endpoint, dtype, device);
 
         /// <summary>
         ///     Return evenly spaced numbers over a specified interval.<br></br>

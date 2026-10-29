@@ -13,8 +13,15 @@ namespace NumSharp.Backends
     public partial class DefaultEngine
     {
         /// <inheritdoc />
-        public override NDArray Linspace(double start, double stop, long num, bool endpoint = true, DType dtype = null)
-            => LinspaceCore(start, stop, num, endpoint, dtype?.GetTypeCode() ?? NPTypeCode.Double);
+        public override NDArray Linspace(double start, double stop, long num, bool endpoint = true, DType dtype = null, string device = null)
+        {
+            // NumPy's first statements are `num = operator.index(num); if num < 0: raise ValueError(...)`; the device is
+            // read later, by the np.arange that builds the ramp. So a negative count wins over a bad device, and neither
+            // reaches the allocation (whose own text would be `negative dimensions are not allowed`).
+            ValidateSampleCount(num);
+            np.ValidateDevice(device);
+            return LinspaceCore(start, stop, num, endpoint, dtype?.GetTypeCode() ?? NPTypeCode.Double);
+        }
 
         /// <summary>
         ///     The storage-lane core behind every public <c>linspace(..., dtype)</c> overload (which all take the single

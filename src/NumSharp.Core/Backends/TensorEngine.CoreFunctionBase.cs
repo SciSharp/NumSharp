@@ -15,7 +15,7 @@ namespace NumSharp
     public abstract partial class TensorEngine
     {
         /// <summary>
-        ///     NumPy's <c>np.linspace(start, stop, num, endpoint=True, dtype=None)</c> over scalar ends:
+        ///     NumPy's <c>np.linspace(start, stop, num, endpoint=True, dtype=None, *, device=None)</c> over scalar ends:
         ///     <paramref name="num"/> evenly spaced samples from <paramref name="start"/> to <paramref name="stop"/>. With
         ///     <paramref name="endpoint"/> the step is <c>(stop - start) / (num - 1)</c> and the last sample is
         ///     <paramref name="stop"/> itself (NumPy overwrites <c>y[-1]</c>, so no rounding of <c>start + i * step</c>
@@ -31,27 +31,31 @@ namespace NumSharp
         ///     dtype FLOORS them (NumPy 1.20+'s <c>_nx.floor(y, out=y)</c> before the cast, not a truncation toward zero;
         ///     char follows uint16), bool is <c>sample != 0</c>, complex128 takes the sample as its real part.
         /// </param>
+        /// <param name="device">NumPy's Array-API <c>device=</c>: only <c>"cpu"</c> and null are accepted. NumPy reads it
+        ///     after the sample count (it is the ramp's np.arange that checks it), so a negative count is reported
+        ///     first.</param>
         /// <returns>
         ///     A new 1-D array of <paramref name="num"/> samples. A float64 result of two or more samples, or of one sample
         ///     with <paramref name="endpoint"/> false, does not own its buffer (<c>OWNDATA</c> false: NumPy returns its
         ///     in-place ramp through <c>astype(copy=False)</c>, which is a view); every other result owns its buffer.
         /// </returns>
         /// <exception cref="ValueError">
-        ///     A negative <paramref name="num"/>. DefaultEngine allocates the result before it reads the count, so the text
-        ///     is the allocation's <c>negative dimensions are not allowed</c>; NumPy's linspace checks the count first
-        ///     (<c>Number of samples, -1, must be non-negative.</c>).
+        ///     A negative <paramref name="num"/> (<c>Number of samples, -1, must be non-negative.</c>), NumPy's first
+        ///     check: before the device and before anything is allocated.
         /// </exception>
+        /// <exception cref="ArgumentException"><paramref name="device"/> is neither null nor <c>"cpu"</c> (NumPy's
+        ///     <c>Device not understood. Only "cpu" is allowed, but received: ...</c>, a ValueError there).</exception>
         /// <exception cref="NotSupportedException">
         ///     <paramref name="dtype"/> has no storage lane (a datetime descriptor), or is a text dtype (<c>S</c>, <c>U</c>,
         ///     <c>StringDType</c>): DefaultEngine allocates the result by storage lane, which carries no string class or
         ///     width.
         /// </exception>
         /// <remarks>
-        ///     <c>np.linspace</c> checks its Array-API <c>device=</c> argument, then calls this member of the default
-        ///     engine. An override must keep the floor of the integer dtypes and the exact last sample: they are NumPy's
-        ///     results, which code ported from NumPy reads (an integer grid's last value, a range's exact end).
+        ///     <c>np.linspace</c> calls this member of the default engine. An override must keep the floor of the integer
+        ///     dtypes and the exact last sample: they are NumPy's results, which code ported from NumPy reads (an integer
+        ///     grid's last value, a range's exact end).
         /// </remarks>
-        public abstract NDArray Linspace(double start, double stop, long num, bool endpoint = true, DType dtype = null);
+        public abstract NDArray Linspace(double start, double stop, long num, bool endpoint = true, DType dtype = null, string device = null);
 
         /// <summary>
         ///     NumPy's <c>np.logspace(start, stop, num=50, endpoint=True, base=10.0, dtype=None, axis=0)</c> over scalar
