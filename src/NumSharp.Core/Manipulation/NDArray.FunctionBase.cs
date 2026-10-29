@@ -1784,5 +1784,367 @@ namespace NumSharp
 
             return (start, stop, step);
         }
+
+        // ----------------------------------------------------------------------------------------------------------------
+        // np.select (P3's batch 7): NumPy's statements after the facade's numpy.matrix region and null checks, with the
+        // helpers that resolve its dtype and run its fused kernel. The kernel classes are named in full.
+        // ----------------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's <c>numpy.select</c> (<c>lib/_function_base_impl.py</c>) after the facade's numpy.matrix region and null
+        ///     checks: the length checks, the choices' and the default's NEP 50 result dtype (a C# number literal is a weak
+        ///     Python scalar; text resolves by descriptor), the two broadcast groups (the conditions, then the choices with the
+        ///     default), the bool check of each condition, then the default written everywhere and every choice copied in
+        ///     under its condition from the last to the first, so the first true condition wins.
+        /// </summary>
+        /// <param name="condlist">The conditions (bool arrays), one per choice.</param>
+        /// <param name="choicelist">The choices: arrays (strong) or boxed C# values (a number literal is weak).</param>
+        /// <param name="default">The value where every condition is false; null is NumPy's <c>0</c>, a weak Python int.</param>
+        /// <returns>A new C-contiguous array of the broadcast shape in the result dtype.</returns>
+        /// <exception cref="ValueError">The two lists differ in length ("list of cases must be same length as list of
+        ///     conditions"), or are empty ("select with an empty condition list is not possible").</exception>
+        /// <exception cref="TypeError">A condition is not bool ("invalid entry {i} in condlist: should be boolean
+        ///     ndarray"), or the choices and the default have no common dtype (NumPy's "Choicelist and default value do not
+        ///     have a common dtype" text around the promotion error).</exception>
+        /// <exception cref="IncorrectShapeException">A group does not broadcast, or the two groups against each other.</exception>
+        /// <exception cref="ArgumentNullException">A null choice (NumPy's object array; NumSharp has no object dtype).</exception>
+        /// <remarks>
+        ///     The fused single-pass IL kernel serves the contiguous, no-cast, full-size-array case
+        ///     (<see cref="TrySelectFused"/>); every other shape takes NumPy's own composition through np.copyto.
+        /// </remarks>
+        internal static NDArray Select(NDArray[] condlist, object[] choicelist, object @default)
+        {
+            // NumPy's order: the length check precedes the empty check, so select([], [x])
+            // is a length error while select([], []) is the empty-condition error.
+            if (condlist.Length != choicelist.Length)
+                throw new ValueError("list of cases must be same length as list of conditions");
+            if (condlist.Length == 0)
+                throw new ValueError("select with an empty condition list is not possible");
+
+            int n = condlist.Length;
+
+            // Classify each choice plus the default, resolving the NEP50 result dtype while
+            // materialising every entry to an NDArray for the broadcast/copy below. The default
+            // occupies the final slot [n] — NumPy appends it to choicelist before promoting so it
+            // both fixes the dtype and joins the choice broadcast shape.
+            var mats = new NDArray[n + 1];
+            bool anyStrong = false;
+            bool anyBeyondInt64 = false;
+            bool anyString = false; // a fixed-width string choice or default: the dtype is resolved by DESCRIPTOR below
+            int weakRank = 0; // 0 none, 1 int, 2 float, 3 complex (ordered by NEP50 dominance)
+            NPTypeCode strong = NPTypeCode.Empty;
+
+            for (int i = 0; i <= n; i++)
+            {
+                object item = i < n ? choicelist[i] : @default;
+                NDArray mat;
+                switch (item)
+                {
+                    case null:
+                        // A null CHOICE is a caller bug (NumPy would build an object array, a dtype
+                        // NumSharp lacks). A null DEFAULT is NumPy's default=0 — a weak python int.
+                        if (i < n)
+                            throw new ArgumentNullException($"choicelist[{i}]",
+                                "choicelist entries must not be null.");
+                        mat = NDArray.Scalar(0);
+                        weakRank = Math.Max(weakRank, 1);
+                        break;
+
+                    case NDArray lit when lit.WasPythonLiteral:
+                        // A C# number literal that reached select as its implicit 0-d array (an NDArray default, a literal
+                        // inside an NDArray[] choicelist): NumPy keeps a Python int / float / complex as the weak scalar
+                        // (`choice if type(choice) in (int, float, complex) else np.asarray(choice)`), exactly as the boxed
+                        // literal below — an int8 choice beside the default 1000 stays int8.
+                        mat = lit;
+                        weakRank = Math.Max(weakRank, lit.typecode == NPTypeCode.Complex ? 3
+                            : lit.typecode is NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Half ? 2 : 1);
+                        if (lit.typecode == NPTypeCode.UInt64 && lit.GetAtIndex<ulong>(0) > long.MaxValue) anyBeyondInt64 = true;
+                        break;
+
+                    case NDArray a:
+                        mat = a;
+                        if (a.typecode == NPTypeCode.String)
+                            anyString = true;
+                        else if (!anyString)
+                            strong = anyStrong ? NDExprTypeRules.PromoteStrong(strong, a.GetTypeCode) : a.GetTypeCode;
+                        anyStrong = true;
+                        break;
+
+                    // Weak (NEP50 "python literal") scalars — the eight C# integer primitives, the two
+                    // binary floats and Complex. These adopt the other operands' dtype instead of
+                    // forcing promotion by their own width/value (int8 array + 1000 stays int8).
+                    case sbyte or byte or short or ushort or int or uint or long or ulong:
+                        mat = np.asanyarray(item);
+                        weakRank = Math.Max(weakRank, 1);
+                        if (item is ulong u && u > long.MaxValue) anyBeyondInt64 = true;
+                        break;
+
+                    case float or double:
+                        mat = np.asanyarray(item);
+                        weakRank = Math.Max(weakRank, 2);
+                        break;
+
+                    case System.Numerics.Complex:
+                        mat = np.asanyarray(item);
+                        weakRank = Math.Max(weakRank, 3);
+                        break;
+
+                    default:
+                        // Strong by NumPy's rule `type(x) in (int, float, complex) else asarray(x)`:
+                        // bool, char, Half, decimal, C# arrays and collections all take the asarray
+                        // branch and contribute their concrete dtype.
+                        mat = np.asanyarray(item);
+                        if (mat.typecode == NPTypeCode.String)
+                            anyString = true;
+                        else if (!anyString)
+                            strong = anyStrong ? NDExprTypeRules.PromoteStrong(strong, mat.GetTypeCode) : mat.GetTypeCode;
+                        anyStrong = true;
+                        break;
+                }
+
+                mats[i] = mat;
+            }
+
+            // Fixed-width strings: NumPy's two result_type calls over DESCRIPTORS (the widest choice's width; S + U → U),
+            // each refusal wrapped in select's own TypeError text. A Python number default next to strings has no common
+            // dtype — select(…, default=0) over string choices raises, as in NumPy.
+            DType stringDescr = anyString ? ResolveSelectStringDescr(choicelist, @default, mats, n) : null;
+
+            NPTypeCode dtype = anyString ? NPTypeCode.String : ResolveSelectDtype(anyStrong, strong, weakRank, anyBeyondInt64);
+
+            // The conditions and the choices are broadcast in two SEPARATE groups (NumPy makes two
+            // independent broadcast_arrays calls). We only need each GROUP'S shape here — to size the
+            // result and to validate mutual compatibility exactly where NumPy's two calls do — because
+            // copyto broadcasts each operand to the result shape itself below. Materialising the
+            // broadcast VIEWS is therefore skipped: it would allocate needlessly AND, for a group of
+            // one, route through broadcast_arrays's single-array path (Shape.Clean(), which resets a
+            // non-contiguous operand's strides to contiguous and would read a transposed/strided/
+            // reversed condition through the wrong elements).
+            Shape scShape = CommonBroadcastShape(condlist);   // validates conditions mutually
+            Shape schShape = CommonBroadcastShape(mats);       // validates choices + default mutually
+
+            // Conditions must be boolean — checked after the group broadcasts, reporting the index.
+            for (int i = 0; i < n; i++)
+                if (condlist[i].GetTypeCode != NPTypeCode.Boolean)
+                    throw new TypeError($"invalid entry {i} in condlist: should be boolean ndarray");
+
+            // Result shape = broadcast(condition-shape, choice-shape). NumPy special-cases all-scalar
+            // choices to skip this call, but broadcast(S, ()) == S so the general call is identical.
+            var (commonLeft, _) = Shape.Broadcast(scShape, schShape);
+            long[] resultDims = commonLeft.dimensions;
+
+            // Fused single-pass fast path for the contiguous, no-cast, full-size-array-choice case —
+            // the one NumPy leaves memory-bound (its (n+1) masked copytos each re-read AND re-write the
+            // whole result buffer). One IL kernel reads each condition and choice once and writes the
+            // result once. Every other shape (broadcast / strided / cast / scalar-choice) declines the
+            // gate and takes the composition below, which already outruns NumPy on those.
+            if (!anyString && TrySelectFused(condlist, mats, n, dtype, resultDims, out var fused))
+                return fused;
+
+            var result = new NDArray(stringDescr ?? (DType)dtype, Shape.Adopt((long[])resultDims.Clone()), false);
+
+            // Composition fallback (NumPy's own structure): burn the default across the whole result
+            // (unsafe cast, matching np.full's copyto), then overlay each choice where its condition is
+            // true — LAST choice first, so the FIRST matching condition ends up winning each position.
+            // copyto broadcasts each operand (and mask) to the result shape, preserving its own strides,
+            // so it correctly serves the broadcast/strided/cast/scalar-choice shapes the fused kernel
+            // declines; every masked write rides NumSharp's SIMD masked-cast kernel.
+            np.copyto(result, mats[n], casting: "unsafe");
+            for (int i = n - 1; i >= 0; i--)
+                np.copyto(result, mats[i], casting: "same_kind", @where: condlist[i]);
+
+            return result;
+        }
+
+        /// <summary>
+        ///     <c>np.select</c>'s result dtype when a string is involved — NumPy 2.4.2's ONE
+        ///     <c>dtype = result_type(*choicelist, default)</c> over descriptors, with C# integer / float / complex literals
+        ///     (boxed, or the 0-d array an implicit conversion marked <see cref="NDArray.WasPythonLiteral"/>) and the null
+        ///     default (NumPy's <c>0</c>) taking part as NEP 50 weak Python scalars.
+        /// </summary>
+        /// <param name="choicelist">The caller's choices.</param>
+        /// <param name="default">The caller's default (null means NumPy's <c>0</c>).</param>
+        /// <param name="mats">The materialised choices and default (slot <paramref name="n"/>).</param>
+        /// <param name="n">The number of choices.</param>
+        /// <returns>The result descriptor.</returns>
+        /// <exception cref="TypeError"><c>Choicelist and default value do not have a common dtype: …</c> — NumPy's text
+        ///     around the promotion error, whose DType list names every choice and the default in order.</exception>
+        /// <remarks>
+        ///     NumPy 2.4.2 promotes the choices and the default in a single <c>result_type</c> call (NumPy 1.x made two, the
+        ///     first wrapped in <c>Choicelist elements do not have a common dtype</c>; this followed that before). The single
+        ///     call decides the error text too: a string choice beside a number choice reports <c>Choicelist and default value
+        ///     …</c> with the default's <c>_PyLongDType</c> at the end of the list.
+        /// </remarks>
+        private static DType ResolveSelectStringDescr(object[] choicelist, object @default, NDArray[] mats, int n)
+        {
+            static object Operand(object item, NDArray mat)
+                => item is sbyte or byte or short or ushort or int or uint or long or ulong or float or double or System.Numerics.Complex ? item
+                    : item is NDArray nd ? nd.Nep50Operand
+                    : mat;
+
+            var operands = new object[n + 1];
+            for (int i = 0; i < n; i++)
+                operands[i] = Operand(choicelist[i], mats[i]);
+            operands[n] = @default is null ? 0 : Operand(@default, mats[n]);
+            try
+            {
+                return DTypePromotion.ResultType(operands);
+            }
+            catch (DTypePromotionError e)
+            {
+                throw new TypeError($"Choicelist and default value do not have a common dtype: {e.Message}");
+            }
+        }
+
+        /// <summary>
+        ///     The fused single-pass fast path for <see cref="select"/>. Fires only when every
+        ///     condition and choice is C-contiguous at the full result shape and the result dtype
+        ///     (no broadcast, no cast) — the case NumPy's copyto composition leaves memory-bound.
+        ///     Delegates the whole select to one IL kernel
+        ///     (<see cref="DirectILKernelGenerator.GetSelectKernel"/>) that seeds each element with
+        ///     the default then walks the conditions last-to-first, so the first true condition wins.
+        ///     Returns false (and leaves <paramref name="result"/> null) for any other shape, dtype,
+        ///     or layout, so the caller falls back to the composition.
+        /// </summary>
+        private static unsafe bool TrySelectFused(NDArray[] condlist, NDArray[] mats, int n, NPTypeCode dtype, long[] resultDims, out NDArray result)
+        {
+            result = null;
+
+            if (!Backends.Kernels.DirectILKernelGenerator.Enabled)
+                return false;
+            if (!Backends.Kernels.DirectILKernelGenerator.SelectKernelSupportsDtype(dtype))
+                return false;
+
+            long resultSize = 1;
+            for (int d = 0; d < resultDims.Length; d++)
+                resultSize *= resultDims[d];
+            if (resultSize == 0)
+                return false; // empty result — the composition handles it trivially.
+
+            // Conditions: boolean, C-contiguous, exactly the result shape (no broadcast stretch).
+            for (int i = 0; i < n; i++)
+            {
+                var c = condlist[i];
+                if (c.GetTypeCode != NPTypeCode.Boolean) return false;
+                if (!c.Shape.IsContiguous) return false;
+                if (!SelectDimsEqual(c.Shape, resultDims)) return false;
+            }
+
+            // Choices: already the result dtype (no cast), C-contiguous, exactly the result shape.
+            for (int i = 0; i < n; i++)
+            {
+                var ch = mats[i];
+                if (ch.GetTypeCode != dtype) return false;
+                if (!ch.Shape.IsContiguous) return false;
+                if (!SelectDimsEqual(ch.Shape, resultDims)) return false;
+            }
+
+            // Default: a scalar (broadcast, cast to dtype for one element) or a full-size, same-dtype,
+            // C-contiguous array. Anything else declines.
+            var def = mats[n];
+            bool defScalar = def.size == 1;
+            NDArray defArr = def;
+            if (defScalar)
+            {
+                if (def.GetTypeCode != dtype)
+                    defArr = def.astype(dtype);
+            }
+            else
+            {
+                if (def.GetTypeCode != dtype) return false;
+                if (!def.Shape.IsContiguous) return false;
+                if (!SelectDimsEqual(def.Shape, resultDims)) return false;
+            }
+
+            var kernel = Backends.Kernels.DirectILKernelGenerator.GetSelectKernel(dtype, n, defScalar);
+            if (kernel == null)
+                return false;
+
+            var res = new NDArray(dtype, Shape.Adopt((long[])resultDims.Clone()), false);
+            SelectFusedInvoke(kernel, condlist, mats, defArr, defScalar, res, n, dtype);
+            result = res;
+            return true;
+        }
+
+        /// <summary>True when <paramref name="shape"/>'s dimensions equal <paramref name="dims"/> exactly.</summary>
+        private static bool SelectDimsEqual(Shape shape, long[] dims)
+        {
+            var sd = shape.dimensions;
+            if (sd.Length != dims.Length) return false;
+            for (int i = 0; i < dims.Length; i++)
+                if (sd[i] != dims[i]) return false;
+            return true;
+        }
+
+        /// <summary>
+        ///     Gather the operand base pointers (base + offset, always the logical element 0 for a
+        ///     C-contiguous operand) and run the fused kernel. The <c>stackalloc</c> pointer arrays
+        ///     stay alive for the whole synchronous kernel call.
+        /// </summary>
+        private static unsafe void SelectFusedInvoke(Backends.Kernels.SelectFusedKernel kernel, NDArray[] condlist, NDArray[] mats, NDArray defArr, bool defScalar, NDArray res, int n, NPTypeCode dtype)
+        {
+            int elemSize = Utilities.InfoOf.GetSize(dtype);
+
+            bool** conds = stackalloc bool*[n];
+            void** choices = stackalloc void*[n];
+            for (int i = 0; i < n; i++)
+            {
+                conds[i] = (bool*)condlist[i].Storage.Address + condlist[i].Shape.offset;
+                choices[i] = (byte*)mats[i].Storage.Address + mats[i].Shape.offset * elemSize;
+            }
+
+            void* defPtr = (byte*)defArr.Storage.Address + defArr.Shape.offset * elemSize;
+            void* resPtr = (byte*)res.Storage.Address + res.Shape.offset * elemSize;
+
+            kernel(conds, choices, defPtr, resPtr, res.size);
+        }
+
+        /// <summary>
+        ///     The common broadcast shape of a group of operands (NumPy's <c>broadcast_arrays</c>
+        ///     shape). Only the DIMENSIONS are consumed by the caller, so the single-operand path's
+        ///     stride reset is harmless; every returned element carries the common dimensions.
+        /// </summary>
+        private static Shape CommonBroadcastShape(NDArray[] arrays)
+        {
+            var shapes = new Shape[arrays.Length];
+            for (int i = 0; i < arrays.Length; i++)
+                shapes[i] = arrays[i].Shape;
+            return Shape.Broadcast(shapes)[0];
+        }
+
+        /// <summary>
+        ///     NumPy's <c>result_type(*choices, default)</c> folded with NEP50 weak-scalar rules —
+        ///     the same resolution <see cref="AxisConcatenator"/> uses, minus the weak-bool kind
+        ///     (select treats python bool as a strong asarray) and the weak-int range check (select
+        ///     wraps an out-of-range default via <see cref="copyto"/> rather than raising).
+        /// </summary>
+        private static NPTypeCode ResolveSelectDtype(bool anyStrong, NPTypeCode strong, int weakRank, bool anyBeyondInt64)
+        {
+            if (!anyStrong)
+            {
+                // All weak literals — the NEP50 defaults. A weak int past int64 lifts the default to
+                // uint64 (NumPy: result_type(2**63) and result_type(2**64-1) are both uint64).
+                return weakRank switch
+                {
+                    3 => NPTypeCode.Complex,
+                    2 => NPTypeCode.Double,
+                    _ => anyBeyondInt64 ? NPTypeCode.UInt64 : NPTypeCode.Int64,
+                };
+            }
+
+            return weakRank switch
+            {
+                // No literal.
+                0 => strong,
+                // A weak int adopts the strong dtype, except bool which it lifts to the default int.
+                1 => strong == NPTypeCode.Boolean ? NPTypeCode.Int64 : strong,
+                // A weak float keeps a float/decimal/complex width, else forces the default float.
+                2 => NDExprTypeRules.IsFloatKind(strong) || strong == NPTypeCode.Decimal || strong == NPTypeCode.Complex
+                    ? strong
+                    : NPTypeCode.Double,
+                // NumSharp has a single complex width, so complex64 collapses onto Complex.
+                _ => NPTypeCode.Complex,
+            };
+        }
     }
 }

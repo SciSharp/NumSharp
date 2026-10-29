@@ -38,7 +38,6 @@ Indexing/np.place.cs	1	0
 Indexing/np.put_along_axis.cs	2	1
 Indexing/np.putmask.cs	1	0
 Indexing/np.ravel_multi_index.cs	0	1
-Indexing/np.select.cs	3	10
 Indexing/np.take.FancyAxis.cs	0	1
 Indexing/np.take_along_axis.cs	1	9
 Indexing/np.unravel_index.cs	0	1
