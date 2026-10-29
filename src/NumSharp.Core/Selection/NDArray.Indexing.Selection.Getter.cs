@@ -15,50 +15,53 @@ namespace NumSharp
     public partial class NDArray
     {
         /// <summary>
-        ///     Used to perform selection based on indices, equivalent to nd[NDArray[]].
+        ///     NumPy's <c>a[tuple(indices)]</c>: the selection the indexer makes of an index tuple whose entries are these
+        ///     arrays, optionally copied into <paramref name="out"/>.
         /// </summary>
-        /// <param name="out">Alternative output array in which to place the result. It must have the same shape as the expected output (and, for a numeric array, be of dtype <see cref="Int32"/>).</param>
-        /// <param name="indices">The index arrays, one per leading axis.</param>
-        /// <returns>The gathered array (<paramref name="out"/> when one is given).</returns>
-        /// <exception cref="IndexOutOfRangeException">When one of the indices exceeds limits, or an index array is not
-        ///     of an integer type.</exception>
-        /// <exception cref="ArgumentException">indices must be of Int type (byte, u/short, u/int, u/long).</exception>
-        /// <exception cref="IndexError">A string array indexed by more index arrays than it has axes.</exception>
+        /// <param name="out">The array that receives the selection (<c>np.copyto</c>: the selection's shape must broadcast to
+        ///     it, its dtype be reachable under <c>same_kind</c>), or null for the selection itself.</param>
+        /// <param name="indices">The index tuple's entries: integer index arrays (broadcast together, one per axis they
+        ///     index), boolean masks (each over as many leading axes as it has), 0-d integer arrays, a 0-d bool. An empty
+        ///     tuple selects the whole array (<c>a[()]</c>).</param>
+        /// <returns>The selection — a new array for an advanced index, a view for an empty tuple — or
+        ///     <paramref name="out"/> when one is given.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="indices"/> or one of its entries is null.</exception>
+        /// <exception cref="IndexError">The index does not fit this array (NumPy's <c>prepare_index</c> texts: a 0-d array
+        ///     indexed by an array is "too many indices for array: array is 0-dimensional, but 1 were indexed", a float index
+        ///     array is "arrays used as indices must be of integer (or boolean) type", an index out of bounds, index arrays that
+        ///     do not broadcast together, a mask that does not match its axes).</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> cannot receive the selection.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/user/basics.indexing.html
-        ///     <para>A fixed-width string array has no element kernel: the gather runs the string indexing route (whole
-        ///     elements through the unit view, as <c>this[NDArray[]]</c> does), and a given <paramref name="out"/> then
-        ///     receives the result through the string copy route.</para>
+        ///     <para>Until 2026-10-29 the arrays reached the integer-array gather alone: a mask raised the IndexError for a
+        ///     non-integer index array, an empty tuple raised <c>ArgumentException</c>, and a 0-d array was read as a
+        ///     one-element 1-D array (no too-many-indices error, the wrong rank in the error texts).</para>
         /// </remarks>
         public NDArray GetIndices(NDArray @out, NDArray[] indices)
         {
-            // A StringDType array: its cells move only through their allocator, so the gather is the indexer's StringDType
-            // route (which also refuses a non-integer index array with NumPy's IndexError); a given out receives the result
-            // through np.copyto.
-            if (Storage.IsVString)
-            {
-                // NDArray[] binds the indexer's params object[] (array covariance): one index array per leading axis.
-                var taken = this[(object[])indices];
-                if (@out is null)
-                    return taken;
-                using (taken)
-                    np.copyto(@out, taken);
-                return @out;
-            }
-            if (typecode == NPTypeCode.String)
-            {
-                var picked = StringFetchIndices(indices);
-                if (@out is null)
-                    return picked;
-                // The caller's output takes the selected elements (same class: a plain copy; S <-> U: the checked
-                // conversion); the temporary goes back to the pool.
-                using (picked)
-                    np.copyto(@out, picked);
-                return @out;
-            }
-            // A caller's out keeps its own class; a fresh gather takes this array's lane-sharing C-type class.
-            var gathered = FetchIndices(this, indices, @out, true);
-            return ReferenceEquals(gathered, @out) ? gathered : KeepLaneSharingClass(gathered);
+            if (indices is null)
+                throw new ArgumentNullException(nameof(indices));
+            var taken = this[IndexArraysAsKey(indices)];
+            if (@out is null)
+                return taken;
+            // The caller's output takes the selected elements; the selection is this call's temporary.
+            using (taken)
+                np.copyto(@out, taken);
+            return @out;
+        }
+
+        /// <summary>
+        ///     An index tuple holding <paramref name="indices"/>' arrays: a new <c>object[]</c>, not the caller's
+        ///     <see cref="NDArray"/>[] passed on by array covariance — the indexer's normalization writes into its tuple, and an
+        ///     <see cref="NDArray"/>[] would refuse any other entry type at run time (ArrayTypeMismatchException).
+        /// </summary>
+        /// <param name="indices">The index arrays (not null).</param>
+        /// <returns>The tuple.</returns>
+        private static object[] IndexArraysAsKey(NDArray[] indices)
+        {
+            var key = new object[indices.Length];
+            System.Array.Copy(indices, key, indices.Length);
+            return key;
         }
 
         /// <summary>

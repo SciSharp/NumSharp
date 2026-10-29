@@ -15,34 +15,29 @@ namespace NumSharp
     public partial class NDArray
     {
         /// <summary>
-        ///     Used to perform set a selection based on indices, equivalent to nd[NDArray[]] = values.
+        ///     NumPy's <c>a[tuple(indices)] = values</c>: the indexer's store through an index tuple whose entries are these
+        ///     arrays.
         /// </summary>
-        /// <param name="values">The values to set via .</param>
-        /// <param name="indices">The index arrays, one per leading axis.</param>
-        /// <remarks>https://numpy.org/doc/stable/user/basics.indexing.html</remarks>
-        /// <exception cref="IndexOutOfRangeException">When one of the indices exceeds limits, or an index array is not
-        ///     of an integer type.</exception>
-        /// <exception cref="ArgumentException">indices must be of Int type (byte, u/short, u/int, u/long).</exception>
-        /// <exception cref="ValueError">If this array is not writeable (e.g., broadcast array) — NumPy's "assignment destination is read-only".</exception>
-        /// <exception cref="IndexError">A string array indexed by more index arrays than it has axes.</exception>
+        /// <param name="values">The value, stored by NumPy's assignment rules (broadcast to the selection; null is Python's
+        ///     None).</param>
+        /// <param name="indices">The index tuple's entries, as for <see cref="GetIndices"/>: integer index arrays, boolean
+        ///     masks, 0-d arrays; an empty tuple stores into the whole array (<c>a[()] = v</c>).</param>
+        /// <remarks>https://numpy.org/doc/stable/user/basics.indexing.html
+        ///     <para>Until 2026-10-29 the arrays reached the integer-array scatter alone: a mask raised the IndexError for a
+        ///     non-integer index array, an empty tuple raised <c>ArgumentException</c>, and a 0-d array was written as a
+        ///     one-element 1-D array where NumPy raises "too many indices".</para></remarks>
+        /// <exception cref="ArgumentNullException"><paramref name="indices"/> or one of its entries is null.</exception>
+        /// <exception cref="ValueError">If this array is not writeable (e.g., broadcast array) — NumPy's "assignment
+        ///     destination is read-only", checked first — or the value does not fit the selection.</exception>
+        /// <exception cref="IndexError">The index does not fit this array (NumPy's <c>prepare_index</c> and MapIter texts,
+        ///     <see cref="GetIndices"/>).</exception>
+        /// <exception cref="OverflowException">A C# integer outside this array's integer dtype.</exception>
         public void SetIndices(NDArray values, NDArray[] indices)
         {
             NumSharpException.ThrowIfNotWriteable(Shape);
-            // A StringDType array: the indexer's StringDType scatter (its cells move only through their allocator, and a
-            // non-integer index array is NumPy's IndexError there).
-            if (Storage.IsVString)
-            {
-                this[indices] = values;
-                return;
-            }
-            // A fixed-width string array has no element kernel: the scatter runs the string indexing route (whole
-            // elements through the unit view, as `this[NDArray[]] = values` does).
-            if (typecode == NPTypeCode.String)
-            {
-                StringSetIndices(indices, values);
-                return;
-            }
-            SetIndices(this, indices, values);
+            if (indices is null)
+                throw new ArgumentNullException(nameof(indices));
+            this[IndexArraysAsKey(indices)] = values;
         }
 
         /// <summary>
