@@ -83,7 +83,6 @@ Manipulation/np.copyto.Strings.cs	15	2
 Manipulation/np.copyto.VString.cs	7	0
 Manipulation/np.copyto.cs	7	5
 Manipulation/np.delete.cs	0	20
-Manipulation/np.packbits.cs	0	11
 Manipulation/np.pad.cs	12	33
 Manipulation/np.repeat.cs	2	9
 Manipulation/np.resize.cs	1	0

@@ -1,5 +1,5 @@
-// The C functions of NumPy's _multiarray_umath that compute (np.dot, np.lexsort and np.unravel_index so far; Appendix D
-// of docs/plans/np-layer-dtype-logic.md lists the rest). The C functions of the array object (np.array,
+// The C functions of NumPy's _multiarray_umath that compute (np.dot, np.lexsort, np.unravel_index, np.packbits and
+// np.unpackbits so far; Appendix D of docs/plans/np-layer-dtype-logic.md lists the rest). The C functions of the array object (np.array,
 // np.copyto, np.concatenate, ...) are not engine members.
 
 using System;
@@ -80,5 +80,56 @@ namespace NumSharp
         /// <remarks>New in 0.71.0 (the np-layer dtype plan): the public <c>np.unravel_index(NDArray, int[], char)</c> computes
         ///     a <c>numpy.matrix</c> operand as a plain array and calls this.</remarks>
         public abstract NDArray<long>[] UnravelIndex(NDArray indices, int[] shape, char order = 'C');
+
+        /// <summary>
+        ///     NumPy's <c>np.packbits(a, axis=None, bitorder='big')</c> (<c>io_pack</c> / <c>pack_bits</c>,
+        ///     <c>numpy/_core/src/multiarray/compiled_base.c</c>), the whole call: the elements packed into the bits of a
+        ///     uint8 array, one bit per element (1 iff it is nonzero), the axis shortened to <c>ceil(len / 8)</c> and the
+        ///     last byte zero-padded.
+        /// </summary>
+        /// <param name="a">A bool or integer array (NumSharp's char included), read in logical order for any layout.</param>
+        /// <param name="axis">The axis to pack along, or null to pack the C-order flattened array into a 1-D result. A
+        ///     0-d input is promoted to <c>(1,)</c> and accepts only 0 and -1.</param>
+        /// <param name="bitorder"><c>"big"</c> puts the first element in the most significant bit, <c>"little"</c> in
+        ///     the least; NumPy's prefix rule: a value beginning with <c>"little"</c> is little, one beginning with
+        ///     <c>"big"</c> big, null is big.</param>
+        /// <returns>A new uint8 array of <paramref name="a"/>'s rank (1-D for a null axis), F-contiguous when the input
+        ///     is.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <exception cref="ValueError"><paramref name="bitorder"/> begins with neither (<c>'order' must be either
+        ///     'little' or 'big'</c>), checked first.</exception>
+        /// <exception cref="TypeError"><paramref name="a"/> is neither bool nor integer (<c>Expected an input array of
+        ///     integer or boolean data type</c>).</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds for <paramref name="a"/>'s rank.</exception>
+        /// <remarks>New in 0.71.0 (the np-layer dtype plan): the public <c>np.packbits</c> applies the <c>numpy.matrix</c>
+        ///     rule and calls this.</remarks>
+        public abstract NDArray Packbits(NDArray a, int? axis = null, string bitorder = "big");
+
+        /// <summary>
+        ///     NumPy's <c>np.unpackbits(a, axis=None, count=None, bitorder='big')</c> (<c>io_unpack</c> /
+        ///     <c>unpack_bits</c>), the whole call: each uint8 element unpacked into eight 0 / 1 uint8 elements along the
+        ///     axis, the inverse of <see cref="Packbits"/>.
+        /// </summary>
+        /// <param name="a">A uint8 array, read in logical order for any layout.</param>
+        /// <param name="axis">The axis to unpack along, or null to unpack the C-order flattened array into a 1-D result.
+        ///     A 0-d input is promoted to <c>(1,)</c> and accepts only 0 and -1.</param>
+        /// <param name="count">The number of output elements along the axis: null unpacks every bit (<c>8 * len</c>); a
+        ///     non-negative count takes that many bits (truncating, or zero-padding past the available bits); a negative
+        ///     count trims that many bits off the end.</param>
+        /// <param name="bitorder"><c>"big"</c> or <c>"little"</c>; NumPy's unpack rule reads only the first character
+        ///     (<c>'l'</c> is little, <c>'b'</c> big), null is big.</param>
+        /// <returns>A new uint8 array of 0 / 1 values of <paramref name="a"/>'s rank (1-D for a null axis), F-contiguous
+        ///     when the input is.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <exception cref="ValueError"><paramref name="bitorder"/> is empty or begins with neither (<c>'order' must
+        ///     begin with 'l' or 'b'</c>), checked first; or <c>-count</c> exceeds the available bits (<c>-count larger than
+        ///     number of elements</c>).</exception>
+        /// <exception cref="TypeError"><paramref name="a"/> is not uint8 (<c>Expected an input array of unsigned byte
+        ///     data type</c>).</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds for <paramref name="a"/>'s rank.</exception>
+        /// <remarks>New in 0.71.0 (the np-layer dtype plan): the public <c>np.unpackbits</c> applies the <c>numpy.matrix</c>
+        ///     rule and calls this. An empty input with a count that asks for elements gives zeros, where NumPy leaks
+        ///     uninitialised memory.</remarks>
+        public abstract NDArray Unpackbits(NDArray a, int? axis = null, long? count = null, string bitorder = "big");
     }
 }
