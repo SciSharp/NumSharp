@@ -39,7 +39,7 @@ namespace NumSharp
         /// <param name="c">Coefficients, anything <c>np.array</c> accepts under the house mapping: an <see cref="NDArray"/>
         ///     (used as is), a typed C# array or <c>Memory&lt;T&gt;</c> of a dtype (an ndarray), a Python tuple / list (a
         ///     ValueTuple, <c>object[]</c>, a jagged or <c>NDArray[]</c> array, any enumerable — coerced by
-        ///     <see cref="Backends.UnmanagedStorage.FromSequence"/>, nested to any depth), or a scalar (a Python scalar keeps NumPy's discovered
+        ///     <see cref="Backends.UnmanagedStorage.FromSequence(object)"/>, nested to any depth), or a scalar (a Python scalar keeps NumPy's discovered
         ///     dtype: an int is int64, and integer / bool series are evaluated as float64 either way).</param>
         /// <param name="tensor">NumPy's <c>tensor</c> flag.</param>
         /// <returns>The values; a 0-d array for a scalar x with a 1-D series.</returns>
@@ -70,7 +70,7 @@ namespace NumSharp
         /// <summary>
         ///     <c>np.array(a, ndmin=1)</c> of an argument that is not an <see cref="NDArray"/> — a series — under the house
         ///     mapping (<see cref="NDPolySeries.AsCoefficientArray"/>): a typed C# array is an ndarray of its dtype, a Python
-        ///     tuple / list goes through np.array's coercion (<see cref="Backends.UnmanagedStorage.FromSequence"/>), and a Python scalar becomes a
+        ///     tuple / list goes through np.array's coercion (<see cref="Backends.UnmanagedStorage.FromSequence(object)"/>), and a Python scalar becomes a
         ///     one-element 1-D array of NumPy's discovered dtype (int64 / float64 / complex128 / bool), a NumPy scalar (Half,
         ///     char, decimal) one of its own. An ordinate, which keeps a scalar 0-D, goes through <see cref="OrdinateArray"/>.
         /// </summary>

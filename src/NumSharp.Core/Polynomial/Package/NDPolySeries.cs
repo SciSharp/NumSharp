@@ -3019,7 +3019,7 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     <c>np.asarray</c> of a Python list / tuple: np.array's coercion — numeric (<see cref="Backends.UnmanagedStorage.FromSequence"/>), or the
+        ///     <c>np.asarray</c> of a Python list / tuple: np.array's coercion — numeric (<see cref="Backends.UnmanagedStorage.FromSequence(object)"/>), or the
         ///     str array NumPy builds when the items hold strs.
         /// </summary>
         /// <param name="seq">The sequence.</param>

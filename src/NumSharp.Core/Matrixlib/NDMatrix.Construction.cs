@@ -253,7 +253,7 @@ namespace NumSharp
         /// <param name="data">The literal.</param>
         /// <returns>One <c>object[]</c> per row (a Python list of lists); every item is a boxed
         ///     <see cref="bool"/>, <see cref="long"/>, <see cref="BigInteger"/>, <see cref="double"/> or
-        ///     <see cref="Complex"/>, the kinds <see cref="Backends.UnmanagedStorage.FromSequence"/> coerces as Python scalars.</returns>
+        ///     <see cref="Complex"/>, the kinds <see cref="Backends.UnmanagedStorage.FromSequence(object)"/> coerces as Python scalars.</returns>
         /// <exception cref="ValueError">Rows of different lengths, or a token that is not a literal.</exception>
         /// <exception cref="SyntaxError">A token that is not Python syntax.</exception>
         /// <exception cref="NotSupportedException">A string, <c>None</c> or <c>...</c> token.</exception>

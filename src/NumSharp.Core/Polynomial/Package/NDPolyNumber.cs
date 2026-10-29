@@ -205,7 +205,7 @@ namespace NumSharp
         ///     NDArray is an ndarray; a typed C# array (or <see cref="Memory{T}"/>) of a dtype is converted with
         ///     <see cref="np.asanyarray(object, DType, char)"/> to an ndarray; a Python SEQUENCE — a tuple
         ///     (<see cref="ITuple"/>), <c>object[]</c> or any other non-dtype C# array (jagged, <c>NDArray[]</c>), any other
-        ///     enumerable — is coerced by np.array's rules, nested to any depth (<see cref="Backends.UnmanagedStorage.FromSequence"/>). A
+        ///     enumerable — is coerced by np.array's rules, nested to any depth (<see cref="Backends.UnmanagedStorage.FromSequence(object)"/>). A
         ///     boxed <see cref="PolyNumber"/> is returned as it is: the internal spelling of a NumPy SCALAR (no C# value is
         ///     one — a 0-d NDArray is an ndarray here) that the series classes hand on through an <c>object</c> parameter.
         /// </summary>

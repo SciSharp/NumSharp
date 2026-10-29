@@ -57,6 +57,12 @@ using NumSharp.Backends.Kernels;
 // is what numpy.polynomial's "lbnd must be a scalar." / "scl must be a scalar." checks evaluate — and why a ragged
 // lbnd raises the inhomogeneous ValueError instead.
 //
+// A REQUESTED DESCRIPTOR (np.array(seq, dtype=...), FromSequence(seq, requested)) is NumPy's walk with the descriptor
+// set: the shape is discovered, no dtype is, and nothing is refused during the walk; then PyArray_AssignFromCache
+// stores every scalar item through the descriptor's setitem (PyArray_Pack: a Python int range-checked, a float
+// truncated into an integer, a str parsed, None NaN or int()'s TypeError, in C order) and casts every array item
+// into its slot (unsafe, PyArray_AssignArray). The one-pass fast paths are off there: they discover a dtype and cast.
+//
 // NumSharp has no NPY_MAXDIMS, so a sequence may nest to any depth (NumPy caps it at 64 dims).
 //
 // =============================================================================
@@ -187,13 +193,95 @@ namespace NumSharp.Backends
         /// <returns>A new, owning, C-contiguous array (float64 <c>(0,)</c> for an empty sequence).</returns>
         /// <exception cref="ValueError">A ragged sequence (NumPy's inhomogeneous-shape text), or an array item that cannot
         ///     be assigned into its slot after an empty sibling ended the dims (NumPy's broadcast text).</exception>
-        /// <exception cref="NotSupportedException">A str / None / other non-numeric item, or a Python int past uint64 —
-        ///     NumPy would build a str or object array, dtypes NumSharp does not have.</exception>
+        /// <exception cref="NotSupportedException">A str / None / other non-numeric item, an array item of a text dtype, or
+        ///     a Python int past uint64 — NumPy would build a str or object array, which this coercion does not.</exception>
         internal static NDArray FromSequence(object seq)
             => FromSequenceOrNonNumeric(seq, out var nonNumeric) ?? throw nonNumeric.Refusal;
 
         /// <summary>
-        ///     <see cref="FromSequence"/> for a caller that can carry NumPy's str / object array as a SHAPE (see the file header):
+        ///     <c>np.array(seq, dtype=requested)</c> of a Python sequence: NumPy's <c>PyArray_FromAny</c> with a requested
+        ///     descriptor. The walk discovers the shape alone (<c>PyArray_DiscoverDTypeAndShape</c> with the descriptor set:
+        ///     no dtype is discovered and no item refused), then <c>PyArray_AssignFromCache</c> stores every scalar item
+        ///     through the descriptor's <see cref="DTypeMeta.setitem"/> (<c>PyArray_Pack</c>) and casts every array item into
+        ///     its slot, unsafely (<c>PyArray_AssignArray</c>), in C order. Without a request it is
+        ///     <see cref="FromSequence(object)"/>.
+        /// </summary>
+        /// <param name="seq">A value <see cref="IsSequence"/> accepts.</param>
+        /// <param name="requested">The requested descriptor (a class with element storage), or null to discover the
+        ///     dtype.</param>
+        /// <returns>A new, owning, C-contiguous array of the requested dtype (its native form).</returns>
+        /// <exception cref="ValueError">A ragged sequence (NumPy's inhomogeneous-shape text), an array item that cannot be
+        ///     assigned into its slot, or a value <c>setitem</c> refuses (a text that is not a number of the class's kind, a
+        ///     NaN into an integer class).</exception>
+        /// <exception cref="OverflowException">A Python int outside an integer class (<c>Python integer 300 out of bounds
+        ///     for int8</c>).</exception>
+        /// <exception cref="TypeError">A value the class cannot convert: None into an integer class (<c>int()</c>'s text), a
+        ///     complex number into a real class.</exception>
+        /// <exception cref="NotSupportedException">A value of no NumPy type, a class without element storage, or an array
+        ///     item of a text dtype (NumPy would cast it; this coercion has no text cast).</exception>
+        /// <remarks>
+        ///     <para>
+        ///     A request does not change how items classify: a typed C# array item is still an ndarray (cast into its slot,
+        ///     <c>np.array([np.array([300], int32)], dtype=int8)</c> wraps to 44), a C# number a Python scalar (packed: 300
+        ///     into int8 raises). The stores run in C order, so the first refused item raises, as NumPy's loop does.
+        ///     </para>
+        ///     <para>
+        ///     A TEXT request is the text builder's when the items are Python values (it discovers an unsized class's width
+        ///     from each value's <c>str()</c>; the callers send such lists there). What reaches this method is a list of
+        ///     array items (typed C# arrays, ndarrays), which NumPy casts into the text class adapted to them: the
+        ///     discovered array's cast (<c>np.asanyarray([[1, 2], [3, 4]] as int32 rows, dtype='U')</c> is <c>&lt;U11</c>),
+        ///     exact when the items share one dtype (NumPy casts each item from its own dtype).
+        ///     </para>
+        /// </remarks>
+        internal static NDArray FromSequence(object seq, DType requested)
+        {
+            if (requested is null)
+                return FromSequence(seq);
+            if (requested.typecode == NPTypeCode.String)
+            {
+                // A text class over array items: the discovered array, cast (an unsized class adapted to it).
+                using var discovered = FromSequence(seq);
+                return discovered.astype(requested, copy: true, order: 'K', casting: "unsafe");
+            }
+            // Arrays converted from typed C# arrays during the walk are intermediates of this call (the fill copies them).
+            using var d = new Discovery(requested);
+            var root = Walk(d, seq, 0);
+            if (d.Ragged)
+                throw Inhomogeneous(d);
+            // The one refusal a requested walk records: a text array item (NumPy would cast it; this coercion has no text cast).
+            if (d.Refused is not null)
+                throw d.Refused;
+            var dims = new long[d.MaxDims];
+            System.Array.Copy(d.Shape, dims, dims.Length);
+            // No cell of these classes holds a reference (the text classes took the cast above), and the fill writes every
+            // element: the buffer is not zeroed first.
+            var r = NDArray.ForOverwrite(requested, Shape.Adopt(dims));
+            try
+            {
+                // The ALLOCATED descriptor stores: NumSharp allocates the native form of a byte-swapped request.
+                var stored = r.dtype;
+                int size = r.dtypesize;
+                // C-order byte strides (a zero dim counts as 1, like NumPy's — nothing is written through them then).
+                var strides = new long[dims.Length];
+                long acc = size;
+                for (int k = dims.Length - 1; k >= 0; k--)
+                {
+                    strides[k] = acc;
+                    acc *= Math.Max(dims[k], 1);
+                }
+                Fill(root, 0, (byte*)r.Storage.Address + r.Shape.offset * size, dims, strides, stored.typecode, r, stored);
+                return r;
+            }
+            catch
+            {
+                // A refused item leaves a partly filled array: it is never handed out.
+                r.Dispose();
+                throw;
+            }
+        }
+
+        /// <summary>
+        ///     <see cref="FromSequence(object)"/> for a caller that can carry NumPy's str / object array as a SHAPE (see the file header):
         ///     the same coercion, but a sequence NumPy turns into a str or object array returns null and describes that
         ///     array in <paramref name="nonNumeric"/> instead of raising.
         /// </summary>
@@ -261,7 +349,7 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     <see cref="FromSequence"/>'s fast path: a non-empty flat list whose items are ALL Python floats (boxed
+        ///     <see cref="FromSequence(object)"/>'s fast path: a non-empty flat list whose items are ALL Python floats (boxed
         ///     <see cref="double"/>) — float64 — or ALL Python ints that fit int64 (boxed <see cref="long"/> or
         ///     <see cref="int"/>) — int64 —, filled straight into a new (n,) array. Anything else (a mix, a nested item, an
         ///     array, a bool, a NumPy scalar, an int past int64) declines to the full walk, which alone knows their rules.
@@ -342,6 +430,12 @@ namespace NumSharp.Backends
             public NPTypeCode Dtype = NPTypeCode.Empty;
             /// <summary>np.ndim's walk: shapes only, every non-sequence non-array item a scalar.</summary>
             public readonly bool ShapeOnly;
+            /// <summary>
+            ///     The requested descriptor (NumPy's <c>DESCRIPTOR_WAS_SET</c>), or null: when set, the walk records the
+            ///     items for the fill but discovers no dtype and refuses nothing (the descriptor's setitem decides each
+            ///     scalar at fill time).
+            /// </summary>
+            public readonly DType Descriptor;
             /// <summary>The first refused item, raised only if the input is not ragged (NumPy reports raggedness first).</summary>
             public NotSupportedException Refused;
             /// <summary>
@@ -355,6 +449,10 @@ namespace NumSharp.Backends
             /// <summary>A fresh walk.</summary>
             /// <param name="shapeOnly">Discover shapes only (np.ndim).</param>
             public Discovery(bool shapeOnly) { ShapeOnly = shapeOnly; }
+
+            /// <summary>A fresh walk under a requested descriptor (<see cref="Descriptor"/>).</summary>
+            /// <param name="descriptor">The requested descriptor; not null.</param>
+            public Discovery(DType descriptor) { Descriptor = descriptor; }
 
             /// <summary>
             ///     Releases the arrays converted from typed C# arrays: intermediates of the walk (the fill has copied them by
@@ -420,8 +518,10 @@ namespace NumSharp.Backends
                 {
                     // A flat list of one scalar kind — a typed collection, or an object[] of Python floats / of Python ints
                     // (the top level's fast path, nested: the 2-D / 3-D point stacks, the rows of an N-D series) — takes the
-                    // same shape updates in two calls and fills as one array.
-                    if (!d.ShapeOnly && TryFlatLeaf(o, out var flatLeaf))
+                    // same shape updates in two calls and fills as one array. Not under a requested descriptor: the flat
+                    // array is a discovered dtype that the fill would CAST, where NumPy packs each item (300 into int8
+                    // raises).
+                    if (!d.ShapeOnly && d.Descriptor is null && TryFlatLeaf(o, out var flatLeaf))
                     {
                         FlatLeaf(d, node, i, flatLeaf, curr + 1);
                         continue;
@@ -467,7 +567,19 @@ namespace NumSharp.Backends
             }
             if (d.ShapeOnly)
                 return;
-            Promote(d, a.typecode);
+            // A text array item (S / U / StringDType): NumPy's array is a text one (the item's class, promoted with the other
+            // items), which this coercion - typed by NPTypeCode, the numeric dtypes - does not build. It is refused like a str
+            // item, not left to fail as an allocation of the String storage lane: NumPy's dtype is a str one, not object.
+            if (a.typecode == NPTypeCode.String)
+            {
+                d.Refused ??= new NotSupportedException(
+                    $"An array item of dtype {a.dtype} makes NumPy build a text array from the sequence, which " +
+                    "NumSharp's coercion of a sequence (numeric dtypes) does not build: stack the items with np.stack instead.");
+                return;
+            }
+            // Under a requested descriptor the array is cast into it at the fill: it votes for no dtype.
+            if (d.Descriptor is null)
+                Promote(d, a.typecode);
             (node.Kids ??= new object[node.Items.Length])[i] = a;
         }
 
@@ -544,7 +656,9 @@ namespace NumSharp.Backends
                 d.Ragged = true;
                 return;
             }
-            if (d.ShapeOnly)
+            // np.ndim's walk needs no dtype; under a requested descriptor the item is the descriptor's setitem's to accept
+            // or refuse at fill time (a str is parsed, None is NaN or int()'s TypeError), in NumPy's element order.
+            if (d.ShapeOnly || d.Descriptor is not null)
                 return;
             if (!PolyNumber.IsScalarValue(o))
             {
@@ -639,15 +753,22 @@ namespace NumSharp.Backends
 
         /// <summary>
         ///     Writes a walked sequence into the result block at <paramref name="p"/>: a child sequence recursively, an array
-        ///     leaf by a casting copy, a scalar by np.array's element conversion (<see cref="PolyNumber.WriteElement"/>).
+        ///     leaf by a casting copy, a scalar by np.array's element conversion (<see cref="PolyNumber.WriteElement"/>) or,
+        ///     under a requested descriptor, by its <see cref="DTypeMeta.setitem"/>.
         /// </summary>
         /// <param name="node">The sequence (not ragged: its length is <c>dims[depth]</c>).</param>
         /// <param name="depth">Its depth.</param><param name="p">Its first element in the result.</param>
         /// <param name="dims">The result dims.</param><param name="strides">The result's C-order byte strides.</param>
         /// <param name="t">The result dtype.</param><param name="r">The result (the base for array-leaf views).</param>
+        /// <param name="store">The requested descriptor whose setitem stores the scalar items (NumPy's
+        ///     <c>PyArray_Pack</c>), or null: the scalars then convert into the DISCOVERED dtype <paramref name="t"/>, which
+        ///     holds every one of them by construction.</param>
         /// <exception cref="ValueError">An array leaf whose dims differ from its slot (only possible after an empty
-        ///     sibling ended the dims above the leaf's own).</exception>
-        private static void Fill(Node node, int depth, byte* p, long[] dims, long[] strides, NPTypeCode t, NDArray r)
+        ///     sibling ended the dims above the leaf's own), or a value <paramref name="store"/>'s setitem refuses.</exception>
+        /// <exception cref="OverflowException">A Python int outside <paramref name="store"/>'s integer range.</exception>
+        /// <exception cref="TypeError">A value <paramref name="store"/>'s setitem cannot convert.</exception>
+        /// <exception cref="NotSupportedException">A value of no NumPy type under <paramref name="store"/>.</exception>
+        private static void Fill(Node node, int depth, byte* p, long[] dims, long[] strides, NPTypeCode t, NDArray r, DType store = null)
         {
             for (int i = 0; i < node.Items.Length; i++)
             {
@@ -655,13 +776,16 @@ namespace NumSharp.Backends
                 switch (node.Kids?[i])
                 {
                     case Node child:
-                        Fill(child, depth + 1, q, dims, strides, t, r);
+                        Fill(child, depth + 1, q, dims, strides, t, r, store);
                         break;
                     case NDArray leaf:
                         CopyLeaf(leaf, depth + 1, q, dims, t, r);
                         break;
                     default:
-                        PolyNumber.FromObject(node.Items[i]).WriteElement(t, q);
+                        if (store is not null)
+                            store.Meta.setitem(store, node.Items[i], q, r.Storage.InternalArray);
+                        else
+                            PolyNumber.FromObject(node.Items[i]).WriteElement(t, q);
                         break;
                 }
             }

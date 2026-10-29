@@ -692,7 +692,7 @@ namespace NumSharp.Backends
 
         /// <summary>
         ///     NumPy's <c>np.asanyarray(distances)</c> for a coordinate spacing: an NDArray as it is, a Python sequence
-        ///     coerced by np.array's rules (<see cref="Backends.UnmanagedStorage.FromSequence"/>: a Python int item is int64, a float float64,
+        ///     coerced by np.array's rules (<see cref="Backends.UnmanagedStorage.FromSequence(object)"/>: a Python int item is int64, a float float64,
         ///     nested lists any depth), a typed C# array or a <see cref="Memory{T}"/> as a whole.
         /// </summary>
         /// <param name="v">A spacing whose <see cref="GradSpacingNdim"/> is not 0.</param>

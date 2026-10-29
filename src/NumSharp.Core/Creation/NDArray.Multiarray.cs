@@ -859,7 +859,8 @@ namespace NumSharp
         ///     NumPy's <c>_array_fromobject_generic</c> for a C# ARRAY operand, the body of
         ///     <see cref="np.array(Array, DType, int, bool, char)"/> once its null check ran: text values (or a string dtype
         ///     over an object or bytes array, or None among an object array's values under a dtype) take the text array
-        ///     builder (the class and width discovered, every element stored by its setitem); a string dtype over a typed
+        ///     builder (the class and width discovered, every element stored by its setitem); any other object array is a
+        ///     Python list (<see cref="ArrayFromPythonList"/>: NumPy's coercion of a sequence); a string dtype over a typed
         ///     numeric array casts the numbers to text (NumPy's <c>PyArray_AdaptDescriptorToArray</c>); any other array gives
         ///     its shape and element type, is flattened and converted to the requested dtype, laid out in C order (or F on
         ///     request) and raised to <paramref name="ndmin"/> dimensions.
@@ -870,16 +871,30 @@ namespace NumSharp
         /// <param name="copy">False lets a rank-1 array of the requested element type be wrapped instead of copied.</param>
         /// <param name="order">The memory layout: <c>'C'</c>, <c>'F'</c>, or <c>'A'</c> / <c>'K'</c>.</param>
         /// <returns>A new array (a view of one when <paramref name="ndmin"/> prepends axes to a text result, as NumPy's).</returns>
-        /// <exception cref="ValueError">A ragged jagged array of text (NumPy's inhomogeneous-shape text).</exception>
+        /// <exception cref="ValueError">A ragged jagged array or object list (NumPy's inhomogeneous-shape text), or a value
+        ///     the requested dtype's setitem refuses.</exception>
         /// <exception cref="UnicodeEncodeError">Non-ASCII text into <c>S</c>.</exception>
-        /// <exception cref="NotSupportedException">An element type NumSharp has no dtype for, or None without a dtype.</exception>
+        /// <exception cref="OverflowException">A Python int (a C# integer in an object list) outside the requested integer
+        ///     dtype.</exception>
+        /// <exception cref="TypeError">A value of an object list the requested dtype cannot convert (None into an
+        ///     integer dtype, a complex number into a real one).</exception>
+        /// <exception cref="NotSupportedException">An element type NumSharp has no dtype for, or None (or a Python int past
+        ///     64 bits) in an object list without a dtype: NumPy's object array.</exception>
         /// <exception cref="InvalidCastException">An element that does not convert to <paramref name="dtype"/>.</exception>
         internal static NDArray ArrayFromManaged(Array array, DType dtype, int ndmin, bool copy, char order)
         {
+            // PyArray_OrderConverter runs while NumPy parses the arguments: an invalid order raises before any element is
+            // converted (a value the dtype refuses would otherwise be reported first).
+            OrderResolver.ResolveBufferOrder(order);
             // Text values (string elements, an object array holding text, or a string dtype over object / byte[][] data)
             // build a fixed-width S/U array: NumPy's discovery of the class and the longest value, then setitem per element.
             if (Backends.UnmanagedStorage.IsTextInput(array, dtype))
                 return Backends.UnmanagedStorage.FromManagedText(array, dtype, ndmin, order);
+            // A C# object array (object[], a jagged object[][], an object grid) is NumPy's Python list in the boundary map:
+            // the coercion of a sequence discovers its shape and dtype (a C# int is a Python int: int64), or stores every item
+            // through the requested descriptor (NumPy's PyArray_Pack: 300 into int8 raises).
+            if (HoldsPythonObjects(array))
+                return ArrayFromPythonList(array, dtype, ndmin, order);
             // A string dtype over a TYPED numeric C# array: the array is an ndarray of its element dtype (the house rule for
             // typed arrays), so NumPy's np.array(arr, dtype='U') casts it — the unsized class adapted to the array
             // (PyArray_AdaptDescriptorToArray: int32 -> <U11), each number written as its scalar's str().
@@ -934,22 +949,103 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     Whether a C# array is NumPy's Python list in the boundary map: its innermost element type is
+        ///     <see cref="object"/> (an <c>object[]</c>, a jagged <c>object[][]</c>, an <c>object[,]</c> grid of rows), so its
+        ///     items are Python objects - C# numbers Python scalars, nested arrays and lists sequences, an
+        ///     <see cref="NDArray"/> or a typed C# array an ndarray.
+        /// </summary>
+        /// <param name="array">The array; not null.</param>
+        /// <returns>True for an array of objects at its innermost level.</returns>
+        private static bool HoldsPythonObjects(Array array)
+        {
+            var elementType = array.GetType().GetElementType();
+            while (elementType is { IsArray: true })
+                elementType = elementType.GetElementType();
+            return elementType == typeof(object);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>PyArray_FromAny</c> of a Python list (a C# object array, <see cref="HoldsPythonObjects"/>) whose items
+        ///     hold no text: the coercion of a sequence (<see cref="UnmanagedStorage.FromSequence(object, DType)"/>) discovers
+        ///     the shape and, without a request, the dtype NumPy discovers (a C# int is a Python int, int64; a C# float or
+        ///     double a Python float, float64; promoted strongly), or stores every item through the requested descriptor's
+        ///     setitem. Then the requested layout and the minimum rank.
+        /// </summary>
+        /// <param name="array">The object array; its text items, if any, were routed to the text builder before.</param>
+        /// <param name="dtype">The requested dtype (not a text class), or null to discover it.</param>
+        /// <param name="ndmin">The minimum number of dimensions: leading ones are prepended as a VIEW of the built array (the
+        ///     built array's own reference goes, as NumPy's result does not own its data then).</param>
+        /// <param name="order">The memory layout: <c>'F'</c> lays a result of two or more dimensions out column-major (a copy
+        ///     of the C-ordered fill); any other is C (the result is fresh).</param>
+        /// <returns>The new array.</returns>
+        /// <exception cref="ValueError">A ragged list (NumPy's inhomogeneous-shape text), or a value the requested dtype's
+        ///     setitem refuses.</exception>
+        /// <exception cref="OverflowException">A Python int outside the requested integer dtype.</exception>
+        /// <exception cref="TypeError">A value the requested dtype cannot convert.</exception>
+        /// <exception cref="NotSupportedException">None or a Python int past 64 bits without a request (NumPy's object
+        ///     array), or a value of no NumPy type.</exception>
+        private static NDArray ArrayFromPythonList(Array array, DType dtype, int ndmin, char order)
+        {
+            var built = array.Rank > 1 && array.Length == 0
+                ? EmptyObjectGrid(array, dtype)
+                : Backends.UnmanagedStorage.FromSequence(array, dtype);
+            if (built.ndim > 1 && OrderResolver.Resolve(order, built.Shape) == 'F')
+            {
+                var f = built.copy('F');
+                built.Dispose();
+                built = f;
+            }
+            if (ndmin <= built.ndim)
+                return built;
+            // NumPy builds the array at its discovered rank and prepends the ones as a view of it.
+            var view = np.AtLeastNdView(built, ndmin);
+            built.Dispose();
+            return view;
+        }
+
+        /// <summary>
+        ///     An EMPTY rectangular object grid (<c>object[0, 3]</c>, <c>object[2, 0, 4]</c>): an empty array of the grid's
+        ///     own dimensions. NumPy cannot spell it - its nested lists end the dimensions at the first empty level
+        ///     (<c>[]</c> is <c>(0,)</c>) -, and a C# grid states every dimension, as a typed grid's array keeps them
+        ///     (<c>new int[0, 3]</c> is <c>(0, 3)</c>), so the grid's are kept instead of the list reading's.
+        /// </summary>
+        /// <param name="grid">The rectangular object array (rank 2 or more, no elements).</param>
+        /// <param name="dtype">The requested dtype, or null for NumPy's float64 default of an empty list.</param>
+        /// <returns>A new empty array of the grid's dimensions.</returns>
+        private static NDArray EmptyObjectGrid(Array grid, DType dtype)
+        {
+            var dims = new long[grid.Rank];
+            for (int d = 0; d < dims.Length; d++)
+                dims[d] = grid.GetLength(d);
+            return np.zeros(new Shape(dims), dtype ?? NumSharp.DType.Double);
+        }
+
+        /// <summary>
         ///     NumPy's <c>_array_fromobject_generic</c> with <c>subok</c> for any C# value, the body of
         ///     <see cref="np.asanyarray(in object, DType, char, string)"/> once the device and the class boundaries were
-        ///     checked: Python's <c>None</c>, an array (<see cref="np.asarray(NDArray, DType, char, bool?, NDArray, string)"/>),
-        ///     text arrays and sequences (the text array builder), object arrays and grids, typed C# arrays, a str, typed
-        ///     sequences, scalars, <c>Memory&lt;T&gt;</c>, tuples and any other enumerable; then the dtype request and the
-        ///     memory layout.
+        ///     checked: the order first (NumPy parses it with the arguments), then Python's <c>None</c>, an array
+        ///     (<see cref="np.asarray(NDArray, DType, char, bool?, NDArray, string)"/>), text arrays and sequences (the text
+        ///     array builder), Python lists - object arrays and grids, tuples and any other enumerable of objects - through
+        ///     the coercion of a sequence (<see cref="UnmanagedStorage.FromSequence(object, DType)"/>: a C# int is a Python
+        ///     int, int64; with a dtype every item is stored by its setitem), typed C# arrays, a str, typed sequences,
+        ///     scalars and <c>Memory&lt;T&gt;</c>; then the dtype request and the memory layout.
         /// </summary>
         /// <param name="a">The value: null is Python's None.</param>
         /// <param name="dtype">The requested dtype, or null to discover it.</param>
         /// <param name="order"><c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c>.</param>
         /// <returns>An array: the operand itself when it is an array that satisfies the request.</returns>
-        /// <exception cref="NotSupportedException">None without a dtype, an object sequence of no NumSharp dtype, or a value
-        ///     of a type this conversion does not read.</exception>
-        /// <exception cref="TypeError">None into an integer (or decimal) dtype.</exception>
+        /// <exception cref="ValueError">An invalid order (NumPy's <c>PyArray_OrderConverter</c> text), a ragged list, or a
+        ///     value the requested dtype's setitem refuses.</exception>
+        /// <exception cref="NotSupportedException">None without a dtype, None or a Python int past 64 bits in a list without
+        ///     a dtype (NumPy's object array), or a value of a type this conversion does not read.</exception>
+        /// <exception cref="TypeError">None into an integer (or decimal) dtype, or a list item the requested dtype cannot
+        ///     convert.</exception>
+        /// <exception cref="OverflowException">A Python int in a list outside the requested integer dtype.</exception>
         internal static NDArray AnyArrayFromObject(object a, DType dtype, char order)
         {
+            // PyArray_OrderConverter runs while NumPy parses the arguments: an invalid order raises before the operand is
+            // converted (a value the dtype refuses, None without a dtype, would otherwise be reported first).
+            OrderResolver.ResolveBufferOrder(order);
             NDArray ret;
             switch (a) {
                 case null:
@@ -969,18 +1065,15 @@ namespace NumSharp
                     ret = Backends.UnmanagedStorage.FromManagedText(texts.ToArray(), dtype, 0, 'C');
                     break;
                 case object[] objArr:
-                    // object[] has no fixed dtype — route through type-promotion path.
-                    // new NDArray(object[]) throws NotSupportedException since object isn't a
-                    // supported element type.
-                    ret = UnmanagedStorage.ConvertNonGenericEnumerable(objArr);
-                    if (ret is null)
-                        throw new NotSupportedException($"Unable to resolve asanyarray for object[] (length {objArr.Length}): element type is not a supported NumSharp dtype.");
+                    // object[] (and by covariance every array of references: a jagged object[][], NDArray[]) is NumPy's
+                    // Python list: the coercion of a sequence, which stores through the request's setitem when there is one
+                    // (np.asanyarray(list, dtype) is np.array(list, dtype, copy=False): 300 into int8 raises).
+                    ret = Backends.UnmanagedStorage.FromSequence(objArr, dtype);
                     break;
                 case Array grid when grid.Rank > 1 && grid.GetType().GetElementType() == typeof(object):
                     // A rectangular object array (object[,], object[,,]) is NumPy's nested list of its rows,
-                    // np.asarray([[1, 2], [3, 4]]): its leaves promoted as a flat list's, laid out with its dims
-                    // (new NDArray(grid) cannot read an object element type).
-                    ret = UnmanagedStorage.ConvertObjectGrid(grid);
+                    // np.asarray([[1, 2], [3, 4]]): the same coercion walks it row by row; an empty grid keeps its dims.
+                    ret = grid.Length == 0 ? EmptyObjectGrid(grid, dtype) : Backends.UnmanagedStorage.FromSequence(grid, dtype);
                     break;
                 case Array array:
                     ret = new NDArray(array);
@@ -1026,18 +1119,16 @@ namespace NumSharp
                         }
                     }
 
-                    if (a is ITuple tuple)
+                    if (a is ITuple || a is IEnumerable)
                     {
-                        ret = UnmanagedStorage.ConvertTuple(tuple);
-                        if (ret is not null)
-                            break;
-                    }
-
-                    if (a is IEnumerable enumerable)
-                    {
-                        ret = UnmanagedStorage.ConvertNonGenericEnumerable(enumerable);
-                        if (ret is not null)
-                            break;
+                        // A tuple, or any other enumerable (List<object>, ArrayList: the typed collections took their typed
+                        // cases above), is NumPy's Python tuple / list: its items, text through the text builder as an
+                        // object list's, everything else the coercion of a sequence (C# ints are Python ints: int64).
+                        var items = Backends.UnmanagedStorage.SequenceItems(a);
+                        ret = Backends.UnmanagedStorage.IsTextInput(items, dtype)
+                            ? Backends.UnmanagedStorage.FromManagedText(items, dtype, 0, 'C')
+                            : Backends.UnmanagedStorage.FromSequence(items, dtype);
+                        break;
                     }
 
                     if (a is IEnumerator enumerator)

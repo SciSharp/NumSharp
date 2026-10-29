@@ -40,7 +40,9 @@ namespace NumSharp.Backends
     {
         /// <summary>
         ///     Whether <c>np.array</c> should take the string route for <paramref name="array"/>: its elements are text
-        ///     (<see cref="string"/>), the requested dtype is a string dtype, or an <c>object</c> array holds text at any
+        ///     (<see cref="string"/>), the requested dtype is a string dtype (over an object array that holds text or no
+        ///     ndarray item: an object list of ndarrays is the coercion of a sequence's, which casts each array item), or an
+        ///     <c>object</c> array holds text at any
         ///     nesting depth (a C# spelling of a Python list of lists: <c>new object[] { new[] { "a", "b" }, new[] { "c" } }</c>)
         ///     — or holds a <c>null</c> (Python's <c>None</c>) under a requested numeric dtype: that list too is built element
         ///     by element with the dtype's setitem (<see cref="Build"/>: <c>np.array([None, 1.0], dtype=float)</c> is
@@ -57,13 +59,48 @@ namespace NumSharp.Backends
             if (elementType == typeof(string))
                 return true;
             // A string dtype (StringDType included) takes the Python objects of an object array (each stored by the dtype's
-            // setitem) and the bytes values of a byte[][]; a typed numeric array is an ndarray, which np.array casts.
+            // setitem) and the bytes values of a byte[][]; a typed numeric array is an ndarray, which np.array casts. So is
+            // an object list of ndarrays without text: NumPy casts each array item into the class (the coercion of a
+            // sequence does: [int32 rows] under 'U' is <U11), which the element builder cannot do.
             if (NDStringStorage.IsString(dtype) || dtype?.Meta is VStringDTypeMeta)
-                return elementType == typeof(object) || elementType == typeof(byte[]);
+                return elementType == typeof(byte[])
+                       || (elementType == typeof(object) && (ContainsText(array) || !ContainsArrayItem(array)));
             // An object list with None under a requested dtype: NumPy packs each element with the dtype's setitem, which the
             // typed conversion of the numeric route cannot do for a null (it threw ArgumentOutOfRangeException). Without a
             // dtype, None makes NumPy's object array, which the numeric route refuses as before.
             return elementType == typeof(object) && (ContainsText(array) || (dtype is not null && ContainsNull(array)));
+        }
+
+        /// <summary>
+        ///     Whether an <c>object</c> array holds an ndarray item - an <see cref="NDArray"/>, a typed C# array of a NumSharp
+        ///     dtype or a <c>Memory&lt;T&gt;</c> of one (<see cref="IsArrayLike"/>) - directly or inside a nested object array.
+        ///     Stops at the first one.
+        /// </summary>
+        /// <param name="array">The array to search.</param>
+        /// <returns>True when an ndarray item is found.</returns>
+        private static bool ContainsArrayItem(Array array)
+        {
+            foreach (var item in array)
+            {
+                switch (item)
+                {
+                    case NDArray _:
+                        return true;
+                    case string _:
+                    case byte[] _:
+                        // A text or bytes value is one element, never an array item or a level to search.
+                        break;
+                    case Array child:
+                        if (IsArrayLike(child) || ContainsArrayItem(child))
+                            return true;
+                        break;
+                    default:
+                        if (IsArrayLike(item))
+                            return true;
+                        break;
+                }
+            }
+            return false;
         }
 
         /// <summary>

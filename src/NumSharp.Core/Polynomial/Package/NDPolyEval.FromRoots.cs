@@ -204,7 +204,7 @@ namespace NumSharp
 
         /// <summary>
         ///     <c>np.array(r, ndmin=1, copy=None)</c>: an <see cref="NDArray"/> as is (a 0-d one expanded to one element, a view),
-        ///     a str a <c>(1,)</c> str array, a sequence through np.array's coercion (<see cref="Backends.UnmanagedStorage.FromSequence"/>), a scalar or
+        ///     a str a <c>(1,)</c> str array, a sequence through np.array's coercion (<see cref="Backends.UnmanagedStorage.FromSequence(object)"/>), a scalar or
         ///     typed C# array as <see cref="NDPolySeries.AsCoefficientArray"/> converts it, None an object <c>[None]</c>.
         /// </summary>
         /// <param name="r">The caller's roots.</param>

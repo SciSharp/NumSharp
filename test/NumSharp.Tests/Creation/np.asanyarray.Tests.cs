@@ -547,14 +547,18 @@ namespace NumSharp.Tests.Creation
 
         #region Non-generic IEnumerable fallback
 
+        /// <summary>
+        ///     A non-generic collection is NumPy's Python list, and its C# ints are Python ints: np.asanyarray([1, 2, 3, 4, 5])
+        ///     is int64 (probed 2.4.2; it was int32, the C# type, until the coercion of a sequence read it).
+        /// </summary>
         [TestMethod]
         public void ArrayList_Int()
         {
             var arrayList = new System.Collections.ArrayList { 1, 2, 3, 4, 5 };
             var result = np.asanyarray(arrayList);
 
-            result.Should().BeShaped(5).And.BeOfValues(1, 2, 3, 4, 5);
-            result.dtype.Should().Be(typeof(int));
+            result.Should().BeShaped(5).And.BeOfValues(1L, 2L, 3L, 4L, 5L);
+            result.dtype.Should().Be(typeof(long));
         }
 
         [TestMethod]
@@ -573,8 +577,9 @@ namespace NumSharp.Tests.Creation
             var hashtable = new System.Collections.Hashtable { { 1, "a" }, { 2, "b" }, { 3, "c" } };
             var result = np.asanyarray(hashtable.Keys);
 
+            // Python ints: int64, as np.asanyarray of a list of ints.
             result.size.Should().Be(3);
-            result.dtype.Should().Be(typeof(int));
+            result.dtype.Should().Be(typeof(long));
         }
 
         #endregion
@@ -689,12 +694,13 @@ namespace NumSharp.Tests.Creation
             var tuple = (1, 2, 3);
             var result = np.asanyarray(tuple);
 
-            result.Should().BeShaped(3).And.BeOfValues(1, 2, 3);
-            result.dtype.Should().Be(typeof(int));
+            result.Should().BeShaped(3).And.BeOfValues(1L, 2L, 3L);
+            result.dtype.Should().Be(typeof(long));
         }
 
         /// <summary>
         /// C# Tuple class is iterable like Python tuples.
+        /// NumPy: np.asanyarray((1,2,3)) -> dtype=int64, shape=(3,)
         /// </summary>
         [TestMethod]
         public void Tuple_IsIterable()
@@ -702,8 +708,8 @@ namespace NumSharp.Tests.Creation
             var tuple = Tuple.Create(1, 2, 3);
             var result = np.asanyarray(tuple);
 
-            result.Should().BeShaped(3).And.BeOfValues(1, 2, 3);
-            result.dtype.Should().Be(typeof(int));
+            result.Should().BeShaped(3).And.BeOfValues(1L, 2L, 3L);
+            result.dtype.Should().Be(typeof(long));
         }
 
         [TestMethod]
@@ -720,12 +726,12 @@ namespace NumSharp.Tests.Creation
         [TestMethod]
         public void ValueTuple_IntAndBool_PromotesToInt()
         {
-            // Mixed int + bool promotes to int (NumPy behavior)
+            // Mixed int + bool promotes to the Python int's int64 (NumPy: np.asanyarray((1, True, 3)) is int64)
             var tuple = (1, true, 3);
             var result = np.asanyarray(tuple);
 
             result.Should().BeShaped(3);
-            result.dtype.Should().Be(typeof(int));
+            result.dtype.Should().Be(typeof(long));
         }
 
         [TestMethod]
@@ -763,11 +769,12 @@ namespace NumSharp.Tests.Creation
         [TestMethod]
         public void ObjectArray_Homogeneous_Int()
         {
+            // C# ints in an object list are Python ints: np.asanyarray([1, 2, 3]) is int64 (it was int32).
             var arr = new object[] { 1, 2, 3 };
             var result = np.asanyarray(arr);
 
-            result.dtype.Should().Be(typeof(int));
-            result.Should().BeShaped(3).And.BeOfValues(1, 2, 3);
+            result.dtype.Should().Be(typeof(long));
+            result.Should().BeShaped(3).And.BeOfValues(1L, 2L, 3L);
         }
 
         [TestMethod]
@@ -783,11 +790,12 @@ namespace NumSharp.Tests.Creation
         [TestMethod]
         public void ObjectArray_MixedBoolInt_PromotesToInt()
         {
+            // np.asanyarray([True, 2, False]) is int64.
             var arr = new object[] { true, 2, false };
             var result = np.asanyarray(arr);
 
-            result.dtype.Should().Be(typeof(int));
-            result.Should().BeShaped(3).And.BeOfValues(1, 2, 0);
+            result.dtype.Should().Be(typeof(long));
+            result.Should().BeShaped(3).And.BeOfValues(1L, 2L, 0L);
         }
 
         [TestMethod]
@@ -802,15 +810,17 @@ namespace NumSharp.Tests.Creation
         }
 
         [TestMethod]
-        public void ObjectArray_AllFloat_PreservesSingle()
+        public void ObjectArray_AllFloat_ArePythonFloats()
         {
-            // Regression: an earlier FindCommonNumericType short-circuit promoted any float
-            // to double. NumPy preserves float32 for homogeneous float32 inputs.
+            // A C# float in an object list is a Python float (the boundary map), so the list is float64, as
+            // np.asanyarray([1.5, 2.5, 3.5]) is; it was float32 while the list was read with C#'s types. A float32 array is
+            // what an ndarray item (float[], an NDArray) keeps.
             var arr = new object[] { 1.5f, 2.5f, 3.5f };
             var result = np.asanyarray(arr);
 
-            result.dtype.Should().Be(typeof(float));
-            result.Should().BeShaped(3).And.BeOfValues(1.5f, 2.5f, 3.5f);
+            result.dtype.Should().Be(typeof(double));
+            result.Should().BeShaped(3).And.BeOfValues(1.5, 2.5, 3.5);
+            np.asanyarray(new object[] { new[] { 1.5f, 2.5f } }).dtype.Should().Be(typeof(float));
         }
 
         [TestMethod]
