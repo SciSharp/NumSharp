@@ -37,8 +37,9 @@ namespace NumSharp
         internal static unsafe NDArray TakeAlongAxis(NDArray arr, NDArray indices, int? axis)
         {
             // A StringDType source: the same gather runs on its cell view (NumPy's checks, this array's shapes) and the cells
-            // are duplicated (NDVStringMove) — never the raw byte kernel below.
-            if (arr.Storage.IsVString)
+            // are duplicated (NDVStringMove) — never the raw byte kernel below. The descriptor answers which sources those
+            // are: the ones whose elements hold references (NumPy's PyDataType_REFCHK).
+            if (arr.dtype.Meta.HasReferences)
                 return Backends.Strings.NDVStringMove.Gather(arr, cells => np.take_along_axis(cells, indices, axis));
 
             // Boundary scope: reclaims the axis=None contiguous re-lay + its reshape view and the
@@ -341,11 +342,11 @@ namespace NumSharp
             long totalSize = 1;
             for (int d = 0; d < ndim; d++) totalSize *= resultDims[d];
 
-            if (arr.Storage.IsVString)
+            if (arr.dtype.Meta.HasReferences)
             {
-                // A StringDType target: the values in its descriptor, then the same scatter on marks (the values'
-                // element numbers: the value broadcast, the overlap snapshot and the bounds pass are the numeric route's)
-                // and the marked elements receive the strings.
+                // A StringDType target (its elements hold references, NumPy's PyDataType_REFCHK): the values in its
+                // descriptor, then the same scatter on marks (the values' element numbers: the value broadcast, the overlap
+                // snapshot and the bounds pass are the numeric route's) and the marked elements receive the strings.
                 var tvals = Backends.Strings.NDVStringMove.StoreValue(values, arr.dtype);
                 Backends.Strings.NDVStringMove.ScatterVia(arr, tvals, (marks, index) => PutAlongAxisCore(marks, indices, index, ax));
                 return;
@@ -565,8 +566,9 @@ namespace NumSharp
             // A StringDType cell is a pointer or an arena offset into ITS array's allocator: copying the raw bytes into the
             // buffer would leave the buffer's cells pointing at the result's storage (and its element size is not a byte
             // count a route may use). Those go through copyto, which writes each text into the buffer's own allocator; the
-            // test comes first because the byte counts below refuse a StringDType array.
-            bool useSpanWrite = !buff.Storage.IsVString && buff.nbytes <= int.MaxValue;
+            // test comes first because the byte counts below refuse a StringDType array. The descriptor answers which buffers
+            // those are: the ones whose elements hold references (NumPy's PyDataType_REFCHK).
+            bool useSpanWrite = !buff.dtype.Meta.HasReferences && buff.nbytes <= int.MaxValue;
             long resBytes = useSpanWrite ? res0.size * buff.dtypesize : 0;
             Span<byte> buffBytes = useSpanWrite ? buff.Unsafe.Bytes() : default;
 
