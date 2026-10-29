@@ -101,13 +101,20 @@ namespace NumSharp
         /// <param name="endpoint">Whether <paramref name="stop"/> is the last sample.</param>
         /// <param name="dtype">The result dtype, or null for float64. A complex dtype computes in the complex128 domain,
         ///     as the <see cref="Geomspace(Complex, Complex, long, bool, DType, int)"/> overload does (its interior differs
-        ///     from the real path's); any other dtype casts the float64 result (an integer dtype truncates toward
-        ///     zero).</param>
+        ///     from the real path's); a text dtype is refused, as NumPy refuses it (below); any other dtype casts the
+        ///     float64 result (an integer dtype truncates toward zero).</param>
         /// <param name="axis">The destination of NumPy's trailing moveaxis: a no-op for the 1-D result, but only 0 and -1
         ///     are in range.</param>
         /// <returns>A new 1-D array of <paramref name="num"/> samples that owns its buffer.</returns>
         /// <exception cref="ValueError">A zero end (<c>Geometric sequence cannot include zero</c>, NumPy's first check),
-        ///     then a negative <paramref name="num"/> (<c>Number of samples, -1, must be non-negative.</c>).</exception>
+        ///     then (after the text dtypes) a negative <paramref name="num"/> (<c>Number of samples, -1, must be
+        ///     non-negative.</c>).</exception>
+        /// <exception cref="DTypePromotionError">A <c>StringDType</c> <paramref name="dtype"/>: NumPy's
+        ///     <c>result_type(start, stop, float(num), zeros((), dtype))</c> finds no common DType (its text lists the four
+        ///     DType classes), right after the zero check.</exception>
+        /// <exception cref="TypeError">An <c>S</c> or <c>U</c> <paramref name="dtype"/>: the ends promote to text and NumPy's
+        ///     <c>sign(start)</c> has no string loop (<c>ufunc 'sign' did not contain a loop with signature matching types
+        ///     &lt;class 'numpy.dtypes.StrDType'&gt; -&gt; None</c>), right after the zero check.</exception>
         /// <exception cref="AxisError">An <paramref name="axis"/> other than 0 or -1, checked after
         ///     <paramref name="num"/>.</exception>
         /// <exception cref="NotSupportedException"><paramref name="dtype"/> has no storage lane (a datetime descriptor):
@@ -131,11 +138,16 @@ namespace NumSharp
         /// <param name="num">The number of samples.</param>
         /// <param name="endpoint">Whether <paramref name="stop"/> is the last sample.</param>
         /// <param name="dtype">The result dtype, or null for complex128; a real dtype drops the imaginary parts in the
-        ///     final cast, as NumPy's <c>astype</c> does.</param>
+        ///     final cast, as NumPy's <c>astype</c> does; a text dtype is refused, as NumPy refuses it (below).</param>
         /// <param name="axis">Only 0 and -1 are in range (NumPy's trailing moveaxis of the 1-D result).</param>
         /// <returns>A new 1-D array of <paramref name="num"/> samples that owns its buffer.</returns>
-        /// <exception cref="ValueError">A zero end (<c>Geometric sequence cannot include zero</c>), then a negative
-        ///     <paramref name="num"/>.</exception>
+        /// <exception cref="ValueError">A zero end (<c>Geometric sequence cannot include zero</c>), then (after the text
+        ///     dtypes) a negative <paramref name="num"/>.</exception>
+        /// <exception cref="DTypePromotionError">A <c>StringDType</c> <paramref name="dtype"/>: no common DType with the
+        ///     complex128 ends (NumPy's text, which lists <c>Complex128DType</c> twice), right after the zero
+        ///     check.</exception>
+        /// <exception cref="TypeError">An <c>S</c> or <c>U</c> <paramref name="dtype"/>: NumPy's <c>sign(start)</c> of the
+        ///     ends cast to text has no string loop, right after the zero check.</exception>
         /// <exception cref="AxisError">An <paramref name="axis"/> other than 0 or -1, checked after
         ///     <paramref name="num"/>.</exception>
         /// <exception cref="NotSupportedException"><paramref name="dtype"/> has no storage lane (a datetime descriptor):

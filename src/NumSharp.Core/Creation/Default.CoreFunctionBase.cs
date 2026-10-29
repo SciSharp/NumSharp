@@ -477,6 +477,9 @@ namespace NumSharp.Backends
             // axis moveaxis), so a zero endpoint wins over a negative num which wins over a bad axis.
             if (start == 0.0 || stop == 0.0)
                 throw new ValueError("Geometric sequence cannot include zero");
+            // A text dtype fails NumPy's next statements, before the count and the axis are read.
+            if (dtype != null && dtype.GetTypeCode() == NPTypeCode.String)
+                RefuseGeomspaceTextDtype(NDArray.Scalar(start), num, dtype);
             ValidateSampleCount(num);
             ValidateSpacingAxis(axis);
 
@@ -496,10 +499,44 @@ namespace NumSharp.Backends
             // NumPy checks each endpoint against 0+0j (a purely-imaginary value is NOT zero and is allowed).
             if (start == Complex.Zero || stop == Complex.Zero)
                 throw new ValueError("Geometric sequence cannot include zero");
+            // A text dtype fails NumPy's next statements, before the count and the axis are read.
+            if (dtype != null && dtype.GetTypeCode() == NPTypeCode.String)
+                RefuseGeomspaceTextDtype(NDArray.Scalar(start), num, dtype);
             ValidateSampleCount(num);
             ValidateSpacingAxis(axis);
 
             return GeomspaceComplexCore(start, stop, num, endpoint, dtype);
+        }
+
+        /// <summary>
+        ///     NumPy's geomspace statements after the zero check, for a text dtype - they always raise, before the sample
+        ///     count and the axis are read: <c>dt = result_type(start, stop, float(num), zeros((), dtype))</c> finds no
+        ///     common DType for <c>StringDType</c>; <c>S</c> and <c>U</c> promote to text, NumPy casts the ends to it
+        ///     (<c>start.astype(dt, copy=True)</c>), and <c>out_sign = sign(start)</c> has no string loop.
+        /// </summary>
+        /// <param name="start">The first end as a 0-d array of the ends' dtype (float64, or complex128 for complex ends);
+        ///     consumed (disposed) here.</param>
+        /// <param name="num">The sample count, which NumPy promotes as <c>float(num)</c>, a weak Python float.</param>
+        /// <param name="dtype">The text dtype (the String storage lane).</param>
+        /// <exception cref="DTypePromotionError">A <c>StringDType</c>: NumPy's text, which lists the four DType classes
+        ///     (<c>The DType &lt;class 'numpy.dtypes.StringDType'&gt; could not be promoted by &lt;class
+        ///     'numpy.dtypes.Float64DType'&gt;. ...</c>).</exception>
+        /// <exception cref="TypeError">An <c>S</c> or <c>U</c> dtype: sign's refusal (<c>ufunc 'sign' did not contain a loop
+        ///     with signature matching types &lt;class 'numpy.dtypes.StrDType'&gt; -&gt; None</c>, a UFuncTypeError in
+        ///     NumPy).</exception>
+        /// <exception cref="InvalidOperationException">Never: np.sign computing text would be a library bug.</exception>
+        private void RefuseGeomspaceTextDtype(NDArray start, long num, DType dtype)
+        {
+            using (start)
+            {
+                // The ends' arrays (start, stop: one dtype) are strong, float(num) is weak, the dtype's 0-d zeros strong:
+                // DTypePromotion.ResultType takes the same operands as NumPy's call, in its order (the DTypePromotionError
+                // text lists them).
+                DType dt = DTypePromotion.ResultType(start.dtype, start.dtype, (double)num, dtype);
+                using NDArray text = start.astype(dt);
+                using NDArray sign = Sign(text);
+            }
+            throw new InvalidOperationException("np.sign computed the sign of text; NumPy has no string loop for it.");
         }
 
         /// <summary>

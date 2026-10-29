@@ -153,5 +153,48 @@ namespace NumSharp.Tests.Creation
             np.linspace(0.0, 1.0, 1, dtype: "U5").ToString(true).Should().Be("array(['0.0'], dtype='<U5')");
             np.linspace(0.0, 1.0, 0, dtype: "U5").ToString(true).Should().Be("array([], dtype='<U5')");
         }
+
+        /// <summary>
+        ///     geomspace's text dtypes fail NumPy's statements after the zero check: <c>result_type(start, stop,
+        ///     float(num), zeros((), dtype))</c> has no common DType for StringDType; S and U promote to text and
+        ///     <c>sign(start)</c> has no string loop. Both come before the sample count and the axis. NumSharp computed the
+        ///     float64 progression and formatted it.
+        /// </summary>
+        [TestMethod]
+        public void Geomspace_TextDtype_FailsNumPysStatements_BeforeTheCountAndTheAxis()
+        {
+            const string stringDTypeFloat =
+                "The DType <class 'numpy.dtypes.StringDType'> could not be promoted by <class 'numpy.dtypes.Float64DType'>. " +
+                "This means that no common DType exists for the given inputs. For example they cannot be stored in a single " +
+                "array unless the dtype is `object`. The full list of DTypes is: (<class 'numpy.dtypes.Float64DType'>, " +
+                "<class 'numpy.dtypes.Float64DType'>, <class 'numpy.dtypes._PyFloatDType'>, <class 'numpy.dtypes.StringDType'>)";
+            const string stringDTypeComplex =
+                "The DType <class 'numpy.dtypes.StringDType'> could not be promoted by <class 'numpy.dtypes.Complex128DType'>. " +
+                "This means that no common DType exists for the given inputs. For example they cannot be stored in a single " +
+                "array unless the dtype is `object`. The full list of DTypes is: (<class 'numpy.dtypes.Complex128DType'>, " +
+                "<class 'numpy.dtypes.Complex128DType'>, <class 'numpy.dtypes._PyFloatDType'>, <class 'numpy.dtypes.StringDType'>)";
+            const string signStr = "ufunc 'sign' did not contain a loop with signature matching types <class 'numpy.dtypes.StrDType'> -> None";
+            const string signBytes = "ufunc 'sign' did not contain a loop with signature matching types <class 'numpy.dtypes.BytesDType'> -> None";
+            var T = np.dtype("T");
+            var c1 = new System.Numerics.Complex(1, 0);
+            var c1000 = new System.Numerics.Complex(1000, 0);
+
+            // np.geomspace(1.0, 1000.0, 4, dtype=StringDType()) -> DTypePromotionError
+            new Action(() => np.geomspace(1.0, 1000.0, 4, dtype: T)).Should().Throw<DTypePromotionError>().WithMessage(stringDTypeFloat);
+            new Action(() => np.geomspace(c1, c1000, 4, dtype: T)).Should().Throw<DTypePromotionError>().WithMessage(stringDTypeComplex);
+            // np.geomspace(1.0, 1000.0, 4, dtype='U5' / 'S5') -> UFuncTypeError (NumSharp's TypeError), complex ends too
+            new Action(() => np.geomspace(1.0, 1000.0, 4, dtype: "U5")).Should().ThrowExactly<TypeError>().WithMessage(signStr);
+            new Action(() => np.geomspace(1.0, 1000.0, 4, dtype: "S5")).Should().ThrowExactly<TypeError>().WithMessage(signBytes);
+            new Action(() => np.geomspace(c1, c1000, 4, dtype: "U5")).Should().ThrowExactly<TypeError>().WithMessage(signStr);
+            // before the count and the axis: np.geomspace(1.0, 1000.0, -1, dtype=StringDType()), (..., 4, dtype='U5', axis=3),
+            // (..., 0, dtype='U5')
+            new Action(() => np.geomspace(1.0, 1000.0, -1, dtype: T)).Should().Throw<DTypePromotionError>().WithMessage(stringDTypeFloat);
+            new Action(() => np.geomspace(1.0, 1000.0, -1, dtype: "U5")).Should().ThrowExactly<TypeError>().WithMessage(signStr);
+            new Action(() => np.geomspace(1.0, 1000.0, 4, dtype: "U5", axis: 3)).Should().ThrowExactly<TypeError>().WithMessage(signStr);
+            new Action(() => np.geomspace(1.0, 1000.0, 0, dtype: "U5")).Should().ThrowExactly<TypeError>().WithMessage(signStr);
+            // after the zero check: np.geomspace(0.0, 1000.0, 4, dtype=StringDType()) -> the zero's ValueError
+            new Action(() => np.geomspace(0.0, 1000.0, 4, dtype: T))
+                .Should().Throw<ValueError>().WithMessage("Geometric sequence cannot include zero");
+        }
     }
 }
