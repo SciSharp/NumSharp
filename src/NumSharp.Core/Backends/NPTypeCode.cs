@@ -97,9 +97,10 @@ namespace NumSharp
         // Group 1 needs a storage lane of its own. Before uncommenting one of its members:
         //   - Keep the value at 17 or in 19..127. DTypeRegistry._byCode and the pythonnet package's _dtypeStrings cache
         //     are 129-slot arrays indexed by the value, and NpFunc sizes every dispatch table to the largest value + 1.
-        //     The free values below 17 (1 and 2) misbehave: GetComputingType answers Double for every value below Single
-        //     (its rule for bool and the integers), and GetTypeCode(Type) casts System.TypeCode.DBNull (2) straight to
-        //     NPTypeCode.
+        //     The free values below 17 (1 and 2) misbehave: GetComputingType, ResolveUnaryReturnType and the divide and
+        //     arctan2 dtype checks read every value below Single as bool or an integer, and GetTypeCode(Type) casts
+        //     System.TypeCode.DBNull (2) straight to NPTypeCode. The value also ranks the code where two codes are
+        //     compared as numbers: np.find_common_type's _find_common_coerce returns the larger one.
         //   - Give it a SizeOf case, or exclude it in StackedMemoryPool: that class's type initializer calls SizeOf on
         //     every member (Enum.GetValues), so a member without a case makes every ArraySlice.Scalar and
         //     UnmanagedStorage.Scalar call throw TypeInitializationException for the rest of the process.
