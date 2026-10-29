@@ -1,5 +1,5 @@
-// The C functions of NumPy's _multiarray_umath that compute (np.dot, np.lexsort, np.unravel_index, np.packbits and
-// np.unpackbits so far; Appendix D of docs/plans/np-layer-dtype-logic.md lists the rest). The C functions of the array object (np.array,
+// The C functions of NumPy's _multiarray_umath that compute (np.dot, np.lexsort, np.unravel_index, np.packbits,
+// np.unpackbits and np.bincount so far; Appendix D of docs/plans/np-layer-dtype-logic.md lists the rest). The C functions of the array object (np.array,
 // np.copyto, np.concatenate, ...) are not engine members.
 
 using System;
@@ -131,5 +131,29 @@ namespace NumSharp
         ///     rule and calls this. An empty input with a count that asks for elements gives zeros, where NumPy leaks
         ///     uninitialised memory.</remarks>
         public abstract NDArray Unpackbits(NDArray a, int? axis = null, long? count = null, string bitorder = "big");
+
+        /// <summary>
+        ///     NumPy's <c>np.bincount(x, weights=None, minlength=0)</c> (<c>arr_bincount</c>,
+        ///     <c>numpy/_core/src/multiarray/compiled_base.c</c>), the whole call: the number of occurrences of each
+        ///     non-negative integer in <paramref name="x"/>, or with <paramref name="weights"/> the sum of the weights at
+        ///     the positions of each value. The result has <c>max(x.max() + 1, minlength)</c> bins.
+        /// </summary>
+        /// <param name="x">A 1-D array of non-negative integers: an integer, bool or char dtype, cast to int64 (a uint64
+        ///     value at or past 2^63 wraps negative and is refused, as NumPy's cast makes it).</param>
+        /// <param name="weights">Null, or a 1-D array of <paramref name="x"/>'s length, cast to float64.</param>
+        /// <param name="minlength">The smallest number of bins (non-negative).</param>
+        /// <returns>A new 1-D array: int64 counts without <paramref name="weights"/>, float64 sums with them. An empty
+        ///     <paramref name="x"/> gives <c>minlength</c> int64 zeros, whatever the weights.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="x"/>, or with values the weights, is not 1-D
+        ///     (NumPy's <c>object of too small depth for desired array</c> / <c>object too deep for desired array</c>
+        ///     ValueError texts).</exception>
+        /// <exception cref="InvalidCastException"><paramref name="x"/> is not an integer, bool or char array, or the
+        ///     weights are complex or text (NumPy's safe-cast TypeError text).</exception>
+        /// <exception cref="ValueError">In NumPy's order: a negative <paramref name="minlength"/>, a negative value, weights
+        ///     of another length.</exception>
+        /// <remarks>New in 0.71.0 (the np-layer dtype plan): the public <c>np.bincount</c> computes a <c>numpy.matrix</c>
+        ///     operand as a plain array and calls this.</remarks>
+        public abstract NDArray Bincount(NDArray x, NDArray weights = null, int minlength = 0);
     }
 }
