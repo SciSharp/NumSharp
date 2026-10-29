@@ -99,7 +99,14 @@
 // array: their operand is a (start, stop) PAIR from SpacePairLabels - increasing, decreasing, equal, mixed-sign, zero,
 // NaN, infinite, signed-zero and extreme pairs, complex ones for geomspace's Complex overload - with the sample count,
 // the log base, the moveaxis destination and the device varied), np.trim_zeros' trim spec and np.vander's column count
-// N; an overload with a required parameter of another kind is reported once as SKIP. An int
+// N, and the constructor family's (np.empty / np.zeros / np.ones / np.full / np.eye / np.identity / np.ndarray, which take
+// no array: their operand is a SHAPE from CtorShapeLabels - 0-d, empty, 1-D to 3-D, unit, negative and overflowing
+// dims - in the C# form its parameter takes (an int, an int[] / long[], a Shape; a form the shape has no value in
+// produces no line), with np.full's fill value (CtorFillLabels: C# numbers of every kind, text, bytes, None, a Python int
+// past every C# integer, NaN and -0.0, 0-d and broadcast arrays, a C# array), np.eye's M and k, the creation order (C
+// first: NumPy's creation functions refuse A and K) and np.ndarray's buffer, offset and strides varied; the _like forms'
+// fill value and shape= take the same variants); an overload with a required parameter of another kind is reported once
+// as SKIP. An int
 // axis
 // starts from its default when it has one. A search function (np.searchsorted) runs on pools of 1-D haystacks: sorted,
 // strided, reversed, unsorted and empty ones beside one 2-D operand; np.convolve / np.correlate run on the same 1-D pools
@@ -431,6 +438,12 @@ static class Snapshot
         // log base and the moveaxis destination of their own; endpoint and dtype take the general roles, the device the
         // coercion family's. np.trim_zeros' trim spec (required on its axis-list overload) and np.vander's column count N.
         SpacePair, SpaceStop, SpaceNum, SpaceBase, SpaceAxis, TrimSpec, VanderN,
+        // The constructor family (np.empty / np.zeros / np.ones / np.full / np.eye / np.identity / np.ndarray) takes no
+        // array: its operand is a SHAPE (CtorShapeLabels; np.eye's N and np.identity's n are its first dim), built in Call
+        // in the C# form of the parameter (MakeCtorShape). The fill value of np.full / np.full_like, the shape= of the _like
+        // forms (base: the prototype's own), np.eye's M and k, the creation order (C first, unlike the general Order role:
+        // NumPy's creation functions refuse A and K), and np.ndarray's buffer, byte offset and byte strides.
+        CtorShape, CtorFill, CtorShapeArg, EyeM, EyeK, CtorOrder, NdBuffer, NdOffset, NdStrides,
         Default, Unsupported,
     }
 
@@ -951,14 +964,15 @@ static class Snapshot
     ///     <see cref="CopytoScalarLabels"/> (NumPy's Python scalars and the NumPy scalars NumSharp's C# types stand for);
     ///     the coercion family's generic overloads (np.array&lt;T&gt;, np.asarray&lt;T&gt;, NDArray.Scalar&lt;T&gt;) for
     ///     every element type NumSharp stores (<see cref="HostElementTypes"/>), each fed only the pool operands of its own
-    ///     dtype; none for any other generic method, whose targets keep their snapshots.
+    ///     dtype; the constructor family's (np.empty&lt;T&gt;, np.zeros&lt;T&gt;, np.ones&lt;T&gt;, np.full&lt;T&gt;) for the
+    ///     same element types, each over every shape; none for any other generic method, whose targets keep their snapshots.
     /// </summary>
     /// <param name="m">A generic method definition.</param>
     /// <returns>Its closed instances, or none.</returns>
     private static IEnumerable<MethodInfo> SnapshotInstantiations(MethodInfo m) =>
         m.DeclaringType == typeof(np) && m.Name == "copyto"
             ? CopytoScalarLabels.Keys.Select(t => m.MakeGenericMethod(t))
-            : IsCoercion(m)
+            : IsCoercion(m) || IsCtor(m)
                 ? HostElementTypes.Select(t => m.MakeGenericMethod(t))
                 : Enumerable.Empty<MethodInfo>();
 
@@ -1035,6 +1049,122 @@ static class Snapshot
             return new Complex(0.0, Real(body));
         return new Complex(Real(body.Substring(0, split)), Real(body.Substring(split)));
     }
+
+    /// <summary>
+    ///     Whether an overload belongs to the constructor family: np.empty / np.zeros / np.ones / np.full (NumPy's creation
+    ///     functions over <c>ctors.c</c> and <c>_core/numeric.py</c>), their <c>_like</c> forms, np.eye / np.identity and
+    ///     the np.ndarray constructor. The family's overloads without an array parameter take a shape as their operand.
+    /// </summary>
+    /// <param name="m">The overload.</param>
+    /// <returns>True for a public static overload of one of those names on np.</returns>
+    private static bool IsCtor(MethodInfo m) =>
+        m.DeclaringType == typeof(np) && m.Name is "empty" or "zeros" or "ones" or "full" or "eye" or "identity" or "ndarray"
+            or "empty_like" or "zeros_like" or "ones_like" or "full_like";
+
+    /// <summary>Whether a parameter belongs to the constructor family (<see cref="IsCtor(MethodInfo)"/>).</summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True when its method is one of the constructors.</returns>
+    private static bool IsCtor(ParameterInfo p) => p.Member is MethodInfo m && IsCtor(m);
+
+    /// <summary>Whether a parameter belongs to a <c>_like</c> form of the constructor family (whose order defaults to K).</summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True for a parameter of np.empty_like / np.zeros_like / np.ones_like / np.full_like.</returns>
+    private static bool IsLike(ParameterInfo p) => p.Member.Name.EndsWith("_like", StringComparison.Ordinal);
+
+    /// <summary>
+    ///     The shapes the constructor family runs on (its operand pool): 0-d, a vector, a matrix, an empty vector, an empty
+    ///     axis between others, a unit matrix, a 3-D shape, a negative dim alone and after a positive one (NumPy's
+    ///     "negative dimensions are not allowed"), and two dims whose float64 byte count overflows (NumPy's "array is too
+    ///     big"). Phase B takes the first five, phase C the first three.
+    /// </summary>
+    private static readonly string[] CtorShapeLabels =
+        { "()", "(3,)", "(2,3)", "(0,)", "(2,0,3)", "(1,1)", "(4,1,2)", "(-1,)", "(2,-3)", "(2147483648,2147483648)" };
+
+    /// <summary>
+    ///     A constructor's shape operand in its parameter's C# form: an int (a 1-D shape's length; np.eye's N and
+    ///     np.identity's n take the first dim of any shape), an int[] / long[] of the dims, or a <see cref="Shape"/>.
+    /// </summary>
+    /// <param name="p">The shape parameter.</param>
+    /// <param name="label">The shape label (<see cref="CtorShapeLabels"/>).</param>
+    /// <param name="value">Receives the boxed value.</param>
+    /// <returns>False when the shape has no value in this form (a 0-d or 2-D shape as an int, a dim past int as an int /
+    ///     int[]); the call is then not made.</returns>
+    private static bool TryMakeCtorShape(ParameterInfo p, string label, out object value)
+    {
+        string inner = label.Trim('(', ')');
+        long[] dims = inner.Length == 0
+            ? Array.Empty<long>()
+            : inner.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(s => long.Parse(s, CultureInfo.InvariantCulture)).ToArray();
+        Type t = p.ParameterType;
+        bool fitsInt = dims.All(d => d >= int.MinValue && d <= int.MaxValue);
+        value = null;
+        if (t == typeof(int))
+        {
+            // np.eye's N / np.identity's n: the first dim of any shape; a creation function's int shape: a 1-D shape only.
+            bool sizeArg = p.Name is "N" or "n";
+            if (dims.Length == 0 || (!sizeArg && dims.Length != 1) || !fitsInt)
+                return false;
+            value = (int)dims[0];
+            return true;
+        }
+        if (t == typeof(int[]))
+        {
+            if (!fitsInt)
+                return false;
+            value = dims.Select(d => (int)d).ToArray();
+            return true;
+        }
+        if (t == typeof(long[]))
+        {
+            value = dims;
+            return true;
+        }
+        if (t == typeof(Shape))
+        {
+            value = new Shape(dims);
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    ///     The fill values of np.full / np.full_like (NumPy's <c>copyto(a, fill_value, casting='unsafe')</c>): a C# int
+    ///     first, then each C# number kind (a Python float, a bool, a NumPy float16, NumSharp's decimal, a complex, a char), a
+    ///     Python int past int8 and one past every C# integer, NaN and -0.0, text and bytes, None, a 0-d int64 array, a row
+    ///     that broadcasts into a (2, 3) or (3,) shape and one that broadcasts into none of them, and a C# int[].
+    /// </summary>
+    private static readonly string[] CtorFillLabels =
+    {
+        "7", "2.5", "true", "half1.5", "dec1.5", "1+2j", "char_x", "300", "-1", "2**70", "nan", "-0.0", "str_ab", "bytes_ab",
+        "none", "0d_int64", "row3", "row4", "int[3]",
+    };
+
+    /// <summary>The fill value of a <see cref="CtorFillLabels"/> label.</summary>
+    /// <param name="label">The label.</param>
+    /// <returns>The boxed C# value (null for None).</returns>
+    private static object MakeCtorFill(string label) => label switch
+    {
+        "7" => 7,
+        "2.5" => 2.5,
+        "true" => true,
+        "half1.5" => (Half)1.5,
+        "dec1.5" => 1.5m,
+        "1+2j" => new Complex(1, 2),
+        "char_x" => 'x',
+        "300" => 300,
+        "-1" => -1,
+        "2**70" => BigInteger.Pow(2, 70),
+        "nan" => double.NaN,
+        "-0.0" => -0.0,
+        "str_ab" => "ab",
+        "bytes_ab" => new byte[] { 97, 98 },
+        "none" => null,
+        "0d_int64" => np.array(5L),
+        "row3" => np.array(new[] { 1.5, 2.5, 3.5 }),
+        "row4" => np.array(new[] { 1, 2, 3, 4 }),
+        "int[3]" => new[] { 4, 5, 6 },
+        _ => throw new ArgumentException("no fill value " + label),
+    };
 
     /// <summary>
     ///     The C# element types of the 15 dtypes NumSharp stores, in the pool's dtype order: the types the coercion
@@ -1544,6 +1674,22 @@ static class Snapshot
         // roles below), before the general array roles would read an array source as a second operand.
         if (IsAssignment(p) && AssignArgLabels(p) is not null)
             return Role.AssignArg;
+        // The constructor family's own parameters (only theirs; the dtype and a _like form's prototype take the general
+        // roles below): the fill value, a _like form's shape=, np.eye's M and k, a creation function's order (C first; a
+        // _like form's order defaults to K and takes the general Order role), np.ndarray's buffer / offset / strides, and
+        // the device.
+        if (IsCtor(p))
+        {
+            if (n == "fill_value" && t == typeof(object)) return Role.CtorFill;
+            if (n == "shape" && t == typeof(Shape) && IsLike(p)) return Role.CtorShapeArg;
+            if (n == "M" && t == typeof(int?)) return Role.EyeM;
+            if (n == "k" && t == typeof(int)) return Role.EyeK;
+            if (n == "order" && t == typeof(char) && !IsLike(p)) return Role.CtorOrder;
+            if (n == "buffer" && t == typeof(object)) return Role.NdBuffer;
+            if (n == "offset" && t == typeof(long)) return Role.NdOffset;
+            if (n == "strides" && t == typeof(long[])) return Role.NdStrides;
+            if (n == "device" && t == typeof(string)) return Role.CoerceDevice;
+        }
         // An NDMatrix parameter (numpy.matrix's out=, typed as the matrix NumPy requires) takes the array roles too; other
         // NDArray subclasses (NDArray<bool> masks, ...) keep falling through, so the snapshots of the np.* and NDArray targets
         // are unchanged by the NDMatrix support.
@@ -2147,6 +2293,67 @@ static class Snapshot
                 Add("null", () => null);
                 foreach (var nCols in new[] { 0, 1, 3, 9, -1 })
                     Add(nCols.ToString(CultureInfo.InvariantCulture), () => (int?)nCols);
+                break;
+            case Role.CtorShape:
+                // Built from the shape label in Call (TryMakeCtorShape); the factory here is never called.
+                Add("shape", () => null);
+                break;
+            case Role.CtorFill:
+                foreach (var label in CtorFillLabels)
+                    Add(label, () => MakeCtorFill(label));
+                break;
+            case Role.CtorShapeArg:
+                // A _like form's shape=: its default first when it has one (the prototype's own shape, NumPy's shape=None),
+                // then a matrix, a vector of the same size, 0-d, an empty vector, a matrix of other dims and a negative dim
+                // (NumPy's "negative dimensions are not allowed"). A required one starts at the matrix.
+                if (p.HasDefaultValue)
+                    Add("default", () => p.DefaultValue is Shape given ? given : default(Shape));
+                foreach (var dims in new[] { new long[] { 2, 3 }, new long[] { 6 }, new long[0], new long[] { 0 }, new long[] { 3, 2 }, new long[] { -1 } })
+                    Add("(" + string.Join(",", dims) + (dims.Length == 1 ? ",)" : ")"), () => new Shape(dims));
+                break;
+            case Role.EyeM:
+                // None (a square matrix) first, then no column, fewer and more columns than N's shapes have, and a negative
+                // count (the allocation's "negative dimensions are not allowed").
+                Add("null", () => null);
+                foreach (var cols in new[] { 0, 2, 5, -1 })
+                    Add(cols.ToString(CultureInfo.InvariantCulture), () => (int?)cols);
+                break;
+            case Role.EyeK:
+                // The main diagonal first, then one above and below, beyond either corner of every shape, and far past it.
+                foreach (var k in new[] { 0, 1, -1, 3, -3, 100 })
+                    Add(k.ToString(CultureInfo.InvariantCulture), () => k);
+                break;
+            case Role.CtorOrder:
+                // A creation function's default C first, then F, the A and K NumPy's creation functions refuse ("only 'C' or
+                // 'F' order is permitted"), a lower-case spelling and a letter NumPy refuses first.
+                foreach (var o in new[] { 'C', 'F', 'A', 'K', 'c', 'Z' })
+                    Add(o.ToString(), () => o);
+                break;
+            case Role.NdBuffer:
+                // No buffer first (np.ndarray allocates), then buffers it lays the array over: the bytes of 0..47 (48 bytes),
+                // too few bytes, a C-contiguous float64 array, a transposed (F-contiguous) one, a strided view (NumPy's
+                // "ndarray is not contiguous"), read-only bytes, and a str (no buffer: NumPy's TypeError).
+                Add("null", () => null);
+                Add("bytes48", () => Enumerable.Range(0, 48).Select(b => (byte)b).ToArray());
+                Add("bytes4", () => new byte[] { 1, 2, 3, 4 });
+                Add("f8_c", () => np.arange(6.0));
+                Add("f8_f", () => np.arange(6.0).reshape(2, 3).T);
+                Add("f8_strided", () => np.arange(12.0)["::2"]);
+                Add("rom48", () => (ReadOnlyMemory<byte>)Enumerable.Range(0, 48).Select(b => (byte)b).ToArray());
+                Add("str", () => "abc");
+                break;
+            case Role.NdOffset:
+                // No offset first, then a whole float64 element, a misaligned byte offset, a negative offset and one past
+                // any buffer above.
+                foreach (var off in new[] { 0L, 8L, 3L, -8L, 1000L })
+                    Add(off.ToString(CultureInfo.InvariantCulture), () => off);
+                break;
+            case Role.NdStrides:
+                // None (C strides) first, then explicit C and F byte strides of a (2, 3) float64 layout, a one-axis stride, a
+                // negative stride, a stride that splits an element, and a stride list of the wrong length.
+                Add("null", () => null);
+                foreach (var s in new[] { new long[] { 24, 8 }, new long[] { 8, 16 }, new long[] { 8 }, new long[] { -8 }, new long[] { 4 }, new long[] { 8, 8, 8 } })
+                    Add("[" + string.Join(",", s) + "]", () => s);
                 break;
             case Role.CoerceSize:
             {
@@ -2835,6 +3042,14 @@ static class Snapshot
                 roles[i] = Role.SpaceStop;
                 continue;
             }
+            // A constructor's operand when it takes no array: its shape (np.eye's N, np.identity's n), built per call from
+            // the shape label in the parameter's C# form (TryMakeCtorShape). A _like form's prototype is the general operand.
+            if (i == 0 && !instance && IsCtor(m) && ps[0].ParameterType != typeof(NDArray))
+            {
+                roles[i] = Role.CtorShape;
+                sawArray = true;
+                continue;
+            }
             // The coercion family's host operand: its first parameter when that is not an NDArray (np.array's C# arrays,
             // strs and scalars, np.asanyarray's object, NDArray.Scalar's value, a conversion operator's C# source). It is
             // built from the pool operand (TryMakeHostOperand), and an NDArray parameter after it (like=) is no operand.
@@ -2913,7 +3128,7 @@ static class Snapshot
             yield return $"{signature}\tSKIP unsupported required parameter {TypeName(ps[unsupported].ParameterType)} {ps[unsupported].Name}";
             yield break;
         }
-        var variants = ps.Select((p, i) => roles[i] is Role.Operand or Role.HostOperand or Role.SpacePair ? null : Variants(p, roles[i])).ToArray();
+        var variants = ps.Select((p, i) => roles[i] is Role.Operand or Role.HostOperand or Role.SpacePair or Role.CtorShape ? null : Variants(p, roles[i])).ToArray();
         int operandIndex = Array.IndexOf(roles, Role.Operand);
         // A coercion overload's operand is its host operand, built per call from the pool operand.
         int hostIndex = Array.IndexOf(roles, Role.HostOperand);
@@ -2925,6 +3140,11 @@ static class Snapshot
         bool spacing = operandIndex < 0 && pairIndex >= 0;
         if (spacing)
             operandIndex = pairIndex;
+        // A constructor's operand is its shape.
+        int shapeIndex = Array.IndexOf(roles, Role.CtorShape);
+        bool ctor = operandIndex < 0 && shapeIndex >= 0;
+        if (ctor)
+            operandIndex = shapeIndex;
         var none = Array.Empty<(int, int)>();
 
         // The number of non-base variants per parameter (0 for the operand and for parameters kept at their default).
@@ -2933,6 +3153,7 @@ static class Snapshot
             Role.Operand => 0,
             Role.HostOperand => 0,
             Role.SpacePair => 0,
+            Role.CtorShape => 0,
             Role.Out => OutVariantLabels.Length,
             Role.Weights => WeightVariantLabels.Length,
             Role.Where => WhereVariantLabels.Length,
@@ -2992,6 +3213,16 @@ static class Snapshot
             reducedLayouts = fullLayouts.Take(5).ToArray();
             pairLayouts = fullLayouts.Take(3).ToArray();
             dtypes = new[] { "pair" };
+            pairDtypes = dtypes;
+        }
+        if (ctor)
+        {
+            // A constructor takes no pool operand: its pools are shapes, one stand-in dtype label ("shape"), the first five
+            // shapes for phase B and the first three for phase C.
+            fullLayouts = CtorShapeLabels;
+            reducedLayouts = fullLayouts.Take(5).ToArray();
+            pairLayouts = fullLayouts.Take(3).ToArray();
+            dtypes = new[] { "shape" };
             pairDtypes = dtypes;
         }
         // A host operand form the pool operand does not have (Call returns null) produces no line; an overload whose host
@@ -3138,10 +3369,12 @@ static class Snapshot
         // A spacing generator's operand is its (start, stop) pair, not a pool operand: a fresh 0-d array stands in for the
         // MUTATED check, which then never fires.
         bool spacingCall = operandIndex >= 0 && roles[operandIndex] == Role.SpacePair;
+        // A constructor's operand is its shape: a fresh 0-d array stands in for the same MUTATED check.
+        bool ctorCall = operandIndex >= 0 && roles[operandIndex] == Role.CtorShape;
         // A host operand's layout is "layout:form" (RunOverload): the pool operand of the layout, then its C# form.
         int formAt = layout.IndexOf(':');
         string baseLayout = formAt < 0 ? layout : layout.Substring(0, formAt);
-        NDArray operand = spacingCall ? np.array(0.0) : MakeOperand(dt, baseLayout);
+        NDArray operand = spacingCall || ctorCall ? np.array(0.0) : MakeOperand(dt, baseLayout);
         // A matrix receiver is np.asmatrix's view of the pool operand (0-d -> (1, 1), 1-D -> (1, N)); a layout it refuses
         // (more than two long axes: "shape too large to be a matrix.") has no matrix to call the member on.
         if (matrix && operand is not null)
@@ -3151,6 +3384,9 @@ static class Snapshot
         object operandArg = operand;
         if (spacingCall)
             operandArg = MakeSpaceValue(ps[operandIndex].ParameterType, layout, start: true);
+        // A shape with no value in the parameter's form (a 2-D shape as an int) makes no line at all.
+        if (ctorCall && !TryMakeCtorShape(ps[operandIndex], layout, out operandArg))
+            return null;
         if (operandIndex >= 0 && roles[operandIndex] == Role.HostOperand)
         {
             // The coercion family's C# value of the operand; a form this operand does not have makes no line at all.
