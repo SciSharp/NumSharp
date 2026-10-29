@@ -91,8 +91,8 @@ namespace NumSharp.Backends
             {
                 long len = current.Shape.dimensions[ax];
                 long m = len > 0 ? len - 1 : 0;                      // result length along axis
-                var hi = np.SliceAlongAxis(current, ax, len - m, len);  // a[1:]  (last  m)
-                var lo = np.SliceAlongAxis(current, ax, 0, m);          // a[:-1] (first m)
+                var hi = NDArray.SliceAlongAxis(current, ax, len - m, len);  // a[1:]  (last  m)
+                var lo = NDArray.SliceAlongAxis(current, ax, 0, m);          // a[:-1] (first m)
                 // Bool diffs via not_equal (the `!=` IL kernel). Numeric diffs go
                 // through the lean NDIter subtract (DiffSubtractViaNDIter), which
                 // writes into an uninitialised output and skips the type-promotion /

@@ -217,14 +217,14 @@ namespace NumSharp.Backends
             // up[1:] = p[1:] + cumsum(ph_correct) along the axis. cumsum widens integer
             // ph_correct to int64/uint64 (NEP50); the assignment casts it back to `outdt`.
             correction = np.cumsum(ph, axis: ax);
-            pTail = np.SliceAlongAxis(p, ax, 1, len); // p[1:] (read-only view)
+            pTail = NDArray.SliceAlongAxis(p, ax, 1, len); // p[1:] (read-only view)
             tail = pTail + correction;                // result_type(p, correction)
 
             // Cast the tail to the output dtype only when it differs (the float path
             // already matches, so this is a no-op copy avoided there), then write it
             // through the [1:] view of `up`.
             castTail = tail.GetTypeCode == outTc ? tail : tail.astype(outdt);
-            upTail = np.SliceAlongAxis(up, ax, 1, len); // up[1:] (writeable view into up)
+            upTail = NDArray.SliceAlongAxis(up, ax, 1, len); // up[1:] (writeable view into up)
             upTail.SetData(castTail);
             // Every intermediate above (dd, ph, correction, the p[1:]/up[1:] views, tail and its
             // cast) is released by this method's scope; `up` is yielded.

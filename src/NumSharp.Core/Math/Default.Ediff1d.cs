@@ -53,8 +53,8 @@ namespace NumSharp.Backends
             if (middle is null)
             {
                 long m = L > 0 ? L - 1 : 0;
-                var hi = np.SliceAlongAxis(flat, 0, L - m, L); // flat[1:]
-                var lo = np.SliceAlongAxis(flat, 0, 0, m);     // flat[:-1]
+                var hi = NDArray.SliceAlongAxis(flat, 0, L - m, L); // flat[1:]
+                var lo = NDArray.SliceAlongAxis(flat, 0, 0, m);     // flat[:-1]
                 // Same lean NDIter subtract as np.diff (uninitialised output,
                 // no promotion/broadcast re-derivation); `-` operator as fallback.
                 middle = DiffSubtractViaNDIter(hi, lo) ?? (hi - lo);

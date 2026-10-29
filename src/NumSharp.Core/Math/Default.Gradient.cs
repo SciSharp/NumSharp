@@ -6,8 +6,8 @@ using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
 // The moved statements call the public np.* functions they called inside np (np.diff, np.empty, np.subtract, np.divide,
-// np.evaluate, np.all) and np's internal SliceAlongAxis, and build np's GradientResult; importing np's statics keeps them
-// verbatim. In a DefaultEngine partial a name resolves to DefaultEngine's members before np's statics: of the unqualified
+// np.evaluate, np.all) and build np's GradientResult; importing np's statics keeps them verbatim. Their axis slices go
+// through NDArray.SliceAlongAxis (np's internal helper until P3's batch 7 moved np.delete's rest into the array object). In a DefaultEngine partial a name resolves to DefaultEngine's members before np's statics: of the unqualified
 // names below only the helper Add was one (DefaultEngine's ufunc member), so the three PolyNumber helpers are GradientAdd,
 // GradientMul and GradientDiv since the file joined DefaultEngine.
 using static NumSharp.np;
@@ -267,9 +267,9 @@ namespace NumSharp.Backends
                 //   uniform     : out[1:-1] = (f[2:] - f[:-2]) / (2*dx)
                 //   non-uniform : out[1:-1] = a*f[:-2] + b*f[1:-1] + c*f[2:]
                 {
-                    NDArray fm2 = SliceAlongAxis(work, axis, 0, M - 2);      // f[:-2]
-                    NDArray fmid = SliceAlongAxis(work, axis, 1, M - 1);     // f[1:-1]
-                    NDArray fp2 = SliceAlongAxis(work, axis, 2, M);          // f[2:]
+                    NDArray fm2 = NDArray.SliceAlongAxis(work, axis, 0, M - 2);      // f[:-2]
+                    NDArray fmid = NDArray.SliceAlongAxis(work, axis, 1, M - 1);     // f[1:-1]
+                    NDArray fp2 = NDArray.SliceAlongAxis(work, axis, 2, M);          // f[2:]
                     if (uniform)
                     {
                         // NumPy's `out[s1] = (f[s4] - f[s2]) / (2. * ax_dx)`, computed straight into the out view via
@@ -299,8 +299,8 @@ namespace NumSharp.Backends
                     else
                     {
                         NDArray axd = (NDArray)ax_dx;                        // the diffs, in their own dtype (len M-1)
-                        NDArray dx1 = SliceAlongAxis(axd, 0, 0, M - 2);      // ax_dx[:-1]
-                        NDArray dx2 = SliceAlongAxis(axd, 0, 1, M - 1);      // ax_dx[1:]
+                        NDArray dx1 = NDArray.SliceAlongAxis(axd, 0, 0, M - 2);      // ax_dx[:-1]
+                        NDArray dx2 = NDArray.SliceAlongAxis(axd, 0, 1, M - 1);      // ax_dx[1:]
                         NDArray sum = dx1 + dx2;
                         // a = -dx2/(dx1*(dx1+dx2)); b = (dx2-dx1)/(dx1*dx2); c = dx1/(dx2*(dx1+dx2))
                         NDArray a = ReshapeAlong(-(dx2) / (dx1 * sum), axis, N);

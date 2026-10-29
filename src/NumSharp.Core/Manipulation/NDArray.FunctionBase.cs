@@ -2,9 +2,10 @@ using System;
 using NumSharp.Backends;
 // NDExprTypeRules: NEP 50's check of a Python int against an integer dtype (the multi-index branch's `indices < 0` add).
 using NumSharp.Backends.Iteration;
-// The moved statements call np's internal insert / delete helpers (PrepareAxisContext, WithSourceOrder, SliceAlongAxis,
-// DuplicateArray, ToInt64Scalar, ToInt64Vector, PythonSliceIndices) unqualified, as they did inside np; importing np's
-// statics keeps them verbatim.
+// The statements call np's public functions unqualified in places, as they did inside np; importing np's statics keeps
+// them verbatim. The insert / delete helpers they share (PrepareAxisContext, WithSourceOrder, SliceAlongAxis,
+// DuplicateArray, ToInt64Scalar, ToInt64Vector, PythonSliceIndices) are this class's own members since P3's batch 7
+// moved np.delete's rest here, and a class member is found before an imported static.
 using static NumSharp.np;
 
 namespace NumSharp
@@ -1563,5 +1564,225 @@ namespace NumSharp
         /// <returns>True for float16, float32, float64 and complex128.</returns>
         private static bool IsFloatFamily(NPTypeCode tc)
             => tc == NPTypeCode.Half || tc == NPTypeCode.Single || tc == NPTypeCode.Double || tc == NPTypeCode.Complex;
+
+        // ----------------------------------------------------------------------------------------------------------------
+        // np.delete's rest (P3's batch 7): the helpers np.insert's and np.delete's statements above share, moved from
+        // np.delete.cs.
+        // ----------------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's <c>delete</c>/<c>insert</c> allocate their output in ONE of two layouts —
+        ///     <c>arrorder = 'F' if arr.flags.fnc else 'C'</c> (<c>_function_base_impl.py</c>): F-contiguous for a
+        ///     strictly F-contiguous source (probed: num 1286), C-contiguous for every other source, a transposed or
+        ///     broadcast one included. The composition kernels here may build another layout (concatenate keeps its
+        ///     inputs' axis order), so the result is copied into the NumPy layout when it is not already in it.
+        ///     IDEMPOTENT (a result already in the layout passes through), so nested overload delegation is safe.
+        /// </summary>
+        /// <param name="arr">The source array (its flags decide the layout).</param>
+        /// <param name="result">The composed result.</param>
+        /// <returns><paramref name="result"/>, or a C / F copy of it.</returns>
+        internal static NDArray WithSourceOrder(NDArray arr, NDArray result)
+        {
+            if (result.ndim <= 1)
+                return result;
+            bool wantF = arr.Shape.IsFContiguous && !arr.Shape.IsContiguous;
+            if (wantF)
+                return result.Shape.IsFContiguous ? result : asfortranarray(result);
+            return result.Shape.IsContiguous ? result : ascontiguousarray(result);
+        }
+
+        /// <summary>
+        ///     Resolves <c>axis=None</c> to "ravel + axis=0" and normalises a
+        ///     non-null axis against <c>arr.ndim</c>. The returned <c>work</c>
+        ///     array is either <c>arr</c> itself or a freshly-allocated ravel
+        ///     (which the caller can treat as owning since insert/delete always
+        ///     produces a new array).
+        /// </summary>
+        /// <param name="arr">The input of insert / delete.</param>
+        /// <param name="axis">The caller's axis, or null for the flattened array.</param>
+        /// <returns>The array to work on and the non-negative axis.</returns>
+        /// <exception cref="AxisError">The axis is out of bounds (NumPy's <c>normalize_axis_index</c> text).</exception>
+        /// <remarks>Internal for np.insert's and np.delete's statements (NDArray.FunctionBase.cs), which share it.</remarks>
+        internal static (NDArray work, int axis) PrepareAxisContext(NDArray arr, int? axis)
+        {
+            if (axis is null)
+            {
+                NDArray work = arr.ndim == 1 ? arr : np.ravel(arr);
+                return (work, 0);
+            }
+
+            int ax = axis.Value;
+            if (ax < 0) ax += arr.ndim;
+            // NumPy's normalize_axis_index raises AxisError (a subclass of the ArgumentOutOfRangeException this used to be).
+            if (ax < 0 || ax >= arr.ndim)
+                throw new AxisError(axis.Value, arr.ndim);
+            return (arr, ax);
+        }
+
+        /// <summary>
+        ///     Casts <paramref name="obj"/> to <see cref="long"/> with NumPy-style
+        ///     bounds error on out-of-range. Used by the scalar-index fast paths.
+        /// </summary>
+        /// <param name="obj">An integer index array; its first element is read (a uint64 above long's range wraps).</param>
+        /// <param name="fn">The NumPy function's name for the error text (<c>"insert"</c> / <c>"delete"</c>).</param>
+        /// <returns>The index as a <see cref="long"/>.</returns>
+        /// <exception cref="ArgumentException"><paramref name="obj"/> is not an integer array (the callers test that
+        ///     first, so this is not reached from them).</exception>
+        /// <remarks>Internal for np.insert's and np.delete's statements (NDArray.FunctionBase.cs), which share it.</remarks>
+        internal static long ToInt64Scalar(NDArray obj, string fn)
+        {
+            // Accept any integer dtype (NumPy: kind in "ui"). Bool is handled by
+            // the caller before this point.
+            switch (obj.GetTypeCode)
+            {
+                case NPTypeCode.Byte:   return obj.GetByte(0);
+                case NPTypeCode.SByte:  return obj.GetSByte(0);
+                case NPTypeCode.Char:   return obj.GetChar(0);
+                case NPTypeCode.Int16:  return obj.GetInt16(0);
+                case NPTypeCode.UInt16: return obj.GetUInt16(0);
+                case NPTypeCode.Int32:  return obj.GetInt32(0);
+                case NPTypeCode.UInt32: return obj.GetUInt32(0);
+                case NPTypeCode.Int64:  return obj.GetInt64(0);
+                case NPTypeCode.UInt64: return (long)obj.GetUInt64(0);
+                default:
+                    throw new ArgumentException(
+                        $"np.{fn}: obj must be int / slice / integer array / boolean mask, got {obj.dtype.type.Name}",
+                        "obj");
+            }
+        }
+
+        /// <summary>
+        ///     Materialises <paramref name="obj"/> as a managed <c>long[]</c>.
+        ///     Any integer dtype is accepted; size-0 input returns an empty array
+        ///     so the caller's "no-op" branch kicks in.
+        /// </summary>
+        /// <param name="obj">A 0-d or 1-D integer index array (a uint64 above long's range wraps).</param>
+        /// <param name="fn">The NumPy function's name for the error texts (<c>"insert"</c> / <c>"delete"</c>).</param>
+        /// <returns>A fresh array of the indices in order.</returns>
+        /// <exception cref="ArgumentException"><paramref name="obj"/> has more than one dimension or is not an integer
+        ///     array (the callers test both first, so neither is reached from them).</exception>
+        /// <remarks>Internal for np.insert's and np.delete's statements (NDArray.FunctionBase.cs), which share it.</remarks>
+        internal static long[] ToInt64Vector(NDArray obj, string fn)
+        {
+            if (obj.ndim > 1)
+                throw new ArgumentException(
+                    $"np.{fn}: index array argument obj must be one dimensional or scalar",
+                    "obj");
+
+            long n = obj.size;
+            var result = new long[n];
+
+            switch (obj.GetTypeCode)
+            {
+                case NPTypeCode.Byte:
+                    for (long i = 0; i < n; i++) result[i] = obj.GetByte((int)i);
+                    break;
+                case NPTypeCode.SByte:
+                    for (long i = 0; i < n; i++) result[i] = obj.GetSByte((int)i);
+                    break;
+                case NPTypeCode.Char:
+                    for (long i = 0; i < n; i++) result[i] = obj.GetChar((int)i);
+                    break;
+                case NPTypeCode.Int16:
+                    for (long i = 0; i < n; i++) result[i] = obj.GetInt16((int)i);
+                    break;
+                case NPTypeCode.UInt16:
+                    for (long i = 0; i < n; i++) result[i] = obj.GetUInt16((int)i);
+                    break;
+                case NPTypeCode.Int32:
+                    for (long i = 0; i < n; i++) result[i] = obj.GetInt32((int)i);
+                    break;
+                case NPTypeCode.UInt32:
+                    for (long i = 0; i < n; i++) result[i] = obj.GetUInt32((int)i);
+                    break;
+                case NPTypeCode.Int64:
+                    for (long i = 0; i < n; i++) result[i] = obj.GetInt64((int)i);
+                    break;
+                case NPTypeCode.UInt64:
+                    for (long i = 0; i < n; i++) result[i] = (long)obj.GetUInt64((int)i);
+                    break;
+                default:
+                    throw new ArgumentException(
+                        $"np.{fn}: obj must be int / slice / integer array / boolean mask, got {obj.dtype.type.Name}",
+                        "obj");
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        ///     Allocates a fresh, owning copy of <paramref name="arr"/>. Used by
+        ///     delete/insert no-op paths to honour NumPy's "delete does not occur
+        ///     in-place" contract.
+        /// </summary>
+        internal static NDArray DuplicateArray(NDArray arr) => np.copy(arr);
+
+        /// <summary>
+        ///     Returns an axis-aligned slice view <c>arr[..., start:stop, ...]</c>
+        ///     by building a <see cref="Slice"/> array. The result shares storage
+        ///     with <paramref name="arr"/> when <c>arr.Shape.IsContiguous</c> /
+        ///     stride-friendly; the caller is responsible for disposing the wrapper.
+        /// </summary>
+        internal static NDArray SliceAlongAxis(NDArray arr, int axis, long start, long stop)
+        {
+            int ndim = arr.ndim;
+            var slices = new Slice[ndim];
+            for (int i = 0; i < ndim; i++)
+                slices[i] = i == axis ? new Slice(start, stop) : Slice.All;
+            return arr[slices];
+        }
+
+        /// <summary>
+        ///     Python-compatible <c>slice.indices(N)</c> implementation. Resolves
+        ///     None/negative bounds to absolute positions and clamps to a legal
+        ///     iteration range. Used by both <see cref="DeleteSlice"/> and
+        ///     <see cref="NDArray.InsertExpandSliceObj"/>.
+        /// </summary>
+        internal static (long start, long stop, long step) PythonSliceIndices(Slice s, long N)
+        {
+            long step = s.Step == 0 ? 1 : s.Step;
+            if (step == 0)
+                throw new ArgumentException("slice step cannot be zero");
+
+            long start, stop;
+            long defaultStart = step > 0 ? 0 : N - 1;
+            long defaultStop = step > 0 ? N : -1; // exclusive; -1 sentinel for backwards
+
+            if (s.Start.HasValue)
+            {
+                start = s.Start.Value;
+                if (start < 0) start += N;
+                if (step > 0)
+                {
+                    if (start < 0) start = 0;
+                    if (start > N) start = N;
+                }
+                else
+                {
+                    if (start < 0) start = -1;
+                    if (start >= N) start = N - 1;
+                }
+            }
+            else start = defaultStart;
+
+            if (s.Stop.HasValue)
+            {
+                stop = s.Stop.Value;
+                if (stop < 0) stop += N;
+                if (step > 0)
+                {
+                    if (stop < 0) stop = 0;
+                    if (stop > N) stop = N;
+                }
+                else
+                {
+                    if (stop < 0) stop = -1;
+                    if (stop >= N) stop = N - 1;
+                }
+            }
+            else stop = defaultStop;
+
+            return (start, stop, step);
+        }
     }
 }
