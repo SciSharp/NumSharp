@@ -180,6 +180,24 @@ namespace NumSharp.Tests.IO
             Assert.AreEqual(msg, e.Message);
         }
 
+        /// <summary>
+        ///     The conversion error names the descriptor that was asked for, as NumPy's <c>%S</c> of the field's descriptor
+        ///     does (probed against NumPy 2.4.2): a non-native one by its type string (<c>&gt;i4</c>), a native one -
+        ///     explicit little-endian included - by its type name. The values themselves are read into the native lane.
+        /// </summary>
+        [TestMethod]
+        public void ConversionError_NamesTheRequestedDescriptor()
+        {
+            NDArray Read(string text, string dtype) => np.loadtxt(new StringReader(text), np.dtype(dtype));
+            AssertMsg<ValueError>(() => Read("3 x", ">i4"), "could not convert string 'x' to >i4 at row 0, column 2.");
+            AssertMsg<ValueError>(() => Read("3 x", ">f8"), "could not convert string 'x' to >f8 at row 0, column 2.");
+            AssertMsg<ValueError>(() => Read("3 x", ">u2"), "could not convert string 'x' to >u2 at row 0, column 2.");
+            AssertMsg<ValueError>(() => Read("3 x", ">c16"), "could not convert string 'x' to >c16 at row 0, column 2.");
+            AssertMsg<ValueError>(() => Read("3 x", "<i4"), "could not convert string 'x' to int32 at row 0, column 2.");
+            AssertMsg<ValueError>(() => Read("3 x", "i4"), "could not convert string 'x' to int32 at row 0, column 2.");
+            AssertArr(Read("3 4", ">i4"), new[] { 2 }, NPTypeCode.Int32, new double[] { 3, 4 });
+        }
+
         // ---- converters / quotechar ------------------------------------------------------
 
         [TestMethod]

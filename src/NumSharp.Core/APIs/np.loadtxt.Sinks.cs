@@ -334,7 +334,11 @@ namespace NumSharp
             }
 
             /// <inheritdoc/>
-            internal override string DescrText => _tc.AsNumpyDtypeName();
+            /// <remarks>NumPy's <c>%S</c> of the field's descriptor: the type name for a native descriptor (<c>int32</c>; the
+            ///     lane's NumPy name, so NumSharp's decimal reads as <c>float64</c>), the requested descriptor's
+            ///     <c>str()</c> for a non-native one (<c>&gt;i4</c>), which this sink still parses into the native
+            ///     lane.</remarks>
+            internal override string DescrText => _descr.isnative ? _tc.AsNumpyDtypeName() : _descr.ToString();
 
             /// <inheritdoc/>
             /// <remarks>
