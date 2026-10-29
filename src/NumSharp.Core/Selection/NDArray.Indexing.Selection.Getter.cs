@@ -109,20 +109,37 @@ namespace NumSharp
         /// array, so callers MUST read the length AFTER calling. Shared by the getter and setter;
         /// only the general <c>object[]</c> path reaches it (the typed indexers bypass it).
         /// </summary>
+        /// <param name="indices">The caller's index tuple. Never written: when an entry is converted, the result is a new
+        ///     array.</param>
+        /// <returns><paramref name="indices"/> itself when no entry needed a conversion, else a new tuple.</returns>
+        /// <remarks>
+        ///     NumPy never modifies the index object (a list inside the tuple stays a list), and a C# caller may index with
+        ///     the same key array again. Until 2026-10-29 the conversions were written into the caller's array: a key holding
+        ///     a <c>bool[]</c> or a <c>List&lt;long&gt;</c> came back holding NDArrays, and the dispatches that call this
+        ///     method are <c>[NDScoped]</c>, so those arrays were disposed and their blocks released when the call returned
+        ///     — the next call with the key read freed memory.
+        /// </remarks>
         private static object[] NormalizeIndexInputs(object[] indices)
         {
+            // The array the conversions are written into: the caller's until the first one, which copies it (the spread
+            // of a tuple below is already a new array).
+            object[] result = indices;
+            bool owned = false;
+
             // Spread a single top-level tuple: nd[(1,2)] == nd[1,2] (Python tuple index).
             if (indices.Length == 1 && indices[0] is System.Runtime.CompilerServices.ITuple tup)
             {
                 var spread = new object[tup.Length];
                 for (int t = 0; t < tup.Length; t++)
                     spread[t] = tup[t];
-                indices = spread;
+                result = spread;
+                owned = true;
             }
 
-            for (int i = 0; i < indices.Length; i++)
+            for (int i = 0; i < result.Length; i++)
             {
-                switch (indices[i])
+                object converted;
+                switch (result[i])
                 {
                     case NDArray _:                                          // already an NDArray (mask/fancy by typecode)
                     case int[] _:                                            // raw int[]/long[] kept as-is (fancy, decision B)
@@ -132,21 +149,29 @@ namespace NumSharp
                     case null:
                         continue;
                     case Array arr when arr.GetType().GetElementType() == typeof(bool):
-                        indices[i] = np.array(arr).MakeGeneric<bool>();      // bool[], bool[,], bool[,,] (rectangular mask)
-                        continue;
+                        converted = np.array(arr).MakeGeneric<bool>();      // bool[], bool[,], bool[,,] (rectangular mask)
+                        break;
                     case Array _:
                         continue;                                            // other typed arrays — left to the dispatch
                     case System.Collections.Generic.IEnumerable<bool> bseq:
-                        indices[i] = np.array(System.Linq.Enumerable.ToArray(bseq)).MakeGeneric<bool>();  // List<bool>, … mask
-                        continue;
+                        converted = np.array(System.Linq.Enumerable.ToArray(bseq)).MakeGeneric<bool>();  // List<bool>, … mask
+                        break;
                     case System.Collections.IEnumerable seq:                 // List<int>, ArrayList, … -> 1-D fancy index
-                        indices[i] = SequenceToIndexArray(seq);
-                        continue;
-                    // scalars (int/bool/IConvertible/Half/Complex) fall through unchanged.
+                        converted = SequenceToIndexArray(seq);
+                        break;
+                    default:
+                        continue;                                            // scalars (int/bool/IConvertible/Half/Complex) unchanged
                 }
+
+                if (!owned)
+                {
+                    result = (object[])result.Clone();
+                    owned = true;
+                }
+                result[i] = converted;
             }
 
-            return indices;
+            return result;
         }
 
         /// <summary>

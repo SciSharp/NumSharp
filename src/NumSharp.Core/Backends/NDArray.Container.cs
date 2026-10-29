@@ -423,8 +423,8 @@ namespace NumSharp
         ///     A key the basic indexer takes (<see cref="TryBasicIndex"/>: a lone string of slice notation holds the WHOLE
         ///     index, <c>"..., 0"</c>) is its parsed slices, an integer slice (<see cref="Slice.Index(long)"/>) given back as
         ///     the integer it is, so that a full integer index is classified as one; any other key is
-        ///     <see cref="NormalizeIndexInputs"/>' form of a copy (it rewrites its argument in place, and the setter
-        ///     re-normalizes the caller's own key).
+        ///     <see cref="NormalizeIndexInputs"/>' form of a copy (the setter re-normalizes the caller's own key; the copy
+        ///     dates from when that method rewrote its argument in place, until 2026-10-29).
         /// </summary>
         /// <param name="key">The caller's index tuple (not modified).</param>
         /// <returns>A new tuple for <see cref="PrepareIndex"/>.</returns>
