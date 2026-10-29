@@ -89,15 +89,52 @@ namespace NumSharp
             #region slice expressions
 
             /// <summary>
-            ///     A parsed <c>start:stop:step</c> expression. Unlike <see cref="Slice"/> (which indexes and
-            ///     is integer-only) this carries real bounds and NumPy's imaginary step, where
-            ///     <c>start:stop:Nj</c> means "N points, stop inclusive" — i.e. <c>linspace</c>.
+            ///     A parsed <c>start:stop:step</c> expression, each field the Python number NumPy computes with. Unlike
+            ///     <see cref="Slice"/> (which indexes and is integer-only) this carries real bounds and NumPy's imaginary
+            ///     step, where <c>start:stop:Nj</c> means "N points, stop inclusive" (<c>linspace</c> in <c>np.r_</c>,
+            ///     <c>arange(0, N) * step + start</c> in <c>np.mgrid</c> / <c>np.ogrid</c>).
             /// </summary>
+            /// <remarks>
+            ///     A field written as digits (or omitted: start 0, step 1) is a Python INT, held exactly in
+            ///     <see cref="IntStart"/> / <see cref="IntStop"/> / <see cref="IntStep"/>; any other field (a point, an exponent,
+            ///     <c>Infinity</c>, <c>NaN</c>) is a Python float. <see cref="Start"/> / <see cref="Stop"/> / <see cref="Step"/>
+            ///     hold every field as a double: an int field correctly rounded (CPython's <c>float(int)</c>, but ±inf past the
+            ///     double range where CPython raises, so a computation that can meet such a field converts the int value). The
+            ///     int values matter past 2**53, where a double no longer holds every integer: NumPy's lengths and int64 values
+            ///     come from Python's exact int arithmetic (<c>np.r_[2**53 + 1:2**53 + 3]</c> has two elements; a double
+            ///     reading of the bounds made four).
+            /// </remarks>
             internal readonly struct SliceSpec
             {
+                /// <summary>The start as a double (0 when omitted).</summary>
                 public readonly double Start;
+
+                /// <summary>The stop as a double (0 when omitted: see <see cref="HasStop"/>).</summary>
                 public readonly double Stop;
+
+                /// <summary>The step as a double (1 when omitted); for an imaginary step, its imaginary part (a point count).</summary>
                 public readonly double Step;
+
+                /// <summary>The start's exact value when <see cref="StartIsInt"/> (0 when omitted).</summary>
+                public readonly BigInteger IntStart;
+
+                /// <summary>The stop's exact value when <see cref="StopIsInt"/> and <see cref="HasStop"/>.</summary>
+                public readonly BigInteger IntStop;
+
+                /// <summary>The step's exact value when <see cref="StepIsInt"/> (1 when omitted).</summary>
+                public readonly BigInteger IntStep;
+
+                /// <summary>The start is a Python int (written as digits, or omitted).</summary>
+                public readonly bool StartIsInt;
+
+                /// <summary>
+                ///     The stop is a Python int, or omitted: Python's None never meets arithmetic as a number (arange moves the
+                ///     start into the stop slot, nd_grid raises), so it does not make the expression a float one.
+                /// </summary>
+                public readonly bool StopIsInt;
+
+                /// <summary>The step is a Python int (written as digits, or omitted); false for an imaginary step.</summary>
+                public readonly bool StepIsInt;
 
                 /// <summary>False for <c>a:</c> and <c>:</c>, where NumPy's arange re-reads start as stop.</summary>
                 public readonly bool HasStop;
@@ -105,21 +142,43 @@ namespace NumSharp
                 /// <summary>The step was written <c>Nj</c>: <see cref="Step"/> is a point COUNT.</summary>
                 public readonly bool ImaginaryStep;
 
-                /// <summary>Every field was written as an integer literal ⇒ int64, else float64.</summary>
+                /// <summary>
+                ///     Every field is a Python int and the step is real: NumPy's arange discovers int64 for it, and its
+                ///     <c>(stop - start) / step</c> is Python's int division (<c>division by zero</c> for a zero step).
+                /// </summary>
                 public readonly bool Integral;
 
-                public SliceSpec(double start, double stop, bool hasStop, double step,
-                    bool imaginaryStep, bool integral)
+                /// <summary>Builds a slice from its fields, each a double and, for a Python int, its exact value.</summary>
+                /// <param name="start">The start as a double.</param>
+                /// <param name="intStart">The start's exact value when it is a Python int, else null (a float).</param>
+                /// <param name="stop">The stop as a double (any value when <paramref name="hasStop"/> is false).</param>
+                /// <param name="intStop">The stop's exact value when it is a Python int, else null.</param>
+                /// <param name="hasStop">Whether the stop was written.</param>
+                /// <param name="step">The step as a double (an imaginary step's imaginary part).</param>
+                /// <param name="intStep">The step's exact value when it is a Python int, else null (a float or imaginary step).</param>
+                /// <param name="imaginaryStep">Whether the step was written <c>Nj</c>.</param>
+                public SliceSpec(double start, BigInteger? intStart, double stop, BigInteger? intStop, bool hasStop,
+                    double step, BigInteger? intStep, bool imaginaryStep)
                 {
                     Start = start;
                     Stop = stop;
-                    HasStop = hasStop;
                     Step = step;
+                    IntStart = intStart ?? BigInteger.Zero;
+                    IntStop = intStop ?? BigInteger.Zero;
+                    IntStep = intStep ?? BigInteger.One;
+                    StartIsInt = intStart.HasValue;
+                    StopIsInt = !hasStop || intStop.HasValue;
+                    StepIsInt = intStep.HasValue && !imaginaryStep;
+                    HasStop = hasStop;
                     ImaginaryStep = imaginaryStep;
-                    Integral = integral;
+                    Integral = StartIsInt && StopIsInt && StepIsInt;
                 }
 
-                /// <summary>Adapts a NumSharp <see cref="Slice"/> (always integral, never imaginary).</summary>
+                /// <summary>Adapts a NumSharp <see cref="Slice"/> (Python ints, never an imaginary step).</summary>
+                /// <param name="slice">The slice.</param>
+                /// <returns>The slice's fields: start 0 when absent, the stop only when present.</returns>
+                /// <exception cref="ArgumentNullException"><paramref name="slice"/> is null.</exception>
+                /// <exception cref="ArgumentException"><paramref name="slice"/> is <c>...</c> or <c>newaxis</c>.</exception>
                 public static SliceSpec FromSlice(Slice slice)
                 {
                     if (slice is null)
@@ -129,10 +188,22 @@ namespace NumSharp
                             "'...' and 'newaxis' are index-only and cannot appear in a concatenation expression.",
                             nameof(slice));
 
-                    return new SliceSpec(slice.Start ?? 0, slice.Stop ?? 0, slice.Stop.HasValue,
-                        slice.Step, false, true);
+                    long start = slice.Start ?? 0;
+                    long stop = slice.Stop ?? 0;
+                    return new SliceSpec(start, start, stop, slice.Stop.HasValue ? (BigInteger?)stop : null, slice.Stop.HasValue,
+                        slice.Step, slice.Step, false);
                 }
 
+                /// <summary>
+                ///     NumPy's slice branch of <c>np.r_</c> / <c>np.c_</c> (and <c>np.mgrid</c> / <c>np.ogrid</c>'s single real
+                ///     slice): <c>arange(start, stop, step)</c> over the Python numbers, or <c>linspace(start, stop, N)</c> for
+                ///     an imaginary step.
+                /// </summary>
+                /// <returns>A fresh 1-D array: int64 when every field is a Python int, else float64.</returns>
+                /// <exception cref="ValueError">An imaginary step without a stop; arange's NaN length or length past
+                ///     npy_intp; the allocation guard's <c>array is too big</c>.</exception>
+                /// <exception cref="DivideByZeroException">A zero step: Python's <c>division by zero</c> for ints,
+                ///     <c>float division by zero</c> once a float is involved.</exception>
                 public NDArray Materialize()
                 {
                     if (ImaginaryStep)
@@ -144,59 +215,77 @@ namespace NumSharp
                         return linspace(Start, Stop, (long)Math.Abs(Step), true, NPTypeCode.Double);
                     }
 
-                    // A zero step is left to arange, exactly as NumPy leaves it to its own
-                    // (where it surfaces as Python's ZeroDivisionError from (stop-start)/step).
-                    var code = Integral ? NPTypeCode.Int64 : NPTypeCode.Double;
+                    // Python ints within int64 take arange's int route (PyArray_ArangeObj over Python ints): the exact length,
+                    // exact int64 values past 2**53, and Python's int division, so a zero step is "division by zero".
+                    if (Integral && FitsInt64(IntStart) && FitsInt64(IntStop) && FitsInt64(IntStep))
+                    {
+                        // NumPy's arange(start, None, step) is arange(0, start, step): a missing stop promotes start into
+                        // the stop slot. np.r_[5::2] is therefore [0, 2, 4].
+                        return HasStop
+                            ? arange((long)IntStart, (long)IntStop, (long)IntStep)
+                            : arange(0L, (long)IntStart, (long)IntStep);
+                    }
 
-                    // NumPy's arange(start, None, step) is arange(0, start, step): a missing stop
-                    // promotes start into the stop slot. np.r_[5::2] is therefore [0, 2, 4].
+                    // A float field makes arange's float route (a zero step is "float division by zero"). A Python int past
+                    // int64 is read as its double here too, NumSharp's limit: NumPy discovers uint64 or object for it.
+                    var code = Integral ? NPTypeCode.Int64 : NPTypeCode.Double;
                     return HasStop
                         ? arange(Start, Stop, Step, code)
                         : arange(0d, Start, Step, code);
                 }
+
+                /// <summary>Whether a Python int fits an int64.</summary>
+                /// <param name="value">The int.</param>
+                /// <returns>True within <c>[-2**63, 2**63 - 1]</c>.</returns>
+                internal static bool FitsInt64(BigInteger value) => value >= long.MinValue && value <= long.MaxValue;
             }
 
             /// <summary>Parses one <c>start:stop[:step]</c> token.</summary>
+            /// <param name="token">The token: two or three colon-separated fields, any of which may be empty.</param>
+            /// <returns>The slice, each field the Python number it spells.</returns>
+            /// <exception cref="ArgumentException">Fewer than two or more than three fields, or a field that is no number
+            ///     (<c>Invalid slice notation: '...'</c>).</exception>
             internal static SliceSpec ParseSliceToken(string token)
             {
                 var fields = token.Split(':');
                 if (fields.Length < 2 || fields.Length > 3)
                     throw new ArgumentException($"Invalid slice notation: '{token.Trim()}'", nameof(token));
 
-                bool integral = true;
-
                 double start = 0d;
+                BigInteger? intStart = BigInteger.Zero;
                 if (!string.IsNullOrWhiteSpace(fields[0]))
-                {
-                    start = ParseNumber(fields[0], token, out bool startIntegral, out _, allowImaginary: false);
-                    integral &= startIntegral;
-                }
+                    start = ParseNumber(fields[0], token, out intStart, out _, allowImaginary: false);
 
                 bool hasStop = !string.IsNullOrWhiteSpace(fields[1]);
                 double stop = 0d;
+                BigInteger? intStop = null;
                 if (hasStop)
-                {
-                    stop = ParseNumber(fields[1], token, out bool stopIntegral, out _, allowImaginary: false);
-                    integral &= stopIntegral;
-                }
+                    stop = ParseNumber(fields[1], token, out intStop, out _, allowImaginary: false);
 
                 double step = 1d;
+                BigInteger? intStep = BigInteger.One;
                 bool imaginary = false;
                 if (fields.Length == 3 && !string.IsNullOrWhiteSpace(fields[2]))
-                {
-                    step = ParseNumber(fields[2], token, out bool stepIntegral, out imaginary, allowImaginary: true);
-                    integral &= stepIntegral;
-                }
+                    step = ParseNumber(fields[2], token, out intStep, out imaginary, allowImaginary: true);
 
-                return new SliceSpec(start, stop, hasStop, step, imaginary, integral && !imaginary);
+                return new SliceSpec(start, intStart, stop, intStop, hasStop, step, intStep, imaginary);
             }
 
             /// <summary>
-            ///     Reads one numeric field. <paramref name="integral"/> follows Python's LITERAL rule, not
-            ///     the value's: <c>0</c> is integral, <c>0.0</c> and <c>1e3</c> are not — which is what makes
+            ///     Reads one numeric field as the Python literal it spells. Python's LITERAL rule decides the type, not the
+            ///     value: digits with an optional sign are an int (<c>0</c>, <c>-5</c>, kept exactly at any size), anything
+            ///     else that parses (<c>0.0</c>, <c>1e3</c>, <c>Infinity</c>, <c>NaN</c>) is a float — which is what makes
             ///     <c>np.r_["0:5"]</c> int64 while <c>np.r_["0.0:5"]</c> is float64.
             /// </summary>
-            private static double ParseNumber(string field, string token, out bool integral,
+            /// <param name="field">The field's text.</param>
+            /// <param name="token">The whole token, for the error text.</param>
+            /// <param name="asInt">The field's exact value when it is a Python int, else null.</param>
+            /// <param name="imaginary">Whether a trailing <c>j</c> made the field imaginary (only when
+            ///     <paramref name="allowImaginary"/>).</param>
+            /// <param name="allowImaginary">Whether the field may end in <c>j</c> (the step).</param>
+            /// <returns>The field as a double (correctly rounded; ±inf past the double range).</returns>
+            /// <exception cref="ArgumentException">The field is no number (<c>Invalid slice notation: '...'</c>).</exception>
+            private static double ParseNumber(string field, string token, out BigInteger? asInt,
                 out bool imaginary, bool allowImaginary)
             {
                 string f = field.Trim();
@@ -212,11 +301,14 @@ namespace NumSharp
                         f = "-1";
                 }
 
-                integral = f.IndexOf('.') < 0 && f.IndexOf('e') < 0 && f.IndexOf('E') < 0;
-
                 if (!double.TryParse(f, NumberStyles.Float, CultureInfo.InvariantCulture, out double value))
                     throw new ArgumentException($"Invalid slice notation: '{token.Trim()}'", nameof(token));
 
+                // Digits (and a sign) are a Python int, kept exactly: a double rounds the integers past 2**53. The text
+                // was trimmed above, so no surrounding white space is left to allow.
+                asInt = BigInteger.TryParse(f, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out BigInteger i)
+                    ? i
+                    : null;
                 return value;
             }
 

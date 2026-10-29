@@ -1,5 +1,6 @@
 using System;
 using NumSharp.Backends;
+using NumSharp.Backends.Kernels;
 
 namespace NumSharp
 {
@@ -184,13 +185,22 @@ namespace NumSharp
             ///     <c>int(abs(step))</c> for an imaginary one. A zero real step is a divide-by-zero,
             ///     matching NumPy's <c>ZeroDivisionError</c>.
             /// </summary>
+            /// <param name="spec">The slice of one axis.</param>
+            /// <returns>The axis size; negative for a range that runs against its step.</returns>
+            /// <exception cref="DivideByZeroException">A zero real step.</exception>
             private static long MeshAxisSize(AxisConcatenator.SliceSpec spec)
             {
                 if (spec.ImaginaryStep)
                     return (long)Math.Abs(spec.Step);
                 if (spec.Step == 0d)
                     throw new DivideByZeroException("mgrid slice step cannot be zero.");
-                return (long)Math.Ceiling((spec.Stop - spec.Start) / spec.Step);
+                // Python ints divide exactly (int / int is the correctly rounded quotient of the exact difference), so a
+                // range of ints past 2**53 is sized as the arange of its line is (SliceSpec.Materialize's int route); a
+                // double reading of those bounds can round the size away from the line's length.
+                double quotient = spec.Integral
+                    ? PyScalar.IntTrueDivide(spec.IntStop - spec.IntStart, spec.IntStep)
+                    : (spec.Stop - spec.Start) / spec.Step;
+                return (long)Math.Ceiling(quotient);
             }
         }
 
