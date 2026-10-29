@@ -12,7 +12,8 @@ namespace NumSharp
         ///     <paramref name="dtype"/>. Port of NumPy's <c>ndarray.getfield(dtype, offset=0)</c>.
         /// </summary>
         /// <param name="dtype">
-        ///     The dtype to read the field as. Its itemsize must be ≤ this array's itemsize.
+        ///     The dtype to read the field as. Its itemsize must be ≤ this array's itemsize. Null is Python's <c>None</c>,
+        ///     which NumPy's dtype converter (<c>PyArray_DescrConverter</c>) reads as the default float64.
         /// </param>
         /// <param name="offset">
         ///     Byte offset of the field within each element. Must be in <c>[0, itemsize − newItemsize]</c>.
@@ -32,18 +33,18 @@ namespace NumSharp
         ///     <c>getfield(int16, 0)</c> / <c>getfield(int16, 2)</c> are the low / high halves.
         ///     </para>
         /// </remarks>
-        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is <c>null</c>.</exception>
         /// <exception cref="ValueError">
         ///     <c>new type is larger than original type</c>, <c>offset is negative</c>, or
-        ///     <c>new type plus offset is larger than original type</c> — the verbatim NumPy texts.
+        ///     <c>new type plus offset is larger than original type</c> — the verbatim NumPy texts (a null
+        ///     <paramref name="dtype"/>, float64, is larger than any field of an array of narrower items).
         /// </exception>
         /// <exception cref="TypeError"><c>Cannot get/set field of an object array</c>: this array or the field holds
         ///     references (a <c>StringDType</c>, whose cells point into its allocator) and the field is not the whole element
         ///     in this array's own descriptor (NumPy's <c>_getfield_is_safe</c>, checked before the size checks).</exception>
         public NDArray getfield(DType dtype, int offset = 0)
         {
-            if (dtype is null)
-                throw new ArgumentNullException(nameof(dtype));
+            // array_getfield reads its dtype with PyArray_DescrConverter ("O&"), which reads None as the default float64.
+            dtype ??= np.float64;
 
             // _getfield_is_safe: memory holding references (StringDType's cells: hasobject) may not be reinterpreted, so
             // either side holding them allows only the whole element in its own descriptor — a view of the same dtype.
@@ -97,7 +98,8 @@ namespace NumSharp
         ///     truncates toward zero). <c>null</c> is Python's <c>None</c>: NaN / <c>nan+nanj</c> / <c>False</c> /
         ///     <c>'None'</c> in the field's dtype, int()'s TypeError for an integer field.
         /// </param>
-        /// <param name="dtype">The dtype of the field being set (its itemsize must be ≤ this array's itemsize).</param>
+        /// <param name="dtype">The dtype of the field being set (its itemsize must be ≤ this array's itemsize). Null is Python's
+        ///     <c>None</c>, which NumPy's dtype converter reads as the default float64.</param>
         /// <param name="offset">Byte offset of the field within each element.</param>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.ndarray.setfield.html
@@ -107,7 +109,6 @@ namespace NumSharp
         ///     the dtype/offset validation), matching NumPy's <c>PyArray_SetField</c>.
         ///     </para>
         /// </remarks>
-        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is <c>null</c>.</exception>
         /// <exception cref="TypeError"><paramref name="value"/> is <c>null</c> (<c>None</c>) and <paramref name="dtype"/> is
         ///     an integer (or <c>decimal</c>) dtype.</exception>
         /// <exception cref="ValueError">
@@ -119,8 +120,9 @@ namespace NumSharp
         [NDScoped] // void boundary: reclaims the field view (a counted reference on this array's buffer) and a value converted here
         public void setfield(object value, DType dtype, int offset = 0)
         {
-            if (dtype is null)
-                throw new ArgumentNullException(nameof(dtype));
+            // array_setfield reads its dtype with PyArray_DescrConverter ("O&", while it parses its arguments, before the
+            // writeability check), which reads None as the default float64.
+            dtype ??= np.float64;
 
             // NumPy checks writeability of SELF first (PyArray_FailUnlessWriteable), before building the
             // field view and validating the dtype/offset. Raise the exact ValueError NumPy raises.

@@ -616,6 +616,10 @@ namespace NumSharp.Tests.Backends.Strings
             }
             Action field = () => r.getfield(np.dtype("int64"));
             field.Should().Throw<TypeError>().WithMessage("Cannot get/set field of an object array");
+            // A null dtype is Python's None, which NumPy reads as float64: the same refusal (NumPy 2.4.2:
+            // np.array([[1], [2, 3]], dtype=object).getfield(None) raises this TypeError).
+            Action noneField = () => r.getfield(null);
+            noneField.Should().Throw<TypeError>().WithMessage("Cannot get/set field of an object array");
             Action view = () => r.view(np.dtype("int64"));
             view.Should().Throw<TypeError>().WithMessage("Cannot change data-type for array of references.");
             Action choose = () => r.choose(new[] { 0 });

@@ -481,17 +481,15 @@ namespace NumSharp
         ///     NumPy's <c>getfield(dtype, offset=0)</c> of an object array: only the object dtype at offset 0 is a field of
         ///     it, and NumSharp has no object dtype, so every dtype it can spell is <c>_getfield_is_safe</c>'s TypeError.
         /// </summary>
-        /// <param name="dtype">The field's dtype.</param>
+        /// <param name="dtype">The field's dtype. Null is Python's <c>None</c>, which NumPy's dtype converter reads as
+        ///     float64, refused like any other.</param>
         /// <param name="offset">The field's byte offset.</param>
         /// <returns>Never returns.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
         /// <exception cref="TypeError"><c>Cannot get/set field of an object array</c>.</exception>
         /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
         public NDListArray getfield(DType dtype, int offset = 0)
         {
             ThrowIfDisposed();
-            if (dtype is null)
-                throw new ArgumentNullException(nameof(dtype));
             throw new TypeError("Cannot get/set field of an object array");
         }
 
@@ -505,17 +503,14 @@ namespace NumSharp
         ///     destination is read-only</c>), then <see cref="getfield"/>'s TypeError for every dtype NumSharp can spell.
         /// </summary>
         /// <param name="value">The value (never stored).</param>
-        /// <param name="dtype">The field's dtype.</param>
+        /// <param name="dtype">The field's dtype. Null is Python's <c>None</c> (float64), refused like any other.</param>
         /// <param name="offset">The field's byte offset.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
         /// <exception cref="ValueError">A read-only array.</exception>
         /// <exception cref="TypeError"><c>Cannot get/set field of an object array</c>.</exception>
         /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
         public void setfield(object value, DType dtype, int offset = 0)
         {
             ThrowIfDisposed();
-            if (dtype is null)
-                throw new ArgumentNullException(nameof(dtype));
             NumSharpException.ThrowIfNotWriteable(Ids.Shape, "assignment destination");
             // PyArray_SetField's getfield: _getfield_is_safe refuses every dtype NumSharp can spell.
             throw new TypeError("Cannot get/set field of an object array");

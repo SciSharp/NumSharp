@@ -204,12 +204,36 @@ namespace NumSharp.Tests.Casting
             act.Should().Throw<ValueError>().WithMessage("new type plus offset is larger than original type");
         }
 
+        /// <summary>
+        ///     A null dtype is Python's <c>None</c>, which NumPy's dtype converter reads as float64 (NumSharp raised
+        ///     ArgumentNullException). NumPy 2.4.2: <c>np.zeros(3, np.int32).getfield(None)</c> raises <c>ValueError: new type
+        ///     is larger than original type</c>; <c>np.arange(3, dtype=np.int64).getfield(None)</c> is a float64 view (owndata
+        ///     False, writeable) holding the bits 0, 1, 2; <c>np.array([1+2j, 3+4j]).getfield(None, 8)</c> is
+        ///     <c>[2., 4.]</c>; <c>a.setfield(1.5, None)</c> stores 1.5's float64 bits into an int64 array and raises the
+        ///     size ValueError for an int32 one.
+        /// </summary>
         [TestMethod]
-        public void GetField_NullType_Raises()
+        public void GetField_NullType_IsNoneFloat64()
         {
             var d = np.array(new int[] { 1, 2, 3 });
             Action act = () => d.getfield((Type)null);
-            act.Should().Throw<ArgumentNullException>();
+            act.Should().Throw<ValueError>().WithMessage("new type is larger than original type");
+
+            var i8 = np.arange(3).astype(NPTypeCode.Int64);
+            var f = i8.getfield(null);
+            f.dtype.Should().Be(np.float64);
+            f.flags.owndata.Should().BeFalse();
+            f.flags.writeable.Should().BeTrue();
+            f.view(np.uint64).ToArray<ulong>().Should().Equal(0UL, 1UL, 2UL);
+
+            var imag = np.array(new Complex[] { new(1, 2), new(3, 4) }).getfield(null, 8);
+            imag.ToArray<double>().Should().Equal(2.0, 4.0);
+
+            var target = np.zeros(new Shape(3), NPTypeCode.Int64);
+            target.setfield(1.5, null);
+            target.ToArray<long>().Should().Equal(4609434218613702656L, 4609434218613702656L, 4609434218613702656L);
+            Action narrow = () => np.zeros(new Shape(3), NPTypeCode.Int32).setfield(1.5, null);
+            narrow.Should().Throw<ValueError>().WithMessage("new type is larger than original type");
         }
 
         // ---- setfield ----------------------------------------------------------------------------
