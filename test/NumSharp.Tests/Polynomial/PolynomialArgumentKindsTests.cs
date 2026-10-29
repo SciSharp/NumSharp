@@ -11,7 +11,7 @@ namespace NumSharp.Tests.Polynomial
     ///     <c>ValueTuple</c>, Python scalars and NDArrays) cannot express: jagged arrays, <c>List&lt;T&gt;</c> and LINQ,
     ///     <c>NDArray[]</c>, <c>Memory&lt;T&gt;</c>, multi-dimensional <c>object[,]</c>, <c>BigInteger[]</c>,
     ///     <c>System.Tuple</c>, the 8-item <c>ValueTuple</c> (whose last item nests in TRest), and the argument-order facts
-    ///     of the sequence conversion (NDPolySequence). Every expected value is NumPy 2.4.2's, the Python spelling next to
+    ///     of the sequence conversion (UnmanagedStorage.Coercion.Sequence.cs). Every expected value is NumPy 2.4.2's, the Python spelling next to
     ///     it.
     /// </summary>
     [TestClass]

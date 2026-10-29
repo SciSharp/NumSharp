@@ -117,13 +117,13 @@ namespace NumSharp
             if (TryFormatScalar(x, out var text))
                 return text;
             // A typed C# array / Memory<T> of a dtype is an ndarray (the house mapping): its str.
-            if (PolySequence.IsArrayLike(x))
+            if (Backends.UnmanagedStorage.IsArrayLike(x))
             {
                 using var a = np.asanyarray(x);
                 return a.ToString();
             }
             // A list / tuple: its repr (items repr'd).
-            if (PolySequence.IsSequence(x))
+            if (Backends.UnmanagedStorage.IsSequence(x))
                 return Repr(x);
             return x.ToString() ?? string.Empty;
         }
@@ -147,14 +147,14 @@ namespace NumSharp
             // A Python scalar's repr is its str (int, float, complex, bool).
             if (TryFormatScalar(x, out var text))
                 return text;
-            if (PolySequence.IsArrayLike(x))
+            if (Backends.UnmanagedStorage.IsArrayLike(x))
             {
                 using var a = np.asanyarray(x);
                 return a.ToString(true);
             }
-            if (PolySequence.IsSequence(x))
+            if (Backends.UnmanagedStorage.IsSequence(x))
             {
-                var items = PolySequence.Items(x);
+                var items = Backends.UnmanagedStorage.SequenceItems(x);
                 bool tuple = x is ITuple;
                 var sb = new StringBuilder();
                 sb.Append(tuple ? '(' : '[');

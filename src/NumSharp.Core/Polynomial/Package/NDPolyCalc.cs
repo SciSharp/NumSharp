@@ -858,7 +858,7 @@ namespace NumSharp
         /// <summary>
         ///     NumPy's <c>if not np.iterable(k): k = [k]</c> then <c>list(k)</c>. An array (an NDArray, a typed C# array,
         ///     a Memory&lt;T&gt;) yields NumPy scalars (1-D) or row views (N-D) as <see cref="PolyNumber"/>s — a 0-d array
-        ///     is not iterable and is one constant; a Python tuple / list (<see cref="PolySequence.IsSequence"/>) yields its
+        ///     is not iterable and is one constant; a Python tuple / list (<see cref="Backends.UnmanagedStorage.IsSequence"/>) yields its
         ///     items and a str its characters, RAW: Python converts an item only when its order uses it
         ///     (<see cref="Constant"/>), so a bad item is reported after the argument checks and after the lbnd
         ///     evaluation of its order, as in NumPy; anything else is one raw constant.
@@ -881,10 +881,10 @@ namespace NumSharp
                     AddArrayItems(list, nd);
                     return list;
             }
-            if (PolySequence.IsArrayLike(k))
+            if (Backends.UnmanagedStorage.IsArrayLike(k))
                 AddArrayItems(list, np.asanyarray(k));
-            else if (PolySequence.IsSequence(k))
-                list.AddRange(PolySequence.Items(k));
+            else if (Backends.UnmanagedStorage.IsSequence(k))
+                list.AddRange(Backends.UnmanagedStorage.SequenceItems(k));
             else
                 list.Add(k);   // not iterable: k = [k]
             return list;
@@ -1033,11 +1033,11 @@ namespace NumSharp
                 case PolyNumber p:
                     return p.Kind == PolyNumberKind.Array ? p.Array.ndim : 0;
             }
-            if (PolySequence.IsSequence(x))
-                return PolySequence.NDim(x);
+            if (Backends.UnmanagedStorage.IsSequence(x))
+                return Backends.UnmanagedStorage.SequenceNDim(x);
             if (x is Array arr)
                 return arr.Rank;   // a typed C# array (IsSequence took every other array)
-            return PolySequence.IsArrayLike(x) ? 1 : 0;
+            return Backends.UnmanagedStorage.IsArrayLike(x) ? 1 : 0;
         }
 
         /// <summary><c>normalize_axis_index(axis, ndim)</c>.</summary>

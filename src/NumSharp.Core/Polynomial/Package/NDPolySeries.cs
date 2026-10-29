@@ -31,7 +31,7 @@ using NumSharp.Backends.Kernels;
 //                                     -> an ndarray of its element dtype (the house mapping)
 //   * ValueTuple / object[] (jagged double[][], NDArray[] and every other non-dtype array) / IList / other
 //     IEnumerable                     -> a Python tuple / list: nested to any depth, shape and element dtypes
-//                                        DISCOVERED like np.array([...]) (NDPolySequence)
+//                                        DISCOVERED like np.array([...]) (UnmanagedStorage.Coercion.Sequence.cs)
 //   * string / string[]               -> a str array: sized like NumPy's, then "no common type"
 // Domains passed to mapparms/mapdomain are INDEXED, never converted, exactly as NumPy indexes them: a typed
 // C# array is an ndarray (its elements are NumPy scalars), an object[]/IList a Python list and a ValueTuple a
@@ -252,13 +252,13 @@ namespace NumSharp
                     return PolySeriesView.Str(strs.Length);
             }
             // A typed C# array (or Memory<T>) of a dtype is an ndarray of its element dtype (the house mapping).
-            if (PolySequence.IsArrayLike(a))
+            if (Backends.UnmanagedStorage.IsArrayLike(a))
                 return PolySeriesView.Of(np.asanyarray(a));
             // A Python tuple / list — nested to any depth, a jagged or NDArray[] array included: np.array's coercion
             // (an empty sequence is NumPy's float64 (0,)); one NumPy turns into a str or object array comes back as its shape.
-            if (PolySequence.IsSequence(a))
+            if (Backends.UnmanagedStorage.IsSequence(a))
             {
-                var arr = PolySequence.ToArrayOrNonNumeric(a, out var nonNumeric);
+                var arr = Backends.UnmanagedStorage.FromSequenceOrNonNumeric(a, out var nonNumeric);
                 return arr is not null
                     ? PolySeriesView.Of(arr)
                     : PolySeriesView.NonNumericArray(nonNumeric.Dims, nonNumeric.IsObject, nonNumeric.Refusal);
@@ -358,7 +358,7 @@ namespace NumSharp
                     text = np.array(strs);
                     return true;
             }
-            if (!PolySequence.IsSequence(a))
+            if (!Backends.UnmanagedStorage.IsSequence(a))
                 return false;
             try
             {
@@ -629,7 +629,7 @@ namespace NumSharp
         /// <summary>
         ///     Python's iteration of <c>alist</c>, each item converted by <c>np.array(a, ndmin=1)</c>: an ndarray (an
         ///     NDArray, a typed C# array, a Memory&lt;T&gt; of a dtype) yields NumPy scalars (1-D) or rows, a Python tuple /
-        ///     list (<see cref="PolySequence.IsSequence"/>) its items, a str its characters.
+        ///     list (<see cref="Backends.UnmanagedStorage.IsSequence"/>) its items, a str its characters.
         /// </summary>
         /// <param name="alist">The iterable.</param>
         /// <returns>The converted items.</returns>
@@ -662,12 +662,12 @@ namespace NumSharp
             }
             // A typed C# array is an ndarray and iterates like one: NumPy SCALARS of its dtype along a 1-D array (a
             // float[] yields np.float32 items, not the Python floats a boxed C# float would be), rows otherwise.
-            if (PolySequence.IsArrayLike(alist))
+            if (Backends.UnmanagedStorage.IsArrayLike(alist))
                 return Items(np.asanyarray(alist));
             // A Python tuple / list — a jagged array's or NDArray[]'s items, a multi-dimensional object[,]'s rows.
-            if (PolySequence.IsSequence(alist))
+            if (Backends.UnmanagedStorage.IsSequence(alist))
             {
-                var items = PolySequence.Items(alist);
+                var items = Backends.UnmanagedStorage.SequenceItems(alist);
                 var r = new PolySeriesView[items.Length];
                 for (int i = 0; i < items.Length; i++)
                     r[i] = AsCoefficientArray(items[i]);
@@ -780,12 +780,12 @@ namespace NumSharp
                     return TrimSeqList(list);
                 case ITuple tuple:
                 {
-                    var items = PolySequence.Items(tuple);
+                    var items = Backends.UnmanagedStorage.SequenceItems(tuple);
                     int k = TrimSeqCount(items);
-                    return k == items.Length ? seq : PolySequence.MakeTuple(items, k);
+                    return k == items.Length ? seq : Backends.UnmanagedStorage.MakeTuple(items, k);
                 }
             }
-            if (PolySequence.IsArrayLike(seq))
+            if (Backends.UnmanagedStorage.IsArrayLike(seq))
             {
                 // An ndarray-like: NumPy's ndarray semantics over the conversion. The result is the conversion itself
                 // (kept) or a view that holds its own reference to the buffer, so only the wrapper of a trimmed one goes.
@@ -795,9 +795,9 @@ namespace NumSharp
                     a.Dispose();
                 return r;
             }
-            if (PolySequence.IsSequence(seq))
+            if (Backends.UnmanagedStorage.IsSequence(seq))
             {
-                var items = PolySequence.Items(seq);
+                var items = Backends.UnmanagedStorage.SequenceItems(seq);
                 int k = TrimSeqCount(items);
                 if (k == items.Length)
                     return seq;
@@ -863,7 +863,7 @@ namespace NumSharp
                 case decimal v: return v != 0m;
                 case NDArray a: return ArrayItemTruth(a);
             }
-            if (PolySequence.IsArrayLike(item))
+            if (Backends.UnmanagedStorage.IsArrayLike(item))
             {
                 using var a = np.asanyarray(item);
                 return ArrayItemTruth(a);
@@ -2818,7 +2818,7 @@ namespace NumSharp
         /// <summary>
         ///     Whether a <c>{p}line</c> operand is a Python object NumPy's statements treat as one rather than as a number or
         ///     a numeric ndarray: text (an S / U / <c>StringDType</c> array, or a C# string — a Python str) or a Python list /
-        ///     tuple (<see cref="PolySequence.IsSequence"/>: an <c>object[]</c>, a ValueTuple, a jagged or <c>NDArray[]</c>
+        ///     tuple (<see cref="Backends.UnmanagedStorage.IsSequence"/>: an <c>object[]</c>, a ValueTuple, a jagged or <c>NDArray[]</c>
         ///     array, any other enumerable; a typed C# array is an ndarray, the house map).
         /// </summary>
         /// <param name="a">The operand.</param>
@@ -2828,7 +2828,7 @@ namespace NumSharp
             {
                 string => true,
                 NDArray nd => Backends.Strings.NDStringUfuncs.IsText(nd),
-                _ => a is not null && PolySequence.IsSequence(a),
+                _ => a is not null && Backends.UnmanagedStorage.IsSequence(a),
             };
 
         /// <summary>
@@ -2895,7 +2895,7 @@ namespace NumSharp
                 case NDArray:
                     return PolyNumber.FromObject(scl).NotZero();
                 default:
-                    return (scl is not null && PolySequence.IsSequence(scl)) || PolyNumber.FromObject(scl).NotZero();
+                    return (scl is not null && Backends.UnmanagedStorage.IsSequence(scl)) || PolyNumber.FromObject(scl).NotZero();
             }
         }
 
@@ -3013,13 +3013,13 @@ namespace NumSharp
                 case string s:
                     return NDArray.FromPythonOperand(s);
             }
-            if (PolySequence.IsSequence(v))
+            if (Backends.UnmanagedStorage.IsSequence(v))
                 return SequenceAsArray(v);
             return WeakOperandOf(PolyNumber.FromObject(v));
         }
 
         /// <summary>
-        ///     <c>np.asarray</c> of a Python list / tuple: np.array's coercion — numeric (<see cref="PolySequence"/>), or the
+        ///     <c>np.asarray</c> of a Python list / tuple: np.array's coercion — numeric (<see cref="Backends.UnmanagedStorage.FromSequence"/>), or the
         ///     str array NumPy builds when the items hold strs.
         /// </summary>
         /// <param name="seq">The sequence.</param>
@@ -3029,7 +3029,7 @@ namespace NumSharp
         ///     an unknown object, text mixes without a common dtype).</exception>
         private static NDArray SequenceAsArray(object seq)
         {
-            var arr = PolySequence.ToArrayOrNonNumeric(seq, out var nonNumeric);
+            var arr = Backends.UnmanagedStorage.FromSequenceOrNonNumeric(seq, out var nonNumeric);
             if (arr is not null)
                 return arr;
             if (!nonNumeric.IsObject && TryStrArray(seq, out var text))
@@ -3066,7 +3066,7 @@ namespace NumSharp
 
         /// <summary>
         ///     The Python type name CPython's error texts give an operand: <c>str</c>, <c>list</c> / <c>tuple</c> (a Python
-        ///     sequence: <see cref="ITuple"/> is a tuple, anything else <see cref="PolySequence.IsSequence"/> takes a list),
+        ///     sequence: <see cref="ITuple"/> is a tuple, anything else <see cref="Backends.UnmanagedStorage.IsSequence"/> takes a list),
         ///     <c>int</c> / <c>float</c> / <c>complex</c> / <c>bool</c> for a Python number, <c>numpy.float16</c> /
         ///     <c>numpy.uint16</c> for the NumPy scalars <see cref="Half"/> / <c>char</c> (the house map), null for anything
         ///     else (a <c>decimal</c>, an object).
@@ -3100,7 +3100,7 @@ namespace NumSharp
                 case ITuple:
                     return "tuple";
             }
-            return v is not null && PolySequence.IsSequence(v) ? "list" : null;
+            return v is not null && Backends.UnmanagedStorage.IsSequence(v) ? "list" : null;
         }
 
         /// <summary>The Python type name of a NumPy-scalar <see cref="PolyNumber"/> (<c>numpy.float16</c>, …).</summary>
@@ -3165,7 +3165,7 @@ namespace NumSharp
                     NDArray nd => nd,
                     string s => NDArray.FromPythonOperand(s),
                     PolyNumber p => p.ToNDArray(),
-                    var v when v is not null && PolySequence.IsSequence(v) => SequenceAsArray(v),
+                    var v when v is not null && Backends.UnmanagedStorage.IsSequence(v) => SequenceAsArray(v),
                     var v => PolyNumber.FromObject(v).ToNDArray(),
                 };
             return arrays;

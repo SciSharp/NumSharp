@@ -161,7 +161,7 @@ namespace NumSharp
             object[] entries = index switch
             {
                 object[] many => many,
-                ITuple tuple => PolySequence.Items(tuple),
+                ITuple tuple => Backends.UnmanagedStorage.SequenceItems(tuple),
                 _ => new[] { index },
             };
             SetItem(entries, AsOperand(value));
@@ -363,7 +363,7 @@ namespace NumSharp
         {
             slices = null;
             if (index.Length == 1 && index[0] is ITuple tuple)
-                index = PolySequence.Items(tuple);
+                index = Backends.UnmanagedStorage.SequenceItems(tuple);
 
             var list = new List<Slice>(index.Length);
             foreach (object entry in index)
@@ -407,7 +407,7 @@ namespace NumSharp
             if (index is null)
                 return false;
             if (index.Length == 1 && index[0] is ITuple tuple)
-                index = PolySequence.Items(tuple);
+                index = Backends.UnmanagedStorage.SequenceItems(tuple);
 
             bool scalarArray = false;
             foreach (object entry in index)
@@ -440,7 +440,7 @@ namespace NumSharp
             if (index is null || index.Length == 0)
                 return false;
             if (index.Length == 1 && index[0] is ITuple tuple)
-                index = PolySequence.Items(tuple);
+                index = Backends.UnmanagedStorage.SequenceItems(tuple);
 
             // Entry #1 by position, where a slice string holds as many entries as it has commas + 1.
             int position = 0;
@@ -484,8 +484,8 @@ namespace NumSharp
                     return array;
             }
 
-            if (value is not string && PolySequence.IsSequence(value))
-                return PolySequence.ToArray(value);
+            if (value is not string && Backends.UnmanagedStorage.IsSequence(value))
+                return Backends.UnmanagedStorage.FromSequence(value);
             return value is Array typed ? np.array(typed) : np.asanyarray(value);
         }
 

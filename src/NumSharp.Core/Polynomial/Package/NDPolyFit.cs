@@ -251,9 +251,9 @@ namespace NumSharp
                     // A 0-d <U array: NumPy's ufunc add has no loop for it with a float64 (the house add raises NumPy's text).
                     return np.add(np.asanyarray(a), NDArray.PythonLiteral(0.0));
             }
-            if (PolySequence.IsSequence(a))
+            if (Backends.UnmanagedStorage.IsSequence(a))
             {
-                NDArray arr = PolySequence.ToArrayOrNonNumeric(a, out var nonNumeric);
+                NDArray arr = Backends.UnmanagedStorage.FromSequenceOrNonNumeric(a, out var nonNumeric);
                 if (arr is null)
                 {
                     if (nonNumeric.IsObject)
@@ -304,14 +304,14 @@ namespace NumSharp
                     break;
                 }
                 default:
-                    if (PolySequence.IsSequence(deg))
+                    if (Backends.UnmanagedStorage.IsSequence(deg))
                     {
                         // np.asarray of a list: its coercion (a ragged list is its ValueError); a str / object list fails the
                         // kind test below.
-                        arr = PolySequence.ToArrayOrNonNumeric(deg, out _) ?? throw DegMustBeIntegers();
+                        arr = Backends.UnmanagedStorage.FromSequenceOrNonNumeric(deg, out _) ?? throw DegMustBeIntegers();
                         break;
                     }
-                    if (PolySequence.IsArrayLike(deg))
+                    if (Backends.UnmanagedStorage.IsArrayLike(deg))
                     {
                         arr = np.asanyarray(deg);
                         break;
@@ -378,8 +378,8 @@ namespace NumSharp
                 case string:
                     return np.asanyarray(rcond);
             }
-            if (PolySequence.IsSequence(rcond))
-                return PolySequence.ToArray(rcond);
+            if (Backends.UnmanagedStorage.IsSequence(rcond))
+                return Backends.UnmanagedStorage.FromSequence(rcond);
             return PolyNumber.FromObject(rcond).ToNDArray();
         }
 

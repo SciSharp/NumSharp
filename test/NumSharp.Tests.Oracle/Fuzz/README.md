@@ -2678,7 +2678,7 @@ at 45 points (1-D and per-point series, at the dtype extremes, and column-stride
 (incl. `lagval`'s OverflowError); Char rides the uint16 proxy. Section (J), 720 cells from the 2026-09-29 wholeness
 pass, covers the x forms a C# caller spells differently: a Python-sequence x (tuples, nested lists and tuples, mixed
 nesting, empty, complex and bool items, a float16 0-d item, ragged → NumPy's inhomogeneous ValueError), coerced by
-`NDPolySequence`'s port of `np.array`, and a Python int x past int64 (a C# `BigInteger`, WEAK: CPython's int
+`UnmanagedStorage.FromSequence`'s port of `np.array`, and a Python int x past int64 (a C# `BigInteger`, WEAK: CPython's int
 arithmetic on the x-only terms, then NumPy's conversion — inf or nan, and OverflowError past float64). Section (K),
 1,890 cells from the same pass, gives c and the ordinates as Python values too (`params["c"]` holds c's spec when it is
 not an operand): a list / tuple / nested / scalar / bool / complex / NumPy-scalar-item / empty / ragged / uint64 c for
@@ -2764,7 +2764,7 @@ late in lane 0 (NumPy returns the early zero — the cascade lets the higher lan
 return the late one — and the mirror for min), and one NaN with a payload that comes back canonical from a window
 boundary inside the vector section and with its payload from the scalar tail. **(O) Python tuples and nested
 sequences** (184 cases, appended after N, from the 2026-09-29 wholeness pass) — the C# replay's `ValueTuple` (a Python
-tuple) and nested `object[]` (lists), coerced by `NDPolySequence`'s port of `np.array`: tuple operands of
+tuple) and nested `object[]` (lists), coerced by `UnmanagedStorage.FromSequence`'s port of `np.array`: tuple operands of
 `polyadd`/`polysub`/`chebadd`/`chebsub` on either side (ints, floats, mixed with a complex, nested → "not 1-d", tuples
 of float32 arrays, the empty tuple, ragged → NumPy's inhomogeneous ValueError), `as_series` iterating a tuple (of
 arrays, tuples, lists, scalars; nested and ragged items; trim on and off), and tuple / nested / ragged / empty inputs
@@ -2834,7 +2834,7 @@ Three sections were added by the 2026-09-29 wholeness pass (5,880 cases), after 
 against NumPy found the sequence conversions wrong (reverting the fix turns 1,278 of them red):
 - **(M) argument kinds** (3,480) — the C# replay turns a Python tuple into a `ValueTuple`, a list into `object[]`, a
   big Python int into `ulong`/`BigInteger` and a NumPy scalar item into a 0-d array, so these cells drive
-  `NDPolySequence`'s port of `np.array`'s coercion: c as tuples, nested lists/tuples to depth 3, rows of arrays,
+  `UnmanagedStorage.FromSequence`'s port of `np.array`'s coercion: c as tuples, nested lists/tuples to depth 3, rows of arrays,
   float16 0-d items, `[2**64-1, 1]` (uint64) and `[2**63, -1]` (float64), empty sequences (`[]`, `()`, `[[], []]`, deep
   empties, an empty array leaf), and ragged input along every detection path (NumPy's texts, with the shape the walk
   still agreed on); scl as tuples/lists/nested columns (the `scl must be a scalar.` ndim check), ragged, and Python

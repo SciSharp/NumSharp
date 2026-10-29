@@ -1855,7 +1855,7 @@ dtype cast copies. `num<0` → `ValueError("Number of samples, {num}, must be no
 - **Constructor** (`NDMatrix.Construction.cs`): the four branches of `matrix.__new__` in NumPy's order. A matrix
   literal (`"1 2; 3 4"`, `"[1.5, 2; 3 4j]"`) is `_convert_from_string` plus a port of `ast.literal_eval` for one
   token (four number bases, `_`, floats, imaginary numbers, signs, parentheses, `True` / `False`; `SyntaxError`
-  and `malformed node` errors). A sequence goes through `PolySequence`; with a `dtype` each element is stored by
+  and `malformed node` errors). A sequence goes through `UnmanagedStorage.FromSequence`; with a `dtype` each element is stored by
   `PyArray_Pack` (`ReductionInitial.TryPack`): a Python int out of range raises OverflowError, a complex number
   into a real dtype raises TypeError.
 - **Library fixes this needed** (they change `NDArray` too): `NDArray.PrepareAssignedValue`
@@ -5688,7 +5688,7 @@ Tier-3A per-chunk IL over `NDIterRef.ForEach`, emitted by ONE typed emitter from
 no per-dtype C#. **Bit-exact with NumPy 2.4.2** on every dtype pair and layout, result LAYOUT included (oracle tier
 `polyeval.jsonl`, 23,866 cases for these 36 names (27,385 with `polyvalfromroots`' section M), 0 excused — 4,650 of them from the 2026-10-01 review, section L: a "strides" facet over
 every x × series layout, see the traps; 2,610 from the 2026-09-29 wholeness pass: section J, a Python-sequence x (tuples,
-nested lists, empty, ragged, NumPy-scalar items — coerced by `PolySequence`, see U4) and a Python int x past int64 (a C#
+nested lists, empty, ragged, NumPy-scalar items — coerced by `UnmanagedStorage.FromSequence`, see U4) and a Python int x past int64 (a C#
 `BigInteger`, weak: CPython int arithmetic on the x-only terms, inf / OverflowError past float64); section K, an
 array_like c and array_like ordinates (below); `MisalignedRegistry`'s generic unary/complex ULP branches are carved out
 for these ops so a drift fails). **Every array_like parameter is `object`** (the wholeness pass): c of `{p}val*`/
@@ -5769,7 +5769,7 @@ operand of NumPy's Python-level scalar code) + `NDPolySeries.cs` (the functions)
 (trim scan, in-place combine, tolerance scan, cast, and one-element scalarmath kernels behind flat slot arrays).
 **Bit-exact with NumPy 2.4.2** — oracle tier `polyseries.jsonl` (19,478 cases, 0 excused: incl. 1,458 long-series, 45
 block-boundary and 72 getdomain window-crossing cases, 752 complex64 results value-compared, 184 tuple / nested-sequence
-cases — section O, coerced by `PolySequence`, see U4 — 26 `trimseq` cases over Python sequences, section P, the deferred
+cases — section O, coerced by `UnmanagedStorage.FromSequence`, see U4 — 26 `trimseq` cases over Python sequences, section P, the deferred
 object / str refusal, section Q, and 780 mapdomain result layouts, section R: values + a "strides" facet over every
 layout) + `Polynomial/PolynomialSeriesTests.cs` (39 tests) + `PolynomialResultLayoutTests.cs`. The
 C# boundary is the house NEP 50 map: bool/integers/float/double/`Complex`/`BigInteger` are Python scalars,
@@ -5987,7 +5987,7 @@ trees (`PolySteps.RewriteForWeakX`) with `PolyNumber` instead; `PolyNumber` emul
 
 **Argument kinds — `np.array`'s coercion, ported (the 2026-09-29 wholeness pass).** Every array_like the package
 converts — `{p}der`/`{p}int`'s c, k, lbnd and scl, `{p}val*`/`{p}grid*`'s c and x, `{p}val2d`/`{p}val3d`/`{p}valnd`'s
-ordinates, `mapdomain`'s x, `as_series`' items, `{p}add`/`{p}sub`'s operands, `trimseq`'s items — goes through `Polynomial/Package/NDPolySequence.cs` (`PolySequence`), a statement-for-statement port of
+ordinates, `mapdomain`'s x, `as_series`' items, `{p}add`/`{p}sub`'s operands, `trimseq`'s items — goes through `Creation/UnmanagedStorage.Coercion.Sequence.cs` (`UnmanagedStorage.FromSequence`; numpy.polynomial's `NDPolySequence.cs` until 2026-10-29, when it became the array object's coercion: numpy.char, numpy.matrix, np.histogramdd and np.gradient read their array_like arguments with it too), a statement-for-statement port of
 `array_coercion.c` (`PyArray_DiscoverDTypeAndShape_Recursive` + `update_shape`) and its fill:
 - **The C# map** (header of `NDPolyNumber.cs`): `ITuple` (ValueTuple, System.Tuple) is a Python tuple; `object[]` and
   every other C# array whose elements are not a NumSharp dtype (jagged `double[][]`, `NDArray[]`, `BigInteger[]`) and any
@@ -6183,7 +6183,7 @@ np.correlate: 6,675 NumPy-generated cases) replayed through the facades by refle
 - **A None / str series was refused on conversion**, before NumPy's own errors. `polyutils.as_series` converts every
   argument, checks sizes and dims, and only THEN meets the common type: a str array (a list holding a str) fails it
   (`Coefficient arrays have no common type`), an object array (None, a non-numeric object, an oversized int) makes it
-  compute with Python objects. So `PolySequence.ToArrayOrNonNumeric` now reports such a sequence as NumPy's array
+  compute with Python objects. So `UnmanagedStorage.FromSequenceOrNonNumeric` now reports such a sequence as NumPy's array
   SHAPE (`PolyNonNumericArray`: dims, object-or-str, the refusal), `AsCoefficientArray` makes it a
   `PolySeriesView.NonNumericArray` (None and an unconvertible scalar are one-element object arrays), and the refusal
   is raised by `NDPolySeries.CommonType` — or later, where NumPy still has checks to run: div's `c2[-1] == 0` (on the
@@ -6276,7 +6276,7 @@ oracle tier `polyvander.jsonl` (31,180 cases, 0 excused; 16,612 at delivery) and
     dtype, multiplied through np.multiply's promotion. A None / str element stays refused. Oracle section J (14,568).
   - **A `char` degree container reads `numpy.uint16`** in NumPy's len() text (`NDPolySeries.PythonTypeName`; it said 'Char').
   - **`List<T>` coercion was ~40 ns an item** (a 1000-point `List<double>` x ran 0.70–0.97× NumPy). The shared coercion
-    (`NDPolySequence`, every polynomial unit) now reads a typed collection — any non-array `IEnumerable<T>` of a dtype:
+    (`UnmanagedStorage.Coercion.Sequence.cs`, every polynomial unit) now reads a typed collection — any non-array `IEnumerable<T>` of a dtype:
     `List<T>`, `HashSet<T>`, `Queue<T>`, LINQ — from its values in one pass (`TryTypedCollection` / `CollectionArray`),
     with NumPy's discovered dtype: a `ulong` mix of both magnitudes is float64, `List<float>` float64, an empty one float64
     with no dtype vote. A NESTED flat list (a typed collection, or an `object[]` of Python floats / ints) becomes one array
@@ -6381,7 +6381,7 @@ roots 1.5–5×. The cells under 1.5× are floors both sides share: LAPACK `geev
   `{p}roots` result, could be overwritten by the next call. Concurrency was checked at 16 threads: 366 first calls and
   6,400 steady-state calls against the single-threaded bytes, 0 differences after the fix (NumPy: 0).
 
-  Perf of the new object value path: the shared coercion (`NDPolySequence`, `NDPolySeries.AsCoefficientArray`)
+  Perf of the new object value path: the shared coercion (`UnmanagedStorage.Coercion.Sequence.cs`, `NDPolySeries.AsCoefficientArray`)
   classified a Python int past uint64 by THROWING and catching NotSupportedException, ~1.4 µs a leaf. Two-term object
   roots ran at 1.13–1.66× NumPy. `PolyNumber.TryDiscoveredDtype` + `ObjectArrayRefusal` (the refusal built, never
   thrown) bring them to 2.9–4.6×, which speeds every unit's object-series path. New corpus sections:
@@ -6642,7 +6642,7 @@ SHA-256-checked): geomean 1.96×, min 1.28×** — and a per-cell lstsq ceiling 
   duplicate's last row wins). The OpenBLAS backend's `Linearize` (every LAPACK function) and lstsq's b copy move a
   column that is contiguous in the source as one block, as NumPy's `linearize_matrix` does with BLAS `?copy` (lstsq
   receives the F-ordered transpose of the quotient: 2.4 vs 4.0 µs at 1,000 × 11).
-- **Arguments**: x / y / w through np.asarray's coercion (`PolySequence`) and `+ 0.0`: None is Python's `unsupported
+- **Arguments**: x / y / w through np.asarray's coercion (`UnmanagedStorage.FromSequence`) and `+ 0.0`: None is Python's `unsupported
   operand type(s) for +: 'NoneType' and 'float'`, a str / str list / str ndarray the ufunc add's no-loop UFuncTypeError,
   an object list NotSupported. deg: a Python int (int64, uint64 from 2**63), a char (np.uint16), a 0-d or non-empty 1-D
   integer array_like; anything else (a bool, a float, a list of floats, an EMPTY int array) is `deg must be an int or

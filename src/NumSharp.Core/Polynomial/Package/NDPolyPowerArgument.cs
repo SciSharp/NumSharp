@@ -90,10 +90,10 @@ namespace NumSharp
                     throw new TypeError("int() argument must be a string, a bytes-like object or a real number, not 'tuple'");
             }
             // A typed C# array / Memory<T> of a dtype is an ndarray of at least one dim: int() refuses it before reading it.
-            if (PolySequence.IsArrayLike(pow))
+            if (Backends.UnmanagedStorage.IsArrayLike(pow))
                 throw new TypeError(OnlyZeroDim);
             // Any other list-like (object[], List<T>, a jagged array, LINQ) is a Python list.
-            if (PolySequence.IsSequence(pow))
+            if (Backends.UnmanagedStorage.IsSequence(pow))
                 throw new TypeError("int() argument must be a string, a bytes-like object or a real number, not 'list'");
             // Scalars (and None / str / an unknown object) are PythonInt.From's: exactly CPython's int() of them.
             return PythonInt.From(pow);
@@ -165,9 +165,9 @@ namespace NumSharp
                     throw new TypeError("'>' not supported between instances of 'int' and 'tuple'");
             }
             // A typed C# array / Memory<T> is an ndarray (the comparison is a ufunc, then its truth value is tested).
-            if (PolySequence.IsArrayLike(maxpower))
+            if (Backends.UnmanagedStorage.IsArrayLike(maxpower))
                 return ArrayExceeds(power, np.asanyarray(maxpower));
-            if (PolySequence.IsSequence(maxpower))
+            if (Backends.UnmanagedStorage.IsSequence(maxpower))
                 throw new TypeError("'>' not supported between instances of 'int' and 'list'");
             throw new TypeError($"'>' not supported between instances of 'int' and '{NDPolySeries.PythonTypeName(maxpower)}'");
         }

@@ -275,7 +275,7 @@ namespace NumSharp
                 }
                 else
                 {
-                    stacked = PolySequence.ToArrayOrNonNumeric(PolySequence.MakeTuple(points, n), out var nonNumeric);
+                    stacked = Backends.UnmanagedStorage.FromSequenceOrNonNumeric(Backends.UnmanagedStorage.MakeTuple(points, n), out var nonNumeric);
                     if (stacked is null)
                     {
                         // A str stack (a str or a list of strs among the points): its `+ 0.0` has no add loop — NumPy's text
@@ -622,14 +622,14 @@ namespace NumSharp
                     len = LenOf(nd);
                     break;
                 default:
-                    if (PolySequence.IsArrayLike(deg))
+                    if (Backends.UnmanagedStorage.IsArrayLike(deg))
                     {
                         arr = converted = np.asanyarray(deg);
                         len = LenOf(arr);
                     }
-                    else if (PolySequence.IsSequence(deg))
+                    else if (Backends.UnmanagedStorage.IsSequence(deg))
                     {
-                        seq = PolySequence.Items(deg);
+                        seq = Backends.UnmanagedStorage.SequenceItems(deg);
                         len = seq.Length;
                     }
                     else

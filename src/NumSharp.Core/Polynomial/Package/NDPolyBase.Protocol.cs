@@ -166,12 +166,12 @@ namespace NumSharp
             }
             // A typed C# array (or Memory<T>) of a dtype is an ndarray (the house map); every other array and enumerable is a
             // Python list.
-            if (PolySequence.IsArrayLike(o))
+            if (Backends.UnmanagedStorage.IsArrayLike(o))
             {
                 NDArray nd = np.asanyarray(o);
                 return new PyOperand(PyOperandKind.NdArray, nd, PolyNumber.FromArray(nd), null, "numpy.ndarray");
             }
-            if (PolySequence.IsSequence(o))
+            if (Backends.UnmanagedStorage.IsSequence(o))
                 return new PyOperand(PyOperandKind.List, o, default, null, "list");
             return new PyOperand(PyOperandKind.Other, o, default, null, o.GetType().Name);
         }

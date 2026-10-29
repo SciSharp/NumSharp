@@ -148,7 +148,7 @@ namespace NumSharp.Tests.Polynomial
             {
                 try
                 {
-                    using var a = PolySequence.ToArray(seq());
+                    using var a = global::NumSharp.Backends.UnmanagedStorage.FromSequence(seq());
                     return Sig(a);
                 }
                 catch (Exception e)

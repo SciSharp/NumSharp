@@ -139,7 +139,7 @@ namespace NumSharp.Tests.Fuzz
                             items.Add(Decode(it));
                         // A C# tuple literal of that arity (the empty ValueTuple for Python's (); eight or more items nest
                         // in TRest the way the compiler nests them, which ITuple flattens back into one tuple).
-                        return PolySequence.MakeTuple(items.ToArray(), items.Count);
+                        return global::NumSharp.Backends.UnmanagedStorage.MakeTuple(items.ToArray(), items.Count);
                     }
                     case "str":
                         return e.GetProperty("str").GetString();
@@ -456,7 +456,7 @@ namespace NumSharp.Tests.Fuzz
                         // NumPy returns the same KIND (the sequence itself or its slice), and the corpus records np.asarray
                         // of it — so the replay compares np.array's coercion of the returned sequence.
                         object r = seq is object[] list ? u.trimseq(list) : u.trimseq(seq);
-                        return r as NDArray ?? PolySequence.ToArray(r);
+                        return r as NDArray ?? global::NumSharp.Backends.UnmanagedStorage.FromSequence(r);
                     }
                     case "trimcoef": return a.Has("tol") ? u.trimcoef(a.Get("c"), a.Get("tol")) : u.trimcoef(a.Get("c"));
                     case "getdomain": return u.getdomain(a.Get("x"));

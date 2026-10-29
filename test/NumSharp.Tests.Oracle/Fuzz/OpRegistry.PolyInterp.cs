@@ -39,7 +39,7 @@ namespace NumSharp.Tests.Fuzz
             ["tuple"] = (x, _) =>
             {
                 object[] items = Array.ConvertAll(np.sin(x).ToArray<double>(), v => (object)v);
-                return PolySequence.MakeTuple(items, items.Length);
+                return global::NumSharp.Backends.UnmanagedStorage.MakeTuple(items, items.Length);
             },
             ["pyfloat"] = (x, _) => 2.0,
             ["pyint"] = (x, _) => 2L,

@@ -351,7 +351,7 @@ namespace NumSharp
                     // FromObject keeps a Python number or NumPy scalar a scalar and converts a typed C# array (whole) or a
                     // Python tuple / list (np.array's nested coercion) to an ndarray — the only way it yields an array
                     // here, since a caller's NDArray took the case above. A list of strs is NumPy's str array.
-                    if (PolySequence.IsSequence(x))
+                    if (Backends.UnmanagedStorage.IsSequence(x))
                     {
                         px = PolyNumber.FromArray(converted = PointsSequence(x));
                         break;
@@ -410,7 +410,7 @@ namespace NumSharp
         /// <exception cref="NotSupportedException">A sequence NumPy makes an object array of (None, a Python int past uint64).</exception>
         private static NDArray PointsSequence(object x)
         {
-            var arr = PolySequence.ToArrayOrNonNumeric(x, out var nonNumeric);
+            var arr = Backends.UnmanagedStorage.FromSequenceOrNonNumeric(x, out var nonNumeric);
             if (arr is not null)
                 return arr;
             if (!nonNumeric.IsObject && NDPolySeries.TryStrArray(x, out var text))
@@ -491,7 +491,7 @@ namespace NumSharp
             if (x is null) throw new ArgumentNullException(nameof(x));
             // np.asanyarray(x) happens before mapparms reads the domains (NumPy's statement order); the conversion is
             // this call's intermediate and the tuple-domain overload always returns a fresh array.
-            using var xa = PolySequence.ToArray(x);
+            using var xa = Backends.UnmanagedStorage.FromSequence(x);
             return mapdomain(xa, old, @new);
         }
 
@@ -637,8 +637,8 @@ namespace NumSharp
                 case System.Runtime.CompilerServices.ITuple:
                     throw new TypeError("'<' not supported between instances of 'tuple' and 'int'");
             }
-            if (!PolyNumber.IsScalarValue(tol) && tol is not NDArray && !PolySequence.IsArrayLike(tol))
-                throw new TypeError($"'<' not supported between instances of '{(PolySequence.IsSequence(tol) ? "list" : NDPolySeries.PythonTypeName(tol))}' and 'int'");
+            if (!PolyNumber.IsScalarValue(tol) && tol is not NDArray && !Backends.UnmanagedStorage.IsArrayLike(tol))
+                throw new TypeError($"'<' not supported between instances of '{(Backends.UnmanagedStorage.IsSequence(tol) ? "list" : NDPolySeries.PythonTypeName(tol))}' and 'int'");
             // A text array: `tol < 0` is the less ufunc on text and a Python int, which has no loop (NumPy's TypeError,
             // raised by the house comparison before any truth value is taken).
             if (tol is NDArray text && Backends.Strings.NDStringUfuncs.IsText(text))

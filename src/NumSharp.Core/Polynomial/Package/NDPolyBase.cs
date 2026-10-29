@@ -973,7 +973,7 @@ namespace NumSharp
                     break;
                 case PyOperandKind.List:
                 case PyOperandKind.Tuple:
-                    px = PolyNumber.FromArray(PolySequence.ToArray(op.Arg));
+                    px = PolyNumber.FromArray(Backends.UnmanagedStorage.FromSequence(op.Arg));
                     break;
                 case PyOperandKind.Str:
                     px = PolyNumber.FromArray(np.asanyarray(op.Arg));

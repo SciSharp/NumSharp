@@ -732,8 +732,8 @@ namespace NumSharp
                 case ICollection col:
                     return col.Count;
             }
-            if (PolySequence.IsArrayLike(o) || PolySequence.IsSequence(o))
-                return PolySequence.IsArrayLike(o) ? np.asanyarray(o).Shape.dimensions[0] : PolySequence.Items(o).Length;
+            if (Backends.UnmanagedStorage.IsArrayLike(o) || Backends.UnmanagedStorage.IsSequence(o))
+                return Backends.UnmanagedStorage.IsArrayLike(o) ? np.asanyarray(o).Shape.dimensions[0] : Backends.UnmanagedStorage.SequenceItems(o).Length;
             throw new TypeError($"object of type '{NDPolySeries.PythonTypeName(o)}' has no len()");
         }
 

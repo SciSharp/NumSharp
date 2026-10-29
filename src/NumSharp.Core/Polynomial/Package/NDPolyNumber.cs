@@ -29,7 +29,7 @@ using NumSharp.Utilities;
 // (weak); Half, char and decimal have no Python literal and are NumPy SCALARS (strong); an NDArray is an
 // ndarray (a 0-d one included — NumPy's np.asanyarray keeps it an array); a typed C# array is an ndarray of
 // its element dtype, while a ValueTuple, object[] (and any other non-dtype array: jagged, NDArray[]) and any other
-// IList/IEnumerable are Python sequences, coerced by np.array's nested discovery (see NDPolySequence).
+// IList/IEnumerable are Python sequences, coerced by np.array's nested discovery (see UnmanagedStorage.Coercion.Sequence.cs).
 //
 // A NumPy scalar's value lives inline (16 raw bytes — every NumSharp dtype fits), so scalarmath chains such
 // as mapparms' seven operations never allocate; only an ndarray operand reaches the NDArray ufuncs.
@@ -205,7 +205,7 @@ namespace NumSharp
         ///     NDArray is an ndarray; a typed C# array (or <see cref="Memory{T}"/>) of a dtype is converted with
         ///     <see cref="np.asanyarray(object, DType, char)"/> to an ndarray; a Python SEQUENCE — a tuple
         ///     (<see cref="ITuple"/>), <c>object[]</c> or any other non-dtype C# array (jagged, <c>NDArray[]</c>), any other
-        ///     enumerable — is coerced by np.array's rules, nested to any depth (<see cref="PolySequence.ToArray"/>). A
+        ///     enumerable — is coerced by np.array's rules, nested to any depth (<see cref="Backends.UnmanagedStorage.FromSequence"/>). A
         ///     boxed <see cref="PolyNumber"/> is returned as it is: the internal spelling of a NumPy SCALAR (no C# value is
         ///     one — a 0-d NDArray is an ndarray here) that the series classes hand on through an <c>object</c> parameter.
         /// </summary>
@@ -247,7 +247,7 @@ namespace NumSharp
                     // A Python sequence goes through np.array's coercion (np.asanyarray converts only ONE level of an
                     // object[] / tuple, and discovers a C# int as int32 where a Python int is int64); an ndarray-like
                     // (a typed C# array, Memory<T>) converts as a whole.
-                    return FromArray(PolySequence.IsSequence(o) ? PolySequence.ToArray(o) : np.asanyarray(o));
+                    return FromArray(Backends.UnmanagedStorage.IsSequence(o) ? Backends.UnmanagedStorage.FromSequence(o) : np.asanyarray(o));
             }
         }
 

@@ -243,7 +243,7 @@ namespace NumSharp
             if (indices is null)
                 return false;
             if (indices.Length == 1 && indices[0] is ITuple tuple)
-                indices = PolySequence.Items(tuple);
+                indices = Backends.UnmanagedStorage.SequenceItems(tuple);
             if (indices.Length != ndim)
                 return false;
             foreach (object entry in indices)
@@ -314,7 +314,7 @@ namespace NumSharp
         {
             slices = null;
             if (index.Length == 1 && index[0] is ITuple tuple)
-                index = PolySequence.Items(tuple);
+                index = Backends.UnmanagedStorage.SequenceItems(tuple);
 
             var list = new List<Slice>(index.Length);
             foreach (object entry in index)
@@ -357,7 +357,7 @@ namespace NumSharp
             if (index is null)
                 return false;
             if (index.Length == 1 && index[0] is ITuple tuple)
-                index = PolySequence.Items(tuple);
+                index = Backends.UnmanagedStorage.SequenceItems(tuple);
 
             bool scalarArray = false;
             foreach (object entry in index)

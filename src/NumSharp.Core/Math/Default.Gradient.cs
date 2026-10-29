@@ -666,7 +666,7 @@ namespace NumSharp.Backends
         ///     NumPy's <c>np.ndim(v)</c> for a spacing (<c>np.asarray(v).ndim</c>), which decides whether it is a step (0) or
         ///     coordinates: 0 for a C# scalar, a string or null (None), the rank of an NDArray or a typed C# array, 1 for a
         ///     <see cref="Memory{T}"/> of a dtype, and the nesting depth of a Python sequence (a <c>List&lt;T&gt;</c>, an
-        ///     <c>object[]</c>, a tuple: the house map, <see cref="PolySequence.IsSequence"/>).
+        ///     <c>object[]</c>, a tuple: the house map, <see cref="Backends.UnmanagedStorage.IsSequence"/>).
         /// </summary>
         /// <param name="v">The spacing.</param>
         /// <returns>Its rank.</returns>
@@ -685,14 +685,14 @@ namespace NumSharp.Backends
             if (v is NDArray nd) return nd.ndim;
             // A Python sequence is tested before a C# array: an object[] (and any array whose elements are no dtype) is a
             // list, whose rank is the depth np.array discovers in it, not the C# array's own rank.
-            if (PolySequence.IsSequence(v)) return PolySequence.NDim(v);
+            if (Backends.UnmanagedStorage.IsSequence(v)) return Backends.UnmanagedStorage.SequenceNDim(v);
             if (v is Array arr) return arr.Rank;    // a typed C# array is an ndarray of its rank
-            return PolySequence.IsArrayLike(v) ? 1 : 0;    // a Memory<T> of a dtype is 1-D; anything else a scalar
+            return Backends.UnmanagedStorage.IsArrayLike(v) ? 1 : 0;    // a Memory<T> of a dtype is 1-D; anything else a scalar
         }
 
         /// <summary>
         ///     NumPy's <c>np.asanyarray(distances)</c> for a coordinate spacing: an NDArray as it is, a Python sequence
-        ///     coerced by np.array's rules (<see cref="PolySequence.ToArray"/>: a Python int item is int64, a float float64,
+        ///     coerced by np.array's rules (<see cref="Backends.UnmanagedStorage.FromSequence"/>: a Python int item is int64, a float float64,
         ///     nested lists any depth), a typed C# array or a <see cref="Memory{T}"/> as a whole.
         /// </summary>
         /// <param name="v">A spacing whose <see cref="GradSpacingNdim"/> is not 0.</param>
@@ -707,9 +707,9 @@ namespace NumSharp.Backends
         {
             if (v is NDArray nd)
                 return nd;
-            if (PolySequence.IsSequence(v))
+            if (Backends.UnmanagedStorage.IsSequence(v))
             {
-                NDArray coords = PolySequence.ToArrayOrNonNumeric(v, out PolyNonNumericArray nonNumeric);
+                NDArray coords = Backends.UnmanagedStorage.FromSequenceOrNonNumeric(v, out PolyNonNumericArray nonNumeric);
                 if (coords is not null)
                     return coords;
                 // The polynomial coercion reports a str array as a shape (it computes no str arithmetic); np.gradient's

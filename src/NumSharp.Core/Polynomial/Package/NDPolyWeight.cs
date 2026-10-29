@@ -343,7 +343,7 @@ namespace NumSharp
         ///     argument NumPy computes with: <c>NoneType</c> for null, <c>str</c> for a string, <c>tuple</c> for an
         ///     <see cref="System.Runtime.CompilerServices.ITuple"/>, <c>list</c> for every other Python sequence of the
         ///     house mapping (an <c>object[]</c>, a non-dtype C# array, any other enumerable — see
-        ///     <see cref="PolySequence.IsSequence"/>). A typed dtype array is an ndarray and is computed with.
+        ///     <see cref="Backends.UnmanagedStorage.IsSequence"/>). A typed dtype array is an ndarray and is computed with.
         /// </summary>
         /// <param name="x">The argument.</param>
         /// <returns>The type name, or null.</returns>
@@ -352,7 +352,7 @@ namespace NumSharp
             null => "NoneType",
             string => "str",
             System.Runtime.CompilerServices.ITuple => "tuple",
-            _ => PolySequence.IsSequence(x) ? "list" : null,
+            _ => Backends.UnmanagedStorage.IsSequence(x) ? "list" : null,
         };
 
         /// <summary>

@@ -21,9 +21,9 @@ using System.Text;
 //                            2-dimensional"; the matrix is a VIEW of arr (ndarray.__new__(buffer=arr)), so it
 //                            never owns its data.
 //
-// The C# boundary follows the house mapping of NDPolySequence.cs: an NDArray is an ndarray (branch 1 or 2), a
+// The C# boundary follows the house mapping of UnmanagedStorage.Coercion.Sequence.cs: an NDArray is an ndarray (branch 1 or 2), a
 // typed C# array of a NumSharp dtype is an ndarray built by np.array, a string is a str, and every other array,
-// tuple or collection is a Python sequence coerced by NumPy's own discovery walk (PolySequence.ToArray), so a
+// tuple or collection is a Python sequence coerced by NumPy's own discovery walk (Backends.UnmanagedStorage.FromSequence), so a
 // list of C# ints is int64 and a ragged list raises NumPy's inhomogeneous-shape error.
 //
 // =============================================================================
@@ -107,7 +107,7 @@ namespace NumSharp
         ///     the nesting, and with a <paramref name="dtype"/> every element is stored with that dtype's
         ///     <c>setitem</c> (<c>PyArray_Pack</c>), not cast from the discovered array.
         /// </summary>
-        /// <param name="sequence">A value <see cref="PolySequence.IsSequence"/> accepts.</param>
+        /// <param name="sequence">A value <see cref="Backends.UnmanagedStorage.IsSequence"/> accepts.</param>
         /// <param name="dtype">The requested dtype, or <c>null</c> for the discovered one.</param>
         /// <returns>A new array (reclaimed by the caller's scope when the caller wraps it in a view).</returns>
         /// <exception cref="ValueError">A ragged sequence (NumPy's inhomogeneous-shape text), or a float NaN for
@@ -127,7 +127,7 @@ namespace NumSharp
         private static unsafe NDArray ArrayFromSequence(object sequence, DType dtype)
         {
             // The walk that discovers the shape also raises NumPy's errors for a ragged or non-numeric sequence.
-            NDArray discovered = PolySequence.ToArray(sequence);
+            NDArray discovered = Backends.UnmanagedStorage.FromSequence(sequence);
             if (dtype is null || dtype == discovered.dtype)
                 return discovered;
 
@@ -160,7 +160,7 @@ namespace NumSharp
         {
             if (node is null or NDArray or string)
                 return false;
-            if (!PolySequence.IsSequence(node))
+            if (!Backends.UnmanagedStorage.IsSequence(node))
             {
                 // A typed C# array of a dtype is an ndarray leaf for the sequence coercion.
                 if (node is Array)
@@ -169,7 +169,7 @@ namespace NumSharp
                 return true;
             }
 
-            foreach (object item in PolySequence.Items(node))
+            foreach (object item in Backends.UnmanagedStorage.SequenceItems(node))
             {
                 if (!TryCollectScalarLeaves(item, leaves))
                     return false;
@@ -219,7 +219,7 @@ namespace NumSharp
             }
 
             // np.array(data, dtype=dtype, copy=copy): a sequence is always converted into new memory.
-            if (PolySequence.IsSequence(data))
+            if (Backends.UnmanagedStorage.IsSequence(data))
                 return FromArrayLike(ArrayFromSequence(data, dtype));
 
             NDArray converted = data is Array typed ? np.array(typed) : np.asanyarray(data);
@@ -253,7 +253,7 @@ namespace NumSharp
         /// <param name="data">The literal.</param>
         /// <returns>One <c>object[]</c> per row (a Python list of lists); every item is a boxed
         ///     <see cref="bool"/>, <see cref="long"/>, <see cref="BigInteger"/>, <see cref="double"/> or
-        ///     <see cref="Complex"/>, the kinds <see cref="PolySequence"/> coerces as Python scalars.</returns>
+        ///     <see cref="Complex"/>, the kinds <see cref="Backends.UnmanagedStorage.FromSequence"/> coerces as Python scalars.</returns>
         /// <exception cref="ValueError">Rows of different lengths, or a token that is not a literal.</exception>
         /// <exception cref="SyntaxError">A token that is not Python syntax.</exception>
         /// <exception cref="NotSupportedException">A string, <c>None</c> or <c>...</c> token.</exception>

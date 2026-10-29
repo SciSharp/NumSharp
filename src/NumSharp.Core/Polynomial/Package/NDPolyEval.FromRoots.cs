@@ -204,7 +204,7 @@ namespace NumSharp
 
         /// <summary>
         ///     <c>np.array(r, ndmin=1, copy=None)</c>: an <see cref="NDArray"/> as is (a 0-d one expanded to one element, a view),
-        ///     a str a <c>(1,)</c> str array, a sequence through np.array's coercion (<see cref="PolySequence"/>), a scalar or
+        ///     a str a <c>(1,)</c> str array, a sequence through np.array's coercion (<see cref="Backends.UnmanagedStorage.FromSequence"/>), a scalar or
         ///     typed C# array as <see cref="NDPolySeries.AsCoefficientArray"/> converts it, None an object <c>[None]</c>.
         /// </summary>
         /// <param name="r">The caller's roots.</param>
@@ -230,7 +230,7 @@ namespace NumSharp
                     converted = np.array(new[] { s });
                     return RootArg.Of(converted, isNdarray: true);
             }
-            if (PolySequence.IsSequence(r))
+            if (Backends.UnmanagedStorage.IsSequence(r))
                 return SequenceArgument(r, out converted, isNdarray: true);
             // A Python / NumPy scalar or a typed C# array. What AsCoefficientArray calls non-numeric here is an OBJECT
             // array (a str was handled above): a Python int past uint64, an object np.asanyarray cannot read.
@@ -266,7 +266,7 @@ namespace NumSharp
                     converted = np.asanyarray(s);
                     return RootArg.Of(converted, isNdarray: false);
             }
-            if (PolySequence.IsSequence(x))
+            if (Backends.UnmanagedStorage.IsSequence(x))
                 return SequenceArgument(x, out converted, isNdarray: true);
             // A Python scalar is weak; anything else goes through np.asanyarray — a typed C# array is an ndarray, a NumPy
             // scalar a strong 0-d array (not an ndarray in NumPy's eyes, but of ndim 0 either way: neither the reshape nor
@@ -275,7 +275,7 @@ namespace NumSharp
             if (weak)
                 return new RootArg(RootArgKind.Weak, null, System.Array.Empty<long>(), isNdarray: false, weak: xw);
             converted = xa;   // ClassifyX built it (a new array)
-            return RootArg.Of(xa, isNdarray: PolySequence.IsArrayLike(x));
+            return RootArg.Of(xa, isNdarray: Backends.UnmanagedStorage.IsArrayLike(x));
         }
 
         /// <summary>
@@ -289,7 +289,7 @@ namespace NumSharp
         /// <exception cref="ValueError">A ragged sequence.</exception>
         private static RootArg SequenceArgument(object seq, out NDArray converted, bool isNdarray)
         {
-            converted = PolySequence.ToArrayOrNonNumeric(seq, out var nn);
+            converted = Backends.UnmanagedStorage.FromSequenceOrNonNumeric(seq, out var nn);
             if (converted is not null)
                 return RootArg.Of(converted, isNdarray);
             if (nn.IsObject)
@@ -378,7 +378,7 @@ namespace NumSharp
             // x as the object loop receives it: a Python value as is; a NumPy scalar or 0-d array cast to the object dtype,
             // i.e. its Python value (a float16 a Python float, a char a Python int).
             PolyNumber xv = xo.Kind == RootArgKind.Weak ? PolyNumber.FromObject(x) : NDPolyAlgebra.ObjectLoopValue(xo.Array);
-            object[] items = PolySequence.IsSequence(r) ? PolySequence.Items(r) : new[] { r };
+            object[] items = Backends.UnmanagedStorage.IsSequence(r) ? Backends.UnmanagedStorage.SequenceItems(r) : new[] { r };
             // x - r is a whole array op: every subtraction runs (and may raise) before the product starts.
             var diff = new PolyNumber[items.Length];
             for (int k = 0; k < items.Length; k++)

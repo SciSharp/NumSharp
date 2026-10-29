@@ -224,7 +224,7 @@ namespace NumSharp
         private bool IsFullIntegerIndex(object[] key)
         {
             if (key.Length == 1 && key[0] is System.Runtime.CompilerServices.ITuple tuple)
-                key = PolySequence.Items(tuple);
+                key = Backends.UnmanagedStorage.SequenceItems(tuple);
             if (key.Length != ndim)
                 return false;
             foreach (object entry in key)

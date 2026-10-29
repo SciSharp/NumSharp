@@ -10,7 +10,9 @@ using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 
 // =============================================================================
-// NDPolySequence.cs — np.array of a Python sequence, for numpy.polynomial's arguments
+// UnmanagedStorage.Coercion.Sequence.cs — np.array of a Python sequence (NumPy's array_coercion.c), the coercion
+// numpy.polynomial, numpy.char, numpy.matrix, np.histogramdd, np.gradient and the indexers read their array_like
+// arguments with (moved from Polynomial/Package/NDPolySequence.cs's PolySequence: the array object's, plan D1)
 // =============================================================================
 //
 // numpy.polynomial converts its array_like arguments with np.array / np.asarray, and a Python list or tuple is
@@ -59,13 +61,11 @@ using NumSharp.Backends.Kernels;
 //
 // =============================================================================
 
-namespace NumSharp
+namespace NumSharp.Backends
 {
-    /// <summary>
-    ///     NumPy's array coercion of a Python sequence (<c>np.array(seq)</c>) for the <c>numpy.polynomial</c> package's
-    ///     arguments, and the house test that decides which C# values ARE Python sequences (see the file header).
-    /// </summary>
-    internal static unsafe class PolySequence
+    // NumPy's array coercion of a Python sequence (np.array(seq)), and the house test that decides which C# values ARE
+    // Python sequences (see the file header). It sits beside the facades (Creation/) because it calls np.asanyarray (C3).
+    public unsafe partial class UnmanagedStorage
     {
         // ---------------------------------------------------------------------------------------------
         //  Classification
@@ -78,7 +78,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">The array.</param>
         /// <returns>True for the 15 NumSharp element types.</returns>
-        public static bool IsDtypeArray(Array a) => IsDtypeElement(a.GetType().GetElementType());
+        internal static bool IsDtypeArray(Array a) => IsDtypeElement(a.GetType().GetElementType());
 
         /// <summary>
         ///     Whether <paramref name="o"/> is an ndarray-like value that <c>np.asanyarray</c> converts as a whole: a typed
@@ -87,7 +87,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="o">The value (may be null).</param>
         /// <returns>True for a typed array or memory of a dtype.</returns>
-        public static bool IsArrayLike(object o) => o is Array a ? IsDtypeArray(a) : IsDtypeMemory(o);
+        internal static bool IsArrayLike(object o) => o is Array a ? IsDtypeArray(a) : IsDtypeMemory(o);
 
         /// <summary>
         ///     Whether <paramref name="o"/> is a Python SEQUENCE under the house mapping: an <see cref="ITuple"/> (a tuple),
@@ -96,7 +96,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="o">The value (may be null).</param>
         /// <returns>True when np.array would walk it as a sequence.</returns>
-        public static bool IsSequence(object o) => o switch
+        internal static bool IsSequence(object o) => o switch
         {
             null or string or NDArray => false,
             ITuple or ArrayRows => true,
@@ -112,7 +112,7 @@ namespace NumSharp
         /// <param name="seq">A value <see cref="IsSequence"/> accepts.</param>
         /// <returns>The items (the caller must not modify the array: an <c>object[]</c> argument is returned itself).</returns>
         /// <exception cref="ArgumentException"><paramref name="seq"/> is not a sequence.</exception>
-        public static object[] Items(object seq)
+        internal static object[] SequenceItems(object seq)
         {
             switch (seq)
             {
@@ -152,7 +152,7 @@ namespace NumSharp
         /// <param name="count">How many leading items the tuple holds (0 … <c>items.Length</c>).</param>
         /// <returns>The boxed tuple.</returns>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative or exceeds the items.</exception>
-        public static object MakeTuple(object[] items, int count)
+        internal static object MakeTuple(object[] items, int count)
         {
             if ((uint)count > (uint)items.Length)
                 throw new ArgumentOutOfRangeException(nameof(count));
@@ -189,11 +189,11 @@ namespace NumSharp
         ///     be assigned into its slot after an empty sibling ended the dims (NumPy's broadcast text).</exception>
         /// <exception cref="NotSupportedException">A str / None / other non-numeric item, or a Python int past uint64 —
         ///     NumPy would build a str or object array, dtypes NumSharp does not have.</exception>
-        public static NDArray ToArray(object seq)
-            => ToArrayOrNonNumeric(seq, out var nonNumeric) ?? throw nonNumeric.Refusal;
+        internal static NDArray FromSequence(object seq)
+            => FromSequenceOrNonNumeric(seq, out var nonNumeric) ?? throw nonNumeric.Refusal;
 
         /// <summary>
-        ///     <see cref="ToArray"/> for a caller that can carry NumPy's str / object array as a SHAPE (see the file header):
+        ///     <see cref="FromSequence"/> for a caller that can carry NumPy's str / object array as a SHAPE (see the file header):
         ///     the same coercion, but a sequence NumPy turns into a str or object array returns null and describes that
         ///     array in <paramref name="nonNumeric"/> instead of raising.
         /// </summary>
@@ -205,7 +205,7 @@ namespace NumSharp
         /// <exception cref="ValueError">A ragged sequence (NumPy's inhomogeneous-shape text — raggedness is reported before
         ///     any refusal, as NumPy's walk does), or an array item that cannot be assigned into its slot after an empty
         ///     sibling ended the dims (NumPy's broadcast text).</exception>
-        public static NDArray ToArrayOrNonNumeric(object seq, out PolyNonNumericArray nonNumeric)
+        internal static NDArray FromSequenceOrNonNumeric(object seq, out PolyNonNumericArray nonNumeric)
         {
             nonNumeric = default;
             // The overwhelmingly common argument — a flat Python list of Python floats (`[1.5, -2.0, 0.25]`, a float
@@ -261,7 +261,7 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     <see cref="ToArray"/>'s fast path: a non-empty flat list whose items are ALL Python floats (boxed
+        ///     <see cref="FromSequence"/>'s fast path: a non-empty flat list whose items are ALL Python floats (boxed
         ///     <see cref="double"/>) — float64 — or ALL Python ints that fit int64 (boxed <see cref="long"/> or
         ///     <see cref="int"/>) — int64 —, filled straight into a new (n,) array. Anything else (a mix, a nested item, an
         ///     array, a bool, a NumPy scalar, an int past int64) declines to the full walk, which alone knows their rules.
@@ -311,7 +311,7 @@ namespace NumSharp
         /// <param name="seq">A value <see cref="IsSequence"/> accepts.</param>
         /// <returns>The rank (≥ 1: a sequence always has at least its own axis).</returns>
         /// <exception cref="ValueError">A ragged sequence.</exception>
-        public static int NDim(object seq)
+        internal static int SequenceNDim(object seq)
         {
             using var d = new Discovery(shapeOnly: true);
             Walk(d, seq, 0);
@@ -392,7 +392,7 @@ namespace NumSharp
         /// <returns>The node, or null when the sequence itself was ragged (its items are not visited).</returns>
         private static Node Walk(Discovery d, object seq, int curr)
         {
-            object[] items = Items(seq);
+            object[] items = SequenceItems(seq);
             long size = items.Length;
             if (!UpdateShape(d, curr, 1, &size, sequence: true))
             {
@@ -773,8 +773,8 @@ namespace NumSharp
 
         /// <summary>The open generic <see cref="MaterializeCollection{T}"/>, closed per element type.</summary>
         private static readonly MethodInfo s_materializeCollection =
-            typeof(PolySequence).GetMethod(nameof(MaterializeCollection), BindingFlags.NonPublic | BindingFlags.Static)
-            ?? throw new MissingMethodException(nameof(PolySequence), nameof(MaterializeCollection));
+            typeof(UnmanagedStorage).GetMethod(nameof(MaterializeCollection), BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new MissingMethodException(nameof(UnmanagedStorage), nameof(MaterializeCollection));
 
         /// <summary>
         ///     Whether <paramref name="o"/> is a typed C# COLLECTION — an <see cref="IEnumerable{T}"/> of one of NumSharp's element
@@ -921,10 +921,13 @@ namespace NumSharp
             }
         }
     }
+}
 
+namespace NumSharp
+{
     /// <summary>
     ///     The array NumPy's <c>np.array</c> builds from a sequence NumSharp cannot hold — a str or object one — described by
-    ///     what can be observed of it before NumPy computes with it (see <see cref="PolySequence.ToArrayOrNonNumeric"/>).
+    ///     what can be observed of it before NumPy computes with it (see <see cref="Backends.UnmanagedStorage.FromSequenceOrNonNumeric"/>).
     /// </summary>
     internal readonly struct PolyNonNumericArray
     {

@@ -394,9 +394,9 @@ namespace NumSharp.Backends
         {
             if (sample is null) throw new ArgumentNullException(nameof(sample));
             // np.atleast_2d(sample) coerces the list first: its shape walk (array_coercion.c's update_shape, ported as
-            // PolySequence.NDim) compares every entry's dims with the first entry's, so entries of different shapes raise
+            // Backends.UnmanagedStorage.SequenceNDim) compares every entry's dims with the first entry's, so entries of different shapes raise
             // NumPy's inhomogeneous ValueError here, before anything is read from them.
-            int ndim = PolySequence.NDim(sample);
+            int ndim = Backends.UnmanagedStorage.SequenceNDim(sample);
             // `N, D = sample.shape` after `.T`: atleast_2d leaves a stack of two or more dims as it is, so entries of two or
             // more dims leave more than two values to unpack.
             if (ndim > 2)
@@ -851,15 +851,15 @@ namespace NumSharp.Backends
         /// <exception cref="NotSupportedException">An entry that is text (a str, bytes or a text array) or None.</exception>
         private static NDArray SharedEdgesFromList(object list)
         {
-            // The shape walk alone (PolySequence.NDim, array_coercion.c's update_shape): NumPy reports raggedness before it
+            // The shape walk alone (Backends.UnmanagedStorage.SequenceNDim, array_coercion.c's update_shape): NumPy reports raggedness before it
             // looks at what the entries hold.
-            PolySequence.NDim(list);
+            Backends.UnmanagedStorage.SequenceNDim(list);
             // A text array entry: the coercion's numeric fill cannot read it (NumPy's array is a str one, see below).
-            foreach (object item in PolySequence.Items(list))
+            foreach (object item in Backends.UnmanagedStorage.SequenceItems(list))
                 if (item is NDArray a && Backends.Strings.NDStringUfuncs.IsText(a))
                     throw StrOrObjectEdges();
             // null: NumPy's str or object array (a str / None item anywhere in the list).
-            return PolySequence.ToArrayOrNonNumeric(list, out _) ?? throw StrOrObjectEdges();
+            return Backends.UnmanagedStorage.FromSequenceOrNonNumeric(list, out _) ?? throw StrOrObjectEdges();
 
             static NotSupportedException StrOrObjectEdges() => new NotSupportedException(
                 "histogram2d's bins list holds text or None: NumPy's np.asarray(bins) makes it a str or object array, " +

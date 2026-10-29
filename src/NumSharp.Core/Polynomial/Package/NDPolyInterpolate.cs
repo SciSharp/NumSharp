@@ -169,8 +169,8 @@ namespace NumSharp
                 }
             }
             // np.asarray of a sequence walks it first: a ragged one is its ValueError, any other has at least one dim.
-            if (PolySequence.IsSequence(deg))
-                PolySequence.NDim(deg);
+            if (Backends.UnmanagedStorage.IsSequence(deg))
+                Backends.UnmanagedStorage.SequenceNDim(deg);
             // Everything else — a float / complex / str / None (0-d arrays of another kind), a typed C# array (an ndarray of
             // one or more dims), a sequence, any other object (a 0-d object array) — fails the test.
             throw DegMustBeAnInt();
@@ -244,7 +244,7 @@ namespace NumSharp
                 }
             }
             // A typed C# array (or Memory<T>) of a dtype is an ndarray: iterated as one, so a 2-D array yields row arrays.
-            if (PolySequence.IsArrayLike(args))
+            if (Backends.UnmanagedStorage.IsArrayLike(args))
             {
                 // The conversion is this call's intermediate; its rows (views) are handed to func and stay alive through
                 // their own references.
@@ -255,8 +255,8 @@ namespace NumSharp
             // coercion's own row type is internal to it).
             if (args is Array grid && grid.Rank > 1)
                 return RowsOf(grid, new int[grid.Rank], 0);
-            if (PolySequence.IsSequence(args))
-                return PolySequence.Items(args);
+            if (Backends.UnmanagedStorage.IsSequence(args))
+                return Backends.UnmanagedStorage.SequenceItems(args);
             throw new TypeError($"Value after * must be an iterable, not {NDPolySeries.PythonTypeName(args)}");
         }
 
@@ -315,9 +315,9 @@ namespace NumSharp
                 case string:
                     return np.asanyarray(y);
             }
-            if (PolySequence.IsSequence(y))
+            if (Backends.UnmanagedStorage.IsSequence(y))
             {
-                NDArray arr = PolySequence.ToArrayOrNonNumeric(y, out var nonNumeric);
+                NDArray arr = Backends.UnmanagedStorage.FromSequenceOrNonNumeric(y, out var nonNumeric);
                 if (arr is not null)
                     return arr;
                 if (nonNumeric.IsObject)

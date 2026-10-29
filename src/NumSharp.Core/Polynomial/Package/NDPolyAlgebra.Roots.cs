@@ -266,7 +266,7 @@ namespace NumSharp
         ///     <c>integer division result too large for a float</c>).</exception>
         private static NDArray ObjectLinearRoot(PolyBasis basis, object c, Shape shape)
         {
-            object[] items = PolySequence.Items(c);
+            object[] items = Backends.UnmanagedStorage.SequenceItems(c);
             // FromObject keeps each item's kind: a BigInteger is a Python int, Half a NumPy float16 scalar, an NDArray a 0-d
             // array (its operations are ufuncs) — the same objects NumPy's object array holds.
             var root = LinearRoot(basis, PolyNumber.FromObject(items[0]), PolyNumber.FromObject(items[1]));
@@ -315,7 +315,7 @@ namespace NumSharp
         ///     number (NumPy raises CPython's TypeError there).</exception>
         private static void ObjectCompanionArithmetic(PolyBasis basis, object c, long len)
         {
-            object[] items = PolySequence.Items(c);
+            object[] items = Backends.UnmanagedStorage.SequenceItems(c);
             long n = len - 1;
             if (basis == PolyBasis.Hermite || basis == PolyBasis.HermiteE)
             {
@@ -387,7 +387,7 @@ namespace NumSharp
         {
             if (v.Len <= 1)
                 return v.Len;
-            object[] items = PolySequence.Items(c);
+            object[] items = Backends.UnmanagedStorage.SequenceItems(c);
             for (long i = items.Length - 1; i > 0; i--)
                 if (!IsPythonZero(items[i]))
                     return i + 1;
