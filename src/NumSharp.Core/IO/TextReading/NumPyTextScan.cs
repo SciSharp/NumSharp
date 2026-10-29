@@ -49,8 +49,10 @@ namespace NumSharp.IO
     ///     a C <c>long</c>: 64 bits on Linux and macOS, 32 on Windows, where an out-of-range number saturates at 2^31. NumSharp
     ///     pins the LP64 (Linux) answers, as its random module pins the LP64 integer types, so <c>"4294967296"</c> read as int8
     ///     is 0 (the 64-bit value truncated), never Windows NumPy's -1. <c>np.fromfile</c>'s integer readers are the C library's
-    ///     <c>fscanf</c>; glibc's behavior is ported (probed through <c>fmemopen</c>), which Windows NumPy matched on every
-    ///     probed input.
+    ///     <c>fscanf</c>; glibc's behavior is ported (probed through <c>fmemopen</c>, and matched by Linux NumPy). Windows
+    ///     NumPy's MSVC <c>fscanf</c> reads the same values, but when an integer scan fails it also consumes the character
+    ///     that ended the scan, so a stream read that way is left one byte further on than NumSharp and Linux NumPy leave
+    ///     it.
     ///     </para>
     ///     <para>
     ///     <b>C strings.</b> Each <c>fromstr</c> routine reads a NUL-terminated C string: the scanners here read byte
