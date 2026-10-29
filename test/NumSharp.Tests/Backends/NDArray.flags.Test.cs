@@ -243,7 +243,7 @@ namespace NumSharp.Tests.Backends
             var a = np.arange(6).astype(np.int32);
             a.flags.writeable = false;
             a.flags.writeable.Should().BeFalse();
-            ((Action)(() => a[0] = 9)).Should().Throw<NumSharpException>().WithMessage("*read-only*");
+            ((Action)(() => a[0] = 9)).Should().Throw<ValueError>().WithMessage("*read-only*");
         }
 
         [TestMethod]

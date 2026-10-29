@@ -19,6 +19,9 @@ namespace NumSharp
         [NDScoped]
         public NDArray hfft(NDArray a, int? n = null, int axis = -1, string norm = null, NDArray @out = null)
         {
+            // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Plain((self: this, a, n, axis, norm, @out), static s => s.self.hfft(s.a, s.n, s.axis, s.norm, s.@out));
             int nn = n ?? (ShapeAt(a, axis) - 1) * 2;
             string newNorm = SwapDirection(norm);
             // NumPy calls irfft with out=None here (the hfft `out` argument is not used).

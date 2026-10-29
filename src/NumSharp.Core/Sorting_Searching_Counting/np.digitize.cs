@@ -27,6 +27,7 @@ namespace NumSharp
         [NDScoped]
         public static NDArray digitize(NDArray x, NDArray bins, bool right = false)
         {
+            using var plain = NDMatrixBoundary.PlainFor(x, bins);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (x is null) throw new ArgumentNullException(nameof(x));
             if (bins is null) throw new ArgumentNullException(nameof(bins));
 
@@ -55,7 +56,7 @@ namespace NumSharp
                 //   result = len(bins) - searchsorted(bins[::-1], x, side)
                 NDArray rev = binsC["::-1"].copy();
                 NDArray ss = np.searchsorted(rev, x, side);
-                return NDArray.Scalar((long)bins.shape[0]) - ss;
+                return NDArray.Scalar((long)bins.Shape.dimensions[0]) - ss;
             }
 
             return np.searchsorted(binsC, x, side);

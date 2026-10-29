@@ -1,347 +1,66 @@
-using System;
-using NumSharp.Backends.Iteration;
-using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
 
 namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
+        /// <summary>
+        ///     <c>np.std</c>: NumPy's <c>_std</c> — the <c>_var</c> port (<see cref="VarStdNumPy"/>) followed by NumPy's
+        ///     square root step, so <c>ddof=</c> and <c>dtype=</c> work at every size and every input gives NumPy's value,
+        ///     dtype and NaN / +inf.
+        /// </summary>
+        /// <param name="arr">The operand (any dtype, any layout).</param>
+        /// <param name="axis_">The reduced axis (negative counts from the end), or null for every axis.</param>
+        /// <param name="keepdims">When true the reduced axes stay in the result with length 1.</param>
+        /// <param name="ddof">Delta degrees of freedom (null is 0): the divisor is <c>max(n - ddof, 0)</c>.</param>
+        /// <param name="dtype">The loop of both sums (an integer or bool input defaults to float64, every other input
+        /// to its own dtype); it decides the result dtype.</param>
+        /// <returns>The standard deviation: a read-only 0-d scalar when the result has no dimensions, otherwise a fresh
+        /// array.</returns>
+        /// <exception cref="AxisError"><paramref name="axis_"/> is outside the operand (a 0-d operand included).</exception>
+        /// <exception cref="System.NotSupportedException">A bool input with <c>dtype=bool</c> (NumPy's boolean-subtract
+        /// TypeError).</exception>
+        /// <exception cref="System.ArgumentException">An integer or bool <paramref name="dtype"/> with a result that has
+        /// dimensions: NumPy's <c>sqrt</c> output-cast error (a 0-d result truncates the root instead).</exception>
+        /// <remarks>
+        ///     The boundary scope reclaims every intermediate of the port and yields only the result (the
+        ///     uninitialized-shape sentinel passes through).
+        /// </remarks>
         [NDScoped]
         public override NDArray ReduceStd(NDArray arr, int? axis_, bool keepdims = false, int? ddof = null, DType dtype = null)
-        {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
-            // Boundary scope: reclaims the fallback double-cast input and the IL path's
-            // pre-cast double result; every return is yielded (the IsEmpty input
-            // passthrough passes through Returns as a no-op).
-
-            var shape = arr.Shape;
-            if (shape.IsEmpty)
-                return arr;
-
-            // Handle empty arrays (size == 0) with axis reduction
-            // NumPy: np.std(np.zeros((0,3)), axis=0) returns array([nan, nan, nan]) (reducing along zero-size axis)
-            // NumPy: np.std(np.zeros((0,3)), axis=1) returns array([]) with shape (0,) (reducing along non-zero axis)
-            if (arr.size == 0)
-            {
-                if (axis_ == null)
-                {
-                    // No axis specified - return NaN scalar
-                    var r = NDArray.Scalar(double.NaN);
-                    if (keepdims)
-                    {
-                        var keepdimsShape = new long[arr.ndim];
-                        for (int i = 0; i < arr.ndim; i++)
-                            keepdimsShape[i] = 1;
-                        r.Storage.Reshape(new Shape(keepdimsShape));
-                    }
-                    return r.MarkReductionScalar();
-                }
-
-                // Axis specified - check if reducing along zero-size axis
-                var emptyAxis = axis_.Value;
-                while (emptyAxis < 0)
-                    emptyAxis = arr.ndim + emptyAxis;
-                if (emptyAxis >= arr.ndim)
-                    throw new ArgumentOutOfRangeException(nameof(axis_));
-
-                var resultShape = Shape.GetAxis(shape, emptyAxis);
-                var emptyOutputType = typeCode ?? NPTypeCode.Double;
-
-                NDArray result;
-                if (shape[emptyAxis] == 0)
-                {
-                    // Reducing along a zero-size axis - return NaN filled array
-                    result = np.empty(new Shape(resultShape), emptyOutputType);
-                    for (long i = 0; i < result.size; i++)
-                        result.SetAtIndex(double.NaN, i);
-                }
-                else
-                {
-                    // Reducing along non-zero axis - return empty array with reduced shape
-                    result = np.empty(new Shape(resultShape), emptyOutputType);
-                }
-
-                if (keepdims)
-                {
-                    var keepdimsShape = new long[arr.ndim];
-                    for (int d = 0, sd = 0; d < arr.ndim; d++)
-                    {
-                        if (d == emptyAxis)
-                            keepdimsShape[d] = 1;
-                        else
-                            keepdimsShape[d] = resultShape[sd++];
-                    }
-                    result.Storage.Reshape(new Shape(keepdimsShape));
-                }
-
-                return result;
-            }
-
-            if (shape.IsScalar || (shape.size == 1 && shape.NDim == 1))
-            {
-                // NumPy: std of single element with ddof=0 is 0.0
-                // With ddof >= size, the divisor is <= 0, which produces NaN
-                int _ddof = ddof ?? 0;
-                double value = (arr.size - _ddof) <= 0 ? double.NaN : 0.0;
-                var r = NDArray.Scalar(value);
-                if (keepdims)
-                {
-                    // NumPy: keepdims preserves the number of dimensions, all set to 1
-                    var keepdimsShape = new long[arr.ndim];
-                    for (int i = 0; i < arr.ndim; i++)
-                        keepdimsShape[i] = 1;
-                    r.Storage.Reshape(new Shape(keepdimsShape));
-                }
-                else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1)
-                    r.Storage.Reshape(Shape.Scalar);
-                return r.MarkReductionScalar();
-            }
-
-            if (axis_ == null)
-            {
-                var r = NDArray.Scalar(std_elementwise(arr, typeCode, ddof));
-                if (keepdims)
-                {
-                    // NumPy: keepdims preserves the number of dimensions, all set to 1
-                    var keepdimsShape = new long[arr.ndim];
-                    for (int i = 0; i < arr.ndim; i++)
-                        keepdimsShape[i] = 1;
-                    r.Storage.Reshape(new Shape(keepdimsShape));
-                }
-                else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1)
-                    r.Storage.Reshape(Shape.Scalar);
-                return r.MarkReductionScalar();
-            }
-            var axis = axis_.Value;
-            while (axis < 0)
-                axis = arr.ndim + axis; //handle negative axis
-
-            if (axis >= arr.ndim)
-                throw new ArgumentOutOfRangeException(nameof(axis));
-
-            if (shape[axis] == 1)
-            {
-                //if the given div axis is 1 - std of a single element is 0
-                //Return zeros with the appropriate shape (NumPy behavior)
-                // B23: Complex std collapses to float64 in NumPy. GetComputingType preserves
-                // Complex→Complex which would give the wrong dtype here; override for Complex.
-                var zerosType = typeCode
-                    ?? (arr.GetTypeCode == NPTypeCode.Complex
-                        ? NPTypeCode.Double
-                        : arr.GetTypeCode.GetComputingType());
-                // KEEPORDER: reducing a size-1 axis of an F-contiguous input keeps F-contig (issue #610).
-                if (keepdims)
-                {
-                    var keepdimsShapeDims = new long[arr.ndim];
-                    for (int i = 0; i < arr.ndim; i++)
-                        keepdimsShapeDims[i] = (i == axis) ? 1 : shape[i];
-                    return AllocateReductionZeros(zerosType, keepdimsShapeDims, shape);
-                }
-                return AllocateReductionZeros(zerosType, Shape.GetAxis(shape, axis), shape);
-            }
-
-            // IL-generated axis reduction fast path - handles all numeric types
-            if (DirectILKernelGenerator.Enabled)
-            {
-                // B16: std axis preserves float input dtype (half → half). Complex → Double (std
-                // is a non-negative real number). Integer → Double.
-                var axisOutType = typeCode
-                    ?? (arr.GetTypeCode == NPTypeCode.Complex
-                        ? NPTypeCode.Double
-                        : arr.GetTypeCode.GetComputingType());
-                var ilResult = ExecuteAxisStdReductionIL(arr, axis, keepdims, axisOutType, ddof ?? 0);
-                if (ilResult is not null)
-                    return ilResult;
-            }
-
-            // Fallback: iterator-based axis reduction (handles non-contiguous, broadcast, edge cases)
-            return ExecuteAxisStdReductionFallback(arr, axis, keepdims, typeCode, ddof);
-        }
+            => VarStdNumPy(arr, axis_, keepdims, ddof ?? 0, dtype, takeSqrt: true);
 
         /// <summary>
-        /// Fallback axis std reduction using iterators. Used when IL kernel not available.
+        ///     The flat standard deviation as a C# value of <typeparamref name="T"/>: <see cref="ReduceStd"/> over every
+        ///     element, then a value conversion.
         /// </summary>
-        private NDArray ExecuteAxisStdReductionFallback(NDArray arr, int axis, bool keepdims, NPTypeCode? typeCode, int? ddof)
-        {
-            Shape axisedShape = Shape.GetAxis(arr.Shape, axis);
-            var retType = typeCode ?? arr.GetTypeCode.GetComputingType();
-
-            // KEEPORDER: allocate in the input's memory order (F for an F-contig input); NDAxisIter
-            // writes each element through the destination's strides, so no post-hoc copy (issue #610).
-            var ret = AllocateReductionResult(retType, axisedShape.dimensions, arr.Shape);
-            int _ddof = ddof ?? 0;
-            var input = arr.GetTypeCode == NPTypeCode.Double ? arr : Cast(arr, NPTypeCode.Double, copy: true);
-            NDAxisIter.ReduceDouble<StdAxisDoubleKernel>(input.Storage, ret.Storage, axis, _ddof);
-
-            if (keepdims)
-                ret.Storage.ExpandDimension(axis);
-
-            return ret;
-        }
-
+        /// <typeparam name="T">The C# type to convert the standard deviation to.</typeparam>
+        /// <param name="arr">The operand.</param>
+        /// <param name="typeCode">NumPy's <c>dtype=</c> (null: the input's own float dtype, float64 for an integer or
+        /// bool input).</param>
+        /// <param name="ddof">Delta degrees of freedom (null is 0).</param>
+        /// <returns>The standard deviation converted to <typeparamref name="T"/>.</returns>
         public T StdElementwise<T>(NDArray arr, NPTypeCode? typeCode, int? ddof) where T : unmanaged
         {
             return Converts.ChangeType<T>(std_elementwise(arr, typeCode, ddof));
         }
 
+        /// <summary>
+        ///     The flat standard deviation as a boxed scalar of the result dtype (<see cref="ReduceStd"/> over every
+        ///     element).
+        /// </summary>
+        /// <param name="arr">The operand.</param>
+        /// <param name="typeCode">NumPy's <c>dtype=</c>, or null.</param>
+        /// <param name="ddof">Delta degrees of freedom (null is 0).</param>
+        /// <returns>The standard deviation, boxed in its result dtype's C# type.</returns>
         protected object std_elementwise(NDArray arr, NPTypeCode? typeCode, int? ddof)
         {
-            if (arr.Shape.IsScalar || (arr.Shape.size == 1 && arr.Shape.NDim == 1))
-            {
-                // With ddof >= size, divisor is <= 0, which produces NaN
-                int _ddof = ddof ?? 0;
-                return (arr.size - _ddof) <= 0 ? double.NaN : 0.0;
-            }
-
-            var retType = typeCode ?? (arr.GetTypeCode).GetComputingType();
-
-            // SIMD fast-path for contiguous arrays
-            if (DirectILKernelGenerator.Enabled && arr.Shape.IsContiguous)
-            {
-                int _ddof = ddof ?? 0;
-                double std;
-
-                unsafe
-                {
-                    switch (arr.GetTypeCode)
-                    {
-                        case NPTypeCode.Single:
-                            std = DirectILKernelGenerator.StdSimdHelper((float*)arr.Address, arr.size, _ddof);
-                            break;
-                        case NPTypeCode.Double:
-                            std = DirectILKernelGenerator.StdSimdHelper((double*)arr.Address, arr.size, _ddof);
-                            break;
-                        case NPTypeCode.Byte:
-                            std = DirectILKernelGenerator.StdSimdHelper((byte*)arr.Address, arr.size, _ddof);
-                            break;
-                        case NPTypeCode.SByte:
-                            std = DirectILKernelGenerator.StdSimdHelper((sbyte*)arr.Address, arr.size, _ddof);
-                            break;
-                        case NPTypeCode.Int16:
-                            std = DirectILKernelGenerator.StdSimdHelper((short*)arr.Address, arr.size, _ddof);
-                            break;
-                        case NPTypeCode.UInt16:
-                            std = DirectILKernelGenerator.StdSimdHelper((ushort*)arr.Address, arr.size, _ddof);
-                            break;
-                        case NPTypeCode.Int32:
-                            std = DirectILKernelGenerator.StdSimdHelper((int*)arr.Address, arr.size, _ddof);
-                            break;
-                        case NPTypeCode.UInt32:
-                            std = DirectILKernelGenerator.StdSimdHelper((uint*)arr.Address, arr.size, _ddof);
-                            break;
-                        case NPTypeCode.Int64:
-                            std = DirectILKernelGenerator.StdSimdHelper((long*)arr.Address, arr.size, _ddof);
-                            break;
-                        case NPTypeCode.UInt64:
-                            std = DirectILKernelGenerator.StdSimdHelper((ulong*)arr.Address, arr.size, _ddof);
-                            break;
-                        default:
-                            goto fallback;
-                    }
-                }
-
-                // Convert to requested return type
-                return Converts.ChangeType(std, retType);
-
-                fallback:;
-            }
-
-            // Fallback: iterator-based (handles non-contiguous, decimal, char, bool)
-            return std_elementwise_fallback(arr, retType, ddof);
-        }
-
-        /// <summary>
-        /// Fallback element-wise std. Shares the strided, zero-copy two-pass moment helpers with
-        /// var (<see cref="VarMomentsReal{TIn}"/> / <see cref="VarMomentsDecimal"/> /
-        /// <see cref="VarMomentsComplex"/>) and takes the square root — strided / transposed /
-        /// sliced / reversed views are iterated in place via their strides, not copied.
-        /// </summary>
-        private unsafe object std_elementwise_fallback(NDArray arr, NPTypeCode retType, int? ddof)
-        {
-            int _ddof = ddof ?? 0;
-            var tc = arr.GetTypeCode;
-            byte* basePtr = (byte*)arr.Address + arr.Shape.offset * arr.dtypesize;
-            bool contig = arr.Shape.IsContiguous;
-            var dims = arr.shape;
-            var strides = arr.Shape.Strides;
-            int ndim = arr.ndim;
-            long n = arr.size;
-
-            if (tc == NPTypeCode.Decimal)
-            {
-                decimal std = Utilities.DecimalMath.Sqrt(VarMomentsDecimal((decimal*)basePtr, dims, strides, ndim, contig, n, _ddof));
-                return Converts.ChangeType(std, retType);
-            }
-
-            // Complex std uses |x - mean|^2 and returns float64.
-            if (tc == NPTypeCode.Complex)
-                return Math.Sqrt(VarMomentsComplex((System.Numerics.Complex*)basePtr, dims, strides, ndim, contig, n, _ddof));
-
-            double variance = VarMomentsRealDispatch(tc, basePtr, dims, strides, ndim, contig, n, _ddof);
-            return Converts.ChangeType(Math.Sqrt(variance), retType);
-        }
-
-        /// <summary>
-        /// IL-generated axis standard deviation reduction. Returns null if kernel not available.
-        /// </summary>
-        private unsafe NDArray ExecuteAxisStdReductionIL(NDArray arr, int axis, bool keepdims, NPTypeCode outputType, int ddof)
-        {
-            var shape = arr.Shape;
-            var inputType = arr.GetTypeCode;
-
-            // Std axis reduction always outputs double for accuracy
-            var key = new AxisReductionKernelKey(inputType, NPTypeCode.Double, ReductionOp.Std, shape.IsContiguous && axis == arr.ndim - 1);
-            var kernel = DirectILKernelGenerator.TryGetAxisReductionKernel(key);
-
-            if (kernel == null)
-                return null;
-
-            var outputDims = new long[arr.ndim - 1];
-            for (int d = 0, od = 0; d < arr.ndim; d++)
-                if (d != axis) outputDims[od++] = shape.dimensions[d];
-
-            // KEEPORDER: allocate the result in the input's memory order (F for an F-contig input),
-            // so the strided-output kernel fills it in place with no post-hoc copy (issue #610).
-            var result = AllocateReductionResult(NPTypeCode.Double, outputDims, shape);
-
-            long axisSize = shape.dimensions[axis];
-            long outputSize = result.size > 0 ? result.size : 1;
-            byte* inputAddr = (byte*)arr.Address + shape.offset * arr.dtypesize;
-
-            fixed (long* inputStrides = shape.strides)
-            fixed (long* inputDims = shape.dimensions)
-            fixed (long* outputStrides = result.Shape.strides)
-            {
-                // The kernel computes std with ddof=0 by default
-                kernel((void*)inputAddr, (void*)result.Address, inputStrides, inputDims, outputStrides, axis, axisSize, arr.ndim, outputSize);
-
-                // For ddof != 0, adjust: std_ddof = std_0 * sqrt(n / max(n - ddof, 0))
-                // B24: same NumPy-parity clamp as in Var's dispatcher — ddof >= n yields +inf
-                // because sqrt(inf) = inf. Without the clamp, ddof > n would take sqrt of a
-                // negative number (NaN) or produce a negative-scaled std.
-                if (ddof != 0)
-                {
-                    double* resultPtr = (double*)result.Address;
-                    double divisor = Math.Max(axisSize - ddof, 0);
-                    double adjustment = Math.Sqrt((double)axisSize / divisor);
-                    for (long i = 0; i < outputSize; i++)
-                        resultPtr[i] *= adjustment;
-                }
-            }
-
-            // Convert to requested output type if different from double
-            if (outputType != NPTypeCode.Double)
-            {
-                result = Cast(result, outputType, copy: true);
-            }
-
-            // ExpandDimension re-inserts the reduced axis preserving the KEEPORDER layout (a Reshape
-            // to a fresh C-shape would reset it to C).
-            if (keepdims)
-                result.Storage.ExpandDimension(axis);
-
-            return result;
+            var r = ReduceStd(arr, null, false, ddof, typeCode);
+            var value = r.GetAtIndex(0);
+            // The 0-d result is this call's own allocation; the uninitialized-shape sentinel comes back as arr itself.
+            if (!ReferenceEquals(r, arr))
+                r.Dispose();
+            return value;
         }
     }
 }

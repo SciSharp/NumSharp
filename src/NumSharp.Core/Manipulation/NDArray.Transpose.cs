@@ -9,6 +9,9 @@
         /// <returns>a with its axes permuted. A view is returned whenever possible.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.transpose.html</remarks>
         public NDArray transpose(int[] premute = null)
-            => np.transpose(this, premute);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
+            return np.transpose(this, premute);
+        }
     }
 }

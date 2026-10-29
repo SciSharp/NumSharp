@@ -66,7 +66,7 @@ namespace NumSharp
             // matches, so NumPy checks it up front regardless of ndim.
             RequireEqualDimensions(arr);
 
-            return diag_indices(checked((int)arr.shape[0]), arr.ndim);
+            return diag_indices(checked((int)arr.Shape.dimensions[0]), arr.ndim);
         }
 
         /// <summary>
@@ -75,7 +75,7 @@ namespace NumSharp
         /// </summary>
         internal static void RequireEqualDimensions(NDArray a)
         {
-            var shape = a.shape;
+            var shape = a.Shape.dimensions;
             for (int d = 1; d < shape.Length; d++)
             {
                 if (shape[d] != shape[0])

@@ -24,6 +24,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray sort_complex(NDArray a)
         {
+            // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Plain(a, static s => sort_complex(s));
             // np.sort == array(a, copy=True) + in-place sort along the default last axis; the sort
             // runs in the ORIGINAL dtype (an int64 past 2^53 must order by its exact value, not by
             // its double image), and only the sorted result is widened.

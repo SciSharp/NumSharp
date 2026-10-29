@@ -18,7 +18,10 @@
         ///     Returns the indices that would sort <paramref name="nd"/> along <paramref name="axis"/>
         ///     (default last; <c>null</c> flattens). Returns int64 indices. NumPy <c>np.argsort</c>.
         /// </summary>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray argsort(NDArray nd, int? axis = -1)
-            => nd.argsort(axis);
+            => NDMatrixBoundary.Sees(nd)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((nd, axis), static s => argsort(s.nd, s.axis))
+            : nd.argsort(axis);
     }
 }

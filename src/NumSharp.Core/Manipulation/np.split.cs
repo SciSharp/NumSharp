@@ -20,8 +20,12 @@ namespace NumSharp
         /// <remarks>
         /// https://numpy.org/doc/stable/reference/generated/numpy.split.html
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray[] split(NDArray ary, int indices_or_sections, int axis = 0)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(ary))
+                return NDMatrixBoundary.WrappedAll((ary, indices_or_sections, axis), static s => split(s.ary, s.indices_or_sections, s.axis));
             if (ary is null) throw new ArgumentNullException(nameof(ary));
 
             // array_split's argument validation handles section<=0; we validate first
@@ -43,14 +47,20 @@ namespace NumSharp
         /// <summary>
         /// Split an array into multiple sub-arrays as views into ary.
         /// </summary>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray[] split(NDArray ary, long[] indices, int axis = 0)
-            => array_split(ary, indices, axis);
+            => NDMatrixBoundary.Sees(ary)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.WrappedAll((ary, indices, axis), static s => split(s.ary, s.indices, s.axis))
+            : array_split(ary, indices, axis);
 
         /// <summary>
         /// Split an array into multiple sub-arrays as views into ary.
         /// </summary>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray[] split(NDArray ary, int[] indices, int axis = 0)
-            => array_split(ary, indices, axis);
+            => NDMatrixBoundary.Sees(ary)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.WrappedAll((ary, indices, axis), static s => split(s.ary, s.indices, s.axis))
+            : array_split(ary, indices, axis);
 
         /// <summary>
         /// Split an array into multiple sub-arrays.
@@ -60,8 +70,12 @@ namespace NumSharp
         /// indices_or_sections to be an integer that does not equally divide the axis.
         /// https://numpy.org/doc/stable/reference/generated/numpy.array_split.html
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray[] array_split(NDArray ary, int indices_or_sections, int axis = 0)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(ary))
+                return NDMatrixBoundary.WrappedAll((ary, indices_or_sections, axis), static s => array_split(s.ary, s.indices_or_sections, s.axis));
             if (ary is null) throw new ArgumentNullException(nameof(ary));
             if (indices_or_sections <= 0)
                 throw new ArgumentException("number sections must be larger than 0.");
@@ -73,8 +87,12 @@ namespace NumSharp
         /// <summary>
         /// Split an array into multiple sub-arrays.
         /// </summary>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray[] array_split(NDArray ary, long[] indices, int axis = 0)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(ary))
+                return NDMatrixBoundary.WrappedAll((ary, indices, axis), static s => array_split(s.ary, s.indices, s.axis));
             if (ary is null) throw new ArgumentNullException(nameof(ary));
             if (indices is null) throw new ArgumentNullException(nameof(indices));
 
@@ -85,8 +103,12 @@ namespace NumSharp
         /// <summary>
         /// Split an array into multiple sub-arrays.
         /// </summary>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray[] array_split(NDArray ary, int[] indices, int axis = 0)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(ary))
+                return NDMatrixBoundary.WrappedAll((ary, indices, axis), static s => array_split(s.ary, s.indices, s.axis));
             if (ary is null) throw new ArgumentNullException(nameof(ary));
             if (indices is null) throw new ArgumentNullException(nameof(indices));
 

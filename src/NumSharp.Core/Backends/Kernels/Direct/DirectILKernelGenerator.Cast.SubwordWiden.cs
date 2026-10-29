@@ -97,8 +97,10 @@ namespace NumSharp.Backends.Kernels
                         for (; i + 32 <= innerN; i += 32)
                         {
                             var v0 = Vector256.Load((short*)(s + 2 * i));
-                            var v1 = Vector256.Load((short*)(s + 2 * i + 32));
-                            var ev = Avx2.Permute4x64(Avx2.PackUnsignedSaturate(Avx2.And(v0, mask), Avx2.And(v1, mask)).AsInt64(), 0xD8).AsSByte();
+                            // One byte early, so the load ends ON the group's last element (2i+62): see the
+                            // DEINTERLEAVE note in DirectILKernelGenerator.Cast.SubwordCopy.cs.
+                            var v1 = Vector256.Load((ushort*)(s + 2 * i + 31));
+                            var ev = Avx2.Permute4x64(Avx2.PackUnsignedSaturate(Avx2.And(v0, mask), Avx2.ShiftRightLogical(v1, 8).AsInt16()).AsInt64(), 0xD8).AsSByte();
                             Vector256.Store(Vector256.WidenLower(ev), d + i);
                             Vector256.Store(Vector256.WidenUpper(ev), d + i + 16);
                         }
@@ -170,8 +172,10 @@ namespace NumSharp.Backends.Kernels
                         for (; i + 32 <= innerN; i += 32)
                         {
                             var v0 = Vector256.Load((short*)(s + 2 * i));
-                            var v1 = Vector256.Load((short*)(s + 2 * i + 32));
-                            var ev = Avx2.Permute4x64(Avx2.PackUnsignedSaturate(Avx2.And(v0, mask), Avx2.And(v1, mask)).AsInt64(), 0xD8).AsByte();
+                            // One byte early, so the load ends ON the group's last element (2i+62): see the
+                            // DEINTERLEAVE note in DirectILKernelGenerator.Cast.SubwordCopy.cs.
+                            var v1 = Vector256.Load((ushort*)(s + 2 * i + 31));
+                            var ev = Avx2.Permute4x64(Avx2.PackUnsignedSaturate(Avx2.And(v0, mask), Avx2.ShiftRightLogical(v1, 8).AsInt16()).AsInt64(), 0xD8).AsByte();
                             Vector256.Store(Vector256.WidenLower(ev).AsInt16(), d + i);
                             Vector256.Store(Vector256.WidenUpper(ev).AsInt16(), d + i + 16);
                         }

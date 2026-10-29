@@ -29,6 +29,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray lexsort(NDArray[] keys, int axis = -1)
         {
+            // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
+            if (NDMatrixBoundary.Sees(keys))
+                return NDMatrixBoundary.Plain((keys, axis), static s => lexsort(s.keys, s.axis));
             if (keys is null || keys.Length == 0)
                 throw new TypeError("need sequence of keys with len > 0 in lexsort");
             for (int i = 0; i < keys.Length; i++)
@@ -41,7 +44,7 @@ namespace NumSharp
                 if (keys[i].ndim != first.ndim)
                     throw new ValueError("all keys need to be the same shape");
                 for (int d = 0; d < first.ndim; d++)
-                    if (keys[i].shape[d] != first.shape[d])
+                    if (keys[i].Shape.dimensions[d] != first.Shape.dimensions[d])
                         throw new ValueError("all keys need to be the same shape");
             }
 
@@ -59,7 +62,7 @@ namespace NumSharp
             if (nd == 0)
                 return NDArray.Scalar(0L);
             if (first.size <= 1)
-                return np.zeros(first.Shape.dimensions, NPTypeCode.Int64); // [0] for one element, [] for none
+                return np.zeros(Shape.Adopt(first.Shape.dimensions), NPTypeCode.Int64); // [0] for one element, [] for none
 
             // First pass over an identity permutation IS the first key's stable argsort;
             // every later key re-sorts the permutation it receives (stably), so the LAST
@@ -84,13 +87,16 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.lexsort.html</remarks>
         public static NDArray lexsort(NDArray keys, int axis = -1)
         {
+            // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
+            if (NDMatrixBoundary.Sees(keys))
+                return NDMatrixBoundary.Plain((keys, axis), static s => lexsort(s.keys, s.axis));
             if (keys is null)
                 throw new ArgumentNullException(nameof(keys));
             // a 0-d array is not a sequence; an empty first axis is a zero-length key sequence
-            if (keys.ndim == 0 || keys.shape[0] == 0)
+            if (keys.ndim == 0 || keys.Shape.dimensions[0] == 0)
                 throw new TypeError("need sequence of keys with len > 0 in lexsort");
 
-            var list = new NDArray[keys.shape[0]];
+            var list = new NDArray[keys.Shape.dimensions[0]];
             for (int i = 0; i < list.Length; i++)
                 list[i] = keys[i];
             return lexsort(list, axis);

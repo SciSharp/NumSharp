@@ -35,11 +35,13 @@ namespace NumSharp.Tests.Fuzz
     ///          Python scalar literals are weak. NumSharp cannot distinguish the two (both are 0-D
     ///          NDArrays), and keeping `arr + 5` ergonomic was chosen over strict NEP50 parity.
     ///       2. Complex arithmetic ULP envelopes vs NumPy's npy_c* algorithms (each per-op,
-    ///          measured, and bounded — see the B2 branch): divide within 2 ULP (npy_cdivide
-    ///          scaling); add/subtract within 2 ULP (FMA contraction); multiply within 16 ULP of
-    ///          the ELEMENT magnitude (catastrophic-cancellation regime); power within 512
-    ///          element-magnitude ULP or at a documented inf/NaN edge (Complex.Pow vs npy_cpow,
-    ///          Bug Ledger L6). Every other complex-binary op is gated bit-exact.
+    ///          measured, and bounded — see the B2 branch): add/subtract within 2 ULP (FMA
+    ///          contraction); power by a NON-integer/complex exponent within 512 element-magnitude
+    ///          ULP or at a documented inf/NaN edge (Complex.Pow vs npy_cpow's host cpow, Bug Ledger
+    ///          L6). BIT-EXACT (no envelope): divide/true_divide (ComplexDivideNumPy ports
+    ///          CDOUBLE_divide), multiply/square (NDComplexMath.Multiply/Square port the fused
+    ///          simd_cmul), and power by an INTEGER exponent (ComplexPowNumPy ports npy_cpow's
+    ///          integer branch). Every other complex-binary op is gated bit-exact.
     /// </summary>
     public static class MisalignedRegistry
     {
@@ -48,9 +50,20 @@ namespace NumSharp.Tests.Fuzz
             "sum", "prod", "min", "max", "mean", "std", "var", "argmax", "argmin", "all", "any"
         };
 
+        /// <summary>
+        ///     The nan-reductions still under the blanket "(T10 / W4) nan* family" excuses below. <c>nanmax</c> /
+        ///     <c>nanmin</c> are deliberately NOT here: they run NumPy's own fmax / fmin schedules (float32 / float64 — the
+        ///     exact SIMD schedules; float16 / complex128 — the sequential loops, which fixed complex NaN propagation and the
+        ///     float16 non-C-layout values) and are held BIT-EXACT on every dtype and layout of the nanreduce and specials
+        ///     tiers (0 divergences on 2,168 cases when removed from this set — a regression now fails the gate).
+        ///     <c>nanvar</c> / <c>nanstd</c> left on 2026-10-05 (plan api-parameter-parity A3): they are NumPy's
+        ///     <c>nanvar</c> / <c>nanstd</c> statement for statement and are held bit-exact in every tier (the
+        ///     <c>nanvarstd</c> tier included). <c>nanmean</c> left the same day (plan A7): it is NumPy's <c>nanmean</c>
+        ///     statement for statement (the <c>nanmean</c> tier), and np.mean for an integer input (X9).
+        /// </summary>
         private static readonly System.Collections.Generic.HashSet<string> NanReduceOps = new()
         {
-            "nansum", "nanprod", "nanmax", "nanmin", "nanmean", "nanstd", "nanvar", "nanmedian"
+            "nansum", "nanprod", "nanmedian"
         };
 
         private static readonly System.Collections.Generic.HashSet<string> QuantileOps = new()
@@ -117,35 +130,336 @@ namespace NumSharp.Tests.Fuzz
         private static readonly System.Collections.Generic.HashSet<string> ByteExactArithmeticUnaryOps = new()
         {
             "poly", "polyder", "polyint", "vander", "poly1d_coeffs", "poly1d_fromroots",
-            "cov", "conjugate", "real", "imag", "vector_norm", "matrix_norm"
+            "cov", "conjugate", "real", "imag", "vector_norm", "matrix_norm",
+            // spacing is a pure bit-fiddle (npy_spacing / npy_half_spacing), bit-exact vs NumPy at
+            // every width incl. float16 exhaustively — no transcendental-libm reason to drift, so a
+            // ≤2-ULP change is a regression, not algorithm noise. Held strict.
+            "spacing",
+            // np.clip with Python-int bounds selects one of {element, converted bound} per element (a
+            // min/max — no arithmetic), so a 1-ULP difference is a wrong BOUND conversion, never noise.
+            // Held strict: its one operand (the bounds ride as params) made it look like a unary op.
+            "clip_pyint",
+            // np.clip as a ufunc call: the same selection, and its overlap / keyword cases carry ONE operand
+            // (every argument a view of it, or a Python scalar), so it must not ride the unary-ULP excuse either.
+            "clip_ufunc",
+            // The reductions' keyword surface: all / any reduce bools (no arithmetic), and its error cases carry ONE
+            // operand, so no excuse may apply.
+            "reduce_kwargs",
+            // The max / min family with NumPy's keywords: a selection (no arithmetic, no rounding), so no excuse may apply.
+            "minmax_kwargs",
+            // np.var / np.std are NumPy's _var / _std statement for statement since 2026-10-05 (plan
+            // api-parameter-parity A2): NumPy's sum schedule, a subtract and a multiply, and an IEEE square root —
+            // no platform libm, so a ULP drift is a regression. ma.var / ma.std are numpy.ma's MaskedArray.var / std
+            // statement for statement since 2026-10-05 (plan item A6) and are held to the same.
+            "var", "std",
+            // np.nanvar / np.nanstd are NumPy's nanvar / nanstd statement for statement since 2026-10-05 (plan
+            // api-parameter-parity A3): two sums in NumPy's schedule over the K-order copy, a subtract, a multiply (the
+            // complex one for a complex input), divisions and an IEEE square root — no platform libm either.
+            "nanvar", "nanstd",
+            // np.mean is NumPy's _mean statement for statement since 2026-10-05 (plan api-parameter-parity X9): np.sum's
+            // add reduction in the loop dtype and the division by the count — no platform libm. ma.mean is numpy.ma's
+            // MaskedArray.mean statement for statement since 2026-10-05 (plan item A6) and is held to the same.
+            "mean",
+            // np.nanmean is NumPy's nanmean statement for statement since 2026-10-05 (plan api-parameter-parity A7): the
+            // count and the NaN-zeroed sum in NumPy's schedule over the K-order copy, the division by the count; an
+            // integer input is np.mean (X9).
+            "nanmean",
+            // ma.anom is numpy.ma's MaskedArray.anom since 2026-10-05 (plan api-parameter-parity A6): ma.mean and numpy.ma's
+            // subtract — no platform libm. Its one operand made it look like a unary op.
+            "anom"
         };
+
+        /// <summary>
+        ///     The evaluate tier's node names whose scalar loops are the platform libm (or a
+        ///     NumSharp algorithm that is not a NumPy port) — the fused-tree analogue of the unary
+        ///     tier's blanket (5) excuse. Spelled in the corpus grammar (OpRegistry.Evaluate.cs).
+        /// </summary>
+        private static readonly System.Collections.Generic.HashSet<string> EvaluateLibmOps = new()
+        {
+            "sqrt", "cbrt", "exp", "exp2", "expm1", "log", "log2", "log10", "log1p",
+            "sin", "cos", "tan", "sinh", "cosh", "tanh", "asin", "acos", "atan",
+            "asinh", "acosh", "atanh", "deg2rad", "rad2deg", "pow", "atan2", "div", "recip",
+            // Phase 4 binary transcendentals — the SAME ~ULP envelope as the unary tier (documented
+            // per-op in the ufunc corpus): logaddexp/logaddexp2 ≤2 ULP (managed fdlibm log1p vs the
+            // closed UCRT log1p), hypot ≤1 ULP at float64 (correctly-rounded Borges FMA vs faithful
+            // UCRT hypot; f32/f16 are bit-exact and need no excuse). copysign/nextafter/heaviside/fmod
+            // are BIT-EXACT and are deliberately NOT here — a 1-ULP regression there must turn red.
+            "logaddexp", "logaddexp2", "hypot",
+        };
+
+        /// <summary>The bit-exact float32 ports, in the evaluate grammar's spelling (see NumPyPortedFloat32Kernels).</summary>
+        private static readonly System.Collections.Generic.HashSet<string> NumPyPortedFloat32KernelsAsEvaluateOps = new()
+        {
+            "exp", "log", "sin", "cos", "tanh", "rad2deg", "deg2rad",
+        };
+
+        /// <summary>Node names in an evaluate-tier expression (the identifiers followed by '(').</summary>
+        private static System.Collections.Generic.HashSet<string> EvaluateExprOps(string expr)
+        {
+            var ops = new System.Collections.Generic.HashSet<string>();
+            if (string.IsNullOrEmpty(expr)) return ops;
+            foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(expr, @"([A-Za-z_][A-Za-z0-9_]*)\s*\("))
+                ops.Add(m.Groups[1].Value);
+            return ops;
+        }
+
+        /// <summary>
+        ///     True on the host the corpus's libm-routed values were authored on: win-amd64, where
+        ///     NumPy 2.4.2 and .NET both call ucrtbase. It is the same Windows check
+        ///     <c>RunHostLibmCorpus</c> uses to keep a whole libm tier strict. A registry branch keyed on
+        ///     it excuses nothing on the reference host, so every such cell stays bit-exact there.
+        /// </summary>
+        internal static readonly bool IsLibmReferenceHost =
+            System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows);
+
+        /// <summary>
+        ///     The (H1) predicate: every differing element of a float32 <c>sin</c>/<c>cos</c> slot is a
+        ///     lane past NumPy's Cody-Waite limit that THIS host's libm answered, within 2 ULP of the
+        ///     reference host's answer.
+        /// </summary>
+        /// <remarks>
+        ///     <para>Past the limit, the port (like NumPy's <c>simd_sincos_f32</c>) returns
+        ///     <c>MathF.Sin(x)</c>/<c>MathF.Cos(x)</c>, i.e. the platform libm, so the ucrtbase answer the
+        ///     corpus recorded is only reproducible on the reference host.</para>
+        ///     <para>The check re-derives the host's answer for every past-limit input in the case's input
+        ///     BUFFER (a superset of the view, so no strided/offset layout can hide one). A diff qualifies
+        ///     only if NumSharp's element IS one of those answers. That keeps an in-range lane, the
+        ///     bit-exact port, out of reach without mapping slot indices back through the out layout.</para>
+        ///     <para>The host is a parameter so the tightness tests pin both sides on any machine;
+        ///     <see cref="Classify"/> passes <see cref="IsLibmReferenceHost"/>.</para>
+        /// </remarks>
+        /// <param name="c">The case. Its first operand is the ufunc input for both the plain unary ops
+        /// and the <c>out_unary</c> out=/where= tier, whose ufunc name is in <c>params.ufunc</c>.</param>
+        /// <param name="kind">How the case diverged; only <see cref="DivergenceKind.Value"/> can qualify.</param>
+        /// <param name="expected">The reference (NumPy) bytes of the compared slot.</param>
+        /// <param name="actual">NumSharp's bytes of the same slot.</param>
+        /// <param name="tc">The slot's element type; only <see cref="NPTypeCode.Single"/> can qualify.</param>
+        /// <param name="diffs">Every differing element of the slot; an empty list never qualifies.</param>
+        /// <param name="libmReferenceHost">True on the corpus's reference host, where nothing is excused.</param>
+        /// <returns>
+        ///     True when the divergence is entirely this host's libm rounding past-limit lanes differently
+        ///     from ucrtbase; false for anything else, including any in-range lane.
+        /// </returns>
+        internal static bool IsHostLibmSinCosHandoff(
+            FuzzCorpus.Case c, DivergenceKind kind, byte[] expected, byte[] actual, NPTypeCode tc,
+            IReadOnlyList<BitDiff.Diff> diffs, bool libmReferenceHost)
+        {
+            if (libmReferenceHost || kind != DivergenceKind.Value || tc != NPTypeCode.Single
+                || diffs == null || diffs.Count == 0 || expected == null || actual == null)
+                return false;
+
+            string ufunc = c.Op == "out_unary"
+                ? (c.Params != null && c.Params.TryGetValue("ufunc", out var u) ? u.GetString() : null)
+                : c.Op;
+            bool sine = ufunc == "sin";
+            if (!sine && ufunc != "cos")
+                return false;
+
+            // A narrow-int input (int16/uint16/char rides the same f->f loop) never exceeds 65535,
+            // below both limits, so only a float32 input can reach the libm handoff.
+            if (c.Operands == null || c.Operands.Length == 0 || c.Operands[0].Dtype != "float32"
+                || c.Operands[0].Buffer == null)
+                return false;
+
+            // NumPy's limits, spelled exactly as NDFloatMath's MaxCodySin / MaxCodyCos.
+            float limit = sine ? 117435.9921875f : 71476.0625f;
+            var hostAnswers = new HashSet<uint>();
+            byte[] input = FuzzCorpus.FromHex(c.Operands[0].Buffer);
+            for (int i = 0; i + 4 <= input.Length; i += 4)
+            {
+                float x = BitConverter.ToSingle(input, i);
+                // The kernel sends a lane to libm when it is not NaN and |x| > limit (its inRange test
+                // is |x| <= limit); ±inf qualifies too and libm returns NaN, which BitDiff tokenizes.
+                if (!float.IsNaN(x) && Math.Abs(x) > limit)
+                    hostAnswers.Add(BitConverter.SingleToUInt32Bits(sine ? MathF.Sin(x) : MathF.Cos(x)));
+            }
+            if (hostAnswers.Count == 0)
+                return false;
+
+            return diffs.All(d => d.Index >= 0 && (d.Index + 1) * 4 <= actual.Length
+                                  && hostAnswers.Contains(BitConverter.ToUInt32(actual, d.Index * 4))
+                                  && BitDiff.WithinUlp(expected, actual, d.Index, tc, 2));
+        }
 
         public static string Classify(
             FuzzCorpus.Case c, DivergenceKind kind,
             byte[] expected, byte[] actual, NPTypeCode tc, IReadOnlyList<BitDiff.Diff> diffs,
             byte[] truth = null)
         {
+            // The numpy.polynomial package (polyeval U3, polyseries U1) is held to ZERO excuses: every one of
+            // its answers is NumPy's own arithmetic reproduced op for op (scalarmath, CPython, the ufunc loops),
+            // so no branch below describes a divergence it is allowed to have. The blanket branches were the
+            // hazard — branch (1) excused ANY dtype divergence of a multi-operand op with a 0-d operand, and
+            // the U1 surface makes a 0-d array a STRONG NumPy scalar on purpose, so a real promotion bug there
+            // would have been reported as "documented". Returning null here keeps every polynomial divergence red.
+            if (OpRegistry.IsPolynomialOp(c.Op))
+                return null;
+
+            // sum_identity.jsonl (np.sum's identity-seeded add reduction) is held to ZERO excuses too. Its values
+            // are signed zeros, exact cancellations, inf / NaN complex parts and small exact numbers, so every sum
+            // is exact in every order: the summation-order and nan-family blankets below have nothing legitimate
+            // to excuse there, and they are precisely what kept a -0.0 out of the engine's copy shortcuts green.
+            if (c.Valueclass == "sum_identity")
+                return null;
+            // varstd.jsonl (np.var / np.std as NumPy's _var / _std, plan api-parameter-parity A2: every layout, dtype,
+            // ddof and dtype= pair, special values, np.setbufsize fills, order-sensitive sizes) is held to ZERO excuses:
+            // every statement of _var is reproduced, so any divergence is a bug. Cells that inherit a residual of
+            // np.sum's own schedule are carved by the generator instead, each naming its [OpenBugs] pin.
+            if (c.Valueclass == "varstd")
+                return null;
+            // nanvarstd.jsonl (np.nanvar / np.nanstd as NumPy's nanvar / nanstd, plan api-parameter-parity A3: every
+            // layout, dtype, NaN pattern, ddof and dtype= pair, special values, np.setbufsize fills) is held to ZERO
+            // excuses as well.
+            if (c.Valueclass == "nanvarstd")
+                return null;
+            // mean_loops.jsonl (np.mean as NumPy's _mean, plan api-parameter-parity X9: every layout, dtype and dtype= loop,
+            // empty and 0-d inputs, special values, order-sensitive sizes, np.setbufsize fills) is held to ZERO excuses too;
+            // the cells that inherit np.sum's residuals (finding 5, X6) are carved by the generator, each pinned.
+            if (c.Valueclass == "meanloops")
+                return null;
+            // nanmean.jsonl (np.nanmean as NumPy's nanmean, plan api-parameter-parity A7: every layout, dtype, NaN pattern
+            // and dtype= loop, special values, np.setbufsize fills, empty and 0-d inputs) is held to ZERO excuses too.
+            if (c.Valueclass == "nanmean")
+                return null;
+            // ma_meanvar.jsonl (np.ma.mean / var / std / anom as numpy.ma's statements, plan api-parameter-parity A6: every
+            // layout, dtype, mask class, ddof, dtype= loop and mean= form, special values, empty and 0-d inputs, NumPy's
+            // errors) is held to ZERO excuses too; the cells that inherit np.sum's residuals (findings 5 and 10, X12) are
+            // carved by the generator (gen_ma_oracle._mv_carved), each pinned.
+            if (c.Valueclass == "mameanvar")
+                return null;
+            // copyto_full.jsonl (np.copyto as NumPy's array_copyto, plan api-parameter-parity X16 + X11: where= masks,
+            // layouts, every dtype, casts, overlap, C# literal sources, 0-d / empty arrays, NumPy's errors and their
+            // order) is held to ZERO excuses, its error cases (valueclass "error") included — hence the op test.
+            if (c.Op == "copyto_full")
+                return null;
+            // The array-OBJECT oracle (gen_viewflags_oracle.py: view_flags / out_flags / shape_args / array_args) is held
+            // to ZERO excuses: its values are small integers every dtype holds exactly, so no rounding or summation-order
+            // branch below has anything legitimate to excuse there, and a blanket branch keyed on op names (the "unary
+            // ~ULP" one fires for any single-operand case) would otherwise hide a wrong element read through a view.
+            // Its error cases are NumPy refusals of a shape form or an out= layout and are held verbatim too. The cells
+            // NumSharp gets wrong are carved by the generator (_gap_of) and replayed under [OpenBugs].
+            if (c.Op is "viewflags" or "outflags" or "shapearg" || c.Valueclass == "arrayarg")
+                return null;
+            // power_fast.jsonl (np.power's float loops as NumPy's DOUBLE_power / FLOAT_power — the zero-exponent-step fast
+            // path exactly where NumPy's calls take it — float16's powf, float_power's plain pow, power's errors; plan
+            // api-parameter-parity X13) is held to ZERO excuses, its error cases included: the "unary ~ULP" and power
+            // branches below would otherwise excuse the one-ULP x*x-vs-pow difference the tier exists to pin.
+            if (c.Op == "power_fast")
+                return null;
+            // surface.jsonl (gen_surface_oracle.py: the APIs the coverage inventory listed as available but unproven —
+            // np.linalg's Array-API forms, the histogram family, the memory predicates, the text formatters, the ndarray
+            // members and the finfo / iinfo / dtype / flags / poly1d attributes) is held to ZERO excuses, its error cases
+            // included (every case carries valueclass "surface"). Its op keys are API names other tiers also use
+            // (histogram, linalg.trace, ...), so a blanket branch keyed on the op name would otherwise excuse them here;
+            // the cells NumSharp gets wrong are carved by the generator (_gap_of) and replayed under [OpenBugs].
+            if (c.Valueclass == "surface")
+                return null;
+            // ma_surface.jsonl (gen_ma_surface_oracle.py: the numpy.ma functions the inventory listed as available but
+            // unproven — creation wrappers, joins, fill values, predicates, putmask, convolve / correlate / cov /
+            // corrcoef, the edge finders, apply_*) is held to ZERO excuses the same way (valueclass "masurface"). The ma
+            // harness strips the "ma." prefix before classifying, so without this rule its convolve / cov / ... cases
+            // would meet the plain ops' branches; the ma harness's own excuses skip the valueclass too (strict).
+            if (c.Valueclass == "masurface")
+                return null;
+            // matrix.jsonl (gen_matrix_oracle.py: numpy.matrix as NDMatrix — the constructor, the row / column indexing
+            // rule, `*` as the matrix product, the reductions that keep two axes, the methods ndarray hands down, the
+            // class and the memory facet of every result) is held to ZERO excuses, its error cases included (every
+            // case carries valueclass "matrix"). Its member keys end in names other tiers excuse (sum, mean, std ...),
+            // and the cells NumSharp gets wrong are carved by the generator (_gap_of) and replayed under [OpenBugs].
+            if (c.Valueclass == "matrix")
+                return null;
+            // matrix_operand*.jsonl (gen_matrix_operand_oracle.py: a case of another tier with one 2-D operand typed
+            // as a numpy.matrix). The SHAPE NumPy gives the result of a matrix operand is the tier's subject (a row,
+            // a column, a scalar, or the plain shape), so no branch below may excuse a shape divergence there: the
+            // source tier's shape excuses describe plain operands. The class has no registry call at all. Values,
+            // and dtypes keep the source tier's rules (the variant keeps its valueclass), except the NEP50 0-d
+            // blankets, which IsMatrixOperandCase switches off where they are tested.
+            // An ERROR is never excused either: every source of the tier is a case NumPy answers with a value, so
+            // an exception on either side comes from the matrix operand (NumPy's "shape too large to be a
+            // matrix.", a matrix method without the keepdims keyword), which no rule written for plain operands
+            // describes. Without this the nan-family's error blankets passed the nanmedian cases NumPy refuses.
+            // (A result where NumPy raises reaches this method as kind Value with no bytes, hence Expects_Throw.)
+            if ((kind == DivergenceKind.Shape || kind == DivergenceKind.Threw || kind == DivergenceKind.ErrorText
+                 || c.Expects_Throw)
+                && IsMatrixOperandCase(c))
+                return null;
+
+            // reduce_start.jsonl (valueclass "negzero": every operand all -0.0, every result a signed zero) is held to
+            // ZERO excuses as well. Its cells exist to show how a reduction STARTS, which only the sign of a zero
+            // result reveals, and a zero is exact in every summation order — so the order, nan-family and
+            // median-sign blankets below would excuse exactly the start bugs the tier is there to catch. A path
+            // NumSharp still gets wrong is carved out of the tier by gen_oracle._rs_carved and pinned by an
+            // [OpenBugs] test, never excused here.
+            if (c.Valueclass == "negzero")
+                return null;
+
+            // The FLAT np.sum / np.mean of a float loop over a non-broadcast operand is NumPy's add.reduce bit for bit
+            // (NumPyAddReduce, Default.Reduction.Add.Exact.cs: the identity start, NpyIter's call schedule over the
+            // operand's layout, a pairwise sum per call, _mean's loop dtype and its float64 division by the count), so
+            // no branch below describes a divergence it may have. The summation-order blanket used to excuse these
+            // cases while the flat route was a multi-accumulator fold; a value or dtype difference is now a real bug.
+            if (IsExactFlatAddReduce(c, tc))
+                return null;
+
+            // The ndarray.* / emath.* namespaced tiers delegate to the SAME kernels as their np.*
+            // twins (a.std() -> the var/std engine, emath.sqrt -> np.sqrt over the promoted
+            // operand), so every excuse branch below must apply to the namespaced spelling too —
+            // strip the prefix once and classify the bare op (the ma.* tier's convention,
+            // FuzzCorpusTests.Ma). A shallow copy keeps the caller's Case untouched.
+            foreach (string ns in new[] { "ndarray.", "emath." })
+            {
+                if (!c.Op.StartsWith(ns, StringComparison.Ordinal))
+                    continue;
+                var stripped = new FuzzCorpus.Case
+                {
+                    Id = c.Id, Op = c.Op.Substring(ns.Length), Params = c.Params,
+                    Operands = c.Operands, Expected = c.Expected, Layout = c.Layout,
+                    Valueclass = c.Valueclass, Alias = c.Alias, Expects_Throw = c.Expects_Throw,
+                    Error = c.Error,
+                };
+                return Classify(stripped, kind, expected, actual, tc, diffs, truth);
+            }
+
+            // argsort TIE order: NumPy's default kind='quicksort' (introsort) is NOT stable, so
+            // where two elements compare equal (the value pools carry both +0.0 and -0.0, which
+            // are IEEE-equal) the tie order is a NumPy implementation artifact, while NumSharp's
+            // radix argsort is STABLE. Excused ONLY when the two index vectors are provably
+            // equivalent sorts of the same 1-D operand — element-for-element the indexed values
+            // compare IEEE-equal — so a genuinely wrong ordering still fails. The main sort tier
+            // generates distinct values on purpose and never reaches this branch.
+            if (kind == DivergenceKind.Value && c.Op == "argsort" && expected != null && actual != null
+                && c.Operands.Length == 1 && c.Operands[0].Shape.Length == 1
+                && ArgsortPermutationsEquivalent(c.Operands[0], expected, actual))
+                return "argsort tie order under NumPy's unstable default introsort (equivalent permutation verified; NumSharp's radix argsort is stable)";
             // (1) NEP50 weak-scalar promotion. Any multi-operand op with a 0-D operand: NumSharp
             //     promotes it weakly (the array operand's dtype drives the result), where NumPy makes
             //     0-D arrays full participants. Covers binary pp_scalar_* and np.where wh_bcast_xy.
-            if (kind == DivergenceKind.Dtype && c.Operands.Length >= 2 && c.Operands.Any(o => o.Shape.Length == 0))
+            //     NOT the relayout tiers: their generator drops every ufunc / np.where variant whose NumPy
+            //     answer changes when its 0-d operands are weak (gen_relayout_oracle._upstream_residual), so
+            //     a difference left in a relayout case with a 0-d operand is not this divergence. The blanket
+            //     matches ANY dtype difference of such a case, and it hid np.logaddexp returning its empty int32
+            //     operand where NumPy returns float64 (gap RL07).
+            if (kind == DivergenceKind.Dtype && c.Operands.Length >= 2 && c.Operands.Any(o => o.Shape.Length == 0)
+                && !IsRelayoutCase(c) && !IsMatrixOperandCase(c))
                 return "NEP50 weak-scalar: 0-D operand promoted weakly (NumPy promotes 0-D arrays fully)";
 
-            // (2) Complex true-division ~1 ULP. Excuse only divide, only complex result, only when every
-            //     differing element is within 2 ULP — a gross error still fails.
-            if (kind == DivergenceKind.Value && c.Op == "divide" && tc == NPTypeCode.Complex
-                && diffs.Count > 0 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
-                return "complex division ~1 ULP (npy_cdivide vs System.Numerics.Complex)";
+            // (2) Complex true-division is now BIT-EXACT vs NumPy (no excuse). ComplexDivideNumPy is a
+            //     byte-for-byte transcription of NumPy's CDOUBLE_divide (Smith's algorithm, reciprocal-
+            //     multiply), so divide/true_divide on complex — including the complex/real-scalar path
+            //     np.divide(z, 3.0) — matches NumPy to the last bit for every finite/inf operand (proven
+            //     over a 5.4M random + full edge-grid differential). The former "~1 ULP (npy_cdivide vs
+            //     System.Numerics.Complex)" excuse was the .NET operator's divide-by-denom vs NumPy's
+            //     multiply-by-reciprocal, and it is GONE — a 1-ULP divide regression now fails the gate.
 
-            // corrcoef normalizes a complex covariance matrix with two in-place complex/real
-            // divisions, so it inherits the same npy_cdivide-vs-System.Numerics rounding as the
-            // direct divide ufunc. Keep this composition explicit — the former blanket complex-
-            // unary excuse hid the one-ULP diagonal cell despite corrcoef being documented exact.
+            // corrcoef normalizes a complex covariance matrix with two in-place complex/real divisions,
+            // but those divisions are now bit-exact (see (2)) — so any residual comes from the MANAGED
+            // complex GEMM inside cov's np.dot (complex accumulation is not associative, and Core's
+            // managed dot differs from the zgemm NumPy's oracle used), NOT from the division. Bounded at
+            // 2 ULP on the committed cases; a gross error still fails.
             if (kind == DivergenceKind.Value && c.Op == "corrcoef" && tc == NPTypeCode.Complex
                 && c.Operands.Any(o => o.Dtype == "complex128")
                 && diffs.Count > 0 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
-                return "corrcoef(complex): normalization inherits npy_cdivide vs System.Numerics "
-                     + "rounding (bounded <=2 ULP) [documented]";
+                return "corrcoef(complex): cov's managed complex GEMM vs zgemm (bounded <=2 ULP) [documented]";
 
             // logaddexp / logaddexp2: log(exp(x1)+exp(x2)) / log2(2**x1+2**x2). Math.Exp / double.Exp2
             // / MathF.Exp are bit-identical to NumPy's ucrtbase exp/exp2/expf, but the compound uses
@@ -156,6 +470,36 @@ namespace NumSharp.Tests.Fuzz
             if (kind == DivergenceKind.Value && (c.Op == "logaddexp" || c.Op == "logaddexp2")
                 && diffs.Count > 0 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
                 return "logaddexp/logaddexp2: managed fdlibm log1p <=2 ULP vs NumPy's closed ucrtbase log1p [documented]";
+
+            // Generator.pareto / Generator.power: NumPy's modern samplers are expm1(E/a) and pow(-expm1(-E), 1/a), and
+            // the win-amd64 CRT's expm1 is a closed approximation inside [-ln 2, ln 1.5] (outside it is exp(x)-1, which
+            // Generator.Expm1 reproduces bit for bit). Inside, Sun's s_expm1 agrees on ~58% of inputs and is <=2 ULP
+            // off; the draws themselves (the ziggurat exponentials) are identical. pareto carries that <=2 ULP straight
+            // through; power's pow(q, 1/a) scales the relative difference by 1/a, so its bound is ceil(2/a)+3 ULP
+            // (power(0.3) measured 9). Keyed on the method AND the bound, so any other grnd drift still fails.
+            if (kind == DivergenceKind.Value && c.Op == "grnd" && tc == NPTypeCode.Double
+                && c.Params.TryGetValue("method", out var grndMethod) && diffs.Count > 0)
+            {
+                string m = grndMethod.GetString();
+                int bound = m == "pareto" ? 2
+                    : m == "power" ? PowerExpm1Bound(c)
+                    : -1;
+                if (bound > 0 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, bound)))
+                    return $"Generator.{m}: in-band expm1 (Sun's s_expm1) vs the closed ucrtbase expm1, <= {bound} ULP [documented]";
+            }
+
+            // hypot: sqrt(x1**2 + x2**2). NumPy calls the platform (win-amd64 UCRT) hypot, which is only
+            // FAITHFULLY rounded — it disagrees with the exact correctly-rounded result on 8.7% of float64
+            // inputs (measured: np.hypot vs an 80-digit Decimal reference). NumSharp's kernel is the
+            // CORRECTLY-rounded result (Borges' FMA algorithm, verified bit-identical to CPython's
+            // correctly-rounded math.hypot over 1.1M adversarial pairs incl. subnormals/overflow), so it is
+            // bit-exact with NumPy on ~91% of float64 inputs and within 1 ULP — MORE accurate — on the rest
+            // (prefer-precise). float32/float16 round the correctly-rounded double down to the narrower type,
+            // which reproduces UCRT's hypotf EXACTLY (no room for its double-precision quirk), so those stay
+            // BIT-EXACT and the excuse is Double-only. Bounded per element; a gross error still fails.
+            if (kind == DivergenceKind.Value && c.Op == "hypot" && tc == NPTypeCode.Double
+                && diffs.Count > 0 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 1)))
+                return "hypot: correctly-rounded Borges FMA <=1 ULP vs NumPy's faithful UCRT hypot [documented, prefer-precise]";
 
             // (F1) np.fft over a float32/float16 input. NumSharp has ONE complex type (complex128) and
             //      no complex64, so it returns complex128 (fft/rfft/ihfft/the N-D forms) or float64
@@ -185,14 +529,11 @@ namespace NumSharp.Tests.Fuzz
             // (op, dtype) cell so a regression in a neighbouring cell still fails the gate.
             // ----------------------------------------------------------------------------------
 
-            // (W1-A) floor_divide / mod producing a float16: NDDivision (F1) ported SByte..UInt64,
-            // Single, Double — but NOT Half. The Half floored-division falls back to a generic path
-            // that yields -0.0 / NaN where NumPy yields the floored quotient or IEEE ±inf. Scoped to
-            // a Half operand/result so int & float32/64 floor_divide stay gated bit-exact.
-            if ((c.Op == "floor_divide" || c.Op == "mod")
-                && (tc == NPTypeCode.Half || c.Operands.Any(o => o.Dtype == "float16"))
-                && (kind == DivergenceKind.Value || kind == DivergenceKind.Threw))
-                return "floor_divide/mod(float16): NDDivision has no Half path (wrong value/NaN) [known bug]";
+            // (W1-A FIXED 2026-09-12) floor_divide / mod / fmod / divmod on float16 are now bit-exact:
+            // EmitHalfOperation routes them through the float32 NDDivision *Single helpers (NumPy's
+            // HALF loops compute in float32 via astype 'e'->'f'), so ÷0 yields ±inf / the floored
+            // quotient exactly as NumPy does (was -0.0/NaN via the old double a-floor(a/b)*b path).
+            // The excuse is removed so any regression of the Half division family fails the gate.
 
             // (W1-B FIXED) power(float16) on the scalar-broadcast path used to throw
             // InvalidCastException because ReadScalarAsDouble called Convert.ToDouble on a boxed
@@ -244,13 +585,10 @@ namespace NumSharp.Tests.Fuzz
                 && c.Operands[0].Dtype != "float32" && c.Operands[0].Dtype != "float64")
                 return "modf(float16/int): no Half kernel, no integer->float64 promotion (throws) [known bug]";
 
-            // (W1-E) np.where on the scalar-broadcast path with a narrow-int operand throws
-            // "Zero-push unsupported for SByte" — NDExpr.EmitPushZero gained Complex/Half (F4) but
-            // not the sub-32-bit integers. Scoped to a where that threw with such an operand.
-            if (c.Op == "where" && kind == DivergenceKind.Threw
-                && c.Operands.Any(o => o.Dtype == "int8" || o.Dtype == "uint8"
-                                       || o.Dtype == "int16" || o.Dtype == "uint16"))
-                return "where(narrow-int) scalar-broadcast: NDExpr zero-push unsupported for sub-32-bit int [known bug]";
+            // (W1-E) was FIXED in the NDExpr Phase 0 pass: WhereNode.EmitPushZeroPublic covers every
+            // sub-32-bit integer (SByte included), so np.where / np.evaluate over an int8 condition
+            // no longer throws "Zero-push unsupported for SByte". Excuse removed so the matrix
+            // verifies it.
 
             // Size-1 result shape was FIXED in Phase 1 F7: Shape.Broadcast no longer collapses a
             // 1-D [1] against a lower-rank operand (e.g. [1] + 0-D scalar -> [1], not []). The NDim
@@ -263,10 +601,11 @@ namespace NumSharp.Tests.Fuzz
 
             // (B2/F10) Complex BINARY arithmetic — PER-OP scopes. The former branch here excused ANY
             // value divergence of ANY magnitude for ANY 2-operand complex-result op (so a gross
-            // complex add/matmul/copyto regression passed silently). Dismantled: divide keeps its
-            // own 2-ULP branch at (2) above; add/subtract/multiply/power get the tight scopes below;
-            // every other complex-binary op (matmul/dot/outer/copyto/extrema/concatenate/...) must
-            // be bit-exact and now fails the gate on divergence.
+            // complex add/matmul/copyto regression passed silently). Dismantled: divide/true_divide AND
+            // multiply/square are now bit-exact (see (2) above and NDComplexMath.Multiply — no excuse);
+            // add/subtract and non-integer power get the tight scopes below; every other complex-binary
+            // op (matmul/dot/outer/copyto/extrema/concatenate/...) must be bit-exact and now fails the
+            // gate on divergence.
             if (kind == DivergenceKind.Value && tc == NPTypeCode.Complex && c.Operands.Length == 2)
             {
                 // add/subtract run the same naive component formulas on both sides; only FMA
@@ -274,39 +613,47 @@ namespace NumSharp.Tests.Fuzz
                 if ((c.Op == "add" || c.Op == "subtract")
                     && diffs.Count > 0 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
                     return "complex add/subtract within 2 ULP (FMA contraction) [documented]";
-                // multiply: npy_cmul vs System.Numerics.Complex round (ac-bd)/(ad+bc) differently
-                // (FMA contraction). In the catastrophic-cancellation regime (ac ~ bd) the RELATIVE
-                // error of the cancelled component is unbounded, but the ABSOLUTE error stays at
-                // rounding scale of the products — i.e. of the element's dominant component. So the
-                // detection: every differing component within 16 ULP *of the element's own
-                // magnitude* (not of itself). A divergence larger than that is a real kernel bug.
-                if (c.Op == "multiply"
-                    && diffs.Count > 0 && diffs.All(d => WithinComplexElementMagnitudeUlp(expected, actual, d.Index, 16)))
-                    return "complex multiply cancellation / ~ULP at element magnitude (npy_cmul vs System.Numerics) [documented #12]";
-                // power: Complex.Pow (polar exp(w*log z)) vs npy_cpow (special-cases small integer
-                // exponents via repeated squaring) — measured on the corpus the finite interior
-                // diverges by up to ~350 ULP of the affected component, plus the documented gross
-                // inf/NaN edges (Phase-1 F5) where one side goes non-finite. Bound the finite side
-                // at 512 ULP of the ELEMENT's magnitude (same absolute-error anchor as multiply:
-                // still catches sign flips / wrong magnitudes) and excuse the non-finite edges.
-                if (c.Op == "power"
+                // multiply is BIT-EXACT (no excuse): NDComplexMath.Multiply ports NumPy's fused
+                // simd_cmul (vfmaddsub) exactly, matching it byte-for-byte on every layout — including
+                // the catastrophic-cancellation regime the old naive `ac-bd` diverged in (up to ~2840
+                // ULP). A 1-ULP multiply regression now fails the gate. (NumPy's np.complex128 SCALAR
+                // multiply is the un-fused scalarmath instead, a scalar/array split NumSharp's one
+                // array multiply can't mirror — the polydiv scalar coefficient handles it locally.)
+                // power: NumSharp now ports npy_cpow's INTEGER-exponent branch (exact repeated
+                // multiplication via ComplexMulNumPy, cdiv(1,·) for negatives), so complex power by an
+                // INTEGER exponent is BIT-EXACT — this excuse must NOT cover it (a regression there,
+                // ~350 element-magnitude ULP for small values, would otherwise hide under the 512
+                // bound). It is scoped to a NON-integer exponent dtype (float/complex), which NumPy
+                // computes through the host cpow / polar exp(w*log z) — the residual NumSharp still
+                // takes via Complex.Pow. That finite interior diverges up to ~350 element-magnitude
+                // ULP, plus the documented gross inf/NaN edges (Phase-1 F5). Bound the finite side at
+                // 512 ULP of the ELEMENT's magnitude and excuse the non-finite edges.
+                //
+                // float_power shares the SAME excuse: np.float_power is computed AS power on the forced
+                // complex128 loop (Default.FloatPower delegates to Power, whose complex kernel IS
+                // ComplexPowNumPy), so complex float_power has the IDENTICAL divergence as complex
+                // power — bit-exact on the integer-exponent branch (PowerExponentAllIntegerBranch stays
+                // the gate there), ~ULP/inf-NaN-edge otherwise. The exponent operand it reads is the
+                // ORIGINAL (pre-cast) operand[1] (int/float/complex), which the predicate already
+                // handles for power's own (complex128,int32)/(complex128,float64) pairs.
+                if ((c.Op == "power" || c.Op == "float_power")
+                    && c.Operands.Length >= 2 && !PowerExponentAllIntegerBranch(c.Operands[1])
                     && diffs.Count > 0 && diffs.All(d => WithinComplexElementMagnitudeUlp(expected, actual, d.Index, 512)
                                       || NonFiniteInvolved(expected, actual, d.Index)))
-                    return "complex power ~ULP / gross inf-NaN edge (Complex.Pow vs npy_cpow) [documented F5]";
+                    return "complex power, non-integer/out-of-range exponent ~ULP / inf-NaN edge (Complex.Pow vs npy_cpow's host cpow) [documented F5]";
             }
 
             // (3) NaN ordering in <= / >= was FIXED in Phase 1 F2 (the unordered Cgt_Un/Clt_Un
             //     compare now yields False for a NaN operand, matching IEEE/NumPy). The classifier
             //     branch is intentionally removed so the comparison matrix verifies it bit-exact.
 
-            // (W5-A) cumprod on a SIZE-1 / empty / 0-d array skips the NEP50 accumulator widening —
-            // it preserves the narrow integer input dtype on the one-element fast path instead of
-            // int16/int32 -> int64, uint8/uint16 -> uint64. cumsum was fixed (ReduceCumAdd now
-            // promotes + reshapes every trivial case to match np.add.accumulate); cumprod still
-            // carries the bug in ReduceCumMul. Scoped to a cumprod dtype mismatch ON THAT size-<=1
-            // fast path only (B3/F11) — a full-size cumprod widening miss is a real bug and fails.
-            if (c.Op == "cumprod" && kind == DivergenceKind.Dtype && ElementCount(c.Operands[0]) <= 1)
-                return "cumprod(size-1 int): skips NEP50 accumulator widening (int16/int32/uint8/uint16) [known bug]";
+            // (W5-A RESOLVED) cumprod on a SIZE-1 / empty / 0-d array now applies the NEP50
+            // accumulator widening (int16/int32->int64, uint8/uint16->uint64) — ReduceCumMul's
+            // size-<=1 and empty branches cast to GetAccumulatingType (matching the long-fixed
+            // ReduceCumAdd). The excuse that stood here is REMOVED so a regression that drops the
+            // widening again turns the gate red; the scan tier's one_element_1d cumprod cases now
+            // pass bit-exact on dtype. (Sibling of the flat size-<=1 sum/prod fix — see the
+            // reduction Dtype excuse below, which is likewise narrowed to exclude sum/prod.)
 
             // --- T13 element-wise extrema (maximum/minimum/fmax/fmin) + isclose ---
             // (W7-B FIXED) maximum/minimum/fmax/fmin are now DIRECT binary ufuncs (BinaryOp.Maximum
@@ -344,22 +691,39 @@ namespace NumSharp.Tests.Fuzz
             // (DirectILKernelGenerator.cs). The classifier branches are removed so the matrix verifies
             // maximum_out / minimum_out / clip_out NaN propagation bit-exact.
 
-            // --- T12 statistics: the QuantileEngine ops (median/percentile/quantile) diverge on
-            //     non-finite slices and on the integer axis path; average has summation-order drift.
-            //     ptp / count_nonzero / clip are bit-exact. ---
-            if (QuantileOps.Contains(c.Op) && kind == DivergenceKind.Value)
+            // --- T12 statistics: the QuantileEngine ops (median/percentile/quantile) ---
+            //   FIXED (were W6-A/B/C, now bit-exact vs NumPy 2.4.2 — verified over tens of
+            //   thousands of differential cases across every dtype × method × axis × layout):
+            //     * W6-C float interpolation precision — the _lerp is now NumPy's TWO-branch form
+            //       (a + (b-a)t for t<0.5, else b - (b-a)(1-t)) at the exact per-dtype precision.
+            //     * W6-B integer path — was a probe artifact (strong vs weak q); int is bit-exact.
+            //     * W6-A ±inf/NaN slices — the two-branch _lerp reproduces NumPy's inf*0 → NaN, and
+            //       midpoint now uses next = prev+1 (never the ceil collapse) so an inf neighbour
+            //       yields NaN exactly as NumPy does. np.median/nanmedian use the mean-of-middle
+            //       reduction (not the q=0.5 lerp), matching NumPy's distinct code path.
+            //   Two narrow residuals remain, both non-contractual:
+            //   (1) the SIGN of a ±0 float result — NumPy's introselect partition orders -0.0 before
+            //       +0.0 (a non-IEEE total order NumSharp's QuickSelect does not replicate) and its
+            //       clamped-index fix_gamma picks the opposite _lerp branch for
+            //       midpoint/averaged_inverted_cdf on a ±0 endpoint; in every such case the VALUE is
+            //       zero on both sides, only the sign bit differs (exactly like the fmax/fmin ±0-tie
+            //       sign above).
+            //   (2) COMPLEX np.median on a slice carrying a NaN — NumPy's `_median_nancheck`
+            //       propagates NaN through the sort/mean in a way (`nan+0j`, `nan+<imag>j`, …) that
+            //       NumSharp's mean-of-middle complex path does not reproduce. This is median-ONLY:
+            //       complex is not a NumPy percentile/quantile dtype (those raise TypeError), and a
+            //       finite complex median is bit-exact — so the excuse fires only when every
+            //       differing element carries a NaN.
+            //   Both are scoped razor-tight, so any real value divergence still fails the gate.
+            if (QuantileOps.Contains(c.Op) && kind == DivergenceKind.Value && diffs.Count > 0)
             {
-                // (W6-A) a slice containing ±inf / NaN: the partition + linear interpolation
-                // ((a+b)/2 or a+(b-a)*frac) produces a NaN where NumPy does not (or vice-versa) —
-                // e.g. (+inf + -inf)/2. Either direction is excused.
-                if (diffs.Any(d => d.Expected == "NaN" || d.Actual == "NaN"))
-                    return "median/percentile/quantile: ±inf/NaN slice partition+interpolation NaN mismatch [known bug]";
-                // (W6-B) integer input on the axis path: GROSS interpolation value error (sign flips,
-                // wrong magnitude) — a genuine QuantileEngine defect, not a rounding difference.
-                if (c.Operands[0].Dtype.StartsWith("int") || c.Operands[0].Dtype.StartsWith("uint"))
-                    return "percentile/quantile(int): gross interpolation value error on the axis path [known bug]";
-                // float input, finite: interpolation order / partition selection differs by a few ULP.
-                return "median/percentile/quantile: float interpolation order/precision divergence [known bug]";
+                if (diffs.All(d => IsSignedZeroPairFloat(d, tc)))
+                    return "median/percentile/quantile: sign of a ±0 result (NumPy's -0<+0 partition "
+                         + "order / clamped-index fix_gamma branch) [documented non-contractual]";
+                if (tc == NPTypeCode.Complex
+                    && diffs.All(d => d.Expected.Contains("NaN") || d.Actual.Contains("NaN")))
+                    return "complex median: NumPy _median_nancheck NaN-propagation vs NumSharp "
+                         + "mean-of-middle [documented non-contractual]";
             }
             // (W6-C) np.average: pairwise (NumPy) vs naive (NumSharp) summation order on large-magnitude
             // slices -> precision drift.
@@ -370,28 +734,32 @@ namespace NumSharp.Tests.Fuzz
             // making the clip SIMD min/max NaN-aware (the scalar path already propagated). The
             // classifier branch is removed so the matrix verifies clip(NaN) bit-exact.
 
-            // --- NaN-aware reductions (T10 / W4): the nan* family is broadly broken ---
+            // --- NaN-aware reductions (T10 / W4): the nan* family is broadly broken — nanmax / nanmin (2026-09-23),
+            // nanvar / nanstd (2026-10-05, plan api-parameter-parity A3) and nanmean (the same day, A7) excepted: they left
+            // NanReduceOps and are ENFORCED bit-exact, so none of the excuses below reaches them ---
             if (NanReduceOps.Contains(c.Op))
             {
-                // (W4-E) nanmean/nanstd/nanvar over an EMPTY float16 array (axis=None) throw
+                // (W4-E) nanmean over an EMPTY float16 array (axis=None) throws
                 // "Can't construct NDIterator with an empty shape" instead of returning NaN.
                 if (kind == DivergenceKind.Threw && c.Operands[0].Shape.Any(d => d == 0))
                     return "nan-reduction(empty): throws 'NDIterator empty shape' instead of NaN [known bug]";
-                // (W4-D) complex 1-D axis reduction throws (shared NDCoordinatesAxisIncrementor bug).
-                if (kind == DivergenceKind.Threw && c.Operands.Length == 1 && c.Operands[0].Dtype == "complex128")
-                    return "complex 1-D axis reduction throws (NDCoordinatesAxisIncrementor vector shape) [known bug]";
-                // (W4-A) shape: nanmean/nanstd/nanvar collapse a 1-D axis reduction to [1] instead of
-                // a scalar [], and drop keepdims entirely on the integer input path.
-                if (kind == DivergenceKind.Shape)
-                    return "nan-reduction shape: nanmean/nanstd/nanvar give [1] not scalar on 1-D axis, and ignore keepdims on int input [known bug]";
-                // result dtype (NEP50 accumulator width / complex->real for nanstd/nanvar).
+                // (W4-D FIXED 2026-10-04) the complex 1-D axis nansum no longer throws: NanSumComplex's axis route is
+                // NumPy's composition (np.sum of the NaN-replaced array) instead of the NDCoordinatesAxisIncrementor walk
+                // that refused a 1-D shape. The excuse is removed, so a regression turns the gate red.
+                // (W4-A, removed 2026-10-05) shape: the branch's last case was nanmean of an integer / bool input dropping
+                // keepdims for axis=None (117 nanreduce cases); nanmean is NumPy's nanmean since plan api-parameter-parity
+                // A7 and left this set. nanstd / nanvar, which had the 1-D axis shape bug too, left it with A3, and no
+                // nansum / nanprod / nanmedian case diverges in shape: any shape divergence of the family now fails.
+                // result dtype (NEP50 accumulator width).
                 if (kind == DivergenceKind.Dtype)
                     return "nan-reduction result dtype differs (NEP50 accumulator / complex->real) [known bug]";
                 // (W4-C) nanmedian propagates NaN instead of ignoring it.
                 if (kind == DivergenceKind.Value && c.Op == "nanmedian")
                     return "nanmedian: propagates NaN instead of ignoring it [known bug]";
-                // (W4-B) nansum/nanmean/nanstd/nanvar: wrong NaN masking / count, or summation order.
-                if (kind == DivergenceKind.Value)
+                // (W4-B) nansum/nanmean/nanprod: wrong NaN masking / count, or summation order. Never a
+                // -0.0 out of nansum / nanmean: they are np.sum / np.mean of the NaN-replaced array, which start from
+                // the identity +0.0 and so cannot be -0.0 in any summation order (see IsIdentitySumSignedZeroFlip).
+                if (kind == DivergenceKind.Value && !IsIdentitySumSignedZeroFlip(c.Op, expected, actual, tc, diffs))
                     return "nan-reduction value: NaN masking / count / summation-order divergence [known bug]";
             }
 
@@ -441,9 +809,10 @@ namespace NumSharp.Tests.Fuzz
             //      (2026-08-14), excused as tracked known bugs with a measured bound — kept in
             //      the corpus so a kernel fix flips them bit-exact automatically and a WORSE
             //      regression still fails:
-            //        * float32 var/std accumulation: 55/26 ULP from truth where NumPy's two-pass
-            //          pairwise sits at 3/2 (contiguous wide-magnitude input);
-            //        * the NEGATIVE-STRIDE reduce path (sum/mean/var/std): 11-32 ULP from truth
+            //        * (float32 var/std accumulation: 55/26 ULP from truth where NumPy's two-pass
+            //          pairwise sits at 3/2 — FIXED 2026-10-05, np.var / np.std are NumPy's _var / _std
+            //          now (plan api-parameter-parity A2), bit-exact, no longer excused);
+            //        * the NEGATIVE-STRIDE reduce path (sum/mean): 11-32 ULP from truth
             //          where NumPy is EXACT on the same reversed view — the backward traversal
             //          accumulates in a worse order than the contiguous kernel;
             //        * float32 DEEP product contractions (inner/tensordot at K=2049, products
@@ -455,49 +824,41 @@ namespace NumSharp.Tests.Fuzz
             //      lane variation); a loss beyond that — or in any other cell — is red.
             if (kind == DivergenceKind.Value && truth != null && expected != null
                 && truth.Length == expected.Length && diffs.Count > 0
-                && ((c.Layout == "negstride_1d"
-                     && (c.Op == "sum" || c.Op == "mean" || c.Op == "var" || c.Op == "std"))
-                    || (tc == NPTypeCode.Single && (c.Op == "var" || c.Op == "std"))
+                && ((c.Layout == "negstride_1d" && (c.Op == "sum" || c.Op == "mean"))
                     || (tc == NPTypeCode.Single && ProductOps.Contains(c.Op)))
                 && diffs.All(d => BitDiff.UlpDistance(actual, truth, d.Index, tc) <= 256))
-                return "precision-loss (known): f32 var/std accumulation + negative-stride reduction "
-                     + "accumulation + f32 deep product contraction lose ULP vs truth where NumPy "
+                return "precision-loss (known): negative-stride reduction accumulation + f32 deep product "
+                     + "contraction lose ULP vs truth where NumPy "
                      + "stays near-exact (bounded ≤256) [known bug]";
-
-            // (R1) np.random transform samplers within a few ULP of NumPy on the SAME CRT:
-            //      chisquare / wald / noncentral_f / dirichlet compose their draws with a
-            //      slightly different arithmetic ordering than NumPy's C (measured ≤5/≤24/≤3/≤3
-            //      ULP on the corpus; the underlying uniform/gauss STREAM is bit-identical — a
-            //      stream slip produces gross divergence and still fails, as the eight carved
-            //      samplers in gen_random_parity did). Per-dist caps: 32 for wald (its
-            //      inverse-Gaussian composition drifts the most), 8 for the rest.
-            if (c.Op == "rnd" && kind == DivergenceKind.Value && diffs.Count > 0
-                && c.Params != null && c.Params.TryGetValue("dist", out var rndDist)
-                && rndDist.GetString() is "chisquare" or "wald" or "noncentral_f" or "dirichlet"
-                && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc,
-                                                    rndDist.GetString() == "wald" ? 32 : 8)))
-                return "rnd transform ~ULP: chisquare/wald/noncentral_f/dirichlet arithmetic "
-                     + "ordering differs from NumPy's C composition (stream identical) [documented]";
 
             // --- Reductions (single-operand, but classified before the unary rules) ---
             if (ReduceOps.Contains(c.Op))
             {
-                // Reduction result dtype differs (NEP50 accumulator width / complex->real for std/var).
-                if (kind == DivergenceKind.Dtype)
-                    return "reduction result dtype differs (NEP50 accumulator / complex->real) [known bug]";
-                // Complex axis reduction on a 2-D+ array now works (resolved); but reducing a 1-D
-                // complex array along its only axis still throws "NDCoordinatesAxisIncrementor with a
-                // vector shape". Excuse only that residual Threw case — the 2-D cases are verified
-                // (value diffs fall to the summation / ~ULP branches).
-                if (kind == DivergenceKind.Threw && c.Operands.Length == 1 && c.Operands[0].Dtype == "complex128")
-                    return "complex 1-D axis reduction throws (NDCoordinatesAxisIncrementor vector shape) [known bug]";
+                // (V1, removed 2026-10-05) var/std at a degenerate size used to skip NumPy's arithmetic — 0 instead
+                //      of NaN for a NaN/inf element or ddof >= 1, float64 instead of float16/float32. np.var / np.std
+                //      are NumPy's _var / _std statement for statement now (plan api-parameter-parity A2), so every
+                //      var/std case is held to NumPy's bits, dtype and shape with no excuse here or below.
+
+                // (removed 2026-10-06) "reduction result dtype differs (NEP50 accumulator / complex->real)". sum/prod
+                //      became bit-exact on dtype on every size on 2026-09-13 (HandleScalarReduction cloned the input
+                //      dtype instead of casting to GetAccumulatingType), np./ndarray. var / std / mean on 2026-10-05
+                //      (NumPy's _var / _mean), and the branch's last 88 cases — the masked mean of a float32 (float64 in
+                //      NumPy, float32 in the old port) and two float32 ma.var slices — went with numpy.ma's statements
+                //      (plan api-parameter-parity A6). It then excused no case in any tier, so a reduction's dtype divergence
+                //      is red; the ma harness's own excuses (MaDtypeExcuse: ma.median / ma.average) run after this
+                //      registry and are unchanged.
+                // Complex axis reductions work on every rank since 2026-10-04 (the 1-D case used to throw
+                // "NDCoordinatesAxisIncrementor with a vector shape"); no Threw case is excused any more.
 
                 // NaN propagation: the FLAT (axis=null) min/max reduction now propagates NaN
                 // (Phase 1 F2-reductions: NaN-propagating SIMD min/max in the IL flat kernel +
                 // CombineVectors), so it is NOT excused — a flat regression fails the gate. The
                 // axis (vertical/strided) SIMD min/max path still drops NaN; excuse only that.
                 // (mean/std/var/sum propagate NaN on both paths already, via arithmetic.)
+                // var/std/mean (np.*, ndarray.* and ma.*) are NumPy's statements since 2026-10-05 (_var, _mean and
+                // numpy.ma's MaskedArray methods): a NaN they miss is a real bug, not this min/max one.
                 if (kind == DivergenceKind.Value && diffs.Count > 0 && diffs.Count > 0 && diffs.All(d => d.Expected == "NaN")
+                    && c.Op != "var" && c.Op != "std" && c.Op != "mean"
                     && c.Params != null
                     && c.Params.TryGetValue("axis", out var axEl)
                     && axEl.ValueKind != System.Text.Json.JsonValueKind.Null)
@@ -505,6 +866,16 @@ namespace NumSharp.Tests.Fuzz
                 // bool min/max along an axis returns True where NumPy returns False.
                 if (kind == DivergenceKind.Value && (c.Op == "min" || c.Op == "max") && tc == NPTypeCode.Boolean)
                     return "bool min/max along axis diverges [known bug]";
+                // (X9) np.mean along an axis of a view with a REVERSED axis inherits np.sum's order there (plan
+                //      api-parameter-parity finding 5): NumPy walks the reversed axis in logical order, the axis kernel in
+                //      memory order, which shows where the values cancel. Everything else of np.mean is NumPy's _mean bit
+                //      for bit (plan item X9), so the unbounded summation blanket below no longer takes mean: only this
+                //      layout, which np.sum's own cases (still under the blanket) share. ma.mean (prefix stripped)
+                //      reaches it too since A6: with nomask or an all-False mask numpy.ma sums the data view itself
+                //      (ma.anom, which subtracts that mean, has its own branch after this block).
+                if (kind == DivergenceKind.Value && c.Op == "mean" && IsReversedAxisReduction(c)
+                    && (tc == NPTypeCode.Half || tc == NPTypeCode.Single || tc == NPTypeCode.Double || tc == NPTypeCode.Complex))
+                    return "mean along an axis of a reversed view: np.sum's order there (finding 5) [known bug]";
                 // Floating accumulation: NumPy pairwise summation / two-pass var vs NumSharp order.
                 // Scoped to FLOAT-FAMILY result dtypes (B1/F9): integer/bool accumulation is exact
                 // (modular) on both sides — an integer-result sum/prod value divergence is a REAL
@@ -512,12 +883,21 @@ namespace NumSharp.Tests.Fuzz
                 // UNBOUNDED, so a truth-bearing case (precision tier) must be adjudicated by the
                 // P1/P2 truthful branch above instead — a divergence that is LESS truthful than
                 // NumPy would otherwise hide in here.
+                // A signed-zero flip of sum / mean is NOT order (IsIdentitySumSignedZeroFlip) and stays red.
                 if (kind == DivergenceKind.Value && truth == null
                     && (tc == NPTypeCode.Half || tc == NPTypeCode.Single
                         || tc == NPTypeCode.Double || tc == NPTypeCode.Complex)
-                    && (c.Op == "sum" || c.Op == "mean" || c.Op == "std" || c.Op == "var" || c.Op == "prod"))
+                    && (c.Op == "sum" || c.Op == "prod")
+                    && !IsIdentitySumSignedZeroFlip(c.Op, expected, actual, tc, diffs))
                     return "reduction summation/two-pass precision (algorithm order)";
             }
+
+            // (A6) ma.anom (prefix stripped) is numpy.ma's MaskedArray.anom — `self - self.mean(axis)` — so along an axis
+            //      of a view with a REVERSED axis it inherits ma.mean's finding-5 residual above (np.sum's order there).
+            //      Nothing else of anom is excused: it is in ByteExactArithmeticUnaryOps, out of the unary ULP branches.
+            if (kind == DivergenceKind.Value && c.Op == "anom" && IsReversedAxisReduction(c)
+                && (tc == NPTypeCode.Half || tc == NPTypeCode.Single || tc == NPTypeCode.Double || tc == NPTypeCode.Complex))
+                return "anom along an axis of a reversed view: its mean's np.sum order there (finding 5) [known bug]";
 
             // Decimal std (surfaced by scoping B1 to float-family): var — the exact decimal
             // mean-of-squared-deviations — is bit-exact, so the divergence is purely sqrt(var):
@@ -564,6 +944,125 @@ namespace NumSharp.Tests.Fuzz
             // InvalidProgramException for every int16/uint16/char/float32 input. The excuse is removed
             // so any regression of the malformed-IL crash now fails the fuzz gate.
 
+            // (E) np.evaluate — the fused tree's divergence policy is the per-node policy of the ops
+            //     it contains (params.expr names them). Three bounded branches, nothing else:
+            //     (E1) a root float Sum/Prod/Mean folds through 4 accumulators (and f16/f32 through
+            //          f64) where NumPy's add.reduce is pairwise — an ORDER-of-summation drift only,
+            //          bounded to 16 ULP over these ≤36-element pools. Phase 2 of
+            //          docs/plans/ndexpr-evaluate.md replaces the fold with NumPy's pairwise schedule
+            //          and DELETES this branch (it is a pending fix, not an accepted difference).
+            //          Phase 2 M1 landed the FLAT float32/float64 Sum/Prod/Mean and the FLAT complex
+            //          Sum/Mean bit-for-bit (DefaultEngine materializes the child and reduces it with
+            //          the same pairwise / sequential kernel np.sum · np.prod use), so those are gone
+            //          from the excuse. What still folds — each a later M2/M-Half milestone — is: ANY
+            //          axis reduction; Half at any axis; and complex Prod (a complex-multiply chain,
+            //          npy_cmul FMA-contracted on NumPy's win-amd64 build but not on .NET's — the
+            //          documented multiply gap #12, which an order fix cannot close).
+            //     (E2) a transcendental / libm node (the same set the unary tier excuses in (5)
+            //          below, minus the bit-exact float32 ports) within 2 ULP.
+            //     (E3) expm1 / log1p composed as Exp(x)-1 / Log(1+x) — the (S1) envelope.
+            if (c.Op == "evaluate" && kind == DivergenceKind.Value && diffs.Count > 0
+                && c.Params != null && c.Params.TryGetValue("expr", out var evExpr))
+            {
+                var evOps = EvaluateExprOps(evExpr.GetString());
+                bool isReduceKind = c.Params.TryGetValue("reduce", out var evRed)
+                    && evRed.ValueKind == System.Text.Json.JsonValueKind.Object
+                    && evRed.GetProperty("kind").GetString() is "sum" or "prod" or "mean";
+                string reduceKind = isReduceKind ? evRed.GetProperty("kind").GetString() : null;
+                // Cases M1 (flat) + M2 (axis) closed — no longer excused: the engine materializes the
+                // child and reduces it with NumPy's OWN schedule (pairwise add.reduce / sequential
+                // multiply.reduce), so float32/float64/complex Sum·Mean and float32/float64 Prod are
+                // BIT-EXACT. FLAT is exact on any layout (the materialized child is contiguous); AXIS
+                // is exact on a C-contiguous child and — since the plan's lever-4 follow-up — on a
+                // STRICTLY F-contiguous multi-D input too: the F-aware stream (TryStreamAxisReduce)
+                // walks the F child in memory order, which is the schedule NumPy's reduce iterator runs
+                // over the F-contiguous child np.sum(a*b, axis) materializes (80/80 bit-exact against a
+                // NumPy 2.4.2 .npy oracle; 61 of them diverged on the old fold). The strict-F exception
+                // this predicate used to carry (IsStrictFContiguousMultiD) is therefore gone, so a
+                // regression on that corner now turns the gate red. Half (no f16 pairwise kernel) and
+                // complex Prod (a complex-multiply chain, npy_cmul FMA-contracted on NumPy's win-amd64
+                // build but not on .NET's — the multiply gap #12) are never diverted and stay excused.
+                bool matDtypeSumMean = (reduceKind == "sum" || reduceKind == "mean")
+                    && (tc == NPTypeCode.Single || tc == NPTypeCode.Double || tc == NPTypeCode.Complex);
+                bool matDtypeProd = reduceKind == "prod"
+                    && (tc == NPTypeCode.Single || tc == NPTypeCode.Double);
+                bool matExactReduce = isReduceKind && (matDtypeSumMean || matDtypeProd);
+                bool floatReduce = isReduceKind
+                    && (tc == NPTypeCode.Half || tc == NPTypeCode.Single || tc == NPTypeCode.Double || tc == NPTypeCode.Complex)
+                    && !matExactReduce;
+                // complex: a Prod is a chain of complex multiplies, each FMA-contracted on NumPy's
+                // side (npy_cmul under MSVC) and not on .NET's — bound at the element's magnitude
+                // like the multiply excuse, wider for the chain.
+                if (floatReduce && diffs.All(d => tc == NPTypeCode.Complex
+                        ? WithinComplexElementMagnitudeUlp(expected, actual, d.Index, 64)
+                        : BitDiff.WithinUlp(expected, actual, d.Index, tc, 16)))
+                    return "evaluate: fused float reduction 4-accumulator fold vs NumPy pairwise/sequential, ≤16 ULP (complex ≤64 ULP of magnitude) "
+                         + "[PENDING ndexpr-evaluate.md Phase 2 — Half, complex-Prod & the strict-F-contiguous axis corner still fold; flat f32/f64 + complex sum/mean (M1) and C-contiguous axis sum/mean/prod (M2) landed]";
+
+                bool libm = evOps.Overlaps(EvaluateLibmOps)
+                    && !(tc == NPTypeCode.Single && evOps.IsSubsetOf(NumPyPortedFloat32KernelsAsEvaluateOps))
+                    && !(tc == NPTypeCode.Double && evOps.Count == 1 && evOps.Contains("tanh"));
+                if (libm && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
+                    return "evaluate: transcendental node ~ULP (libm / algorithm difference, same policy as the unary tier)";
+
+                if (evOps.Overlaps(new[] { "expm1", "log1p" })
+                    && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)
+                                      || BitDiff.WithinAbs(expected, actual, d.Index, tc, Expm1Log1pAbsTol(tc))))
+                    return "evaluate: expm1/log1p composed as Exp(x)-1 / Log(1+x), bounded abs error [documented non-portable defect]";
+
+                // (E5) complex Min/Max reduction over a NaN-carrying pool: which NaN element wins is
+                //      iteration-order dependent (NumPy's reduce walks a negative-stride 1-D operand in
+                //      LOGICAL order — probed: np.min(z[::-1]) picks the first NaN from the logical
+                //      start — while NDIter's KEEPORDER walks memory order, the same order the engine's
+                //      np.min takes). Both results carry a NaN; only the payload/partner differs.
+                //      Scoped to complex min/max with a NaN on both sides of every diff.
+                if (tc == NPTypeCode.Complex
+                    && c.Params.TryGetValue("reduce", out var evRed2)
+                    && evRed2.ValueKind == System.Text.Json.JsonValueKind.Object
+                    && evRed2.GetProperty("kind").GetString() is "min" or "max"
+                    && diffs.All(d => NonFiniteInvolved(expected, actual, d.Index) && ComplexHasNaN(expected, d.Index) && ComplexHasNaN(actual, d.Index)))
+                    return "evaluate: complex min/max reduction NaN identity — which NaN element wins is iteration-order dependent (NumPy logical vs memory order) [documented, P2 canonical-order work]";
+
+                // (E4) the fused tree inherits the ENGINE's documented per-op divergences, scoped
+                //      exactly as the ufunc tiers scope them (W1-A / B2-F10 / (2) / (5)):
+                bool anyHalf = tc == NPTypeCode.Half || c.Operands.Any(o => o.Dtype == "float16");
+                if (evOps.Overlaps(new[] { "mod", "floordiv" }) && anyHalf)
+                    return "evaluate: floor_divide/mod(float16) — NDDivision has no Half path (wrong value/NaN) [known bug W1-A]";
+
+                bool anyComplex = tc == NPTypeCode.Complex || c.Operands.Any(o => o.Dtype == "complex128");
+                if (anyComplex)
+                {
+                    if (evOps.Contains("pow")
+                        && diffs.All(d => tc != NPTypeCode.Complex
+                                          || WithinComplexElementMagnitudeUlp(expected, actual, d.Index, 512)
+                                          || NonFiniteInvolved(expected, actual, d.Index)))
+                        return "evaluate: complex power ~ULP / gross inf-NaN edge (Complex.Pow vs npy_cpow) [documented F5]";
+                    if (evOps.Contains("mul") && tc == NPTypeCode.Complex
+                        && diffs.All(d => WithinComplexElementMagnitudeUlp(expected, actual, d.Index, 16)))
+                        return "evaluate: complex multiply cancellation / ~ULP at element magnitude (npy_cmul vs System.Numerics) [documented #12]";
+                    if (evOps.Overlaps(new[] { "div", "recip", "add", "sub", "abs", "sqrt", "exp", "log", "sin", "cos", "tanh" })
+                        && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 3)))
+                        return "evaluate: complex arithmetic / magnitude / unary within 3 ULP (npy_c* vs System.Numerics; FMA contraction) [documented]";
+                }
+            }
+
+            // (H1) float32 sin/cos PAST NumPy's Cody-Waite limit: the platform libm on BOTH sides.
+            //      The simd_sincos_f32 port (NDFloatMath) is bit-exact on every in-range lane and
+            //      deliberately NOT on the rest. A lane with |x| above NumPy's limit (sin 117435.992,
+            //      cos 71476.0625) goes to MathF.Sin/Cos, exactly as NumPy's own kernel hands it to
+            //      npy_sinf/npy_cosf. So on any host both libraries return THAT host's libm answer, and
+            //      the corpus records win-amd64 ucrtbase's. Another libm may round the lane differently:
+            //      macos-latest's Apple libm put float32 sin(2^32) at 0xbeec8982, 1 ULP from ucrtbase's
+            //      0xbeec8981, in 12 out_where comparisons (six out layouts x both slots).
+            //      This is the RunHostLibmCorpus pin applied per element to an otherwise portable tier.
+            //      Narrow by construction: never on the reference host, only float32 sin/cos, and each
+            //      differing element must equal this host's libm answer for a past-limit input of the
+            //      same case and sit within 2 ULP of the reference. An in-range lane cannot qualify, so
+            //      a regression in the port itself still fails on every host.
+            if (IsHostLibmSinCosHandoff(c, kind, expected, actual, tc, diffs, IsLibmReferenceHost))
+                return "float32 sin/cos past NumPy's Cody-Waite limit is the platform libm on both sides; this "
+                     + "host's libm rounds the lane differently from the win-amd64 ucrtbase reference [host-libm pin]";
+
             // (5) Unary transcendental / complex magnitude ~ULP (libm / algorithm differences).
             //     Tight: every differing element within 2 ULP — a gross error still fails.
             //
@@ -583,10 +1082,22 @@ namespace NumSharp.Tests.Fuzz
             //     tanh is carved out at BOTH widths (see NumPyPortedFloat64Kernels): it is the one
             //     op here for which NumPy ships its own kernel at float64 as well, so f8 tanh is a
             //     port too and a 1-ULP drift there is likewise a regression, not libm noise.
-            if (kind == DivergenceKind.Value && c.Operands.Length == 1
+            //
+            //     NOT for np.evaluate: a fused tree has its OWN policy above ((E1)-(E5), keyed on the
+            //     nodes params.expr names), and this branch — keyed only on "one operand" — used to
+            //     hand every single-operand fused tree a blanket 2-ULP excuse whatever its nodes: it
+            //     swallowed a ±0 flip in a flat min/max (+0 and -0 are "within 2 ULP") and 18 real
+            //     reduction divergences (a transposed-3-D flat sum/prod/mean reduced in logical instead
+            //     of memory order, an integer mean folded instead of NumPy's chunked float64 pairwise).
+            //     Those are fixed, and excluding evaluate here is what keeps them — and block C9's
+            //     signed-zero cells — enforced.
+            if (kind == DivergenceKind.Value && c.Operands.Length == 1 && c.Op != "evaluate"
                 && !(tc == NPTypeCode.Single && NumPyPortedFloat32Kernels.Contains(c.Op))
                 && !(tc == NPTypeCode.Double && NumPyPortedFloat64Kernels.Contains(c.Op))
                 && !ByteExactArithmeticUnaryOps.Contains(c.Op)
+                // numpy.polynomial evaluation is + - * / only (a Python-scalar x leaves ONE operand, the
+                // coefficients): bit-exact by construction, so it must never inherit this excuse.
+                && !OpRegistry.IsPolynomialOp(c.Op)
                 && diffs.Count > 0 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
                 return "unary ~ULP (transcendental/magnitude algorithm difference)";
 
@@ -622,6 +1133,7 @@ namespace NumSharp.Tests.Fuzz
             //     regression fails.
             if (kind == DivergenceKind.Value && c.Operands.Length == 1 && tc == NPTypeCode.Complex
                 && !ByteExactArithmeticUnaryOps.Contains(c.Op)
+                && !OpRegistry.IsPolynomialOp(c.Op)   // + - * / only: held bit-exact (see branch 5)
                 && diffs.Count > 0 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 3)))
                 return "complex unary within 3 ULP (full NumPy-algorithm port)";
 
@@ -724,24 +1236,15 @@ namespace NumSharp.Tests.Fuzz
             if (c.Op == "nonzero_all" && c.Operands.Length == 1 && c.Operands[0].Shape.Length == 0)
                 return "nonzero(0-d): NumPy raises ValueError, NumSharp returns a tuple [known bug]";
 
-            // (K4) Complex-input ufunc rejection — the WORDING, not the decision. Both sides refuse
-            // cbrt/floor/ceil/trunc/deg2rad/rad2deg/floor_divide/mod on complex input; NumPy raises
-            // its ufunc TypeError, NumSharp a NotSupportedException with its own text. (The bitwise
-            // and invert loops DO produce NumPy's message verbatim, so the machinery exists — these
-            // kernels simply do not use it.)
-            if (kind == DivergenceKind.ErrorText && ComplexRejectOps.Contains(c.Op)
-                && c.Operands.Any(o => o.Dtype == "complex128"))
-                return "complex ufunc rejection wording: NotSupportedException('operation X not supported "
-                     + "for Complex') vs NumPy's ufunc TypeError [known gap]";
-
-            // (K5) …and on a ZERO-SIZE complex operand the rejection is skipped ENTIRELY: NumSharp
-            // returns an empty result because the kernel never runs, where NumPy still raises —
-            // NumPy validates the LOOP (can this dtype be handled at all?), not the data.
-            if (kind == DivergenceKind.Value && ComplexRejectOps.Contains(c.Op)
-                && c.Operands.Any(o => o.Dtype == "complex128")
-                && c.Operands.Any(o => o.Shape.Any(d => d == 0)))
-                return "complex ufunc rejection SKIPPED on a zero-size operand (NumPy validates the "
-                     + "loop, not the data) [known bug]";
+            // (K4/K5) RESOLVED — no excuse. cbrt/floor/ceil/trunc/deg2rad/rad2deg/floor_divide/mod on
+            // complex input now raise NumPy's EXACT ufunc TypeError verbatim
+            // ("ufunc '<name>' not supported for the input types, and the inputs could not be safely
+            // coerced to any supported types according to the casting rule ''safe''"; mod's ufunc name
+            // is 'remainder'), instead of a kernel NotSupportedException with NumSharp wording (K4).
+            // The guard sits at each Default.<Op> method and keys off the INPUT DTYPE, not the data, so
+            // a ZERO-SIZE complex operand is rejected too — NumPy validates the loop, not the data (K5).
+            // Both excuse branches and the ComplexRejectOps set are deleted, not narrowed; a regression
+            // (wrong type, wrong wording, or a zero-size skip) turns the errors_full tier red.
 
             // (K6/K8 RETIRED) power with a negative integer exponent — for BOTH an integer base and
             // a bool base (which promotes to an integer loop) — now raises NumPy's clean
@@ -760,43 +1263,55 @@ namespace NumSharp.Tests.Fuzz
                 return "result_type(mixed signed/unsigned, 0-D operand): throws instead of resolving "
                      + "a promotion [known bug]";
 
-            // (K10) ufunc out=/where= with a read-only BROADCAST out. NumPy refuses it
-            // ("non-broadcastable output operand …" / read-only output). NumSharp either raises
-            // with different wording or — worse — WRITES THROUGH IT, which contradicts its own
-            // design rule that a broadcast view is non-writeable (Shape.IsWriteable == false).
-            if ((kind == DivergenceKind.ErrorText || kind == DivergenceKind.Value
-                 || kind == DivergenceKind.Arity || kind == DivergenceKind.Shape)
-                && c.Layout == "out_broadcast")
-                return "ufunc out= on a read-only broadcast view: NumSharp writes through it (or "
-                     + "refuses with different wording) where NumPy raises [known bug]";
+            // (K10) RESOLVED — no excuse. A ufunc out=/where= with a read-only BROADCAST out now
+            // raises the SAME exception as NumPy: ValueError("output array is read-only"), verbatim.
+            // NumSharp's ThrowIfNotWriteable used to raise NumSharpException with the identical text
+            // (the sole read-only hold-out; np.choose/nditer/byteswap/getfield already used
+            // ValueError), so only the exception TYPE diverged. ThrowReadOnly now throws ValueError,
+            // so these 983 out_broadcast cases pass on their own — the branch that excused them is
+            // deleted, not merely narrowed, and a regression (write-through, wrong type, or wrong
+            // wording) turns the OutWhere tier red instead of being silently absorbed.
 
-            // (K12) isnan into a STRIDED bool out writes False where NumPy writes True — the
-            // 1-byte store walks the buffer rather than the view, so the True results land on the
-            // wrong elements. A CONTIGUOUS bool out is correct, which is exactly why this needed a
-            // strided-out axis to surface at all.
+            // (K12) A unary FLOAT-CLASSIFICATION PREDICATE (isnan / isinf / isfinite / signbit) into
+            // a rank>=2 [..., ::2]-STRIDED bool `out`: NumSharp writes the CORRECT full overwrite,
+            // NumPy 2.4.2 does NOT. This is a NumPy BUG, not a NumSharp one (2026-09-18 audit):
+            // np.isnan(x, out=view) leaks the view's PRIOR contents into the gap-strided slots its
+            // buffered predicate loop (loops_unary_fp_le) fails to cover on write-back — so with a
+            // non-zero prior the result != isnan(x). Probed exhaustively: the leak is confined to
+            // these 4 unary predicates (comparisons/logical/arithmetic are fine), to rank>=2, and to
+            // the inner-axis skip-stride view ONLY (a plain zeros prior, a 1-D strided out, an
+            // f/negstride/offset/transposed out, and every binary op are all correct on BOTH sides).
+            // NumSharp cannot and MUST NOT reproduce NumPy's buffering bug, so the corpus's recorded
+            // (buggy) expectation for exactly these cells is an excused NumSharp-is-MORE-correct
+            // divergence; every other predicate cell stays bit-exact and gated.
             if (kind == DivergenceKind.Value && c.Op == "out_unary"
                 && c.Layout == "out_strided"
                 && c.Params != null && c.Params.TryGetValue("ufunc", out var ufEl)
-                && ufEl.GetString() == "isnan")
-                return "isnan into a strided bool out=: results land on the wrong elements "
-                     + "(buffer walked instead of the view) [known bug]";
+                && ufEl.GetString() is "isnan" or "isinf" or "isfinite" or "signbit")
+                return "unary float predicate into a rank>=2 skip-strided bool out=: NumSharp "
+                     + "overwrites correctly while NumPy 2.4.2 leaks the out's prior contents "
+                     + "(its buffered predicate loop bug) — NumSharp is MORE correct [numpy bug]";
 
-            // (K11) out=/where= float32 transcendentals (exp/sin) and isnan: every differing
-            // element is within 2 ULP — the same envelope branch (5) documents for the plain unary
-            // path, which cannot be reached here because `out` and `where` are operands too (so
-            // Operands.Length > 1).
-            //
-            // OPEN QUESTION, deliberately recorded rather than smoothed over: exp(1.0f) inside a
-            // (4,5) float32 array comes back 0x402df854 from np.exp(x), np.exp(x, out) AND
-            // np.exp(x, out, where) alike, while NumPy — and the committed unary.jsonl expectation
-            // for the very same values, shape and dtype — say 0x402df855. The unary tier is green,
-            // so the same op on the same data disagrees depending on how the array was built.
-            // That points at kernel/path selection, not at out=; it is scoped here only so this
-            // tier can gate everything else it covers.
-            if (kind == DivergenceKind.Value && c.Op != null && c.Op.StartsWith("out_")
-                && diffs.Count > 0 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
-                return "out=/where= float32 transcendental within 2 ULP — see the exp(1.0f) "
-                     + "path-dependence note at branch K11 [open question]";
+            // (K13) min/max family (maximum/minimum/fmax/fmin): the SIGN of a ±0 result is
+            // NON-CONTRACTUAL. Since +0.0 == -0.0, IEEE maxNum/minNum may return either operand, and
+            // NumPy picks the surviving zero's sign by SIMD LANE — probed against 2.4.2, fmax(+0, -0)
+            // comes back +0 inside a 20-element array yet -0 inside a 4-element one, so the sign is
+            // not bit-reproducible across array contexts. NumSharp's per-element out=/where= scalar
+            // path picks a consistent sign that can differ from whichever NumPy's vectorized kernel
+            // happened to record. Excused ONLY when EVERY diff is a pure ±0 sign flip (both values
+            // exactly zero) — a wrong NON-zero result, or a NaN-bit flip, is NOT a signed zero and
+            // falls through to fail. Same class as the documented float32-sum NaN-bit order excuse.
+            // out_clip is NO LONGER in this class: its ±0 difference was never lane noise but NumPy's
+            // const fast path for scalar float bounds (clip.cpp _npy_clip_const_minmax_ keeps the
+            // element on a tie, x < lo ? lo : x), which the clip kernel now reproduces
+            // (DirectILKernelGenerator.UsesConstSelect). The out_clip cells are held bit-exact.
+            if (kind == DivergenceKind.Value
+                && c.Op == "out_binary"
+                && c.Params != null && c.Params.TryGetValue("ufunc", out var mmUf)
+                && mmUf.GetString() is "maximum" or "minimum" or "fmax" or "fmin"
+                && diffs.Count > 0 && diffs.All(d => BitDiff.IsSignedZeroFlip(expected, actual, d.Index, tc)))
+                return "min/max family signed-zero: the sign of a ±0 result is non-contractual "
+                     + "(NumPy varies it by SIMD lane) — every diff is a pure +0/-0 flip [non-contractual]";
 
             // (K7) NEP50 weak-scalar, reached through the ERROR path rather than the dtype one.
             // Documented difference (1) at the top of this file: NumSharp treats a 0-D operand as a
@@ -806,31 +1321,30 @@ namespace NumSharp.Tests.Fuzz
             // EXCLUDES the out=/where= tier: there a 0-D operand is usually the `where` MASK
             // (scalar_true / scalar_false), which has nothing to do with promotion — without this
             // guard the branch silently swallowed 60 mask cases it had no business classifying.
+            //
+            // EXCLUDES clip_pyint too: its 0-D operand is the CLIPPED array (the scalar_0d layouts, with
+            // an out= operand beside it) — its bounds ride as params, so there is no weak 0-D operand to
+            // promote, and a divergence there is a real clip bug. And clip_ufunc, whose 0-D operands are the
+            // clipped array (scalar_0d) and its zero-filled 0-D a: the scalar bounds ride as params there too.
+            //
+            // EXCLUDES trapezoid as well (plan api-parameter-parity A5): its 0-D operands are y, whose every axis
+            // is NumPy's leaked "list assignment index out of range" IndexError, and x, which diff refuses ("diff
+            // requires input that is at least one dimensional") — never a weak scalar a pairing could promote.
+            // With the old axis error planted back, this branch excused the 12 err_axis_outside_y cases of a 0-D y
+            // with an x, so a regression there passed; without it all 78 IndexError cases turn red.
+            //
+            // EXCLUDES the relayout tiers too, for the reason given at branch (1): their generator keeps only the
+            // 0-d variants whose NumPy outcome does not depend on weak promotion, so this branch would excuse real
+            // value and error-parity differences there, not the divergence it documents.
             if ((kind == DivergenceKind.Value || kind == DivergenceKind.ErrorText)
                 && (c.Op == null || !c.Op.StartsWith("out_"))
-                && c.Operands.Length >= 2 && c.Operands.Any(o => o.Shape.Length == 0))
+                && c.Op != "clip_pyint" && c.Op != "clip_ufunc" && c.Op != "trapezoid"
+                && c.Operands.Length >= 2 && c.Operands.Any(o => o.Shape.Length == 0)
+                && !IsRelayoutCase(c) && !IsMatrixOperandCase(c))
                 return "NEP50 weak-scalar (error path): a 0-D operand promotes weakly, so a pairing "
                      + "NumPy refuses succeeds instead";
 
             return null;
-        }
-
-        /// <summary>
-        ///     The ufuncs NumPy has no complex loop for. NumSharp refuses them too, but with its own
-        ///     exception type and wording — see branches (K4)/(K5).
-        /// </summary>
-        private static readonly System.Collections.Generic.HashSet<string> ComplexRejectOps = new()
-        {
-            "cbrt", "floor", "ceil", "trunc", "deg2rad", "rad2deg", "floor_divide", "mod"
-        };
-
-        /// <summary>Element count of a corpus operand (0-d shape [] counts as 1).</summary>
-        private static long ElementCount(FuzzCorpus.Operand o)
-        {
-            long n = 1;
-            foreach (var d in o.Shape)
-                n *= d;
-            return n;
         }
 
         /// <summary>
@@ -841,6 +1355,48 @@ namespace NumSharp.Tests.Fuzz
         /// </summary>
         private static long TruthSlack(long dNPY)
             => dNPY >= (long.MaxValue - 8) / 4 ? long.MaxValue : Math.Max(4 * dNPY, dNPY + 8);
+
+        /// <summary>
+        ///     Generator.power's documented in-band expm1 bound, <c>ceil(2 / a) + 3</c> ULP, for the SMALLEST exponent
+        ///     parameter <c>a</c> the case draws with — the one that amplifies the expm1 difference most.
+        /// </summary>
+        /// <param name="c">A grnd power case: a scalar-parameter stream case (<c>a</c> in <c>args[0]</c>) or an
+        ///     array-parameter broadcast case (<c>a</c> in its first <c>bargs</c> entry — a literal, or an operand every
+        ///     element of which some output position draws with).</param>
+        /// <returns>The per-element ULP bound; -1 when the case carries no readable <c>a</c> (no excuse then).</returns>
+        /// <remarks>
+        ///     NaN elements are skipped: <c>power(NaN)</c> is NaN on both sides and never diverges. The validated
+        ///     <c>a</c> is positive, so the bound is finite for every real case.
+        /// </remarks>
+        private static int PowerExpm1Bound(FuzzCorpus.Case c)
+        {
+            double minA;
+            if (c.Params.TryGetValue("bargs", out var bargs))
+            {
+                var first = bargs[0];
+                if (first.TryGetProperty("f", out var f))
+                    minA = f.GetDouble();
+                else if (first.TryGetProperty("i", out var i))
+                    minA = i.GetInt64();
+                else if (first.TryGetProperty("op", out var k))
+                {
+                    using var a = FuzzCorpus.Reconstruct(c.Operands[k.GetInt32()]);
+                    using var ad = a.astype(np.float64);
+                    minA = double.PositiveInfinity;
+                    for (long e = 0; e < ad.size; e++)
+                    {
+                        double v = ad.GetAtIndex<double>(e);
+                        if (v < minA)
+                            minA = v;
+                    }
+                }
+                else
+                    return -1;
+            }
+            else
+                minA = c.Params["args"][0].GetDouble();
+            return minA > 0 && double.IsFinite(2.0 / minA) ? (int)Math.Ceiling(2.0 / minA) + 3 : -1;
+        }
 
         /// <summary>
         ///     The absolute-error envelope for the expm1/log1p Exp(x)-1 / Log(1+x) signature — a few
@@ -864,6 +1420,153 @@ namespace NumSharp.Tests.Fuzz
             && (d.Actual == "00000000" || d.Actual == "00000080");
 
         /// <summary>
+        ///     Whether case <paramref name="c"/> belongs to a relayout tier (<c>gen_relayout_oracle.py</c>: layout tag
+        ///     <c>relayout:&lt;kind&gt;@&lt;position&gt;</c>), whose generator already removed the variants the NEP50 0-d
+        ///     branches document, so those branches must not excuse anything there.
+        /// </summary>
+        /// <param name="c">The case.</param>
+        /// <returns>True for a relayout variant.</returns>
+        private static bool IsRelayoutCase(FuzzCorpus.Case c)
+            => c.Layout != null && c.Layout.StartsWith("relayout:", StringComparison.Ordinal);
+
+        /// <summary>
+        ///     Whether case <paramref name="c"/> belongs to a matrix-operand tier
+        ///     (<c>gen_matrix_operand_oracle.py</c>: layout tag <c>matrix@&lt;position&gt;</c> or <c>matrix@all</c>).
+        ///     Its generator drops every source case with a 0-d operand next to another operand, so the NEP50 0-d
+        ///     blankets have nothing to document there; with them on, an error NumPy raises only for a matrix
+        ///     operand (<c>shape too large to be a matrix.</c>) would read as the documented weak-scalar divergence.
+        /// </summary>
+        /// <param name="c">The case.</param>
+        /// <returns>True for a matrix-operand variant.</returns>
+        private static bool IsMatrixOperandCase(FuzzCorpus.Case c)
+            => c.Layout != null && c.Layout.StartsWith("matrix@", StringComparison.Ordinal);
+
+        /// <summary>
+        ///     Whether case <paramref name="c"/> reduces along an axis (an <c>axis</c> param that is not null) of an operand
+        ///     with a reversed axis (a negative stride on an axis of extent &gt; 1): the layout of plan
+        ///     <c>docs/plans/api-parameter-parity.md</c> finding 5, where np.sum's axis kernel walks memory order and
+        ///     NumPy the logical order.
+        /// </summary>
+        /// <param name="c">The case.</param>
+        /// <returns>True for an axis reduction over a view with a reversed axis.</returns>
+        private static bool IsReversedAxisReduction(FuzzCorpus.Case c)
+        {
+            if (c.Params == null || !c.Params.TryGetValue("axis", out var axis)
+                || axis.ValueKind == System.Text.Json.JsonValueKind.Null || c.Operands.Length != 1)
+                return false;
+            var o = c.Operands[0];
+            if (o.Shape == null || o.Strides == null)
+                return false;
+            for (int d = 0; d < o.Shape.Length; d++)
+                if (o.Strides[d] < 0 && o.Shape[d] > 1)
+                    return true;
+            return false;
+        }
+
+        /// <summary>
+        ///     Whether case <paramref name="c"/> is a FLAT (<c>axis=None</c>) <c>sum</c> / <c>mean</c> with a float result
+        ///     over a non-broadcast operand — exactly the cells NumSharp's exact add.reduce engine (NumPyAddReduce) computes,
+        ///     so the classifier excuses nothing there.
+        /// </summary>
+        /// <remarks>
+        ///     Broadcast operands (a stride-0 axis of extent &gt; 1) are left to the old route by the engine (NpyIter's axis
+        ///     sort skips their comparisons, a schedule the engine does not model), and Decimal has no NumPy dtype, so both
+        ///     keep the branches below. An integer or bool result is exact in any order and never reaches the summation
+        ///     branches anyway. The <c>ma.</c> tier reaches this classifier with its prefix stripped
+        ///     (<c>FuzzCorpusTests.Ma.StripMa</c>) but runs <c>NDMaskedArray</c>'s own reductions, not this engine, so its
+        ///     cases (ids <c>ma.*</c>) keep their documented gaps.
+        /// </remarks>
+        /// <param name="c">The case.</param>
+        /// <param name="tc">The result dtype the classifier compares in.</param>
+        /// <returns>True when the case must be bit-exact.</returns>
+        private static bool IsExactFlatAddReduce(FuzzCorpus.Case c, NPTypeCode tc)
+        {
+            if ((c.Op != "sum" && c.Op != "mean") || c.Operands.Length != 1)
+                return false;
+            if (c.Id != null && c.Id.StartsWith("ma.", StringComparison.Ordinal))
+                return false;
+            if (c.Params != null && c.Params.TryGetValue("axis", out var axis)
+                && axis.ValueKind != System.Text.Json.JsonValueKind.Null)
+                return false;
+            if (tc != NPTypeCode.Half && tc != NPTypeCode.Single && tc != NPTypeCode.Double && tc != NPTypeCode.Complex)
+                return false;
+            var o = c.Operands[0];
+            if (o.Dtype == "decimal" || o.Shape == null || o.Strides == null)
+                return false;
+            for (int d = 0; d < o.Shape.Length; d++)
+                if (o.Strides[d] == 0 && o.Shape[d] > 1)
+                    return false;
+            return true;
+        }
+
+        /// <summary>
+        ///     True when <paramref name="op"/> is one of the identity-seeded add reductions — sum, mean, nansum,
+        ///     nanmean — and some differing element is a SIGNED-ZERO flip (both values numerically zero, opposite sign
+        ///     bits; for complex, either part). NumPy assigns the add identity +0.0 to the result before the loop runs
+        ///     (PyUFunc_ReduceWrapper), so +0.0 + (-0.0) makes its sum, and every mean / NaN-skipping variant built on
+        ///     it, NEVER -0.0 — in any summation order. Such a flip is therefore a NumSharp bug (a copy where NumPy adds
+        ///     to the identity), never the "summation order" the reduction blankets excuse; those blankets kept a
+        ///     -0.0 out of every one-element / length-1-axis sum green until 2026-10.
+        /// </summary>
+        /// <param name="op">The bare op key (the ndarray. prefix already stripped).</param>
+        /// <param name="expected">NumPy's result bytes.</param>
+        /// <param name="actual">NumSharp's result bytes.</param>
+        /// <param name="tc">The result dtype.</param>
+        /// <param name="diffs">The differing elements.</param>
+        /// <returns>Whether the divergence includes a signed-zero flip the identity rules out.</returns>
+        private static bool IsIdentitySumSignedZeroFlip(string op, byte[] expected, byte[] actual, NPTypeCode tc,
+            IReadOnlyList<BitDiff.Diff> diffs)
+        {
+            if (expected == null || actual == null || diffs == null || diffs.Count == 0)
+                return false;
+            if (op != "sum" && op != "mean" && op != "nansum" && op != "nanmean")
+                return false;
+            foreach (var d in diffs)
+            {
+                if (tc == NPTypeCode.Complex)
+                {
+                    // A complex element is two float64 words; either one flipping its zero sign counts.
+                    if (ZeroFlipAt(expected, actual, d.Index * 16) || ZeroFlipAt(expected, actual, d.Index * 16 + 8))
+                        return true;
+                }
+                else if (BitDiff.IsSignedZeroFlip(expected, actual, d.Index, tc))
+                    return true;
+            }
+
+            return false;
+
+            static bool ZeroFlipAt(byte[] e, byte[] a, int off)
+            {
+                double x = BitConverter.ToDouble(e, off), y = BitConverter.ToDouble(a, off);
+                return x == 0.0 && y == 0.0 && BitConverter.DoubleToInt64Bits(x) != BitConverter.DoubleToInt64Bits(y);
+            }
+        }
+
+        /// <summary>
+        ///     Both the expected and actual tokens are a signed zero at the float dtype
+        ///     <paramref name="tc"/> (Double / Single / Half). BitDiff prints bytes low-to-high, so
+        ///     the sign bit sits in the LAST byte: +0.0 is all-zero and -0.0 has a trailing "80"
+        ///     (Double 0x…80, Single "00000080", Half "0080"). Only the float output dtypes of the
+        ///     quantile family are relevant — integer/bool/char results are exact and never ±0-signed.
+        /// </summary>
+        private static bool IsSignedZeroPairFloat(BitDiff.Diff d, NPTypeCode tc)
+        {
+            switch (tc)
+            {
+                case NPTypeCode.Double:
+                    return (d.Expected == "0000000000000000" || d.Expected == "0000000000000080")
+                        && (d.Actual   == "0000000000000000" || d.Actual   == "0000000000000080");
+                case NPTypeCode.Single:
+                    return IsSignedZeroPairSingle(d);
+                case NPTypeCode.Half:
+                    return (d.Expected == "0000" || d.Expected == "0080")
+                        && (d.Actual   == "0000" || d.Actual   == "0080");
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>
         ///     True when both differing complex components at <paramref name="index"/> lie within
         ///     <paramref name="maxUlp"/> ULP of the ELEMENT's magnitude (its largest finite
         ///     component), not of themselves. This is the absolute-error envelope a differently
@@ -872,6 +1575,59 @@ namespace NumSharp.Tests.Fuzz
         ///     at rounding scale of the products (~ the dominant component). Non-finite values are
         ///     never "cancellation".
         /// </summary>
+        /// <summary>
+        ///     True when EVERY value of a power exponent operand takes NumPy <c>npy_cpow</c>'s exact
+        ///     INTEGER branch — real, integral, and strictly within (-100, 100). Those exponents
+        ///     NumSharp computes bit-exactly (<c>ComplexPowNumPy</c>'s repeated multiplication), so the
+        ///     complex-power ULP excuse must stay OFF them (a regression fails the gate). When any
+        ///     value is non-integral, complex, or |n| >= 100, NumPy routes it through the host
+        ///     <c>cpow</c> instead (which NumSharp still approximates via <c>Complex.Pow</c>), so the
+        ///     bounded ULP excuse legitimately applies to the whole case. The whole-buffer scan is a
+        ///     conservative over-approximation of "has a cpow-branch element" (it ignores strides, so a
+        ///     broadcast/duplicated out-of-range value still trips it) — safe, because it only ever
+        ///     widens the excuse, never gates a genuinely divergent element.
+        /// </summary>
+        /// <param name="exp">The exponent operand (operand[1] of a power case).</param>
+        /// <returns>True iff every stored exponent value is a real integer with |value| &lt; 100.</returns>
+        private static bool PowerExponentAllIntegerBranch(FuzzCorpus.Operand exp)
+        {
+            byte[] b;
+            try { b = FuzzCorpus.FromHex(exp.Buffer); }
+            catch { return false; }                      // undecodable → be conservative, allow the excuse
+            if (b.Length == 0) return false;
+
+            // Local test of npy_cpow's integer-branch predicate for one real value.
+            static bool IntBranch(double v) => !double.IsNaN(v) && !double.IsInfinity(v)
+                                               && v > -100.0 && v < 100.0 && System.Math.Floor(v) == v;
+
+            switch (FuzzCorpus.DtypeToTC(exp.Dtype))
+            {
+                case NPTypeCode.Boolean:
+                case NPTypeCode.Byte:  for (int i = 0; i < b.Length; i++) if (!IntBranch(b[i])) return false; return true;
+                case NPTypeCode.SByte: for (int i = 0; i < b.Length; i++) if (!IntBranch((sbyte)b[i])) return false; return true;
+                case NPTypeCode.Int16:  for (int i = 0; i + 1 < b.Length; i += 2) if (!IntBranch(BitConverter.ToInt16(b, i)))  return false; return true;
+                case NPTypeCode.UInt16:
+                case NPTypeCode.Char:   for (int i = 0; i + 1 < b.Length; i += 2) if (!IntBranch(BitConverter.ToUInt16(b, i))) return false; return true;
+                case NPTypeCode.Int32:  for (int i = 0; i + 3 < b.Length; i += 4) if (!IntBranch(BitConverter.ToInt32(b, i)))  return false; return true;
+                case NPTypeCode.UInt32: for (int i = 0; i + 3 < b.Length; i += 4) if (!IntBranch(BitConverter.ToUInt32(b, i))) return false; return true;
+                case NPTypeCode.Int64:  for (int i = 0; i + 7 < b.Length; i += 8) if (!IntBranch(BitConverter.ToInt64(b, i)))  return false; return true;
+                case NPTypeCode.UInt64: for (int i = 0; i + 7 < b.Length; i += 8) if (!IntBranch(BitConverter.ToUInt64(b, i))) return false; return true;
+                case NPTypeCode.Half:   for (int i = 0; i + 1 < b.Length; i += 2) if (!IntBranch((double)BitConverter.ToHalf(b, i)))   return false; return true;
+                case NPTypeCode.Single: for (int i = 0; i + 3 < b.Length; i += 4) if (!IntBranch(BitConverter.ToSingle(b, i))) return false; return true;
+                case NPTypeCode.Double: for (int i = 0; i + 7 < b.Length; i += 8) if (!IntBranch(BitConverter.ToDouble(b, i))) return false; return true;
+                case NPTypeCode.Complex:
+                    // Integer branch requires a zero imaginary part AND an integral in-range real part.
+                    for (int i = 0; i + 15 < b.Length; i += 16)
+                    {
+                        double re = BitConverter.ToDouble(b, i);
+                        double im = BitConverter.ToDouble(b, i + 8);
+                        if (im != 0.0 || !IntBranch(re)) return false;
+                    }
+                    return true;
+                default: return false;                   // decimal / unknown → allow the excuse
+            }
+        }
+
         private static bool WithinComplexElementMagnitudeUlp(byte[] exp, byte[] act, int index, int maxUlp)
         {
             int o = index * 16;
@@ -902,6 +1658,13 @@ namespace NumSharp.Tests.Fuzz
         }
 
         /// <summary>Either side's complex element at <paramref name="index"/> has a NaN/inf component.</summary>
+        /// <summary>True when the complex128 element at <paramref name="index"/> has a NaN real or imaginary part.</summary>
+        private static bool ComplexHasNaN(byte[] buf, int index)
+        {
+            int o = index * 16;
+            return double.IsNaN(BitConverter.ToDouble(buf, o)) || double.IsNaN(BitConverter.ToDouble(buf, o + 8));
+        }
+
         private static bool NonFiniteInvolved(byte[] exp, byte[] act, int index)
         {
             int o = index * 16;
@@ -910,5 +1673,77 @@ namespace NumSharp.Tests.Fuzz
                 || !double.IsFinite(BitConverter.ToDouble(act, o))
                 || !double.IsFinite(BitConverter.ToDouble(act, o + 8));
         }
+
+        /// <summary>
+        ///     Prove two int64 argsort index vectors are EQUIVALENT sorts of the same 1-D operand:
+        ///     both must be permutations of [0, n) and, position for position, must select values
+        ///     that compare IEEE-equal (so a +0.0/-0.0 or duplicate-value tie may resolve either
+        ///     way, but a genuinely different ORDERING of distinct values still fails). This is
+        ///     the self-limiting guard behind the argsort tie-order excuse — it re-derives the
+        ///     claim from the operand bytes instead of trusting the branch condition.
+        /// </summary>
+        /// <param name="operand">The case's single 1-D operand descriptor (buffer + view layout).</param>
+        /// <param name="expected">NumPy's index vector, raw int64 little-endian bytes.</param>
+        /// <param name="actual">NumSharp's index vector, raw int64 little-endian bytes.</param>
+        /// <returns>True when both are in-range permutations selecting pairwise-equal values.</returns>
+        private static bool ArgsortPermutationsEquivalent(FuzzCorpus.Operand operand, byte[] expected, byte[] actual)
+        {
+            if (expected.Length != actual.Length || expected.Length % 8 != 0)
+                return false;
+            int n = expected.Length / 8;
+
+            var view = FuzzCorpus.Reconstruct(operand);
+            try
+            {
+                if (view.size != n)
+                    return false;
+                var seenExp = new bool[n];
+                var seenAct = new bool[n];
+                for (int i = 0; i < n; i++)
+                {
+                    long ei = BitConverter.ToInt64(expected, i * 8);
+                    long ai = BitConverter.ToInt64(actual, i * 8);
+                    // Out-of-range or repeated indices mean it is NOT a permutation — never excuse.
+                    if (ei < 0 || ei >= n || ai < 0 || ai >= n || seenExp[ei] || seenAct[ai])
+                        return false;
+                    seenExp[ei] = seenAct[ai] = true;
+                    // The same index on both sides is the same slot — trivially equivalent, and
+                    // it MUST short-circuit: an agreed NaN position would otherwise fail the IEEE
+                    // equality below (NaN != NaN) and veto the whole excuse.
+                    if (ei == ai)
+                        continue;
+                    // IEEE == (not bitwise): -0.0 == +0.0 is exactly the tie being excused; a NaN
+                    // never equals anything, so a NaN placed DIFFERENTLY is NOT excused here.
+                    if (!TieEqual(view.GetAtIndex(ei), view.GetAtIndex(ai)))
+                        return false;
+                }
+                return true;
+            }
+            finally
+            {
+                view.Dispose();
+            }
+        }
+
+        /// <summary>
+        ///     IEEE-equality over the boxed elements <see cref="NDArray.GetAtIndex(long)"/> hands
+        ///     out, per dtype family: Half widens exactly to double, Complex compares both lanes,
+        ///     every IConvertible lane (bool/ints/floats) compares as double — so a signed-zero or
+        ///     duplicate-value tie reads equal while NaN (never equal to anything) and any distinct
+        ///     values read unequal.
+        /// </summary>
+        /// <param name="a">First boxed element.</param>
+        /// <param name="b">Second boxed element.</param>
+        /// <returns>True when the two elements compare IEEE-equal.</returns>
+        private static bool TieEqual(object a, object b) => (a, b) switch
+        {
+            (Half ha, Half hb) => (double)ha == (double)hb,
+            (System.Numerics.Complex ca, System.Numerics.Complex cb) =>
+                ca.Real == cb.Real && ca.Imaginary == cb.Imaginary,
+            (IConvertible ia, IConvertible ib) =>
+                ia.ToDouble(System.Globalization.CultureInfo.InvariantCulture)
+                == ib.ToDouble(System.Globalization.CultureInfo.InvariantCulture),
+            _ => false,
+        };
     }
 }

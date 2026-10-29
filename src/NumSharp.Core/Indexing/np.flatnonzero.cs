@@ -28,6 +28,9 @@ namespace NumSharp
         ///     </para>
         /// </remarks>
         public static NDArray<long> flatnonzero(NDArray a)
-            => a.TensorEngine.FlatNonZero(a);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(a);   // NumPy returns plain index arrays for a matrix too
+            return a.TensorEngine.FlatNonZero(a);
+        }
     }
 }

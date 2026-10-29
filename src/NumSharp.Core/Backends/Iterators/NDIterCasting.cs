@@ -378,10 +378,22 @@ namespace NumSharp.Backends.Iteration
         /// <summary>
         /// Convert a single value from srcType to dstType.
         /// </summary>
+        /// <param name="src">Address of one element of <paramref name="srcType"/>.</param>
+        /// <param name="dst">Address of one element of <paramref name="dstType"/> to write.</param>
+        /// <param name="srcType">The source element type.</param>
+        /// <param name="dstType">The destination element type.</param>
+        /// <exception cref="NotSupportedException">Either type is not one of the 15 storage dtypes.</exception>
         /// <remarks>
         /// Complex needs special handling on either end because a double intermediate
         /// would drop the imaginary component. Real -> Complex sets imaginary=0; Complex
         /// -> Real takes the real part (matching NumPy's ComplexWarning truncation).
+        /// <para>
+        /// float16 &lt;-&gt; float32 converts DIRECTLY, never through a double: NumPy converts
+        /// float16 bit by bit (npy_halfbits_to_floatbits / npy_floatbits_to_halfbits), so a
+        /// signalling NaN stays signalling, and the float32 &lt;-&gt; float64 hop in between would set
+        /// the quiet bit. float16 &lt;-&gt; float64 goes through the double, which the NaN-exact
+        /// <see cref="Converts.ToDouble(Half)"/> / <see cref="Converts.ToHalf(double)"/> make exact.
+        /// </para>
         /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static void ConvertValue(void* src, void* dst, NPTypeCode srcType, NPTypeCode dstType)
@@ -432,7 +444,25 @@ namespace NumSharp.Backends.Iteration
             switch (srcType)
             {
                 case NPTypeCode.Half:
+                    // float16 -> float32 directly (see remarks): the double route would quiet a signalling NaN in
+                    // the float64 -> float32 narrowing. Every other target is exact through the double.
+                    if (dstType == NPTypeCode.Single)
+                    {
+                        *(float*)dst = Converts.ToSingle(*(Half*)src);
+                        return;
+                    }
+                    WriteFromDouble(dst, ReadAsDouble(src, srcType), dstType);
+                    return;
                 case NPTypeCode.Single:
+                    // float32 -> float16 directly (see remarks): the float32 -> float64 widening would quiet a
+                    // signalling NaN, and NumPy's npy_floatbits_to_halfbits keeps the float32 payload's top bits.
+                    if (dstType == NPTypeCode.Half)
+                    {
+                        *(Half*)dst = Converts.ToHalf(*(float*)src);
+                        return;
+                    }
+                    WriteFromDouble(dst, ReadAsDouble(src, srcType), dstType);
+                    return;
                 case NPTypeCode.Double:
                     WriteFromDouble(dst, ReadAsDouble(src, srcType), dstType);
                     return;
@@ -471,6 +501,14 @@ namespace NumSharp.Backends.Iteration
         /// Complex must be handled by the caller — going through double would silently
         /// drop the imaginary component.
         /// </summary>
+        /// <param name="ptr">Address of one element of <paramref name="type"/>.</param>
+        /// <param name="type">The element type.</param>
+        /// <returns>
+        /// The element as float64 — exact except for Int64/UInt64/Decimal magnitudes beyond 2^53, which round ONCE
+        /// to nearest-even (UInt64 via <see cref="Converts.ToDouble(ulong)"/>, since .NET 8's own conversion rounds
+        /// twice from 2^63 on); a float16 NaN keeps its payload and signalling state (<see cref="Converts.ToDouble(Half)"/>).
+        /// </returns>
+        /// <exception cref="NotSupportedException"><paramref name="type"/> is Complex or not a storage dtype.</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static double ReadAsDouble(void* ptr, NPTypeCode type)
         {
@@ -484,8 +522,8 @@ namespace NumSharp.Backends.Iteration
                 NPTypeCode.Int32 => *(int*)ptr,
                 NPTypeCode.UInt32 => *(uint*)ptr,
                 NPTypeCode.Int64 => *(long*)ptr,
-                NPTypeCode.UInt64 => *(ulong*)ptr,
-                NPTypeCode.Half => (double)*(Half*)ptr,
+                NPTypeCode.UInt64 => Converts.ToDouble(*(ulong*)ptr),
+                NPTypeCode.Half => Converts.ToDouble(*(Half*)ptr),
                 NPTypeCode.Single => *(float*)ptr,
                 NPTypeCode.Double => *(double*)ptr,
                 NPTypeCode.Decimal => (double)*(decimal*)ptr,
@@ -535,8 +573,9 @@ namespace NumSharp.Backends.Iteration
                 case NPTypeCode.UInt64: *(ulong*)ptr = v; break;
                 case NPTypeCode.Char: *(char*)ptr = unchecked((char)v); break;
                 case NPTypeCode.Half: *(Half*)ptr = (Half)(double)v; break;
-                case NPTypeCode.Single: *(float*)ptr = v; break;
-                case NPTypeCode.Double: *(double*)ptr = v; break;
+                // Round ONCE like NumPy's C cast (.NET 8's own ulong -> float/double conversions round twice).
+                case NPTypeCode.Single: *(float*)ptr = Converts.ToSingle(v); break;
+                case NPTypeCode.Double: *(double*)ptr = Converts.ToDouble(v); break;
                 case NPTypeCode.Decimal: *(decimal*)ptr = v; break;
                 default: throw new NotSupportedException($"Unsupported type: {type}");
             }
@@ -562,7 +601,7 @@ namespace NumSharp.Backends.Iteration
                 case NPTypeCode.Int64: *(long*)ptr = Converts.ToInt64(value); break;
                 case NPTypeCode.UInt64: *(ulong*)ptr = Converts.ToUInt64(value); break;
                 case NPTypeCode.Char: *(char*)ptr = Converts.ToChar(value); break;
-                case NPTypeCode.Half: *(Half*)ptr = (Half)value; break;
+                case NPTypeCode.Half: *(Half*)ptr = Converts.ToHalf(value); break;
                 case NPTypeCode.Single: *(float*)ptr = (float)value; break;
                 case NPTypeCode.Double: *(double*)ptr = value; break;
                 case NPTypeCode.Decimal: *(decimal*)ptr = Converts.ToDecimal(value); break;

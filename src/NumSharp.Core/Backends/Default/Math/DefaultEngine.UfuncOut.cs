@@ -46,11 +46,18 @@ namespace NumSharp.Backends
             NDIterPerOpFlags.WRITEONLY | NDIterPerOpFlags.NO_BROADCAST | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
         };
 
+        // The MASKED configs flag the output READWRITE, not WRITEONLY: NumPy's masked ufunc loop does the
+        // same for a passed-in out (ufunc_object.c: "In the masked version, we consider the output
+        // read-write"). It decides the overlap case. COPY_IF_OVERLAP computes into a temporary and writes
+        // it back WHOLE, and only a READ operand has that temporary initialized from the array, so with
+        // WRITEONLY the mask's False positions came back as heap bytes (np.add(x[:-1], 1, out=x[1:],
+        // where=m) wrote 6.95e-310 where NumPy keeps x). For a fresh result (no out) the flag changes
+        // nothing: the target overlaps no input and needs no cast, so it is never copied or buffered.
         private static readonly NDIterPerOpFlags[] s_ufuncBinaryOutMaskedFlags =
         {
             NDIterPerOpFlags.READONLY | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
             NDIterPerOpFlags.READONLY | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
-            NDIterPerOpFlags.WRITEONLY | NDIterPerOpFlags.WRITEMASKED | NDIterPerOpFlags.NO_BROADCAST | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+            NDIterPerOpFlags.READWRITE | NDIterPerOpFlags.WRITEMASKED | NDIterPerOpFlags.NO_BROADCAST | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
             NDIterPerOpFlags.READONLY | NDIterPerOpFlags.ARRAYMASK,
         };
 
@@ -60,10 +67,11 @@ namespace NumSharp.Backends
             NDIterPerOpFlags.WRITEONLY | NDIterPerOpFlags.NO_BROADCAST | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
         };
 
+        // READWRITE output for the same reason as s_ufuncBinaryOutMaskedFlags.
         private static readonly NDIterPerOpFlags[] s_ufuncUnaryOutMaskedFlags =
         {
             NDIterPerOpFlags.READONLY | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
-            NDIterPerOpFlags.WRITEONLY | NDIterPerOpFlags.WRITEMASKED | NDIterPerOpFlags.NO_BROADCAST | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+            NDIterPerOpFlags.READWRITE | NDIterPerOpFlags.WRITEMASKED | NDIterPerOpFlags.NO_BROADCAST | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
             NDIterPerOpFlags.READONLY | NDIterPerOpFlags.ARRAYMASK,
         };
 
@@ -80,12 +88,20 @@ namespace NumSharp.Backends
             BinaryOp.Multiply => "multiply",
             BinaryOp.Divide => "divide",
             BinaryOp.Mod => "remainder",
+            BinaryOp.Fmod => "fmod",
             BinaryOp.Power => "power",
             BinaryOp.FloorDivide => "floor_divide",
             BinaryOp.BitwiseAnd => "bitwise_and",
             BinaryOp.BitwiseOr => "bitwise_or",
             BinaryOp.BitwiseXor => "bitwise_xor",
+            // NumPy spells the shift ufuncs with an underscore ("left_shift"/"right_shift"); without
+            // these the switch would fall to op.ToString().ToLowerInvariant() = "leftshift", so a
+            // dtype=/out= cast error on a shift routed through ExecuteBinaryOp would leak the wrong name.
+            BinaryOp.LeftShift => "left_shift",
+            BinaryOp.RightShift => "right_shift",
             BinaryOp.ATan2 => "arctan2",
+            BinaryOp.Gcd => "gcd",
+            BinaryOp.Lcm => "lcm",
             _ => op.ToString().ToLowerInvariant(),
         };
 
@@ -104,6 +120,7 @@ namespace NumSharp.Backends
         {
             UnaryOp.Sqrt => "sqrt",
             UnaryOp.Abs => "absolute",
+            UnaryOp.Fabs => "fabs",
             UnaryOp.Negate => "negative",
             UnaryOp.Exp => "exp",
             UnaryOp.Log => "log",
@@ -124,6 +141,7 @@ namespace NumSharp.Backends
             UnaryOp.BitwiseNot => "invert",
             UnaryOp.LogicalNot => "logical_not",
             UnaryOp.Positive => "positive",
+            UnaryOp.Spacing => "spacing",
             _ => op.ToString().ToLowerInvariant(),
         };
 
@@ -142,31 +160,45 @@ namespace NumSharp.Backends
         /// NumPy requires the where mask to be exactly bool — its converter
         /// casts with the 'safe' rule, and only bool→bool passes
         /// (_wheremask_converter, ufunc_object.c:580). Error text verbatim.
+        /// Shared by the elementwise ufuncs and every reduction's <c>where=</c>
+        /// (<see cref="ReductionArguments"/>), which use the same converter.
         /// </summary>
-        private static void ValidateWhereMask(NDArray? where)
+        /// <param name="where">The caller's mask, or <c>null</c> for NumPy's <c>where=True</c>.</param>
+        /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array. NumPy raises
+        /// <c>TypeError</c>; the house type for this check is <see cref="ArgumentException"/>, with NumPy's text:
+        /// "Cannot cast array data from …" for an array, "Cannot cast scalar from …" for a 0-d array
+        /// (PyArray_FromAny reports a 0-d source as a scalar; probed 2.4.2 with <c>np.array(1)</c>).</exception>
+        internal static void ValidateWhereMask(NDArray? where)
         {
             if (where is null || where.typecode == NPTypeCode.Boolean)
                 return;
             throw new ArgumentException(
-                $"Cannot cast array data from dtype('{where.typecode.AsNumpyDtypeName()}') " +
+                $"Cannot cast {(where.ndim == 0 ? "scalar" : "array data")} from dtype('{where.typecode.AsNumpyDtypeName()}') " +
                 "to dtype('bool') according to the rule 'safe'");
         }
 
         /// <summary>
-        /// out must be reachable from the loop result dtype by a same_kind cast
-        /// (NumPy's default ufunc casting rule). Error text verbatim
-        /// (UFuncTypeError in NumPy).
+        /// out must be reachable from the loop result dtype under <paramref name="casting"/>
+        /// (NumPy's default ufunc rule is same_kind; np.evaluate's <c>casting=</c> keyword can
+        /// tighten it to safe/equiv/no or loosen it to unsafe). Error text verbatim
+        /// (UFuncTypeError in NumPy), naming the rule that failed.
         /// </summary>
-        private static void ValidateOutCast(NPTypeCode resultType, NPTypeCode outType, string ufuncName)
+        /// <param name="resultType">The computed (loop) result dtype the write must cast FROM.</param>
+        /// <param name="outType">The caller <c>out=</c> dtype the write must cast TO.</param>
+        /// <param name="ufuncName">The ufunc name for the message ("evaluate" for the fused path).</param>
+        /// <param name="casting">The cast rule to enforce; defaults to NumPy's ufunc <c>same_kind</c>.</param>
+        /// <exception cref="ArgumentException"><paramref name="resultType"/> is not castable to <paramref name="outType"/> under <paramref name="casting"/>.</exception>
+        private static void ValidateOutCast(NPTypeCode resultType, NPTypeCode outType, string ufuncName,
+            NPY_CASTING casting = NPY_CASTING.NPY_SAME_KIND_CASTING)
         {
             if (resultType == outType)
                 return;
-            if (NDIterCasting.CanCast(resultType, outType, NPY_CASTING.NPY_SAME_KIND_CASTING))
+            if (NDIterCasting.CanCast(resultType, outType, casting))
                 return;
             throw new ArgumentException(
                 $"Cannot cast ufunc '{ufuncName}' output from " +
                 $"dtype('{resultType.AsNumpyDtypeName()}') to " +
-                $"dtype('{outType.AsNumpyDtypeName()}') with casting rule 'same_kind'");
+                $"dtype('{outType.AsNumpyDtypeName()}') with casting rule '{DTypeCasting.CastingToString(casting)}'");
         }
 
         /// <summary>
@@ -383,10 +415,12 @@ namespace NumSharp.Backends
             bool simdViable = sameDtype
                               && DirectILKernelGenerator.CanUseSimdBinary(op, resultType);
 
+            // NumPy's elementwise NaN operand order (float add/multiply keep the SECOND operand's NaN when both are
+            // NaN): see DirectILKernelGenerator.NaNOperandOrder.cs.
             Action<ILGenerator> scalarBody;
             if (sameDtype)
             {
-                scalarBody = il => DirectILKernelGenerator.EmitScalarOperation(il, op, resultType);
+                scalarBody = il => DirectILKernelGenerator.EmitScalarOperation(il, op, resultType, NaNOperandOrder.NumPyUfunc);
             }
             else
             {
@@ -395,9 +429,18 @@ namespace NumSharp.Backends
                 scalarBody = il => EmitMixedScalarBody(il, capLhs, capRhs, capRes, capOp);
             }
 
+            // Shifts are excluded from CanUseSimdBinary (CanUseSimdForOp lists no shift), so simdViable is
+            // false for them — but the same-dtype case has a per-lane VARIABLE shift kernel
+            // (EmitShiftVectorBody, the one ExecuteShiftViaNDIter drives). Supply it here too so the hot
+            // out= / where= shift path vectorizes instead of falling to the scalar body (the count operand
+            // is broadcast or an array; a variable shift covers both, and the overflow rule is baked in).
+            bool shiftSimd = sameDtype && (op == BinaryOp.LeftShift || op == BinaryOp.RightShift)
+                             && DirectILKernelGenerator.ShiftVariableSupported(resultType, op == BinaryOp.LeftShift);
             Action<ILGenerator>? vectorBody = simdViable
-                ? il => DirectILKernelGenerator.EmitVectorOperation(il, op, resultType)
-                : null;
+                ? il => DirectILKernelGenerator.EmitVectorOperation(il, op, resultType, NaNOperandOrder.NumPyUfunc)
+                : shiftSimd
+                    ? il => DirectILKernelGenerator.EmitShiftVectorBody(il, resultType, op == BinaryOp.LeftShift)
+                    : null;
 
             // Packed key (no per-call string): npy_binop_{op}_{lhsType}_{rhsType}_{resultType}.
             var cacheKey = InnerLoopKernelKey.Binary(op, lhsType, rhsType, resultType);
@@ -433,7 +476,11 @@ namespace NumSharp.Backends
                     s_ufuncBinaryOutFlags,
                     opDtypes);
 
-                iter.ExecuteElementWiseBinary(lhsType, rhsType, resultType, scalarBody, vectorBody, cacheKey);
+                // How NumPy would split this iteration into inner-loop calls (read only when a float add/multiply's
+                // broadcast operand is NaN); the struct outlives the call below.
+                BroadcastNaNRule nanRule = NumPyBroadcastNaNRule(op, lhsType, rhsType, resultType, target.typecode,
+                    lhs.size, rhs.size, masked: false, iter.NDim, iter.HasNegPerm, iter.GetInnerStrideArray());
+                iter.ExecuteElementWiseBinary(lhsType, rhsType, resultType, scalarBody, vectorBody, cacheKey, &nanRule);
             }
             else
             {
@@ -451,8 +498,11 @@ namespace NumSharp.Backends
                     s_ufuncBinaryOutMaskedFlags,
                     opDtypes);
 
+                // NumPy calls the inner loop once per mask-true run; the rule applies per run.
+                BroadcastNaNRule nanRule = NumPyBroadcastNaNRule(op, lhsType, rhsType, resultType, target.typecode,
+                    lhs.size, rhs.size, masked: true, iter.NDim, iter.HasNegPerm, iter.GetInnerStrideArray());
                 iter.ExecuteElementWise(
-                    new[] { lhsType, rhsType, resultType }, scalarBody, vectorBody, cacheKey);
+                    new[] { lhsType, rhsType, resultType }, scalarBody, vectorBody, cacheKey, &nanRule);
             }
 
             return target;
@@ -514,10 +564,11 @@ namespace NumSharp.Backends
 
             // Comparison computes at the NumPy common dtype inside the kernel
             // (probed A3: greater(i8 2^53+1, f8 2^53) → False, equal → True —
-            // both operands cast to f64 first).
-            var comparisonType = lhsType == rhsType
-                ? lhsType
-                : np._FindCommonScalarType(lhsType, rhsType);
+            // both operands cast to f64 first). The rule is the bare route's, so an
+            // int64 / uint64 pair compares EXACTLY at Decimal here too (NumPy's qQ / Qq
+            // loops): the plain promotion compared it at float64, so
+            // equal(int64 2^53+1, uint64 2^53, out=o) was True where NumPy says False.
+            var comparisonType = ComparisonKernelKey.GetComparisonType(lhsType, rhsType);
 
             NPTypeCode capLhs = lhsType, capRhs = rhsType, capCmp = comparisonType;
             ComparisonOp capOp = op;
@@ -568,6 +619,18 @@ namespace NumSharp.Backends
                     globalFlags, NPY_ORDER.NPY_CORDER, casting,
                     s_ufuncBinaryOutFlags,
                     opDtypes);
+
+                // Chunks long enough for a vector loop go through the comparison run
+                // (Backends/Kernels/ComparisonRun.cs): contiguous and one-value operands are read in
+                // place, stepped / reversed / other-dtype inputs are staged 8 KB at a time, a strided
+                // bool out receives each block through a strided store, and an out of another dtype
+                // is filled through the iterator's Boolean buffer. Before it, every one of these ran
+                // the per-element kernel below or — same-dtype stepped inputs into a contiguous out —
+                // the whole-array kernel's coordinate loop (np.less(f64, f64, out=strided bool) at
+                // 100K: 105 us, NumPy 65). Narrow rows and tiny arrays are declined and keep the
+                // routes below.
+                if (iter.TryExecuteComparisonRun(ComparisonRun.Get(op, lhsType, rhsType)))
+                    return target;
 
                 // Same-dtype inputs into a bool out that is contiguous in iteration order:
                 // run the whole-array SIMD comparison kernel (Vector.Compare + mask packing —
@@ -653,7 +716,7 @@ namespace NumSharp.Backends
             bool simdViable = DirectILKernelGenerator.CanUseUnarySimd(key);
 
             bool bufferedPromoting = inputType != outputType
-                && !IsUnaryPredicateOp(op)
+                && !UnaryOpReadsInputType(op)
                 && !(op == UnaryOp.Abs && inputType == NPTypeCode.Complex)
                 && DirectILKernelGenerator.CanUseUnarySimd(
                        new UnaryKernelKey(outputType, outputType, op, IsContiguous: true))
@@ -674,7 +737,7 @@ namespace NumSharp.Backends
             {
                 scalarBody = il =>
                 {
-                    if (IsUnaryPredicateOp(capOp))
+                    if (UnaryOpReadsInputType(capOp))
                     {
                         DirectILKernelGenerator.EmitUnaryScalarOperation(il, capOp, capIn);
                     }

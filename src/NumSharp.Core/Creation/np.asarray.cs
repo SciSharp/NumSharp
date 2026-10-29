@@ -6,16 +6,26 @@ namespace NumSharp
     {
         public static NDArray asarray(string data)
         {
-            var nd = new NDArray(typeof(string), Array.Empty<long>());
+            var nd = new NDArray(typeof(string), Shape.Adopt(Array.Empty<long>()));
             nd.ReplaceData(new string[] {data});
             return nd;
         }
 
+        /// <summary>
+        ///     NumPy's <c>np.asarray(2)</c>: a new 0-d array holding one C# value. Like <c>np.array(2)</c>, the
+        ///     result is an explicit 0-d ARRAY (<see cref="NDArray.IsExplicitZeroDimArray"/>): a matrix multiplied by
+        ///     it takes NumPy's 1 x 1 matrix route instead of scaling.
+        /// </summary>
+        /// <typeparam name="T">The value's type; it must map to a NumSharp dtype.</typeparam>
+        /// <param name="data">The value.</param>
+        /// <returns>A new writeable 0-d array that owns its one element.</returns>
+        /// <exception cref="NotSupportedException"><typeparamref name="T"/> has no NumSharp dtype.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asarray.html</remarks>
         public static NDArray asarray<T>(T data) where T : struct
         {
-            var nd = new NDArray(typeof(T), Array.Empty<long>());
+            var nd = new NDArray(typeof(T), Shape.Adopt(Array.Empty<long>()));
             nd.ReplaceData(new T[] {data});
-            return nd;
+            return nd.MarkExplicitZeroDimArray();
         }
 
         public static NDArray asarray(string[] data, int ndim = 1)
@@ -52,6 +62,9 @@ namespace NumSharp
             NDArray like = null,
             string device = null)
         {
+            // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Plain((a, dtype, order, copy, like, device), static s => asarray(s.a, s.dtype, s.order, s.copy, s.like, s.device));
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
 
@@ -69,12 +82,15 @@ namespace NumSharp
             bool layoutMatches = LayoutAlreadyOK(a.Shape, order);
             bool noCopyNeeded = typeMatches && layoutMatches;
 
+            // A copy or a cast of an explicit 0-d ARRAY is an explicit 0-d array again (NumPy returns a 0-d ndarray
+            // from np.asarray(np.array(2), dtype=float)); the mark is per object, so it is carried over by hand.
+            bool explicitZeroDim = a.IsExplicitZeroDimArray;
+
             if (copy == true)
             {
                 char physical = OrderResolver.Resolve(order, a.Shape);
-                if (!typeMatches)
-                    return a.astype(dtype, copy: true, order: physical);
-                return a.copy(physical);
+                NDArray copied = !typeMatches ? a.astype(dtype, copy: true, order: physical) : a.copy(physical);
+                return explicitZeroDim ? copied.MarkExplicitZeroDimArray() : copied;
             }
 
             if (copy == false && !noCopyNeeded)
@@ -91,9 +107,8 @@ namespace NumSharp
 
             // copy == null && !noCopyNeeded: copy / cast as required.
             char physical2 = OrderResolver.Resolve(order, a.Shape);
-            if (!typeMatches)
-                return a.astype(dtype, copy: true, order: physical2);
-            return a.copy(physical2);
+            NDArray converted = !typeMatches ? a.astype(dtype, copy: true, order: physical2) : a.copy(physical2);
+            return explicitZeroDim ? converted.MarkExplicitZeroDimArray() : converted;
         }
 
         /// <summary>
@@ -118,6 +133,9 @@ namespace NumSharp
             NDArray like = null,
             string device = null)
         {
+            // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
+            if (NDMatrixBoundary.Sees(like))
+                return NDMatrixBoundary.Plain((buffer, dtype, order, copy, like, device), static s => asarray(s.buffer, s.dtype, s.order, s.copy, s.like, s.device));
             if (buffer is null)
                 throw new ArgumentNullException(nameof(buffer));
             return asarray(buffer.obj, dtype, order, copy, like, device);
@@ -137,6 +155,9 @@ namespace NumSharp
             NDArray like = null,
             string device = null)
         {
+            // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
+            if (NDMatrixBoundary.Sees(like))
+                return NDMatrixBoundary.Plain((buffer, dtype, order, copy, like, device), static s => asarray(s.buffer, s.dtype, s.order, s.copy, s.like, s.device));
             if (buffer is null)
                 throw new ArgumentNullException(nameof(buffer));
             return asarray(buffer.obj, dtype, order, copy, like, device);

@@ -191,7 +191,9 @@ namespace NumSharp.Backends.Kernels
                         _ => val
                     };
                 }
-                return val;
+                // np.nansum is np.sum of the NaN-replaced slab, which starts from the identity +0.0: a lone -0.0 sums to
+                // +0.0, not to itself (the product's identity 1 and min/max's copy keep the element).
+                return op == ReductionOp.NanSum ? T.Zero + val : val;
             }
 
             // Dispatch to type-specific SIMD implementations

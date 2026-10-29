@@ -43,6 +43,11 @@ namespace NumSharp.Backends
             }
 
             //If either a or b is 0-D (scalar), it is equivalent to multiply and using numpy.multiply(a, b) or a * b is preferred.
+            // NumPy's own float/complex route differs in the sign of a zero: cblas_matrixproduct treats a size-1
+            // operand as a scalar and, for a result longer than one element, runs ?axpy into a ZERO-FILLED output,
+            // so np.dot(-0.0, [1, 1]) is [+0, +0] where this multiply gives [-0, -0]; a (1,1)·(1,1) pair is the
+            // plain product there but a zero-started sum in MultiplyMatrix below. Open gap, pinned by
+            // OpenBugsReductionTests.Dot_SizeOneOperand_FollowsNumPysScalarBranch_OnTheManagedPath.
             if (isLeftScalar || isRightScalar)
             {
                 return Multiply(left, right);
@@ -68,6 +73,14 @@ namespace NumSharp.Backends
             // and a hard-coded axis=1 (wrong for N-D).
             if (leftshape.NDim >= 2 && rightshape.NDim == 1)
             {
+                // np.dot reports a mismatch in its own words (cblasfuncs.c / multiarraymodule.c
+                // dot_alignment_error). Matmul's check words the same condition as a gufunc core-dimension
+                // mismatch, so test here, before the delegation.
+                long contracted = leftshape.dimensions[leftshape.NDim - 1];
+                if (contracted != rightshape.dimensions[0])
+                    throw new ArgumentException(
+                        $"shapes {leftshape.ToPythonTuple()} and {rightshape.ToPythonTuple()} not aligned: " +
+                        $"{contracted} (dim {leftshape.NDim - 1}) != {rightshape.dimensions[0]} (dim 0)");
                 return Matmul(left, right);
             }
             // If a is 1-D and b is 2-D, treat a as row vector and do matrix multiply, then squeeze
@@ -80,8 +93,20 @@ namespace NumSharp.Backends
                 // Reshape 1D to row vector (1, n), multiply, squeeze back to 1D
                 var leftReshaped = left.reshape(1, leftshape[0]);
                 var result = MultiplyMatrix(leftReshaped, right);
-                var squeezed = result.reshape(rightshape[1]);
                 leftReshaped.Dispose(); // row-vector alias of the input — the input keeps its own ref
+
+                // NumPy's dot result OWNS its data. The (1, m) product is a fresh C-contiguous buffer that only
+                // `result` wraps, so drop the unit axis by relabelling its shape in place: no second array
+                // object, and the vector stays the owner. Any other product (a view an engine shortcut handed
+                // back) keeps the reshape-view route.
+                var productShape = result.Shape;
+                if (result.Storage.OwnsData && productShape.IsContiguous && productShape.offset == 0)
+                {
+                    result.Storage.Reshape(Shape.Vector(rightshape[1]));
+                    return result;
+                }
+
+                var squeezed = result.reshape(rightshape[1]);
                 result.Dispose();       // the returned view holds its own counted ref on the product buffer
                 return squeezed;
             }

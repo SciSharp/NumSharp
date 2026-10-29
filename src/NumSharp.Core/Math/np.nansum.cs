@@ -14,7 +14,10 @@ namespace NumSharp
         /// Only applicable to float and double arrays.
         /// For integer arrays, this is equivalent to np.sum (no NaN values possible).
         /// </remarks>
+        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
         public static NDArray nansum(NDArray a, int? axis = null, bool keepdims = false)
-            => a.TensorEngine.NanSum(a, axis, keepdims);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            ? NDMatrixBoundary.Reduced((a, axis, keepdims), static s => nansum(s.a, s.axis, s.keepdims), axis, keepdims, "sum")
+            : a.TensorEngine.NanSum(a, axis, keepdims);
     }
 }

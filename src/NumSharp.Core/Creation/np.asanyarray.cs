@@ -29,6 +29,7 @@ namespace NumSharp
         /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
         /// <returns>Array interpretation of a in the requested layout.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asanyarray.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray asanyarray(in object a, DType dtype, char order, string device = null)
         {
             ValidateDevice(device);
@@ -37,6 +38,9 @@ namespace NumSharp
                 case null:
                     throw new ArgumentNullException(nameof(a));
                 case NDArray nd:
+                    // a numpy.matrix passes through as a matrix (np.asarray, which this calls, strips the class)
+                    if (NDMatrixBoundary.Sees(nd))
+                        return NDMatrixBoundary.Wrapped((nd, dtype, order), static s => asarray(s.nd, s.dtype, s.order));
                     return asarray(nd, dtype, order);
                 case object[] objArr:
                     // object[] has no fixed dtype — route through type-promotion path.

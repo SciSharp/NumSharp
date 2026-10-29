@@ -71,5 +71,46 @@ namespace NumSharp
                         nameof(order));
             }
         }
+
+        /// <summary>
+        ///     Resolves the <c>order</c> argument of a constructor that lays a CALLER'S buffer out from dimensions alone —
+        ///     NumPy's <c>ndarray(shape, buffer=values, order=order)</c>: <c>'F'</c> is the column-major layout, and every
+        ///     other valid order (<c>'C'</c>, <c>'A'</c>, <c>'K'</c>, in either case) is the row-major one.
+        /// </summary>
+        /// <param name="order">The order char the caller passed.</param>
+        /// <returns><c>'F'</c> for <c>'F'</c> or <c>'f'</c>; <c>'C'</c> for <c>'C'</c>, <c>'A'</c> or <c>'K'</c> in either
+        ///     case.</returns>
+        /// <exception cref="ValueError">
+        ///     <paramref name="order"/> is none of the eight accepted chars. The text is NumPy 2.4.2's verbatim:
+        ///     <c>order must be one of 'C', 'F', 'A', or 'K' (got 'X')</c>.
+        /// </exception>
+        /// <remarks>
+        ///     Unlike <see cref="Resolve"/>, <c>'A'</c> and <c>'K'</c> need no source array here and never raise. NumPy's
+        ///     <c>array_new</c> (<c>numpy/_core/src/multiarray/arrayobject.c</c>) converts the argument with
+        ///     <c>PyArray_OrderConverter</c> and then only asks whether it is <c>NPY_FORTRANORDER</c> (<c>is_f_order</c>), so
+        ///     every other order gets the C strides of <c>_array_fill_strides</c> (probed: <c>order='A'</c>, <c>'K'</c>,
+        ///     <c>'a'</c> and <c>'k'</c> all give the C layout). Use it only where NumPy's own entry point behaves that way;
+        ///     a function that resolves <c>'A'</c> or <c>'K'</c> against an input array uses <see cref="Resolve"/>.
+        /// </remarks>
+        public static char ResolveBufferOrder(char order)
+        {
+            switch (order)
+            {
+                case 'F':
+                case 'f':
+                    return 'F';
+
+                case 'C':
+                case 'c':
+                case 'A':
+                case 'a':
+                case 'K':
+                case 'k':
+                    return 'C';
+
+                default:
+                    throw new ValueError($"order must be one of 'C', 'F', 'A', or 'K' (got '{order}')");
+            }
+        }
     }
 }

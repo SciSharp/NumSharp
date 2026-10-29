@@ -34,9 +34,21 @@ namespace NumSharp
         ///     to 1-D before concatenation.</param>
         /// <returns>A new array with <paramref name="values"/> appended to
         ///     <paramref name="arr"/> along <paramref name="axis"/>.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.append.html</remarks>
+        /// <exception cref="ArgumentNullException"><paramref name="arr"/> or <paramref name="values"/> is null.</exception>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.append.html
+        ///     <para>Scoped by <c>[NDScoped]</c>: the raveled copies (or views) of a multi-dimensional
+        ///     <paramref name="arr"/> or <paramref name="values"/> are released on return, exceptions included, and
+        ///     the concatenated result is yielded. A 1-D input is passed to <see cref="concatenate(NDArray[], int?, NDArray, DType, string)"/>
+        ///     as-is; it was built before the scope opened, so the scope never disposes it.</para>
+        /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        [NDScoped]
         public static NDArray append(NDArray arr, NDArray values, int? axis = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(arr, values))
+                return NDMatrixBoundary.Wrapped((arr, values, axis), static s => append(s.arr, s.values, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (values is null) throw new ArgumentNullException(nameof(values));
 
@@ -46,15 +58,7 @@ namespace NumSharp
                 // Mirrors NumPy's `arr.ravel() if arr.ndim != 1 else arr`.
                 NDArray flatArr = arr.ndim == 1 ? arr : np.ravel(arr);
                 NDArray flatVals = values.ndim == 1 ? values : np.ravel(values);
-                try
-                {
-                    return np.concatenate(new[] { flatArr, flatVals }, axis: 0);
-                }
-                finally
-                {
-                    if (!ReferenceEquals(flatArr, arr)) flatArr.Dispose();
-                    if (!ReferenceEquals(flatVals, values)) flatVals.Dispose();
-                }
+                return np.concatenate(new[] { flatArr, flatVals }, axis: 0);
             }
 
             // Axis given — concatenate handles the shape validation and dtype
@@ -64,18 +68,34 @@ namespace NumSharp
 
         /// <summary>
         ///     Scalar / generic-value overload that wraps the value via
-        ///     <see cref="np.asanyarray"/> before delegating. Matches NumPy's
+        ///     <see cref="np.asanyarray(in object, DType, string)"/> before delegating. Matches NumPy's
         ///     <c>np.append([1,2,3], 4)</c> idiom — the scalar is auto-coerced
         ///     to a 0-D ndarray (whose ravel is shape (1,)).
         /// </summary>
+        /// <param name="arr">Input array.</param>
+        /// <param name="values">Values to append: a scalar, a C# array or collection, or an <see cref="NDArray"/>
+        ///     whose static type is <see cref="object"/>. Converted with <see cref="np.asanyarray(in object, DType, string)"/>.</param>
+        /// <param name="axis">Axis along which to append; <c>null</c> (default) flattens both operands first.</param>
+        /// <returns>A new array with <paramref name="values"/> appended to <paramref name="arr"/>.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="arr"/> or <paramref name="values"/> is null.</exception>
+        /// <remarks>
+        ///     Scoped by <c>[NDScoped]</c>: the conversion of a scalar or collection is released on return. An
+        ///     <see cref="NDArray"/> passed as <see cref="object"/> comes back from <see cref="np.asanyarray(in object, DType, string)"/>
+        ///     unchanged; it was built before the scope opened, so the scope never disposes it. (The hand-written
+        ///     version disposed that conversion unconditionally, which released the caller's own array.)
+        /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        [NDScoped]
         public static NDArray append(NDArray arr, object values, int? axis = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(arr))
+                return NDMatrixBoundary.Wrapped((arr, values, axis), static s => append(s.arr, s.values, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (values is null) throw new ArgumentNullException(nameof(values));
 
             var asArr = np.asanyarray(values);
-            try { return append(arr, asArr, axis); }
-            finally { asArr.Dispose(); }
+            return append(arr, asArr, axis);
         }
     }
 }

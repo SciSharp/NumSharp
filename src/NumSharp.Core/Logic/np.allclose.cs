@@ -20,6 +20,9 @@
         ///considered equal to NaN's in `b` in the output array.</param>
         public static bool allclose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8,
             bool equal_nan = false)
-            => a.TensorEngine.AllClose(a, b, rtol, atol, equal_nan);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(a, b);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return a.TensorEngine.AllClose(a, b, rtol, atol, equal_nan);
+        }
     }
 }

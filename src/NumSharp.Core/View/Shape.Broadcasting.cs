@@ -86,7 +86,7 @@ namespace NumSharp
             }
 
             // We don't need to mark it as IsBroadcasted because technically, it has not broadcasted strides.
-            return mit; // implicit cast
+            return Shape.Adopt(mit); // mit is built here, so the shape takes it as is
         }
 
         /// <summary>

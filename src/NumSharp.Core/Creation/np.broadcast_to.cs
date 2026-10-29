@@ -66,6 +66,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.broadcast_to.html</remarks>
         public static NDArray broadcast_to(NDArray from, Shape against)
         {
+            using var plain = NDMatrixBoundary.PlainFor(from);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             ValidateBroadcastTo(from.Shape, against);
             return new NDArray(UnmanagedStorage.CreateBroadcastedUnsafe(from.Storage, Shape.Broadcast(from.Shape, against).LeftShape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE)));
         }
@@ -79,6 +80,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.broadcast_to.html</remarks>
         public static Shape broadcast_to(Shape from, NDArray against)
         {
+            using var plain = NDMatrixBoundary.PlainFor(against);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             ValidateBroadcastTo(from, against.Shape);
             return Shape.Broadcast(from, against.Shape).LeftShape;
         }
@@ -92,6 +94,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.broadcast_to.html</remarks>
         public static NDArray broadcast_to(UnmanagedStorage from, NDArray against)
         {
+            using var plain = NDMatrixBoundary.PlainFor(against);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             ValidateBroadcastTo(from.Shape, against.Shape);
             return new NDArray(UnmanagedStorage.CreateBroadcastedUnsafe(from, Shape.Broadcast(from.Shape, against.Shape).LeftShape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE)));
         }
@@ -105,6 +108,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.broadcast_to.html</remarks>
         public static NDArray broadcast_to(NDArray from, NDArray against)
         {
+            using var plain = NDMatrixBoundary.PlainFor(from, against);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             ValidateBroadcastTo(from.Shape, against.Shape);
             return new NDArray(UnmanagedStorage.CreateBroadcastedUnsafe(from.Storage, Shape.Broadcast(from.Shape, against.Shape).LeftShape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE)));
         }
@@ -145,6 +149,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.broadcast_to.html</remarks>
         public static NDArray broadcast_to(NDArray from, UnmanagedStorage against)
         {
+            using var plain = NDMatrixBoundary.PlainFor(from);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             ValidateBroadcastTo(from.Shape, against.Shape);
             return new NDArray(UnmanagedStorage.CreateBroadcastedUnsafe(from.Storage, Shape.Broadcast(from.Shape, against.Shape).LeftShape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE)));
         }

@@ -22,8 +22,12 @@ namespace NumSharp
         /// <param name="dtype">the type expected as a return, null will remain the same dtype.</param>
         /// <returns>Minimum of a. If axis is None, the result is a scalar value. If axis is given, the result is an array of dimension a.ndim - 1.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.amin.html</remarks>
+        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
         public static NDArray amin(NDArray a, int? axis = null, bool keepdims = false, DType dtype = null)
         {
+            // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Reduced((a, axis, keepdims, dtype), static s => amin(s.a, s.axis, s.keepdims, s.dtype), axis, keepdims, "min");
             // Delegate to TensorEngine which handles keepdims for axis=null
             return a.TensorEngine.ReduceAMin(a, axis, keepdims, dtype);
         }
@@ -37,8 +41,12 @@ namespace NumSharp
         /// <param name="dtype">the type expected as a return, null will remain the same dtype.</param>
         /// <returns>Minimum of a. If axis is None, the result is a scalar value. If axis is given, the result is an array of dimension a.ndim - 1.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.amin.html</remarks>
+        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
         public static NDArray min(NDArray a, int? axis = null, bool keepdims = false, DType dtype = null)
         {
+            // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Reduced((a, axis, keepdims, dtype), static s => min(s.a, s.axis, s.keepdims, s.dtype), axis, keepdims, "min");
             // Delegate to TensorEngine which handles keepdims for axis=null
             return a.TensorEngine.ReduceAMin(a, axis, keepdims, dtype);
         }

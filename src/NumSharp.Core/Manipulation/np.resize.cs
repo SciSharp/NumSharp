@@ -34,6 +34,7 @@ namespace NumSharp
         /// <exception cref="ArgumentException">If any element of <paramref name="new_shape"/> is negative.</exception>
         public static unsafe NDArray resize(NDArray a, Shape new_shape)
         {
+            using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (a is null) throw new ArgumentNullException(nameof(a));
 
             // Validate dimensions and compute the target element count. NumPy's np.resize
@@ -50,7 +51,7 @@ namespace NumSharp
 
             // The result is always C-contiguous (NumPy reshapes the concatenated 1-D read-out),
             // so normalize to C-order dims — independent of any strides carried by new_shape.
-            var outShape = new Shape(newDims);
+            var outShape = Shape.Adopt(newDims);
 
             // Flatten to a 1-D C-order read-out. ravel returns a view when a is already
             // contiguous, else a fresh contiguous copy — either way a dense run of `a.size`

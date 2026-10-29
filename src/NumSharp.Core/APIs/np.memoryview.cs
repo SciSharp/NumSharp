@@ -93,7 +93,7 @@ namespace NumSharp
             {
                 get
                 {
-                    var dims = _arr.Shape.Dimensions;
+                    var dims = _arr.Shape.dimensions;
                     var ret = new long[dims.Length];
                     Array.Copy(dims, ret, dims.Length);
                     return ret;
@@ -109,7 +109,7 @@ namespace NumSharp
             {
                 get
                 {
-                    var st = _arr.Shape.Strides;
+                    var st = _arr.Shape.strides;
                     long isz = _arr.dtypesize;
                     var ret = new long[st.Length];
                     for (int i = 0; i < st.Length; i++)
@@ -163,7 +163,7 @@ namespace NumSharp
             /// </summary>
             public long Length => ndim == 0
                 ? throw new InvalidOperationException("len() of unsized object")
-                : _arr.Shape.Dimensions[0];
+                : _arr.Shape.dimensions[0];
 
             /// <summary>
             ///     Write-through scalar element access (NumPy's <c>memoryview</c> full-index element get/set).
@@ -214,7 +214,7 @@ namespace NumSharp
                 if (indices.Length != nd)
                     throw new ArgumentException($"cannot index {nd}-dimensional memory with {indices.Length} indices");
 
-                var dims = _arr.Shape.Dimensions;
+                var dims = _arr.Shape.dimensions;
                 var coords = new long[nd];
                 for (int i = 0; i < nd; i++)
                 {
@@ -315,7 +315,7 @@ namespace NumSharp
 
             /// <summary>An informative debug string (NumPy's <c>memoryview</c> repr is the opaque <c>&lt;memory at 0x…&gt;</c>).</summary>
             public override string ToString()
-                => $"<NumSharp.MemoryView shape=[{string.Join(",", _arr.Shape.Dimensions)}] format='{format}' readonly={@readonly}>";
+                => $"<NumSharp.MemoryView shape=[{string.Join(",", _arr.Shape.dimensions)}] format='{format}' readonly={@readonly}>";
         }
     }
 

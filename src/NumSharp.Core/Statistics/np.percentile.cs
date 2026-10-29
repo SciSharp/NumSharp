@@ -14,6 +14,9 @@ namespace NumSharp
             int? axis = null, NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false)
         {
+            // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims), static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims), axis, keepdims, null);
             ValidatePercentile(q);
             int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
             return QuantileEngine.Compute(a, new[] { q / 100.0 }, axisArr, @out, overwrite_input,
@@ -24,6 +27,9 @@ namespace NumSharp
             int? axis = null, NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false)
         {
+            // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims), static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims), axis, keepdims, null);
             if (q is null) throw new ArgumentNullException(nameof(q));
             double[] qFracs = new double[q.Length];
             for (int i = 0; i < q.Length; i++)
@@ -64,6 +70,9 @@ namespace NumSharp
             int? axis = null, NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false)
         {
+            // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims), static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims), axis, keepdims, null);
             if (q is null) throw new ArgumentNullException(nameof(q));
             if (q.ndim > 1) throw new ArgumentException("q must be a scalar or 1d");
             bool qIsScalar = q.ndim == 0;

@@ -14,6 +14,7 @@ namespace NumSharp
         [NDScoped]
         public static NDArray polyder(NDArray p, int m = 1)
         {
+            using var plain = NDMatrixBoundary.PlainFor(p);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (m < 0)
                 throw new ValueError("Order of derivative must be positive (see polyint)");
 

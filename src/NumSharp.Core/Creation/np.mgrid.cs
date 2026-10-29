@@ -24,7 +24,7 @@ namespace NumSharp
             public NDArray Grid => _grid;
 
             /// <summary>The number of per-axis grids stacked along the first axis (0 for a scalar/empty grid).</summary>
-            public int Length => _grid is null || _grid.ndim == 0 ? 0 : (int)_grid.shape[0];
+            public int Length => _grid is null || _grid.ndim == 0 ? 0 : (int)_grid.Shape.dimensions[0];
 
             /// <summary>The k-th per-axis grid — <c>grid[k]</c> along the first axis.</summary>
             public NDArray this[int index] => _grid[index];
@@ -140,10 +140,13 @@ namespace NumSharp
                 // NumPy builds the dense grid as indices(sizes, typ) then rescales each layer. The sizes
                 // are ceil((stop-start)/step) (imaginary: the point count) and MAY be negative — indices
                 // then raises "negative dimensions are not allowed", exactly as NumPy's mgrid does (its
-                // ogrid twin instead clamps via arange). A zero real step is a divide-by-zero.
-                int[] sizes = new int[n];
+                // ogrid twin instead clamps via arange). A zero real step is a divide-by-zero. Sizes stay
+                // long: MeshAxisSize is long-native and np.indices takes long[], so no int down-cast is
+                // needed (the former int[]-only indices forced a checked((int)) here that also re-widened
+                // to long[] right after — pure friction that also imposed an artificial 2^31 ceiling).
+                long[] sizes = new long[n];
                 for (int k = 0; k < n; k++)
-                    sizes[k] = checked((int)MeshAxisSize(specs[k]));
+                    sizes[k] = MeshAxisSize(specs[k]);
 
                 NDArray grid = indices(sizes, typ);   // (n, size_0, …, size_{n-1})
 
@@ -152,10 +155,7 @@ namespace NumSharp
                 // coordinates, so it is skipped — the common np.mgrid[0:a, 0:b] case is a single fused
                 // indices fill with no post-pass, and this reuses SliceSpec's exact arange/linspace
                 // values instead of a dtype-branching multiply-add.
-                long[] full = new long[n];
-                for (int k = 0; k < n; k++)
-                    full[k] = sizes[k];
-                var fullShape = new Shape(full);
+                var fullShape = Shape.Adopt(sizes);
 
                 for (int k = 0; k < n; k++)
                 {
@@ -172,7 +172,7 @@ namespace NumSharp
                         lineShape[d] = 1L;
                     lineShape[k] = line.size;
 
-                    copyto(grid[k], broadcast_to(line.reshape(lineShape), fullShape));
+                    copyto(grid[k], broadcast_to(line.reshape(Shape.Adopt(lineShape)), fullShape));
                 }
 
                 return grid;

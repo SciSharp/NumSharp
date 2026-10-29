@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "date": "2026-09-09",
+  "convention": "GitHubHandle.ExistingGistPortName.cs",
+  "scope": "14ported C# implementation files; classes, namespaces, runners, original Python source caches and historical test evidence retain their identities.",
+  "content_changed": false,
+  "historical_evidence": "Historical verification JSON/TRX/source snapshots keep paths as observed at execution time. Resolve old implementation paths through this mapping; do not treat the rename as a new numerical verification run.",
+  "renames": [
+    {
+      "old": "examples/gist/ForecastingMetrics.cs",
+      "new": "examples/gist/bshishov.ForecastingMetrics.cs",
+      "sha256": "871d6321a3eaf799568de3a5f4efb895bdee5827e559753070182ca3710ba421"
+    },
+    {
+      "old": "examples/gist/RankingMetrics.cs",
+      "new": "examples/gist/bwhite.RankingMetrics.cs",
+      "sha256": "411a8a6a8a2662e162ded8aa57c2dba27a88a86657e4b20283e1c88d9bba753b"
+    },
+    {
+      "old": "examples/gist/FrequencyEstimation.cs",
+      "new": "examples/gist/endolith.FrequencyEstimation.cs",
+      "sha256": "8be070d322944f8ef03d0764408db715ec686bde04a470a46b71ac0143ff59ee"
+    },
+    {
+      "old": "examples/gist/StableDiffusionWalk.cs",
+      "new": "examples/gist/karpathy.StableDiffusionWalk.cs",
+      "sha256": "2e63a954e15acab2d990c35a64c7fdd27a4da1e75cb49d7188afd1e4f2f0383c"
+    },
+    {
+      "old": "examples/gist/CatchReinforcementLearning.cs",
+      "new": "examples/gist/EderSantana.CatchReinforcementLearning.cs",
+      "sha256": "1e779b7015157db87af2b703c2b432b52c6916b32b00975f4333c07d5b1d487d"
+    },
+    {
+      "old": "examples/gist/NaturalEvolutionStrategies.cs",
+      "new": "examples/gist/karpathy.NaturalEvolutionStrategies.cs",
+      "sha256": "0658b1ee967e445d0a05f615fd965983d4bb6d34aa736f09bdd8a2917617626e"
+    },
+    {
+      "old": "examples/gist/PeakDetection.cs",
+      "new": "examples/gist/endolith.PeakDetection.cs",
+      "sha256": "5a7d7975c03a3d1874b1fb81b74f495dc0c53443e7db335d6027c961af8bfd2e"
+    },
+    {
+      "old": "examples/gist/TensorboardHistogram.cs",
+      "new": "examples/gist/gyglim.TensorboardHistogram.cs",
+      "sha256": "a0c8e458f8bc60d445b69438f4d18e22568ef2dd9e06fc726102fdadf9cfac1a"
+    },
+    {
+      "old": "examples/gist/TimeseriesCnn.cs",
+      "new": "examples/gist/jkleint.TimeseriesCnn.cs",
+      "sha256": "1b634d6bed965cd3c68d41adf27620c6470ec8db47fdb89e9311e269afe0e285"
+    },
+    {
+      "old": "examples/gist/GoogLeNet.cs",
+      "new": "examples/gist/joelouismarino.GoogLeNet.cs",
+      "sha256": "bfef6c6db3ad88ba6bc47cbdf962434bf1bb9d4a2942b4040cf7d06b9898fe68"
+    },
+    {
+      "old": "examples/gist/karpathy/MinimalCharacterRnn.cs",
+      "new": "examples/gist/karpathy/karpathy.MinimalCharacterRnn.cs",
+      "sha256": "3b102f5226c27f436e29c32e81ef29d12186d5be9fbb2e8931d67c73352d6044"
+    },
+    {
+      "old": "examples/gist/karpathy/PongPolicyGradient.cs",
+      "new": "examples/gist/karpathy/karpathy.PongPolicyGradient.cs",
+      "sha256": "2970e454b6bf589d2c695134aed75f423a6b575efd26f879f5751e60e861b2d9"
+    },
+    {
+      "old": "examples/gist/karpathy/BatchedLstm.cs",
+      "new": "examples/gist/karpathy/karpathy.BatchedLstm.cs",
+      "sha256": "6349d49614e01d1311220f35081f7d53133bf01f00a57412cc885218665496ce"
+    },
+    {
+      "old": "examples/gist/karpathy/MicroGpt.cs",
+      "new": "examples/gist/karpathy/karpathy.MicroGpt.cs",
+      "sha256": "c0058367f42c4e78e75bf2c753c60a98c9797450b207828b530b8178e23995c6"
+    }
+  ]
+}

@@ -536,5 +536,95 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="count">The count of items of type <typeparamref name="T"/> (not bytes count)</param>
         /// <returns>A wrapped memory block as <see cref="ArraySlice{T}"/></returns>
         public static unsafe ArraySlice<T> Wrap<T>(void* address, long count) where T : unmanaged => new ArraySlice<T>(new UnmanagedMemoryBlock<T>((T*)address, count));
+
+        /// <summary>
+        ///     Wrap an ALIAS of memory another array owns — reinterpreted as <typeparamref name="T"/> — whose reference
+        ///     counting is the owner's. Use it for every byte-reinterpreting view (a complex lane, <c>view(dtype)</c>,
+        ///     <c>getfield</c>): an <see cref="NDArray"/> over the returned slice keeps the owner's buffer alive until the
+        ///     alias itself is disposed, exactly as an ordinary view sharing the owner's slice does. (A plain
+        ///     <see cref="Wrap{T}(void*, long)"/> counts nothing, so disposing the owner freed the buffer under the alias.)
+        /// </summary>
+        /// <param name="address">The first aliased element (inside <paramref name="arcOwner"/>'s buffer).</param>
+        /// <param name="count">The count of items of type <typeparamref name="T"/> (not bytes count).</param>
+        /// <param name="arcOwner">The owner's slice — the source storage's <c>InternalArray</c>.</param>
+        /// <returns>A non-owning slice whose ARC operations forward to <paramref name="arcOwner"/>.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="arcOwner"/> is null.</exception>
+        internal static unsafe ArraySlice<T> WrapShared<T>(void* address, long count, IArraySlice arcOwner) where T : unmanaged
+            => new ArraySlice<T>(new UnmanagedMemoryBlock<T>((T*)address, count, arcOwner));
+
+        /// <summary>
+        ///     Wraps <paramref name="count"/> elements of <paramref name="typeCode"/> at <paramref name="address"/> in a slice
+        ///     that OWNS the memory through <paramref name="release"/>: the block calls it once, when the last array over
+        ///     the slice is released (or the block is finalized). <c>np.ndarray(shape, buffer=...)</c> hands it the pin of a
+        ///     managed buffer, so the pin lives exactly as long as an array over the buffer does.
+        /// </summary>
+        /// <param name="typeCode">The element type.</param>
+        /// <param name="address">The first element (pinned or otherwise stable for the slice's lifetime).</param>
+        /// <param name="count">The count of elements (not bytes).</param>
+        /// <param name="release">Frees what keeps <paramref name="address"/> valid (a <c>GCHandle</c>, a
+        ///     <c>MemoryHandle</c>). Called at most once.</param>
+        /// <returns>The owning slice.</returns>
+        /// <exception cref="NotSupportedException"><paramref name="typeCode"/> is not a storage type.</exception>
+        internal static unsafe IArraySlice WrapOwned(NPTypeCode typeCode, void* address, long count, Action release)
+        {
+            switch (typeCode)
+            {
+                case NPTypeCode.Boolean: return new ArraySlice<bool>(new UnmanagedMemoryBlock<bool>((bool*)address, count, release));
+                case NPTypeCode.SByte: return new ArraySlice<sbyte>(new UnmanagedMemoryBlock<sbyte>((sbyte*)address, count, release));
+                case NPTypeCode.Byte: return new ArraySlice<byte>(new UnmanagedMemoryBlock<byte>((byte*)address, count, release));
+                case NPTypeCode.Int16: return new ArraySlice<short>(new UnmanagedMemoryBlock<short>((short*)address, count, release));
+                case NPTypeCode.UInt16: return new ArraySlice<ushort>(new UnmanagedMemoryBlock<ushort>((ushort*)address, count, release));
+                case NPTypeCode.Int32: return new ArraySlice<int>(new UnmanagedMemoryBlock<int>((int*)address, count, release));
+                case NPTypeCode.UInt32: return new ArraySlice<uint>(new UnmanagedMemoryBlock<uint>((uint*)address, count, release));
+                case NPTypeCode.Int64: return new ArraySlice<long>(new UnmanagedMemoryBlock<long>((long*)address, count, release));
+                case NPTypeCode.UInt64: return new ArraySlice<ulong>(new UnmanagedMemoryBlock<ulong>((ulong*)address, count, release));
+                case NPTypeCode.Char: return new ArraySlice<char>(new UnmanagedMemoryBlock<char>((char*)address, count, release));
+                case NPTypeCode.Half: return new ArraySlice<Half>(new UnmanagedMemoryBlock<Half>((Half*)address, count, release));
+                case NPTypeCode.Single: return new ArraySlice<float>(new UnmanagedMemoryBlock<float>((float*)address, count, release));
+                case NPTypeCode.Double: return new ArraySlice<double>(new UnmanagedMemoryBlock<double>((double*)address, count, release));
+                case NPTypeCode.Decimal: return new ArraySlice<decimal>(new UnmanagedMemoryBlock<decimal>((decimal*)address, count, release));
+                case NPTypeCode.Complex: return new ArraySlice<Complex>(new UnmanagedMemoryBlock<Complex>((Complex*)address, count, release));
+                default:
+                    throw new NotSupportedException($"{typeCode} is not a storage type.");
+            }
+        }
+
+        /// <summary>
+        ///     <see cref="WrapShared{T}(void*, long, IArraySlice)"/> for an element type known only at run time: an alias of
+        ///     <paramref name="count"/> elements of <paramref name="typeCode"/> at <paramref name="address"/>, whose reference
+        ///     counting forwards to <paramref name="arcOwner"/>. <c>np.ndarray(shape, dtype, buffer=...)</c> lays its result
+        ///     over a buffer this way, in one step instead of a byte view reinterpreted afterwards.
+        /// </summary>
+        /// <param name="typeCode">The element type of the alias.</param>
+        /// <param name="address">The first aliased element (inside <paramref name="arcOwner"/>'s memory). It need not be
+        ///     aligned for <paramref name="typeCode"/>: NumSharp reads elements with unaligned loads.</param>
+        /// <param name="count">The count of elements (not bytes).</param>
+        /// <param name="arcOwner">The slice whose block owns the memory (or forwards to the one that does).</param>
+        /// <returns>A non-owning slice whose ARC operations forward to <paramref name="arcOwner"/>.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="arcOwner"/> is null.</exception>
+        /// <exception cref="NotSupportedException"><paramref name="typeCode"/> is not a storage type.</exception>
+        internal static unsafe IArraySlice WrapShared(NPTypeCode typeCode, void* address, long count, IArraySlice arcOwner)
+        {
+            switch (typeCode)
+            {
+                case NPTypeCode.Boolean: return WrapShared<bool>(address, count, arcOwner);
+                case NPTypeCode.SByte: return WrapShared<sbyte>(address, count, arcOwner);
+                case NPTypeCode.Byte: return WrapShared<byte>(address, count, arcOwner);
+                case NPTypeCode.Int16: return WrapShared<short>(address, count, arcOwner);
+                case NPTypeCode.UInt16: return WrapShared<ushort>(address, count, arcOwner);
+                case NPTypeCode.Int32: return WrapShared<int>(address, count, arcOwner);
+                case NPTypeCode.UInt32: return WrapShared<uint>(address, count, arcOwner);
+                case NPTypeCode.Int64: return WrapShared<long>(address, count, arcOwner);
+                case NPTypeCode.UInt64: return WrapShared<ulong>(address, count, arcOwner);
+                case NPTypeCode.Char: return WrapShared<char>(address, count, arcOwner);
+                case NPTypeCode.Half: return WrapShared<Half>(address, count, arcOwner);
+                case NPTypeCode.Single: return WrapShared<float>(address, count, arcOwner);
+                case NPTypeCode.Double: return WrapShared<double>(address, count, arcOwner);
+                case NPTypeCode.Decimal: return WrapShared<decimal>(address, count, arcOwner);
+                case NPTypeCode.Complex: return WrapShared<Complex>(address, count, arcOwner);
+                default:
+                    throw new NotSupportedException($"{typeCode} is not a storage type.");
+            }
+        }
     }
 }

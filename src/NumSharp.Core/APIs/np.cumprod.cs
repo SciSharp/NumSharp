@@ -13,9 +13,13 @@ namespace NumSharp
         /// <param name="out">Alternate output array in which to place the result. It must have the same shape and buffer length as the expected output, but its dtype may differ (the result is cast into it with NumPy's unsafe casting) and a reference to <paramref name="out"/> is returned.</param>
         /// <returns>A new array holding the result is returned unless out is specified, in which case a reference to out is returned. The result has the same size as a, and the same shape as a if axis is not None or a is a 1-d array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.cumprod.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray cumprod(NDArray arr, int? axis = null, DType typeCode = null, NDArray @out = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(arr))
+                return NDMatrixBoundary.Wrapped((arr, axis, typeCode, @out), static s => cumprod(s.arr, s.axis, s.typeCode, s.@out), @out);
             NDArray result = arr.TensorEngine.ReduceCumMul(arr, axis, typeCode);
             return WriteScanToOut(result, @out);
         }

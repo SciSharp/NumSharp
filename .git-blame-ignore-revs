@@ -37,3 +37,10 @@ e6fd25438ba488038494c60a2333b2850501ff64
 # (submodule git mv + BCL-snapshot R100 renames) + rewrite all path references
 # across docs/code. Mechanical, no logic change.
 1e7a0c86c313b4913833bbe2f46517a352d08bcd
+
+# Rename the ordered concurrent maps *Dict -> *Dictionary (ConcurrentOrderedDictionary,
+# ConcurrentOrderedCompactDictionary, OrderedDictionary) + their tests/benchmark/probes/ledger
+# references, and delete the experimental ConcurrentPointingDict. Mechanical rename, no logic
+# change. Caveat: git re-attributes this commit's few genuinely NEW doc lines (e.g. the proposal's
+# naming note) to neighbouring older lines; `git blame --no-ignore-revs-file` shows their true origin.
+5635182d1df03bfb6c3e46a0b077593641f6eb6e

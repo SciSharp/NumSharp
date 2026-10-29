@@ -11,6 +11,16 @@
          NumSharp.Core grants it InternalsVisibleTo, which now names a PublicKey. -->
     <Configurations>Debug;Release;Publish</Configurations>
     <RootNamespace>NumSharp.Tests</RootNamespace>
+    <!-- JIT posture for this TEST HOST: tiered compilation stays ON, TieredPGO is switched OFF — a per-project
+         override of the repo-wide default in ../../Directory.Build.props, which names exactly this kind of
+         override. A test host is short-lived and JIT-bound (it runs tens of thousands of distinct methods a
+         handful of times each), so PGO's instrumented tier — one more JIT of every hot method, plus the probe
+         overhead while it runs — never pays back before the process exits. Measured 2026-09-24, net10.0, CI
+         filter, best of 2 alternating runs, summed test durations with identical pass/skip counts:
+         NumSharp.Tests 65.8 s -> 61.4 s, NumSharp.Tests.Oracle 16.6 s -> 14.2 s,
+         NumSharp.Tests.Build.Analyzer 23.9 s -> 20.7 s. Tier-1 code only loses PGO-guided layout and guarded
+         devirtualization; no test asserts steady-state speed tightly enough to notice. -->
+    <TieredPGO>false</TieredPGO>
   </PropertyGroup>
 	
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Publish|AnyCPU'">
@@ -32,6 +42,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\examples\gist\NumSharp.GistExamples.csproj" />
     <ProjectReference Include="..\..\src\NumSharp.Bitmap\NumSharp.Bitmap.csproj" />
     <ProjectReference Include="..\..\src\NumSharp.Core\NumSharp.Core.csproj" />
     <!-- The optional external-CBLAS/LAPACK engine. The differential-fuzz oracle (incl. the
@@ -46,6 +57,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="../../examples/gist/demo-output.txt" Link="GistDemoOutput.txt" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../examples/gist/karpathy/demo-output.txt" Link="KarpathyDemoOutput.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="data\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
@@ -56,6 +72,16 @@
   <!-- .npy/.npz format oracle: real NumPy 2.4.2 output, replayed by NpyOracleTests (no Python in CI). -->
   <ItemGroup>
     <None Update="IO\corpus\npy_oracle.zip">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <!-- numpy.dtype / DType-class oracle: real NumPy 2.4.2 member names, descriptor attributes, errors, comparisons,
+       promotions, class attributes and casting resolutions, one file per C long model (llp64 = Windows NumPy,
+       lp64 = Linux NumPy), replayed by DTypeOracleTests (no Python in CI). Regenerate:
+       python test/oracle/gen_dtype_oracle.py, and the same under WSL's Linux NumPy for lp64. -->
+  <ItemGroup>
+    <None Update="DTypes\corpus\dtype_oracle.*.jsonl">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>

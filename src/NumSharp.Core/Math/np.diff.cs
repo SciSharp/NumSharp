@@ -61,10 +61,14 @@ namespace NumSharp
         ///     preserved (boolean input yields boolean output via not_equal).
         /// </returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.diff.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray diff(NDArray a, int n = 1, int axis = -1,
                                    object prepend = null, object append = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Wrapped((a, n, axis, prepend, append), static s => diff(s.a, s.n, s.axis, s.prepend, s.append));
             if (a is null) throw new ArgumentNullException(nameof(a));
 
             // n == 0 returns the input unchanged (NumPy returns the same object).
@@ -74,16 +78,7 @@ namespace NumSharp
                     $"order must be non-negative but got {n}", nameof(n));
 
             int nd = a.ndim;
-            if (nd == 0)
-                throw new ArgumentException(
-                    "diff requires input that is at least one dimensional");
-
-            // normalize_axis_index(axis, nd)
-            int ax = axis;
-            if (ax < 0) ax += nd;
-            if (ax < 0 || ax >= nd)
-                throw new ArgumentOutOfRangeException(nameof(axis),
-                    $"axis {axis} is out of bounds for array of dimension {nd}");
+            int ax = DiffAxis(a, axis);
 
             // Fast path: a single difference along a C-contiguous innermost axis with no
             // prepend/append is an adjacent-difference stencil — one fused kernel over the
@@ -137,7 +132,7 @@ namespace NumSharp
             bool currentOwned = workOwned;
             for (int it = 0; it < n; it++)
             {
-                long len = current.shape[ax];
+                long len = current.Shape.dimensions[ax];
                 long m = len > 0 ? len - 1 : 0;                      // result length along axis
                 var hi = SliceAlongAxis(current, ax, len - m, len);  // a[1:]  (last  m)
                 var lo = SliceAlongAxis(current, ax, 0, m);          // a[:-1] (first m)
@@ -158,6 +153,33 @@ namespace NumSharp
             }
 
             return current;
+        }
+
+        /// <summary>
+        ///     The rank and axis checks <see cref="diff"/> makes before differencing (after its <c>n</c>
+        ///     checks), shared with the callers that compose NumPy's <c>diff(a, axis=axis)</c> into a fused
+        ///     pass instead of calling it (<see cref="trapezoid"/>), so they reject exactly what diff rejects,
+        ///     with the same errors.
+        /// </summary>
+        /// <param name="a">The array to be differenced.</param>
+        /// <param name="axis">The caller's axis; negative counts from the end (NumPy's <c>normalize_axis_index</c>).</param>
+        /// <returns>The axis in <c>[0, a.ndim)</c>.</returns>
+        /// <exception cref="ArgumentException"><paramref name="a"/> is 0-D ("diff requires input that is at least one dimensional").</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="axis"/> is outside <c>[-a.ndim, a.ndim-1]</c>.</exception>
+        internal static int DiffAxis(NDArray a, int axis)
+        {
+            int nd = a.ndim;
+            if (nd == 0)
+                throw new ArgumentException(
+                    "diff requires input that is at least one dimensional");
+
+            // normalize_axis_index(axis, nd)
+            int ax = axis;
+            if (ax < 0) ax += nd;
+            if (ax < 0 || ax >= nd)
+                throw new ArgumentOutOfRangeException(nameof(axis),
+                    $"axis {axis} is out of bounds for array of dimension {nd}");
+            return ax;
         }
 
         /// <summary>
@@ -196,7 +218,7 @@ namespace NumSharp
             }
             outDims[nd - 1] = inLen - 1;
 
-            var outp = new NDArray(a.dtype, new Shape(outDims), false);
+            var outp = new NDArray(a.dtype, Shape.Adopt(outDims), false);
             if (outp.size == 0) return outp;
 
             int elemSize = a.dtypesize;
@@ -227,9 +249,9 @@ namespace NumSharp
             if (v.ndim == 0)
             {
                 long[] dims = new long[a.ndim];
-                for (int i = 0; i < a.ndim; i++) dims[i] = a.shape[i];
+                for (int i = 0; i < a.ndim; i++) dims[i] = a.Shape.dimensions[i];
                 dims[axis] = 1;
-                var bcast = np.broadcast_to(v, new Shape(dims));
+                var bcast = np.broadcast_to(v, Shape.Adopt(dims));
                 toDispose.Add(bcast);
                 return bcast;
             }
@@ -265,8 +287,8 @@ namespace NumSharp
             // Fresh C-contiguous, uninitialised output with hi's dimensions.
             int nd = hi.ndim;
             long[] dims = new long[nd];
-            for (int i = 0; i < nd; i++) dims[i] = hi.shape[i];
-            var outp = new NDArray(hi.dtype, new Shape(dims), false);
+            for (int i = 0; i < nd; i++) dims[i] = hi.Shape.dimensions[i];
+            var outp = new NDArray(hi.dtype, Shape.Adopt(dims), false);
 
             // Empty result: the NDIter element-wise path must not run over zero
             // elements (it walks broadcast dims as if non-empty). Nothing to do.

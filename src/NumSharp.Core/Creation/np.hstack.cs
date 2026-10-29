@@ -13,8 +13,12 @@ namespace NumSharp
         /// <param name="tup">The arrays must have the same shape along all but the second axis, except 1-D arrays which can be any length.</param>
         /// <returns>The array formed by stacking the given arrays.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.hstack.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray hstack(params NDArray[] tup)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(tup))
+                return NDMatrixBoundary.Wrapped(tup, static s => hstack(s));
             if (tup == null)
                 throw new ArgumentNullException(nameof(tup));
 
@@ -22,7 +26,7 @@ namespace NumSharp
                 throw new ArgumentException("Value cannot be an empty collection.", nameof(tup));
 
             tup = np.atleast_1d(tup); //handle scalars
-            if (tup[0].shape.Length == 1)
+            if (tup[0].Shape.dimensions.Length == 1)
                 return np.concatenate(tup, 0);
             else
                 return np.concatenate(tup, 1);

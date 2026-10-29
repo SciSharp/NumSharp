@@ -68,7 +68,10 @@ namespace NumSharp
                 inverted = true;
             }
 
-            NDArray result = SlidingCorrelate(data, kernel, retType, m);
+            // conj(v) is a fresh array, so only a one-element `a` passed through with a non-positive stride can keep a
+            // complex product off cblas (see DotOperandBlasable).
+            bool complexDotViaBlas = DotOperandBlasable(a, retType, reversed: false);
+            NDArray result = SlidingCorrelate(data, kernel, retType, m, complexDotViaBlas);
 
             // If we swapped, reverse the output (ret = ret[::-1]).
             if (inverted)

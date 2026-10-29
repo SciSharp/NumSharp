@@ -41,8 +41,8 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
                 NDArrayOnnxInterop.FromTensorElementType(type).Should().Be(code, $"{type} imports as {code}");
                 NDArrayOnnxInterop.TryToTensorElementType(code, out TensorElementType t).Should().BeTrue();
                 t.Should().Be(type);
-                NDArrayOnnxInterop.TryFromTensorElementType(type, out NPTypeCode c).Should().BeTrue();
-                c.Should().Be(code);
+                NDArrayOnnxInterop.TryFromTensorElementType(type, out DType c).Should().BeTrue();
+                c.GetTypeCode().Should().Be(code);
             }
         }
 

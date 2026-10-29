@@ -1,0 +1,813 @@
+{
+  "schema_version": 1,
+  "audit_date": "2026-09-09",
+  "scope": "All demonstrated outputs in two pinned main files, plus measured coverage for every forecasting function/helper. Not a claim of arbitrary dtype/axis or framework coverage.",
+  "status": "Tests implemented; final centralized rerun is recorded by the parent in VERIFICATION.md.",
+  "reference_execution": {
+    "python": "3.12.12",
+    "numpy": "2.4.2",
+    "route": "Read both pinned main files completely. Independently re-express numerical formulas; execute those formulas with the original ranking inputs before adding C# tests. No remote fetch or framework import.",
+    "ranking_numpy_2_adaptation": "np.asfarray replaced by np.asarray(..., dtype=np.float64); formulas unchanged."
+  },
+  "test_files": {
+    "managed_original": "test/NumSharp.Tests/Examples/GistMetricsTests.cs",
+    "live_original": "test/NumSharp.Tests.Interop/GistMetricsLiveParityTests.cs",
+    "managed_source_demonstrations": "test/NumSharp.Tests/Examples/GistMetricsSourceDemonstrationsTests.cs",
+    "live_source_demonstrations": "test/NumSharp.Tests.Interop/GistMetricsSourceDemonstrationsLiveTests.cs"
+  },
+  "sources": [
+    {
+      "rank": 1,
+      "gist": "https://gist.github.com/bshishov/5dc237f59f019b26145648e2124ca1c9",
+      "revision": "824c2f332d919185289ded2709752c67bd41244d",
+      "filename": "forecasting_metrics.py",
+      "sha256": "df7a6d0709b228cd8ae9b44a416da200e7f988ef2ef3e0479b89f89bc80a17be",
+      "full_file_lines": 310,
+      "original_demonstrated_output_count": 0,
+      "audit": "No doctests, main routine, example datasets or printed numeric measurements. The only print statement is the evaluator's error diagnostic at line 305.",
+      "input_contract": "Equal-length one-dimensional float64 NDArrays; positive seasonal periods. Python masked-array, arbitrary-axis and dtype-coercion branches are outside the documented C# vector helper contract.",
+      "cases": [
+        {
+          "id": "forecast-mse",
+          "source_function": "mse",
+          "source_line": 71,
+          "kind": "numerical_function",
+          "managed_test": "GistMetricsTests.AllThirtyForecastMetrics_MatchRecordedNumpy",
+          "named_entrypoint_test": "GistMetricsSourceDemonstrationsTests.ForecastSource_DefaultEvaluator_AndNamedSurface_AreMeasurable",
+          "live_test": "GistMetricsLiveParityTests.AllThirtyForecastScores_AreExactExceptTwoOneUlpMetrics_OnThreeLayouts",
+          "validated": "Independent recorded NumPy scalar, correct registry/name dispatch, and live same-buffer scalar over contiguous/strided/reversed vectors.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "forecast-rmse",
+          "source_function": "rmse",
+          "source_line": 76,
+          "kind": "numerical_function",
+          "managed_test": "GistMetricsTests.AllThirtyForecastMetrics_MatchRecordedNumpy",
+          "named_entrypoint_test": "GistMetricsSourceDemonstrationsTests.ForecastSource_DefaultEvaluator_AndNamedSurface_AreMeasurable",
+          "live_test": "GistMetricsLiveParityTests.AllThirtyForecastScores_AreExactExceptTwoOneUlpMetrics_OnThreeLayouts",
+          "validated": "Independent recorded NumPy scalar, correct registry/name dispatch, and live same-buffer scalar over contiguous/strided/reversed vectors.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "forecast-nrmse",
+          "source_function": "nrmse",
+          "source_line": 81,
+          "kind": "numerical_function",
+          "managed_test": "GistMetricsTests.AllThirtyForecastMetrics_MatchRecordedNumpy",
+          "named_entrypoint_test": "GistMetricsSourceDemonstrationsTests.ForecastSource_DefaultEvaluator_AndNamedSurface_AreMeasurable",
+          "live_test": "GistMetricsLiveParityTests.AllThirtyForecastScores_AreExactExceptTwoOneUlpMetrics_OnThreeLayouts",
+          "validated": "Independent recorded NumPy scalar, correct registry/name dispatch, and live same-buffer scalar over contiguous/strided/reversed vectors.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "forecast-me",
+          "source_function": "me",
+          "source_line": 86,
+          "kind": "numerical_function",
+          "managed_test": "GistMetricsTests.AllThirtyForecastMetrics_MatchRecordedNumpy",
+          "named_entrypoint_test": "GistMetricsSourceDemonstrationsTests.ForecastSource_DefaultEvaluator_AndNamedSurface_AreMeasurable",
+          "live_test": "GistMetricsLiveParityTests.AllThirtyForecastScores_AreExactExceptTwoOneUlpMetrics_OnThreeLayouts",
+          "validated": "Independent recorded NumPy scalar, correct registry/name dispatch, and live same-buffer scalar over contiguous/strided/reversed vectors.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "forecast-mae",
+          "source_function": "mae",
+          "source_line": 91,
+          "kind": "numerical_function",
+          "managed_test": "GistMetricsTests.AllThirtyForecastMetrics_MatchRecordedNumpy",
+          "named_entrypoint_test": "GistMetricsSourceDemonstrationsTests.ForecastSource_DefaultEvaluator_AndNamedSurface_AreMeasurable",
+          "live_test": "GistMetricsLiveParityTests.AllThirtyForecastScores_AreExactExceptTwoOneUlpMetrics_OnThreeLayouts",
+          "validated": "Independent recorded NumPy scalar, correct registry/name dispatch, and live same-buffer scalar over contiguous/strided/reversed vectors.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "forecast-mad",
+          "source_function": "mad",
+          "source_line": 96,
+          "kind": "numerical_function",
+          "managed_test": "GistMetricsTests.AllThirtyForecastMetrics_MatchRecordedNumpy",
+          "named_entrypoint_test": "GistMetricsSourceDemonstrationsTests.ForecastSource_DefaultEvaluator_AndNamedSurface_AreMeasurable",
+          "live_test": "GistMetricsLiveParityTests.AllThirtyForecastScores_AreExactExceptTwoOneUlpMetrics_OnThreeLayouts",
+          "validated": "Independent recorded NumPy scalar, correct registry/name dispatch, and live same-buffer scalar over contiguous/strided/reversed vectors.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "forecast-gmae",
+          "source_function": "gmae",
+          "source_line": 102,
+          "kind": "numerical_function",
+          "managed_test": "GistMetricsTests.AllThirtyForecastMetrics_MatchRecordedNumpy",
+          "named_entrypoint_test": "GistMetricsSourceDemonstrationsTests.ForecastSource_DefaultEvaluator_AndNamedSurface_AreMeasurable",
+          "live_test": "GistMetricsLiveParityTests.AllThirtyForecastScores_AreExactExceptTwoOneUlpMetrics_OnThreeLayouts",
+          "validated": "Independent recorded NumPy scalar, correct registry/name dispatch, and live same-buffer scalar over contiguous/strided/reversed vectors.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "forecast-mdae",
+          "source_function": "mdae",
+          "source_line": 107,
+          "kind": "numerical_function",
+          "managed_test": "GistMetricsTests.AllThirtyForecastMetrics_MatchRecordedNumpy",
+          "named_entrypoint_test": "GistMetricsSourceDemonstrationsTests.ForecastSource_DefaultEvaluator_AndNamedSurface_AreMeasurable",
+          "live_test": "GistMetricsLiveParityTests.AllThirtyForecastScores_AreExactExceptTwoOneUlpMetrics_OnThreeLayouts",
+          "validated": "Independent recorded NumPy scalar, correct registry/name dispatch, and live same-buffer scalar over contiguous/strided/reversed vectors.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "forecast-mpe",
+          "source_function": "mpe",
+          "source_line": 112,
+          "kind": "numerical_function",
+          "managed_test": "GistMetricsTests.AllThirtyForecastMetrics_MatchRecordedNumpy",
+          "named_entrypoint_test": "GistMetricsSourceDemonstrationsTests.ForecastSource_DefaultEvaluator_AndNamedSurface_AreMeasurable",
+          "live_test": "GistMetricsLiveParityTests.AllThirtyForecastScores_AreExactExceptTwoOneUlpMetrics_OnThreeLayouts",
+          "validated": "Independent recorded NumPy scalar, correct registry/name dispatch, and live same-buffer scalar over contiguous/strided/reversed vectors.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "forecast-mape",
+          "source_function": "mape",
+          "source_line": 117,
+          "kind": "numerical_function",
+          "managed_test": "GistMetricsTests.AllThirtyForecastMetrics_MatchRecordedNumpy",
+          "named_entrypoint_test": "GistMetricsSourceDemonstrationsTests.ForecastSource_DefaultEvaluator_AndNamedSurface_AreMeasurable",
+          "live_test": "GistMetricsLiveParityTests.AllThirtyForecastScores_AreExactExceptTwoOneUlpMetrics_OnThreeLayouts",
+          "validated": "Independent recorded NumPy scalar, correct registry/name dispatch, and live same-buffer scalar over contiguous/strided/reversed vectors.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "forecast-mdape",
+          "source_function": "mdape",
+          "source_line": 132,
+          "kind": "numerical_function",
+          "managed_test": "GistMetricsTests.AllThirtyForecastMetrics_MatchRecordedNumpy",
+          "named_entrypoint_test": "GistMetricsSourceDemonstrationsTests.ForecastSource_DefaultEvaluator_AndNamedSurface_AreMeasurable",
+          "live_test": "GistMetricsLiveParityTests.AllThirtyForecastScores_AreExactExceptTwoOneUlpMetrics_OnThreeLayouts",
+          "validated": "Independent recorded NumPy scalar, correct registry/name dispatch, and live same-buffer scalar over contiguous/strided/reversed vectors.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "forecast-smape",
+          "source_function": "smape",
+          "source_line": 141,
+          "kind": "numerical_function",
+          "managed_test": "GistMetricsTests.AllThirtyForecastMetrics_MatchRecordedNumpy",
+          "named_entrypoint_test": "GistMetricsSourceDemonstrationsTests.ForecastSource_DefaultEvaluator_AndNamedSurface_AreMeasurable",
+          "live_test": "GistMetricsLiveParityTests.AllThirtyForecastScores_AreExactExceptTwoOneUlpMetrics_OnThreeLayouts",
+          "validated": "Independent recorded NumPy scalar, correct registry/name dispatch, and live same-buffer scalar over contiguous/strided/reversed vectors.",
+          "live_ulp_budget": 1
+        },
+        {
+          "id": "forecast-smdape",
+          "source_function": "smdape",
+          "source_line": 150,
+          "kind": "numerical_function",
+          "managed_test": "GistMetricsTests.AllThirtyForecastMetrics_MatchRecordedNumpy",
+          "named_entrypoint_test": "GistMetricsSourceDemonstrationsTests.ForecastSource_DefaultEvaluator_AndNamedSurface_AreMeasurable",
+          "live_test": "GistMetricsLiveParityTests.AllThirtyForecastScores_AreExactExceptTwoOneUlpMetrics_OnThreeLayouts",
+          "validated": "Independent recorded NumPy scalar, correct registry/name dispatch, and live same-buffer scalar over contiguous/strided/reversed vectors.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "forecast-maape",
+          "source_function": "maape",
+          "source_line": 159,
+          "kind": "numerical_function",
+          "managed_test": "GistMetricsTests.AllThirtyForecastMetrics_MatchRecordedNumpy",
+          "named_entrypoint_test": "GistMetricsSourceDemonstrationsTests.ForecastSource_DefaultEvaluator_AndNamedSurface_AreMeasurable",
+          "live_test": "GistMetricsLiveParityTests.AllThirtyForecastScores_AreExactExceptTwoOneUlpMetrics_OnThreeLayouts",
+          "validated": "Independent recorded NumPy scalar, correct registry/name dispatch, and live same-buffer scalar over contiguous/strided/reversed vectors.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "forecast-mase",
+          "source_function": "mase",
+          "source_line": 168,
+          "kind": "numerical_function",
+          "managed_test": "GistMetricsTests.AllThirtyForecastMetrics_MatchRecordedNumpy",
+          "named_entrypoint_test": "GistMetricsSourceDemonstrationsTests.ForecastSource_DefaultEvaluator_AndNamedSurface_AreMeasurable",
+          "live_test": "GistMetricsLiveParityTests.AllThirtyForecastScores_AreExactExceptTwoOneUlpMetrics_OnThreeLayouts",
+          "validated": "Independent recorded NumPy scalar, correct registry/name dispatch, and live same-buffer scalar over contiguous/strided/reversed vectors.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "forecast-std_ae",
+          "source_function": "std_ae",
+          "source_line": 177,
+          "kind": "numerical_function",
+          "managed_test": "GistMetricsTests.AllThirtyForecastMetrics_MatchRecordedNumpy",
+          "named_entrypoint_test": "GistMetricsSourceDemonstrationsTests.ForecastSource_DefaultEvaluator_AndNamedSurface_AreMeasurable",
+          "live_test": "GistMetricsLiveParityTests.AllThirtyForecastScores_AreExactExceptTwoOneUlpMetrics_OnThreeLayouts",
+          "validated": "Independent recorded NumPy scalar, correct registry/name dispatch, and live same-buffer scalar over contiguous/strided/reversed vectors.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "forecast-std_ape",
+          "source_function": "std_ape",
+          "source_line": 183,
+          "kind": "numerical_function",
+          "managed_test": "GistMetricsTests.AllThirtyForecastMetrics_MatchRecordedNumpy",
+          "named_entrypoint_test": "GistMetricsSourceDemonstrationsTests.ForecastSource_DefaultEvaluator_AndNamedSurface_AreMeasurable",
+          "live_test": "GistMetricsLiveParityTests.AllThirtyForecastScores_AreExactExceptTwoOneUlpMetrics_OnThreeLayouts",
+          "validated": "Independent recorded NumPy scalar, correct registry/name dispatch, and live same-buffer scalar over contiguous/strided/reversed vectors.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "forecast-rmspe",
+          "source_function": "rmspe",
+          "source_line": 189,
+          "kind": "numerical_function",
+          "managed_test": "GistMetricsTests.AllThirtyForecastMetrics_MatchRecordedNumpy",
+          "named_entrypoint_test": "GistMetricsSourceDemonstrationsTests.ForecastSource_DefaultEvaluator_AndNamedSurface_AreMeasurable",
+          "live_test": "GistMetricsLiveParityTests.AllThirtyForecastScores_AreExactExceptTwoOneUlpMetrics_OnThreeLayouts",
+          "validated": "Independent recorded NumPy scalar, correct registry/name dispatch, and live same-buffer scalar over contiguous/strided/reversed vectors.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "forecast-rmdspe",
+          "source_function": "rmdspe",
+          "source_line": 198,
+          "kind": "numerical_function",
+          "managed_test": "GistMetricsTests.AllThirtyForecastMetrics_MatchRecordedNumpy",
+          "named_entrypoint_test": "GistMetricsSourceDemonstrationsTests.ForecastSource_DefaultEvaluator_AndNamedSurface_AreMeasurable",
+          "live_test": "GistMetricsLiveParityTests.AllThirtyForecastScores_AreExactExceptTwoOneUlpMetrics_OnThreeLayouts",
+          "validated": "Independent recorded NumPy scalar, correct registry/name dispatch, and live same-buffer scalar over contiguous/strided/reversed vectors.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "forecast-rmsse",
+          "source_function": "rmsse",
+          "source_line": 207,
+          "kind": "numerical_function",
+          "managed_test": "GistMetricsTests.AllThirtyForecastMetrics_MatchRecordedNumpy",
+          "named_entrypoint_test": "GistMetricsSourceDemonstrationsTests.ForecastSource_DefaultEvaluator_AndNamedSurface_AreMeasurable",
+          "live_test": "GistMetricsLiveParityTests.AllThirtyForecastScores_AreExactExceptTwoOneUlpMetrics_OnThreeLayouts",
+          "validated": "Independent recorded NumPy scalar, correct registry/name dispatch, and live same-buffer scalar over contiguous/strided/reversed vectors.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "forecast-inrse",
+          "source_function": "inrse",
+          "source_line": 213,
+          "kind": "numerical_function",
+          "managed_test": "GistMetricsTests.AllThirtyForecastMetrics_MatchRecordedNumpy",
+          "named_entrypoint_test": "GistMetricsSourceDemonstrationsTests.ForecastSource_DefaultEvaluator_AndNamedSurface_AreMeasurable",
+          "live_test": "GistMetricsLiveParityTests.AllThirtyForecastScores_AreExactExceptTwoOneUlpMetrics_OnThreeLayouts",
+          "validated": "Independent recorded NumPy scalar, correct registry/name dispatch, and live same-buffer scalar over contiguous/strided/reversed vectors.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "forecast-rrse",
+          "source_function": "rrse",
+          "source_line": 218,
+          "kind": "numerical_function",
+          "managed_test": "GistMetricsTests.AllThirtyForecastMetrics_MatchRecordedNumpy",
+          "named_entrypoint_test": "GistMetricsSourceDemonstrationsTests.ForecastSource_DefaultEvaluator_AndNamedSurface_AreMeasurable",
+          "live_test": "GistMetricsLiveParityTests.AllThirtyForecastScores_AreExactExceptTwoOneUlpMetrics_OnThreeLayouts",
+          "validated": "Independent recorded NumPy scalar, correct registry/name dispatch, and live same-buffer scalar over contiguous/strided/reversed vectors.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "forecast-mre",
+          "source_function": "mre",
+          "source_line": 223,
+          "kind": "numerical_function",
+          "managed_test": "GistMetricsTests.AllThirtyForecastMetrics_MatchRecordedNumpy",
+          "named_entrypoint_test": "GistMetricsSourceDemonstrationsTests.ForecastSource_DefaultEvaluator_AndNamedSurface_AreMeasurable",
+          "live_test": "GistMetricsLiveParityTests.AllThirtyForecastScores_AreExactExceptTwoOneUlpMetrics_OnThreeLayouts",
+          "validated": "Independent recorded NumPy scalar, correct registry/name dispatch, and live same-buffer scalar over contiguous/strided/reversed vectors.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "forecast-rae",
+          "source_function": "rae",
+          "source_line": 228,
+          "kind": "numerical_function",
+          "managed_test": "GistMetricsTests.AllThirtyForecastMetrics_MatchRecordedNumpy",
+          "named_entrypoint_test": "GistMetricsSourceDemonstrationsTests.ForecastSource_DefaultEvaluator_AndNamedSurface_AreMeasurable",
+          "live_test": "GistMetricsLiveParityTests.AllThirtyForecastScores_AreExactExceptTwoOneUlpMetrics_OnThreeLayouts",
+          "validated": "Independent recorded NumPy scalar, correct registry/name dispatch, and live same-buffer scalar over contiguous/strided/reversed vectors.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "forecast-mrae",
+          "source_function": "mrae",
+          "source_line": 233,
+          "kind": "numerical_function",
+          "managed_test": "GistMetricsTests.AllThirtyForecastMetrics_MatchRecordedNumpy",
+          "named_entrypoint_test": "GistMetricsSourceDemonstrationsTests.ForecastSource_DefaultEvaluator_AndNamedSurface_AreMeasurable",
+          "live_test": "GistMetricsLiveParityTests.AllThirtyForecastScores_AreExactExceptTwoOneUlpMetrics_OnThreeLayouts",
+          "validated": "Independent recorded NumPy scalar, correct registry/name dispatch, and live same-buffer scalar over contiguous/strided/reversed vectors.",
+          "live_ulp_budget": 1
+        },
+        {
+          "id": "forecast-mdrae",
+          "source_function": "mdrae",
+          "source_line": 238,
+          "kind": "numerical_function",
+          "managed_test": "GistMetricsTests.AllThirtyForecastMetrics_MatchRecordedNumpy",
+          "named_entrypoint_test": "GistMetricsSourceDemonstrationsTests.ForecastSource_DefaultEvaluator_AndNamedSurface_AreMeasurable",
+          "live_test": "GistMetricsLiveParityTests.AllThirtyForecastScores_AreExactExceptTwoOneUlpMetrics_OnThreeLayouts",
+          "validated": "Independent recorded NumPy scalar, correct registry/name dispatch, and live same-buffer scalar over contiguous/strided/reversed vectors.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "forecast-gmrae",
+          "source_function": "gmrae",
+          "source_line": 243,
+          "kind": "numerical_function",
+          "managed_test": "GistMetricsTests.AllThirtyForecastMetrics_MatchRecordedNumpy",
+          "named_entrypoint_test": "GistMetricsSourceDemonstrationsTests.ForecastSource_DefaultEvaluator_AndNamedSurface_AreMeasurable",
+          "live_test": "GistMetricsLiveParityTests.AllThirtyForecastScores_AreExactExceptTwoOneUlpMetrics_OnThreeLayouts",
+          "validated": "Independent recorded NumPy scalar, correct registry/name dispatch, and live same-buffer scalar over contiguous/strided/reversed vectors.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "forecast-mbrae",
+          "source_function": "mbrae",
+          "source_line": 248,
+          "kind": "numerical_function",
+          "managed_test": "GistMetricsTests.AllThirtyForecastMetrics_MatchRecordedNumpy",
+          "named_entrypoint_test": "GistMetricsSourceDemonstrationsTests.ForecastSource_DefaultEvaluator_AndNamedSurface_AreMeasurable",
+          "live_test": "GistMetricsLiveParityTests.AllThirtyForecastScores_AreExactExceptTwoOneUlpMetrics_OnThreeLayouts",
+          "validated": "Independent recorded NumPy scalar, correct registry/name dispatch, and live same-buffer scalar over contiguous/strided/reversed vectors.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "forecast-umbrae",
+          "source_function": "umbrae",
+          "source_line": 253,
+          "kind": "numerical_function",
+          "managed_test": "GistMetricsTests.AllThirtyForecastMetrics_MatchRecordedNumpy",
+          "named_entrypoint_test": "GistMetricsSourceDemonstrationsTests.ForecastSource_DefaultEvaluator_AndNamedSurface_AreMeasurable",
+          "live_test": "GistMetricsLiveParityTests.AllThirtyForecastScores_AreExactExceptTwoOneUlpMetrics_OnThreeLayouts",
+          "validated": "Independent recorded NumPy scalar, correct registry/name dispatch, and live same-buffer scalar over contiguous/strided/reversed vectors.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "forecast-mda",
+          "source_function": "mda",
+          "source_line": 259,
+          "kind": "numerical_function",
+          "managed_test": "GistMetricsTests.AllThirtyForecastMetrics_MatchRecordedNumpy",
+          "named_entrypoint_test": "GistMetricsSourceDemonstrationsTests.ForecastSource_DefaultEvaluator_AndNamedSurface_AreMeasurable",
+          "live_test": "GistMetricsLiveParityTests.AllThirtyForecastScores_AreExactExceptTwoOneUlpMetrics_OnThreeLayouts",
+          "validated": "Independent recorded NumPy scalar, correct registry/name dispatch, and live same-buffer scalar over contiguous/strided/reversed vectors.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "forecast-error",
+          "source_function": "_error",
+          "source_line": 6,
+          "kind": "helper",
+          "managed_test": "GistMetricsTests.ForecastHelpers_ReturnOwnedResults_AndSeasonalViews",
+          "live_test": "GistMetricsLiveParityTests.ForecastArithmeticAndArrayHelpers_AreByteExact",
+          "validated": "Every difference element has an exact live array oracle; explicit scalar observation and input preservation."
+        },
+        {
+          "id": "forecast-percentage",
+          "source_function": "_percentage_error",
+          "source_line": 11,
+          "kind": "helper",
+          "managed_test": "GistMetricsTests.ForecastHelpers_ReturnOwnedResults_AndSeasonalViews",
+          "live_test": "GistMetricsLiveParityTests.ForecastArithmeticAndArrayHelpers_AreByteExact",
+          "validated": "EPSILON-adjusted division, full array bytes and non-percent scaling."
+        },
+        {
+          "id": "forecast-naive",
+          "source_function": "_naive_forecasting",
+          "source_line": 20,
+          "kind": "helper",
+          "managed_test": "GistMetricsTests.ForecastHelpers_ReturnOwnedResults_AndSeasonalViews",
+          "live_test": "GistMetricsLiveParityTests.ForecastArithmeticAndArrayHelpers_AreByteExact",
+          "validated": "Seasonality-two history length/values, shared-view mutation, complete array bytes; positive-parameter error also covered in ForecastEdgeCases_AreExplicit."
+        },
+        {
+          "id": "forecast-relative",
+          "source_function": "_relative_error",
+          "source_line": 25,
+          "kind": "helper",
+          "managed_test": "GistMetricsSourceDemonstrationsTests.ForecastSource_SeasonalAndExplicitBenchmarks_AllRelativeScores",
+          "live_test": "GistMetricsLiveParityTests.ForecastBenchmarkHelpers_AreByteExact_OnStridedSharedInputs",
+          "validated": "Default benchmark via thirty-metric live gate; seasonality two and explicit benchmark across all six relative scores; full helper arrays byte-exact."
+        },
+        {
+          "id": "forecast-bounded",
+          "source_function": "_bounded_relative_error",
+          "source_line": 39,
+          "kind": "helper",
+          "managed_test": "GistMetricsSourceDemonstrationsTests.ForecastSource_SeasonalAndExplicitBenchmarks_AllRelativeScores",
+          "live_test": "GistMetricsLiveParityTests.ForecastBenchmarkHelpers_AreByteExact_OnStridedSharedInputs",
+          "validated": "Default, seasonal and explicit benchmark branches; exact complete helper bytes and six scalar scores."
+        },
+        {
+          "id": "forecast-geometric",
+          "source_function": "_geometric_mean",
+          "source_line": 57,
+          "kind": "helper",
+          "managed_test": "GistMetricsSourceDemonstrationsTests.ForecastSource_SeasonalAndExplicitBenchmarks_AllRelativeScores",
+          "live_test": "GistMetricsLiveParityTests.ForecastSpecialValues_MatchLiveNumpyClassification",
+          "validated": "Positive [1,4,16] result 4, zero geometric mean exact bytes, and gmae/gmrae full live calculations."
+        },
+        {
+          "id": "forecast-registry",
+          "source_line": 264,
+          "kind": "registry",
+          "managed_test": "GistMetricsSourceDemonstrationsTests.ForecastSource_DefaultEvaluator_AndNamedSurface_AreMeasurable",
+          "validated": "Exactly 30 short names, all named public entrypoints called and compared to independently measured registry results."
+        },
+        {
+          "id": "forecast-evaluate",
+          "source_function": "evaluate",
+          "source_line": 298,
+          "kind": "evaluation",
+          "managed_test": "GistMetricsSourceDemonstrationsTests.ForecastSource_DefaultEvaluator_AndNamedSurface_AreMeasurable",
+          "additional_managed_test": "GistMetricsTests.ForecastEdgeCases_AreExplicit",
+          "validated": "Exact four default keys and their numerical scores; unknown metric -> NaN. C# intentionally does not reproduce the Python diagnostic print; no numeric output is invented."
+        },
+        {
+          "id": "forecast-evaluate-all",
+          "source_function": "evaluate_all",
+          "source_line": 309,
+          "kind": "evaluation",
+          "managed_test": "GistMetricsTests.AllThirtyForecastMetrics_MatchRecordedNumpy",
+          "live_test": "GistMetricsLiveParityTests.AllThirtyForecastScores_AreExactExceptTwoOneUlpMetrics_OnThreeLayouts",
+          "validated": "All thirty emitted scores measured, not merely a no-throw invocation."
+        }
+      ]
+    },
+    {
+      "rank": 2,
+      "gist": "https://gist.github.com/bwhite/3726239",
+      "revision": "2c92e90259b01b4a657d20c0ad8390caadd59c8b",
+      "filename": "rank_metrics.py",
+      "sha256": "b9abd30faa5fe1d4ff968769888bd774ad2220ce1d64365c66aa9b0a42055a1c",
+      "full_file_lines": 234,
+      "original_demonstrated_output_count": 25,
+      "numeric_outputs": 24,
+      "error_outputs": 1,
+      "audit": "All seven docstrings contain executable numerical demonstrations. The main block only invokes doctest.testmod; no separate data/application demonstration is omitted.",
+      "historical_mismatch": {
+        "case_id": "rank-L111",
+        "old_printed": "0.7833333333333333",
+        "observed_python_3_12": "0.7833333333333334",
+        "port_average_precision": "0.7833333333333333",
+        "explanation": "The independent built-in Python-list summation and np.mean average_precision differ by one ULP on the verification interpreter. Test both numerical meanings without relabeling the old text as today's exact output."
+      },
+      "cases": [
+        {
+          "id": "rank-L20",
+          "source_lines": [
+            19,
+            21
+          ],
+          "kind": "demonstrated_numeric_output",
+          "reported_result": "0.61111111111111105",
+          "observed_reference_result": "0.611111111111111",
+          "managed_test": "GistMetricsSourceDemonstrationsTests.RankingSource_MeanReciprocalRank_AllThreeDemonstrations",
+          "live_test": "GistMetricsSourceDemonstrationsLiveTests.RankingSource_Mrr_OriginalThreeInputs_ByteExact",
+          "validated": "Original source input and cutoff/convention drive the actual C# metric; numerical output and exact live shape/dtype/bytes are asserted.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "rank-L23",
+          "source_lines": [
+            22,
+            24
+          ],
+          "kind": "demonstrated_numeric_output",
+          "reported_result": "0.5",
+          "observed_reference_result": "0.5",
+          "managed_test": "GistMetricsSourceDemonstrationsTests.RankingSource_MeanReciprocalRank_AllThreeDemonstrations",
+          "live_test": "GistMetricsSourceDemonstrationsLiveTests.RankingSource_Mrr_OriginalThreeInputs_ByteExact",
+          "validated": "Original source input and cutoff/convention drive the actual C# metric; numerical output and exact live shape/dtype/bytes are asserted.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "rank-L26",
+          "source_lines": [
+            25,
+            27
+          ],
+          "kind": "demonstrated_numeric_output",
+          "reported_result": "0.75",
+          "observed_reference_result": "0.75",
+          "managed_test": "GistMetricsSourceDemonstrationsTests.RankingSource_MeanReciprocalRank_AllThreeDemonstrations",
+          "live_test": "GistMetricsSourceDemonstrationsLiveTests.RankingSource_Mrr_OriginalThreeInputs_ByteExact",
+          "validated": "Original source input and cutoff/convention drive the actual C# metric; numerical output and exact live shape/dtype/bytes are asserted.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "rank-L46",
+          "source_lines": [
+            45,
+            47
+          ],
+          "kind": "demonstrated_numeric_output",
+          "reported_result": "0.33333333333333331",
+          "observed_reference_result": "0.3333333333333333",
+          "managed_test": "GistMetricsSourceDemonstrationsTests.RankingSource_RPrecision_AllThreeDemonstrations",
+          "live_test": "GistMetricsSourceDemonstrationsLiveTests.RankingSource_BinaryDoctests_AndAreaMeasurement",
+          "validated": "Original source input and cutoff/convention drive the actual C# metric; numerical output and exact live shape/dtype/bytes are asserted.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "rank-L49",
+          "source_lines": [
+            48,
+            50
+          ],
+          "kind": "demonstrated_numeric_output",
+          "reported_result": "0.5",
+          "observed_reference_result": "0.5",
+          "managed_test": "GistMetricsSourceDemonstrationsTests.RankingSource_RPrecision_AllThreeDemonstrations",
+          "live_test": "GistMetricsSourceDemonstrationsLiveTests.RankingSource_BinaryDoctests_AndAreaMeasurement",
+          "validated": "Original source input and cutoff/convention drive the actual C# metric; numerical output and exact live shape/dtype/bytes are asserted.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "rank-L52",
+          "source_lines": [
+            51,
+            53
+          ],
+          "kind": "demonstrated_numeric_output",
+          "reported_result": "1.0",
+          "observed_reference_result": "1.0",
+          "managed_test": "GistMetricsSourceDemonstrationsTests.RankingSource_RPrecision_AllThreeDemonstrations",
+          "live_test": "GistMetricsSourceDemonstrationsLiveTests.RankingSource_BinaryDoctests_AndAreaMeasurement",
+          "validated": "Original source input and cutoff/convention drive the actual C# metric; numerical output and exact live shape/dtype/bytes are asserted.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "rank-L75",
+          "source_lines": [
+            74,
+            76
+          ],
+          "kind": "demonstrated_numeric_output",
+          "reported_result": "0.0",
+          "observed_reference_result": "0.0",
+          "managed_test": "GistMetricsSourceDemonstrationsTests.RankingSource_PrecisionAtK_AllValuesAndOriginalError",
+          "live_test": "GistMetricsSourceDemonstrationsLiveTests.RankingSource_BinaryDoctests_AndAreaMeasurement",
+          "validated": "Original source input and cutoff/convention drive the actual C# metric; numerical output and exact live shape/dtype/bytes are asserted.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "rank-L77",
+          "source_lines": [
+            77,
+            78
+          ],
+          "kind": "demonstrated_numeric_output",
+          "reported_result": "0.0",
+          "observed_reference_result": "0.0",
+          "managed_test": "GistMetricsSourceDemonstrationsTests.RankingSource_PrecisionAtK_AllValuesAndOriginalError",
+          "live_test": "GistMetricsSourceDemonstrationsLiveTests.RankingSource_BinaryDoctests_AndAreaMeasurement",
+          "validated": "Original source input and cutoff/convention drive the actual C# metric; numerical output and exact live shape/dtype/bytes are asserted.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "rank-L79",
+          "source_lines": [
+            79,
+            80
+          ],
+          "kind": "demonstrated_numeric_output",
+          "reported_result": "0.33333333333333331",
+          "observed_reference_result": "0.3333333333333333",
+          "managed_test": "GistMetricsSourceDemonstrationsTests.RankingSource_PrecisionAtK_AllValuesAndOriginalError",
+          "live_test": "GistMetricsSourceDemonstrationsLiveTests.RankingSource_BinaryDoctests_AndAreaMeasurement",
+          "validated": "Original source input and cutoff/convention drive the actual C# metric; numerical output and exact live shape/dtype/bytes are asserted.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "rank-L81",
+          "source_lines": [
+            81,
+            84
+          ],
+          "kind": "demonstrated_error",
+          "reported_result": "ValueError: Relevance score length < k",
+          "observed_reference_result": "ValueError: Relevance score length < k",
+          "managed_test": "GistMetricsSourceDemonstrationsTests.RankingSource_PrecisionAtK_AllValuesAndOriginalError",
+          "live_test": "GistMetricsSourceDemonstrationsLiveTests.RankingSource_PrecisionAtK_OriginalValueError",
+          "validated": "Same out-of-range cutoff and message; Python ValueError maps to C# ArgumentException.",
+          "live_ulp_budget": null
+        },
+        {
+          "id": "rank-L111",
+          "source_lines": [
+            109,
+            112
+          ],
+          "kind": "demonstrated_numeric_output",
+          "reported_result": "0.7833333333333333",
+          "observed_reference_result": "0.7833333333333334",
+          "managed_test": "GistMetricsSourceDemonstrationsTests.RankingSource_AveragePrecision_AndIndependentAreaMeasurement",
+          "live_test": "GistMetricsSourceDemonstrationsLiveTests.RankingSource_BinaryDoctests_AndAreaMeasurement",
+          "validated": "Same original Python-list PR-area measurement versus the actual port's AP; a separately documented one-ULP relationship.",
+          "live_ulp_budget": 1
+        },
+        {
+          "id": "rank-L113",
+          "source_lines": [
+            113,
+            114
+          ],
+          "kind": "demonstrated_numeric_output",
+          "reported_result": "0.78333333333333333",
+          "observed_reference_result": "0.7833333333333333",
+          "managed_test": "GistMetricsSourceDemonstrationsTests.RankingSource_AveragePrecision_AndIndependentAreaMeasurement",
+          "live_test": "GistMetricsSourceDemonstrationsLiveTests.RankingSource_BinaryDoctests_AndAreaMeasurement",
+          "validated": "Original source input and cutoff/convention drive the actual C# metric; numerical output and exact live shape/dtype/bytes are asserted.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "rank-L136",
+          "source_lines": [
+            135,
+            137
+          ],
+          "kind": "demonstrated_numeric_output",
+          "reported_result": "0.78333333333333333",
+          "observed_reference_result": "0.7833333333333333",
+          "managed_test": "GistMetricsSourceDemonstrationsTests.RankingSource_MeanAveragePrecision_BothDemonstrations",
+          "live_test": "GistMetricsSourceDemonstrationsLiveTests.RankingSource_BinaryDoctests_AndAreaMeasurement",
+          "validated": "Original source input and cutoff/convention drive the actual C# metric; numerical output and exact live shape/dtype/bytes are asserted.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "rank-L139",
+          "source_lines": [
+            138,
+            140
+          ],
+          "kind": "demonstrated_numeric_output",
+          "reported_result": "0.39166666666666666",
+          "observed_reference_result": "0.39166666666666666",
+          "managed_test": "GistMetricsSourceDemonstrationsTests.RankingSource_MeanAveragePrecision_BothDemonstrations",
+          "live_test": "GistMetricsSourceDemonstrationsLiveTests.RankingSource_BinaryDoctests_AndAreaMeasurement",
+          "validated": "Original source input and cutoff/convention drive the actual C# metric; numerical output and exact live shape/dtype/bytes are asserted.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "rank-L161",
+          "source_lines": [
+            160,
+            162
+          ],
+          "kind": "demonstrated_numeric_output",
+          "reported_result": "3.0",
+          "observed_reference_result": "3.0",
+          "managed_test": "GistMetricsSourceDemonstrationsTests.RankingSource_Dcg_AllSixDemonstrations",
+          "live_test": "GistMetricsSourceDemonstrationsLiveTests.RankingSource_AllDcgAndNdcgDemonstrations_ByteExact",
+          "validated": "Original source input and cutoff/convention drive the actual C# metric; numerical output and exact live shape/dtype/bytes are asserted.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "rank-L163",
+          "source_lines": [
+            163,
+            164
+          ],
+          "kind": "demonstrated_numeric_output",
+          "reported_result": "3.0",
+          "observed_reference_result": "3.0",
+          "managed_test": "GistMetricsSourceDemonstrationsTests.RankingSource_Dcg_AllSixDemonstrations",
+          "live_test": "GistMetricsSourceDemonstrationsLiveTests.RankingSource_AllDcgAndNdcgDemonstrations_ByteExact",
+          "validated": "Original source input and cutoff/convention drive the actual C# metric; numerical output and exact live shape/dtype/bytes are asserted.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "rank-L165",
+          "source_lines": [
+            165,
+            166
+          ],
+          "kind": "demonstrated_numeric_output",
+          "reported_result": "5.0",
+          "observed_reference_result": "5.0",
+          "managed_test": "GistMetricsSourceDemonstrationsTests.RankingSource_Dcg_AllSixDemonstrations",
+          "live_test": "GistMetricsSourceDemonstrationsLiveTests.RankingSource_AllDcgAndNdcgDemonstrations_ByteExact",
+          "validated": "Original source input and cutoff/convention drive the actual C# metric; numerical output and exact live shape/dtype/bytes are asserted.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "rank-L167",
+          "source_lines": [
+            167,
+            168
+          ],
+          "kind": "demonstrated_numeric_output",
+          "reported_result": "4.2618595071429155",
+          "observed_reference_result": "4.2618595071429155",
+          "managed_test": "GistMetricsSourceDemonstrationsTests.RankingSource_Dcg_AllSixDemonstrations",
+          "live_test": "GistMetricsSourceDemonstrationsLiveTests.RankingSource_AllDcgAndNdcgDemonstrations_ByteExact",
+          "validated": "Original source input and cutoff/convention drive the actual C# metric; numerical output and exact live shape/dtype/bytes are asserted.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "rank-L169",
+          "source_lines": [
+            169,
+            170
+          ],
+          "kind": "demonstrated_numeric_output",
+          "reported_result": "9.6051177391888114",
+          "observed_reference_result": "9.605117739188811",
+          "managed_test": "GistMetricsSourceDemonstrationsTests.RankingSource_Dcg_AllSixDemonstrations",
+          "live_test": "GistMetricsSourceDemonstrationsLiveTests.RankingSource_AllDcgAndNdcgDemonstrations_ByteExact",
+          "validated": "Original source input and cutoff/convention drive the actual C# metric; numerical output and exact live shape/dtype/bytes are asserted.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "rank-L171",
+          "source_lines": [
+            171,
+            172
+          ],
+          "kind": "demonstrated_numeric_output",
+          "reported_result": "9.6051177391888114",
+          "observed_reference_result": "9.605117739188811",
+          "managed_test": "GistMetricsSourceDemonstrationsTests.RankingSource_Dcg_AllSixDemonstrations",
+          "live_test": "GistMetricsSourceDemonstrationsLiveTests.RankingSource_AllDcgAndNdcgDemonstrations_ByteExact",
+          "validated": "Original source input and cutoff/convention drive the actual C# metric; numerical output and exact live shape/dtype/bytes are asserted.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "rank-L204",
+          "source_lines": [
+            203,
+            205
+          ],
+          "kind": "demonstrated_numeric_output",
+          "reported_result": "1.0",
+          "observed_reference_result": "1.0",
+          "managed_test": "GistMetricsSourceDemonstrationsTests.RankingSource_Ndcg_AllFiveDemonstrations",
+          "live_test": "GistMetricsSourceDemonstrationsLiveTests.RankingSource_AllDcgAndNdcgDemonstrations_ByteExact",
+          "validated": "Original source input and cutoff/convention drive the actual C# metric; numerical output and exact live shape/dtype/bytes are asserted.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "rank-L207",
+          "source_lines": [
+            206,
+            208
+          ],
+          "kind": "demonstrated_numeric_output",
+          "reported_result": "0.9203032077642922",
+          "observed_reference_result": "0.9203032077642922",
+          "managed_test": "GistMetricsSourceDemonstrationsTests.RankingSource_Ndcg_AllFiveDemonstrations",
+          "live_test": "GistMetricsSourceDemonstrationsLiveTests.RankingSource_AllDcgAndNdcgDemonstrations_ByteExact",
+          "validated": "Original source input and cutoff/convention drive the actual C# metric; numerical output and exact live shape/dtype/bytes are asserted.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "rank-L209",
+          "source_lines": [
+            209,
+            210
+          ],
+          "kind": "demonstrated_numeric_output",
+          "reported_result": "0.96519546960144276",
+          "observed_reference_result": "0.9651954696014428",
+          "managed_test": "GistMetricsSourceDemonstrationsTests.RankingSource_Ndcg_AllFiveDemonstrations",
+          "live_test": "GistMetricsSourceDemonstrationsLiveTests.RankingSource_AllDcgAndNdcgDemonstrations_ByteExact",
+          "validated": "Original source input and cutoff/convention drive the actual C# metric; numerical output and exact live shape/dtype/bytes are asserted.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "rank-L211",
+          "source_lines": [
+            211,
+            212
+          ],
+          "kind": "demonstrated_numeric_output",
+          "reported_result": "0.0",
+          "observed_reference_result": "0.0",
+          "managed_test": "GistMetricsSourceDemonstrationsTests.RankingSource_Ndcg_AllFiveDemonstrations",
+          "live_test": "GistMetricsSourceDemonstrationsLiveTests.RankingSource_AllDcgAndNdcgDemonstrations_ByteExact",
+          "validated": "Original source input and cutoff/convention drive the actual C# metric; numerical output and exact live shape/dtype/bytes are asserted.",
+          "live_ulp_budget": 0
+        },
+        {
+          "id": "rank-L213",
+          "source_lines": [
+            213,
+            214
+          ],
+          "kind": "demonstrated_numeric_output",
+          "reported_result": "1.0",
+          "observed_reference_result": "1.0",
+          "managed_test": "GistMetricsSourceDemonstrationsTests.RankingSource_Ndcg_AllFiveDemonstrations",
+          "live_test": "GistMetricsSourceDemonstrationsLiveTests.RankingSource_AllDcgAndNdcgDemonstrations_ByteExact",
+          "validated": "Original source input and cutoff/convention drive the actual C# metric; numerical output and exact live shape/dtype/bytes are asserted.",
+          "live_ulp_budget": 0
+        }
+      ]
+    }
+  ]
+}

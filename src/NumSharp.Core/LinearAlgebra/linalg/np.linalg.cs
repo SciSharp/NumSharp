@@ -76,7 +76,7 @@ namespace NumSharp
                         throw new LinAlgError(
                             $"{a.ndim}-dimensional array given. Array must be at least two-dimensional");
 
-                    if (a.shape[a.ndim - 2] != a.shape[a.ndim - 1])
+                    if (a.Shape.dimensions[a.ndim - 2] != a.Shape.dimensions[a.ndim - 1])
                         throw new LinAlgError("Last 2 dimensions of the array must be square");
                 }
             }
@@ -93,14 +93,23 @@ namespace NumSharp
             ///     is equivalent to NumPy's check and avoids running <c>isfinite</c> on a dtype NumPy has
             ///     no loop for. Runs BEFORE <see cref="CommonType"/>, so a float16 NaN reports this
             ///     message rather than the "unsupported in linalg" one — matching NumPy's order.
+            ///     <para>
+            ///     NumPy's <c>isfinite(a).all()</c> is answered by the fused single-pass
+            ///     <see cref="Backends.Kernels.FiniteScan.IsAllFinite"/> (the <c>asarray_chkfinite</c> kernel: the
+            ///     same predicate per dtype, every layout) instead of a bool temp plus a reduction — on the small
+            ///     matrices numpy.polynomial's <c>{p}roots</c> hands eigvals that temp was ~0.4 µs of a ~10 µs call.
+            ///     </para>
             /// </remarks>
+            /// <param name="arrays">The operands to check (any dtype, any layout).</param>
+            /// <exception cref="LinAlgError"><c>Array must not contain infs or NaNs</c> — an operand holds ±inf or a NaN
+            ///     (a complex one in either component).</exception>
             internal static void AssertFinite(params NDArray[] arrays)
             {
                 foreach (var a in arrays)
                 {
                     bool floaty = a.typecode is NPTypeCode.Half or NPTypeCode.Single
                         or NPTypeCode.Double or NPTypeCode.Complex;
-                    if (floaty && !np.all(np.isfinite(a)))
+                    if (floaty && !Backends.Kernels.FiniteScan.IsAllFinite(a))
                         throw new LinAlgError("Array must not contain infs or NaNs");
                 }
             }
@@ -185,7 +194,7 @@ namespace NumSharp
                     return np.multiply(real, real);
                 }
 
-                var magnitudes = np.zeros(new Shape(x.shape), NPTypeCode.Double);
+                var magnitudes = np.zeros(Shape.Adopt(x.Shape.dimensions), NPTypeCode.Double);
 
                 // Both walks are pinned to 'C' — the typed iterator defaults to 'K' (MEMORY order),
                 // which for a strided or transposed source visits elements in a different sequence

@@ -559,10 +559,10 @@ namespace NumSharp.Utilities
             Complex c => c,
             double d => new Complex(d, 0),
             float f => new Complex(f, 0),
-            Half h => new Complex((double)h, 0),
+            Half h => Converts.ToComplex(h),
             decimal m => new Complex((double)m, 0),
             long l => new Complex(l, 0),
-            ulong ul => new Complex(ul, 0),
+            ulong ul => Converts.ToComplex(ul),
             int i => new Complex(i, 0),
             uint ui => new Complex(ui, 0),
             short s => new Complex(s, 0),
@@ -872,8 +872,8 @@ namespace NumSharp.Utilities
                         case NPTypeCode.Int64:   return (Half)Unsafe.As<T, long>(ref value);
                         case NPTypeCode.UInt64:  return (Half)Unsafe.As<T, ulong>(ref value);
                         case NPTypeCode.Char:    return (Half)Unsafe.As<T, char>(ref value);
-                        case NPTypeCode.Double:  return (Half)Unsafe.As<T, double>(ref value);
-                        case NPTypeCode.Single:  return (Half)Unsafe.As<T, float>(ref value);
+                        case NPTypeCode.Double:  return Converts.ToHalf(Unsafe.As<T, double>(ref value));
+                        case NPTypeCode.Single:  return Converts.ToHalf(Unsafe.As<T, float>(ref value));
                         case NPTypeCode.Decimal: return (Half)Unsafe.As<T, decimal>(ref value);
                         default:
                             return ChangeType((object)value, typeCode);

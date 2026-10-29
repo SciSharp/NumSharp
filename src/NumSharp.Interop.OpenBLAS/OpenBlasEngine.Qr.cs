@@ -235,7 +235,7 @@ namespace NumSharp.Interop.OpenBLAS
                 outDims[i] = dims[i];
             outDims[nb] = d0;
             outDims[nb + 1] = d1;
-            return new Shape(outDims);
+            return Shape.Adopt(outDims);
         }
 
         /// <summary>Builds a shape of the leading <paramref name="nb"/> batch dims plus one trailing dim.</summary>
@@ -245,7 +245,7 @@ namespace NumSharp.Interop.OpenBLAS
             for (int i = 0; i < nb; i++)
                 outDims[i] = dims[i];
             outDims[nb] = d0;
-            return new Shape(outDims);
+            return Shape.Adopt(outDims);
         }
 
         /// <summary>Writes a stack of leading-identity matrices — orgqr(k=0)'s result — into a C-block.</summary>

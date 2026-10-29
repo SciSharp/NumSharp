@@ -15,6 +15,7 @@ namespace NumSharp
         [NDScoped] // reclaims the ravel/nonzero/strip/astype chain and the companion-matrix + eigvals intermediates
         public static NDArray roots(NDArray p)
         {
+            using var plain = NDMatrixBoundary.PlainFor(p);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             p = np.atleast_1d(p);
             if (p.ndim != 1)
                 throw new ValueError("Input must be a rank-1 array.");

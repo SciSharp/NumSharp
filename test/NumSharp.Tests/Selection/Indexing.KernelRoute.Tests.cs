@@ -228,7 +228,10 @@ namespace NumSharp.Tests.Selection
         {
             var a = np.zeros(new Shape(10), np.float64);
             Action act = () => a[np.array(new long[] { 1, 2, 3 })] = np.array(new[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
-            act.Should().Throw<ValueError>().WithMessage("could not broadcast input array from shape (5,) into shape (3,)");
+            // NumPy 2.4.2 (probed): every index-array assignment reports a value that does not fit through
+            // MapIter's broadcast_error, also for a 1-D destination.
+            act.Should().Throw<ValueError>().WithMessage(
+                "shape mismatch: value array of shape (5,) could not be broadcast to indexing result of shape (3,)");
         }
 
         [TestMethod]
@@ -331,7 +334,10 @@ namespace NumSharp.Tests.Selection
             Assert.IsTrue(np.array_equal(np.take(a, i32, mode: "clip"), np.take(a, i64, mode: "clip")));
             Doubles(np.take(a, np.array(new[] { 5, -1 }))).Should().Equal(5, 99);
             Action raise = () => np.take(a, i32);
-            raise.Should().Throw<ArgumentOutOfRangeException>().WithMessage("*index 150 is out of bounds for axis with size 100*");
+            // NumPy's FLAT (axis=None) take drops the axis clause entirely — "for size 100", not
+            // "for axis 0 with size 100" (probed 2.4.2; the old "for axis with size" wording
+            // matched neither spelling and is oracle-gated by errors_full's curated take cells).
+            raise.Should().Throw<ArgumentOutOfRangeException>().WithMessage("*index 150 is out of bounds for size 100*");
 
             var m = np.arange(24, dtype: np.int64).reshape(6, 4);
             Assert.IsTrue(np.array_equal(np.take(m, np.array(new[] { 5, 0 }), axis: 0), np.take(m, np.array(new long[] { 5, 0 }), axis: 0)));

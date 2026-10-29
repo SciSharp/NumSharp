@@ -93,14 +93,22 @@ namespace NumSharp.Generic
         { }
 
         /// <summary>
-        /// Constructor which takes .NET array
-        /// dtype and shape is determined from array
+        ///     Wraps a .NET array of <typeparamref name="TDType"/> as a typed array — NumPy's
+        ///     <c>np.ndarray(shape, buffer=values, order=order)</c>, as <see cref="NumSharp.NDArray(System.Array, NumSharp.Shape, char)"/> describes:
+        ///     <paramref name="shape"/> contributes its DIMENSIONS only, and the values are laid out densely in
+        ///     <paramref name="order"/>.
         /// </summary>
-        /// <param name="values"></param>
-        /// <param name="shape"></param>
-        /// <param name="order"></param>
-        /// <returns>Array with values</returns>
-        /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+        /// <param name="values">The elements; a one-dimensional array is wrapped without a copy, a multi-dimensional or
+        ///     jagged one is flattened row by row first. Its element type must be <typeparamref name="TDType"/>.</param>
+        /// <param name="shape">The dimensions of the result (a view's shape gives the same array as a fresh shape of the
+        ///     same dimensions); <c>default</c> uses the dimensions of <paramref name="values"/>.</param>
+        /// <param name="order"><c>'C'</c> (default) row-major, <c>'F'</c> column-major; <c>'A'</c> and <c>'K'</c> mean
+        ///     <c>'C'</c>; lowercase is accepted.</param>
+        /// <exception cref="NullReferenceException"><paramref name="values"/> is null.</exception>
+        /// <exception cref="ValueError"><paramref name="order"/> is not 'C', 'F', 'A' or 'K' in either case.</exception>
+        /// <exception cref="ArgumentException">The element count of <paramref name="values"/> is not the size of
+        ///     <paramref name="shape"/>, or the element type of <paramref name="values"/> is not <typeparamref name="TDType"/>
+        ///     (checked after the base constructor has wrapped the values).</exception>
         public NDArray(Array values, Shape shape = default, char order = 'C') : base(values, shape, order)
         {
             if (dtype != typeof(TDType))
@@ -108,14 +116,21 @@ namespace NumSharp.Generic
         }
 
         /// <summary>
-        /// Constructor which takes .NET array
-        /// dtype and shape is determined from array
+        ///     Wraps an <see cref="IArraySlice"/> of <typeparamref name="TDType"/> as a typed array — NumPy's
+        ///     <c>np.ndarray(shape, buffer=values, order=order)</c>, as <see cref="NumSharp.NDArray(NumSharp.Backends.Unmanaged.IArraySlice, NumSharp.Shape, char)"/>
+        ///     describes: <paramref name="shape"/> contributes its DIMENSIONS only, and the slice is laid out densely in
+        ///     <paramref name="order"/>.
         /// </summary>
-        /// <param name="values"></param>
-        /// <param name="shape"></param>
-        /// <param name="order"></param>
-        /// <returns>Array with values</returns>
-        /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+        /// <param name="values">The buffer, wrapped without a copy. Its element type must be <typeparamref name="TDType"/>.</param>
+        /// <param name="shape">The dimensions of the result; <c>default</c> makes a one-dimensional array of
+        ///     <c>values.Count</c> elements.</param>
+        /// <param name="order"><c>'C'</c> (default) row-major, <c>'F'</c> column-major; <c>'A'</c> and <c>'K'</c> mean
+        ///     <c>'C'</c>; lowercase is accepted.</param>
+        /// <exception cref="NullReferenceException"><paramref name="values"/> is null.</exception>
+        /// <exception cref="ValueError"><paramref name="order"/> is not 'C', 'F', 'A' or 'K' in either case.</exception>
+        /// <exception cref="ArgumentException">The element count of <paramref name="values"/> is not the size of
+        ///     <paramref name="shape"/>, or the slice's element type is not <typeparamref name="TDType"/> (checked after the
+        ///     base constructor has wrapped the slice).</exception>
         public NDArray(IArraySlice values, Shape shape = default, char order = 'C') : base(values, shape, order)
         {
             var underlying = values.GetType().GenericTypeArguments[0];

@@ -30,7 +30,7 @@ namespace NumSharp.Backends
             if (nd.ndim == 0)
             {
                 if (axis == 0 || axis == -1)
-                    return np.array(reduceAll ? All(nd) : Any(nd)).AsGeneric<bool>() ?? throw new InvalidOperationException("np.all/np.any expected a Boolean result.");
+                    return NDArray.Scalar(reduceAll ? All(nd) : Any(nd)).AsGeneric<bool>() ?? throw new InvalidOperationException("np.all/np.any expected a Boolean result.");
 
                 throw new AxisError(axis, 0);
             }
@@ -41,7 +41,7 @@ namespace NumSharp.Backends
             // as a reshape at the end — matches Default.Reduction.Add.ExecuteAxisReduction and
             // lets the axis kernels assume one fewer output dim than input.
             var reducedDims = Shape.GetAxis(nd.Shape, axis);
-            Shape reducedShape = reducedDims.Length == 0 ? Shape.Scalar : new Shape(reducedDims);
+            Shape reducedShape = reducedDims.Length == 0 ? Shape.Scalar : Shape.Adopt(reducedDims);
             NDArray<bool> result = CreateLogicalResult(reducedShape, reduceAll && nd.Shape.dimensions[axis] == 0);
 
             if (result.size == 0 || nd.Shape.dimensions[axis] == 0)
@@ -89,7 +89,7 @@ namespace NumSharp.Backends
         {
             var dims = (long[])inputShape.dimensions.Clone();
             dims[axis] = 1;
-            return new Shape(dims);
+            return Shape.Adopt(dims);
         }
 
         // Multi-axis reduction. Matches NumPy: reduces along all listed axes.
@@ -117,7 +117,7 @@ namespace NumSharp.Backends
                 if (axis.Length != 1 || (axis[0] != 0 && axis[0] != -1))
                     throw new AxisError(axis.Length > 0 ? axis[0] : 0, 0);
 
-                return np.array(reduceAll ? All(nd) : Any(nd)).AsGeneric<bool>() ?? throw new InvalidOperationException("np.all/np.any expected a Boolean result.");
+                return NDArray.Scalar(reduceAll ? All(nd) : Any(nd)).AsGeneric<bool>() ?? throw new InvalidOperationException("np.all/np.any expected a Boolean result.");
             }
 
             int ndim = nd.ndim;
@@ -129,12 +129,12 @@ namespace NumSharp.Backends
             if (normalized.Length == ndim)
             {
                 bool scalar = reduceAll ? All(nd) : Any(nd);
-                var result = np.array(scalar).AsGeneric<bool>() ?? throw new InvalidOperationException("np.all/np.any expected a Boolean result.");
+                var result = NDArray.Scalar(scalar).AsGeneric<bool>() ?? throw new InvalidOperationException("np.all/np.any expected a Boolean result.");
                 if (keepdims)
                 {
                     var dims = new long[ndim];
                     for (int i = 0; i < ndim; i++) dims[i] = 1;
-                    result.Storage.Reshape(new Shape(dims));
+                    result.Storage.Reshape(Shape.Adopt(dims));
                 }
                 return result;
             }
@@ -162,14 +162,14 @@ namespace NumSharp.Backends
             {
                 var newDims = new List<long>(ndim - normalized.Length);
                 var axesSet = new HashSet<int>(normalized);
-                long[] resultShape = chained.shape;
+                long[] resultShape = chained.Shape.dimensions;
                 for (int d = 0; d < ndim; d++)
                 {
                     if (!axesSet.Contains(d))
                         newDims.Add(resultShape[d]);
                 }
 
-                Shape newShape = newDims.Count == 0 ? Shape.Scalar : new Shape(newDims.ToArray());
+                Shape newShape = newDims.Count == 0 ? Shape.Scalar : Shape.Adopt(newDims.ToArray());
                 chained.Storage.Reshape(newShape);
             }
 
@@ -193,7 +193,7 @@ namespace NumSharp.Backends
         private NDArray<bool> ReduceContiguousAxisRun(NDArray nd, int[] sortedAxes, bool keepdims, bool reduceAll)
         {
             int ndim = nd.ndim;
-            long[] origDims = nd.shape;
+            long[] origDims = nd.Shape.dimensions;
             int firstAxis = sortedAxes[0];
             int lastAxis = sortedAxes[sortedAxes.Length - 1];
 
@@ -209,14 +209,14 @@ namespace NumSharp.Backends
             for (int i = lastAxis + 1; i < ndim; i++) newDims[w++] = origDims[i];
 
             // Reshape is a view on C-contig data (no copy).
-            NDArray reshaped = nd.reshape(newDims);
+            NDArray reshaped = nd.reshape(Shape.Adopt(newDims));
             NDArray<bool> reduced = ReduceLogicalAxis(reshaped, firstAxis, keepdims: false, reduceAll: reduceAll);
 
             if (keepdims)
             {
                 var dimsKD = (long[])origDims.Clone();
                 foreach (int a in sortedAxes) dimsKD[a] = 1;
-                reduced.Storage.Reshape(new Shape(dimsKD));
+                reduced.Storage.Reshape(Shape.Adopt(dimsKD));
             }
 
             return reduced;

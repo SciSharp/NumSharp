@@ -15,6 +15,7 @@ namespace NumSharp
         [NDScoped]
         public static NDArray setxor1d(NDArray ar1, NDArray ar2, bool assume_unique = false)
         {
+            using var plain = NDMatrixBoundary.PlainFor(ar1, ar2);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // Boundary scope: the unique/ravel/concatenate/sort temps and the flag masks are
             // reclaimed at exit; only the surviving-values array is yielded.
 

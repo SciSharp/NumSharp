@@ -20,8 +20,12 @@ namespace NumSharp
         ///     input stays a strided view, and a broadcast input keeps stride-0 (read-only).
         ///     https://numpy.org/doc/stable/reference/generated/numpy.squeeze.html
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray squeeze(NDArray a)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Wrapped(a, static s => squeeze(s));
             var dims = a.Shape.dimensions;
             int keep = 0;
             for (int i = 0; i < dims.Length; i++)
@@ -41,16 +45,20 @@ namespace NumSharp
         /// <returns>The input array, but with all or a subset of the dimensions of length 1 removed. This is always a itself or a view into a.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.squeeze.html</remarks>
         /// <exception cref="IncorrectShapeException">If axis is not None, and an axis being squeezed is not of length 1</exception>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray squeeze(NDArray a, int axis)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Wrapped((a, axis), static s => squeeze(s.a, s.axis));
             while (axis < 0)
                 axis = a.ndim + axis; //handle negative axis
 
             if (axis >= a.ndim)
                 throw new ArgumentOutOfRangeException(nameof(axis));
 
-            if (a.shape[axis] != 1)
-                throw new IncorrectShapeException($"Unable to squeeze axis {axis} because it is of length {a.shape[axis]} and not 1.");
+            if (a.Shape.dimensions[axis] != 1)
+                throw new IncorrectShapeException($"Unable to squeeze axis {axis} because it is of length {a.Shape.dimensions[axis]} and not 1.");
 
             // Stride-dropping VIEW (see squeeze(NDArray)) removing ONLY the named axis.
             return SqueezeView(a, a.ndim - 1, onlyAxis: axis);
@@ -97,7 +105,7 @@ namespace NumSharp
         public static Shape squeeze(Shape shape)
         {
             //TODO! what will happen if its a slice?
-            return new Shape(shape.dimensions.Where(d => d != 1).ToArray());
+            return Shape.Adopt(shape.dimensions.Where(d => d != 1).ToArray());
         }
 
         /// <summary>
@@ -133,7 +141,7 @@ namespace NumSharp
             if (r.Length == 0)
                 return Shape.Scalar;
 
-            return new Shape(r);
+            return Shape.Adopt(r);
         }
     }
 }

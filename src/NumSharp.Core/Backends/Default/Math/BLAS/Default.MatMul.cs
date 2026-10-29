@@ -38,8 +38,8 @@ namespace NumSharp.Backends
             if (lhsWas1D) lhs = np.expand_dims(lhs, 0);
             if (rhsWas1D) rhs = np.expand_dims(rhs, 1);
 
-            long K = lhs.shape[lhs.ndim - 1];
-            long Kr = rhs.shape[rhs.ndim - 2];
+            long K = lhs.Shape.dimensions[lhs.ndim - 1];
+            long Kr = rhs.Shape.dimensions[rhs.ndim - 2];
             if (K != Kr)
                 throw new IncorrectShapeException(
                     $"matmul: Input operand core dimension mismatch (n?,k),(k,m?)->(n?,m?): " +
@@ -52,9 +52,39 @@ namespace NumSharp.Backends
             // Remove the dimensions that were inserted for 1-D operands. NumPy order: drop the
             // prepended lhs dim (-2) first, then the appended rhs dim (-1) — recomputing ndim between
             // the two squeezes keeps the axis indices valid (both inserted dims have size 1).
-            if (lhsWas1D) result = np.squeeze(result, result.ndim - 2);
-            if (rhsWas1D) result = np.squeeze(result, result.ndim - 1);
+            if (lhsWas1D) result = DropInsertedAxis(result, result.ndim - 2);
+            if (rhsWas1D) result = DropInsertedAxis(result, result.ndim - 1);
 
+            return result;
+        }
+
+        /// <summary>
+        ///     Removes the length-1 axis that the promotion of a 1-D matmul operand inserted. The product is a
+        ///     fresh C-contiguous buffer, so the axis is dropped by relabelling the shape IN PLACE: the result
+        ///     stays the owner of its data, as NumPy's gufunc result is (it allocates the final shape), and no
+        ///     second array object is created. A product that is not such a buffer takes the squeeze view.
+        /// </summary>
+        /// <param name="result">The product with the inserted axis. Its storage is modified when it owns a
+        ///     C-contiguous buffer at offset 0; callers must not keep another wrapper of it.</param>
+        /// <param name="axis">The axis to remove; its extent is 1.</param>
+        /// <returns><paramref name="result"/> itself with one axis fewer, or a squeezed view of it.</returns>
+        private static NDArray DropInsertedAxis(NDArray result, int axis)
+        {
+            Shape shape = result.Shape;
+            // The last axis of a vector·vector product leaves a 0-d result: that keeps the squeeze route, whose
+            // scalar result the callers already expect.
+            if (shape.NDim < 2 || !result.Storage.OwnsData || !shape.IsContiguous || shape.offset != 0)
+                return np.squeeze(result, axis);
+
+            long[] dims = shape.dimensions;
+            var kept = new long[dims.Length - 1];
+            for (int i = 0, j = 0; i < dims.Length; i++)
+            {
+                if (i != axis)
+                    kept[j++] = dims[i];
+            }
+
+            result.Storage.Reshape(Shape.Adopt(kept));
             return result;
         }
 
@@ -67,9 +97,9 @@ namespace NumSharp.Backends
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         protected NDArray BatchedMatmul(NDArray lhs, NDArray rhs)
         {
-            long n = lhs.shape[lhs.ndim - 2];
-            long k = lhs.shape[lhs.ndim - 1];
-            long m = rhs.shape[rhs.ndim - 1];
+            long n = lhs.Shape.dimensions[lhs.ndim - 2];
+            long k = lhs.Shape.dimensions[lhs.ndim - 1];
+            long m = rhs.Shape.dimensions[rhs.ndim - 1];
 
             // Stack (batch) dims = every axis except the trailing matrix pair.
             long[] batchA = TakeDims(lhs.Shape, lhs.ndim - 2);
@@ -77,13 +107,13 @@ namespace NumSharp.Backends
             long[] batch = BroadcastStackDims(batchA, batchB);
 
             // Broadcast each operand's stack dims up to the common batch, keeping its matrix dims.
-            var lhsFull = new Shape(batch.Concat(new[] { n, k }).ToArray());
-            var rhsFull = new Shape(batch.Concat(new[] { k, m }).ToArray());
+            var lhsFull = Shape.Adopt(batch.Concat(new[] { n, k }).ToArray());
+            var rhsFull = Shape.Adopt(batch.Concat(new[] { k, m }).ToArray());
             var lhsB = np.broadcast_to(lhs, lhsFull);
             var rhsB = np.broadcast_to(rhs, rhsFull);
 
             var resultType = np._FindCommonArrayType(lhs.GetTypeCode, rhs.GetTypeCode);
-            var resultShape = new Shape(batch.Concat(new[] { n, m }).ToArray());
+            var resultShape = Shape.Adopt(batch.Concat(new[] { n, m }).ToArray());
             // fillZeros is the ctor default, but it is spelled out because the k == 0 branch below
             // RELIES on it: there, no kernel runs and this allocation is the only thing that ever
             // writes the result. (The ordinary path does not need it — every 2-D kernel clears C
@@ -119,7 +149,7 @@ namespace NumSharp.Backends
             // GetData(coords) is COORDINATE (sub-array) access — a raw long[] passed to the
             // this[...] indexer is now FANCY indexing (NumPy parity), so the batch sub-matrix
             // must be taken via GetData, not nd[index].
-            var iterShape = new Shape(batch.Length == 0 ? new long[] { 1 } : batch);
+            var iterShape = Shape.Adopt(batch.Length == 0 ? new long[] { 1 } : batch);
             var len = iterShape.size;
             var incr = new ValueCoordinatesIncrementor(ref iterShape);
             var index = incr.Index;

@@ -15,52 +15,33 @@ namespace NumSharp.Tests.AuditV2
     {
         // ============================================================================
         // T1.10 — Shape is a `readonly struct` with a mutating set indexer.
-        // File: src/NumSharp.Core/View/Shape.cs (lines 754-760)
+        // File: src/NumSharp.Core/View/Shape.cs
         //
-        // Although Shape is declared `public readonly partial struct Shape`, the
-        // indexer at line 754-760 exposes a `set` accessor that mutates the
-        // referenced `long[] dimensions` array.  Because `_flags`, `size`, and
-        // `_hashCode` are computed once at construction, mutating `dimensions[i]`
-        // via `shape[i] = x` leaves the cached fields stale and silently breaks
-        // any downstream check (Equals/GetHashCode/Size/IsContiguous).
+        // FIXED (2026-10-05, docs/plans/view-shape-open-bugs.md bug 2a): the indexer
+        // has no setter any more. It used to write into the referenced
+        // `long[] dimensions` array, leaving `_flags`, `size` and `_hashCode` stale
+        // (Equals/GetHashCode/Size/IsContiguous silently wrong), and because shapes
+        // and arrays share dimension arrays, it also changed every array sharing it.
         // ============================================================================
         /// <summary>
-        /// T1.10 — Mutating the Shape indexer breaks immutability and invalidates
-        /// the cached _flags / size / _hashCode (Shape is supposed to be immutable
-        /// per NumPy semantics and per the struct's `readonly` modifier).
+        /// T1.10 — FIXED: the <see cref="Shape"/> indexer is read-only, so a shape cannot be mutated through it and its
+        /// cached size, hash and equality always agree with its dimensions (NumPy's shape is an immutable tuple).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.10")]
-        public void T1_10_Shape_SetIndexer_Mutates_Readonly_Struct()
+        [TestMethod]
+        public void T1_10_Shape_Indexer_IsReadOnly()
         {
+            var indexer = typeof(Shape).GetProperty("Item", new[] { typeof(int) });
+            indexer.Should().NotBeNull("Shape keeps its read accessor shape[i]");
+            indexer!.CanWrite.Should().BeFalse("Shape is immutable, like the tuple NumPy hands out");
+
             var shape = new Shape(new long[] { 4, 5, 6 });
+            shape[0].Should().Be(4);
+            shape[-1].Should().Be(6, "a negative axis counts from the end");
+            shape.Size.Should().Be(120);
 
-            // Capture initial state
-            long originalSize = shape.Size;        // 4 * 5 * 6 = 120
-            int originalHash = shape.GetHashCode();
-            int originalFlags = shape._flags;
-
-            originalSize.Should().Be(120);
-
-            // Mutate via set indexer (this should NOT compile, or it should be
-            // a no-op, on a readonly struct that promises immutability).
-            shape[0] = 99;
-
-            // The dimensions array IS mutated (proving mutation occurred):
-            shape[0].Should().Be(99);
-            shape.Dimensions[0].Should().Be(99);
-
-            // BUG: Cached size is stale — still reports the pre-mutation value.
-            // Expected: 99 * 5 * 6 = 2970 (or, ideally, the mutation should not be possible).
-            shape.Size.Should().Be(99L * 5 * 6, "Shape.Size must reflect actual dimensions or mutation must be disallowed");
-
-            // BUG: Cached hash code is stale (Shape contract: equal shapes -> equal hash).
-            var rebuilt = new Shape(new long[] { 99, 5, 6 });
-            shape.GetHashCode().Should().Be(rebuilt.GetHashCode(),
-                "GetHashCode must agree with an equivalently-constructed shape");
-
-            // BUG: Equality compares using cached size + dims, so even though
-            // dimensions now match (99,5,6), Equals returns false (size mismatch).
-            shape.Equals(rebuilt).Should().BeTrue("two shapes with the same dimensions must be equal");
+            var rebuilt = new Shape(new long[] { 4, 5, 6 });
+            shape.GetHashCode().Should().Be(rebuilt.GetHashCode());
+            shape.Equals(rebuilt).Should().BeTrue();
         }
 
         // ============================================================================
@@ -237,9 +218,14 @@ namespace NumSharp.Tests.AuditV2
         }
 
         // ============================================================================
-        // Tier 2 — Performance gap >2× confirmed (not exact ratio).
+        // Tier 2 — Performance gap >2× confirmed at audit time (not exact ratio).
         // np.all / np.any contiguous int32: ~3× slower than NumPy on 1M elements
         // np.nonzero: ~17× slower than NumPy on 1M elements
+        //
+        // Status of the 2026-10-05 run of the whole OpenBugs category (i9-13900K,
+        // timed sections replayed 5× per configuration, limit / measured):
+        //   np.all     Release 3.5-3.8× under its limit, Debug 0.6× (fails) -> stays [OpenBugs]
+        //   np.nonzero Release 5-8× under its limit,     Debug 1.9-2.7×     -> RESOLVED, tag removed
         // ============================================================================
         /// <summary>
         /// T2 perf — `np.all` on a contiguous all-true int32 1M array is much
@@ -247,6 +233,12 @@ namespace NumSharp.Tests.AuditV2
         /// assert only that the gap exceeds 2× (which is well above the
         /// SIMD/short-circuit headroom available in `NDAllKernel&lt;T&gt;`).
         /// </summary>
+        /// <remarks>
+        /// Still [OpenBugs] after the 2026-10-05 run although it passes in Release: 100 calls take 11-12 ms there
+        /// against the 42 ms limit, but 63-70 ms in a Debug build of NumSharp.Core, so a local Debug run would fail.
+        /// The limit is a hard-coded NumPy baseline, so the test measures the host as much as the code; remove the tag
+        /// only together with a limit that holds for a Debug build too.
+        /// </remarks>
         [TestMethod, OpenBugs(IssueUrl = "audit-v2-T2-all-perf")]
         public void T2_All_Contiguous_Is_Much_Slower_Than_NumPy()
         {
@@ -267,10 +259,17 @@ namespace NumSharp.Tests.AuditV2
         }
 
         /// <summary>
-        /// T2 perf — `np.nonzero` is dramatically slower than NumPy because of
-        /// per-element `long[ndim]` allocation in the masking kernel.
+        /// T2 perf — `np.nonzero` was dramatically slower than NumPy at audit time because of
+        /// per-element `long[ndim]` allocation in the masking kernel. The test now guards the fix:
+        /// 10 calls over 1M elements must stay under 2× the 16 ms NumPy baseline (32 ms).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "audit-v2-T2-nonzero-perf")]
+        /// <remarks>
+        /// Measured on 2026-10-05 (i9-13900K): 4-6 ms in Release (CI's configuration) and 12-17 ms in a Debug build, so
+        /// on that host the limit holds with a 5× margin in Release and about 2× in Debug. Like every hard-coded
+        /// wall-clock limit it can fail on a host that is several times slower or heavily loaded; a failure there is a
+        /// host signal first.
+        /// </remarks>
+        [TestMethod] // RESOLVED: within 2× of NumPy (was [OpenBugs] audit-v2-T2-nonzero-perf).
         public void T2_NonZero_Is_Much_Slower_Than_NumPy()
         {
             const long numpyBaselineMs = 16;

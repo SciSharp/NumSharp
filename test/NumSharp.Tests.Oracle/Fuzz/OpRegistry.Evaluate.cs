@@ -1,0 +1,402 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Numerics;
+using System.Text.Json;
+using NumSharp;
+using NumSharp.Backends.Iteration;
+
+namespace NumSharp.Tests.Fuzz
+{
+    /// <summary>
+    ///     The C# half of the <c>evaluate.jsonl</c> tier (generator: <c>gen_oracle.gen_evaluate</c>).
+    ///     Parses the corpus prefix grammar into an <see cref="NDExpr"/> over the reconstructed
+    ///     operands and runs <c>np.evaluate</c>; NumPy's unfused node-by-node chain is the oracle.
+    ///
+    ///     Grammar (must stay 1:1 with the Python evaluator):
+    ///     <code>
+    ///       in&lt;k&gt;               operand k
+    ///       li:&lt;int&gt; lu:&lt;uint64&gt;  weak Python int          lf:&lt;float&gt;  weak Python float
+    ///       lb:0|1                 weak Python bool         lc:&lt;re&gt;;&lt;im&gt; weak Python complex
+    ///       lh:&lt;float&gt;            STRONG float16 scalar
+    ///       fn(arg,...)            node — see BuildNode
+    ///     </code>
+    ///     params["reduce"] = {kind, axis, keepdims} wraps the tree in a root reduction;
+    ///     params["out"] = true names the LAST operand as the out= target (tuple result:
+    ///     [returned, whole out base buffer], the out_where convention);
+    ///     params["where"] = true (plan P4.5) additionally appends a boolean mask AFTER out, so the
+    ///     operand list is [inputs…, out, mask] and the masked write leaves masked-off out slots at
+    ///     their prior contents (the whole-out-base slot of the tuple proves it).
+    /// </summary>
+    public static partial class OpRegistry
+    {
+        internal static NDArray EvaluateFromCorpus(IReadOnlyDictionary<string, JsonElement> p, NDArray[] ops)
+        {
+            bool hasOut = p.TryGetValue("out", out var o) && o.ValueKind == JsonValueKind.True;
+            var expr = BuildEvaluateTree(p, ops, hasOut ? ops.Length - 1 : ops.Length);
+            if (hasOut)
+                return np.evaluate(expr, @out: ops[ops.Length - 1]);
+
+            // Phase 4.5 keywords: dtype= (implicit root cast) and order= (fresh-result layout), mutually
+            // exclusive with out= so they only ride the non-out path. casting= governs out= only, so it
+            // rides the tuple out-path (EvaluateOutFromCorpus) when a case carries it.
+            DType dtype = null;
+            if (p.TryGetValue("dtype", out var dt) && dt.ValueKind == JsonValueKind.String)
+                dtype = FuzzCorpus.DtypeToTC(dt.GetString());   // NPTypeCode → DType (implicit)
+            char order = p.TryGetValue("order", out var ord) && ord.ValueKind == JsonValueKind.String
+                ? ord.GetString()[0] : 'K';
+            return np.evaluate(expr, dtype: dtype, order: order);
+        }
+
+        internal static NDArray[] EvaluateOutFromCorpus(IReadOnlyDictionary<string, JsonElement> p, NDArray[] ops)
+        {
+            // params["where"]=true (plan P4.5) appends the boolean mask as the LAST operand, AFTER out:
+            // the operand list is [inputs…, out, mask]. Without it, out is the last operand.
+            bool hasWhere = p.TryGetValue("where", out var w) && w.ValueKind == JsonValueKind.True;
+            int outIdx = hasWhere ? ops.Length - 2 : ops.Length - 1;
+            var target = ops[outIdx];
+            var expr = BuildEvaluateTree(p, ops, outIdx);   // inputs are [0, outIdx)
+            var returned = hasWhere
+                ? np.evaluate(expr, @out: target, where: ops[ops.Length - 1])
+                : np.evaluate(expr, @out: target);
+            return new[] { returned, BaseBuffer(target) };
+        }
+
+        private static NDExpr BuildEvaluateTree(IReadOnlyDictionary<string, JsonElement> p, NDArray[] ops, int nInputs)
+        {
+            var parser = new EvaluateExprParser(p["expr"].GetString(), ops, nInputs);
+            NDExpr tree = parser.Parse();
+
+            if (p.TryGetValue("reduce", out var red) && red.ValueKind == JsonValueKind.Object)
+            {
+                string kind = red.GetProperty("kind").GetString();
+                int? axis = red.TryGetProperty("axis", out var ax) && ax.ValueKind == JsonValueKind.Number ? ax.GetInt32() : null;
+                bool keepdims = red.TryGetProperty("keepdims", out var kd) && kd.ValueKind == JsonValueKind.True;
+                int ddof = red.TryGetProperty("ddof", out var ddj) && ddj.ValueKind == JsonValueKind.Number ? ddj.GetInt32() : 0;
+
+                // The weighted average reduces over TWO trees — the values tree already parsed above and a
+                // second WEIGHTS tree carried in red["weights"] — so it is built before the single-child
+                // reduce switch. Both trees bind against the SAME operand list (in0/in1/…).
+                if (kind == "average")
+                {
+                    var weightsExpr = red.GetProperty("weights").GetString();
+                    NDExpr weightsTree = new EvaluateExprParser(weightsExpr, ops, nInputs).Parse();
+                    return axis is int aAvg
+                        ? NDExpr.Average(tree, weightsTree, aAvg, keepdims)
+                        : keepdims ? NDExpr.Average(tree, weightsTree, true)   // flat + keepdims (P2 M5)
+                                   : NDExpr.Average(tree, weightsTree);
+                }
+
+                // Flat (axis=null) arms honor keepdims via the P2 M5 keepdims overloads: keepdims=false
+                // is the 0-d form, keepdims=true the (1,)*ndim form (the bool is REQUIRED on those
+                // overloads, so the ternary picks the intended one — never the 0-d form by default).
+                tree = (kind, axis) switch
+                {
+                    ("sum", null) => keepdims ? NDExpr.Sum(tree, true) : NDExpr.Sum(tree),
+                    ("prod", null) => keepdims ? NDExpr.Prod(tree, true) : NDExpr.Prod(tree),
+                    ("min", null) => keepdims ? NDExpr.Min(tree, true) : NDExpr.Min(tree),
+                    ("max", null) => keepdims ? NDExpr.Max(tree, true) : NDExpr.Max(tree),
+                    ("mean", null) => keepdims ? NDExpr.Mean(tree, true) : NDExpr.Mean(tree),
+                    ("any", null) => keepdims ? NDExpr.Any(tree, true) : NDExpr.Any(tree),
+                    ("all", null) => keepdims ? NDExpr.All(tree, true) : NDExpr.All(tree),
+                    ("count_nonzero", null) => keepdims ? NDExpr.CountNonzero(tree, true) : NDExpr.CountNonzero(tree),
+                    ("nansum", null) => keepdims ? NDExpr.NanSum(tree, true) : NDExpr.NanSum(tree),
+                    ("nanprod", null) => keepdims ? NDExpr.NanProd(tree, true) : NDExpr.NanProd(tree),
+                    ("ptp", null) => keepdims ? NDExpr.Ptp(tree, true) : NDExpr.Ptp(tree),
+                    ("nanmin", null) => keepdims ? NDExpr.NanMin(tree, true) : NDExpr.NanMin(tree),
+                    ("nanmax", null) => keepdims ? NDExpr.NanMax(tree, true) : NDExpr.NanMax(tree),
+                    ("argmax", null) => keepdims ? NDExpr.ArgMax(tree, true) : NDExpr.ArgMax(tree),
+                    ("argmin", null) => keepdims ? NDExpr.ArgMin(tree, true) : NDExpr.ArgMin(tree),
+                    ("nanmean", null) => keepdims ? NDExpr.NanMean(tree, true) : NDExpr.NanMean(tree),
+                    ("var", null) => keepdims ? NDExpr.Var(tree, true, ddof) : NDExpr.Var(tree, ddof),
+                    ("std", null) => keepdims ? NDExpr.Std(tree, true, ddof) : NDExpr.Std(tree, ddof),
+                    ("sum", int a) => NDExpr.Sum(tree, a, keepdims),
+                    ("prod", int a) => NDExpr.Prod(tree, a, keepdims),
+                    ("min", int a) => NDExpr.Min(tree, a, keepdims),
+                    ("max", int a) => NDExpr.Max(tree, a, keepdims),
+                    ("mean", int a) => NDExpr.Mean(tree, a, keepdims),
+                    ("any", int a) => NDExpr.Any(tree, a, keepdims),
+                    ("all", int a) => NDExpr.All(tree, a, keepdims),
+                    ("count_nonzero", int a) => NDExpr.CountNonzero(tree, a, keepdims),
+                    ("nansum", int a) => NDExpr.NanSum(tree, a, keepdims),
+                    ("nanprod", int a) => NDExpr.NanProd(tree, a, keepdims),
+                    ("ptp", int a) => NDExpr.Ptp(tree, a, keepdims),
+                    ("nanmin", int a) => NDExpr.NanMin(tree, a, keepdims),
+                    ("nanmax", int a) => NDExpr.NanMax(tree, a, keepdims),
+                    ("argmax", int a) => NDExpr.ArgMax(tree, a, keepdims),
+                    ("argmin", int a) => NDExpr.ArgMin(tree, a, keepdims),
+                    ("nanmean", int a) => NDExpr.NanMean(tree, a, keepdims),
+                    ("var", int a) => NDExpr.Var(tree, a, keepdims, ddof),
+                    ("std", int a) => NDExpr.Std(tree, a, keepdims, ddof),
+                    _ => throw new NotSupportedException($"evaluate reduce kind '{kind}'"),
+                };
+            }
+
+            return tree;
+        }
+
+        /// <summary>Recursive-descent parser over the prefix grammar; one instance per case.</summary>
+        private sealed class EvaluateExprParser
+        {
+            private readonly List<string> _tokens;
+            private readonly NDArray[] _ops;
+            private readonly int _nInputs;
+            private int _pos;
+
+            public EvaluateExprParser(string expr, NDArray[] ops, int nInputs)
+            {
+                _tokens = Tokenize(expr);
+                _ops = ops;
+                _nInputs = nInputs;
+            }
+
+            private static List<string> Tokenize(string expr)
+            {
+                var toks = new List<string>();
+                int i = 0;
+                while (i < expr.Length)
+                {
+                    char c = expr[i];
+                    if (char.IsWhiteSpace(c)) { i++; continue; }
+                    if (c == '(' || c == ')' || c == ',') { toks.Add(c.ToString()); i++; continue; }
+                    int start = i;
+                    while (i < expr.Length && expr[i] != '(' && expr[i] != ')' && expr[i] != ',') i++;
+                    toks.Add(expr.Substring(start, i - start));
+                }
+                return toks;
+            }
+
+            public NDExpr Parse()
+            {
+                var e = ParseNode();
+                if (_pos != _tokens.Count)
+                    throw new FormatException($"trailing tokens in evaluate expr at {_pos}");
+                return e;
+            }
+
+            private string Next() => _tokens[_pos++];
+
+            private NDExpr ParseNode()
+            {
+                string tok = Next();
+                if (tok.StartsWith("in", StringComparison.Ordinal) && int.TryParse(tok.AsSpan(2), out int k))
+                {
+                    if (k >= _nInputs) throw new FormatException($"in{k} out of range ({_nInputs} inputs)");
+                    return NDExpr.Arr(_ops[k]);
+                }
+
+                int colon = tok.IndexOf(':');
+                if (colon > 0)
+                    return Literal(tok.Substring(0, colon), tok.Substring(colon + 1));
+
+                if (Next() != "(") throw new FormatException($"expected '(' after {tok}");
+                var args = new List<NDExpr>();
+                while (true)
+                {
+                    args.Add(ParseNode());
+                    string sep = Next();
+                    if (sep == ")") break;
+                    if (sep != ",") throw new FormatException($"expected ',' or ')' in evaluate expr, got '{sep}'");
+                }
+                return BuildNode(tok, args);
+            }
+
+            private static NDExpr Literal(string kind, string val)
+            {
+                switch (kind)
+                {
+                    case "li":
+                    {
+                        long v = long.Parse(val, CultureInfo.InvariantCulture);
+                        // A C# int literal and a long literal are BOTH weak Python ints; keep the
+                        // narrower spelling where it fits so the corpus exercises both ctor paths.
+                        return v >= int.MinValue && v <= int.MaxValue ? NDExpr.Const((int)v) : NDExpr.Const(v);
+                    }
+                    case "lu": return NDExpr.Const(ulong.Parse(val, CultureInfo.InvariantCulture));
+                    case "lf": return NDExpr.Const(ParseDouble(val));
+                    case "lb": return NDExpr.Const(val.Trim() == "1");
+                    case "lc":
+                    {
+                        var parts = val.Split(';');
+                        return NDExpr.Const(new Complex(ParseDouble(parts[0]), ParseDouble(parts[1])));
+                    }
+                    case "lh": return NDExpr.Const((Half)ParseDouble(val));
+                    default: throw new FormatException($"unknown evaluate literal '{kind}:{val}'");
+                }
+            }
+
+            private static double ParseDouble(string s)
+            {
+                s = s.Trim();
+                return s switch
+                {
+                    "nan" => double.NaN,
+                    "inf" => double.PositiveInfinity,
+                    "-inf" => double.NegativeInfinity,
+                    _ => double.Parse(s, NumberStyles.Float, CultureInfo.InvariantCulture),
+                };
+            }
+
+            private static NDExpr BuildNode(string name, List<NDExpr> a)
+            {
+                // Phase 4.1b Cast: cast_<dtype>(child) → NDExpr.Cast(child, dtype). Handled before the
+                // switch because the target dtype is baked into the token name (cast_float32, cast_int8…).
+                if (name.StartsWith("cast_", StringComparison.Ordinal))
+                    return NDExpr.Cast(a[0], FuzzCorpus.DtypeToTC(name.Substring("cast_".Length)));
+                // Phase 4.1b Round(decimals): round_<d>(child) → NDExpr.Round(child, d); d spelled m<n> = -n.
+                if (name.StartsWith("round_", StringComparison.Ordinal))
+                {
+                    string s = name.Substring("round_".Length);
+                    int d = s.StartsWith("m", StringComparison.Ordinal)
+                        ? -int.Parse(s.Substring(1), CultureInfo.InvariantCulture)
+                        : int.Parse(s, CultureInfo.InvariantCulture);
+                    return NDExpr.Round(a[0], d);
+                }
+                switch (name)
+                {
+                    // binary
+                    case "add": return NDExpr.Add(a[0], a[1]);
+                    case "sub": return NDExpr.Subtract(a[0], a[1]);
+                    case "mul": return NDExpr.Multiply(a[0], a[1]);
+                    case "div": return NDExpr.Divide(a[0], a[1]);
+                    case "mod": return NDExpr.Mod(a[0], a[1]);
+                    case "pow": return NDExpr.Power(a[0], a[1]);
+                    case "floordiv": return NDExpr.FloorDivide(a[0], a[1]);
+                    case "atan2": return NDExpr.ATan2(a[0], a[1]);
+                    case "and": return NDExpr.BitwiseAnd(a[0], a[1]);
+                    case "or": return NDExpr.BitwiseOr(a[0], a[1]);
+                    case "xor": return NDExpr.BitwiseXor(a[0], a[1]);
+                    case "min": return NDExpr.Min(a[0], a[1]);
+                    case "max": return NDExpr.Max(a[0], a[1]);
+                    // Phase 4 binary family (min/max already cover NaN-propagating maximum/minimum).
+                    case "fmax": return NDExpr.FMax(a[0], a[1]);
+                    case "fmin": return NDExpr.FMin(a[0], a[1]);
+                    case "fmod": return NDExpr.Fmod(a[0], a[1]);
+                    case "copysign": return NDExpr.CopySign(a[0], a[1]);
+                    case "nextafter": return NDExpr.NextAfter(a[0], a[1]);
+                    case "logaddexp": return NDExpr.LogAddExp(a[0], a[1]);
+                    case "logaddexp2": return NDExpr.LogAddExp2(a[0], a[1]);
+                    case "hypot": return NDExpr.Hypot(a[0], a[1]);
+                    case "heaviside": return NDExpr.Heaviside(a[0], a[1]);
+                    case "gcd": return NDExpr.Gcd(a[0], a[1]);
+                    case "lcm": return NDExpr.Lcm(a[0], a[1]);
+                    case "lshift": return NDExpr.LeftShift(a[0], a[1]);
+                    case "rshift": return NDExpr.RightShift(a[0], a[1]);
+                    // Phase 4.3 logical nodes — bool result via a per-operand nonzero test (NOT bitwise).
+                    case "land": return NDExpr.LogicalAnd(a[0], a[1]);
+                    case "lor": return NDExpr.LogicalOr(a[0], a[1]);
+                    case "lxor": return NDExpr.LogicalXor(a[0], a[1]);
+                    case "eq": return NDExpr.Equal(a[0], a[1]);
+                    case "ne": return NDExpr.NotEqual(a[0], a[1]);
+                    case "lt": return NDExpr.Less(a[0], a[1]);
+                    case "le": return NDExpr.LessEqual(a[0], a[1]);
+                    case "gt": return NDExpr.Greater(a[0], a[1]);
+                    case "ge": return NDExpr.GreaterEqual(a[0], a[1]);
+                    case "where": return NDExpr.Where(a[0], a[1], a[2]);
+                    // unary
+                    case "neg": return NDExpr.Negate(a[0]);
+                    case "abs": return NDExpr.Abs(a[0]);
+                    case "sqrt": return NDExpr.Sqrt(a[0]);
+                    case "square": return NDExpr.Square(a[0]);
+                    case "recip": return NDExpr.Reciprocal(a[0]);
+                    case "sign": return NDExpr.Sign(a[0]);
+                    case "cbrt": return NDExpr.Cbrt(a[0]);
+                    case "exp": return NDExpr.Exp(a[0]);
+                    case "exp2": return NDExpr.Exp2(a[0]);
+                    case "expm1": return NDExpr.Expm1(a[0]);
+                    case "log": return NDExpr.Log(a[0]);
+                    case "log2": return NDExpr.Log2(a[0]);
+                    case "log10": return NDExpr.Log10(a[0]);
+                    case "log1p": return NDExpr.Log1p(a[0]);
+                    case "sin": return NDExpr.Sin(a[0]);
+                    case "cos": return NDExpr.Cos(a[0]);
+                    case "tan": return NDExpr.Tan(a[0]);
+                    case "sinh": return NDExpr.Sinh(a[0]);
+                    case "cosh": return NDExpr.Cosh(a[0]);
+                    case "tanh": return NDExpr.Tanh(a[0]);
+                    case "asin": return NDExpr.ASin(a[0]);
+                    case "acos": return NDExpr.ACos(a[0]);
+                    case "atan": return NDExpr.ATan(a[0]);
+                    case "asinh": return NDExpr.Asinh(a[0]);
+                    case "acosh": return NDExpr.Acosh(a[0]);
+                    case "atanh": return NDExpr.Atanh(a[0]);
+                    case "deg2rad": return NDExpr.Deg2Rad(a[0]);
+                    case "rad2deg": return NDExpr.Rad2Deg(a[0]);
+                    case "floor": return NDExpr.Floor(a[0]);
+                    case "ceil": return NDExpr.Ceil(a[0]);
+                    case "round": return NDExpr.Round(a[0]);
+                    case "rint": return NDExpr.Rint(a[0]);
+                    case "trunc": return NDExpr.Truncate(a[0]);
+                    case "not": return NDExpr.BitwiseNot(a[0]);
+                    case "lnot": return NDExpr.LogicalNot(a[0]);
+                    case "isnan": return NDExpr.IsNaN(a[0]);
+                    case "isfinite": return NDExpr.IsFinite(a[0]);
+                    case "isinf": return NDExpr.IsInf(a[0]);
+                    // Phase 4 unary node coverage (the engine unary ufuncs that gained an NDExpr node).
+                    case "positive": return NDExpr.Positive(a[0]);
+                    case "conj": return NDExpr.Conjugate(a[0]);
+                    case "fabs": return NDExpr.Fabs(a[0]);
+                    case "spacing": return NDExpr.Spacing(a[0]);
+                    case "signbit": return NDExpr.SignBit(a[0]);
+                    case "isposinf": return NDExpr.IsPosInf(a[0]);
+                    case "isneginf": return NDExpr.IsNegInf(a[0]);
+                    case "bitwise_count": return NDExpr.BitwiseCount(a[0]);
+                    // Phase 4.1b — the complex→real component extractors (np.real/imag/angle).
+                    case "real": return NDExpr.Real(a[0]);
+                    case "imag": return NDExpr.Imag(a[0]);
+                    case "angle": return NDExpr.Angle(a[0]);
+                    // C6 combinators (NDExpr.Combinators.cs) — pure compositions; the generator's
+                    // _EV_COMBINATOR references reproduce each one's exact NumPy chain. Heaviside is NOT
+                    // here: it is the Phase-4.2 binary node ("heaviside", above), not a combinator.
+                    case "if": return NDExpr.If(a[0], a[1], a[2]);
+                    case "ifnot": return NDExpr.IfNot(a[0], a[1], a[2]);
+                    case "when": return NDExpr.When(a[0], a[1]);
+                    case "unless": return NDExpr.Unless(a[0], a[1]);
+                    case "clampmin": return NDExpr.ClampMin(a[0], a[1]);
+                    case "clampmax": return NDExpr.ClampMax(a[0], a[1]);
+                    case "saturate": return NDExpr.Saturate(a[0]);
+                    case "nanto": return NDExpr.NanTo(a[0], a[1]);
+                    case "coalesce": return NDExpr.Coalesce(a[0], a[1]);
+                    case "relu": return NDExpr.Relu(a[0]);
+                    case "leakyrelu": return NDExpr.LeakyRelu(a[0], a[1]);
+                    case "elu": return NDExpr.Elu(a[0], a[1]);
+                    case "sigmoid": return NDExpr.Sigmoid(a[0]);
+                    case "swish": return NDExpr.Swish(a[0]);
+                    case "softplus": return NDExpr.Softplus(a[0]);
+                    case "gelu": return NDExpr.Gelu(a[0]);
+                    case "hardsigmoid": return NDExpr.HardSigmoid(a[0]);
+                    case "step": return NDExpr.Step(a[0]);
+                    case "nand": return NDExpr.Nand(a[0], a[1]);
+                    case "nor": return NDExpr.Nor(a[0], a[1]);
+                    case "xnor": return NDExpr.Xnor(a[0], a[1]);
+                    case "implies": return NDExpr.Implies(a[0], a[1]);
+                    case "majority3": return NDExpr.Majority3(a[0], a[1], a[2]);
+                    case "ispositive": return NDExpr.IsPositive(a[0]);
+                    case "isnegative": return NDExpr.IsNegative(a[0]);
+                    case "isinteger": return NDExpr.IsInteger(a[0]);
+                    case "isclose": return NDExpr.IsClose(a[0], a[1], a[2], a[3]);
+                    case "samesign": return NDExpr.SameSign(a[0], a[1]);
+                    case "between": return NDExpr.Between(a[0], a[1], a[2]);
+                    case "cmp": return NDExpr.Cmp(a[0], a[1]);
+                    case "steptoward": return NDExpr.StepToward(a[0], a[1], a[2]);
+                    case "maxmagnitude": return NDExpr.MaxMagnitude(a[0], a[1]);
+                    case "median3": return NDExpr.Median3(a[0], a[1], a[2]);
+                    case "threshold": return NDExpr.Threshold(a[0], a[1], a[2]);
+                    case "lerp": return NDExpr.Lerp(a[0], a[1], a[2]);
+                    // Variadic combinators: reconstruct the trailing operands. switch(default, c0, v0,
+                    // c1, v1, …) folds into (cond, value) pairs; mux(index, v0, v1, …) and
+                    // bucketize(x, e0, e1, …) take the tail as a params array.
+                    case "switch":
+                    {
+                        var cases = new List<(NDExpr, NDExpr)>();
+                        for (int i = 1; i + 1 < a.Count; i += 2) cases.Add((a[i], a[i + 1]));
+                        return NDExpr.Switch(a[0], cases.ToArray());
+                    }
+                    case "mux": return NDExpr.Mux(a[0], a.GetRange(1, a.Count - 1).ToArray());
+                    case "bucketize": return NDExpr.Bucketize(a[0], a.GetRange(1, a.Count - 1).ToArray());
+                    default: throw new NotSupportedException($"evaluate node '{name}' has no NDExpr mapping");
+                }
+            }
+        }
+    }
+}

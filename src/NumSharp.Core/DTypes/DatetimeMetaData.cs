@@ -98,30 +98,44 @@ namespace NumSharp
             0,    /* Generic units don't have a conversion */
         };
 
-        /// <summary>The unit (<c>base</c> in NumPy's struct).</summary>
-        public readonly NPY_DATETIMEUNIT Base;
+        /// <summary>
+        ///     The unit — NumPy's <c>PyArray_DatetimeMetaData.base</c>. C# spells it <c>@base</c> (<c>meta.@base</c>), because
+        ///     <c>base</c> is a keyword; the member's name is <c>base</c> all the same (reflection, <c>nameof</c>).
+        /// </summary>
+        public readonly NPY_DATETIMEUNIT @base;
 
-        /// <summary>The unit multiplier (<c>num</c> in NumPy's struct); 1 for a plain unit.</summary>
-        public readonly int Num;
+        /// <summary>The unit multiplier — NumPy's <c>PyArray_DatetimeMetaData.num</c>; 1 for a plain unit.</summary>
+        public readonly int num;
 
         /// <summary>The generic (unbound) metadata — the parameter of a bare <c>M8</c> / <c>m8</c>.</summary>
         public static readonly DatetimeMetaData Generic = new DatetimeMetaData(NPY_DATETIMEUNIT.NPY_FR_GENERIC, 1);
 
+        /// <summary>
+        ///     The metadata of <paramref name="num"/> units of <paramref name="base"/> — NumPy's struct literal
+        ///     <c>{base, num}</c>.
+        /// </summary>
+        /// <param name="base">The unit.</param>
+        /// <param name="num">The unit multiplier; 1 for a plain unit.</param>
+        /// <remarks>
+        ///     No validation, as in NumPy: the parsers and the unit arithmetic that build metadata check their own inputs,
+        ///     and <see cref="UnitString"/> refuses a unit outside the table when it is read.
+        /// </remarks>
         public DatetimeMetaData(NPY_DATETIMEUNIT @base, int num = 1)
         {
-            Base = @base;
-            Num = num;
+            // The parameters carry the fields' names (NumPy's spelling), so both fields are written through `this.`.
+            this.@base = @base;
+            this.num = num;
         }
 
         /// <summary>True for the generic (unbound) unit.</summary>
-        public bool IsGeneric => Base == NPY_DATETIMEUNIT.NPY_FR_GENERIC;
+        public bool IsGeneric => @base == NPY_DATETIMEUNIT.NPY_FR_GENERIC;
 
         /// <summary>The unit string NumPy's <c>np.datetime_data</c> returns (<c>"ns"</c>, <c>"Y"</c>, <c>"generic"</c>).</summary>
         public string UnitString
         {
             get
             {
-                int b = (int)Base;
+                int b = (int)@base;
                 if (b < 0 || b >= NumUnits)
                     throw new RuntimeError("NumPy datetime metadata is corrupted");
                 return UnitStrings[b];
@@ -138,22 +152,22 @@ namespace NumSharp
                 return skipBrackets ? "generic" : "";
 
             string basestr = UnitString;
-            if (Num == 1)
+            if (num == 1)
                 return skipBrackets ? basestr : "[" + basestr + "]";
-            return skipBrackets ? Num + basestr : "[" + Num + basestr + "]";
+            return skipBrackets ? num + basestr : "[" + num + basestr + "]";
         }
 
         /// <summary>The bracketed metadata string (<c>"[ns]"</c>, <c>"[10ns]"</c>, <c>""</c> for generic).</summary>
         public override string ToString() => ToString(skipBrackets: false);
 
         /// <inheritdoc/>
-        public bool Equals(DatetimeMetaData other) => Base == other.Base && Num == other.Num;
+        public bool Equals(DatetimeMetaData other) => @base == other.@base && num == other.num;
 
         /// <inheritdoc/>
         public override bool Equals(object obj) => obj is DatetimeMetaData other && Equals(other);
 
         /// <inheritdoc/>
-        public override int GetHashCode() => HashCode.Combine((int)Base, Num);
+        public override int GetHashCode() => HashCode.Combine((int)@base, num);
 
         public static bool operator ==(DatetimeMetaData left, DatetimeMetaData right) => left.Equals(right);
         public static bool operator !=(DatetimeMetaData left, DatetimeMetaData right) => !left.Equals(right);
@@ -354,7 +368,7 @@ namespace NumSharp
         /// <exception cref="TypeError">A zero divisor — where NumPy divides by zero and crashes.</exception>
         internal static DatetimeMetaData ConvertDivisorToMultiple(DatetimeMetaData meta, int den, string metastr)
         {
-            if (meta.Base == NPY_DATETIMEUNIT.NPY_FR_GENERIC)
+            if (meta.@base == NPY_DATETIMEUNIT.NPY_FR_GENERIC)
                 throw new ValueError("Can't use 'den' divisor with generic units");
 
             if (den == 0)
@@ -366,27 +380,27 @@ namespace NumSharp
             }
 
             int num = 3;
-            if (meta.Base == NPY_DATETIMEUNIT.NPY_FR_W)
+            if (meta.@base == NPY_DATETIMEUNIT.NPY_FR_W)
                 num = 4;
-            else if (meta.Base > NPY_DATETIMEUNIT.NPY_FR_D)
+            else if (meta.@base > NPY_DATETIMEUNIT.NPY_FR_D)
                 num = 2;
 
             int[] totry;
             int[] baseunit;
-            if (meta.Base >= NPY_DATETIMEUNIT.NPY_FR_s)
+            if (meta.@base >= NPY_DATETIMEUNIT.NPY_FR_s)
             {
                 /* _multiplies_table only has entries up to NPY_FR_s */
                 int ind = ((int)NPY_DATETIMEUNIT.NPY_FR_s - (int)NPY_DATETIMEUNIT.NPY_FR_Y) * 2;
                 totry = _multiplesTable[ind];
-                baseunit = new[] { (int)meta.Base + 1, (int)meta.Base + 2, 0, 0 };
-                if (meta.Base == NPY_DATETIMEUNIT.NPY_FR_as - 1)
+                baseunit = new[] { (int)meta.@base + 1, (int)meta.@base + 2, 0, 0 };
+                if (meta.@base == NPY_DATETIMEUNIT.NPY_FR_as - 1)
                     num = 1;
-                if (meta.Base == NPY_DATETIMEUNIT.NPY_FR_as)
+                if (meta.@base == NPY_DATETIMEUNIT.NPY_FR_as)
                     num = 0;
             }
             else
             {
-                int ind = ((int)meta.Base - (int)NPY_DATETIMEUNIT.NPY_FR_Y) * 2;
+                int ind = ((int)meta.@base - (int)NPY_DATETIMEUNIT.NPY_FR_Y) * 2;
                 totry = _multiplesTable[ind];
                 baseunit = _multiplesTable[ind + 1];
             }
@@ -407,7 +421,7 @@ namespace NumSharp
                 throw new ValueError($"divisor ({den}) is not a multiple of a lower-unit in datetime metadata \"{metastr}\"");
             }
 
-            return new DatetimeMetaData((NPY_DATETIMEUNIT)baseunit[i], meta.Num * q);
+            return new DatetimeMetaData((NPY_DATETIMEUNIT)baseunit[i], meta.num * q);
         }
 
         /// <summary>
@@ -507,27 +521,27 @@ namespace NumSharp
         internal static (long num, long denom) ConversionFactor(in DatetimeMetaData src, in DatetimeMetaData dst)
         {
             /* Generic units change to the destination with no conversion factor */
-            if (src.Base == NPY_DATETIMEUNIT.NPY_FR_GENERIC)
+            if (src.@base == NPY_DATETIMEUNIT.NPY_FR_GENERIC)
                 return (1, 1);
             /*
              * Converting to a generic unit from something other than a generic
              * unit is an error.
              */
-            if (dst.Base == NPY_DATETIMEUNIT.NPY_FR_GENERIC)
+            if (dst.@base == NPY_DATETIMEUNIT.NPY_FR_GENERIC)
                 throw new ValueError("Cannot convert from specific units to generic units in NumPy datetimes or timedeltas");
 
             NPY_DATETIMEUNIT srcBase, dstBase;
             bool swapped;
-            if (src.Base <= dst.Base)
+            if (src.@base <= dst.@base)
             {
-                srcBase = src.Base;
-                dstBase = dst.Base;
+                srcBase = src.@base;
+                dstBase = dst.@base;
                 swapped = false;
             }
             else
             {
-                srcBase = dst.Base;
-                dstBase = src.Base;
+                srcBase = dst.@base;
+                dstBase = src.@base;
                 swapped = true;
             }
 
@@ -589,8 +603,8 @@ namespace NumSharp
             if (swapped)
                 (num, denom) = (denom, num);
 
-            num *= (ulong)src.Num;
-            denom *= (ulong)dst.Num;
+            num *= (ulong)src.num;
+            denom *= (ulong)dst.num;
 
             /* Return as a fraction in reduced form */
             ulong gcd = Gcd(num, denom);
@@ -610,45 +624,45 @@ namespace NumSharp
              * Any unit can always divide into generic units. In other words, we
              * should be able to convert generic units into any more specific unit.
              */
-            if (dividend.Base == NPY_DATETIMEUNIT.NPY_FR_GENERIC)
+            if (dividend.@base == NPY_DATETIMEUNIT.NPY_FR_GENERIC)
                 return true;
             /*
              * However, generic units cannot always divide into more specific units.
              * We cannot safely convert datetimes with units back into generic units.
              */
-            if (divisor.Base == NPY_DATETIMEUNIT.NPY_FR_GENERIC)
+            if (divisor.@base == NPY_DATETIMEUNIT.NPY_FR_GENERIC)
                 return false;
 
-            ulong num1 = (ulong)(uint)dividend.Num;
-            ulong num2 = (ulong)(uint)divisor.Num;
+            ulong num1 = (ulong)(uint)dividend.num;
+            ulong num2 = (ulong)(uint)divisor.num;
 
             /* If the bases are different, factor in a conversion */
-            if (dividend.Base != divisor.Base)
+            if (dividend.@base != divisor.@base)
             {
                 /*
                  * Years and Months are incompatible with
                  * all other units (except years and months are compatible
                  * with each other).
                  */
-                if (dividend.Base == NPY_DATETIMEUNIT.NPY_FR_Y)
+                if (dividend.@base == NPY_DATETIMEUNIT.NPY_FR_Y)
                 {
-                    if (divisor.Base == NPY_DATETIMEUNIT.NPY_FR_M)
+                    if (divisor.@base == NPY_DATETIMEUNIT.NPY_FR_M)
                         num1 *= 12;
                     else if (strictWithNonlinearUnits)
                         return false;
                     else
                         return true; /* Could do something complicated here */
                 }
-                else if (divisor.Base == NPY_DATETIMEUNIT.NPY_FR_Y)
+                else if (divisor.@base == NPY_DATETIMEUNIT.NPY_FR_Y)
                 {
-                    if (dividend.Base == NPY_DATETIMEUNIT.NPY_FR_M)
+                    if (dividend.@base == NPY_DATETIMEUNIT.NPY_FR_M)
                         num2 *= 12;
                     else if (strictWithNonlinearUnits)
                         return false;
                     else
                         return true;
                 }
-                else if (dividend.Base == NPY_DATETIMEUNIT.NPY_FR_M || divisor.Base == NPY_DATETIMEUNIT.NPY_FR_M)
+                else if (dividend.@base == NPY_DATETIMEUNIT.NPY_FR_M || divisor.@base == NPY_DATETIMEUNIT.NPY_FR_M)
                 {
                     if (strictWithNonlinearUnits)
                         return false;
@@ -656,15 +670,15 @@ namespace NumSharp
                 }
 
                 /* Take the greater base (unit sizes are decreasing in enum) */
-                if (dividend.Base > divisor.Base)
+                if (dividend.@base > divisor.@base)
                 {
-                    num2 *= UnitsFactor(divisor.Base, dividend.Base);
+                    num2 *= UnitsFactor(divisor.@base, dividend.@base);
                     if (num2 == 0)
                         return false;
                 }
                 else
                 {
-                    num1 *= UnitsFactor(dividend.Base, divisor.Base);
+                    num1 *= UnitsFactor(dividend.@base, divisor.@base);
                     if (num1 == 0)
                         return false;
                 }
@@ -692,19 +706,19 @@ namespace NumSharp
             bool strictWithNonlinearUnits1, bool strictWithNonlinearUnits2)
         {
             /* If either unit is generic, adopt the metadata from the other one */
-            if (meta1.Base == NPY_DATETIMEUNIT.NPY_FR_GENERIC)
+            if (meta1.@base == NPY_DATETIMEUNIT.NPY_FR_GENERIC)
                 return meta2;
-            if (meta2.Base == NPY_DATETIMEUNIT.NPY_FR_GENERIC)
+            if (meta2.@base == NPY_DATETIMEUNIT.NPY_FR_GENERIC)
                 return meta1;
 
-            ulong num1 = (ulong)(uint)meta1.Num;
-            ulong num2 = (ulong)(uint)meta2.Num;
+            ulong num1 = (ulong)(uint)meta1.num;
+            ulong num2 = (ulong)(uint)meta2.num;
             NPY_DATETIMEUNIT @base;
 
             /* First validate that the units have a reasonable GCD */
-            if (meta1.Base == meta2.Base)
+            if (meta1.@base == meta2.@base)
             {
-                @base = meta1.Base;
+                @base = meta1.@base;
             }
             else
             {
@@ -713,9 +727,9 @@ namespace NumSharp
                  * all other units (except years and months are compatible
                  * with each other).
                  */
-                if (meta1.Base == NPY_DATETIMEUNIT.NPY_FR_Y)
+                if (meta1.@base == NPY_DATETIMEUNIT.NPY_FR_Y)
                 {
-                    if (meta2.Base == NPY_DATETIMEUNIT.NPY_FR_M)
+                    if (meta2.@base == NPY_DATETIMEUNIT.NPY_FR_M)
                     {
                         @base = NPY_DATETIMEUNIT.NPY_FR_M;
                         num1 *= 12;
@@ -723,11 +737,11 @@ namespace NumSharp
                     else if (strictWithNonlinearUnits1)
                         throw IncompatibleUnits(meta1, meta2);
                     else
-                        @base = meta2.Base; /* Don't multiply num1 since there is no even factor */
+                        @base = meta2.@base; /* Don't multiply num1 since there is no even factor */
                 }
-                else if (meta2.Base == NPY_DATETIMEUNIT.NPY_FR_Y)
+                else if (meta2.@base == NPY_DATETIMEUNIT.NPY_FR_Y)
                 {
-                    if (meta1.Base == NPY_DATETIMEUNIT.NPY_FR_M)
+                    if (meta1.@base == NPY_DATETIMEUNIT.NPY_FR_M)
                     {
                         @base = NPY_DATETIMEUNIT.NPY_FR_M;
                         num2 *= 12;
@@ -735,37 +749,37 @@ namespace NumSharp
                     else if (strictWithNonlinearUnits2)
                         throw IncompatibleUnits(meta1, meta2);
                     else
-                        @base = meta1.Base;
+                        @base = meta1.@base;
                 }
-                else if (meta1.Base == NPY_DATETIMEUNIT.NPY_FR_M)
+                else if (meta1.@base == NPY_DATETIMEUNIT.NPY_FR_M)
                 {
                     if (strictWithNonlinearUnits1)
                         throw IncompatibleUnits(meta1, meta2);
-                    @base = meta2.Base;
+                    @base = meta2.@base;
                 }
-                else if (meta2.Base == NPY_DATETIMEUNIT.NPY_FR_M)
+                else if (meta2.@base == NPY_DATETIMEUNIT.NPY_FR_M)
                 {
                     if (strictWithNonlinearUnits2)
                         throw IncompatibleUnits(meta1, meta2);
-                    @base = meta1.Base;
+                    @base = meta1.@base;
                 }
                 else
                 {
-                    @base = meta1.Base; // overwritten below
+                    @base = meta1.@base; // overwritten below
                 }
 
                 /* Take the greater base (unit sizes are decreasing in enum) */
-                if (meta1.Base > meta2.Base)
+                if (meta1.@base > meta2.@base)
                 {
-                    @base = meta1.Base;
-                    num2 *= UnitsFactor(meta2.Base, meta1.Base);
+                    @base = meta1.@base;
+                    num2 *= UnitsFactor(meta2.@base, meta1.@base);
                     if (num2 == 0)
                         throw UnitsOverflow(meta1, meta2);
                 }
                 else
                 {
-                    @base = meta2.Base;
-                    num1 *= UnitsFactor(meta1.Base, meta2.Base);
+                    @base = meta2.@base;
+                    num1 *= UnitsFactor(meta1.@base, meta2.@base);
                     if (num1 == 0)
                         throw UnitsOverflow(meta1, meta2);
                 }
@@ -878,13 +892,13 @@ namespace NumSharp
                     return true;
 
                 case NPY_CASTING.NPY_SAME_KIND_CASTING:
-                    return CanCastDatetime64Units(src.Base, dst.Base, casting);
+                    return CanCastDatetime64Units(src.@base, dst.@base, casting);
 
                 case NPY_CASTING.NPY_SAFE_CASTING:
-                    return CanCastDatetime64Units(src.Base, dst.Base, casting) && Divides(src, dst, false);
+                    return CanCastDatetime64Units(src.@base, dst.@base, casting) && Divides(src, dst, false);
 
                 default:
-                    return src.Base == dst.Base && src.Num == dst.Num;
+                    return src.@base == dst.@base && src.num == dst.num;
             }
         }
 
@@ -897,13 +911,13 @@ namespace NumSharp
                     return true;
 
                 case NPY_CASTING.NPY_SAME_KIND_CASTING:
-                    return CanCastTimedelta64Units(src.Base, dst.Base, casting);
+                    return CanCastTimedelta64Units(src.@base, dst.@base, casting);
 
                 case NPY_CASTING.NPY_SAFE_CASTING:
-                    return CanCastTimedelta64Units(src.Base, dst.Base, casting) && Divides(src, dst, true);
+                    return CanCastTimedelta64Units(src.@base, dst.@base, casting) && Divides(src, dst, true);
 
                 default:
-                    return src.Base == dst.Base && src.Num == dst.Num;
+                    return src.@base == dst.@base && src.num == dst.num;
             }
         }
     }

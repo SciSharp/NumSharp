@@ -108,13 +108,16 @@ namespace NumSharp
             [NDScoped] // reclaims the moveaxis views, the six component products and the pre-moveaxis stack
             public static NDArray cross(NDArray x1, NDArray x2, int axis = -1)
             {
+                // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
+                if (NDMatrixBoundary.Sees(x1, x2))
+                    return NDMatrixBoundary.Plain((x1, x2, axis), static s => cross(s.x1, s.x2, s.axis));
                 int a1 = NormalizeAxis(axis, x1.ndim);
                 int a2 = NormalizeAxis(axis, x2.ndim);
 
-                if (x1.shape[a1] != 3 || x2.shape[a2] != 3)
+                if (x1.Shape.dimensions[a1] != 3 || x2.Shape.dimensions[a2] != 3)
                     throw new ValueError(
                         "Both input arrays must be (arrays of) 3-dimensional vectors, but they are " +
-                        $"{x1.shape[a1]} and {x2.shape[a2]} dimensional instead.");
+                        $"{x1.Shape.dimensions[a1]} and {x2.Shape.dimensions[a2]} dimensional instead.");
 
                 // Work with the component axis FIRST, so each of the three components is a plain
                 // leading-axis index that drops the axis; taking them from the last axis instead

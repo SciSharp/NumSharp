@@ -18,6 +18,9 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.tensordot.html</remarks>
         public static NDArray tensordot(NDArray a, NDArray b, int axes = 2)
         {
+            // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
+            if (NDMatrixBoundary.Sees(a, b))
+                return NDMatrixBoundary.Plain((a, b, axes), static s => tensordot(s.a, s.b, s.axes));
             var axesA = new List<int>();
             var axesB = new List<int>();
             for (int k = -axes; k < 0; k++)
@@ -33,7 +36,9 @@ namespace NumSharp
         ///     <paramref name="b"/> — NumPy's <c>axes=(int, int)</c> spelling.
         /// </summary>
         public static NDArray tensordot(NDArray a, NDArray b, (int AxisA, int AxisB) axes)
-            => tensordot(a, b, new[] {axes.AxisA}, new[] {axes.AxisB});
+            => NDMatrixBoundary.Sees(a, b)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
+            ? NDMatrixBoundary.Plain((a, b, axes), static s => tensordot(s.a, s.b, s.axes))
+            : tensordot(a, b, new[] {axes.AxisA}, new[] {axes.AxisB});
 
         /// <summary>
         ///     Tensor contraction pairing <paramref name="axesA"/> of <paramref name="a"/> with
@@ -54,6 +59,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray tensordot(NDArray a, NDArray b, int[] axesA, int[] axesB)
         {
+            // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
+            if (NDMatrixBoundary.Sees(a, b))
+                return NDMatrixBoundary.Plain((a, b, axesA, axesB), static s => tensordot(s.a, s.b, s.axesA, s.axesB));
             // Port of numpy/_core/numeric.py :: tensordot.
             var shapeA = a.Shape.dimensions;
             var shapeB = b.Shape.dimensions;

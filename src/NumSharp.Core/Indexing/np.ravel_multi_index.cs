@@ -28,6 +28,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ravel_multi_index.html</remarks>
         public static NDArray<long> ravel_multi_index(NDArray[] multi_index, int[] dims, string mode = "raise", char order = 'C')
         {
+            using var plain = NDMatrixBoundary.PlainFor(multi_index);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             int ndim = ValidateRavelInputs(multi_index, dims);
             var modes = new int[ndim];
             int singleMode = ParseMode(mode, nameof(mode));
@@ -42,6 +43,7 @@ namespace NumSharp
         /// </summary>
         public static NDArray<long> ravel_multi_index(NDArray[] multi_index, int[] dims, string[] modes, char order = 'C')
         {
+            using var plain = NDMatrixBoundary.PlainFor(multi_index);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             int ndim = ValidateRavelInputs(multi_index, dims);
             if (modes == null || modes.Length != ndim)
                 throw new ArgumentException(
@@ -109,7 +111,7 @@ namespace NumSharp
             // NDArray<T>.GetAtIndex (which translates through Shape.TransformOffset)
             // would collapse to the unbroadcast cell, returning duplicated values
             // even though the kernel wrote the correct sequence to raw memory.
-            var resultShape = new Shape((long[])refShape.dimensions.Clone());
+            var resultShape = Shape.Adopt((long[])refShape.dimensions.Clone());
             var result = new NDArray<long>(resultShape);
 
             if (count == 0)

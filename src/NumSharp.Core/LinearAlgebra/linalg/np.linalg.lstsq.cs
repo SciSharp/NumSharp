@@ -27,10 +27,17 @@ namespace NumSharp
             ///     </para>
             /// </remarks>
             /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+            /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
             [NDScoped] // reclaims the column-promoted b, the ToCommon casts and the nrhs==0 padding temps; the 4-tuple is yielded
             public static (NDArray Solution, NDArray Residuals, NDArray Rank, NDArray SingularValues) lstsq(
                 NDArray a, NDArray b, double? rcond = null)
             {
+                // NumPy takes its wrap from b (`a, _ = _makearray(a); b, wrap = _makearray(b)`) and returns
+                // wrap(x), wrap(resids), rank, s: a numpy.matrix b gives the solution and the residuals as matrices
+                // (probed 2.4.2: a 2 x 2 matrix and a 1 x 0 matrix), a matrix a with a plain b plain arrays.
+                if (NDMatrixBoundary.IsMatrix(b) && NDMatrixBoundary.Sees(b))
+                    return NDMatrixBoundary.WrappedFirstTwoOfFour((a, b, rcond), static s => lstsq(s.a, s.b, s.rcond));
+                using var plain = NDMatrixBoundary.PlainFor(a, b);   // a matrix a with a plain b: computed as plain arrays
                 // A 1-D b is promoted to a single column, exactly as NumPy's `b = b[:, newaxis]`; the
                 // solution is squeezed back at the end. _assert_2d then rejects any higher rank.
                 bool is1d = b.ndim == 1;
@@ -65,8 +72,8 @@ namespace NumSharp
 
                 if (padded)
                 {
-                    x = np.zeros(new Shape(new long[] {n, 0}), common);            // x[..., :0]
-                    resids = np.zeros(new Shape(new long[] {0}), NPTypeCode.Double); // resids[..., :0]
+                    x = np.zeros(Shape.Adopt(new long[] {n, 0}), common);            // x[..., :0]
+                    resids = np.zeros(Shape.Adopt(new long[] {0}), NPTypeCode.Double); // resids[..., :0]
                 }
 
                 if (is1d)
@@ -76,7 +83,7 @@ namespace NumSharp
                 // discards them otherwise, replacing them with an empty array of the real result type.
                 long rankVal = Convert.ToInt64(rank.GetAtIndex(0));
                 if (rankVal != n || m <= n)
-                    resids = np.zeros(new Shape(new long[] {0}), realCommon);
+                    resids = np.zeros(Shape.Adopt(new long[] {0}), realCommon);
                 else
                     resids = resids.astype(realCommon);
 

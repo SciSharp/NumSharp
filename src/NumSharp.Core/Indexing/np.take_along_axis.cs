@@ -32,9 +32,16 @@ namespace NumSharp
         ///     <paramref name="arr"/>.
         /// </returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.take_along_axis.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static unsafe NDArray take_along_axis(NDArray arr, NDArray indices, int? axis = -1)
         {
+            // a numpy.matrix arr: NumPy indexes the matrix itself along an axis (a matrix comes back) and its
+            // flat iterator without one (a plain 1-d array)
+            if (NDMatrixBoundary.Sees(arr))
+                return axis is null
+                    ? NDMatrixBoundary.Plain((arr, indices, axis), static s => take_along_axis(s.arr, s.indices, s.axis))
+                    : NDMatrixBoundary.Wrapped((arr, indices, axis), static s => take_along_axis(s.arr, s.indices, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (indices is null) throw new ArgumentNullException(nameof(indices));
 
@@ -95,7 +102,7 @@ namespace NumSharp
                 else throw new IndexError(BuildBroadcastMismatchMessage(arrShape, idxShape, ax));
             }
 
-            var result = new NDArray(arr.typecode, new Shape(resultDims), false);
+            var result = new NDArray(arr.typecode, Shape.Adopt(resultDims), false);
 
             long totalSize = result.size;
             if (totalSize == 0)

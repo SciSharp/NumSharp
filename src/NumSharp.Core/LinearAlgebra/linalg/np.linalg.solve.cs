@@ -21,25 +21,32 @@ namespace NumSharp
             ///     </para>
             /// </remarks>
             /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+            /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
             // Scope: solve casts BOTH operands via ToCommon (two potential dtype-cast temps) before
             // the engine call — [NDScoped] reclaims whichever were minted (a passthrough operand
             // already at the common type is never tracked), yielding the engine's fresh solution.
             [NDScoped]
             public static NDArray solve(NDArray a, NDArray b)
             {
+                // NumPy takes its wrap from b (`a, _ = _makearray(a); b, wrap = _makearray(b)`): a numpy.matrix b
+                // gives a matrix, a matrix a with a plain b a plain array (probed 2.4.2).
+                if (NDMatrixBoundary.Sees(a, b))
+                    return NDMatrixBoundary.IsMatrix(b)
+                        ? NDMatrixBoundary.Wrapped((a, b), static s => solve(s.a, s.b))
+                        : NDMatrixBoundary.Plain((a, b), static s => solve(s.a, s.b));
                 AssertStackedSquare(a);
 
                 bool oneDimensional = b.ndim == 1;
                 if (oneDimensional)
                 {
                     GufuncGuard.RequireCoreSize("solve1", "(m,m),(m)->(m)", 1, 0,
-                        b.shape[0], a.shape[a.ndim - 1]);
+                        b.Shape.dimensions[0], a.Shape.dimensions[a.ndim - 1]);
                 }
                 else
                 {
                     GufuncGuard.RequireRank("solve", "(m,m),(m,n)->(m,n)", 1, b, 2);
                     GufuncGuard.RequireCoreSize("solve", "(m,m),(m,n)->(m,n)", 1, 0,
-                        b.shape[b.ndim - 2], a.shape[a.ndim - 1]);
+                        b.Shape.dimensions[b.ndim - 2], a.Shape.dimensions[a.ndim - 1]);
                 }
 
                 var common = CommonType(a, b);
@@ -61,9 +68,13 @@ namespace NumSharp
             ///     </para>
             /// </remarks>
             /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+            /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
             [NDScoped]
             public static NDArray tensorsolve(NDArray a, NDArray b, int[] axes = null)
             {
+                // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+                if (NDMatrixBoundary.Sees(a))
+                    return NDMatrixBoundary.Wrapped((a, b, axes), static s => tensorsolve(s.a, s.b, s.axes));
                 var work = a;
                 if (axes is not null)
                 {

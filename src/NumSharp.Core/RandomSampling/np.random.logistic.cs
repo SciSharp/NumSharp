@@ -1,7 +1,3 @@
-using System;
-using NumSharp.Backends.Unmanaged;
-using NumSharp.Generic;
-
 namespace NumSharp
 {
     public partial class NumPyRandom
@@ -9,15 +5,28 @@ namespace NumSharp
         /// <summary>
         ///     Draw a single sample from a logistic distribution.
         /// </summary>
-        public NDArray logistic(double loc = 0.0, double scale = 1.0) => logistic(loc, scale, Shape.Scalar);
+        /// <param name="loc">Mean of the distribution.</param>
+        /// <param name="scale">Scale parameter (must be &gt;= 0).</param>
+        /// <returns>A 0-d float64 array holding the draw.</returns>
+        /// <exception cref="ValueError"><paramref name="scale"/> is negative, including <c>-0.0</c> (<c>scale &lt; 0</c>).</exception>
+        /// <remarks>
+        ///     Every distribution argument given, no size: one draw (a 0-d array, NumPy's size <c>()</c>, which draws
+        ///     exactly what <c>None</c> draws). NumPy's defaults live on the size overload, which carries NumPy's whole
+        ///     <c>logistic(loc=0.0, scale=1.0, size=None)</c> signature — so <c>logistic()</c>, <c>logistic(size:
+        ///     3)</c> and any argument left out bind there. This overload has no defaults on purpose: two overloads
+        ///     that both need defaults filled in are ambiguous to C#, and the size-only call would not compile.
+        /// </remarks>
+        public NDArray logistic(double loc, double scale) => logistic(loc, scale, Shape.Scalar);
 
         /// <summary>
         ///     Draw samples from a logistic distribution.
         /// </summary>
         /// <param name="loc">Mean of the distribution. Default is 0.</param>
-        /// <param name="scale">Scale parameter (must be >= 0). Default is 1.</param>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Drawn samples from the parameterized logistic distribution.</returns>
+        /// <param name="scale">Scale parameter (must be &gt;= 0). Default is 1.</param>
+        /// <param name="size">Output shape; <c>default</c> (NumPy's <c>None</c>) draws a single value.</param>
+        /// <returns>Drawn samples from the parameterized logistic distribution (float64).</returns>
+        /// <exception cref="ValueError"><paramref name="scale"/> is negative, including <c>-0.0</c> (<c>scale &lt; 0</c>), or
+        ///     <paramref name="size"/> has a negative dimension.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.logistic.html
         ///     <br/>
@@ -29,48 +38,44 @@ namespace NumSharp
         ///     f(x; μ, s) = exp(-(x-μ)/s) / (s * (1 + exp(-(x-μ)/s))^2)
         ///     <br/>
         ///     Mean = loc, Variance = scale^2 * pi^2 / 3
+        ///     <br/>
+        ///     NumPy's <c>random_logistic</c>: <c>loc + scale * log(U / (1 - U))</c>, redrawing only <c>U == 0</c>.
+        ///     <c>scale == 0</c> STILL consumes a uniform per value (the former shortcut skipped the draw and desynchronized
+        ///     every later value). Holds the bit generator's lock for the draws.
         /// </remarks>
-        public NDArray logistic(double loc, double scale, Shape size)
+        public NDArray logistic(double loc = 0.0, double scale = 1.0, Shape size = default)
         {
-            if (scale < 0)
-                throw new ArgumentException("scale < 0", nameof(scale));
+            RandomConstraints.Check(scale, "scale", ConstraintType.CONS_NON_NEGATIVE);
 
-            if (size.IsScalar || size.IsEmpty)
-                return NDArray.Scalar(SampleLogistic(loc, scale));
-
-            var ret = new NDArray<double>(size);
-            ArraySlice<double> data = ret.Data<double>();
-
-            for (int i = 0; i < ret.size; i++)
+            if (IsScalarDraw(size))
             {
-                data[i] = SampleLogistic(loc, scale);
+                unsafe
+                {
+                    // A one-double buffer IS NumPy's per-draw call sequence.
+                    double word;
+                    var one = new DrawBufferDouble(randomizer, &word, 1);
+                    lock (randomizer.@lock)
+                        return NDArray.Scalar(Distributions.RandomLogistic(ref one, loc, scale));
+                }
+            }
+
+            var ret = LegacyOutput(NPTypeCode.Double, size);
+            unsafe
+            {
+                var dst = (double*)ret.Address;
+                long n = ret.size;
+                // Read-ahead draws (bulk-filled by the bit generator): every value draws at least one uniform.
+                double* storage = stackalloc double[DrawBufferDouble.Capacity];
+                var src = new DrawBufferDouble(randomizer, storage, DrawBufferDouble.Capacity);
+                lock (randomizer.@lock)
+                    for (long i = 0; i < n; i++)
+                    {
+                        src.Owed = n - i;
+                        dst[i] = Distributions.RandomLogistic(ref src, loc, scale);
+                    }
             }
 
             return ret;
-        }
-
-        /// <summary>
-        ///     Sample from the logistic distribution using inverse transform method.
-        /// </summary>
-        /// <remarks>
-        ///     Uses the formula: X = loc + scale * ln(U / (1 - U))
-        ///     where U ~ Uniform(0, 1).
-        ///
-        ///     Special case: if scale == 0, returns loc directly.
-        /// </remarks>
-        private double SampleLogistic(double loc, double scale)
-        {
-            if (scale == 0)
-                return loc;
-
-            double U;
-            do
-            {
-                U = randomizer.NextDouble();
-            } while (U == 0.0 || U == 1.0);
-
-            // X = loc + scale * ln(U / (1 - U))
-            return loc + scale * Math.Log(U / (1.0 - U));
         }
     }
 }

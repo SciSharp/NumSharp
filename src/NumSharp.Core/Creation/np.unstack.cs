@@ -32,8 +32,14 @@ namespace NumSharp
         ///     by dropping <c>axis</c> from dims/strides and advancing the offset
         ///     by <c>i * strides[axis]</c>; no iterator or data movement anywhere.
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray[] unstack(NDArray x, int axis = 0)
         {
+            // A numpy.matrix operand: NumPy iterates np.moveaxis(x, axis, 0), and iterating a matrix yields 1 x N
+            // row matrices (probed 2.4.2: np.unstack(m) of a 2 x 3 matrix is two 1 x 3 matrices, np.unstack(m, axis=1)
+            // three 1 x 2 matrices). Each 1-d slice of the plain result is wrapped into that row.
+            if (NDMatrixBoundary.Sees(x))
+                return NDMatrixBoundary.WrappedAll((x, axis), static s => unstack(s.x, s.axis));
             if (x is null)
                 throw new ArgumentNullException(nameof(x));
 
@@ -68,7 +74,7 @@ namespace NumSharp
                 // result array above). There is no data to alias — each entry is
                 // an empty array of the remaining shape.
                 for (int i = 0; i < result.Length; i++)
-                    result[i] = new NDArray(x.dtype, new Shape(subDims));
+                    result[i] = new NDArray(x.dtype, Shape.Adopt(subDims));
                 return result;
             }
 

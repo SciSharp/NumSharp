@@ -12,6 +12,9 @@ namespace NumSharp
         /// <param name="mode">How out-of-bounds indices behave: "raise" (default), "wrap", or "clip".</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.put.html</remarks>
         public void put(NDArray indices, NDArray values, string mode = "raise")
-            => np.put(this, indices, values, mode);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
+            np.put(this, indices, values, mode);
+        }
     }
 }

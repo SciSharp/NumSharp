@@ -42,10 +42,14 @@ namespace NumSharp
         ///     absent here too. See <see cref="vecdot"/>.
         ///     </para>
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray vecmat(NDArray x1, NDArray x2, NDArray @out = null, int[][] axes = null,
             int? axis = null, bool keepdims = false, DType dtype = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(x1, x2))
+                return NDMatrixBoundary.Wrapped((x1, x2, @out, axes, axis, keepdims, dtype), static s => vecmat(s.x1, s.x2, s.@out, s.axes, s.axis, s.keepdims, s.dtype), @out);
             GufuncGuard.RejectAxisWithAxes(axes, axis);
             GufuncGuard.RejectAxisAndKeepdims("vecmat", VecmatSignature, axis, keepdims, 2);
 
@@ -66,7 +70,7 @@ namespace NumSharp
             }
 
             GufuncGuard.RequireCoreSize("vecmat", VecmatSignature, 1, 0,
-                b.shape[b.ndim - 2], a.shape[a.ndim - 1]);
+                b.Shape.dimensions[b.ndim - 2], a.Shape.dimensions[a.ndim - 1]);
 
             a = GufuncGuard.ToLoop(a, dtype);
             b = GufuncGuard.ToLoop(b, dtype);

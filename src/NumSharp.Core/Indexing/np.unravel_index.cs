@@ -32,10 +32,16 @@ namespace NumSharp
         ///     Any index in <paramref name="indices"/> is &lt; 0 or
         ///     &gt;= product of <paramref name="shape"/>.
         /// </exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unravel_index.html</remarks>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.unravel_index.html
+        ///     <para>Scoped by <c>[NDScoped]</c>: the int64 / C-contiguous copy of <paramref name="indices"/> is released
+        ///     on return, exceptions included, and the coordinate arrays are yielded. The body no longer tracks
+        ///     ownership of that copy with a flag and two hand-written disposals.</para>
+        /// </remarks>
         [NDScoped]
         public static NDArray<long>[] unravel_index(NDArray indices, int[] shape, char order = 'C')
         {
+            using var plain = NDMatrixBoundary.PlainFor(indices);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             ValidateOrder(order, nameof(order));
             ValidateShapeForUnravel(shape, out long unravelSize);
 
@@ -43,13 +49,12 @@ namespace NumSharp
 
             // Cast indices to int64 contig. astype with copy: false returns the same
             // NDArray if dtype already matches AND it's contig; otherwise it materializes.
+            // A materialized copy is released by this method's scope (exceptions included) and is
+            // kept reachable by it while the kernel reads it; an `indices` used as-is is the caller's
+            // (built before the scope opened) and is never disposed.
             var idx64 = indices.GetTypeCode == NPTypeCode.Int64
                 ? (indices.Shape.IsContiguous ? indices : np.ascontiguousarray(indices))
                 : indices.astype(NPTypeCode.Int64);
-
-            // ARC: idx64 may alias `indices` (no-op cast on contig int64); the explicit
-            // Dispose below only triggers when astype/ascontiguousarray actually allocated.
-            bool ownIdx64 = !ReferenceEquals(idx64, indices);
 
             // Result NDArrays have the same DIMENSIONS as the input but with fresh
             // C-contiguous strides. Cloning indices.Shape directly would copy
@@ -57,7 +62,7 @@ namespace NumSharp
             // Shape.TransformOffset, would collapse the result to the unbroadcast
             // cell — the kernel writes correct sequential values to raw memory
             // but the user would see duplicates.
-            var resultShape = new Shape((long[])indices.Shape.dimensions.Clone());
+            var resultShape = Shape.Adopt((long[])indices.Shape.dimensions.Clone());
             var result = new NDArray<long>[ndim];
             for (int d = 0; d < ndim; d++)
                 result[d] = new NDArray<long>(resultShape);
@@ -65,18 +70,10 @@ namespace NumSharp
             long count = indices.size;
             if (count == 0)
             {
-                if (ownIdx64) idx64.Dispose();
                 return result;
             }
 
-            try
-            {
-                ExecuteUnravelIndex(idx64, shape, unravelSize, result, order);
-            }
-            finally
-            {
-                if (ownIdx64) idx64.Dispose();
-            }
+            ExecuteUnravelIndex(idx64, shape, unravelSize, result, order);
 
             return result;
         }

@@ -15,21 +15,33 @@ namespace NumSharp.Tests
     ///     copy. The bugs below live in the NaN-aware engine (<c>Default.Reduction.Nan.cs</c>) and the
     ///     argmax/argmin dtype switch — none of which the fold touches.
     /// </summary>
+    /// <remarks>
+    ///     Every bug in this file is FIXED. The four tests that were still <c>[OpenBugs]</c> were found passing by the
+    ///     2026-10-05 run of the whole OpenBugs category and now guard the fixes in CI: the float16 axis reads
+    ///     (186ddc8f for nansum, cadd513e for nanmax), complex nanmax/nanmin (de6333dd) and argmax/argmin of Decimal and
+    ///     Char (8cad3025).
+    /// </remarks>
     public partial class OpenBugs
     {
         // =====================================================================
-        // BUG: NaN-aware AXIS reductions on NON-CONTIGUOUS half arrays are wrong.
+        // FIXED (186ddc8f nansum, cadd513e nanmax): NaN-aware AXIS reductions on
+        // NON-CONTIGUOUS half arrays were wrong.
         //
-        // ExecuteNanAxisReduction (Default.Reduction.Nan.cs) hand-rolls the input
-        // offset from shape.strides[...] and reads arr.GetAtIndex(baseOffset + i*axisStride).
-        // For float/double this resolves correctly, but for Half the index resolution
-        // double-applies strides on any non-C-canonical layout (transpose, broadcast,
-        // reversed) — so the reduction reads the wrong cells. float32/float64 are correct
-        // on the IDENTICAL layouts; only Half breaks. Offset-only slices (still
-        // C-canonical strides) are unaffected.
+        // At pin time ExecuteNanAxisReduction (Default.Reduction.Nan.cs) hand-rolled the
+        // input offset from shape.strides[...] and read arr.GetAtIndex(baseOffset + i*axisStride).
+        // For float/double this resolved correctly, but for Half the index resolution
+        // double-applied strides on any non-C-canonical layout (transpose, broadcast,
+        // reversed) — so the reduction read the wrong cells. float32/float64 were correct
+        // on the IDENTICAL layouts; only Half broke. Offset-only slices (still
+        // C-canonical strides) were unaffected.
         // =====================================================================
+        /// <summary>
+        ///     float16 <c>np.nansum</c> along axis 0 and <c>np.nanmax</c> along axis 1 of a TRANSPOSED (non-contiguous)
+        ///     array read the cells the view selects and skip the NaNs: <c>[3, 8]</c> and <c>[3, 1, 5]</c>, the same as
+        ///     on a materialized copy.
+        /// </summary>
         [TestMethod]
-        [OpenBugs]
+        [TestCategory("Fixed")]
         public void Bug_NanAxis_Half_NonContiguous_WrongValues()
         {
             // (2,3) half, transpose -> (3,2) non-contiguous (strides [1,3]); NOT broadcast.
@@ -50,15 +62,20 @@ namespace NumSharp.Tests
         }
 
         // =====================================================================
-        // BUG: np.nanmax / np.nanmin on COMPLEX arrays do NOT skip NaN.
+        // FIXED (de6333dd): np.nanmax / np.nanmin on COMPLEX arrays did NOT skip NaN.
         //
-        // NanMax/NanMin (Default.Reduction.Nan.cs) gate on Single/Double/Half only and
-        // route Complex to the regular ReduceAMax/ReduceAMin, which PROPAGATE NaN. NumPy's
-        // nanmax/nanmin skip any element whose real OR imag part is NaN. Reproduces on a
+        // NanMax/NanMin (Default.Reduction.Nan.cs) gated on Single/Double/Half only and
+        // routed Complex to the regular ReduceAMax/ReduceAMin, which PROPAGATE NaN. NumPy's
+        // nanmax/nanmin skip any element whose real OR imag part is NaN. Reproduced on a
         // plain contiguous array — not broadcast-specific.
         // =====================================================================
+        /// <summary>
+        ///     <c>np.nanmax</c> / <c>np.nanmin</c> of complex128 skip an element whose real OR imaginary part is NaN:
+        ///     <c>[nan+1j, 2+2j, -1+3j]</c> gives <c>2+2j</c> and <c>-1+3j</c> (NumPy's <c>CDOUBLE_fmax</c> /
+        ///     <c>CDOUBLE_fmin</c>), where the plain max/min would propagate the NaN.
+        /// </summary>
         [TestMethod]
-        [OpenBugs]
+        [TestCategory("Fixed")]
         public void Bug_NanMaxMin_Complex_DoesNotSkipNaN()
         {
             var a = np.array(new Complex[]
@@ -115,15 +132,20 @@ namespace NumSharp.Tests
         }
 
         // =====================================================================
-        // BUG: np.argmax / np.argmin on DECIMAL arrays return the wrong index.
+        // FIXED (8cad3025): np.argmax / np.argmin on DECIMAL arrays returned the wrong index.
         //
-        // The argmax/argmin dtype switch mishandles Decimal: it returns a boundary index
-        // (last/first) rather than the index of the extreme value. Reproduces on a plain
+        // The argmax/argmin dtype switch mishandled Decimal: it returned a boundary index
+        // (last/first) rather than the index of the extreme value. Reproduced on a plain
         // contiguous array. (Decimal has no NumPy analog; the oracle is float64 with the
         // same values: argmax([3,9,1,9,2,5]) == 1, argmin == 2.)
         // =====================================================================
+        /// <summary>
+        ///     <c>np.argmax</c> / <c>np.argmin</c> of a decimal array return the index of the FIRST extreme value (1 and
+        ///     2 for <c>[3, 9, 1, 9, 2, 5]</c>, as float64 gives in NumPy), so a tie at the maximum keeps the earlier
+        ///     index.
+        /// </summary>
         [TestMethod]
-        [OpenBugs]
+        [TestCategory("Fixed")]
         public void Bug_ArgMaxMin_Decimal_WrongIndex()
         {
             var a = np.array(new decimal[] { 3, 9, 1, 9, 2, 5 });
@@ -132,14 +154,18 @@ namespace NumSharp.Tests
         }
 
         // =====================================================================
-        // BUG: np.argmax / np.argmin throw NotSupportedException on CHAR arrays.
+        // FIXED (8cad3025): np.argmax / np.argmin threw NotSupportedException on CHAR arrays.
         //
         // Char maps to NumPy uint16, which DOES support argmax/argmin. NumSharp's
-        // argmax/argmin dtype switch omits Char and throws
+        // argmax/argmin dtype switch omitted Char and threw
         // "ArgMax not supported for type Char".
         // =====================================================================
+        /// <summary>
+        ///     <c>np.argmax</c> / <c>np.argmin</c> of a char array compare code points like NumPy's uint16: index 3 (code
+        ///     point 90) and index 2 (code point 1) for <c>[3, 73, 1, 90, 2]</c>, not a NotSupportedException.
+        /// </summary>
         [TestMethod]
-        [OpenBugs]
+        [TestCategory("Fixed")]
         public void Bug_ArgMaxMin_Char_NotSupported()
         {
             var a = np.array(new char[] { (char)3, (char)73, (char)1, (char)90, (char)2 });

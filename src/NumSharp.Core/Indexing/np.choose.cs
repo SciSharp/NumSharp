@@ -44,16 +44,33 @@ namespace NumSharp
         ///     choices against <paramref name="a"/>.
         /// </returns>
         /// <exception cref="ValueError">
-        ///     <paramref name="choices"/> is empty (<c>"0-length sequence."</c>), or an index is out of
-        ///     range under <c>mode="raise"</c> (<c>"invalid entry in choice array"</c>).
+        ///     <paramref name="choices"/> is empty (<c>"0-length sequence."</c>), an index is out of
+        ///     range under <c>mode="raise"</c> (<c>"invalid entry in choice array"</c>), or
+        ///     <paramref name="mode"/> is not a known clip mode (NumPy's two clip-mode texts).
         /// </exception>
         /// <exception cref="TypeError">
         ///     <paramref name="a"/> cannot be safe-cast to <c>int64</c>, or <paramref name="out"/> has the
         ///     wrong shape (<c>"choose: invalid shape for output array."</c>).
         /// </exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.choose.html</remarks>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/>, <paramref name="choices"/> or a choice entry is null.</exception>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.choose.html
+        ///     <para>Scoped by <c>[NDScoped]</c>: the int64 copy of a non-int64 index array, the 0-d arrays of
+        ///     scalar choices, the converted copies of collection choices, the dtype casts of the choices, their
+        ///     broadcast views and, when <paramref name="out"/> is given, the computed result that is copied into
+        ///     it are all released on return, exceptions included. The result is yielded when <paramref name="out"/>
+        ///     is null. Before the scope, only the index copy was released by hand: the casts, the scalar arrays and
+        ///     the <c>out=</c> temporary were left to the finalizer, and a broadcast view of a cast choice kept that
+        ///     cast's buffer out of the pool. The caller's arrays were built before the scope opened, so the scope
+        ///     never disposes them.</para>
+        /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        [NDScoped]
         public static NDArray choose(NDArray a, object[] choices, NDArray @out = null, string mode = "raise")
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Wrapped((a, choices, @out, mode), static s => choose(s.a, s.choices, s.@out, s.mode), @out);
             if (a is null) throw new ArgumentNullException(nameof(a));
             if (choices is null) throw new ArgumentNullException(nameof(choices));
             return ChooseCore(a, choices, @out, mode);
@@ -64,8 +81,24 @@ namespace NumSharp
         ///     choices (the common case — every choice is an <see cref="NDArray"/>). The result dtype is
         ///     <see cref="result_type"/> of the choices.
         /// </summary>
+        /// <param name="a">The index array (see <see cref="choose(NDArray,object[],NDArray,string)"/>).</param>
+        /// <param name="choices">The choice arrays.</param>
+        /// <param name="out">Optional destination whose shape must equal the broadcast result shape.</param>
+        /// <param name="mode"><c>"raise"</c> (default), <c>"wrap"</c> or <c>"clip"</c>.</param>
+        /// <returns>A fresh C-contiguous array, or <paramref name="out"/> when given.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/>, <paramref name="choices"/> or a choice is null.</exception>
+        /// <exception cref="ValueError"><paramref name="choices"/> is empty, an index is out of range under
+        ///     <c>mode="raise"</c>, or <paramref name="mode"/> is not a known clip mode.</exception>
+        /// <exception cref="TypeError"><paramref name="a"/> cannot be safe-cast to int64, or <paramref name="out"/>
+        ///     has the wrong shape.</exception>
+        /// <remarks>Scoped by <c>[NDScoped]</c>, with the same reclaimed set as the <see cref="object"/>[] overload.</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        [NDScoped]
         public static NDArray choose(NDArray a, NDArray[] choices, NDArray @out = null, string mode = "raise")
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Wrapped((a, choices, @out, mode), static s => choose(s.a, s.choices, s.@out, s.mode), @out);
             if (a is null) throw new ArgumentNullException(nameof(a));
             if (choices is null) throw new ArgumentNullException(nameof(choices));
             var objs = new object[choices.Length];
@@ -79,19 +112,59 @@ namespace NumSharp
         ///     abuse — <c>choices.shape[0]</c> choice sub-arrays). A 0-d <paramref name="choices"/> is a
         ///     <see cref="TypeError"/> (<c>"iteration over a 0-d array"</c>), exactly as NumPy raises.
         /// </summary>
+        /// <param name="a">The index array (see <see cref="choose(NDArray,object[],NDArray,string)"/>).</param>
+        /// <param name="choices">An array whose outermost dimension enumerates the choices.</param>
+        /// <param name="out">Optional destination whose shape must equal the broadcast result shape.</param>
+        /// <param name="mode"><c>"raise"</c> (default), <c>"wrap"</c> or <c>"clip"</c>.</param>
+        /// <returns>A fresh C-contiguous array, or <paramref name="out"/> when given.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> or <paramref name="choices"/> is null.</exception>
+        /// <exception cref="TypeError"><paramref name="choices"/> is 0-d, <paramref name="a"/> cannot be safe-cast
+        ///     to int64, or <paramref name="out"/> has the wrong shape.</exception>
+        /// <exception cref="ValueError"><paramref name="choices"/> has length 0 along its first axis, an index is out
+        ///     of range under <c>mode="raise"</c>, or <paramref name="mode"/> is not a known clip mode.</exception>
+        /// <remarks>Scoped by <c>[NDScoped]</c>, with the same reclaimed set as the <see cref="object"/>[] overload,
+        ///     plus the views along axis 0 this overload builds (each held a reference on the caller's buffer until
+        ///     the finalizer ran).</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        [NDScoped]
         public static NDArray choose(NDArray a, NDArray choices, NDArray @out = null, string mode = "raise")
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Wrapped((a, choices, @out, mode), static s => choose(s.a, s.choices, s.@out, s.mode), @out);
             if (a is null) throw new ArgumentNullException(nameof(a));
             if (choices is null) throw new ArgumentNullException(nameof(choices));
             if (choices.ndim == 0)
                 throw new TypeError("iteration over a 0-d array");
-            int n = (int)choices.shape[0];
+            int n = (int)choices.Shape.dimensions[0];
             var objs = new object[n];
             for (int i = 0; i < n; i++)
                 objs[i] = choices[i];   // view along axis 0
             return ChooseCore(a, objs, @out, mode);
         }
 
+        /// <summary>
+        ///     The shared body of the three <c>choose</c> overloads: classifies each choice (NEP50 weak scalar or
+        ///     strong array), resolves the common dtype, casts the choices and the index array, broadcasts them to
+        ///     the result shape and runs the IL gather kernel.
+        /// </summary>
+        /// <param name="a">The index array.</param>
+        /// <param name="choices">The choices: <see cref="NDArray"/>s, boxed C# scalars, or array-likes.</param>
+        /// <param name="out">Optional destination (shape must equal the result shape).</param>
+        /// <param name="mode">The clip mode string, parsed by NumPy's rules.</param>
+        /// <returns>The fresh result, or <paramref name="out"/> after the result is copied into it.</returns>
+        /// <exception cref="ArgumentNullException">A choice entry is null.</exception>
+        /// <exception cref="ValueError">No choices, an out-of-range index under raise, a bad clip mode, or a
+        ///     read-only <paramref name="out"/>.</exception>
+        /// <exception cref="TypeError">The index array cannot be safe-cast to int64, or <paramref name="out"/> has
+        ///     the wrong shape.</exception>
+        /// <remarks>
+        ///     Covered by <c>[NDScopedCovered]</c>: its only callers are the three <c>[NDScoped]</c> <c>choose</c>
+        ///     overloads, so every array built here except the returned result is released by the caller's scope,
+        ///     exceptions included. The scope also keeps the int64 index copy reachable while the kernel reads it
+        ///     through raw pointers.
+        /// </remarks>
+        [NDScopedCovered]
         private static unsafe NDArray ChooseCore(NDArray a, object[] choices, NDArray @out, string mode)
         {
             int modeInt = ParseChooseMode(mode);
@@ -164,6 +237,9 @@ namespace NumSharp
                 castChoices[i] = mats[i].GetTypeCode == dtype ? mats[i] : mats[i].astype(dtype, copy: false);
 
             // ── 3) index → int64 under the 'safe' rule ────────────────────────────────────
+            // idx64 is EITHER `a` itself (already int64 — the caller's, built before any scope opened, so never
+            // disposed) OR a fresh int64 astype built under the caller's scope, which releases it — and its
+            // broadcast view below — on return or on the out-of-range throw.
             NDArray idx64 = CastChooseIndexToInt64(a);
 
             // ── 4) common broadcast shape of (all choices + index) ────────────────────────
@@ -184,7 +260,7 @@ namespace NumSharp
             }
 
             // ── 6) allocate the fresh C-contiguous result (common dtype) ──────────────────
-            var result = new NDArray(dtype, new Shape((long[])resultDims.Clone()), false);
+            var result = new NDArray(dtype, Shape.Adopt((long[])resultDims.Clone()), false);
             long totalSize = result.size;
 
             if (totalSize == 0)
@@ -199,7 +275,7 @@ namespace NumSharp
                 chViews[i] = v;
                 if (!v.Shape.IsContiguous) allContig = false;
             }
-            NDArray idxView = broadcast_to(idx64, common);
+            var idxView = broadcast_to(idx64, common);
             if (!idxView.Shape.IsContiguous) allContig = false;
 
             // ── 8) run the IL kernel (flat when every operand is C-contiguous, else strided) ─

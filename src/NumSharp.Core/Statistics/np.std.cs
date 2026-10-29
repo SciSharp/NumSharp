@@ -15,8 +15,11 @@ namespace NumSharp
         /// <param name="dtype">The <see cref="DType"/> the computation/result should use (a C# <see cref="System.Type"/>, an <see cref="NPTypeCode"/> or a NumPy dtype string all convert implicitly).</param>
         /// <returns>A new array containing the std values, or a reference to the output array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.std.html</remarks>
+        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
         public static NDArray std(NDArray a, bool keepdims = false, int? ddof = null, DType dtype = null)
-            => a.TensorEngine.ReduceStd(a, null, keepdims, ddof, dtype);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            ? NDMatrixBoundary.Reduced((a, keepdims, ddof, dtype), static s => std(s.a, s.keepdims, s.ddof, s.dtype), null, keepdims, "std")
+            : a.TensorEngine.ReduceStd(a, null, keepdims, ddof, dtype);
 
         /// <summary>
         ///     Compute the standard deviation along the specified axis.
@@ -28,7 +31,10 @@ namespace NumSharp
         /// <param name="dtype">The <see cref="DType"/> the computation/result should use (implicit from <see cref="System.Type"/> / <see cref="NPTypeCode"/> / NumPy dtype string).</param>
         /// <returns>A new array containing the std values, or a reference to the output array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.std.html</remarks>
+        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
         public static NDArray std(NDArray a, int axis, bool keepdims = false, int? ddof = null, DType dtype = null)
-            => a.TensorEngine.ReduceStd(a, axis, keepdims, ddof, dtype);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+            ? NDMatrixBoundary.Reduced((a, axis, keepdims, ddof, dtype), static s => std(s.a, s.axis, s.keepdims, s.ddof, s.dtype), axis, keepdims, "std")
+            : a.TensorEngine.ReduceStd(a, axis, keepdims, ddof, dtype);
     }
 }

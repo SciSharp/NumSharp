@@ -22,7 +22,7 @@ namespace NumSharp
         public object item()
         {
             if (size != 1)
-                throw new IncorrectSizeException($"Can only convert an array of size 1 to a scalar, but array has size {size}.");
+                throw new IncorrectSizeException("can only convert an array of size 1 to a Python scalar");
             return Storage.GetAtIndex(0);
         }
 
@@ -35,7 +35,7 @@ namespace NumSharp
         public T item<T>() where T : unmanaged
         {
             if (size != 1)
-                throw new IncorrectSizeException($"Can only convert an array of size 1 to a scalar, but array has size {size}.");
+                throw new IncorrectSizeException("can only convert an array of size 1 to a Python scalar");
             return GetItemAs<T>(Storage.GetAtIndex(0));
         }
 

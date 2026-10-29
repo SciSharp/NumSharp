@@ -159,15 +159,15 @@ namespace NumSharp
         /// TypeError: len() of unsized object
         /// </code>
         ///
-        /// Note: For scalars (0-d arrays), NumPy raises TypeError.
-        /// NumSharp returns 1 for consistency with C# conventions.
+        /// Note: For scalars (0-d arrays), NumPy raises <c>TypeError: len() of unsized object</c>
+        /// and NumSharp raises the same, message-verbatim (oracle-gated by the instance tier).
         /// Use <see cref="size"/> for total element count.
         /// </remarks>
         public long __len__()
         {
             if (ndim == 0)
-                throw new TypeError("len() of unsized object (0-d array)");
-            return shape[0];
+                throw new TypeError("len() of unsized object");
+            return this.Shape.dimensions[0];
         }
 
         #endregion

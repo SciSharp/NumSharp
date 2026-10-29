@@ -43,43 +43,73 @@ namespace NumSharp
         public static NDArray pad(NDArray array, int pad_width, string mode = "constant",
             object constant_values = null, object end_values = null,
             object stat_length = null, string reflect_type = "even")
-            => PadImpl(array, (object)pad_width, mode, constant_values, end_values, stat_length, reflect_type);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(array);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return PadImpl(array, (object)pad_width, mode, constant_values, end_values, stat_length, reflect_type);
+        }
 
         public static NDArray pad(NDArray array, int[] pad_width, string mode = "constant",
             object constant_values = null, object end_values = null,
             object stat_length = null, string reflect_type = "even")
-            => PadImpl(array, pad_width, mode, constant_values, end_values, stat_length, reflect_type);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(array);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return PadImpl(array, pad_width, mode, constant_values, end_values, stat_length, reflect_type);
+        }
 
         public static NDArray pad(NDArray array, int[,] pad_width, string mode = "constant",
             object constant_values = null, object end_values = null,
             object stat_length = null, string reflect_type = "even")
-            => PadImpl(array, pad_width, mode, constant_values, end_values, stat_length, reflect_type);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(array);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return PadImpl(array, pad_width, mode, constant_values, end_values, stat_length, reflect_type);
+        }
 
         public static NDArray pad(NDArray array, (int before, int after) pad_width, string mode = "constant",
             object constant_values = null, object end_values = null,
             object stat_length = null, string reflect_type = "even")
-            => PadImpl(array, pad_width, mode, constant_values, end_values, stat_length, reflect_type);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(array);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return PadImpl(array, pad_width, mode, constant_values, end_values, stat_length, reflect_type);
+        }
 
         public static NDArray pad(NDArray array, IDictionary<int, object> pad_width, string mode = "constant",
             object constant_values = null, object end_values = null,
             object stat_length = null, string reflect_type = "even")
-            => PadImpl(array, pad_width, mode, constant_values, end_values, stat_length, reflect_type);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(array);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return PadImpl(array, pad_width, mode, constant_values, end_values, stat_length, reflect_type);
+        }
 
         // Callable mode (overloads matching each pad_width shape).
         public static NDArray pad(NDArray array, int pad_width, PadFunc mode, object kwargs = null)
-            => PadCallableImpl(array, (object)pad_width, mode, kwargs);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(array);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return PadCallableImpl(array, (object)pad_width, mode, kwargs);
+        }
 
         public static NDArray pad(NDArray array, int[] pad_width, PadFunc mode, object kwargs = null)
-            => PadCallableImpl(array, pad_width, mode, kwargs);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(array);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return PadCallableImpl(array, pad_width, mode, kwargs);
+        }
 
         public static NDArray pad(NDArray array, int[,] pad_width, PadFunc mode, object kwargs = null)
-            => PadCallableImpl(array, pad_width, mode, kwargs);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(array);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return PadCallableImpl(array, pad_width, mode, kwargs);
+        }
 
         public static NDArray pad(NDArray array, (int before, int after) pad_width, PadFunc mode, object kwargs = null)
-            => PadCallableImpl(array, pad_width, mode, kwargs);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(array);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return PadCallableImpl(array, pad_width, mode, kwargs);
+        }
 
         public static NDArray pad(NDArray array, IDictionary<int, object> pad_width, PadFunc mode, object kwargs = null)
-            => PadCallableImpl(array, pad_width, mode, kwargs);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(array);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return PadCallableImpl(array, pad_width, mode, kwargs);
+        }
 
         // ---------------------------- top-level dispatcher ----------------------------
 
@@ -110,7 +140,7 @@ namespace NumSharp
             {
                 for (int ax = 0; ax < array.ndim; ax++)
                 {
-                    if (array.shape[ax] == 0 && (padPairs[ax, 0] != 0 || padPairs[ax, 1] != 0))
+                    if (array.Shape.dimensions[ax] == 0 && (padPairs[ax, 0] != 0 || padPairs[ax, 1] != 0))
                         throw new ArgumentException(
                             $"can't extend empty axis {ax} using modes other than 'constant' or 'empty'");
                 }
@@ -161,7 +191,7 @@ namespace NumSharp
                 // dims and pass each 1-D vector by reference to the user function.
                 var view = np.moveaxis(padded, axis, padded.ndim - 1);
                 int outerNdim = view.ndim - 1;
-                long axisLen = view.shape[outerNdim];
+                long axisLen = view.Shape.dimensions[outerNdim];
                 long left = padPairs[axis, 0];
                 long right = padPairs[axis, 1];
 
@@ -177,7 +207,7 @@ namespace NumSharp
                 // the 1-D vector at that position, call user-func, dispose.
                 var coords = new long[outerNdim];
                 long totalOuter = 1;
-                for (int i = 0; i < outerNdim; i++) totalOuter *= view.shape[i];
+                for (int i = 0; i < outerNdim; i++) totalOuter *= view.Shape.dimensions[i];
                 for (long idx = 0; idx < totalOuter; idx++)
                 {
                     var slices = new Slice[view.ndim];
@@ -191,7 +221,7 @@ namespace NumSharp
                     for (int d = outerNdim - 1; d >= 0; d--)
                     {
                         coords[d]++;
-                        if (coords[d] < view.shape[d]) break;
+                        if (coords[d] < view.Shape.dimensions[d]) break;
                         coords[d] = 0;
                     }
                 }
@@ -271,7 +301,7 @@ namespace NumSharp
                 // Period = current valid length on this axis = roi.shape[axis] - left - right.
                 // Captured BEFORE the iterative shrink loop because the valid area never grows
                 // for wrap — only the pad band shrinks.
-                long originalPeriod = roi.shape[axis] - right - left;
+                long originalPeriod = roi.Shape.dimensions[axis] - right - left;
                 try
                 {
                     while (left > 0 || right > 0)
@@ -297,7 +327,7 @@ namespace NumSharp
                 // Singleton-axis fallback: legacy NumPy behavior — extending a length-1
                 // axis with reflect/symmetric falls back to edge padding (there's nothing
                 // to reflect). Operates on the full padded (not roi) per upstream code.
-                if (array.shape[axis] == 1)
+                if (array.Shape.dimensions[axis] == 1)
                 {
                     var (leftEdge, rightEdge) = _GetEdges(padded, axis, (left, right));
                     try { _SetPadArea(padded, axis, (left, right), (leftEdge, rightEdge)); }
@@ -306,7 +336,7 @@ namespace NumSharp
                 }
 
                 var roi = _ViewRoi(padded, originalSlice, axis);
-                long originalPeriod = array.shape[axis];
+                long originalPeriod = array.Shape.dimensions[axis];
                 try
                 {
                     while (left > 0 || right > 0)
@@ -332,7 +362,7 @@ namespace NumSharp
             NDArray padded, int axis, (long left, long right) width, string method, long originalPeriod, bool includeEdge)
         {
             long leftPad = width.left, rightPad = width.right;
-            long oldLength = padded.shape[axis] - rightPad - leftPad;
+            long oldLength = padded.Shape.dimensions[axis] - rightPad - leftPad;
             long edgeOffset;
             if (includeEdge)
             {
@@ -391,7 +421,7 @@ namespace NumSharp
                         odd = 2 * edge - rightChunk;
                     }
 
-                    long padStart = padded.shape[axis] - rightPad;
+                    long padStart = padded.Shape.dimensions[axis] - rightPad;
                     long padStop = padStart + chunkLength;
                     var padSlices = _SliceAtAxis(new Slice(padStart, padStop), axis, padded.ndim);
                     AssignSliceValue(padded, padSlices, odd ?? rightChunk);
@@ -414,7 +444,7 @@ namespace NumSharp
             NDArray padded, int axis, (long left, long right) width, long originalPeriod)
         {
             long leftPad = width.left, rightPad = width.right;
-            long period = padded.shape[axis] - rightPad - leftPad;
+            long period = padded.Shape.dimensions[axis] - rightPad - leftPad;
             period = period / originalPeriod * originalPeriod; // ensure multiple of original
 
             long newLeftPad = 0, newRightPad = 0;
@@ -513,7 +543,7 @@ namespace NumSharp
             (long left, long right) lengthPair, string mode)
         {
             long leftIndex = width.left;
-            long rightIndex = padded.shape[axis] - width.right;
+            long rightIndex = padded.Shape.dimensions[axis] - width.right;
             long maxLength = rightIndex - leftIndex;
 
             long leftLength = lengthPair.left;
@@ -591,7 +621,7 @@ namespace NumSharp
                     case "mean":
                     {
                         using var sum = np.sum(src, axis: axis, keepdims: true);
-                        long n = src.shape[axis];
+                        long n = src.Shape.dimensions[axis];
                         // Promote sum to float for the divide if it isn't already.
                         if (IsIntegerDtype(sum.GetTypeCode))
                         {
@@ -674,7 +704,7 @@ namespace NumSharp
                         if (right > 0)
                         {
                             using var ramp = BuildLinearRamp(rightEdge, axis, right, endPairs[axis, 1], padded.GetTypeCode, reverse: true);
-                            long axisLen = roi.shape[axis];
+                            long axisLen = roi.Shape.dimensions[axis];
                             var padSlices = _SliceAtAxis(new Slice(axisLen - right, axisLen), axis, padded.ndim);
                             AssignSliceValue(roi, padSlices, ramp);
                         }
@@ -720,7 +750,7 @@ namespace NumSharp
             int ndim = edge.ndim;
             var coefShape = new long[ndim];
             for (int i = 0; i < ndim; i++) coefShape[i] = i == axis ? width : 1L;
-            var coefReshaped = coef.reshape(new Shape(coefShape));
+            var coefReshaped = coef.reshape(Shape.Adopt(coefShape));
 
             // Arithmetic dtype selection — must preserve the source dtype's
             // structure (especially Complex's imaginary component).  For integer
@@ -796,7 +826,7 @@ namespace NumSharp
             var originalSlice = new Slice[ndim];
             for (int i = 0; i < ndim; i++)
             {
-                long size = array.shape[i];
+                long size = array.Shape.dimensions[i];
                 long left = padPairs[i, 0];
                 long right = padPairs[i, 1];
                 newDims[i] = left + size + right;
@@ -805,7 +835,7 @@ namespace NumSharp
 
             // NumPy: order = 'F' if array.flags.fnc else 'C'  (F-contig and NOT also C).
             char order = (array.Shape.IsFContiguous && !array.Shape.IsContiguous) ? 'F' : 'C';
-            var padded = np.empty(new Shape(newDims, order), array.dtype);
+            var padded = np.empty(Shape.Adopt(newDims, order), array.dtype);
 
             if (fillValue != null)
             {
@@ -855,7 +885,7 @@ namespace NumSharp
             }
             if (width.right > 0)
             {
-                long axisLen = padded.shape[axis];
+                long axisLen = padded.Shape.dimensions[axis];
                 var slices = _SliceAtAxis(new Slice(axisLen - width.right, axisLen), axis, padded.ndim);
                 AssignSliceValue(padded, slices, values.right);
             }
@@ -870,7 +900,7 @@ namespace NumSharp
         private static (NDArray left, NDArray right) _GetEdges(NDArray padded, int axis, (long left, long right) width)
         {
             int ndim = padded.ndim;
-            long axisLen = padded.shape[axis];
+            long axisLen = padded.Shape.dimensions[axis];
             long leftIdx = width.left;
             long rightIdx = axisLen - width.right;
 

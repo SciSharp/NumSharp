@@ -57,6 +57,7 @@ namespace NumSharp
         [NDScoped]
         public static NDArray bincount(NDArray x, NDArray weights = null, int minlength = 0)
         {
+            using var plain = NDMatrixBoundary.PlainFor(x, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (x is null) throw new ArgumentNullException(nameof(x));
 
             // --- x must be exactly 1-D (NumPy PyArray_FromAny with min_depth == max_depth == 1). ---

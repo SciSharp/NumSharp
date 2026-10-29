@@ -26,9 +26,23 @@ namespace NumSharp
 {
     public partial class NDArray
     {
+        /// <summary>
+        ///     Converts a managed array (any rank, or jagged) into an <see cref="NDArray"/> copy of its data; a null array
+        ///     converts to a null <see cref="NDArray"/>.
+        /// </summary>
+        /// <param name="array">The array to convert, or null.</param>
+        /// <returns>A new array holding a copy of the elements, or null when <paramref name="array"/> is null.</returns>
+        /// <exception cref="NotSupportedException">The element type is not one of NumSharp's dtypes.</exception>
+        /// <remarks>
+        ///     C# runs a user-defined conversion even for a null source, so without the null pass-through an optional
+        ///     <see cref="NDArray"/> parameter fed from a null <c>double[]</c> variable (a common way to spell NumPy's
+        ///     <c>p=None</c>) crashed with a <see cref="NullReferenceException"/> instead of meaning "not given".
+        /// </remarks>
         public static implicit operator NDArray(Array array)
         {
-            // ReSharper disable once PossibleNullReferenceException
+            if (array is null)
+                return null;
+
             bool isJaggedArray = array.GetType().GetElementType().IsArray;
             var underlying = array.ResolveElementType();
             if (isJaggedArray)

@@ -9,6 +9,7 @@
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.argmin.html</remarks>
         public long argmin()
         {
+            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
             return np.argmin(this);
         }
 
@@ -21,6 +22,7 @@
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.argmin.html</remarks>
         public NDArray argmin(int axis, bool keepdims = false)
         {
+            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
             return np.argmin(this, axis, keepdims);
         }
     }

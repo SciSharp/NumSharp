@@ -15,8 +15,11 @@ namespace NumSharp
         /// <param name="dtype">Overrides the data type of the result.</param>
         /// <returns>Array of fill_value with the same shape and type as a.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.full_like.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray full_like(NDArray a, object fill_value, DType dtype = null, string device = null)
-            => full_like(a, fill_value, dtype, 'K', device);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((a, fill_value, dtype, device), static s => full_like(s.a, s.fill_value, s.dtype, s.device))
+            : full_like(a, fill_value, dtype, 'K', device);
 
         /// <summary>
         ///     Return a full array with the same shape and type as a given array.
@@ -28,14 +31,18 @@ namespace NumSharp
         /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
         /// <returns>Array of fill_value with the same shape and type as a.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.full_like.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray full_like(NDArray a, object fill_value, DType dtype, char order, string device = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Wrapped((a, fill_value, dtype, order, device), static s => full_like(s.a, s.fill_value, s.dtype, s.order, s.device));
             ValidateDevice(device);
             // NumPy's *_like contract preserves a.dtype unless dtype= is explicitly supplied.
             // fill_value is CAST into that dtype; its CLR type never selects the result dtype.
             var typeCode = dtype != null ? dtype.GetTypeCode() : a.typecode;
             char physical = OrderResolver.Resolve(order, a.Shape);
-            var shape = new Shape((long[])a.shape.Clone(), physical);
+            var shape = Shape.Adopt((long[])a.Shape.dimensions.Clone(), physical);
 
             // Allocates from shape.size directly (not via UnmanagedStorage.Allocate), so the
             // dimension guard has to be explicit here — see np.full.

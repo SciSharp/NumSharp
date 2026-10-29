@@ -17,6 +17,18 @@
          combination; the release pipeline runs the suite a second time with `-p:MLNetVersion=<current>` so
          the current ML.NET is covered too. Override locally the same way: dotnet test -p:MLNetVersion=4.0.2. -->
     <MLNetVersion Condition="'$(MLNetVersion)' == ''">2.0.1</MLNetVersion>
+
+    <!-- JIT posture for this TEST HOST: tiered compilation OFF, so every method is compiled fully optimized on its
+         first call. The lifetime suite (LifetimeGcTests) probes windows in which an object is already unreachable
+         while code still reads memory it owns — a getter's cursor during the row copy. Those windows exist only in
+         OPTIMIZED code: tier-0 code reports every local as live for the whole method. With tiering on, a method reaches
+         tier 1 only after 30 calls, a quiet period and a background compile. In a whole-suite run (other tests'
+         compile backlog, their jitting resetting the call-counting delay), the probe's warm-up never got there: its
+         no-KeepAlive control was caught in 0 of 12 rounds, against 12 of 12 when run alone or with tiering off. This
+         posture also runs EVERY other test of the bridge against optimized code, where a missing KeepAlive is a live
+         bug rather than a latent one. Cost, measured 2026-10-03 (net10.0, Release, whole suite): 36.3 s -> 38.9 s.
+         Overrides the repo-wide default in ../../Directory.Build.props; TieredPGO needs tiering, so it is off with it. -->
+    <TieredCompilation>false</TieredCompilation>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Publish|AnyCPU'">
@@ -37,6 +49,26 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\NumSharp.Core\NumSharp.Core.csproj" />
     <ProjectReference Include="..\..\src\NumSharp.Interop.MLNet\NumSharp.Interop.MLNet.csproj" />
+  </ItemGroup>
+
+  <!-- The GC window protocol the pool-balance checks (ArcAccountingTests) measure in: buffers taken minus returned
+       is only meaningful while no collection runs finalizers that return unrelated buffers. Linked, not copied, so
+       every suite that reads the process-global pool counters shares ONE implementation of the protocol. -->
+  <ItemGroup>
+    <Compile Include="..\NumSharp.Tests\Utilities\GcQuiescence.cs" Link="Support\GcQuiescence.cs" />
+  </ItemGroup>
+
+  <!-- The public-surface formatter the API-approval test (ApiSurfaceTests) compares against its approved list. Linked
+       from the ONNX Runtime suite so both packages' approvals render a surface the same way (defaults, `this`, `params`
+       and by-reference modifiers included). -->
+  <ItemGroup>
+    <Compile Include="..\NumSharp.Tests.Interop.OnnxRuntime\ApiSurface.cs" Link="Support\ApiSurface.cs" />
+  </ItemGroup>
+
+  <!-- The lifetime / GC proof tools (finalizers run by hand in every order, a buffer's reference count, pool poisoning)
+       the finalization-order tests (LifetimeGcTests) share with the ONNX Runtime suite. -->
+  <ItemGroup>
+    <Compile Include="..\NumSharp.Tests.Interop.OnnxRuntime\LifetimeHarness.cs" Link="Support\LifetimeHarness.cs" />
   </ItemGroup>
 
 </Project>

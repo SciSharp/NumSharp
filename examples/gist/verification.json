@@ -1,0 +1,836 @@
+{
+  "verified_at_utc": "2026-09-09T15:50:54.4856406Z",
+  "host": "Windows x64",
+  "sdk": "10.0.101",
+  "runtimes": [
+    "8.0.29",
+    "10.0.1"
+  ],
+  "python": "3.12.12",
+  "numpy": "2.4.2",
+  "scipy": "1.16.3",
+  "python_shared_library": "C:/Users/ELI/.claude/python/python312.dll",
+  "configuration": "Release",
+  "filter": "ClassName~Gist",
+  "all_ten_demos_executed": true,
+  "scope": "Numerical routines only; no ML model/framework application execution",
+  "tests": [
+    {
+      "framework": "net8.0",
+      "suite": "unit",
+      "total": 49,
+      "passed": 49,
+      "failed": 0,
+      "not_executed": 0,
+      "trx": "outputs/gist-ports-2026-09-09/gist-unit-net8.0-final.trx",
+      "sha256": "be9223defbd01be98f91105891c912d68e586ed83e281b49cd2aaccf3e23335a",
+      "composed_metric_scalar_ulp_histogram": [],
+      "tests": [
+        {
+          "name": "Forecasts_RespectNoncontiguousInputs",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Logistic_MultiDimensionalSize_ReturnsCorrectShape",
+          "outcome": "Passed"
+        },
+        {
+          "name": "InvalidTensorShapesAndWindows_AreExplicitErrors",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Frequency_CrossingsAndAutocorrelationRecoverExactPeriod",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Replay_TargetsBootstrapOnlySelectedNonterminalAction",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Frequency_ParabolicAndPolynomialCompanionAreFunctional",
+          "outcome": "Passed"
+        },
+        {
+          "name": "GuidanceAndImagePostprocessing_AreRunnableWithoutAModel",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Logistic_WithLocAndScale",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ForecastMda_UsesPreviousActual_AndStdAeRetainsOriginalDefinition",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PeakDetection_RejectsInvalidThresholdAndCoordinates",
+          "outcome": "Passed"
+        },
+        {
+          "name": "AllThirtyForecastMetrics_MatchRecordedNumpy",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Slerp_OrthogonalAndLinearBranches_PreserveDtypeAndInputs",
+          "outcome": "Passed"
+        },
+        {
+          "name": "RankingEdgeCases_PreserveGistCutoffs",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Logistic_ArraySize_ReturnsCorrectShape",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Logistic_ScaleZero_ReturnsLoc",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ForecastEdgeCases_AreExplicit",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ForecastHelpers_ReturnOwnedResults_AndSeasonalViews",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Nes_FullOptimization_IsFunctionalAndDeterministic",
+          "outcome": "Passed"
+        },
+        {
+          "name": "RankingViews_AreNotSortedInPlace",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Logistic_NegativeScale_ThrowsArgumentException",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Replay_EmptyAndInvalidPredictionFailExplicitly",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PeakDetection_ReproducesPublishedDemonstration",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Frequency_UndefinedEstimatesAreNaNAndInvalidArgumentsThrow",
+          "outcome": "Passed"
+        },
+        {
+          "name": "SignalDemosRunWithoutExternalApplicationDependencies",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Catch_SeededReset_UsesOriginalDrawBounds",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Timeseries_ReversedInputAndChronologicalSplit_RespectPythonSlices",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Logistic_Reproducibility",
+          "outcome": "Passed"
+        },
+        {
+          "name": "CatchAndReplay_OwnStateBeyondAnInnerTemporaryScope",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Histogram_BucketsStatisticsAndConstantRange",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Logistic_CanProduceNegativeValues",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Catch_TransitionsAndTerminalReward",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Logistic_DefaultScalar_NegativeScale_ThrowsArgumentException",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Logistic_LargerScaleProducesLargerVariance",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Logistic_ShapeSize_ReturnsCorrectShape",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PeakDetection_EmptyAndFlatHaveOriginalEmptyShape",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Frequency_FftAndHpsRecoverHarmonicFundamental",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Logistic_StdConvergesToExpected",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Logistic_DefaultParameters_ReturnsScalar",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Histogram_Float32StatisticsRetainOriginalReductionDtype",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Nes_OneStep_MatchesCapturedNumPy",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Frequency_WindowHasCorrectSymmetryAndEndpoints",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PeakDetection_CustomCoordinatesPlateausAndTrailingPeak",
+          "outcome": "Passed"
+        },
+        {
+          "name": "GoogLeNet_LrnAndPoolHelper_CoverChannelEdgesAndViews",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Slerp_ZeroNorm_PropagatesNaNLikeTheFormula",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Timeseries_VectorAndMatrix_KeepOriginalShapesAndOwnership",
+          "outcome": "Passed"
+        },
+        {
+          "name": "AllSevenRankingMetrics_MatchRecordedNumpy",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Logistic_MeanConvergesToLoc",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Histogram_StridedInputAndRejectedRanges",
+          "outcome": "Passed"
+        },
+        {
+          "name": "GoogLeNet_PreprocessIsFloat32BgrAndDoesNotMutateRgb",
+          "outcome": "Passed"
+        }
+      ]
+    },
+    {
+      "framework": "net8.0",
+      "suite": "live",
+      "total": 30,
+      "passed": 30,
+      "failed": 0,
+      "not_executed": 0,
+      "trx": "outputs/gist-ports-2026-09-09/gist-live-net8.0-final-v2.trx",
+      "sha256": "52ebc48637befe5d3490e3650ed9d8177a2eb500cf63f74a23736b469ad4b4ca",
+      "composed_metric_scalar_ulp_histogram": [
+        {
+          "ulp": 0,
+          "scalar_cases": 134
+        },
+        {
+          "ulp": 1,
+          "scalar_cases": 10
+        },
+        {
+          "ulp": 2,
+          "scalar_cases": 6
+        }
+      ],
+      "tests": [
+        {
+          "name": "Timeseries_WindowsTargetsQueryAndSplit_ByteExact",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Histogram_BucketsAndMetadata_ExactLiveNumpy (True)",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Slerp_OrthogonalAndNearParallel_ByteExact",
+          "outcome": "Passed"
+        },
+        {
+          "name": "GuidanceAndDecodedPixels_ByteExact",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ForecastArithmeticAndArrayHelpers_AreByteExact",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Catch_GridTransitions_ExactLiveNumpy",
+          "outcome": "Passed"
+        },
+        {
+          "name": "FrequencyPipelines_MeasuredUlpVersusLiveNumpyAndScipy",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Window_ByteExactVersusLiveScipy",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ForecastBenchmarkHelpers_AreByteExact_OnStridedSharedInputs",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ParityGuard_RejectsSameBytesWithWrongShapeOrDtype",
+          "outcome": "Passed"
+        },
+        {
+          "name": "RankingBinaryScores_AreByteExact_VsLiveNumpy",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PolynomialVertex_ByteExactWithPinnedLapack",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ForecastSpecialValues_MatchLiveNumpyClassification",
+          "outcome": "Passed"
+        },
+        {
+          "name": "AllThirtyForecastScores_AreExactExceptTwoOneUlpMetrics_OnThreeLayouts",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Slerp_StridedTensorAndZeroNorm_VsLiveNumpy",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Replay_BellmanTargets_ExactLiveNumpy",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ParityGuard_EnforcesExplicitUlpCapOnNegativeValues",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Nes_Complete300IterationOptimization_ByteExactLiveNumpy",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Histogram_Float32EdgesAndStatistics_ExactLiveNumpy",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Nes_SeededNoiseAndOneStep_ExactLiveNumpy",
+          "outcome": "Passed"
+        },
+        {
+          "name": "LegacyHps_AllPrintedPassesAndUndefinedPeaksAreChecked",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Peaks_ByteExactIncludingViewsTiesNaNsEmptyAndCustomCoordinates",
+          "outcome": "Passed"
+        },
+        {
+          "name": "GoogLeNet_LocalResponseNormalization_ByteExact",
+          "outcome": "Passed"
+        },
+        {
+          "name": "RankingLogDiscounts_AreByteExact_AtPowerOfTwoKnots",
+          "outcome": "Passed"
+        },
+        {
+          "name": "GoogLeNet_PreprocessingPoolAndArgmax_ByteExact",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Crossings_ByteExactOnNonIntegerCrossingsAndReversedViews",
+          "outcome": "Passed"
+        },
+        {
+          "name": "RankingDiscounts_AreExactForMethodZero_AndOneOrTwoUlpsForMethodOne",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ParityGuard_DoesNotHideDifferentZeroOrNanBits",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Histogram_BucketsAndMetadata_ExactLiveNumpy (False)",
+          "outcome": "Passed"
+        },
+        {
+          "name": "QuadraticVertex_ByteExact",
+          "outcome": "Passed"
+        }
+      ]
+    },
+    {
+      "framework": "net10.0",
+      "suite": "unit",
+      "total": 49,
+      "passed": 49,
+      "failed": 0,
+      "not_executed": 0,
+      "trx": "outputs/gist-ports-2026-09-09/gist-unit-net10.0-final.trx",
+      "sha256": "c0a4d506d6ffb4c1ce700e5bce448c3db5481012cdf50cde8bd89f0b6635979d",
+      "composed_metric_scalar_ulp_histogram": [],
+      "tests": [
+        {
+          "name": "Frequency_ParabolicAndPolynomialCompanionAreFunctional",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Catch_TransitionsAndTerminalReward",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Catch_SeededReset_UsesOriginalDrawBounds",
+          "outcome": "Passed"
+        },
+        {
+          "name": "GuidanceAndImagePostprocessing_AreRunnableWithoutAModel",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PeakDetection_ReproducesPublishedDemonstration",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Logistic_ArraySize_ReturnsCorrectShape",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Logistic_ShapeSize_ReturnsCorrectShape",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Frequency_CrossingsAndAutocorrelationRecoverExactPeriod",
+          "outcome": "Passed"
+        },
+        {
+          "name": "RankingEdgeCases_PreserveGistCutoffs",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Logistic_LargerScaleProducesLargerVariance",
+          "outcome": "Passed"
+        },
+        {
+          "name": "CatchAndReplay_OwnStateBeyondAnInnerTemporaryScope",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Nes_FullOptimization_IsFunctionalAndDeterministic",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Frequency_FftAndHpsRecoverHarmonicFundamental",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Timeseries_ReversedInputAndChronologicalSplit_RespectPythonSlices",
+          "outcome": "Passed"
+        },
+        {
+          "name": "AllThirtyForecastMetrics_MatchRecordedNumpy",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Slerp_ZeroNorm_PropagatesNaNLikeTheFormula",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Logistic_WithLocAndScale",
+          "outcome": "Passed"
+        },
+        {
+          "name": "GoogLeNet_LrnAndPoolHelper_CoverChannelEdgesAndViews",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Logistic_MultiDimensionalSize_ReturnsCorrectShape",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ForecastMda_UsesPreviousActual_AndStdAeRetainsOriginalDefinition",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Nes_OneStep_MatchesCapturedNumPy",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PeakDetection_CustomCoordinatesPlateausAndTrailingPeak",
+          "outcome": "Passed"
+        },
+        {
+          "name": "InvalidTensorShapesAndWindows_AreExplicitErrors",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Logistic_DefaultScalar_NegativeScale_ThrowsArgumentException",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Histogram_StridedInputAndRejectedRanges",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Logistic_DefaultParameters_ReturnsScalar",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Logistic_CanProduceNegativeValues",
+          "outcome": "Passed"
+        },
+        {
+          "name": "AllSevenRankingMetrics_MatchRecordedNumpy",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Frequency_UndefinedEstimatesAreNaNAndInvalidArgumentsThrow",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Replay_EmptyAndInvalidPredictionFailExplicitly",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Logistic_ScaleZero_ReturnsLoc",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Logistic_NegativeScale_ThrowsArgumentException",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PeakDetection_EmptyAndFlatHaveOriginalEmptyShape",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Timeseries_VectorAndMatrix_KeepOriginalShapesAndOwnership",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PeakDetection_RejectsInvalidThresholdAndCoordinates",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Logistic_Reproducibility",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Frequency_WindowHasCorrectSymmetryAndEndpoints",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Replay_TargetsBootstrapOnlySelectedNonterminalAction",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Logistic_StdConvergesToExpected",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Histogram_Float32StatisticsRetainOriginalReductionDtype",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Forecasts_RespectNoncontiguousInputs",
+          "outcome": "Passed"
+        },
+        {
+          "name": "SignalDemosRunWithoutExternalApplicationDependencies",
+          "outcome": "Passed"
+        },
+        {
+          "name": "GoogLeNet_PreprocessIsFloat32BgrAndDoesNotMutateRgb",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Slerp_OrthogonalAndLinearBranches_PreserveDtypeAndInputs",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Histogram_BucketsStatisticsAndConstantRange",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Logistic_MeanConvergesToLoc",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ForecastEdgeCases_AreExplicit",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ForecastHelpers_ReturnOwnedResults_AndSeasonalViews",
+          "outcome": "Passed"
+        },
+        {
+          "name": "RankingViews_AreNotSortedInPlace",
+          "outcome": "Passed"
+        }
+      ]
+    },
+    {
+      "framework": "net10.0",
+      "suite": "live",
+      "total": 30,
+      "passed": 30,
+      "failed": 0,
+      "not_executed": 0,
+      "trx": "outputs/gist-ports-2026-09-09/gist-live-net10.0-final-v2.trx",
+      "sha256": "9075ebad66abacbd31aabe9e58df8560e5be46b4015ace03824eb3f7b2be14ff",
+      "composed_metric_scalar_ulp_histogram": [
+        {
+          "ulp": 0,
+          "scalar_cases": 134
+        },
+        {
+          "ulp": 1,
+          "scalar_cases": 10
+        },
+        {
+          "ulp": 2,
+          "scalar_cases": 6
+        }
+      ],
+      "tests": [
+        {
+          "name": "Histogram_BucketsAndMetadata_ExactLiveNumpy (False)",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PolynomialVertex_ByteExactWithPinnedLapack",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Peaks_ByteExactIncludingViewsTiesNaNsEmptyAndCustomCoordinates",
+          "outcome": "Passed"
+        },
+        {
+          "name": "QuadraticVertex_ByteExact",
+          "outcome": "Passed"
+        },
+        {
+          "name": "RankingLogDiscounts_AreByteExact_AtPowerOfTwoKnots",
+          "outcome": "Passed"
+        },
+        {
+          "name": "RankingDiscounts_AreExactForMethodZero_AndOneOrTwoUlpsForMethodOne",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Timeseries_WindowsTargetsQueryAndSplit_ByteExact",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Histogram_Float32EdgesAndStatistics_ExactLiveNumpy",
+          "outcome": "Passed"
+        },
+        {
+          "name": "AllThirtyForecastScores_AreExactExceptTwoOneUlpMetrics_OnThreeLayouts",
+          "outcome": "Passed"
+        },
+        {
+          "name": "GoogLeNet_PreprocessingPoolAndArgmax_ByteExact",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Window_ByteExactVersusLiveScipy",
+          "outcome": "Passed"
+        },
+        {
+          "name": "LegacyHps_AllPrintedPassesAndUndefinedPeaksAreChecked",
+          "outcome": "Passed"
+        },
+        {
+          "name": "GoogLeNet_LocalResponseNormalization_ByteExact",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ForecastArithmeticAndArrayHelpers_AreByteExact",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Slerp_StridedTensorAndZeroNorm_VsLiveNumpy",
+          "outcome": "Passed"
+        },
+        {
+          "name": "RankingBinaryScores_AreByteExact_VsLiveNumpy",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Slerp_OrthogonalAndNearParallel_ByteExact",
+          "outcome": "Passed"
+        },
+        {
+          "name": "GuidanceAndDecodedPixels_ByteExact",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Nes_SeededNoiseAndOneStep_ExactLiveNumpy",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Replay_BellmanTargets_ExactLiveNumpy",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ForecastBenchmarkHelpers_AreByteExact_OnStridedSharedInputs",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ParityGuard_DoesNotHideDifferentZeroOrNanBits",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Nes_Complete300IterationOptimization_ByteExactLiveNumpy",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ForecastSpecialValues_MatchLiveNumpyClassification",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Catch_GridTransitions_ExactLiveNumpy",
+          "outcome": "Passed"
+        },
+        {
+          "name": "FrequencyPipelines_MeasuredUlpVersusLiveNumpyAndScipy",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Crossings_ByteExactOnNonIntegerCrossingsAndReversedViews",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Histogram_BucketsAndMetadata_ExactLiveNumpy (True)",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ParityGuard_RejectsSameBytesWithWrongShapeOrDtype",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ParityGuard_EnforcesExplicitUlpCapOnNegativeValues",
+          "outcome": "Passed"
+        }
+      ]
+    }
+  ],
+  "source_pins": [
+    {
+      "path": "examples/gist/CatchReinforcementLearning.cs",
+      "sha256": "33269b13fefdc12b7dc4bb6d89bb71488c3bd7130f58bbb792019e631267f97c"
+    },
+    {
+      "path": "examples/gist/ForecastingMetrics.cs",
+      "sha256": "871d6321a3eaf799568de3a5f4efb895bdee5827e559753070182ca3710ba421"
+    },
+    {
+      "path": "examples/gist/FrequencyEstimation.cs",
+      "sha256": "dde9def7e1d0d147eeac3965abb4332e0b96e70a3ba98358f211f1b5e1249cc2"
+    },
+    {
+      "path": "examples/gist/GoogLeNet.cs",
+      "sha256": "bfef6c6db3ad88ba6bc47cbdf962434bf1bb9d4a2942b4040cf7d06b9898fe68"
+    },
+    {
+      "path": "examples/gist/NaturalEvolutionStrategies.cs",
+      "sha256": "171ad4c266402b67953224660ff1bd0779f173d677cb2d612182b48dc9b814dc"
+    },
+    {
+      "path": "examples/gist/NumSharp.GistExamples.csproj",
+      "sha256": "0564cbd7e8d8ab62c41dac4872b59a9e505c49bf7751a1ea30c3819e803c3387"
+    },
+    {
+      "path": "examples/gist/PeakDetection.cs",
+      "sha256": "5a7d7975c03a3d1874b1fb81b74f495dc0c53443e7db335d6027c961af8bfd2e"
+    },
+    {
+      "path": "examples/gist/RankingMetrics.cs",
+      "sha256": "411a8a6a8a2662e162ded8aa57c2dba27a88a86657e4b20283e1c88d9bba753b"
+    },
+    {
+      "path": "examples/gist/run.cs",
+      "sha256": "58aa4d4b9b7d7b33d1a1a46263f5f5b137198ff716453f4e4984a22bcbd69e02"
+    },
+    {
+      "path": "examples/gist/sources.json",
+      "sha256": "23318b4234c2a4bedaaaa7edf0552a32855984364965359fcee807aa9045fbf3"
+    },
+    {
+      "path": "examples/gist/StableDiffusionWalk.cs",
+      "sha256": "2e63a954e15acab2d990c35a64c7fdd27a4da1e75cb49d7188afd1e4f2f0383c"
+    },
+    {
+      "path": "examples/gist/TensorboardHistogram.cs",
+      "sha256": "1f469ba04f9bf202910f7d7928b32f2386e1cb426d1d73fbed32aa28ed9a1032"
+    },
+    {
+      "path": "examples/gist/TimeseriesCnn.cs",
+      "sha256": "1b634d6bed965cd3c68d41adf27620c6470ec8db47fdb89e9311e269afe0e285"
+    },
+    {
+      "path": "test/NumSharp.Tests.Interop/GistLearningLiveParityTests.cs",
+      "sha256": "0ef4dade06dc131c4fbb8266892160081c408e04ec532130c9905e10239b9aca"
+    },
+    {
+      "path": "test/NumSharp.Tests.Interop/GistMetricsLiveParityTests.cs",
+      "sha256": "b31e2456bd601b9974d4a64508ce8cb0a82587f122f071589f9da3af85131458"
+    },
+    {
+      "path": "test/NumSharp.Tests.Interop/GistParity.cs",
+      "sha256": "7bcd1767de4c12cb53b5c325c8f6e5d1bed3ccc43f3220def213e5e91eda2802"
+    },
+    {
+      "path": "test/NumSharp.Tests.Interop/GistParityGuardTests.cs",
+      "sha256": "2df6a087eeb1465717d5813a400fc7a87d01d5b9f11accd7b56b596ab9aee6ef"
+    },
+    {
+      "path": "test/NumSharp.Tests.Interop/GistSignalLiveParityTests.cs",
+      "sha256": "c87f4ec5c404f5db878c2d892e4aa2b0ed0b0d417536677e76547579537edc2a"
+    },
+    {
+      "path": "test/NumSharp.Tests.Interop/GistTensorLiveParityTests.cs",
+      "sha256": "469580fc71efb350d646016451950b1f354ead7e986c56775c6b07636b2a6b2f"
+    },
+    {
+      "path": "test/NumSharp.Tests/Examples/GistLearningTests.cs",
+      "sha256": "83b3aa20d3531d5890a11841de0bb1ed4cee265cf6056cc495295f3b29a5aae3"
+    },
+    {
+      "path": "test/NumSharp.Tests/Examples/GistMetricsTests.cs",
+      "sha256": "65ce11f9ca44f67268b8e6378879c8440d122564a50e1518f20dbb14492b0c92"
+    },
+    {
+      "path": "test/NumSharp.Tests/Examples/GistSignalTests.cs",
+      "sha256": "d3c563c627076e943d978b2c1d11587ca2a499108c123e0ec3d9dd335ac80529"
+    },
+    {
+      "path": "test/NumSharp.Tests/Examples/GistTensorExamplesTests.cs",
+      "sha256": "0cc1c2368f438279a2ae45a736a0e2ddd584baad36d970ef3265ca68bf8a84b5"
+    }
+  ],
+  "demo": {
+    "command": "dotnet run --file examples/gist/run.cs -c Release -- all",
+    "exit_code": 0,
+    "stdout_path": "examples/gist/demo-output.txt",
+    "stdout_sha256": "4b1b7a5e805c5a6d2de873f2eaa6469b99de272b26f8573e274e5b42ebbd18f5"
+  },
+  "repository_head": "f658fbe8dac0edfab3862b2e107e36b02d68eebd",
+  "concurrent_work_preserved": {
+    "path": "src/NumSharp.Core/Assembly/Properties.cs",
+    "sha256": "321a31f75852e87675480c67dd62efcb7ac043f75d6d6644418372b091aa81d1",
+    "note": "Unrelated ML.NET friend-assembly additions appeared during final verification. Not edited by this task; numerical implementation unchanged."
+  },
+  "pythonhome_explicitly_set_in_parent_runs": false
+}

@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "purpose": "Stable embedded original-source test fixtures; no network/output-directory dependency at build or test time.",
+  "source_loader": "test/NumSharp.Tests.Interop/KarpathyOriginalSource.cs",
+  "sources": [
+    {
+      "key": "rnn",
+      "original_source_path": "outputs/karpathy-gists-2026-09-09/cache/rnn.py",
+      "fixture_path": "test/NumSharp.Tests.Interop/Fixtures/Karpathy/karpathy.min-char-rnn.py",
+      "sha256": "98a0eaa61092f9541e883f3e8b6c02dae28b5658dbc5f692ffe0881be37a390a",
+      "source_url": "https://gist.githubusercontent.com/karpathy/d4dee566867f8291f086/raw/45350b64ab738fa1ca2bf170969494339eab5633/min-char-rnn.py",
+      "gist_url": "https://gist.github.com/karpathy/d4dee566867f8291f086",
+      "license_observation": "Header declares BSD License without identifying variant or supplying full license text."
+    },
+    {
+      "key": "pong",
+      "original_source_path": "outputs/karpathy-gists-2026-09-09/cache/pong.py",
+      "fixture_path": "test/NumSharp.Tests.Interop/Fixtures/Karpathy/karpathy.pg-pong.py",
+      "sha256": "cf764d11a0ebebb46d02c482c5a9c7c31081960d24b7c332757362735ad71a14",
+      "source_url": "https://gist.githubusercontent.com/karpathy/a4166c7fe253700972fcbc77e4ea32c5/raw/21358a21606ee9c389e5753ff09969238adb293b/pg-pong.py",
+      "gist_url": "https://gist.github.com/karpathy/a4166c7fe253700972fcbc77e4ea32c5",
+      "license_observation": "No explicit license declaration in this pinned source file; no grant inferred."
+    },
+    {
+      "key": "lstm",
+      "original_source_path": "outputs/karpathy-gists-2026-09-09/cache/lstm.py",
+      "fixture_path": "test/NumSharp.Tests.Interop/Fixtures/Karpathy/karpathy.batched-lstm.py",
+      "sha256": "137a213cfe6ec6eb7c73dc73c18f356dfd676e6e36bb66d2be6667ca6be7a4c4",
+      "source_url": "https://gist.githubusercontent.com/karpathy/587454dc0146a6ae21fc/raw/3dd03205cf6d92630f2b81f1a929730584ae5e28/gistfile1.py",
+      "gist_url": "https://gist.github.com/karpathy/587454dc0146a6ae21fc",
+      "license_observation": "No explicit license declaration in this pinned source file; no grant inferred."
+    },
+    {
+      "key": "microgpt",
+      "original_source_path": "outputs/karpathy-gists-2026-09-09/cache/microgpt.py",
+      "fixture_path": "test/NumSharp.Tests.Interop/Fixtures/Karpathy/karpathy.microgpt.py",
+      "sha256": "d47d88c2fd432c8ebdc1048beab7f7eb64ea7e0e664e11b812d72a6d95ebccee",
+      "source_url": "https://gist.githubusercontent.com/karpathy/8627fe009c40f57531cb18360106ce95/raw/f42a9440467b4620bd6c178777e7a0209ef064d2/microgpt.py",
+      "gist_url": "https://gist.github.com/karpathy/8627fe009c40f57531cb18360106ce95",
+      "license_observation": "No explicit license declaration in this pinned source file; no grant inferred."
+    },
+    {
+      "key": "walk",
+      "original_source_path": "docs/articles/gist/runs/2026-09-09-sorted/cache/source-00103b0037c5aaea32fe1da1af553355-cfec3bb84900cc3abfe5539d6d69e3fb1f2921b8-55dbbdcfe4bef303.raw",
+      "fixture_path": "test/NumSharp.Tests.Interop/Fixtures/Karpathy/karpathy.stablediffusionwalk.py",
+      "sha256": "cd5c47d7fbfa6d09fafbd6d6938c8a3217bf734c30ce9fb222b238aeb88c8451",
+      "source_url": "https://gist.github.com/karpathy/00103b0037c5aaea32fe1da1af553355/cfec3bb84900cc3abfe5539d6d69e3fb1f2921b8#file-stablediffusionwalk-py",
+      "gist_url": "https://gist.github.com/karpathy/00103b0037c5aaea32fe1da1af553355",
+      "license_observation": "No explicit license declaration in the pinned file; attribution is not a license grant."
+    },
+    {
+      "key": "nes",
+      "original_source_path": "docs/articles/gist/runs/2026-09-09-sorted/cache/source-77fbb6a8dac5395f1b73e7a89300318d-2d87bda1fe2a1711eac65c65a2d215f6cfb799e3-08487b543521b307.raw",
+      "fixture_path": "test/NumSharp.Tests.Interop/Fixtures/Karpathy/karpathy.nes.py",
+      "sha256": "4144833dab064335631040b233d19aea2392f1e460a2cae1491a5def5d912f3b",
+      "source_url": "https://gist.github.com/karpathy/77fbb6a8dac5395f1b73e7a89300318d/2d87bda1fe2a1711eac65c65a2d215f6cfb799e3#file-nes-py",
+      "gist_url": "https://gist.github.com/karpathy/77fbb6a8dac5395f1b73e7a89300318d",
+      "license_observation": "No explicit license declaration in the pinned file; attribution is not a license grant."
+    }
+  ]
+}

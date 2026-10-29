@@ -31,6 +31,33 @@ namespace NumSharp
             if (new_shape == null || new_shape.Length == 0)
                 return;
 
+            // The public Shape constructor copies the caller's array (bug 2d); inline values bind the span overload
+            // below and skip that copy.
+            resize(new Shape(new_shape), refcheck: true);
+        }
+
+        /// <summary>
+        ///     Change shape and size of this array <b>in-place</b> (see <see cref="resize(long[])"/> for the fill and
+        ///     truncate rules). This is the overload inline values bind (<c>a.resize(2, 3)</c>): the call allocates only
+        ///     the dimension array the new shape keeps.
+        /// </summary>
+        /// <param name="new_shape">Shape of resized array (one value per dimension). Empty is a no-op, as NumPy's
+        ///     <c>a.resize()</c>.</param>
+        /// <exception cref="IncorrectShapeException">
+        ///     If this array is not single-segment (contiguous); if growing/shrinking an array that does not own its data
+        ///     or is referenced by another array; or if a dimension is negative.
+        /// </exception>
+        /// <exception cref="OutOfMemoryException">The new element count overflows (NumPy's <c>MemoryError</c>).</exception>
+        /// <remarks>
+        ///     <c>a.resize()</c> binds this overload. An array argument binds <see cref="resize(long[])"/> instead, which
+        ///     copies it. https://numpy.org/doc/stable/reference/generated/numpy.ndarray.resize.html
+        /// </remarks>
+        public void resize(params ReadOnlySpan<long> new_shape)
+        {
+            // NumPy's a.resize() is a no-op; C# sends it here as an empty span (the array overload's empty/null rule).
+            if (new_shape.IsEmpty)
+                return;
+
             resize(new Shape(new_shape), refcheck: true);
         }
 
@@ -123,7 +150,7 @@ namespace NumSharp
                 // creation-time one AllocationGuard enforces: resize stops at the first zero dim,
                 // so `(0, -1)` is a legal resize target while `np.zeros((0, -1))` is not. NumPy has
                 // the same split — it mallocs newnbytes and only then writes the dimensions.
-                var fresh = new NDArray(this.typecode, new Shape(new[] { newSize }), fillZeros: false);
+                var fresh = new NDArray(this.typecode, Shape.Adopt(new[] { newSize }), fillZeros: false);
 
                 byte* src = this.Storage.Address + shape.offset * itemsize;
                 byte* dst = fresh.Storage.Address;
@@ -138,7 +165,7 @@ namespace NumSharp
                 // for any other sharer under refcheck:false), then discard the fresh wrapper so the
                 // net effect is `this` solely owning the new buffer.
                 var newStorage = fresh.Storage;
-                var freshShape = new Shape(newDims, freshStrides);
+                var freshShape = Shape.Adopt(newDims, freshStrides);
                 newStorage.SetShapeUnsafe(ref freshShape);
                 newStorage.InternalArray.TryAddRef();
                 this.Storage.InternalArray?.Release();

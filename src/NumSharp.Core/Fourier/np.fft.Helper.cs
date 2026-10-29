@@ -16,7 +16,9 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.fftshift.html</remarks>
         [NDScoped]
         public NDArray fftshift(NDArray x, int[] axes = null)
-            => Shift(x, axes, negate: false);
+            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
+            ? NDMatrixBoundary.Plain((self: this, x, axes), static s => s.self.fftshift(s.x, s.axes))
+            : Shift(x, axes, negate: false);
 
         /// <summary>
         ///     Shift the zero-frequency component to the center of the spectrum, over a single axis.
@@ -25,7 +27,9 @@ namespace NumSharp
         /// <param name="axes">Axis over which to shift (NumPy's <c>axes</c> also accepts a single int).</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.fftshift.html</remarks>
         public NDArray fftshift(NDArray x, int axes)
-            => Shift(x, new[] { axes }, negate: false);
+            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
+            ? NDMatrixBoundary.Plain((self: this, x, axes), static s => s.self.fftshift(s.x, s.axes))
+            : Shift(x, new[] { axes }, negate: false);
 
         /// <summary>
         ///     The inverse of <see cref="fftshift(NDArray, int[])"/>. Rolls every axis by
@@ -37,7 +41,9 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.ifftshift.html</remarks>
         [NDScoped]
         public NDArray ifftshift(NDArray x, int[] axes = null)
-            => Shift(x, axes, negate: true);
+            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
+            ? NDMatrixBoundary.Plain((self: this, x, axes), static s => s.self.ifftshift(s.x, s.axes))
+            : Shift(x, axes, negate: true);
 
         /// <summary>
         ///     The inverse of <see cref="fftshift(NDArray, int)"/>, over a single axis.
@@ -46,7 +52,9 @@ namespace NumSharp
         /// <param name="axes">Axis over which to shift (NumPy's <c>axes</c> also accepts a single int).</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.ifftshift.html</remarks>
         public NDArray ifftshift(NDArray x, int axes)
-            => Shift(x, new[] { axes }, negate: true);
+            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
+            ? NDMatrixBoundary.Plain((self: this, x, axes), static s => s.self.ifftshift(s.x, s.axes))
+            : Shift(x, new[] { axes }, negate: true);
 
         /// <summary>
         ///     Roll <paramref name="x"/> along each requested axis by <c>±(shape[axis] // 2)</c>.
@@ -93,7 +101,7 @@ namespace NumSharp
             foreach (int ax in axes)
             {
                 int a = ax < 0 ? ax + nd : ax;
-                long shift = x.shape[a] / 2;   // dim // 2 (a >= 0 here, so int-div == floor-div)
+                long shift = x.Shape.dimensions[a] / 2;   // dim // 2 (a >= 0 here, so int-div == floor-div)
                 result = np.roll(result, negate ? -shift : shift, a);
             }
             return ReferenceEquals(result, x) ? x.copy() : result;

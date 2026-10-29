@@ -45,6 +45,23 @@ namespace NumSharp.Tests.Fuzz
             ///     something" assertion; cases that carry one are held to NumPy's actual message.
             /// </summary>
             public ErrorInfo Error { get; set; }
+
+            /// <summary>
+            ///     The documented gap a CARVED case pins (an id of <c>gen_viewflags_oracle.GAPS</c> or
+            ///     <c>gen_relayout_oracle.GAPS</c>), present only on the cases of a <c>gaps/*_gaps.jsonl</c> file: NumSharp
+            ///     is known to differ from NumPy there, so the case is kept out of the gate and replayed by an
+            ///     <c>[OpenBugs]</c> test that names the gap. Null everywhere else.
+            /// </summary>
+            public string Gap { get; set; }
+
+            /// <summary>
+            ///     Relayout tiers only (<c>gen_relayout_oracle.py</c>): true when NumPy's own outcome changes once the
+            ///     moved operand is a fresh C-ordered copy of the same values — a reduction whose summation order follows
+            ///     the memory order, a read-only operand an in-place op refuses. Such a variant is exempt from the
+            ///     layout-invariance contract (<c>FuzzCorpusTests.RelayoutLayoutInvariance</c>); it is still held to
+            ///     NumPy's recorded answer by the ordinary replay. False (absent) on every other row.
+            /// </summary>
+            public bool Layout_Sensitive { get; set; }
         }
 
         /// <summary>NumPy's exception: the Python class name and <c>str(e)</c>, verbatim.</summary>
@@ -62,6 +79,71 @@ namespace NumSharp.Tests.Fuzz
             public long Offset { get; set; }
             public long BufferSize { get; set; }
             public string Buffer { get; set; }
+
+            /// <summary>
+            ///     MASKED-ARRAY corpus only: hex of a C-contiguous bool buffer (one byte per element,
+            ///     <c>product(Shape)</c> bytes) giving the mask at the DATA view's logical C-order
+            ///     positions. Absent (null) means <c>nomask</c> — NumPy's fast path where an operand
+            ///     is an ordinary unmasked array. Ordinary (non-ma) tiers never set this, so their
+            ///     operand serialization is byte-identical to before.
+            /// </summary>
+            public string Mask { get; set; }
+
+            /// <summary>
+            ///     Explicit writeable flag, serialized by <c>layout_catalog.describe()</c> ONLY when
+            ///     the NumPy view was READ-ONLY in a way its strides cannot convey — a SAME-SHAPE
+            ///     <c>np.broadcast_to</c> keeps ordinary strides, so without this the reconstructed
+            ///     operand was silently writeable and the out_where broadcast-out refusal cells
+            ///     (NumPy: ValueError "output array is read-only") could never pass. Absent (null)
+            ///     means writeable — every pre-flag corpus row deserializes exactly as before.
+            /// </summary>
+            public bool? Writeable { get; set; }
+
+            /// <summary>
+            ///     True when NumPy's operand OWNED its buffer (<c>base is None</c>), emitted by
+            ///     <c>gen_viewflags_oracle._desc</c> only. <see cref="Buffer"/> is then the owner's MEMORY-order bytes and
+            ///     (<see cref="Strides"/>, <see cref="Offset"/>) its physical layout, so <see cref="Reconstruct"/> builds an
+            ///     owning array over them (OWNDATA set, no base) instead of a view of a 1-D base. Without this an identity
+            ///     result (<c>np.asarray(a) is a</c>) reported OWNDATA false where NumPy reports true — a harness artifact,
+            ///     not NumSharp's. Absent (null) or false means a view, which is how every older corpus row deserializes.
+            /// </summary>
+            public bool? Own { get; set; }
+
+            /// <summary>
+            ///     True when NumPy's operand was a <c>numpy.matrix</c>, emitted by <c>gen_matrix_oracle.desc</c> only.
+            ///     <see cref="Reconstruct"/> then returns an <see cref="NDMatrix"/> over the very storage the plain
+            ///     reconstruction builds (same layout, same ownership, same writeability), so the replay calls the
+            ///     matrix members on it. Absent (null) or false means a plain array, as on every other tier.
+            /// </summary>
+            public bool? Matrix { get; set; }
+        }
+
+        /// <summary>
+        ///     The memory facet of one result (<c>gen_viewflags_oracle._mem</c>): how the returned array relates to the
+        ///     operands and what its flags say — the part of a result its values cannot show.
+        /// </summary>
+        /// <remarks>
+        ///     <see cref="Strides"/> holds BYTE strides with every extent-1 axis and every axis of an empty result written
+        ///     as 0, on both sides of the comparison: NumPy assigns those per allocation path and no flag reads them. A
+        ///     NumPy SCALAR result (<see cref="Scalar"/>) carries the scalar's flags (read-only, owning) and no strides;
+        ///     NumSharp answers with a 0-d array, compared against those flags.
+        /// </remarks>
+        public sealed class MemFacet
+        {
+            /// <summary>[C_CONTIGUOUS, F_CONTIGUOUS, OWNDATA, WRITEABLE, ALIGNED], NumPy's <c>result.flags</c>.</summary>
+            public bool[] Flags { get; set; }
+
+            /// <summary>The result's byte strides, extent-1 axes and empty results zeroed (see the type remarks).</summary>
+            public long[] Strides { get; set; }
+
+            /// <summary>Per operand (descriptor order): <c>np.shares_memory(result, operand)</c>.</summary>
+            public bool[] Shares { get; set; }
+
+            /// <summary>Per operand (descriptor order): <c>result is operand</c> — NumPy returned the operand object itself.</summary>
+            public bool[] Same { get; set; }
+
+            /// <summary>True when NumPy returned a NumPy scalar (<c>np.generic</c>) rather than an ndarray.</summary>
+            public bool Scalar { get; set; }
         }
 
         /// <summary>
@@ -104,8 +186,84 @@ namespace NumSharp.Tests.Fuzz
             /// <summary>Expected dtype name (kind=dtype) or expected string (kind=text).</summary>
             public string Value { get; set; }
 
-            /// <summary>Per-slot results for kind=tuple, in NumPy's tuple order.</summary>
+            /// <summary>
+            ///     MASKED-ARRAY corpus only (kind=masked / masked_tuple slots): hex of the result's
+            ///     <c>getmaskarray</c> — a C-contiguous bool buffer of <c>product(Shape)</c> bytes.
+            ///     <see cref="Buffer"/> then holds the <c>filled(0)</c> data (masked slots zeroed), so
+            ///     the pair together is the observable masked value: unmasked data bit-for-bit + the
+            ///     mask bit-for-bit, with masked-slot underlying data left a wildcard (it is
+            ///     implementation-defined for unique/set-ops and merely input-restored for ufuncs).
+            /// </summary>
+            public string Mask { get; set; }
+
+            /// <summary>
+            ///     MASKED-ARRAY corpus, ma_meanvar.jsonl only: hex of the result's data at EVERY slot in C order
+            ///     (<c>np.asarray(r.data)</c>; the <c>masked</c> singleton's float64 0.0), masked slots included. Where
+            ///     <see cref="Buffer"/> leaves a masked slot a wildcard, this pins what NumPy leaves there (its divide-domain
+            ///     fills, the minuend's put-back data). Null on every other tier, which then skips the comparison.
+            /// </summary>
+            public string Raw { get; set; }
+
+            /// <summary>
+            ///     MASKED-ARRAY corpus, ma_meanvar.jsonl only: the object NumPy returned — <c>masked</c> (the singleton),
+            ///     <c>scalar</c> (a NumPy scalar, or a 0-d result without a mask), <c>nomask</c> (an array whose mask is
+            ///     nomask) or <c>mask</c> (an array with a mask array, an all-False one included). <c>getmaskarray</c>
+            ///     (<see cref="Mask"/>) cannot tell an all-False mask from nomask, nor the singleton from a masked 0-d
+            ///     array; this can. Null on every other tier.
+            /// </summary>
+            public string Form { get; set; }
+
+            /// <summary>Per-slot results for kind=tuple / masked_tuple, in NumPy's tuple order.</summary>
             public Expected[] Slots { get; set; }
+
+            /// <summary>
+            ///     The result's memory facet (view / copy / identity against each operand, flags, strides), carried by the
+            ///     view-flags tiers (<c>gen_viewflags_oracle.py</c>) and compared by <c>FuzzCorpusTests.CompareMem</c>. Null
+            ///     on every other tier, which then compares values only.
+            /// </summary>
+            public MemFacet Mem { get; set; }
+
+            /// <summary>
+            ///     Tuple results of the view-flags tiers: the slot pairs <c>[i, j]</c> (i &lt; j) whose arrays share
+            ///     memory (<c>np.shares_memory</c>) — <c>np.nonzero</c>'s columns of ONE buffer, <c>np.meshgrid</c>'s
+            ///     views. Null when the tier does not record it.
+            /// </summary>
+            public int[][] Xshare { get; set; }
+
+            /// <summary>
+            ///     Tuple results of the view-flags tiers: the slot pairs <c>[i, j]</c> (i &lt; j) that are ONE object
+            ///     (<c>slot_i is slot_j</c>). Null when the tier does not record it.
+            /// </summary>
+            public int[][] Xsame { get; set; }
+
+            /// <summary>
+            ///     RANDOM-API corpus only (kind=random_api): NumPy's canonical observation of the call's result — a JSON
+            ///     tree (array / scalar / text / object / sequence observations, see <c>RandomApi/RandomApiObservation.cs</c>).
+            ///     Absent (<see cref="JsonValueKind.Undefined"/>) on every other tier.
+            /// </summary>
+            public JsonElement Result { get; set; }
+
+            /// <summary>
+            ///     RANDOM-API corpus only: the receiver's canonical state text after the call (engine state, buffered 32-bit
+            ///     half, RandomState's Gaussian cache) — what pins the stream POSITION, not only the values. Null elsewhere
+            ///     and for receivers without state.
+            /// </summary>
+            public string State { get; set; }
+
+            /// <summary>
+            ///     RANDOM-API corpus only: the array observations of the operands a member mutates in place (<c>shuffle</c>),
+            ///     after the call, in the order of <c>params.watch</c>. Absent elsewhere.
+            /// </summary>
+            public JsonElement After { get; set; }
+
+            /// <summary>
+            ///     MATRIX corpus only (<c>gen_matrix_oracle.py</c>): the class of the object NumPy returned —
+            ///     <c>matrix</c> (a <c>numpy.matrix</c>), <c>ndarray</c> (a plain array) or <c>scalar</c> (a NumPy scalar).
+            ///     The values of a matrix and of the array it views are the same bytes, so only this field can tell
+            ///     <c>m.A</c> from <c>m</c> or a matrix result from one that lost the class. Null on every other tier,
+            ///     which then skips the comparison.
+            /// </summary>
+            public string Cls { get; set; }
 
             /// <summary>Normalized kind — legacy cases carry none and mean "array".</summary>
             public string KindOrArray => string.IsNullOrEmpty(Kind) ? "array" : Kind;
@@ -115,18 +273,42 @@ namespace NumSharp.Tests.Fuzz
         public static string CorpusPath(string fileName)
             => Path.Combine(AppContext.BaseDirectory, "Fuzz", "corpus", fileName);
 
+        /// <summary>
+        ///     Opens a corpus file for ONE streaming pass: its case count is known up front and its cases are parsed
+        ///     one at a time as they are enumerated. Prefer this over <see cref="Load"/> for any replay that visits
+        ///     each case once — see <see cref="CorpusFile"/> for why holding a whole tier's parsed cases was the cost.
+        /// </summary>
+        /// <param name="fileName">The corpus file name under <c>Fuzz/corpus/</c>.</param>
+        /// <returns>The opened file; dispose it (it holds a pooled buffer).</returns>
+        /// <exception cref="IOException">The file does not exist or cannot be read.</exception>
+        public static CorpusFile Open(string fileName) => new(fileName, CorpusPath(fileName));
+
+        /// <summary>
+        ///     Parses a whole corpus file into a list, for the callers that need random access or several passes
+        ///     (a filtered subset, a two-variation replay). A single-pass replay should enumerate <see cref="Open"/>
+        ///     instead, so the parsed cases die young rather than surviving — and being promoted — as a list.
+        /// </summary>
+        /// <param name="fileName">The corpus file name under <c>Fuzz/corpus/</c>.</param>
+        /// <returns>Every case, in file order (one per non-blank line).</returns>
+        /// <exception cref="IOException">The file does not exist or cannot be read.</exception>
+        /// <exception cref="JsonException">A line is not valid corpus JSON.</exception>
         public static List<Case> Load(string fileName)
         {
-            var path = CorpusPath(fileName);
-            var list = new List<Case>();
-            foreach (var line in File.ReadLines(path))
-            {
-                if (string.IsNullOrWhiteSpace(line))
-                    continue;
-                list.Add(JsonSerializer.Deserialize<Case>(line, J));
-            }
+            using var file = Open(fileName);
+            var list = new List<Case>(file.Count);
+            foreach (var c in file)
+                list.Add(c);
             return list;
         }
+
+        /// <summary>
+        ///     Deserializes one corpus line (UTF-8, terminator excluded) with the corpus serializer options —
+        ///     case-insensitive property names, unknown properties ignored.
+        /// </summary>
+        /// <param name="utf8Line">One JSONL line.</param>
+        /// <returns>The parsed case (null only for a literal <c>null</c> line, which no generator writes).</returns>
+        /// <exception cref="JsonException">The line is not a valid corpus case.</exception>
+        internal static Case ParseLine(ReadOnlySpan<byte> utf8Line) => JsonSerializer.Deserialize<Case>(utf8Line, J);
 
         // -- dtype token <-> NPTypeCode. 13 NumPy-representable types + "char": NumSharp's Char
         // is bit-identical to uint16, so the oracle emits Char cases as uint16-proxy bytes
@@ -177,22 +359,148 @@ namespace NumSharp.Tests.Fuzz
             _ => throw new NotSupportedException($"NPTypeCode {tc} unsupported in SliceFromBytes")
         };
 
-        /// <summary>Reconstruct the exact operand NDArray the corpus case describes.</summary>
+        /// <summary>
+        ///     Reconstruct the exact operand NDArray the corpus case describes: a view of a 1-D base built from the
+        ///     buffer bytes, or — when <see cref="Operand.Own"/> is set — an owning array over those bytes with the
+        ///     described layout; then the descriptor's read-only flag.
+        /// </summary>
+        /// <param name="o">The operand descriptor.</param>
+        /// <returns>The operand array (a fresh owning array for an empty shape without a buffer; an empty view over the
+        /// buffer for one with a buffer).</returns>
+        /// <exception cref="NotSupportedException">The descriptor names a dtype NumSharp has no type code for.</exception>
         public static NDArray Reconstruct(Operand o)
         {
             var tc = DtypeToTC(o.Dtype);
 
-            // Empty operands: strides/offset are vacuous (0 elements). Build a plain empty array.
+            // Empty operands: with no buffer the strides/offset are vacuous (0 elements), so a plain empty array is the
+            // operand. With a buffer the descriptor is an empty VIEW cut from it (NumPy's a[3:3]: the view keeps the
+            // owner's memory and an offset that addresses no element), which the general path below rebuilds as such —
+            // a kernel that reads "element 0" of it then sees the owner's bytes, the trap the relayout empty_view kind
+            // exists to reach.
             for (int i = 0; i < o.Shape.Length; i++)
-                if (o.Shape[i] == 0)
-                    return new NDArray(tc, new Shape(o.Shape), false);
+                if (o.Shape[i] == 0 && (o.BufferSize == 0 || string.IsNullOrEmpty(o.Buffer)))
+                    return ApplyWriteable(new NDArray(tc, new Shape(o.Shape), false), o);
 
             var bytes = FromHex(o.Buffer);
             var slice = SliceFromBytes(bytes, tc);                       // Count == bufferSize
+            if (o.Own == true)
+            {
+                // NumPy's operand OWNED its buffer: the bytes are its memory and (strides, offset) its physical layout,
+                // so the storage is built over the slice WITH that layout (UnmanagedStorage trusts it, NumPy's C-API
+                // contract) and the array gets no base — OWNDATA is set, exactly as for the NumPy operand. An owner is
+                // C- or F-contiguous at offset 0 by construction of the generator (_desc refuses anything else).
+                var ownShape = new Shape(o.Shape, o.Strides, o.Offset, o.BufferSize);
+                return ApplyWriteable(new NDArray(new UnmanagedStorage(slice, ownShape)), o);
+            }
             var baseShape = new Shape(new[] { o.BufferSize });          // 1-D contiguous, size == Count
             var storage = new UnmanagedStorage(slice, baseShape);
             var viewShape = new Shape(o.Shape, o.Strides, o.Offset, o.BufferSize); // operand view (alias, no checks)
-            return new NDArray(storage, viewShape);
+            return ApplyWriteable(new NDArray(storage, viewShape), o);
+        }
+
+        /// <summary>
+        ///     The operand's VALUES as a fresh C-ordered array that owns its data: the elements the descriptor addresses,
+        ///     gathered in logical C order by plain index arithmetic over the buffer bytes — no NumSharp kernel touches
+        ///     them, so the copy cannot share a layout bug with the code under test.
+        /// </summary>
+        /// <param name="o">The operand descriptor (any layout: offset, stepped, reversed, broadcast, 0-d, empty).</param>
+        /// <returns>
+        ///     A writeable, C-contiguous owner of the operand's dtype and shape holding the same logical values (a plain
+        ///     empty array for a zero-size shape).
+        /// </returns>
+        /// <exception cref="NotSupportedException">The descriptor names a dtype NumSharp has no type code for.</exception>
+        /// <remarks>
+        ///     The relayout layout-invariance contract compares NumSharp's answer on <see cref="Reconstruct"/> (the
+        ///     layout under test) with its answer on this copy, so the copy is built independently of
+        ///     <c>NDArray.copy</c> / <c>np.ascontiguousarray</c> — a copy kernel that forgot <c>Shape.offset</c> would
+        ///     otherwise misread both sides the same way and hide the bug it exists to expose.
+        /// </remarks>
+        public static NDArray ReconstructCanonical(Operand o)
+        {
+            var tc = DtypeToTC(o.Dtype);
+            int nd = o.Shape.Length;
+            long size = 1;
+            for (int d = 0; d < nd; d++)
+                size *= o.Shape[d];
+            if (size == 0)
+                return new NDArray(tc, new Shape(o.Shape), false);
+
+            var src = FromHex(o.Buffer);
+            int isz = tc.SizeOf();
+            var dst = new byte[checked((int)(size * isz))];
+            // C-order odometer over the logical indices; each element's buffer position is the descriptor's offset plus
+            // the strided sum (strides may be negative or zero — a reversed or broadcast view — never out of range,
+            // because the generator's describe() verified the whole addressed range lies inside the buffer).
+            var idx = new long[nd];
+            for (long k = 0; k < size; k++)
+            {
+                long at = o.Offset;
+                for (int d = 0; d < nd; d++)
+                    at += idx[d] * o.Strides[d];
+                System.Buffer.BlockCopy(src, checked((int)(at * isz)), dst, checked((int)(k * isz)), isz);
+                for (int d = nd - 1; d >= 0; d--)
+                {
+                    if (++idx[d] < o.Shape[d])
+                        break;
+                    idx[d] = 0;
+                }
+            }
+
+            // C strides in elements, offset 0, buffer exactly the values: an owner, as NumPy's np.array(view) is.
+            var strides = new long[nd];
+            long acc = 1;
+            for (int d = nd - 1; d >= 0; d--)
+            {
+                strides[d] = acc;
+                acc *= o.Shape[d];
+            }
+            return new NDArray(new UnmanagedStorage(SliceFromBytes(dst, tc), new Shape(o.Shape, strides, 0, size)));
+        }
+
+        /// <summary>
+        ///     Honor the operand's explicit <see cref="Operand.Writeable"/> flag: a same-shape
+        ///     broadcast view is read-only in NumPy while its (shape, strides) reconstruction looks
+        ///     writeable, so the flag is cleared through the public <c>setflags</c> route (the same
+        ///     path the flags oracle audits). Stride-derived read-onlyness (a genuine stride-0
+        ///     broadcast dim) needs no flag and is untouched.
+        /// </summary>
+        /// <param name="nd">The freshly reconstructed operand.</param>
+        /// <param name="o">Its corpus descriptor (carries the optional flag).</param>
+        /// <returns><paramref name="nd"/>, non-writeable when the descriptor says so.</returns>
+        private static NDArray ApplyWriteable(NDArray nd, Operand o)
+        {
+            if (o.Writeable == false)
+                nd.setflags(write: false);
+            // A numpy.matrix operand: the same storage object under the matrix class (the plain wrapper built above
+            // is released; the matrix holds its own counted reference on the buffer).
+            if (o.Matrix == true)
+            {
+                var matrix = new NDMatrix(nd.Storage);
+                nd.Dispose();
+                return matrix;
+            }
+            return nd;
+        }
+
+        /// <summary>
+        ///     Rebuild the C-contiguous bool mask NDArray a masked operand carries, from its hex and
+        ///     the DATA view's logical shape. The bytes are one-per-element in C-order, so the mask is
+        ///     a plain contiguous array (never strided) even when the data view is — exactly how NumPy
+        ///     stores <c>MaskedArray._mask</c> and how <c>np.ma.array(view, mask=cmask)</c> pairs them.
+        /// </summary>
+        /// <param name="shape">The data view's shape (the mask has the same shape).</param>
+        /// <param name="maskHex">Hex of the C-contiguous bool buffer, or null for nomask.</param>
+        /// <returns>The bool mask NDArray, or null when <paramref name="maskHex"/> is null (nomask).</returns>
+        public static NDArray ReconstructMask(long[] shape, string maskHex)
+        {
+            if (maskHex == null)
+                return null;                                     // nomask: keep _mask == null (the fast path)
+            for (int i = 0; i < shape.Length; i++)
+                if (shape[i] == 0)
+                    return new NDArray(NPTypeCode.Boolean, new Shape(shape), false);   // empty: no bytes
+            var bytes = FromHex(maskHex);
+            var slice = ArraySlice.FromBuffer<bool>(bytes, true);
+            return new NDArray(new UnmanagedStorage(slice, new Shape(shape)), new Shape(shape));
         }
 
         /// <summary>Materialize an op result to C-contiguous, offset-0 logical bytes for bit comparison.</summary>

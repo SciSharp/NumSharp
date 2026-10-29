@@ -7,7 +7,11 @@ namespace NumSharp
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ravel.html</remarks>
         /// <remarks><br></br>If this array's <see cref="Shape"/> is a slice, the a copy will be made.</remarks>
-        public NDArray ravel() => np.ravel(this, 'C');
+        public NDArray ravel()
+        {
+            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
+            return np.ravel(this, 'C');
+        }
 
         /// <summary>
         ///     Return a contiguous flattened array. A 1-D array, containing the elements of the input, is returned
@@ -19,6 +23,10 @@ namespace NumSharp
         ///     'K' - memory order.
         /// </param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ravel.html</remarks>
-        public NDArray ravel(char order) => np.ravel(this, order);
+        public NDArray ravel(char order)
+        {
+            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
+            return np.ravel(this, order);
+        }
     }
 }

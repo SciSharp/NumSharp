@@ -44,6 +44,9 @@ namespace NumSharp
         public static NDArray cross(NDArray a, NDArray b, int axisa = -1, int axisb = -1, int axisc = -1,
             int? axis = null)
         {
+            // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
+            if (NDMatrixBoundary.Sees(a, b))
+                return NDMatrixBoundary.Plain((a, b, axisa, axisb, axisc, axis), static s => cross(s.a, s.b, s.axisa, s.axisb, s.axisc, s.axis));
             if (axis is not null)
                 axisa = axisb = axisc = axis.Value;
 
@@ -56,8 +59,8 @@ namespace NumSharp
             a = moveaxis(a, normA, -1);
             b = moveaxis(b, normB, -1);
 
-            long aLen = a.shape[a.ndim - 1];
-            long bLen = b.shape[b.ndim - 1];
+            long aLen = a.Shape.dimensions[a.ndim - 1];
+            long bLen = b.Shape.dimensions[b.ndim - 1];
             if ((aLen != 2 && aLen != 3) || (bLen != 2 && bLen != 3))
                 throw new ValueError(
                     "incompatible dimensions for cross product\n(dimension must be 2 or 3)");

@@ -51,6 +51,13 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("NumSharp.Interop.System.Numerics.Tensors, PublicKey=" + NumSharpFriendKey.PublicKey)]
 [assembly: InternalsVisibleTo("NumSharp.Tests.Interop.System.Numerics.Tensors, PublicKey=" + NumSharpFriendKey.PublicKey)]
 
+// The Parquet interop bridge loads Parquet columns straight into an NDArray's raw unmanaged buffer (it hands
+// Parquet.Net a Memory<T> window over the NDArray's UnmanagedMemoryBlock<T> so the decoder writes in place).
+// It currently builds on public NumSharp surface only, but is granted friend access for parity with the other
+// interop bridges (and any future reach into Storage) — and its test assembly signs with the same key.
+[assembly: InternalsVisibleTo("NumSharp.Interop.ParquetNet, PublicKey=" + NumSharpFriendKey.PublicKey)]
+[assembly: InternalsVisibleTo("NumSharp.Tests.Interop.ParquetNet, PublicKey=" + NumSharpFriendKey.PublicKey)]
+
 [assembly: InternalsVisibleTo("NumSharp.Benchmark, PublicKey=" + NumSharpFriendKey.PublicKey)]
 
 // Cross-repo: TensorFlow.NET signs with the identical key, which is the reason NumSharp keeps using

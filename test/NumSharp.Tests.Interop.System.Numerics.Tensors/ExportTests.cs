@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Numerics;
 using System.Numerics.Tensors;
 using System.Runtime.InteropServices;
@@ -143,6 +144,112 @@ namespace NumSharp.Tests.Interop.Tensors
         public void ToTensor_Null_Throws()
         {
             new Action(() => NDArrayTensorsInterop.ToTensor<float>(null)).Should().Throw<ArgumentNullException>();
+        }
+
+        // ---- edge shapes: the 0-d scalar and the empty array -------------------------------------------
+
+        /// <summary>
+        ///     A 0-d NumSharp scalar copies to a single-element vector tensor [1] — the same shape
+        ///     <c>AsTensorSpan</c> gives it, since the BCL has no rank 0 — and keeps its value. Regression: it passed
+        ///     EMPTY lengths to <c>Tensor.Create</c>, which builds a rank-1 LENGTH-0 tensor, so the value was
+        ///     silently dropped.
+        /// </summary>
+        [TestMethod]
+        public void ToTensor_Scalar_CrossesAsSingleElementVector_KeepingItsValue()
+        {
+            using NDArray scalar = NDArray.Scalar(7.5);
+            scalar.ndim.Should().Be(0);
+
+            Tensor<double> t = scalar.ToTensor<double>();
+            t.Rank.Should().Be(1);
+            ((long)t.Lengths[0]).Should().Be(1);
+            t[new nint[] { 0 }].Should().Be(7.5);
+
+            using NDArray back = t.ToNDArray();
+            back.shape.Should().Equal(1L);
+            back.GetDouble(0).Should().Be(7.5);
+        }
+
+        /// <summary>
+        ///     An empty array exports with its shape intact and all-zero strides — a span the BCL can flatten, fill and
+        ///     reduce, and that imports back to the same shape. Regression: it exported as
+        ///     <c>TensorSpan&lt;T&gt;.Empty</c>, which is rank 0 (a (3,0,4) shape was gone, <c>Lengths</c> was empty)
+        ///     and unusable: the BCL's own <c>FlattenTo</c> and <c>Tensor.Sum</c> threw IndexOutOfRangeException on it,
+        ///     and so did <c>span.ToNDArray()</c>.
+        /// </summary>
+        [TestMethod]
+        public void AsTensorSpan_Empty_KeepsItsShape_AndTheBclCanUseIt()
+        {
+            long[][] shapes = { new long[] { 0 }, new long[] { 3, 0 }, new long[] { 0, 3 }, new long[] { 2, 0, 4 } };
+            foreach (long[] dims in shapes)
+            {
+                using NDArray empty = np.zeros(new Shape(dims), np.float32);
+                using var h = empty.AsTensorSpan<float>();
+
+                h.Lengths.Select(x => (long)x).Should().Equal(dims);
+                h.Strides.Should().OnlyContain(s => s == 0, "the BCL accepts a zero-size span only with all-zero strides");
+
+                ReadOnlyTensorSpan<float> ro = h.ReadOnlySpan;
+                ro.Rank.Should().Be(dims.Length);
+                ro.FlattenTo(Span<float>.Empty);
+                Tensor.Sum(ro).Should().Be(0f);
+                h.Span.Fill(1f);                                   // an empty writeable array gives a usable mutable span
+
+                using NDArray back = ro.ToNDArray();
+                back.shape.Should().Equal(dims);
+            }
+        }
+
+        /// <summary>
+        ///     The two edge-shape fixes hold for all 15 element types: a 0-d array keeps its value through
+        ///     <c>ToTensor</c>, and an empty (2,0,3) array survives <c>AsTensorSpan</c> → <c>span.ToNDArray()</c> with its
+        ///     shape and dtype.
+        /// </summary>
+        [TestMethod]
+        public void EdgeShapes_AllDtypes_CrossIntact()
+        {
+            AssertEdgeShapes<bool>(NPTypeCode.Boolean);
+            AssertEdgeShapes<byte>(NPTypeCode.Byte);
+            AssertEdgeShapes<sbyte>(NPTypeCode.SByte);
+            AssertEdgeShapes<short>(NPTypeCode.Int16);
+            AssertEdgeShapes<ushort>(NPTypeCode.UInt16);
+            AssertEdgeShapes<int>(NPTypeCode.Int32);
+            AssertEdgeShapes<uint>(NPTypeCode.UInt32);
+            AssertEdgeShapes<long>(NPTypeCode.Int64);
+            AssertEdgeShapes<ulong>(NPTypeCode.UInt64);
+            AssertEdgeShapes<char>(NPTypeCode.Char);
+            AssertEdgeShapes<Half>(NPTypeCode.Half);
+            AssertEdgeShapes<float>(NPTypeCode.Single);
+            AssertEdgeShapes<double>(NPTypeCode.Double);
+            AssertEdgeShapes<decimal>(NPTypeCode.Decimal);
+            AssertEdgeShapes<Complex>(NPTypeCode.Complex);
+        }
+
+        /// <summary>
+        ///     Checks one dtype: the 0-d scalar's bytes come through <c>ToTensor</c> as a one-element tensor, and an
+        ///     empty array's shape and dtype come back through a zero-copy span.
+        /// </summary>
+        /// <typeparam name="T">The CLR element type of <paramref name="code"/>.</typeparam>
+        /// <param name="code">The NumSharp dtype under test.</param>
+        private static void AssertEdgeShapes<T>(NPTypeCode code) where T : unmanaged
+        {
+            using (NDArray seven = np.array(7.0))
+            using (NDArray scalar = seven.astype(code, copy: true))
+            {
+                Tensor<T> t = scalar.ToTensor<T>();
+                ((long)t.FlattenedLength).Should().Be(1, $"{code}: a 0-d array keeps its one element");
+                var value = new T[1];
+                t.FlattenTo(value);
+                MemoryMarshal.AsBytes<T>(value).ToArray().Should().Equal(BytesOf(scalar), $"{code}: the 0-d value is kept");
+            }
+
+            using (NDArray empty = Arange(code, 2, 0, 3))
+            using (var h = empty.AsTensorSpan<T>())
+            using (NDArray back = h.ReadOnlySpan.ToNDArray())
+            {
+                back.shape.Should().Equal(new long[] { 2, 0, 3 }, $"{code}: an empty array keeps its shape");
+                back.typecode.Should().Be(code);
+            }
         }
     }
 }

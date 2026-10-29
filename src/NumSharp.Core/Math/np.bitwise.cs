@@ -15,8 +15,11 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
         /// <returns>Result. This is a scalar if both x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.bitwise_and.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray bitwise_and(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x1.TensorEngine.BitwiseAnd(x1, x2, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => bitwise_and(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
+            : x1.TensorEngine.BitwiseAnd(x1, x2, dtype, @out, where);
 
         /// <summary>
         /// Compute the bit-wise OR of two arrays element-wise.
@@ -28,8 +31,11 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
         /// <returns>Result. This is a scalar if both x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.bitwise_or.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray bitwise_or(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x1.TensorEngine.BitwiseOr(x1, x2, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => bitwise_or(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
+            : x1.TensorEngine.BitwiseOr(x1, x2, dtype, @out, where);
 
         /// <summary>
         /// Compute the bit-wise XOR of two arrays element-wise.
@@ -41,7 +47,29 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
         /// <returns>Result. This is a scalar if both x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.bitwise_xor.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray bitwise_xor(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x1.TensorEngine.BitwiseXor(x1, x2, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => bitwise_xor(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
+            : x1.TensorEngine.BitwiseXor(x1, x2, dtype, @out, where);
+
+        /// <summary>
+        /// Compute the number of 1-bits in the absolute value of each element (NumPy 2.0's np.bitwise_count).
+        /// Only integer and boolean types are handled — float/complex/decimal inputs raise a TypeError, and a
+        /// <paramref name="dtype"/> other than uint8 raises the no-loop TypeError (every loop outputs uint8).
+        /// Signed negatives count the MAGNITUDE, so bitwise_count(-1) == 1 (not 8), and the signed minimum
+        /// counts as 1 (its two's-complement negation overflows to itself, matching NumPy's <c>a &lt; 0 ? -a : a</c>).
+        /// </summary>
+        /// <param name="x">Input array. Only integer and boolean types are handled.</param>
+        /// <param name="@out">A location into which the result is stored (uint8 loop result cast same_kind into it; a wider integer out is accepted).</param>
+        /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
+        /// <param name="dtype">Output dtype request; only uint8 (or null) is a valid loop.</param>
+        /// <returns>A uint8 array of set-bit counts. This is a scalar if x is a scalar.</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.bitwise_count.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        public static NDArray bitwise_count(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
+            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => bitwise_count(s.x, s.@out, s.where, s.dtype), @out)
+            : x.TensorEngine.BitwiseCount(x, dtype, @out, where);
     }
 }

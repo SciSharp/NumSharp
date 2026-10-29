@@ -510,14 +510,20 @@ public static class S
                 var keep = new List<NDArray>();
                 for (int i = 0; i < 25; i++)
                 {
+                    // Epoch BEFORE this round's calls, so CollectSince can prove the young collection below reaches
+                    // every intermediate the round dropped. That is what the forced collection is for: it finalizes
+                    // the dropped intermediates so their pooled buffers go home and the NEXT round's calls reuse
+                    // them — a wrongly released live result then shows up as corrupted values. A young collection
+                    // decides those objects' fates exactly as the former full pair did while no collection ran
+                    // mid-round (and CollectSince falls back to the full pair when one did); it just no longer marks
+                    // this host's whole heap, which is dominated by the Roslyn compilations the weaver tests keep.
+                    var roundStart = GcQuiescence.Epoch.Capture();
                     var a = Input();
                     var bare = (NDArray)run.Invoke("S", "Bare", null, a);
                     var tuple = ((NDArray, NDArray))run.Invoke("S", "Tuple2", null, a);
                     var arr = (NDArray[])run.Invoke("S", "Arr", null, a);
                     keep.Add(bare); keep.Add(tuple.Item1); keep.Add(arr[1]);
-                    GC.Collect();
-                    GC.WaitForPendingFinalizers();
-                    GC.Collect();
+                    GcQuiescence.CollectSince(roundStart);
                     CollectionAssert.AreEqual(new[] { 1.0, 3.0, 5.0 }, bare.ToArray<double>(), $"{Label(run)}: Bare at iteration {i}");
                     CollectionAssert.AreEqual(new[] { 1.0, 2.0, 3.0 }, tuple.Item1.ToArray<double>(), $"{Label(run)}: Tuple2 at iteration {i}");
                     CollectionAssert.AreEqual(new[] { -1.0, 1.0, 3.0 }, arr[1].ToArray<double>(), $"{Label(run)}: Arr at iteration {i}");

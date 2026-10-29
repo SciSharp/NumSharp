@@ -13,12 +13,20 @@ namespace NumSharp.Tests.Creation
             AssertAreEqual(nd.Data<int>(), new int[] {0, 1, 2});
         }
 
+        /// <summary>
+        ///     NumPy's <c>np.ndarray((2, 3), dtype=np.int32, order='C')</c> allocates like <c>np.empty</c>: the values are
+        ///     uninitialized, so only the layout is defined — int32, shape <c>(2, 3)</c>, strides <c>(12, 4)</c>,
+        ///     C-contiguous. The full contract is in <c>np.ndarray.Test.cs</c> and the <c>ndarray_ctor</c> oracle tier.
+        /// </summary>
         [TestMethod]
         public void ndarray()
         {
-            var x = np.ndarray((2, 3), dtype: np.int32, order: 'C');
-            Console.WriteLine(x.Shape);
-            x.flat.Cast<int>().Should().AllBeEquivalentTo(0);
+            using var x = np.ndarray((2, 3), dtype: np.int32, order: 'C');
+
+            x.dtype.Should().Be(np.int32);
+            x.shape.Should().Equal(2L, 3L);
+            x.strides.Should().Equal(12L, 4L);
+            x.flags.c_contiguous.Should().BeTrue();
         }
 
         [TestMethod]

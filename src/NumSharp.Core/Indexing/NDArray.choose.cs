@@ -16,7 +16,10 @@ namespace NumSharp
         /// <param name="mode">Out-of-bounds behaviour: <c>"raise"</c> (default), <c>"wrap"</c> or <c>"clip"</c>.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.choose.html</remarks>
         public NDArray choose(object[] choices, NDArray @out = null, string mode = "raise")
-            => np.choose(this, choices, @out, mode);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
+            return np.choose(this, choices, @out, mode);
+        }
 
         /// <summary>
         ///     Use this index array to choose from <paramref name="choices"/> (the common case — every
@@ -24,7 +27,10 @@ namespace NumSharp
         ///     <see cref="np.choose(NDArray,NDArray[],NDArray,string)"/> for full documentation.
         /// </summary>
         public NDArray choose(NDArray[] choices, NDArray @out = null, string mode = "raise")
-            => np.choose(this, choices, @out, mode);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
+            return np.choose(this, choices, @out, mode);
+        }
 
         /// <summary>
         ///     Use this index array to choose from a single <paramref name="choices"/> array whose
@@ -32,6 +38,9 @@ namespace NumSharp
         ///     <see cref="np.choose(NDArray,NDArray,NDArray,string)"/> for full documentation.
         /// </summary>
         public NDArray choose(NDArray choices, NDArray @out = null, string mode = "raise")
-            => np.choose(this, choices, @out, mode);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
+            return np.choose(this, choices, @out, mode);
+        }
     }
 }

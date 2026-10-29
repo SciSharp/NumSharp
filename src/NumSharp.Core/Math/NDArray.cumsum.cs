@@ -17,6 +17,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.cumsum.html</remarks>
         public NDArray cumsum(int? axis = null, DType dtype = null, NDArray @out = null)
         {
+            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
             return np.cumsum(this, axis, dtype, @out);
         }
     }

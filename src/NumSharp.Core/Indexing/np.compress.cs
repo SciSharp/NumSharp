@@ -63,8 +63,12 @@ namespace NumSharp
         ///     <paramref name="axis"/> = <c>null</c> is equivalent.
         ///     </para>
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray compress(NDArray condition, NDArray a, int? axis = null, NDArray @out = null)
         {
+            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            if (NDMatrixBoundary.Sees(a))
+                return NDMatrixBoundary.Wrapped((condition, a, axis, @out), static s => compress(s.condition, s.a, s.axis, s.@out), @out);
             if (condition is null) throw new ArgumentNullException(nameof(condition));
             if (a is null) throw new ArgumentNullException(nameof(a));
 
@@ -189,7 +193,7 @@ namespace NumSharp
                 outDims[ax] = count;
             }
 
-            result = new NDArray(a.typecode, new Shape(outDims), false);
+            result = new NDArray(a.typecode, Shape.Adopt(outDims), false);
 
             if (count == 0 || outerSize == 0 || innerCount == 0)
                 return true;

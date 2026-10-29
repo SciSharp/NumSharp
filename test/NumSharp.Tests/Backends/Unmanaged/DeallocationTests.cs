@@ -26,6 +26,8 @@ namespace NumSharp.Tests.Backends.Unmanaged
         {
             //this test should be churned.
             const int iterations = 10_000;
+            // Epoch BEFORE the kept slices exist, so the collection below can prove it reaches every one of them.
+            var since = GcQuiescence.Epoch.Capture();
             //alocate and store
             var l = new List<ArraySlice<float>>(iterations);
             for (int i = 0; i < iterations; i++)
@@ -33,9 +35,14 @@ namespace NumSharp.Tests.Backends.Unmanaged
                 l.Add(inner(3));
             }
 
-            //force GC
-            GC.Collect();
-            Thread.Sleep(40); //2 thread cycles
+            // Force the GC to decide the kept slices' fate, then let the finalizers of anything it found unreachable
+            // run — a block wrongly released under a live slice frees its memory for the allocations below to
+            // overwrite. CollectSince takes a young collection when that is exact (no collection ran since the
+            // epoch: every slice and its disposer is still in gen 0/1) and the full one otherwise; the finalizer
+            // wait is deterministic where the former Thread.Sleep(40) after a full GC.Collect() only hoped the
+            // finalizer thread had run (~120 ms in a full run for the pair, the full collection marking the whole
+            // test host's heap).
+            GcQuiescence.CollectSince(since);
             //allocate more with different value for the chance of overriding previous memory
             for (int i = 0; i < iterations*10; i++)
             {

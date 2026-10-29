@@ -135,9 +135,9 @@ namespace NumSharp.Tests.Interop
 
             // Guarded write paths must raise numpy's exact refusal instead of corrupting the source.
             ((Action)(() => np.copyto(view, np.zeros(new Shape(5)))))
-                .Should().Throw<NumSharpException>().WithMessage("*read-only*");
+                .Should().Throw<ValueError>().WithMessage("*read-only*");
             ((Action)(() => view["1:3"] = np.zeros(new Shape(2))))
-                .Should().Throw<NumSharpException>().WithMessage("*read-only*");
+                .Should().Throw<ValueError>().WithMessage("*read-only*");
 
             PyStr("ro_np.tolist()").Should().Be("[0.0, 1.0, 2.0, 3.0, 4.0]",
                 "the refused writes must have left the read-only Python data untouched");
@@ -161,7 +161,7 @@ namespace NumSharp.Tests.Interop
 
             view.Shape.IsWriteable.Should().BeFalse("bytes are immutable; the view must be read-only");
             ((Action)(() => np.copyto(view, np.zeros(new Shape(4), typeof(byte)))))
-                .Should().Throw<NumSharpException>().WithMessage("*read-only*");
+                .Should().Throw<ValueError>().WithMessage("*read-only*");
 
             ReadAt<byte>(view, 0).Should().Be(97, "reading stays fully functional");
         }
@@ -177,7 +177,7 @@ namespace NumSharp.Tests.Interop
             view.Shape.IsWriteable.Should().BeFalse("the interface reports data=(ptr, readonly=True)");
 
             ((Action)(() => np.copyto(view, np.zeros(new Shape(5), typeof(long)))))
-                .Should().Throw<NumSharpException>().WithMessage("*read-only*");
+                .Should().Throw<ValueError>().WithMessage("*read-only*");
             PyStr("ro_base.tolist()").Should().Be("[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]", "base data untouched");
         }
 

@@ -15,7 +15,10 @@ namespace NumSharp
         /// <returns>An array shaped as a but with the specified axis removed.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.prod.html</remarks>
         public NDArray prod(int? axis = null, DType dtype = null, bool keepdims = false)
-            => np.prod(this, axis, dtype, keepdims);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
+            return np.prod(this, axis, dtype, keepdims);
+        }
 
     }
 }

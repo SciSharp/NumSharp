@@ -19,6 +19,12 @@
 #   bash src/NumSharp.Interop.OpenBLAS/tools/verify_build_override.sh
 # =============================================================================
 set -euo pipefail
+# Checks read captured output through a here-string, `grep -q PAT <<< "$OUT"`, never
+# `echo "$OUT" | grep -q PAT`. Under pipefail, grep -q exits on its first match while echo is still
+# writing; once the capture outgrows the pipe buffer, echo dies of SIGPIPE and the pipeline FAILS
+# for a pattern it FOUND. Measured: 20/20 false "not found" for a match near the top of a large
+# capture. CI run 35856837911 (package-consumer-smoke, macOS) failed verify_build_override.sh
+# step 10 exactly so, on the verbose rebuild log.
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PKG_DIR="$(dirname "$HERE")"
@@ -143,9 +149,9 @@ write_csproj "$REF_VERSION"
 grep -q '"mode": "version"' "$RID_MARKER" || fail "version marker missing/wrong at $RID_MARKER"
 grep -q '"required": true' "$RID_MARKER" || fail "version marker must be required"
 RUN="$(cd "$CONS" && dotnet run --no-build 2>/dev/null)"
-echo "$RUN" | grep -q "enabled=True" || fail "backend not enabled at runtime: $RUN"
-echo "$RUN" | grep -q "bundled=False" || fail "a marker-declared override must NOT report IsBundledLibrary: $RUN"
-echo "$RUN" | grep -q "dot00=10" || fail "wrong product: $RUN"
+grep -q "enabled=True" <<< "$RUN" || fail "backend not enabled at runtime: $RUN"
+grep -q "bundled=False" <<< "$RUN" || fail "a marker-declared override must NOT report IsBundledLibrary: $RUN"
+grep -q "dot00=10" <<< "$RUN" || fail "wrong product: $RUN"
 echo "ok"
 
 step "3. rebuild is a cache hit (no download)"
@@ -211,11 +217,12 @@ CACHED="$(find "$CACHE/scipy-openblas64/$PINNED/$RID" -type f ! -name '*.tmp' -p
 echo "    poisoning $CACHED"
 printf 'garbage' > "$CACHED"
 # The rebuild's output is what carries the diagnosis; a failed build must show it, not vanish
-# behind a captured substitution.
+# behind a captured substitution. `|| true`: an excerpt with no matching line must not let
+# pipefail + set -e end the script before `fail` says what went wrong.
 POISON="$(cd "$CONS" && dotnet build -t:Rebuild -v n --nologo 2>&1)" \
-    || { echo "$POISON" | grep -i "error\|NumSharp.Interop.OpenBLAS:" | tail -30; fail "the rebuild after poisoning the cache failed (output above)"; }
-echo "$POISON" | grep -q "DISCARDING poisoned cache entry" || fail "the tampered entry must be detected and discarded"
-echo "$POISON" | grep -q "NumSharp.Interop.OpenBLAS: downloading" || fail "the discarded entry must be re-downloaded"
+    || { grep -i "error\|NumSharp.Interop.OpenBLAS:" <<< "$POISON" | tail -30 || true; fail "the rebuild after poisoning the cache failed (output above)"; }
+grep -q "DISCARDING poisoned cache entry" <<< "$POISON" || fail "the tampered entry must be detected and discarded"
+grep -q "NumSharp.Interop.OpenBLAS: downloading" <<< "$POISON" || fail "the discarded entry must be re-downloaded"
 grep -q '"mode": "version"' "$RID_MARKER" || fail "staging must complete after the self-heal"
 echo "ok"
 
@@ -227,8 +234,8 @@ grep -q '"mode": "version"' "$ROOT_MARKER" || fail "root marker must record the 
 grep -q '"path"' "$ROOT_MARKER" || fail "root marker must point at the custom directory"
 [ ! -f "$RID_MARKER" ] || fail "the stale default-staged marker must be cleared when staging moves to OpenBlasPath"
 COMBRUN="$(cd "$CONS" && NUMSHARP_OPENBLAS_SEARCH_PATH="$PATH_DIR" dotnet run --no-build 2>/dev/null)"
-echo "$COMBRUN" | grep -qi "library=.*pathdir" || fail "runtime must bind from the custom directory: $COMBRUN"
-echo "$COMBRUN" | grep -q "bundled=False" || fail "a custom-dir override is not the bundle: $COMBRUN"
+grep -qi "library=.*pathdir" <<< "$COMBRUN" || fail "runtime must bind from the custom directory: $COMBRUN"
+grep -q "bundled=False" <<< "$COMBRUN" || fail "a custom-dir override is not the bundle: $COMBRUN"
 echo "ok"
 
 step "12. override removed: all markers cleared"
@@ -242,7 +249,7 @@ EMPTY_DIR="$WORK/emptydir"; mkdir -p "$EMPTY_DIR"
 ( cd "$CONS" && NUMSHARP_OPENBLAS_SEARCH_PATH="$EMPTY_DIR" run dotnet build -v q --nologo "-clp:ErrorsOnly" )
 grep -q '"mode": "path"' "$ROOT_MARKER" || fail "path marker missing at $ROOT_MARKER"
 PATHRUN="$(cd "$CONS" && dotnet run --no-build 2>/dev/null)"
-echo "$PATHRUN" | grep -q "bundled=True" || fail "an empty path override must fall through to the bundle: $PATHRUN"
+grep -q "bundled=True" <<< "$PATHRUN" || fail "an empty path override must fall through to the bundle: $PATHRUN"
 ( cd "$CONS" && run dotnet build -v q --nologo "-clp:ErrorsOnly" )
 [ ! -f "$ROOT_MARKER" ] || fail "the path marker must clear once the env override is gone"
 echo "ok"
@@ -255,7 +262,7 @@ grep -q '"mode": "version"' "$WORK/pub-portable/runtimes/$RID/native/openblas.so
 grep -q '"mode": "version"' "$WORK/pub-rid/openblas.source.json" \
     || fail "flattened publish must carry the root marker"
 PUBRUN="$(dotnet "$WORK/pub-rid/consumer.dll" 2>/dev/null)"
-echo "$PUBRUN" | grep -q "bundled=False" || fail "published app must bind the override: $PUBRUN"
+grep -q "bundled=False" <<< "$PUBRUN" || fail "published app must bind the override: $PUBRUN"
 echo "ok"
 
 step "15. the cache holds extracted libraries only (Goal 7: no wheels survive)"

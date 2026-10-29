@@ -113,11 +113,13 @@ namespace NumSharp.Tests.Creation
         [TestMethod]
         public void View_Survives_Source_Dispose()
         {
+            // Built after this epoch, so CollectSince decides these objects' fate as a full collection would, with
+            // a young one whenever no collection ran in between (GcQuiescence.CollectSince).
+            var since = GcQuiescence.Epoch.Capture();
             var src = np.arange(4).astype(np.int32);
             var fb = np.frombuffer(src.data, np.int32);      // shares the ARC-managed buffer
             src.Dispose();
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
+            GcQuiescence.CollectSince(since);
             CollectionAssert.AreEqual(new[] { 0, 1, 2, 3 }, fb.ToArray<int>()); // buffer kept alive
         }
 

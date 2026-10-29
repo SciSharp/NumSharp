@@ -139,7 +139,7 @@ namespace NumSharp
         internal readonly Shape KeepOrder()
         {
             var dims = (long[])dimensions.Clone();
-            return new Shape(dims, StridesForPerm(dims, SortedStridePerm(strides)));
+            return Shape.Adopt(dims, StridesForPerm(dims, SortedStridePerm(strides)));
         }
 
         /// <summary>
@@ -165,9 +165,218 @@ namespace NumSharp
 
             var dims = (long[])outDims.Clone();
             if (allC)
-                return new Shape(dims);
+                return Shape.Adopt(dims);
 
-            return new Shape(dims, StridesForPerm(dims, MultiSortedStridePerm(inputs, dims.Length)));
+            return Shape.Adopt(dims, StridesForPerm(dims, MultiSortedStridePerm(inputs, dims.Length)));
+        }
+
+        /// <summary>
+        ///     The layout NumPy's ufunc machinery allocates its output in — NpyIter's: the operands are broadcast over
+        ///     <paramref name="dims"/> (<c>npyiter_fill_axisdata</c>), the iterator axes sorted by
+        ///     <c>npyiter_find_best_axis_ordering</c>, and the output laid out dense along that order
+        ///     (<c>npyiter_new_temp_array</c>). Use it wherever NumSharp reproduces the RESULT of a chain of NumPy ufunc
+        ///     calls with one kernel: the result's strides (and so its C/F flags) are then NumPy's, not whatever order
+        ///     the kernel happened to write in.
+        /// </summary>
+        /// <param name="dims">The broadcast output shape (the operands must broadcast to it; not checked). The returned
+        ///     shape ADOPTS this array as its dimensions — pass a fresh one (or one nobody will ever write to): a Shape is
+        ///     immutable only as long as the arrays it holds are.</param>
+        /// <param name="operands">The ufunc's INPUT operands (0-d ones and NumPy scalars included: they never vote).
+        ///     Each is read through its own dims/strides, right-aligned against <paramref name="dims"/>. An array
+        ///     converts implicitly; a single operand needs no array (<c>new ReadOnlySpan&lt;Shape&gt;(in s)</c>).</param>
+        /// <returns>A fresh, offset-0, dense shape of <paramref name="dims"/>.</returns>
+        /// <remarks>
+        ///     <para><b>How it differs from the other two votes in this file.</b> An operand's stride counts as 0 — it
+        ///     abstains — on every axis where the broadcast extent is 1, the operand lacks the axis, its own extent is 1,
+        ///     OR its stride really is 0 (an <c>np.broadcast_to</c> view): <c>npyiter_fill_axisdata</c> writes the
+        ///     stride as is and the sort skips zero strides. <see cref="MultiSortedStridePerm"/> (concatenate's vote)
+        ///     abstains only on extent-1 axes, so a broadcast view's stride-0 axis there sorts innermost, and
+        ///     <see cref="KeepOrder"/> (<c>np.copy</c>'s order='K') sorts it innermost as well — which is why a copy of a
+        ///     row-broadcast is F-contiguous while a ufunc over it (<c>np.broadcast_to(a, (3, 4)) + 0</c>) is C (probed
+        ///     2.4.2).</para>
+        ///     <para><b>The sort.</b> A stable insertion sort over the iterator's axes, innermost first (NpyIter keeps
+        ///     its AXISDATA reversed from C order): an axis moves inward past another when, for the first operand that
+        ///     sees both (neither stride 0), its |stride| is smaller; any LATER operand whose |strides| say otherwise
+        ///     cancels the move ("C-order wins conflicts between operands"); a pair no operand sees is skipped and the
+        ///     scan continues outward. Ported line for line — the conflict and skip rules are what make, e.g., a
+        ///     transposed series broadcast against an F-ordered x come out with the series' axes outermost.</para>
+        ///     <para><b>Allocation.</b> The innermost sorted axis gets stride 1, each further one the product of the
+        ///     extents inside it — so an extent-1 axis gets whatever stride its sorted position gives it (NumPy's own
+        ///     answer for it is path-dependent: its trivial-loop fast path fills C/F strides instead; flags never read
+        ///     an extent-1 axis's stride). Strides are in ELEMENTS, NumSharp's convention; every comparison is within
+        ///     one operand, so NumPy's byte strides sort identically.</para>
+        ///     <para><b>Cost.</b> It runs on every call that lays out a non-C result (the polynomial evaluation and
+        ///     mapdomain paths), so its only heap allocation is the strides array the result keeps: the vote table and
+        ///     the permutation live on the stack up to <see cref="NpyIterStackLimit"/> entries, and the dims are adopted
+        ///     rather than copied.</para>
+        /// </remarks>
+        internal static Shape NpyIterOutputShape(long[] dims, ReadOnlySpan<Shape> operands)
+        {
+            int nd = dims.Length;
+            if (nd == 0)
+                return NewScalar();
+            int nop = operands.Length;
+
+            // npyiter_fill_axisdata: the stride each operand contributes per ITERATOR axis i (array axis nd-1-i);
+            // 0 = abstains (the four broadcast cases of the remarks). Stack-resident for any realistic rank × operand
+            // count; the heap fallback keeps an absurd rank (NumSharp has no 64-dimension cap) from blowing the stack.
+            int cells = nop * nd;
+            Span<long> istr = cells <= NpyIterStackLimit ? stackalloc long[cells] : new long[cells];
+            for (int iop = 0; iop < nop; iop++)
+            {
+                var od = operands[iop].dimensions;
+                var os = operands[iop].strides;
+                int ond = od.Length;
+                for (int iax = 0; iax < nd; iax++)
+                {
+                    int ax = nd - 1 - iax;
+                    int k = ax - (nd - ond);
+                    istr[iop * nd + iax] = dims[ax] == 1 || k < 0 || od[k] == 1 ? 0 : os[k];
+                }
+            }
+
+            // npyiter_find_best_axis_ordering: perm[i] = the iterator axis at sorted position i (innermost first).
+            Span<int> perm = nd <= NpyIterStackLimit ? stackalloc int[nd] : new int[nd];
+            for (int i = 0; i < nd; i++)
+                perm[i] = i;
+            for (int axI0 = 1; axI0 < nd; axI0++)
+            {
+                int axIpos = axI0;
+                int axJ0 = perm[axI0];
+                for (int axI1 = axI0 - 1; axI1 >= 0; axI1--)
+                {
+                    bool ambig = true, shouldSwap = false;
+                    int axJ1 = perm[axI1];
+                    for (int iop = 0; iop < nop; iop++)
+                    {
+                        long s0 = istr[iop * nd + axJ0], s1 = istr[iop * nd + axJ1];
+                        if (s0 != 0 && s1 != 0)
+                        {
+                            // NumPy: "Set swap even if it's not ambiguous already, because in the case of conflicts
+                            // between different operands, C-order wins" — and only SET it while still ambiguous.
+                            if (Math.Abs(s1) <= Math.Abs(s0))
+                                shouldSwap = false;
+                            else if (ambig)
+                                shouldSwap = true;
+                            ambig = false;
+                        }
+                    }
+
+                    // Unambiguous: move the insertion point or stop; ambiguous: keep scanning outward.
+                    if (!ambig)
+                    {
+                        if (shouldSwap)
+                            axIpos = axI1;
+                        else
+                            break;
+                    }
+                }
+
+                if (axIpos != axI0)
+                {
+                    for (int axI1 = axI0; axI1 > axIpos; axI1--)
+                        perm[axI1] = perm[axI1 - 1];
+                    perm[axIpos] = axJ0;
+                }
+            }
+
+            // npyiter_new_temp_array (no op_axes): dense strides, innermost sorted axis first.
+            var strides = new long[nd];
+            long stride = 1;
+            for (int idim = 0; idim < nd; idim++)
+            {
+                int ax = nd - 1 - perm[idim];
+                strides[ax] = stride;
+                stride *= dims[ax];
+            }
+
+            return Shape.Adopt(dims, strides);
+        }
+
+        /// <summary>
+        ///     The layout NumPy allocates a single-axis reduction's result in — <c>npyiter_new_temp_array</c> over the
+        ///     reduction iterator: the input's axes sorted by NpyIter's rule (<see cref="NpyIterOutputShape"/>'s vote, the
+        ///     input the only voter — the allocated result has no strides yet, so it cannot vote), then the result laid out
+        ///     dense along that order, the reduced axis dropped (or kept with extent 1, which takes the running stride without
+        ///     growing it).
+        /// </summary>
+        /// <param name="outputDims">The result's dims: the input's without <paramref name="axis"/>, or (the keepdims form)
+        ///     the input's with <paramref name="axis"/> set to 1 — told apart by their length. Adopted by the returned
+        ///     shape: pass a fresh array.</param>
+        /// <param name="input">The reduced array's shape (any layout; a stride-0 or extent-1 axis abstains from the
+        ///     vote, as in NpyIter).</param>
+        /// <param name="axis">The reduced axis, already normalized.</param>
+        /// <returns>A fresh, offset-0, dense shape of <paramref name="outputDims"/>.</returns>
+        /// <remarks>
+        ///     A C-contiguous input gives a C result and an F-contiguous one an F result, as before; what this adds is every
+        ///     other order — a transposed 3-D input reduced along one axis leaves the other two in the input's memory order
+        ///     (probed 2.4.2: <c>np.max(np.ones((2, 3, 4)).transpose(2, 0, 1), axis=1)</c> has element strides (1, 4)), where
+        ///     a C-only allocation reordered them.
+        /// </remarks>
+        internal static Shape ReductionOutputShape(long[] outputDims, Shape input, int axis)
+        {
+            int nd = input.NDim;
+            bool keepdimsForm = outputDims.Length == nd;
+            var full = NpyIterOutputShape((long[])input.dimensions.Clone(), new ReadOnlySpan<Shape>(in input));
+            int[] outerFirst = full.DenseAxisOrder();
+
+            // npyiter_new_temp_array: strides assigned walking the iteration order innermost first; a dropped reduced axis
+            // takes none, every other result axis the running stride.
+            var strides = new long[outputDims.Length];
+            long stride = 1;
+            for (int i = outerFirst.Length - 1; i >= 0; i--)
+            {
+                int ax = outerFirst[i];
+                int r = keepdimsForm ? ax : ax == axis ? -1 : ax > axis ? ax - 1 : ax;
+                if (r < 0)
+                    continue;
+                strides[r] = stride;
+                stride *= outputDims[r];
+            }
+
+            return Adopt(outputDims, strides);
+        }
+
+        /// <summary>
+        ///     Largest vote table (operands × rank) and permutation <see cref="NpyIterOutputShape"/> keeps on the stack —
+        ///     256 longs = 2 KB, far above any ufunc's operand count times a realistic rank; beyond it the tables go to
+        ///     the heap rather than risk the stack.
+        /// </summary>
+        private const int NpyIterStackLimit = 256;
+
+        /// <summary>
+        ///     The axes of a DENSE layout (no stride-0 axis of extent &gt; 1 — e.g. one <see cref="NpyIterOutputShape"/>
+        ///     built) in memory order, outermost first: <c>np.transpose(a, perm)</c> of an array laid out this way is
+        ///     C-contiguous, and a C-contiguous buffer of the transposed dims IS this layout's buffer — the identity
+        ///     that lets a kernel which can only write C order produce this layout by writing the transposed view.
+        /// </summary>
+        /// <returns>The permutation, outermost axis first (length <see cref="NDim"/>).</returns>
+        /// <remarks>
+        ///     Ties — an extent-1 axis shares its stride with a neighbour — keep their original order (a stable sort).
+        ///     An extent-1 axis is only ever read at index 0, so where it lands does not change any element's address:
+        ///     every non-unit axis has a distinct stride in a dense layout, and their relative order is all that the
+        ///     identity above needs.
+        /// </remarks>
+        internal int[] DenseAxisOrder()
+        {
+            int nd = dimensions.Length;
+            var perm = new int[nd];
+            for (int i = 0; i < nd; i++)
+                perm[i] = i;
+            // Stable insertion sort by stride, descending: ranks are tiny, and stability is what keeps ties put.
+            for (int i = 1; i < nd; i++)
+            {
+                int a = perm[i];
+                long s = strides[a];
+                int j = i - 1;
+                while (j >= 0 && strides[perm[j]] < s)
+                {
+                    perm[j + 1] = perm[j];
+                    j--;
+                }
+                perm[j + 1] = a;
+            }
+            return perm;
         }
     }
 }

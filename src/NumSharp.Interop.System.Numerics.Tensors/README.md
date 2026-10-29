@@ -3,9 +3,8 @@
 Zero-copy interop between NumSharp's `NDArray` and the BCL's **`System.Numerics.Tensors`** types —
 `Tensor<T>`, `TensorSpan<T>` and `ReadOnlyTensorSpan<T>`.
 
-It is a **conversion library** in the mould of `NumSharp.Interop.OnnxRuntime` /
-`NumSharp.Interop.MLNet`: it moves data (or rather, descriptions of the same memory) across the
-boundary. It is **not** an engine backend — `System.Numerics.Tensors` does not compute NumSharp
+It is a **conversion library**: it moves data (or rather, descriptions of the same memory) across
+the boundary. It is **not** an engine backend — `System.Numerics.Tensors` does not compute NumSharp
 operations, so there is no `TensorEngine` seam, no `[ModuleInitializer]`, and **no native
 dependency**. Referencing the package changes nothing until you call a verb.
 
@@ -26,8 +25,7 @@ dependency**. Referencing the package changes nothing until you call a verb.
 
 ## Dtypes — all 15 cross as themselves
 
-Unlike ONNX Runtime (a fixed `TensorElementType` enum with real gaps), `System.Numerics.Tensors`
-containers are **unconstrained generics** over an unmanaged `T`. So **every** NumSharp dtype crosses
+`System.Numerics.Tensors` containers are **unconstrained generics** over an unmanaged `T`. So **every** NumSharp dtype crosses
 zero-copy as its own CLR type — `bool`, the eight integers, `char`, **`System.Half`** (directly, no
 `Float16` wrapper), `float`, `double`, **`System.Decimal`** and **`System.Numerics.Complex`**. Nothing
 is refused and nothing is converted.
@@ -39,6 +37,20 @@ NDArray view shares zero-copy (a broadcast view through `ReadOnlySpan` only — 
 stride-0 lanes would corrupt data). The one refusal is a **negative-stride** view (a reversed slice
 `a[::-1]`): `System.Numerics.Tensors` forbids negative strides — materialize it first
 (`np.ascontiguousarray(nd)`, `nd.copy()`) or use `ToTensor`.
+
+## Edge shapes
+
+- **0-d scalar → `[1]`.** The BCL has no rank 0, so both `AsTensorSpan` and `ToTensor` give a 0-d array
+  the shape `[1]`, keeping its value; importing that tensor back gives `(1,)`.
+- **Empty arrays keep their shape.** A `(3,0,4)` array exports as a rank-3 span with every stride 0 (the
+  form the BCL accepts for a zero-size span), which the BCL can flatten, fill and reduce. The BCL's own
+  rank-0 values (`Tensor<T>.Empty`, `ReadOnlyTensorSpan<T>.Empty`) hold no element and import as `(0,)`.
+- **Sliced tensors import their own elements.** A tensor that starts past element 0 of its backing array
+  (`t.Slice(…)`, a range indexer, `Tensor.Create(array, start, …)`) is copied or viewed from its own start.
+  (`Tensor<T>.GetPinnedHandle()` points at the backing array's element 0, so the bridge reads the start from
+  the tensor's span instead.)
+- **Released buffers are refused.** `AsTensorSpan` and `ToTensor` throw `ObjectDisposedException` for an
+  array whose buffer has been released, whatever its layout.
 
 ## Example
 

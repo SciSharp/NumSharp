@@ -40,6 +40,9 @@ namespace NumSharp
         /// </para>
         /// </remarks>
         public static NDArray correlate(NDArray a, NDArray v, string mode = "valid")
-            => a.correlate(v, mode);
+        {
+            using var plain = NDMatrixBoundary.PlainFor(a, v);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return a.correlate(v, mode);
+        }
     }
 }

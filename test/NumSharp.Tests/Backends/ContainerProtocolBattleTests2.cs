@@ -175,17 +175,23 @@ public class ContainerProtocolBattleTests2
         np.all(arr == 5).Should().BeTrue();
     }
 
+    /// <summary>
+    ///     <c>arr[:] = row</c> broadcasts the row into every row of a 2-D target, as NumPy's assignment does. Only the
+    ///     first row being written would leave the rest of the array stale without an error.
+    /// </summary>
+    /// <remarks>
+    ///     Was <c>[OpenBugs]</c> ("NumPy broadcasts row to all rows, NumSharp doesn't") until the 2026-10-05 run of the
+    ///     whole OpenBugs category found it passing.
+    /// </remarks>
     [TestMethod]
-    [OpenBugs] // BUG: NumPy broadcasts row to all rows, NumSharp doesn't
     public void SetItem_BroadcastRowTo2D()
     {
         // NumPy: arr[:] = row broadcasts row to all rows
-        // NumSharp: doesn't support this broadcast pattern yet
         var arr = np.zeros(new long[] { 3, 4 }, np.int32);
         var row = np.array(new[] { 1, 2, 3, 4 });
         arr.__setitem__(":", row);
 
-        // When fixed, all rows should be [1, 2, 3, 4]
+        // All rows must be [1, 2, 3, 4]
         for (int i = 0; i < 3; i++)
         {
             ((int)arr[i, 0]).Should().Be(1);

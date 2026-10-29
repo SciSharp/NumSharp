@@ -70,7 +70,7 @@ namespace NumSharp.Tests.RandomSampling
         [TestMethod]
         public void Laplace_NegativeScale_ThrowsArgumentException()
         {
-            Assert.ThrowsException<ArgumentException>(() => np.random.laplace(0, -1, 5));
+            Assert.ThrowsException<ValueError>(() => np.random.laplace(0, -1, 5));
         }
 
         [TestMethod]
@@ -162,8 +162,8 @@ namespace NumSharp.Tests.RandomSampling
         {
             // From NumPy: assert_raises(ValueError, np.random.laplace, scale=-0.)
             // Note: -0.0 in C# is equal to 0.0, but we test with explicit negative
-            Assert.ThrowsException<ArgumentException>(() => np.random.laplace(0, -1));
-            Assert.ThrowsException<ArgumentException>(() => np.random.laplace(0, -0.001));
+            Assert.ThrowsException<ValueError>(() => np.random.laplace(0, -1));
+            Assert.ThrowsException<ValueError>(() => np.random.laplace(0, -0.001));
         }
 
         /// <summary>

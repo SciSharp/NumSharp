@@ -95,7 +95,7 @@ public class AuditV2_CastingRandomUtilities
     //   to (low=0, high=low). This collides with the perfectly legal call
     //   np.random.randint(-10, -1, 3) which NumPy returns e.g. [-4, -7, -3].
     // -----------------------------------------------------------------------
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.31")]
+    [TestMethod]
     public void T1_31_Randint_NegativeOneHigh_TreatedAsSentinel()
     {
         np.random.seed(42);
@@ -108,7 +108,9 @@ public class AuditV2_CastingRandomUtilities
         arr.size.Should().Be(3);
         for (int i = 0; i < (int)arr.size; i++)
         {
-            long v = arr.GetInt64(i);
+            // Read by value: randint's default dtype is NumPy's C long (int64 in NumSharp's LP64 model; Windows NumPy's
+            // is int32), so a width-specific accessor would be tied to that choice.
+            long v = System.Convert.ToInt64(arr.GetAtIndex(i));
             v.Should().BeGreaterThanOrEqualTo(-10);
             v.Should().BeLessThan(-1);
         }
@@ -121,14 +123,16 @@ public class AuditV2_CastingRandomUtilities
     //   Public API typo carried throughout. Surface via TupleElementNamesAttribute
     //   on the method's return type.
     // -----------------------------------------------------------------------
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.32")]
+    [TestMethod]
     public void T1_32_Modf_TupleElementNameTypo()
     {
+        // The modf signature gained the ufunc out=/where=/dtype= parameters
+        // (NDArray outFrac, NDArray outIntegral, NDArray where, DType dtype); look it up by that shape.
         var modf = typeof(np).GetMethod(
             nameof(np.modf),
             BindingFlags.Public | BindingFlags.Static,
             null,
-            new[] { typeof(NDArray), typeof(NPTypeCode?) },
+            new[] { typeof(NDArray), typeof(NDArray), typeof(NDArray), typeof(NDArray), typeof(DType) },
             null);
         modf.Should().NotBeNull();
 

@@ -76,17 +76,18 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     <see cref="NPTypeCode.Decimal"/> (no ONNX type — convert to Double first; the array-producing
         ///     verbs do so automatically) or <see cref="NPTypeCode.Complex"/> (ORT accepts no complex tensors).
         /// </exception>
-        public static TensorElementType ToTensorElementType(NPTypeCode code)
+        public static TensorElementType ToTensorElementType(DType dtype)
         {
-            if (!TryToTensorElementType(code, out TensorElementType type))
+            NPTypeCode code = (dtype ?? throw new ArgumentNullException(nameof(dtype))).GetTypeCode();
+            if (!TryToTensorElementType(dtype, out TensorElementType type))
                 throw new NotSupportedException(UnsupportedExportMessage(code));
             return type;
         }
 
         /// <summary><see cref="ToTensorElementType"/> without the throw; <c>false</c> for Decimal / Complex.</summary>
-        public static bool TryToTensorElementType(NPTypeCode code, out TensorElementType type)
+        public static bool TryToTensorElementType(DType dtype, out TensorElementType type)
         {
-            switch (code)
+            switch (dtype?.GetTypeCode())
             {
                 case NPTypeCode.Boolean: type = TensorElementType.Bool; return true;
                 case NPTypeCode.Byte: type = TensorElementType.UInt8; return true;
@@ -116,29 +117,29 @@ namespace NumSharp.Interop.OnnxRuntime
         /// </exception>
         public static NPTypeCode FromTensorElementType(TensorElementType type)
         {
-            if (!TryFromTensorElementType(type, out NPTypeCode code))
+            if (!TryFromTensorElementType(type, out DType dtype))
                 throw new NotSupportedException(UnsupportedImportMessage(type));
-            return code;
+            return dtype.GetTypeCode();
         }
 
         /// <summary><see cref="FromTensorElementType"/> without the throw.</summary>
-        public static bool TryFromTensorElementType(TensorElementType type, out NPTypeCode code)
+        public static bool TryFromTensorElementType(TensorElementType type, out DType dtype)
         {
             switch (type)
             {
-                case TensorElementType.Bool: code = NPTypeCode.Boolean; return true;
-                case TensorElementType.UInt8: code = NPTypeCode.Byte; return true;
-                case TensorElementType.Int8: code = NPTypeCode.SByte; return true;
-                case TensorElementType.Int16: code = NPTypeCode.Int16; return true;
-                case TensorElementType.UInt16: code = NPTypeCode.UInt16; return true;
-                case TensorElementType.Int32: code = NPTypeCode.Int32; return true;
-                case TensorElementType.UInt32: code = NPTypeCode.UInt32; return true;
-                case TensorElementType.Int64: code = NPTypeCode.Int64; return true;
-                case TensorElementType.UInt64: code = NPTypeCode.UInt64; return true;
-                case TensorElementType.Float16: code = NPTypeCode.Half; return true;
-                case TensorElementType.Float: code = NPTypeCode.Single; return true;
-                case TensorElementType.Double: code = NPTypeCode.Double; return true;
-                default: code = default; return false;                                   // String, BFloat16, Complex64/128, DataTypeMax
+                case TensorElementType.Bool: dtype = NPTypeCode.Boolean; return true;
+                case TensorElementType.UInt8: dtype = NPTypeCode.Byte; return true;
+                case TensorElementType.Int8: dtype = NPTypeCode.SByte; return true;
+                case TensorElementType.Int16: dtype = NPTypeCode.Int16; return true;
+                case TensorElementType.UInt16: dtype = NPTypeCode.UInt16; return true;
+                case TensorElementType.Int32: dtype = NPTypeCode.Int32; return true;
+                case TensorElementType.UInt32: dtype = NPTypeCode.UInt32; return true;
+                case TensorElementType.Int64: dtype = NPTypeCode.Int64; return true;
+                case TensorElementType.UInt64: dtype = NPTypeCode.UInt64; return true;
+                case TensorElementType.Float16: dtype = NPTypeCode.Half; return true;
+                case TensorElementType.Float: dtype = NPTypeCode.Single; return true;
+                case TensorElementType.Double: dtype = NPTypeCode.Double; return true;
+                default: dtype = null; return false;                                     // String, BFloat16, Complex64/128, DataTypeMax
             }
         }
 
@@ -147,8 +148,9 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     <see cref="System.Half"/> becomes ORT's <see cref="Float16"/>, <see cref="char"/> becomes
         ///     <see cref="ushort"/>; <c>null</c> for Decimal / Complex.
         /// </summary>
-        public static Type ToTensorElementClrType(NPTypeCode code)
+        public static Type ToTensorElementClrType(DType dtype)
         {
+            NPTypeCode code = (dtype ?? throw new ArgumentNullException(nameof(dtype))).GetTypeCode();
             switch (code)
             {
                 case NPTypeCode.Boolean: return typeof(bool);
@@ -237,7 +239,7 @@ namespace NumSharp.Interop.OnnxRuntime
             {
                 case TensorElementType.String:
                     return "ORT string tensors have no NumSharp dtype (NumSharp has no string/object arrays). Read them with " +
-                           "OrtValue.GetStringTensorAsArray() / GetStringElement(i).";
+                           "ortValue.ReadStringTensor() (or OrtValue.GetStringTensorAsArray() / GetStringElement(i)).";
                 case TensorElementType.BFloat16:
                     return "ORT BFloat16 has no NumSharp dtype (NumSharp has no bfloat16). Cast the tensor to float32 or float16 " +
                            "inside the model graph, or read the raw 16-bit patterns with GetTensorDataAsSpan<BFloat16>().";
@@ -265,8 +267,8 @@ namespace NumSharp.Interop.OnnxRuntime
             if (kind == OnnxValueType.ONNX_TYPE_TENSOR)
                 return;
             throw new NotSupportedException(
-                $"{verb} needs a dense tensor OrtValue, but this value is {kind}. Sequences and maps are read element by element " +
-                "with OrtValue.GetValueCount() / GetValue(i, allocator) or the ProcessSequence / ProcessMap visitors; " +
+                $"{verb} needs a dense tensor OrtValue, but this value is {kind}. A sequence of tensors is read with ToNDArrays(); " +
+                "a single map with ToMap(); a sequence of maps (the scikit-learn ZipMap shape) with ToMaps(); " +
                 "sparse tensors and optionals have no NumSharp analog.");
         }
 
@@ -378,21 +380,142 @@ namespace NumSharp.Interop.OnnxRuntime
         }
 
         /// <summary>
+        ///     Wrap a window of a NumSharp buffer — viewed as <paramref name="tc"/> elements — as an ALIAS whose reference
+        ///     counting is <paramref name="owner"/>'s own (<c>ArraySlice.WrapShared</c>): an <see cref="NDArray"/> over the
+        ///     returned slice holds a counted reference on the owner's buffer and keeps it reachable, exactly as an ordinary
+        ///     view does, and the owner's last release frees the buffer once. The element type may differ from the owner's
+        ///     (Float16 viewed as Half, a Char buffer viewed as UInt16) — the reinterpreting-alias case the primitive exists for.
+        /// </summary>
+        /// <param name="tc">The dtype the alias carries.</param>
+        /// <param name="p">The first aliased element, inside <paramref name="owner"/>'s buffer.</param>
+        /// <param name="count">The number of <paramref name="tc"/> elements aliased.</param>
+        /// <param name="owner">The buffer's slice, to which every reference-counting call of the alias is forwarded.</param>
+        /// <returns>The alias; it holds no reference until an <see cref="NDArray"/> is built over it.</returns>
+        /// <exception cref="NotSupportedException"><paramref name="tc"/> is not a storage dtype.</exception>
+        internal static unsafe IArraySlice WrapShared(NPTypeCode tc, void* p, long count, IArraySlice owner)
+        {
+            switch (tc)
+            {
+                case NPTypeCode.Boolean: return ArraySlice.WrapShared<bool>(p, count, owner);
+                case NPTypeCode.Byte: return ArraySlice.WrapShared<byte>(p, count, owner);
+                case NPTypeCode.SByte: return ArraySlice.WrapShared<sbyte>(p, count, owner);
+                case NPTypeCode.Int16: return ArraySlice.WrapShared<short>(p, count, owner);
+                case NPTypeCode.UInt16: return ArraySlice.WrapShared<ushort>(p, count, owner);
+                case NPTypeCode.Int32: return ArraySlice.WrapShared<int>(p, count, owner);
+                case NPTypeCode.UInt32: return ArraySlice.WrapShared<uint>(p, count, owner);
+                case NPTypeCode.Int64: return ArraySlice.WrapShared<long>(p, count, owner);
+                case NPTypeCode.UInt64: return ArraySlice.WrapShared<ulong>(p, count, owner);
+                case NPTypeCode.Char: return ArraySlice.WrapShared<char>(p, count, owner);
+                case NPTypeCode.Half: return ArraySlice.WrapShared<Half>(p, count, owner);
+                case NPTypeCode.Single: return ArraySlice.WrapShared<float>(p, count, owner);
+                case NPTypeCode.Double: return ArraySlice.WrapShared<double>(p, count, owner);
+                case NPTypeCode.Complex: return ArraySlice.WrapShared<Complex>(p, count, owner);
+                default: throw new NotSupportedException(tc.ToString());
+            }
+        }
+
+        /// <summary>
         ///     Take an ARC reference on the array's buffer and resolve the pointer to its first logical
         ///     element (<c>slice.Address + Shape.Offset × itemsize</c> — right for both a contiguous slice
         ///     that re-seats the storage address and a view that keeps the base address with a non-zero
         ///     offset). The caller owns the reference and must <see cref="IArraySlice.Release"/> it.
         /// </summary>
+        /// <param name="source">The array whose buffer is pinned.</param>
+        /// <param name="data">The address of the array's first logical element.</param>
+        /// <param name="nbytes">The byte length of the array's elements (<c>size × itemsize</c>), meaningful as one run only for a contiguous array.</param>
+        /// <returns>The pinned buffer; release it exactly once.</returns>
+        /// <exception cref="ObjectDisposedException">The array's buffer has already been released.</exception>
         internal static unsafe IArraySlice Pin(NDArray source, out byte* data, out long nbytes)
         {
-            IArraySlice slice = source.Storage.InternalArray;
-            if (!slice.TryAddRef())
-                throw new ObjectDisposedException(nameof(source), "the NumSharp buffer has already been released.");
+            IArraySlice slice = Pin(source);
             Shape shape = source.Shape;
             int itemsize = source.dtypesize;
             nbytes = shape.Size * itemsize;
             data = (byte*)slice.Address + shape.Offset * itemsize;
             return slice;
+        }
+
+        /// <summary>
+        ///     Take an ARC reference on the array's buffer, refusing a buffer that has already been released. This is
+        ///     the ONLY liveness check NumSharp offers: <c>TryAddRef</c> fails once the last reference is gone, while
+        ///     every read (<c>astype</c>, <c>copy()</c>, a raw pointer) goes ahead regardless and, once the pool has
+        ///     handed the memory to another array, returns that array's values. So every verb takes this reference
+        ///     before its first read of a caller's array, and holds it until the read is done.
+        /// </summary>
+        /// <param name="source">The array whose buffer is pinned.</param>
+        /// <returns>The pinned buffer; release it exactly once (<see cref="IArraySlice.Release"/>).</returns>
+        /// <exception cref="ObjectDisposedException">The array's buffer has already been released.</exception>
+        internal static IArraySlice Pin(NDArray source)
+        {
+            IArraySlice slice = source.Storage.InternalArray;
+            if (!slice.TryAddRef())
+                throw new ObjectDisposedException(nameof(source), "the NumSharp buffer has already been released.");
+            return slice;
+        }
+
+        /// <summary>
+        ///     The dtype a NumSharp array is fed to ONNX Runtime as: <see cref="NPTypeCode.Decimal"/>, which has no ONNX
+        ///     element type, becomes <see cref="NPTypeCode.Double"/>; every other dtype is fed as itself (Char and Half
+        ///     cross bit-for-bit as UInt16 / Float16, see <see cref="ToTensorElementType"/>). Lets a verb decide its
+        ///     dtype and size refusals from the source's dtype and shape alone, before it converts or reads anything.
+        /// </summary>
+        /// <param name="code">The source array's dtype.</param>
+        /// <returns>The dtype the conversion verbs produce for it.</returns>
+        internal static NPTypeCode FeedTypeCode(NPTypeCode code) => code == NPTypeCode.Decimal ? NPTypeCode.Double : code;
+
+        /// <summary>
+        ///     <c>source.astype(code)</c> while holding a reference on the source's buffer — how every verb converts a
+        ///     caller's array. Use it instead of a bare <c>astype</c>, which reads the buffer without asking whether it
+        ///     is still alive.
+        /// </summary>
+        /// <remarks>
+        ///     The verbs used to convert first and pin afterwards, so the pin (<see cref="Pin(NDArray)"/>, the only
+        ///     liveness check) ran on the fresh conversion and always succeeded: a source whose buffer had been released
+        ///     was converted from whatever the pool had put there, and the export carried another array's values.
+        ///     Holding the reference across the conversion also keeps another thread's dispose from releasing the
+        ///     buffer while it is read.
+        /// </remarks>
+        /// <param name="source">The array to convert; any layout.</param>
+        /// <param name="code">The dtype to convert to.</param>
+        /// <returns>
+        ///     A new array the caller owns and must dispose, laid out as <c>astype</c> lays it out (NumPy's order 'K':
+        ///     a transposed source gives a Fortran-ordered result, so callers needing C order still check).
+        /// </returns>
+        /// <exception cref="ObjectDisposedException">The source's buffer has already been released.</exception>
+        internal static NDArray ConvertPinned(NDArray source, NPTypeCode code)
+        {
+            IArraySlice pin = Pin(source);
+            try
+            {
+                return source.astype(code);
+            }
+            finally
+            {
+                pin.Release();
+                GC.KeepAlive(source);
+            }
+        }
+
+        /// <summary>
+        ///     <c>source.copy()</c> — a C-order copy, the densifying step for a view ONNX Runtime cannot share — while
+        ///     holding a reference on the source's buffer, for the reason <see cref="ConvertPinned"/> gives: the copy
+        ///     reads the buffer without checking that it is still alive.
+        /// </summary>
+        /// <param name="source">The array to copy; any layout (0-d stays 0-d, unlike <c>np.ascontiguousarray</c>).</param>
+        /// <returns>A new C-contiguous array the caller owns and must dispose.</returns>
+        /// <exception cref="ObjectDisposedException">The source's buffer has already been released.</exception>
+        internal static NDArray CopyPinned(NDArray source)
+        {
+            IArraySlice pin = Pin(source);
+            try
+            {
+                return source.copy();
+            }
+            finally
+            {
+                pin.Release();
+                GC.KeepAlive(source);
+            }
         }
     }
 }

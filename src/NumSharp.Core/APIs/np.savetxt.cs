@@ -180,8 +180,8 @@ namespace NumSharp
                 throw new ValueError($"Expected 1D or 2D array, got {ndim}D array instead");
 
             long nrows, ncol;
-            if (ndim == 1) { nrows = X.shape[0]; ncol = 1; }
-            else { nrows = X.shape[0]; ncol = X.shape[1]; }
+            if (ndim == 1) { nrows = X.Shape.dimensions[0]; ncol = 1; }
+            else { nrows = X.Shape.dimensions[0]; ncol = X.Shape.dimensions[1]; }
 
             NPTypeCode tc = X.typecode;
             bool iscomplex = tc == NPTypeCode.Complex;

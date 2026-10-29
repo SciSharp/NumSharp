@@ -34,7 +34,9 @@ namespace NumSharp
             ///     </para>
             /// </remarks>
             public static NDArray norm(NDArray x, object ord = null, int? axis = null, bool keepdims = false)
-                => norm(x, ord, axis is null ? null : new[] {axis.Value}, keepdims);
+                => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
+                ? NDMatrixBoundary.Plain((x, ord, axis, keepdims), static s => norm(s.x, s.ord, s.axis, s.keepdims))
+                : norm(x, ord, axis is null ? null : new[] {axis.Value}, keepdims);
 
             /// <summary>
             ///     Matrix or vector norm reduced over an explicit axis tuple.
@@ -43,6 +45,9 @@ namespace NumSharp
             [NDScoped]
             public static NDArray norm(NDArray x, object ord, int[] axis, bool keepdims = false)
             {
+                // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
+                if (NDMatrixBoundary.Sees(x))
+                    return NDMatrixBoundary.Plain((x, ord, axis, keepdims), static s => norm(s.x, s.ord, s.axis, s.keepdims));
                 var a = ToFloating(x);
                 int nd = a.ndim;
 
@@ -77,7 +82,9 @@ namespace NumSharp
             /// </summary>
             /// <inheritdoc cref="vector_norm(NDArray, int[], bool, object)"/>
             public static NDArray vector_norm(NDArray x, int axis, bool keepdims = false, object ord = null)
-                => vector_norm(x, new[] {axis}, keepdims, ord);
+                => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
+                ? NDMatrixBoundary.Plain((x, axis, keepdims, ord), static s => vector_norm(s.x, s.axis, s.keepdims, s.ord))
+                : vector_norm(x, new[] {axis}, keepdims, ord);
 
             /// <summary>
             ///     The Array-API vector norm — <c>axis</c> defaults to flattening and <c>ord</c> to 2.
@@ -90,6 +97,9 @@ namespace NumSharp
             [NDScoped]
             public static NDArray vector_norm(NDArray x, int[] axis = null, bool keepdims = false, object ord = null)
             {
+                // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
+                if (NDMatrixBoundary.Sees(x))
+                    return NDMatrixBoundary.Plain((x, axis, keepdims, ord), static s => vector_norm(s.x, s.axis, s.keepdims, s.ord));
                 object order = ord ?? 2;
                 if (axis is not null)
                     return norm(x, order, axis, keepdims);
@@ -110,7 +120,9 @@ namespace NumSharp
             /// </param>
             /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.matrix_norm.html</remarks>
             public static NDArray matrix_norm(NDArray x, bool keepdims = false, object ord = null)
-                => norm(x, ord ?? "fro", new[] {-2, -1}, keepdims);
+                => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
+                ? NDMatrixBoundary.Plain((x, keepdims, ord), static s => matrix_norm(s.x, s.keepdims, s.ord))
+                : norm(x, ord ?? "fro", new[] {-2, -1}, keepdims);
 
             #region internals
 

@@ -14,7 +14,10 @@ namespace NumSharp
         /// <param name="x">Input value.</param>
         /// <returns>The natural logarithm of x, element-wise. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.log.html</remarks>
-        public static NDArray log(NDArray x) => x.TensorEngine.Log(x);
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        public static NDArray log(NDArray x) => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped(x, static s => log(s))
+            : x.TensorEngine.Log(x);
 
         /// <summary>
         ///     Natural logarithm, element-wise.
@@ -25,8 +28,11 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
         /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=): the computation runs at this precision; integer/bool requests raise NumPy's "No loop matching" error.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.log.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray log(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x.TensorEngine.Log(x, dtype, @out, where);
+            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => log(s.x, s.@out, s.where, s.dtype), @out)
+            : x.TensorEngine.Log(x, dtype, @out, where);
 
         /// <summary>
         ///     Base-2 logarithm of x.
@@ -34,7 +40,10 @@ namespace NumSharp
         /// <param name="x">Input value.</param>
         /// <returns>Base-2 logarithm of x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.log2.html</remarks>
-        public static NDArray log2(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null) => x.TensorEngine.Log2(x, dtype, @out, where);
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        public static NDArray log2(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null) => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => log2(s.x, s.@out, s.where, s.dtype), @out)
+            : x.TensorEngine.Log2(x, dtype, @out, where);
 
         /// <summary>
         ///     Base-2 logarithm of x.
@@ -42,7 +51,10 @@ namespace NumSharp
         /// <param name="x">Input value.</param>
         /// <returns>Base-2 logarithm of x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.log2.html</remarks>
-        public static NDArray log2(NDArray x) => x.TensorEngine.Log2(x);
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        public static NDArray log2(NDArray x) => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped(x, static s => log2(s))
+            : x.TensorEngine.Log2(x);
 
         /// <summary>
         ///     Return the base 10 logarithm of the input array, element-wise.
@@ -50,7 +62,10 @@ namespace NumSharp
         /// <param name="x">Input value.</param>
         /// <returns>The logarithm to the base 10 of x, element-wise. NaNs are returned where x is negative. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.log10.html</remarks>
-        public static NDArray log10(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null) => x.TensorEngine.Log10(x, dtype, @out, where);
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        public static NDArray log10(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null) => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => log10(s.x, s.@out, s.where, s.dtype), @out)
+            : x.TensorEngine.Log10(x, dtype, @out, where);
 
         /// <summary>
         ///     Return the base 10 logarithm of the input array, element-wise.
@@ -58,7 +73,10 @@ namespace NumSharp
         /// <param name="x">Input value.</param>
         /// <returns>The logarithm to the base 10 of x, element-wise. NaNs are returned where x is negative. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.log10.html</remarks>
-        public static NDArray log10(NDArray x) => x.TensorEngine.Log10(x);
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        public static NDArray log10(NDArray x) => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped(x, static s => log10(s))
+            : x.TensorEngine.Log10(x);
 
         /// <summary>
         ///     Return the natural logarithm of one plus the input array, element-wise.<br></br>
@@ -67,7 +85,10 @@ namespace NumSharp
         /// <param name="x">Input value.</param>
         /// <returns>Natural logarithm of 1 + x, element-wise. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.log1p.html</remarks>
-        public static NDArray log1p(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null) => x.TensorEngine.Log1p(x, dtype, @out, where);
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        public static NDArray log1p(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null) => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => log1p(s.x, s.@out, s.where, s.dtype), @out)
+            : x.TensorEngine.Log1p(x, dtype, @out, where);
 
         /// <summary>
         ///     Return the natural logarithm of one plus the input array, element-wise.<br></br>
@@ -76,6 +97,9 @@ namespace NumSharp
         /// <param name="x">Input value.</param>
         /// <returns>Natural logarithm of 1 + x, element-wise. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.log1p.html</remarks>
-        public static NDArray log1p(NDArray x) => x.TensorEngine.Log1p(x);
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        public static NDArray log1p(NDArray x) => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped(x, static s => log1p(s))
+            : x.TensorEngine.Log1p(x);
     }
 }

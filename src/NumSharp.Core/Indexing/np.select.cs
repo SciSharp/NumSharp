@@ -63,6 +63,7 @@ namespace NumSharp
         /// </remarks>
         public static NDArray select(NDArray[] condlist, object[] choicelist, object @default = null)
         {
+            using var plain = NDMatrixBoundary.PlainFor(condlist);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (condlist is null) throw new ArgumentNullException(nameof(condlist));
             if (choicelist is null) throw new ArgumentNullException(nameof(choicelist));
 
@@ -170,7 +171,7 @@ namespace NumSharp
             if (TrySelectFused(condlist, mats, n, dtype, resultDims, out var fused))
                 return fused;
 
-            var result = new NDArray(dtype, new Shape((long[])resultDims.Clone()), false);
+            var result = new NDArray(dtype, Shape.Adopt((long[])resultDims.Clone()), false);
 
             // Composition fallback (NumPy's own structure): burn the default across the whole result
             // (unsafe cast, matching np.full's copyto), then overlay each choice where its condition is
@@ -249,7 +250,7 @@ namespace NumSharp
             if (kernel == null)
                 return false;
 
-            var res = new NDArray(dtype, new Shape((long[])resultDims.Clone()), false);
+            var res = new NDArray(dtype, Shape.Adopt((long[])resultDims.Clone()), false);
             SelectFusedInvoke(kernel, condlist, mats, defArr, defScalar, res, n, dtype);
             result = res;
             return true;

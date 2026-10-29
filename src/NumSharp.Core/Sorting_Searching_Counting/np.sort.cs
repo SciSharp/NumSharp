@@ -18,8 +18,11 @@ namespace NumSharp
         ///     NaN floats sort to the end; complex sorts lexicographically (real then imaginary),
         ///     any-NaN-part last — matching NumPy 2.4.2.
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray sort(NDArray a, int? axis = -1, string kind = null)
-            => AxisSort.Sort(a, axis);
+            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            ? NDMatrixBoundary.Wrapped((a, axis, kind), static s => sort(s.a, s.axis, s.kind))
+            : AxisSort.Sort(a, axis);
     }
 
     public partial class NDArray

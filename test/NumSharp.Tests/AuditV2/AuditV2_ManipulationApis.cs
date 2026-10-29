@@ -17,17 +17,21 @@ namespace NumSharp.Tests.AuditV2;
 public class AuditV2_ManipulationApis
 {
     // =====================================================================
-    // T1.17 — np.expand_dims drops new axis for empty arrays
+    // T1.17 — np.expand_dims dropped the new axis for empty arrays (RESOLVED)
+    //
+    // Fixed by 1fcd6f1e (NumPy-parity for empty arrays in expand_dims / stack /
+    // vstack / cumprod). Both tests were [OpenBugs] until the 2026-10-05 run of
+    // the whole OpenBugs category found them passing.
     // =====================================================================
 
     /// <summary>
-    /// T1.17 — np.expand_dims drops the new axis when input is empty.
+    /// T1.17 — np.expand_dims must add the new axis when the input is empty.
     ///
     /// NumPy 2.4.2: np.expand_dims(np.array([], dtype=float), 0).shape == (1, 0)
-    /// NumSharp:    returns shape (0,) — the empty short-circuit at lines 7-12 returns 'a' unchanged.
-    /// File: src/NumSharp.Core/Manipulation/np.expand_dims.cs:8
+    /// At audit time NumSharp returned shape (0,): an empty short-circuit in
+    /// src/NumSharp.Core/Manipulation/np.expand_dims.cs returned 'a' unchanged.
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.17")]
+    [TestMethod] // RESOLVED: the empty input gains the axis (was [OpenBugs] audit-v2-T1.17).
     public void T1_17_ExpandDims_EmptyArray_AddsDimension()
     {
         var e = np.array(new double[] { });
@@ -40,10 +44,11 @@ public class AuditV2_ManipulationApis
     }
 
     /// <summary>
-    /// T1.17 — also broken when expanding to (1, 1, 0) via repeated calls.
+    /// T1.17 — repeated calls must keep adding axes to an empty array (this was
+    /// broken the same way at audit time).
     /// NumPy: np.expand_dims(np.expand_dims(e, 0), 0).shape == (1, 1, 0).
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.17")]
+    [TestMethod] // RESOLVED: nested expansion reaches (1, 1, 0) (was [OpenBugs] audit-v2-T1.17).
     public void T1_17_ExpandDims_EmptyArray_NestedAdd()
     {
         var e = np.array(new double[] { });
@@ -252,7 +257,9 @@ public class AuditV2_ManipulationApis
     }
 
     /// <summary>
-    /// T1.18 — where with non-boolean array raises ArgumentException.
+    /// T1.18 — where with a non-boolean array raises NumPy's text (array_copyto converts the mask with
+    /// PyArray_FromAny under the 'safe' rule): "Cannot cast array data from dtype('int32') to dtype('bool')
+    /// according to the rule 'safe'", NumPy's TypeError under the house ArgumentException every where= check raises.
     /// </summary>
     [TestMethod]
     public void T1_18_Copyto_Where_NonBoolean_Throws()
@@ -263,7 +270,7 @@ public class AuditV2_ManipulationApis
 
         Action act = () => np.copyto(dst, src, @where: maskInt);
         act.Should().Throw<ArgumentException>()
-            .WithMessage("*where*bool*int32*");
+            .WithMessage("Cannot cast array data from dtype('int32') to dtype('bool') according to the rule 'safe'");
     }
 
     /// <summary>
@@ -370,11 +377,11 @@ public class AuditV2_ManipulationApis
     // =====================================================================
 
     /// <summary>
-    /// T1.61 — copyto into unwriteable destination throws NumSharpException (NumPy: ValueError).
+    /// T1.61 — copyto into an unwriteable destination throws ValueError, matching NumPy exactly.
     /// FIXED — np.copyto routes through the one standard write guard
-    /// (NumSharpException.ThrowIfNotWriteable, NumPy's PyArray_FailUnlessWriteable), so it throws
-    /// the same NumSharpException with the canonical "assignment destination is read-only" message
-    /// as every other write path (indexer setters, guarded views over read-only memmaps/imports).
+    /// (NumSharpException.ThrowIfNotWriteable, NumPy's PyArray_FailUnlessWriteable), which raises
+    /// ValueError with the canonical "assignment destination is read-only" message — the same type
+    /// AND text as every other write path (indexer setters, guarded views over read-only memmaps/imports).
     /// </summary>
     [TestMethod]
     public void T1_61_Copyto_UnwriteableDst_ThrowsValueErrorEquivalent()
@@ -385,8 +392,8 @@ public class AuditV2_ManipulationApis
         var src = np.array(new double[] { 2.0, 3.0, 4.0, 5.0, 6.0 });
 
         Action act = () => np.copyto(bDst, src);
-        act.Should().Throw<NumSharpException>(
-            "NumPy raises ValueError on write to read-only destination; NumSharp's canonical guard raises NumSharpException")
+        act.Should().Throw<ValueError>(
+            "NumPy raises ValueError on write to a read-only destination; NumSharp's write guard raises the same ValueError")
             .WithMessage("*assignment destination is read-only*");
     }
 

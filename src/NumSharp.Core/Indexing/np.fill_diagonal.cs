@@ -48,6 +48,7 @@ namespace NumSharp
         [NDScoped]
         public static void fill_diagonal(NDArray a, object val, bool wrap = false)
         {
+            using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (a is null) throw new ArgumentNullException(nameof(a));
 
             int ndim = a.ndim;
@@ -59,7 +60,7 @@ namespace NumSharp
             if (ndim == 2)
             {
                 // Explicit, fast formula for the common case; rectangular arrays are accepted.
-                long cols = a.shape[1];
+                long cols = a.Shape.dimensions[1];
                 step = cols + 1;
                 // Without wrapping, stop before a tall matrix's diagonal re-enters column 0.
                 end = wrap ? a.size : cols * cols;
@@ -73,7 +74,7 @@ namespace NumSharp
                 long cum = 1;
                 for (int d = 0; d < ndim - 1; d++)
                 {
-                    cum *= a.shape[d];
+                    cum *= a.Shape.dimensions[d];
                     step += cum;
                 }
 
@@ -142,7 +143,7 @@ namespace NumSharp
 
             long s0 = shape.strides[0];
             long s1 = shape.strides[1];
-            long colCount = a.shape[1];
+            long colCount = a.Shape.dimensions[1];
             long blockStride = s0 + s1;
 
             // Each block of `cols` targets marches down the diagonal; the next block restarts

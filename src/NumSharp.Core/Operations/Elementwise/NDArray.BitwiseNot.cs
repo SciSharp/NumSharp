@@ -18,6 +18,7 @@ namespace NumSharp
         /// </remarks>
         public static NDArray operator ~(NDArray x)
         {
+            using var plain = NDMatrixBoundary.PlainFor(x);   // an operator keeps the plain-array meaning for a matrix object
             return np.invert(x);
         }
     }

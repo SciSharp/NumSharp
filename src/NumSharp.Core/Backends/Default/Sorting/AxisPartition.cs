@@ -122,7 +122,7 @@ namespace NumSharp.Backends.Sorting
             }
             int ax = AxisSort.NormalizeAxis(axis.Value, a.ndim);
             var src = a.Shape.IsContiguous ? a : a.copy('C');
-            var ret = new NDArray(NPTypeCode.Int64, new Shape((long[])a.Shape.dimensions.Clone()), false);
+            var ret = new NDArray(NPTypeCode.Int64, Shape.Adopt((long[])a.Shape.dimensions.Clone()), false);
             ArgPartitionInto(src, ret, ax, WidenKth(kth));
             return ret;
         }
@@ -143,7 +143,7 @@ namespace NumSharp.Backends.Sorting
             }
             int ax = AxisSort.NormalizeAxis(axis.Value, a.ndim);
             var src = a.Shape.IsContiguous ? a : a.copy('C');
-            var ret = new NDArray(NPTypeCode.Int64, new Shape((long[])a.Shape.dimensions.Clone()), false);
+            var ret = new NDArray(NPTypeCode.Int64, Shape.Adopt((long[])a.Shape.dimensions.Clone()), false);
             ArgPartitionInto(src, ret, ax, ExtractKthValues(kth));
             return ret;
         }
@@ -251,7 +251,7 @@ namespace NumSharp.Backends.Sorting
 
         private static void PartitionInPlaceCore(NDArray target, int axis, long[] kth)
         {
-            long N = target.shape[axis];
+            long N = target.Shape.dimensions[axis];
             var ks = PrepKth(kth, N, target.size);
             if (target.size == 0 || N <= 1 || ks.Length == 0)
                 return;
@@ -292,7 +292,7 @@ namespace NumSharp.Backends.Sorting
 
         private static void ArgPartitionInto(NDArray src, NDArray dst, int axis, long[] kth)
         {
-            long N = src.shape[axis];
+            long N = src.Shape.dimensions[axis];
             var ks = PrepKth(kth, N, src.size);
             if (src.size == 0)
                 return;

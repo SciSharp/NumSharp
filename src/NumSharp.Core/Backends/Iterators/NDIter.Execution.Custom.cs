@@ -114,6 +114,33 @@ namespace NumSharp.Backends.Iteration
             Action<ILGenerator> scalarBody,
             Action<ILGenerator>? vectorBody,
             in InnerLoopKernelKey key)
+            => ExecuteElementWise(operandTypes, scalarBody, vectorBody, key, auxdata: null);
+
+        /// <summary>
+        /// Packed-key <see cref="ExecuteElementWise(NPTypeCode[], Action{ILGenerator}, Action{ILGenerator}?, in InnerLoopKernelKey)"/>
+        /// that also hands the 1-D inner-loop kernel an <paramref name="auxdata"/> cookie — the binary ufunc routes pass a
+        /// <see cref="BroadcastNaNRule"/> there (see <see cref="DirectILKernelGenerator.EmitBroadcastNaNRegion"/>).
+        /// </summary>
+        /// <param name="operandTypes">Data-operand dtypes (inputs then output; a trailing ARRAYMASK operand excluded).</param>
+        /// <param name="scalarBody">Per-element IL body.</param>
+        /// <param name="vectorBody">Optional per-vector IL body.</param>
+        /// <param name="key">The kernel's packed cache key.</param>
+        /// <param name="auxdata">
+        /// Cookie passed to every inner-loop call, or null. It must stay valid for the whole call. The 2-D block kernels
+        /// (narrow strided rows, masked or not) do not receive it: they serve multi-axis iterations, which NumPy mostly
+        /// BUFFERS into one contiguous call (the second operand's NaN everywhere, which the kernel bodies already give).
+        /// The multi-axis broadcasts NumPy runs one region-rule call per row (unbuffered) or per buffer fill (a 0-d or
+        /// size-1 operand stays at stride 0 in its buffered loop) are open bugs, pinned with NumPy's bits in
+        /// <c>test/NumSharp.Tests/OpenBugs.NaNOperandOrder.cs</c>.
+        /// </param>
+        /// <exception cref="ArgumentNullException"><paramref name="operandTypes"/> is null.</exception>
+        /// <exception cref="ArgumentException">The operand-type count does not match the iterator.</exception>
+        public void ExecuteElementWise(
+            NPTypeCode[] operandTypes,
+            Action<ILGenerator> scalarBody,
+            Action<ILGenerator>? vectorBody,
+            in InnerLoopKernelKey key,
+            void* auxdata)
         {
             if (operandTypes is null) throw new ArgumentNullException(nameof(operandTypes));
 
@@ -131,7 +158,7 @@ namespace NumSharp.Backends.Iteration
 
             if (!DirectILKernelGenerator.TryGetInnerLoop(key, out var kernel))
                 kernel = DirectILKernelGenerator.CompileInnerLoop(operandTypes, scalarBody, vectorBody, key);
-            ForEach(kernel);
+            ForEach(kernel, auxdata);
         }
 
         /// <summary>
@@ -491,6 +518,31 @@ namespace NumSharp.Backends.Iteration
             Action<ILGenerator> scalarBody,
             Action<ILGenerator>? vectorBody,
             in InnerLoopKernelKey key)
+            => ExecuteElementWiseBinary(lhs, rhs, outType, scalarBody, vectorBody, key, auxdata: null);
+
+        /// <summary>
+        /// Packed-key binary form that also hands the 1-D inner-loop kernel an <paramref name="auxdata"/> cookie (the
+        /// binary ufunc routes pass a <see cref="BroadcastNaNRule"/>); a cache hit allocates nothing.
+        /// </summary>
+        /// <param name="lhs">The first input's dtype.</param>
+        /// <param name="rhs">The second input's dtype.</param>
+        /// <param name="outType">The output's dtype.</param>
+        /// <param name="scalarBody">Per-element IL body.</param>
+        /// <param name="vectorBody">Optional per-vector IL body.</param>
+        /// <param name="key">The kernel's packed cache key.</param>
+        /// <param name="auxdata">
+        /// Cookie passed to every inner-loop call, or null; it must stay valid for the whole call. The 2-D block kernel
+        /// (narrow strided rows) does not receive it, because NumPy mostly buffers such multi-axis iterations into one
+        /// contiguous call; the ones it runs one region-rule call per row (unbuffered) or per buffer fill (a 0-d or
+        /// size-1 operand stays at stride 0) are open bugs, pinned in <c>test/NumSharp.Tests/OpenBugs.NaNOperandOrder.cs</c>.
+        /// </param>
+        /// <exception cref="ArgumentException">The iterator does not have three data operands.</exception>
+        public void ExecuteElementWiseBinary(
+            NPTypeCode lhs, NPTypeCode rhs, NPTypeCode outType,
+            Action<ILGenerator> scalarBody,
+            Action<ILGenerator>? vectorBody,
+            in InnerLoopKernelKey key,
+            void* auxdata)
         {
             ValidateElementWiseOperandCount(3);
             if (Is2DElementwiseShape() &&
@@ -498,7 +550,7 @@ namespace NumSharp.Backends.Iteration
                 return;
             if (!DirectILKernelGenerator.TryGetInnerLoop(key, out var kernel))
                 kernel = DirectILKernelGenerator.CompileInnerLoop(new[] { lhs, rhs, outType }, scalarBody, vectorBody, key);
-            ForEach(kernel);
+            ForEach(kernel, auxdata);
         }
 
         /// <summary>Convenience: 2-input + 1-output (binary).</summary>

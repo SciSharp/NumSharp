@@ -58,7 +58,21 @@ namespace NumSharp.Tests.Fuzz
         // ───────── base reconstruction (mirrors gen_index_oracle.make_base) ─────────
         private static NDArray A() => np.arange(12L).reshape(3, 4);
 
-        private static NDArray Base(string n)
+        /// <summary>
+        ///     Rebuilds a named index-oracle BASE array (mirrors <c>gen_index_oracle.make_base</c>): the
+        ///     0-d scalar, the 1-D <c>V*</c> vectors, the 3x4 <c>A</c> family in every view layout the oracle
+        ///     indexes (transposed, row/col-strided, negative-stride, offset, stride-0 broadcast), the 3-D
+        ///     <c>B</c>/<c>BT</c> pair and the empty-dimension bases. Shared with the leak sweep
+        ///     (<see cref="UndisposedIntermediateTests"/>), which replays the SAME index cases with every
+        ///     result disposed — the reason it is <c>internal</c> rather than private.
+        /// </summary>
+        /// <remarks>View bases alias a freshly built parent (<c>A()</c>/<c>np.arange</c>) that nothing else
+        /// references; a caller that must not litter wraps the call in an <see cref="NDScope"/> and yields
+        /// the returned view, so the parent is released and ARC keeps the shared buffer alive.</remarks>
+        /// <param name="n">The base token recorded in the case (<c>S</c>, <c>V0</c>, <c>A</c>, <c>AT</c>, …).</param>
+        /// <returns>A fresh array (or view of a fresh parent) equal to NumPy's base for that token.</returns>
+        /// <exception cref="ArgumentException"><paramref name="n"/> is not a known base token (a corpus/harness drift).</exception>
+        internal static NDArray Base(string n)
         {
             switch (n)
             {
@@ -83,7 +97,15 @@ namespace NumSharp.Tests.Fuzz
             }
         }
 
-        private static NDArray DtypeBase(string dt)
+        /// <summary>
+        ///     Rebuilds the dtype-tier base (<c>arange(12).reshape(3,4)</c> cast to <paramref name="dt"/>,
+        ///     or its parity pattern for bool) that <c>index_dtype</c>/<c>index_setter_dtype</c> cases index.
+        ///     Shared with the leak sweep, hence <c>internal</c>.
+        /// </summary>
+        /// <param name="dt">The NumPy dtype name recorded in the case.</param>
+        /// <returns>A fresh 3x4 array of the requested dtype.</returns>
+        /// <exception cref="ArgumentException"><paramref name="dt"/> is not one of the 12 dtype tokens the tier uses.</exception>
+        internal static NDArray DtypeBase(string dt)
         {
             var b = np.arange(12L).reshape(3, 4);
             if (dt == "bool") return (b % 2L).astype(NPTypeCode.Boolean);
@@ -119,9 +141,25 @@ namespace NumSharp.Tests.Fuzz
             }
         }
 
-        private static object[] BuildIndex(JsonElement tokens) => tokens.EnumerateArray().Select(Tok).ToArray();
+        /// <summary>
+        ///     Converts a case's serialized index tokens into the NumSharp index objects the indexer takes
+        ///     (ints, <see cref="Slice"/>s, newaxis/ellipsis, integer/boolean index ARRAYS and 0-d arrays) —
+        ///     mirrors <c>gen_index_oracle.tok_to_np</c>. Shared with the leak sweep, hence <c>internal</c>.
+        /// </summary>
+        /// <remarks>Array tokens are freshly built <see cref="NDArray"/>s the caller owns (dispose them, or
+        /// build under an <see cref="NDScope"/> and yield them).</remarks>
+        /// <param name="tokens">The case's <c>tokens</c> JSON array.</param>
+        /// <returns>The index objects in token order, ready for <c>base[idx]</c>.</returns>
+        /// <exception cref="ArgumentException">A token kind is unknown (a corpus/harness drift).</exception>
+        internal static object[] BuildIndex(JsonElement tokens) => tokens.EnumerateArray().Select(Tok).ToArray();
 
-        private static NDArray BuildValue(JsonElement v)
+        /// <summary>
+        ///     Builds a SETTER case's int64 right-hand side: a 0-d scalar or an int64 array of the recorded
+        ///     shape. Shared with the leak sweep, hence <c>internal</c>.
+        /// </summary>
+        /// <param name="v">The case's <c>value</c> JSON (<c>["scalar", n]</c> or <c>["arr", flat, shape]</c>).</param>
+        /// <returns>A fresh array the caller owns.</returns>
+        internal static NDArray BuildValue(JsonElement v)
         {
             if (v[0].GetString() == "scalar") return (NDArray)v[1].GetInt64();
             return np.array(v[1].EnumerateArray().Select(x => x.GetInt64()).ToArray())
@@ -130,7 +168,14 @@ namespace NumSharp.Tests.Fuzz
 
         // G15 value forms: ["scalar",n] int64 | ["fscalar",x] float64 | ["farr",flat,shape] float64
         // (mirrors gen_index_oracle.setter_val_to_np — np-typed scalars, so uint8 = -1 WRAPS).
-        private static NDArray BuildTypedValue(JsonElement v)
+        /// <summary>
+        ///     Builds a CROSS-DTYPE setter's right-hand side (the G15 value forms: int64 scalar, float64
+        ///     scalar, or float64 array). Shared with the leak sweep, hence <c>internal</c>.
+        /// </summary>
+        /// <param name="v">The case's <c>value</c> JSON.</param>
+        /// <returns>A fresh array the caller owns.</returns>
+        /// <exception cref="ArgumentException">The value form is unknown (a corpus/harness drift).</exception>
+        internal static NDArray BuildTypedValue(JsonElement v)
         {
             switch (v[0].GetString())
             {
@@ -148,7 +193,15 @@ namespace NumSharp.Tests.Fuzz
         private static long[] NpVals(JsonElement np) => np.GetProperty("vals").EnumerateArray().Select(x => x.GetInt64()).ToArray();
         private static long[] NpShape(JsonElement np) => np.GetProperty("shape").EnumerateArray().Select(x => x.GetInt64()).ToArray();
 
-        private static IEnumerable<JsonElement> LoadLines(string file)
+        /// <summary>
+        ///     Streams an index-oracle corpus file as parsed JSON cases (blank lines skipped). The index tiers
+        ///     use their own schema (base/tokens/value/np), not <see cref="FuzzCorpus.Case"/>, which is why
+        ///     they have a dedicated loader. Shared with the leak sweep, hence <c>internal</c>.
+        /// </summary>
+        /// <param name="file">Corpus file name under <c>Fuzz/corpus/</c>.</param>
+        /// <returns>One cloned root element per case line, lazily.</returns>
+        /// <exception cref="System.IO.FileNotFoundException">The corpus file was not copied next to the test assembly.</exception>
+        internal static IEnumerable<JsonElement> LoadLines(string file)
         {
             var path = FuzzCorpus.CorpusPath(file);
             foreach (var line in File.ReadLines(path))
