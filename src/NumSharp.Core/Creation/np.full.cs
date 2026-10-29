@@ -108,7 +108,7 @@ namespace NumSharp
         /// <returns>True when NumPy's <c>copyto</c> would broadcast the value rather than store one scalar.</returns>
         /// <remarks>
         ///     A 0-d array is not one: it stores one element through the scalar rule
-        ///     (<see cref="TryCopytoUnsafeScalarElement"/>), which a text 0-d array reaches too (parsed once).
+        ///     (<see cref="UnmanagedStorage.TryCopytoUnsafeScalarElement"/>), which a text 0-d array reaches too (parsed once).
         /// </remarks>
         internal static bool IsBroadcastFillValue(object fill_value)
             => fill_value is NDArray nd ? nd.ndim > 0 : fill_value is Array && fill_value is not byte[];
@@ -199,7 +199,7 @@ namespace NumSharp
 
         /// <summary>
         ///     The element <c>np.full</c> / <c>np.full_like</c> fill with — NumPy's <c>copyto(a, fill_value,
-        ///     casting='unsafe')</c> of a scalar (<see cref="TryCopytoUnsafeScalarElement"/>), boxed as
+        ///     casting='unsafe')</c> of a scalar (<see cref="UnmanagedStorage.TryCopytoUnsafeScalarElement"/>), boxed as
         ///     <paramref name="typeCode"/>'s exact CLR type.
         /// </summary>
         /// <param name="fill_value">The caller's fill value; <c>null</c> is Python's <c>None</c>.</param>
@@ -231,7 +231,7 @@ namespace NumSharp
                 return fill_value;
 
             Span<byte> element = stackalloc byte[ReductionInitial.SlotBytes];
-            if (TryCopytoUnsafeScalarElement(fill_value, typeCode, element))
+            if (UnmanagedStorage.TryCopytoUnsafeScalarElement(fill_value, typeCode, element))
                 return ReductionInitial.Box(element, typeCode);
             return Converts.ChangeType(fill_value, typeCode);
         }

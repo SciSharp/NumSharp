@@ -72,9 +72,8 @@ Manipulation/NDArray.FunctionBase.cs	7	8	# np.insert's and np.delete's statement
 Manipulation/NDArray.fill.cs	3	1
 Manipulation/np.apply_along_axis.cs	0	1
 Manipulation/np.asscalar.cs	0	1
-Manipulation/np.copyto.Strings.cs	15	2
-Manipulation/np.copyto.VString.cs	7	0
-Manipulation/np.copyto.cs	7	5
+Manipulation/np.copyto.Strings.cs	1	0
+Manipulation/np.copyto.cs	1	0
 Manipulation/np.delete.cs	0	20
 Manipulation/np.pad.cs	12	33
 Manipulation/np.trim_zeros.cs	2	0

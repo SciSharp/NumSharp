@@ -1,11 +1,20 @@
-using NumSharp.Backends;
+using System;
+using System.Numerics;
+using System.Runtime.CompilerServices;
 using NumSharp.Backends.Iteration;
+using NumSharp.Backends.Kernels;
 using NumSharp.Backends.Strings;
 using NumSharp.Backends.Unmanaged;
+using NumSharp.Backends.Unmanaged.Pooling;
+using NumSharp.Utilities;
 
-namespace NumSharp
+namespace NumSharp.Backends
 {
-    public static partial class np
+    // ---------------------------------------------------------------------------------------------------------------------
+    // PyArray_AssignArray / PyArray_AssignRawScalar for NEP 55 StringDType operands: every string moves through the
+    // allocators (UnmanagedStorage.Assign.cs holds the numeric assignment).
+    // ---------------------------------------------------------------------------------------------------------------------
+    public partial class UnmanagedStorage
     {
         /// <summary>
         ///     <c>PyArray_AssignArray</c> / <c>PyArray_AssignRawScalar</c> when either operand is a NEP 55 <c>StringDType</c>
@@ -90,7 +99,7 @@ namespace NumSharp
                 using var marks = NDVStringMove.NewMarks(dst);
                 using var index = NDVStringMove.ValueIndex(value);
                 // The numeric masked copy broadcasts the element numbers (and the mask) exactly as the strings would be.
-                copyto(marks, index, "unsafe", @where);
+                np.copyto(marks, index, "unsafe", @where);
                 NDVStringMove.ScatterMarks(dst, marks, value);
             }
             finally
@@ -173,7 +182,7 @@ namespace NumSharp
             // The selected elements' source numbers (-1 where nothing is copied), broadcast and masked by the numeric copy.
             using var marks = NDVStringMove.NewMarks(dst);
             using (var index = NDVStringMove.ValueIndex(src))
-                copyto(marks, index, "unsafe", @where);
+                np.copyto(marks, index, "unsafe", @where);
             using var zero = NDArray.Scalar(0L);
             using var selected = np.greater_equal(marks, zero);
             using var positions = np.flatnonzero(selected);
@@ -188,7 +197,7 @@ namespace NumSharp
             // The values at their destination positions (a C-ordered staging array), written back under the same selection.
             using var staged = np.zeros(Shape.Adopt((long[])dst.Shape.dimensions.Clone()), to);
             np.put(staged, positions, values);
-            copyto(dst, staged, "unsafe", selected);
+            np.copyto(dst, staged, "unsafe", selected);
         }
 
         /// <summary>The address of a <c>StringDType</c> array's first cell (<c>PyArray_DATA</c>; 16-byte cells).</summary>
