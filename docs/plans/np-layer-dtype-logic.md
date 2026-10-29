@@ -57,16 +57,18 @@ np.loadtxt's converters are left. Batch 9, the computing functions in P3's files
 (2026-10-29): np.linspace / np.logspace / np.geomspace are `TensorEngine` members in `TensorEngine.CoreFunctionBase.cs`,
 np.vander in `TensorEngine.TwoDimBase.cs`, np.trim_zeros in `TensorEngine.FunctionBase.cs`, and the six divergences a
 replay of their snapshot through NumPy found are fixed per D4. Batch 7, NumPy's Python functions of the array object,
-has its first four parts done (2026-10-29): np.where's body is `NDArray.Where` in `NDArray.Multiarray.cs` (every engine
+has its first five parts done (2026-10-29): np.where's body is `NDArray.Where` in `NDArray.Multiarray.cs` (every engine
 np.where call, the fixed-width text route's included, calls it), np.real / np.imag's are `NDArray.RealPart` / `ImagPart`
 in the new `NDArray.TypeCheck.cs` with ndarray.imag's setter, ndarray.conjugate's is `NDArray.Conjugate`, np.extract's,
 np.asarray_chkfinite's, np.select's and np.piecewise's statements and np.delete's helpers are `NDArray.FunctionBase.cs`
 members, np.pad's are `NDArray.Pad` / `NDArray.PadCallable` in the new `NDArray.ArrayPad.cs`, np.ix_'s,
 np.fill_diagonal's and np.r_ / np.c_'s indexer's are `NDArray.Ix`, `NDArray.FillDiagonal` and
-`NDArray.AxisConcatenate` in the new `NDArray.IndexTricks.cs`, and the divergences a replay of their snapshot through
-NumPy found are fixed per D4 (np.where's result dtype and order, np.select's broadcast and cast texts, np.piecewise's
-constants, np.delete's error axis, np.broadcast_shapes' pair, np.pad's check order, values and computations, np.ix_'s
-result object, np.r_'s matrix copy and Python int entries, np.fill_diagonal's value conversion). P5 is done
+`NDArray.AxisConcatenate` in the new `NDArray.IndexTricks.cs`, the along-axis trio's are `NDArray.TakeAlongAxis`,
+`NDArray.PutAlongAxis` and `NDArray.ApplyAlongAxis` in the new `NDArray.ShapeBase.cs`, and the divergences a replay of
+their snapshot through NumPy found are fixed per D4 (np.where's result dtype and order, np.select's broadcast and cast
+texts, np.piecewise's constants, np.delete's error axis, np.broadcast_shapes' pair, np.pad's check order, values and
+computations, np.ix_'s result object, np.r_'s matrix copy and Python int entries, np.fill_diagonal's value conversion,
+np.apply_along_axis's text scalar width). P5 is done
 (2026-10-29): its six
 families and, handed over by the coordinator, the lines first assigned to PE (np.argmax's out= pair, np.unravel_index,
 np.packbits / np.unpackbits, np.bincount, and the text lines of np.kron and np.median) are engine members or engine
@@ -855,6 +857,9 @@ first, as it did for np.fft.
    with the D4 fixes its replay found (`33fd5151`, `839950c2`, `54ad9427`). Fourth part done (`5f4d6015`, `ac83cba8`,
    `b07d19d2`, `f66c85cd`): np.r_ / np.c_, np.ix_ and np.fill_diagonal (`IndexTricks`), with the D4 fixes their
    replay found (`70646c73`, `cf75f39f`, `d6b4926e`); np.fill_diagonal's StringDType route asks `HasReferences`.
+   Fifth part done (`19dbc34b`, `70533e1b`, `b25f717d`): np.take_along_axis, np.put_along_axis and
+   np.apply_along_axis (`ShapeBase`) with `NDVStringStatistics.Quantile.cs`' two pins, and the D4 fixes its replay
+   and the full test run found (`10626746`, `62683028`).
 8. **The indexers** (8 files, 98 lines; `Selection/NDArray.Indexing.*.cs`, NumPy's `mapping.c`; already the array
    object): the `StringDType` routes behind `HasReferences`, the typed fetch / store switches into
    `UnmanagedStorage.Mapping.cs`. The index-kind tests stay.
@@ -1103,6 +1108,47 @@ candidate.
 
 ## 9. State log
 
+- **2026-10-29, P3: batch 7, fifth part (np.take_along_axis, np.put_along_axis, np.apply_along_axis).** Five commits on
+  `strings` from the parallel session (developed in the scratch worktree on `6f1da8dd`, rebased onto `0f092c78`,
+  batch 6c's tool commit, and landed by fast-forward). R1: 3 text and 11 numeric lines leave (np.put_along_axis.cs 2 / 1,
+  np.take_along_axis.cs 1 / 9, np.apply_along_axis.cs 0 / 1; the three files have no row now); R2:
+  `NDVStringStatistics.Quantile.cs`' two np.apply_along_axis pins leave (2 computations -> 0, its pin's reason with
+  them).
+  - `19dbc34b`: the snapshot tool reaches np.apply_along_axis (both overloads were SKIP: a delegate first): its func1d
+    from a fixed menu NumPy names alike (np.sum, the first element, a constant int64, a constant str, negate, np.cumsum, a
+    float32 cast, the slice itself, v[:2], np.outer) and the *args overload's function with none, one or two args. With
+    np.take_along_axis, np.put_along_axis and the nan-quantile functions whose text route drives np.apply_along_axis:
+    254,172 cases.
+  - `70533e1b`, the pure move: the new `Manipulation/NDArray.ShapeBase.cs` (NumPy's `lib/_shape_base_impl.py`) holds
+    `NDArray.TakeAlongAxis`, `NDArray.PutAlongAxis` with its scatter core and `NDArray.ApplyAlongAxis` with their helpers;
+    np's `PyShapeTuple` did not move (NDArray has its own, the same text for every shape the core passes). The facades keep
+    their numpy.matrix / numpy.char rules and null checks; np.apply_along_axis's *args overload still calls the
+    one-argument facade. `NDVStringStatistics.Quantile.cs` calls `NDArray.ApplyAlongAxis` (the two R2 pins). Snapshot
+    byte-identical under `NUMSHARP_DEBUG_GUARD_PAGES=1`; the rebind check found PyShapeTuple (deliberate) and the types
+    `NDArray` / `Shape` only.
+  - `b25f717d`, the slot conversion: the three StringDType decisions (the cell gather, the cell scatter, the refusal of the
+    raw span write) ask `DTypeMeta.HasReferences`. Snapshot byte-identical.
+  - D4, from the replay of the trio's 13,896 cases through NumPy 2.4.2 on Windows and on Linux (13,152 replayed, char and
+    decimal skipped; 714 / 722 differed):
+    - `10626746`: np.apply_along_axis takes NumPy's `asanyarray` of its first result: a text scalar (an element `v[0]` of
+      a fixed-width slice, `np.sum` of a StringDType slice) makes the buffer as wide as that first value (`<U1` for
+      `'3'`; StringDType's Python str a U array), and later results are truncated to it (`TextScalarAsArray`). 45 cases.
+    - `62683028`, found by the full test run (the strings oracle's `tsort` tier: 31 np.nanquantile cases over StringDType
+      rows): the StringDType quantile route applies `asanyarray` to each row's result itself and handed the 0-d `U` array
+      on unmarked, which `10626746` then re-read as an `np.str_`, dropping a trailing NUL (a first result `'ab\0'` gave a
+      `<U2` buffer where NumPy's is `<U3`). The route marks its `asanyarray` results as explicit 0-d arrays
+      (`MarkExplicitZeroDimArray`), which `ApplyAlongAxis` keeps; the snapshot is line for line the same (its text pools
+      hold no value ending in NUL). Its message names `10626746` by the hash it had before the rebases,
+      `cfd6c053`.
+  - After the D4 669 replay cases differ on Windows and 677 on Linux, none in the moved code's own work: 568 null
+    `indices` (the house's ArgumentNullException where NumPy fails on None's attributes), 78 no-loop texts of the test
+    function's `v + sum(a)` over bytes (the `+` operator names a C# int literal int32, NumPy's Python int int64), 16 first
+    out-of-bounds indices of a non-contiguous index array (the documented visiting order), 7 complex np.cumsum columns
+    starting with -0.0 (np.cumsum's own pin), and on Linux 8 host-dependent special operands.
+  - Core's doc warnings 3,830 -> 3,829 (the move).
+  - Gates: NumSharp.Tests 20,828 / 20,827 passed on net10.0 / net8.0 (11 skipped) and the oracle suite 414 / 414 (2 skipped), Release, `TestCategory!=OpenBugs&TestCategory!=HighMemory` (on net8.0 the R1 ratchet re-run on the committed tree: the full run had read the next part's uncommitted moves). The first full run found the regression `62683028` fixes (31 strings-oracle cases). The 2 new tests (`Manipulation/np.apply_along_axis.Test.cs` `TextScalarResult_IsAsWideAsTheFirstValue`, `Backends/Strings/StringDTypeOrderTests.cs` `NanQuantile_AlongAxis_BufferIsAsWideAsTheFirstRowsStr`, NumPy-probed) fail on the parents of their commits.
+  - Left for batch 7: np.indices (`Numeric`); np.diag (`TwoDimBase`); the lines of np.mgrid, np.ogrid and
+    np.ravel_multi_index.
 - **2026-10-29, P3: batch 6, second part (np.fromfile, np.fromstring, ndarray.tofile, tobytes, getfield, byteswap).**
   Ten commits on `strings`: the tool commit landed first (`592ee2c4`), the others were developed in the scratch worktree
   on it, rebased onto `6f1da8dd` (batch 7's fourth part) and landed by fast-forward. R1: 16 text and 7 numeric lines
