@@ -343,5 +343,88 @@ namespace NumSharp.Tests.IO
             Assert.ThrowsException<ArgumentNullException>(() => np.savetxt((Stream)null, np.array(new int[] { 1 })));
             Assert.ThrowsException<ArgumentNullException>(() => np.savetxt(new MemoryStream(), (NDArray)null));
         }
+
+        // ---- None (a C# null) for the string arguments -----------------------------------
+
+        /// <summary>The text CPython raises when savetxt concatenates a None.</summary>
+        private const string ConcatNone = "can only concatenate str (not \"NoneType\") to str";
+
+        /// <summary>
+        ///     Runs <c>np.savetxt</c> into a <see cref="StringWriter"/> (NumPy's <c>io.StringIO</c>): the error it raised, or
+        ///     null, and the text that reached the writer.
+        /// </summary>
+        /// <param name="call">The call, given the writer.</param>
+        /// <returns>The error and the text written.</returns>
+        private static (Exception Error, string Written) RunIntoWriter(Action<StringWriter> call)
+        {
+            var sw = new StringWriter();
+            Exception error = null;
+            try { call(sw); }
+            catch (Exception e) { error = e; }
+            return (error, sw.ToString());
+        }
+
+        /// <summary>
+        ///     A null string argument is Python's None, refused where NumPy's statements meet it (probed against NumPy
+        ///     2.4.2 into an <c>io.StringIO</c>): fmt at once (<c>invalid fmt: None</c>); delimiter only where it is joined
+        ///     (one spec repeated per column, or a spec list after its length check - a multi-<c>%</c> format never reads
+        ///     it); header and footer at <c>len()</c>; comments and newline in their concatenations, where a real row's
+        ///     becomes the Mismatch TypeError and a complex row's stays the plain one. What was written before an error -
+        ///     the rows before a footer's - stays in the target, and an empty array writes no row to fail on.
+        /// </summary>
+        [TestMethod]
+        public void NullStringArguments_AreNone_NumPysErrorsAtNumPysPoints()
+        {
+            var x = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
+            var z = np.array(new Complex[,] { { new Complex(1, 2), new Complex(3, -4) } });
+            var empty = np.zeros(new Shape(0, 2));
+            const string rows = "1.000000000000000000e+00 2.000000000000000000e+00\n3.000000000000000000e+00 4.000000000000000000e+00\n";
+            const string complexRow = " (1.000000000000000000e+00+2.000000000000000000e+00j)  (3.000000000000000000e+00-4.000000000000000000e+00j)\n";
+
+            void Expect<TError>((Exception Error, string Written) r, string message, string written) where TError : Exception
+            {
+                Assert.IsInstanceOfType(r.Error, typeof(TError), r.Error?.ToString());
+                Assert.AreEqual(message, r.Error.Message);
+                Assert.AreEqual(written, r.Written);
+            }
+
+            // fmt=None: ValueError before anything is written (both overloads: a null string and a null spec list).
+            Expect<ValueError>(RunIntoWriter(w => np.savetxt(w, x, fmt: (string)null)), "invalid fmt: None", "");
+            Expect<ValueError>(RunIntoWriter(w => np.savetxt(w, x, fmt: (string[])null)), "invalid fmt: None", "");
+            // delimiter=None: AttributeError where NumPy joins with it, never for a multi-% format.
+            Expect<AttributeError>(RunIntoWriter(w => np.savetxt(w, x, delimiter: null)), "'NoneType' object has no attribute 'join'", "");
+            Expect<AttributeError>(RunIntoWriter(w => np.savetxt(w, x, new[] { "%d", "%d" }, delimiter: null)),
+                "'NoneType' object has no attribute 'join'", "");
+            Expect<AttributeError>(RunIntoWriter(w => np.savetxt(w, x, new[] { "%d" }, delimiter: null)), "fmt has wrong shape.  ['%d']", "");
+            var multi = RunIntoWriter(w => np.savetxt(w, x, "%d;%d", delimiter: null));
+            Assert.IsNull(multi.Error, multi.Error?.ToString());
+            Assert.AreEqual("1;2\n3;4\n", multi.Written);
+            // A None spec in the list: str.join's TypeError.
+            Expect<TypeError>(RunIntoWriter(w => np.savetxt(w, x, new[] { "%d", null })),
+                "sequence item 1: expected str instance, NoneType found", "");
+            // header=None: len() fails before the header is written; a None comments / newline while it is built.
+            Expect<TypeError>(RunIntoWriter(w => np.savetxt(w, x, header: null)), "object of type 'NoneType' has no len()", "");
+            Expect<TypeError>(RunIntoWriter(w => np.savetxt(w, x, header: "h", comments: null)), ConcatNone, "");
+            Expect<TypeError>(RunIntoWriter(w => np.savetxt(w, x, header: "h", newline: null)), ConcatNone, "");
+            // An empty header or footer never reads comments.
+            var noComments = RunIntoWriter(w => np.savetxt(w, x, comments: null));
+            Assert.IsNull(noComments.Error, noComments.Error?.ToString());
+            Assert.AreEqual(rows, noComments.Written);
+            // newline=None in a real row: NumPy catches the concatenation's TypeError and raises the Mismatch from it.
+            var mismatch = RunIntoWriter(w => np.savetxt(w, x, newline: null));
+            Expect<TypeError>(mismatch, "Mismatch between array dtype ('float64') and format specifier ('%.18e %.18e')", "");
+            Assert.AreEqual(ConcatNone, mismatch.Error.InnerException?.Message);
+            // ... and in a complex row the plain TypeError (that branch does not wrap it).
+            Expect<TypeError>(RunIntoWriter(w => np.savetxt(w, z, newline: null)), ConcatNone, "");
+            // footer=None / a None comments for a footer: raised after every row was written.
+            Expect<TypeError>(RunIntoWriter(w => np.savetxt(w, x, footer: null)), "object of type 'NoneType' has no len()", rows);
+            Expect<TypeError>(RunIntoWriter(w => np.savetxt(w, z, footer: null)), "object of type 'NoneType' has no len()", complexRow);
+            Expect<TypeError>(RunIntoWriter(w => np.savetxt(w, x, footer: "f", comments: null)), ConcatNone, rows);
+            // An empty array has no row: a None newline fails only in the footer's concatenation.
+            var noRow = RunIntoWriter(w => np.savetxt(w, empty, newline: null));
+            Assert.IsNull(noRow.Error, noRow.Error?.ToString());
+            Assert.AreEqual("", noRow.Written);
+            Expect<TypeError>(RunIntoWriter(w => np.savetxt(w, empty, footer: "f", newline: null)), ConcatNone, "");
+        }
     }
 }

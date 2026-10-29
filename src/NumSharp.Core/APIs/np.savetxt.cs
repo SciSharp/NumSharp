@@ -50,6 +50,17 @@ namespace NumSharp
         ///     translation: a header, row or footer the encoding cannot hold raises <see cref="UnicodeEncodeError"/> (its
         ///     position counting the translated write), with the writes before it in the file. NumPy's <c>"bytes"</c> is
         ///     no encoding here (<see cref="LookupError"/> <c>unknown encoding: bytes</c>), nor is the empty name.</param>
+        /// <exception cref="ValueError">A 0-d or more than 2-d array, a format with the wrong number of specs, or a null
+        ///     <paramref name="fmt"/> (Python's None: <c>invalid fmt: None</c>).</exception>
+        /// <exception cref="AttributeError">A null <paramref name="delimiter"/> where NumPy joins the specs with it (one spec
+        ///     repeated per column: <c>'NoneType' object has no attribute 'join'</c>; a multi-<c>%</c> format never reads
+        ///     it).</exception>
+        /// <exception cref="TypeError">An element its spec cannot convert, or a null <paramref name="newline"/> once a row is
+        ///     built (<c>Mismatch between array dtype …</c>; for a complex array the plain <c>can only concatenate str (not
+        ///     "NoneType") to str</c>); a null <paramref name="header"/> / <paramref name="footer"/> (<c>object of type
+        ///     'NoneType' has no len()</c>), or a null <paramref name="comments"/> / <paramref name="newline"/> while a
+        ///     non-empty header or footer is built. A footer's error comes after every row was written, as in
+        ///     NumPy.</exception>
         /// <remarks>
         ///     Byte-for-byte what NumPy 2.4.2's own <c>np.savetxt</c> writes for the same array — including
         ///     the Python text-mode newline translation on a filename target: every <c>\n</c> is written as
@@ -70,6 +81,13 @@ namespace NumSharp
         ///     <see cref="AttributeError"/> is raised. For a complex array each entry must itself contain
         ///     both the real and imaginary specs (e.g. <c>"%.3e%+.3ej"</c>).
         /// </param>
+        /// <exception cref="AttributeError">A spec list of the wrong length, or a null <paramref name="delimiter"/> (Python's
+        ///     None has no <c>join</c>).</exception>
+        /// <exception cref="TypeError">A null entry of <paramref name="fmt"/> (<c>sequence item 1: expected str instance,
+        ///     NoneType found</c>), an element its spec cannot convert, and the null header / footer / comments / newline
+        ///     errors of the single-spec overload.</exception>
+        /// <exception cref="ValueError">A 0-d or more than 2-d array, or a null <paramref name="fmt"/> (<c>invalid fmt:
+        ///     None</c>).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.savetxt.html</remarks>
         public static void savetxt(string fname, NDArray X, string[] fmt, string delimiter = " ",
             string newline = "\n", string header = "", string footer = "", string comments = "# ", string encoding = null)
@@ -100,8 +118,12 @@ namespace NumSharp
         ///     included) raises <see cref="LookupError"/> at the first write, a codec NumSharp does not implement
         ///     <see cref="NotSupportedException"/>.</param>
         /// <exception cref="ArgumentNullException"><paramref name="stream"/> is null.</exception>
-        /// <exception cref="ValueError">A 0-d or more than 2-d array, or a format with the wrong number of specs.</exception>
-        /// <exception cref="TypeError">An element its spec cannot convert (<c>Mismatch between array dtype …</c>).</exception>
+        /// <exception cref="ValueError">A 0-d or more than 2-d array, a format with the wrong number of specs, or a null
+        ///     <paramref name="fmt"/> (<c>invalid fmt: None</c>).</exception>
+        /// <exception cref="AttributeError">A null <paramref name="delimiter"/> where NumPy joins the specs with
+        ///     it.</exception>
+        /// <exception cref="TypeError">An element its spec cannot convert (<c>Mismatch between array dtype …</c>), and the
+        ///     null newline / header / footer / comments errors of the file-name overload, at the same points.</exception>
         /// <exception cref="UnicodeEncodeError">A write the encoding cannot encode.</exception>
         /// <exception cref="LookupError">An unknown or non-text encoding, at the first write.</exception>
         /// <exception cref="NotSupportedException">A codec NumSharp does not implement, at the first write.</exception>
@@ -121,8 +143,10 @@ namespace NumSharp
         /// <param name="comments">String prepended to the header / footer lines.</param>
         /// <param name="encoding">As for the single-spec overload (null is Latin-1).</param>
         /// <exception cref="ArgumentNullException"><paramref name="stream"/> is null.</exception>
-        /// <exception cref="AttributeError">A spec list of the wrong length.</exception>
-        /// <exception cref="TypeError">An element its spec cannot convert.</exception>
+        /// <exception cref="AttributeError">A spec list of the wrong length, or a null <paramref name="delimiter"/>.</exception>
+        /// <exception cref="TypeError">A null entry of <paramref name="fmt"/>, an element its spec cannot convert, and the
+        ///     null newline / header / footer / comments errors of the file-name overload.</exception>
+        /// <exception cref="ValueError">A 0-d or more than 2-d array, or a null <paramref name="fmt"/>.</exception>
         /// <exception cref="UnicodeEncodeError">A write the encoding cannot encode.</exception>
         /// <exception cref="LookupError">An unknown or non-text encoding, at the first write.</exception>
         /// <exception cref="NotSupportedException">A codec NumSharp does not implement, at the first write.</exception>
@@ -153,8 +177,12 @@ namespace NumSharp
         ///     <c>WriteWrap</c> encodes only for a stream that refuses <c>str</c>): any name, an unknown one included, writes
         ///     the same text.</param>
         /// <exception cref="ArgumentNullException"><paramref name="writer"/> is null.</exception>
-        /// <exception cref="ValueError">A 0-d or more than 2-d array, or a format with the wrong number of specs.</exception>
-        /// <exception cref="TypeError">An element its spec cannot convert (<c>Mismatch between array dtype …</c>).</exception>
+        /// <exception cref="ValueError">A 0-d or more than 2-d array, a format with the wrong number of specs, or a null
+        ///     <paramref name="fmt"/> (<c>invalid fmt: None</c>).</exception>
+        /// <exception cref="AttributeError">A null <paramref name="delimiter"/> where NumPy joins the specs with
+        ///     it.</exception>
+        /// <exception cref="TypeError">An element its spec cannot convert (<c>Mismatch between array dtype …</c>), and the
+        ///     null newline / header / footer / comments errors of the file-name overload, at the same points.</exception>
         /// <remarks>
         ///     What reached the writer before an error stays written (NumPy writes each row as it formats it), and the
         ///     writer is flushed in every case. https://numpy.org/doc/stable/reference/generated/numpy.savetxt.html
@@ -190,8 +218,10 @@ namespace NumSharp
         /// <param name="comments">String prepended to the header / footer lines.</param>
         /// <param name="encoding">Accepted for NumPy's signature and ignored, as for the single-spec overload.</param>
         /// <exception cref="ArgumentNullException"><paramref name="writer"/> is null.</exception>
-        /// <exception cref="AttributeError">A spec list of the wrong length.</exception>
-        /// <exception cref="TypeError">An element its spec cannot convert.</exception>
+        /// <exception cref="AttributeError">A spec list of the wrong length, or a null <paramref name="delimiter"/>.</exception>
+        /// <exception cref="TypeError">A null entry of <paramref name="fmt"/>, an element its spec cannot convert, and the
+        ///     null newline / header / footer / comments errors of the file-name overload.</exception>
+        /// <exception cref="ValueError">A 0-d or more than 2-d array, or a null <paramref name="fmt"/>.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.savetxt.html</remarks>
         public static void savetxt(TextWriter writer, NDArray X, string[] fmt, string delimiter = " ",
             string newline = "\n", string header = "", string footer = "", string comments = "# ", string encoding = null)
@@ -528,18 +558,23 @@ namespace NumSharp
         /// </summary>
         /// <param name="output">The batching, codec-checking writer.</param>
         /// <param name="X">The array.</param>
-        /// <param name="fmt">A format string or one spec per column.</param>
-        /// <param name="delimiter">The column separator.</param>
-        /// <param name="newline">The row terminator.</param>
-        /// <param name="header">The header text.</param>
-        /// <param name="footer">The footer text.</param>
-        /// <param name="comments">The header / footer line prefix.</param>
+        /// <param name="fmt">A format string or one spec per column; null is Python's None.</param>
+        /// <param name="delimiter">The column separator; null is Python's None.</param>
+        /// <param name="newline">The row terminator; null is Python's None.</param>
+        /// <param name="header">The header text; null is Python's None.</param>
+        /// <param name="footer">The footer text; null is Python's None.</param>
+        /// <param name="comments">The header / footer line prefix; null is Python's None.</param>
         /// <exception cref="ArgumentNullException"><paramref name="X"/> is null.</exception>
         /// <exception cref="ValueError">A 0-d or more than 2-d array, a format with the wrong number of specs, a NaN under
-        ///     an integer spec.</exception>
-        /// <exception cref="AttributeError">A spec list of the wrong length.</exception>
-        /// <exception cref="TypeError">An element its spec cannot convert (NumPy's <c>Mismatch between array dtype (…) and
-        ///     format specifier (…)</c>, the formatter's TypeError as the cause).</exception>
+        ///     an integer spec, a null <paramref name="fmt"/> (<c>invalid fmt: None</c>).</exception>
+        /// <exception cref="AttributeError">A spec list of the wrong length; a null <paramref name="delimiter"/> that NumPy
+        ///     joins the specs with.</exception>
+        /// <exception cref="TypeError">An element its spec cannot convert, or a null <paramref name="newline"/> once a row is
+        ///     built (NumPy's <c>Mismatch between array dtype (…) and format specifier (…)</c>, the TypeError as the cause;
+        ///     a complex array's row raises the plain concatenation TypeError); a null spec-list entry; a null
+        ///     <paramref name="header"/> / <paramref name="footer"/> (<c>object of type 'NoneType' has no len()</c>) or a
+        ///     null <paramref name="comments"/> / <paramref name="newline"/> while a non-empty header or footer is built
+        ///     (<c>can only concatenate str (not "NoneType") to str</c>).</exception>
         /// <remarks>
         ///     <para>
         ///     A <c>StringDType</c> array's elements are Python objects (<c>stringdtype_getitem</c>: a plain <c>str</c>, or
@@ -571,9 +606,12 @@ namespace NumSharp
 
             string format = ResolveSaveTxtFormat(fmt, ncol, iscomplex, delimiter);
 
-            // NumPy writes the header immediately (before the row loop), so a mid-row error leaves it written.
+            // NumPy: `if len(header) > 0:` - a None header has no len(). It writes the header immediately (before the row
+            // loop), so a mid-row error leaves it written; a None comments / newline fails while the header text is built.
+            if (header is null)
+                throw new TypeError("object of type 'NoneType' has no len()");
             if (header.Length > 0)
-                output.Write(comments + header.Replace("\n", "\n" + comments) + newline);
+                output.Write(SaveTxtCommentBlock(header, comments, newline));
 
             // The row format is parsed once and run for every row. CPython parses it again for each row, but a parse has no
             // effect of its own: the text and the errors (in their order) are the same.
@@ -605,6 +643,10 @@ namespace NumSharp
                     {
                         row.Clear();
                         program.FormatInto(row, args, kinds);
+                        // `... + newline` with a None newline: CPython's TypeError, which this branch does not wrap (the
+                        // generic catch below delivers the rows before it).
+                        if (newline is null)
+                            throw new TypeError("can only concatenate str (not \"NoneType\") to str");
                         s = row.Append(newline).ToString().Replace("+-", "-");
                     }
                     catch (PrintfArgumentException ex)
@@ -644,11 +686,16 @@ namespace NumSharp
                     {
                         // Append the row straight into the batch buffer — no per-row string allocation.
                         program.FormatInto(chunk, args, kinds);
+                        // NumPy builds `v = format % tuple(row) + newline` inside its try: a None newline's TypeError is
+                        // caught and re-raised as the Mismatch below, like a formatter's.
+                        if (newline is null)
+                            throw new PrintfArgumentException("can only concatenate str (not \"NoneType\") to str");
                     }
                     catch (PrintfArgumentException ex)
                     {
-                        // NumPy catches the TypeError from `format % tuple(row)` and re-raises this. str(X.dtype): the type
-                        // name for a numeric array, the descriptor ('<U2', '|S3', 'StringDType()') for a string one.
+                        // NumPy catches the TypeError from `format % tuple(row) + newline` and re-raises this.
+                        // str(X.dtype): the type name for a numeric array, the descriptor ('<U2', '|S3', 'StringDType()')
+                        // for a string one.
                         output.Discard(start);
                         string dtypeText = tc == NPTypeCode.String ? X.dtype.ToString() : tc.AsNumpyDtypeName();
                         throw new TypeError(
@@ -667,26 +714,45 @@ namespace NumSharp
                 }
             }
 
-            if (footer.Length > 0)
-                output.Write(comments + footer.Replace("\n", "\n" + comments) + newline);
+            // NumPy: `if len(footer) > 0:` (a None footer has no len()), then the footer text, whose None comments / newline
+            // fail while it is built. Every row was written before any of these errors, so the batch is delivered first.
+            string footerText;
+            try
+            {
+                if (footer is null)
+                    throw new TypeError("object of type 'NoneType' has no len()");
+                footerText = footer.Length > 0 ? SaveTxtCommentBlock(footer, comments, newline) : null;
+            }
+            catch
+            {
+                output.Flush();
+                throw;
+            }
+            if (footerText != null)
+                output.Write(footerText);
             output.Flush();
         }
 
         /// <summary>Builds the per-row <c>format</c> string exactly as savetxt does, with NumPy's verbatim errors.</summary>
-        /// <param name="fmt">A <see cref="string"/> or a <c>string[]</c>.</param>
+        /// <param name="fmt">A <see cref="string"/> or a <c>string[]</c>; null is Python's None.</param>
         /// <param name="ncol">The number of columns.</param>
         /// <param name="iscomplex">A complex array (a single spec becomes <c>' (spec+specj)'</c> per column).</param>
-        /// <param name="delimiter">The column separator.</param>
+        /// <param name="delimiter">The column separator; null is Python's None, refused only where NumPy joins with it.</param>
         /// <returns>The row format.</returns>
-        /// <exception cref="AttributeError">A spec list whose length is not <paramref name="ncol"/>.</exception>
-        /// <exception cref="ValueError">A multi-spec string with the wrong number of <c>%</c>, or any other fmt.</exception>
+        /// <exception cref="AttributeError">A spec list whose length is not <paramref name="ncol"/>; a null
+        ///     <paramref name="delimiter"/> that NumPy joins the specs with (<c>'NoneType' object has no attribute
+        ///     'join'</c>: a spec list, or one spec repeated per column - a multi-<c>%</c> format never reads it).</exception>
+        /// <exception cref="TypeError">A null entry of a spec list (<c>str.join</c>'s <c>sequence item 1: expected str
+        ///     instance, NoneType found</c>).</exception>
+        /// <exception cref="ValueError">A multi-spec string with the wrong number of <c>%</c>, or a null
+        ///     <paramref name="fmt"/> (<c>invalid fmt: None</c>).</exception>
         private static string ResolveSaveTxtFormat(object fmt, long ncol, bool iscomplex, string delimiter)
         {
             if (fmt is string[] list)
             {
                 if (list.Length != ncol)
                     throw new AttributeError($"fmt has wrong shape.  {PyListRepr(list)}");
-                return string.Join(delimiter, list);
+                return PyJoin(delimiter, list);
             }
 
             if (fmt is string s)
@@ -699,7 +765,7 @@ namespace NumSharp
                     var parts = new string[ncol];
                     string unit = iscomplex ? $" ({s}+{s}j)" : s;
                     for (long i = 0; i < ncol; i++) parts[i] = unit;
-                    return string.Join(delimiter, parts);
+                    return PyJoin(delimiter, parts);
                 }
 
                 if (iscomplex && nfmt != 2 * ncol)
@@ -710,8 +776,56 @@ namespace NumSharp
                 return s; // a multi-% format string used directly (delimiter ignored)
             }
 
-            throw new ValueError($"invalid fmt: {fmt}");
+            // NumPy: raise ValueError(f'invalid fmt: {fmt!r}'). The typed overloads leave only None to reach here.
+            throw new ValueError($"invalid fmt: {(fmt is null ? "None" : fmt.ToString())}");
         }
+
+        /// <summary>
+        ///     Python's <c>delimiter.join(items)</c>: a None separator has no <c>join</c> (AttributeError, raised before any
+        ///     item is looked at), and a None item is refused by <c>str.join</c> (TypeError naming its index).
+        /// </summary>
+        /// <param name="delimiter">The separator; null is Python's None.</param>
+        /// <param name="items">The items; a null one is Python's None.</param>
+        /// <returns>The joined text.</returns>
+        /// <exception cref="AttributeError">A null <paramref name="delimiter"/>.</exception>
+        /// <exception cref="TypeError">A null item.</exception>
+        private static string PyJoin(string delimiter, string[] items)
+        {
+            if (delimiter is null)
+                throw new AttributeError("'NoneType' object has no attribute 'join'");
+            for (int i = 0; i < items.Length; i++)
+            {
+                if (items[i] is null)
+                    throw new TypeError($"sequence item {i}: expected str instance, NoneType found");
+            }
+            return string.Join(delimiter, items);
+        }
+
+        /// <summary>
+        ///     Python's <c>left + right</c> for two str values where the right one may be None: CPython's TypeError for a None
+        ///     right operand. Every concatenation of savetxt has a str on its left by the time it runs (a None
+        ///     <c>comments</c> already failed in <c>'\n' + comments</c>, which NumPy evaluates first).
+        /// </summary>
+        /// <param name="left">The left operand (never null at its call sites).</param>
+        /// <param name="right">The right operand; null is Python's None.</param>
+        /// <returns>The concatenation.</returns>
+        /// <exception cref="TypeError">A null <paramref name="right"/> (<c>can only concatenate str (not "NoneType") to
+        ///     str</c>).</exception>
+        private static string PyConcat(string left, string right)
+            => right is null ? throw new TypeError("can only concatenate str (not \"NoneType\") to str") : left + right;
+
+        /// <summary>
+        ///     The text NumPy writes for a header or footer: <c>text.replace('\n', '\n' + comments)</c>, then
+        ///     <c>comments + text + newline</c>, evaluated in that order - so a None <paramref name="comments"/> fails in the
+        ///     first concatenation, a None <paramref name="newline"/> in the last.
+        /// </summary>
+        /// <param name="text">The header or footer, non-empty.</param>
+        /// <param name="comments">The line prefix; null is Python's None.</param>
+        /// <param name="newline">The line terminator; null is Python's None.</param>
+        /// <returns>The text to write.</returns>
+        /// <exception cref="TypeError">A null <paramref name="comments"/> or <paramref name="newline"/>.</exception>
+        private static string SaveTxtCommentBlock(string text, string comments, string newline)
+            => PyConcat(PyConcat(comments, text.Replace("\n", PyConcat("\n", comments))), newline);
 
         /// <summary>Python's <c>fmt.count('%')</c>.</summary>
         /// <param name="s">The format.</param>
