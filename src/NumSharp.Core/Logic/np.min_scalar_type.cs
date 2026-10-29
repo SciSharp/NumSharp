@@ -6,13 +6,20 @@ namespace NumSharp
     {
         /// <summary>
         /// For scalar value, returns the data type with the smallest size and smallest scalar
-        /// kind which can hold its value.
+        /// kind which can hold its value. For a non-scalar array, returns the vector's dtype unmodified.
         /// </summary>
-        /// <param name="value">The scalar value to check.</param>
+        /// <param name="value">
+        /// The value to check: a C# scalar (NumPy's Python scalar or NumPy scalar), or an <see cref="NDArray"/> — a 0-d
+        /// array is a scalar (its element decides), an array of one or more dimensions answers its own dtype.
+        /// </param>
         /// <returns>The minimum dtype that can represent the value.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="value"/> is null (NumPy's <c>None</c> is an object scalar, which NumSharp has no dtype for).</exception>
         /// <remarks>
         /// https://numpy.org/doc/stable/reference/generated/numpy.min_scalar_type.html
         ///
+        /// NumPy's <c>array_min_scalar_type</c> converts the argument to an array and runs
+        /// <c>PyArray_MinScalarType</c>: an array with <c>ndim &gt; 0</c> keeps its dtype, a 0-d numeric array is demoted by
+        /// the VALUE it holds (<c>min_scalar_type_num</c>, keyed by the element's own type).
         /// For integers, finds the smallest integer type that can hold the value.
         /// For floats, finds the smallest float type whose RANGE (magnitude) can hold the
         /// value — matching NumPy, precision loss is allowed (e.g. 1e-40 reports float16).
@@ -24,12 +31,25 @@ namespace NumSharp
         /// np.min_scalar_type(1000)    // UInt16
         /// np.min_scalar_type(1.0)     // Half (float16)
         /// np.min_scalar_type(true)    // Boolean
+        /// np.min_scalar_type(np.arange(4, dtype: np.float64))   // float64 (not a scalar: its dtype)
+        /// np.min_scalar_type(np.array(1000L))                   // uint16 (a 0-d array is a scalar)
         /// </code>
         /// </example>
         public static DType min_scalar_type(object value)
         {
             if (value == null)
                 throw new ArgumentNullException(nameof(value));
+
+            if (value is NDArray arr)
+            {
+                // PyArray_MinScalarType_internal: `ndim > 0 || !PyTypeNum_ISNUMBER(type_num)` returns the array's dtype
+                // as it is; only a 0-d NUMERIC array is demoted, by the value of its one element, which GetAtIndex hands
+                // back boxed in the element's own C# type so the per-type rules below apply exactly as for a scalar. A
+                // 0-d array of the vestigial string slot is no number and keeps its dtype.
+                if (arr.ndim > 0 || !arr.dtype.Meta._is_numeric)
+                    return arr.dtype;
+                return min_scalar_type(arr.GetAtIndex(0));
+            }
 
             return value switch
             {

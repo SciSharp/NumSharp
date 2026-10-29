@@ -292,6 +292,76 @@ namespace NumSharp.Tests.DTypes
         }
 
         /// <summary>
+        ///     <see cref="BuiltinCastingImpl.casting"/> is computed on its first read, and two threads may make that first
+        ///     read together. It used to be a <c>Nullable&lt;NPY_CASTING&gt;</c> read with <c>??=</c>, which is two loads
+        ///     (the value, then <c>HasValue</c>): a reader whose loads straddled the other thread's store returned
+        ///     <see cref="NPY_CASTING.NPY_NO_CASTING"/>, and <see cref="DTypeCasting.CheckCastSafety"/>'s shortcut then
+        ///     answered True for every rule (<c>np.can_cast(float64, int32, 'no')</c>). Two threads here read the casting
+        ///     of a fresh float64 → int32 implementation in lockstep, round after round; every read must be
+        ///     <see cref="NPY_CASTING.NPY_UNSAFE_CASTING"/>.
+        /// </summary>
+        /// <remarks>
+        ///     Calibrated against the old pattern (a private class with the same <c>??=</c> getter, scratch probe): 843 and
+        ///     1,241 torn reads per 2,000,000 racing first reads on an i9-13900K, so 200,000 rounds catch it many times
+        ///     over; the fixed getter read 0 of 4,000,000. The threads wait for each other by spinning, yielding after a few
+        ///     spins so a host with fewer free cores than threads still makes progress, and a time budget ends the run
+        ///     early on a slow host rather than hanging it.
+        /// </remarks>
+        [TestMethod]
+        public void BuiltinCasting_FirstReadRacedByTwoThreads_NeverTears()
+        {
+            const int rounds = 200_000;
+            var impls = new BuiltinCastingImpl[rounds];
+            for (int r = 0; r < rounds; r++)
+                impls[r] = new BuiltinCastingImpl(DTypeRegistry.Double, DTypeRegistry.Int32);
+
+            long wrong = 0, reads = 0;
+            int stop = 0;
+            // One slot per thread, a cache line apart, holding the round it has reached; a thread reads round r only once
+            // the other has reached it too, so the two first reads of each fresh object overlap as closely as possible.
+            var reached = new long[2 * 16];
+            var budget = System.Diagnostics.Stopwatch.StartNew();
+            void Racer(object state)
+            {
+                int me = (int)state, other = 1 - me;
+                for (int r = 0; r < rounds; r++)
+                {
+                    Volatile.Write(ref reached[me * 16], r + 1);
+                    int spins = 0;
+                    while (Volatile.Read(ref reached[other * 16]) < r + 1)
+                    {
+                        if (Volatile.Read(ref stop) != 0)
+                            return;
+                        if (++spins > 64)
+                            Thread.Yield();
+                    }
+                    if (impls[r].casting != NPY_CASTING.NPY_UNSAFE_CASTING)
+                        Interlocked.Increment(ref wrong);
+                    Interlocked.Increment(ref reads);
+                    // The budget check runs rarely; once it fires, the other thread leaves its wait through `stop`.
+                    if ((r & 1023) == 0 && budget.Elapsed > TimeSpan.FromSeconds(5))
+                    {
+                        Volatile.Write(ref stop, 1);
+                        return;
+                    }
+                }
+            }
+
+            var a = new Thread(Racer) { IsBackground = true, Name = "casting racer 0" };
+            var b = new Thread(Racer) { IsBackground = true, Name = "casting racer 1" };
+            a.Start(0);
+            b.Start(1);
+            a.Join(TimeSpan.FromMinutes(1)).Should().BeTrue("a racer must finish instead of hanging the run");
+            b.Join(TimeSpan.FromMinutes(1)).Should().BeTrue("a racer must finish instead of hanging the run");
+
+            Interlocked.Read(ref wrong).Should().Be(0, $"no racing first read may see a torn casting ({Interlocked.Read(ref reads)} reads)");
+            Interlocked.Read(ref reads).Should().BeGreaterThan(0);
+            // Every implementation, read or not, still reports the cast's real safety.
+            impls[0].casting.Should().Be(NPY_CASTING.NPY_UNSAFE_CASTING);
+            np.can_cast(DType.Double, DType.Int32, "no").Should().BeFalse();
+        }
+
+        /// <summary>
         ///     A DType class that exists only to own a cast table: abstract, without storage, and never added to
         ///     <see cref="DTypeRegistry"/>, so its registrations are invisible to every other test.
         /// </summary>

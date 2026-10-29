@@ -2332,10 +2332,18 @@ NumPy's `casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe' (go
 `repr dtype('>i4')`, `isbuiltin 0`); datetime typestrs (`M8`, `m8`, `M`, `m`, `datetime64[10ns]`, `timedelta64[s/2]` →
 `m8[500ms]`, the divisor→multiple table incl. NumPy's `M8[W/11]` → `M8[0Y]` quirk) via `DatetimeMetaData.Parse` with the
 verbatim `Invalid datetime metadata string "[5]" at position 2` / `Invalid datetime unit in metadata string "[5x]"` /
-`divisor (7) is not a multiple of a lower-unit …` texts (a zero divisor raises where CPython crashes); one-char codes;
-`kind+size` parsed with `strtol` semantics (`i04`, `i 4`, `i+4` are int32; `b1` bool; `i3`/`f16`/`?1` invalid); then the
-name table. Invalid strings keep `NotSupportedException` but adopt NumPy's `data type 'X' not understood` /
-`Alias 'bool8' was removed in NumPy 2.0. Use a name without a digit at the end.` wording. An explicit HOST byte order is
+`divisor (7) is not a multiple of a lower-unit …` texts (a zero divisor raises where CPython crashes); one-char codes
+(NumPy 2.x's `'n'` / `'N'` intp letters included; a lone control character below `'\x18'` is a TYPE NUMBER to
+`PyArray_DescrFromType`: `'\x0c'` is float64); `kind+size` parsed with `strtol` semantics (`i04`, `i 4`, `i+4` are int32,
+C whitespace only — `'f\xa08'` is invalid; `b1` bool; `i3`/`f16`/`?1` invalid); then the name table, looked up by the
+WHOLE string as NumPy's `typeDict` is (`PyDict_GetItemWithError(typeDict, obj)`), so a byte-order prefix before a NAME
+is "not understood" (`'<float64'`, `'|bool'`) while it is a byte order before a code (`'<f8'`, `'>d'`). Invalid strings
+keep `NotSupportedException` but adopt NumPy's `data type %R not understood` / `Alias %R was removed in NumPy 2.0. Use a
+name without a digit at the end.` wording, quoted by Python's `repr` (`data type "a'b" not understood`); a valid NumPy
+dtype of a class NumSharp lacks (complex64, `S`/`U`/`V`/`O`, `T`, `O4`/`O8`, `csingle`) says "is not supported by
+NumSharp". The `parse` records of the dtype oracle (1,813 strings per C `long` model, replayed by
+`DTypeOracleTests.Parse_Strings_MatchNumPy`) gate the whole grammar; the 24 C# spellings (`Int32`, `Single`, `Decimal`,
+…) are NumSharp's documented superset, asserted still refused by NumPy. An explicit HOST byte order is
 folded into `'='` by the parser (`np.dtype("<f8")` is the float64 singleton). Builtins are singletons
 (`np.dtype("i8")` is the same object every call, `isbuiltin 1`), and so are the datetime LETTERS (`np.dtype("M")`,
 `isbuiltin 1`); datetime typestrs (`M8`, `M8[ns]`) and non-native descriptors are fresh. `DType` equality is STRUCTURAL

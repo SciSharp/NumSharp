@@ -50,6 +50,29 @@ namespace NumSharp
         /// <returns>The singleton of the default class.</returns>
         public override DType default_descr() => DTypeRegistry.FromTypeCode(_defaultCode).singleton;
 
+        /// <summary>
+        ///     NumPy's <c>discover_descriptor_from_py{long,float,complex}</c> (<c>abstractdtypes.c</c>): the dtype an array
+        ///     made from ONE literal gets, which is what <c>np.result_type(literal)</c> answers (a lone operand skips
+        ///     promotion and returns the dtype of <c>np.asarray(literal)</c>). A Python int is read by VALUE: the default
+        ///     integer while it fits <c>int64</c>, <c>uint64</c> above that (<c>np.result_type(2**63)</c> is uint64); a
+        ///     float is float64 and a complex complex128. As an operand among others the literal stays weak and its value
+        ///     never matters (<c>np.result_type(np.uint8, 2**63)</c> is uint8).
+        /// </summary>
+        /// <param name="obj">The literal: a boxed C# integer primitive, <c>float</c> / <c>double</c>, or <see cref="System.Numerics.Complex"/>.</param>
+        /// <returns>The singleton of the discovered class.</returns>
+        /// <remarks>
+        ///     NumPy's third outcome, an <c>object</c> array for an int past <c>2**64 - 1</c>, cannot arise: no C# integer
+        ///     primitive holds such a value.
+        /// </remarks>
+        public override DType discover_descr_from_pyobject(object obj)
+        {
+            // Only a ulong can exceed int64 among the C# integers; NumPy's PyLong_AsLongLong fails for it and
+            // PyLong_AsUnsignedLongLong succeeds, which is NPY_ULONGLONG (uint64).
+            if (PyKind == PyScalarKind.Int && obj is ulong u && u > long.MaxValue)
+                return DTypeRegistry.UInt64.singleton;
+            return default_descr();
+        }
+
         /// <summary>Weak literals map onto the C# primitives of their category.</summary>
         /// <param name="type">The C# type of the literal.</param>
         /// <returns>True when <paramref name="type"/> is a C# primitive of this class's category.</returns>

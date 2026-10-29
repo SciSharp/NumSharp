@@ -27,6 +27,13 @@ Record kinds (field "kind"):
            no-argument class call (the instance's repr and whether it is the singleton, or the error).
   cast     one (from class, to class) pair: whether NumPy has a casting implementation, its name, and what its
            resolve_descriptors makes of the given descriptors (casting, loop descriptors, view_offset).
+  parse    one dtype STRING through np.dtype(str) — every sctypeDict name, every character below 128 (a control
+           character is a type number to PyArray_DescrFromType), each of them behind each byte-order prefix (a name is
+           looked up by the WHOLE string, so '<float64' is not understood while '<f8' is a byte order), kind + size
+           grids, strtol whitespace, parentheses / comma strings, quoting, and NumSharp's own C# aliases. The outcome:
+           the descriptor's attributes, its class and whether that class is the canonical one of its width, or the
+           exception type and str(e); plus whether NumPy reads the string as a comma string (_check_for_commastring,
+           over the UTF-8 bytes as NumPy does), the structured / sub-array family NumSharp refuses.
 
 Recipes (field "recipe") build a descriptor step by step, and the C# replay has a twin of each step:
   ["dtype", spec, kw]      np.dtype(spec, **kw)      (kw may hold align / copy / metadata)
@@ -423,6 +430,100 @@ def casts():
             emit("cast", f"{fn}->{tn}:{f},{t}", frm=fn, to=tn, exists=True, name=name, given=[f, t], resolved=resolved)
 
 
+# ---------------------------------------------------------------------------------------------------------------------
+# dtype strings
+# ---------------------------------------------------------------------------------------------------------------------
+
+# NumSharp's own C# spellings (DType's documented superset of NumPy's grammar). NumPy refuses every one of them; the
+# replay asserts that it still does, so a NumPy that starts accepting one turns the exemption red.
+NUMSHARP_ALIASES = ["Int32", "Bool", "Boolean", "boolean", "Half", "Single", "Double", "Complex", "Char", "char",
+                    "Decimal", "decimal", "SByte", "sbyte", "Byte", "UByte", "Int16", "UInt16", "UInt32", "Int64",
+                    "UInt64", "Float", "String", "string"]
+
+# Strings outside the generated grids: names NumPy does not have, removed aliases, whitespace, parentheses and comma
+# strings, quoting, datetime metadata, non-ASCII.
+PARSE_EXTRA = ["cdouble", "datetime", "timedelta", "float96", "float128", "complex192", "complex256", "int128",
+               "uint128", "bool8", "int0", "uint0", "void0", "object0", "str0", "bytes0", "Float64", "INT32",
+               "", "<<f8", "<>f8", "|<f8", "f4 ", " f4", "f\t8", "f\n8", "f 8", "f\x0b8", "f\x0c8", "f\r8",
+               "f\xa08", "f\u20008", "i\v4", "i4\x00", "f8,", "f8,i4", "3f8", "1f8", "0f8", "(2,)f8", "()f8", "() f8",
+               "<()f8", ">()f8", "()>f8", "()<f8", "<()>f8", "()", "( )", "(2,)", "(2)f8", "( )f8", "f8()", "f(8)",
+               "(f8)", "((2,))f8", "a'b", 'a"b', "i4\n", "é", "fé8", "\U0001F600", "M8[ns", "M8[ns]]",
+               "M8[ns,", "<M8[ns]x", "M8[generic]", "datetime64[]", "M8[]", "f+8", "f-0", "i 4", "u08"]
+
+
+def is_commastring(s):
+    """NumPy's _check_for_commastring over the UTF-8 bytes _convert_from_str reads: a leading digit (after an optional
+    byte-order character), a leading empty tuple (likewise), or a comma outside square brackets."""
+    b = s.encode("utf-8")
+    n = len(b)
+    if n == 0:
+        return False
+    order = b"><|="
+    if 48 <= b[0] <= 57 or (n > 1 and b[0] in order and 48 <= b[1] <= 57):
+        return True
+    if (n > 1 and b[0] == 40 and b[1] == 41) or (n > 3 and b[0] in order and b[1] == 40 and b[2] == 41):
+        return True
+    depth = 0
+    for c in b:
+        if c == 44 and depth == 0:
+            return True
+        if c == 91:
+            depth += 1
+        elif c == 93:
+            depth -= 1
+    return False
+
+
+def parse_specs():
+    """The dtype strings of the `parse` records, in a fixed order."""
+    specs, seen = [], set()
+
+    def add(s):
+        if s not in seen:
+            seen.add(s)
+            specs.append(s)
+
+    for k in sorted(k for k in np.sctypeDict if isinstance(k, str)):
+        add(k)
+    for i in range(128):
+        add(chr(i))
+    for s in NUMSHARP_ALIASES + PARSE_EXTRA:
+        add(s)
+    for s in list(specs):
+        if s and s[0] not in "<>=|" and s.strip() == s and "," not in s and "(" not in s and len(s) <= 16:
+            for bo in "<>=|":
+                add(bo + s)
+    for kind in "biufcMmOSUVa?ehdlqgFDGpPnN":
+        for size in [0, 1, 2, 3, 4, 8, 10, 12, 16, 20, 24, 32]:
+            add(f"{kind}{size}")
+            add(f">{kind}{size}")
+    return specs
+
+
+def parse_outcome(s):
+    """np.dtype(s): the descriptor's facts, or the exception (warnings, such as 'a' being deprecated, are ignored)."""
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        try:
+            d = np.dtype(s)
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "type": type(e).__name__, "text": str(e)}
+    try:
+        canonical = canonical_class(d)
+    except Exception:  # noqa: BLE001 — a class whose name does not parse back (S0 -> 'bytes0', StringDType)
+        canonical = False
+    return {"ok": True, "repr": repr(d), "str": d.str, "isbuiltin": d.isbuiltin, "byteorder": d.byteorder,
+            "kind": d.kind, "char": d.char, "num": d.num, "itemsize": d.itemsize, "cls": type(d).__name__,
+            "canonical": canonical}
+
+
+def parses():
+    """One `parse` record per dtype string."""
+    for s in parse_specs():
+        emit("parse", repr(s), spec=s, commastring=is_commastring(s), outcome=parse_outcome(s))
+
+
 def main():
     members()
     descriptors()
@@ -430,6 +531,7 @@ def main():
     promotions()
     classes()
     casts()
+    parses()
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(json.dumps({"kind": "meta", "id": "meta/host", "numpy": np.__version__, "platform": sys.platform,

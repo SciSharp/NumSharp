@@ -23,32 +23,53 @@ namespace NumSharp
         /// - "unsafe" means any data conversions may be done.
         /// </param>
         /// <returns>True if cast can occur according to the casting rule.</returns>
+        /// <exception cref="TypeError">
+        ///     <paramref name="to"/> or <paramref name="from"/> is null (NumPy's <c>None</c>: "did not understand one of the
+        ///     types; 'None' not accepted"), or <paramref name="casting"/> is null ("casting must be str, not NoneType"). NumPy
+        ///     converts <c>to</c> and <c>casting</c> while it parses the arguments and <c>from_</c> after, so the checks run
+        ///     in that order.
+        /// </exception>
         /// <exception cref="ValueError"><c>casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe' (got '…')</c> — verbatim NumPy.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.can_cast.html</remarks>
         public static bool can_cast(DType from, DType to, string casting = "safe")
         {
-            if (from is null) throw new ArgumentNullException(nameof(from));
             if (to is null) throw new TypeError("did not understand one of the types; 'None' not accepted");
-            return DTypeCasting.CanCastTypeTo(from, to, DTypeCasting.ParseCasting(casting));
+            var rule = DTypeCasting.ParseCasting(casting);
+            if (from is null) throw new TypeError("did not understand one of the types; 'None' not accepted");
+            return DTypeCasting.CanCastTypeTo(from, to, rule);
         }
 
         /// <summary>
         /// <see cref="can_cast(DType, DType, string)"/> for a dtype STRING source (<c>np.can_cast("i4", "i8")</c>). Exists so that a
         /// string first argument binds the dtype grammar rather than NumSharp's string→<see cref="NDArray"/> (character array) conversion.
         /// </summary>
+        /// <param name="from">The dtype string to cast from; null is NumPy's <c>None</c>.</param>
+        /// <param name="to">Data type to cast to.</param>
+        /// <param name="casting">The casting rule (see <see cref="can_cast(DType, DType, string)"/>).</param>
+        /// <returns>True if cast can occur according to the casting rule.</returns>
+        /// <exception cref="TypeError">A null argument (NumPy's texts, in NumPy's order: <c>to</c>, <c>casting</c>, then <c>from_</c>).</exception>
+        /// <exception cref="ValueError">An unknown casting name.</exception>
+        /// <exception cref="NotSupportedException"><paramref name="from"/> is not a dtype NumSharp understands (raised after <c>to</c> and <c>casting</c> are checked, as NumPy parses <c>from_</c> last).</exception>
         public static bool can_cast(string from, DType to, string casting = "safe")
         {
-            if (from is null) throw new ArgumentNullException(nameof(from));
-            return can_cast(dtype(from), to, casting);
+            if (to is null) throw new TypeError("did not understand one of the types; 'None' not accepted");
+            var rule = DTypeCasting.ParseCasting(casting);
+            if (from is null) throw new TypeError("did not understand one of the types; 'None' not accepted");
+            return DTypeCasting.CanCastTypeTo(dtype(from), to, rule);
         }
 
         /// <summary>
         /// Returns True if cast between data types can occur according to the casting rule (the <see cref="NPY_CASTING"/> spelling).
         /// </summary>
+        /// <param name="from">Data type to cast from.</param>
+        /// <param name="to">Data type to cast to.</param>
+        /// <param name="casting">The casting level.</param>
+        /// <returns>True if cast can occur according to the casting rule.</returns>
+        /// <exception cref="TypeError"><paramref name="to"/> or <paramref name="from"/> is null (NumPy's "did not understand one of the types; 'None' not accepted").</exception>
         public static bool can_cast(DType from, DType to, NPY_CASTING casting)
         {
-            if (from is null) throw new ArgumentNullException(nameof(from));
             if (to is null) throw new TypeError("did not understand one of the types; 'None' not accepted");
+            if (from is null) throw new TypeError("did not understand one of the types; 'None' not accepted");
             return DTypeCasting.CanCastTypeTo(from, to, casting);
         }
 
@@ -290,11 +311,14 @@ namespace NumSharp
         /// Returns True if cast from the array's dtype can occur according to the casting rule (NumPy's array form of
         /// <c>can_cast</c>; arrays are never inspected by value under NEP 50).
         /// </summary>
+        /// <param name="from">The array whose dtype is cast; null is NumPy's <c>None</c>.</param>
+        /// <param name="to">Data type to cast to.</param>
+        /// <param name="casting">The casting rule (see <see cref="can_cast(DType, DType, string)"/>).</param>
+        /// <returns>True if the array's dtype can be cast according to the casting rule.</returns>
+        /// <exception cref="TypeError">A null argument (NumPy's texts, in NumPy's order: <c>to</c>, <c>casting</c>, then <c>from_</c>).</exception>
+        /// <exception cref="ValueError">An unknown casting name.</exception>
         public static bool can_cast(NDArray from, DType to, string casting = "safe")
-        {
-            if (from is null) throw new ArgumentNullException(nameof(from));
-            return can_cast(DType.From(from.GetTypeCode), to, casting);
-        }
+            => can_cast(from is null ? null : DType.From(from.GetTypeCode), to, casting);
 
         /// <summary>
         /// Check if a scalar value fits in the target type.

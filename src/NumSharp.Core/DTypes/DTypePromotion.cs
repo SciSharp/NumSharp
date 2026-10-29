@@ -375,7 +375,11 @@ namespace NumSharp
             if (n == 1)
             {
                 /* If the input is a single value, skip promotion. */
-                return allDescriptors[0] != null ? allDTypes[0].ensure_canonical(allDescriptors[0]) : allDTypes[0].default_descr();
+                // NumPy's lone operand is `PyArray_DTYPE(np.asarray(obj))`: a literal is discovered by value (a C# ulong
+                // past int64 is uint64, as 2**63 is in NumPy), and a class operand stands for its default descriptor.
+                return allDescriptors[0] != null
+                    ? allDTypes[0].ensure_canonical(allDescriptors[0])
+                    : allDTypes[0].discover_descr_from_pyobject(arraysAndDtypes[0]);
             }
 
             var commonDType = PromoteDTypeSequence(allDTypes);

@@ -333,6 +333,49 @@ namespace NumSharp.Tests.DTypes
             empty.Should().Throw<ValueError>();
         }
 
+        /// <summary>
+        ///     A LONE literal skips promotion in NumPy and answers the dtype of <c>np.asarray(literal)</c>, which reads a
+        ///     Python int by value: <c>np.result_type(2**63)</c> and <c>np.result_type(2**64 - 1)</c> are uint64, a smaller int
+        ///     int64, a float float64, a complex complex128. Among other operands the literal is weak and its value never
+        ///     matters (<c>np.result_type(np.uint8, 2**63)</c> is uint8; two big ints meet in the abstract class, int64).
+        ///     All probed against 2.4.2. C# literals bind <c>np.result_type</c>'s NDArray overloads, so the object form is
+        ///     spelled with an explicit <c>object[]</c> here.
+        /// </summary>
+        [TestMethod]
+        public void ResultType_LoneLiteral_IsDiscoveredByValue()
+        {
+            np.result_type(new object[] { 9223372036854775808UL }).Should().BeSameAs(DType.UInt64);
+            np.result_type(new object[] { ulong.MaxValue }).Should().BeSameAs(DType.UInt64);
+            np.result_type(new object[] { (ulong)long.MaxValue }).Should().BeSameAs(DType.Int64);
+            np.result_type(new object[] { -1L }).Should().BeSameAs(DType.Int64);
+            np.result_type(new object[] { 1 }).Should().BeSameAs(DType.Int64, "a C# int is a Python int, whose array is intp");
+            np.result_type(new object[] { 1.5 }).Should().BeSameAs(DType.Double);
+            np.result_type(new object[] { 1.5f }).Should().BeSameAs(DType.Double, "a C# float is a Python float");
+            np.result_type(new object[] { new Complex(0, 1) }).Should().BeSameAs(DType.Complex);
+            np.result_type(new object[] { DType.Byte, 9223372036854775808UL }).Should().BeSameAs(DType.Byte);
+            np.result_type(new object[] { 9223372036854775808UL, 9223372036854775808UL }).Should().BeSameAs(DType.Int64);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>np.promote_types</c> converts both arguments with <c>PyArray_DescrConverter2</c>, which turns None
+        ///     into no descriptor, and refuses that with "did not understand one of the types" — None is not float64
+        ///     there. Every empty <c>np.result_type</c> spelling is NumPy's ValueError.
+        /// </summary>
+        [TestMethod]
+        public void PromoteTypes_None_And_EmptyResultType_AreNumPysErrors()
+        {
+            new Action(() => np.promote_types((DType)null, DType.Int32)).Should().Throw<TypeError>()
+                .WithMessage("did not understand one of the types");
+            new Action(() => np.promote_types(DType.Int32, (DType)null)).Should().Throw<TypeError>()
+                .WithMessage("did not understand one of the types");
+            const string Empty = "at least one array or dtype is required";
+            new Action(() => np.result_type(Array.Empty<object>())).Should().Throw<ValueError>().WithMessage(Empty);
+            new Action(() => np.result_type(Array.Empty<DType>())).Should().Throw<ValueError>().WithMessage(Empty);
+            new Action(() => np.result_type(Array.Empty<NPTypeCode>())).Should().Throw<ValueError>().WithMessage(Empty);
+            new Action(() => np.result_type(Array.Empty<NDArray>())).Should().Throw<ValueError>().WithMessage(Empty);
+            new Action(() => np.result_type(Array.Empty<string>())).Should().Throw<ValueError>().WithMessage(Empty);
+        }
+
         [TestMethod]
         public void CastDescrToDType_AdaptsInstances()
         {

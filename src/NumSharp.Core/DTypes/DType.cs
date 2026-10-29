@@ -518,14 +518,17 @@ namespace NumSharp
         ///     resolve on ALL platforms (to int32 / int64), and <see cref="NPY_TYPES.NPY_LONG"/> follows C <c>long</c>
         ///     (int32 on LLP64/Windows, int64 on LP64). The returned descriptor's own <see cref="num"/> is therefore
         ///     NumSharp's platform-canonical value, which is a genuine round-trip only for that canonical spelling — the
-        ///     same folding NumSharp applies to intc/int32. Numbers with NO NumSharp type at all
-        ///     (<see cref="NPY_TYPES.NPY_CFLOAT"/> complex64, <see cref="NPY_TYPES.NPY_OBJECT"/>, <see cref="NPY_TYPES.NPY_VOID"/>,
-        ///     extended precision, the sentinels) are rejected, matching how the parser refuses a dtype NumSharp cannot
-        ///     represent.
+        ///     same folding NumSharp applies to intc/int32. The long-double pair folds the same way the type codes
+        ///     <c>'g'</c> / <c>'G'</c> and the names <c>"longdouble"</c> / <c>"clongdouble"</c> do: NumSharp has no extended
+        ///     precision (NumPy's own win-amd64 long double is the 8-byte double), so <see cref="NPY_TYPES.NPY_LONGDOUBLE"/>
+        ///     is float64 and <see cref="NPY_TYPES.NPY_CLONGDOUBLE"/> complex128. Numbers with NO NumSharp type at all
+        ///     (<see cref="NPY_TYPES.NPY_CFLOAT"/> complex64, <see cref="NPY_TYPES.NPY_OBJECT"/>, <see cref="NPY_TYPES.NPY_STRING"/>,
+        ///     <see cref="NPY_TYPES.NPY_VOID"/>, the sentinels) are rejected, matching how the parser refuses a dtype NumSharp
+        ///     cannot represent.
         /// </summary>
         /// <param name="type_num">A NumPy type number.</param>
         /// <returns>The class's canonical instance (for the datetime pair, the generic-unit descriptor).</returns>
-        /// <exception cref="NotSupportedException">NumSharp has no type of this number's width/kind (complex64, object, void, extended precision, or a sentinel).</exception>
+        /// <exception cref="NotSupportedException">NumSharp has no type of this number's width/kind (complex64, object, bytes, void, or a sentinel).</exception>
         public static DType From(NPY_TYPES type_num)
         {
             // Map EVERY C-integer number to the NumSharp type of that width+signedness (NumSharp has one type per
@@ -540,6 +543,9 @@ namespace NumSharp
                 case NPY_TYPES.NPY_ULONGLONG: return DTypeRegistry.UInt64.singleton;
                 case NPY_TYPES.NPY_LONG: return (DTypeRegistry.CLongIs32Bit ? DTypeRegistry.Int32 : DTypeRegistry.Int64).singleton;
                 case NPY_TYPES.NPY_ULONG: return (DTypeRegistry.CLongIs32Bit ? DTypeRegistry.UInt32 : DTypeRegistry.UInt64).singleton;
+                // No class of their own (the long-double classes collapse onto the 8-byte lanes, as 'g' / 'G' do).
+                case NPY_TYPES.NPY_LONGDOUBLE: return DTypeRegistry.Double.singleton;
+                case NPY_TYPES.NPY_CLONGDOUBLE: return DTypeRegistry.Complex128.singleton;
             }
 
             var meta = DTypeRegistry.FromTypeNum((int)type_num);

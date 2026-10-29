@@ -81,10 +81,11 @@ namespace NumSharp
         /// </summary>
         /// <param name="types">One or more NPTypeCode values.</param>
         /// <returns>The result type from combining the inputs.</returns>
+        /// <exception cref="ValueError">No type is given: NumPy's "at least one array or dtype is required".</exception>
         public static DType result_type(params NPTypeCode[] types)
         {
             if (types == null || types.Length == 0)
-                throw new ArgumentException("At least one type must be provided", nameof(types));
+                throw new ValueError("at least one array or dtype is required");
 
             if (types.Length == 1)
                 return types[0];
@@ -98,10 +99,11 @@ namespace NumSharp
         /// </summary>
         /// <param name="arrays">One or more NDArray objects.</param>
         /// <returns>The result type from combining the array dtypes.</returns>
+        /// <exception cref="ValueError">No array is given: NumPy's "at least one array or dtype is required".</exception>
         public static DType result_type(params NDArray[] arrays)
         {
             if (arrays == null || arrays.Length == 0)
-                throw new ArgumentException("At least one array must be provided", nameof(arrays));
+                throw new ValueError("at least one array or dtype is required");
 
             if (arrays.Length == 1)
                 return arrays[0].GetTypeCode;

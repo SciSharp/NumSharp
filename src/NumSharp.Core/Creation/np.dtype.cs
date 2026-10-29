@@ -5,6 +5,7 @@ using System.Linq;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using NumSharp.Backends;
+using NumSharp.IO; // PyLiteral.Repr: NumPy's error texts quote the dtype string with %R
 
 namespace NumSharp
 {
@@ -18,40 +19,86 @@ namespace NumSharp
         /// <param name="typeset">The set of characters that the returned character is chosen from. The default set is ‘GDFgdf’.</param>
         /// <param name="default">The default character, this is returned if none of the characters in typechars matches a character in typeset.</param>
         /// <returns>The character representing the minimum-size type that was found.</returns>
+        /// <exception cref="TypeError"><paramref name="typechars"/> is null, or <paramref name="typeset"/> is null while there is a character to test against it (Python's iteration / <c>in</c> errors).</exception>
+        /// <exception cref="ValueError">
+        ///     A matching character is not one of NumPy's sized codes <c>'GDFgdfQqLlIiHhBb?'</c> (<c>'e'</c>, <c>'n'</c>,
+        ///     <c>'p'</c>, …) and the answer is not the <c>'F'</c> + <c>'d'</c> rule: NumPy picks the minimum with
+        ///     <c>_typecodes_by_elsize.index</c>, whose <c>str.index</c> raises "substring not found" for it.
+        /// </exception>
+        /// <remarks>
+        ///     Port of <c>numpy/lib/_type_check_impl.py::mintypecode</c>: the characters of <paramref name="typechars"/> that
+        ///     are in <paramref name="typeset"/>, the default when there are none, <c>'D'</c> when both <c>'F'</c> and
+        ///     <c>'d'</c> are among them, else the one listed first in <c>'GDFgdfQqLlIiHhBb?'</c>.
+        /// </remarks>
         public static char mintypecode(string typechars, string typeset = "GDFgdf", char @default = 'd')
         {
-            const string _typecodes_by_elsize = "GDFgdfQqLlIiHhBb?";
-
-            var chars = typechars.ToCharArray();
-            var intersect = chars.Intersect(typeset.ToCharArray()).ToArray();
-            if (intersect.Length == 0)
-                return @default;
-            if (intersect.Contains('F') && intersect.Contains('d'))
-                return 'D';
-
-            return intersect.OrderBy(c => _typecodes_by_elsize.IndexOf(c)).First();
+            if (typechars == null)
+                throw new TypeError("'NoneType' object is not iterable");
+            return MinTypeCode(typechars, typeset, @default);
         }
 
         /// <summary>
         ///     Return the character for the minimum-size type to which given types can be safely cast.
         ///     The returned type character must represent the smallest size dtype such that an array of the returned type can handle the data from an array of all types in typechars(or if typechars is an array, then its dtype.char).
         /// </summary>
-        /// <param name="typechars"></param>
+        /// <param name="typechars">The type characters, one per type (see <see cref="DType.@char"/>).</param>
         /// <param name="typeset">The set of characters that the returned character is chosen from. The default set is ‘GDFgdf’.</param>
         /// <param name="default">The default character, this is returned if none of the characters in typechars matches a character in typeset.</param>
         /// <returns>The character representing the minimum-size type that was found.</returns>
+        /// <exception cref="TypeError"><paramref name="typechars"/> is null, or <paramref name="typeset"/> is null while there is a character to test against it.</exception>
+        /// <exception cref="ValueError">A matching character is not one of NumPy's sized codes (see <see cref="mintypecode(string, string, char)"/>).</exception>
         public static char mintypecode(char[] typechars, string typeset = "GDFgdf", char @default = 'd')
+        {
+            if (typechars == null)
+                throw new TypeError("'NoneType' object is not iterable");
+            return MinTypeCode(typechars, typeset, @default);
+        }
+
+        /// <summary>
+        ///     The body of <see cref="mintypecode(string, string, char)"/>, statement for statement NumPy's: the set of
+        ///     characters found in <paramref name="typeset"/>, the default for an empty set, the <c>'F'</c> + <c>'d'</c> →
+        ///     <c>'D'</c> rule, then the minimum by position in <c>_typecodes_by_elsize</c>.
+        /// </summary>
+        /// <param name="typechars">The type characters to test.</param>
+        /// <param name="typeset">The characters the answer may be; null raises only when a character reaches the test (Python's lazy set comprehension).</param>
+        /// <param name="default">The answer for an empty intersection.</param>
+        /// <returns>The minimum-size type character.</returns>
+        /// <exception cref="TypeError"><paramref name="typeset"/> is null and a character is tested against it.</exception>
+        /// <exception cref="ValueError">A character of the intersection is not in <c>_typecodes_by_elsize</c>.</exception>
+        private static char MinTypeCode(IEnumerable<char> typechars, string typeset, char @default)
         {
             const string _typecodes_by_elsize = "GDFgdfQqLlIiHhBb?";
 
-            var chars = typechars;
-            var intersect = chars.Intersect(typeset.ToCharArray()).ToArray();
-            if (intersect.Length == 0)
+            var intersection = new HashSet<char>();
+            foreach (char t in typechars)
+            {
+                // `t in typeset` — evaluated per character, so a None typeset fails only once there is a character.
+                if (typeset == null)
+                    throw new TypeError("argument of type 'NoneType' is not iterable");
+                if (typeset.IndexOf(t) >= 0)
+                    intersection.Add(t);
+            }
+            if (intersection.Count == 0)
                 return @default;
-            if (intersect.Contains('F') && intersect.Contains('d'))
+            if (intersection.Contains('F') && intersection.Contains('d'))
                 return 'D';
 
-            return intersect.OrderBy(c => _typecodes_by_elsize.IndexOf(c)).First();
+            // min(intersection, key=_typecodes_by_elsize.index): Python's min evaluates the key of EVERY element, so any
+            // element missing from the string raises, even when another element would have been the minimum.
+            char best = '\0';
+            int bestIndex = int.MaxValue;
+            foreach (char t in intersection)
+            {
+                int index = _typecodes_by_elsize.IndexOf(t);
+                if (index < 0)
+                    throw new ValueError("substring not found");
+                if (index < bestIndex)
+                {
+                    bestIndex = index;
+                    best = t;
+                }
+            }
+            return best;
         }
 
         // ---- Platform-detected types (MUST be declared BEFORE _dtype_string_map since
@@ -111,6 +158,10 @@ namespace NumSharp
             Add("i",  typeof(int));
             Add("l",  _cLongType);       // C long: 32-bit on Windows (MSVC), 64-bit on *nix (gcc LP64)
             Add("q",  typeof(long));
+            // NumPy 2.x's two intp letters (arraytypes.c.src's LETTER_TO_NUM): 'n' is np.intp (the size of size_t, the
+            // letter NumPy 2.0 moved intp to) and 'p' stays pointer-sized; on every platform NumSharp runs on they are
+            // the same integer.
+            Add("n",  _intpType);
             Add("p",  _intpType);        // intptr
             // unsigned int
             Add("B",  typeof(byte));
@@ -118,6 +169,7 @@ namespace NumSharp
             Add("I",  typeof(uint));
             Add("L",  _cULongType);      // C unsigned long: same platform rule as 'l'
             Add("Q",  typeof(ulong));
+            Add("N",  _uintpType);       // np.uintp (see 'n')
             Add("P",  _uintpType);       // uintptr
             // float
             Add("e",  typeof(Half));
@@ -150,6 +202,7 @@ namespace NumSharp
             // Note: "complex64" is NOT in the map — it's in _unsupported_numpy_codes so
             // accessing it throws NotSupportedException. NumSharp only has complex128.
             Add("complex128", typeof(Complex));
+            Add("cdouble",    typeof(Complex));  // np.cdouble, the C name of complex128 (in NumPy's sctypeDict)
             Add("complex",    typeof(Complex));
             Add("byte",       typeof(sbyte));   // NumPy: np.dtype('byte') → int8
             Add("ubyte",      typeof(byte));    // NumPy: np.dtype('ubyte') → uint8
@@ -203,15 +256,34 @@ namespace NumSharp
             return map.ToFrozenDictionary();
         }
 
-        // NumPy dtype codes that are valid in NumPy but NumSharp does not implement.
-        // Route to clear NotSupportedException instead of silent misbehavior.
-        // Note: 'F', 'c8', 'complex64' — NumSharp refuses these since it only has complex128.
-        // Users should explicitly use 'complex128' / 'D' / 'c16' / 'complex'.
-        private static readonly FrozenSet<string> _unsupported_numpy_codes = new HashSet<string>(StringComparer.Ordinal)
+        /// <summary>
+        ///     The one-character type codes NumPy's <c>PyArray_DescrFromType</c> accepts (<c>LETTER_TO_NUM</c>, plus
+        ///     <c>'c'</c> and <c>'T'</c>) whose class NumSharp has no storage for: complex64 (<c>'F'</c>), object
+        ///     (<c>'O'</c>), the unsized bytes / str / void (<c>'S'</c>, <c>'U'</c>, <c>'V'</c>), the one-byte string
+        ///     <c>'c'</c> (<c>S1</c>, not NumSharp's <c>char</c>) and NEP 55's <c>StringDType</c> (<c>'T'</c>). They are
+        ///     valid dtypes, so the refusal says "not supported" rather than NumPy's "not understood". A byte-order prefix
+        ///     does not change that, because NumPy strips the prefix before it reads a type code (<c>'&lt;S'</c> is
+        ///     <c>dtype('S')</c> there).
+        /// </summary>
+        private static readonly FrozenSet<char> _unsupported_numpy_typechars = new HashSet<char>
         {
-            "S", "U", "V", "O", "a", "c", // c = S1 (1-byte string), NOT complex
-            "F", "c8", "complex64",       // complex64 — NumSharp has no 32-bit complex
-            "object", "object_", "bytes_", "str_", "str", "void", "unicode", "bytes",
+            'F', 'O', 'S', 'U', 'V', 'c', 'T',
+        }.ToFrozenSet();
+
+        /// <summary>
+        ///     The names of NumPy's <c>typeDict</c> (<c>np.sctypeDict</c>'s string keys) whose class NumSharp has no storage
+        ///     for: complex64, bytes, str, void and object. NumPy looks a name up by the WHOLE string, so only the bare name
+        ///     is a valid dtype (<c>'object'</c>); with a byte-order prefix (<c>'&lt;object'</c>) it is NumPy's "not understood".
+        ///     <c>'a'</c> is the deprecated one-letter alias of <c>'S'</c>, which NumPy reaches through this table (it has no
+        ///     <c>LETTER_TO_NUM</c> entry), so <c>'|a'</c> is "not understood" too.
+        /// </summary>
+        private static readonly FrozenSet<string> _unsupported_numpy_names = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "a", "bytes", "bytes_",            // the bytes class 'S'
+            "complex64", "csingle",            // complex64 — NumSharp has no 32-bit complex
+            "object", "object_",
+            "str", "str_", "unicode",          // the str class 'U'
+            "void",
         }.ToFrozenSet();
 
         // NumPy 2.0 removed these bit-suffixed aliases; the message is NumPy's verbatim.
@@ -263,15 +335,18 @@ namespace NumSharp
         /// <exception cref="TypeError">A malformed datetime unit (<c>Invalid datetime metadata string "[5]" at position 2</c>, verbatim).</exception>
         /// <exception cref="ValueError">A datetime divisor that is not a multiple of a lower unit (verbatim).</exception>
         /// <remarks>
-        ///     Grammar, in NumPy's order: a comma-string / parenthesised sub-array is a structured dtype (unsupported);
-        ///     the byte-order character is consumed (<c>'|'</c> reads as native, an explicit host order folds into
-        ///     <c>'='</c>, and a lone byte-order character is invalid); a datetime typestr
+        ///     Grammar, in NumPy's order: a comma string (a top-level comma, a leading digit or a leading <c>()</c>) is a
+        ///     structured / sub-array dtype (unsupported); the byte-order character is consumed (<c>'|'</c> reads as native,
+        ///     an explicit host order folds into <c>'='</c>, and a lone byte-order character is invalid); a datetime typestr
         ///     (<c>M8</c>/<c>m8</c>/<c>datetime64</c>/<c>timedelta64</c> + metadata) is parsed by
-        ///     <see cref="DatetimeMetaData.Parse"/>; a one-character code is a type code; a code whose tail is an integer
-        ///     is <c>kind + size</c> (<c>PyArray_TypestrConvert</c> — so <c>"b1"</c> is bool while <c>"b"</c> is int8,
+        ///     <see cref="DatetimeMetaData.Parse"/>; a one-character code is a type code (a control character below
+        ///     <c>'\x18'</c> is a TYPE NUMBER: <c>'\x0c'</c> is float64); a code whose tail is an integer is
+        ///     <c>kind + size</c> (<c>PyArray_TypestrConvert</c> — so <c>"b1"</c> is bool while <c>"b"</c> is int8,
         ///     <c>"i3"</c>, <c>"f16"</c> and <c>"?1"</c> are invalid); anything else is a NAME looked up in the type
-        ///     dictionary. Case matters everywhere (<c>"I4"</c> is not <c>"i4"</c>), whitespace is never stripped. The
-        ///     keywords then apply in <c>arraydescr_new</c>'s order: <paramref name="copy"/>, then <paramref name="metadata"/>.
+        ///     dictionary by the WHOLE string, so a byte-order prefix before a name (<c>"&lt;float64"</c>,
+        ///     <c>"|bool"</c>) is "not understood" while it is accepted before a code (<c>"&lt;f8"</c>, <c>"&gt;d"</c>).
+        ///     Case matters everywhere (<c>"I4"</c> is not <c>"i4"</c>), whitespace is never stripped. The keywords then
+        ///     apply in <c>arraydescr_new</c>'s order: <paramref name="copy"/>, then <paramref name="metadata"/>.
         ///     <para>https://numpy.org/doc/stable/reference/arrays.dtypes.html</para>
         /// </remarks>
         public static DType dtype(string dtype, bool align = false, bool copy = false, IReadOnlyDictionary<string, object> metadata = null)
@@ -298,8 +373,9 @@ namespace NumSharp
             /* check for commas present or first (or second) element a digit */
             if (CheckForCommaString(type))
                 throw new NotSupportedException("NumSharp does not support structured (comma-string / field list) dtypes");
-            if (type.Contains('('))
-                throw new NotSupportedException("NumSharp does not support custom nested array dtypes");
+            // A parenthesis outside a comma string is no sub-array in NumPy: '(2)f8', '( )f8' and 'f8()' go on through the
+            // grammar below, which names no type with a '(', and are "not understood" (a sub-array string is always a
+            // comma string: '(2,)f8' and '2f8' are caught above).
 
             /* Process the endian character. '|' is replaced by '='*/
             char endian = DType.NPY_NATIVE;
@@ -334,21 +410,37 @@ namespace NumSharp
             if (IsDatetimeTypestr(type))
                 return ParseDatetimeTypestr(type).WithByteOrder(endian);
 
+            // The descriptor a type NUMBER gave (a control character, see below), else null; `resolved` is the C# type a
+            // type code, a kind + size or a name gave. One of them is set once the grammar has read the string.
+            DType numbered = null;
             Type resolved = null;
             /* A typecode like 'd' */
             if (type.Length == 1)
             {
+                char code = type[0];
                 // NumPy's PyArray_DescrFromType maps the datetime LETTERS to the generic-unit descriptors
                 // (np.dtype('M') is dtype('<M8'), np.dtype('m') is dtype('<m8')) — the static BUILTIN descriptor itself,
                 // so np.dtype('M').isbuiltin is 1 while the typestr np.dtype('M8') builds a fresh one (isbuiltin 0); only
                 // the opposite byte order copies it (the `finish` block's DESCR_REPLACE).
-                if (type[0] == 'M' || type[0] == 'm')
+                if (code == 'M' || code == 'm')
                 {
-                    var letter = (type[0] == 'M' ? DTypeRegistry.DateTime64 : DTypeRegistry.TimeDelta64).singleton;
+                    var letter = (code == 'M' ? DTypeRegistry.DateTime64 : DTypeRegistry.TimeDelta64).singleton;
                     return endian == DType.NPY_NATIVE ? letter : letter.WithByteOrder(endian);
                 }
-                if (!_dtype_string_map.TryGetValue(type, out resolved))
-                    resolved = null;
+                // `check_num = (unsigned char)type[0]` is handed to PyArray_DescrFromType, which reads a value below
+                // NPY_NTYPES_LEGACY (24) as a TYPE NUMBER, not a letter: a lone control character is a builtin dtype
+                // ('\x00' is bool, '\x0c' float64, '\x17' float16). DType.From(NPY_TYPES) is that lookup for NumSharp's
+                // classes, and refuses the numbers NumSharp has no class for (complex64, object, bytes, void). The str
+                // class's number is refused here too: NumSharp's vestigial unsized 'U' slot holds no text, and every other
+                // spelling of that class ('U', 'str', 'U5') is refused as unsupported as well.
+                if (code == (char)NPY_TYPES.NPY_UNICODE)
+                    throw new NotSupportedException($"NumPy dtype {PyLiteral.Repr(type)} (type number 19, str) is not supported by NumSharp");
+                if (code < (char)NPY_TYPES.NPY_NTYPES_LEGACY)
+                    numbered = DType.From((NPY_TYPES)code);
+                else if (_unsupported_numpy_typechars.Contains(code))
+                    throw new NotSupportedException($"NumPy dtype '{type}' is not supported by NumSharp");
+                else if (!_dtype_string_map.TryGetValue(type, out resolved))
+                    resolved = null; // not a type code: NumPy clears the error and tries the name table below
             }
             /* Possibly a kind + size like 'f8' but also could be 'bool' */
             else if (TryParseSizeSuffix(type, out int elsize))
@@ -372,20 +464,24 @@ namespace NumSharp
                 }
             }
 
-            if (resolved == null)
+            if (numbered == null && resolved == null)
             {
                 /* Now check to see if the object is registered in typeDict */
-                if (_unsupported_numpy_codes.Contains(type))
-                    throw new NotSupportedException($"NumPy dtype '{type}' is not supported by NumSharp");
-                if (!_dtype_string_map.TryGetValue(type, out resolved))
+                // NumPy looks the WHOLE original string up (`PyDict_GetItemWithError(typeDict, obj)`), not the
+                // endian-stripped one, and no name starts with a byte-order character: '<float64', '|bool' and '>double'
+                // are "not understood" while the bare names are dtypes. Only the removed-alias test reads the stripped
+                // string, and its message quotes the whole one ("Alias '<int0' was removed ...").
+                if (_unsupported_numpy_names.Contains(dtype))
+                    throw new NotSupportedException($"NumPy dtype '{dtype}' is not supported by NumSharp");
+                if (!_dtype_string_map.TryGetValue(dtype, out resolved))
                 {
                     if (_removed_numpy_aliases.Contains(type))
-                        throw new NotSupportedException($"Alias '{type}' was removed in NumPy 2.0. Use a name without a digit at the end.");
+                        throw new NotSupportedException($"Alias {PyLiteral.Repr(dtype)} was removed in NumPy 2.0. Use a name without a digit at the end.");
                     throw NotUnderstood(dtype);
                 }
             }
 
-            var descr = DType.From(resolved);
+            var descr = numbered ?? DType.From(resolved);
             if (endian != DType.NPY_NATIVE && endian != DType.NPY_NATBYTE && descr.byteorder != DType.NPY_IGNORE)
                 return descr.WithByteOrder(endian);
             return descr;
@@ -482,23 +578,35 @@ namespace NumSharp
             return conv.WithMetadata(new System.Collections.ObjectModel.ReadOnlyDictionary<string, object>(merged));
         }
 
+        /// <summary>
+        ///     NumPy's <c>_convert_from_str</c> failure: <c>data type %R not understood</c>, the string quoted by Python's
+        ///     <c>repr</c> — so a quote inside switches to double quotes (<c>data type "a'b" not understood</c>) and a control
+        ///     character is escaped (<c>data type 'i4\n' not understood</c>). NumPy raises <c>TypeError</c>; NumSharp keeps
+        ///     its long-standing <see cref="NotSupportedException"/> for every dtype string it cannot use, with NumPy's text.
+        /// </summary>
+        /// <param name="dtype">The WHOLE string the caller passed (byte-order prefix included).</param>
+        /// <returns>The exception to throw.</returns>
         private static NotSupportedException NotUnderstood(string dtype)
-            => new NotSupportedException($"data type '{dtype}' not understood");
+            => new NotSupportedException($"data type {PyLiteral.Repr(dtype)} not understood");
 
         /// <summary>
-        ///     NumPy's <c>_check_for_commastring</c>: a comma anywhere, or a leading digit (after an optional byte-order
-        ///     character), marks a structured "comma string" dtype (<c>"i4,f8"</c>, <c>"3f8"</c>).
+        ///     NumPy's <c>_check_for_commastring</c>: a comma outside square brackets, a leading digit (after an optional
+        ///     byte-order character), or a leading empty tuple <c>()</c> (also after a byte-order character) marks a
+        ///     structured "comma string" dtype (<c>"i4,f8"</c>, <c>"3f8"</c>, <c>"()f8"</c>, <c>"&lt;()f8"</c>).
         /// </summary>
+        /// <param name="type">The whole dtype string.</param>
+        /// <returns>True when NumPy would hand the string to <c>_convert_from_commastring</c>.</returns>
         private static bool CheckForCommaString(string type)
         {
             /* Check for ints at start of string */
             int start = 0;
-            if (type.Length > 1 && (type[0] == '>' || type[0] == '<' || type[0] == '|' || type[0] == '='))
+            if (type.Length > 1 && IsByteOrderChar(type[0]))
                 start = 1;
             if (start < type.Length && type[start] >= '0' && type[start] <= '9')
                 return true;
             /* Check for empty tuple */
-            if (type.Length > 1 && type[0] == '(' && type[1] == ')')
+            if ((type.Length > 1 && type[0] == '(' && type[1] == ')')
+                || (type.Length > 3 && IsByteOrderChar(type[0]) && type[1] == '(' && type[2] == ')'))
                 return true;
             /* Check for presence of commas outside square [] brackets */
             int sqbracket = 0;
@@ -519,6 +627,21 @@ namespace NumSharp
             }
             return false;
         }
+
+        /// <summary>NumPy's <c>_chk_byteorder</c>: one of the four byte-order characters a dtype string may start with.</summary>
+        /// <param name="c">The character.</param>
+        /// <returns>True for <c>'&gt;'</c>, <c>'&lt;'</c>, <c>'|'</c> and <c>'='</c>.</returns>
+        private static bool IsByteOrderChar(char c) => c == '>' || c == '<' || c == '|' || c == '=';
+
+        /// <summary>
+        ///     C's <c>isspace</c> in the "C" locale, the whitespace <c>strtol</c> skips: space, tab, line feed, vertical tab,
+        ///     form feed and carriage return. NumPy parses the size of <c>"f 8"</c> with <c>strtol</c>, so only these six
+        ///     count — a no-break space (U+00A0) or any other Unicode space makes the string "not understood", which
+        ///     <see cref="char.IsWhiteSpace(char)"/> would wrongly accept.
+        /// </summary>
+        /// <param name="c">The character.</param>
+        /// <returns>True for the six ASCII whitespace characters.</returns>
+        private static bool IsCSpace(char c) => c == ' ' || (c >= '\t' && c <= '\r');
 
         /// <summary>NumPy's <c>is_datetime_typestr</c>: <c>M8…</c>, <c>m8…</c>, <c>datetime64…</c>, <c>timedelta64…</c>.</summary>
         private static bool IsDatetimeTypestr(string type)
@@ -573,13 +696,17 @@ namespace NumSharp
         /// <summary>
         ///     C <c>strtol(type + 1, &amp;typeend, 10)</c> with NumPy's acceptance test: the tail after the kind letter
         ///     must parse entirely as a non-negative integer (leading whitespace and an explicit sign are what
-        ///     <c>strtol</c> accepts, so <c>"i 4"</c> and <c>"i+4"</c> read as <c>"i4"</c> in NumPy too).
+        ///     <c>strtol</c> accepts, so <c>"i 4"</c> and <c>"i+4"</c> read as <c>"i4"</c> in NumPy too; the whitespace is
+        ///     C's <see cref="IsCSpace"/>, never a Unicode space).
         /// </summary>
+        /// <param name="type">The dtype string after its byte-order character (at least two characters).</param>
+        /// <param name="elsize">The parsed size, or 0 when the tail is not an integer.</param>
+        /// <returns>True when the whole tail is one non-negative integer that fits an <see cref="int"/>.</returns>
         private static bool TryParseSizeSuffix(string type, out int elsize)
         {
             elsize = 0;
             int i = 1;
-            while (i < type.Length && char.IsWhiteSpace(type[i]))
+            while (i < type.Length && IsCSpace(type[i]))
                 i++;
             bool negative = false;
             if (i < type.Length && (type[i] == '+' || type[i] == '-'))
@@ -649,7 +776,9 @@ namespace NumSharp
                         default: return null;
                     }
                 case 'O':
-                    if (itemsize == IntPtr.Size)
+                    // PyArray_TypestrConvert takes 'O4' AND 'O8' as object on every platform (the deprecation of the two
+                    // spellings expired, they still parse); any other size is not a type.
+                    if (itemsize == 4 || itemsize == 8)
                         throw new NotSupportedException($"NumPy dtype '{type}' is not supported by NumSharp");
                     return null;
                 default:

@@ -93,6 +93,7 @@ namespace NumSharp.Tests.DTypes
             Of("promote").Count.Should().BeGreaterThan(700);
             Of("class").Count.Should().BeGreaterThan(30);
             Of("cast").Count.Should().BeGreaterThan(1500);
+            Of("parse").Count.Should().BeGreaterThan(1500);
         }
 
         // ---------------------------------------------------------------------------------------------------------
@@ -381,6 +382,151 @@ namespace NumSharp.Tests.DTypes
                 string id = rec.GetProperty("id").GetString();
                 string actual = Raised(() => Build(rec.GetProperty("recipe")));
                 Check(problems, id, "error", actual, ErrorText(rec.GetProperty("error")));
+            }
+            AssertNoProblems(problems);
+        }
+
+        // ---------------------------------------------------------------------------------------------------------
+        // dtype strings
+        // ---------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumSharp's own C# spellings of <see cref="np.dtype(string, bool, bool, IReadOnlyDictionary{string, object})"/>
+        ///     (the documented superset of NumPy's grammar), the twin of the generator's <c>NUMSHARP_ALIASES</c>. NumPy
+        ///     must still refuse each one (the replay asserts it, so the list cannot rot) and NumSharp must accept it.
+        /// </summary>
+        private static readonly HashSet<string> NumSharpAliases = new(StringComparer.Ordinal)
+        {
+            "Int32", "Bool", "Boolean", "boolean", "Half", "Single", "Double", "Complex", "Char", "char", "Decimal",
+            "decimal", "SByte", "sbyte", "Byte", "UByte", "Int16", "UInt16", "UInt32", "Int64", "UInt64", "Float",
+            "String", "string",
+        };
+
+        /// <summary>The long-double classes, which NumSharp collapses onto the 8-byte float64 / complex128 lanes.</summary>
+        private static readonly HashSet<string> CollapsedLongDoubleClasses = new(StringComparer.Ordinal) { "LongDoubleDType", "CLongDoubleDType" };
+
+        /// <summary>The text NumSharp refuses NumPy's comma strings (structured and sub-array dtypes) with.</summary>
+        private const string StructuredRefusal = "NumSharp does not support structured (comma-string / field list) dtypes";
+
+        /// <summary>
+        ///     Every probed dtype string through <c>np.dtype(str)</c>: the same descriptor as NumPy's (repr, str, byte order,
+        ///     isbuiltin, kind, item size; the type number and character too when NumPy's class is the canonical class of
+        ///     its width) or the same error text, under the house rules:
+        ///     <list type="bullet">
+        ///       <item><description>NumPy's <c>TypeError</c> "data type … not understood" / "Alias … was removed" is
+        ///       NumSharp's <see cref="NotSupportedException"/> with the same text; every other NumPy error keeps its
+        ///       type.</description></item>
+        ///       <item><description>A valid NumPy dtype of a class NumSharp has no storage for (<see cref="AbsentClasses"/>)
+        ///       raises <see cref="NotSupportedException"/>.</description></item>
+        ///       <item><description>A comma string (structured or sub-array, decided by NumPy's own
+        ///       <c>_check_for_commastring</c>) may raise <see cref="StructuredRefusal"/> whatever NumPy answers — the one
+        ///       representable outcome, <c>'()f8'</c> = float64, included.</description></item>
+        ///       <item><description>NumPy's long double (8 bytes on Windows, 16 on Linux) is NumSharp's float64 (complex:
+        ///       complex128) under its C names (<c>'g'</c>, <c>'longdouble'</c>); a spelling that names Linux's 16-byte
+        ///       width (<c>'f16'</c>, <c>'float128'</c>) has no NumSharp lane and raises
+        ///       <see cref="NotSupportedException"/>.</description></item>
+        ///     </list>
+        /// </summary>
+        [TestMethod]
+        public void Parse_Strings_MatchNumPy()
+        {
+            var problems = new List<string>();
+            foreach (var rec in Of("parse"))
+            {
+                string id = rec.GetProperty("id").GetString();
+                string spec = rec.GetProperty("spec").GetString();
+                bool commastring = rec.GetProperty("commastring").GetBoolean();
+                var numpy = rec.GetProperty("outcome");
+                bool numpyOk = numpy.GetProperty("ok").GetBoolean();
+
+                DType d = null;
+                Exception error = null;
+                try
+                {
+                    d = np.dtype(spec);
+                }
+                catch (Exception e)
+                {
+                    error = e;
+                }
+
+                if (NumSharpAliases.Contains(spec))
+                {
+                    if (numpyOk)
+                        problems.Add($"{id}: NumPy now accepts this NumSharp alias; remove it from NumSharpAliases and the generator's NUMSHARP_ALIASES");
+                    if (error != null)
+                        problems.Add($"{id}: the NumSharp alias raised {ErrorText(error)}");
+                    continue;
+                }
+
+                if (commastring && error is NotSupportedException && error.Message == StructuredRefusal)
+                    continue; // the structured / sub-array family NumSharp refuses as a whole
+
+                if (!numpyOk)
+                {
+                    string type = numpy.GetProperty("type").GetString();
+                    string text = numpy.GetProperty("text").GetString();
+                    if (error == null)
+                    {
+                        problems.Add($"{id}: returned {d.ToString(true)}, NumPy raised {type}: {text}");
+                        continue;
+                    }
+                    // The house rule: a dtype string NumSharp cannot use is a NotSupportedException carrying NumPy's text.
+                    bool notUnderstood = type == "TypeError" && (text.StartsWith("data type ", StringComparison.Ordinal) || text.StartsWith("Alias ", StringComparison.Ordinal));
+                    string expectedType = notUnderstood ? nameof(NotSupportedException) : type;
+                    string actualType = error switch { TypeError => "TypeError", ValueError => "ValueError", _ => error.GetType().Name };
+                    if (actualType != expectedType || error.Message != text)
+                        problems.Add($"{id}: raised {actualType}: {Show(error.Message)}, expected {expectedType}: {Show(text)}");
+                    continue;
+                }
+
+                string cls = numpy.GetProperty("cls").GetString();
+                if (AbsentClasses.ContainsKey(cls))
+                {
+                    if (error is not NotSupportedException)
+                        problems.Add($"{id}: NumPy's {cls} has no NumSharp storage, so it must raise NotSupportedException; got {(error == null ? d.ToString(true) : ErrorText(error))}");
+                    continue;
+                }
+
+                if (CollapsedLongDoubleClasses.Contains(cls))
+                {
+                    var lane = cls == "LongDoubleDType" ? DTypeRegistry.Double : DTypeRegistry.Complex128;
+                    int numpySize = numpy.GetProperty("itemsize").GetInt32();
+                    if (error != null)
+                    {
+                        // Linux's long double is 16 bytes: the spellings that name that WIDTH ('f16', 'c32', 'float128',
+                        // 'complex256') have no NumSharp lane, while the C names ('g', 'longdouble') collapse onto 8 bytes.
+                        if (!(error is NotSupportedException && numpySize != lane.ItemSize))
+                            problems.Add($"{id}: raised {ErrorText(error)}, NumPy {numpy.GetProperty("repr").GetString()}");
+                        continue;
+                    }
+                    if (!ReferenceEquals(d.Meta, lane))
+                        problems.Add($"{id}: NumPy's {cls} must collapse onto {lane}, got {d.Meta}");
+                    // Windows' long double is the 8-byte double: there the descriptor must equal NumPy's to the repr.
+                    if (numpySize == d.itemsize)
+                        Check(problems, id, "repr", d.ToString(true), numpy.GetProperty("repr").GetString());
+                    continue;
+                }
+
+                if (error != null)
+                {
+                    problems.Add($"{id}: raised {ErrorText(error)}, NumPy {numpy.GetProperty("repr").GetString()}");
+                    continue;
+                }
+
+                Check(problems, id, "repr", d.ToString(true), numpy.GetProperty("repr").GetString());
+                Check(problems, id, "str", d.str, numpy.GetProperty("str").GetString());
+                Check(problems, id, "byteorder", d.byteorder.ToString(), numpy.GetProperty("byteorder").GetString());
+                Check(problems, id, "isbuiltin", d.isbuiltin.ToString(CultureInfo.InvariantCulture), numpy.GetProperty("isbuiltin").GetInt32().ToString(CultureInfo.InvariantCulture));
+                Check(problems, id, "kind", d.kind.ToString(), numpy.GetProperty("kind").GetString());
+                Check(problems, id, "itemsize", d.itemsize.ToString(CultureInfo.InvariantCulture), numpy.GetProperty("itemsize").GetInt32().ToString(CultureInfo.InvariantCulture));
+                // A C-name class NumPy keeps beside the sized class of its width (IntDType on Windows, LongLongDType on
+                // Linux) has its own number and character; NumSharp collapses each width onto one class.
+                if (numpy.GetProperty("canonical").GetBoolean())
+                {
+                    Check(problems, id, "num", d.num.ToString(CultureInfo.InvariantCulture), numpy.GetProperty("num").GetInt32().ToString(CultureInfo.InvariantCulture));
+                    Check(problems, id, "char", d.@char.ToString(), numpy.GetProperty("char").GetString());
+                }
             }
             AssertNoProblems(problems);
         }
