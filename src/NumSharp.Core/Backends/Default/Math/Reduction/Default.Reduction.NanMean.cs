@@ -101,31 +101,31 @@ namespace NumSharp.Backends
             if (eager)
             {
                 // NumPy's own statements: the mask, the copy with zeros, the count of ~mask, the sum.
-                var mask = np.isnan(a);
+                var mask = engine.IsNan(a);
                 var arr0 = new NDArray(inT, shape.KeepOrder(), false);
                 np.copyto(arr0, a);
                 ZeroWhereMask(arr0, mask);
-                cnt = engine.ReduceAdd(np.logical_not(mask), axis, keepdims, np.int64, @out: null);
+                cnt = engine.ReduceAdd(engine.LogicalNot(mask), axis, keepdims, np.int64, @out: null);
                 tot = engine.ReduceAdd(arr0, axis, keepdims, dtype, @out: null);
             }
             else
             {
                 var ae = NDExpr.Arr(a);
                 var notNaN = NDExpr.LogicalNot(NDExpr.IsNaN(ae));
-                cnt = np.evaluate(flat
+                cnt = engine.Evaluate(flat
                     ? (keepdims ? NDExpr.CountNonzero(notNaN, keepdims: true) : NDExpr.CountNonzero(notNaN))
                     : NDExpr.CountNonzero(notNaN, axis.Value, keepdims));
                 var zeroed = NDExpr.Where(NDExpr.IsNaN(ae), NDExpr.Const(0), ae);
                 if (stream)
                 {
-                    tot = np.evaluate(flat
+                    tot = engine.Evaluate(flat
                         ? (keepdims ? NDExpr.Sum(zeroed, keepdims: true) : NDExpr.Sum(zeroed))
                         : NDExpr.Sum(zeroed, axis.Value, keepdims));
                 }
                 else
                 {
                     var arr0 = new NDArray(inT, shape.KeepOrder(), false);
-                    np.evaluate(zeroed, @out: arr0);
+                    engine.Evaluate(zeroed, arr0);
                     tot = engine.ReduceAdd(arr0, axis, keepdims, dtype, @out: null);
                 }
             }

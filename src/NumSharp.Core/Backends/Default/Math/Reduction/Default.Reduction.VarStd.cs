@@ -168,7 +168,7 @@ namespace NumSharp.Backends
                 // summed as one pairwise call; np.evaluate's flat Sum streams exactly that schedule over the fused child,
                 // so x never reaches memory.
                 var sq = SquaredDeviationExpr(arr, meanOperand, square);
-                ret = np.evaluate(keepdims ? NDExpr.Sum(sq, keepdims: true) : NDExpr.Sum(sq));
+                ret = Evaluate(keepdims ? NDExpr.Sum(sq, keepdims: true) : NDExpr.Sum(sq));
             }
             else
             {
@@ -569,7 +569,7 @@ namespace NumSharp.Backends
                 for (long t = 0; t < r; t++)
                 {
                     var slab = slabs[t];
-                    np.add(acc, slab, @out: acc, dtype: accT);
+                    Add(acc, slab, accT, acc);
                     slab.Dispose();
                 }
                 slabs.Dispose();
@@ -753,11 +753,11 @@ namespace NumSharp.Backends
             if (square == DeviationSquare.Real && arr.GetTypeCode != xT && xT is NPTypeCode.Single or NPTypeCode.Double)
             {
                 np.copyto(x2, arr, casting: "unsafe");
-                np.evaluate(NDExpr.Square(NDExpr.Arr(x2) - NDExpr.Arr(mean)), @out: x2);
+                x2.TensorEngine.Evaluate(NDExpr.Square(NDExpr.Arr(x2) - NDExpr.Arr(mean)), x2);
                 return;
             }
 
-            np.evaluate(SquaredDeviationExpr(arr, mean, square), @out: x2);
+            arr.TensorEngine.Evaluate(SquaredDeviationExpr(arr, mean, square), x2);
         }
 
         /// <summary>
@@ -798,21 +798,22 @@ namespace NumSharp.Backends
         /// <param name="square">How the deviation is squared.</param>
         private static void SquaredDeviationsEager(NDArray arr, NDArray mean, NDArray x2, NPTypeCode xT, DeviationSquare square)
         {
-            using var plain = NDMatrixBoundary.PlainFor(arr, mean, x2);   // an engine method computes plain: np.subtract / np.multiply below must not apply its matrix rule
+            using var plain = NDMatrixBoundary.PlainFor(arr, mean, x2);   // an engine method computes plain: no matrix rule may apply inside the engine members called below
             if (square == DeviationSquare.Modulus)
             {
                 var x = new NDArray(NPTypeCode.Complex, x2.Shape, false);
-                np.subtract(arr, mean, @out: x, dtype: xT);
-                var re = np.real(x);
-                var im = np.imag(x);
-                np.multiply(re, re, @out: re);
-                np.multiply(im, im, @out: im);
-                np.add(re, im, @out: x2);
+                arr.TensorEngine.Subtract(arr, mean, xT, x);
+                // np.real / np.imag of the complex deviations: views of the real and imaginary lanes.
+                var re = new NDArray(x.Storage.AliasComplexLane(imaginary: false));
+                var im = new NDArray(x.Storage.AliasComplexLane(imaginary: true));
+                re.TensorEngine.Multiply(re, re, null, re);
+                im.TensorEngine.Multiply(im, im, null, im);
+                re.TensorEngine.Add(re, im, null, x2);
                 return;
             }
 
-            np.subtract(arr, mean, @out: x2, dtype: xT);
-            np.multiply(x2, x2, @out: x2);
+            arr.TensorEngine.Subtract(arr, mean, xT, x2);
+            x2.TensorEngine.Multiply(x2, x2, null, x2);
         }
 
         /// <summary>
@@ -827,7 +828,7 @@ namespace NumSharp.Backends
         /// <param name="count">The divisor (the element count, or <c>max(n - ddof, 0)</c>); 0 gives NumPy's NaN / ±inf.</param>
         internal static void DivideByCountLikeNumPy(NDArray a, long count)
         {
-            using var plain = NDMatrixBoundary.PlainFor(a);   // an engine method computes plain: np.true_divide (a is a caller's out= matrix) below must not apply its matrix rule
+            using var plain = NDMatrixBoundary.PlainFor(a);   // an engine method computes plain (a may be a caller's out= matrix): no matrix rule may apply inside the engine members called below
             // The divisor and the integer branch's quotient are this method's own temporaries: disposed here, because
             // np.mean's route (MeanLikeNumPy) runs outside any [NDScoped] member (np.var / np.std's scopes disposed them
             // before; Dispose is idempotent, so those scopes are unaffected). The out= calls return `a` itself.
@@ -837,17 +838,17 @@ namespace NumSharp.Backends
                 case NPTypeCode.Double:
                 case NPTypeCode.Complex:
                 case NPTypeCode.Decimal:
-                    np.true_divide(a, divisor, @out: a);
+                    a.TensorEngine.Divide(a, divisor, null, a);
                     break;
                 case NPTypeCode.Half:
                 case NPTypeCode.Single:
                     // The float64 loop, then a same_kind cast into the narrower float (one rounding from double).
-                    np.true_divide(a, divisor, @out: a, dtype: np.float64);
+                    a.TensorEngine.Divide(a, divisor, np.float64, a);
                     break;
                 default:
                 {
                     // An integer / bool / char sum (an integer or bool dtype=): float64 quotient, unsafe cast back.
-                    using var q = np.true_divide(a, divisor);
+                    using var q = a.TensorEngine.Divide(a, divisor);
                     np.copyto(a, q, casting: "unsafe");
                     break;
                 }
@@ -867,23 +868,23 @@ namespace NumSharp.Backends
         /// <remarks>Internal: <see cref="NDListArray"/>'s mean divides its masked sum in a <c>dtype=</c> loop with it.</remarks>
         internal static void DivideByCountLikeNumPy(NDArray a, NDArray counts)
         {
-            using var plain = NDMatrixBoundary.PlainFor(a);   // an engine method computes plain: np.true_divide below must not apply a matrix rule
+            using var plain = NDMatrixBoundary.PlainFor(a);   // an engine method computes plain: no matrix rule may apply inside the engine members called below
             switch (a.GetTypeCode)
             {
                 case NPTypeCode.Double:
                 case NPTypeCode.Complex:
                 case NPTypeCode.Decimal:
-                    np.true_divide(a, counts, @out: a);
+                    a.TensorEngine.Divide(a, counts, null, a);
                     break;
                 case NPTypeCode.Half:
                 case NPTypeCode.Single:
                     // The float64 loop, then a same_kind cast into the narrower float (one rounding from double).
-                    np.true_divide(a, counts, @out: a, dtype: np.float64);
+                    a.TensorEngine.Divide(a, counts, np.float64, a);
                     break;
                 default:
                 {
                     // An integer / bool / char sum: the float64 quotients, unsafe cast back (a 0 / 0 NaN is True, INT_MIN).
-                    using var q = np.true_divide(a, counts);
+                    using var q = a.TensorEngine.Divide(a, counts);
                     np.copyto(a, q, casting: "unsafe");
                     break;
                 }
@@ -911,21 +912,24 @@ namespace NumSharp.Backends
             var rt = ret.GetTypeCode;
             if (rt == NPTypeCode.Decimal)
             {
-                // One root per output; the typed NDIter walk writes each in place.
-                foreach (ref decimal v in np.nditer<decimal>(ret, writeable: true))
-                    v = DecimalMath.Sqrt(v);
+                // One root per output, written in place. Every element is independent, so the logical order of the flat
+                // index (GetAtIndex / SetAtIndex map it through ret's strides, any layout) gives the same values as a
+                // memory-order walk.
+                long n = ret.size;
+                for (long i = 0; i < n; i++)
+                    ret.SetAtIndex(DecimalMath.Sqrt(ret.GetAtIndex<decimal>(i)), i);
                 return;
             }
 
             if ((rt.IsInteger() || rt == NPTypeCode.Boolean || rt == NPTypeCode.Char) && scalarResult)
             {
-                var root = np.sqrt(ret);
+                var root = ret.TensorEngine.Sqrt(ret);
                 np.copyto(ret, root, casting: "unsafe");
                 return;
             }
 
             // Float / complex: the ufunc in place. Integer / bool with dimensions: the ufunc's own same_kind refusal.
-            np.sqrt(ret, @out: ret);
+            ret.TensorEngine.Sqrt(ret, null, ret);
         }
     }
 }

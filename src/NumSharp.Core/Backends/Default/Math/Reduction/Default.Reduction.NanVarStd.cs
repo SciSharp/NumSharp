@@ -166,11 +166,11 @@ namespace NumSharp.Backends
             if (eager)
             {
                 // NumPy's own statements: the mask, the copy with zeros, the count of ~mask.
-                mask = np.isnan(a);
+                mask = engine.IsNan(a);
                 arr0 = new NDArray(inT, kl, false);
                 np.copyto(arr0, a);
                 ZeroWhereMask(arr0, mask);
-                var notMask = np.logical_not(mask);
+                var notMask = engine.LogicalNot(mask);
                 cnt = engine.ReduceAdd(notMask, axis, keepdims: true, dtype: np.int64, @out: null);
                 avg = engine.ReduceAdd(arr0, axis, keepdims: true, dtype: dtype, @out: null);
             }
@@ -178,15 +178,15 @@ namespace NumSharp.Backends
             {
                 // The non-NaN count per output: an order-free integer fold, streamed over a in any layout.
                 var notNaN = NDExpr.LogicalNot(NDExpr.IsNaN(ae));
-                cnt = np.evaluate(flat ? NDExpr.CountNonzero(notNaN, keepdims: true) : NDExpr.CountNonzero(notNaN, axis.Value, keepdims: true));
+                cnt = engine.Evaluate(flat ? NDExpr.CountNonzero(notNaN, keepdims: true) : NDExpr.CountNonzero(notNaN, axis.Value, keepdims: true));
                 if (stream)
                 {
-                    avg = np.evaluate(flat ? NDExpr.Sum(zeroed, keepdims: true) : NDExpr.Sum(zeroed, axis.Value, keepdims: true));
+                    avg = engine.Evaluate(flat ? NDExpr.Sum(zeroed, keepdims: true) : NDExpr.Sum(zeroed, axis.Value, keepdims: true));
                 }
                 else
                 {
                     arr0 = new NDArray(inT, kl, false);
-                    np.evaluate(zeroed, @out: arr0);
+                    engine.Evaluate(zeroed, arr0);
                     avg = engine.ReduceAdd(arr0, axis, keepdims: true, dtype: dtype, @out: null);
                 }
             }
@@ -207,7 +207,7 @@ namespace NumSharp.Backends
                 // var = np.sum(sqr) with sqr NumPy's fresh K-order array: one memory run summed as one pairwise call, which
                 // np.evaluate's flat Sum streams over the fused child — the squared deviations never reach memory.
                 var sq = SquaredNanDeviationExpr(a, avgOperand, inT);
-                var = np.evaluate(keepdims ? NDExpr.Sum(sq, keepdims: true) : NDExpr.Sum(sq));
+                var = engine.Evaluate(keepdims ? NDExpr.Sum(sq, keepdims: true) : NDExpr.Sum(sq));
             }
             else if (eager)
             {
@@ -218,7 +218,7 @@ namespace NumSharp.Backends
                 // The squared deviations in NumPy's K-order layout, then NumPy's sum over them. A real input reuses the
                 // copy's buffer (same dtype and layout); a complex one writes float64 squares.
                 var x2 = arr0 is not null && sqT == inT ? arr0 : new NDArray(sqT, kl, false);
-                np.evaluate(SquaredNanDeviationExpr(a, avgOperand, inT), @out: x2);
+                engine.Evaluate(SquaredNanDeviationExpr(a, avgOperand, inT), x2);
                 var = engine.ReduceAdd(x2, axis, keepdims, dtype, @out: null);
             }
 
@@ -228,13 +228,13 @@ namespace NumSharp.Backends
             if (!var.Shape.IsWriteable)
                 var = var.copy();
             var cntOut = keepdims ? cnt : cnt.reshape(Shape.Adopt((long[])var.Shape.dimensions.Clone()));
-            var dof = np.subtract(cntOut, NDArray.Scalar((long)ddof));
+            var dof = engine.Subtract(cntOut, NDArray.Scalar((long)ddof));
             DivideByCountsLikeNumPy(var, dof);
 
             // isbad = dof <= 0: NaN, inf or a negative quotient are all replaced by np.nan — the POSITIVE quiet NaN
             // (.NET's double.NaN is the negative one), cast into var's dtype.
-            var isbad = np.less_equal(dof, NDArray.Scalar(0L));
-            if (np.any(isbad))
+            var isbad = engine.LessEqual(dof, NDArray.Scalar(0L));
+            if (engine.Any(isbad))
                 np.copyto(var, NDArray.Scalar(BitConverter.Int64BitsToDouble(0x7FF8000000000000L)), casting: "unsafe", where: isbad);
 
             if (takeSqrt)
@@ -284,20 +284,21 @@ namespace NumSharp.Backends
             // temporary and NumPy's unsafe cast (the real part).
             var loopT = np.result_type(arr0.dtype, avg.dtype);
             if (np.can_cast(loopT, arr0.dtype, "same_kind"))
-                np.subtract(arr0, avg, @out: arr0);
+                engine.Subtract(arr0, avg, null, arr0);
             else
-                np.copyto(arr0, np.subtract(arr0, avg), casting: "unsafe");
+                np.copyto(arr0, engine.Subtract(arr0, avg), casting: "unsafe");
             ZeroWhereMask(arr0, mask);
 
             NDArray sqr;
             if (inT == NPTypeCode.Complex)
             {
-                np.multiply(arr0, np.conjugate(arr0), @out: arr0);
-                sqr = np.real(arr0);
+                engine.Multiply(arr0, engine.Conjugate(arr0), null, arr0);
+                // np.real of the complex copy: a view of its real lane.
+                sqr = new NDArray(arr0.Storage.AliasComplexLane(imaginary: false));
             }
             else
             {
-                np.multiply(arr0, arr0, @out: arr0);
+                engine.Multiply(arr0, arr0, null, arr0);
                 sqr = arr0;
             }
             return engine.ReduceAdd(sqr, axis, keepdims, dtype, @out: null);
@@ -335,10 +336,10 @@ namespace NumSharp.Backends
                 case NPTypeCode.Half:
                 case NPTypeCode.Single:
                     // The float64 loop, then a same_kind cast into the narrower float (one rounding from double).
-                    np.true_divide(a, counts, @out: a, dtype: np.float64);
+                    a.TensorEngine.Divide(a, counts, np.float64, a);
                     break;
                 default:
-                    np.true_divide(a, counts, @out: a);
+                    a.TensorEngine.Divide(a, counts, null, a);
                     break;
             }
         }
