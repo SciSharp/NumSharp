@@ -58,7 +58,7 @@ namespace NumSharp
             if (@string is null)
                 throw new ArgumentNullException(nameof(@string));
             // "s#": a str is its UTF-8 bytes, converted before every other argument.
-            byte[] data = Utf8Strict(@string);
+            byte[] data = ArrayFileIO.Utf8Strict(@string);
             return FromStringBytes(data, dtype, count, sep, like);
         }
 
@@ -83,8 +83,9 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     <c>array_fromstring</c> after its first argument: <paramref name="sep"/>'s <c>"s"</c> conversion, the removed
-        ///     binary mode, then <c>PyArray_FromString</c>'s dtype checks and the text read.
+        ///     <c>array_fromstring</c> after its first argument: <paramref name="sep"/>'s <c>"s"</c> conversion and the removed
+        ///     binary mode, then <c>PyArray_FromString</c> (<see cref="ArrayFileIO.FromString"/>: its dtype checks and the text
+        ///     read).
         /// </summary>
         /// <param name="data">The text's bytes.</param>
         /// <param name="dtype">The dtype (null: float64).</param>
@@ -96,22 +97,12 @@ namespace NumSharp
         /// <exception cref="ValueError">NumPy's refusals and read errors (see the public overloads).</exception>
         private static NDArray FromStringBytes(byte[] data, DType dtype, long count, string sep, NDArray like)
         {
-            byte[] sepBytes = sep == null ? null : CStringArgument(sep);
+            byte[] sepBytes = sep == null ? null : ArrayFileIO.CStringArgument(sep);
             _ = like;
             // The binary mode (no separator) is gone in NumPy 2.x: it raises rather than reinterpret the bytes.
             if (sepBytes == null || sepBytes.Length == 0)
                 throw new ValueError("The binary mode of fromstring is removed, use frombuffer instead");
-            dtype ??= float64;
-            // A dtype whose items hold references (StringDType: a cell points into its buffer's allocator) cannot be filled
-            // from text, whatever the text or the count.
-            if (dtype.Meta is VStringDTypeMeta)
-                throw new ValueError("Cannot create an object array from a string");
-            // A fixed-width string dtype: an unsized class first, then any dtype without a text element reader.
-            if (Backends.Strings.NDStringStorage.IsString(dtype))
-                throw new ValueError(dtype.itemsize == 0
-                    ? "zero-valued itemsize"
-                    : "don't know how to read character strings with that array type");
-            return NumPyTextScan.FromString(data, dtype, count, sepBytes);
+            return ArrayFileIO.FromString(data, dtype, count, sepBytes);
         }
     }
 }
