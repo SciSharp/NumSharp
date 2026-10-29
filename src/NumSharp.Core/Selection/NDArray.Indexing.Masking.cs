@@ -24,6 +24,11 @@ namespace NumSharp
         [SuppressMessage("ReSharper", "CoVariantArrayConversion")]
         private protected NDArray GetMasked(NDArray<bool> mask)
         {
+            // A 0-d mask is NumPy's HAS_0D_BOOL (HAS_BOOL on a 0-d array): MapIter's copy keeps this array's memory order,
+            // which the C-order gather below did not (an F-ordered or broadcast source gave a C-ordered result).
+            if (mask.ndim == 0)
+                return ZeroDBoolSelection((bool)mask);
+
             // NumPy boolean indexing (numpy/_core/src/multiarray/mapping.c):
             // the mask matches a leading PREFIX of arr's shape — mask.ndim <= arr.ndim
             // and mask.shape == arr.shape[:mask.ndim]. For each True (in C-order) the
@@ -52,6 +57,87 @@ namespace NumSharp
 
             // The mask does not match a leading prefix of the array shape: NumPy's prepare_index error.
             throw BooleanIndexError(mask);
+        }
+
+        /// <summary>
+        ///     <c>a[True]</c> / <c>a[False]</c> (GET) for a lone Python bool or 0-d bool array: NumPy's <c>HAS_0D_BOOL</c> — an
+        ///     ADVANCED index that adds one leading axis of length 1 (True) or 0 (False) and consumes none — and, on a 0-d
+        ///     array, <c>HAS_BOOL</c>, whose boolean subscript gives the same <c>(1,)</c> / <c>(0,)</c> answer.
+        /// </summary>
+        /// <param name="selected">The bool.</param>
+        /// <returns>A new array of shape <c>(1,) + a.shape</c> holding a copy of this array, laid out in this array's memory
+        ///     order (MapIter's subspace keeps the source's strides: an F-ordered source gives an F-ordered result, a broadcast
+        ///     one keeps its stride-0 axis innermost); or a new empty array of shape <c>(0,) + a.shape</c>. Never a view.</returns>
+        /// <remarks>
+        ///     The KEEPORDER copy of the new-axis view reproduces MapIter's layout. Two routes used to answer instead: the mask
+        ///     route (a boolean gather in C order, for a 0-d bool ARRAY) and a fixed-width string array's unit route (for a C#
+        ///     bool too), both C-ordered whatever the source's order. The new-axis view is built from the storage
+        ///     (<see cref="NumSharp.Backends.UnmanagedStorage.GetView(Slice[])"/>), not through <c>np.expand_dims</c>: a public function would see
+        ///     an <see cref="NDMatrix"/> object indexed through an <see cref="NDArray"/> reference as a matrix operand
+        ///     (<see cref="NDMatrixBoundary"/>). The result keeps this array's lane-sharing C-type class
+        ///     (<see cref="KeepLaneSharingClass"/>).
+        /// </remarks>
+        private protected NDArray ZeroDBoolSelection(bool selected)
+        {
+            // The new-axis view is this call's own: only the copy (or the empty array) leaves.
+            using var expanded = new NDArray(Storage.GetView(new[] { Slice.NewAxis }));
+            if (selected)
+                return KeepLaneSharingClass(expanded.copy('K'));
+            var emptyDims = (long[])expanded.Shape.dimensions.Clone();
+            emptyDims[0] = 0;
+            return KeepLaneSharingClass(np.empty(Shape.Adopt(emptyDims), dtype));
+        }
+
+        /// <summary>
+        ///     A new 0-d boolean mask holding <paramref name="selected"/>: the 0-d bool array NumPy's <c>prepare_index</c> makes
+        ///     of a Python bool (<c>PyArray_FROM_O(True)</c>), typed for <see cref="SetMasked"/>.
+        /// </summary>
+        /// <param name="selected">The bool.</param>
+        /// <returns>The mask. The caller owns it and disposes it.</returns>
+        /// <remarks>The typed wrapper is an alias (<see cref="MakeGeneric{T}"/>) with its own counted reference, so the untyped
+        ///     0-d array is released at once; <see cref="AsGeneric{T}"/> could hand back the very object the <c>using</c>
+        ///     releases.</remarks>
+        private static NDArray<bool> ZeroDBoolMask(bool selected)
+        {
+            using var scalar = NDArray.Scalar(selected);
+            return scalar.MakeGeneric<bool>();
+        }
+
+        /// <summary>
+        ///     The index tuple with every C# <see cref="bool"/> entry replaced by the 0-d bool array NumPy's
+        ///     <c>prepare_index</c> makes of a Python bool (<c>PyArray_FROM_O(True)</c>), so that a bool beside other entries
+        ///     takes the routes written for an <c>np.array(True)</c> entry: <c>HAS_0D_BOOL</c>, an advanced index adding one
+        ///     axis of length 1 or 0 that broadcasts with the other advanced entries and joins their block.
+        /// </summary>
+        /// <param name="entries">The normalized index tuple; not modified.</param>
+        /// <returns><paramref name="entries"/> itself when it holds no C# bool; else a new tuple whose bool entries are new
+        ///     0-d bool arrays.</returns>
+        /// <remarks>
+        ///     <para>
+        ///     The C# bool was read by routes of its own, which treated it as a basic index: a newaxis for True, an early
+        ///     return for False. So <c>a[True, True]</c> and <c>a[True, False]</c> raised a mask IndexError, <c>a[False, 0]</c>
+        ///     and <c>a[1:3, False]</c> a NullReferenceException, <c>a[True, [0, 2]]</c> returned the wrong elements,
+        ///     <c>a[True, 0]</c> a view where NumPy copies, and a False store skipped NumPy's value check.
+        ///     </para>
+        ///     <para>
+        ///     Lifetime: the arrays made here are left to the caller's <see cref="NDScopedAttribute"/> scope (the
+        ///     <c>FetchIndices</c> / <c>SetIndices</c> dispatches), which reclaims them after the index is resolved; the copy
+        ///     keeps them out of the caller's own key array, which outlives the scope.
+        ///     </para>
+        /// </remarks>
+        [NDScopedCovered] // callers: the [NDScoped] FetchIndices(object[]) and SetIndices(object[], values) dispatches
+        private static object[] BoolEntriesAsArrays(object[] entries)
+        {
+            object[] converted = null;
+            for (int i = 0; i < entries.Length; i++)
+            {
+                if (entries[i] is bool b)
+                {
+                    converted ??= (object[])entries.Clone();
+                    converted[i] = NDArray.Scalar(b);
+                }
+            }
+            return converted ?? entries;
         }
 
         /// <summary>

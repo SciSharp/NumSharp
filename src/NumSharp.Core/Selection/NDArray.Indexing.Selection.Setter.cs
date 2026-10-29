@@ -205,6 +205,10 @@ namespace NumSharp
             // by the Try* helpers below. `this`/`values` were made outside: never touched.
 
             indicesObjects = NormalizeIndexInputs(indicesObjects);    // tuple spread + mask/sequence coercion
+            // A C# bool beside other entries is NumPy's 0-d bool array (prepare_index's PyArray_FROM_O): the routes below
+            // are written for that spelling (TryBuild0dBoolWithBasic, the multi-advanced grid). A lone bool keeps its case.
+            if (indicesObjects.Length > 1)
+                indicesObjects = BoolEntriesAsArrays(indicesObjects);
             var indicesLen = indicesObjects.Length;
             if (indicesLen == 1)
             {
@@ -249,11 +253,15 @@ namespace NumSharp
                         new NDArray(Storage.GetView(Slice.Index((long)ui))).SetData(values, new int[0]);
                         return;
                     case bool boolean:
-                        if (boolean == false)
-                            return; //do nothing
-
-                        SetData(values, new int[0]);
-                        return; // np.expand_dims(this, 0); //equivalent to [np.newaxis]
+                    {
+                        // NumPy's prepare_index reads a Python bool as the 0-d bool array PyArray_FROM_O makes of it: the
+                        // 0-d mask's store (SetAdvanced's, for a caller that reaches this dispatch directly). It used to
+                        // store into the whole array for True — no new axis, so the value was checked against a.shape with
+                        // the view's text — and to do nothing for False, without NumPy's conversion or value check.
+                        using var zeroDMask = ZeroDBoolMask(boolean);
+                        SetMasked(zeroDMask, values);
+                        return;
+                    }
 
                     case int[] coords:
                         // A raw int[]/long[] as the SOLE index is FANCY scatter — NumPy
@@ -307,7 +315,14 @@ namespace NumSharp
             {
                 if (boolVal)
                 {
-                    this[boolBasic] = values;
+                    // HAS_0D_BOOL is advanced indexing: NumPy's MapIter checks the value against the indexing result —
+                    // the shape of the newaxis view built here — with ITS text ("shape mismatch: value array of shape
+                    // (5,) could not be broadcast to indexing result of shape (1,4)") before any element is written. The
+                    // view assignment raised the view's text instead (AssignArray's "could not broadcast input array from
+                    // shape (5,) into shape (1,4)"). A value that passes stores the same elements either way. None (null,
+                    // which a text array's store converts itself) is a scalar: nothing to check.
+                    var selection = this[boolBasic];
+                    this[boolBasic] = values is null ? null : PrepareAssignedValue(values, selection.Shape.dimensions);
                     return;
                 }
                 // any-False -> the selection is EMPTY (size 0 along boolAxis), but NumPy still

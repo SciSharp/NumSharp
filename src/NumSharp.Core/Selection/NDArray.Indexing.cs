@@ -336,9 +336,15 @@ namespace NumSharp
         ///     arrays that do not broadcast together, or an entry that is not a valid index (NumPy's texts).</exception>
         /// <remarks>A fixed-width string array's ADVANCED index runs on its unit view (NumPy's <c>prepare_index</c> first,
         ///     against this array's rank); every other array takes <see cref="FetchIndices(object[])"/>, whose result keeps
-        ///     this array's lane-sharing C-type class.</remarks>
+        ///     this array's lane-sharing C-type class. A lone Python bool is <see cref="ZeroDBoolSelection"/>'s, for every dtype
+        ///     (the string route would lay its copy out in C order); a lone 0-d bool array reaches it through the mask route
+        ///     (<see cref="GetMasked"/>).</remarks>
         private protected NDArray GetAdvanced(object[] indicesObjects)
         {
+            // A lone Python bool (NumPy reads it as the 0-d bool array PyArray_FROM_O makes): HAS_0D_BOOL, and HAS_BOOL on a
+            // 0-d array, the same answer — a copy of the array with one new leading axis of length 1 or 0.
+            if (indicesObjects.Length == 1 && indicesObjects[0] is bool selected)
+                return ZeroDBoolSelection(selected);
             // A string array's ADVANCED index (arrays, masks, bools) runs on its unit view; basic indices (slices,
             // integers) are views and take the ordinary path.
             if (typecode == NPTypeCode.String && TryStringAdvancedIndex(ref indicesObjects, out var normalized))
@@ -364,9 +370,24 @@ namespace NumSharp
         ///     <c>shape mismatch: value array of shape ... could not be broadcast to indexing result of shape ...</c>).</exception>
         /// <exception cref="IndexError">The index is invalid (NumPy's <c>prepare_index</c> texts).</exception>
         /// <exception cref="OverflowException">A C# integer outside this array's integer dtype.</exception>
+        /// <exception cref="TypeError">A value of two or more dimensions through a lone Python bool on a 0-d array (NumPy's
+        ///     boolean assignment, <see cref="ThrowIfBooleanSubscriptAssignMismatch"/>).</exception>
+        /// <remarks>A lone Python bool is the 0-d mask's store (<see cref="SetMasked"/>), for every dtype, as a lone 0-d bool
+        ///     array already was: NumPy's <c>prepare_index</c> reads a Python bool as the 0-d bool array <c>PyArray_FROM_O</c>
+        ///     makes of it, which is the full mask of a 0-d array (<c>HAS_BOOL</c>: the boolean assignment and its texts) and on
+        ///     any other array a fancy index adding one axis of length 1 or 0 (<c>HAS_0D_BOOL</c>: the value converted first —
+        ///     an empty selection still raises the conversion's OverflowError — then checked against <c>(1|0,) + shape</c>
+        ///     with MapIter's text).</remarks>
         private void SetAdvanced(object[] indicesObjects, NDArray value)
         {
             ThrowIfNotWriteable();
+            if (indicesObjects.Length == 1 && indicesObjects[0] is bool selected)
+            {
+                // The mask is this call's own; the store copies from the value, so it is released at once.
+                using var zeroDMask = ZeroDBoolMask(selected);
+                SetMasked(zeroDMask, value);
+                return;
+            }
             if (typecode == NPTypeCode.String && TryStringAdvancedIndex(ref indicesObjects, out var normalized))
             {
                 // NumPy validates the index (prepare_index) before it converts the value.

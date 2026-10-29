@@ -176,6 +176,10 @@ namespace NumSharp
         private NDArray FetchIndices(object[] indicesObjects)
         {
             indicesObjects = NormalizeIndexInputs(indicesObjects);    // tuple spread + mask/sequence coercion
+            // A C# bool beside other entries is NumPy's 0-d bool array (prepare_index's PyArray_FROM_O): the routes below
+            // are written for that spelling (TryBuild0dBoolWithBasic, the multi-advanced grid). A lone bool keeps its case.
+            if (indicesObjects.Length > 1)
+                indicesObjects = BoolEntriesAsArrays(indicesObjects);
             var indicesLen = indicesObjects.Length;
             if (indicesLen == 1)
             {
@@ -214,20 +218,12 @@ namespace NumSharp
                         // uint64 scalar like any other integer: a[np.uint64(1)] == a[1].
                         return new NDArray(Storage.GetData((int)ui));
                     case bool boolean:
-                    {
                         // NumPy's HAS_0D_BOOL: a scalar bool is an ADVANCED index (prepare_index makes it a zeros index
                         // array of length 1 / 0 on a new leading axis), so the result is a fresh array — never a view —
-                        // of shape (1, ...) for True and (0, ...) for False. MapIter lays the subspace out in the source's
-                        // memory order, which a KEEPORDER copy of the new-axis view reproduces (a transposed source's
-                        // a[True] is (12, 1, 4)-strided, a broadcast one's keeps the stride-0 axis innermost).
+                        // of shape (1, ...) for True and (0, ...) for False, in the source's memory order (see
+                        // ZeroDBoolSelection, shared with a 0-d bool array's mask route).
                         // (The view this returned for True shared memory, and False returned the dims-less sentinel.)
-                        var expanded = np.expand_dims(this, 0);
-                        if (boolean)
-                            return expanded.copy('K');
-                        var emptyDims = (long[])expanded.Shape.dimensions.Clone();
-                        emptyDims[0] = 0;
-                        return np.empty(Shape.Adopt(emptyDims), dtype);
-                    }
+                        return ZeroDBoolSelection(boolean);
 
                     case int[] coords:
                         // A raw int[]/long[] as the SOLE index is FANCY indexing — NumPy
