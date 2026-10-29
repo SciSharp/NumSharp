@@ -908,7 +908,7 @@ namespace NumSharp.Backends.Strings
             // b's reshape error, raised by the reshape itself.
             long n = a.size;
             if (b.size != n)
-                np.reshape(b, new long[] { n });
+                b.reshape(new long[] { n });
             if (n > 0)
             {
                 string x = PyObjectTypeName(a, 0);

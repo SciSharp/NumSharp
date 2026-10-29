@@ -56,7 +56,7 @@ namespace NumSharp
             try
             {
                 o = new NDArray(r.typecode, layout, false);
-                ov = np.transpose(o, layout.DenseAxisOrder());   // C-contiguous over r's (transposed) dims
+                ov = o.TensorEngine.Transpose(o, layout.DenseAxisOrder());   // C-contiguous over r's (transposed) dims
                 UnmanagedStorage.Copyto(ov, r, NPY_CASTING.NPY_SAME_KIND_CASTING);
                 var done = o;
                 o = null;

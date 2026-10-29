@@ -1129,7 +1129,7 @@ namespace NumSharp.Backends.Strings
                 return null;
             if (SameElements(result, input))
                 return null;
-            return np.copy(input);
+            return input.copy('K');   // np.copy's order: K keeps the input's layout (the method's default is C)
         }
 
         /// <summary>Whether two arrays are the same elements: one address, one shape, one set of strides.</summary>

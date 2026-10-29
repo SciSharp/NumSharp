@@ -65,7 +65,7 @@ namespace NumSharp.Backends
             // does. Preserve symmetry with NonZero — recurse via atleast_1d.
             if (nd.ndim == 0)
             {
-                var promoted = np.atleast_1d(nd);
+                var promoted = nd.reshape(1);   // np.atleast_1d of a 0-d array: its (1,) view
                 var flat = FlatNonZero(promoted);
                 promoted.Dispose(); // 1-element view wrapper of the scalar's buffer
                 return flat;

@@ -420,7 +420,7 @@ namespace NumSharp.Backends.Strings
                         from[i] = numpyAxis + i;
                         to[i] = i;
                     }
-                    r = np.moveaxis(r, from, to);
+                    r = r.TensorEngine.MoveAxis(r, from, to);
                 }
                 if (target is not null)
                     UnmanagedStorage.Copyto(target, r, NPY_CASTING.NPY_UNSAFE_CASTING);

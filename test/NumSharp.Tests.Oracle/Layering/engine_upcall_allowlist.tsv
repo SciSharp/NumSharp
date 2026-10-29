@@ -3,16 +3,16 @@
 # engine member or the family core instead, or pin it here by hand with a reason in a fourth column. After a drop,
 # rerun the test with NUMSHARP_WRITE_LAYERING_ALLOWLIST=1 and commit.
 # path<TAB>computations<TAB>structural[<TAB># reason]
-Backends/Default/Indexing/Default.Argwhere.cs	0	2
+Backends/Default/Indexing/Default.Argwhere.cs	0	1
 Backends/Default/Indexing/Default.BooleanMask.cs	0	2
-Backends/Default/Indexing/Default.FlatNonZero.cs	0	2
-Backends/Default/Indexing/Default.NonZero.cs	0	2
+Backends/Default/Indexing/Default.FlatNonZero.cs	0	1
+Backends/Default/Indexing/Default.NonZero.cs	0	1
 Backends/Default/Indexing/Default.Trace.cs	0	1	# np.trace's body moved by P1b: np.ascontiguousarray(diag) before the sum until P6 gives the engine its own copy (the out= route's np.copyto went with P1d: ReduceAdd's out operand)
 Backends/Default/Math/BLAS/Default.Dot.NDMD.cs	0	1
 Backends/Default/Math/BLAS/Default.MatMul.2D2D.cs	0	1
 Backends/Default/Math/BLAS/Default.MatMul.cs	0	3
 Backends/Default/Math/Default.ATan2.cs	0	1
-Backends/Default/Math/Default.ClipNDArray.cs	0	6
+Backends/Default/Math/Default.ClipNDArray.cs	0	2
 Backends/Default/Math/Default.DivMod.cs	0	2
 Backends/Default/Math/Default.GcdLcm.cs	0	1
 Backends/Default/Math/Default.Modf.cs	0	1
@@ -21,38 +21,34 @@ Backends/Default/Math/Default.Power.cs	0	2
 Backends/Default/Math/Default.Shift.cs	0	1
 Backends/Default/Math/DefaultEngine.BinaryOp.cs	0	1
 Backends/Default/Math/DefaultEngine.BitwiseOp.cs	0	3
-Backends/Default/Math/DefaultEngine.Evaluate.MinMaxAxis.cs	0	1
 Backends/Default/Math/DefaultEngine.Evaluate.cs	0	3
 Backends/Default/Math/DefaultEngine.ReductionOp.cs	0	1
 Backends/Default/Math/Reduction/Default.Reduction.MinMax.Keywords.cs	0	1
 Backends/Default/Math/Reduction/Default.Reduction.NanVarStd.cs	0	2
-Backends/Default/Math/Reduction/Default.Reduction.VarStd.cs	0	5
+Backends/Default/Math/Reduction/Default.Reduction.VarStd.cs	0	2
 Backends/Default/Sorting/AxisSort.cs	0	1
 Backends/Default/Sorting/TextSearch.cs	0	1
-Backends/Default/Sorting/VStringDistinct.cs	0	2
+Backends/Default/Sorting/VStringDistinct.cs	0	1
 Backends/Default/Sorting/VStringSearch.cs	0	3
 Backends/Iterators/NDIter.cs	0	1
 Backends/Iterators/NDIterCasting.cs	0	2
 Backends/Kernels/BinaryKernel.cs	0	1
 Backends/Kernels/ComparisonRun.cs	0	1
 Backends/Kernels/ILKernelGenerator.Polynomial.Typing.cs	0	1
-Backends/NDArray.AdoptLayout.cs	0	1
 Backends/NDArray.Container.cs	0	1
 Backends/NDArray.PythonLiteral.cs	0	2
 Backends/NDArray.cs	0	2
 Backends/Strings/NDCharObjectPath.Mod.cs	0	1
 Backends/Strings/NDCharObjectPath.cs	0	2
 Backends/Strings/NDStringArrays.cs	0	1
-Backends/Strings/NDStringCopy.cs	0	2
+Backends/Strings/NDStringCopy.cs	0	1
 Backends/Strings/NDStringMethods.cs	9	5	# numpy.strings' own Python statements (the computed-width wrappers' sizing: np.amax, np.where, np.minimum, np.subtract, np.multiply, np.add, np.less): the text API's own pass (plan section 8), not the engine's
 Backends/Strings/NDStringRepeatReduction.cs	0	2
-Backends/Strings/NDStringUfuncs.VString.cs	0	1
 Backends/Strings/NDTextNumericReduction.cs	0	1
-Backends/Strings/NDVStringArithmetic.cs	0	1
 Backends/Strings/NDVStringMove.cs	0	3
-Backends/Strings/NDVStringReduction.cs	0	6
-Backends/Strings/NDVStringStatistics.Quantile.cs	0	4
+Backends/Strings/NDVStringReduction.cs	0	4
+Backends/Strings/NDVStringStatistics.Quantile.cs	0	3
 Backends/Strings/NDVStringStatistics.cs	0	1
-Backends/TensorEngine.LinearAlgebra.cs	0	5
+Backends/TensorEngine.LinearAlgebra.cs	0	3
 Backends/Unmanaged/UnmanagedStorage.Setters.cs	0	1
 Backends/Unmanaged/VStringArraySlice.cs	0	1

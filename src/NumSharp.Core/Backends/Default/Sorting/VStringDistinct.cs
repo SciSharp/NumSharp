@@ -272,7 +272,7 @@ namespace NumSharp.Backends.Sorting
             // gathered (the NAs left out: a None-like NA must not be compared) and sorted.
             bool whole = m == ar.size;
             using var picks = whole ? null : np.array(texts);
-            using var subset = whole ? null : np.take(ar, picks);
+            using var subset = whole ? null : UnmanagedStorage.TakeFrom(ar, picks, null, null, np.ClipModeRaise);
             NDArray sorted = subset ?? ar;
             using var order = AxisSort.ArgSortVString(sorted, 0, stable: true);
             // The argsort's result is a fresh C-contiguous int64 array: read it through its pointer, not per-element calls.

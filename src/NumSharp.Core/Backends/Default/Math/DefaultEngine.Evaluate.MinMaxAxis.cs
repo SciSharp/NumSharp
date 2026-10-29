@@ -545,7 +545,7 @@ namespace NumSharp.Backends
             NDArray view = null;
             try
             {
-                view = np.transpose(buffer, axes);
+                view = buffer.TensorEngine.Transpose(buffer, axes);
                 EvaluateCore(child, inputs, view);   // writes through the view into the buffer
                 return view;
             }

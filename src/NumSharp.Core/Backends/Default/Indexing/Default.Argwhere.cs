@@ -66,7 +66,7 @@ namespace NumSharp.Backends
             // away: a (count, 0) VIEW of the promoted result's buffer, keeping its strides (8, 8 for a truthy element).
             if (nd.ndim == 0)
             {
-                var promoted = np.atleast_1d(nd);
+                var promoted = nd.reshape(1);   // np.atleast_1d of a 0-d array: its (1,) view
                 var full = ArgwhereContiguousOrMaterialize(promoted);
                 promoted.Dispose(); // 1-element view wrapper of the scalar's buffer
                 var fs = full.Shape;

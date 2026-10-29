@@ -427,10 +427,10 @@ namespace NumSharp.Backends
             // The transposes below are this engine method's own views: np.transpose must not apply its matrix rule
             // to a caller's matrix (a bound or an out; np.clip's own rule covers the clipped array).
             using var plain = identity ? default : NDMatrixBoundary.PlainFor(new[] { lhs, min, max, @out });
-            NDArray xv = identity ? lhs : np.transpose(lhs, perm);
-            NDArray minv = minArray ? (identity ? min : np.transpose(min, perm)) : min;
-            NDArray maxv = maxArray ? (identity ? max : np.transpose(max, perm)) : max;
-            NDArray outv = @out is null ? null : (identity ? @out : np.transpose(@out, perm));
+            NDArray xv = identity ? lhs : lhs.TensorEngine.Transpose(lhs, perm);
+            NDArray minv = minArray ? (identity ? min : min.TensorEngine.Transpose(min, perm)) : min;
+            NDArray maxv = maxArray ? (identity ? max : max.TensorEngine.Transpose(max, perm)) : max;
+            NDArray outv = @out is null ? null : (identity ? @out : @out.TensorEngine.Transpose(@out, perm));
 
             if (!IsFlatRun(xv) || (minArray && !IsFlatRun(minv)) || (maxArray && !IsFlatRun(maxv))
                 || (outv is not null && !IsFlatRun(outv)))

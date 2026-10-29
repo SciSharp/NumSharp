@@ -75,7 +75,7 @@ namespace NumSharp.Backends
             // historical implementation has always produced. Preserve that semantic
             // (otherwise this becomes a breaking-change PR for downstream callers).
             if (nd.ndim == 0)
-                return NonZero(np.atleast_1d(nd));
+                return NonZero(nd.reshape(1));   // np.atleast_1d of a 0-d array: its (1,) view
 
             int ndim = nd.ndim;
             long size = nd.size;

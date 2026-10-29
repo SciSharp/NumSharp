@@ -559,7 +559,7 @@ namespace NumSharp.Backends
 
                 src[axis] = new Slice(a0, a0 + r);
                 var arrBlock = arr[src];
-                var logical = np.transpose(block, inverse);
+                var logical = block.TensorEngine.Transpose(block, inverse);
                 FillSquaredDeviations(arrBlock, mean, logical, xT, square, eager);
                 logical.Dispose();
                 arrBlock.Dispose();
@@ -594,7 +594,9 @@ namespace NumSharp.Backends
                     continue;
                 keptAxes[j++] = Array.IndexOf(keptOrder, d);
             }
-            var accLogical = np.transpose(acc.reshape(Shape.Adopt(keptMem)), keptAxes);
+            // np.transpose's body (the array's own engine member), over the accumulator viewed in the kept axes' memory
+            // order; the reshape keeps acc's engine, so acc.TensorEngine is the view's.
+            var accLogical = acc.TensorEngine.Transpose(acc.reshape(Shape.Adopt(keptMem)), keptAxes);
 
             var reduced = new long[nd - 1];
             for (int d = 0, k = 0; d < nd; d++)
@@ -664,7 +666,9 @@ namespace NumSharp.Backends
 
             // arr's elements in MEMORY order as one 1-D view: a dense layout transposed into its memory order is
             // C-contiguous, so the reshape is a view; a 1-D operand already is that order (any stride).
-            NDArray run = arr.ndim <= 1 ? arr.reshape(n) : np.transpose(arr, arr.Shape.DenseAxisOrder()).reshape(n);
+            NDArray run = arr.ndim <= 1
+                ? arr.reshape(n)
+                : arr.TensorEngine.Transpose(arr, arr.Shape.DenseAxisOrder()).reshape(n);
 
             byte* slot = stackalloc byte[16];
             double accD = 0d;

@@ -265,7 +265,7 @@ namespace NumSharp.Backends.Strings
             // (NumPy's iterator copies the operand; its first-element copy then reads the original, which is the same text).
             NDArray overlapCopy = ReferenceEquals(result, @out)
                                   && NDMemOverlap.SolveMayShareMemory(result, a, maxWork: 0) != MemOverlap.No
-                ? np.copy(a)
+                ? a.copy('K')   // np.copy's order: K keeps the input's layout (the method's default is C)
                 : null;
             try
             {
@@ -1244,7 +1244,7 @@ namespace NumSharp.Backends.Strings
                 if (!castOut && !castInput && NDMemOverlap.SolveMayShareMemory(@out, input, maxWork: 0) != MemOverlap.No
                     && !SameElements(@out, input))
                 {
-                    overlapCopy = np.copy(src);
+                    overlapCopy = src.copy('K');   // np.copy's order: K keeps the source's layout
                     src = overlapCopy;
                 }
                 if (!castOut)

@@ -86,7 +86,7 @@ namespace NumSharp
             {
                 long n = a.size;
                 if (b.size != n)
-                    np.reshape(b, new long[] {n});
+                    b.reshape(new long[] {n});
                 throw Backends.Strings.NDStringUfuncs.NoItemsize();
             }
             var blas = Blas;
@@ -99,7 +99,7 @@ namespace NumSharp
             // is why a length mismatch surfaces as a reshape error and never as the
             // "vectors have different lengths" the C code below it still carries.
             var left = np.ravel(a);
-            var right = np.reshape(b, new long[] {left.size});
+            var right = b.reshape(new long[] {left.size});
             return Dot(LinAlgHelper.Conjugate(left), right);
         }
 

@@ -160,7 +160,7 @@ namespace NumSharp.Backends.Strings
             // walked backward. Viewing the verdicts in that order makes the flat C-order argmax the first visited hit.
             long[] dstStrides = dstShape.strides;
             int[] perm = Enumerable.Range(0, nd).OrderByDescending(d => Math.Abs(dstStrides[d])).ToArray();
-            NDArray ordered = nd > 1 ? np.transpose(hit, perm) : hit.view();
+            NDArray ordered = nd > 1 ? hit.TensorEngine.Transpose(hit, perm) : hit.view();
             try
             {
                 for (int j = 0; j < nd; j++)
