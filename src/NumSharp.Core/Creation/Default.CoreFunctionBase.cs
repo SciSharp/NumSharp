@@ -21,6 +21,11 @@ namespace NumSharp.Backends
             // reaches the allocation (whose own text would be `negative dimensions are not allowed`).
             ValidateSampleCount(num);
             np.ValidateDevice(device);
+            // A text dtype (S, U or StringDType: the String storage lane) has no typed fill. NumPy computes the float64
+            // samples (issubdtype(dtype, integer) is false: no floor) and its final astype formats them, so
+            // np.linspace(0, 1, 5, dtype='U5') is ['0.0', '0.25', '0.5', '0.75', '1.0'].
+            if (dtype != null && dtype.GetTypeCode() == NPTypeCode.String)
+                return CastSpacingResult(LinspaceCore(start, stop, num, endpoint, NPTypeCode.Double), dtype);
             return LinspaceCore(start, stop, num, endpoint, dtype?.GetTypeCode() ?? NPTypeCode.Double);
         }
 

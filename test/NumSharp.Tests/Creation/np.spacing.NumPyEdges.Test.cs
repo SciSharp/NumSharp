@@ -125,5 +125,33 @@ namespace NumSharp.Tests.Creation
             // a subnormal step that does not underflow keeps i * step + start: np.linspace(1e-320, 2e-320, 49)[:6]
             Bits(np.linspace(1e-320, 2e-320, 49)).Should().StartWith(new long[] { 2024, 2066, 2108, 2150, 2192, 2234 });
         }
+
+        // ------------------------------------------------------------------------------------------------ text dtypes
+
+        /// <summary>
+        ///     A text dtype is NumPy's final <c>astype</c> of the float64 samples (no floor: it is not an integer dtype);
+        ///     NumSharp refused it (<c>NotSupportedException</c>: a dtype asked for by storage lane).
+        /// </summary>
+        [TestMethod]
+        public void Linspace_TextDtype_FormatsTheFloat64Samples()
+        {
+            // repr(np.linspace(0.0, 1.0, 5, dtype=...)) and friends, NumPy 2.4.2
+            var u = np.linspace(0.0, 1.0, 5, dtype: "U5");
+            u.ToString(true).Should().Be("array(['0.0', '0.25', '0.5', '0.75', '1.0'], dtype='<U5')");
+            u.flags.owndata.Should().BeTrue();
+            np.linspace(0.0, 1.0, 5, dtype: "S5").ToString(true)
+                .Should().Be("array([b'0.0', b'0.25', b'0.5', b'0.75', b'1.0'], dtype='|S5')");
+            np.linspace(0.0, 1.0, 5, dtype: np.dtype("T")).ToString(true)
+                .Should().Be("array(['0.0', '0.25', '0.5', '0.75', '1.0'], dtype=StringDType())");
+            // a fixed width cuts the text: '10.0' -> '10.'
+            np.linspace(1.0, 10.0, 3, dtype: "U3").ToString(true).Should().Be("array(['1.0', '5.5', '10.'], dtype='<U3')");
+            // the unsized 'U' takes the width of the float64 text (32)
+            np.linspace(-1e300, 1e300, 3, dtype: "U").ToString(true)
+                .Should().Be("array(['-1e+300', '0.0', '1e+300'], dtype='<U32')");
+            np.linspace(0.0, 1.0, 4, endpoint: false, dtype: "U5").ToString(true)
+                .Should().Be("array(['0.0', '0.25', '0.5', '0.75'], dtype='<U5')");
+            np.linspace(0.0, 1.0, 1, dtype: "U5").ToString(true).Should().Be("array(['0.0'], dtype='<U5')");
+            np.linspace(0.0, 1.0, 0, dtype: "U5").ToString(true).Should().Be("array([], dtype='<U5')");
+        }
     }
 }

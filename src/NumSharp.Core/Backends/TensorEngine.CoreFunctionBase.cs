@@ -29,7 +29,9 @@ namespace NumSharp
         /// <param name="dtype">
         ///     The result dtype, or null for float64. The samples are computed in float64 and then converted: an integer
         ///     dtype FLOORS them (NumPy 1.20+'s <c>_nx.floor(y, out=y)</c> before the cast, not a truncation toward zero;
-        ///     char follows uint16), bool is <c>sample != 0</c>, complex128 takes the sample as its real part.
+        ///     char follows uint16), bool is <c>sample != 0</c>, complex128 takes the sample as its real part, and a text
+        ///     dtype (<c>S</c>, <c>U</c>, <c>StringDType</c>) formats them as NumPy's <c>astype</c> does (<c>'0.25'</c>,
+        ///     cut to the width of a fixed-width dtype).
         /// </param>
         /// <param name="device">NumPy's Array-API <c>device=</c>: only <c>"cpu"</c> and null are accepted. NumPy reads it
         ///     after the sample count (it is the ramp's np.arange that checks it), so a negative count is reported
@@ -45,11 +47,8 @@ namespace NumSharp
         /// </exception>
         /// <exception cref="ArgumentException"><paramref name="device"/> is neither null nor <c>"cpu"</c> (NumPy's
         ///     <c>Device not understood. Only "cpu" is allowed, but received: ...</c>, a ValueError there).</exception>
-        /// <exception cref="NotSupportedException">
-        ///     <paramref name="dtype"/> has no storage lane (a datetime descriptor), or is a text dtype (<c>S</c>, <c>U</c>,
-        ///     <c>StringDType</c>): DefaultEngine allocates the result by storage lane, which carries no string class or
-        ///     width.
-        /// </exception>
+        /// <exception cref="NotSupportedException"><paramref name="dtype"/> has no storage lane (a datetime
+        ///     descriptor).</exception>
         /// <remarks>
         ///     <c>np.linspace</c> calls this member of the default engine. An override must keep NumPy's arithmetic, which
         ///     code ported from NumPy reads: the floor of the integer dtypes, the exact last sample, one sample as

@@ -26,8 +26,8 @@ namespace NumSharp
         ///     non-negative.</c>), checked first, as NumPy checks it.</exception>
         /// <exception cref="ArgumentException">A <paramref name="device"/> other than <c>"cpu"</c>, checked after the
         ///     count.</exception>
-        /// <exception cref="NotSupportedException">A <paramref name="dtype"/> without a storage lane (a datetime descriptor)
-        ///     or a text dtype.</exception>
+        /// <exception cref="NotSupportedException">A <paramref name="dtype"/> without a storage lane (a datetime
+        ///     descriptor); a text dtype formats the float64 samples, as NumPy's astype does.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linspace.html
         ///     <para>Computed by the default engine's <see cref="TensorEngine.Linspace"/>: there is no operand to choose
         ///     another.</para></remarks>
