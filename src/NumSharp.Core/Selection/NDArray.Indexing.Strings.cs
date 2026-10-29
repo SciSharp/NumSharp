@@ -208,7 +208,7 @@ namespace NumSharp
                 // Python's None: STRING_setitem / UNICODE_setitem store any object by its str(), so None is the text 'None'
                 // (truncated to the width) at every selected element. It is a scalar, converted before the index is
                 // resolved like any text literal, and its conversion cannot fail.
-                using var none = NDStringArrays.FromScalar(null, ((StringDTypeMeta)dtype.Meta).singleton);
+                using var none = Backends.UnmanagedStorage.FromAnyScalar(null, ((StringDTypeMeta)dtype.Meta).singleton);
                 StringAdvancedSet(none, onUnits, onProxy);
                 return;
             }

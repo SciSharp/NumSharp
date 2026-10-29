@@ -44,10 +44,68 @@ namespace NumSharp.Backends
 	            case NPTypeCode.Decimal: return nd.ToMuliDimArray<decimal>();
 	            case NPTypeCode.Complex: return nd.ToMuliDimArray<System.Numerics.Complex>();
 	            // Text: a C# array of the decoded elements (string for U, byte[] for S) in the array's own shape.
-	            case NPTypeCode.String: return Backends.Strings.NDStringArrays.ToManagedArray(nd);
+	            case NPTypeCode.String: return TextToManagedArray(nd);
 	            default:
 		            throw new NotSupportedException();
             }
+        }
+
+        /// <summary>
+        ///     The explicit <c>(Array)</c> conversion of a fixed-width string array: a C# array of the array's shape whose
+        ///     elements are the decoded values — <see cref="string"/> for <c>U</c>, <c>byte[]</c> for <c>S</c>, trailing NULs
+        ///     stripped as NumPy's element access strips them (<c>arr.tolist()</c> with C# arrays instead of nested lists).
+        ///     A 0-d array becomes a one-element vector, as <c>ToMuliDimArray</c> does for the numeric dtypes.
+        /// </summary>
+        /// <param name="a">A string array of any layout (read in logical C order).</param>
+        /// <returns><c>string[]</c>, <c>string[,]</c>, ... or <c>byte[][]</c>, <c>byte[][,]</c>, ...</returns>
+        /// <exception cref="SystemError">A <c>U</c> unit above <c>U+10FFFF</c> (the decoder's refusal, as NumPy's).</exception>
+        /// <exception cref="InvalidOperationException">A dimension longer than a C# array can hold.</exception>
+        private static Array TextToManagedArray(NDArray a)
+        {
+            // StringDType: string elements, or object ones when the NA object is not a string / None (its NA elements carry
+            // that object).
+            var vparams = a.Storage.IsVString ? a.dtype.VString : null;
+            var elementType = vparams != null
+                ? (!vparams.HasNAObject || vparams.na_object is null || vparams.na_object is string ? typeof(string) : typeof(object))
+                : a.Storage.StringSlice.IsUnicode ? typeof(string) : typeof(byte[]);
+            var dims = a.Shape.dimensions;
+            if (dims.Length == 0)
+            {
+                var one = Array.CreateInstance(elementType, 1);
+                one.SetValue(a.Storage.GetAtIndex(0), 0);
+                return one;
+            }
+
+            var lengths = new int[dims.Length];
+            for (int d = 0; d < dims.Length; d++)
+                lengths[d] = dims[d] <= int.MaxValue
+                    ? (int)dims[d]
+                    : throw new InvalidOperationException($"Dimension {d} has {dims[d]} elements, more than a C# array holds.");
+            var result = Array.CreateInstance(elementType, lengths);
+            long n = a.size;
+            if (n == 0)
+                return result;
+
+            // A vector fills by flat index; higher ranks walk a C-order odometer in lockstep with the flat index, so each
+            // element is decoded once and stored at its coordinates (GetAtIndex resolves strides, offset and broadcast).
+            if (dims.Length == 1)
+            {
+                for (int i = 0; i < lengths[0]; i++)
+                    result.SetValue(a.Storage.GetAtIndex(i), i);
+                return result;
+            }
+            var coords = new int[dims.Length];
+            for (long flat = 0; flat < n; flat++)
+            {
+                result.SetValue(a.Storage.GetAtIndex(flat), coords);
+                for (int d = coords.Length - 1; d >= 0; d--)
+                {
+                    if (++coords[d] < lengths[d])
+                        break;
+                    coords[d] = 0;
+                }
+            }
+            return result;
         }
     }
 }

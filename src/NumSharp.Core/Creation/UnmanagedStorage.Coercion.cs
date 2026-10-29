@@ -43,7 +43,7 @@ namespace NumSharp.Backends
                 return Backends.Strings.NDVStringMove.StoreScalar(value, dtype);
             // A string dtype holds text: the value is encoded (str / bytes), not converted through IConvertible.
             if (dtype.Meta is StringDTypeMeta)
-                return Backends.Strings.NDStringArrays.FromScalar(value, dtype);
+                return Backends.UnmanagedStorage.FromAnyScalar(value, dtype);
             return new NDArray(UnmanagedStorage.Scalar(value, dtype.GetTypeCode()));
         }
 
@@ -60,7 +60,7 @@ namespace NumSharp.Backends
         {
             // Text values are 0-d fixed-width strings: a string is U (np.array('ab')), a byte[] is S (np.array(b'ab')).
             if (value is string || value is byte[])
-                return Backends.Strings.NDStringArrays.FromScalar(value, null);
+                return Backends.UnmanagedStorage.FromAnyScalar(value, null);
             return new NDArray(UnmanagedStorage.Scalar(value));
         }
 
@@ -81,7 +81,7 @@ namespace NumSharp.Backends
         /// <exception cref="OverflowException">An integer text outside an integer dtype's range.</exception>
         /// <exception cref="NotSupportedException">None without a dtype (NumPy's object array).</exception>
         internal static NDArray FromAnyScalar(object op, DType dtype)
-            => Strings.NDStringArrays.FromScalar(op, dtype);
+            => Build(Array.Empty<long>(), new List<object>(1) { op }, dtype, 'C');
 
         /// <summary>
         ///     The implicit conversion of a C# array (<c>NDArray x = new[] { 1, 2 }</c>) once its null pass-through ran: text
@@ -95,8 +95,8 @@ namespace NumSharp.Backends
         internal static NDArray FromManagedArray(Array array)
         {
             // Text values build a fixed-width string array (the same discovery as np.array); everything else is numeric.
-            if (Backends.Strings.NDStringArrays.IsTextInput(array, null))
-                return Backends.Strings.NDStringArrays.FromManaged(array, null, 0, 'C');
+            if (Backends.UnmanagedStorage.IsTextInput(array, null))
+                return Backends.UnmanagedStorage.FromManagedText(array, null, 0, 'C');
 
             bool isJaggedArray = array.GetType().GetElementType().IsArray;
             var underlying = array.ResolveElementType();

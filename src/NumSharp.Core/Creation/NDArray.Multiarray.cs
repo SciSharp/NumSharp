@@ -817,7 +817,7 @@ namespace NumSharp
 
             // A string request is satisfied only by a string array of that class AND width (an unsized 'U' adapts to the
             // array first); the storage lane alone would let a <U4 array pass for 'S' or 'U2'.
-            bool typeMatches = dtype == null || Backends.Strings.NDStringArrays.SatisfiesRequest(a, dtype);
+            bool typeMatches = dtype == null || Backends.UnmanagedStorage.SatisfiesRequest(a, dtype);
             bool layoutMatches = LayoutAlreadyOK(a.Shape, order);
             bool noCopyNeeded = typeMatches && layoutMatches;
 
@@ -878,8 +878,8 @@ namespace NumSharp
         {
             // Text values (string elements, an object array holding text, or a string dtype over object / byte[][] data)
             // build a fixed-width S/U array: NumPy's discovery of the class and the longest value, then setitem per element.
-            if (Backends.Strings.NDStringArrays.IsTextInput(array, dtype))
-                return Backends.Strings.NDStringArrays.FromManaged(array, dtype, ndmin, order);
+            if (Backends.UnmanagedStorage.IsTextInput(array, dtype))
+                return Backends.UnmanagedStorage.FromManagedText(array, dtype, ndmin, order);
             // A string dtype over a TYPED numeric C# array: the array is an ndarray of its element dtype (the house rule for
             // typed arrays), so NumPy's np.array(arr, dtype='U') casts it — the unsized class adapted to the array
             // (PyArray_AdaptDescriptorToArray: int32 -> <U11), each number written as its scalar's str().
@@ -960,13 +960,13 @@ namespace NumSharp
                     return NDArray.NoneForStore(dtype);
                 case NDArray nd:
                     return np.asarray(nd, dtype, order);
-                case Array textArr when Backends.Strings.NDStringArrays.IsTextInput(textArr, dtype):
+                case Array textArr when Backends.UnmanagedStorage.IsTextInput(textArr, dtype):
                     // Text (string[], an object[] holding str/bytes, or any array under a string dtype): NumPy's
                     // np.asanyarray of a list of str — a fixed-width string array.
-                    ret = Backends.Strings.NDStringArrays.FromManaged(textArr, dtype, 0, 'C');
+                    ret = Backends.UnmanagedStorage.FromManagedText(textArr, dtype, 0, 'C');
                     break;
                 case IEnumerable<string> texts:
-                    ret = Backends.Strings.NDStringArrays.FromManaged(texts.ToArray(), dtype, 0, 'C');
+                    ret = Backends.UnmanagedStorage.FromManagedText(texts.ToArray(), dtype, 0, 'C');
                     break;
                 case object[] objArr:
                     // object[] has no fixed dtype — route through type-promotion path.
@@ -1050,7 +1050,7 @@ namespace NumSharp
                     throw new NotSupportedException($"Unable to resolve asanyarray for type {type.Name}");
             }
 
-            if (dtype != null && !Backends.Strings.NDStringArrays.SatisfiesRequest(ret, dtype))
+            if (dtype != null && !Backends.UnmanagedStorage.SatisfiesRequest(ret, dtype))
                 ret = ret.astype(dtype, true);
 
             // Apply requested order (no-op for scalars / 1-D / already-matching layouts).

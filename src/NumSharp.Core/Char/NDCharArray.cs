@@ -313,7 +313,7 @@ namespace NumSharp
         {
             // np.array(value): the 0-d text array of the value's own class and length. Its wrapper is released once the
             // stand-in holds its own counted reference on the storage.
-            using var built = Backends.Strings.NDStringArrays.FromScalar(value, null);
+            using var built = Backends.UnmanagedStorage.FromAnyScalar(value, null);
             var scalar = new NDCharArray(built.Storage) { IsScalarStandIn = true };
             scalar.MarkReductionScalar();
             return scalar;

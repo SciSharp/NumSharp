@@ -73,7 +73,7 @@ namespace NumSharp
         private const string CmpMessage = "comparison must be '==', '!=', '<', '>', '<=', '>='";
 
         /// <summary>
-        ///     The unsized <c>S</c> request a list of bytes is built under: <see cref="NDStringArrays.FromManaged"/> then
+        ///     The unsized <c>S</c> request a list of bytes is built under: <see cref="Backends.UnmanagedStorage.FromManagedText"/> then
         ///     discovers the width (the longest value, at least 1), as NumPy's <c>np.array([b'ab', b'c'])</c> does.
         /// </summary>
         private static readonly DType s_bytesRequest = np.dtype("S");
@@ -334,7 +334,7 @@ namespace NumSharp
                     return NDArray.PythonBytesLiteral(bytes);
                 case IEnumerable<byte[]> values:
                     // A list of bytes: an S array as wide as its longest value.
-                    return NDStringArrays.FromManaged(values as byte[][] ?? values.ToArray(), s_bytesRequest, 0, 'C');
+                    return Backends.UnmanagedStorage.FromManagedText(values as byte[][] ?? values.ToArray(), s_bytesRequest, 0, 'C');
                 default:
                     return NDArray.FromPythonOperand(value);
             }

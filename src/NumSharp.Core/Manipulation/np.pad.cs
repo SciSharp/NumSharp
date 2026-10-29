@@ -352,8 +352,8 @@ namespace NumSharp
                     // Text stays text; a number becomes its 0-d array, which the area assignment writes as its str()
                     // (NumPy's _as_pairs makes every constant a NumPy scalar through np.array).
                     encoded[axis, side] = v is NDArray given ? given
-                        : v is string or byte[] or char ? Backends.Strings.NDStringArrays.FromScalar(v, null)
-                        : v is null ? Backends.Strings.NDStringArrays.FromScalar(null, array.dtype)
+                        : v is string or byte[] or char ? Backends.UnmanagedStorage.FromAnyScalar(v, null)
+                        : v is null ? Backends.UnmanagedStorage.FromAnyScalar(null, array.dtype)
                         : NDArray.Scalar(v);
                 }
 
@@ -1843,7 +1843,7 @@ namespace NumSharp
             // integer 300 out of bounds for int8") and casts into every other dtype, as the weak_scalar tier pins.
             if (value is string or byte[] && tc != NPTypeCode.String)
             {
-                using var text = Backends.Strings.NDStringArrays.FromScalar(value, null);
+                using var text = Backends.UnmanagedStorage.FromAnyScalar(value, null);
                 using var cast = text.astype(DType.From(tc), true, 'K', "unsafe");
                 return cast.GetAtIndex(0);
             }

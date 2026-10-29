@@ -928,7 +928,7 @@ namespace NumSharp.Backends.Strings
             {
                 case string s:
                     // An unsized U discovers its width from the text (np.asanyarray('') is <U1).
-                    return NDStringArrays.FromScalar(s, null);
+                    return Backends.UnmanagedStorage.FromAnyScalar(s, null);
                 case double d:
                     return NDArray.Scalar(PyFloatValue(d));
                 case float f:

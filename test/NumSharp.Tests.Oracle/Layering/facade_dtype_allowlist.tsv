@@ -9,7 +9,7 @@ APIs/np.fromfile.cs	6	0
 APIs/np.fromstring.cs	2	0
 APIs/np.iinfo.cs	1	21
 APIs/np.loadtxt.Parsers.cs	0	15
-APIs/np.loadtxt.Sinks.cs	24	0
+APIs/np.loadtxt.Sinks.cs	23	0
 APIs/np.loadtxt.cs	2	0
 APIs/np.memoryview.cs	2	16
 APIs/np.nditer.Typed.cs	0	1
@@ -58,10 +58,9 @@ Logic/np.min_scalar_type.cs	1	0
 Logic/np.type_checks.cs	2	15
 Manipulation/np.apply_along_axis.cs	0	1
 Manipulation/np.asscalar.cs	0	1
-Manipulation/np.copyto.Strings.cs	1	0
 Manipulation/np.copyto.cs	1	0
 Manipulation/np.delete.cs	0	20
-Manipulation/np.pad.cs	12	33
+Manipulation/np.pad.cs	9	33
 Math/NDArray.ComplexAccessors.cs	1	2
 Math/np.imag.cs	0	1
 Math/np.real.cs	0	1

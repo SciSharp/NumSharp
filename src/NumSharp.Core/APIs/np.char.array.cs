@@ -169,7 +169,7 @@ namespace NumSharp
                 ? TextClass(unicode ?? false).singleton
                 : TextDescr(unicode ?? false, itemsize.Value, unsizedAtZero: true);
             char layout = OrderResolver.ResolveBufferOrder(order ?? 'C');
-            NDArray built = NDStringArrays.FromValues(Array.Empty<long>(), new[] { obj }, request, layout);
+            NDArray built = Backends.UnmanagedStorage.FromValues(Array.Empty<long>(), new[] { obj }, request, layout);
             return NDCharArray.ViewOf(built);
         }
 
@@ -319,7 +319,7 @@ namespace NumSharp
                 char layout = OrderResolver.ResolveBufferOrder(order ?? 'K');
                 text = nd.size > 0 && nd.typecode is NPTypeCode.Double or NPTypeCode.Single or NPTypeCode.Half
                     ? FloatsAsText(nd, toUnicode, layout)
-                    : NDStringArrays.FromValues(ToListShape(nd), ToListValues(nd), request, layout);
+                    : Backends.UnmanagedStorage.FromValues(ToListShape(nd), ToListValues(nd), request, layout);
             }
             else
             {

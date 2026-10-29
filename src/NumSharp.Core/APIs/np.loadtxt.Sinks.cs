@@ -761,7 +761,7 @@ namespace NumSharp
                         return new NDArray(NDStringStorage.AllocationDescr(_descr), new Shape(0, cols), false);
                     if (_staged > 0)
                         return FinishStaged(rows, cols);
-                    return NDStringArrays.FromValues(new[] { rows, (long)cols }, _values, _descr);
+                    return Backends.UnmanagedStorage.FromValues(new[] { rows, (long)cols }, _values, _descr);
                 }
 
                 if (_presized is not null)
@@ -775,7 +775,7 @@ namespace NumSharp
 
             /// <summary>
             ///     The unsized class's result from the staged text: NumPy's <c>astype</c> of its object array of the fields
-            ///     (<see cref="NDStringArrays.FromValues"/> over the same strings / byte arrays) — the widest element decides
+            ///     (<see cref="Backends.UnmanagedStorage.FromValues(long[], IReadOnlyList{object}, DType)"/> over the same strings / byte arrays) — the widest element decides
             ///     the width, each element is written by the class's setitem.
             /// </summary>
             /// <param name="rows">The number of rows (at least one).</param>
@@ -785,7 +785,7 @@ namespace NumSharp
             ///     inside array.</c>).</exception>
             private NDArray FinishStaged(long rows, int cols)
             {
-                DType descr = NDStringArrays.UnsizedTextDescr((StringDTypeMeta)_descr.Meta, _stagedWidth);
+                DType descr = Backends.UnmanagedStorage.UnsizedTextDescr((StringDTypeMeta)_descr.Meta, _stagedWidth);
                 var storage = UnmanagedStorage.AllocateString(new Shape(rows, cols), descr, fillZeros: false);
                 var slice = storage.StringSlice;
                 byte* p = slice.Address;

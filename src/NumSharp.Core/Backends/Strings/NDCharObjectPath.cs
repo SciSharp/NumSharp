@@ -337,7 +337,7 @@ namespace NumSharp.Backends.Strings
                     return false;
                 var found = new List<long>();
                 var values = new List<object>();
-                NDStringArrays.Collect(array, found, values);
+                Backends.UnmanagedStorage.CollectValues(array, found, values);
                 dims = found.ToArray();
                 items = values.ToArray();
                 return true;
@@ -393,7 +393,7 @@ namespace NumSharp.Backends.Strings
                     return false;
                 var dims = new List<long>();
                 var leaves = new List<object>();
-                NDStringArrays.Collect(source, dims, leaves);
+                Backends.UnmanagedStorage.CollectValues(source, dims, leaves);
                 bool anyInt = false, anyUInt = false, anyFloat = false, anyComplex = false;
                 foreach (var leaf in leaves)
                 {

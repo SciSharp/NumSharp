@@ -45,7 +45,7 @@ namespace NumSharp
                 throw new ArgumentNullException(nameof(dst));
             if (src is null)
                 throw new ArgumentNullException(nameof(src));
-            using var value = NDStringArrays.FromScalar(src, null);
+            using var value = Backends.UnmanagedStorage.FromAnyScalar(src, null);
             DefaultEngine.ValidateWhereMask(@where);
             UnmanagedStorage.CopytoAssignArray(dst, value, @where, rule);
         }

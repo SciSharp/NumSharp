@@ -206,7 +206,7 @@ namespace NumSharp
         /// <returns>A new 0-d <c>U</c> array holding <paramref name="value"/>.</returns>
         internal static NDArray PythonStrLiteral(string value)
         {
-            var nd = Backends.Strings.NDStringArrays.FromScalar(value, null);
+            var nd = Backends.UnmanagedStorage.FromAnyScalar(value, null);
             nd.WasPythonStr = true;
             nd.PythonStrText = value;
             return nd;
@@ -398,7 +398,7 @@ namespace NumSharp
             // S / U: STRING_setitem / UNICODE_setitem take any object by its str(), so 'None', encoded and truncated to the
             // width (an unsized class discovers its width from the text, as np.asarray(None, dtype='U') is <U4).
             if (descr.Meta is StringDTypeMeta)
-                return Backends.Strings.NDStringArrays.FromScalar(null, descr);
+                return Backends.UnmanagedStorage.FromAnyScalar(null, descr);
 
             NPTypeCode tc = descr.typecode;
             byte* slot = stackalloc byte[ReductionInitial.SlotBytes];

@@ -2606,7 +2606,7 @@ namespace NumSharp
                     {
                         try
                         {
-                            return NDStringArrays.FromScalar(fill_value, ndtype);
+                            return Backends.UnmanagedStorage.FromAnyScalar(fill_value, ndtype);
                         }
                         catch (ValueError e)
                         {

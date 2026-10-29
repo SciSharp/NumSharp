@@ -648,7 +648,7 @@ namespace NumSharp.Backends.Strings
                     return result;
                 }
                 using var value = fillValue is string || fillValue is byte[] || fillValue is char
-                    ? NDStringArrays.FromScalar(fillValue, null)
+                    ? Backends.UnmanagedStorage.FromAnyScalar(fillValue, null)
                     : np.asanyarray(fillValue);
                 np.copyto(result, value, "unsafe");
                 return result;

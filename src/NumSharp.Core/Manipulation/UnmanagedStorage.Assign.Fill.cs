@@ -105,7 +105,7 @@ namespace NumSharp.Backends
                     FillTextFrom(self, nd.Storage);
                 return;
             }
-            using var scalar = Backends.Strings.NDStringArrays.FromScalar(value, self.dtype);
+            using var scalar = Backends.UnmanagedStorage.FromAnyScalar(value, self.dtype);
             if (self.size > 0)
                 FillTextFrom(self, scalar.Storage);
         }
