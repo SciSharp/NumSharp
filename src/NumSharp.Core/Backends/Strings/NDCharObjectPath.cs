@@ -2382,7 +2382,9 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="OutOfMemoryException">The arena cannot grow.</exception>
         private static NDArray JoinIntoVString(List<NDArray> ops, Operand[] readers, Shape outer, JoinState join)
         {
-            var result = new NDArray(np.dtypes.StringDType(), outer.Clean(), true);
+            // np.dtypes.StringDType()'s descriptor: the class's default descriptor, a fresh one per call (no NA object,
+            // coerce=True), from the dtype layer.
+            var result = new NDArray(DTypeRegistry.VString.default_descr(), outer.Clean(), true);
             try
             {
                 if (!join.StrMethod)

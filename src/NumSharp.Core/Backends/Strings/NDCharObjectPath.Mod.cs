@@ -180,10 +180,11 @@ namespace NumSharp.Backends.Strings
 
             using var self = VecArg.Convert(a, "a");
             var readers = BuildReaders(self, vals);
-            // A StringDType result is a FRESH default descriptor (a's NA object dropped): its cells are packed as the walk
-            // formats them, so no arena of the whole result and no second pass exist (see ModWalkState.PackElement).
+            // A StringDType result is a FRESH default descriptor (a's NA object dropped; np.dtypes.StringDType()'s, the
+            // class's default_descr): its cells are packed as the walk formats them, so no arena of the whole result and no
+            // second pass exist (see ModWalkState.PackElement).
             NDArray packed = loop == NDStringMethods.TextLoop.VString
-                ? new NDArray(np.dtypes.StringDType(), outer.Clean(), true)
+                ? new NDArray(DTypeRegistry.VString.default_descr(), outer.Clean(), true)
                 : null;
             ModWalkState w = null;
             try
