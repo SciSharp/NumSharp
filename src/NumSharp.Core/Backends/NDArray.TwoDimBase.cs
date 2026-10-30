@@ -1,5 +1,6 @@
 using System;
 using NumSharp.Backends;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp
@@ -11,8 +12,8 @@ namespace NumSharp
     // (the np-layer dtype plan's D1: functions that create arrays), and np.eye, np.identity, np.diag and np.diagflat are
     // facades over them.
     //
-    // The file sits beside its facades (Creation/) rather than under Backends/ because its statements still call np.*
-    // functions (np.zeros, np.diagonal, np.copyto), which ratchet R2 forbids under Backends/ (plan C3).
+    // The plan's phase P6 made its np.* calls (np.zeros, np.diagonal, np.copyto) the members their facades dispatch to
+    // and moved the file from beside its facades (Creation/) to Backends/, beside the array object's class (plan C3).
     // ---------------------------------------------------------------------------------------------------------------------
     public partial class NDArray
     {
@@ -43,7 +44,7 @@ namespace NumSharp
             char physical = OrderResolver.Resolve(order);
 
             var resolvedType = dtype ?? DType.Double;
-            var m = np.zeros(Shape.Matrix(N, cols), resolvedType);
+            var m = new NDArray(resolvedType, Shape.Matrix(N, cols), true);
             if (N == 0 || cols == 0)
                 return physical == 'F' ? m.copy('F') : m;
 
@@ -109,7 +110,8 @@ namespace NumSharp
                 case 1:
                     return DiagonalEmbed(v, k);
                 case 2:
-                    return np.diagonal(v, k);
+                    // np.diagonal(v, k)'s statement: np.diag's facade has applied the class rules already.
+                    return Diagonal(v, k, 0, 1);
                 default:
                     // NumPy: raise ValueError("Input must be 1- or 2-d.")
                     throw new ArgumentException("Input must be 1- or 2-d.");
@@ -136,7 +138,7 @@ namespace NumSharp
         /// <remarks>
         ///     NumPy writes the values through a strided flat slice
         ///     (<c>res.flat[i::n+1] = v</c>). NumSharp does the structurally identical thing but
-        ///     without an element loop: it <see cref="Backends.Unmanaged.UnmanagedStorage.Alias(Shape)"/>es
+        ///     without an element loop: it <see cref="UnmanagedStorage.Alias(Shape)"/>es
         ///     a <b>writeable</b> length-<c>v.size</c>, stride-<c>(n+1)</c> view onto the fresh
         ///     zero buffer and lets the ordinary copy machinery fill it. The view is internal and
         ///     never escapes — it is a write target, not a result — which is why it does not carry
@@ -153,7 +155,7 @@ namespace NumSharp
                 throw new ArgumentException(
                     $"array is too big; `arr.size * arr.itemsize` is larger than the maximum possible size (n={n}).");
 
-            var res = np.zeros(Shape.Matrix((int)n, (int)n), v1d.dtype); // descriptor: a string's zero is '' at v's width
+            var res = new NDArray(v1d.dtype, Shape.Matrix((int)n, (int)n), true); // descriptor: a string's zero is '' at v's width
             if (s == 0)
                 return res;
 
@@ -171,7 +173,7 @@ namespace NumSharp
                 Backends.Strings.NDVStringMove.ScatterVia(res, v1d, (marks, index) =>
                 {
                     using var diagonal = new NDArray(marks.Storage.Alias(new Shape(new[] { s }, new[] { n + 1 }, start, n * n)));
-                    np.copyto(diagonal, index);
+                    UnmanagedStorage.Copyto(diagonal, index, NPY_CASTING.NPY_SAME_KIND_CASTING, null);
                 });
                 return res;
             }

@@ -1,6 +1,7 @@
 using System;
 using System.Numerics;
 using NumSharp.Backends;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
@@ -16,8 +17,8 @@ namespace NumSharp
     // They are the array object's own members (the np-layer dtype plan's D1: functions that create arrays), and the np.*
     // functions are facades over them.
     //
-    // The file sits beside its facades (Creation/) rather than under Backends/ because its statements still call np.*
-    // functions (np.asanyarray, np.copyto), which ratchet R2 forbids under Backends/ (plan C3).
+    // The plan's phase P6 made its np.* calls (np.asanyarray, np.copyto) the members their facades dispatch to and moved
+    // the file from beside its facades (Creation/) to Backends/, beside the array object's class (plan C3).
     // ---------------------------------------------------------------------------------------------------------------------
     public partial class NDArray
     {
@@ -126,7 +127,7 @@ namespace NumSharp
         internal static NDArray FullFromArrayFill(Shape shape, object fill_value, DType resultDescr)
         {
             // asarray(fill_value): an NDArray as it is, a C# array converted (np.asanyarray's dtype discovery).
-            NDArray converted = fill_value is NDArray ? null : np.asanyarray(fill_value);
+            NDArray converted = fill_value is NDArray ? null : AnyArrayFromObject(fill_value, null, 'K');
             NDArray fill = converted ?? (NDArray)fill_value;
             try
             {
@@ -142,7 +143,7 @@ namespace NumSharp
                 var result = new NDArray(descr, shape, false);
                 try
                 {
-                    np.copyto(result, fill, "unsafe");
+                    UnmanagedStorage.Copyto(result, fill, NPY_CASTING.NPY_UNSAFE_CASTING, null);
                 }
                 catch
                 {
@@ -352,7 +353,7 @@ namespace NumSharp
                         // `res[i] = idx.reshape(...)`: the coordinate runs along axis i and broadcasts along the others.
                         using var line = idx.reshape(Shape.Adopt(axisShape));
                         using var slab = res[i];
-                        np.copyto(slab, line);
+                        UnmanagedStorage.Copyto(slab, line, NPY_CASTING.NPY_SAME_KIND_CASTING, null);
                     }
             }
             catch

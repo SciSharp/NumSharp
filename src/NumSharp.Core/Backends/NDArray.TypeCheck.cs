@@ -1,4 +1,5 @@
 using NumSharp.Backends;
+using NumSharp.Backends.Iteration;
 
 namespace NumSharp
 {
@@ -71,7 +72,7 @@ namespace NumSharp
             // The layout is array_imag_get's PyArray_ISFORTRAN(self): F order for an F-contiguous array that is not also
             // C-contiguous (a transposed C block's imaginary part is F-contiguous), C otherwise.
             bool fortran = val.Shape.IsFContiguous && !val.Shape.IsContiguous;
-            var zeros = np.zeros(Shape.Adopt(val.Shape.dimensions, fortran ? 'F' : 'C'), val.dtype);
+            var zeros = new NDArray(val.dtype, Shape.Adopt(val.Shape.dimensions, fortran ? 'F' : 'C'), true);
             zeros.Storage.SetShapeUnsafe(zeros.Shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE));
             return zeros;
         }
@@ -98,7 +99,7 @@ namespace NumSharp
         {
             if (self.typecode != NPTypeCode.Complex)
                 throw new TypeError("array does not have imaginary part to set");
-            np.copyto(ImagPart(self), value, casting: "unsafe");
+            UnmanagedStorage.Copyto(ImagPart(self), value, NPY_CASTING.NPY_UNSAFE_CASTING, null);
         }
     }
 }

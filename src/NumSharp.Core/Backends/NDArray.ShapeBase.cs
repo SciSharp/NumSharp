@@ -10,7 +10,9 @@ namespace NumSharp
     // NumPy's take_along_axis, put_along_axis and apply_along_axis as members of the array object (P3's batch 7):
     // TakeAlongAxis, PutAlongAxis with its scatter core, and ApplyAlongAxis. The facades keep their numpy.matrix /
     // numpy.char rules and their null checks; np.apply_along_axis's *args overload wraps its delegate and calls the
-    // one-argument facade.
+    // one-argument facade. The statements call the members the np.* functions dispatch to (the plan's phase P6), but
+    // for the ndindex iterator apply_along_axis walks (np.NDIndex, NumPy's ndindex: a public type nested in np, which
+    // ratchet R2 pins), and the file sits under Backends/, beside the array object's class (plan C3).
     public partial class NDArray
     {
         // ---------------------------- np.expand_dims ----------------------------
@@ -89,7 +91,7 @@ namespace NumSharp
             // are duplicated (NDVStringMove) — never the raw byte kernel below. The descriptor answers which sources those
             // are: the ones whose elements hold references (NumPy's PyDataType_REFCHK).
             if (arr.dtype.Meta.HasReferences)
-                return Backends.Strings.NDVStringMove.Gather(arr, cells => np.take_along_axis(cells, indices, axis));
+                return Backends.Strings.NDVStringMove.Gather(arr, cells => TakeAlongAxis(cells, indices, axis));
 
             // Boundary scope: reclaims the axis=None contiguous re-lay + its reshape view and the
             // int64 index cast at exit. The scope's tracked list also strong-roots those temps
@@ -105,7 +107,7 @@ namespace NumSharp
                 // arr = np.array(arr.flat): a C-order 1-D image of the source. A non-C-contiguous
                 // view must be re-laid to C-logical order first (ravel semantics), then reshaped
                 // to 1-D; a 0-d source flattens to shape (1,).
-                var flatSource = arr.Shape.IsContiguous ? arr : np.ascontiguousarray(arr);
+                var flatSource = arr.Shape.IsContiguous ? arr : AsContiguousArray(arr, null);
                 arr = flatSource.reshape(flatSource.size);
                 ax = 0;
             }
@@ -575,7 +577,9 @@ namespace NumSharp
                 if (i != ax)
                     perm[p++] = i;
             perm[nd - 1] = ax;
-            NDArray inarr = np.transpose(arr, perm);
+            // np.transpose(arr, perm)'s statement, the engine's Transpose view: a numpy.matrix operand runs inside its
+            // facade's rule, and a chararray one is sliced plain by GetData whatever class the view has.
+            NDArray inarr = arr.TensorEngine.Transpose(arr, perm);
 
             // The iteration space is every dimension except the last (the sliced axis). For a 1-D
             // input this is the empty shape, over which ndindex yields exactly one (empty) coordinate.
@@ -588,7 +592,8 @@ namespace NumSharp
             // func result fixes the buffer's shape+dtype), the rest fill the buffer. When a leading
             // dimension is 0 the sequence is empty — there is no first slice — which is exactly the
             // condition NumPy rejects.
-            IEnumerator<long[]> inds = np.ndindex(leading).GetEnumerator();
+            // np.ndindex(leading)'s statement: NumPy's ndindex iterator (np.NDIndex, validated at construction).
+            IEnumerator<long[]> inds = new np.NDIndex(leading).GetEnumerator();
             if (!inds.MoveNext())
                 throw new ValueError("Cannot apply_along_axis when any iteration dimensions are 0");
 
@@ -609,7 +614,7 @@ namespace NumSharp
             var bufDims = new long[leadingLen + resNd];
             System.Array.Copy(leading, 0, bufDims, 0, leadingLen);
             System.Array.Copy(resDims, 0, bufDims, leadingLen, resNd);
-            NDArray buff = np.zeros(Shape.Adopt(bufDims), res0.dtype);
+            NDArray buff = new NDArray(res0.dtype, Shape.Adopt(bufDims), true);
 
             // Because ndindex walks the leading dims in C-order and `buff` is C-contiguous, the k-th
             // slice's slot is exactly the k-th contiguous block of `buff`'s bytes — NumPy's "each
@@ -666,7 +671,7 @@ namespace NumSharp
             // dispose func1d's results or the slices passed to it: a callback may return or retain arrays
             // the caller still owns (a held array, the slice itself), so their lifetime stays the caller's.
             // Without the release, every call stranded `buff`'s reference — one pooled buffer until a GC.
-            var result = np.transpose(buff, buffPermute);
+            var result = buff.TensorEngine.Transpose(buff, buffPermute);
             buff.Dispose();
             inarr.Dispose();
             return result;
@@ -732,8 +737,8 @@ namespace NumSharp
         ///     bytes into the block at <c>k * resBytes</c>, no destination view, no cast/broadcast
         ///     setup. FALLBACK (any other result — a differing shape, dtype, or non-contiguous layout,
         ///     or a buffer too large for a 32-bit span): the trailing result-shaped sub-view
-        ///     <c>buff.GetData(ind)</c> plus <see cref="np.copyto(NDArray, NDArray, string, NDArray)"/>, which reproduces NumPy's
-        ///     <c>buff[ind] = res</c> broadcast-on-assign and unsafe cast exactly.
+        ///     <c>buff.GetData(ind)</c> plus the assignment <see cref="UnmanagedStorage.Copyto"/> at <c>unsafe</c> (np.copyto's
+        ///     statement), which reproduces NumPy's <c>buff[ind] = res</c> broadcast-on-assign and unsafe cast exactly.
         /// </summary>
         /// <param name="buff">The contiguous output buffer (leading dims + result dims).</param>
         /// <param name="buffBytes">The whole buffer as bytes (valid only when <paramref name="useSpanWrite"/>).</param>
@@ -755,7 +760,7 @@ namespace NumSharp
             }
 
             NDArray dst = buff.GetData(ind);
-            np.copyto(dst, res, casting: "unsafe");
+            UnmanagedStorage.Copyto(dst, res, NPY_CASTING.NPY_UNSAFE_CASTING, null);
         }
 
         /// <summary>
