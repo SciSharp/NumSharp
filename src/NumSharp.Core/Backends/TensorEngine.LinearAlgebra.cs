@@ -1,6 +1,6 @@
 using System;
-using System.Numerics;
 using NumSharp.Backends;
+using NumSharp.Backends.Kernels;
 
 namespace NumSharp
 {
@@ -187,25 +187,41 @@ namespace NumSharp.Backends
         ///     operand" step is a no-op for real loops.
         /// </summary>
         /// <remarks>
-        ///     Kept internal: <c>np.conj</c>/<c>np.conjugate</c> is a NumPy function in its own right
-        ///     and adding it belongs to its own pass, not to this one.
+        ///     <para>Kept internal: <c>np.conj</c>/<c>np.conjugate</c> is a NumPy function in its own right
+        ///     and adding it belongs to its own pass, not to this one.</para>
+        ///     <para>The conjugates go into a fresh C-ordered array: the products this feeds see the layout the former
+        ///     <c>a.copy()</c> gave them (a product's reduction order follows its operands' layout, so the layout is part of
+        ///     the answer). One pass, through the engine's own conjugate kernel: a C-contiguous operand is read linearly by
+        ///     the unary kernel itself (no ufunc argument handling); any other layout goes through the engine member, which
+        ///     routes it through the iterator (the unary kernel's own strided walk is the engine's slow fallback, about four
+        ///     times slower on an F-ordered operand).</para>
         /// </remarks>
+        /// <param name="a">The operand.</param>
+        /// <returns><paramref name="a"/> itself for a dtype other than complex128; otherwise a fresh C-ordered array of
+        ///     the conjugates.</returns>
+        /// <exception cref="InvalidOperationException">IL generation is disabled (the engine's conjugate kernel, as for
+        ///     np.conjugate).</exception>
         internal static NDArray Conjugate(NDArray a)
         {
             if (a.typecode != NPTypeCode.Complex)
                 return a;
 
-            // The copy is a fresh C-contiguous buffer of a.size elements: each is conjugated in place, in memory order.
-            var result = a.copy();
-            unsafe
+            var result = new NDArray(NPTypeCode.Complex, a.Shape.Clean(), false);
+            try
             {
-                var p = (Complex*)result.Address;
-                long n = result.size;
-                for (long i = 0; i < n; i++)
-                    p[i] = Complex.Conjugate(p[i]);
+                if (!a.Shape.IsContiguous)
+                    return a.TensorEngine.Conjugate(a, null, result);
+                var kernel = DirectILKernelGenerator.GetUnaryKernel(
+                    new UnaryKernelKey(NPTypeCode.Complex, NPTypeCode.Complex, UnaryOp.Conjugate, IsContiguous: true));
+                DefaultEngine.ExecuteUnaryKernel(kernel, a, result);
+                return result;
             }
-
-            return result;
+            catch
+            {
+                // The result never reaches a caller: its buffer goes back now, not at finalization.
+                result.Dispose();
+                throw;
+            }
         }
 
         /// <summary>

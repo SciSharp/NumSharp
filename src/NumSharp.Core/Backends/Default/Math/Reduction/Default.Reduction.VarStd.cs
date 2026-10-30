@@ -901,8 +901,8 @@ namespace NumSharp.Backends
         ///     scalar. They differ only for an integer or bool variance (an integer <c>dtype=</c>): the array form raises
         ///     NumPy's output-cast error (the sqrt loop is float, the out integer, <c>same_kind</c> refuses), the scalar
         ///     form computes the float root and truncates it into the dtype. Decimal (no NumPy dtype) takes
-        ///     <see cref="DecimalMath.Sqrt"/> per element, keeping 28 digits where the decimal sqrt ufunc rounds through
-        ///     double.
+        ///     <see cref="DecimalMath.Sqrt"/> per element through the iterator, keeping 28 digits where the decimal sqrt
+        ///     ufunc rounds through double.
         /// </summary>
         /// <param name="ret">The variance; overwritten with its square root. Writeable.</param>
         /// <param name="scalarResult">True when <paramref name="ret"/> is 0-d (NumPy's scalar path).</param>
@@ -911,17 +911,17 @@ namespace NumSharp.Backends
         /// names the sqrt loop the integer width selects).</exception>
         /// <remarks>Internal, not private: <see cref="NDListArray"/>'s std runs the same <c>_std</c> step on the variance of
         ///     an empty list array (its values in a <c>dtype=</c> loop or an <c>out=</c>).</remarks>
-        internal static void SqrtLikeNumPy(NDArray ret, bool scalarResult)
+        internal static unsafe void SqrtLikeNumPy(NDArray ret, bool scalarResult)
         {
             var rt = ret.GetTypeCode;
             if (rt == NPTypeCode.Decimal)
             {
-                // One root per output, written in place. Every element is independent, so the logical order of the flat
-                // index (GetAtIndex / SetAtIndex map it through ret's strides, any layout) gives the same values as a
-                // memory-order walk.
-                long n = ret.size;
-                for (long i = 0; i < n; i++)
-                    ret.SetAtIndex(DecimalMath.Sqrt(ret.GetAtIndex<decimal>(i)), i);
+                // One root per element, in place, through the iterator: the walk NumPy's sqrt(ret, out=ret) makes, one
+                // READWRITE operand in memory order (K) with an external loop, whatever ret's layout (an out= view
+                // included). Every element is independent, so the order of the chunks cannot change a value. The engine's
+                // decimal Sqrt is no substitute: it rounds through double (15 digits).
+                using var it = TypedIterHelpers.Build(ret, writeable: true, NPY_ORDER.NPY_KEEPORDER);
+                it.ForEach(s_decimalSqrtLoop);
                 return;
             }
 
@@ -934,6 +934,31 @@ namespace NumSharp.Backends
 
             // Float / complex: the ufunc in place. Integer / bool with dimensions: the ufunc's own same_kind refusal.
             ret.TensorEngine.Sqrt(ret, null, ret);
+        }
+
+        /// <summary>
+        ///     The decimal root as an iterator inner loop (<see cref="NDIterRef.ForEach"/>'s contract): every element of the
+        ///     chunk replaced by its <see cref="DecimalMath.Sqrt"/>, in place. One delegate for the process, so a call
+        ///     allocates nothing for it.
+        /// </summary>
+        private static readonly unsafe NDInnerLoopFunc s_decimalSqrtLoop = DecimalSqrtChunk;
+
+        /// <summary>
+        ///     One inner-loop chunk of <see cref="SqrtLikeNumPy"/>'s decimal branch: <paramref name="count"/> decimals from
+        ///     <c>dataptrs[0]</c>, <c>strides[0]</c> bytes apart (any sign; a chunk of one element may report 0).
+        /// </summary>
+        /// <param name="dataptrs">The operand's chunk start (one operand).</param>
+        /// <param name="strides">The operand's byte stride.</param>
+        /// <param name="count">The chunk's element count.</param>
+        /// <param name="auxdata">Unused.</param>
+        /// <exception cref="ArgumentException">A negative element (<see cref="DecimalMath.Sqrt"/>'s refusal); a variance
+        ///     never holds one.</exception>
+        private static unsafe void DecimalSqrtChunk(void** dataptrs, long* strides, long count, void* auxdata)
+        {
+            byte* p = (byte*)dataptrs[0];
+            long stride = strides[0];
+            for (long i = 0; i < count; i++, p += stride)
+                *(decimal*)p = DecimalMath.Sqrt(*(decimal*)p);
         }
     }
 }

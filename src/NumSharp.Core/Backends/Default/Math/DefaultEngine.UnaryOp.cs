@@ -714,10 +714,18 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// Execute the IL-generated unary kernel.
+        ///     Runs a whole-array unary kernel from <paramref name="input"/> (its first element, any layout, read through its
+        ///     own strides) into <paramref name="result"/>, written in C order.
         /// </summary>
+        /// <param name="kernel">The kernel for the input's layout: its <see cref="UnaryKernelKey.IsContiguous"/> must say
+        ///     whether <paramref name="input"/> is C-contiguous (the contiguous kernel reads linearly; the strided one walks
+        ///     the input's strides over <paramref name="result"/>'s dimensions, the engine's slow fallback).</param>
+        /// <param name="input">The operand.</param>
+        /// <param name="result">A fresh C-contiguous array of the input's dimensions and the kernel's output dtype.</param>
+        /// <remarks>Internal, not private: <c>LinAlgHelper.Conjugate</c> runs the conjugate kernel this way for a contiguous
+        ///     operand, without the ufunc's argument handling.</remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-        private static unsafe void ExecuteUnaryKernel(
+        internal static unsafe void ExecuteUnaryKernel(
             UnaryKernel kernel,
             NDArray input, NDArray result)
         {
