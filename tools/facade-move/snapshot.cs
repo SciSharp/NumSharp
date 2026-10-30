@@ -152,7 +152,11 @@
 // axes, C# bools and tuples, index arrays of several dtypes, ranks and layouts, masks, mixed advanced indices and the
 // entries NumPy or C# refuses; IndexKeyLabels -, the fancy pair's index list, and the stored value - the selection's own
 // values reversed, C# literals, text, 0-d and one-element arrays, None, a Python int past every C# integer, a list, a shape
-// that does not broadcast; IndexValueLabels / IndexObjectValueLabels); an overload
+// that does not broadcast; IndexValueLabels / IndexObjectValueLabels), and NDArray.astype's (the cast family: its dtype
+// over every class a cast reaches - the numeric dtypes, S / U at three widths and unsized, StringDType with and without an
+// NA object - and its casting rule with astype's own 'same_value'; CastDTypeLabels / CastCastingLabels, on a reduced
+// pool that keeps the special layouts and the strided, reversed and broadcast views, and pairs over every pool dtype);
+// an overload
 // with a required parameter of another
 // kind is reported once as SKIP. An int
 // axis
@@ -546,8 +550,77 @@ static class Snapshot
         // is that overload's operand (RavelScalarCoordsLabels, built in Call by MakeRavelScalarCoords). Its order takes
         // UnravelOrder.
         RavelCoords, RavelDims, RavelMode, RavelModes, RavelScalarCoords,
+        // NDArray.astype (the cast family): its dtype over every class a cast reaches - the numeric storage dtypes, the
+        // fixed-width text classes at three widths and unsized (np.dtype('U') / np.dtype('S'), which astype adapts to the
+        // array), StringDType with and without an NA object - and its casting rule with astype's own 'same_value'
+        // (CastDTypeLabels, CastCastingLabels). copy and order take the general Bool / Order roles.
+        CastDType, CastCasting,
         Default, Unsupported,
     }
+
+    /// <summary>
+    ///     Whether a parameter belongs to NDArray.astype, the cast family: its dtype takes <see cref="CastDTypeLabels"/> and its
+    ///     casting rule <see cref="CastCastingLabels"/> (the other targets keep the general DType / Casting variants, and so
+    ///     their snapshots).
+    /// </summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True for a parameter of a public instance NDArray.astype overload.</returns>
+    private static bool IsCast(ParameterInfo p) =>
+        p.Member is MethodInfo m && IsCastMember(m);
+
+    /// <summary>Whether an overload is NDArray.astype, the cast family's member.</summary>
+    /// <param name="m">The overload.</param>
+    /// <returns>True for a public instance NDArray.astype overload.</returns>
+    private static bool IsCastMember(MethodInfo m) =>
+        m.DeclaringType == typeof(NDArray) && m.Name == "astype" && !m.IsStatic;
+
+    /// <summary>
+    ///     The dtypes NDArray.astype's dtype takes (the base, float64, first): every numeric storage dtype (NumSharp's
+    ///     decimal and char included: the replay skips them), the fixed-width text classes at the pool's width (5), a narrower
+    ///     one (truncation) and a wider one (NUL padding), the unsized 'S' / 'U' NumPy adapts to the array
+    ///     (<c>PyArray_AdaptDescriptorToArray</c>), StringDType, a StringDType whose NA object is NaN, and null (the C#
+    ///     refusal). Together with the pool's text operands (S5, U5, T), their special layouts (text that does not parse,
+    ///     the empty string) and the special numbers (NaN, infinities, signed zeros), every text cast pair runs: numbers
+    ///     formatted as text, text parsed into numbers, text into bool, S / U widths and classes, StringDType both ways.
+    /// </summary>
+    private static readonly string[] CastDTypeLabels =
+    {
+        "float64", "bool", "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64", "float16", "float32",
+        "complex128", "decimal", "char", "S5", "S3", "S8", "U5", "U3", "U8", "S", "U", "T", "T_nan", "null",
+    };
+
+    /// <summary>
+    ///     The descriptor of a <see cref="CastDTypeLabels"/> label: <c>np.dtype(label)</c>, StringDType with a NaN NA object
+    ///     for "T_nan", null for "null".
+    /// </summary>
+    /// <param name="label">The label.</param>
+    /// <returns>The descriptor, or null.</returns>
+    private static DType MakeCastDType(string label) => label switch
+    {
+        "null" => null,
+        "T_nan" => np.dtypes.StringDType(double.NaN),
+        _ => np.dtype(label),
+    };
+
+    /// <summary>
+    ///     NDArray.astype's casting rules: its default ('unsafe') first, the four stricter rules, NumPy 2.4's 'same_value'
+    ///     (which astype accepts and no text cast satisfies) and a name NumPy refuses.
+    /// </summary>
+    private static readonly string[] CastCastingLabels = { "unsafe", "no", "equiv", "safe", "same_kind", "same_value", "bogus" };
+
+    /// <summary>
+    ///     The reduced pool of NDArray.astype (phase B, where the dtype varies): the general reduced pool with the special
+    ///     layouts (text that does not parse, the empty string, NaN and infinities: the casts' errors and their
+    ///     formatting) and the strided, reversed and broadcast views (the cast routes of non-contiguous sources).
+    /// </summary>
+    private static readonly string[] CastReducedLayouts =
+        { "c2d", "c2d_special", "f2d", "strided", "reversed", "bcast", "0d", "0d_special", "empty", "3d", "3d_special" };
+
+    /// <summary>
+    ///     The small pool of NDArray.astype (phase C, where the dtype meets the casting rule, the order or copy): a matrix, its
+    ///     special values, a 3-D operand and a 0-d one, over EVERY pool dtype (a cast rule depends on both classes).
+    /// </summary>
+    private static readonly string[] CastPairLayouts = { "c2d", "c2d_special", "3d", "0d" };
 
     /// <summary>
     ///     Whether a parameter belongs to a public static np.evaluate overload, whose <c>expr</c> (an
@@ -3254,6 +3327,10 @@ static class Snapshot
         // The gufuncs' axes= list, matmul's nullable keepdims and its casting rule.
         if (n == "axes" && t == typeof(int[][])) return Role.AxesList;
         if (n == "keepdims" && t == typeof(bool?)) return Role.KeepdimsNullable;
+        // NDArray.astype's dtype and casting rule take the cast family's variants (only its: every other target keeps the
+        // general DType and Casting variants, and so its snapshot).
+        if (IsCast(p) && t == typeof(DType)) return Role.CastDType;
+        if (IsCast(p) && n == "casting" && t == typeof(string)) return Role.CastCasting;
         if (n == "casting" && t == typeof(string)) return Role.Casting;
         // np.gradient's spacings (typed object / object[]: NumPy's *varargs, each a scalar or a coordinate array) and its
         // boundary order.
@@ -3955,6 +4032,16 @@ static class Snapshot
                         Add(c, () => c);
                 break;
             }
+            case Role.CastDType:
+                // NDArray.astype's dtype: float64 first (the base), then every class a cast reaches (CastDTypeLabels).
+                foreach (var d in CastDTypeLabels)
+                    Add(d, () => MakeCastDType(d));
+                break;
+            case Role.CastCasting:
+                // NDArray.astype's casting rule: its default first (CastCastingLabels' 'unsafe'), then the rest.
+                foreach (var c in CastCastingLabels)
+                    Add(c, () => c);
+                break;
             case Role.GradSpacing:
                 // The base is the default (null: no spacing, unit steps); the variants follow from the operand (MakeGradSpacing).
                 Add(GradSpacingVariantLabels[0], () => null);
@@ -4689,6 +4776,8 @@ static class Snapshot
                                 : m.DeclaringType == typeof(NDArray)
                                   && m.Name is "get_Item" or "set_Item" or "__setitem__" or "GetIndices" or "SetIndices"
                                     ? (Layouts, IndexerReducedLayouts, IndexerPairLayouts)
+                                : IsCastMember(m)
+                                    ? (Layouts, CastReducedLayouts, CastPairLayouts)
                                     : (Layouts, ReducedLayouts, PairLayouts);
 
     /// <summary>
@@ -4955,6 +5044,10 @@ static class Snapshot
         // The operand layouts of the three phases: the general pools, or the 1-D pools of a search function (below).
         var (fullLayouts, reducedLayouts, pairLayouts) = PoolsFor(m);
         string[] dtypes = Dtypes, pairDtypes = PairDtypes;
+        // NDArray.astype's rule checks depend on BOTH classes: its pairs (the dtype with the casting rule, the order, copy)
+        // run over every pool dtype, not the general eight.
+        if (IsCastMember(m))
+            pairDtypes = dtypes;
         if (host)
         {
             // A host operand takes every form its parameter type admits ("layout:form", see HostForms), and a typed
