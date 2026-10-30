@@ -28,10 +28,10 @@ using SysUnsafe = System.Runtime.CompilerServices.Unsafe;
 // DefaultEngine's override of TensorEngine.Isin (TensorEngine.ArraySetOps.cs), moved from the public np.isin by the
 // np-layer dtype plan's P2 into the internal operation class IsinEngine, and made these DefaultEngine partials by its
 // phase PE (E1: NumPy writes isin in Python, and such a function is a TensorEngine member that DefaultEngine implements).
-// The file sits beside the facade, not under Backends/, because its statements call the public np.* functions NumPy's
-// call (np.ravel, np.unique, np.concatenate, np.argsort, np.equal, np.searchsorted, ...), which ratchet R2 counts under
-// Backends/. Its private helpers keep their names: none is shared with another DefaultEngine member, so no overload set
-// changed.
+// NumPy's statements call np.ravel, np.concatenate, np.argsort, np.equal, np.searchsorted, np.take, ...; here they are
+// this engine's or the operand's engine members, the array object's (the ravel, the allocations, the concatenation, the
+// take) and the dtype layer's promotion. Its private helpers keep their names: none is shared with another
+// DefaultEngine member, so no overload set changed.
 // =============================================================================
 
 namespace NumSharp.Backends
@@ -83,8 +83,8 @@ namespace NumSharp.Backends
             // C-contiguous shape) — reusing element.Shape would carry a view's strides and scramble the
             // contiguous membership buffer on reshape (transposed/strided/negative-stride element).
             Shape outShape = Shape.Adopt(element.Shape.dimensions);
-            NDArray ar1 = np.ravel(element);        // C-order flatten (NumPy: np.asarray(element).ravel())
-            NDArray ar2 = np.ravel(test_elements);  // test values are always flattened
+            NDArray ar1 = NDArray.Ravel(element, 'C');        // C-order flatten (NumPy: np.asarray(element).ravel())
+            NDArray ar2 = NDArray.Ravel(test_elements, 'C');  // test values are always flattened
 
             // kind='table' is only defined for boolean/integer arrays (NumPy's dtype.kind in ("u", "i", "b"): a char array,
             // NumPy's uint16, is one), and can overflow for wide signed ranges.
@@ -109,11 +109,11 @@ namespace NumSharp.Backends
             // `_isin(...).reshape(element.shape)`, so even this answer is a VIEW of a fresh 1-D array (flags.owndata
             // False); allocating outShape directly returned an owner.
             if (ar1.size == 0)
-                return np.zeros(new Shape(ar1.size), NPTypeCode.Boolean).reshape(outShape);
+                return new NDArray(NPTypeCode.Boolean, new Shape(ar1.size), true).reshape(outShape);
 
             // Empty test set -> nothing is a member (all invert); a view of the 1-D answer, as above.
             if (ar2.size == 0)
-                return np.full(new Shape(ar1.size), invert, NPTypeCode.Boolean).reshape(outShape);
+                return NDArray.Full(new Shape(ar1.size), invert, NPTypeCode.Boolean).reshape(outShape);
 
             // NumPy's _isin answers on one of three paths (the table method, the loop path, the sort path; NumPyPath), and
             // each gives the exact membership, except NumPy's SORT path in two cases: its np.concatenate casts both unique
@@ -145,7 +145,7 @@ namespace NumSharp.Backends
             // comparisons, exact for an int64 / uint64 pair too), which ComputeMembership computes without NumPy's
             // per-value passes or sort.
             NDArray member = ComputeMembership(ar1, ar2);
-            NDArray result = invert ? np.logical_not(member) : member;
+            NDArray result = invert ? LogicalNot(member, null, null, null) : member;
             return result.reshape(outShape);
         }
 
@@ -214,8 +214,8 @@ namespace NumSharp.Backends
         [NDScoped]
         private static NDArray IsinTextFlat(NDArray element, NDArray test_elements, bool assume_unique, bool invert)
         {
-            NDArray ar1 = np.ravel(element);
-            NDArray ar2 = np.ravel(test_elements);
+            NDArray ar1 = NDArray.Ravel(element, 'C');
+            NDArray ar2 = NDArray.Ravel(test_elements, 'C');
             long n1 = ar1.size, n2 = ar2.size;
 
             // Python evaluates 10 * len(ar1) ** 0.145 in double precision, as Math.Pow does.
@@ -224,17 +224,17 @@ namespace NumSharp.Backends
                 // The loop path: one comparison of ar1 with each value of ar2, OR-ed (AND-ed under invert) into the mask.
                 // A pair the comparison has no loop for answers all-False (all-True for !=), which leaves the mask as it
                 // is, so only a pair that compares text runs the kernel.
-                NDArray mask = np.full(Shape.Vector(n1), invert, NPTypeCode.Boolean);
+                NDArray mask = NDArray.Full(Shape.Vector(n1), invert, NPTypeCode.Boolean);
                 if (n1 == 0 || !Backends.Strings.NDStringUfuncs.ComparesText(ar1.dtype, ar2.dtype))
                     return mask;
                 for (long i = 0; i < n2; i++)
                 {
                     using NDArray a = ar2[i.ToString()];
-                    using NDArray hit = invert ? np.not_equal(ar1, a) : np.equal(ar1, a);
+                    using NDArray hit = invert ? ar1.TensorEngine.NotEqual(ar1, a, null, null, null) : ar1.TensorEngine.Compare(ar1, a, null, null, null);
                     if (invert)
-                        np.logical_and(mask, hit, @out: mask);
+                        mask.TensorEngine.LogicalAnd(mask, hit, null, mask, null);
                     else
-                        np.logical_or(mask, hit, @out: mask);
+                        mask.TensorEngine.LogicalOr(mask, hit, null, mask, null);
                 }
                 return mask;
             }
@@ -279,12 +279,15 @@ namespace NumSharp.Backends
             // ar = concatenate((ar1, ar2)) casts both to their common dtype: it formats numbers into text and decodes bytes
             // beside str, and makes float64 of a 64-bit integer beside a float or (uint64 beside a signed integer) beside
             // the other sign (NumPy's promotion).
-            NDArray ar = np.concatenate((ar1, ar2), 0);
+            NDArray ar = NDArray.ConcatenateInto(new[] { ar1, ar2 }, 0, null, null, "same_kind");   // np.concatenate((ar1, ar2))
             // "We need this to be a stable sort, so always use 'mergesort'": ar1's values come before ar2's equal ones.
-            NDArray order = np.argsort(ar, -1, kind: "mergesort");
+            NDArray order = ar.TensorEngine.ArgSort(ar, -1, "mergesort", null, null);
             NDArray sar = ar[order];
             NDArray boolAr = invert ? sar["1:"] != sar[":-1"] : sar["1:"] == sar[":-1"];
-            NDArray flag = np.concatenate((boolAr, np.array(new[] { invert })), 0);
+            // np.array([invert]) is np.array's statement for a C# array of one bool: a one-element array over a copy.
+            NDArray flag = NDArray.ConcatenateInto(
+                new[] { boolAr, new NDArray(Unmanaged.ArraySlice.FromArray(new[] { invert }, true), Shape.Vector(1)) },
+                0, null, null, "same_kind");
             var ret = new NDArray(NPTypeCode.Boolean, Shape.Vector(ar.size), false);
             ret[order] = flag;
             // assume_unique keeps the first len(ar1) flags (NumPy's slice: a view); otherwise the inverse maps each original
@@ -394,7 +397,7 @@ namespace NumSharp.Backends
             // NumPy's table: np.zeros with the set marked 1, or under invert np.ones with the set marked 0, so the probe reads
             // the flag itself. The table is scratch, released here: the using also keeps it reachable while its raw pointer
             // is read.
-            using NDArray table = np.full(new Shape(range + 1), invert, NPTypeCode.Boolean);
+            using NDArray table = NDArray.Full(new Shape(range + 1), invert, NPTypeCode.Boolean);
             bool* tb = (bool*)table.Address + table.Shape.offset;
             switch (ar2.typecode)
             {
@@ -475,7 +478,7 @@ namespace NumSharp.Backends
             };
             long hi = lo + size - 1;
             // Scratch, released here: the using also keeps it reachable while its raw pointer is read.
-            using NDArray domain = np.full(new Shape(size), invert, NPTypeCode.Boolean);
+            using NDArray domain = NDArray.Full(new Shape(size), invert, NPTypeCode.Boolean);
             bool* table = (bool*)domain.Address + domain.Shape.offset;
             switch (setType)
             {
@@ -677,7 +680,7 @@ namespace NumSharp.Backends
             // at a time, m times per element: the membership routes' constant cost per element is lower.
             if (!Vector256.IsHardwareAccelerated)
                 return null;
-            NPTypeCode t = np.result_type(ar1.typecode, ar2.typecode);
+            NPTypeCode t = DTypePromotion.PromoteTypes(ar1.typecode, ar2.typecode);
             if (t == NPTypeCode.Double && IsIntegerOrBool(ar1.typecode) && IsIntegerOrBool(ar2.typecode))
                 return null;
             if (t is NPTypeCode.Half or NPTypeCode.Complex or NPTypeCode.Decimal)
@@ -844,7 +847,7 @@ namespace NumSharp.Backends
         ///     (np.ravel's results are, a view at an offset included), else a C-ordered copy.</summary>
         /// <param name="a">A flattened operand.</param>
         /// <returns>A C-contiguous array with the same values.</returns>
-        private static NDArray ContiguousRun(NDArray a) => a.Shape.IsContiguous ? a : np.ascontiguousarray(a);
+        private static NDArray ContiguousRun(NDArray a) => a.Shape.IsContiguous ? a : NDArray.AsContiguousArray(a, null);
 
         /// <summary>
         ///     NumPy's <c>ar2_range &lt;= np.iinfo(ar2.dtype).max</c>, the table method's overflow constraint (bool read as
@@ -877,7 +880,7 @@ namespace NumSharp.Backends
         ///     magnitude counts as lossy (NumPy's statements then run, which are right either way).</returns>
         private static bool ConcatenationIsLossless(NDArray ar1, NDArray ar2)
         {
-            NPTypeCode t = np.result_type(ar1.typecode, ar2.typecode);
+            NPTypeCode t = DTypePromotion.PromoteTypes(ar1.typecode, ar2.typecode);
             if (t != NPTypeCode.Double && t != NPTypeCode.Complex)
                 return true;
             return WithinDoublePrecision(ar1) && WithinDoublePrecision(ar2);
@@ -899,12 +902,12 @@ namespace NumSharp.Backends
             {
                 case NPTypeCode.Int64:
                 {
-                    using NDArray min = np.amin(a), max = np.amax(a);
+                    using NDArray min = a.TensorEngine.ReduceAMin(a, null, false, null, null, null, null), max = a.TensorEngine.ReduceAMax(a, null, false, null, null, null, null);
                     return Convert.ToInt64(min.GetAtIndex(0)) >= -exact && Convert.ToInt64(max.GetAtIndex(0)) <= exact;
                 }
                 case NPTypeCode.UInt64:
                 {
-                    using NDArray max = np.amax(a);
+                    using NDArray max = a.TensorEngine.ReduceAMax(a, null, false, null, null, null, null);
                     return (ulong)max.GetAtIndex(0) <= (ulong)exact;
                 }
                 default:
@@ -919,7 +922,7 @@ namespace NumSharp.Backends
         /// </summary>
         private static NDArray ComputeMembership(NDArray ar1, NDArray ar2)
         {
-            NPTypeCode t = np.result_type(ar1.typecode, ar2.typecode);
+            NPTypeCode t = DTypePromotion.PromoteTypes(ar1.typecode, ar2.typecode);
 
             // Exact-integer guard: among integer/bool pairs, ONLY uint64-with-signed promotes to Double
             // (NEP50), which loses precision past 2^53 and would report two distinct integers as equal.
@@ -959,8 +962,8 @@ namespace NumSharp.Backends
             if (elemT.typecode == NPTypeCode.Boolean) elemT = elemT.astype(NPTypeCode.Byte);
             if (testT.typecode == NPTypeCode.Boolean) testT = testT.astype(NPTypeCode.Byte);
 
-            NDArray minS = np.amin(testT);                          // 0-d, dtype of the operands
-            NDArray maxS = np.amax(testT);
+            NDArray minS = testT.TensorEngine.ReduceAMin(testT, null, false, null, null, null, null);                          // 0-d, dtype of the operands
+            NDArray maxS = testT.TensorEngine.ReduceAMax(testT, null, false, null, null, null, null);
             long minI = Convert.ToInt64(minS.GetAtIndex(0));
             long maxI = Convert.ToInt64(maxS.GetAtIndex(0));
             ulong urange = unchecked((ulong)(maxI - minI));
@@ -968,14 +971,14 @@ namespace NumSharp.Backends
                 return null;                                       // range too wide -> sort path
             long range = (long)urange;
 
-            NDArray table = np.zeros(new Shape(range + 1), NPTypeCode.Boolean);
+            NDArray table = new NDArray(NPTypeCode.Boolean, new Shape(range + 1), true);
             table[testT - minS] = (NDArray)true;                   // scatter: mark each present value
 
             // Stay in the operands' own dtype (no widening of the large element array). Out-of-range
             // elements clamp to a valid slot via take(mode='clip') and are then forced False by the
             // range mask regardless of the (possibly wrapped) offset — so no explicit bounds check.
             NDArray offset = elemT - minS;
-            NDArray gathered = np.take(table, offset, mode: "clip");
+            NDArray gathered = UnmanagedStorage.TakeFrom(table, offset, null, null, ClipModes.ClipModeClip);   // np.take(..., mode='clip')
             NDArray inRange = (elemT >= minS) & (elemT <= maxS);
             return gathered & inRange;
         }
@@ -999,14 +1002,14 @@ namespace NumSharp.Backends
             if (hashed is not null)
                 return hashed;
 
-            NDArray u = np.sort(testT);
+            NDArray u = testT.TensorEngine.Sort(testT, -1, null, null, null);
             long m = u.size;
             if (m == 0)
-                return np.zeros(new Shape(elemT.size), NPTypeCode.Boolean);
+                return new NDArray(NPTypeCode.Boolean, new Shape(elemT.size), true);
 
-            NDArray idx = np.searchsorted(u, elemT, "left");        // int64, shape == elemT.shape (1-D)
-            NDArray clamped = np.minimum(idx, (NDArray)(m - 1));    // stay in-bounds for the gather
-            NDArray gathered = np.take(u, clamped);
+            NDArray idx = u.TensorEngine.SearchSorted(u, elemT, "left", null);   // int64, shape == elemT.shape (1-D)
+            NDArray clamped = idx.TensorEngine.Minimum(idx, (NDArray)(m - 1), null, null, null);   // stay in-bounds for the gather
+            NDArray gathered = UnmanagedStorage.TakeFrom(u, clamped, null, null, ClipModes.ClipModeRaise);   // np.take(u, clamped)
             NDArray inRange = idx < (NDArray)m;                     // idx == m => greater than all => not found
             return (gathered == elemT) & inRange;
         }
@@ -1199,7 +1202,7 @@ namespace NumSharp.Backends
         /// <remarks>The two reductions are reclaimed here; the caller's scope covers nothing of them.</remarks>
         private static (BigInteger Min, BigInteger Max) TableBounds(NDArray ar2)
         {
-            using NDArray min = np.amin(ar2), max = np.amax(ar2);
+            using NDArray min = ar2.TensorEngine.ReduceAMin(ar2, null, false, null, null, null, null), max = ar2.TensorEngine.ReduceAMax(ar2, null, false, null, null, null, null);
             return (IsinPythonInt(min.GetAtIndex(0)), IsinPythonInt(max.GetAtIndex(0)));
         }
 
@@ -1229,8 +1232,8 @@ namespace NumSharp.Backends
                 case NPTypeCode.Int16:
                 case NPTypeCode.Int32:
                 case NPTypeCode.Int64:
-                    long mn = Convert.ToInt64(np.amin(ar2).GetAtIndex(0));
-                    long mx = Convert.ToInt64(np.amax(ar2).GetAtIndex(0));
+                    long mn = Convert.ToInt64(ar2.TensorEngine.ReduceAMin(ar2, null, false, null, null, null, null).GetAtIndex(0));
+                    long mx = Convert.ToInt64(ar2.TensorEngine.ReduceAMax(ar2, null, false, null, null, null, null).GetAtIndex(0));
                     ulong range = unchecked((ulong)(mx - mn));      // two's-complement distance, exact for all signed
                     ulong typeMax = ar2.typecode switch
                     {

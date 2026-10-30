@@ -79,8 +79,8 @@ namespace NumSharp.Backends
         [NDScoped]
         private static NDArray IsinVStringFlat(NDArray element, NDArray test_elements, bool invert)
         {
-            NDArray ar1 = np.ravel(element);
-            NDArray ar2 = np.ravel(test_elements);
+            NDArray ar1 = NDArray.Ravel(element, 'C');
+            NDArray ar2 = NDArray.Ravel(test_elements, 'C');
             using var set = new IsinObjects();
             set.Collect(ar2);
             long n1 = ar1.size;
@@ -110,11 +110,11 @@ namespace NumSharp.Backends
             foreach (object number in set.Numbers)
             {
                 using NDArray scalar = NDArray.FromPythonOperand(number);
-                using NDArray hit = invert ? np.not_equal(ar1, scalar) : np.equal(ar1, scalar);
+                using NDArray hit = invert ? ar1.TensorEngine.NotEqual(ar1, scalar, null, null, null) : ar1.TensorEngine.Compare(ar1, scalar, null, null, null);
                 if (invert)
-                    np.logical_and(mask, hit, @out: mask);
+                    mask.TensorEngine.LogicalAnd(mask, hit, null, mask, null);
                 else
-                    np.logical_or(mask, hit, @out: mask);
+                    mask.TensorEngine.LogicalOr(mask, hit, null, mask, null);
             }
             return mask;
         }
