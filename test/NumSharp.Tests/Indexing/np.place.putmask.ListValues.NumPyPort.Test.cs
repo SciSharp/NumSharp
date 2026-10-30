@@ -176,15 +176,16 @@ namespace NumSharp.Tests.Indexing
         }
 
         /// <summary>
-        ///     Python ints and floats into an integer class: the list is cast when one fused min / max pass shows every item
-        ///     in range (a float truncated toward zero, as <c>int()</c> truncates) and stored item by item otherwise, which
-        ///     raises at the first item out of range. NumPy: int8 &lt;- <c>[1.9, -1.9, 127.99, -128.5]</c> is <c>[1, -1, 127,
-        ///     -128]</c>, &lt;- <c>[-128, 127, 5]</c> stores them, &lt;- <c>[128.0]</c> raises "Python integer 128 out of
-        ///     bounds for int8"; uint8 &lt;- <c>[0.5, -0.5, 255.9]</c> is <c>[0, 0, 255]</c>; uint64 &lt;- <c>[-1]</c> raises.
-        ///     Each list is stored as given (the pass's scalar loop) and tiled to 35 items (its vector lanes and a scalar
-        ///     tail), each stored result byte for byte the per-item route's for the same values given as an
-        ///     <c>object[]</c>; each error is raised for a one-item list and for a 35-item list with the bad item at each of
-        ///     its positions (every vector lane and the tail).
+        ///     Python ints and floats into an integer class: the list is cast when its min and max (np.amin / np.amax's IL
+        ///     reduction kernels, read on the discovered buffer) show every item in range (a float truncated toward zero, as
+        ///     <c>int()</c> truncates) and stored item by item otherwise, which raises at the first item out of range. NumPy:
+        ///     int8 &lt;- <c>[1.9, -1.9, 127.99, -128.5]</c> is <c>[1, -1, 127, -128]</c>, &lt;- <c>[-128, 127, 5]</c>
+        ///     stores them, &lt;- <c>[128.0]</c> raises "Python integer 128 out of bounds for int8"; uint8 &lt;- <c>[0.5,
+        ///     -0.5, 255.9]</c> is <c>[0, 0, 255]</c>; uint64 &lt;- <c>[-1]</c> raises. Each list is stored as given (the
+        ///     kernels' scalar loops) and tiled to 35 items (their vector lanes and a scalar tail), each stored result byte
+        ///     for byte the per-item route's for the same values given as an <c>object[]</c>; each error is raised for a
+        ///     one-item list and for a 35-item list with the bad item at each of its positions (every vector lane and the
+        ///     tail).
         /// </summary>
         [TestMethod]
         public void IntegerTargets_CastWhenEveryItemFits()
