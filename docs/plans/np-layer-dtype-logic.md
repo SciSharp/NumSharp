@@ -88,7 +88,14 @@ under `Backends/` are array-object members, and the thirteen divergences a repla
 error order, the store's value conversion and order, Python bools and 0-d integer arrays as NumPy reads them,
 `PyArray_AssignArray`'s strip, list values, GetIndices / SetIndices, the caller's key left unchanged, integer slices as
 integers, the advanced block's placement); R1's lines left in the indexer files are index-kind tests and the string
-routes' representation. P5 is done
+routes' representation. Batch 9b, the text casts through the casting impls, is done (2026-10-30): every storage class
+pair's casting impl gives its strided loop, `DTypeCasting.GetDTypeTransferFunction` (NumPy's
+`PyArray_GetDTypeTransferFunction`) hands it out as an `NDCastInfo` (`NPY_cast_info`), NumPy's raw assignment walk is
+`UnmanagedStorage.RawArrayAssignArray` in the new `Manipulation/UnmanagedStorage.Assign.Raw.cs`, and the converting
+walks take their loop from the transfer function (the raw assignment of numbers and text, the iterator's string buffer
+transfers, the text-number reductions, np.copyto's scalar store into text) while the bulk routes keep their kernels;
+the divergences a replay of astype's snapshot and the conversion found are fixed per D4 (astype's argument order and
+its 0-d refusal text, a StringDType buffer refilled after `remove_multi_index` rebuilt the setup). P5 is done
 (2026-10-29): its six
 families and, handed over by the coordinator, the lines first assigned to PE (np.argmax's out= pair, np.unravel_index,
 np.packbits / np.unpackbits, np.bincount, and the text lines of np.kron and np.median) are engine members or engine
@@ -919,7 +926,13 @@ first, as it did for np.fft.
     (`UnmanagedStorage.Assign*.cs`: NumPy's `raw_array_assign_array` and its masked form, chunked as NumPy's casts are),
     np.concatenate's string route and the later batches' casts then get their loop from `DTypeCasting`
     (`PyArray_GetDTypeTransferFunction`) instead of testing the `S` / `U` lane. It follows the moves because one set of
-    loops serves batches 3, 4, 6 and 8.
+    loops serves batches 3, 4, 6 and 8. Done (`f5385d8c`, `7e0d9eeb`, `2535625f`, `c1e5791a`), with the three D4 fixes
+    the replay of astype's snapshot and the conversion found (`5b9727d0`, `f103ab22`, before the move; `83a71a0f`,
+    before the conversion): every storage class pair's impl gives its loop (the numeric impls too: the iterator and the
+    reductions convert a number side through them), `DTypeCasting.GetDTypeTransferFunction` hands it out as an
+    `NDCastInfo`, the raw walk is `UnmanagedStorage.RawArrayAssignArray`, and the refusal text is
+    `DTypeCasting.InvalidCastError`. The bulk routes keep their own kernels, `NDStringCopy.ThrowIfCannotConvert` stays
+    their pre-check, and astype's text-to-bool keeps `NDStringTruth`'s bulk truth (see the state log).
 10. **What stays** (5 files, 13 lines, and the index-kind tests of the other batches), listed by R1 after P3 with its
     reason: the C# conversions (`NDArray.Implicit.ValueTypes.cs`, `NDArray.ToString.cs`: a C# cast is not a NumPy
     statement; they call `getitem` and the coercion path), the DType layer's own files (`np.dtype.cs`, `np.dtypes.cs`)
@@ -1153,6 +1166,82 @@ candidate.
 ---
 
 ## 9. State log
+
+- **2026-10-30, P3: batch 9b (the text casts through the casting impls) - batch 9b is done.** Eight commits on
+  `strings`, developed in the scratch worktree: the tool commit and the two astype D4 fixes landed first by fast-forward
+  (tip `f103ab22`), then the move, the loops, the D4 fix the conversion found, the conversion and this docs commit.
+  - `f5385d8c`: the snapshot tool learns NDArray.astype's casts - the cast family: astype's dtype over every class a cast
+    reaches (the 15 numeric storage dtypes, `S` and `U` at widths 3 / 5 / 8 and unsized, StringDType with and without a
+    NaN NA object, null) and its casting rule with NumPy 2.4's `'same_value'`, on a reduced pool that keeps the special
+    layouts and the strided, reversed and broadcast views, with pairs over every pool dtype. 36,792 cases. Replayed
+    through NumPy 2.4.2: 2,721 lines differed.
+  - D4, before the move, with NumPy-probed tests that fail on the parent (`Casting/NDArray.astype.Arguments.NumPyPort.Test.cs`):
+    - `5b9727d0` astype parses its order, then its casting name, before anything else (NumPy's `npy_parse_arguments`
+      order and `PyArray_CastingConverterSameValue`): an unknown name raises where the cast needs nothing (a same-type
+      cast skipped the check), the order's error comes first, the text lists `'same_value'`, and a numeric cast between
+      storage types under `'same_value'` raises `NotSupportedException` (NumPy 2.4's value-checking loops are not
+      ported; pinned by `OpenBugs.Bug_Astype_SameValueCasting_NumericCastsHaveNoValueCheck`); 2,721 -> 1,534 lines;
+    - `f103ab22` a refused rule on a 0-d array says `Cannot cast scalar from ...` (`npy_set_invalid_cast_error`'s
+      `scalar` argument is astype's `PyArray_NDIM(self) == 0`); 1,534 -> 931.
+    - The 931 lines left are kept: 900 numeric casts under `'same_value'` (the OpenBugs pin) and 31 StringDType ->
+      complex128 casts where NumPy 2.4.2 has a bug - stringdtype/casts.cpp's `string_to_complex_float` sets the imaginary
+      part from the parsed value's REAL part (`npy_csetimagfunc(out, complex_value.real)`), so
+      `np.array(['3'], 'T').astype(complex)` is `3+3j`; NumSharp gives `complex('3')`, `3+0j`. Outside the replay (the
+      tool's null label is the C# refusal): NumPy's `astype(None)` is float64, NumSharp's `astype(null)` raises
+      `ArgumentNullException`; left to the owner with the other null-is-None decisions.
+  - `7e0d9eeb`, the move: NumPy's raw assignment walk, which NumSharp had twice (NDTextConversion's, with the `where=`
+    mask, and NDVStringCasting's), is one member of the assignment, `UnmanagedStorage.RawArrayAssignArray(dst, src, mask,
+    loop)` in the new `Manipulation/UnmanagedStorage.Assign.Raw.cs` (`raw_array_assign_array` and
+    `raw_array_wheremasked_assign_array`, the per-run body NumPy's strided-loop shape, `NDInnerLoopFunc`), and
+    `npy_set_invalid_cast_error` is `DTypeCasting.InvalidCastError` (it was `NDStringCasting.InvalidCast`; six callers).
+    Snapshot byte-identical.
+  - `2535625f`, the loops: every storage class's casting impl gives `get_strided_loop` - the builtin numeric impls the IL
+    inner cast kernel (`ConvertValue` without dynamic code), `S -> S` / `U -> U` the zero-pad copy, a number into `S` /
+    `U` its `str()` and `S <-> U` with the whole element ASCII-checked, `S` / `U` into a number the parse in NumPy's
+    128-element commit blocks, the four StringDType impls `NDVStringCasting.TransferRun` with both allocators locked per
+    call (`VStringCastLoop`); the datetime impls keep the base loop, which raises. `DTypeCasting.GetDTypeTransferFunction`
+    (the class pair's impl, its `resolve_descriptors` - a resolved descriptor other than the given one would be a
+    multi-step cast, which native storage never needs, so it is refused -, its loop) returns `NDCastInfo`
+    (`NPY_cast_info`), and `ArrayMethodContext.Allocators` carries a StringDType side's allocator. Tests
+    `DTypes/DTypeTransferFunctionTests.cs`: every loop over the raw walk gives astype's outcome, 28 sources x 20 targets.
+  - `83a71a0f` (D4, found by the conversion): a StringDType buffer refilled after `remove_multi_index` ran the buffering
+    setup again (`RebuildBufferingSetup`, NumSharp's departure from NumPy) was written through the freed allocator of
+    the first buffer, which the operand's cached transfers held, so its arena strings could not be read ("Failed to load
+    string in StringDType getitem"); `NDIterVStringContext.ForgetTransfers` drops them whenever the buffer allocator
+    changes. Test `StringDTypeIterationTests.RemoveMultiIndex_RebuiltBuffers_FillThroughTheNewAllocator` (fails on the
+    parent).
+  - `c1e5791a`, the conversion: the converting walks ask `DTypeCasting.GetDTypeTransferFunction` for their loop -
+    `NDTextConversion.Walk` (numbers <-> fixed-width text under np.copyto, slice and index assignment, np.concatenate's
+    inputs and `NDStringCopy.Copy`'s number route), the iterator's string buffer transfers (`NDIterBufferManager.
+    StringTransfer`, resolved once per fill or write-back and threaded through `TransferBuffer`'s walk; a StringDType
+    operand's cached in `NDIterVStringContext` as `NDCastInfo`; `CopyVStringRun` and the context's `Lock` / `Unlock` are
+    gone, the loops lock per call), `NDTextNumericReduction.Transfers` (its `NumberRun` gone: the numeric impl's loop is
+    that kernel) and `CopytoAssignRawScalar`'s store of a number into `S` / `U` (NumPy's `PyArray_CastRawArrays`).
+    Snapshot of the 22 targets the text casts reach, 391,525 cases under guard pages: byte-identical to `f103ab22`'s.
+  - Where the batch departs from its item's text: (1) the item named `NDStringTruth`'s cast flavor and `NDStringCopy`'s
+    unit copies as becoming loops. Their per-run bodies are the impls' loops now (`TransferElements` serves `S -> S`,
+    `U -> U` and `S <-> U`), but the bulk routes keep their kernels, by §6's rule (a slot replaces a test of the dtype's
+    name, never a typed kernel): `NDStringCopy.Copy`'s unit views, astype's text-to-bool through `NDStringTruth`,
+    `NDVStringCopy.Copy` and `NDVStringCasting.Copy`, whose `S -> StringDType` setup reserves a fresh destination's arena
+    once (1.85x / 4.24x at 20-60 / 300-500 bytes; a per-run loop cannot see that the whole destination is fresh). (2)
+    `NDStringCopy.ThrowIfCannotConvert` stays the `S <-> U` bulk route's pre-check: it names NumPy's first failing element
+    before the unit copy, which cannot fail half-way. (3) The numeric impls got loops too, which the item did not name:
+    the iterator's and the reductions' number sides convert through them. (4) The numeric scalar store keeps
+    `ConvertValue`, and setitem's parse of a Python list's strings keeps its direct `ParseRun` (no cast quotes `'x'`).
+  - Measured (fixed costs the transfer function adds, best of 15 rounds, against `f103ab22`): a 3-element
+    number-to-text walk 0.33 -> 0.39 us and np.copyto's scalar store into `U8[10]` 3.15 -> 3.23 us (the
+    resolution: the impl lookup, `resolve_descriptors` and the context, about 60 to 80 ns a call); a 3-element
+    text-to-number walk 0.38 -> 0.28 us; the 100,000-element walks unchanged (2.8 ms parse, 7.2 ms format);
+    np.nditer over a `U2[1000]` array buffered as float64 in 16 fills 37.2 -> 40.4 us (one resolution per fill or
+    write-back: NumPy resolves once per iterator, `npyiter_allocate_transfer_functions`; caching a fixed-width
+    operand's casts per iterator, as the StringDType context does, is the lever, not taken), over StringDType
+    37.9 -> 39.3 us (resolved once per iterator, as before); a text trace with `dtype=float64` 2.14 -> 2.35 us (three
+    resolutions per reduction). Two P-cores, two interleaved runs of each build.
+  - Gates: NumSharp.Tests (20,918 on net10.0, 20,917 on net8.0) and the oracle suite (414; the two soak tests
+    skipped) pass at `c1e5791a` (`TestCategory!=OpenBugs&TestCategory!=HighMemory`); no doc warning in the touched
+    files with Core's NoWarn cleared.
+  - Next on P3: batch 10 (what stays). P3's tool commits (`f5385d8c` and batch 8's `09d818fa` among them) join the 0.71.0
+    notes' snapshot-tool line when P3 ends.
 
 - **2026-10-30, P6: the structural calls, family 6, and the two defects the family snapshots found (D4).** Three
   commits on `strings` from the parallel session, developed in the scratch worktree and landed by fast-forward:

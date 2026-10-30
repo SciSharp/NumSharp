@@ -3719,8 +3719,9 @@ object per class with the NEP 42 slots as virtuals under NumPy's own names — `
 reservations `HasReferences`/`get_clear_loop`/`get_fill_zero_loop` — the C fields `singleton`/`type_num`/`flags`, the
 Python class attributes `type`/`_abstract`/`_parametric`/`_legacy`/`_is_numeric`, and the per-class-pair **`CastingImpl`**
 table (`castingimpls` + `within_dtype_castingimpl`, looked up by `GetCastingImpl` = `PyArray_GetCastingImpl`; NEP 43
-`ArrayMethod`: `resolve_descriptors` + `get_strided_loop`, the latter unused until Stage C; `casting` is the impl's
-minimal safety). A **`DType`** is the INSTANCE (the descriptor, `numpy.dtype`): `Meta` + `byteorder` + the parametric
+`ArrayMethod`: `resolve_descriptors` + `get_strided_loop` — every storage class pair gives its loop (the IL inner cast
+kernel for numbers, the text formatting / parsing / truth / zero-pad / `S ↔ U` runs, the `StringDType` casts), the
+datetime pair none until Stage C; `casting` is the impl's minimal safety). A **`DType`** is the INSTANCE (the descriptor, `numpy.dtype`): `Meta` + `byteorder` + the parametric
 payload (`DatetimeMetadata`), with NumPy's whole surface — `num`/`kind`/`char`/`itemsize`/`alignment`/`name`/`str`/
 `descr`/`isbuiltin`/`isnative`/`hasobject`/`flags`/`newbyteorder`, `ToString()` = `str(dtype)` and `ToString(true)` =
 `repr(dtype)`. **`NPTypeCode` stays the storage/kernel discriminator**: every storage class exposes it as
@@ -3756,6 +3757,29 @@ datetime unit rules (`time_to_time`: exact 10³ᵏ folds are no-casts, generic�
 timedelta years/months barrier `unsafe`, finer-and-divides `safe`, else `same_kind`; numeric→`m8` `safe` for bool/ints
 except 64-bit unsigned (`same_kind`), floats `unsafe`; anything↔`M8` `unsafe`). Casting strings are case-sensitive with
 NumPy's `casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe' (got '…')` `ValueError`.
+
+**The converting walks take their loop from `DTypeCasting.GetDTypeTransferFunction`** (NumPy's
+`PyArray_GetDTypeTransferFunction`; np-layer dtype plan, P3 batch 9b): the class pair's impl (NumPy's `TypeError`
+"Cannot cast data from X to Y." without one), its `resolve_descriptors` (a loop descriptor other than the given one
+would need NumPy's multi-step wrapping, which native storage never needs: `NotSupportedException`), then its
+`get_strided_loop`, as an `NDCastInfo` (`NPY_cast_info`: `func`, `context`, `descriptors`,
+`Run(src, srcStride, dst, dstStride, count)` with byte strides; one walk at a time, a parse loop owns its scratch). A
+`StringDType` side's allocator rides on `ArrayMethodContext.Allocators` (NumPy keeps it on the descriptor, NumSharp on
+the cells' buffer), and its loops lock both allocators for each call. The callers: the raw assignment of numbers ↔ text
+(`NDTextConversion.Walk` over `UnmanagedStorage.RawArrayAssignArray`, NumPy's `raw_array_assign_array` and
+`raw_array_wheremasked_assign_array`), the iterator's string buffer transfers (`NDIterBufferManager.StringTransfer`,
+resolved once per fill or write-back; a `StringDType` operand's cached in `NDIterVStringContext` and dropped whenever its
+buffer allocator changes, or a refill after `remove_multi_index` rebuilt the setup wrote through a freed allocator), the
+text-number reductions' conversions and np.copyto's scalar store into `S` / `U` (NumPy's `PyArray_CastRawArrays`). A
+caller never chooses a converter by the operands' lanes. The bulk routes keep their own kernels (a slot replaces a test of
+the dtype's name, never a typed kernel): `NDStringCopy.Copy`'s unit views, `NDVStringCopy.Copy`, `NDVStringCasting.Copy`
+(its `S → StringDType` setup reserves a fresh destination's arena once, which a per-run loop cannot see), the numeric
+scalar store's `ConvertValue`, and setitem's parse of a Python list's strings (`TextReprStyle.PythonObject`).
+**`ndarray.astype` parses its arguments in NumPy's order** — the order, then the casting name, before anything else (an
+unknown name raises even where `copy=False` would return the array itself); astype's sixth name is `'same_value'`, and a
+NUMERIC cast under it raises `NotSupportedException` (NumPy 2.4's value-checking casts are not ported; pinned in
+`OpenBugs.cs`). A refused rule says `Cannot cast scalar from …` for a 0-d array and `array data` otherwise
+(`DTypeCasting.InvalidCastError`, NumPy's `npy_set_invalid_cast_error`, shared by every assignment route).
 
 **`np.dtype(string)` is `_convert_from_str` ported**: comma-string/sub-array → unsupported; byte-order char consumed
 (`'|'` reads native; a NON-native prefix is KEPT — `np.dtype(">i4")` has `byteorder '>'`, `isnative false`, `str ">i4"`,
