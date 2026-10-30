@@ -182,7 +182,8 @@ namespace NumSharp
             string v => PythonStrLiteral(v),
             Half v => NumPyScalarLiteral(v),
             char v => NumPyScalarLiteral(v),
-            _ => np.asanyarray(value),
+            // np.asanyarray(value)'s statement: an NDArray is the arm above, so the class boundaries never apply.
+            _ => AnyArrayFromObject(value, null, 'K'),
         };
 
         /// <summary>
@@ -520,8 +521,9 @@ namespace NumSharp
             // the str ('1.5'), where converting it to a U array first and casting that would quote the array element
             // (np.str_('1.5')). The values are the same either way.
             bool numericText = value is string && destination != NPTypeCode.String && destination != NPTypeCode.Empty;
+            // np.asanyarray(value)'s statement (an NDArray value returned above, so no class boundary applies).
             if (!numericText && (!IsStoreScalar(value) || destination == NPTypeCode.String || destination == NPTypeCode.Empty))
-                return np.asanyarray(value);
+                return AnyArrayFromObject(value, null, 'K');
 
             byte* slot = stackalloc byte[ReductionInitial.SlotBytes];
             if (value is Half or char or decimal)

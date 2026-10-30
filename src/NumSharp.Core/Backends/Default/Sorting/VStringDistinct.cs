@@ -271,7 +271,9 @@ namespace NumSharp.Backends.Sorting
             // order — no gathered copy of the strings, and its indices are already the array's. Otherwise the texts are
             // gathered (the NAs left out: a None-like NA must not be compared) and sorted.
             bool whole = m == ar.size;
-            using var picks = whole ? null : np.array(texts);
+            // The index array np.array(texts) builds: a copy of the indices as a 1-D int64 array (np.array<T>(params T[])'s
+            // statement, NDArray's constructor over a copied slice).
+            using var picks = whole ? null : new NDArray(Unmanaged.ArraySlice.FromArray(texts, true), Shape.Vector(texts.Length));
             using var subset = whole ? null : UnmanagedStorage.TakeFrom(ar, picks, null, null, np.ClipModeRaise);
             NDArray sorted = subset ?? ar;
             using var order = AxisSort.ArgSortVString(sorted, 0, stable: true);

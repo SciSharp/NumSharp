@@ -577,10 +577,12 @@ namespace NumSharp.Backends.Strings
                 }
                 case Array objects:
                     // An object[] or a jagged array (Python's nested lists): np.array's discovery with the requested
-                    // descriptor stores every leaf by setitem and raises NumPy's ragged-shape error.
-                    return np.array(objects, descr);
+                    // descriptor stores every leaf by setitem and raises NumPy's ragged-shape error (np.array(Array,
+                    // dtype)'s statement after its null check, the array object's coercion member).
+                    return NDArray.ArrayFromManaged(objects, descr, 0, true, 'C');
                 case System.Collections.IEnumerable sequence:
-                    return np.array(System.Linq.Enumerable.ToArray(System.Linq.Enumerable.Cast<object>(sequence)), descr);
+                    return NDArray.ArrayFromManaged(
+                        System.Linq.Enumerable.ToArray(System.Linq.Enumerable.Cast<object>(sequence)), descr, 0, true, 'C');
                 default:
                     // A boxed number, bool or any other single object: one setitem.
                     return StoreScalar(value, descr);
@@ -668,9 +670,11 @@ namespace NumSharp.Backends.Strings
                     UnmanagedStorage.Copyto(result, nd, NPY_CASTING.NPY_UNSAFE_CASTING);
                     return result;
                 }
+                // np.asanyarray(fillValue)'s statement: an NDArray fill returned above, so its class boundaries (a matrix,
+                // a chararray) never apply here.
                 using var value = fillValue is string || fillValue is byte[] || fillValue is char
                     ? Backends.UnmanagedStorage.FromAnyScalar(fillValue, null)
-                    : np.asanyarray(fillValue);
+                    : NDArray.AnyArrayFromObject(fillValue, null, 'K');
                 UnmanagedStorage.Copyto(result, value, NPY_CASTING.NPY_UNSAFE_CASTING);
                 return result;
             }
