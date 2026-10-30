@@ -64,9 +64,9 @@ namespace NumSharp.Backends
 
             // PyArray_ObjectType(op1) then (op2, typenum): the promotion of two arrays with dimensions, which is NumPy's
             // promote_types for every pair of the 15 storage dtypes (the frozen array-array table np._FindCommonType reads
-            // agrees on all 225 pairs; written in place, as the engine calls no np.* function).
+            // agrees on all 225 pairs): the dtype layer's type-code form, the engine behind np.promote_types.
             NPTypeCode at = a.GetTypeCode, vt = v.GetTypeCode;
-            NPTypeCode retType = at == vt ? at : DTypePromotion.PromoteTypes(DType.From(at), DType.From(vt)).GetTypeCode();
+            NPTypeCode retType = DTypePromotion.PromoteTypes(at, vt);
 
             // PyArray_Correlate2 conjugates the (common-typed) second operand for a complex dtype, BEFORE the swap, so an
             // inverted correlation uses conj(v) as the data and the untouched a as the kernel.

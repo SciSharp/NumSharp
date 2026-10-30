@@ -672,7 +672,8 @@ namespace NumSharp.Backends
         /// so np.clip agrees with np.minimum / np.maximum, the ufuncs NumPy's <c>_clip</c> routes one-sided
         /// clips to. A C# integer literal therefore adopts the array's dtype the way a Python int does
         /// (clip(float32, 1, 3) stays float32), and a higher-kind scalar promotes (a float bound on an int array → float64).
-        /// An array bound promotes strongly via <see cref="np.result_type(NPTypeCode, NPTypeCode)"/>.
+        /// An array bound promotes strongly (<see cref="DTypePromotion.PromoteTypes(NPTypeCode, NPTypeCode)"/>, the engine
+        /// behind <see cref="np.result_type(NPTypeCode, NPTypeCode)"/>).
         /// </summary>
         /// <param name="outType">The dtype promoted so far (the array's, then after the first bound).</param>
         /// <param name="bound">The bound to fold in, or null for none.</param>
@@ -689,7 +690,7 @@ namespace NumSharp.Backends
             if (bound is null) return outType;
             if (bound.ndim == 0)
                 return np._FindCommonArrayScalarType(outType, bound.typecode);
-            return np.result_type(outType, bound.typecode);
+            return DTypePromotion.PromoteTypes(outType, bound.typecode);
         }
 
         /// <summary>

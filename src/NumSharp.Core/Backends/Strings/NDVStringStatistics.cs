@@ -103,7 +103,7 @@ namespace NumSharp.Backends.Strings
             // `result_type = np.result_type(a.dtype, wgt.dtype)` (StringDType is not an integer or bool): the SEQUENCE
             // promotion, whose refusal lists every DType ("could not be promoted by ... The full list of DTypes is: ..."),
             // not the pairwise promote_types text.
-            DType resultDtype = np.result_type(a.dtype, weights.dtype);
+            DType resultDtype = DTypePromotion.ResultType(a.dtype, weights.dtype);
             // `scl = wgt.sum(axis=axis, dtype=result_dtype)`: a dtype= descriptor instance has no loop.
             int? axis = axes is { Length: 1 } ? axes[0] : null;
             using var scl = weights.TensorEngine.Sum(weights, axis, resultDtype, keepdims);

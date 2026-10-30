@@ -362,6 +362,29 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     <see cref="PromoteTypes(DType, DType)"/> of two storage lanes: the lane of the promoted descriptor, or the lane
+        ///     itself when both are the same. The type-code form of <c>np.promote_types</c> and of <c>np.result_type</c> of
+        ///     two types, and what engine code that resolves a loop over type codes calls (a call into the np.* facade from
+        ///     the engine is what the layering ratchet R2 refuses).
+        /// </summary>
+        /// <param name="type1">The first lane.</param>
+        /// <param name="type2">The second lane.</param>
+        /// <returns>The promoted lane; <paramref name="type1"/> when the lanes are equal.</returns>
+        /// <exception cref="DTypePromotionError">The two classes have no common class.</exception>
+        /// <exception cref="NotSupportedException">The lanes differ and one is the string lane
+        ///     (<see cref="NPTypeCode.String"/>), which carries neither the string class nor the width
+        ///     (<see cref="DType.From(NPTypeCode)"/>'s refusal).</exception>
+        /// <remarks>
+        ///     Equal lanes return at once, without the descriptors: the promotion of a builtin class with itself is that
+        ///     class, so the answer is the same and the call is a comparison. Only the LANE comes back, so whatever the
+        ///     promoted descriptor carries beyond its lane is dropped (a lane-sharing C-type class: Windows NumPy promotes
+        ///     int16 with uint16 to the C int class <c>'i'</c>, whose lane is int32). Callers that need the descriptor use the
+        ///     <see cref="DType"/> form.
+        /// </remarks>
+        internal static NPTypeCode PromoteTypes(NPTypeCode type1, NPTypeCode type2)
+            => type1 == type2 ? type1 : PromoteTypes(DType.From(type1), DType.From(type2)).GetTypeCode();
+
+        /// <summary>
         ///     NumPy's <c>PyArray_AdaptDescriptorToArray(arr, NULL, descr)</c> (<c>array_coercion.c</c>): the descriptor an
         ///     array is cast, iterated or viewed with when <paramref name="requested"/> is asked for. A sized descriptor is
         ///     used as given; an unsized string descriptor (<c>'S'</c> / <c>'U'</c>, NumPy's legacy parametric instance

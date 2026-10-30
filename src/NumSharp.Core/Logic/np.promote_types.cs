@@ -57,12 +57,7 @@ namespace NumSharp
         /// </code>
         /// </example>
         public static DType promote_types(NPTypeCode type1, NPTypeCode type2)
-        {
-            if (type1 == type2)
-                return type1;
-
-            return DTypePromotion.PromoteTypes(DType.From(type1), DType.From(type2)).GetTypeCode();
-        }
+            => DTypePromotion.PromoteTypes(type1, type2);
 
         /// <summary>
         /// Returns the data type with the smallest size and smallest scalar kind to which

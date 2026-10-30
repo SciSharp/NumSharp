@@ -1497,7 +1497,7 @@ namespace NumSharp.Backends
 
             // 2. The loop: the input's dtype, or the promotion of (out, input) — out acts as the reduction's first input.
             NPTypeCode inT = a.GetTypeCode;
-            NPTypeCode loop = @out is null ? inT : np.promote_types(@out.GetTypeCode, inT).GetTypeCode();
+            NPTypeCode loop = @out is null ? inT : DTypePromotion.PromoteTypes(@out.GetTypeCode, inT);
 
             // 3. initial packed into the loop dtype (PyArray_Pack), after every shape error.
             byte* seed = stackalloc byte[ReductionInitial.SlotBytes];

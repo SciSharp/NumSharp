@@ -282,8 +282,8 @@ namespace NumSharp.Backends
             // subtract(arr, avg, out=arr, casting='unsafe'): the loop is result_type(arr, avg); its result is cast into arr.
             // NumSharp's out= checks same_kind, so a complex loop over a real copy (a complex dtype=) goes through a
             // temporary and NumPy's unsafe cast (the real part).
-            var loopT = np.result_type(arr0.dtype, avg.dtype);
-            if (np.can_cast(loopT, arr0.dtype, "same_kind"))
+            var loopT = DTypePromotion.ResultType(arr0.dtype, avg.dtype);
+            if (DTypeCasting.CanCastTypeTo(loopT, arr0.dtype, NPY_CASTING.NPY_SAME_KIND_CASTING))
                 engine.Subtract(arr0, avg, null, arr0);
             else
                 UnmanagedStorage.Copyto(arr0, engine.Subtract(arr0, avg), NPY_CASTING.NPY_UNSAFE_CASTING);

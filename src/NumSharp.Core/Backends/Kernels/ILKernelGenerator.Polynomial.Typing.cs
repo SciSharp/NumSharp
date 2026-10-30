@@ -34,7 +34,7 @@ namespace NumSharp.Backends.Kernels
     {
         /// <summary>NumPy's strong-strong promotion (<c>np.result_type</c> of two array dtypes).</summary>
         /// <param name="a">Left dtype.</param><param name="b">Right dtype.</param><returns>The promoted dtype.</returns>
-        public static NPTypeCode Promote(NPTypeCode a, NPTypeCode b) => a == b ? a : (NPTypeCode)np.promote_types(a, b);
+        public static NPTypeCode Promote(NPTypeCode a, NPTypeCode b) => a == b ? a : DTypePromotion.PromoteTypes(a, b);
 
         /// <summary>
         ///     Bool, every integer dtype and NumSharp's <c>Char</c> (a uint16-like integer) — the dtypes a Python

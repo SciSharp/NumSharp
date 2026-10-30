@@ -115,7 +115,7 @@ namespace NumSharp.Backends
             DivideByCountLikeNumPy(arrmean, rcount);
 
             // x = subtract(arr, arrmean): both are arrays, so NEP 50 promotes them as strong operands.
-            NPTypeCode xT = np.result_type(arr.dtype, arrmean.dtype).GetTypeCode();
+            NPTypeCode xT = DTypePromotion.ResultType(arr.dtype, arrmean.dtype).GetTypeCode();
             // NumPy squares x with umr_multiply(x, x) for a float or integer INPUT (a complex x too, when dtype= is
             // complex), takes real² + imag² of a complex x otherwise (a complex input, or a bool input with
             // dtype=complex), and computes (x * conj(x)).real for a bool input with a real x — x² again.
@@ -143,7 +143,7 @@ namespace NumSharp.Backends
             DType sumLoop = loop;
             if (sumLoop is null && @out is not null)
             {
-                DType promoted = np.promote_types(@out.dtype, (DType)sqT);
+                DType promoted = DTypePromotion.PromoteTypes(@out.dtype, (DType)sqT);
                 if (promoted.GetTypeCode() != sqT)
                     sumLoop = promoted;
             }

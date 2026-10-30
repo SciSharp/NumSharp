@@ -138,11 +138,7 @@ namespace NumSharp
         /// <param name="type2">Second type code.</param>
         /// <returns>The result type from combining the inputs.</returns>
         public static DType result_type(NPTypeCode type1, NPTypeCode type2)
-        {
-            if (type1 == type2)
-                return type1;
-            return DTypePromotion.PromoteTypes(DType.From(type1), DType.From(type2)).GetTypeCode();
-        }
+            => DTypePromotion.PromoteTypes(type1, type2);
 
         /// <summary>
         /// Returns the type that results from applying the NumPy type promotion rules

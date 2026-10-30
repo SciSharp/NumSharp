@@ -984,9 +984,12 @@ namespace NumSharp
             NPTypeCode fromType = this.GetTypeCode;
             if (fromType == toType)
                 return;
-            // np.can_cast encodes NumPy's cast table (bit-exact vs 2.4.2, verified across all 15 dtypes).
+            // PyArray_CanCastTypeTo, np.can_cast's engine, encodes NumPy's cast table (bit-exact vs 2.4.2, verified across
+            // all 15 dtypes). Both callers pass the level ParseCastingSameValue parsed, always one of the five rules
+            // ('same_value' and the default come back as 'unsafe', which returned above), so the name the error text
+            // quotes is the caller's.
             string rule = DTypeCasting.CastingToString(casting);
-            if (!np.can_cast(fromType, toType, rule))
+            if (!DTypeCasting.CanCastTypeTo(DType.From(fromType), DType.From(toType), casting))
                 throw new InvalidCastException(
                     $"Cannot cast {(ndim == 0 ? "scalar" : "array data")} from dtype('{fromType.AsNumpyDtypeName()}') " +
                     $"to dtype('{toType.AsNumpyDtypeName()}') according to the rule '{rule}'");

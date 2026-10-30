@@ -636,7 +636,7 @@ namespace NumSharp.Backends.Strings
                 throw NDStringUfuncs.VStringNoLoop("subtract", new[] { operand, DTypeRegistry.PyFloat.ToString() },
                     target.dtype.Meta.ToString());
             }
-            if (!np.can_cast(loop, target.dtype, "same_kind"))
+            if (!DTypeCasting.CanCastTypeTo(loop, target.dtype, NPY_CASTING.NPY_SAME_KIND_CASTING))
                 throw new TypeError($"Cannot cast ufunc 'add' output from {loop.ToString(true)} to {target.dtype.ToString(true)} " +
                                     "with casting rule 'same_kind'");
             UnmanagedStorage.Copyto(target, lerp, NPY_CASTING.NPY_UNSAFE_CASTING);

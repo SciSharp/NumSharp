@@ -138,9 +138,9 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     The common dtype of a numeric search, <c>np.promote_types(a, v)</c> over type codes, computed here instead of
-        ///     called: the same two statements (an identical pair is itself, any other pair the NEP 42 engine's common class),
-        ///     so the engine makes no call up into the np.* layer.
+        ///     The common dtype of a numeric search, <c>np.promote_types(a, v)</c> over type codes: the dtype layer's
+        ///     type-code form (<see cref="DTypePromotion.PromoteTypes(NPTypeCode, NPTypeCode)"/>, an identical pair is itself,
+        ///     any other pair the NEP 42 engine's common class), so the engine makes no call up into the np.* layer.
         /// </summary>
         /// <param name="a">The haystack's type code.</param>
         /// <param name="v">The key's type code (int32 for a C# int key, float64 for a C# double one).</param>
@@ -148,7 +148,7 @@ namespace NumSharp.Backends
         /// <exception cref="DTypePromotionError">No common dtype exists (not reached by the numeric route: every pair of
         ///     storage-backed numeric types promotes).</exception>
         private static NPTypeCode SearchSortedCommonType(NPTypeCode a, NPTypeCode v)
-            => a == v ? a : DTypePromotion.PromoteTypes(DType.From(a), DType.From(v)).GetTypeCode();
+            => DTypePromotion.PromoteTypes(a, v);
 
         /// <summary>
         ///     One key searched in a numeric haystack already of the common dtype: the key written to a stack buffer of that
