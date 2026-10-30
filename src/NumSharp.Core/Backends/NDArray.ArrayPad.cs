@@ -10,7 +10,9 @@ namespace NumSharp
     // NumPy's np.pad statements as members of the array object (P3's batch 7): the np.pad facades keep their
     // numpy.matrix regions and call Pad / PadCallable. The helpers keep their NumPy names (_AsPairs, _PadSimple,
     // _SliceAtAxis, _ViewRoi, _SetPadArea, _GetEdges, _GetStats, _SetReflectBoth, _SetWrapBoth): the
-    // corner-propagation logic that turns per-axis padding into N-D padding tracks the upstream structure.
+    // corner-propagation logic that turns per-axis padding into N-D padding tracks the upstream structure. The
+    // statements call the members the np.* functions dispatch to (the plan's phase P6), and the file sits under
+    // Backends/, beside the array object's class (plan C3).
     public partial class NDArray
     {
         // ---------------------------- top-level dispatcher ----------------------------
@@ -170,7 +172,7 @@ namespace NumSharp
             {
                 // Move pad axis to the end so we can iterate the outer (ndim-1)
                 // dims and pass each 1-D vector by reference to the user function.
-                var view = np.moveaxis(padded, axis, padded.ndim - 1);
+                var view = padded.TensorEngine.MoveAxis(padded, new[] {axis}, new[] {padded.ndim - 1});
                 int outerNdim = view.ndim - 1;
                 long axisLen = view.Shape.dimensions[outerNdim];
                 long left = padPairs[axis, 0];
@@ -668,10 +670,10 @@ namespace NumSharp
             if (chunk.typecode == NPTypeCode.String)
                 return mode switch
                 {
-                    "maximum" => np.amax(chunk, axis: axis, keepdims: true),
-                    "minimum" => np.amin(chunk, axis: axis, keepdims: true),
-                    "mean" => np.mean(chunk, axis, true),
-                    "median" => np.median(chunk, axis: axis, keepdims: true),
+                    "maximum" => chunk.TensorEngine.ReduceAMax(chunk, axis, true, null, null, null, null),
+                    "minimum" => chunk.TensorEngine.ReduceAMin(chunk, axis, true, null, null, null, null),
+                    "mean" => chunk.TensorEngine.Mean(chunk, axis, null, true),
+                    "median" => chunk.TensorEngine.Median(chunk, new[] {axis}, null, false, true),
                     _ => throw new NotSupportedException($"stat mode '{mode}'"),
                 };
 
@@ -681,20 +683,20 @@ namespace NumSharp
             {
                 switch (mode)
                 {
-                    case "maximum": return np.amax(chunk);
-                    case "minimum": return np.amin(chunk);
-                    case "mean":    return np.mean(chunk);
-                    case "median":  return np.median(chunk);
+                    case "maximum": return chunk.TensorEngine.ReduceAMax(chunk, null, false, null, null, null, null);
+                    case "minimum": return chunk.TensorEngine.ReduceAMin(chunk, null, false, null, null, null, null);
+                    case "mean":    return chunk.TensorEngine.Mean(chunk);
+                    case "median":  return chunk.TensorEngine.Median(chunk, null, null, false, false);
                 }
             }
 
             // stat_func(chunk, axis=axis, keepdims=True) on the view itself.
             switch (mode)
             {
-                case "maximum": return np.amax(chunk, axis: axis, keepdims: true);
-                case "minimum": return np.amin(chunk, axis: axis, keepdims: true);
-                case "mean": return np.mean(chunk, axis, true);
-                case "median": return np.median(chunk, axis: axis, keepdims: true);
+                case "maximum": return chunk.TensorEngine.ReduceAMax(chunk, axis, true, null, null, null, null);
+                case "minimum": return chunk.TensorEngine.ReduceAMin(chunk, axis, true, null, null, null, null);
+                case "mean": return chunk.TensorEngine.Mean(chunk, axis, null, true);
+                case "median": return chunk.TensorEngine.Median(chunk, new[] {axis}, null, false, true);
                 default: throw new NotSupportedException($"stat mode '{mode}'");
             }
         }
@@ -709,7 +711,7 @@ namespace NumSharp
             if (!IsIntegerDtype(padded.GetTypeCode)) return;
             if (stat.GetTypeCode == padded.GetTypeCode) return;
             // Round to nearest-even then cast.
-            var rounded = np.around(stat);
+            var rounded = stat.TensorEngine.Round(stat, 0, null, null);   // np.around(stat)'s statement
             var castBack = rounded.astype(padded.dtype);
             stat.Dispose();
             if (!ReferenceEquals(rounded, castBack)) rounded.Dispose();
@@ -860,13 +862,13 @@ namespace NumSharp
                 case NDArray nd:
                     return (nd.dtype, nd.size == 1 || nd.size == 2 && !(nd.ndim == 2 && nd.Shape.dimensions[0] == 2));
                 case string:
-                    return (np.dtype("U"), true);
+                    return (DTypeRegistry.Str.singleton, true);   // np.dtype("U")
                 // A C# char is NumPy's np.uint16 scalar (the house boundary map), never a one-character str: over a
                 // numeric array linspace computes with its code point, over a text array the promotion refuses it.
                 case char:
                     return (np.uint16, true);
                 case byte[]:
-                    return (np.dtype("S"), true);
+                    return (DTypeRegistry.Bytes.singleton, true);   // np.dtype("S")
                 case object[,] o2:
                 {
                     var values = new List<object>(o2.Length);
@@ -942,8 +944,8 @@ namespace NumSharp
                     default: anyFloat = true; break;
                 }
             }
-            if (anyStr) return np.dtype("U");
-            if (anyBytes) return np.dtype("S");
+            if (anyStr) return DTypeRegistry.Str.singleton;      // np.dtype("U")
+            if (anyBytes) return DTypeRegistry.Bytes.singleton;  // np.dtype("S")
             if (anyComplex) return np.complex128;
             if (anyFloat) return np.float64;
             if (anyInt) return anyHugeUnsigned ? (anyNegative ? np.float64 : np.uint64) : np.int64;
@@ -1030,7 +1032,7 @@ namespace NumSharp
             // `delta / div` / `y /= div` is a weak operand of the same loop.
             using var start = NDArray.Scalar(NumSharp.Utilities.Converts.ChangeType(UnwrapPyListItem(endValue), work), work);
             using var div = NDArray.Scalar(NumSharp.Utilities.Converts.ChangeType(width, work), work);
-            using var delta = np.subtract(edge, start, dtype: computeType);
+            using var delta = edge.TensorEngine.Subtract(edge, start, computeType, null, null);
             using var step = delta / div;
 
             // y = arange(0, num, dtype=dt), laid along the axis (NumPy reshapes it to (num, 1, ...) and moves axis 0 to `axis`
@@ -1038,14 +1040,14 @@ namespace NumSharp
             int ndim = edge.ndim;
             var yShape = new long[ndim];
             for (int i = 0; i < ndim; i++) yShape[i] = i == axis ? width : 1L;
-            using var counts = np.arange(width);
+            using var counts = UnmanagedStorage.ArangeObj(0L, width, 1L, null);   // np.arange(width)
             using var countsTyped = counts.astype(computeType);
             using var y = countsTyped.reshape(Shape.Adopt(yShape));
 
             // any_step_zero over the whole call: the subnormal guard's order for every element, or the plain one for all.
             bool anyStepZero;
             using (var zero = step == 0)
-                anyStepZero = np.any(zero);
+                anyStepZero = zero.TensorEngine.Any(zero);
             NDArray scaled;
             if (anyStepZero)
             {
@@ -1067,7 +1069,7 @@ namespace NumSharp
                 NDArray toCast = ramp;
                 if (IsIntegerDtype(dtype) || dtype == NPTypeCode.Char)
                 {
-                    toCast = np.floor(ramp);
+                    toCast = ramp.TensorEngine.Floor(ramp, null, null, null);
                     ramp.Dispose();
                 }
                 var cast = toCast.astype(NumSharp.NPTypeCodeExtensions.AsType(dtype));
@@ -1121,7 +1123,7 @@ namespace NumSharp
 
             // NumPy: order = 'F' if array.flags.fnc else 'C'  (F-contig and NOT also C).
             char order = (array.Shape.IsFContiguous && !array.Shape.IsContiguous) ? 'F' : 'C';
-            var padded = np.empty(Shape.Adopt(newDims, order), array.dtype);
+            var padded = new NDArray(array.dtype, Shape.Adopt(newDims, order), false);
 
             if (fillValue != null)
             {
@@ -1691,7 +1693,7 @@ namespace NumSharp
             NDArray arr = x as NDArray;
             bool owned = arr is null;
             if (owned)
-                arr = np.asanyarray(x);
+                arr = AnyArrayFromObject(x, null, 'K');
             try
             {
                 if (arr.ndim < 3)
