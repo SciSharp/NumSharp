@@ -176,14 +176,14 @@ namespace NumSharp.Backends
                 if (dst.size > 1)
                 {
                     using var converted = CopytoConvertWhole(src, to, Shape.NewScalar());
-                    np.copyto(dst, converted, "unsafe", @where);
+                    Copyto(dst, converted, NPY_CASTING.NPY_UNSAFE_CASTING, @where);
                     return;
                 }
                 if (@where is not null)
                     Shape.AssignmentBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides,
                         "where mask", stripLeadingUnitAxes: false);
                 // Nothing written (or, for one element, nothing converted inside the masked loop) when nothing is selected.
-                if (dst.size == 0 || (@where is not null && !np.any(@where)))
+                if (dst.size == 0 || (@where is not null && !@where.TensorEngine.Any(@where)))
                     return;
                 NDTextConversion.Convert(dst.Storage, src.Storage);
                 return;
@@ -202,7 +202,7 @@ namespace NumSharp.Backends
             if (overlapNeedsCopy && dst.size > 0)
             {
                 using var temp = CopytoConvertWhole(new NDArray(source), to, dst.Shape.KeepOrder());
-                np.copyto(dst, temp, "unsafe", @where);
+                Copyto(dst, temp, NPY_CASTING.NPY_UNSAFE_CASTING, @where);
                 return;
             }
 
@@ -216,7 +216,7 @@ namespace NumSharp.Backends
             if (@where is not null)
                 Shape.AssignmentBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides, "where mask",
                     stripLeadingUnitAxes: false);
-            if (dst.size == 0 || (@where is not null && !np.any(@where)))
+            if (dst.size == 0 || (@where is not null && !@where.TensorEngine.Any(@where)))
                 return;
             NDTextConversion.Convert(dst.Storage, source, @where?.Storage);
         }
@@ -275,11 +275,11 @@ namespace NumSharp.Backends
                     if (@where is not null)
                         Shape.AssignmentBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides,
                             "where mask", stripLeadingUnitAxes: false);
-                    if (dst.size == 0 || (@where is not null && !np.any(@where)))
+                    if (dst.size == 0 || (@where is not null && !@where.TensorEngine.Any(@where)))
                         return;
                     // One element: converted inside the masked loop, i.e. only now that it is selected.
                     truth ??= NDStringTruth.Truth(src, NDStringTruth.Flavor.Cast);
-                    np.copyto(dst, truth, "unsafe", @where);
+                    Copyto(dst, truth, NPY_CASTING.NPY_UNSAFE_CASTING, @where);
                     return;
                 }
 
@@ -303,7 +303,7 @@ namespace NumSharp.Backends
                 if (@where is not null)
                     Shape.AssignmentBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides, "where mask",
                         stripLeadingUnitAxes: false);
-                if (dst.size == 0 || (@where is not null && !np.any(@where)))
+                if (dst.size == 0 || (@where is not null && !@where.TensorEngine.Any(@where)))
                     return;
 
                 // The masked transfer converts only the selected elements: a bad code point raises only when the mask
@@ -311,7 +311,7 @@ namespace NumSharp.Backends
                 truth ??= @where is null
                     ? NDStringTruth.Truth(src, NDStringTruth.Flavor.Cast)
                     : MaskedTruth(dst, src, @where);
-                np.copyto(dst, truth, "unsafe", @where);
+                Copyto(dst, truth, NPY_CASTING.NPY_UNSAFE_CASTING, @where);
             }
             finally
             {
@@ -340,9 +340,9 @@ namespace NumSharp.Backends
                 using var first = units["..., 0"];
                 using var high = first > 0x10FFFFu;
                 using var later = chars > 1 ? units["..., 1:"] : null;
-                using var laterNonzero = later is null ? null : np.any(later, axis: -1);
-                using var laterEmpty = laterNonzero is null ? null : np.logical_not(laterNonzero);
-                using var bad = laterEmpty is null ? high.view() : np.logical_and(high, laterEmpty);
+                using var laterNonzero = later is null ? null : later.TensorEngine.Any(later, -1, null, false, null);
+                using var laterEmpty = laterNonzero is null ? null : laterNonzero.TensorEngine.LogicalNot(laterNonzero, null, null, null);
+                using var bad = laterEmpty is null ? high.view() : high.TensorEngine.LogicalAnd(high, laterEmpty, null, null, null);
                 // copyto strips the source's leading extent-1 axes beyond the destination's rank (the broadcast check
                 // already passed, so every extra leading axis has extent 1); the rest broadcasts as the assignment does.
                 var badDims = bad.shape;
@@ -350,9 +350,9 @@ namespace NumSharp.Backends
                     ? bad.reshape(badDims[(badDims.Length - dst.ndim)..])
                     : bad.view();
                 // A selected destination slot whose (broadcast) source element is bad means NumPy converts that element.
-                using var badView = np.broadcast_to(badRanked, dst.Shape);
-                using var selectedBad = np.logical_and(badView, @where);
-                if (np.any(selectedBad))
+                using var badView = NDArray.BroadcastTo(badRanked, dst.Shape);
+                using var selectedBad = badView.TensorEngine.LogicalAnd(badView, @where, null, null, null);
+                if (selectedBad.TensorEngine.Any(selectedBad))
                     throw new SystemError(NDStringTruth.InvalidCodePointMessage);
             }
             return NDStringTruth.Truth(src, NDStringTruth.Flavor.Nonzero);

@@ -13,22 +13,8 @@ namespace NumSharp
         public static NDArray[] broadcast_arrays(params NDArray[] ndArrays)
         {
             using var plain = NDMatrixBoundary.PlainFor(ndArrays);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            int len = ndArrays.Length;
-            int i;
-            var inputShapes = new Shape[len];
-            for (i = 0; i < len; i++)
-                inputShapes[i] = ndArrays[i].Shape;
-            var outputShapes = Shape.Broadcast(inputShapes);
-
-            var list = new NDArray[len];
-            for (i = 0; i < len; i++)
-                // NumPy 2.4.2 parity: broadcast_arrays results are WRITEABLE (unlike broadcast_to),
-                // even for stretched (stride-0) dimensions. NumPy emits a FutureWarning that a future
-                // version will change this, but 2.4.2 still returns writeable=True. Force the flag on so
-                // even a broadcasted subshape (which Shape.Broadcast marks read-only) stays writeable.
-                list[i] = new NDArray(UnmanagedStorage.CreateBroadcastedUnsafe(ndArrays[i].Storage, outputShapes[i].WithFlags(flagsToSet: ArrayFlags.WRITEABLE)));
-
-            return list;
+            // The statement is the array object's (NDArray.BroadcastArrays, Creation/NDArray.StrideTricks.cs).
+            return NDArray.BroadcastArrays(ndArrays);
         }
 
         /// <summary>

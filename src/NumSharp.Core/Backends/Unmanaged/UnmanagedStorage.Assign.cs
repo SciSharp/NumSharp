@@ -18,8 +18,9 @@ namespace NumSharp.Backends
     // Python or NumPy scalar, a str). The text and StringDType routes are in UnmanagedStorage.Assign.Strings.cs and
     // UnmanagedStorage.Assign.VString.cs.
     //
-    // The files sit beside their facades rather than under Backends/Unmanaged/ because their statements still call np.*
-    // functions, which ratchet R2 forbids under Backends/ (plan C3); P6 moves them down once those calls are gone.
+    // The plan's phase P6 made each np.* call of the files' statements the member its facade dispatches to (the
+    // assignment's own Copyto and TakeFrom / PutTo, the engine's Any and the logical ufuncs over the masks) and moved the
+    // files from beside their facades to Backends/Unmanaged/.
     // ---------------------------------------------------------------------------------------------------------------------
     public partial class UnmanagedStorage
     {
@@ -74,7 +75,7 @@ namespace NumSharp.Backends
                 {
                     // The per-element cast converts None only into a selected element (raw_array_wheremasked_assign_scalar
                     // runs the cast for the unmasked runs): with nothing selected, nothing is converted and nothing raises.
-                    if (@where is not null && !np.any(@where))
+                    if (@where is not null && !@where.TensorEngine.Any(@where))
                         return;
                     none = NDArray.NoneForStore(dst.dtype);
                 }
@@ -122,7 +123,8 @@ namespace NumSharp.Backends
                     throw new InvalidCastException(
                         $"Cannot cast scalar from dtype('O') to {dst.dtype.ToString(true)} according to the rule " +
                         $"'{DTypeCasting.CastingToString(casting)}'");
-                using var digits = np.array(new[] { value.ToString() }).reshape(Shape.NewScalar());
+                // np.array([str(value)]): the C# array overload's text route (the array object's ArrayFromManaged).
+                using var digits = NDArray.ArrayFromManaged(new[] { value.ToString() }, null, 0, true, 'C').reshape(Shape.NewScalar());
                 CopytoAssignArray(dst, digits, @where, NPY_CASTING.NPY_UNSAFE_CASTING);
                 return;
             }
@@ -552,7 +554,7 @@ namespace NumSharp.Backends
                 if (@where is not null)
                     textMaskStrides = Shape.AssignmentBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides,
                         "where mask", stripLeadingUnitAxes: false);
-                if (dst.size == 0 || (@where is not null && !np.any(@where)))
+                if (dst.size == 0 || (@where is not null && !@where.TensorEngine.Any(@where)))
                     return;
                 var slice = dst.Storage.StringSlice;
                 byte[] element = new byte[Math.Max(slice.ItemSize, 1)];

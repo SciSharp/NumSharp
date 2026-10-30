@@ -99,7 +99,7 @@ namespace NumSharp.Backends
                 using var marks = NDVStringMove.NewMarks(dst);
                 using var index = NDVStringMove.ValueIndex(value);
                 // The numeric masked copy broadcasts the element numbers (and the mask) exactly as the strings would be.
-                np.copyto(marks, index, "unsafe", @where);
+                Copyto(marks, index, NPY_CASTING.NPY_UNSAFE_CASTING, @where);
                 NDVStringMove.ScatterMarks(dst, marks, value);
             }
             finally
@@ -182,22 +182,22 @@ namespace NumSharp.Backends
             // The selected elements' source numbers (-1 where nothing is copied), broadcast and masked by the numeric copy.
             using var marks = NDVStringMove.NewMarks(dst);
             using (var index = NDVStringMove.ValueIndex(src))
-                np.copyto(marks, index, "unsafe", @where);
+                Copyto(marks, index, NPY_CASTING.NPY_UNSAFE_CASTING, @where);
             using var zero = NDArray.Scalar(0L);
-            using var selected = np.greater_equal(marks, zero);
-            using var positions = np.flatnonzero(selected);
+            using var selected = marks.TensorEngine.GreaterEqual(marks, zero, null, null, null);
+            using var positions = selected.TensorEngine.FlatNonZero(selected);
             if (positions.size == 0)
                 return;
             // Gather the selected texts (destination C order) and convert only them.
-            using var flatMarks = np.ravel(marks);
-            using var sourceNumbers = np.take(flatMarks, positions);
-            using var flatSource = np.ravel(src);
-            using var picked = np.take(flatSource, sourceNumbers);
+            using var flatMarks = NDArray.Ravel(marks, 'C');
+            using var sourceNumbers = TakeFrom(flatMarks, positions, null, null, ClipModes.ClipModeRaise);
+            using var flatSource = NDArray.Ravel(src, 'C');
+            using var picked = TakeFrom(flatSource, sourceNumbers, null, null, ClipModes.ClipModeRaise);
             using var values = picked.astype(to, true, 'K', "unsafe");
             // The values at their destination positions (a C-ordered staging array), written back under the same selection.
-            using var staged = np.zeros(Shape.Adopt((long[])dst.Shape.dimensions.Clone()), to);
-            np.put(staged, positions, values);
-            np.copyto(dst, staged, "unsafe", selected);
+            using var staged = new NDArray(to, Shape.Adopt((long[])dst.Shape.dimensions.Clone()), true);
+            PutTo(staged, positions, values, "raise");
+            Copyto(dst, staged, NPY_CASTING.NPY_UNSAFE_CASTING, selected);
         }
 
         /// <summary>The address of a <c>StringDType</c> array's first cell (<c>PyArray_DATA</c>; 16-byte cells).</summary>

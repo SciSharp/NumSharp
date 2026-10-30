@@ -13,14 +13,15 @@ namespace NumSharp.Backends
     // arrays are known — the MapIter's gather (mapiter_get, mapiter_trivial_get) and scatter (mapiter_set,
     // mapiter_trivial_set), the index arrays' broadcast and normalization to intp, the selected positions' offsets and the
     // subspace copies. They are the array object's own members (the np-layer dtype plan's D1, P3 batch 8): positions
-    // select and assign elements, nothing computes a value, so no TensorEngine member is involved. The indexers
+    // select and assign elements, and the one value computed, whether a mask selects anything at all, is the engine's Any
+    // over the array the scatter marked (np.any's statement). The indexers
     // (NDArray.Indexing*.cs: prepare_index, the routes that turn masks, slices and integers into index arrays, the string
     // routes) call them; NDArray keeps protected forwarders under the old names (FetchIndices, SetIndices, ...) for types
     // that derive from it.
     //
-    // The file sits beside its indexers rather than under Backends/Unmanaged/ because its statements still call np.*
-    // functions (np.copy, np.broadcast_arrays, np.broadcast_to, np.atleast_1d, np.zeros, np.ones, np.any), which ratchet
-    // R2 forbids under Backends/ (plan C3). The IL kernels stay in Backends/Kernels/.
+    // The plan's phase P6 made each np.* call of the statements (np.copy, np.broadcast_arrays, np.broadcast_to,
+    // np.atleast_1d, np.zeros, np.ones, np.any) the member its facade dispatches to and moved the file from beside the
+    // indexers to Backends/Unmanaged/. The IL kernels stay in Backends/Kernels/.
     // ---------------------------------------------------------------------------------------------------------------------
     public partial class UnmanagedStorage
     {
@@ -135,7 +136,7 @@ namespace NumSharp.Backends
                 source = source.reshape(1);
 
             if (source.Shape.IsBroadcasted)
-                source = np.copy(source).MakeGeneric<T>();
+                source = ((NDArray)source).copy('K').MakeGeneric<T>();   // np.copy(source): ndarray.copy's plain copy
 
             long[] retShape = null, subShape = null;
 
@@ -200,7 +201,7 @@ namespace NumSharp.Backends
                 //handle broadcasting
                 if (broadcastRequired)
                 {
-                    indices = np.broadcast_arrays(indices);
+                    indices = NDArray.BroadcastArrays(indices);
                     indicesSize = indices[0].size;
                     idxs = indices[0];
                 }
@@ -215,7 +216,7 @@ namespace NumSharp.Backends
                         // implied shape, no spurious leading size-1 axis: a[np.array(0), np.array(1)]
                         // -> scalar, matching NumPy.
                         indicesImpliedShape = nd.Shape.dimensions;
-                        indices[i] = nd = np.atleast_1d(nd).flat;
+                        indices[i] = nd = NDArray.AtLeast1d(nd).flat;
                     }
                 }
             }
@@ -658,11 +659,11 @@ namespace NumSharp.Backends
                 }
                 return;
             }
-            using (var proxy = np.zeros(new Shape((long[])src.Shape.dimensions.Clone()), NPTypeCode.Byte))
-            using (var valueProxy = np.ones(new Shape((long[])values.Shape.dimensions.Clone()), NPTypeCode.Byte))
+            using (var proxy = new NDArray(NPTypeCode.Byte, new Shape((long[])src.Shape.dimensions.Clone()), true))
+            using (var valueProxy = NDArray.Ones(new Shape((long[])values.Shape.dimensions.Clone()), NPTypeCode.Byte))
             {
                 MapIterSet(proxy, (NDArray[])indices.Clone(), valueProxy);
-                if (!np.any(proxy))
+                if (!proxy.TensorEngine.Any(proxy))
                     return;
             }
             using var converted = values.astype(src.dtype, true, 'K', "unsafe");
@@ -881,7 +882,7 @@ namespace NumSharp.Backends
                 //handle broadcasting
                 if (broadcastRequired)
                 {
-                    indices = np.broadcast_arrays(indices);
+                    indices = NDArray.BroadcastArrays(indices);
                     indicesSize = indices[0].size;
                     idxs = indices[0];
                 }
@@ -1038,7 +1039,7 @@ namespace NumSharp.Backends
                     string Tup(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
                     try
                     {
-                        valuesTyped = np.broadcast_to(valuesTyped, Shape.Adopt(retShape)).copy().MakeGeneric<T>();
+                        valuesTyped = NDArray.BroadcastTo(valuesTyped, Shape.Adopt(retShape)).copy().MakeGeneric<T>();
                     }
                     catch (IncorrectShapeException ex)
                     {
@@ -1066,7 +1067,7 @@ namespace NumSharp.Backends
                 {
                     try
                     {
-                        typedValues = np.broadcast_to(typedValues, Shape.Adopt(retShape)).copy().MakeGeneric<T>();
+                        typedValues = NDArray.BroadcastTo(typedValues, Shape.Adopt(retShape)).copy().MakeGeneric<T>();
                     }
                     catch (IncorrectShapeException ex)
                     {
@@ -1149,7 +1150,7 @@ namespace NumSharp.Backends
                 // exactly retShape (the same ValueError texts as the general route, per branch).
                 try
                 {
-                    typed = np.broadcast_to(typed, Shape.Adopt(retShape)).copy().MakeGeneric<T>();
+                    typed = NDArray.BroadcastTo(typed, Shape.Adopt(retShape)).copy().MakeGeneric<T>();
                 }
                 catch (IncorrectShapeException ex)
                 {
