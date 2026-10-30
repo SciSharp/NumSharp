@@ -15,6 +15,7 @@ Backends/Default/Math/Default.Power.cs	0	2
 Backends/Default/Math/Default.Shift.cs	0	1
 Backends/Default/Math/DefaultEngine.BinaryOp.cs	0	1
 Backends/Default/Math/DefaultEngine.BitwiseOp.cs	0	3
+Backends/Default/Sorting/Default.Digitize.cs	0	1	# np._FindCommonType(bins, x): a promotion helper on np. The promotion helpers move into the dtype layer after strings merges journey4, whose 88048433 rewrote np.find_common_type.cs, the file they live in (moving them first would conflict there)
 Backends/Iterators/NDIter.cs	0	1
 Backends/Iterators/NDIterCasting.cs	0	2
 Backends/Kernels/BinaryKernel.cs	0	1

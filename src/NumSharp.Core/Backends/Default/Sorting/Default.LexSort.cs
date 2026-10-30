@@ -48,7 +48,7 @@ namespace NumSharp.Backends
             if (nd == 0)
                 return NDArray.Scalar(0L);
             if (first.size <= 1)
-                return np.zeros(Shape.Adopt(first.Shape.dimensions), NPTypeCode.Int64); // [0] for one element, [] for none
+                return new NDArray(NPTypeCode.Int64, Shape.Adopt(first.Shape.dimensions), true); // [0] for one element, [] for none
 
             // First pass over an identity permutation IS the first key's stable argsort;
             // every later key re-sorts the permutation it receives (stably), so the LAST
@@ -66,7 +66,7 @@ namespace NumSharp.Backends
                 VStringSort.LexPass(keys[0], perm, ax);
             }
             else
-                perm = np.argsort(keys[0], ax, kind: "stable");
+                perm = ArgSort(keys[0], ax, kind: "stable");
             for (int j = 1; j < keys.Length; j++)
             {
                 if (Backends.Strings.NDStringUfuncs.IsVString(keys[j]))
@@ -74,8 +74,8 @@ namespace NumSharp.Backends
                     VStringSort.LexPass(keys[j], perm, ax);
                     continue;
                 }
-                var g = np.argsort(np.take_along_axis(keys[j], perm, ax), ax, kind: "stable");
-                perm = np.take_along_axis(perm, g, ax);
+                var g = ArgSort(NDArray.TakeAlongAxis(keys[j], perm, ax), ax, kind: "stable");
+                perm = NDArray.TakeAlongAxis(perm, g, ax);
             }
             return perm;
         }
@@ -94,8 +94,8 @@ namespace NumSharp.Backends
             for (int d = 0; d < dims.Length; d++)
                 lineShape[d] = d == axis ? dims[d] : 1;
             // arange along the axis, broadcast over the other axes and materialized (the pass rewrites it in place).
-            using var line = np.arange(dims[axis]).reshape(Shape.Adopt(lineShape));
-            using var broadcast = np.broadcast_to(line, Shape.Adopt((long[])dims.Clone()));
+            using var line = UnmanagedStorage.ArangeObj(0L, dims[axis], 1L, null).reshape(Shape.Adopt(lineShape));
+            using var broadcast = NDArray.BroadcastTo(line, Shape.Adopt((long[])dims.Clone()));
             return broadcast.copy();
         }
     }

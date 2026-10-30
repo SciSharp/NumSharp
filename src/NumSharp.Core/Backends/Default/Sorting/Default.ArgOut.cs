@@ -1,10 +1,9 @@
 // NumPy's out= contract of np.argmax / np.argmin (PyArray_ArgMaxWithKeepdims / PyArray_ArgMinWithKeepdims: the out's shape,
 // then its safe cast to intp, then an unsafe copy of the indices), which DefaultEngine's ReduceArgMax / ReduceArgMin end
-// with, and the checks they run before a text comparison. The file sits beside the facades while it calls np.copyto:
-// ratchet R2 counts np.* calls against every file under Backends/ (the np-layer dtype plan, C3); it moves under
-// Backends/Default/ in P6.
+// with, and the checks they run before a text comparison.
 
 using System;
+using NumSharp.Backends.Iteration;
 
 namespace NumSharp.Backends
 {
@@ -34,7 +33,8 @@ namespace NumSharp.Backends
                 return result;
 
             ValidateArgOut(@out, result.Shape.dimensions, name);
-            np.copyto(@out, result, casting: "unsafe");
+            // np.copyto(out, result, casting='unsafe'): the array object's assignment at that level.
+            UnmanagedStorage.Copyto(@out, result, NPY_CASTING.NPY_UNSAFE_CASTING);
             return @out;
         }
 

@@ -1,10 +1,9 @@
 // NumPy's np.nanargmax and np.nanargmin (numpy/lib/_nanfunctions_impl.py) as DefaultEngine's members: the axis check,
 // text's argmax / argmin checks, _replace_nan with the all-NaN slice guard, and the arg reduction with NumPy's out=
 // contract (ReduceArgMax / ReduceArgMin's).
-// The file sits beside its facade while it calls np.*: ratchet R2 counts np.* calls against every file under Backends/
-// (the np-layer dtype plan, C3); it moves under Backends/Default/ in P6.
 
 using System;
+using NumSharp.Backends.Iteration;
 
 namespace NumSharp.Backends
 {
@@ -107,23 +106,25 @@ namespace NumSharp.Backends
                     return a;
             }
 
-            var mask = np.isnan(a);
+            // np.isnan / np.any / np.all as the operands' engine members (a static helper: the operand's engine).
+            var mask = a.TensorEngine.IsNan(a);
             // NumPy checks `mask is not None and mask.size` — an empty array skips the all-NaN
             // guard and lets argmax/argmin raise their own empty-sequence error. A NaN-free array
             // needs no replacement copy (argmax only reads, so returning `a` is observably identical).
-            if (mask.size == 0 || !np.any(mask))
+            if (mask.size == 0 || !mask.TensorEngine.Any(mask))
                 return a;
 
+            var engine = mask.TensorEngine;
             bool anyAllNanSlice = axis is int ax
-                ? np.any(np.all(mask, ax))
-                : np.all(mask);
+                ? engine.Any(engine.All(mask, ax))
+                : engine.All(mask);
             if (anyAllNanSlice)
                 throw new ValueError("All-NaN slice encountered");
 
             // np.copyto(a_copy, val, where=mask): the double scalar casts into the operand's own
             // dtype (Half/float/double; Complex becomes (fill, 0) — probed identical to NumPy).
             var replaced = a.copy();
-            np.copyto(replaced, NDArray.Scalar(fill), where: mask);
+            UnmanagedStorage.Copyto(replaced, NDArray.Scalar(fill), NPY_CASTING.NPY_SAME_KIND_CASTING, mask);
             return replaced;
         }
     }

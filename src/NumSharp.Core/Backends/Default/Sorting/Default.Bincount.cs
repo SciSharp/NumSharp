@@ -1,7 +1,6 @@
 // NumPy's np.bincount (arr_bincount, numpy/_core/src/multiarray/compiled_base.c) as DefaultEngine's member: the depth and
-// dtype checks in NumPy's order, a fused min / max scan, and the count and weighted kernels. The file sits beside its
-// facade while it calls np.zeros: ratchet R2 counts np.* calls against every file under Backends/ (the np-layer dtype
-// plan, C3); it moves under Backends/Default/ in P6.
+// dtype checks in NumPy's order, a fused min / max scan, and the count and weighted kernels. Its zero-filled results
+// are the allocation constructor (np.zeros's statement), so the engine calls no np.* function.
 
 using System;
 using System.Numerics;
@@ -74,7 +73,7 @@ namespace NumSharp.Backends
             // Empty input returns zeros(minlength) as int64 — even when weights are present and
             // mismatched, NumPy returns here before ever looking at weights.
             if (len == 0)
-                return np.zeros(Shape.Vector(minlength), NPTypeCode.Int64);
+                return new NDArray(NPTypeCode.Int64, Shape.Vector(minlength), true);
 
             MinMaxInt64(xi, len, out long mn, out long mx);
             if (mn < 0)
@@ -170,7 +169,7 @@ namespace NumSharp.Backends
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe NDArray BincountCount(NDArray xi, long len, long ansSize)
         {
-            NDArray ans = np.zeros(Shape.Vector(ansSize), NPTypeCode.Int64);
+            NDArray ans = new NDArray(NPTypeCode.Int64, Shape.Vector(ansSize), true);
             long* xp = (long*)xi.Address;
             long* a0 = (long*)ans.Address;
 
@@ -258,7 +257,7 @@ namespace NumSharp.Backends
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe NDArray BincountWeighted(NDArray xi, NDArray w64, long len, long ansSize)
         {
-            NDArray ans = np.zeros(Shape.Vector(ansSize), NPTypeCode.Double);
+            NDArray ans = new NDArray(NPTypeCode.Double, Shape.Vector(ansSize), true);
             long* xp = (long*)xi.Address;
             double* wp = (double*)w64.Address;
             double* dans = (double*)ans.Address;

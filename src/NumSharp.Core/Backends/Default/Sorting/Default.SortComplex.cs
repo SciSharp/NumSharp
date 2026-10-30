@@ -1,7 +1,5 @@
 // NumPy's np.sort_complex (numpy/lib/_function_base_impl.py) as DefaultEngine's member: its two statements, the sort in
-// the input's dtype and the conversion to complex. The file sits beside its facade while it calls np.*: ratchet R2
-// counts np.* calls against every file under Backends/ (the np-layer dtype plan, C3); it moves under
-// Backends/Default/ in P6.
+// the input's dtype (the engine's Sort, np.sort's member) and the conversion to complex.
 
 namespace NumSharp.Backends
 {
@@ -16,7 +14,7 @@ namespace NumSharp.Backends
             // np.sort == array(a, copy=True) + in-place sort along the default last axis; the sort
             // runs in the ORIGINAL dtype (an int64 past 2^53 must order by its exact value, not by
             // its double image), and only the sorted result is widened.
-            var b = np.sort(a, -1);
+            var b = Sort(a, -1);
             return b.typecode == NPTypeCode.Complex ? b : b.astype(NPTypeCode.Complex);
         }
     }

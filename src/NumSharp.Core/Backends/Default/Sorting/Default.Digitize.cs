@@ -1,6 +1,6 @@
 // NumPy's np.digitize (numpy/lib/_function_base_impl.py) as DefaultEngine's member: the checks, the monotonicity of
-// the bins and searchsorted on them. The file sits beside its facade while it calls np.*: ratchet R2 counts np.* calls
-// against every file under Backends/ (the np-layer dtype plan, C3); it moves under Backends/Default/ in P6.
+// the bins and searchsorted on them (the engine's SearchSorted, np.searchsorted's member). The one np.* call left is
+// np._FindCommonType, a promotion helper whose move into the dtype layer waits (R2 pins it with its reason).
 
 using System;
 
@@ -31,8 +31,8 @@ namespace NumSharp.Backends
             {
                 string objectSide = right ? "left" : "right";
                 if (mono == -1)
-                    return NDArray.Scalar((long)bins.Shape.dimensions[0]) - np.searchsorted(bins["::-1"], x, objectSide);
-                return np.searchsorted(bins, x, objectSide);
+                    return NDArray.Scalar((long)bins.Shape.dimensions[0]) - SearchSorted(bins["::-1"], x, objectSide);
+                return SearchSorted(bins, x, objectSide);
             }
 
             // A text x is searched as text: searchsorted converts the numeric bins to the common string dtype and runs NumPy's
@@ -43,11 +43,11 @@ namespace NumSharp.Backends
             if (Backends.Strings.NDStringUfuncs.IsString(x))
             {
                 if (x.size == 0 || bins.size == 0)
-                    return np.zeros(Shape.Adopt((long[])x.Shape.dimensions.Clone()), NPTypeCode.Int64);
+                    return new NDArray(NPTypeCode.Int64, Shape.Adopt((long[])x.Shape.dimensions.Clone()), true);
                 string textSide = right ? "left" : "right";
                 if (mono == -1)
-                    return NDArray.Scalar((long)bins.Shape.dimensions[0]) - np.searchsorted(bins["::-1"], x, textSide);
-                return np.searchsorted(bins, x, textSide);
+                    return NDArray.Scalar((long)bins.Shape.dimensions[0]) - SearchSorted(bins["::-1"], x, textSide);
+                return SearchSorted(bins, x, textSide);
             }
 
             // The side is reversed relative to `right` because searchsorted's operands are swapped
@@ -65,11 +65,11 @@ namespace NumSharp.Backends
                 // Decreasing bins: reverse to ascending, search, then invert the indices.
                 //   result = len(bins) - searchsorted(bins[::-1], x, side)
                 NDArray rev = binsC["::-1"].copy();
-                NDArray ss = np.searchsorted(rev, x, side);
+                NDArray ss = SearchSorted(rev, x, side);
                 return NDArray.Scalar((long)bins.Shape.dimensions[0]) - ss;
             }
 
-            return np.searchsorted(binsC, x, side);
+            return SearchSorted(binsC, x, side);
         }
 
         /// <summary>
