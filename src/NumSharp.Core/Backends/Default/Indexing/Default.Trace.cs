@@ -124,8 +124,8 @@ namespace NumSharp.Backends
             result = null;
 
             int ndim = a.ndim;
-            int ax1 = check_and_adjust_axis(ndim, axis1, nameof(axis1));
-            int ax2 = check_and_adjust_axis(ndim, axis2, nameof(axis2));
+            int ax1 = Shape.check_and_adjust_axis(ndim, axis1, nameof(axis1));
+            int ax2 = Shape.check_and_adjust_axis(ndim, axis2, nameof(axis2));
             // PyArray_Diagonal's ValueError, after both axes are in range.
             if (ax1 == ax2)
                 throw new ValueError(

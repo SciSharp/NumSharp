@@ -54,7 +54,7 @@ namespace NumSharp
         {
             ThrowIfDisposed();
             var sortKind = SortKindArguments.Resolve(kind, order, stable);
-            int ax = DefaultEngine.check_and_adjust_axis(ndim, axis);
+            int ax = Shape.check_and_adjust_axis(ndim, axis);
             if (!Ids.Shape.IsWriteable)
                 throw new ValueError("sort array is read-only");
             SortInPlace(ax, sortKind == NPY_SORTKIND.NPY_STABLESORT);
@@ -550,12 +550,12 @@ namespace NumSharp
             {
                 // PyArray_ArgSort's PyArray_CheckAxis ravels a 0-d array to one element first: axis 0 / -1 of a 1-D array
                 // (any other is the AxisError of dimension 1), and the result is that 1-D array's argsort, [0].
-                DefaultEngine.check_and_adjust_axis(1, axis.Value);
+                Shape.check_and_adjust_axis(1, axis.Value);
                 return new NDArray(NPTypeCode.Int64, Shape.Vector(1), true);
             }
             else
             {
-                ax = DefaultEngine.check_and_adjust_axis(ndim, axis.Value);
+                ax = Shape.check_and_adjust_axis(ndim, axis.Value);
             }
             using (flatRanks)
             {
@@ -591,7 +591,7 @@ namespace NumSharp
         {
             ThrowIfDisposed();
             CheckSelectKind(kind, order);
-            int ax = DefaultEngine.check_and_adjust_axis(ndim, axis);
+            int ax = Shape.check_and_adjust_axis(ndim, axis);
             if (!Ids.Shape.IsWriteable)
                 throw new ValueError("partition array is read-only");
             PrepKth(kth, Ids.Shape.dimensions[ax], size);
@@ -614,12 +614,12 @@ namespace NumSharp
             {
                 // PyArray_ArgPartition's PyArray_CheckAxis ravels a 0-d array to one element first.
                 if (axis is { } a0 && a0 != 0 && a0 != -1)
-                    DefaultEngine.check_and_adjust_axis(1, a0);
+                    Shape.check_and_adjust_axis(1, a0);
                 PrepKth(kth, 1, 1);
                 var one = new NDArray(NPTypeCode.Int64, Shape.Vector(1), true);
                 return one;
             }
-            long n = axis is null ? size : Ids.Shape.dimensions[DefaultEngine.check_and_adjust_axis(ndim, axis.Value)];
+            long n = axis is null ? size : Ids.Shape.dimensions[Shape.check_and_adjust_axis(ndim, axis.Value)];
             PrepKth(kth, n, size);
             return ArgSortCore(axis, stable: false);
         }

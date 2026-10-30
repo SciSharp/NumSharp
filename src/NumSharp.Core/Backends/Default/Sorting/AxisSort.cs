@@ -357,7 +357,7 @@ namespace NumSharp.Backends.Sorting
         /// <param name="ndim">The rank it addresses (the caller passes 1 for a 0-d input NumPy ravels first).</param>
         /// <returns>The non-negative axis.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is outside <c>[-ndim, ndim)</c>.</exception>
-        internal static int NormalizeAxis(int axis, int ndim) => DefaultEngine.check_and_adjust_axis(ndim, axis);
+        internal static int NormalizeAxis(int axis, int ndim) => Shape.check_and_adjust_axis(ndim, axis);
 
         // ============================ in-place line sort ============================
 

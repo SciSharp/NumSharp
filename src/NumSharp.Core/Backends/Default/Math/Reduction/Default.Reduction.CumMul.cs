@@ -110,7 +110,7 @@ namespace NumSharp.Backends
             // PyArray_CheckAxis, before any shortcut: the axis addresses rank max(ndim, 1) (a 0-d input ravels to 1-D), so
             // cumprod([5], axis=-3) and cumprod(0-d, axis=1) are NumPy's AxisError, not the value itself. The shortcuts below
             // used to run first, and the later wrap-then-test loop accepted -ndim - 1 (reducing the last axis).
-            int axisChecked = axis_ is null ? 0 : check_and_adjust_axis(Math.Max(arr.ndim, 1), axis_.Value);
+            int axisChecked = axis_ is null ? 0 : Shape.check_and_adjust_axis(Math.Max(arr.ndim, 1), axis_.Value);
 
             // Empty: cumprod returns a FRESH array of the accumulator dtype (NEP50 widening applies
             // even when empty — cumprod(empty int32) is int64, like cumsum). axis=None ravels to a

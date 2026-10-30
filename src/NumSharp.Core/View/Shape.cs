@@ -1401,7 +1401,7 @@ namespace NumSharp
             if (dims.Length == 0)
                 return Array.Empty<long>();
 
-            axis = Backends.DefaultEngine.check_and_adjust_axis(dims.Length, axis);
+            axis = check_and_adjust_axis(dims.Length, axis);
             return dims.RemoveAt(axis);
         }
 

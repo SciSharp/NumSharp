@@ -523,7 +523,7 @@ namespace NumSharp.Backends
 
             // normalize_axis_index, on the axis as given: the wrap-then-test loop this replaces accepted -ndim - 1 and
             // reduced the last axis instead of raising.
-            axis = check_and_adjust_axis(arr.ndim, axis);
+            axis = Shape.check_and_adjust_axis(arr.ndim, axis);
 
             // Get kernel
             var inputType = arr.GetTypeCode;

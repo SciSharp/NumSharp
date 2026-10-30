@@ -8288,7 +8288,7 @@ namespace NumSharp
             // NumPy's AxisError even for an unmasked operand (this method used to wrap it and return the data).
             int[] axes = axis is null
                 ? Enumerable.Range(0, nd).ToArray()
-                : DefaultEngine.normalize_axis_tuple(axis.Value, nd);
+                : Shape.normalize_axis_tuple(axis.Value, nd);
             // `if m is nomask or not m.any(): return x._data` — a VIEW of the data (OWNDATA false), as NumPy's
             // `asarray(x)._data` is, never the operand's own array object.
             if (m is null || !np.any(m))

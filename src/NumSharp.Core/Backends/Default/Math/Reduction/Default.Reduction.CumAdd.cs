@@ -117,7 +117,7 @@ namespace NumSharp.Backends
             // treated as 1-D for cumsum, so the valid range is [-nd, nd) with nd = max(ndim, 1).
             int axis = 0;
             if (axis_ != null)
-                axis = check_and_adjust_axis(Math.Max(arr.ndim, 1), axis_.Value);
+                axis = Shape.check_and_adjust_axis(Math.Max(arr.ndim, 1), axis_.Value);
 
             // Empty: cumsum returns a FRESH array of the accumulator dtype — NEP50 widening applies
             // even when empty (cumsum(empty int32) is int64). axis=None ravels to 1-D (NumPy shape

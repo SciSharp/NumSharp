@@ -77,7 +77,7 @@ namespace NumSharp
 
             // normalize_axis_index on the axis as given. The wrap-then-test loop this replaces never ended for a negative
             // axis of a 0-d input, and wrapped -ndim - 1 to the last axis.
-            axis = Backends.DefaultEngine.check_and_adjust_axis(a.ndim, axis);
+            axis = Shape.check_and_adjust_axis(a.ndim, axis);
 
             if (a.Shape.dimensions[axis] != 1)
                 throw new ValueError("cannot select an axis to squeeze out which has size not equal to one");

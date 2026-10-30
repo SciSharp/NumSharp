@@ -120,7 +120,7 @@ namespace NumSharp
 
             // check_and_adjust_axis(&axis, ndim) of PyArray_ConcatenateArrays: NumPy's AxisError for an axis out of range,
             // the axis as given (axis=None ravels first, so its effective axis 0 always fits).
-            effectiveAxis = DefaultEngine.check_and_adjust_axis(ndim, effectiveAxis);
+            effectiveAxis = Shape.check_and_adjust_axis(ndim, effectiveAxis);
 
             // Shape validation: all inputs must have same ndim and match on
             // non-axis dimensions. Accumulate axis size for the result.

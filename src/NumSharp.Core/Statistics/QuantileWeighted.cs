@@ -209,7 +209,7 @@ namespace NumSharp.Statistics
                 throw new ValueError($"Only method 'inverted_cdf' supports weights. Got: {method ?? "None"}.");
             // `axis = normalize_axis_tuple(axis, a.ndim, argname="axis")`: the argument name prefixes NumPy's texts here,
             // unlike the unweighted call, where only _ureduce normalizes the axis.
-            reduced = axis is null ? null : DefaultEngine.normalize_axis_tuple(axis, a.ndim, "axis");
+            reduced = axis is null ? null : Shape.normalize_axis_tuple(axis, a.ndim, "axis");
             NDArray wgt = WeightsAreValid(weights, a, reduced);
             // `if np.any(weights < 0)` compares the weights as the caller gave them (`np.asanyarray` keeps a subclass): a
             // chararray's own `<` is compare_chararrays, which refuses a number whatever the text holds (probed 2.4.2).

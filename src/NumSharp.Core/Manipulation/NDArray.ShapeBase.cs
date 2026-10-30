@@ -57,7 +57,7 @@ namespace NumSharp
             // and this reproduces its text exactly so both overloads agree.
             // normalize_axis_tuple((axis,), out_ndim) raises NumPy's AxisError; the range test runs on the axis as given.
             int outNdim = a.ndim + 1;
-            Backends.DefaultEngine.check_and_adjust_axis(outNdim, axis);
+            Shape.check_and_adjust_axis(outNdim, axis);
 
             return new NDArray(a.Storage.Alias(a.Shape.ExpandDimension(axis))) { TensorEngine = a.TensorEngine };
         }

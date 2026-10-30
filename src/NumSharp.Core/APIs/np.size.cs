@@ -30,7 +30,7 @@ namespace NumSharp
 
             // normalize_axis_tuple's AxisError, on the axis as given: the old wrap-then-index read the dimension array
             // out of its bounds (IndexOutOfRangeException) for an axis past either end, and a 0-d input.
-            return a.Shape.dimensions[Backends.DefaultEngine.check_and_adjust_axis(a.ndim, axis.Value)];
+            return a.Shape.dimensions[Shape.check_and_adjust_axis(a.ndim, axis.Value)];
         }
 
         //based on:

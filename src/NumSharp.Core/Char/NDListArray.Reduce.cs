@@ -1474,7 +1474,7 @@ namespace NumSharp
             else
             {
                 // PyArray_CheckAxis: a 0-d array is one element along axis 0 / -1.
-                ax = ndim == 0 ? DefaultEngine.check_and_adjust_axis(1, axis.Value) : DefaultEngine.check_and_adjust_axis(ndim, axis.Value);
+                ax = ndim == 0 ? Shape.check_and_adjust_axis(1, axis.Value) : Shape.check_and_adjust_axis(ndim, axis.Value);
                 source = ndim == 0 ? Ids.reshape(1) : Ids;
             }
             try
@@ -1851,7 +1851,7 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException">The mask does not broadcast to the array (np.broadcast_to's error).</exception>
         private long StatisticsCount(int? axis, NDArray mask)
         {
-            long items = axis is null ? size : Ids.Shape.dimensions[DefaultEngine.check_and_adjust_axis(ndim, axis.Value)];
+            long items = axis is null ? size : Ids.Shape.dimensions[Shape.check_and_adjust_axis(ndim, axis.Value)];
             if (mask is not null)
             {
                 // broadcast_to(where, arr.shape) runs before any reduction, whatever the mask's dtype.
@@ -2075,7 +2075,7 @@ namespace NumSharp
             }
             else
             {
-                int ax = ndim == 0 ? 0 : DefaultEngine.check_and_adjust_axis(ndim, axis.Value);
+                int ax = ndim == 0 ? 0 : Shape.check_and_adjust_axis(ndim, axis.Value);
                 count = ndim == 0 ? 1 : Ids.Shape.dimensions[ax];
                 outputs = count == 0 ? SizeWithout(ax) : size / count;
             }

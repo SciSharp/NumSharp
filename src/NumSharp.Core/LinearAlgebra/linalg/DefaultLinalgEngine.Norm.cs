@@ -81,7 +81,7 @@ namespace NumSharp.Backends
             if (axis is not null)
             {
                 int nd = x.ndim;
-                var normalized = Backends.DefaultEngine.normalize_axis_tuple(axis, nd);
+                var normalized = Shape.normalize_axis_tuple(axis, nd);
 
                 // rest = the axes not reduced, in order; newshape = axis + rest (the raw axes: transpose accepts them).
                 var isReduced = new bool[nd];
@@ -669,7 +669,7 @@ namespace NumSharp.Backends
         /// <param name="nd">The operand's rank.</param>
         /// <returns>The non-negative axis.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
-        private static int NormalizeAxis(int axis, int nd) => Backends.DefaultEngine.check_and_adjust_axis(nd, axis);
+        private static int NormalizeAxis(int axis, int nd) => Shape.check_and_adjust_axis(nd, axis);
 
         /// <summary>
         ///     Python's <c>x.shape[axis]</c>: the tuple index np.linalg.cross reads BEFORE it normalizes anything, so an

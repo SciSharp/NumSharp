@@ -186,7 +186,7 @@ namespace NumSharp
             }
 
             r = FreshOwner(r);
-            r.Storage.SetShapeUnsafe(DefaultEngine.TransposedShape(r.Shape, permutation));
+            r.Storage.SetShapeUnsafe(Shape.TransposedShape(r.Shape, permutation));
             return r;
         }
 

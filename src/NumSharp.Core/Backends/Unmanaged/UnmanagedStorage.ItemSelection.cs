@@ -1983,7 +1983,7 @@ namespace NumSharp.Backends
             // input ravels first), checked before either path reads anything — the fast path treated a 0-d input as one
             // element for ANY axis.
             if (axis is not null)
-                Backends.DefaultEngine.check_and_adjust_axis(Math.Max(a.ndim, 1), axis.Value);
+                Shape.check_and_adjust_axis(Math.Max(a.ndim, 1), axis.Value);
 
             // Fast path: bool cond, contig src, no out= override (so result dtype
             // == src dtype). Wires straight into the fused gather kernel.
@@ -2058,7 +2058,7 @@ namespace NumSharp.Backends
             }
             else
             {
-                int ax = Backends.DefaultEngine.check_and_adjust_axis(a.ndim, axis.Value);
+                int ax = Shape.check_and_adjust_axis(a.ndim, axis.Value);
 
                 outerSize = 1;
                 for (int d = 0; d < ax; d++) outerSize *= a.Shape.dimensions[d];

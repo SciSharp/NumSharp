@@ -72,7 +72,7 @@ namespace NumSharp.Backends
 
             // normalize_axis_index(axis, nd): valid range is [-nd, nd-1]. NumPy raises
             // AxisError here (via normalize_axis_index) reporting the ORIGINAL axis.
-            int ax = Backends.DefaultEngine.check_and_adjust_axis(nd, axis);
+            int ax = Shape.check_and_adjust_axis(nd, axis);
 
             // diff's subtract runs after its rank and axis checks, and has no loop for text: two StringDType operands are
             // named by class (the dispatcher), two fixed-width ones by descriptor (the legacy resolver).

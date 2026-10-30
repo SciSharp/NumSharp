@@ -301,7 +301,7 @@ namespace NumSharp.Backends
                 return NDArray.Scalar(CountNonZero(nd)).MarkReductionScalar();
             }
 
-            axis = check_and_adjust_axis(nd.ndim, axis);
+            axis = Shape.check_and_adjust_axis(nd.ndim, axis);
 
             // NumPy's count_nonzero along an axis IS `a.astype(bool, copy=False).sum(axis=axis, dtype=np.intp,
             // keepdims=keepdims)` (numeric.py): the bool cast (NaN and inf true, -0.0 false, a complex value true when

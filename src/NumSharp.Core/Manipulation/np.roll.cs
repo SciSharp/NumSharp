@@ -35,7 +35,7 @@ namespace NumSharp
                 return roll(a.ravel(), shift, 0).reshape(Shape.Adopt(a.Shape.dimensions));
 
             // normalize_axis_tuple(axis, a.ndim, allow_duplicate=True): NumPy's AxisError, the axis as given.
-            int ax = Backends.DefaultEngine.check_and_adjust_axis(a.ndim, axis.Value);
+            int ax = Shape.check_and_adjust_axis(a.ndim, axis.Value);
 
             long n = a.Shape.dimensions[ax];
 

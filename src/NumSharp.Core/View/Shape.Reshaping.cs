@@ -364,7 +364,7 @@ namespace NumSharp
         /// <remarks>
         ///     Each axis is normalized against the FINAL output ndim
         ///     (<c>inputNdim + axes.Length</c>) by NumPy's <c>normalize_axis_tuple</c>
-        ///     (<see cref="Backends.DefaultEngine.normalize_axis_tuple(int[], int, object, bool)"/>).
+        ///     (<see cref="normalize_axis_tuple(int[], int, object, bool)"/>).
         /// </remarks>
         /// <param name="axes">Positions in the expanded output where size-1 axes are placed.</param>
         /// <returns>A new <see cref="Shape"/> aliasing the same storage with size-1 dims inserted.</returns>
@@ -380,7 +380,7 @@ namespace NumSharp
 
             // normalize_axis_tuple(axis, out_ndim): every axis normalized against the OUTPUT ndim (NumPy's AxisError for one
             // out of range, the axis as given), then the "repeated axis" ValueError.
-            var normalized = Backends.DefaultEngine.normalize_axis_tuple(axes, outNdim);
+            var normalized = normalize_axis_tuple(axes, outNdim);
 
             // Apply axes in ascending order so each ExpandDimension call sees a
             // stable "earlier dim has already been inserted" view.

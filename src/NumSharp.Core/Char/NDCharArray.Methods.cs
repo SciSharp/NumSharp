@@ -214,7 +214,7 @@ namespace NumSharp
             get
             {
                 Finalize(dtype);
-                return new NDCharArray(Storage.Alias(Backends.DefaultEngine.ReversedAxesShape(Shape))) { TensorEngine = TensorEngine };
+                return new NDCharArray(Storage.Alias(Shape.ReversedAxesShape(Shape))) { TensorEngine = TensorEngine };
             }
         }
 

@@ -55,7 +55,7 @@ namespace NumSharp
                 if (x.ndim != 1)
                     return NDCharArrayBoundary.KeptAll((x, axis), static s => unstack(s.x, s.axis));
                 // moveaxis' axis check first ("source: axis 1 is out of bounds ..."), then the elements.
-                DefaultEngine.check_and_adjust_axis(1, axis, "source");
+                Shape.check_and_adjust_axis(1, axis, "source");
                 return NDCharArrayBoundary.StrippedElements((NDCharArray)x);
             }
             if (x is null)
@@ -68,7 +68,7 @@ namespace NumSharp
 
             // NumPy's unstack is `tuple(moveaxis(x, axis, 0))`, so a bad axis is moveaxis' "source: axis … is out of
             // bounds" AxisError.
-            axis = DefaultEngine.check_and_adjust_axis(ndim, axis, "source");
+            axis = Shape.check_and_adjust_axis(ndim, axis, "source");
 
             var shape = x.Shape;
             var result = new NDArray[checked((int)shape.dimensions[axis])];

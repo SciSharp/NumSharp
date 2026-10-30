@@ -9,9 +9,18 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
+        // =============================================================================
+        // The axis math is Shape's (View/Shape.Axes.cs): check_and_adjust_axis, normalize_axis_tuple, the permutations
+        // of the axis views and the transposed view's layout. The public statics below shipped in 0.70.0 and forward to
+        // it, so a caller of the released API keeps working; the library calls Shape's members. The four overrides are
+        // the array-object members TensorEngine shipped (they stay on the engine): Shape computes their permutation,
+        // the storage aliases the view.
+        // =============================================================================
+
         /// <summary>
         ///     NumPy's <c>normalize_axis_index(axis, nd.ndim)</c>: <paramref name="axis"/> wrapped into
-        ///     <c>[0, nd.ndim)</c>, or NumPy's <see cref="AxisError"/> naming the axis as given.
+        ///     <c>[0, nd.ndim)</c>, or NumPy's <see cref="AxisError"/> naming the axis as given. Forwards to
+        ///     <see cref="Shape.check_and_adjust_axis(int, int, string)"/>.
         /// </summary>
         /// <param name="nd">The array whose rank the axis addresses.</param>
         /// <param name="axis">The axis; negative values count from the end.</param>
@@ -20,12 +29,13 @@ namespace NumSharp.Backends
         [MethodImpl(Inline)]
         public static int check_and_adjust_axis(NDArray nd, int axis)
         {
-            return check_and_adjust_axis(nd.ndim, axis, null);
+            return Shape.check_and_adjust_axis(nd.ndim, axis, null);
         }
 
         /// <summary>
         ///     NumPy's <c>normalize_axis_index(axis, ndim)</c> (C: <c>check_and_adjust_axis</c>): <paramref name="axis"/>
-        ///     wrapped into <c>[0, ndims)</c>, or NumPy's <see cref="AxisError"/> naming the axis as given.
+        ///     wrapped into <c>[0, ndims)</c>, or NumPy's <see cref="AxisError"/> naming the axis as given. Forwards to
+        ///     <see cref="Shape.check_and_adjust_axis(int, int, string)"/>.
         /// </summary>
         /// <param name="ndims">The rank the axis addresses.</param>
         /// <param name="axis">The axis; negative values count from the end.</param>
@@ -35,13 +45,14 @@ namespace NumSharp.Backends
         [MethodImpl(Inline)]
         public static int check_and_adjust_axis(int ndims, int axis)
         {
-            return check_and_adjust_axis(ndims, axis, null);
+            return Shape.check_and_adjust_axis(ndims, axis, null);
         }
 
         /// <summary>
-        ///     NumPy's <c>normalize_axis_index(axis, ndim, msg_prefix)</c> (C: <c>check_and_adjust_axis_msg</c>), the ONE
-        ///     axis check every axis-taking function routes through: <paramref name="axis"/> wrapped into
-        ///     <c>[0, ndims)</c>, or NumPy's <see cref="AxisError"/> with the argument name in front of its text.
+        ///     NumPy's <c>normalize_axis_index(axis, ndim, msg_prefix)</c> (C: <c>check_and_adjust_axis_msg</c>):
+        ///     <paramref name="axis"/> wrapped into <c>[0, ndims)</c>, or NumPy's <see cref="AxisError"/> with the argument
+        ///     name in front of its text. Forwards to <see cref="Shape.check_and_adjust_axis(int, int, string)"/>, the ONE
+        ///     axis check every axis-taking function routes through.
         /// </summary>
         /// <param name="ndims">The rank the axis addresses. A 0-d operand is rank 0, so no axis fits it — the functions
         ///     that treat a 0-d operand as 1-D (NumPy's <c>PyArray_CheckAxis</c>: argmax, cumsum, take, compress, …)
@@ -53,22 +64,21 @@ namespace NumSharp.Backends
         /// <exception cref="AxisError"><paramref name="axis"/> is outside <c>[-ndims, ndims)</c>.</exception>
         /// <remarks>
         ///     The range is tested on the value as given, BEFORE any wrap. A wrap-then-test spelling
-        ///     (<c>while (axis &lt; 0) axis += ndim</c>) is the bug this replaces in its callers: it wraps
-        ///     <c>-ndim - 1</c> to <c>-1</c> and then to <c>ndim - 1</c>, so an out-of-range axis silently reduced the
-        ///     last axis, and on a 0-d operand (<c>ndim == 0</c>) it never terminates.
+        ///     (<c>while (axis &lt; 0) axis += ndim</c>) wraps <c>-ndim - 1</c> to <c>-1</c> and then to <c>ndim - 1</c>, so
+        ///     an out-of-range axis silently reduces the last axis, and on a 0-d operand (<c>ndim == 0</c>) it never
+        ///     terminates.
         /// </remarks>
         [MethodImpl(Inline)]
         public static int check_and_adjust_axis(int ndims, int axis, string msgPrefix)
         {
-            if (axis < -ndims || axis >= ndims)
-                throw new AxisError(axis, ndims, msgPrefix);
-            return axis < 0 ? axis + ndims : axis;
+            return Shape.check_and_adjust_axis(ndims, axis, msgPrefix);
         }
 
         /// <summary>
         ///     NumPy's <c>numpy.lib.array_utils.normalize_axis_tuple</c>: every axis of <paramref name="axis"/> wrapped
         ///     into <c>[0, ndim)</c> (an AxisError naming the argument when one is out of range), then — unless
         ///     <paramref name="allow_duplicate"/> — NumPy's "repeated axis" ValueError when two name the same axis.
+        ///     Forwards to <see cref="Shape.normalize_axis_tuple(int[], int, object, bool)"/>.
         /// </summary>
         /// <param name="axis">The un-normalized axes. Never modified: the result is a new array.</param>
         /// <param name="ndim">The rank the axes address.</param>
@@ -80,34 +90,14 @@ namespace NumSharp.Backends
         /// <returns>The normalized axes, one per input entry, in input order.</returns>
         /// <exception cref="AxisError">An axis is out of range (checked for every axis before any repeat).</exception>
         /// <exception cref="ValueError">Two axes are the same after normalization and duplicates are not allowed.</exception>
-        /// <remarks>
-        ///     Two former behaviours are gone: the caller's array was rewritten in place (so a caller that passed its own
-        ///     axes array saw it normalized), and a repeat was silently REMOVED (<c>Distinct()</c>), which made
-        ///     <c>np.moveaxis(a, [0, 0], [0, 1])</c> report a length mismatch instead of NumPy's repeat.
-        /// </remarks>
         public static int[] normalize_axis_tuple(int[] axis, int ndim, object argname = null, bool allow_duplicate = false)
         {
-            string name = argname?.ToString();
-            var normalized = new int[axis.Length];
-            // normalize_axis_index(ax, ndim, argname) for each entry, in order: the FIRST out-of-range axis is reported,
-            // and every range check runs before the repeat check (NumPy's tuple comprehension, then len(set(axis))).
-            for (int i = 0; i < axis.Length; i++)
-                normalized[i] = check_and_adjust_axis(ndim, axis[i], name);
-
-            if (!allow_duplicate)
-            {
-                for (int i = 1; i < normalized.Length; i++)
-                    for (int j = 0; j < i; j++)
-                        if (normalized[i] == normalized[j])
-                            // `if argname:` — Python's truthiness, so an empty name gives the plain text.
-                            throw new ValueError(string.IsNullOrEmpty(name) ? "repeated axis" : $"repeated axis in `{name}` argument");
-            }
-
-            return normalized;
+            return Shape.normalize_axis_tuple(axis, ndim, argname, allow_duplicate);
         }
 
         /// <summary>
         ///     NumPy's <c>normalize_axis_tuple</c> for one integer axis: the one-element tuple of the normalized axis.
+        ///     Forwards to <see cref="Shape.normalize_axis_tuple(int, int, object, bool)"/>.
         /// </summary>
         /// <param name="axis">The un-normalized axis.</param>
         /// <param name="ndim">The rank the axis addresses.</param>
@@ -117,7 +107,7 @@ namespace NumSharp.Backends
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
         public static int[] normalize_axis_tuple(int axis, int ndim, object argname = null, bool allow_duplicate = false)
         {
-            return normalize_axis_tuple(new int[] {axis}, ndim, argname, allow_duplicate);
+            return Shape.normalize_axis_tuple(axis, ndim, argname, allow_duplicate);
         }
 
         /// <summary>
@@ -134,20 +124,9 @@ namespace NumSharp.Backends
         ///     have different lengths ("`source` and `destination` arguments must have the same number of elements").</exception>
         public override NDArray MoveAxis(NDArray nd, int[] source, int[] destination)
         {
-            // NumPy's statements in NumPy's order: source is normalized (and repeat-checked) first, then destination,
-            // and only then the lengths are compared.
-            source = normalize_axis_tuple(source, nd.ndim, "source");
-            destination = normalize_axis_tuple(destination, nd.ndim, "destination");
-            if (source.Length != destination.Length)
-                throw new ValueError("`source` and `destination` arguments must have the same number of elements");
-
-            var order = Enumerable.Range(0, nd.ndim).Except(source).ToList();
-
-            // for dest, src in sorted(zip(destination, source)): order.insert(dest, src)
-            foreach (var (dest, src) in destination.Zip(source, (i, i1) => (dest: i, src: i1)).OrderBy(tuple => tuple.dest).ThenBy(tuple => tuple.src))
-                order.Insert(dest, src);
-
-            return Transpose(nd, order.ToArray());
+            // np.moveaxis' statements in NumPy's order (source normalized and repeat-checked first, then destination, then
+            // the lengths compared) give the permutation; the view is this engine's Transpose of it.
+            return Transpose(nd, Shape.MoveAxisPermutation(nd.ndim, source, destination));
         }
 
         /// <summary>
@@ -161,23 +140,7 @@ namespace NumSharp.Backends
         /// <exception cref="AxisError">An axis is out of range: "axis1: axis …" or "axis2: axis …" (axis1 checked first).</exception>
         public override NDArray SwapAxes(NDArray nd, int axis1, int axis2)
         {
-            var ndims = nd.ndim;
-            var dims = new long[ndims];
-            for (int i = 0; i < ndims; i++)
-                dims[i] = i;
-
-            // check_and_adjust_axis_msg(&a1, n, axis1) then (&a2, n, axis2): NumPy names the argument in the text.
-            axis1 = check_and_adjust_axis(ndims, axis1, "axis1");
-            axis2 = check_and_adjust_axis(ndims, axis2, "axis2");
-
-            dims[axis1] = axis2;
-            dims[axis2] = axis1;
-
-            // Convert long[] to int[] for Transpose (axes are limited to int range)
-            var intDims = new int[ndims];
-            for (int i = 0; i < ndims; i++)
-                intDims[i] = (int)dims[i];
-            return Transpose(nd, intDims);
+            return Transpose(nd, Shape.SwapAxesPermutation(nd.ndim, axis1, axis2));
         }
 
         /// <summary>
@@ -194,71 +157,33 @@ namespace NumSharp.Backends
         ///     its negative wrap, as NumPy prints it).</exception>
         public override NDArray RollAxis(NDArray nd, int axis, int start = 0)
         {
-            int n = nd.ndim;
-            axis = check_and_adjust_axis(n, axis);
-            if (start < 0)
-                start += n;
-
-            // NumPy's own message-only AxisError, reporting `start` AFTER the negative wrap.
-            if (!(0 <= start && start < n + 1))
-                throw new AxisError($"'start' arg requires {-n} <= start < {n + 1}, but {start} was passed in");
-
-            if (axis < start)
-                start -= 1;
+            var permutation = Shape.RollAxisPermutation(nd.ndim, axis, start);
 
             // `return a[...]`: a NEW view of the array, never the array object itself (NumPy's identity rule — the caller
-            // may reshape or resize the result without touching the input).
-            if (axis == start)
+            // may reshape or resize the result without touching the input). Null is the "no axis moves" answer.
+            if (permutation == null)
                 return new NDArray(nd.Storage.Alias()) { TensorEngine = nd.TensorEngine };
 
-            var premutes = new List<int>(n);
-            for (int i = 0; i < n; i++)
-                premutes.Add(i);
-
-            premutes.RemoveAt(axis);
-            premutes.Insert(start, axis);
-            return Transpose(nd, premutes.ToArray());
+            return Transpose(nd, permutation);
         }
 
+        /// <summary>
+        ///     NumPy's <c>PyArray_Transpose</c>: a VIEW of <paramref name="nd"/> whose axis <c>i</c> is the source axis
+        ///     <c>premute[i]</c>, or with the axes reversed when <paramref name="premute"/> is null.
+        /// </summary>
+        /// <param name="nd">The array.</param>
+        /// <param name="premute">The axes in their new order (NumPy's <c>axes</c>), or null for <c>axes=None</c>. An
+        ///     empty array is NumPy's <c>axes=()</c>, which only a 0-d array matches.</param>
+        /// <returns>A new view sharing <paramref name="nd"/>'s buffer, with permuted dimensions and strides; it keeps the
+        ///     source's writeability (a read-only broadcast or memmap stays read-only).</returns>
+        /// <exception cref="ValueError">The permutation has another length than the array's rank ("axes don't match
+        ///     array") or names an axis twice ("repeated axis in transpose").</exception>
+        /// <exception cref="AxisError">An entry of the permutation is out of range.</exception>
         public override NDArray Transpose(NDArray nd, int[] premute = null)
         {
-            int i, n;
-            var permutation = new int[nd.ndim];
-            var reverse_permutation = new int[nd.ndim];
-            // NumPy distinguishes axes=None (reverse all axes) from an explicit length-0
-            // permutation axes=() / []: the empty permutation only matches a 0-d array,
-            // and raises "axes don't match array" for any ndim >= 1. So only a null
-            // `premute` means "reverse"; an empty array falls through to the length check.
-            if (premute == null)
-            {
-                n = nd.ndim;
-                for (i = 0; i < n; i++)
-                {
-                    permutation[i] = n - 1 - i;
-                }
-            }
-            else
-            {
-                n = premute.Length;
-                int[] axes = premute;
-                // PyArray_Transpose: a permutation of another length is NumPy's ValueError before any axis is read.
-                if (n != nd.ndim)
-                    throw new ValueError("axes don't match array");
-
-                for (i = 0; i < n; i++)
-                    reverse_permutation[i] = -1;
-
-                for (i = 0; i < n; i++)
-                {
-                    // check_and_adjust_axis (AxisError, no prefix), then the repeat test — per entry, in order.
-                    int axis = check_and_adjust_axis(nd, axes[i]);
-                    if (reverse_permutation[axis] != -1)
-                        throw new ValueError("repeated axis in transpose");
-
-                    reverse_permutation[axis] = i;
-                    permutation[i] = axis;
-                }
-            }
+            // PyArray_Transpose's permutation: axes=None reverses, an explicit permutation is checked entry by entry
+            // (Shape.TransposePermutation).
+            var permutation = Shape.TransposePermutation(nd.ndim, premute);
 
             // An EMPTY array takes the same view path as any other: NumPy's PyArray_Transpose always returns a view of
             // its input with permuted dimensions AND strides (owndata False, the source's writeability kept). A former
@@ -272,55 +197,11 @@ namespace NumSharp.Backends
             //
             // No data copy is needed - transpose is always O(1).
             // The transposed shape shares memory with the original.
-            var newShape = TransposedShape(nd.Shape, permutation);
+            var newShape = Shape.TransposedShape(nd.Shape, permutation);
 
             // Return an alias (view) with the permuted shape. Alias() inherits writeability from the
             // source, so transposing a read-only array (broadcast / 'r' memmap) stays read-only.
             return new NDArray(nd.Storage.Alias(newShape)) { TensorEngine = nd.TensorEngine };
-        }
-
-        /// <summary>
-        ///     The shape of a transposed VIEW (<c>PyArray_Transpose</c>'s new array): axis <c>i</c> of the result is axis
-        ///     <c>permutation[i]</c> of <paramref name="shape"/>, dimensions and strides alike; the offset and the buffer stay,
-        ///     so the view reads the same memory. Shared by <see cref="Transpose"/> and the subclasses that build their own
-        ///     view object over the same storage (<c>NDCharArray.T</c>).
-        /// </summary>
-        /// <param name="shape">The source shape.</param>
-        /// <param name="permutation">A validated permutation of the source axes (one entry per axis, each once).</param>
-        /// <returns>The permuted shape; its contiguity flags are computed from the permuted strides.</returns>
-        internal static Shape TransposedShape(in Shape shape, int[] permutation)
-        {
-            int n = permutation.Length;
-            var srcDims = shape.dimensions;
-            var srcStrides = shape.strides;
-
-            // Permute dimensions and strides
-            var permutedDims = new long[n];
-            var permutedStrides = new long[n];
-            for (int i = 0; i < n; i++)
-            {
-                permutedDims[i] = srcDims[permutation[i]];
-                permutedStrides[i] = srcStrides[permutation[i]];
-            }
-
-            // Create the transposed shape via constructor (immutable)
-            // IsContiguous is computed from strides and will be false for transposed arrays
-            long bufSize = shape.bufferSize > 0 ? shape.bufferSize : shape.size;
-            return new Shape(permutedDims, permutedStrides, shape.offset, bufSize);
-        }
-
-        /// <summary>
-        ///     The shape of <c>a.T</c> (<see cref="Transpose"/> with no permutation): the axes reversed.
-        /// </summary>
-        /// <param name="shape">The source shape.</param>
-        /// <returns>The reversed-axes shape (see <see cref="TransposedShape(in Shape, int[])"/>).</returns>
-        internal static Shape ReversedAxesShape(in Shape shape)
-        {
-            int n = shape.NDim;
-            var permutation = new int[n];
-            for (int i = 0; i < n; i++)
-                permutation[i] = n - 1 - i;
-            return TransposedShape(shape, permutation);
         }
     }
 }

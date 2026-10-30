@@ -140,7 +140,7 @@ namespace NumSharp.Backends
         {
             if (axis is null || (ndim == 0 && (axis.Value == 0 || axis.Value == -1)))
                 return;
-            DefaultEngine.check_and_adjust_axis(ndim, axis.Value);
+            Shape.check_and_adjust_axis(ndim, axis.Value);
         }
 
         /// <summary>

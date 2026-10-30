@@ -1222,7 +1222,7 @@ namespace NumSharp.Backends
 
                 // np.average's normalize_axis_tuple(axis, a.ndim, argname="axis"): NumPy's AxisError names the argument
                 // ("axis: axis 2 is out of bounds for array of dimension 2").
-                nax = avg.Axis is int rawAxis ? check_and_adjust_axis(prod.ndim, rawAxis, "axis") : (int?)null;
+                nax = avg.Axis is int rawAxis ? Shape.check_and_adjust_axis(prod.ndim, rawAxis, "axis") : (int?)null;
                 avgChildNdim = prod.ndim;                      // the (broadcast) rank — the flat keepdims result is (1,)*avgChildNdim
 
                 num = ExactSumArray(prod, nax, rt);            // Σ(v·w) at rt (pairwise / axis add.reduce)

@@ -293,7 +293,7 @@ namespace NumSharp.Backends
                     "diff requires input that is at least one dimensional");
 
             // normalize_axis_index(axis, nd)
-            return check_and_adjust_axis(nd, axis);
+            return Shape.check_and_adjust_axis(nd, axis);
         }
     }
 }

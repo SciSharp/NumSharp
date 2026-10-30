@@ -14,7 +14,7 @@ namespace NumSharp
     ///     <c>np.swapaxes</c>' <c>axis1</c> / <c>axis2</c>, <c>np.cross</c>' <c>axisa</c>, <c>np.average</c>'s
     ///     <c>axis</c>). NumPy raises it from <c>normalize_axis_index</c> (C: <c>check_and_adjust_axis_msg</c>), so every
     ///     NumSharp function that normalizes an axis raises it through
-    ///     <see cref="Backends.DefaultEngine.check_and_adjust_axis(int, int, string)"/>.
+    ///     <see cref="Shape.check_and_adjust_axis(int, int, string)"/>.
     ///     </para>
     ///     <para>
     ///     It derives from <see cref="ArgumentOutOfRangeException"/>, so a handler written for

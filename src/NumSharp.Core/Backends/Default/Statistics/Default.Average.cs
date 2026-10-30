@@ -261,7 +261,7 @@ namespace NumSharp.Backends
         private static int[] NormalizeAxisTuple(int[] axis, int ndim)
         {
             if (axis is null) return null;
-            return Backends.DefaultEngine.normalize_axis_tuple(axis, ndim, "axis");
+            return Shape.normalize_axis_tuple(axis, ndim, "axis");
         }
 
         /// <summary>

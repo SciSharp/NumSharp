@@ -34,7 +34,7 @@ namespace NumSharp.Backends
                 // normalize_axis_tuple(axis, ndim, argname="axis"): every axis range-checked first ("axis: axis 3 is out
                 // of bounds ..."), then the "repeated axis in `axis` argument" check — NumPy's order, so a tuple holding
                 // both a repeat and an out-of-range axis reports the latter.
-                foreach (int a in DefaultEngine.normalize_axis_tuple(axis, ndim, "axis"))
+                foreach (int a in Shape.normalize_axis_tuple(axis, ndim, "axis"))
                     trimAxis[a] = true;
             }
 

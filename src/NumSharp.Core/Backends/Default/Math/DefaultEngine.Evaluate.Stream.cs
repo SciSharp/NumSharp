@@ -580,7 +580,7 @@ namespace NumSharp.Backends
             }
 
             // np.average's normalize_axis_tuple(axis, a.ndim, argname="axis"): NumPy's AxisError names the argument.
-            int ax = check_and_adjust_axis(nd, avg.Axis.Value, "axis");
+            int ax = Shape.check_and_adjust_axis(nd, avg.Axis.Value, "axis");
             var reducedDims = new long[nd - 1];
             for (int d = 0, rd = 0; d < nd; d++) if (d != ax) reducedDims[rd++] = ops[0].Shape.dimensions[d];
             Shape reducedShape = reducedDims.Length > 0 ? Shape.Adopt(reducedDims) : Shape.NewScalar();

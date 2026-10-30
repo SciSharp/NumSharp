@@ -51,7 +51,7 @@ namespace NumSharp
 
             // `axis = normalize_axis_index(axis, result_ndim)` — NumPy's AxisError against the RESULT's rank, raised once
             // here (the expansion below then sees an axis in range).
-            axis = Backends.DefaultEngine.check_and_adjust_axis(first.ndim + 1, axis);
+            axis = Shape.check_and_adjust_axis(first.ndim + 1, axis);
 
             // `expanded_arrays = [arr[sl] for arr in arrays]` — the new axis at `axis` of the (ndim + 1)-D result.
             var expanded = new NDArray[arrays.Length];

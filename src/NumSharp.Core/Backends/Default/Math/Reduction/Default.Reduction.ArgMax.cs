@@ -78,7 +78,7 @@ namespace NumSharp.Backends
             // for a 0-d input, which NumPy ravels first — so an empty, a one-element and a 0-d input all raise NumPy's
             // AxisError for an axis out of range (a wrap-then-test loop here used to accept -ndim - 1, return 0 for any
             // axis of a 0-d or one-element input, and never end for a negative axis of a 0-d input).
-            int? axisChecked = axis_ is null ? (int?)null : check_and_adjust_axis(Math.Max(arr.ndim, 1), axis_.Value);
+            int? axisChecked = axis_ is null ? (int?)null : Shape.check_and_adjust_axis(Math.Max(arr.ndim, 1), axis_.Value);
 
             if (shape.IsEmpty)
                 throw new ValueError("attempt to get argmax of an empty sequence"); // NumPy's ValueError (an ArgumentException)

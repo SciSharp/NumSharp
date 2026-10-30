@@ -1042,7 +1042,7 @@ namespace NumSharp.Backends
         internal static int[] NormalizeAxes(int[] axes, int ndim)
         {
             if (axes.Length == 0) return Array.Empty<int>();
-            return DefaultEngine.normalize_axis_tuple(axes, ndim);
+            return Shape.normalize_axis_tuple(axes, ndim);
         }
 
         /// <summary>
