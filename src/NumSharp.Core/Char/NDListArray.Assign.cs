@@ -655,7 +655,7 @@ namespace NumSharp
         public NDArray choose(object choices, NDArray @out = null, string mode = "raise")
         {
             ThrowIfDisposed();
-            np.ClipmodeConverter(mode);
+            ClipModes.ClipmodeConverter(mode);
             // PyArray_FromArray's cast text calls a 0-d array a scalar.
             throw new TypeError($"Cannot cast {(ndim == 0 ? "scalar" : "array data")} from dtype('O') to dtype('int64') according to the rule 'safe'");
         }

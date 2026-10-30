@@ -1,9 +1,7 @@
 // NumPy's np.ravel_multi_index (arr_ravel_multi_index, numpy/_core/src/multiarray/compiled_base.c) as DefaultEngine's
 // member: the argument checks in NumPy's order, astype_anyint (ThrowIfNotIntIndices, which np.unravel_index's member
-// shares), the coordinates' broadcast and NumPy's output layout, the int64 casts and the folding kernel. The file sits
-// beside its facade while it calls np.* (the helpers the scalar overload shares: the clip-mode converters,
-// RavelStrides, ThrowIfZeroDimension, IsLaidOutAs): ratchet R2 counts np.* calls against every file under Backends/
-// (the np-layer dtype plan, C3); it moves under Backends/Default/ in P6.
+// shares), the coordinates' broadcast and NumPy's output layout, the int64 casts and the folding kernel, with the
+// helpers the scalar overload of np.ravel_multi_index shares (RavelStrides, ThrowIfZeroDimension).
 
 using System;
 using System.Text;
@@ -35,8 +33,8 @@ namespace NumSharp.Backends
             // sequence gives each its own: the sequence's length, then each mode in order); then the ravel strides
             // refuse an 'A' / 'K' order and an overflowing product; only then are the coordinates read.
             NPY_ORDER npyOrder = OrderResolver.Convert(order);
-            int[] modes = np.ConvertClipmodeSequence(mode, dims.Length);
-            long[] ravelStrides = np.RavelStrides(dims, npyOrder);
+            int[] modes = ClipModes.ConvertClipmodeSequence(mode, dims.Length);
+            long[] ravelStrides = RavelStrides(dims, npyOrder);
             ValidateRavelInputs(multi_index, dims);
 
             foreach (var coords in multi_index)
@@ -67,7 +65,7 @@ namespace NumSharp.Backends
             // unobservable, so the check runs before it here and a refused call leaves nothing to release.
             long count = layout.size;
             if (count != 0)
-                np.ThrowIfZeroDimension(dims);
+                ThrowIfZeroDimension(dims);
 
             var result = new NDArray<long>(layout, false);
             if (count == 0)
@@ -87,7 +85,7 @@ namespace NumSharp.Backends
                 for (int d = 0; d < ndim; d++)
                 {
                     var src = multi_index[d];
-                    if (src.typecode == NPTypeCode.Int64 && HasDims(src.Shape, bdims) && np.IsLaidOutAs(src.Shape, layout))
+                    if (src.typecode == NPTypeCode.Int64 && HasDims(src.Shape, bdims) && src.Shape.IsLaidOutAs(layout))
                     {
                         coordPtrs[d] = (nint)((long*)src.Storage.Address + src.Shape.offset);
                     }
@@ -260,6 +258,48 @@ namespace NumSharp.Backends
             if (indices is not null && indices.dtype.kind is 'b' or 'i' or 'u')
                 return;
             throw new TypeError("only int indices permitted");
+        }
+
+        /// <summary>
+        ///     The ravel strides <c>arr_ravel_multi_index</c> computes before it reads the coordinates, with NumPy's two
+        ///     refusals: the order, and the dims product (checked on every multiplication, the last one included).
+        /// </summary>
+        /// <param name="dims">The shape being indexed.</param>
+        /// <param name="order">The converted order.</param>
+        /// <returns>One stride per dimension (C: the last dimension's is 1; F: the first one's).</returns>
+        /// <exception cref="ValueError"><c>'A'</c> / <c>'K'</c> (<c>only 'C' or 'F' order is permitted</c>), or a product
+        ///     that overflows int64 (<c>invalid dims: array size defined by dims is larger than the maximum possible
+        ///     size.</c>).</exception>
+        internal static long[] RavelStrides(int[] dims, NPY_ORDER order)
+        {
+            bool cOrder = OrderResolver.RequireCOrFOrder(order);
+            int ndim = dims.Length;
+            var ravelStrides = new long[ndim];
+            long s = 1;
+            for (int i = 0; i < ndim; i++)
+            {
+                int d = cOrder ? ndim - 1 - i : i;
+                ravelStrides[d] = s;
+                long next = unchecked(s * dims[d]);
+                if (dims[d] != 0 && next / dims[d] != s)
+                    throw new ValueError("invalid dims: array size defined by dims is larger than the maximum possible size.");
+                s = next;
+            }
+            return ravelStrides;
+        }
+
+        /// <summary>
+        ///     <c>ravel_multi_index_loop</c>'s first check: a shape with a zero dimension has no element to index.
+        /// </summary>
+        /// <param name="dims">The shape being indexed.</param>
+        /// <exception cref="ValueError">A zero dimension (<c>cannot unravel if shape has zero entries (is empty).</c>).</exception>
+        /// <remarks>NumPy makes it only when there is a coordinate to fold (an empty broadcast skips the loop), in every
+        ///     mode: wrap would otherwise divide by the zero dimension.</remarks>
+        internal static void ThrowIfZeroDimension(int[] dims)
+        {
+            for (int d = 0; d < dims.Length; d++)
+                if (dims[d] == 0)
+                    throw new ValueError("cannot unravel if shape has zero entries (is empty).");
         }
     }
 }

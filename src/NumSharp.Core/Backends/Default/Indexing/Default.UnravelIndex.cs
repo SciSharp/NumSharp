@@ -1,8 +1,7 @@
 // NumPy's np.unravel_index (arr_unravel_index, numpy/_core/src/multiarray/compiled_base.c) as DefaultEngine's member: the
 // argument checks in NumPy's order, the result buffer laid out along the indices' iteration order, the unravel kernel and
-// the coordinate views. The file sits beside its facade while it calls np.* (the helpers np.ravel_multi_index shares):
-// ratchet R2 counts np.* calls against every file under Backends/ (the np-layer dtype plan, C3); it moves under
-// Backends/Default/ in P6.
+// the coordinate views, and the dimensions' product check (UnravelSize, which the scalar overload of np.unravel_index
+// shares).
 
 using System;
 using NumSharp.Backends.Iteration;
@@ -35,9 +34,9 @@ namespace NumSharp.Backends
             // else), PyArray_OverflowMultiplyList checks the dimensions, astype_anyint refuses a non-integer index array,
             // and only then — once the result buffer exists, before any index is read — is an 'A' / 'K' order refused.
             NPY_ORDER npyOrder = OrderResolver.Convert(order);
-            long unravelSize = np.UnravelSize(shape);
+            long unravelSize = UnravelSize(shape);
             ThrowIfNotIntIndices(indices);
-            bool cOrder = np.RequireCOrFOrder(npyOrder);
+            bool cOrder = OrderResolver.RequireCOrFOrder(npyOrder);
 
             int ndims = shape.Length;
             long count = indices.size;
@@ -144,7 +143,7 @@ namespace NumSharp.Backends
             try
             {
                 long* idx;
-                if (indices.typecode == NPTypeCode.Int64 && np.IsLaidOutAs(indices.Shape, layout))
+                if (indices.typecode == NPTypeCode.Int64 && indices.Shape.IsLaidOutAs(layout))
                 {
                     idx = (long*)indices.Storage.Address + indices.Shape.offset;
                 }
@@ -220,6 +219,45 @@ namespace NumSharp.Backends
 
             if (status < count)
                 throw new ValueError($"index {idx[status]} is out of bounds for array with size {unravelSize}");
+        }
+
+        /// <summary>
+        ///     The product of the unravel dimensions as NumPy's <c>PyArray_OverflowMultiplyList</c> computes it, and its
+        ///     refusal: the exclusive upper bound of a valid flat index.
+        /// </summary>
+        /// <param name="shape">The dimensions (an empty shape's product is 1).</param>
+        /// <returns>The product: 0 as soon as a dimension is 0 (later dimensions are not multiplied); negative dimensions
+        ///     multiply in, so a shape with an odd number of them has a negative product and no valid index.</returns>
+        /// <exception cref="ValueError">The product overflows int64, or is exactly -1 — NumPy's overflow sentinel, so shape
+        ///     <c>(-1,)</c> is refused too (<c>dimensions are too large; arrays and shapes with a total size greater than
+        ///     'intp' are not supported.</c>).</exception>
+        internal static long UnravelSize(int[] shape)
+        {
+            // NumPy parity: do NOT pre-reject zero or negative dims. Empty index arrays work against any shape, including
+            // (0, 3); a non-empty one against a zero or negative product is refused by the kernel's bounds check
+            // (val < 0 || val >= unravelSize), with NumPy's "index N is out of bounds for array with size M".
+            long s = 1L;
+            bool overflow = false;
+            for (int d = 0; d < shape.Length; d++)
+            {
+                long dim = shape[d];
+                if (dim == 0)
+                {
+                    s = 0;
+                    break;
+                }
+                long next = unchecked(s * dim);
+                if (next / dim != s)
+                {
+                    overflow = true;
+                    break;
+                }
+                s = next;
+            }
+            if (overflow || s == -1)
+                throw new ValueError(
+                    "dimensions are too large; arrays and shapes with a total size greater than 'intp' are not supported.");
+            return s;
         }
     }
 }

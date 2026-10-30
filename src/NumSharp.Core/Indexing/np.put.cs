@@ -34,7 +34,7 @@ namespace NumSharp
         /// <exception cref="TypeError"><paramref name="values"/> is null (<c>None</c>) and <paramref name="a"/> is an integer
         ///     (or <c>decimal</c>) array.</exception>
         /// <exception cref="ValueError">A bad <paramref name="mode"/> (NumPy's <c>clipmode_parser</c> texts, see
-        ///     <see cref="ClipmodeConverter"/>) — reported first, as NumPy parses it with the arguments —, then a read-only
+        ///     <see cref="ClipModes.ClipmodeConverter"/>) — reported first, as NumPy parses it with the arguments —, then a read-only
         ///     <paramref name="a"/> (<c>put: output array is read-only</c>).</exception>
         /// <exception cref="TypeError">The index dtype cannot be cast to int64 under the <c>safe</c> rule (float, complex,
         ///     uint64), an empty index array included.</exception>

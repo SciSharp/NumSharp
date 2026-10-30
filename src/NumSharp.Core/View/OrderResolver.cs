@@ -160,5 +160,21 @@ namespace NumSharp
                     throw new ValueError($"order must be one of 'C', 'F', 'A', or 'K' (got '{order}')");
             }
         }
+
+        /// <summary>
+        ///     The order check NumPy's <c>unravel_index</c> and <c>ravel_multi_index</c> make once their other early checks
+        ///     pass: only C and F mean anything for an index transform.
+        /// </summary>
+        /// <param name="order">The converted order (<see cref="OrderResolver.Convert"/>).</param>
+        /// <returns>True for C order, false for F order.</returns>
+        /// <exception cref="ValueError"><c>'A'</c> or <c>'K'</c> (<c>only 'C' or 'F' order is permitted</c>).</exception>
+        internal static bool RequireCOrFOrder(NPY_ORDER order)
+        {
+            if (order == NPY_ORDER.NPY_CORDER)
+                return true;
+            if (order == NPY_ORDER.NPY_FORTRANORDER)
+                return false;
+            throw new ValueError("only 'C' or 'F' order is permitted");
+        }
     }
 }

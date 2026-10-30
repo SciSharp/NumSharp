@@ -89,8 +89,8 @@ namespace NumSharp
         {
             if (shape is null) throw new ArgumentNullException(nameof(shape));
             NPY_ORDER npyOrder = OrderResolver.Convert(order);
-            long unravelSize = UnravelSize(shape);
-            bool cOrder = RequireCOrFOrder(npyOrder);
+            long unravelSize = Backends.DefaultEngine.UnravelSize(shape);
+            bool cOrder = OrderResolver.RequireCOrFOrder(npyOrder);
 
             if (index < 0 || index >= unravelSize)
                 throw new ValueError($"index {index} is out of bounds for array with size {unravelSize}");
@@ -129,80 +129,5 @@ namespace NumSharp
             return coords;
         }
 
-        /// <summary>
-        ///     Whether <paramref name="s"/> stores its elements exactly as <paramref name="layout"/> does — the same stride
-        ///     on every axis with more than one element (an extent-1 axis's stride addresses nothing).
-        /// </summary>
-        /// <param name="s">The array's shape.</param>
-        /// <param name="layout">A dense layout of the same dimensions.</param>
-        /// <returns>True when reading <paramref name="s"/>'s buffer linearly from its first element visits the elements
-        ///     in <paramref name="layout"/>'s order.</returns>
-        internal static bool IsLaidOutAs(Shape s, Shape layout)
-        {
-            var dims = s.dimensions;
-            var strides = s.strides;
-            var want = layout.strides;
-            for (int k = 0; k < dims.Length; k++)
-            {
-                if (dims[k] > 1 && strides[k] != want[k])
-                    return false;
-            }
-            return true;
-        }
-
-        /// <summary>
-        ///     The order check NumPy's <c>unravel_index</c> and <c>ravel_multi_index</c> make once their other early checks
-        ///     pass: only C and F mean anything for an index transform.
-        /// </summary>
-        /// <param name="order">The converted order (<see cref="OrderResolver.Convert"/>).</param>
-        /// <returns>True for C order, false for F order.</returns>
-        /// <exception cref="ValueError"><c>'A'</c> or <c>'K'</c> (<c>only 'C' or 'F' order is permitted</c>).</exception>
-        internal static bool RequireCOrFOrder(NPY_ORDER order)
-        {
-            if (order == NPY_ORDER.NPY_CORDER)
-                return true;
-            if (order == NPY_ORDER.NPY_FORTRANORDER)
-                return false;
-            throw new ValueError("only 'C' or 'F' order is permitted");
-        }
-
-        /// <summary>
-        ///     The product of the unravel dimensions as NumPy's <c>PyArray_OverflowMultiplyList</c> computes it, and its
-        ///     refusal: the exclusive upper bound of a valid flat index.
-        /// </summary>
-        /// <param name="shape">The dimensions (an empty shape's product is 1).</param>
-        /// <returns>The product: 0 as soon as a dimension is 0 (later dimensions are not multiplied); negative dimensions
-        ///     multiply in, so a shape with an odd number of them has a negative product and no valid index.</returns>
-        /// <exception cref="ValueError">The product overflows int64, or is exactly -1 — NumPy's overflow sentinel, so shape
-        ///     <c>(-1,)</c> is refused too (<c>dimensions are too large; arrays and shapes with a total size greater than
-        ///     'intp' are not supported.</c>).</exception>
-        internal static long UnravelSize(int[] shape)
-        {
-            // NumPy parity: do NOT pre-reject zero or negative dims. Empty index arrays work against any shape, including
-            // (0, 3); a non-empty one against a zero or negative product is refused by the kernel's bounds check
-            // (val < 0 || val >= unravelSize), with NumPy's "index N is out of bounds for array with size M".
-            long s = 1L;
-            bool overflow = false;
-            for (int d = 0; d < shape.Length; d++)
-            {
-                long dim = shape[d];
-                if (dim == 0)
-                {
-                    s = 0;
-                    break;
-                }
-                long next = unchecked(s * dim);
-                if (next / dim != s)
-                {
-                    overflow = true;
-                    break;
-                }
-                s = next;
-            }
-            if (overflow || s == -1)
-                throw new ValueError(
-                    "dimensions are too large; arrays and shapes with a total size greater than 'intp' are not supported.");
-            return s;
-        }
     }
 }

@@ -411,6 +411,27 @@ namespace NumSharp
         ///     256 longs = 2 KB, far above any ufunc's operand count times a realistic rank; beyond it the tables go to
         ///     the heap rather than risk the stack.
         /// </summary>
+        /// <summary>
+        ///     Whether this shape stores its elements exactly as <paramref name="layout"/> does — the same stride on every
+        ///     axis with more than one element (an extent-1 axis's stride addresses nothing). The index transforms
+        ///     (np.ravel_multi_index, np.unravel_index) read an int64 operand in place when it is laid out like their
+        ///     result, and copy it otherwise.
+        /// </summary>
+        /// <param name="layout">A dense layout of the same dimensions.</param>
+        /// <returns>True when reading this shape's buffer linearly from its first element visits the elements in
+        ///     <paramref name="layout"/>'s order.</returns>
+        internal bool IsLaidOutAs(in Shape layout)
+        {
+            var dims = dimensions;
+            var want = layout.strides;
+            for (int k = 0; k < dims.Length; k++)
+            {
+                if (dims[k] > 1 && strides[k] != want[k])
+                    return false;
+            }
+            return true;
+        }
+
         private const int NpyIterStackLimit = 256;
 
         /// <summary>

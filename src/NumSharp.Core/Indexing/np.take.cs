@@ -41,7 +41,7 @@ namespace NumSharp
         ///     <paramref name="out"/> is the element's UNSTRIPPED NumPy scalar (<c>PyArray_Return</c>), NumSharp's
         ///     read-only stand-in.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> or <paramref name="indices"/> is null.</exception>
-        /// <exception cref="ValueError">A bad <paramref name="mode"/> (<see cref="ClipmodeConverter"/>), checked first;
+        /// <exception cref="ValueError">A bad <paramref name="mode"/> (<see cref="ClipModes.ClipmodeConverter"/>), checked first;
         ///     an <paramref name="out"/> of another shape (<c>output array does not match result of ndarray.take</c>) or a
         ///     read-only one (<c>WRITEBACKIFCOPY base is read-only</c>).</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
@@ -70,7 +70,7 @@ namespace NumSharp
             if (indices is null) throw new ArgumentNullException(nameof(indices));
 
             // array_take converts the mode (and parses the axis) with its arguments, before PyArray_TakeFrom runs.
-            int modeInt = ClipmodeConverter(mode);
+            int modeInt = ClipModes.ClipmodeConverter(mode);
             return UnmanagedStorage.TakeFrom(a, indices, axis, @out, modeInt);
         }
 

@@ -33,7 +33,7 @@ namespace NumSharp.Backends
         /// <param name="indices">The integer index array; a C-contiguous int32/int64 one is read in place.</param>
         /// <param name="axis">The caller's axis, or null for a flat take.</param>
         /// <param name="out">The caller's destination, or null.</param>
-        /// <param name="mode">The parsed out-of-bounds policy (<see cref="np.ClipmodeConverter"/>).</param>
+        /// <param name="mode">The parsed out-of-bounds policy (<see cref="ClipModes.ClipmodeConverter"/>).</param>
         /// <returns>The taken values: <paramref name="out"/> itself when given, else a new C-contiguous array of
         ///     <paramref name="a"/>'s dtype.</returns>
         /// <exception cref="AxisError">An out-of-range <paramref name="axis"/>.</exception>
@@ -148,7 +148,7 @@ namespace NumSharp.Backends
                         maxItem: maxItem, innerSize: innerCount * a.dtypesize, mode: mode, idx32: idx32,
                         axis: ravel ? null : ax);   // axis form: the raise-mode IndexError names this axis
                 }
-                else if (mode == np.ClipModeRaise)
+                else if (mode == ClipModes.ClipModeRaise)
                 {
                     ThrowIfTakeIndexOutOfBounds(idx64, idx32, indicesCount, maxItem, ravel ? 0 : ax);
                 }
@@ -393,7 +393,7 @@ namespace NumSharp.Backends
         /// <param name="values">The values: an <see cref="NDArray"/> (a C# literal's marked 0-d array is packed as the
         ///     Python scalar it stands for), a boxed C# number (packed by its kind), or anything
         ///     <see cref="NDArray.AsStoreValue"/> converts. Read in C order and cycled.</param>
-        /// <param name="mode">The clip mode string (<see cref="np.ClipmodeConverter"/>).</param>
+        /// <param name="mode">The clip mode string (<see cref="ClipModes.ClipmodeConverter"/>).</param>
         /// <exception cref="ValueError">A bad <paramref name="mode"/>; then a read-only <paramref name="a"/>.</exception>
         /// <exception cref="TypeError">An index dtype that does not cast to int64 under <c>safe</c>.</exception>
         /// <exception cref="IndexError">A non-empty <paramref name="indices"/> into an empty <paramref name="a"/>, or an
@@ -429,7 +429,7 @@ namespace NumSharp.Backends
         {
             // array_put converts `mode` with PyArray_ClipmodeConverter while it parses its arguments: a bad mode is
             // reported before PyArray_PutTo looks at the target.
-            int modeInt = np.ClipmodeConverter(mode);
+            int modeInt = ClipModes.ClipmodeConverter(mode);
 
             // PyArray_FailUnlessWriteable(self, "put: output array") is PyArray_PutTo's first check (probed 2.4.2:
             // put(ro, [], []) and put(ro, [oob], v) report read-only).
@@ -531,8 +531,8 @@ namespace NumSharp.Backends
         /// <param name="idx32">True when <paramref name="idx64"/> holds int32 values.</param>
         /// <param name="ni">The number of indices.</param>
         /// <param name="vals">The C-contiguous values of <paramref name="a"/>'s element type, at least one.</param>
-        /// <param name="mode">The parsed boundary mode (<see cref="np.ClipModeRaise"/>, <see cref="np.ClipModeWrap"/>,
-        ///     <see cref="np.ClipModeClip"/>).</param>
+        /// <param name="mode">The parsed boundary mode (<see cref="ClipModes.ClipModeRaise"/>, <see cref="ClipModes.ClipModeWrap"/>,
+        ///     <see cref="ClipModes.ClipModeClip"/>).</param>
         /// <exception cref="NotSupportedException">No IL put kernel exists for the element width.</exception>
         /// <exception cref="IndexError">An index is out of bounds under mode raise (NumPy's text; the indices before it
         ///     have been written).</exception>
@@ -550,7 +550,7 @@ namespace NumSharp.Backends
             long status;
             // The lean flat scatter (DirectILKernelGenerator.GatherFlat.cs) serves RAISE mode with a
             // compile-time element width; wrap/clip keep the general kernel.
-            var flat = mode == np.ClipModeRaise ? DirectILKernelGenerator.GetPutFlatKernel(copyKind, idx32) : null;
+            var flat = mode == ClipModes.ClipModeRaise ? DirectILKernelGenerator.GetPutFlatKernel(copyKind, idx32) : null;
             if (flat != null)
             {
                 status = flat(dstPtr, idxPtr, ni, valsPtr, vals.size, a.size);
@@ -1901,22 +1901,22 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     Parse the clip mode with NumPy's <c>PyArray_ClipmodeConverter</c> (<see cref="np.ClipmodeConverter"/>, the
+        ///     Parse the clip mode with NumPy's <c>PyArray_ClipmodeConverter</c> (<see cref="ClipModes.ClipmodeConverter"/>, the
         ///     parser <c>np.take</c>, <c>np.put</c> and <c>np.ravel_multi_index</c> share) and map it to the choose
         ///     kernel's constants.
         /// </summary>
         /// <param name="mode"><c>"raise"</c>, <c>"wrap"</c>, <c>"clip"</c>, or <c>null</c> (NumPy's <c>None</c>:
         ///     raise).</param>
         /// <returns>The <see cref="DirectILKernelGenerator"/> <c>ChooseMode*</c> constant.</returns>
-        /// <exception cref="ValueError">See <see cref="np.ClipmodeConverter"/>: a misspelled mode (<c>Use one of 'clip',
+        /// <exception cref="ValueError">See <see cref="ClipModes.ClipmodeConverter"/>: a misspelled mode (<c>Use one of 'clip',
         ///     'raise', or 'wrap' for clip mode</c>) or any other string (<c>clipmode must be one of 'clip', 'raise', or
         ///     'wrap' (got 'bogus')</c>).</exception>
         /// <remarks>The mapping is spelled out, not assumed: the shared numbering and the choose kernel's are equal
         ///     today, and a switch keeps a later renumbering of either from silently selecting the wrong mode.</remarks>
-        private static int ParseChooseMode(string mode) => np.ClipmodeConverter(mode) switch
+        private static int ParseChooseMode(string mode) => ClipModes.ClipmodeConverter(mode) switch
         {
-            np.ClipModeWrap => DirectILKernelGenerator.ChooseModeWrap,
-            np.ClipModeClip => DirectILKernelGenerator.ChooseModeClip,
+            ClipModes.ClipModeWrap => DirectILKernelGenerator.ChooseModeWrap,
+            ClipModes.ClipModeClip => DirectILKernelGenerator.ChooseModeClip,
             _ => DirectILKernelGenerator.ChooseModeRaise,
         };
 

@@ -274,7 +274,7 @@ namespace NumSharp.Backends.Sorting
             // The index array np.array(texts) builds: a copy of the indices as a 1-D int64 array (np.array<T>(params T[])'s
             // statement, NDArray's constructor over a copied slice).
             using var picks = whole ? null : new NDArray(Unmanaged.ArraySlice.FromArray(texts, true), Shape.Vector(texts.Length));
-            using var subset = whole ? null : UnmanagedStorage.TakeFrom(ar, picks, null, null, np.ClipModeRaise);
+            using var subset = whole ? null : UnmanagedStorage.TakeFrom(ar, picks, null, null, ClipModes.ClipModeRaise);
             NDArray sorted = subset ?? ar;
             using var order = AxisSort.ArgSortVString(sorted, 0, stable: true);
             // The argsort's result is a fresh C-contiguous int64 array: read it through its pointer, not per-element calls.

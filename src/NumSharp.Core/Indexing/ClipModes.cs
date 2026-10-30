@@ -3,7 +3,14 @@ using System.Collections.Generic;
 
 namespace NumSharp
 {
-    public static partial class np
+    /// <summary>
+    ///     NumPy's clip-mode converters (<c>conversion_utils.c</c>: <c>PyArray_ClipmodeConverter</c>,
+    ///     <c>PyArray_ConvertClipmodeSequence</c>) and the mode numbering the take / put / choose / ravel_multi_index
+    ///     kernels share. The facades (np.take, np.put, np.choose, np.ravel_multi_index), the array object's item
+    ///     selection and the engine's ravel_multi_index all parse <c>mode</c> through it, so it lives outside the np
+    ///     facade class: the engine calls no np.* member (ratchet R2 of the np-layer dtype plan).
+    /// </summary>
+    internal static class ClipModes
     {
         /// <summary>The <c>raise</c> clip mode (NumPy's <c>NPY_RAISE</c>) in the numbering the take / put / choose /
         ///     ravel_multi_index kernels share: an out-of-range index is an error.</summary>
@@ -59,8 +66,7 @@ namespace NumSharp
             }
 
             // The parser returned -1 without an error (empty string, or an unknown first character): the helper's
-            // "%s %s (got %R)" with the ORIGINAL argument's repr. (Fully qualified: inside np, PyRepr names np's own
-            // einsum_path helper method.)
+            // "%s %s (got %R)" with the ORIGINAL argument's repr.
             string repr = global::NumSharp.Backends.Printing.PyRepr.Str(mode);
             throw new ValueError($"clipmode must be one of 'clip', 'raise', or 'wrap' (got {repr})");
         }
