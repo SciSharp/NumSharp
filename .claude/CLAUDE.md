@@ -202,7 +202,7 @@ TRAPS: a gather whose index depends on the previous chunk's carry waits for the 
 that copies and zeroes it (53 % of a call) — the case-map driver reserves it once (`VStringAllocator.TryReserve` with
 `NDVStringCopy.ArenaBytesForCopy`), and a fresh arena is `NativeMemory.AllocZeroed`; EVERY fresh `StringDType` array
 paid first-touch page faults (`SizeBucketedBufferPool.TakeZeroed` is always calloc: 4.5 ns per element at 100K) —
-`VStringArraySlice.Allocate` now takes a recycled pooled buffer and clears it up to `np.PrefersWriteOnce`'s 64 MiB
+`VStringArraySlice.Allocate` now takes a recycled pooled buffer and clears it up to `SizeBucketedBufferPool.PrefersWriteOnce`'s 64 MiB
 (~1 ns), which every function that returns `T` gains. Gates: oracle `strcase` (2,100 cases) / `tcase` (955; 210 NumPy
 errors in all), zero excuses; `StringCaseMapTests` (12). Benchmark: 55 cells 4.5–237× NumPy, geomean 37.6×.
 **`np.strings.translate` since P2.6 milestone 3 (2026-10-17, `5bbd65c2`, pins `2ada5757`; plan state log).** NumPy's
@@ -1698,8 +1698,8 @@ is `(0, 3)`); the order is checked before anything is converted. Gate: `Creation
 the coercion family's snapshot (`tools/facade-move/snapshot.cs`).
 
 **`np.full` / `np.full_like` / `np.ones` / `np.eye` / `np.ndarray` are the array object's** (2026-10-29, plan
-np-layer-dtype-logic P3 batch 5). Their bodies are `NDArray.Full` / `FullLike` / `Ones` (`Creation/NDArray.Numeric.cs`,
-numeric.py's `a = empty(...); copyto(a, fill_value, casting='unsafe')`), `NDArray.Eye` (`Creation/NDArray.TwoDimBase.cs`)
+np-layer-dtype-logic P3 batch 5). Their bodies are `NDArray.Full` / `FullLike` / `Ones` (`Backends/NDArray.Numeric.cs`,
+numeric.py's `a = empty(...); copyto(a, fill_value, casting='unsafe')`), `NDArray.Eye` (`Backends/NDArray.TwoDimBase.cs`)
 and `UnmanagedStorage.ArrayNew` (`Backends/Unmanaged/UnmanagedStorage.Ctors.cs`, arrayobject.c's `array_new`), beside
 the storage-lane fills `FullCore` / `FullFillElement` / `OnesCore`. The fill value is read as NumPy's
 `asarray(fill_value)` without a dtype - a 0-d array keeps its dtype, a `BigInteger` is a Python int (int64, uint64,
@@ -1713,13 +1713,13 @@ snapshot (`tools/facade-move/snapshot.cs`, 42,635 lines) and `Creation/np.{eye.N
 full.FillValues}.Test.cs`.
 
 **`np.indices` and `np.diag` / `np.diagflat` are the array object's too** (2026-10-29, plan np-layer-dtype-logic P3
-batch 7). np.indices' grids are `NDArray.Indices` / `IndicesSparse` (`Creation/NDArray.Numeric.cs`), NumPy's
+batch 7). np.indices' grids are `NDArray.Indices` / `IndicesSparse` (`Backends/NDArray.Numeric.cs`), NumPy's
 `res = empty((N,) + dimensions, dtype)` then one `arange(dim, dtype)` per axis assigned with broadcasting: the
 allocation's ValueError comes first (a negative dimension), an arange's TypeError next (a text dtype at any length, bool
 past two elements, even in an empty grid), a text dtype's empty tuple is an empty text array, and an int64-lane grid
 keeps the IL fill kernel. The sparse grid is views of its aranges (`flags.owndata` False), and a negative dimension there
 is an empty axis (the reshape's unknown dimension), as NumPy's. np.diag's and np.diagflat's statements and their diagonal
-scatter are `NDArray.Diag` / `DiagFlat` (`Creation/NDArray.TwoDimBase.cs`, beside `NDArray.Eye`); the StringDType route
+scatter are `NDArray.Diag` / `DiagFlat` (`Backends/NDArray.TwoDimBase.cs`, beside `NDArray.Eye`); the StringDType route
 asks `HasReferences`. Gate: their snapshot (2,772 lines) and `Indexing/np.indices.NumPyPort.Test.cs`.
 
 **`np.mgrid` / `np.ogrid` are the array object's too, NumPy's `nd_grid.__getitem__` statements** (2026-10-29, plan
@@ -1801,7 +1801,7 @@ dtype cast copies. `num<0` → `ValueError("Number of samples, {num}, must be no
   are `Math.Pow`-bound (a bare `Math.Pow` loop of 1M measures 8.17 ms vs logspace's 8.29 ms — 98 % pure pow), and
   no bit-exact SIMD `pow` exists, so the 1.5× target is unreachable without abandoning parity — the same class as
   `arcsinh`/`float_power`-general/`gcd`. See `Creation/np.{linspace,logspace,geomspace}.cs` (the facades) and
-  `Creation/Default.CoreFunctionBase.cs` (`TensorEngine.Linspace` / `Logspace` / `Geomspace` of
+  `Backends/Default/Creation/Default.CoreFunctionBase.cs` (`TensorEngine.Linspace` / `Logspace` / `Geomspace` of
   `Backends/TensorEngine.CoreFunctionBase.cs`, DefaultEngine's fills; np-layer dtype plan, P3 batch 9).
 
 **`np.matrix(data, dtype=None, copy=True)` → `NDMatrix` — NumPy's `numpy.matrix`** (2026-10-09; port of
@@ -2053,12 +2053,12 @@ negative NaN before, which also flipped `{p}fromroots`' NaN sign), but `unique` 
 `union1d`/`setxor1d`/`setdiff1d` run a guarded NaN-rewrite pass on a float32/float64 result — `np.where(np.isnan(r),
 canonical, r)`, entered only when `np.any(np.isnan(r))` (≈0.3 ms on a 490 K result, skipped when no NaN survives) —
 to stay bit-identical (`DefaultEngine.CanonicalizeSetOpNaN` beside the `Union1d` / `Setxor1d` / `Setdiff1d` members in
-`Manipulation/Default.SetOps.cs`; verified across neg/payload/multi-NaN × f16/f32/f64
+`Backends/Default/Manipulation/Default.SetOps.cs`; verified across neg/payload/multi-NaN × f16/f32/f64
 + complex against NumPy 2.4.2). `isin` (bool result) and `intersect1d` (NaN never shared) need no pass.
 **Perf (NPY/NS, Release, best-of-21, warm):** **2.2–13.5×** — NumSharp's `unique`/`sort` outrun NumPy's at every
 measured size (the wins widen at 1M, where NumPy's set-ops cost 60–400 ms); the NaN pass is O(result) and does not
 move these numbers. See `Manipulation/np.{union1d,intersect1d,setxor1d,setdiff1d}.cs` (the facades) and
-`Manipulation/Default.SetOps.cs` (the engine members).
+`Backends/Default/Manipulation/Default.SetOps.cs` (the engine members).
 
 **`np.static unique` returns `np.UniqueResult`** (the shared core the set routines reuse) — NumPy's bare-array-OR-tuple
 return expressed as ONE type, because C# cannot pick a return type from a runtime flag. **ONE** static overload
@@ -2084,7 +2084,7 @@ keep their return types; only the static `np.unique` was lifted to `UniqueResult
 computation. All of them are one call into an engine member (np-layer dtype plan P2 and PE, 2026-10-28):
 `TensorEngine.Unique` for `np.unique` after its chararray / matrix boundaries and for both instance members (the bare
 one takes element 0), `UniqueValues` / `UniqueCounts` / `UniqueInverse` / `UniqueAll` for the Array-API functions;
-DefaultEngine's overrides are `Manipulation/Default.Unique.cs`, the kernels its partials
+DefaultEngine's overrides are `Backends/Default/Manipulation/Default.Unique.cs`, the kernels its partials
 `Default.Unique.{Kwargs,Hash,Radix,Text,VString}.cs`. The other three sibling
 result structs (`UniqueAllResult`/`UniqueCountsResult`/`UniqueInverseResult`) are always tuples, so they carry no
 `values`-forwarding surface — the asymmetry is deliberate (only `np.unique` has a bare-array case). Gate:
@@ -2140,8 +2140,8 @@ the np.unique family of the np-layer plan (2026-10-28, two pinned P-cores): floa
 (still that gap), float16 values alone 5.49× (the stable radix argsort, was 0.95×), complex128 `np.unique_counts`
 1.59–4.74× over a cardinality sweep at 100K / 1M (0.91× at 1K, NumPy's fixed cost). Full design +
 the measured "why the axis comparator stays scalar / why floats stay sorted / why splitmix" decisions:
-**`docs/stale-docs/UNIQUE_DESIGN.md`** (superseded where this section differs). See `Manipulation/Default.Unique.cs` (the
-Array-API bodies) + `Manipulation/Default.Unique.Hash.cs`.
+**`docs/stale-docs/UNIQUE_DESIGN.md`** (superseded where this section differs). See `Backends/Default/Manipulation/Default.Unique.cs` (the
+Array-API bodies) + `Backends/Default/Manipulation/Default.Unique.Hash.cs`.
 
 **`np.unique` full parameter parity** — `unique(ar, return_index=false, return_inverse=false,
 return_counts=false, axis=null, equal_nan=true, sorted=true)`, all six probed against 2.4.2 (gates
@@ -2210,7 +2210,7 @@ the scalar (NumPy's `m[()]`), `flip(m, 0)` raises AxisError. `fliplr` requires n
 
 `rot90(m, k=1, axes=(0,1))` rotates in the plane of two axes by `90°·k` (counterclockwise from the first axis toward the second). Like NumPy it is a **pure view composition** of axis-flips + a transpose — no data moves, so the result shares memory with `m` (read-only when the source is, e.g. a broadcast view). `k` is taken mod 4 (Python-style, so negatives wrap); `k∈{0}` returns a full view, `k∈{2}` flips both axes, `k∈{1,3}` flip-then-transpose. Validation mirrors NumPy verbatim (`ValueError`, NumPy's own type — not normalize_axis_index's AxisError): `len(axes)!=2` → "len(axes) must be 2.", `axes[0]==axes[1] || |axes[0]-axes[1]|==ndim` → "Axes must be different." (this fires *before* the range check, so e.g. `axes=(0,2)` on 2-D reports "different", not out-of-range), else out-of-range. See `Manipulation/np.rot90.cs`.
 
-`np.trim_zeros(filt, trim="fb", axis=null)` crops leading/trailing all-zero hyperplanes (NumPy 2.2.0+ N-dimensional bounding box; probed against 2.4.2). `trim` is case-insensitive ('f'=front, 'b'=back, "fb"/"bf"=both) and validated (`ValueError "unexpected character(s) in \`trim\`: '…'"`). `axis=null` trims the smallest bounding box over all axes; an explicit axis/axis-list (int overload + `int[]` overload) trims only those (NumPy's `normalize_axis_tuple(axis, ndim, argname="axis")`: every axis range-checked first → `AxisError "axis: axis 2 is out of bounds for array of dimension 2"`, then `ValueError "repeated axis in \`axis\` argument"`); an **empty** axis list or a **0-d** input returns the input unmodified. Always returns a **view** (dtype & ndim preserved); all-zero/empty inputs collapse the trimmed axes to length 0 (trim spec ignored, matching NumPy). Implementation is NOT NumPy's `argwhere.min/max` (which materializes every non-zero coordinate) — the bounding box is separable, so it takes the first/last non-zero index from `np.nonzero` (1-D) or `np.nonzero(np.any(filt, other_axes))` (N-D), touching only the trimmed axes. Measured **3.4×–361× faster than NumPy 2.4.2** (min on tiny 1-D, up to 361× on 3-D single-axis). Differential-fuzzed 400/400 bit-exact across 1–3D × {int/uint/float/bool} × sparsity × trim × axis. See `Manipulation/np.trim_zeros.cs` (the facade) and `Manipulation/Default.TrimZeros.cs` (`TensorEngine.TrimZeros`: a test of the values decides the view, so it is the engine's; np-layer dtype plan, P3 batch 9).
+`np.trim_zeros(filt, trim="fb", axis=null)` crops leading/trailing all-zero hyperplanes (NumPy 2.2.0+ N-dimensional bounding box; probed against 2.4.2). `trim` is case-insensitive ('f'=front, 'b'=back, "fb"/"bf"=both) and validated (`ValueError "unexpected character(s) in \`trim\`: '…'"`). `axis=null` trims the smallest bounding box over all axes; an explicit axis/axis-list (int overload + `int[]` overload) trims only those (NumPy's `normalize_axis_tuple(axis, ndim, argname="axis")`: every axis range-checked first → `AxisError "axis: axis 2 is out of bounds for array of dimension 2"`, then `ValueError "repeated axis in \`axis\` argument"`); an **empty** axis list or a **0-d** input returns the input unmodified. Always returns a **view** (dtype & ndim preserved); all-zero/empty inputs collapse the trimmed axes to length 0 (trim spec ignored, matching NumPy). Implementation is NOT NumPy's `argwhere.min/max` (which materializes every non-zero coordinate) — the bounding box is separable, so it takes the first/last non-zero index from `np.nonzero` (1-D) or `np.nonzero(np.any(filt, other_axes))` (N-D), touching only the trimmed axes. Measured **3.4×–361× faster than NumPy 2.4.2** (min on tiny 1-D, up to 361× on 3-D single-axis). Differential-fuzzed 400/400 bit-exact across 1–3D × {int/uint/float/bool} × sparsity × trim × axis. See `Manipulation/np.trim_zeros.cs` (the facade) and `Backends/Default/Manipulation/Default.TrimZeros.cs` (`TensorEngine.TrimZeros`: a test of the values decides the view, so it is the engine's; np-layer dtype plan, P3 batch 9).
 
 `permute_dims` and `matrix_transpose` are the NumPy 2.x / Array-API transpose aliases (both pure O(1) views). `np.permute_dims(a, axes=null)` is a straight alias of `transpose` (delegates to `TensorEngine.Transpose`). `np.matrix_transpose(x)` swaps the two innermost axes (`(..., M, N)→(..., N, M)`, i.e. `swapaxes(x, -1, -2)`) and requires `ndim ≥ 2`, else `ArgumentException "Input array must be at least 2-dimensional, but it is {ndim}"`; the companion property `ndarray.mT` does the same but raises the NumPy-verbatim `"matrix transpose with ndim < 2 is undefined"` (distinct message, both probed against 2.4.2). Read-only/broadcast inputs stay non-writeable through the alias. See `Manipulation/np.permute_dims.cs`, `Manipulation/np.matrix_transpose.cs`, `Backends/NDArray.cs` (`mT`).
 
@@ -2224,7 +2224,7 @@ the scalar (NumPy's `m[()]`), `flip(m, 0)` raises AxisError. `fliplr` requires n
 - `concatenate` layout vote fixed to NumPy's ambiguity resolution: **F output only when all inputs are F-contiguous AND not all are also C-contiguous** — both-C&F inputs (e.g. `(N,1)` columns) now produce C order, matching `PyArray_CreateMultiSortedStridePerm`. Also added the uniform-tiny-slab interleave fast path (constant-size loads/stores when every per-outer slab is the same 1/2/4/8/16 bytes — the `(N,1)` column pattern; ~10-20× over per-slab `Buffer.MemoryCopy`).
 - `UnmanagedStorage.GetData<T>()` now narrows to the shape's `[offset, offset+size)` window before returning/casting (zero-copy, still writes through) — previously a **contiguous view at a non-zero offset** (np.split / np.unstack children) returned the WHOLE backing buffer from `Data<T>()`.
 
-`resize` ships as both `np.resize(a, new_shape)` (function — fills the enlarged output with **repeated copies** of `a` in C-order via an exact-sized doubling byte-tile; empty source / zero new-size → `zeros`; always C-contiguous; any input layout is raveled first) and `ndarray.resize(new_shape, refcheck=true)` (**in-place** — grows with **zeros**, shrinks by truncation, operates on the raw contiguous buffer so an F-contiguous resize relabels memory column-major). The method mirrors NumPy's guards verbatim (`IncorrectShapeException`): single-segment only, and when the byte size changes it must own its data (not a view) and — under `refcheck` — not be shared (`IArraySlice.IsUniquelyReferenced`, backed by the ARC block refcount); `refcheck:false` bypasses. Same-size resize is a pure in-place reshape (no ownership/reference check). See `Manipulation/np.resize.cs` and `Manipulation/NDArray.resize.cs`, the facades over `UnmanagedStorage.ResizeRepeating` (`Indexing/UnmanagedStorage.ItemSelection.cs`) and `UnmanagedStorage.Resize` (`Backends/Unmanaged/UnmanagedStorage.Reshaping.cs`, NumPy's `PyArray_Resize`).
+`resize` ships as both `np.resize(a, new_shape)` (function — fills the enlarged output with **repeated copies** of `a` in C-order via an exact-sized doubling byte-tile; empty source / zero new-size → `zeros`; always C-contiguous; any input layout is raveled first) and `ndarray.resize(new_shape, refcheck=true)` (**in-place** — grows with **zeros**, shrinks by truncation, operates on the raw contiguous buffer so an F-contiguous resize relabels memory column-major). The method mirrors NumPy's guards verbatim (`IncorrectShapeException`): single-segment only, and when the byte size changes it must own its data (not a view) and — under `refcheck` — not be shared (`IArraySlice.IsUniquelyReferenced`, backed by the ARC block refcount); `refcheck:false` bypasses. Same-size resize is a pure in-place reshape (no ownership/reference check). See `Manipulation/np.resize.cs` and `Manipulation/NDArray.resize.cs`, the facades over `UnmanagedStorage.ResizeRepeating` (`Backends/Unmanaged/UnmanagedStorage.ItemSelection.cs`) and `UnmanagedStorage.Resize` (`Backends/Unmanaged/UnmanagedStorage.Reshaping.cs`, NumPy's `PyArray_Resize`).
 
 ### Allocation & reshape guards (error parity)
 
@@ -2294,12 +2294,12 @@ errors of this family — `split(..., axis=oob)`'s leaked `IndexError`, `squeeze
 open-bugs rundown's bug 7 and the neighbours its sweep found; plan `docs/plans/api-parameter-parity.md` X36; gates
 the type-strict, zero-excuse `axis_args.jsonl` oracle tier (15,444 cases) + the evaluate tier's C10 block (330) +
 `Manipulation/AxisArgumentParity.Test.cs`).
-`DefaultEngine.check_and_adjust_axis(ndims, axis, msgPrefix)` is NumPy's `check_and_adjust_axis_msg`: the range
-test runs on the axis AS GIVEN, then the wrap, and the error is the house `AxisError` (NumPy's type, an
-`ArgumentOutOfRangeException`) with NumPy's text, `"{msgPrefix}: axis 5 is out of bounds for array of dimension 2"`
+`Shape.check_and_adjust_axis(ndims, axis, msgPrefix)` (`View/Shape.Axes.cs`; `DefaultEngine`'s public static of that
+name forwards to it) is NumPy's `check_and_adjust_axis_msg`: the range test runs on the axis AS GIVEN, then the wrap,
+and the error is the house `AxisError` (NumPy's type, an `ArgumentOutOfRangeException`) with NumPy's text, `"{msgPrefix}: axis 5 is out of bounds for array of dimension 2"`
 (`new AxisError(axis, ndim, msgPrefix)`; NumPy names the argument where it normalizes several: moveaxis'
 `source` / `destination`, swapaxes' and diagonal's `axis1` / `axis2`, cross' `axisa` / `axisb` / `axisc`,
-average's and trim_zeros' `axis`, unstack's `source`). `DefaultEngine.normalize_axis_tuple(axis, ndim, argname,
+average's and trim_zeros' `axis`, unstack's `source`). `Shape.normalize_axis_tuple(axis, ndim, argname,
 allow_duplicate)` is NumPy's function: a NEW array (it used to rewrite the caller's in place), every axis
 range-checked before the repeat check, a repeat NumPy's `ValueError "repeated axis"` / `"repeated axis in
 \`{argname}\` argument"` (it used to REMOVE the repeat with `Distinct()`). Rules every caller follows, each a fixed
@@ -2610,7 +2610,7 @@ result's own buffer as NumPy does: `SlidingDot.RevertInPlace`), and a complex `v
   (`PyArray_Correlate` / `PyArray_Correlate2` with `_pyarray_correlate`'s checks) are the engine members
   `TensorEngine.Correlate` / `Correlate2` (`Backends/Default/Math/Default.Correlate.cs`); np.convolve's Python
   statements (`ndmin=1`, its own `a cannot be empty` / `v cannot be empty`, the swap by length, `v[::-1]`) are
-  `TensorEngine.Convolve` (DefaultEngine's in `Math/Default.Convolve.cs`); the four facades are one call each, NDArray.convolve / correlate keeping
+  `TensorEngine.Convolve` (DefaultEngine's in `Backends/Default/Math/Default.Convolve.cs`); the four facades are one call each, NDArray.convolve / correlate keeping
   `[NDScoped]` so the weaver roots their operands at the public entry (`OperandRootsTests`, gap LT22).
 - **The mode is NumPy's `PyArray_CorrelatemodeConverter`** (`SlidingDot.ParseSlidingMode`): case-SENSITIVE; a text
   whose first letter names a mode but is not its exact name is `ValueError("Use one of 'valid', 'same', or 'full' for
@@ -2685,7 +2685,7 @@ managed path stays the `groupa` fuzz default.
 P-cores, best of 6–8 process runs): np.correlate of 3 by 8 values (the swapped product) **1.87×** (0.57× while the
 reversal took a view and a copy), np.convolve of 8 by 3 values **1.33×** (the reversed view, then the kernel and the
 result at the NDArray allocation floor), np.convolve(int32 1000, 10, 'same') **4.34×**. See `Math/np.correlate.cs`,
-`Math/np.math.cs` (np.convolve), `Math/NDArray.{Correlate,Convolve}.cs`, `Math/Default.Convolve.cs`,
+`Math/np.math.cs` (np.convolve), `Math/NDArray.{Correlate,Convolve}.cs`, `Backends/Default/Math/Default.Convolve.cs`,
 `Backends/Default/Math/Default.Correlate.cs`, `Backends/Default/Math/Sliding/SlidingDot{,.Long}.cs`,
 `Backends/ISlidingDotBackend.cs`, `NumSharp.Interop.OpenBLAS/OpenBlasEngine.SlidingDot.cs`.
 
@@ -2718,7 +2718,7 @@ Decimal (no NumPy analog) rides the same fused expression through the decimal→
 `unary` tier. **Perf (NPY/NS, Release, best-of, warm):** **≈1.5–2.5× at 100K and 10M** (f64/int 2.2–2.5×, f32
 ~1.5–2.0× — the single-pass fusion halves NumPy's memory traffic); at 1K sinc sits at the per-op NDIter-setup floor
 (~parity), sin being the dominant cost on both sides there. See `Math/np.sinc.cs` (the facade) and
-`Math/Default.Sinc.cs` (`TensorEngine.Sinc`, DefaultEngine's fused pass; np-layer dtype plan, P2).
+`Backends/Default/Math/Default.Sinc.cs` (`TensorEngine.Sinc`, DefaultEngine's fused pass; np-layer dtype plan, P2).
 
 **NaN operand order of float add / multiply — a win-amd64 pin (2026-10-03).** When BOTH operands of a float32 /
 float64 add or multiply are NaN, the result is one operand's NaN, and the COMPILED LOOP picks which: x86
@@ -3112,10 +3112,10 @@ masks carried NaN, an unmasked inf stayed where NumPy masks it into 0.0, and the
 - **Perf** (310 cells): geomean 4.80× since X11's masked copy and X15's float16 broadcast route (2026-10-06; 2.83×
   before), min 1.07×. The five cells under 1.5× are the memory-bound 1M nomask means (1.07–1.39×).
 
-**`np.average` / `np.average_returned` are NumPy's statements** (`Statistics/Default.Average.cs`; 2026-10-27, plan
-`docs/plans/np-layer-dtype-logic.md` P2, the family's state-log entry). NumPy writes average in Python
-(`numpy/lib/_function_base_impl.py`), so the operation is an internal class beside the facade (it calls np.*
-functions, which ratchet R2 forbids under `Backends/`); the facades keep the numpy.matrix boundary and the null check.
+**`np.average` / `np.average_returned` are NumPy's statements** (`Backends/Default/Statistics/Default.Average.cs`;
+2026-10-27, plan `docs/plans/np-layer-dtype-logic.md` P2, the family's state-log entry). NumPy writes average in Python
+(`numpy/lib/_function_base_impl.py`), so the operation is `TensorEngine.Average` (`TensorEngine.FunctionBase.cs`),
+whose `DefaultEngine` override holds the statements; the facades keep the numpy.matrix boundary and the null check.
 - **The statements.** `_weights_are_valid`: weights of another shape raise `TypeError("Axis must be specified when
   shapes of a and weights differ.")` without an axis and `ValueError("Shape of weights must be consistent with shape
   of a along specified axis.")` along one; weights along the axes are transposed and reshaped into the operand's frame.
@@ -3409,7 +3409,7 @@ See `Logic/np.is.cs` (`signbit`), `Backends/Default/Logic/Default.SignBit.cs`,
 `np.isin(element, test_elements, assume_unique=false, invert=false, kind=null)` is the element-wise membership
 test — a bool array of `element`'s shape, True where `element[i]` is a value in the (flattened) `test_elements`
 set — and runs NumPy's `_isin` (`numpy/lib/_arraysetops_impl.py`) after the facade's class boundary, in
-`Manipulation/Default.Isin.cs` (`Default.Isin.VString.cs` holds the `StringDType` route; moved there by the np-layer
+`Backends/Default/Manipulation/Default.Isin.cs` (`Default.Isin.VString.cs` holds the `StringDType` route; moved there by the np-layer
 dtype plan's P2, 2026-10-27, as the internal class IsinEngine, and made `TensorEngine.Isin` by its phase PE). NumPy answers on one of three paths, and NumSharp takes the same one (`NumPyPath`):
 - **The table method** (an integer or bool pair — a char array is NumPy's uint16 —, `kind` None or `'table'`, the
   set's range safe for its dtype and at most `6·(len(ar1)+len(ar2))`, or `kind='table'`) runs as one pass
@@ -3446,7 +3446,7 @@ uint8 3.40×, bool 34.7×; 1M int32 6.07×), the loop path **1.74–6.41×** (10
 same source measured 270 and 940 µs), and `assume_unique` over presorted floats **0.42×** (NumPy's own statements
 against NumPy's timsort, which finds the two sorted runs; 5.17× over a permutation). An AVX2 gather of the range table
 measured 1.7× faster and is not taken: Intel's GDS microcode mitigation slows gathers on 6th–11th-generation cores. See
-`Manipulation/np.isin.cs` (facade), `Manipulation/Default.Isin.cs`; gates: `Manipulation/np.isin.Test.cs` (42) +
+`Manipulation/np.isin.cs` (facade), `Backends/Default/Manipulation/Default.Isin.cs`; gates: `Manipulation/np.isin.Test.cs` (42) +
 `np.isin.NumPyPort.Test.cs` (4) + the `isin` cases of the `groupa` tier (22) + the facade-move snapshot's NumPy twin
 (5,069 comparable calls, every one NumPy's outcome).
 
@@ -4124,7 +4124,7 @@ carry) and a branch-light unsigned-bounds resolve.
 
 Gates: `Indexing/TakeAlongAxisTests.cs` (37) + 44 `take_along_axis` cases in the `groupa` differential-fuzz
 tier. See `Indexing/np.take_along_axis.cs` (its statements are `NDArray.TakeAlongAxis` in
-`Manipulation/NDArray.ShapeBase.cs`).
+`Backends/NDArray.ShapeBase.cs`).
 
 `np.put_along_axis(arr, indices, values, axis)` (NumPy `numpy/lib/_shape_base_impl.py`) is the SETTER twin
 of `take_along_axis`: for every position in the (broadcast) iteration space it reads one index and writes one
@@ -4157,7 +4157,7 @@ index VALUE follows the validation odometer's C-order while NumPy's follows its 
 error TYPE, axis and size always match, and argsort/argmax output (contiguous) is exact, so it never arises in
 practice (validated: 10,200 randomized cases + 142 metamorphic layout invariants, 0 unexplained). Gates:
 `Indexing/PutAlongAxisTests.cs` (41) + 48 `put_along_axis` cases in the `groupa` differential-fuzz tier. See
-`Indexing/np.put_along_axis.cs` (its statements are `NDArray.PutAlongAxis` in `Manipulation/NDArray.ShapeBase.cs`).
+`Indexing/np.put_along_axis.cs` (its statements are `NDArray.PutAlongAxis` in `Backends/NDArray.ShapeBase.cs`).
 
 `np.select(condlist, choicelist, default=0)` (NumPy `numpy/lib/_function_base_impl.py`) draws each
 output element from the choice whose condition is true, FIRST matching condition winning; positions
@@ -4358,7 +4358,7 @@ works as an entry too, so `np.s_[…]` composes into `np.r_[…]`.
   `ndmin must be <= ndmax (64)`, but NumSharp has no 64-dimension ceiling anywhere, so importing one
   here would make the DSL refuse ranks the rest of the library accepts; `np.r_["0,100000", x]` builds
   the 100000-dim array. It has to be CHEAP rather than merely bounded, because `ndmin` comes from a
-  user-typed directive: `np.AtLeastNdView` prepends every axis in ONE `Storage.Alias` over
+  user-typed directive: `NDArray.AtLeastNdView` prepends every axis in ONE `Storage.Alias` over
   `Shape.PrependDimensions` (O(ndim), 1.4 ms at `ndmin=100000`) where the per-axis `expand_dims` loop
   it replaced cloned dims+strides each step — quadratic, 27.6 s at 100000 and unbounded at 2³¹-1. An
   `ndmin` too large to allocate a shape for (`"0,2147483647"`) surfaces as `OutOfMemoryException` in
@@ -5166,8 +5166,8 @@ StringSearchTests.cs` (21); plan `docs/plans/strings-phase2.md`):
   starting best can admit a lane that an earlier lane of the group has since beaten.
 
 **Text set routines and statistics are NumPy's statements over the sort and search engines** (strings phase 2, P2.2
-milestone C, 2026-10-16; `Manipulation/Default.Unique.Text.cs`, `Backends/Default/Sorting/TextDistinct.cs`,
-`Manipulation/Default.Isin.cs` (`IsinTextFlat`), the set routines' own files, `Sorting_Searching_Counting/{Default.LexSort,
+milestone C, 2026-10-16; `Backends/Default/Manipulation/Default.Unique.Text.cs`, `Backends/Default/Sorting/TextDistinct.cs`,
+`Backends/Default/Manipulation/Default.Isin.cs` (`IsinTextFlat`), the set routines' own files, `Sorting_Searching_Counting/{Default.LexSort,
 np.sort_complex}.cs`, `Statistics/np.histogram.cs` (`HistogramCumulativeText`), `Statistics/QuantileText.cs` +
 `Default.Quantile.Functions.cs` (`QuantileOfText`); gates the string oracle's `strsets` section (7,299 cases, strict but for one order excuse) +
 `Backends/Strings/StringSetsTests.cs` (18); plan `docs/plans/strings-phase2.md`):
@@ -5237,7 +5237,7 @@ families, the string oracle with no layout excuse for them, `Indexing/IndexSearc
   modes, ravel strides, count, dtypes, broadcast with the iterator's text), `dims=()` gives 0, a zero dimension raises
   `cannot unravel if shape has zero entries (is empty).` in every mode, the errors are ValueError. Its body is the
   engine member `TensorEngine.RavelMultiIndex` (2026-10-29, `TensorEngine.Multiarray.cs`, implemented in
-  `Indexing/Default.RavelMultiIndex.cs` with NumPy's `astype_anyint`, which np.unravel_index's member shares and which
+  `Backends/Default/Indexing/Default.RavelMultiIndex.cs` with NumPy's `astype_anyint`, which np.unravel_index's member shares and which
   asks the descriptor's kind); its `mode` is NumPy's mode object (a string for every axis, a sequence of strings, None:
   `np.ConvertClipmodeSequence(object, int)`), and a null coordinate array is NumPy's None
   (`TypeError: only int indices permitted`; it leaked a NullReferenceException).
@@ -5501,7 +5501,7 @@ Without the backend they fall to the managed GEMM (exactly as `np.matmul` itself
 is deliberately **no `TryEinsum` seam** — einsum reaches a backend the indirect way `np.tensordot` and
 `np.linalg.multi_dot` do, through the product. The whole call is the abstract `TensorEngine.Einsum`
 (`Backends/TensorEngine.EinsumFunc.cs`, NumPy's `_core/einsumfunc.py`), which `DefaultEngine` implements in
-`LinearAlgebra/Default.Einsum.cs` (beside the facade while it calls np.*): the argument checks, the parse, the
+`Backends/Default/LinearAlgebra/Default.Einsum.cs`: the argument checks, the parse, the
 view path, then N operands fold left-to-right, each step through `PairwiseContract`.
 
 **Value parity, with a probed split.** Integer and boolean contractions are byte-exact everywhere
@@ -5627,7 +5627,7 @@ decision order, with the verbatim error taxonomy (`ValueError` for the parse/sha
 `KeyError` — a new `Exceptions/KeyError.cs` — for an unknown path name, reproducing NumPy's buggy
 `('Path name %s not found', '…')` leak; `RuntimeError` for an incomplete explicit path; `TypeError`
 "Did not understand the path: …" / "object of type '…' has no len()" for a bad path object; a bool memory
-limit is Python's int, accepted). `np.einsum` runs the same resolution (`np.ResolveOptimize`) for any
+limit is Python's int, accepted). `np.einsum` runs the same resolution (`EinsumPathPlanner.ResolveOptimize`) for any
 `optimize` but `False`, first, before the operands, `order=` and `casting=`, as NumPy's `einsum` calls
 `einsum_path` before `c_einsum`. The
 returned `EinsumPath` ROUND-TRIPS into `np.einsum(…, optimize: path)` (also the raw list and the memory
@@ -5698,7 +5698,7 @@ library asserts axis texts with wildcards.
 - `fill_diagonal(a, val, wrap=False)` — **in place, returns void**. Values **tile cyclically and truncate**, they do not broadcast (`a.flat[:end:step] = val` semantics — probed: `[1,2,3,4]` into a 6×6 gives `[1,2,3,4,1,2]`, an over-long list is cut, and an **empty** one is a silent no-op). `wrap` only affects tall matrices. Errors verbatim: `array must be at least 2-d`, `All dimensions of input must be of equal length` (ndim > 2, non-hyper-cubic), `underlying array is read-only`. Implemented with **no element loop** — the targets resolve to real strides and are written by the IL strided-store kernel (`DirectILKernelGenerator.DiagWrite`), one stride-`Σstrides` run (or, when wrapping, `ceil(count/cols)` equally-strided blocks); a stride-0 source broadcasts the scalar, a contiguous/tiled source supplies the sequence, and both feed the same kernel with no NDIter setup. This replaces the old aliased-view + `SetData` route (which sent the strided destination through `NDIter.Copy`) and falls back to it when dynamic codegen is unavailable (AOT). The kernel is why it writes correctly through transposed, sliced, F-order and negative-stride views (verified for `wrap` × non-contiguous too, the one combination the oracle tier does not reach). `val` is `object` and accepts everything NumPy's array_like does — scalars, `NDArray`, C# arrays (incl. rectangular 2-D, which ravel), and `IEnumerable` collections — converted the way NumPy's flat assignment converts it, `PyArray_FromAny(val, a.dtype, FORCECAST)`, BEFORE the diagonal is walked, so an empty array still raises (`NDArray.FlatStoreValue`, `Indexing/NDArray.IndexTricks.cs`): a scalar or str by the dtype's setitem (a Python int range-checked, a str parsed by `int()` / `float()` / `complex()` and quoted as the str, its `str()` into `S` / `U`, a `BigInteger` included), an `object[]` or collection item by item the same way (`new object[] { 300, 2 }` into int8 raises), an `NDArray` or typed C# array by an unsafe cast. A **null** `val` is Python's `None` (P1.7b): NaN for a float array, `False` for bool, `'None'` for text, `int(None)`'s TypeError for an integer array — converted after the read-only check and before the empty-diagonal return, as NumPy's `a.flat[:end:step] = None` does (it was a deliberate `ArgumentNullException` divergence until 2026-10-13).
 - `diag_indices(n, ndim=2)` / `diag_indices_from(arr)` / `tril_indices(n, k=0, m=None)` / `triu_indices` / `tril_indices_from(arr, k=0)` / `triu_indices_from` / `mask_indices(n, mask_func, k=0)` — return `NDArray<long>[]` (the house tuple convention; `intp` is int64). `diag_indices` returns **the same array instance** in every slot, matching NumPy's `(idx,) * ndim` aliasing (a write through one is visible through all); `ndim <= 0` gives an empty array. `mask_indices`' arity follows the mask function's rank, so passing `diag` yields **one** index array. The `tril/triu_indices` generators skip NumPy's N×M bool mask + two broadcast coordinate grids + boolean gathers entirely: the triangle is separable, so the row/column runs are emitted directly in `O(output)` — **4.4× NumPy at 10M**.
 
-**Perf (NPY/NS, best-of-rounds, Release):** geomean **1.83× at N=10M** (no cell below 1.0; min 1.13×) and **1.40× at N=100K**. `tril_indices`/`triu_indices` lead at 4.40×/4.55× (10M). `fill_diagonal` now **wins at every tier** through the `DiagWrite` IL kernel — **4.8× at 100K, 1.46× at 10M** (the 10M cell was 0.40× on the old `SetData` route, which paid `NDIter.Copy`'s per-strided-write overhead: 37.9 µs → 10.9 µs); it touches only `min(rows, cols)` elements, so a direct byte-width MOV loop is all the work there is. `diag`/`diagflat` **construct** win at small/large n but sit at **0.12–0.33× at 100K**, allocator-bound on the fresh-sparse-diagonal page faults documented above — a property of NumSharp's non-caching allocator, not the diag kernel (NumSharp's fresh alloc already matches NumPy's fresh; only NumPy's warm block cache pulls ahead in the tight benchmark loop). `diag_indices`/`diag_indices_from` are `arange`+wrap and win **2–3.6× / 9–14×** (a reported 0.54× on `diag_indices` was a contaminated snapshot — it is comfortably >1× on an idle host). The triangular fills pick their allocation strategy by size: below **64 MiB** the buffer comes back dirty so they allocate uninitialised and write every byte exactly once, above it `np.zeros` rides free OS zero-pages and only the retained run is touched (measured cliff — 64 MB: 6.0 ms vs 11.0 ms write-once; 72 MB: 18.9 ms vs 13.5 ms the other way; see `np.tri.cs` → `WriteOnceMaxBytes`).
+**Perf (NPY/NS, best-of-rounds, Release):** geomean **1.83× at N=10M** (no cell below 1.0; min 1.13×) and **1.40× at N=100K**. `tril_indices`/`triu_indices` lead at 4.40×/4.55× (10M). `fill_diagonal` now **wins at every tier** through the `DiagWrite` IL kernel — **4.8× at 100K, 1.46× at 10M** (the 10M cell was 0.40× on the old `SetData` route, which paid `NDIter.Copy`'s per-strided-write overhead: 37.9 µs → 10.9 µs); it touches only `min(rows, cols)` elements, so a direct byte-width MOV loop is all the work there is. `diag`/`diagflat` **construct** win at small/large n but sit at **0.12–0.33× at 100K**, allocator-bound on the fresh-sparse-diagonal page faults documented above — a property of NumSharp's non-caching allocator, not the diag kernel (NumSharp's fresh alloc already matches NumPy's fresh; only NumPy's warm block cache pulls ahead in the tight benchmark loop). `diag_indices`/`diag_indices_from` are `arange`+wrap and win **2–3.6× / 9–14×** (a reported 0.54× on `diag_indices` was a contaminated snapshot — it is comfortably >1× on an idle host). The triangular fills pick their allocation strategy by size: below **64 MiB** the buffer comes back dirty so they allocate uninitialised and write every byte exactly once, above it `np.zeros` rides free OS zero-pages and only the retained run is touched (measured cliff — 64 MB: 6.0 ms vs 11.0 ms write-once; 72 MB: 18.9 ms vs 13.5 ms the other way; see `SizeBucketedBufferPool.WriteOnceMaxBytes`).
 
 ### Window functions
 `bartlett`, `blackman`, `hamming`, `hanning`, `kaiser`
@@ -5719,7 +5719,7 @@ is special-cased only to dodge the `alpha == 0` division. Formulae, verbatim fro
 hamming `0.54+0.46·cos(πn/(M-1))`; blackman `0.42+0.5·cos(πn/(M-1))+0.08·cos(2πn/(M-1))`; kaiser
 `i0(β·√(1-((n-α)/α)²))/i0(β)` with `α=(M-1)/2` and `i0` the cephes Chebyshev modified-Bessel routine
 NumPy's `np.i0` uses (the internal `np.BesselI0` scalar helper, the `_i0_1`/`_i0_2`/`_chbevl` port, which the
-public `np.i0` runs too: `TensorEngine.I0`, `Math/Default.I0.cs`, one cephes kernel per float width in
+public `np.i0` runs too: `TensorEngine.I0`, `Backends/Default/Math/Default.I0.cs`, one cephes kernel per float width in
 `Math/np.i0.cs`).
 
 **BIT-IDENTICAL to NumPy 2.4.2** (verified across 152 `(M, beta)` cases + the differential-fuzz `windows`
@@ -6143,7 +6143,7 @@ trees (`PolySteps.RewriteForWeakX`) with `PolyNumber` instead; `PolyNumber` emul
 
 **Argument kinds — `np.array`'s coercion, ported (the 2026-09-29 wholeness pass).** Every array_like the package
 converts — `{p}der`/`{p}int`'s c, k, lbnd and scl, `{p}val*`/`{p}grid*`'s c and x, `{p}val2d`/`{p}val3d`/`{p}valnd`'s
-ordinates, `mapdomain`'s x, `as_series`' items, `{p}add`/`{p}sub`'s operands, `trimseq`'s items — goes through `Creation/UnmanagedStorage.Coercion.Sequence.cs` (`UnmanagedStorage.FromSequence`; numpy.polynomial's `NDPolySequence.cs` until 2026-10-29, when it became the array object's coercion: numpy.char, numpy.matrix, np.histogramdd and np.gradient read their array_like arguments with it too), a statement-for-statement port of
+ordinates, `mapdomain`'s x, `as_series`' items, `{p}add`/`{p}sub`'s operands, `trimseq`'s items — goes through `Backends/Unmanaged/UnmanagedStorage.Coercion.Sequence.cs` (`UnmanagedStorage.FromSequence`; numpy.polynomial's `NDPolySequence.cs` until 2026-10-29, when it became the array object's coercion: numpy.char, numpy.matrix, np.histogramdd and np.gradient read their array_like arguments with it too), a statement-for-statement port of
 `array_coercion.c` (`PyArray_DiscoverDTypeAndShape_Recursive` + `update_shape`) and its fill:
 - **The C# map** (header of `NDPolyNumber.cs`): `ITuple` (ValueTuple, System.Tuple) is a Python tuple; `object[]` and
   every other C# array whose elements are not a NumSharp dtype (jagged `double[][]`, `NDArray[]`, `BigInteger[]`) and any
@@ -6496,7 +6496,7 @@ roots 1.5–5×. The cells under 1.5× are floors both sides share: LAPACK `geev
   written.
 - **The zero matrix is a write-once allocation.** `new NDArray(fillZeros: true)` (calloc) handed out fresh OS pages,
   and the diagonal writes faulted each one: ~0.9 µs a page, 75 µs at degree 200. It now follows np.tri's policy
-  (`np.PrefersWriteOnce`): up to 64 MiB a pooled buffer plus `np.ZeroBytes`; above that, OS-zeroed pages.
+  (`SizeBucketedBufferPool.PrefersWriteOnce`): up to 64 MiB a pooled buffer plus `np.ZeroBytes`; above that, OS-zeroed pages.
 - **Library-wide fixes that rode along:**
   - **`np.linalg.eig`/`eigvals` of a float32 operand with complex eigenvalues** returned double-precision values.
     NumPy returns complex64 (geev in double, then `astype(complex64)`). `CollapseEig` now rounds each component to
@@ -7619,7 +7619,7 @@ code gives NumPy's text.
     unit dimensions stripped), then the index arrays' values are checked.
   - The caller's key array is never written (`NormalizeIndexInputs` copies it at the first conversion; it used to leave
     disposed arrays in a reused key).
-  - The typed fetch / store are `UnmanagedStorage.MapIterGet` / `MapIterSet` (`Selection/UnmanagedStorage.Mapping.cs`);
+  - The typed fetch / store are `UnmanagedStorage.MapIterGet` / `MapIterSet` (`Backends/Unmanaged/UnmanagedStorage.Mapping.cs`);
     NDArray's protected `FetchIndices` / `SetIndices` / `...ND` / `...NDNonLinear` forward to them.
 
 **Storing a C# literal is NumPy's `PyArray_Pack` of a Python scalar, at every store entry point** (2026-10-08, plan
@@ -7675,10 +7675,10 @@ code gives NumPy's text.
 | TensorEngine | `Backends/TensorEngine.cs` (Blas, Evaluate) + one partial per NumPy source file: `TensorEngine.{Umath,Methods,Multiarray,Numeric,NanFunctions,UfuncLike,ArrayObject,FunctionBase,ArraySetOps,LinearAlgebra,Threading,Histograms,Scimath,EinsumFunc,Polynomial}.cs` (np-layer dtype plan, phase PE) |
 | DefaultEngine | `Backends/Default/DefaultEngine.*.cs` |
 | np API | `APIs/np.cs` |
-| Diagonal / triangular family | `Creation/np.tri.cs`, `Indexing/np.{diag,tril,diag_indices,tril_indices,fill_diagonal}.cs`, `Creation/NDArray.TwoDimBase.cs` (np.diag / np.diagflat's statements, beside np.eye's), `Indexing/NDArray.IndexTricks.cs` (np.fill_diagonal's statements, the diagonal scatter np.diag shares) |
-| unique family | `Manipulation/np.unique.cs` (`np.unique`: its class boundaries, then `TensorEngine.Unique`), `Manipulation/np.unique_values.cs` (Array-API `unique_values`/`unique_counts`/`unique_inverse`/`unique_all` + result structs), `Manipulation/NDArray.unique.cs` (the two instance members, one call each; the legacy protected `unique<T>()`), DefaultEngine's `Manipulation/Default.Unique.cs` (the statements after the boundaries, the text checks) + `Default.Unique.Kwargs.cs` (NumPy's `_unique1d` routes: the argsort-and-gather statements, the in-place-sort routes, the long-indexed fallback, the axis path) + `Default.Unique.Hash.cs` (int + complex hash fast path, splitmix64; the complex radix sort of the distinct values and the cardinality checkpoint) + `Default.Unique.{Radix,Text,VString}.cs`. Design + measured perf decisions: `docs/stale-docs/UNIQUE_DESIGN.md` |
-| Selection family | `Indexing/np.{take,take_along_axis,put,put_along_axis,place,putmask,select}.cs` (take_along_axis' and put_along_axis' statements, with np.apply_along_axis', are `Manipulation/NDArray.ShapeBase.cs`); the bodies of take / put / putmask / place / repeat / choose / compress / np.resize are `UnmanagedStorage` members in `Indexing/UnmanagedStorage.ItemSelection.cs` (NumPy's `item_selection.c`; each picks its `StringDType` route by `DTypeMeta.HasReferences`, NumPy's `PyDataType_REFCHK`); IL kernels `Backends/Kernels/Direct/DirectILKernelGenerator.{Take,TakeAlongAxis,Put,PutAlongAxis,Place,PutMask,Select}.cs` (`Select` = fused single-pass reverse-`ConditionalSelect` chain; `TakeAlongAxis` = whole-array strided-odometer gather, byte-width-keyed; `PutAlongAxis` = the scatter mirror — a dtype-agnostic validate pass + a bounds-free scatter pass for NumPy's all-or-nothing assignment; `PutMask` = Place's typed-MOV scatter with a by-position cursor + `nv==1` scalar fast path) |
-| Indexers (NumPy's `mapping.c`) | `Selection/NDArray.Indexing.cs` (the one indexer's dispatch), `.PrepareIndex.cs` (`prepare_index`, `MapIterResultDims`), `.Selection.Getter.cs` / `.Selection.Setter.cs` (the routes that turn masks, bools, slices and integers into index arrays; `NormalizeIndexInputs`, `AdvancedEntriesAreConsecutive`), `.Masking.cs`, `.Strings.cs` / `.VString.cs` (the fixed-width text route on the unit view; the `StringDType` route, chosen by `DTypeMeta.HasReferences`), `Selection/UnmanagedStorage.Mapping.cs` (the typed fetch / store `MapIterGet` / `MapIterSet` and their subspace copies), `Backends/NDArray.Container.cs` (`__getitem__` / `__setitem__`) |
+| Diagonal / triangular family | `Creation/np.tri.cs`, `Indexing/np.{diag,tril,diag_indices,tril_indices,fill_diagonal}.cs`, `Backends/NDArray.TwoDimBase.cs` (np.diag / np.diagflat's statements, beside np.eye's), `Indexing/NDArray.IndexTricks.cs` (np.fill_diagonal's statements, the diagonal scatter np.diag shares) |
+| unique family | `Manipulation/np.unique.cs` (`np.unique`: its class boundaries, then `TensorEngine.Unique`), `Manipulation/np.unique_values.cs` (Array-API `unique_values`/`unique_counts`/`unique_inverse`/`unique_all` + result structs), `Manipulation/NDArray.unique.cs` (the two instance members, one call each; the legacy protected `unique<T>()`), DefaultEngine's `Backends/Default/Manipulation/Default.Unique.cs` (the statements after the boundaries, the text checks) + `Default.Unique.Kwargs.cs` (NumPy's `_unique1d` routes: the argsort-and-gather statements, the in-place-sort routes, the long-indexed fallback, the axis path) + `Default.Unique.Hash.cs` (int + complex hash fast path, splitmix64; the complex radix sort of the distinct values and the cardinality checkpoint) + `Default.Unique.{Radix,Text,VString}.cs`. Design + measured perf decisions: `docs/stale-docs/UNIQUE_DESIGN.md` |
+| Selection family | `Indexing/np.{take,take_along_axis,put,put_along_axis,place,putmask,select}.cs` (take_along_axis' and put_along_axis' statements, with np.apply_along_axis', are `Backends/NDArray.ShapeBase.cs`); the bodies of take / put / putmask / place / repeat / choose / compress / np.resize are `UnmanagedStorage` members in `Backends/Unmanaged/UnmanagedStorage.ItemSelection.cs` (NumPy's `item_selection.c`; each picks its `StringDType` route by `DTypeMeta.HasReferences`, NumPy's `PyDataType_REFCHK`); IL kernels `Backends/Kernels/Direct/DirectILKernelGenerator.{Take,TakeAlongAxis,Put,PutAlongAxis,Place,PutMask,Select}.cs` (`Select` = fused single-pass reverse-`ConditionalSelect` chain; `TakeAlongAxis` = whole-array strided-odometer gather, byte-width-keyed; `PutAlongAxis` = the scatter mirror — a dtype-agnostic validate pass + a bounds-free scatter pass for NumPy's all-or-nothing assignment; `PutMask` = Place's typed-MOV scatter with a by-position cursor + `nv==1` scalar fast path) |
+| Indexers (NumPy's `mapping.c`) | `Selection/NDArray.Indexing.cs` (the one indexer's dispatch), `.PrepareIndex.cs` (`prepare_index`, `MapIterResultDims`), `.Selection.Getter.cs` / `.Selection.Setter.cs` (the routes that turn masks, bools, slices and integers into index arrays; `NormalizeIndexInputs`, `AdvancedEntriesAreConsecutive`), `.Masking.cs`, `.Strings.cs` / `.VString.cs` (the fixed-width text route on the unit view; the `StringDType` route, chosen by `DTypeMeta.HasReferences`), `Backends/Unmanaged/UnmanagedStorage.Mapping.cs` (the typed fetch / store `MapIterGet` / `MapIterSet` and their subspace copies), `Backends/NDArray.Container.cs` (`__getitem__` / `__setitem__`) |
 | numpy.matrix (`NDMatrix`) | `Matrixlib/NDMatrix.cs` (class, result forms, scalar conversions, T / H / I / A / A1), `.Construction.cs` (`matrix.__new__`, the literal parser), `.Indexing.cs`, `.Operators.cs`, `.Reductions.cs`, `.Methods.cs`, `Matrixlib/np.matrix.cs`, `Creation/np.{asmatrix,bmat}.cs`, `View/Shape.Matrix.cs` (the finalize rule), `Selection/NDArray.Indexing.AssignedValue.cs` (NumPy's value rule for index-array assignment) |
 | The matrix boundary (`np.*` with a matrix operand) | `Matrixlib/NDMatrixBoundary.cs` (`Sees`, the rules `Wrapped` / `Reduced` / `Plain` / `WrappedAll` / `WrappedPair` / `WrappedTriple` / `WrappedIf`, the regions `PlainFor` / `Inside`, `PlainOf` for containers, the caller audit); one statement in each public `np.*` overload; oracle `matrix_operand.jsonl` via `OpRegistry.MatrixOperand.cs` and `FuzzCorpusTests.MatrixOperand.cs` |
 | Comparison engine (`==` … `>=`) | `Backends/Default/Math/DefaultEngine.CompareOp.cs` (dispatch, the trivial route), `DefaultEngine.CompareOp.Rows.cs` (the two-level route without an iterator), `DefaultEngine.UfuncOut.cs` (`out=` / `where=`), `Backends/Kernels/ComparisonRun.cs` (one chunk of any layout and dtype pair through the vector kernels; scalar adoption; the tile and repeated-row routes of a rows iteration), `Backends/Iterators/NDIter.Execution.ComparisonRun.cs` (the iterator hook), `Backends/Kernels/Direct/DirectILKernelGenerator.Comparison.cs` (the IL vector kernels), `.Comparison.Half.cs`, `.Comparison.Complex.cs`, `.Comparison.MixedSign.cs`, `.StridedMove.cs`, `.TransposeTile.cs` (a tile of an F-ordered operand into contiguous rows). Tests `Backends/Kernels/ComparisonRunTests.cs`, `TransposeTileTests.cs`, `ComparisonBroadcastKernelTests.cs`; fenced memory `test/NumSharp.Tests/Utilities/FencedMemory.cs` |
@@ -7686,11 +7686,11 @@ code gives NumPy's text.
 | ONNX Runtime interop (package) | `src/NumSharp.Interop.OnnxRuntime/NDArrayOnnxInterop.{cs,Export.cs,Import.cs,NonTensor.cs,Text.cs}` (dtype maps, `IsCpuAccessible`, `AsOrtValue`/`ToOrtValue`/`AsDenseTensor`/`ToDenseTensor`, `ToNDArray`/`AsNDArray`, the non-tensor readers, the text crossing), `OnnxCodecMode.cs` (Auto / View / Copy), `OrtTensor.cs` (the `OrtTensor`/`OrtTensor<T>` handles, the value → handle and disposed-value tables, `ImportLease`), `UnmanagedMemoryManager.cs` (`Memory<T>` over the unmanaged buffer + `PinToken`), `InferenceSessionExtensions.cs` (`session.Run(NDArray…)`, `RunInto`, the overlap and fed-input rules) + `InferenceSessionExtensions.Async.cs` (`RunIntoAsync`/`RunAsync`, `PendingRun`), `src/NumSharp.Interop.Shared/Postprocess.cs` (compiled into this bridge and the ML.NET one); ORT C# source for reference at `refs/onnxruntime/csharp/` (sparse submodule, at `v1.31.0`) + the official samples at `refs/onnxruntime-inference-examples/c_sharp/` |
 | ML.NET interop (package) | `src/NumSharp.Interop.MLNet/NDArrayMLNetInterop.{cs,Export.cs,Import.cs}` (dtype maps, `AsDataView`/`ToDataView`/`ToVBuffer`, `ToNDArray`, zero-copy `VBuffer.AsNDArray<T>` + `WrapExternal`/`Pin`/`Live{Exports,Imports}`), `NDArrayDataView.cs` (the NDArray-backed `IDataView` + strided lazy cursor + ARC-pin lifetime), `VBufferAccessor.cs` (compiled-expression getter for the private `VBuffer<T>._values`), `ImportLease.cs` (the last-view-releases GCHandle pin lease), `Postprocess.cs` (shared with ONNX). Depends on `Microsoft.ML.DataView` only |
 | CBLAS product family | `LinearAlgebra/np.{inner,vdot,vecdot,matvec,vecmat,matmul,tensordot}.cs` (facades); the gufuncs' whole calls `Backends/Default/LinearAlgebra/Default.Gufuncs.cs` (`TensorEngine.Matmul` / `Vecdot` / `Matvec` / `Vecmat` with every keyword), NumPy's gufunc checks `Backends/Default/LinearAlgebra/{GufuncGuard,GufuncSignature}.cs`; NumPy's float16 NaN order `Utilities/NDHalfDot.cs` |
-| Sliding products (`np.correlate` / `np.convolve`) | `Math/np.correlate.cs`, `Math/np.math.cs` (np.convolve), `Math/NDArray.{Correlate,Convolve}.cs` (facades); `Math/Default.Convolve.cs` (np.convolve's Python statements, `TensorEngine.Convolve`); `Backends/Default/Math/Default.Correlate.cs` (`TensorEngine.Correlate` / `Correlate2`: `PyArray_Correlate` / `PyArray_Correlate2`); `Backends/Default/Math/Sliding/SlidingDot{,.Long}.cs` (the mode converter, the sliding kernels, NumPy's per-dtype dotfunc models, the blocked long products, the in-place reversal, `SlidingCorrelateInto` for numpy.polynomial); `Backends/ISlidingDotBackend.cs` (the byte-parity BLAS seam) |
-| einsum | `LinearAlgebra/np.einsum.cs` (the facade), `Backends/TensorEngine.EinsumFunc.cs` (the abstract `Einsum`), `LinearAlgebra/Default.Einsum.cs` (DefaultEngine's: the checks, the view path, the pairwise fold over the matrix products), `LinearAlgebra/EinsumSubscripts.cs` (port of `einsum.cpp`'s parser) |
+| Sliding products (`np.correlate` / `np.convolve`) | `Math/np.correlate.cs`, `Math/np.math.cs` (np.convolve), `Math/NDArray.{Correlate,Convolve}.cs` (facades); `Backends/Default/Math/Default.Convolve.cs` (np.convolve's Python statements, `TensorEngine.Convolve`); `Backends/Default/Math/Default.Correlate.cs` (`TensorEngine.Correlate` / `Correlate2`: `PyArray_Correlate` / `PyArray_Correlate2`); `Backends/Default/Math/Sliding/SlidingDot{,.Long}.cs` (the mode converter, the sliding kernels, NumPy's per-dtype dotfunc models, the blocked long products, the in-place reversal, `SlidingCorrelateInto` for numpy.polynomial); `Backends/ISlidingDotBackend.cs` (the byte-parity BLAS seam) |
+| einsum | `LinearAlgebra/np.einsum.cs` (the facade), `Backends/TensorEngine.EinsumFunc.cs` (the abstract `Einsum`), `Backends/Default/LinearAlgebra/Default.Einsum.cs` (DefaultEngine's: the checks, the view path, the pairwise fold over the matrix products), `LinearAlgebra/EinsumSubscripts.cs` (port of `einsum.cpp`'s parser) |
 | `np.linalg` module | `LinearAlgebra/linalg/np.linalg.cs` (the module class) and `np.linalg.{solve,inv,det,eig,svd,qr,cholesky,lstsq,norm,multi_dot,matrix_power,arrayapi}.cs` (facades: the class boundary and one call); NumPy's Python statements in `LinearAlgebra/linalg/DefaultLinalgEngine*.cs` beside them (the `TensorEngine.Linalg` sub-engine's default: `_assert_*` / `_commonType`, one partial per facade file; the `_umath_linalg` gufuncs are its `protected virtual` kernels, `Backends/Default/LinearAlgebra/DefaultLinalgEngine.Kernels.cs`; the contract is `Backends/LinalgEngine.cs`); np.dot's whole call `Backends/Default/Math/BLAS/Default.Dot*.cs` (`TensorEngine.Dot(x, y, out)`, the N-D route's per-dtype dot functions in `Default.Dot.NDMD.cs`); `Exceptions/LinAlgError.cs` |
 | Window functions | `Math/np.windows.cs` (bartlett/blackman/hamming/hanning/kaiser + the internal cephes `BesselI0`; fused via `np.evaluate`) |
-| Fourier / FFT (`np.fft.*`) | `Fourier/np.fft.cs` (`FourierModule` facade), `Fourier/np.fft.{Standard,Real,Hermitian,Helper}.cs` (the 18 funcs: one call each into `TensorEngine.Fft`, the shifts over np.roll), `Backends/FftEngine.cs` (the sub-engine's contract, 16 members), `Fourier/DefaultFftEngine{,.Standard,.Real,.Hermitian,.Helper}.cs` (NumPy's statements), `Fourier/DefaultFftEngine.RawFft.cs` (layer-3 port: `_raw_fft`/`_raw_fftnd`/`_cook_nd_args`/`_swap_direction`), `Fourier/DefaultFftEngine.Kernels.cs` (the `protected virtual` c2c / r2c / c2r kernels), `Fourier/PocketFFTDriver.cs` (strided 1-D driver + FFTPACK packing), `Fourier/PocketFFT.{Twiddle,Complex,Real,Bluestein,Plan}.cs` (managed pocketfft engine); companion accessors `Math/np.{conjugate,real,imag,angle}.cs` (np.real / np.imag's statements: `NDArray.RealPart` / `ImagPart` in `Math/NDArray.TypeCheck.cs`). Design + parity ledger: `docs/FFT_PARITY.md` |
+| Fourier / FFT (`np.fft.*`) | `Fourier/np.fft.cs` (`FourierModule` facade), `Fourier/np.fft.{Standard,Real,Hermitian,Helper}.cs` (the 18 funcs: one call each into `TensorEngine.Fft`, the shifts over np.roll), `Backends/FftEngine.cs` (the sub-engine's contract, 16 members), `Fourier/DefaultFftEngine{,.Standard,.Real,.Hermitian,.Helper}.cs` (NumPy's statements), `Fourier/DefaultFftEngine.RawFft.cs` (layer-3 port: `_raw_fft`/`_raw_fftnd`/`_cook_nd_args`/`_swap_direction`), `Fourier/DefaultFftEngine.Kernels.cs` (the `protected virtual` c2c / r2c / c2r kernels), `Fourier/PocketFFTDriver.cs` (strided 1-D driver + FFTPACK packing), `Fourier/PocketFFT.{Twiddle,Complex,Real,Bluestein,Plan}.cs` (managed pocketfft engine); companion accessors `Math/np.{conjugate,real,imag,angle}.cs` (np.real / np.imag's statements: `NDArray.RealPart` / `ImagPart` in `Backends/NDArray.TypeCheck.cs`). Design + parity ledger: `docs/FFT_PARITY.md` |
 | numpy.polynomial evaluation (`np.polynomial.*`) | `Polynomial/Package/np.polynomial{,.polynomial,.chebyshev,.legendre,.laguerre,.hermite,.hermite_e}.cs` (facades), `Polynomial/Package/NDPolyEval.cs` (NumPy's Python layer), `NDPolyEval.FromRoots.cs` (`polyvalfromroots`: NumPy's statements, the product-form rule, the object / str paths), `Backends/Kernels/ILKernelGenerator.Polynomial.cs` (step tables incl. the root product + `PyScalar`), `.Typing.cs` (NEP 50 per node, peeling), `.Emitter.cs` (typed emitter), `.Lanes.cs` (vector lane kinds for every dtype pair), `.ConstPool.cs` (weak-value regions), `.Eval.cs` (dispatcher/part/stage kernels, `PolyRootForm`). Plan + measurements: `docs/plans/numpy-polynomial.md` (U3); benchmark `benchmark/polynomial/` |
 | numpy.polynomial additive family + polyutils (U1) | `Polynomial/Package/np.polynomial.polyutils.cs` (`PolyUtilsModule` facade, incl. the generic tuple overloads), `Polynomial/Package/NDPolyNumber.cs` (`PolyNumber`: Python / NumPy-scalar / ndarray operand + NumPy's operator dispatch), `Polynomial/Package/NDPolySeries.cs` (as_series/trimseq/trimcoef/getdomain/mapparms/mapdomain/{p}add/sub/line/constants + the `PyNum` machine-number lane), `Backends/Kernels/Direct/DirectILKernelGenerator.PolySeries.cs` (trim/combine/tolerance/cast/scalarmath IL kernels + the fused mapparms kernel), CPython arithmetic in `ILKernelGenerator.Polynomial.cs` (`PyScalar`: `IntTrueDivide`, `ComplexQuotient`, NaN-priority `Float*`/`Complex*` helpers). Oracle `polyseries.jsonl` via `OpRegistry.PolySeries.cs` |
 | numpy.polynomial calculus family (U4) | `Polynomial/Package/NDPolyCalc.cs` (`{p}der`/`{p}int` driver: NumPy's prologue, one-buffer orchestration, the integral's lbnd correction, NumPy's result layouts, `PyVal1D`), `Backends/Kernels/Direct/DirectILKernelGenerator.PolyCalculus.cs` (`PolyCalcRoutines` recurrence tables + the per-(basis, direction, dtypes) whole-array kernel: load/convert/scale stage, recurrence stage, column blocks). Oracle `polycalc.jsonl` via `OpRegistry.PolySeries.cs`; benchmark `benchmark/polynomial/polycalc_*` |

@@ -112,7 +112,7 @@ namespace NumSharp
         /// <remarks>Reads each index array through a raw pointer (int64, else int32 — the two dtypes
         ///     <see cref="NormalizeIndexArray"/> leaves), so the arrays must stay alive while the getters run.
         ///     <c>protected internal</c> since 2026-10-29 for the typed fetch and store in
-        ///     <c>Selection/UnmanagedStorage.Mapping.cs</c>, which call it.</remarks>
+        ///     <c>Backends/Unmanaged/UnmanagedStorage.Mapping.cs</c>, which call it.</remarks>
         protected internal static unsafe Func<long, long>[] PrepareIndexGetters(Shape srcShape, NDArray[] indices)
         {
             var indexGetters = new Func<long, long>[indices.Length];

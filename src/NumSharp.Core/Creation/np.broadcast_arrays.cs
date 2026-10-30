@@ -13,7 +13,7 @@ namespace NumSharp
         public static NDArray[] broadcast_arrays(params NDArray[] ndArrays)
         {
             using var plain = NDMatrixBoundary.PlainFor(ndArrays);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // The statement is the array object's (NDArray.BroadcastArrays, Creation/NDArray.StrideTricks.cs).
+            // The statement is the array object's (NDArray.BroadcastArrays, Backends/NDArray.StrideTricks.cs).
             return NDArray.BroadcastArrays(ndArrays);
         }
 

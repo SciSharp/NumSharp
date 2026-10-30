@@ -227,7 +227,7 @@ namespace NumSharp.Backends
         // The allocations behind np.full, np.full_like and np.ones (ctors.c; np-layer dtype plan, Appendix D's
         // UnmanagedStorage.Ctors.cs): a new array of a storage lane with one element stored into every slot. NumPy writes
         // it as `a = empty(...); copyto(a, value, casting='unsafe')`; the array object's NDArray.Full / FullLike / Ones
-        // (Creation/NDArray.Numeric.cs) decide the dtype and the route and call these for the storage lanes.
+        // (Backends/NDArray.Numeric.cs) decide the dtype and the route and call these for the storage lanes.
         // ---------------------------------------------------------------------------------------------
 
         /// <summary>

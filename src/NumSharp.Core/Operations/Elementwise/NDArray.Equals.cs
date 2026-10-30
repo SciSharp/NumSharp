@@ -169,7 +169,7 @@ namespace NumSharp
         {
             using var plain = NDMatrixBoundary.PlainFor(this, rhs);   // the member keeps the plain-array meaning for a matrix object
             // np.array_equal's statements, this array's TensorEngine.ArrayEqual (DefaultEngine's in
-            // Logic/Default.ArrayEqual.cs), for every dtype: the member answers as the function does.
+            // Backends/Default/Logic/Default.ArrayEqual.cs), for every dtype: the member answers as the function does.
             return TensorEngine.ArrayEqual(this, rhs, equal_nan);
         }
 

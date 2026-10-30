@@ -91,7 +91,7 @@ integers, the advanced block's placement); R1's lines left in the indexer files 
 routes' representation. Batch 9b, the text casts through the casting impls, is done (2026-10-30): every storage class
 pair's casting impl gives its strided loop, `DTypeCasting.GetDTypeTransferFunction` (NumPy's
 `PyArray_GetDTypeTransferFunction`) hands it out as an `NDCastInfo` (`NPY_cast_info`), NumPy's raw assignment walk is
-`UnmanagedStorage.RawArrayAssignArray` in the new `Manipulation/UnmanagedStorage.Assign.Raw.cs`, and the converting
+`UnmanagedStorage.RawArrayAssignArray` in the new `UnmanagedStorage.Assign.Raw.cs`, and the converting
 walks take their loop from the transfer function (the raw assignment of numbers and text, the iterator's string buffer
 transfers, the text-number reductions, np.copyto's scalar store into text) while the bulk routes keep their kernels;
 the divergences a replay of astype's snapshot and the conversion found are fixed per D4 (astype's argument order and
@@ -104,11 +104,17 @@ families and, handed over by the coordinator, the lines first assigned to PE (np
 np.packbits / np.unpackbits, np.bincount, and the text lines of np.kron and np.median) are engine members or engine
 partials, and the two divergences found on the way are fixed per D4 (np.argmax / np.argmin check a text operand's
 `out=` before they compare, `127c3c98`; np.nan_to_num refuses text and complex fills as NumPy's copyto does,
-`d313e41b`). P6's structural part is under way (2026-10-29 / 30): the engine's np.copyto, allocation,
-np.broadcast_to / np.broadcast_shapes, buffer-size and view / copy calls are the array object's members (R2's
-structural calls 263 -> 47, the indexers' four with batch 8), and the two defects its snapshots found are fixed per D4
+`d313e41b`). P6 is done (2026-10-30) but for three of the array object's homes, which wait for P7: the engine calls
+np.* only where R2 lists the call with its reason (24 files: numpy.strings' own 9 computations, and 37 structural
+calls, 23 of them the promotion helpers, which move into the dtype layer after `strings` merges `journey4`), every
+`DefaultEngine` and `UnmanagedStorage` partial sits under `Backends/`, the axis math is `Shape`'s
+(`View/Shape.Axes.cs`), and seven of the ten `NDArray` homes moved to `Backends/` once they called no np.* function.
+`NDArray.Multiarray.cs`, `NDArray.FunctionBase.cs` and `NDArray.IndexTricks.cs` stay beside their facades: some of
+their calls rely on a facade's class rule. The five defects its snapshots, readings and probes found are fixed per D4
 (a failed iteration's buffers are not written back, `dc807d59`; `np.array(IEnumerable<T>, size)` of a shorter
-enumeration raises np.fromiter's error, `f48b5677`). An audit of the element code the plan's own commits added
+enumeration raises np.fromiter's error, `f48b5677`; a bad `device=` raises NumPy's ValueError, `85167352`;
+np.nansum / np.nanprod along an axis with an empty result, `eeaac035`; np.average with numpy.matrix weights,
+`e169b25d`). An audit of the element code the plan's own commits added
 (2026-10-30) found four places and a few small ones that re-implement a kernel, the iterator or a BCL primitive the
 library already had. [§7 PA](#pa-reuse-what-the-library-already-has-the-2026-10-30-audit) plans their alignment. Its
 probe found exact models of NumPy's dot functions, so the dot item also fixes np.dot where it differs from NumPy today.
@@ -745,7 +751,7 @@ Where the operation classes and `DefaultEngine`'s Python-level statics go (E1):
       (the ufuncs), `.Methods.cs` (the ndarray methods that compute), `.Multiarray.cs` (the C functions that compute)
       and `.ArrayObject.cs` (the ten array-object members shipped in 0.70.0, E7). This is file organization only.
 - [x] **E7, the array object stays off `TensorEngine`.** Done 2026-10-28 (`7408f707`, `8f3407eb`, §9); the shape math of
-      its last bullet is P6's.
+      its last bullet moved in P6 (`2dddb067`).
   - No function of the array object becomes an engine member. Its functions move into their `NDArray`,
     `UnmanagedStorage` and `Shape` partials when P3 or D8's pass moves their family
     ([§1](#1-what-out-of-np-has-to-mean), [Appendix D](#appendix-d-where-every-numpy-function-lives)); `InsertEngine`
@@ -756,9 +762,11 @@ Where the operation classes and `DefaultEngine`'s Python-level statics go (E1):
     them: `GetStorage`, `CreateNDArray` ×2 (no caller in src or tests), `Transpose`, `SwapAxes`, `MoveAxis`, `RollAxis`,
     `Cast`, `BooleanMask`, `BooleanMaskSet`. Removing them would break a subclass for a layering reason alone; see
     "Later".
-  - The shape math `DefaultEngine` holds today (`Broadcast`, `ResolveReturnShape` and `AreBroadcastable` in
-    `Default.Broadcasting.cs`; `normalize_axis_tuple` and `check_and_adjust_axis` in `Default.Transpose.cs`) moves to
-    `Shape` partials (`Shape.Broadcasting.cs`, a new `Shape.Axes.cs`) in P6, with their callers.
+  - The shape math `DefaultEngine` held (`Broadcast`, `ResolveReturnShape` and `AreBroadcastable` in
+    `Default.Broadcasting.cs`; `normalize_axis_tuple` and `check_and_adjust_axis` in `Default.Transpose.cs`) is `Shape`'s
+    since P6 (`2dddb067`): the axis math moved to the new `Shape.Axes.cs` with its callers, and `DefaultEngine` keeps
+    the public statics it shipped in 0.70.0 as forwarders; the broadcasting members needed no move,
+    `Shape.Broadcasting.cs` already held them and every library caller called Shape's.
 
 The gates are §6's, plus three rules:
 - A test per sub-engine sets a probe subclass on the cached engine's property (`Linalg`, `Fft`), calls the facade, checks
@@ -836,7 +844,8 @@ NumPy's do; bulk moves keep their IL kernels.
   `.ShapeBase.cs`, `.TwoDimBase.cs`, `.IndexTricks.cs`, `.ArrayPad.cs`, `.TypeCheck.cs`, ...): NumPy's statements of the
   functions that are Python in NumPy.
 - A partial stays beside its facades while its statements call np.*, as `DefaultEngine`'s did (C3; R2 counts np.* calls
-  under `Backends/`). P6 moves it under `Backends/Unmanaged/`.
+  under `Backends/`). P6 moved the `UnmanagedStorage` partials under `Backends/Unmanaged/` and seven `NDArray` homes
+  under `Backends/`; three `NDArray` homes wait for P7 (see P6).
 - R1 learns the home names: Appendix D's `NDArray.<NumPy source>.cs` partials hold NumPy's statements (A), so the
   scanner leaves them out, as the names of the `Default.*.cs` partials beside the facades leave those out.
   `NDArray.FunctionBase.cs`'s hand pin (`32478d0c`) goes with that.
@@ -1137,22 +1146,30 @@ The 255 text lines are P3's K4 files, np.evaluate's two (P2's) and np.fft.RawFft
 
 ### P6. The engine stops calling np.*
 
-- [ ] The computational up-calls left after P1 to P5 become engine or core calls; the structural ones become calls into
+- [x] The computational up-calls left after P1 to P5 become engine or core calls; the structural ones become calls into
       the array object's members (the allocation, `UnmanagedStorage.Assign.cs`'s assignment for `copyto`,
       `broadcast_to`, the buffer size). R2 ends at zero computations; any structural call left is listed with its
       reason. Then `DefaultEngine`'s partials of NumPy's Python layer move under `Backends/Default/`, the array object's
-      beside their classes (C3), and the shape math `DefaultEngine` holds moves to `Shape` partials (E7).
+      beside their classes (C3), and the shape math `DefaultEngine` holds moves to `Shape` partials (E7). Done
+      2026-10-30 but for three `NDArray` homes, which P7 takes (see the state log).
   - [x] The computational part (2026-10-29, see the state log): R2's computations 132 -> 16, each converted call the
         engine member its facade dispatches to, every family snapshot-identical. The 16 left are pinned in
         `engine_upcall_allowlist.tsv` with their reasons: np.where (5) and np.apply_along_axis (2) are the array
         object's (§1, decided 2026-10-28) and leave when P3's batch 7 gives them their `NDArray` homes;
         `Backends/Strings/NDStringMethods.cs` (9) holds numpy.strings' own statements, the text API's pass (§8).
-  - [ ] The structural calls: 263 at `c4cc72d9`, 82 after families 1 to 5 (2026-10-29, see the state log: the
+  - [x] The structural calls: 263 at `c4cc72d9`, 82 after families 1 to 5 (2026-10-29, see the state log: the
         copies, the allocations, the broadcasts, the buffer size, the one-call views and copies), 78 after P3's batch 8
         took the indexers' four, 47 after family 6 (2026-10-30: np.ascontiguousarray, np.expand_dims, np.flip and
-        np.ravel, whose statements became array-object members). Left: the coercion calls, the promotion helpers, the
-        text API's statements, the write-once policy and the `flatiter` object.
-  - [ ] The moves under `Backends/Default/`, beside their classes and into `Shape` partials.
+        np.ravel, whose statements became array-object members), 27 after families 7 to 10 (2026-10-30: the dtype
+        routines, the coercion calls, numpy.char's StringDType results, the write-once policy). The moves brought the
+        calls their files keep into R2's scan; it lists 37 at the end, in 24 files, each with its reason: 23 calls of
+        the promotion helpers, which move into the dtype layer after `strings` merges `journey4`; 7 constructions of
+        np's public result types; the `flatiter` and `ndindex` iterators; numpy.strings' 5 descriptor calls (§8).
+  - [x] The moves (2026-10-30): every `DefaultEngine` partial under `Backends/Default/` (groups 1 to 9) and every
+        `UnmanagedStorage` partial under `Backends/Unmanaged/` (group 10), the axis math into the new
+        `View/Shape.Axes.cs` (group 11), seven of the ten `NDArray` homes under `Backends/` (group 12). Left for P7:
+        `NDArray.Multiarray.cs`, `NDArray.FunctionBase.cs` and `NDArray.IndexTricks.cs`, some of whose calls rely on a
+        facade's class rule.
 
 ### PA. Reuse what the library already has (the 2026-10-30 audit)
 
@@ -1331,6 +1348,10 @@ with the old route switchable in the same process.
 ### P7. The class boundary
 
 - [ ] Its own plan (D7).
+- [ ] The three `NDArray` homes P6 left beside their facades (`NDArray.Multiarray.cs`, `NDArray.FunctionBase.cs`,
+      `NDArray.IndexTricks.cs`): decide how their calls that rely on a facade's class rule keep the class
+      ([§9](#9-state-log), 2026-10-30), then convert their calls and move them under `Backends/` as P6 moved the other
+      seven.
 
 ### Later, outside this plan
 
@@ -1363,6 +1384,115 @@ candidate.
 ---
 
 ## 9. State log
+
+- **2026-10-30, P6: the structural calls (families 7 to 10), the partials beside the facades (groups 1 to 10), the shape
+  math (group 11), seven of the array object's homes (group 12) and three D4 fixes. P6 is done but for three homes,
+  which wait for P7.** Commits on `strings` from this session, developed in scratch worktrees and landed by
+  fast-forward, each snapshot-identical against its base and gated by `NumSharp.Tests` (both frameworks) and the
+  oracle (both frameworks, the Layering tests included). R2: 30 files, 9 computations, 47 structural calls (after
+  family 6) -> 24 files, 9 computations, 37 structural calls, every row with its reason; R1 unchanged (41 files).
+  - The families (the engine's last structural calls into np):
+    - `e4f44423` family 7, the dtype routines: the engine's 10 np.result_type / np.promote_types / np.can_cast calls
+      call `DTypePromotion.ResultType` / `PromoteTypes` / `DTypeCasting.CanCastTypeTo`, with a new type-code form
+      `DTypePromotion.PromoteTypes(NPTypeCode, NPTypeCode)` that np.promote_types / np.result_type of two type codes
+      call too (np.correlate's and np.searchsorted's in-place copies of that rule call it). 47 -> 37.
+    - `ffbe208d` family 8, the coercion calls: the engine's 7 np.array / np.asanyarray calls are
+      `NDArray.ArrayFromManaged` / `NDArray.AnyArrayFromObject`. 37 -> 30.
+    - `f4ab9500` family 9: numpy.char's two StringDType results take `DTypeRegistry.VString.default_descr()`. 30 -> 28.
+    - `7cd45759` family 10, the write-once policy: `np.PrefersWriteOnce` / `WriteOnceMaxBytes` move into the buffer pool
+      (`SizeBucketedBufferPool`), beside the window its 64 MiB cliff comes from. 28 -> 27.
+  - The partials beside the facades: each np.* call of a `DefaultEngine` or array-object partial becomes the member its
+    facade dispatches to (the engine's member, the operand's engine in a static helper, the array object's member, the
+    dtype layer's routine), and the file moves under `Backends/Default/<area>/` or `Backends/Unmanaged/`:
+    - group 1 `e9336a3e` sorting (np.digitize, np.bincount, np.lexsort, the nan arg reductions, np.sort_complex,
+      np.partition's kth, np.argmax's out=; 27 calls) - np.digitize's `np._FindCommonType` pinned with the promotion
+      helpers' deferral;
+    - group 2 `e3c307da` ravel / unravel: the helpers they shared with their facades leave np (`ClipModes`, `DefaultEngine`'s
+      `RavelStrides` / `ThrowIfZeroDimension` / `UnravelSize`, `OrderResolver.RequireCOrFOrder`, `Shape.IsLaidOutAs`);
+    - group 3 `62b5af8a` creation (np.vander's statements, np.geomspace's complex power) - the device check leaves np
+      (`DeviceArguments.ValidateDevice`, one function for every caller; the FFT engine's private copy goes);
+    - group 4 `30a4eca3` logic (np.array_equal / np.array_equiv, np.nan_to_num / np.isreal / np.iscomplex /
+      np.real_if_close; 23 calls);
+    - group 5 `41de81be` the diff family (np.diff, np.ediff1d, np.trapezoid, np.unwrap; 22 calls) - R2 counts a
+      `using static NumSharp.np` directive in an engine file as one computation (it hid np.trapezoid's unqualified
+      calls); `3d058acf` np.gradient, np.i0, np.interp, np.sinc, numpy.emath, np.convolve (33 calls) - R2 counts
+      `np.GradientResult` as structural;
+    - group 6 `24538dcc` np.cross / np.kron (38 calls); `0bf3554a` np.einsum (23 calls) - np.einsum_path's optimize=
+      resolution moves from np into an `EinsumPathPlanner` partial;
+    - group 7 `2f5ddde5` np.isin (44 calls); `049f92e3` np.packbits / np.unpackbits, np.trim_zeros and the set routines
+      (28 calls); `917a04f7` np.unique (19 calls);
+    - group 8 `bbdaff8e` the legacy polynomial functions (61 calls) - np.atleast_1d's statement for an array is
+      `NDArray.AtLeast1d` in the new `NDArray.CoreShapeBase.cs`;
+    - group 9 `dc7eec2c` the quantile family (30 calls); `d7b559e4` np.average / np.cov (35 calls) -
+      `NDArray.AtLeast2d`; `afc18c72` the histogram family (115 calls and 12 a `using static` hid) - R2 counts np's
+      result types `HistogramResult` / `HistogramddResult` / `Histogram2dResult` as structural;
+    - group 10 `d6da0312` the array object's mapping and assignment partials (38 calls; np.broadcast_arrays' statement
+      for a list of arrays is `NDArray.BroadcastArrays`); `f098ab0e` the item-selection partial (36 calls);
+      `aaafc433` the coercion partials (36 calls; np's ndmin padding `np.AtLeastNdView` is `NDArray.AtLeastNdView`,
+      `np._FindCommonType_Scalar` pinned).
+    - After group 10 no `DefaultEngine` partial and no `UnmanagedStorage` partial remains outside `Backends/`.
+  - A scope rule met on the way (`f098ab0e`): when a replaced facade is `[NDScoped]` and the member it dispatches to is
+    `[NDScopedCovered]`, the caller must be scoped itself, or the member's temporaries outlive the call. np.compress's
+    statements called np.take, whose scope released `TakeFrom`'s temporaries (the C-order copy of a non-contiguous
+    source, the natural result of an out= call); the member call left them to the finalizer, and the oracle's leak gates
+    caught it (37 families, one escaped array each). `UnmanagedStorage.Compress` is `[NDScoped]` now.
+  - The reasons: `46afc25d` gives every R2 row left its reason: the 23 promotion-helper calls (`_FindCommonType` and its
+    relatives, 18 files) move into the dtype layer after `strings` merges `journey4`, whose `88048433` rewrote
+    `np.find_common_type.cs`, the file they live in (moving them first would conflict there); 7 constructions of np's
+    public result types (`GradientResult`, `HistogramResult`, `HistogramddResult`, `Histogram2dResult`); 1 of the
+    flatiter object (`np.FlatIterator`), and since group 12a 1 of the ndindex iterator (`np.NDIndex`); and numpy.strings'
+    own statements (9 computations, 5 `np.strings.OutputDescriptor`), the text API's pass (§8).
+  - Group 11, the shape math (E7's last bullet): `2dddb067` moves the axis math into the new `View/Shape.Axes.cs`
+    (check_and_adjust_axis, normalize_axis_tuple, the permutations of transpose / np.moveaxis / np.swapaxes /
+    np.rollaxis, the transposed view's layout); the library's 47 call sites call Shape's members, and `DefaultEngine`
+    keeps the public statics it shipped in 0.70.0 as forwarders. The broadcasting members needed no move: `Shape`
+    already held them and every library caller called Shape's; `DefaultEngine.Broadcast(Shape, Shape)` keeps the
+    elementwise ufunc layer's own error text.
+  - Group 12, the array object's homes (C3: `Backends/` for `NDArray`). A call converts only where no facade rule could
+    fire there: the outer facade's rule or plain region covers every operand that reaches it, or the operand is a fresh
+    array, a view or a statistic of one, or the conversion of a value that is no NDArray. A probe of the matrix,
+    chararray and text corners against the tree before each group checks it.
+    - `5408fe01` (12a): NDArray.Numeric.cs, .TwoDimBase.cs, .TypeCheck.cs and .ShapeBase.cs's 16 calls become the
+      allocation, `UnmanagedStorage.Copyto`, `AnyArrayFromObject`, `Diagonal`, `TakeAlongAxis`, `AsContiguousArray` and
+      the engine's `Transpose`; NDArray.CoreShapeBase.cs and .StrideTricks.cs called none; the six move under
+      `Backends/`. apply_along_axis walks `np.NDIndex`, pinned as np's public type. Snapshot 43,204 lines identical,
+      probe 42 outcomes identical.
+    - `84099a2e` (12c): NDArray.ArrayPad.cs's 24 calls (np.pad's statistic modes, the linear ramp, the allocation, the
+      unsized text descriptors) become the engine's members, the allocation, `UnmanagedStorage.ArangeObj`,
+      `AnyArrayFromObject` and `DTypeRegistry.Str` / `Bytes.singleton`; the file moves under `Backends/`. Snapshot
+      93,720 lines identical but for the uninitialized bytes of mode='empty', probe 39 outcomes identical.
+  - The homes that stay beside their facades, for P7: `NDArray.Multiarray.cs`, `NDArray.FunctionBase.cs` and
+    `NDArray.IndexTricks.cs`. Some of their calls rely on a facade's class rule for an operand the outer facade does not
+    cover, so converting them would change a result's class, which is the class boundary's subject (§8):
+    - `NDArray.AnyArrayFromObject` returns `np.asarray(nd, dtype, order)` for an NDArray, and relies on np.asarray's
+      plain rule for a numpy.matrix or numpy.char.chararray operand;
+    - np.piecewise's facade has a matrix rule only, so its `np.zeros_like(x)` keeps a chararray `x` through
+      np.zeros_like's rule; np.select's facade opens a plain region for the conditions only, so a matrix or chararray
+      choice meets np.asanyarray's, np.broadcast_to's and np.copyto's rules;
+    - np.ix_'s `np.expand_dims` keeps a chararray's class, as NumPy's reshape does; np.r_'s `np.concatenate` and
+      `np.transpose` meet their matrix rules.
+    The other calls of these three files were not sorted; `NDArray.CoreAsArray.cs`, Appendix D's eleventh home (np.require),
+    does not exist yet.
+  - D4 fixes the reading and the snapshots found, each with tests that fail on its parent:
+    - `85167352`: a bad `device=` raises NumPy's ValueError with NumPy's text alone (the creation functions threw an
+      ArgumentException whose message .NET extended; `ndarray.to_device`'s two refusals were ArgumentExceptions);
+    - `eeaac035`: np.nansum / np.nanprod along an axis whose result is empty return NumPy's empty array (the NaN axis
+      driver walked one output: it read a whole axis from an input holding no element, which ended the oracle's test
+      host once, and a zero extent left of another output axis divided by zero);
+    - `e169b25d`: np.average / np.average_returned of a plain operand with numpy.matrix weights compute as plain arrays
+      (along an axis they raised the out= broadcast error: the engine's np.sum met its matrix rule for the weights at
+      the boundary's depth zero).
+  - Snapshot noise met on the way, all pre-existing: np.convolve of the complex128 special-values operand returns a NaN
+    whose sign differs between runs (both runs on one tree too; the oracle compares NaN as a token); np.empty /
+    np.empty_like and np.pad's mode='empty' return uninitialized memory, so their element hashes differ between runs.
+  - Gates: every commit's message has its counts. The wall-clock assertions AuditV2 T1_58 / T2_NonZero failed under
+    machine load in some runs and passed alone 3 of 3 each time.
+  - Outside P6's checklist and not touched: the sub-engines' partials still sit beside their facades and call np.*,
+    outside R2's scan (`Backends/`): `DefaultLinalgEngine` in `LinearAlgebra/linalg/` (169 calls in 13 files, many of
+    them numpy.linalg's own calls of numpy functions, as NumPy's `linalg.py` makes them) and `DefaultFftEngine` in
+    `Fourier/` (10 calls in 7 files). Moving them is a decision of its own: the same method, or a rule that a
+    sub-engine may call the public functions its NumPy module calls.
+  - Next: P7, the class boundary, which the owner keeps for the end (D7), and with it the three homes above.
 
 - **2026-10-30, PA: three items tried to confirm the plan - PA1 and PA4 done, PA2 measured and held.** The owner asked
   to pick three items and confirm that moving to the existing code is better. One item of each kind was picked:
@@ -4550,6 +4680,11 @@ def implemented_in(obj):
 | facades over the array object | numpy.linalg | 2 | 2 | diagonal, matrix_transpose |
 | facades over the array object | numpy.fft | 2 | 2 | fftshift, ifftshift |
 
+The `NDArray` homes sit under `Backends/` once their statements call no np.* function (C3): seven do since P6
+(`NDArray.Numeric.cs`, `.ShapeBase.cs`, `.TwoDimBase.cs`, `.CoreShapeBase.cs`, `.TypeCheck.cs`, `.StrideTricks.cs`,
+`.ArrayPad.cs`); `NDArray.Multiarray.cs`, `.FunctionBase.cs` and `.IndexTricks.cs` stay beside their facades until
+P7, and `NDArray.CoreAsArray.cs` does not exist yet.
+
 The memory and layout work under these members:
 - `UnmanagedStorage` partials (`Backends/Unmanaged/`):
   - `UnmanagedStorage.Assign.cs` (new): `array_assign_array.c` and `array_assign_scalar.c`, the assignment np.copyto
@@ -4561,9 +4696,10 @@ The memory and layout work under these members:
     and np.arange through the `DType` class's `fill` slot.
   - `UnmanagedStorage.Buffer.cs` (exists): np.frombuffer's body, NumPy's `PyArray_FromBuffer` (np.frombuffer itself is
     counted with IO below).
-- `Shape` partials (`View/`): `Shape.Broadcasting.cs` (exists; takes `DefaultEngine.Broadcast`, `ResolveReturnShape` and
-  `AreBroadcastable`), `Shape.Reshaping.cs` and `Shape.Allocation.cs` (exist), `Shape.Axes.cs` (new:
-  `normalize_axis_tuple`, `check_and_adjust_axis`, the axis permutations of transpose, swapaxes, moveaxis and rollaxis).
+- `Shape` partials (`View/`): `Shape.Broadcasting.cs` (exists; holds `Broadcast`, `ResolveReturnShape` and
+  `AreBroadcastable`, which `DefaultEngine`'s members forward to), `Shape.Reshaping.cs` and `Shape.Allocation.cs`
+  (exist), `Shape.Axes.cs` (since P6: `normalize_axis_tuple`, `check_and_adjust_axis`, the axis permutations of
+  transpose, swapaxes, moveaxis and rollaxis, and the transposed view's layout).
 
 ### Outside both, 239 (NumSharp 208)
 
