@@ -574,6 +574,43 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
+        ///     <c>remove_multi_index</c> on a buffered reduction whose merged axes no longer fit the buffering setup makes the
+        ///     iterator run the setup again (<c>RebuildBufferingSetup</c>: the buffers are freed and allocated anew, NOT NumPy,
+        ///     which keeps the old setup and walks wrong elements or crashes): a <c>StringDType</c> buffer then has a NEW string
+        ///     allocator, and the refill must write its strings through that one. The cached transfer of the operand still held
+        ///     the freed allocator of the first buffer, so the refilled cells (texts over 15 bytes: arena strings, not stored in
+        ///     the cell) could not be read: "Failed to load string in StringDType getitem". Every source string is read once,
+        ///     in C order (the source is C-contiguous and the reduced axis stays an axis of its own).
+        /// </summary>
+        [TestMethod]
+        public void RemoveMultiIndex_RebuiltBuffers_FillThroughTheNewAllocator()
+        {
+            var texts = Enumerable.Range(0, 120).Select(i => $"element-number-{i:D3}-long-text").ToArray();
+            using var flat = np.array(texts);
+            using var src = flat.reshape(2, 3, 4, 5);
+            // op_axes of the output, the buffer size: each pair rebuilds the setup (a smaller buffer fills core by core and
+            // keeps it, so it never had the stale transfer).
+            foreach (var (axes, bufsize) in new[] { (new[] { 0, -1, 1, 2 }, 13L), (new[] { 0, -1, 1, 2 }, 40L), (new[] { -1, 0, 1, 2 }, 13L), (new[] { -1, 0, 1, 2 }, 40L) })
+            {
+                var outShape = Enumerable.Range(0, 4).Where(d => axes[d] >= 0).Select(d => (long)src.shape[d]).ToArray();
+                using var output = np.zeros(new Shape(outShape));
+                var read = new List<object>();
+                using (var it = np.nditer(new[] { src, output }, new[] { "buffered", "multi_index", "reduce_ok", "refs_ok" },
+                           new[] { new[] { "readonly" }, new[] { "readwrite" } }, op_dtypes: new DType[] { T, np.float64 },
+                           casting: "unsafe", op_axes: new[] { null, axes }, buffersize: bufsize))
+                {
+                    it.remove_multi_index();
+                    do
+                    {
+                        using var x = it[0];
+                        read.Add(x.item());
+                    } while (it.iternext());
+                }
+                read.Should().Equal(texts, $"op_axes [{string.Join(", ", axes)}], buffersize {bufsize}");
+            }
+        }
+
+        /// <summary>
         ///     <c>copy()</c> taken in the middle of a buffered walk owns its buffered strings: it walks on from the same
         ///     position after the original has moved past (and freed) the strings of its own buffer. The operand is a
         ///     transpose walked in C order, so its buffers are really filled (a K-order walk of it is contiguous and in place).

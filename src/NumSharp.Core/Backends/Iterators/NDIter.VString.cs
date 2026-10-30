@@ -142,6 +142,8 @@ namespace NumSharp.Backends.Iteration
                 return;
             NativeMemory.Clear(buffer, (nuint)(elements * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING));
             BufferAllocators[op] = new VStringAllocator();
+            // The new allocator replaces whatever a cached transfer of this operand captured.
+            ForgetTransfers(op);
         }
 
         /// <summary>
@@ -157,7 +159,26 @@ namespace NumSharp.Backends.Iteration
             if (allocator == null)
                 return;
             BufferAllocators[op] = null;
+            // The operand's cached transfers write and read through this allocator: none may run once it is freed.
+            ForgetTransfers(op);
             allocator.ClearAndFree((byte*)buffer, elements);
+        }
+
+        /// <summary>
+        ///     Drops operand <paramref name="op"/>'s cached transfers (<see cref="Transfer"/>), which hold the buffer allocator
+        ///     they were built over; the next fill or flush builds them again over the current one.
+        /// </summary>
+        /// <param name="op">The operand index.</param>
+        /// <remarks>
+        ///     A state's buffers are freed and allocated again without a new context when the iterator runs its buffering setup
+        ///     a second time (<c>RebuildBufferingSetup</c>, after <c>remove_multi_index</c> merged axes the old setup no longer
+        ///     describes). A transfer kept from the first buffer would then write the refill's strings through the freed
+        ///     allocator, and the new allocator could not read them back (NumSharp's "Failed to load string" error).
+        /// </remarks>
+        private void ForgetTransfers(int op)
+        {
+            _fills[op] = null;
+            _flushes[op] = null;
         }
 
         /// <summary>
