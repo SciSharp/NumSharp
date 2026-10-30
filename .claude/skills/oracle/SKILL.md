@@ -24,7 +24,7 @@ byte-for-byte NumPy across every layout × dtype the corpus covers.
 Three outcomes per case: **bit-exact** (pass), a **documented divergence** in `MisalignedRegistry` (excused, never
 silent), or a **failure** (red → real bug, auto-shrunk to a 1-element repro).
 
-The authoritative narrative lives in the project `.claude/CLAUDE.md` → "Differential-Fuzz Pipeline (NumPy oracle)"
+The authoritative narrative lives in the project rule `.claude/rules/oracle.md` (the differential-fuzz pipeline)
 and the divergence ledger `test/NumSharp.Tests.Oracle/Fuzz/README.md`. This skill is the **actionable playbook**.
 
 ## File map

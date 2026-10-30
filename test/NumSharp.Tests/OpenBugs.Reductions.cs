@@ -485,8 +485,8 @@ namespace NumSharp.Tests
         /// <remarks>
         ///     Root cause: <c>Default.Reduction.Add.cs</c> <c>ReduceAddInCastLoop</c>'s axis route casts blocks along the
         ///     outermost kept axis and sums each reduced row in one pairwise call; NumPy's fills come from
-        ///     <c>npyiter_find_buffering_setup</c> (<c>.claude/CLAUDE.md</c> names it among np.sum's residuals: "an axis
-        ///     reduction in a cast loop whose reduced runs exceed the buffer is not modeled"). Found by the varstd oracle
+        ///     <c>npyiter_find_buffering_setup</c> (<c>.claude/rules/reductions.md</c> lists it among np.sum's open
+        ///     residuals: an axis reduction in a cast loop whose reduced runs exceed the buffer). Found by the varstd oracle
         ///     tier's section B (2026-10-05, plan <c>docs/plans/api-parameter-parity.md</c> A2), which carves these cells
         ///     (<c>gen_oracle.gen_varstd</c>, "pinned row longer than the buffer") and names this test. NumPy 2.4.2's
         ///     default-buffer answers, which NumSharp gives today, differ from these at elements 1, 6 and 7 (sum) and
@@ -559,9 +559,9 @@ namespace NumSharp.Tests
         /// <remarks>
         ///     Root cause: <c>NumPyAddReduce</c> (<c>Default.Reduction.Add.Exact.cs</c>) declines a broadcast operand —
         ///     NpyIter's axis sort skips the comparisons a stride-0 operand takes part in, a schedule the engine does not
-        ///     model — and <c>sum_elementwise_il</c> / <c>mean_elementwise_il</c> fold instead (<c>.claude/CLAUDE.md</c>,
-        ///     "Math — Reductions", residuals: "a broadcast operand declines to the old fold (value-exact, not
-        ///     order-exact)"). Found by the mean_loops oracle tier (2026-10-05, plan
+        ///     model — and <c>sum_elementwise_il</c> / <c>mean_elementwise_il</c> fold instead
+        ///     (<c>.claude/rules/reductions.md</c>, np.sum's open residuals: a broadcast operand runs a value-exact fold,
+        ///     not NumPy's order). Found by the mean_loops oracle tier (2026-10-05, plan
         ///     <c>docs/plans/api-parameter-parity.md</c> X9), which carves these cells (<c>gen_oracle.gen_mean_loops</c>,
         ///     "broadcast") and names this test.
         /// </remarks>

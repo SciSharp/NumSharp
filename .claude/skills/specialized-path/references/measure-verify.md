@@ -168,8 +168,8 @@ EOF
 NumSharp.Core is single-threaded by design ("parallelization is minimal"), so a fair comparison needs
 the *other* side — and the optional NumSharp OpenBLAS backend — pinned to one thread too. Two reasons,
 not one: **fairness** (unpinned NumPy BLAS multi-threads `@`/`dot`/`solve`/… and beats a single-core
-kernel ~5×) AND **determinism** (a BLAS's result BITS depend on the thread count — CLAUDE.md: "1/2/4/24
-threads give four different answers" — so >1 also reddens the byte-parity gates you run in VERIFY).
+kernel ~5×) AND **determinism** (a BLAS's result BITS depend on the thread count — `.claude/rules/openblas.md`: "1, 2, 4
+and 24 threads give four different answers" — so >1 also reddens the byte-parity gates you run in VERIFY).
 
 **NumPy / Python side — export in the SHELL, before `import numpy`.** Backends read their thread count
 once at load, so `os.environ[...] =` set *after* the import (or a shell var set after the interpreter

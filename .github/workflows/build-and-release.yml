@@ -182,7 +182,7 @@ jobs:
     # compile gate cannot see "builds fine, ships with no identity". Publishes nothing.
     #
     # The loop also names the UNRELEASED packages (OnnxRuntime, MLNet, ParquetNet:
-    # <IsPackable>false</IsPackable> in each csproj, "Unreleased packages" in .claude/CLAUDE.md). Their `dotnet pack` is a silent no-op that writes no .nupkg, so today they
+    # <IsPackable>false</IsPackable> in each csproj, "Unreleased packages" in .claude/rules/interop-packages.md). Their `dotnet pack` is a silent no-op that writes no .nupkg, so today they
     # add nothing to verify; the day one is released by flipping that property, it is packed and
     # verified here with no edit to this step.
     #
@@ -253,7 +253,7 @@ jobs:
   # of the gate: this is the ONLY place CI compiles the pythonnet, OnnxRuntime, MLNet,
   # System.Numerics.Tensors and ParquetNet packages, whose sources reach into NumSharp.Core internals
   # through keyed friend grants and would otherwise break unnoticed. That holds for the UNRELEASED
-  # ones too (OnnxRuntime, MLNet, ParquetNet — "Unreleased packages" in .claude/CLAUDE.md): they are
+  # ones too (OnnxRuntime, MLNet, ParquetNet — "Unreleased packages" in .claude/rules/interop-packages.md): they are
   # merged code that nothing packs, so this job is all that keeps them building and passing until
   # they ship.
   #
@@ -805,7 +805,7 @@ jobs:
         # build can declare a stale target-framework up-to-date and skip CoreCompile, leaving no
         # .xml on disk — pack then fails NU5026, or (worse) packs stale output. Rebuild forces a
         # clean compile of every TFM so --no-build always packs a complete, current tree. This is
-        # the repo convention for anything that gets packed (see .claude/CLAUDE.md / OpenBLAS design).
+        # the repo convention for anything that gets packed (see .claude/rules/openblas.md, "-t:Rebuild before packing").
         dotnet build src/NumSharp.Core/NumSharp.Core.csproj \
           --configuration Release \
           -t:Rebuild \
@@ -848,7 +848,7 @@ jobs:
         # built here and named in the Pack step below like every other package, but each csproj sets
         # <IsPackable>false</IsPackable>, which makes its `dotnet pack` a silent no-op: no .nupkg, so
         # nothing is uploaded, published or listed in the release notes. Releasing one is that
-        # property set back to true ("Unreleased packages" in .claude/CLAUDE.md); this step and the
+        # property set back to true ("Unreleased packages" in .claude/rules/interop-packages.md); this step and the
         # Pack step then need no edit. The builds stay so that switch keeps working: the Pack step
         # runs --no-build and needs this Rebuild's output the moment a package is released.
         #
@@ -1053,7 +1053,7 @@ jobs:
 
         # The install lines and the package table list exactly the packages this release PACKED,
         # read from the .nupkg files downloaded above, never from a hand-kept list. An unreleased
-        # package (<IsPackable>false</IsPackable>, "Unreleased packages" in .claude/CLAUDE.md) packs
+        # package (<IsPackable>false</IsPackable>, "Unreleased packages" in .claude/rules/interop-packages.md) packs
         # to nothing, so it cannot be advertised here, and releasing one needs no edit to this step.
         # Each id comes from the package's own nuspec rather than its file name, so NuGet's version
         # normalization cannot break the match. The ids are read in a process substitution, where
