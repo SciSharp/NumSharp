@@ -189,6 +189,42 @@ namespace NumSharp
             }
         }
 
+        /// <summary>NumPy 2.4's value-preserving casting rule: a name only <c>ndarray.astype</c>'s converter accepts.</summary>
+        internal const string SameValueName = "same_value";
+
+        /// <summary>
+        ///     NumPy's <c>PyArray_CastingConverterSameValue</c> (<c>conversion_utils.c</c>), <c>ndarray.astype</c>'s casting
+        ///     converter: <see cref="ParseCasting"/>'s five names plus NumPy 2.4's <c>'same_value'</c>, whose error text lists
+        ///     it too. <c>npy_parse_arguments</c> runs it right after the order converter, before astype adapts the dtype,
+        ///     takes the <c>copy=False</c> shortcut or checks the rule — so an unknown name raises even for a cast that needs
+        ///     nothing.
+        /// </summary>
+        /// <param name="casting">The caller's casting name; null or empty is NumSharp's astype default, <c>'unsafe'</c>.</param>
+        /// <param name="sameValue">True when the name is <c>'same_value'</c>. NumSharp's <see cref="NPY_CASTING"/> has no
+        ///     member for it (its value carries NumPy's <c>NPY_SAME_VALUE_CASTING_FLAG</c>), so the caller reads this flag
+        ///     and the returned level is <see cref="NPY_CASTING.NPY_UNSAFE_CASTING"/>, the rule NumPy's flag rides on.</param>
+        /// <returns>The casting level.</returns>
+        /// <exception cref="ValueError"><c>casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe',
+        ///     'same_value' (got '…')</c>.</exception>
+        internal static NPY_CASTING ParseCastingSameValue(string casting, out bool sameValue)
+        {
+            sameValue = casting == SameValueName;
+            if (string.IsNullOrEmpty(casting) || sameValue)
+                return NPY_CASTING.NPY_UNSAFE_CASTING;
+            switch (casting)
+            {
+                case "no":
+                case "equiv":
+                case "safe":
+                case "same_kind":
+                case "unsafe":
+                    return ParseCasting(casting);
+                default:
+                    throw new ValueError(
+                        $"casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe', '{SameValueName}' (got '{casting}')");
+            }
+        }
+
         /// <summary>NumPy's <c>npy_casting_to_string</c>: the casting string of a level.</summary>
         public static string CastingToString(NPY_CASTING casting)
         {

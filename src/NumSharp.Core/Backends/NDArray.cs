@@ -882,14 +882,20 @@ namespace NumSharp
         ///     'K' (default) - preserve the source layout.
         /// </param>
         /// <param name="casting">
-        ///     NumPy's cast-rule gate ('no' / 'equiv' / 'safe' / 'same_kind' / 'unsafe').
+        ///     NumPy's cast-rule gate ('no' / 'equiv' / 'safe' / 'same_kind' / 'unsafe', and NumPy 2.4's 'same_value').
         ///     Default 'unsafe' (matches NumPy's astype default) — any conversion is permitted.
         ///     A stricter rule raises <see cref="InvalidCastException"/> (NumPy's TypeError analogue)
         ///     when the source dtype cannot cast to <paramref name="dtype"/> under that rule.
         /// </param>
         /// <returns>An <see cref="NDArray"/> of given <paramref name="dtype"/> with the requested layout.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
-        /// <exception cref="NotSupportedException">The descriptor's class has no storage lane yet (a datetime64/timedelta64 descriptor before Stage C).</exception>
+        /// <exception cref="NotSupportedException">The descriptor's class has no storage lane yet (a datetime64/timedelta64
+        ///     descriptor before Stage C), or <paramref name="casting"/> is 'same_value' for a numeric cast between two storage
+        ///     types (NumSharp has no value-checking cast loop yet; a cast within one storage type changes no value and runs).</exception>
+        /// <exception cref="ValueError">An unknown <paramref name="order"/> (<c>order must be one of 'C', 'F', 'A', or 'K' (got
+        ///     '…')</c>), then an unknown <paramref name="casting"/> name (<c>casting must be one of 'no', 'equiv', 'safe',
+        ///     'same_kind', 'unsafe', 'same_value' (got '…')</c>): NumPy's argument parsing, before anything else.</exception>
+        /// <exception cref="InvalidCastException">The cast is not allowed under <paramref name="casting"/>.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.astype.html</remarks>
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
         public NDArray astype(DType dtype, bool copy, char order, string casting = "unsafe")
@@ -902,7 +908,19 @@ namespace NumSharp
             if (typecode == NPTypeCode.String || dtype.Meta is StringDTypeMeta || dtype.Meta is VStringDTypeMeta)
                 return Backends.Strings.NDStringCasting.AsType(this, dtype, copy, order, casting);
             var typeCode = dtype.GetTypeCode(); // a descriptor-only class raises its own descriptive "no storage yet"
-            ValidateAstypeCasting(typeCode, casting);
+            // npy_parse_arguments runs astype's converters in its parameter order - the order converter, then astype's
+            // casting converter (which also takes NumPy 2.4's 'same_value') - before every other step: an unknown name
+            // raises even for a cast that needs nothing (the same dtype under copy=False).
+            OrderResolver.Resolve(order, Shape);
+            var rule = DTypeCasting.ParseCastingSameValue(casting, out bool sameValue);
+            // 'same_value' casts through NumPy 2.4's value-checking loops (every element must survive the cast unchanged).
+            // NumSharp's numeric casts have no such check yet; a cast to the same storage type changes no value, so only
+            // that one is allowed.
+            if (sameValue && typeCode != GetTypeCode)
+                throw new NotSupportedException(
+                    $"casting='{DTypeCasting.SameValueName}' from {this.dtype.ToString(true)} to {dtype.ToString(true)}: NumSharp's " +
+                    "numeric casts have no value-checking loop yet (NumPy 2.4's 'could not cast' checks).");
+            ValidateAstypeCasting(typeCode, rule);
             var casted = TensorEngine.Cast(this, dtype.type, copy);
             // The cast works by storage lane, so a NEW result reports the lane's own class: a lane-sharing target
             // (astype(np.longdouble), Windows' astype(np.intc)) labels it with the requested class, as NumPy's does. When
@@ -952,26 +970,25 @@ namespace NumSharp
         ///     check the rule before it allocates anything.
         /// </summary>
         /// <param name="toType">The numeric type code of the target.</param>
-        /// <param name="casting">The casting rule name; null, empty or <c>"unsafe"</c> allows every cast.</param>
+        /// <param name="casting">The casting rule, already parsed by astype's converter
+        ///     (<see cref="DTypeCasting.ParseCastingSameValue"/>, which runs first, as NumPy's argument parsing does).</param>
         /// <exception cref="InvalidCastException">The cast from this array's type is not allowed under the rule
         ///     (<c>Cannot cast array data from dtype('…') to dtype('…') according to the rule '…'</c>).</exception>
-        /// <exception cref="ArgumentException">An unknown rule name (<see cref="np.can_cast(NPTypeCode, NPTypeCode, string)"/>'s
-        ///     refusal).</exception>
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
-        internal void ValidateAstypeCasting(NPTypeCode toType, string casting)
+        internal void ValidateAstypeCasting(NPTypeCode toType, Backends.Iteration.NPY_CASTING casting)
         {
             // 'unsafe' (astype's default) short-circuits — every conversion is allowed, no work.
-            if (string.IsNullOrEmpty(casting) || casting == "unsafe")
+            if (casting == Backends.Iteration.NPY_CASTING.NPY_UNSAFE_CASTING)
                 return;
             NPTypeCode fromType = this.GetTypeCode;
             if (fromType == toType)
                 return;
-            // np.can_cast validates the rule name (ArgumentException on an unknown rule) and
-            // encodes NumPy's cast table (bit-exact vs 2.4.2, verified across all 15 dtypes).
-            if (!np.can_cast(fromType, toType, casting))
+            // np.can_cast encodes NumPy's cast table (bit-exact vs 2.4.2, verified across all 15 dtypes).
+            string rule = DTypeCasting.CastingToString(casting);
+            if (!np.can_cast(fromType, toType, rule))
                 throw new InvalidCastException(
                     $"Cannot cast array data from dtype('{fromType.AsNumpyDtypeName()}') " +
-                    $"to dtype('{toType.AsNumpyDtypeName()}') according to the rule '{casting}'");
+                    $"to dtype('{toType.AsNumpyDtypeName()}') according to the rule '{rule}'");
         }
 
         /// <summary>

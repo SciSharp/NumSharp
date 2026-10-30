@@ -35,7 +35,8 @@ namespace NumSharp.Backends.Strings
         /// <returns><paramref name="src"/> itself, or a new array of the adapted dtype.</returns>
         /// <exception cref="ValueError"><paramref name="casting"/> is not one of NumPy's astype names (<c>casting must be one of
         ///     'no', 'equiv', 'safe', 'same_kind', 'unsafe', 'same_value' (got '…')</c>).</exception>
-        /// <exception cref="ArgumentException"><paramref name="order"/> is not one of C/F/A/K.</exception>
+        /// <exception cref="ValueError"><paramref name="order"/> is not one of C/F/A/K (<c>order must be one of 'C', 'F',
+        ///     'A', or 'K' (got '…')</c>), reported before an unknown casting name.</exception>
         /// <exception cref="InvalidCastException">The cast is not allowed under <paramref name="casting"/> — NumPy's
         ///     TypeError text, <c>Cannot cast array data from dtype('&lt;U5') to dtype('&lt;U3') according to the rule 'safe'</c>
         ///     (<c>Cannot cast scalar from …</c> for a 0-d array).</exception>
@@ -68,7 +69,8 @@ namespace NumSharp.Backends.Strings
         ///     before the result is allocated; it may throw. <c>null</c> runs nothing.</param>
         /// <returns><paramref name="src"/> itself, or a new array of the adapted dtype.</returns>
         /// <exception cref="ValueError">An unknown casting name, or whatever <paramref name="beforeAllocate"/> throws.</exception>
-        /// <exception cref="ArgumentException"><paramref name="order"/> is not one of C/F/A/K.</exception>
+        /// <exception cref="ValueError"><paramref name="order"/> is not one of C/F/A/K (<c>order must be one of 'C', 'F',
+        ///     'A', or 'K' (got '…')</c>), reported before an unknown casting name.</exception>
         /// <exception cref="InvalidCastException">The cast is not allowed under <paramref name="casting"/>.</exception>
         /// <exception cref="UnicodeEncodeError"><c>U → S</c> meets a code point at or above 128.</exception>
         /// <exception cref="UnicodeDecodeError"><c>S → U</c> meets a byte at or above <c>0x80</c>.</exception>
@@ -76,11 +78,11 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="OverflowException">Text → integer meets a value outside the target.</exception>
         internal static NDArray AsType(NDArray src, DType dtype, bool copy, char order, string casting, Action<DType> beforeAllocate)
         {
-            // npy_parse_arguments: the casting and order converters run before the dtype is adapted. astype's converter
-            // also takes NumPy 2.4's 'same_value', which no string cast implements (every one fails the rule below).
-            bool sameValue = casting == SameValue;
-            var rule = string.IsNullOrEmpty(casting) || sameValue ? NPY_CASTING.NPY_UNSAFE_CASTING : ParseAstypeCasting(casting);
+            // npy_parse_arguments runs astype's converters in its parameter order - dtype, order, casting - before the dtype
+            // is adapted: an unknown order is reported before an unknown casting name. astype's casting converter also takes
+            // NumPy 2.4's 'same_value', which no string cast implements (every one fails the rule below).
             OrderResolver.Resolve(order, src.Shape); // validates the order character (C/F/A/K)
+            var rule = DTypeCasting.ParseCastingSameValue(casting, out bool sameValue);
 
             var from = src.dtype;
             var to = DTypePromotion.AdaptDescriptorToArray(from, dtype);
@@ -109,7 +111,7 @@ namespace NumSharp.Backends.Strings
             if (sameValue)
                 throw new InvalidCastException(
                     $"Cannot cast {(src.ndim == 0 ? "scalar" : "array data")} from {from.ToString(true)} to {to.ToString(true)} " +
-                    $"according to the rule '{SameValue}'");
+                    $"according to the rule '{DTypeCasting.SameValueName}'");
 
             if (!DTypeCasting.CanCastTypeTo(from, to, rule))
                 throw InvalidCast(from, to, rule, src.ndim == 0);
@@ -128,33 +130,6 @@ namespace NumSharp.Backends.Strings
             // their scalar's str(), texts parsed by int() / float() / complex() (NDTextConversion). An empty array
             // allocates the result and converts nothing (np.zeros(0, 'U2').astype(np.float64) is an empty float64 array).
             return NDIter.CopyAs(to, src, order);
-        }
-
-        /// <summary>NumPy 2.4's value-preserving casting rule, accepted by <c>ndarray.astype</c> only.</summary>
-        private const string SameValue = "same_value";
-
-        /// <summary>
-        ///     <c>ndarray.astype</c>'s casting converter: the five <see cref="DTypeCasting.ParseCasting"/> names, with astype's
-        ///     own error text, which also lists <c>'same_value'</c> (the caller handles that name before calling this).
-        /// </summary>
-        /// <param name="casting">The caller's casting name (not null, not empty, not <c>'same_value'</c>).</param>
-        /// <returns>The casting level.</returns>
-        /// <exception cref="ValueError"><c>casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe', 'same_value'
-        ///     (got '…')</c>.</exception>
-        private static NPY_CASTING ParseAstypeCasting(string casting)
-        {
-            switch (casting)
-            {
-                case "no":
-                case "equiv":
-                case "safe":
-                case "same_kind":
-                case "unsafe":
-                    return DTypeCasting.ParseCasting(casting);
-                default:
-                    throw new ValueError(
-                        $"casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe', '{SameValue}' (got '{casting}')");
-            }
         }
 
         /// <summary>

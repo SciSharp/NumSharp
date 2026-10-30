@@ -68,12 +68,16 @@ namespace NumSharp
                 return From(Backends.Strings.NDStringCasting.AsType(this, dtype, copy, order, casting, Finalize), this);
 
             // A chararray over int8 / char data (or one a view(dtype) left numeric) cast to a number: ndarray's astype.
-            // NumPy returns the array itself for copy=False of the same dtype whose layout already satisfies the order,
-            // before it allocates anything (so even a uint32 chararray answers itself there); otherwise its casting rule,
-            // then the allocation (the finalize rule), then the cast loop. The order test is the one the string path uses.
+            // NumPy parses the order, then the casting name, before anything else (an unknown name raises even when nothing
+            // has to change); it returns the array itself for copy=False of the same dtype whose layout already satisfies the
+            // order, before it allocates anything (so even a uint32 chararray answers itself there); otherwise its casting
+            // rule, then the allocation (the finalize rule), then the cast loop. The order test is the one the string path
+            // uses.
+            OrderResolver.Resolve(order, Shape);
+            var rule = DTypeCasting.ParseCastingSameValue(casting, out _);
             if (!copy && dtype.Equals(this.dtype) && Backends.Strings.NDStringCasting.OrderSatisfied(order, Shape))
                 return this;
-            ValidateAstypeCasting(dtype.GetTypeCode(), casting);
+            ValidateAstypeCasting(dtype.GetTypeCode(), rule);
             Finalize(dtype);
             return From(base.astype(dtype, copy, order, casting), this);
         }

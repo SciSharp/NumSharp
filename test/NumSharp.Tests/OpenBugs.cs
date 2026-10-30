@@ -2580,5 +2580,25 @@ namespace NumSharp.Tests
                 "NumSharp: check_and_adjust_axis converts -4 to ndim+(-4) = -1, then the " +
                 "array access dims[-1] throws IndexOutOfRangeException.");
         }
+
+        /// <summary>
+        ///     NumPy 2.4's <c>casting='same_value'</c> for a numeric <c>astype</c>: the cast runs through value-checking loops
+        ///     (<c>lowlevel_strided_loops.c.src</c>'s same-value checks: a non-finite value into an integer, a value outside the
+        ///     target's range, a value that does not round-trip), so <c>np.array([2.0, 3.0]).astype(np.int32,
+        ///     casting='same_value')</c> is <c>[2, 3]</c> and <c>np.array([1.5]).astype(np.int32, casting='same_value')</c> raises
+        ///     <c>ValueError: could not cast 'same_value' double to long</c> (Windows NumPy's C name of int32; LP64 says
+        ///     <c>int</c>). NumSharp's numeric casts have no such loop: astype raises NotSupportedException for a cast between
+        ///     two storage types (found by P3 batch 9b's replay of astype's snapshot, 600 cases).
+        /// </summary>
+        [TestMethod]
+        [OpenBugs]
+        public void Bug_Astype_SameValueCasting_NumericCastsHaveNoValueCheck()
+        {
+            var exact = np.array(new[] { 2.0, 3.0 }).astype(np.int32, true, 'K', "same_value");
+            exact.ToArray<int>().Should().Equal(2, 3);
+
+            Action lossy = () => np.array(new[] { 1.5 }).astype(np.int32, true, 'K', "same_value");
+            lossy.Should().Throw<ValueError>().WithMessage("could not cast 'same_value' double to *");
+        }
     }
 }
