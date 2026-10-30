@@ -973,7 +973,8 @@ namespace NumSharp
         /// <param name="casting">The casting rule, already parsed by astype's converter
         ///     (<see cref="DTypeCasting.ParseCastingSameValue"/>, which runs first, as NumPy's argument parsing does).</param>
         /// <exception cref="InvalidCastException">The cast from this array's type is not allowed under the rule
-        ///     (<c>Cannot cast array data from dtype('…') to dtype('…') according to the rule '…'</c>).</exception>
+        ///     (<c>Cannot cast array data from dtype('…') to dtype('…') according to the rule '…'</c>, and <c>Cannot cast scalar
+        ///     from …</c> for a 0-d array: NumPy's <c>npy_set_invalid_cast_error</c>, told whether the source is 0-d).</exception>
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
         internal void ValidateAstypeCasting(NPTypeCode toType, Backends.Iteration.NPY_CASTING casting)
         {
@@ -987,7 +988,7 @@ namespace NumSharp
             string rule = DTypeCasting.CastingToString(casting);
             if (!np.can_cast(fromType, toType, rule))
                 throw new InvalidCastException(
-                    $"Cannot cast array data from dtype('{fromType.AsNumpyDtypeName()}') " +
+                    $"Cannot cast {(ndim == 0 ? "scalar" : "array data")} from dtype('{fromType.AsNumpyDtypeName()}') " +
                     $"to dtype('{toType.AsNumpyDtypeName()}') according to the rule '{rule}'");
         }
 
