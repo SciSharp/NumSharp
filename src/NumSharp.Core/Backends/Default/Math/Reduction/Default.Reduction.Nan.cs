@@ -512,7 +512,9 @@ namespace NumSharp.Backends
         /// <param name="keepdims">Whether the reduced axis stays with length one.</param>
         /// <param name="op">The NaN-aware reduction.</param>
         /// <returns>The reduced array in the input's memory order; for a 1-D input without keepdims the 0-d result as
-        ///     NumPy's read-only scalar stand-in (the np.sum / np.prod / np.fmax.reduce it ports returns a scalar).</returns>
+        ///     NumPy's read-only scalar stand-in (the np.sum / np.prod / np.fmax.reduce it ports returns a scalar). An
+        ///     EMPTY result (a zero extent on an axis other than <paramref name="axis"/>) is returned as allocated: no
+        ///     kernel runs, so an input holding no element is never read.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range — NumPy's np.sum / np.prod rule, which the
         ///     nan functions inherit (they call them on the NaN-replaced copy).</exception>
         private unsafe NDArray ExecuteNanAxisReduction(NDArray arr, int axis, bool keepdims, ReductionOp op)
@@ -542,8 +544,22 @@ namespace NumSharp.Backends
             // so the strided-output kernel fills it in place with no post-hoc copy (issue #610).
             var result = AllocateReductionResult(inputType, outputDims, shape, axis);
 
+            // An EMPTY result (a zero extent on an axis that is not reduced: np.nansum(np.zeros((0, 3)), axis=1)) has no
+            // element to compute, and NumPy's reduction makes no inner-loop call for it. The kernel must not run: it
+            // walks outputSize outputs, and the size-0 fallback this check replaces walked ONE. That read a whole axis
+            // from an input holding no element (an access violation when the input ended at an unmapped page), wrote one
+            // element into a result holding none, and with a zero extent left of another output axis divided by zero in
+            // the kernel's output-coordinate decomposition ((2, 0, 3) along axis 2). A 0-d result (a 1-D input) has size
+            // 1 and is computed below.
+            if (result.size == 0)
+            {
+                if (keepdims)
+                    result.Storage.ExpandDimension(axis);
+                return result;
+            }
+
             long axisSize = shape.dimensions[axis];
-            long outputSize = result.size > 0 ? result.size : 1;
+            long outputSize = result.size;
             byte* inputAddr = (byte*)arr.Address + shape.offset * arr.dtypesize;
 
             fixed (long* inputStrides = shape.strides)
@@ -570,7 +586,7 @@ namespace NumSharp.Backends
         /// <param name="keepdims">Whether the reduced axis stays with length one.</param>
         /// <param name="op">The NaN-aware reduction.</param>
         /// <returns>The reduced array in the input's memory order; for a 1-D input without keepdims the 0-d result as
-        ///     NumPy's read-only scalar stand-in.</returns>
+        ///     NumPy's read-only scalar stand-in. An EMPTY result is returned as allocated, nothing read.</returns>
         private NDArray ExecuteNanAxisReductionScalar(NDArray arr, int axis, bool keepdims, ReductionOp op)
         {
             var shape = arr.Shape;
@@ -586,8 +602,18 @@ namespace NumSharp.Backends
             // index used only to locate the INPUT slice — independent of the output's physical layout.
             var result = AllocateReductionResult(inputType, outputDims, shape, axis);
 
+            // An empty result has no element to compute (see ExecuteNanAxisReduction): the size-0 fallback this check
+            // replaces walked one output, reading a slice of an input holding no element and writing into a result holding
+            // none, or dividing by zero in the output-coordinate decomposition below.
+            if (result.size == 0)
+            {
+                if (keepdims)
+                    result.Storage.ExpandDimension(axis);
+                return result;
+            }
+
             long axisSize = shape.dimensions[axis];
-            long outputSize = result.size > 0 ? result.size : 1;
+            long outputSize = result.size;
 
             long[] outputDimStrides = new long[arr.ndim - 1 > 0 ? arr.ndim - 1 : 1];
             if (arr.ndim > 1)
