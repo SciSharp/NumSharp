@@ -1,7 +1,7 @@
 // NumPy's np.cross (numpy/_core/numeric.py) as DefaultEngine's member: NumPy's statements, a composition over
-// moveaxis, multiply, negative, subtract and concatenate. The file sits beside its facade while it calls np.*: ratchet
-// R2 counts np.* calls against every file under Backends/ (the np-layer dtype plan, C3); it moves under
-// Backends/Default/ in P6.
+// moveaxis, multiply, negative, subtract and concatenate - each the member its np.* function dispatches to (this
+// engine, the operand's engine in the static StackCross, the array object's concatenation and expand_dims, Shape's
+// broadcast of the leading shapes, the dtype layer's promotion).
 
 namespace NumSharp.Backends
 {
@@ -20,8 +20,8 @@ namespace NumSharp.Backends
             // Check axisa and axisb are within bounds, then move the working axis to the end.
             int normA = NormalizeCrossAxis(axisa, a.ndim, "axisa");
             int normB = NormalizeCrossAxis(axisb, b.ndim, "axisb");
-            a = np.moveaxis(a, normA, -1);
-            b = np.moveaxis(b, normB, -1);
+            a = MoveAxis(a, new[] { normA }, new[] { -1 });   // np.moveaxis(a, normA, -1)'s statement
+            b = MoveAxis(b, new[] { normB }, new[] { -1 });
 
             long aLen = a.Shape.dimensions[a.ndim - 1];
             long bLen = b.Shape.dimensions[b.ndim - 1];
@@ -34,7 +34,9 @@ namespace NumSharp.Backends
             // leading axes that do not broadcast raise np.broadcast's own "shape mismatch: objects cannot be broadcast to
             // a single shape. ..." ValueError, and for a 3-vector result `axisc` is checked against that shape plus the
             // vector axis — both before the dtype promotion and the multiplies (a text operand meets them first too).
-            Shape leading = np.broadcast_shapes(LeadingShape(a), LeadingShape(b));
+            // np.broadcast_shapes(...)'s last statement; its first two (no shapes -> (), a negative dimension -> ValueError)
+            // cannot fire for two arrays' shapes.
+            Shape leading = Shape.BroadcastShape(LeadingShape(a), LeadingShape(b));
             if (aLen == 3 || bLen == 3)
                 NormalizeCrossAxis(axisc, leading.NDim + 1, "axisc");
 
@@ -48,7 +50,7 @@ namespace NumSharp.Backends
                 var promoted = DTypePromotion.PromoteTypes(a.dtype, b.dtype);
                 throw Backends.Strings.NDStringUfuncs.NoLoop("multiply", promoted, promoted);
             }
-            NPTypeCode dtype = np.promote_types(a.typecode, b.typecode);
+            NPTypeCode dtype = DTypePromotion.PromoteTypes(a.typecode, b.typecode);
             a = a.astype(dtype);
             b = b.astype(dtype);
 
@@ -57,18 +59,21 @@ namespace NumSharp.Backends
             NDArray a0 = a["..., 0"], a1 = a["..., 1"];
             NDArray b0 = b["..., 0"], b1 = b["..., 1"];
 
+            // The products below are np.multiply / np.subtract / np.negative's statements (this engine's Multiply, Subtract
+            // and Negate). np.negative also copies an F-contiguous operand's result into F order when the result is not
+            // F already; Negate allocates such a result in F order, so that copy never fires.
             if (aLen == 2)
             {
                 if (bLen == 2)
                     // both 2-D: only the z-component, returned as a scalar (per leading position).
-                    return np.subtract(np.multiply(a0, b1), np.multiply(a1, b0));
+                    return Subtract(Multiply(a0, b1), Multiply(a1, b0));
 
                 // a is 2-D (a2 == 0), b is 3-D.
                 NDArray b2 = b["..., 2"];
                 return StackCross(
-                    np.multiply(a1, b2),                              // a1*b2 - 0
-                    np.negative(np.multiply(a0, b2)),                    // 0 - a0*b2
-                    np.subtract(np.multiply(a0, b1), np.multiply(a1, b0)),  // a0*b1 - a1*b0
+                    Multiply(a1, b2),                              // a1*b2 - 0
+                    Negate(Multiply(a0, b2)),                    // 0 - a0*b2
+                    Subtract(Multiply(a0, b1), Multiply(a1, b0)),  // a0*b1 - a1*b0
                     axisc);
             }
 
@@ -79,17 +84,17 @@ namespace NumSharp.Backends
                 {
                     NDArray b2 = b["..., 2"];
                     return StackCross(
-                        np.subtract(np.multiply(a1, b2), np.multiply(a2, b1)),
-                        np.subtract(np.multiply(a2, b0), np.multiply(a0, b2)),
-                        np.subtract(np.multiply(a0, b1), np.multiply(a1, b0)),
+                        Subtract(Multiply(a1, b2), Multiply(a2, b1)),
+                        Subtract(Multiply(a2, b0), Multiply(a0, b2)),
+                        Subtract(Multiply(a0, b1), Multiply(a1, b0)),
                         axisc);
                 }
 
                 // a is 3-D, b is 2-D (b2 == 0).
                 return StackCross(
-                    np.negative(np.multiply(a2, b1)),                    // 0 - a2*b1
-                    np.multiply(a2, b0),                              // a2*b0 - 0
-                    np.subtract(np.multiply(a0, b1), np.multiply(a1, b0)),  // a0*b1 - a1*b0
+                    Negate(Multiply(a2, b1)),                    // 0 - a2*b1
+                    Multiply(a2, b0),                              // a2*b0 - 0
+                    Subtract(Multiply(a0, b1), Multiply(a1, b0)),  // a0*b1 - a1*b0
                     axisc);
             }
         }
@@ -113,13 +118,15 @@ namespace NumSharp.Backends
             int outNdim = cp0.ndim + 1;                         // len(broadcast_shape + (3,))
             int normC = NormalizeCrossAxis(axisc, outNdim, "axisc");
 
-            var stacked = np.concatenate(new[]
+            // np.concatenate / np.expand_dims / np.moveaxis's statements: the array object's concatenation (its default
+            // casting) and axis insertion, and the stack's engine MoveAxis.
+            var stacked = NDArray.ConcatenateInto(new[]
             {
-                np.expand_dims(cp0, -1),
-                np.expand_dims(cp1, -1),
-                np.expand_dims(cp2, -1)
-            }, -1);
-            return np.moveaxis(stacked, -1, normC);
+                NDArray.ExpandDims(cp0, -1),
+                NDArray.ExpandDims(cp1, -1),
+                NDArray.ExpandDims(cp2, -1)
+            }, -1, null, null, "same_kind");
+            return stacked.TensorEngine.MoveAxis(stacked, new[] { -1 }, new[] { normC });
         }
 
         /// <summary>

@@ -1,6 +1,6 @@
 // NumPy's np.kron (numpy/lib/_shape_base_impl.py) as DefaultEngine's member: the rank padding, the interleaved
-// broadcast multiply and its tile fast path. The file sits beside its facade while it calls np.*: ratchet R2 counts np.*
-// calls against every file under Backends/ (the np-layer dtype plan, C3); it moves under Backends/Default/ in P6.
+// broadcast multiply and its tile fast path (np.multiply's statement, this engine's Multiply; np.broadcast_to's, the
+// array object's BroadcastTo).
 
 using System;
 
@@ -24,7 +24,7 @@ namespace NumSharp.Backends
             // product with a scalar is just the (broadcasting) element-wise product. This also covers
             // the both-scalar case (0-d * 0-d -> 0-d).
             if (ndb == 0 || nda == 0)
-                return np.multiply(a, b);
+                return Multiply(a, b);
 
             int nd = Math.Max(nda, ndb);
 
@@ -87,15 +87,15 @@ namespace NumSharp.Backends
                 // SimdFull multiply. The final reshape to (rt*st) is a view over the contiguous product.
                 // Both operands (and the reshape/broadcast views they came from) are released by this
                 // method's scope as soon as it returns — the same moment a `using` would release them.
-                var aRep = np.broadcast_to(a.reshape(Shape.Adopt(aInter)), bcShape).copy();
-                var bTiled = np.broadcast_to(b.reshape(Shape.Adopt(bInter)), bcShape).copy();
-                return np.multiply(aRep, bTiled).reshape(Shape.Adopt(outShape));
+                var aRep = NDArray.BroadcastTo(a.reshape(Shape.Adopt(aInter)), bcShape).copy();
+                var bTiled = NDArray.BroadcastTo(b.reshape(Shape.Adopt(bInter)), bcShape).copy();
+                return Multiply(aRep, bTiled).reshape(Shape.Adopt(outShape));
             }
 
             // Direct broadcast-multiply. For contiguous inputs the two reshapes are pure views, so this is
             // a single kernel pass; a non-contiguous operand is materialised C-order by reshape (as NumPy
             // does), keeping values correct for every layout.
-            return np.multiply(a.reshape(Shape.Adopt(aInter)), b.reshape(Shape.Adopt(bInter))).reshape(Shape.Adopt(outShape));
+            return Multiply(a.reshape(Shape.Adopt(aInter)), b.reshape(Shape.Adopt(bInter))).reshape(Shape.Adopt(outShape));
         }
 
         /// <summary>
