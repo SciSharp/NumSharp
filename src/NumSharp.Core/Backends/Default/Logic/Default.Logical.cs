@@ -1,5 +1,4 @@
 using System;
-using System.Numerics;
 using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 using NumSharp.Generic;
@@ -79,9 +78,9 @@ namespace NumSharp.Backends
 
         /// <summary>
         ///     logical_and / or / xor in one pass, for the common call: each block of elements is reduced to its truth values
-        ///     on the stack (the comparison engine's <c>x != 0</c> run) and the two blocks are combined into the result with one
-        ///     vector operation per <see cref="Vector{T}.Count"/> bytes. The composition the callers fall back to makes two
-        ///     bool temporaries and three passes over the elements.
+        ///     on the stack (the comparison engine's <c>x != 0</c> run) and the two blocks are combined into the result by the
+        ///     bitwise ufunc's own kernel (bool &amp; bool, | or ^ over contiguous bytes). The composition the callers fall back
+        ///     to makes two bool temporaries and three passes over the elements.
         /// </summary>
         /// <param name="lhs">The first operand (numeric or bool: the text guard answered text before this runs).</param>
         /// <param name="rhs">The second operand.</param>
@@ -105,8 +104,9 @@ namespace NumSharp.Backends
         ///     255 and 1 XOR to 0, probed). This route computes the same truth values, a bool operand's included, with the
         ///     comparison against a zero of the operand's own dtype (zero converts exactly into every dtype, so the comparison
         ///     dtype cannot change a truth value; NaN is True, -0.0 False, a complex value True when either part is nonzero),
-        ///     and combines them by the same byte operation. The result's layout is the composition's: C for C operands, F
-        ///     for strictly F ones (the comparison and the bitwise ufunc keep an all-F operand set F).</para>
+        ///     and combines them with the bitwise ufunc's same-dtype bool kernel, the composition's own last step. The result's
+        ///     layout is the composition's: C for C operands, F for strictly F ones (the comparison and the bitwise ufunc
+        ///     keep an all-F operand set F).</para>
         ///     <para><b>Why the shape rules.</b> Each block is a linear run of every operand's memory, which is the element
         ///     order of the iteration only when the operands share one dense layout (or one of them is a single value), and
         ///     a single-valued operand of higher rank would add leading axes to the result (NumPy's broadcast: (1, 1)
@@ -164,6 +164,11 @@ namespace NumSharp.Backends
             ComparisonRun rRun = ComparisonRun.Get(ComparisonOp.NotEqual, rType, rType);
             if (lRun is null || rRun is null)
                 return null;
+            // The combine is the bitwise ufunc's own kernel, the composition's last step: bool & bool (| or ^) over the two
+            // blocks of truth bytes, vectorized on byte lanes. Fetched before the result is allocated, so nothing is left
+            // behind if IL generation is unavailable (the runs above are null then, and the composition serves the call).
+            MixedTypeKernel combine = DirectILKernelGenerator.GetMixedTypeKernel(
+                new MixedTypeKernelKey(NPTypeCode.Boolean, NPTypeCode.Boolean, NPTypeCode.Boolean, op, ExecutionPath.SimdFull));
 
             NDArray result;
             if (@out is null)
@@ -206,7 +211,8 @@ namespace NumSharp.Backends
                 int len = (int)Math.Min(LogicalRunBlock, n - i);
                 byte* lTruth = lOne ? lBlock : TruthBlock(lp + i * li, li, lRun, zero, lBlock, len);
                 byte* rTruth = rOne ? rBlock : TruthBlock(rp + i * ri, ri, rRun, zero, rBlock, len);
-                CombineTruth(lTruth, rTruth, o + i, len, op);
+                // The SimdFull path reads only the three pointers and the count: no strides or shape.
+                combine(lTruth, rTruth, o + i, null, null, null, 1, len);
             }
             LogicalRuns++;
             return result;
@@ -302,47 +308,6 @@ namespace NumSharp.Backends
             byte truth;
             run.Run(p, 0, zero, 0, &truth, 1, 1);
             new Span<byte>(block, LogicalRunBlock).Fill(truth);
-        }
-
-        /// <summary>
-        ///     Combines two blocks of truth values into the result: <c>o[i] = l[i] op r[i]</c> on bytes, as the bitwise ufunc
-        ///     combines the composition's two bool arrays.
-        /// </summary>
-        /// <param name="l">The first block.</param>
-        /// <param name="r">The second block.</param>
-        /// <param name="o">The result's bytes for this block.</param>
-        /// <param name="len">The element count.</param>
-        /// <param name="op">BitwiseAnd, BitwiseOr or BitwiseXor.</param>
-        /// <remarks>One loop per operation, so the operation is not tested per element; the vector width is the host's
-        ///     (<see cref="Vector{T}"/>), the tail scalar.</remarks>
-        private static unsafe void CombineTruth(byte* l, byte* r, byte* o, int len, BinaryOp op)
-        {
-            int w = Vector<byte>.Count;
-            int i = 0;
-            switch (op)
-            {
-                case BinaryOp.BitwiseAnd:
-                    if (Vector.IsHardwareAccelerated)
-                        for (; i + w <= len; i += w)
-                            (Vector.Load(l + i) & Vector.Load(r + i)).Store(o + i);
-                    for (; i < len; i++)
-                        o[i] = (byte)(l[i] & r[i]);
-                    break;
-                case BinaryOp.BitwiseOr:
-                    if (Vector.IsHardwareAccelerated)
-                        for (; i + w <= len; i += w)
-                            (Vector.Load(l + i) | Vector.Load(r + i)).Store(o + i);
-                    for (; i < len; i++)
-                        o[i] = (byte)(l[i] | r[i]);
-                    break;
-                default:
-                    if (Vector.IsHardwareAccelerated)
-                        for (; i + w <= len; i += w)
-                            (Vector.Load(l + i) ^ Vector.Load(r + i)).Store(o + i);
-                    for (; i < len; i++)
-                        o[i] = (byte)(l[i] ^ r[i]);
-                    break;
-            }
         }
 
         /// <inheritdoc/>
