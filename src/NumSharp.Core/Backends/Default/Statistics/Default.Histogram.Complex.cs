@@ -1,7 +1,6 @@
 using System;
 using System.Numerics;
 using NumSharp.Backends;
-using static NumSharp.np;
 
 namespace NumSharp.Backends
 {
@@ -85,8 +84,8 @@ namespace NumSharp.Backends
             if (a.size == 0)
                 return new ComplexOuterEdges(0, 1, strong: false); // can't infer a range from no data
 
-            using NDArray min = np.amin(a);
-            using NDArray max = np.amax(a);
+            using NDArray min = a.TensorEngine.ReduceAMin(a, null, false, null, null, null, null);
+            using NDArray max = a.TensorEngine.ReduceAMax(a, null, false, null, null, null, null);
             Complex lo = min.GetAtIndex<Complex>(0), hi = max.GetAtIndex<Complex>(0);
             if (!(HistogramIsFinite(lo) && HistogramIsFinite(hi)))
                 throw new ValueError($"autodetected range of [{min.ToString(false)}, {max.ToString(false)}] is not finite");
@@ -172,7 +171,7 @@ namespace NumSharp.Backends
                 case "fd":
                 case "auto":
                     // _hist_bin_fd: np.percentile(x, [75, 25]) refuses complex data ("a must be an array of real numbers").
-                    np.percentile(x, new double[] { 75, 25 });
+                    x.TensorEngine.Percentile(x, new double[] { 75, 25 }, null, null, false, "linear", false, null);
                     throw new InvalidOperationException("np.histogram: np.percentile accepted complex data.");
                 case "scott":
                 {
@@ -197,7 +196,7 @@ namespace NumSharp.Backends
                     // not all equal, so the peak-to-peak value is nonzero); else the float 0.0.
                     if (n > 2)
                     {
-                        using NDArray sigma = np.std(x);
+                        using NDArray sigma = x.TensorEngine.ReduceStd(x, null, false, null, null);
                         if (sigma.GetAtIndex<double>(0) > 0.0)
                             throw Backends.Strings.NDStringUfuncs.NotSupportedForInputTypes("ceil");
                     }
@@ -225,9 +224,9 @@ namespace NumSharp.Backends
         /// <returns>True when the lexicographic maximum and minimum are equal.</returns>
         private static bool ComplexPtpIsZero(NDArray x)
         {
-            using NDArray max = np.amax(x);
-            using NDArray min = np.amin(x);
-            using NDArray ptp = np.subtract(max, min);
+            using NDArray max = x.TensorEngine.ReduceAMax(x, null, false, null, null, null, null);
+            using NDArray min = x.TensorEngine.ReduceAMin(x, null, false, null, null, null, null);
+            using NDArray ptp = max.TensorEngine.Subtract(max, min, null, null, null);
             return ptp.GetAtIndex<Complex>(0) == Complex.Zero;
         }
 
@@ -257,19 +256,20 @@ namespace NumSharp.Backends
             int div = num - 1; // num >= 2
             using NDArray start = NDArray.Scalar(edges.First);
             using NDArray stop = NDArray.Scalar(edges.Last);
-            using NDArray delta = np.subtract(stop, start);
+            using NDArray delta = stop.TensorEngine.Subtract(stop, start, null, null, null);
             using NDArray divisor = NDArray.Scalar(new Complex(div, 0));
-            using NDArray step = np.divide(delta, divisor);
-            NDArray y = np.arange(num).astype(NPTypeCode.Complex);
+            using NDArray step = delta.TensorEngine.Divide(delta, divisor, null, null, null);
+            // np.arange(num) as complex128
+            NDArray y = UnmanagedStorage.ArangeObj(0L, (long)num, 1L, null).astype(NPTypeCode.Complex);
             if (step.GetAtIndex<Complex>(0) == Complex.Zero)
             {
                 // Special handling for denormal steps (NumPy's gh-5437): divide first, then scale by the whole delta.
-                np.divide(y, divisor, @out: y);
-                np.multiply(y, delta, @out: y);
+                y.TensorEngine.Divide(y, divisor, null, y, null);
+                y.TensorEngine.Multiply(y, delta, null, y, null);
             }
             else
-                np.multiply(y, step, @out: y);
-            np.add(y, start, @out: y);
+                y.TensorEngine.Multiply(y, step, null, y, null);
+            y.TensorEngine.Add(y, start, null, y, null);
             y.SetAtIndex(edges.Last, num - 1);
             return y;
         }
@@ -299,7 +299,7 @@ namespace NumSharp.Backends
             long len = raveled.size;
             int nbins = be.NBins;
             NDArray binEdges = be.Edges;
-            NDArray n = np.zeros(Shape.Vector(nbins), ntype);
+            NDArray n = new NDArray(ntype, Shape.Vector(nbins), true);
             if (len == 0)
                 return n;
 
@@ -307,7 +307,7 @@ namespace NumSharp.Backends
             using NDArray lastEdge = be.ComplexEdges.LastScalar();
             // norm_numerator = n_equal_bins; norm_denom = _unsigned_subtract(last_edge, first_edge): complex128 for the data's
             // edges, float64 for a range's (no signed-to-unsigned mapping applies to either).
-            using NDArray normDenom = np.subtract(lastEdge, firstEdge);
+            using NDArray normDenom = lastEdge.TensorEngine.Subtract(lastEdge, firstEdge, null, null, null);
             using NDArray numerator = NDArray.Scalar((long)nbins);
             using NDArray one = NDArray.Scalar(1L);
             using NDArray lastIndex = NDArray.Scalar((long)nbins - 1);
@@ -330,28 +330,31 @@ namespace NumSharp.Backends
                 }
 
                 // tmp_a.astype(bin_edges.dtype) is complex128 already. The bin indices: the cast to intp keeps the real part.
-                NDArray fIndices = np.multiply(np.divide(np.subtract(tmpA, firstEdge), normDenom), numerator);
+                NDArray fromFirst = tmpA.TensorEngine.Subtract(tmpA, firstEdge, null, null, null);
+                NDArray scaled = fromFirst.TensorEngine.Divide(fromFirst, normDenom, null, null, null);
+                NDArray fIndices = scaled.TensorEngine.Multiply(scaled, numerator, null, null, null);
                 NDArray indices = fIndices.astype(NPTypeCode.Int64);
                 // indices[indices == n_equal_bins] -= 1
-                np.subtract(indices, one, @out: indices, where: indices == numerator);
+                indices.TensorEngine.Subtract(indices, one, null, indices, indices == numerator);
                 // decrement = tmp_a < bin_edges[indices]; indices[decrement] -= 1
                 NDArray decrement = tmpA < binEdges[indices];
-                np.subtract(indices, one, @out: indices, where: decrement);
+                indices.TensorEngine.Subtract(indices, one, null, indices, decrement);
                 // increment = (tmp_a >= bin_edges[indices + 1]) & (indices != n_equal_bins - 1); indices[increment] += 1
                 NDArray increment = (tmpA >= binEdges[indices + one]) & (indices != lastIndex);
-                np.add(indices, one, @out: indices, where: increment);
+                indices.TensorEngine.Add(indices, one, null, indices, increment);
 
                 if (complexWeights)
                 {
                     // n.real += bincount(..., weights=tmp_w.real); n.imag += bincount(..., weights=tmp_w.imag): componentwise.
-                    NDArray re = bincount(indices, np.real(tmpW), nbins);
-                    NDArray im = bincount(indices, np.imag(tmpW), nbins);
+                    NDArray re = indices.TensorEngine.Bincount(indices, NDArray.RealPart(tmpW), nbins);
+                    NDArray im = indices.TensorEngine.Bincount(indices, NDArray.ImagPart(tmpW), nbins);
                     n = n + MakeComplex(re, im);
                 }
                 else
                 {
                     // n += np.bincount(indices, weights=tmp_w, minlength=n_equal_bins).astype(ntype)
-                    np.add(n, bincount(indices, tmpW, nbins).astype(ntype), @out: n);
+                    NDArray counted = indices.TensorEngine.Bincount(indices, tmpW, nbins).astype(ntype);
+                    n.TensorEngine.Add(n, counted, null, n, null);
                 }
             }
             return n;

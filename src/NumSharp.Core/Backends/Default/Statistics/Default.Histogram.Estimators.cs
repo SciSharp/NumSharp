@@ -2,7 +2,6 @@ using System;
 using System.Numerics;
 using NumSharp.Backends;
 using NumSharp.Backends.Kernels;
-using static NumSharp.np;
 
 namespace NumSharp.Backends
 {
@@ -100,8 +99,8 @@ namespace NumSharp.Backends
         /// <returns>The peak-to-peak value with its dtype.</returns>
         private static NpScalar PtpScalar(NDArray x)
         {
-            using NDArray max = np.amax(x);
-            using NDArray min = np.amin(x);
+            using NDArray max = x.TensorEngine.ReduceAMax(x, null, false, null, null, null, null);
+            using NDArray min = x.TensorEngine.ReduceAMin(x, null, false, null, null, null, null);
             switch (EstimatorDtype(x))
             {
                 case NPTypeCode.Half:
@@ -135,8 +134,8 @@ namespace NumSharp.Backends
         /// </remarks>
         private static NpScalar DataEdgesDelta(NDArray a)
         {
-            using NDArray max = np.amax(a);
-            using NDArray min = np.amin(a);
+            using NDArray max = a.TensorEngine.ReduceAMax(a, null, false, null, null, null, null);
+            using NDArray min = a.TensorEngine.ReduceAMin(a, null, false, null, null, null, null);
             switch (EstimatorDtype(a))
             {
                 case NPTypeCode.Half:
@@ -265,7 +264,7 @@ namespace NumSharp.Backends
         private static NpScalar ScottWidth(NDArray x)
         {
             double factor = Math.Pow(24.0 * Math.Pow(Math.PI, 0.5) / x.size, 1.0 / 3.0);
-            using NDArray std = np.std(x);
+            using NDArray std = x.TensorEngine.ReduceStd(x, null, false, null, null);
             return std.typecode switch
             {
                 NPTypeCode.Half => new NpScalar((double)(Half)((float)(Half)factor * (float)std.GetAtIndex<Half>(0)), NPTypeCode.Half),
@@ -283,7 +282,7 @@ namespace NumSharp.Backends
         /// <exception cref="TypeError">Complex data (np.percentile: <c>a must be an array of real numbers</c>).</exception>
         private static NpScalar FdWidth(NDArray x)
         {
-            using NDArray q = np.percentile(x, new double[] { 75, 25 });
+            using NDArray q = x.TensorEngine.Percentile(x, new double[] { 75, 25 }, null, null, false, "linear", false, null);
             double iqr = q.GetAtIndex<double>(0) - q.GetAtIndex<double>(1);
             return NpScalar.Float64(2.0 * iqr * Math.Pow(x.size, -1.0 / 3.0));
         }
@@ -302,16 +301,16 @@ namespace NumSharp.Backends
             if (n > 2)
             {
                 double sg1 = Math.Sqrt(6.0 * (n - 2) / ((n + 1.0) * (n + 3)));
-                using NDArray sigma = np.std(x);
+                using NDArray sigma = x.TensorEngine.ReduceStd(x, null, false, null, null);
                 if (sigma.astype(NPTypeCode.Double).GetAtIndex<double>(0) > 0.0)
                 {
                     // temp = x - np.mean(x); np.true_divide(temp, sigma, temp); np.power(temp, 3, temp); g1 = np.mean(temp).
-                    using NDArray mean = np.mean(x);
-                    using NDArray temp = np.subtract(x, mean);
-                    np.true_divide(temp, sigma, @out: temp);
+                    using NDArray mean = x.TensorEngine.Mean(x);
+                    using NDArray temp = x.TensorEngine.Subtract(x, mean, null, null, null);
+                    temp.TensorEngine.Divide(temp, sigma, null, temp, null);
                     using (NDArray three = NDArray.Scalar(3))
-                        np.power(temp, three, @out: temp, dtype: temp.dtype); // a Python int exponent: the data's loop
-                    using NDArray g1 = np.mean(temp);
+                        temp.TensorEngine.Power(temp, three, temp.dtype, temp, null); // a Python int exponent: the data's loop
+                    using NDArray g1 = temp.TensorEngine.Mean(temp);
                     double absG1 = Math.Abs(g1.astype(NPTypeCode.Double).GetAtIndex<double>(0));
                     double denominator = 1.0 + Math.Log2(n) + Math.Log2(1.0 + absG1 / sg1);
                     return NpScalar.Float64(PtpScalar(x).Value / denominator);
@@ -350,12 +349,12 @@ namespace NumSharp.Backends
             {
                 NpScalar hh = DivideByPython(ptp, nbins);
                 double j;
-                HistogramResult h = HistogramFunction(x, nbins, range, false, null);
+                np.HistogramResult h = HistogramFunction(x, nbins, range, false, null);
                 using (h.hist)
                 using (h.bin_edges)
                 using (NDArray count = NDArray.Scalar((double)n))
-                using (NDArray pk = np.divide(h.hist, count))
-                using (NDArray dot = np.dot(pk, pk))
+                using (NDArray pk = h.hist.TensorEngine.Divide(h.hist, count, null, null, null))
+                using (NDArray dot = pk.TensorEngine.Dot(pk, pk, null))
                     j = (2 - (n + 1) * dot.GetAtIndex<double>(0)) / hh.Value;
                 if (nbins == 1 || j < bestJ)
                 {

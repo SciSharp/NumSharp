@@ -1,10 +1,8 @@
 using System;
 using NumSharp.Backends;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
-// The moved statements call the public np.* functions they called inside np (np.histogram for Stone's estimator,
-// np.bincount, np.can_cast, np.promote_types, ...); importing np's statics keeps them verbatim.
-using static NumSharp.np;
 
 // =============================================================================
 // Default.Histogram*.cs - DefaultEngine's np.histogram, np.histogram_bin_edges, np.histogramdd and np.histogram2d
@@ -27,8 +25,10 @@ using static NumSharp.np;
 // internal operation class HistogramEngine (decision D1: NumPy writes these functions in Python); its phase PE (E1) made
 // that class these DefaultEngine partials. Two helpers were renamed, because DefaultEngine is one namespace of member
 // names: IsFinite is HistogramIsFinite and Ptp is HistogramPtp (DefaultEngine has members of both names, np.isfinite's
-// and np.ptp's). The files stay beside the facades because their statements call public np.* functions, which ratchet
-// R2 counts under Backends/.
+// and np.ptp's). Its phase P6 made each np.* call of the statements the member its facade dispatches to (np.histogram's
+// and np.bincount's included, which the files reached through `using static NumSharp.np`) and moved the files from
+// beside the facades to Backends/Default/Statistics/. The engine members build np's public result types
+// (np.HistogramResult, np.HistogramddResult, np.Histogram2dResult), which ratchet R2 counts as structural.
 // =============================================================================
 
 namespace NumSharp.Backends
@@ -134,7 +134,7 @@ namespace NumSharp.Backends
         ///     before): the raveled input and weights, the bin indices, the counting scratch and the density quotients are
         ///     reclaimed; only the histogram and its edges leave.</remarks>
         [NDScoped]
-        public override HistogramResult Histogram(NDArray a, object bins, (double, double)? range = null,
+        public override np.HistogramResult Histogram(NDArray a, object bins, (double, double)? range = null,
             bool density = false, NDArray weights = null)
             => HistogramFunction(a, bins, range, density, weights);
 
@@ -154,7 +154,7 @@ namespace NumSharp.Backends
         ///     <c>U</c> common descriptor (<see cref="HistogramTextAnswer"/>).</exception>
         /// <exception cref="ArgumentException">Bool weights over data on explicit edges: the in-place update of the bool total
         ///     (<see cref="HistogramCumulative"/>, <see cref="HistogramCumulativeLoop"/>).</exception>
-        internal static HistogramResult HistogramFunction(NDArray a, object bins, (double, double)? range, bool density,
+        internal static np.HistogramResult HistogramFunction(NDArray a, object bins, (double, double)? range, bool density,
             NDArray weights)
         {
             (NDArray raveled, NDArray w) = RavelAndCheckWeights(a, weights);
@@ -170,10 +170,13 @@ namespace NumSharp.Backends
             // ntype: int64 counts when unweighted, else the weights' dtype (NumPy: hist.dtype == weights.dtype).
             NPTypeCode ntype = w is null ? NPTypeCode.Int64 : w.typecode;
 
-            // The bincount fast path only applies when the weights can accumulate as float64/complex128.
+            // The bincount fast path only applies when the weights can accumulate as float64/complex128: np.can_cast(from,
+            // to)'s statement for two type codes, the same code or the dtype layer's safe cast.
+            static bool CanCastSafe(NPTypeCode from, NPTypeCode to)
+                => from == to || DTypeCasting.CanCastTypeTo(DType.From(from), DType.From(to), NPY_CASTING.NPY_SAFE_CASTING);
             bool simpleWeights = w is null
-                || can_cast(w.typecode, NPTypeCode.Double)
-                || can_cast(w.typecode, NPTypeCode.Complex);
+                || CanCastSafe(w.typecode, NPTypeCode.Double)
+                || CanCastSafe(w.typecode, NPTypeCode.Complex);
 
             // Complex data's equal-width counting is NumPy's statements in complex128 (HistogramEngine.Complex.cs); the fused
             // index kernel of the real dtypes cannot express a complex quotient.
@@ -192,12 +195,12 @@ namespace NumSharp.Backends
                 // quotient when n.sum()'s imaginary part is small), so a density result may sit within a handful of
                 // ULP of NumPy's. That is the library-wide np.sum reduction-order characteristic, not a histogram
                 // divergence — matching it would mean reimplementing NumPy's pairwise sum, an np.sum concern.
-                NDArray db = np.diff(binEdges).astype(NPTypeCode.Double);
-                NDArray dens = n / db / np.sum(n);
-                return new HistogramResult(dens, binEdges);
+                NDArray db = binEdges.TensorEngine.Diff(binEdges, 1, -1, null, null).astype(NPTypeCode.Double);
+                NDArray dens = n / db / n.TensorEngine.Sum(n, null, null, false);
+                return new np.HistogramResult(dens, binEdges);
             }
 
-            return new HistogramResult(n, binEdges);
+            return new np.HistogramResult(n, binEdges);
         }
 
         /// <summary>
@@ -224,7 +227,7 @@ namespace NumSharp.Backends
         ///     edges as numbers and searches them as text: edges <c>[1, 2, 10]</c> become <c>'1'</c>, <c>'2'</c>, <c>'10'</c>);
         ///     this is NumPy's answer and the loop below gives it, where binning each sample would not.
         /// </remarks>
-        private static HistogramResult HistogramTextAnswer(NDArray raveled, NDArray w, NDArray binEdges, bool density)
+        private static np.HistogramResult HistogramTextAnswer(NDArray raveled, NDArray w, NDArray binEdges, bool density)
         {
             // NumPy's statements decide every answer here, text weights included: cum_n = np.zeros(bin_edges.shape,
             // weights.dtype) holds text, a block's `sw.cumsum()` (add.accumulate) is the first statement that can refuse
@@ -237,10 +240,10 @@ namespace NumSharp.Backends
             {
                 // db = np.array(np.diff(bin_edges), float): text edges (StringDType included) have no subtract loop, which
                 // np.diff's subtraction reports.
-                NDArray db = np.diff(binEdges).astype(NPTypeCode.Double);
-                return new HistogramResult(n / db / np.sum(n), binEdges);
+                NDArray db = binEdges.TensorEngine.Diff(binEdges, 1, -1, null, null).astype(NPTypeCode.Double);
+                return new np.HistogramResult(n / db / n.TensorEngine.Sum(n, null, null, false), binEdges);
             }
-            return new HistogramResult(n, binEdges);
+            return new np.HistogramResult(n, binEdges);
         }
 
         /// <summary>
@@ -284,8 +287,8 @@ namespace NumSharp.Backends
         {
             long len = a.size;
             // cum_n = np.zeros(bin_edges.shape, ntype)
-            NDArray cumN = np.zeros(Shape.Vector(binEdges.size), ntype);
-            NDArray zero = w is null ? null : np.zeros(Shape.Vector(1), ntype);
+            NDArray cumN = new NDArray(ntype, Shape.Vector(binEdges.size), true);
+            NDArray zero = w is null ? null : new NDArray(ntype, Shape.Vector(1), true);
             for (long start = 0; start < len; start += HistogramBlock)
             {
                 long blockLen = System.Math.Min(HistogramBlock, len - start);
@@ -294,23 +297,25 @@ namespace NumSharp.Backends
                 if (w is null)
                 {
                     // sa = np.sort(a[i:i + BLOCK]); cum_n += _search_sorted_inclusive(sa, bin_edges)
-                    NDArray sa = np.sort(tmpA);
-                    np.add(cumN, SearchSortedInclusive(sa, binEdges), @out: cumN);
+                    NDArray sa = tmpA.TensorEngine.Sort(tmpA, -1, null, null, null);
+                    cumN.TensorEngine.Add(cumN, SearchSortedInclusive(sa, binEdges), null, cumN, null);
                 }
                 else
                 {
                     // sorting_index = np.argsort(tmp_a); sa = tmp_a[sorting_index]; sw = tmp_w[sorting_index]
-                    NDArray sortIdx = np.argsort(tmpA);
+                    NDArray sortIdx = tmpA.TensorEngine.ArgSort(tmpA, -1, null, null, null);
                     NDArray sa = tmpA[sortIdx];
                     NDArray sw = w[slice][sortIdx];
                     // cw = np.concatenate((zero, sw.cumsum())); cum_n += cw[bin_index]
-                    NDArray cw = np.concatenate((zero, np.cumsum(sw)), 0);
+                    NDArray cw = NDArray.ConcatenateInto(new[] { zero, sw.TensorEngine.ReduceCumAdd(sw, null, null, null) }, 0,
+                        null, null, "same_kind");
                     NDArray binIndex = SearchSortedInclusive(sa, binEdges);
-                    np.add(cumN, np.take(cw, binIndex), @out: cumN);
+                    cumN.TensorEngine.Add(cumN, UnmanagedStorage.TakeFrom(cw, binIndex, null, null, ClipModes.ClipModeRaise),
+                        null, cumN, null);
                 }
             }
             // n = np.diff(cum_n)
-            return np.diff(cumN);
+            return cumN.TensorEngine.Diff(cumN, 1, -1, null, null);
         }
 
         // ---------------------------------------------------------------------
@@ -342,7 +347,7 @@ namespace NumSharp.Backends
 
             // Empty input: no samples, all-zero histogram of the right dtype.
             if (len == 0)
-                return np.zeros(Shape.Vector(nbins), ntype);
+                return new NDArray(ntype, Shape.Vector(nbins), true);
 
             // Zero bins: the kernels would count every sample outside the zero-length result (a heap corruption); NumPy's
             // statements refuse such samples instead.
@@ -364,7 +369,7 @@ namespace NumSharp.Backends
             {
                 // Unweighted: ONE fused pass — compute each index and increment its count directly.
                 // No int64 indices array, no separate bincount. Integer counts are order-independent.
-                NDArray counts = np.zeros(Shape.Vector(nbins), NPTypeCode.Int64);
+                NDArray counts = new NDArray(NPTypeCode.Int64, Shape.Vector(nbins), true);
                 var countKernel = rangeQuotient
                     ? DirectILKernelGenerator.GetHistogramRangeCountKernel(be.BinDtype)
                     : DirectILKernelGenerator.GetHistogramCountKernel(be.BinDtype);
@@ -377,8 +382,8 @@ namespace NumSharp.Backends
             // The float64-accumulate-per-block-then-cast AND the 65536 block boundary are both load-bearing
             // for bit-exactness (a single-pass sum diverges in the last ULP; verified against NumPy 2.4.2).
             bool complexWeights = ntype == NPTypeCode.Complex;
-            NDArray wReal = EnsureContiguousDtype(complexWeights ? np.real(w) : w, NPTypeCode.Double);
-            NDArray wImag = complexWeights ? EnsureContiguousDtype(np.imag(w), NPTypeCode.Double) : null;
+            NDArray wReal = EnsureContiguousDtype(complexWeights ? NDArray.RealPart(w) : w, NPTypeCode.Double);
+            NDArray wImag = complexWeights ? EnsureContiguousDtype(NDArray.ImagPart(w), NPTypeCode.Double) : null;
 
             var wkernel = rangeQuotient
                 ? DirectILKernelGenerator.GetHistogramRangeWeightedKernel(be.BinDtype)
@@ -388,20 +393,20 @@ namespace NumSharp.Backends
             double* wrBase = (double*)wReal.Address;
             double* wiBase = complexWeights ? (double*)wImag.Address : null;
 
-            NDArray n = np.zeros(Shape.Vector(nbins), ntype);
+            NDArray n = new NDArray(ntype, Shape.Vector(nbins), true);
             for (long start = 0; start < len; start += HistogramBlock)
             {
                 long blockLen = System.Math.Min(HistogramBlock, len - start);
                 void* sBlk = aBase + start * elemB;
 
                 // Real part (or the whole weight, for real dtypes): one fused float64 scatter over the block.
-                NDArray tempR = np.zeros(Shape.Vector(nbins), NPTypeCode.Double);
+                NDArray tempR = new NDArray(NPTypeCode.Double, Shape.Vector(nbins), true);
                 wkernel(sBlk, wrBase + start, blockLen, (void*)edgesB.Address, be.First, be.Last, nbins, (double*)tempR.Address);
 
                 if (complexWeights)
                 {
                     // Imaginary part accumulates through a second scatter — NumPy's two-bincount split.
-                    NDArray tempI = np.zeros(Shape.Vector(nbins), NPTypeCode.Double);
+                    NDArray tempI = new NDArray(NPTypeCode.Double, Shape.Vector(nbins), true);
                     wkernel(sBlk, wiBase + start, blockLen, (void*)edgesB.Address, be.First, be.Last, nbins, (double*)tempI.Address);
                     n = n + MakeComplex(tempR, tempI);
                 }
@@ -448,7 +453,7 @@ namespace NumSharp.Backends
             using NDArray first = NDArray.Scalar(be.First);
             using NDArray last = NDArray.Scalar(be.Last);
             using NDArray keep = (raveled >= first) & (raveled <= last);
-            long kept = np.count_nonzero(keep);
+            long kept = keep.TensorEngine.CountNonZero(keep);
             if (kept > 0)
             {
                 // `decrement = tmp_a < bin_edges[indices]` runs before the bincount: a NaN index of that first block is the
@@ -456,12 +461,12 @@ namespace NumSharp.Backends
                 if (raveled.typecode != NPTypeCode.Decimal && ZeroBinsBlockHasNaNIndex(raveled, keep, be))
                     throw new IndexError("index -9223372036854775808 is out of bounds for axis 0 with size 1");
                 // indices = f_indices.astype(np.intp) is 0 (a product with n_equal_bins = 0), then -1; np.bincount refuses.
-                using NDArray indices = np.full(Shape.Vector(kept), -1L, np.int64);
+                using NDArray indices = NDArray.Full(Shape.Vector(kept), -1L, np.int64);
                 using NDArray weights = w?[keep];
-                bincount(indices, weights, 0);
+                indices.TensorEngine.Bincount(indices, weights, 0);
                 throw new InvalidOperationException("np.histogram: np.bincount accepted negative indices.");
             }
-            return np.zeros(Shape.Vector(0), ntype);
+            return new NDArray(ntype, Shape.Vector(0), true);
         }
 
         /// <summary>
@@ -560,7 +565,7 @@ namespace NumSharp.Backends
                 if (nb < 0)
                     return HistogramCumulativeLoop(raveled, null, binEdges, DType.Int64);
 
-                NPTypeCode cmp = promote_types(raveled.typecode, binEdges.typecode);
+                NPTypeCode cmp = DTypePromotion.PromoteTypes(raveled.typecode, binEdges.typecode);
 
                 // Binning each sample gives NumPy's counts only while the edges are ordered for the search NumPy runs
                 // instead. A NaN edge is not: it passes the monotonic check, the search places it after every number,
@@ -575,7 +580,7 @@ namespace NumSharp.Backends
                 {
                     NDArray aC = EnsureContiguousDtype(raveled, cmp);
                     NDArray eC = EnsureContiguousDtype(binEdges, cmp);
-                    NDArray counts = np.zeros(Shape.Vector(nb), NPTypeCode.Int64);
+                    NDArray counts = new NDArray(NPTypeCode.Int64, Shape.Vector(nb), true);
                     unsafe { searchKernel((void*)aC.Address, raveled.size, (void*)eC.Address, nb, (long*)counts.Address); }
                     return counts;
                 }
@@ -583,36 +588,38 @@ namespace NumSharp.Backends
                 // Complex (no ordering): compose via searchsorted + bincount (rare). searchsorted('right')
                 // yields [0, nbins+1]; a value equal to the last edge is pulled into the last bin, then
                 // bincount slices off both outlier bins.
-                NDArray idx = np.searchsorted(binEdges, raveled, "right");
+                NDArray idx = binEdges.TensorEngine.SearchSorted(binEdges, raveled, "right", null);
                 NDArray onEdge = raveled == binEdges["-1"];
                 idx = idx - onEdge.astype(NPTypeCode.Int64);
-                return bincount(idx, minlength: nb + 2)[$"1:{nb + 1}"].copy();
+                return idx.TensorEngine.Bincount(idx, null, nb + 2)[$"1:{nb + 1}"].copy();
             }
 
-            NDArray cumN = np.zeros(Shape.Vector(binEdges.size), ntype);
+            NDArray cumN = new NDArray(ntype, Shape.Vector(binEdges.size), true);
             {
-                NDArray zero = np.zeros(Shape.Vector(1), ntype);
+                NDArray zero = new NDArray(ntype, Shape.Vector(1), true);
                 for (long start = 0; start < len; start += HistogramBlock)
                 {
                     long blockLen = System.Math.Min(HistogramBlock, len - start);
                     string slice = $"{start}:{start + blockLen}";
                     NDArray tmpA = raveled[slice];
                     NDArray tmpW = w[slice];
-                    NDArray sortIdx = np.argsort(tmpA);
+                    NDArray sortIdx = tmpA.TensorEngine.ArgSort(tmpA, -1, null, null, null);
                     NDArray sa = tmpA[sortIdx];
                     NDArray sw = tmpW[sortIdx];
                     // cw = [0, cumsum(sorted weights)]; cum_n += cw[bin_index].
-                    NDArray cw = np.concatenate((zero, np.cumsum(sw)));
+                    NDArray cw = NDArray.ConcatenateInto(new[] { zero, sw.TensorEngine.ReduceCumAdd(sw, null, null, null) }, 0,
+                        null, null, "same_kind");
                     NDArray binIndex = SearchSortedInclusive(sa, binEdges);
                     // In place, as NumPy's `+=`: the total keeps the weights' dtype (ntype), so narrow integer weights
                     // wrap in their own dtype, and bool weights refuse the int64 cumulative sum under same_kind
                     // ("Cannot cast ufunc 'add' output from dtype('int64') to dtype('bool') ..."), even when the edges
                     // leave nothing to add.
-                    np.add(cumN, np.take(cw, binIndex), @out: cumN);
+                    cumN.TensorEngine.Add(cumN, UnmanagedStorage.TakeFrom(cw, binIndex, null, null, ClipModes.ClipModeRaise),
+                        null, cumN, null);
                 }
             }
 
-            return np.diff(cumN);
+            return cumN.TensorEngine.Diff(cumN, 1, -1, null, null);
         }
 
         /// <summary>
@@ -626,9 +633,9 @@ namespace NumSharp.Backends
         private static NDArray SearchSortedInclusive(NDArray a, NDArray v)
         {
             long m = v.size;
-            NDArray left = np.searchsorted(a, v[$"0:{m - 1}"], "left");
-            NDArray right = np.searchsorted(a, v[$"{m - 1}:{m}"], "right");
-            return np.concatenate((left, right));
+            NDArray left = a.TensorEngine.SearchSorted(a, v[$"0:{m - 1}"], "left", null);
+            NDArray right = a.TensorEngine.SearchSorted(a, v[$"{m - 1}:{m}"], "right", null);
+            return NDArray.ConcatenateInto(new[] { left, right }, 0, null, null, "same_kind");
         }
 
         // ---------------------------------------------------------------------
@@ -714,7 +721,7 @@ namespace NumSharp.Backends
                         // Integer data never gets a sub-unit bin width: NumPy's `np.issubdtype(a.dtype, np.integer)`, which
                         // holds for NumSharp's char too (an unsignedinteger in its scalar hierarchy, the uint16 of the oracle);
                         // the width is then the Python int 1.
-                        if (np.issubdtype(a.dtype, np.integer) && width.Value < 1)
+                        if (NDScalarType.Of(a.dtype.Meta).IsSubclassOf(NDScalarType.Integer) && width.Value < 1)
                             width = new NpScalar(1, NPTypeCode.UInt64);
                         // delta = _unsigned_subtract(last_edge, first_edge): a range's Python floats subtract in float64, the
                         // data's own edges in the data's dtype (an integer data's exact difference; with no spread, the
@@ -917,9 +924,9 @@ namespace NumSharp.Backends
                 // `np.isfinite(first_edge)`: a str has no isfinite loop; a NaN-like NA (the minimum only when every element
                 // is one) is not finite, and the `and` stops there, reporting both edges.
                 object lo, hi;
-                using (var mn = np.amin(a))
+                using (var mn = a.TensorEngine.ReduceAMin(a, null, false, null, null, null, null))
                     lo = mn.Storage.GetAtIndex(0);
-                using (var mx = np.amax(a))
+                using (var mx = a.TensorEngine.ReduceAMax(a, null, false, null, null, null, null))
                     hi = mx.Storage.GetAtIndex(0);
                 if (lo is string || lo is char)
                     throw Backends.Strings.NDStringUfuncs.NotSupportedForInputTypes("isfinite");
@@ -929,13 +936,13 @@ namespace NumSharp.Backends
             else if (Backends.Strings.NDStringUfuncs.IsString(a))
             {
                 // `a.min()` is minimum.reduce, which has no fixed-width text loop: the reduction reports it.
-                using (np.amin(a)) { }
+                using (a.TensorEngine.ReduceAMin(a, null, false, null, null, null, null)) { }
                 throw new InvalidOperationException($"np.histogram: np.amin reduced {a.dtype} text, which NumPy refuses.");
             }
             else
             {
-                first = ScalarDouble(np.amin(a));
-                last = ScalarDouble(np.amax(a));
+                first = ScalarDouble(a.TensorEngine.ReduceAMin(a, null, false, null, null, null, null));
+                last = ScalarDouble(a.TensorEngine.ReduceAMax(a, null, false, null, null, null, null));
                 if (!(HistogramIsFinite(first) && HistogramIsFinite(last)))
                     throw new ValueError($"autodetected range of [{FormatEdge(first)}, {FormatEdge(last)}] is not finite");
             }
@@ -982,7 +989,8 @@ namespace NumSharp.Backends
                 case "rice":
                     return HistogramPtp(x) / (2.0 * System.Math.Cbrt(n));
                 case "scott":
-                    return System.Math.Cbrt(24.0 * System.Math.Sqrt(System.Math.PI) / n) * ScalarDouble(np.std(x));
+                    return System.Math.Cbrt(24.0 * System.Math.Sqrt(System.Math.PI) / n)
+                        * ScalarDouble(x.TensorEngine.ReduceStd(x, null, false, null, null));
                 case "fd":
                     return BinWidthFd(x, n);
                 case "doane":
@@ -1008,7 +1016,7 @@ namespace NumSharp.Backends
         /// <returns>The bin width.</returns>
         private static double BinWidthFd(NDArray x, long n)
         {
-            NDArray q = np.percentile(x, new double[] { 75, 25 });
+            NDArray q = x.TensorEngine.Percentile(x, new double[] { 75, 25 }, null, null, false, "linear", false, null);
             double iqr = ScalarDouble(q[0]) - ScalarDouble(q[1]);
             return 2.0 * iqr * System.Math.Pow(n, -1.0 / 3.0);
         }
@@ -1022,14 +1030,14 @@ namespace NumSharp.Backends
             if (n > 2)
             {
                 double sg1 = System.Math.Sqrt(6.0 * (n - 2) / ((n + 1.0) * (n + 3)));
-                double sigma = ScalarDouble(np.std(x));
+                double sigma = ScalarDouble(x.TensorEngine.ReduceStd(x, null, false, null, null));
                 if (sigma > 0.0)
                 {
-                    double mean = ScalarDouble(np.mean(x));
+                    double mean = ScalarDouble(x.TensorEngine.Mean(x));
                     // g1 = mean(((x - mean) / sigma)^3).
                     NDArray temp = (x.astype(NPTypeCode.Double) - NDArray.Scalar(mean)) / NDArray.Scalar(sigma);
-                    temp = np.power(temp, NDArray.Scalar(3.0));
-                    double g1 = ScalarDouble(np.mean(temp));
+                    temp = temp.TensorEngine.Power(temp, NDArray.Scalar(3.0), null, null, null);
+                    double g1 = ScalarDouble(temp.TensorEngine.Mean(temp));
                     return HistogramPtp(x) / (1.0 + System.Math.Log2(n) + System.Math.Log2(1.0 + System.Math.Abs(g1) / sg1));
                 }
             }
@@ -1061,8 +1069,10 @@ namespace NumSharp.Backends
             for (int nbins = 1; nbins <= upperBound; nbins++)
             {
                 double hh = ptp / nbins;
-                NDArray counts = histogram(x, nbins, rng).hist; // pk = counts / n
-                double sumSq = ScalarDouble(np.sum(np.power(counts.astype(NPTypeCode.Double), NDArray.Scalar(2.0))));
+                NDArray counts = x.TensorEngine.Histogram(x, nbins, rng, false, null).hist; // pk = counts / n
+                NDArray countsF = counts.astype(NPTypeCode.Double);
+                NDArray squares = countsF.TensorEngine.Power(countsF, NDArray.Scalar(2.0), null, null, null);
+                double sumSq = ScalarDouble(squares.TensorEngine.Sum(squares, null, null, false));
                 double pkDot = sumSq / ((double)n * n); // p_k · p_k
                 double j = (2 - (n + 1) * pkDot) / hh;
                 if (j < bestJ) { bestJ = j; bestNbins = nbins; }
@@ -1077,7 +1087,9 @@ namespace NumSharp.Backends
         /// <summary>Peak-to-peak (max − min) of <paramref name="x"/> computed in double (no signed-int overflow).</summary>
         /// <param name="x">The non-empty data.</param>
         /// <returns>The maximum minus the minimum, both read as float64.</returns>
-        private static double HistogramPtp(NDArray x) => ScalarDouble(np.amax(x)) - ScalarDouble(np.amin(x));
+        private static double HistogramPtp(NDArray x)
+            => ScalarDouble(x.TensorEngine.ReduceAMax(x, null, false, null, null, null, null))
+               - ScalarDouble(x.TensorEngine.ReduceAMin(x, null, false, null, null, null, null));
 
         /// <summary>
         ///     The float width the equal-width bin edges (and the index arithmetic) use, matching NumPy's
@@ -1136,7 +1148,7 @@ namespace NumSharp.Backends
         private static unsafe NDArray ComputeLinspaceInDtype(double first, double last, int num, NPTypeCode dtype)
         {
             if (dtype == NPTypeCode.Double)
-                return np.linspace(first, last, num, endpoint: true, dtype: NPTypeCode.Double);
+                return BackendFactory.GetEngine().Linspace(first, last, num, true, NPTypeCode.Double, null);
 
             NPTypeCode binType = dtype;
             var edges = new NDArray(binType, Shape.Vector(num), false);
@@ -1265,7 +1277,7 @@ namespace NumSharp.Backends
         /// <summary>True when every element of the boolean mask is true (NumPy's <c>logical_and.reduce</c>).</summary>
         /// <param name="mask">The bool mask.</param>
         /// <returns>True when no element is False (an empty mask is all True).</returns>
-        private static bool AllTrue(NDArray mask) => np.all(mask);
+        private static bool AllTrue(NDArray mask) => mask.TensorEngine.All(mask);
 
         /// <summary>
         ///     NumPy's <c>np.any(bin_edges[:-1] &gt; bin_edges[1:])</c> over 1-D TEXT edges (two or more): the string
@@ -1279,7 +1291,7 @@ namespace NumSharp.Backends
             using var lower = edges[":-1"];
             using var upper = edges["1:"];
             using var greater = lower > upper;
-            return np.any(greater);
+            return greater.TensorEngine.Any(greater);
         }
 
         /// <summary>True when any adjacent pair strictly decreases (rejects non-monotonic explicit edges; equal is allowed).</summary>
@@ -1290,7 +1302,8 @@ namespace NumSharp.Backends
         {
             long m = edges.size;
             if (m < 2) return false;
-            return np.any(edges[$"0:{m - 1}"] > edges[$"1:{m}"]);
+            NDArray decreasing = edges[$"0:{m - 1}"] > edges[$"1:{m}"];
+            return decreasing.TensorEngine.Any(decreasing);
         }
 
         /// <summary>
@@ -1307,8 +1320,8 @@ namespace NumSharp.Backends
                 case NPTypeCode.Single:
                 case NPTypeCode.Double:
                 case NPTypeCode.Complex:
-                    using (NDArray nan = np.isnan(edges))
-                        return np.any(nan);
+                    using (NDArray nan = edges.TensorEngine.IsNan(edges, null, null, null))
+                        return nan.TensorEngine.Any(nan);
                 default:
                     return false;
             }
@@ -1321,7 +1334,8 @@ namespace NumSharp.Backends
         {
             long m = edges.size;
             if (m < 2) return false;
-            return np.any(edges[$"0:{m - 1}"] >= edges[$"1:{m}"]);
+            NDArray nonIncreasing = edges[$"0:{m - 1}"] >= edges[$"1:{m}"];
+            return nonIncreasing.TensorEngine.Any(nonIncreasing);
         }
 
         /// <summary>Build a complex array from separate real and imaginary parts (used for complex weights).</summary>
@@ -1387,9 +1401,9 @@ namespace NumSharp.Backends
             {
                 if (!ShapeEquals(weights, a))
                     throw new ValueError("weights should have the same shape as a.");
-                w = np.ravel(weights);
+                w = NDArray.Ravel(weights, 'C');
             }
-            return (np.ravel(arr), w);
+            return (NDArray.Ravel(arr, 'C'), w);
         }
 
         /// <summary>True when two arrays have identical shapes (dimension-by-dimension).</summary>

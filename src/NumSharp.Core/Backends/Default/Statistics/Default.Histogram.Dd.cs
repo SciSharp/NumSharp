@@ -1,9 +1,6 @@
 using System;
 using NumSharp.Backends;
 using NumSharp.Backends.Kernels;
-// The moved statements call the public np.* functions they called inside np (np.bincount, np.promote_types, ...) and
-// return np's result structs (HistogramddResult, Histogram2dResult); importing np's statics keeps them verbatim.
-using static NumSharp.np;
 
 namespace NumSharp.Backends
 {
@@ -40,7 +37,7 @@ namespace NumSharp.Backends
         /// <remarks>Owns its scope (a public entry since the plan's phase PE; the body was <c>[NDScopedCovered]</c> under
         ///     np.histogramdd's scope): every binning temporary is reclaimed, the histogram and the edges leave.</remarks>
         [NDScoped]
-        public override HistogramddResult Histogramdd(NDArray[] sample, object bins, (double, double)?[] range = null,
+        public override np.HistogramddResult Histogramdd(NDArray[] sample, object bins, (double, double)?[] range = null,
             bool density = false, NDArray weights = null)
             => HistogramddFunction(sample, bins, range, density, weights);
 
@@ -59,7 +56,7 @@ namespace NumSharp.Backends
         /// <remarks>Owns its scope (a public entry since the plan's phase PE; the body was <c>[NDScopedCovered]</c> under
         ///     np.histogram2d's scope): the stacked column and every binning temporary are reclaimed.</remarks>
         [NDScoped]
-        public override Histogram2dResult Histogram2d(NDArray x, NDArray y, object bins, (double, double)?[] range = null,
+        public override np.Histogram2dResult Histogram2d(NDArray x, NDArray y, object bins, (double, double)?[] range = null,
             bool density = false, NDArray weights = null)
             => Histogram2dFunction(x, y, bins, range, density, weights);
 
@@ -121,7 +118,7 @@ namespace NumSharp.Backends
         ///     </para>
         /// </remarks>
         [NDScopedCovered] // only callers: the [NDScoped] Histogramdd and Histogram2d overrides (Histogram2dFunction)
-        internal static HistogramddResult HistogramddFunction(NDArray[] cols, object bins, (double, double)?[] range,
+        internal static np.HistogramddResult HistogramddFunction(NDArray[] cols, object bins, (double, double)?[] range,
             bool density, NDArray weights)
         {
             // NumPy builds the internal sample via `atleast_2d(sample).T`, which STACKS the D coordinate
@@ -217,7 +214,7 @@ namespace NumSharp.Backends
                 nbin[i] = (int)edges[i].size + 1; // +1 for an outlier bin on each end (shared low+high span)
                 // `dedges[i] = np.diff(edges[i])`: text edges have no subtract loop, and np.diff's subtraction refuses them at
                 // any length (an empty difference resolves the loop too).
-                dedges[i] = np.diff(edges[i]);
+                dedges[i] = edges[i].TensorEngine.Diff(edges[i], 1, -1, null, null);
             }
 
             if ((textSample || vstringSample) && N == 0)
@@ -227,7 +224,7 @@ namespace NumSharp.Backends
                 // NumPy searches the numeric edges converted to text, so the bins follow string order, "10" before "3".)
                 cols = new NDArray[D];
                 for (int i = 0; i < D; i++)
-                    cols[i] = np.zeros(Shape.Vector(0), NPTypeCode.Double);
+                    cols[i] = new NDArray(NPTypeCode.Double, Shape.Vector(0), true);
             }
 
             // Per-dimension bin number for every point: searchsorted(edges, x, 'right'), then pull points that
@@ -250,7 +247,7 @@ namespace NumSharp.Backends
                 if ((textSample || Backends.Strings.NDStringUfuncs.IsVString(cols[i])) && N > 0)
                 {
                     // A text column: NumPy's searchsorted in the text descriptor common to the column and the edges.
-                    Ncount[i] = np.searchsorted(edges[i], cols[i], "right");
+                    Ncount[i] = edges[i].TensorEngine.SearchSorted(edges[i], cols[i], "right", null);
                     needsOnEdge[i] = true;
                     continue;
                 }
@@ -258,7 +255,7 @@ namespace NumSharp.Backends
                 // kernel must not run on it: it reads the last edge, which an empty array does not have.
                 if (edges[i].size == 0)
                     continue;
-                NPTypeCode cmp = promote_types(edges[i].typecode, cols[i].typecode);
+                NPTypeCode cmp = DTypePromotion.PromoteTypes(edges[i].typecode, cols[i].typecode);
                 var searchIdx = DirectILKernelGenerator.GetHistogramSearchIndexKernel(cmp);
                 // The fused kernel counts the edges at or below each point, which is NumPy's binary search only over SORTED
                 // edges. An edge array holding a NaN passes the monotonic check (no comparison with a NaN is true) but is not
@@ -273,7 +270,7 @@ namespace NumSharp.Backends
                 }
                 else
                 {
-                    Ncount[i] = np.searchsorted(edges[i], cols[i], "right");
+                    Ncount[i] = edges[i].TensorEngine.SearchSorted(edges[i], cols[i], "right", null);
                     needsOnEdge[i] = true;
                 }
             }
@@ -293,7 +290,10 @@ namespace NumSharp.Backends
             }
 
             // Flatten the D bin numbers into one index into the padded histogram, tally, reshape, drop outliers.
-            NDArray xy = np.ravel_multi_index(Ncount, nbin);
+            // np.ravel_multi_index(Ncount, nbin)'s statement: the first coordinate array's engine (the default one without
+            // dimensions), mode 'raise', C order.
+            TensorEngine indexEngine = D > 0 ? Ncount[0].TensorEngine : BackendFactory.GetEngine();
+            NDArray xy = indexEngine.RavelMultiIndex(Ncount, nbin, "raise", 'C');
 
             long minlen = 1;
             foreach (int nb in nbin) minlen *= nb;
@@ -305,7 +305,7 @@ namespace NumSharp.Backends
             // depth meets that cast here, with NumPy's text (NumSharp's bincount does not convert text).
             if (weights is not null && weights.ndim == 1 && xy.size > 0 && Backends.Strings.NDStringUfuncs.IsText(weights))
                 throw new TypeError($"Cannot cast array data from {weights.dtype.ToString(true)} to dtype('float64') according to the rule 'safe'");
-            NDArray flat = bincount(xy, weights, minlength: (int)minlen);
+            NDArray flat = xy.TensorEngine.Bincount(xy, weights, (int)minlen);
             NDArray hist = flat.reshape(Shape.Adopt(ToLongShape(nbin)));
             hist = hist.astype(NPTypeCode.Double); // NumPy: hist.astype(float, casting='safe') — H is always float64
 
@@ -318,7 +318,7 @@ namespace NumSharp.Backends
 
             if (density)
             {
-                NDArray s = np.sum(hist);
+                NDArray s = hist.TensorEngine.Sum(hist, null, null, false);
                 for (int i = 0; i < D; i++)
                 {
                     long[] shape = new long[D];
@@ -329,7 +329,7 @@ namespace NumSharp.Backends
                 hist = hist / s;
             }
 
-            return new HistogramddResult(hist, edges);
+            return new np.HistogramddResult(hist, edges);
         }
 
         // ---------------------------------------------------------------------
@@ -423,7 +423,7 @@ namespace NumSharp.Backends
         {
             // np.asanyarray(()) is an empty float64 array: one column without points.
             if (entries.Length == 0)
-                return np.empty(Shape.Vector(0), NPTypeCode.Double);
+                return new NDArray(NPTypeCode.Double, Shape.Vector(0), false);
             foreach (var e in entries)
                 if (e is null)
                     throw new NotSupportedException("None has no NumSharp equivalent: NumPy stacks the sample into an object " +
@@ -441,7 +441,7 @@ namespace NumSharp.Backends
             var parts = new NDArray[cast.Length];
             for (int i = 0; i < cast.Length; i++)
                 parts[i] = cast[i].reshape(1);
-            return np.concatenate(parts);
+            return NDArray.ConcatenateInto(parts, 0, null, null, "same_kind");
         }
 
         /// <summary>
@@ -490,7 +490,7 @@ namespace NumSharp.Backends
             // Fold the columns' dtypes through NEP50 promotion, exactly the result_type NumPy's stack uses.
             NPTypeCode common = cols[0].typecode;
             for (int i = 1; i < cols.Length; i++)
-                common = promote_types(common, cols[i].typecode);
+                common = DTypePromotion.PromoteTypes(common, cols[i].typecode);
 
             // Uniform input needs no cast — return the originals so the common path allocates nothing.
             bool needsCast = false;
@@ -569,9 +569,9 @@ namespace NumSharp.Backends
         {
             null => null,
             NDArray nd => nd,
-            double[] d => np.array(d),
-            long[] l => np.array(l),
-            int[] ii => np.array(ii),
+            double[] d => new NDArray(Unmanaged.ArraySlice.FromArray(d, true), Shape.Vector(d.Length)),
+            long[] l => new NDArray(Unmanaged.ArraySlice.FromArray(l, true), Shape.Vector(l.Length)),
+            int[] ii => new NDArray(Unmanaged.ArraySlice.FromArray(ii, true), Shape.Vector(ii.Length)),
             bool or sbyte or byte or short or ushort or int or uint or long or ulong => entry,
             double or float or Half or decimal or System.Numerics.Complex or string or byte[] => entry,
             _ => throw new ValueError("each `bins` entry must be an int or a 1-D edge array")
@@ -765,7 +765,7 @@ namespace NumSharp.Backends
         ///     (<c>too many values to unpack (expected 2)</c>); and every refusal of the histogramdd engine the two arrays and
         ///     the arguments then meet.</exception>
         [NDScopedCovered] // only caller: the [NDScoped] Histogram2d override (the stacked column and every binning temporary are reclaimed)
-        internal static Histogram2dResult Histogram2dFunction(NDArray x, NDArray y, object bins, (double, double)?[] range,
+        internal static np.Histogram2dResult Histogram2dFunction(NDArray x, NDArray y, object bins, (double, double)?[] range,
             bool density, NDArray weights)
         {
             if (x is null) throw new ArgumentNullException(nameof(x));
@@ -789,8 +789,8 @@ namespace NumSharp.Backends
 
             // `histogramdd([x, y], ...)`: the pair is a sequence sample, so its stacking statement runs on it — two arrays of
             // one length but different shapes are refused there, and two 2-D arrays of one shape leave three values to unpack.
-            HistogramddResult dd = HistogramddFunction(ColumnsFromSequence(new[] { x, y }), ddBins, range, density, weights);
-            return new Histogram2dResult(dd.H, dd.edges[0], dd.edges[1]);
+            np.HistogramddResult dd = HistogramddFunction(ColumnsFromSequence(new[] { x, y }), ddBins, range, density, weights);
+            return new np.Histogram2dResult(dd.H, dd.edges[0], dd.edges[1]);
         }
 
         /// <summary>
@@ -833,9 +833,9 @@ namespace NumSharp.Backends
         private static NDArray AsEdgeArray(object bins) => bins switch
         {
             NDArray nd => nd,
-            double[] a => np.array(a),
-            int[] a => np.array(a),
-            long[] a => np.array(a),
+            double[] a => new NDArray(Unmanaged.ArraySlice.FromArray(a, true), Shape.Vector(a.Length)),
+            int[] a => new NDArray(Unmanaged.ArraySlice.FromArray(a, true), Shape.Vector(a.Length)),
+            long[] a => new NDArray(Unmanaged.ArraySlice.FromArray(a, true), Shape.Vector(a.Length)),
             NDArray[] or object[] => SharedEdgesFromList(bins),
             _ => throw new ValueError("shared `bins` must be a 1-D edge array")
         };

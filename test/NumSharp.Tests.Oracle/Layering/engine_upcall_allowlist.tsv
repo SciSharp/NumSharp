@@ -17,6 +17,8 @@ Backends/Default/Math/Default.Shift.cs	0	1
 Backends/Default/Math/DefaultEngine.BinaryOp.cs	0	1
 Backends/Default/Math/DefaultEngine.BitwiseOp.cs	0	3
 Backends/Default/Sorting/Default.Digitize.cs	0	1	# np._FindCommonType(bins, x): a promotion helper on np. The promotion helpers move into the dtype layer after strings merges journey4, whose 88048433 rewrote np.find_common_type.cs, the file they live in (moving them first would conflict there)
+Backends/Default/Statistics/Default.Histogram.Dd.cs	0	2	# np.HistogramddResult and np.Histogram2dResult: the public result types np.histogramdd and np.histogram2d return (types nested in np, as np's other result types are); the engine members build the values the facades return
+Backends/Default/Statistics/Default.Histogram.cs	0	4	# np.HistogramResult: the public result type np.histogram returns (a type nested in np, as np's other result types are); the engine member builds the value the facade returns, at its four returns
 Backends/Iterators/NDIter.cs	0	1
 Backends/Iterators/NDIterCasting.cs	0	2
 Backends/Kernels/BinaryKernel.cs	0	1

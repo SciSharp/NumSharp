@@ -38,7 +38,8 @@ namespace NumSharp.Tests.Layering
         /// <summary>
         ///     The np.* names R2 reports as structural (allocation, copies, broadcasting, dtype construction, promotion
         ///     helpers, and the public result types nested in np that an engine member builds: <c>FlatIterator</c>,
-        ///     <c>GradientResult</c>) rather than computations. The split only labels the counts; both kinds are ratcheted.
+        ///     <c>GradientResult</c>, <c>HistogramResult</c>, <c>HistogramddResult</c>, <c>Histogram2dResult</c>) rather
+        ///     than computations. The split only labels the counts; both kinds are ratcheted.
         /// </summary>
         private static readonly HashSet<string> StructuralNames = new(StringComparer.Ordinal)
         {
@@ -51,7 +52,8 @@ namespace NumSharp.Tests.Layering
             "split", "array_split", "unstack", "take", "take_along_axis", "put", "put_along_axis", "repeat", "tile",
             "pad", "result_type", "promote_types", "can_cast", "_FindCommonType", "_FindCommonType_Array",
             "_FindCommonArrayType", "_FindCommonScalarType", "_FindCommonArrayScalarType", "AtLeastNdView",
-            "PrefersWriteOnce", "FlatIterator", "GradientResult", "dtypes.StringDType", "strings.OutputDescriptor",
+            "PrefersWriteOnce", "FlatIterator", "GradientResult", "HistogramResult", "HistogramddResult",
+            "Histogram2dResult", "dtypes.StringDType", "strings.OutputDescriptor",
         };
 
         /// <summary>
