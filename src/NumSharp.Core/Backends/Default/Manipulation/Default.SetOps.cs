@@ -1,7 +1,8 @@
 // NumPy's set routines np.union1d, np.setxor1d and np.setdiff1d (numpy/lib/_arraysetops_impl.py) as DefaultEngine's
-// members, with the NaN pass that makes their float32 / float64 results NumPy's bits. The file sits beside the facades
-// while it calls np.*: ratchet R2 counts np.* calls against every file under Backends/ (the np-layer dtype plan, C3);
-// it moves under Backends/Default/ in P6.
+// members, with the NaN pass that makes their float32 / float64 results NumPy's bits. NumPy's statements call np.unique,
+// np.concatenate, np.ravel, np.sort, np.isin, np.isnan, np.any and np.where; here they are this engine's or the
+// operand's engine members (np.unique's Unique with its defaults, values only) and the array object's (the ravel, the
+// concatenation, the one-element flag, NDArray.Where).
 
 using System;
 
@@ -19,7 +20,9 @@ namespace NumSharp.Backends
             // reclaimed at exit; only the final (possibly NaN-canonicalised) array is yielded.
             // NumPy: unique(concatenate((ar1, ar2), axis=None)) — axis=None flattens both operands.
             // NumPy's unique-sort canonicalises a surviving float32/float64 NaN; match it (see CanonicalizeSetOpNaN).
-            return CanonicalizeSetOpNaN(np.unique(np.concatenate((np.ravel(ar1), np.ravel(ar2)), 0)));
+            return CanonicalizeSetOpNaN(Unique(
+                NDArray.ConcatenateInto(new[] { NDArray.Ravel(ar1, 'C'), NDArray.Ravel(ar2, 'C') }, 0, null, null, "same_kind"),
+                false, false, false, null, true, true)[0]);
         }
 
         /// <inheritdoc />
@@ -33,21 +36,21 @@ namespace NumSharp.Backends
 
             if (!assume_unique)
             {
-                ar1 = np.unique(ar1);
-                ar2 = np.unique(ar2);
+                ar1 = Unique(ar1, false, false, false, null, true, true)[0];
+                ar2 = Unique(ar2, false, false, false, null, true, true)[0];
             }
 
             // concatenate((ar1, ar2), axis=None) — flattens both.
-            NDArray aux = np.concatenate((np.ravel(ar1), np.ravel(ar2)), 0);
+            NDArray aux = NDArray.ConcatenateInto(new[] { NDArray.Ravel(ar1, 'C'), NDArray.Ravel(ar2, 'C') }, 0, null, null, "same_kind");
             if (aux.size == 0)
                 return aux;
 
-            aux = np.sort(aux);
+            aux = Sort(aux, -1, null, null, null);
 
             // flag = concatenate(([True], aux[1:] != aux[:-1], [True]))
-            NDArray trueOne = np.array(new[] { true });
+            NDArray trueOne = new NDArray(Unmanaged.ArraySlice.FromArray(new[] { true }, true), Shape.Vector(1));   // np.array([True])
             NDArray neq = aux["1:"] != aux[":-1"];
-            NDArray flag = np.concatenate((trueOne, neq, trueOne), 0);
+            NDArray flag = NDArray.ConcatenateInto(new[] { trueOne, neq, trueOne }, 0, null, null, "same_kind");
 
             // return aux[flag[1:] & flag[:-1]]  — values appearing exactly once survive
             NDArray sel = flag["1:"] & flag[":-1"];
@@ -65,16 +68,16 @@ namespace NumSharp.Backends
 
             if (assume_unique)
             {
-                ar1 = np.ravel(ar1);
+                ar1 = NDArray.Ravel(ar1, 'C');
             }
             else
             {
-                ar1 = np.unique(ar1);
-                ar2 = np.unique(ar2);
+                ar1 = Unique(ar1, false, false, false, null, true, true)[0];
+                ar2 = Unique(ar2, false, false, false, null, true, true)[0];
             }
 
             // ar1[isin(ar1, ar2, assume_unique=True, invert=True)] — keep only the values absent from ar2.
-            NDArray mask = np.isin(ar1, ar2, assume_unique: true, invert: true);
+            NDArray mask = Isin(ar1, ar2, true, true, null);   // np.isin(ar1, ar2, assume_unique=True, invert=True)
             // ar1 came from np.unique; NumPy canonicalises a surviving float32/float64 NaN (see CanonicalizeSetOpNaN).
             return CanonicalizeSetOpNaN(ar1[mask]);
         }
@@ -111,15 +114,15 @@ namespace NumSharp.Backends
             if (result.size == 0)
                 return result;
 
-            NDArray mask = np.isnan(result);
-            if (!np.any(mask))                              // common case: no NaN survived -> untouched
+            NDArray mask = result.TensorEngine.IsNan(result, null, null, null);
+            if (!mask.TensorEngine.Any(mask))               // common case: no NaN survived -> untouched
                 return result;
 
             // The exact bits NumPy's float sort produces: 0x7FF8000000000000 (f64) / 0x7FC00000 (f32).
             NDArray canon = result.typecode == NPTypeCode.Double
                 ? NDArray.Scalar(BitConverter.UInt64BitsToDouble(0x7FF8000000000000UL))
                 : NDArray.Scalar(BitConverter.UInt32BitsToSingle(0x7FC00000U));
-            return np.where(mask, canon, result);
+            return NDArray.Where(mask, canon, result);
         }
     }
 }

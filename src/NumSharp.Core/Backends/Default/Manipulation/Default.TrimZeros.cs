@@ -1,8 +1,7 @@
 // NumPy's np.trim_zeros (numpy/lib/_function_base_impl.py) as DefaultEngine's member: its statements as the facade held
 // them - the trim spec's check, normalize_axis_tuple, the no-axis return, the text dtypes' truth probe and the bounding
-// box of the nonzero hyperplanes, one trimmed axis at a time. The file sits beside its facade while it calls np.*:
-// ratchet R2 counts np.* calls against every file under Backends/ (the np-layer dtype plan, C3); it moves under
-// Backends/Default/ in P6.
+// box of the nonzero hyperplanes, one trimmed axis at a time (np.nonzero and np.any's statements: the probe's engine
+// NonZero and Any).
 
 namespace NumSharp.Backends
 {
@@ -74,7 +73,7 @@ namespace NumSharp.Backends
                 NDArray positions;
                 if (ndim == 1)
                 {
-                    positions = np.nonzero(probe)[0];
+                    positions = probe.TensorEngine.NonZero(probe)[0];   // np.nonzero(probe)[0]
                 }
                 else
                 {
@@ -82,7 +81,10 @@ namespace NumSharp.Backends
                     for (int k = 0; k < ndim; k++)
                         if (k != d)
                             others[oi++] = k;
-                    positions = np.nonzero(np.any(probe, others))[0];
+                    // np.nonzero(np.any(probe, others))[0]: np.any's statement over an axis list is the engine's Any (its
+                    // last statement marks a 0-d result as a scalar, and this one keeps an axis).
+                    NDArray anyMask = probe.TensorEngine.Any(probe, others, false);
+                    positions = anyMask.TensorEngine.NonZero(anyMask)[0];
                 }
 
                 long n = positions.size;
