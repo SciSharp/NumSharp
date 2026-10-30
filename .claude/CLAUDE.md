@@ -4279,9 +4279,15 @@ this was a real bug the contiguous fast path had before the guard) — and diffe
 scatter but with the cursor advance OUTSIDE the mask-True branch, plus a cursor-free `nv==1` scalar-
 broadcast fast path (NumPy's own `if (nv==1)` branch). Errors are NumPy-verbatim: read-only →
 `"putmask: output array is read-only"` (reported first, before mask-size/nv), wrong size →
-`"putmask: mask and data must be the same size"`. Like `place`/`put`, `values` is unconditionally
-`astype`-cast to `a`'s dtype (the NumPy ndarray-`safe`-cast vs python-scalar-coercion error split is the
-documented sibling simplification — the oracle never feeds cross-dtype values). All 15 dtypes; scalars
+`"putmask: mask and data must be the same size"`. `values` is converted as NumPy's
+`PyArray_FromAny(values, a.dtype)` converts it, after the mask's size check (`UnmanagedStorage.PutMaskCore`, shared with
+`place`'s `PlaceCore`): an array of values must cast under the `'safe'` rule (NumPy's TypeError text), a 0-d array (a
+NumPy scalar) converts without it, a C# literal is packed with Python's range checks, and a C# array is NumPy's Python
+LIST, discovered into `a`'s dtype item by item (`ListValuesLikeNumPy`, 2026-10-30: `[1000, 2]` into int8 raises
+`OverflowError` where it stored -24, `[1, 2.5]` into `<U3` stores `['1', '2.5']`, a NaN into an integer array raises
+`int()`'s `ValueError`); a typed array is cast in one pass only where the cast stores exactly those values (a widening;
+numbers into bool; doubles into a float or complex class; numbers into an integer class when the values' min and max,
+taken by np.amin / np.amax's IL kernels on the buffer, lie in the class with exact bounds). All 15 dtypes; scalars
 convert implicitly (`np.putmask(a, cond, 44)`). **Perf (NPY/NS, best-of-9, Release):** geomean **1.80×**,
 faster than NumPy on every cell; **2.0–3.07×** at 1K/100K and **1.59–1.77×** at 10M for 1/4-byte dtypes;
 the 8/16-byte 10M cells (int64/float64/complex128) compress to **1.08–1.36×** — the memory-bandwidth wall

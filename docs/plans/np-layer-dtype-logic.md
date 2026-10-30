@@ -95,7 +95,10 @@ pair's casting impl gives its strided loop, `DTypeCasting.GetDTypeTransferFuncti
 walks take their loop from the transfer function (the raw assignment of numbers and text, the iterator's string buffer
 transfers, the text-number reductions, np.copyto's scalar store into text) while the bulk routes keep their kernels;
 the divergences a replay of astype's snapshot and the conversion found are fixed per D4 (astype's argument order and
-its 0-d refusal text, a StringDType buffer refilled after `remove_multi_index` rebuilt the setup). P5 is done
+its 0-d refusal text, a StringDType buffer refilled after `remove_multi_index` rebuilt the setup). Batch 10, what
+stays, is done (2026-10-30), and with it P3: every row R1 still lists (41 files, 288 lines) carries its reason, and
+the D4 the reading found is fixed (`5987c5e5`: np.place / np.putmask convert a C# array of values as NumPy's
+Python list, into the target's descriptor). P5 is done
 (2026-10-29): its six
 families and, handed over by the coordinator, the lines first assigned to PE (np.argmax's out= pair, np.unravel_index,
 np.packbits / np.unpackbits, np.bincount, and the text lines of np.kron and np.median) are engine members or engine
@@ -751,7 +754,7 @@ The gates are §6's, plus three rules:
 
 - [x] **Design first** (2026-10-29, at `1fcb4663`): below, with the per-file table in
       [Appendix E](#appendix-e-p3s-lines-by-file).
-- [ ] Then the batches of the design, in its order.
+- [x] Then the batches of the design, in its order (batches 1 to 10, the last on 2026-10-30; see the state log).
 
 **P3's design (2026-10-29).** P3 owns the R1 lines of 80 facade files (P5's classification): 702 lines, 469 numeric and
 233 text. K4 adds 20 text lines in nine files R1 does not scan (the text readers of `IO/TextReading/`,
@@ -937,7 +940,10 @@ first, as it did for np.fft.
     reason: the C# conversions (`NDArray.Implicit.ValueTypes.cs`, `NDArray.ToString.cs`: a C# cast is not a NumPy
     statement; they call `getitem` and the coercion path), the DType layer's own files (`np.dtype.cs`, `np.dtypes.cs`)
     and the typed iterator's type check (`np.ndenumerate.cs`); outside R1, the IO codecs, the Python-object helpers,
-    `DTypes/`' own slot code and np.random's text refusals.
+    `DTypes/`' own slot code and np.random's text refusals. Done (`5987c5e5`, `926de8c7`): R1 lists 41
+    files, 288 lines after P3, each row with its reason in the allowlist's fourth column (the classes C, D, index
+    kind and A, and the lines P2 and P7 still own); reading them found one D4, the value conversion of np.place's
+    and np.putmask's list overloads, fixed first (see the state log).
 
 ### P4. numpy.polynomial and numpy.ma (K5, 61 lines in 14 files)
 
@@ -1166,6 +1172,56 @@ candidate.
 ---
 
 ## 9. State log
+
+- **2026-10-30, P3: batch 10 (what stays) - batch 10 is done, and with it P3.** Three commits on `strings`, developed in
+  the scratch worktree and landed by fast-forward: the D4 fix the batch found, the reasons, and this docs commit.
+  - Batch 10 read every line R1 still lists (LayeringScanner's own line dump of the 43 files at `5ec7033b`, 290 lines)
+    and sorted each by the plan's classes. Two lines were neither a class nor a later phase's: the value conversion of
+    np.place's and np.putmask's list overloads, which batch 2's entry had handed to batch 4 and batch 4 left in the
+    facades. They discovered the list on their own (`np.array(vals)`) and cast it UNSAFELY into the target.
+  - `5987c5e5` (D4): np.place / np.putmask convert a C# array of values - their documented Python list - where
+    NumPy's `arr_place` / `PyArray_PutMask` convert it (`PyArray_FromAny(values0, PyArray_DESCR(self), ...)`, after
+    the writeability, the mask's bool conversion and the size check): discovered INTO the target's descriptor, every
+    item by its setitem (`UnmanagedStorage.ListValuesLikeNumPy` over `NDArray.AnyArrayFromObject`). Probed against
+    NumPy 2.4.2: `[1000, 2]` into int8 raises `Python integer 1000 out of bounds for int8` (it stored -24), `[1, 2.5]`
+    into `<U3` is `['1', '2.5']` (it stored `'1.0'`), a C# `float[] { 1.1f }` into `<U32` is `'1.100000023841858'`
+    (it stored the float32's `'1.1'`), a NaN into an integer array raises `int()`'s ValueError, and a wrong-size mask
+    is reported before a ragged list. `PlaceCore` / `PutMaskCore` take NumPy's `values0` as one object (an NDArray,
+    a C# Array or null); the facades' list overloads are one call each, and R1's np.place.cs and np.putmask.cs rows go.
+    A typed array keeps a one-pass cast where the cast stores exactly what each item's setitem stores and no item can
+    raise (`CastStoresEachItemsValue`): a widening, numbers into bool, doubles into a float or complex class, and
+    numbers into an integer class whose range holds the values' min and max (`ItemsFitIntegerClass`); text targets take
+    the per-item stores. The min and max come from the IL reduction kernels np.amin / np.amax run, called on the
+    discovered buffer (no 0-d result arrays: the first version through np.amin / np.amax cost ~1.2 us more a call, and a
+    hand-written vector pass was no faster than the kernels), and the bounds are exact (Int128 for integers, powers of
+    two for a float's truncation). Tests `Indexing/np.place.putmask.ListValues.NumPyPort.Test.cs` (9; 7 fail on the
+    parent). np.place into a StringDType array crashes NumPy 2.4.2 itself (access violation), so that case has no NumPy
+    answer; NumSharp stores each item's `str()`.
+  - `926de8c7`: every row R1 still lists carries its reason in the allowlist's fourth column (LayeringScanner keeps
+    it, the writer rewrites it). 41 files, 288 lines (text 34, numeric 254), by class:
+    - C, a C#-only conversion or class-boundary statement (8 files, 15 lines): the 0-d array's C# conversions
+      (`NDArray.Implicit.ValueTypes.cs`), char printing (`NDArray.ToString.cs`), the typed element-type checks
+      (`np.nditer.Typed`, `np.ndenumerate`, `np.asscalar`), np.vectorize's return type, the comparison operators' text
+      route (`NDArray.TextComparison.cs`) and np.copyto's C# char into text;
+    - D, the dtype layer's or a class's own code (18 files, 206 lines, 192 of them numeric): `np.dtype.cs`,
+      `np.dtypes.cs`, the dtype routines (np.can_cast, np.common_type, np.find_common_type, np.min_scalar_type, the
+      isdtype family and the type characters, isrealobj / iscomplexobj), finfo and iinfo (each describes a dtype), the
+      memoryview's format characters, the flat iterator's element stores and numpy.matrix's six files;
+    - index kind (9 files, 59 lines): np.take.FancyAxis's int64 test and the indexers' lines batch 8 left (index-kind
+      tests, `KeepLaneSharingClass`, the fixed-width text routes' unit view and None store, the StringDType route
+      bodies' calls into the text backend);
+    - A, a NumPy statement where it stays (2 files, 3 lines): numpy.polynomial's polyutils port (P4) and
+      np.random.multinomial's own float16 / float32 statement;
+    - a later phase's (4 files, 5 lines): np.evaluate's text refusal (P2, the owner's decision) and the matrix rule's
+      result dtype in np.nanmean / np.nanstd / np.nanvar (P7, D7's TODO).
+  - Where the batch departs from its item's text: the item expected "5 files, 13 lines" (the text lines of K4's C and D
+    classes). R1 counts numeric lines too, and the other batches' leftovers stay where their entries decided them; the
+    reasons name each one instead of a list in this plan.
+  - Gates: NumSharp.Tests 20,926 / 20,925 (net10.0 / net8.0) on the final code, and the D4's test classes (209) on
+    both frameworks after its last guard test; the oracle 414 (net10.0); the np.place / np.putmask snapshot (12,684
+    cases) holds the same lines as `5ec7033b`'s; R1 41 files, 288 lines.
+  - P3 is done. Next: P6's structural part goes on in the parallel session; P7 is the TODO the owner kept for the end
+    (D7).
 
 - **2026-10-30, P3: batch 9b (the text casts through the casting impls) - batch 9b is done.** Eight commits on
   `strings`, developed in the scratch worktree: the tool commit and the two astype D4 fixes landed first by fast-forward
