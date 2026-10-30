@@ -294,14 +294,7 @@ namespace NumSharp
             if (arys == null)
                 throw new ArgumentNullException(nameof(arys));
 
-            var arr = asanyarray(arys, null);
-            switch (arr.ndim)
-            {
-                case 0:
-                    return arr.reshape(1);
-                default:
-                    return arr;
-            }
+            return NDArray.AtLeast1d(asanyarray(arys, null));
         }        
         
         /// <summary>
@@ -320,13 +313,7 @@ namespace NumSharp
             if (arr is null)
                 throw new ArgumentNullException(nameof(arr));
 
-            switch (arr.ndim)
-            {
-                case 0:
-                    return arr.reshape(1);
-                default:
-                    return arr;
-            }
+            return NDArray.AtLeast1d(arr);
         }
 
         /// <summary>
