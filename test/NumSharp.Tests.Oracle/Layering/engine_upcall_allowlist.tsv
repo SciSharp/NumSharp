@@ -3,26 +3,26 @@
 # engine member or the family core instead, or pin it here by hand with a reason in a fourth column. After a drop,
 # rerun the test with NUMSHARP_WRITE_LAYERING_ALLOWLIST=1 and commit.
 # path<TAB>computations<TAB>structural[<TAB># reason]
-Backends/Default/Math/BLAS/Default.Dot.NDMD.cs	0	1
-Backends/Default/Math/BLAS/Default.MatMul.2D2D.cs	0	1
-Backends/Default/Math/BLAS/Default.MatMul.cs	0	1
-Backends/Default/Math/Default.ATan2.cs	0	1
-Backends/Default/Math/Default.ClipNDArray.cs	0	1
-Backends/Default/Math/Default.DivMod.cs	0	1
-Backends/Default/Math/Default.GcdLcm.cs	0	1
+Backends/Default/Math/BLAS/Default.Dot.NDMD.cs	0	1	# np._FindCommonArrayType(lhs, rhs): a promotion helper on np. The promotion helpers move into the dtype layer after strings merges journey4, whose 88048433 rewrote np.find_common_type.cs, the file they live in (moving them first would conflict there)
+Backends/Default/Math/BLAS/Default.MatMul.2D2D.cs	0	1	# np._FindCommonArrayType(left, right): a promotion helper on np. The promotion helpers move into the dtype layer after strings merges journey4, whose 88048433 rewrote np.find_common_type.cs, the file they live in (moving them first would conflict there)
+Backends/Default/Math/BLAS/Default.MatMul.cs	0	1	# np._FindCommonArrayType(lhs, rhs): a promotion helper on np. The promotion helpers move into the dtype layer after strings merges journey4, whose 88048433 rewrote np.find_common_type.cs, the file they live in (moving them first would conflict there)
+Backends/Default/Math/Default.ATan2.cs	0	1	# np._FindCommonType(y, x): a promotion helper on np. The promotion helpers move into the dtype layer after strings merges journey4, whose 88048433 rewrote np.find_common_type.cs, the file they live in (moving them first would conflict there)
+Backends/Default/Math/Default.ClipNDArray.cs	0	1	# np._FindCommonArrayScalarType(outType, bound): a promotion helper on np. The promotion helpers move into the dtype layer after strings merges journey4, whose 88048433 rewrote np.find_common_type.cs, the file they live in (moving them first would conflict there)
+Backends/Default/Math/Default.DivMod.cs	0	1	# np._FindCommonType(lhs, rhs): a promotion helper on np. The promotion helpers move into the dtype layer after strings merges journey4, whose 88048433 rewrote np.find_common_type.cs, the file they live in (moving them first would conflict there)
+Backends/Default/Math/Default.GcdLcm.cs	0	1	# np._FindCommonType(lhs, rhs): a promotion helper on np. The promotion helpers move into the dtype layer after strings merges journey4, whose 88048433 rewrote np.find_common_type.cs, the file they live in (moving them first would conflict there)
 Backends/Default/Math/Default.Gradient.cs	0	1	# np.GradientResult: the public result type np.gradient returns (a type nested in np, as np's other result types are); the engine member builds the value the facade returns
-Backends/Default/Math/Default.Power.StrideZero.cs	0	2
-Backends/Default/Math/Default.Power.cs	0	2
-Backends/Default/Math/Default.Shift.cs	0	1
-Backends/Default/Math/DefaultEngine.BinaryOp.cs	0	1
-Backends/Default/Math/DefaultEngine.BitwiseOp.cs	0	3
+Backends/Default/Math/Default.Power.StrideZero.cs	0	2	# np._FindCommonType(lhs, rhs) (2): a promotion helper on np. The promotion helpers move into the dtype layer after strings merges journey4, whose 88048433 rewrote np.find_common_type.cs, the file they live in (moving them first would conflict there)
+Backends/Default/Math/Default.Power.cs	0	2	# np._FindCommonType(lhs, rhs) (2): a promotion helper on np. The promotion helpers move into the dtype layer after strings merges journey4, whose 88048433 rewrote np.find_common_type.cs, the file they live in (moving them first would conflict there)
+Backends/Default/Math/Default.Shift.cs	0	1	# np._FindCommonType(lhs, rhs): a promotion helper on np. The promotion helpers move into the dtype layer after strings merges journey4, whose 88048433 rewrote np.find_common_type.cs, the file they live in (moving them first would conflict there)
+Backends/Default/Math/DefaultEngine.BinaryOp.cs	0	1	# np._FindCommonType(lhs, rhs): a promotion helper on np. The promotion helpers move into the dtype layer after strings merges journey4, whose 88048433 rewrote np.find_common_type.cs, the file they live in (moving them first would conflict there)
+Backends/Default/Math/DefaultEngine.BitwiseOp.cs	0	3	# np._FindCommonType(lhs, rhs) (3): a promotion helper on np. The promotion helpers move into the dtype layer after strings merges journey4, whose 88048433 rewrote np.find_common_type.cs, the file they live in (moving them first would conflict there)
 Backends/Default/Sorting/Default.Digitize.cs	0	1	# np._FindCommonType(bins, x): a promotion helper on np. The promotion helpers move into the dtype layer after strings merges journey4, whose 88048433 rewrote np.find_common_type.cs, the file they live in (moving them first would conflict there)
 Backends/Default/Statistics/Default.Histogram.Dd.cs	0	2	# np.HistogramddResult and np.Histogram2dResult: the public result types np.histogramdd and np.histogram2d return (types nested in np, as np's other result types are); the engine members build the values the facades return
 Backends/Default/Statistics/Default.Histogram.cs	0	4	# np.HistogramResult: the public result type np.histogram returns (a type nested in np, as np's other result types are); the engine member builds the value the facade returns, at its four returns
-Backends/Iterators/NDIter.cs	0	1
-Backends/Iterators/NDIterCasting.cs	0	2
-Backends/Kernels/BinaryKernel.cs	0	1
-Backends/Kernels/ComparisonRun.cs	0	1
-Backends/NDArray.cs	0	1
-Backends/Strings/NDStringMethods.cs	9	5	# numpy.strings' own Python statements (the computed-width wrappers' sizing: np.amax, np.where, np.minimum, np.subtract, np.multiply, np.add, np.less): the text API's own pass (plan section 8), not the engine's
+Backends/Iterators/NDIter.cs	0	1	# np._FindCommonType_Array(codes): a promotion helper on np. The promotion helpers move into the dtype layer after strings merges journey4, whose 88048433 rewrote np.find_common_type.cs, the file they live in (moving them first would conflict there)
+Backends/Iterators/NDIterCasting.cs	0	2	# np._FindCommonType_Array(codes) and np._FindCommonArrayType(a, b): a promotion helper on np. The promotion helpers move into the dtype layer after strings merges journey4, whose 88048433 rewrote np.find_common_type.cs, the file they live in (moving them first would conflict there)
+Backends/Kernels/BinaryKernel.cs	0	1	# np._FindCommonScalarType(lhs, rhs): a promotion helper on np. The promotion helpers move into the dtype layer after strings merges journey4, whose 88048433 rewrote np.find_common_type.cs, the file they live in (moving them first would conflict there)
+Backends/Kernels/ComparisonRun.cs	0	1	# np._FindCommonScalarType(lhsType, rhsType): a promotion helper on np. The promotion helpers move into the dtype layer after strings merges journey4, whose 88048433 rewrote np.find_common_type.cs, the file they live in (moving them first would conflict there)
+Backends/NDArray.cs	0	1	# np.FlatIterator: the public type ndarray.flatiter returns (NumPy's numpy.flatiter, a type nested in np as np.Broadcast and np.NDIterator are); the array object's property constructs it
+Backends/Strings/NDStringMethods.cs	9	5	# numpy.strings' own Python statements (the computed-width wrappers' sizing: np.amax, np.where, np.minimum, np.subtract, np.multiply, np.add, np.less, and np.strings.OutputDescriptor, their f"{a.dtype.char}{size}" output dtype): the text API's own pass (plan section 8), not the engine's
 Backends/Unmanaged/UnmanagedStorage.Coercion.cs	0	1	# np._FindCommonType_Scalar(type codes): a promotion helper on np (the scalar promotion of a C# object list's element types). The promotion helpers move into the dtype layer after strings merges journey4, whose 88048433 rewrote np.find_common_type.cs, the file they live in (moving them first would conflict there)
