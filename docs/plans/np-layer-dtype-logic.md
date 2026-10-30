@@ -108,8 +108,11 @@ partials, and the two divergences found on the way are fixed per D4 (np.argmax /
 np.broadcast_to / np.broadcast_shapes, buffer-size and view / copy calls are the array object's members (R2's
 structural calls 263 -> 47, the indexers' four with batch 8), and the two defects its snapshots found are fixed per D4
 (a failed iteration's buffers are not written back, `dc807d59`; `np.array(IEnumerable<T>, size)` of a shorter
-enumeration raises np.fromiter's error, `f48b5677`). Progress goes into the
-[§9 state log](#9-state-log), newest entry first.
+enumeration raises np.fromiter's error, `f48b5677`). An audit of the element code the plan's own commits added
+(2026-10-30) found four places and a few small ones that re-implement a kernel, the iterator or a BCL primitive the
+library already had. [§7 PA](#pa-reuse-what-the-library-already-has-the-2026-10-30-audit) plans their alignment, not
+implemented yet. Its probe found exact models of NumPy's dot functions, so the dot item also fixes np.dot where it
+differs from NumPy today. Progress goes into the [§9 state log](#9-state-log), newest entry first.
 
 **The engine layout (the owner's decision of 2026-10-28, D1 in [§5](#5-decisions-for-the-owner)).** Every NumPy function
 NumSharp moves that computes values becomes a `TensorEngine` member. Those NumPy writes in Python are declared in
@@ -570,6 +573,15 @@ The recommendations as written before the answers:
 8. **Docs and tests.** The facade's docs still true; new members documented in full; tests re-pointed.
 9. **Divergences.** Each one found: a NumPy probe, oracle cases, a fix in its own commit (D4).
 10. **State log.** One entry in [§9](#9-state-log).
+11. **Reuse** (added by PA, 2026-10-30). Before writing an element loop or vector code, search for what already does it:
+    - the kernel caches (`DirectILKernelGenerator.Get*` / `TryGet*`, `ILKernelGenerator`);
+    - the iterator (`NDIterRef`, `TypedIterHelpers`, `ForEach`);
+    - the engine's members;
+    - the shared helpers (`NDHalfDot`, `NDFloatMath`, `NDComplexMath`, ...);
+    - the BCL span primitives (`Fill`, `CopyTo`, `Reverse`, `IndexOf`).
+
+    A removed np.* call becomes its engine member or the iterator, never a hand loop. A new element loop states its
+    reason in the commit message.
 
 ---
 
@@ -1137,6 +1149,158 @@ The 255 text lines are P3's K4 files, np.evaluate's two (P2's) and np.fft.RawFft
         text API's statements, the write-once policy and the `flatiter` object.
   - [ ] The moves under `Backends/Default/`, beside their classes and into `Shape` partials.
 
+### PA. Reuse what the library already has (the 2026-10-30 audit)
+
+The audit read the element-level code the plan's commits added to `src/NumSharp.Core`: loops, vector code, stack blocks,
+block copies and per-element boxed reads, skipping code a commit only moved. It found 443 lines in 71 of 376 commits
+([§9](#9-state-log), 2026-10-30). Four places and a few small ones re-implement a kernel, the iterator or a BCL
+primitive the library already had. In two of them the cause is R2: it counts np.* calls under `Backends/`, and the
+rewrites that removed `np.nditer<T>` dropped the iterator with it, although `NDIterRef` and the kernels are allowed
+there. Rules (decided 2026-10-30):
+
+- **R-1.** A removed np.* call becomes its engine member or the iterator (`NDIterRef`, `TypedIterHelpers`, `ForEach`),
+  never a hand loop.
+- **R-2.** When a private copy is faster than the shared kernel, the speedup is measured and then moved into the shared
+  kernel, where every caller gains it; the private copy goes.
+- **R-3.** One NumPy function, one managed model. Where two copies model the same NumPy loop, the model a probe finds
+  exact stays, and the other copy's divergence is a D4.
+- **R-4.** A move keeps the bytes (the snapshot is identical). A change of bytes is a D4 commit of its own, probed
+  against NumPy, with tests that fail on its parent.
+
+- [ ] **PA1. The two rewrites R2 caused** (`75e61cae`, `5c17faec`).
+  - `DefaultEngine.SqrtLikeNumPy`'s decimal roots (`Default.Reduction.VarStd.cs`): the index loop (`GetAtIndex` /
+    `SetAtIndex`, a coordinate decomposition per element) becomes one iterator pass:
+    `TypedIterHelpers.Build(ret, writeable: true, NPY_KEEPORDER)`, then `ForEach` with a static inner loop that applies
+    `DecimalMath.Sqrt` to each chunk at its stride. That is the walk `np.nditer<decimal>` made. The engine's decimal
+    `Sqrt` is no substitute: it rounds through double (15 digits), and var / std keep decimal's 28.
+  - `LinAlgHelper.Conjugate` (`TensorEngine.LinearAlgebra.cs`; the first operand of np.vdot / np.vecdot / np.vecmat
+    without a backend): `a.copy()` and then a conjugating loop become the engine's conjugate kernel
+    (`UnaryOp.Conjugate`) writing into a fresh C-ordered array. One pass instead of two, and the same layout `a.copy()`
+    gave.
+  - Gates: the snapshot of np.var / np.std / np.nanvar / np.nanstd (the decimal pools) and np.vdot / np.vecdot /
+    np.vecmat (the complex pools) identical; `decimal_varstd.jsonl`, `products.jsonl`; the cells decimal std and complex
+    vdot at 1K and 100K.
+
+- [ ] **PA2. The add loops of the reduction iterator** (`da7adc53`; `NumPyAddLoops` in `Default.Reduction.Add.Axes.cs`).
+  The float64 and float32 elementwise forms (`DoubleBinary` / `SingleBinary` with their contiguous, broadcast, reversed
+  and rows vector loops, about 250 lines) re-implement the rule for which NaN an add keeps, a rule the kernels already
+  carry (`DirectILKernelGenerator.NaNOperandOrder.cs`). That makes two copies of a subtle rule that must agree.
+  - Each call of an elementwise form becomes one call of the Tier-3B add inner loop of its dtype
+    (`DirectILKernelGenerator.TryGetInnerLoop(InnerLoopKernelKey.Binary(BinaryOp.Add, t, t, t))`), with operands
+    `{o, x, o}`, byte strides, and `BroadcastNaNRule.PerCall()` when the out is contiguous. That is NumPy's own
+    structure: its reduction calls `DOUBLE_add`'s inner loop. `NumPyReduceIterator.Loop<T>` keeps its function
+    pointers; their bodies become the call.
+  - `ComplexBinary` and `DecimalBinary` move the same way. The complex form keeps the second operand's NaN in each part
+    when both are NaN, so it moves only if the snapshot, which compares that against the shared complex add's rule, is
+    identical. Otherwise it waits until `OpenBugs.NaNOperandOrder`'s complex class is fixed in the shared kernel.
+  - The rows forms (`DoubleBinaryRows` / `SingleBinaryRows`, which keep the out row in registers across rows): first
+    per-row calls of the same kernel, as NumPy makes them. If that is more than 10 % slower on the (rows, n) cells, the
+    register blocking goes into the 2-D kernel family as a stationary-out mode (`TryGet2DKernel` with an out whose
+    outer stride is 0), not back into a private copy.
+  - The reversed form: first the shared kernel's strided route. If that is more than 10 % slower, a reversed-run load
+    (one load and a lane reversal) goes into the shared shell's strided dispatch, where `a[::-1] + b` gains it too.
+  - Stays: `HalfBinary` (already the house float16 kernel, `HalfArithRun`), the reduce forms (already the shared
+    pairwise folds), `PairwiseOfCopies` (a closed form for a stride-0 run) and `DecimalReduce` (no shared decimal sum
+    continues from a running value).
+  - Gates:
+    - the snapshot of np.sum / np.mean / np.average over pools with NaN pairs is identical;
+    - the oracle tiers `sum_identity.jsonl`, `mean_loops.jsonl`, `varstd.jsonl`, `nanvarstd.jsonl`, `nanmean.jsonl`,
+      `reduce_start.jsonl` and `nan_order.jsonl` (raw NaN bits) pass, and so do np.average's axis-tuple tests;
+    - a mutant of the shared NaN rule now also fails the reduction's tests;
+    - `da7adc53`'s cells (a reversed axis, a broadcast axis, axis tuples) are measured.
+
+- [ ] **PA3. One home for NumPy's dot functions** (`ee9ce021`; `SlidingDot` and `Default.Dot.Fused.cs` predate the
+  plan). NumPy has one `@name@_dot` per dtype (`arraytypes.c.src`). `PyArray_MatrixProduct2`'s N-D route and
+  `_pyarray_correlate` reach it through `PyArray_ArrFuncs.dotfunc`, and the 1-D route calls the same cblas function.
+  NumSharp models it four times (`Default.Dot.NDMD.cs` twice, `SlidingDot.cs`, `SimdDot.cs`), and the copies disagree
+  with each other and with NumPy. A probe ([Appendix B5](#b5-numpys-dot-functions-per-stride-class-input-to-pa3))
+  found an exact model for every class except complex from 8 terms. With those models, np.dot matches NumPy in cells
+  where it does not today:
+
+  | dtype | run strides | today: results that differ from NumPy | the exact model |
+  |---|---|---|---|
+  | float32 | both unit | N-D 29–33 % below 32 terms, 52–57 % from 32; 1-D 27–73 % | below 32 terms, `cblas_sdot`'s scalar loop (products rounded to float32, summed in double: `SdotManaged`'s model); from 32, the Haswell `sdot_kernel_16` (four float32 FMA accumulators and its lane reduction; probed at 1-D, the same cblas call) |
+  | float32 | positive, not both unit | 31–74 % (5 to 64 terms) | `cblas_sdot`'s strided loop: two float32 products summed in float32, the pair added into a double. NDMD's note that no managed model matched is wrong. |
+  | float32 | not blasable (negative or 0) | 34–73 % | `FLOAT_dot`'s own loop, a float32 sum |
+  | float64 | both unit | none below 16 terms; from 16, N-D 56–68 % and 1-D 31–62 % | sequential below 16; from 16, the Haswell `ddot_kernel_8` (four FMA accumulators over `n & -16`, its lane reduction, then the tail in order) |
+  | float64 | positive, or not blasable | none | `StridedDdot` / sequential (as today) |
+  | complex128 | both unit | N-D: none below 8 terms, 49–94 % from 8; 1-D 81–100 % | the four sums below 8 terms; from 8, the vector kernel (no model yet) |
+  | complex128 | positive, or not blasable | none | the four sums / `CDOUBLE_dot`'s loop (as today) |
+
+  The Haswell kernels are what OpenBLAS dispatches on this host (an i9-13900K). NumPy on a host that dispatches another
+  kernel (AVX-512's SkylakeX) gives other bits, and there NumSharp's results stay bounded, as with the other host pins.
+  - **PA3a, the D4, first.** `Utilities/NDDot.cs`, beside `NDHalfDot.cs`, holds NumPy's `@name@_dot` per dtype, with
+    `blas_stride`'s split and the models above. In the same commit, the call sites whose bits change take it, because
+    the fix is the switch: NDMD's float32 routes, its float64 unit route, the 1-D route (float32, float64 and complex
+    below 8 terms), and SlidingDot's float32 and float64 per-position dots. SlidingDot's complex per-position dot from
+    8 terms takes the four sums: neither model is exact there, and R-3 keeps the one that matches NumPy more often
+    (6–51 % of the N-D results against 3–12 % for the per-term product). The tests come from NumPy's bits, and a new
+    section of the products tier covers N-D and 1-D np.dot over the three stride classes, lengths around 8, 16 and 32,
+    and special values.
+  - **PA3b, the move.** The other dot functions move into `NDDot` with their bytes unchanged: bool, the integers,
+    decimal, float16 (still `NDHalfDot.Sum`) and complex's exact classes.
+    - NDMD loses its 10 dot functions. The SIMD route's two walkers (`DotNDMDSimdFloat` / `DotNDMDSimdDouble`) merge
+      into `Walk<T>` unless they measure faster.
+    - SlidingDot's `SdotManaged`, the ramps' `DotSimd`, `ZdotuManaged`, `CdoubleDotPlain` and the decimal and bool
+      locals go, and so does `SimdDot`.
+    - The callers keep their dtype switches. A `DTypeMeta.dotfunc` slot, NumPy's ArrFuncs slot, waits for the loop
+      registry of "Later": here it would add an indirect call per output element and no behavior.
+  - Stays:
+    - SlidingDot's middles vectorized over output positions, bit-identical to the per-position model by construction;
+    - `SlidingDot.Long`'s blocked kernels, bounded at the vector block as documented; once the Haswell models are in,
+      they are the only float positions left bounded;
+    - `DotParallel`, np.multithreading's partial sums.
+  - Later, not in PA: a model of `zdotu`'s vector kernel (complex from 8 terms), probed the same way; np.vdot and
+    np.vecdot, whose NumPy loops call the same functions.
+  - Gates: the PA3a tests and corpus section; `products.jsonl`, the `groupa` correlate / convolve cases and
+    `polyalgebra*.jsonl`; `matmul_parity` (the backend path) unchanged; the PA3b snapshot identical. Cells measured:
+    N-D np.dot, np.correlate float64 / complex128, and 1-D np.dot at 1K / 100K / 10M. The Haswell model and `SimdDot`
+    use the same number of FMAs.
+
+- [ ] **PA4. The logical ufuncs' combine** (`e41c90dc`). `CombineTruth` (`Default.Logical.cs`) is a hand vector
+  AND / OR / XOR over bytes, which its own comment says works "as the bitwise ufunc combines". It becomes that ufunc's
+  kernel, called once per block: `GetMixedTypeKernel(new MixedTypeKernelKey(Boolean, Boolean, Boolean, op,
+  ExecutionPath.SimdFull))`, vectorized on byte lanes. The truth values keep `ComparisonRun` and `Span.Fill`. Gates:
+  the snapshot of np.logical_and / or / xor identical, the `logic` and `out_where` tiers, and `e41c90dc`'s cells.
+
+- [ ] **PA5. The small ones.**
+  - np.eye (`NDArray.TwoDimBase.cs`, `e23cef2b`): the per-slot `Buffer.MemoryCopy` of the converted one becomes
+    `NDArray.TryDiagonalScatter`, which runs the `DiagWrite` kernel behind np.diag and np.fill_diagonal with a stride-0
+    source. The per-slot setitem stays for a class whose items hold references. The kernel takes fixed widths up to
+    256 bytes (`FixedCopyKindFor`, as the take and put flat kernels do), so fixed-width text uses it in np.eye, np.diag
+    and np.fill_diagonal. `TryDiagonalScatter`'s comment "every NumSharp dtype is 1/2/4/8/16 B" is wrong on this
+    branch.
+  - np.unique (`Default.Unique.Kwargs.cs`, `Default.Unique.Hash.cs`): the gathers `aux = values[perm]` and the complex
+    radix path's `uv[p]` become the flat take kernel (`GetTakeFlatKernel`), `perm[i] = p[i]` becomes one
+    `Span.CopyTo`, and the NaN tails become `Span.Fill`.
+  - np.correlate's in-place reversal (`SlidingDot.ReverseElements`, `25b193e6`) becomes `Span<T>.Reverse`
+    (vectorized). The swap loop stays only for a run longer than `int.MaxValue` elements.
+  - The int64 ramps: PolyRoots' IL ramp kernel, np.mgrid / np.ogrid's `GridFillInt64` (`6f0f2e33`) and the fill slot's
+    int64 / uint64 cases (`95b7167e`) compute the same wrapping `start + i * step`. They become one kernel, moved to
+    `DirectILKernelGenerator.Ramp.cs` for its three callers.
+  - The decimal empty mean (`DecimalMeanOfNoElement`, `a2e9fe85`): its NaN loop becomes the allocation's own fill,
+    `ArraySlice.Allocate(NPTypeCode.Double, n, double.NaN)` (what `UnmanagedStorage.FullCore` uses). .NET's NaN bits
+    are kept and pinned by a test.
+  - Stays, with its reason: `GridFillFloat`, NumPy's two float64 passes (`nn * step`, then `+ start`) fused into one
+    loop. No kernel computes `i * step + start` in one call: the arange fill slot computes `start + i * delta`, which
+    gives other bits, and a ramp followed by the affine kernel takes two passes.
+  - Gates: each family's snapshot identical; the oracle tiers of np.eye, np.unique, np.correlate, np.mgrid / np.ogrid,
+    np.arange and np.average.
+
+- [ ] **PA6. Keep it from coming back.**
+  - [x] §6 gains step 11 (Reuse), this commit.
+  - [ ] **R3, a ratchet for hand vector code**, modeled on R1 / R2 and using `LayeringScanner`'s walk. It counts, per
+    file of `src/NumSharp.Core` outside `Backends/Kernels/`, the lines that use `Vector*<T>`, `Vector*.`, `Avx*`,
+    `Sse*`, `Fma` or `AdvSimd`, against an allowlist of file, count and reason. At `c5f30f52` that is 60 files,
+    including the kernel homes outside that folder: the text lanes, the sorts and the float math helpers. A new file
+    or a higher count fails and prints the lines. R3 lands last, with its counts taken after PA1 to PA5. It cannot see
+    a scalar element loop (most loops are legitimate); step 11 covers those.
+  - [ ] `.claude/CLAUDE.md` gains the rule under Implementation Patterns.
+
+Order: PA1 and PA2 first (the R2 regressions, then the duplicated NaN rule, the correctness risk), then PA3 (the D4,
+then the move), PA4, PA5 and PA6. Every commit runs §6's gates. Perf cells are measured NPY/NS on two pinned P-cores,
+with the old route switchable in the same process.
+
 ### P7. The class boundary
 
 - [ ] Its own plan (D7).
@@ -1172,6 +1336,34 @@ candidate.
 ---
 
 ## 9. State log
+
+- **2026-10-30, the audit of the plan's own element code, and PA.** The owner asked whether the plan's work had made
+  the mistake batch 10's first draft made: a hand-written min / max pass where np.amin / np.amax's IL kernels already
+  did the work. They had.
+  - Method: a scan (`git show --unified=0` per commit) of the lines the plan's 376 commits added to
+    `src/NumSharp.Core`, skipping lines the same commit deleted, i.e. code that only moved. It kept loops, vector code,
+    stack blocks, block copies and per-element boxed reads: 443 lines in 71 commits, every line that touches elements
+    read.
+  - Found, in four places:
+    - the reduction iterator's add loops re-implement the add kernel's NaN rule (`da7adc53`);
+    - N-D np.dot holds a second copy of NumPy's dot functions (`ee9ce021`; SlidingDot has had them since 2026-09-30);
+    - the logical ufuncs combine truth values with a hand vector loop where the bitwise kernel exists (`e41c90dc`);
+    - two of R2's rewrites dropped the iterator along with `np.nditer<T>`: decimal std's roots became a per-element
+      index loop (`75e61cae`) and the conjugation a raw loop beside the engine's own conjugate kernel (`5c17faec`).
+  - Also found, small: np.eye, np.unique, np.correlate's reversal, the int64 ramps, the decimal empty mean.
+  - Checked and fine: the raw assignment walk (it reuses `RawArrayIter`), the casting loops (the IL cast kernel),
+    `NDByteOrder` (moved, not copied) and np.isin's one-pass kernels (timed against a build from existing pieces
+    first).
+  - The scan cannot see duplication written with high-level calls.
+  - A probe then asked which model of NumPy's dot functions is exact per stride class
+    ([Appendix B5](#b5-numpys-dot-functions-per-stride-class-input-to-pa3)). Every class has an exact model except
+    complex from 8 terms. The vector kernels are scipy-openblas' Haswell ddot and sdot: ddot was exact at 1-D and N-D,
+    sdot at 1-D, which is the same cblas call as N-D's unit runs (PA3a's corpus checks N-D). So the dot alignment
+    also fixes np.dot where it differs from NumPy today: 27–74 % of float32 results, and 31–68 % of float64 results
+    from 16 terms.
+  - [§7 PA](#pa-reuse-what-the-library-already-has-the-2026-10-30-audit) holds the alignment: its rules, one item per
+    finding with the replacement, what stays and why, the gates, and the order. §6 gains step 11 (Reuse) in this
+    commit. Nothing is implemented yet.
 
 - **2026-10-30, P3: batch 10 (what stays) - batch 10 is done, and with it P3.** Three commits on `strings`, developed in
   the scratch worktree and landed by fast-forward: the D4 fix the batch found, the reasons, and this docs commit.
@@ -4137,6 +4329,45 @@ whole computation, the user's callback included.
 
 Two P-cores, fastest of 25 batches of 20,000 calls: a plain view of a chararray, created and disposed, 287 ns;
 `np.ravel(chararray)` today 563 ns, by substitution (plain view, plain ravel, chararray view of the result) 708 ns.
+
+### B5. NumPy's dot functions per stride class (input to PA3)
+
+`np.dot` against NumPy 2.4.2 on this host (i9-13900K; scipy-openblas 0.3.31.22.0 at one thread), with NumSharp built at
+`c5f30f52` and no BLAS backend, 2026-10-30.
+- **N-D cases:** `(2, 3, K) · (K, 4)`, 40 draws per cell of normal values with exponents spread over six decades, so
+  960 results per cell. Each cell gives the contracted runs one stride class: both unit (`np.dot(a, b.T)`), the second
+  at stride 4 (`np.dot(a, b)`), or the first reversed (`np.dot(a[..., ::-1], b)`).
+- **1-D cases:** two fresh vectors, 200 draws per cell.
+- **Scoring:** each candidate model was emulated in Python, with exact FMAs through `fractions`, and its results were
+  counted against NumPy's bits.
+
+| Cell | NumSharp's results that differ | Model that matches every result |
+|---|---|---|
+| N-D float32, unit, K 3–31 | 280–318 of 960 | sdot's scalar loop (float32 products, double sum) |
+| N-D float32, unit, K 32–64 | 498–551 of 960 | none of the scalar models: the vector kernel (see 1-D) |
+| N-D float32, stride 4, K 5–64 | 295–708 of 960 (K 3: none) | sdot's strided pairs |
+| N-D float32, reversed, K 3–64 | 327–704 of 960 | FLOAT_dot's float32 loop |
+| N-D float64, unit, K 3–15 | none | sequential |
+| N-D float64, unit, K 16–64 | 535–655 of 960 | the Haswell ddot kernel |
+| N-D float64, stride 4 / reversed | none | `StridedDdot` / sequential |
+| N-D complex128, unit, K 3–7 | none | the four sums |
+| N-D complex128, unit, K 8–64 | 468–900 of 960 | none (the four sums match 60–492, the per-term product 32–114) |
+| N-D complex128, stride 4 / reversed | none | the four sums / CDOUBLE_dot's loop |
+| 1-D float32, K 5–1000 | 54–146 of 200 | sdot's scalar loop below 32 terms, the Haswell sdot kernel from 32 |
+| 1-D float64, K 5–15 | none | sequential |
+| 1-D float64, K 16–1000 | 63–124 of 200 | the Haswell ddot kernel |
+| 1-D complex128, K 5 | 162 of 200 | the four sums |
+| 1-D complex128, K 8–1000 | 171–200 of 200 | none (the four sums match 1–118, the per-term product 0–29) |
+
+The two Haswell kernels' reductions:
+- **ddot:** each accumulator's two 128-bit halves added, then `(acc0 + acc1) + (acc2 + acc3)` lane by lane, then the
+  two lanes; the tail is added in order with separate multiplies and adds.
+- **sdot:** the same per accumulator (4-lane halves), the accumulators added in pairs, then two horizontal adds. The
+  float32 result goes into a double that takes the tail's float32 products, and is rounded to float32 at the end.
+
+`SimdDot`'s model uses the same FMAs and sums `(a0 + a1) + (a2 + a3)` with `Vector256.Sum`; it matches 76–137 of 200
+float64 results from 16 terms on. The probe's scripts are in the session's scratchpad. PA3a turns them into the
+corpus section.
 
 ---
 
