@@ -610,6 +610,9 @@ namespace NumSharp.Backends.Iteration
             int arrSize = state.GetSrcElementSize(op);
             int bufSize = state.GetElementSize(op);
             int nd = Math.Max(state.NDim, 1);
+            // A string operand's cast in this direction, resolved once for the fill or write-back (every run below runs it);
+            // other operands move through the numeric run copies and need none.
+            NDCastInfo cast = state.IsStringOp(op) ? StringTransfer(ref state, op, toBuffer) : null;
 
             // The write-back of a WRITEMASKED operand is masked by the ARRAYMASK operand, read where it lives: its buffer, or
             // its array at the buffer's start when it is unbuffered (it then advances by its own single stride).
@@ -629,7 +632,7 @@ namespace NumSharp.Backends.Iteration
                 // A reduce operand whose element repeats along the core: its buffer holds the outer column, one element per
                 // outer step (ReduceOuterSize of them — none for a fill shorter than a core, NumPy's integer division).
                 long elemStride = state.OuterAxisStrides[op] / arrSize;
-                Transfer1D(ref state, op, arr, elemStride, buf, state.ReduceOuterStrides[op] / bufSize,
+                Transfer1D(ref state, op, cast, arr, elemStride, buf, state.ReduceOuterStrides[op] / bufSize,
                     state.ReduceOuterSize, toBuffer, mask, maskStride);
                 return;
             }
@@ -656,7 +659,7 @@ namespace NumSharp.Backends.Iteration
                     bufElemStride = 0;
                 }
 
-                Transfer1D(ref state, op, arr, innerStride, buf, bufElemStride, count, toBuffer, mask, maskStride);
+                Transfer1D(ref state, op, cast, arr, innerStride, buf, bufElemStride, count, toBuffer, mask, maskStride);
                 return;
             }
 
@@ -666,15 +669,15 @@ namespace NumSharp.Backends.Iteration
                 long* shape = stackalloc long[ndimTransfer];
                 long* coords = stackalloc long[ndimTransfer];
                 long* strides = stackalloc long[ndimTransfer];
-                TransferNDim(ref state, op, ndimTransfer, shape, coords, strides, arr, buf, bufElemStride, count, toBuffer,
-                    mask, maskStride);
+                TransferNDim(ref state, op, cast, ndimTransfer, shape, coords, strides, arr, buf, bufElemStride, count,
+                    toBuffer, mask, maskStride);
             }
             else
             {
                 // NumSharp has no axis limit: a very high-rank walk keeps its scratch on the (pinned) managed heap.
                 var scratch = new long[3 * ndimTransfer];
                 fixed (long* s = scratch)
-                    TransferNDim(ref state, op, ndimTransfer, s, s + ndimTransfer, s + 2 * ndimTransfer, arr, buf,
+                    TransferNDim(ref state, op, cast, ndimTransfer, s, s + ndimTransfer, s + 2 * ndimTransfer, arr, buf,
                         bufElemStride, count, toBuffer, mask, maskStride);
             }
         }
@@ -685,6 +688,7 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         /// <param name="state">The buffered iterator's state.</param>
         /// <param name="op">The operand.</param>
+        /// <param name="cast">A string operand's cast in this direction (<see cref="StringTransfer"/>); null for any other.</param>
         /// <param name="arr">The run's first array element.</param>
         /// <param name="arrElemStride">The array stride in elements of the array dtype.</param>
         /// <param name="buf">The buffer's first element.</param>
@@ -693,11 +697,12 @@ namespace NumSharp.Backends.Iteration
         /// <param name="toBuffer">True for the fill, false for the write-back.</param>
         /// <param name="mask">The write-back's mask, or null.</param>
         /// <param name="maskStride">The mask's byte stride.</param>
-        private static void Transfer1D(ref NDIterState state, int op, byte* arr, long arrElemStride, byte* buf,
-                                       long bufElemStride, long count, bool toBuffer, byte* mask, long maskStride)
+        private static void Transfer1D(ref NDIterState state, int op, NDCastInfo cast, byte* arr, long arrElemStride,
+                                       byte* buf, long bufElemStride, long count, bool toBuffer, byte* mask, long maskStride)
         {
             long shape = count, coord = 0, stride = arrElemStride;
-            TransferWalk(ref state, op, 1, &shape, &coord, &stride, arr, buf, bufElemStride, count, toBuffer, mask, maskStride);
+            TransferWalk(ref state, op, cast, 1, &shape, &coord, &stride, arr, buf, bufElemStride, count, toBuffer, mask,
+                maskStride);
         }
 
         /// <summary>
@@ -706,6 +711,7 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         /// <param name="state">The buffered iterator's state.</param>
         /// <param name="op">The operand.</param>
+        /// <param name="cast">A string operand's cast in this direction (<see cref="StringTransfer"/>); null for any other.</param>
         /// <param name="ndimTransfer">The axes the walk spans (counted from the innermost).</param>
         /// <param name="shape">Scratch for the extents (ndimTransfer entries).</param>
         /// <param name="coords">Scratch for the start coordinates.</param>
@@ -717,9 +723,9 @@ namespace NumSharp.Backends.Iteration
         /// <param name="toBuffer">True for the fill, false for the write-back.</param>
         /// <param name="mask">The write-back's mask, or null.</param>
         /// <param name="maskStride">The mask's byte stride.</param>
-        private static void TransferNDim(ref NDIterState state, int op, int ndimTransfer, long* shape, long* coords,
-                                         long* strides, byte* arr, byte* buf, long bufElemStride, long count, bool toBuffer,
-                                         byte* mask, long maskStride)
+        private static void TransferNDim(ref NDIterState state, int op, NDCastInfo cast, int ndimTransfer, long* shape,
+                                         long* coords, long* strides, byte* arr, byte* buf, long bufElemStride, long count,
+                                         bool toBuffer, byte* mask, long maskStride)
         {
             for (int idim = 0; idim < ndimTransfer; idim++)
             {
@@ -728,7 +734,7 @@ namespace NumSharp.Backends.Iteration
                 strides[idim] = StrideAt(ref state, idim, op);
             }
 
-            TransferWalk(ref state, op, ndimTransfer, shape, coords, strides, arr, buf, bufElemStride, count, toBuffer,
+            TransferWalk(ref state, op, cast, ndimTransfer, shape, coords, strides, arr, buf, bufElemStride, count, toBuffer,
                 mask, maskStride);
         }
 
@@ -741,6 +747,7 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         /// <param name="state">The buffered iterator's state.</param>
         /// <param name="op">The operand.</param>
+        /// <param name="cast">A string operand's cast in this direction (<see cref="StringTransfer"/>); null for any other.</param>
         /// <param name="ndimTransfer">The axes the walk spans (at least 1).</param>
         /// <param name="shape">The extents, innermost first.</param>
         /// <param name="coords">The start coordinates (read only: the walk keeps its own).</param>
@@ -752,9 +759,9 @@ namespace NumSharp.Backends.Iteration
         /// <param name="toBuffer">True for the fill, false for the write-back.</param>
         /// <param name="mask">The write-back's mask, or null.</param>
         /// <param name="maskStride">The mask's byte stride.</param>
-        private static void TransferWalk(ref NDIterState state, int op, int ndimTransfer, long* shape, long* coords,
-                                         long* strides, byte* arr, byte* buf, long bufElemStride, long count, bool toBuffer,
-                                         byte* mask, long maskStride)
+        private static void TransferWalk(ref NDIterState state, int op, NDCastInfo cast, int ndimTransfer, long* shape,
+                                         long* coords, long* strides, byte* arr, byte* buf, long bufElemStride, long count,
+                                         bool toBuffer, byte* mask, long maskStride)
         {
             if (count <= 0)
                 return;
@@ -772,7 +779,8 @@ namespace NumSharp.Backends.Iteration
             for (;;)
             {
                 long run = Math.Min(count, shape[0] - c0);
-                TransferRun(ref state, op, arr, strides[0], buf, bufElemStride, run, toBuffer, mask, maskStride, arrSize, bufSize);
+                TransferRun(ref state, op, cast, arr, strides[0], buf, bufElemStride, run, toBuffer, mask, maskStride, arrSize,
+                    bufSize);
                 count -= run;
                 if (count <= 0)
                     return;
@@ -807,6 +815,7 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         /// <param name="state">The buffered iterator's state.</param>
         /// <param name="op">The operand.</param>
+        /// <param name="cast">A string operand's cast in this direction (<see cref="StringTransfer"/>); null for any other.</param>
         /// <param name="arr">The run's first array element.</param>
         /// <param name="arrElemStride">The array stride in elements.</param>
         /// <param name="buf">The run's first buffer element.</param>
@@ -818,8 +827,8 @@ namespace NumSharp.Backends.Iteration
         /// <param name="arrSize">The array element size.</param>
         /// <param name="bufSize">The buffer element size.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static void TransferRun(ref NDIterState state, int op, byte* arr, long arrElemStride, byte* buf,
-                                        long bufElemStride, long count, bool toBuffer, byte* mask, long maskStride,
+        private static void TransferRun(ref NDIterState state, int op, NDCastInfo cast, byte* arr, long arrElemStride,
+                                        byte* buf, long bufElemStride, long count, bool toBuffer, byte* mask, long maskStride,
                                         int arrSize, int bufSize)
         {
             if (count <= 0)
@@ -828,11 +837,11 @@ namespace NumSharp.Backends.Iteration
             if (state.IsStringOp(op))
             {
                 if (toBuffer)
-                    CopyStringRun(ref state, op, arr, arrElemStride, buf, bufElemStride, count, toBuffer: true);
+                    CopyStringRun(ref state, op, cast, arr, arrElemStride, buf, bufElemStride, count, toBuffer: true);
                 else if (mask != null)
-                    CopyStringRunFromBufferMasked(ref state, op, buf, arr, arrElemStride, count, mask, maskStride);
+                    CopyStringRunFromBufferMasked(ref state, op, cast, buf, arr, arrElemStride, count, mask, maskStride);
                 else
-                    CopyStringRun(ref state, op, buf, bufElemStride, arr, arrElemStride, count, toBuffer: false);
+                    CopyStringRun(ref state, op, cast, buf, bufElemStride, arr, arrElemStride, count, toBuffer: false);
                 return;
             }
 

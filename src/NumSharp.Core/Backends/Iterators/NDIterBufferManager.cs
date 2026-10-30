@@ -693,13 +693,48 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>
-        ///     One run of a fixed-width string operand between its array and its buffer: the widths and classes come from
-        ///     the state (<see cref="NDIterState.OpStringKinds"/> and the element sizes), the move is
-        ///     <see cref="Strings.NDStringCopy.TransferElements"/> — NumPy's <c>string_to_string</c> zero-pad copy and its
-        ///     <c>S ↔ U</c> casts.
+        ///     The cast of operand <paramref name="op"/>'s transfer in one direction - NumPy's per-operand transfer function
+        ///     (<c>transferinfo[iop].read</c> / <c>.write</c>, set up through <c>PyArray_GetDTypeTransferFunction</c>): the strided
+        ///     loop of the class pair's casting impl between the operand's array descriptor and its iteration (buffer)
+        ///     descriptor. A <c>StringDType</c> side's cast is the one the iterator's <see cref="NDIterVStringContext"/> keeps
+        ///     (built once per operand and direction, over the allocators of both sides); a fixed-width side's is resolved for
+        ///     the caller's walk, from the descriptors the state rebuilds (<see cref="NDIterState.GetOpSrcDescr"/> /
+        ///     <see cref="NDIterState.GetOpDescr"/>).
         /// </summary>
         /// <param name="state">The iterator state.</param>
-        /// <param name="op">The operand (one side, at least, is a string).</param>
+        /// <param name="op">A string operand (a fixed-width or <c>StringDType</c> side, at least).</param>
+        /// <param name="toBuffer">True for the fill (array to buffer), false for the write-back (buffer to array).</param>
+        /// <returns>The cast. A fixed-width one is resolved per call, so call this once per walk (one fill, one write-back),
+        ///     not per run: the resolution allocates (a parse loop owns its scratch).</returns>
+        /// <exception cref="InvalidOperationException">A <c>StringDType</c> operand without its iterator context, or a
+        ///     <c>StringDType</c> buffer without its allocator (routing bugs).</exception>
+        /// <exception cref="TypeError">No casting implementation joins the two classes (the descriptor plan admitted the
+        ///     operand, so this does not occur).</exception>
+        internal static NDCastInfo StringTransfer(ref NDIterState state, int op, bool toBuffer)
+        {
+            if (state.IsVStringOp(op))
+            {
+                var ctx = NDIterVStringContext.Of(ref state)
+                          ?? throw new InvalidOperationException("A StringDType iterator operand has no StringDType context.");
+                return ctx.Transfer(op, toBuffer);
+            }
+
+            // The state keeps a fixed-width side's class and width; the descriptors rebuilt from them are native, as the
+            // buffers and every NumSharp storage are, so the class pair's loop takes them as they are.
+            DType arr = state.GetOpSrcDescr(op), buf = state.GetOpDescr(op);
+            var (from, to) = toBuffer ? (arr, buf) : (buf, arr);
+            return DTypeCasting.GetDTypeTransferFunction(true, from.itemsize, to.itemsize, from, to, false, out _);
+        }
+
+        /// <summary>
+        ///     One run of a string operand (a fixed-width or <c>StringDType</c> side, at least) between its array and its
+        ///     buffer: the operand's cast (<see cref="StringTransfer"/>) over the run - NumPy's <c>string_to_string</c> zero-pad
+        ///     copy and its <c>S ↔ U</c> casts, a number's <c>str()</c> and a text's parse (the legacy casts of astype), and
+        ///     the <c>StringDType</c> casts (every string duplicated into the destination's allocator, never bytes).
+        /// </summary>
+        /// <param name="state">The iterator state.</param>
+        /// <param name="op">The operand.</param>
+        /// <param name="cast">The operand's cast in this direction (<see cref="StringTransfer"/>).</param>
         /// <param name="src">The run's first source element.</param>
         /// <param name="srcElemStride">The source stride in ELEMENTS of the source side.</param>
         /// <param name="dst">The run's first destination element.</param>
@@ -707,114 +742,43 @@ namespace NumSharp.Backends.Iteration
         /// <param name="count">The number of elements.</param>
         /// <param name="toBuffer">True for array → buffer (the fill), false for buffer → array (the flush).</param>
         /// <exception cref="ValueError">Text → number meets a text that is not a number of the numeric side's kind (NumPy's
-        ///     <c>int()</c> / <c>float()</c> / <c>complex()</c> texts, quoting <c>np.str_('…')</c>).</exception>
+        ///     <c>int()</c> / <c>float()</c> / <c>complex()</c> texts, quoting <c>np.str_('…')</c>), or a <c>StringDType</c> NA
+        ///     element meets a numeric side.</exception>
         /// <exception cref="OverflowException">Text → integer meets a value outside the numeric side.</exception>
         /// <exception cref="SystemError">A <c>U</c> text converted to a number is one unit above U+10FFFF.</exception>
-        /// <exception cref="UnicodeEncodeError">A <c>U → S</c> element holds a code point at or above 128.</exception>
+        /// <exception cref="UnicodeEncodeError">A <c>U → S</c> element (or a <c>StringDType</c> text into <c>S</c>) holds a
+        ///     code point at or above 128.</exception>
         /// <exception cref="UnicodeDecodeError">An <c>S → U</c> element holds a byte at or above <c>0x80</c>, or an
         ///     <c>S</c> text converted to complex is not UTF-8.</exception>
-        internal static void CopyStringRun(ref NDIterState state, int op, byte* src, long srcElemStride,
+        /// <exception cref="OutOfMemoryException">A <c>StringDType</c> side cannot allocate a string (NumPy's
+        ///     <c>MemoryError</c> texts).</exception>
+        internal static void CopyStringRun(ref NDIterState state, int op, NDCastInfo cast, byte* src, long srcElemStride,
                                            byte* dst, long dstElemStride, long count, bool toBuffer)
         {
             if (count <= 0)
                 return;
-
-            // A NEP 55 StringDType side: the iterator's context holds both sides' descriptors and allocators, and the transfer
-            // duplicates each string into the destination's allocator (or runs the StringDType cast of the pair) — never bytes.
-            if (state.IsVStringOp(op))
-            {
-                CopyVStringRun(ref state, op, src, srcElemStride, dst, dstElemStride, count, toBuffer);
-                return;
-            }
-
-            var bufType = state.GetOpDType(op);
-            var arrType = state.GetOpSrcDType(op);
-            int kinds = state.OpStringKinds[op];
-            bool bufUnicode = (kinds & NDIterState.StringBufferUnicode) != 0;
-            bool arrUnicode = (kinds & NDIterState.StringSourceUnicode) != 0;
-            int bufSize = state.GetElementSize(op);
-            int arrSize = state.GetSrcElementSize(op);
-            if (bufType != NPTypeCode.String || arrType != NPTypeCode.String)
-            {
-                // Numbers <-> text: NumPy converts each element at this point (after every construction check passed),
-                // through the same legacy casts as astype — a number formatted as its scalar's str(), a text parsed.
-                NPTypeCode fromType = toBuffer ? arrType : bufType, toType = toBuffer ? bufType : arrType;
-                bool fromUnicode = toBuffer ? arrUnicode : bufUnicode, toUnicode = toBuffer ? bufUnicode : arrUnicode;
-                int fromSize = toBuffer ? arrSize : bufSize, toSize = toBuffer ? bufSize : arrSize;
-                if (toType == NPTypeCode.String)
-                {
-                    Strings.NDTextConversion.FormatRun(src, srcElemStride * fromSize, fromType, dst, dstElemStride * toSize,
-                        toUnicode, toUnicode ? toSize / 4 : toSize, count);
-                }
-                else
-                {
-                    int chars = fromUnicode ? fromSize / 4 : fromSize;
-                    byte[] scratch = new byte[Strings.NDTextParse.ScratchBytes(chars)];
-                    Strings.NDTextConversion.ParseRun(src, srcElemStride * fromSize, fromUnicode, chars, dst,
-                        dstElemStride * toSize, toType, count, scratch, Strings.TextReprStyle.ArrayElement);
-                }
-                return;
-            }
-
-            if (toBuffer)
-                Strings.NDStringCopy.TransferElements(src, srcElemStride * arrSize, arrSize, arrUnicode,
-                                                      dst, dstElemStride * bufSize, bufSize, bufUnicode, count);
-            else
-                Strings.NDStringCopy.TransferElements(src, srcElemStride * bufSize, bufSize, bufUnicode,
-                                                      dst, dstElemStride * arrSize, arrSize, arrUnicode, count);
-        }
-
-        /// <summary>
-        ///     One run of an operand with a NEP 55 <c>StringDType</c> side between its array and its buffer: NumPy's
-        ///     <c>string_to_string</c> between two <c>StringDType</c> descriptors, or the <c>StringDType</c> cast loop of the pair
-        ///     (<see cref="NDIterVStringContext.Transfer"/>), with the allocators of both sides locked for the run.
-        /// </summary>
-        /// <param name="state">The iterator state (it has an <see cref="NDIterVStringContext"/>).</param>
-        /// <param name="op">The operand.</param>
-        /// <param name="src">The run's first source element.</param>
-        /// <param name="srcElemStride">The source stride in ELEMENTS of the source side.</param>
-        /// <param name="dst">The run's first destination element.</param>
-        /// <param name="dstElemStride">The destination stride in ELEMENTS of the destination side.</param>
-        /// <param name="count">The number of elements.</param>
-        /// <param name="toBuffer">True for array → buffer (the fill), false for buffer → array (the flush).</param>
-        /// <exception cref="InvalidOperationException">The state has no <c>StringDType</c> context (a routing bug).</exception>
-        /// <exception cref="ValueError">A text does not parse into a numeric side, or an NA element meets a numeric side
-        ///     (NumPy's StringDType cast texts).</exception>
-        /// <exception cref="OverflowException">An integer text outside the numeric side.</exception>
-        /// <exception cref="UnicodeEncodeError">A text is not ASCII and the other side is <c>S</c>.</exception>
-        /// <exception cref="OutOfMemoryException">NumPy's <c>MemoryError</c> texts.</exception>
-        private static void CopyVStringRun(ref NDIterState state, int op, byte* src, long srcElemStride,
-                                           byte* dst, long dstElemStride, long count, bool toBuffer)
-        {
-            var ctx = NDIterVStringContext.Of(ref state)
-                      ?? throw new InvalidOperationException("A StringDType iterator operand has no StringDType context.");
+            // The loop takes byte strides: each side's element size converts its stride (the source is the array for a fill,
+            // the buffer for a flush). A StringDType loop locks both sides' allocators for the call itself.
             int fromSize = toBuffer ? state.GetSrcElementSize(op) : state.GetElementSize(op);
             int toSize = toBuffer ? state.GetElementSize(op) : state.GetSrcElementSize(op);
-            var run = ctx.Transfer(op, toBuffer);
-            ctx.Lock(op);
-            try
-            {
-                run(src, srcElemStride * fromSize, dst, dstElemStride * toSize, count);
-            }
-            finally
-            {
-                ctx.Unlock(op);
-            }
+            cast.Run(src, srcElemStride * fromSize, dst, dstElemStride * toSize, count);
         }
 
         /// <summary>
-        ///     The masked flush of one run of a fixed-width string operand — <see cref="CopyRunFromBufferMasked"/>'s structure
-        ///     (each stretch of true mask bytes moved as one run) over <see cref="CopyStringRun"/>.
+        ///     The masked flush of one run of a string operand — <see cref="CopyRunFromBufferMasked"/>'s structure (each
+        ///     stretch of true mask bytes moved as one run) over <see cref="CopyStringRun"/>.
         /// </summary>
         /// <param name="state">The iterator state.</param>
         /// <param name="op">The WRITEMASKED string operand.</param>
+        /// <param name="cast">The operand's write-back cast (<see cref="StringTransfer"/>).</param>
         /// <param name="buf">The run's first buffer element.</param>
         /// <param name="dst">The run's first array element.</param>
         /// <param name="dstElemStride">The array stride in elements.</param>
         /// <param name="count">The run length.</param>
         /// <param name="mask">The run's first mask byte.</param>
         /// <param name="maskStride">The mask byte stride (0 for a broadcast mask).</param>
-        private static void CopyStringRunFromBufferMasked(ref NDIterState state, int op, byte* buf, byte* dst,
+        /// <exception cref="Exception">The cast's conversion errors (see <see cref="CopyStringRun"/>).</exception>
+        private static void CopyStringRunFromBufferMasked(ref NDIterState state, int op, NDCastInfo cast, byte* buf, byte* dst,
                                                           long dstElemStride, long count, byte* mask, long maskStride)
         {
             if (count <= 0)
@@ -825,7 +789,7 @@ namespace NumSharp.Backends.Iteration
             if (maskStride == 0)
             {
                 if (mask[0] != 0)
-                    CopyStringRun(ref state, op, buf, 1, dst, dstElemStride, count, toBuffer: false);
+                    CopyStringRun(ref state, op, cast, buf, 1, dst, dstElemStride, count, toBuffer: false);
                 return;
             }
 
@@ -838,23 +802,25 @@ namespace NumSharp.Backends.Iteration
                 while (i < count && mask[i * maskStride] != 0)
                     i++;
                 if (i > start)
-                    CopyStringRun(ref state, op, buf + start * bufSize, 1,
+                    CopyStringRun(ref state, op, cast, buf + start * bufSize, 1,
                                   dst + start * dstElemStride * arrSize, dstElemStride, i - start, toBuffer: false);
             }
         }
 
         /// <summary>
-        ///     The from-the-start transfer of a fixed-width string operand behind <see cref="CopyToBuffer(ref NDIterState, int, long)"/>
+        ///     The from-the-start transfer of a string operand behind <see cref="CopyToBuffer(ref NDIterState, int, long)"/>
         ///     / <see cref="CopyFromBuffer(ref NDIterState, int, long)"/>: <paramref name="count"/> elements from the operand's
         ///     current data pointer, walking the iteration space from coordinate zero — the layout
         ///     <see cref="CopyToBuffer{T}"/> / <see cref="CopyFromBuffer{T}"/> assume — in inner-axis runs of
-        ///     <see cref="CopyStringRun"/>. (The iterator's own buffered iteration walks from the buffer start's coordinates
-        ///     instead: <c>TransferBuffer</c> in NDIterBufferManager.Buffering.cs.)
+        ///     <see cref="CopyStringRun"/>, all through one cast (<see cref="StringTransfer"/>). (The iterator's own buffered
+        ///     iteration walks from the buffer start's coordinates instead: <c>TransferBuffer</c> in
+        ///     NDIterBufferManager.Buffering.cs.)
         /// </summary>
         /// <param name="state">The iterator state.</param>
         /// <param name="op">The string operand.</param>
         /// <param name="count">The number of elements.</param>
         /// <param name="toBuffer">True to fill the buffer, false to flush it (a read-only operand is not flushed).</param>
+        /// <exception cref="Exception">The cast's conversion errors (see <see cref="CopyStringRun"/>).</exception>
         private static void CopyStringOperandFromStart(ref NDIterState state, int op, long count, bool toBuffer)
         {
             byte* buffer = (byte*)state.GetBuffer(op);
@@ -867,12 +833,14 @@ namespace NumSharp.Backends.Iteration
             int arrSize = state.GetSrcElementSize(op);
             int bufSize = state.GetElementSize(op);
             int ndim = state.NDim;
+            // The operand's cast in this direction, resolved once for the whole walk (every run below runs it).
+            var cast = StringTransfer(ref state, op, toBuffer);
             if (ndim == 0)
             {
                 if (toBuffer)
-                    CopyStringRun(ref state, op, arr, 0, buffer, 1, 1, toBuffer: true);
+                    CopyStringRun(ref state, op, cast, arr, 0, buffer, 1, 1, toBuffer: true);
                 else
-                    CopyStringRun(ref state, op, buffer, 1, arr, 0, 1, toBuffer: false);
+                    CopyStringRun(ref state, op, cast, buffer, 1, arr, 0, 1, toBuffer: false);
                 return;
             }
 
@@ -890,9 +858,9 @@ namespace NumSharp.Backends.Iteration
             {
                 long run = Math.Min(remaining, innerLen - coords[innerAxis]);
                 if (toBuffer)
-                    CopyStringRun(ref state, op, arr, innerStride, buffer, 1, run, toBuffer: true);
+                    CopyStringRun(ref state, op, cast, arr, innerStride, buffer, 1, run, toBuffer: true);
                 else
-                    CopyStringRun(ref state, op, buffer, 1, arr, innerStride, run, toBuffer: false);
+                    CopyStringRun(ref state, op, cast, buffer, 1, arr, innerStride, run, toBuffer: false);
 
                 buffer += run * bufSize;
                 remaining -= run;

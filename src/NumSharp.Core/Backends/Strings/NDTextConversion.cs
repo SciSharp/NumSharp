@@ -98,7 +98,7 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
-        ///     The masked form of <see cref="Convert(UnmanagedStorage, UnmanagedStorage)"/>: converts only the elements
+        ///     The masked form of <see cref="Convert(UnmanagedStorage, UnmanagedStorage, TextReprStyle)"/>: converts only the elements
         ///     <paramref name="where"/> selects — NumPy's <c>raw_array_wheremasked_assign_array</c>, whose masked transfer
         ///     (<c>_strided_masked_wrapper_transfer_function</c>) calls the wrapped cast once per run of selected elements,
         ///     so an element the mask leaves out is never parsed (it cannot raise) and the 128-element commit blocks start at
@@ -189,17 +189,22 @@ namespace NumSharp.Backends.Strings
         private static int ItemSize(UnmanagedStorage s) => s.IsString ? s.StringSlice.ItemSize : s.TypeCode.SizeOf();
 
         /// <summary>
-        ///     The conversion's strided loop over NumPy's raw assignment walk
-        ///     (<see cref="UnmanagedStorage.RawArrayAssignArray"/>): numbers formatted into a text destination
-        ///     (<see cref="FormatRun"/>), texts parsed into a numeric one (<see cref="ParseRun"/>), one call per innermost run
-        ///     (per run of selected elements under a mask).
+        ///     The conversion over NumPy's raw assignment walk (<see cref="UnmanagedStorage.RawArrayAssignArray"/>), one call of
+        ///     the cast's strided loop per innermost run (per run of selected elements under a mask): the loop of the class
+        ///     pair's casting impl (<see cref="DTypeCasting.GetDTypeTransferFunction"/>, NumPy's
+        ///     <c>PyArray_GetDTypeTransferFunction</c>) - numbers formatted into a text destination (<see cref="FormatRun"/>),
+        ///     texts parsed into a numeric one (<see cref="ParseRun"/>).
         /// </summary>
         /// <param name="dst">The destination.</param>
         /// <param name="src">The source (not overlapping <paramref name="dst"/>). A source of higher rank than the
         ///     destination has extent-1 leading axes (the caller's broadcast check proved it); they are dropped, as NumPy's
         ///     assignment strips them.</param>
         /// <param name="mask">A bool mask broadcastable to <paramref name="dst"/>, or null.</param>
-        /// <param name="style">How a parse error quotes a text.</param>
+        /// <param name="style">How a parse error quotes a text: <see cref="TextReprStyle.ArrayElement"/> is the cast's
+        ///     (the loop from <see cref="DTypeCasting"/>); <see cref="TextReprStyle.PythonObject"/> is <c>setitem</c>'s, for
+        ///     the one caller that packs a Python list's strings into a numeric dtype (NumPy's <c>PyArray_Pack</c> parses the
+        ///     Python object itself, so its error quotes <c>'x'</c>, not <c>np.str_('x')</c>): no cast has that loop, so the
+        ///     parse runs with that quoting directly.</param>
         /// <exception cref="ValueError">A text is not a number of the destination's kind, or has too many digits.</exception>
         /// <exception cref="OverflowException">An integer text does not fit the destination.</exception>
         /// <exception cref="SystemError">A <c>U</c> element is one unit above U+10FFFF.</exception>
@@ -208,22 +213,23 @@ namespace NumSharp.Backends.Strings
             TextReprStyle style = TextReprStyle.ArrayElement)
         {
             NDInnerLoopFunc loop;
-            if (dst.IsString)
+            if (style == TextReprStyle.PythonObject && !dst.IsString)
             {
-                var slice = dst.StringSlice;
-                NPTypeCode from = src.TypeCode;
-                loop = (ptrs, strides, count, aux) =>
-                    FormatRun((byte*)ptrs[0], strides[0], from, (byte*)ptrs[1], strides[1], slice.IsUnicode, slice.Chars, count);
-            }
-            else
-            {
+                // setitem's parse of Python strings (see the style parameter): the cast loop's ParseRun with setitem's
+                // quoting. One scratch for the whole walk: the ASCII rewrite of the widest element and its underscore-free
+                // copy.
                 var slice = src.StringSlice;
-                // One scratch for the whole walk: the ASCII rewrite of the widest element and its underscore-free copy.
                 byte[] scratch = new byte[NDTextParse.ScratchBytes(slice.Chars)];
                 NPTypeCode target = dst.TypeCode;
                 loop = (ptrs, strides, count, aux) =>
                     ParseRun((byte*)ptrs[0], strides[0], slice.IsUnicode, slice.Chars, (byte*)ptrs[1], strides[1], target, count,
                         scratch, style);
+            }
+            else
+            {
+                // The cast: the class pair's strided loop, resolved once for the walk.
+                loop = DTypeCasting.GetDTypeTransferFunction(true, src.ItemBytes, dst.ItemBytes, src.Descr, dst.Descr, false, out _)
+                    .func;
             }
             UnmanagedStorage.RawArrayAssignArray(dst, src, mask, loop);
         }

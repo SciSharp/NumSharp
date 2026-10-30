@@ -520,8 +520,9 @@ namespace NumSharp.Backends
         /// <param name="casting">The casting level.</param>
         /// <exception cref="ValueError">A read-only destination, or a mask that does not broadcast.</exception>
         /// <exception cref="InvalidCastException">The cast is not allowed ("Cannot cast scalar from …").</exception>
-        /// <remarks>A string destination receives the number's NumPy scalar <c>str()</c>, truncated to its width
-        ///     (<see cref="NDTextConversion.FormatRun"/>).</remarks>
+        /// <remarks>A string destination receives the number's NumPy scalar <c>str()</c>, truncated to its width: the cast
+        ///     of the class pair (<see cref="DTypeCasting.GetDTypeTransferFunction"/>, NumPy's <c>PyArray_CastRawArrays</c>)
+        ///     run once over the source element.</remarks>
         internal static unsafe void CopytoAssignRawScalar(NDArray dst, byte* srcData, NPTypeCode srcType, NDArray @where, NPY_CASTING casting)
         {
             NumSharpException.ThrowIfNotWriteable(dst.Shape);
@@ -557,7 +558,10 @@ namespace NumSharp.Backends
                 byte[] element = new byte[Math.Max(slice.ItemSize, 1)];
                 fixed (byte* text = element)
                 {
-                    NDTextConversion.FormatRun(srcData, 0, srcType, text, slice.ItemSize, slice.IsUnicode, slice.Chars, 1);
+                    // NumPy's PyArray_CastRawArrays of the one source element: the class pair's strided loop (a number's
+                    // str() into S / U) from the transfer function, run over a single element.
+                    DTypeCasting.GetDTypeTransferFunction(true, srcType.SizeOf(), slice.ItemSize, from, dst.dtype, false, out _)
+                        .Run(srcData, 0, text, slice.ItemSize, 1);
                     long[] zeros = new long[dst.ndim];
                     byte selected = 1;
                     if (@where is null)

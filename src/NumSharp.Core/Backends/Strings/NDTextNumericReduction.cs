@@ -276,16 +276,22 @@ namespace NumSharp.Backends.Strings
         // ---------------------------------------------------------------------------------------------
 
         /// <summary>
-        ///     The buffer conversions of one reduction: the out to and from the loop dtype, the input to it — a parse /
-        ///     <c>str()</c> for a fixed-width text operand, the <c>StringDType</c> cast loops (the cells' allocator locked per
-        ///     run) for a <c>StringDType</c> one, the IL cast kernels for a number.
+        ///     The buffer conversions of one reduction: the out to and from the loop dtype, the input to it — each the strided
+        ///     loop of the class pair's casting impl (<see cref="DTypeCasting.GetDTypeTransferFunction"/>, NumPy's
+        ///     <c>PyArray_GetDTypeTransferFunction</c> for the iterator's buffer transfers): a parse / <c>str()</c> for a
+        ///     fixed-width text operand, the <c>StringDType</c> cast loops (the cells' allocator locked per call) for a
+        ///     <c>StringDType</c> one, the IL cast kernels for a number.
         /// </summary>
+        /// <remarks>
+        ///     Each conversion is resolved once, here, for the whole reduction, and the iterator runs its fills one after the
+        ///     other: a parse loop's scratch (owned by its cast) is never used by two runs at once.
+        /// </remarks>
         private sealed class Transfers
         {
-            /// <summary>The out's <c>StringDType</c> allocator (locked around each run), or null.</summary>
+            /// <summary>The out's <c>StringDType</c> allocator (handed to its casts, which lock it per call), or null.</summary>
             private readonly VStringAllocator _outAllocator;
 
-            /// <summary>The input's <c>StringDType</c> allocator (locked around each run), or null.</summary>
+            /// <summary>The input's <c>StringDType</c> allocator (handed to its cast, which locks it per call), or null.</summary>
             private readonly VStringAllocator _inAllocator;
 
             /// <summary>Builds the conversions.</summary>
@@ -310,78 +316,32 @@ namespace NumSharp.Backends.Strings
             /// <summary>The input → loop conversion.</summary>
             internal NumPyReduceIterator.Transfer InToLoop { get; }
 
-            /// <summary>The conversion of an operand into the loop dtype.</summary>
+            /// <summary>The conversion of an operand into the loop dtype: the cast of the operand's descriptor into the loop's.</summary>
             /// <param name="a">The operand.</param>
             /// <param name="loop">The loop's descriptor.</param>
             /// <param name="allocator">The operand's <c>StringDType</c> allocator, or null.</param>
-            /// <returns>The conversion.</returns>
+            /// <returns>The conversion (byte strides, as the iterator passes them).</returns>
+            /// <exception cref="TypeError">No casting impl joins the two classes (the loop resolution only picks numeric
+            ///     loops, which every storage class casts to and from).</exception>
             private static NumPyReduceIterator.Transfer ToLoop(NDArray a, DType loop, VStringAllocator allocator)
-            {
-                NPTypeCode loopT = loop.GetTypeCode();
-                if (allocator is not null)
-                {
-                    var run = NDVStringCasting.TransferRun(a.dtype, allocator, loop, null);
-                    return (s, ss, d, ds, n) =>
-                    {
-                        allocator.acquire_allocator();
-                        try { run(s, ss, d, ds, n); }
-                        finally { allocator.release_allocator(); }
-                    };
-                }
-                if (NDStringUfuncs.IsString(a))
-                {
-                    bool unicode = a.dtype.kind == 'U';
-                    int chars = unicode ? a.dtype.itemsize / 4 : a.dtype.itemsize;
-                    // ParseRun's work space: the widest element's parse (one buffer per conversion; runs are sequential).
-                    var scratch = new byte[NDTextParse.ScratchBytes(chars)];
-                    return (s, ss, d, ds, n) =>
-                        NDTextConversion.ParseRun(s, ss, unicode, chars, d, ds, loopT, n, scratch, TextReprStyle.ArrayElement);
-                }
-                return NumberRun(a.typecode, loopT);
-            }
+                => Through(DTypeCasting.GetDTypeTransferFunction(true, a.Storage.ItemBytes, loop.itemsize, a.dtype, loop,
+                    false, out _, allocator, null));
 
-            /// <summary>The conversion of the loop dtype into an operand.</summary>
+            /// <summary>The conversion of the loop dtype into an operand: the cast of the loop's descriptor into the operand's.</summary>
             /// <param name="loop">The loop's descriptor.</param>
             /// <param name="a">The operand.</param>
             /// <param name="allocator">The operand's <c>StringDType</c> allocator, or null.</param>
-            /// <returns>The conversion.</returns>
+            /// <returns>The conversion (byte strides, as the iterator passes them).</returns>
+            /// <exception cref="TypeError">No casting impl joins the two classes (see <see cref="ToLoop"/>).</exception>
             private static NumPyReduceIterator.Transfer FromLoop(DType loop, NDArray a, VStringAllocator allocator)
-            {
-                NPTypeCode loopT = loop.GetTypeCode();
-                if (allocator is not null)
-                {
-                    var run = NDVStringCasting.TransferRun(loop, null, a.dtype, allocator);
-                    return (s, ss, d, ds, n) =>
-                    {
-                        allocator.acquire_allocator();
-                        try { run(s, ss, d, ds, n); }
-                        finally { allocator.release_allocator(); }
-                    };
-                }
-                if (NDStringUfuncs.IsString(a))
-                {
-                    bool unicode = a.dtype.kind == 'U';
-                    int chars = unicode ? a.dtype.itemsize / 4 : a.dtype.itemsize;
-                    return (s, ss, d, ds, n) => NDTextConversion.FormatRun(s, ss, loopT, d, ds, unicode, chars, n);
-                }
-                return NumberRun(loopT, a.typecode);
-            }
+                => Through(DTypeCasting.GetDTypeTransferFunction(true, loop.itemsize, a.Storage.ItemBytes, loop, a.dtype,
+                    false, out _, null, allocator));
 
-            /// <summary>A numeric cast run (the IL inner cast kernel, the scalar converter without dynamic code).</summary>
-            /// <param name="from">The source dtype.</param>
-            /// <param name="to">The destination dtype.</param>
-            /// <returns>The conversion.</returns>
-            private static NumPyReduceIterator.Transfer NumberRun(NPTypeCode from, NPTypeCode to)
-            {
-                var kernel = DirectILKernelGenerator.TryGetInnerCastKernel(from, to);
-                if (kernel is not null)
-                    return (s, ss, d, ds, n) => kernel(s, ss, d, ds, n);
-                return (s, ss, d, ds, n) =>
-                {
-                    for (long i = 0; i < n; i++, s += ss, d += ds)
-                        NDIterCasting.ConvertValue(s, d, from, to);
-                };
-            }
+            /// <summary>A cast as the reduction iterator's transfer shape (one run per call).</summary>
+            /// <param name="cast">The cast.</param>
+            /// <returns>The transfer.</returns>
+            private static NumPyReduceIterator.Transfer Through(NDCastInfo cast)
+                => (s, ss, d, ds, n) => cast.Run(s, ss, d, ds, n);
         }
 
         // ---------------------------------------------------------------------------------------------

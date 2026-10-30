@@ -20,11 +20,13 @@ namespace NumSharp.Backends.Iteration
     ///     NumPy's either way; only the internal arena offsets of a buffer's cells differ, which no API shows.
     ///     </para>
     ///     <para>
-    ///     <b>Transfers.</b> A fill (array → buffer) and a flush (buffer → array) of such an operand run
-    ///     <see cref="NDVStringCasting.TransferRun"/> over each run of the iterator's walk: NumPy's <c>string_to_string</c> between
-    ///     two <c>StringDType</c> descriptors (every string duplicated into the destination's allocator, the destination's old
-    ///     string freed first), or the <c>StringDType</c> cast loop of the pair (<c>U</c> / <c>S</c> / bool / numbers). The run
-    ///     bodies are built once per operand and direction (<see cref="Transfer"/>).
+    ///     <b>Transfers.</b> A fill (array → buffer) and a flush (buffer → array) of such an operand run the strided loop of
+    ///     the pair's casting impl (<see cref="DTypeCasting.GetDTypeTransferFunction"/>, NumPy's per-operand transfer function)
+    ///     over each run of the iterator's walk: NumPy's <c>string_to_string</c> between two <c>StringDType</c> descriptors
+    ///     (every string duplicated into the destination's allocator, the destination's old string freed first), or the
+    ///     <c>StringDType</c> cast loop of the pair (<c>U</c> / <c>S</c> / bool / numbers), each call with both sides'
+    ///     allocators locked. The casts are built once per operand and direction (<see cref="Transfer"/>), over the allocators
+    ///     of that moment, and dropped whenever the operand's buffer allocator changes.
     ///     </para>
     ///     <para>
     ///     <b>Lifetime.</b> Attached once the operands are final (after the copy routes and COPY_IF_OVERLAP replaced any of them,
@@ -51,11 +53,11 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         internal readonly VStringAllocator[] BufferAllocators;
 
-        /// <summary>The cached fill bodies (array → buffer), per operand; built on first use.</summary>
-        private readonly NDVStringCasting.RunAction[] _fills;
+        /// <summary>The cached fill casts (array → buffer), per operand; built on first use, dropped with the buffer's allocator.</summary>
+        private readonly NDCastInfo[] _fills;
 
-        /// <summary>The cached flush bodies (buffer → array), per operand; built on first use.</summary>
-        private readonly NDVStringCasting.RunAction[] _flushes;
+        /// <summary>The cached flush casts (buffer → array), per operand; built on first use, dropped with the buffer's allocator.</summary>
+        private readonly NDCastInfo[] _flushes;
 
         /// <summary>Creates an empty context for <paramref name="nop"/> operands.</summary>
         /// <param name="nop">The number of operands.</param>
@@ -65,8 +67,8 @@ namespace NumSharp.Backends.Iteration
             BufferDescrs = new DType[nop];
             ArrayAllocators = new VStringAllocator[nop];
             BufferAllocators = new VStringAllocator[nop];
-            _fills = new NDVStringCasting.RunAction[nop];
-            _flushes = new NDVStringCasting.RunAction[nop];
+            _fills = new NDCastInfo[nop];
+            _flushes = new NDCastInfo[nop];
         }
 
         /// <summary>
@@ -182,52 +184,34 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>
-        ///     The run body of operand <paramref name="op"/>'s transfer in one direction, built once: a fill reads the array side
-        ///     and writes the buffer side, a flush the reverse.
+        ///     Operand <paramref name="op"/>'s cast in one direction, built once: a fill reads the array side and writes the
+        ///     buffer side, a flush the reverse. It is the strided loop of the pair's casting impl
+        ///     (<see cref="DTypeCasting.GetDTypeTransferFunction"/>) over the two descriptors and their cells' allocators, which
+        ///     locks both allocators for each call (NumPy's <c>NpyString_acquire_allocators</c> inside its cast loops).
         /// </summary>
         /// <param name="op">The operand index.</param>
         /// <param name="toBuffer">True for the fill, false for the flush.</param>
-        /// <returns>The run body (the caller locks the allocators, see <see cref="Lock"/>).</returns>
+        /// <returns>The cast (it holds the allocators of this moment; <see cref="ForgetTransfers"/> drops it when the buffer's
+        ///     allocator changes).</returns>
         /// <exception cref="InvalidOperationException">A <c>StringDType</c> buffer side without its allocator (the buffer was
         ///     not allocated through <see cref="AllocateBuffer"/>: a routing bug).</exception>
-        internal NDVStringCasting.RunAction Transfer(int op, bool toBuffer)
+        /// <exception cref="TypeError">No casting impl joins the two descriptors' classes (the descriptor plan admitted the
+        ///     operand, so this does not occur).</exception>
+        internal NDCastInfo Transfer(int op, bool toBuffer)
         {
             var cache = toBuffer ? _fills : _flushes;
-            var run = cache[op];
-            if (run != null)
-                return run;
+            var cast = cache[op];
+            if (cast != null)
+                return cast;
             if (IsBufferVString(op) && BufferAllocators[op] == null)
                 throw new InvalidOperationException("A StringDType iterator buffer needs the allocator of its cells.");
-            run = toBuffer
-                ? NDVStringCasting.TransferRun(ArrayDescrs[op], ArrayAllocators[op], BufferDescrs[op], BufferAllocators[op])
-                : NDVStringCasting.TransferRun(BufferDescrs[op], BufferAllocators[op], ArrayDescrs[op], ArrayAllocators[op]);
-            cache[op] = run;
-            return run;
-        }
-
-        /// <summary>Locks the allocators operand <paramref name="op"/>'s transfer touches (both sides' that exist).</summary>
-        /// <param name="op">The operand index.</param>
-        /// <remarks>Pair it with exactly one <see cref="Unlock"/> for the same operand.</remarks>
-        internal void Lock(int op)
-        {
-            var a = ArrayAllocators[op];
-            var b = BufferAllocators[op];
-            if (a != null && b != null)
-                VStringAllocator.acquire_allocators(a, b);
-            else
-                (a ?? b)?.acquire_allocator();
-        }
-
-        /// <summary>Releases what <see cref="Lock"/> took for operand <paramref name="op"/>.</summary>
-        /// <param name="op">The operand index.</param>
-        internal void Unlock(int op)
-        {
-            var a = ArrayAllocators[op];
-            var b = BufferAllocators[op];
-            if (a != null && b != null)
-                VStringAllocator.release_allocators(a, b);
-            else
-                (a ?? b)?.release_allocator();
+            DType from = toBuffer ? ArrayDescrs[op] : BufferDescrs[op], to = toBuffer ? BufferDescrs[op] : ArrayDescrs[op];
+            var fromAllocator = toBuffer ? ArrayAllocators[op] : BufferAllocators[op];
+            var toAllocator = toBuffer ? BufferAllocators[op] : ArrayAllocators[op];
+            cast = DTypeCasting.GetDTypeTransferFunction(true, from.itemsize, to.itemsize, from, to, false, out _,
+                fromAllocator, toAllocator);
+            cache[op] = cast;
+            return cast;
         }
 
         /// <summary>
