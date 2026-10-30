@@ -105,22 +105,28 @@ namespace NumSharp
 
         /// <summary>
         ///     NumPy's <c>get_strided_loop</c>: the inner loop for the resolved <paramref name="context"/> and the given
-        ///     fixed strides. Stage A registers no loops here — the engine still drives its own IL cast kernels directly — so
-        ///     the base implementation raises <see cref="NotSupportedException"/> naming the missing piece; Stage C
-        ///     overrides it for the datetime loops.
+        ///     fixed strides. The casts between the storage classes override it - the builtin numeric casts (the IL cast
+        ///     kernels), the fixed-width text casts (formatting, parsing, the text truth, the zero-pad copy and the
+        ///     <c>S ↔ U</c> casts) and the <c>StringDType</c> casts - and <see cref="DTypeCasting"/> hands their loops out
+        ///     (NumPy's <c>PyArray_GetDTypeTransferFunction</c>). The datetime casts have no storage yet (Stage C), so they keep
+        ///     this base implementation, which raises.
         /// </summary>
         /// <param name="context">The method and the resolved operand descriptors.</param>
         /// <param name="aligned">True when every operand is aligned.</param>
         /// <param name="strides">The fixed byte strides of the operands, or the strides of the first call.</param>
         /// <param name="flags">Receives the flags of the returned loop (they may differ from the method's
         ///     <see cref="ArrayMethod.flags"/>).</param>
-        /// <returns>The inner loop.</returns>
-        /// <exception cref="NotSupportedException">Always, in the base implementation: no method provides a loop yet.</exception>
+        /// <returns>The inner loop: one call converts one strided run, <c>dataptrs</c> / <c>strides</c> holding the inputs
+        ///     first, then the outputs (a cast: [0] the source, [1] the destination). A NumSharp loop captures what it needs
+        ///     and ignores <c>auxdata</c>; it raises a conversion error as an exception, at the element NumPy's loop raises
+        ///     it.</returns>
+        /// <exception cref="NotSupportedException">The base implementation: the method has no loop (a datetime cast before
+        ///     Stage C).</exception>
         public virtual NDInnerLoopFunc get_strided_loop(ArrayMethodContext context, bool aligned, long[] strides, out NDArrayMethodFlags flags)
         {
             throw new NotSupportedException(
-                $"ArrayMethod '{name}' does not provide a strided loop yet: NumSharp's engine drives its own IL kernels for the " +
-                "builtin dtypes, and registered ArrayMethod loops arrive with the datetime64/timedelta64 storage (Stage C).");
+                $"ArrayMethod '{name}' does not provide a strided loop yet: its classes have no storage in NumSharp, and the " +
+                "datetime64/timedelta64 loops arrive with that storage (Stage C).");
         }
 
         /// <inheritdoc/>
@@ -134,7 +140,8 @@ namespace NumSharp
     /// <remarks>
     ///     The members are the struct's fields, <c>method</c> and <c>descriptors</c> (<c>dtype_api.h</c>). Not ported:
     ///     <c>caller</c> (the ufunc a NumPy loop is called for; NumSharp's loops run without a caller object) and the
-    ///     NumPy 2.4 fields <c>_reserved</c> and <c>flags</c>.
+    ///     NumPy 2.4 fields <c>_reserved</c> and <c>flags</c>. NumSharp adds <see cref="Allocators"/>: a <c>StringDType</c>
+    ///     operand's string allocator, which NumPy reaches through the descriptor and NumSharp keeps on the operand's buffer.
     /// </remarks>
     public sealed class ArrayMethodContext
     {
@@ -143,10 +150,29 @@ namespace NumSharp
         /// <param name="descriptors">The resolved operand descriptors (inputs first, then outputs).</param>
         /// <exception cref="ArgumentNullException"><paramref name="method"/> or <paramref name="descriptors"/> is null.</exception>
         public ArrayMethodContext(ArrayMethod method, IReadOnlyList<DType> descriptors)
+            : this(method, descriptors, null)
+        {
+        }
+
+        /// <summary>
+        ///     Builds the context of one call of <paramref name="method"/> whose operands hold <c>StringDType</c> cells: the
+        ///     allocators those cells belong to ride along, because a <c>StringDType</c> loop can read or write a cell only
+        ///     through its allocator (an arena offset or a heap pointer of that allocator).
+        /// </summary>
+        /// <param name="method">The method being run.</param>
+        /// <param name="descriptors">The resolved operand descriptors (inputs first, then outputs).</param>
+        /// <param name="allocators">One entry per operand, in the descriptors' order: the allocator of a <c>StringDType</c>
+        ///     operand's cells, null for an operand of another class; or null when no operand is <c>StringDType</c>.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="method"/> or <paramref name="descriptors"/> is null.</exception>
+        /// <exception cref="ArgumentException"><paramref name="allocators"/> does not hold one entry per operand.</exception>
+        internal ArrayMethodContext(ArrayMethod method, IReadOnlyList<DType> descriptors, IReadOnlyList<Backends.Strings.VStringAllocator> allocators)
         {
             // The parameters carry the fields' names (NumPy's spelling), so every field is written through `this.`.
             this.method = method ?? throw new ArgumentNullException(nameof(method));
             this.descriptors = descriptors ?? throw new ArgumentNullException(nameof(descriptors));
+            if (allocators is not null && allocators.Count != descriptors.Count)
+                throw new ArgumentException($"{allocators.Count} allocators for {descriptors.Count} operands.", nameof(allocators));
+            Allocators = allocators;
         }
 
         /// <summary>The method this context belongs to — NumPy's <c>method</c>.</summary>
@@ -154,6 +180,14 @@ namespace NumSharp
 
         /// <summary>The resolved operand descriptors (inputs first, then outputs) — NumPy's <c>descriptors</c>.</summary>
         public IReadOnlyList<DType> descriptors { get; }
+
+        /// <summary>
+        ///     The string allocator of each <c>StringDType</c> operand, in the descriptors' order (null for another class), or
+        ///     null when no operand is <c>StringDType</c>. NumPy has no such field: its <c>StringDType</c> descriptor owns the
+        ///     allocator (<c>PyArray_StringDTypeObject.allocator</c>), while NumSharp keeps it on the cells' buffer, so the
+        ///     caller that knows the buffers passes them in (<see cref="DTypeCasting"/>'s transfer function).
+        /// </summary>
+        internal IReadOnlyList<Backends.Strings.VStringAllocator> Allocators { get; }
     }
 
     /// <summary>

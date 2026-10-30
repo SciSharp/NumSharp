@@ -22,8 +22,10 @@ namespace NumSharp
     ///     </para>
     ///     <para>
     ///     A lane-sharing class casts through its lane's tables: its storage code is the lane's, so the promotion-table
-    ///     test reads the lane pair (<c>longdouble → float32</c> is float64's <c>same_kind</c>). The loop is not provided by
-    ///     this object — the engine drives its IL cast kernels directly (Stage A).
+    ///     test reads the lane pair (<c>longdouble → float32</c> is float64's <c>same_kind</c>). Its strided loop
+    ///     (<see cref="get_strided_loop"/>) is the engine's IL inner cast kernel of the lane pair, the per-element cast the
+    ///     bulk casts are measured against; the bulk routes (astype, the iterator's numeric buffers) keep their own vector
+    ///     kernels.
     ///     </para>
     /// </remarks>
     public sealed class BuiltinCastingImpl : CastingImpl
@@ -82,6 +84,34 @@ namespace NumSharp
             if (IsWithinDType || _from.IsEquivalentNumeric(_to))
                 return LegacySameDTypeResolveDescriptors(this, givenDescrs, loopDescrs, out viewOffset);
             return SimpleCastResolveDescriptors(this, givenDescrs, loopDescrs, out viewOffset);
+        }
+
+        /// <summary>
+        ///     NumPy's numeric cast loop (<c>_strided_to_strided_cast_*</c> / <c>numeric_copy_or_byteswap</c>): the engine's IL
+        ///     inner cast kernel of the two storage lanes - the NumPy-exact per-element cast table (a lane-sharing class casts
+        ///     as its lane; within one lane it is a copy), or the scalar <see cref="NDIterCasting.ConvertValue"/> loop where
+        ///     dynamic code is unavailable (the same table).
+        /// </summary>
+        /// <param name="context">The resolved descriptors (both native: storage holds no other byte order).</param>
+        /// <param name="aligned">Unused: the kernels read and write unaligned elements.</param>
+        /// <param name="strides">Unused: the kernel takes the strides of each call.</param>
+        /// <param name="flags">Receives the method's flags (no Python API, no floating-point errors raised).</param>
+        /// <returns>The loop: [0] the source run, [1] the destination run, byte strides.</returns>
+        public override unsafe NDInnerLoopFunc get_strided_loop(ArrayMethodContext context, bool aligned, long[] strides, out NDArrayMethodFlags flags)
+        {
+            flags = this.flags;
+            NPTypeCode from = _from.TypeCode, to = _to.TypeCode;
+            var cast = Backends.Kernels.DirectILKernelGenerator.TryGetInnerCastKernel(from, to);
+            if (cast is not null)
+                return (ptrs, st, count, aux) => cast(ptrs[0], st[0], ptrs[1], st[1], count);
+            // No dynamic code: the scalar cast table, one element at a time.
+            return (ptrs, st, count, aux) =>
+            {
+                byte* sp = (byte*)ptrs[0], dp = (byte*)ptrs[1];
+                long ss = st[0], ds = st[1];
+                for (long i = 0; i < count; i++, sp += ss, dp += ds)
+                    NDIterCasting.ConvertValue(sp, dp, from, to);
+            };
         }
 
         /// <summary>
@@ -264,6 +294,37 @@ namespace NumSharp
             if (IsWithinDType)
                 return BuiltinCastingImpl.LegacySameDTypeResolveDescriptors(this, givenDescrs, loopDescrs, out viewOffset);
             return BuiltinCastingImpl.SimpleCastResolveDescriptors(this, givenDescrs, loopDescrs, out viewOffset);
+        }
+
+        /// <summary>
+        ///     The loop of the casts OUT of a fixed-width text class into a numeric storage class - NumPy's legacy
+        ///     <c>STRING_to_@TYPE@</c> / <c>UNICODE_to_@TYPE@</c> wrapped in <c>NPY_LOWLEVEL_BUFFER_BLOCKSIZE</c> blocks
+        ///     (<see cref="Backends.Strings.NDTextConversion.ParseRun"/>): each text parsed by CPython's <c>int()</c> /
+        ///     <c>float()</c> / <c>complex()</c> (a bool target takes the text's truth value), a block of 128 committed only when
+        ///     every element of it parsed, the error quoting the element's NumPy scalar (<c>np.str_('x')</c>). The
+        ///     numeric ↔ datetime casts this class also registers have no storage yet: they keep the base, which raises.
+        /// </summary>
+        /// <param name="context">The resolved descriptors: [0] the text (its class and width), [1] the number (its lane).</param>
+        /// <param name="aligned">Unused: the loop reads and writes unaligned elements.</param>
+        /// <param name="strides">Unused: the loop takes the strides of each call.</param>
+        /// <param name="flags">Receives the method's flags.</param>
+        /// <returns>The loop: [0] the text run, [1] the number run, byte strides.</returns>
+        /// <exception cref="NotSupportedException">A pair other than text into a numeric storage class (a datetime cast before
+        ///     Stage C).</exception>
+        public override unsafe NDInnerLoopFunc get_strided_loop(ArrayMethodContext context, bool aligned, long[] strides, out NDArrayMethodFlags flags)
+        {
+            if (From is not StringDTypeMeta text || To is not LegacyBuiltinDTypeMeta number)
+                return base.get_strided_loop(context, aligned, strides, out flags);
+            flags = this.flags;
+            var src = context.descriptors[0];
+            bool unicode = text.IsUnicode;
+            int chars = unicode ? src.itemsize / 4 : src.itemsize;
+            NPTypeCode target = number.TypeCode;
+            // The loop's work space (NumPy's auxdata): the ASCII rewrite of the widest element and its underscore-free copy,
+            // reused by every call of this loop (one walk at a time, see NDCastInfo).
+            byte[] scratch = new byte[Backends.Strings.NDTextParse.ScratchBytes(chars)];
+            return (ptrs, st, count, aux) => Backends.Strings.NDTextConversion.ParseRun((byte*)ptrs[0], st[0], unicode, chars,
+                (byte*)ptrs[1], st[1], target, count, scratch, Backends.Strings.TextReprStyle.ArrayElement);
         }
     }
 }

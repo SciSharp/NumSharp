@@ -12,8 +12,9 @@ namespace NumSharp
     /// </summary>
     /// <remarks>
     ///     The class-level minimal safety is <c>unsafe</c> ("must resolve"), so <c>can_cast</c> for any stricter rule always
-    ///     asks <see cref="resolve_descriptors"/>. The data movement itself is NumSharp's unit-view copy (truncate or
-    ///     zero-pad per element over the <c>uint8</c>/<c>uint32</c> lanes), not a loop handed out by this object.
+    ///     asks <see cref="resolve_descriptors"/>. Its strided loop (<see cref="get_strided_loop"/>) is NumPy's zero-pad copy
+    ///     per element; a whole-array copy between two string storages keeps NumSharp's bulk route, the unit-view copy
+    ///     (truncate or zero-pad over the <c>uint8</c>/<c>uint32</c> lanes, <see cref="Backends.Strings.NDStringCopy"/>).
     /// </remarks>
     public sealed class StringToStringCastingImpl : CastingImpl
     {
@@ -57,6 +58,26 @@ namespace NumSharp
             /* The strings have the same length: */
             return notSwapped ? NPY_CASTING.NPY_NO_CASTING : NPY_CASTING.NPY_EQUIV_CASTING;
         }
+
+        /// <summary>
+        ///     NumPy's <c>string_to_string</c> loop (<c>PyArray_GetStridedZeroPadCopyFn</c>): each element's first
+        ///     <c>min(src, dst)</c> units copied and a wider destination NUL-padded
+        ///     (<see cref="Backends.Strings.NDStringCopy.TransferElements"/>). No unit is decoded: a unit that is not a valid
+        ///     code point moves unchanged, so the loop cannot fail.
+        /// </summary>
+        /// <param name="context">The resolved descriptors: [0] the source, [1] the destination (one class, any widths).</param>
+        /// <param name="aligned">Unused: the copy moves bytes.</param>
+        /// <param name="strides">Unused: the loop takes the strides of each call.</param>
+        /// <param name="flags">Receives the method's flags.</param>
+        /// <returns>The loop: [0] the source run, [1] the destination run, byte strides.</returns>
+        public override unsafe NDInnerLoopFunc get_strided_loop(ArrayMethodContext context, bool aligned, long[] strides, out NDArrayMethodFlags flags)
+        {
+            flags = this.flags;
+            bool unicode = ((StringDTypeMeta)From).IsUnicode;
+            int srcItem = context.descriptors[0].itemsize, dstItem = context.descriptors[1].itemsize;
+            return (ptrs, st, count, aux) => Backends.Strings.NDStringCopy.TransferElements((byte*)ptrs[0], st[0], srcItem, unicode,
+                (byte*)ptrs[1], st[1], dstItem, unicode, count);
+        }
     }
 
     /// <summary>
@@ -75,9 +96,10 @@ namespace NumSharp
     ///     <c>decimal</c> as a float (32, enough for the 31 characters of <c>-0.0000000000000000000000000001</c>).
     ///     </para>
     ///     <para>
-    ///     The descriptor resolution lives here; the casts themselves run on NumSharp's string kernels: a number is formatted
-    ///     as its scalar <c>str()</c> (<see cref="NumSharp.Backends.Strings.NDTextConversion"/>), and the <c>S ↔ U</c>
-    ///     casts on the unit-view kernels (ASCII-checked).
+    ///     Its strided loop (<see cref="get_strided_loop"/>) formats a number as its scalar <c>str()</c>
+    ///     (<see cref="NumSharp.Backends.Strings.NDTextConversion.FormatRun"/>) and moves an <c>S ↔ U</c> element after its
+    ///     ASCII check (<see cref="NumSharp.Backends.Strings.NDStringCopy.TransferElements"/>); a whole-array <c>S ↔ U</c>
+    ///     copy keeps the bulk unit-view route, which checks every element before it writes.
     ///     </para>
     /// </remarks>
     public sealed class ToStringCastingImpl : CastingImpl
@@ -167,6 +189,43 @@ namespace NumSharp
                 return casting; // U -> S: unsafe whatever the lengths
 
             return loopDescrs[1].itemsize >= size ? NPY_CASTING.NPY_SAFE_CASTING : NPY_CASTING.NPY_SAME_KIND_CASTING;
+        }
+
+        /// <summary>
+        ///     NumPy's legacy casts into a text class, run per strided run: a number's scalar <c>str()</c> truncated to the
+        ///     destination width and NUL-padded (<c>@TYPE@_to_STRING</c> / <c>@TYPE@_to_UNICODE</c>,
+        ///     <see cref="Backends.Strings.NDTextConversion.FormatRun"/>; formatting cannot fail), or an element of the OTHER
+        ///     text class decoded / encoded whole, then truncated or padded (<c>STRING_to_UNICODE</c> /
+        ///     <c>UNICODE_to_STRING</c>, <see cref="Backends.Strings.NDStringCopy.TransferElements"/>: an element that is not
+        ///     ASCII raises before the run writes anything).
+        /// </summary>
+        /// <param name="context">The resolved descriptors: [0] the source (a number's lane, or the other text class and its
+        ///     width), [1] the text destination (its class and width).</param>
+        /// <param name="aligned">Unused: the loop reads and writes unaligned elements.</param>
+        /// <param name="strides">Unused: the loop takes the strides of each call.</param>
+        /// <param name="flags">Receives the method's flags.</param>
+        /// <returns>The loop: [0] the source run, [1] the text run, byte strides.</returns>
+        public override unsafe NDInnerLoopFunc get_strided_loop(ArrayMethodContext context, bool aligned, long[] strides, out NDArrayMethodFlags flags)
+        {
+            flags = this.flags;
+            var src = context.descriptors[0];
+            var dst = context.descriptors[1];
+            bool dstUnicode = ((StringDTypeMeta)To).IsUnicode;
+            int dstItem = dst.itemsize;
+            if (From is StringDTypeMeta fromText)
+            {
+                // S <-> U: the element moves after its whole value proved ASCII.
+                bool srcUnicode = fromText.IsUnicode;
+                int srcItem = src.itemsize;
+                return (ptrs, st, count, aux) => Backends.Strings.NDStringCopy.TransferElements((byte*)ptrs[0], st[0], srcItem,
+                    srcUnicode, (byte*)ptrs[1], st[1], dstItem, dstUnicode, count);
+            }
+
+            // A number: its scalar str(), from the lane's value.
+            NPTypeCode from = From.TypeCode;
+            int chars = dstUnicode ? dstItem / 4 : dstItem;
+            return (ptrs, st, count, aux) => Backends.Strings.NDTextConversion.FormatRun((byte*)ptrs[0], st[0], from, (byte*)ptrs[1],
+                st[1], dstUnicode, chars, count);
         }
     }
 

@@ -253,13 +253,42 @@ namespace NumSharp.Tests.DTypes
             DTypeCasting.EquivTypes(np.dtype("M8[1000ms]"), np.dtype("M8[s]")).Should().BeTrue();
         }
 
+        /// <summary>
+        ///     A datetime cast has no storage before Stage C, so its impl keeps the base <c>get_strided_loop</c>, which raises
+        ///     (the storage classes' casts provide their loops: <see cref="DTypeTransferFunctionTests"/>).
+        /// </summary>
         [TestMethod]
-        public void GetStridedLoop_IsNotProvidedInStageA()
+        public void GetStridedLoop_DatetimeCastsHaveNoLoopBeforeStageC()
+        {
+            var impl = DTypeCasting.GetCastingImpl(np.dtypes.DateTime64DType, np.dtypes.DateTime64DType);
+            var ctx = new ArrayMethodContext(impl, new[] { np.dtype("M8[s]"), np.dtype("M8[ms]") });
+            Action act = () => impl.get_strided_loop(ctx, aligned: true, new long[] { 8, 8 }, out _);
+            act.Should().Throw<NotSupportedException>().WithMessage("*does not provide a strided loop yet*Stage C*");
+        }
+
+        /// <summary>
+        ///     A builtin numeric cast's loop is the engine's IL inner cast kernel of the two lanes: int32 → int64 widens each
+        ///     element of a strided run (here every other element).
+        /// </summary>
+        [TestMethod]
+        public unsafe void GetStridedLoop_NumericCastIsTheInnerCastKernel()
         {
             var impl = DTypeCasting.GetCastingImpl(np.dtypes.Int32DType, np.dtypes.Int64DType);
             var ctx = new ArrayMethodContext(impl, new[] { DType.Int32, DType.Int64 });
-            Action act = () => impl.get_strided_loop(ctx, aligned: true, new long[] { 4, 8 }, out _);
-            act.Should().Throw<NotSupportedException>().WithMessage("*does not provide a strided loop yet*Stage C*");
+            var loop = impl.get_strided_loop(ctx, aligned: true, new long[] { 8, 8 }, out var flags);
+            flags.Should().Be(impl.flags);
+            int* src = stackalloc int[] { 1, -9, -2, -9, 300, -9 };
+            long* dst = stackalloc long[3];
+            void** ptrs = stackalloc void*[2];
+            long* strides = stackalloc long[2];
+            ptrs[0] = src;
+            ptrs[1] = dst;
+            strides[0] = 8; // every other int32
+            strides[1] = 8;
+            loop(ptrs, strides, 3, null);
+            dst[0].Should().Be(1L);
+            dst[1].Should().Be(-2L);
+            dst[2].Should().Be(300L);
         }
     }
 }

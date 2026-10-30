@@ -52,6 +52,21 @@ namespace NumSharp
                 viewOffset = 0;
             return NPY_CASTING.NPY_NO_CASTING;
         }
+        /// <summary>
+        ///     The cast's strided loop (<see cref="VStringCastLoop.Get"/>): NumPy's <c>stringdtype/casts.cpp</c> loop of the
+        ///     pair, the allocators of both sides locked per call.
+        /// </summary>
+        /// <param name="context">The resolved descriptors and the <c>StringDType</c> sides' allocators
+        ///     (<see cref="ArrayMethodContext.Allocators"/>).</param>
+        /// <param name="aligned">Unused: the loop reads and writes unaligned cells and elements.</param>
+        /// <param name="strides">Unused: the loop takes the strides of each call.</param>
+        /// <param name="flags">Receives the method's flags.</param>
+        /// <returns>The loop: [0] the source run, [1] the destination run, byte strides.</returns>
+        /// <exception cref="ArgumentException">A <c>StringDType</c> side without its allocator in the context.</exception>
+        /// <exception cref="NotSupportedException">The other class has no storage (datetime64 / timedelta64 before
+        ///     Stage C).</exception>
+        public override NDInnerLoopFunc get_strided_loop(ArrayMethodContext context, bool aligned, long[] strides, out NDArrayMethodFlags flags)
+            => VStringCastLoop.Get(this, context, out flags);
     }
 
     /// <summary>
@@ -96,6 +111,21 @@ namespace NumSharp
             viewOffset = NoView;
             return _resolveSafety;
         }
+        /// <summary>
+        ///     The cast's strided loop (<see cref="VStringCastLoop.Get"/>): NumPy's <c>stringdtype/casts.cpp</c> loop of the
+        ///     pair, the allocators of both sides locked per call.
+        /// </summary>
+        /// <param name="context">The resolved descriptors and the <c>StringDType</c> sides' allocators
+        ///     (<see cref="ArrayMethodContext.Allocators"/>).</param>
+        /// <param name="aligned">Unused: the loop reads and writes unaligned cells and elements.</param>
+        /// <param name="strides">Unused: the loop takes the strides of each call.</param>
+        /// <param name="flags">Receives the method's flags.</param>
+        /// <returns>The loop: [0] the source run, [1] the destination run, byte strides.</returns>
+        /// <exception cref="ArgumentException">A <c>StringDType</c> side without its allocator in the context.</exception>
+        /// <exception cref="NotSupportedException">The other class has no storage (datetime64 / timedelta64 before
+        ///     Stage C).</exception>
+        public override NDInnerLoopFunc get_strided_loop(ArrayMethodContext context, bool aligned, long[] strides, out NDArrayMethodFlags flags)
+            => VStringCastLoop.Get(this, context, out flags);
     }
 
     /// <summary>
@@ -138,6 +168,21 @@ namespace NumSharp
             loopDescrs[0] = givenDescrs[0];
             return NPY_CASTING.NPY_SAME_KIND_CASTING;
         }
+        /// <summary>
+        ///     The cast's strided loop (<see cref="VStringCastLoop.Get"/>): NumPy's <c>stringdtype/casts.cpp</c> loop of the
+        ///     pair, the allocators of both sides locked per call.
+        /// </summary>
+        /// <param name="context">The resolved descriptors and the <c>StringDType</c> sides' allocators
+        ///     (<see cref="ArrayMethodContext.Allocators"/>).</param>
+        /// <param name="aligned">Unused: the loop reads and writes unaligned cells and elements.</param>
+        /// <param name="strides">Unused: the loop takes the strides of each call.</param>
+        /// <param name="flags">Receives the method's flags.</param>
+        /// <returns>The loop: [0] the source run, [1] the destination run, byte strides.</returns>
+        /// <exception cref="ArgumentException">A <c>StringDType</c> side without its allocator in the context.</exception>
+        /// <exception cref="NotSupportedException">The other class has no storage (datetime64 / timedelta64 before
+        ///     Stage C).</exception>
+        public override NDInnerLoopFunc get_strided_loop(ArrayMethodContext context, bool aligned, long[] strides, out NDArrayMethodFlags flags)
+            => VStringCastLoop.Get(this, context, out flags);
     }
 
     /// <summary>
@@ -188,6 +233,87 @@ namespace NumSharp
             }
             loopDescrs[0] = givenDescrs[0];
             return NPY_CASTING.NPY_UNSAFE_CASTING;
+        }
+        /// <summary>
+        ///     The cast's strided loop (<see cref="VStringCastLoop.Get"/>): NumPy's <c>stringdtype/casts.cpp</c> loop of the
+        ///     pair, the allocators of both sides locked per call.
+        /// </summary>
+        /// <param name="context">The resolved descriptors and the <c>StringDType</c> sides' allocators
+        ///     (<see cref="ArrayMethodContext.Allocators"/>).</param>
+        /// <param name="aligned">Unused: the loop reads and writes unaligned cells and elements.</param>
+        /// <param name="strides">Unused: the loop takes the strides of each call.</param>
+        /// <param name="flags">Receives the method's flags.</param>
+        /// <returns>The loop: [0] the source run, [1] the destination run, byte strides.</returns>
+        /// <exception cref="ArgumentException">A <c>StringDType</c> side without its allocator in the context.</exception>
+        /// <exception cref="NotSupportedException">The other class has no storage (datetime64 / timedelta64 before
+        ///     Stage C).</exception>
+        public override NDInnerLoopFunc get_strided_loop(ArrayMethodContext context, bool aligned, long[] strides, out NDArrayMethodFlags flags)
+            => VStringCastLoop.Get(this, context, out flags);
+    }
+
+    /// <summary>
+    ///     The strided loop of every <c>StringDType</c> cast (the four casting impls of this file): NumPy's
+    ///     <c>stringdtype/casts.cpp</c> loop of the pair (<see cref="Backends.Strings.NDVStringCasting.TransferRun"/>:
+    ///     <c>string_to_string</c> between two <c>StringDType</c> descriptors, the encode / decode of <c>U</c> and <c>S</c>, bool,
+    ///     the numbers' <c>str()</c> and their parse), with the allocators of both sides locked for each call, as NumPy's loops
+    ///     acquire them (<c>NpyString_acquire_allocators</c>).
+    /// </summary>
+    /// <remarks>
+    ///     The lock is a re-entrant monitor, so a caller that already holds an allocator for a whole walk nests safely. The
+    ///     allocators come from the context (NumSharp keeps them on the cells' buffers, NumPy on the descriptors).
+    /// </remarks>
+    internal static class VStringCastLoop
+    {
+        /// <summary>Builds the loop of <paramref name="impl"/> for <paramref name="context"/>.</summary>
+        /// <param name="impl">The <c>StringDType</c> cast (its flags are the loop's).</param>
+        /// <param name="context">The resolved descriptors and the allocators of the <c>StringDType</c> sides.</param>
+        /// <param name="flags">Receives the method's flags.</param>
+        /// <returns>The loop: [0] the source run, [1] the destination run, byte strides.</returns>
+        /// <exception cref="ArgumentException">A <c>StringDType</c> side without its allocator in the context.</exception>
+        /// <exception cref="NotSupportedException">The other class has no storage (datetime64 / timedelta64 before
+        ///     Stage C).</exception>
+        internal static unsafe NDInnerLoopFunc Get(CastingImpl impl, ArrayMethodContext context, out NDArrayMethodFlags flags)
+        {
+            flags = impl.flags;
+            var from = context.descriptors[0];
+            var to = context.descriptors[1];
+            var fromAllocator = context.Allocators?[0];
+            var toAllocator = context.Allocators?[1];
+            var run = Backends.Strings.NDVStringCasting.TransferRun(from, fromAllocator, to, toAllocator);
+            return (ptrs, st, count, aux) =>
+            {
+                Acquire(fromAllocator, toAllocator);
+                try
+                {
+                    run((byte*)ptrs[0], st[0], (byte*)ptrs[1], st[1], count);
+                }
+                finally
+                {
+                    Release(fromAllocator, toAllocator);
+                }
+            };
+        }
+
+        /// <summary>Locks the allocators that exist (one, or both in creation order: no deadlock between two casts).</summary>
+        /// <param name="a">The source side's allocator, or null.</param>
+        /// <param name="b">The destination side's allocator, or null.</param>
+        private static void Acquire(Backends.Strings.VStringAllocator a, Backends.Strings.VStringAllocator b)
+        {
+            if (a is not null && b is not null)
+                Backends.Strings.VStringAllocator.acquire_allocators(a, b);
+            else
+                (a ?? b)?.acquire_allocator();
+        }
+
+        /// <summary>Releases what <see cref="Acquire"/> took.</summary>
+        /// <param name="a">The source side's allocator, or null.</param>
+        /// <param name="b">The destination side's allocator, or null.</param>
+        private static void Release(Backends.Strings.VStringAllocator a, Backends.Strings.VStringAllocator b)
+        {
+            if (a is not null && b is not null)
+                Backends.Strings.VStringAllocator.release_allocators(a, b);
+            else
+                (a ?? b)?.release_allocator();
         }
     }
 }

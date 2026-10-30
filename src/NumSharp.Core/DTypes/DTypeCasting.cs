@@ -100,6 +100,67 @@ namespace NumSharp
         private static bool SameDescr(DType a, DType b) => ReferenceEquals(a, b) || (a is not null && a.Equals(b));
 
         /// <summary>
+        ///     NumPy's <c>PyArray_GetDTypeTransferFunction</c> (<c>dtype_transfer.c</c>: <c>define_cast_for_descrs</c> over
+        ///     <c>init_cast_info</c>): the strided loop that casts <paramref name="srcDtype"/> into <paramref name="dstDtype"/>,
+        ///     from the casting implementation registered for the CLASS pair - its <see cref="ArrayMethod.resolve_descriptors"/>
+        ///     and its <see cref="ArrayMethod.get_strided_loop"/>. Every route that converts element by element over its own walk
+        ///     asks this instead of choosing a converter by the dtypes' names: the raw assignment, the iterator's buffer
+        ///     transfers, the reductions over text.
+        /// </summary>
+        /// <param name="aligned">True when both operands are aligned (NumSharp's loops read and write unaligned elements
+        ///     too, so NumPy's wrapping of a method without <c>SUPPORTS_UNALIGNED</c> is never needed).</param>
+        /// <param name="srcStride">The source's byte stride (of the first call; a loop may assume it fixed).</param>
+        /// <param name="dstStride">The destination's byte stride.</param>
+        /// <param name="srcDtype">The source descriptor.</param>
+        /// <param name="dstDtype">The destination descriptor.</param>
+        /// <param name="moveReferences">NumPy's <c>move_references</c> (the source's references may be moved, not copied);
+        ///     NumSharp's <c>StringDType</c> loops always duplicate, so it is accepted and has no effect.</param>
+        /// <param name="outFlags">Receives the loop's flags (NumPy's <c>out_flags</c>).</param>
+        /// <param name="srcAllocator">The string allocator of a <c>StringDType</c> source's cells, else null (NumPy keeps it
+        ///     on the descriptor; NumSharp on the cells' buffer, so the caller passes it).</param>
+        /// <param name="dstAllocator">The string allocator of a <c>StringDType</c> destination's cells, else null.</param>
+        /// <returns>The resolved cast (NumPy's <c>NPY_cast_info</c>).</returns>
+        /// <exception cref="ArgumentNullException">A descriptor is null.</exception>
+        /// <exception cref="TypeError">No cast is registered for the class pair (NumPy's <c>Cannot cast data from X to
+        ///     Y.</c>), or the impl's descriptor resolution refuses the pair.</exception>
+        /// <exception cref="NotSupportedException">The resolved descriptors differ from the given ones (a byte swap or another
+        ///     wrapping step NumPy would chain: NumSharp's storage is native, so no storage reaches it), or the impl has no
+        ///     loop (a datetime cast before Stage C).</exception>
+        internal static NDCastInfo GetDTypeTransferFunction(bool aligned, long srcStride, long dstStride, DType srcDtype,
+            DType dstDtype, bool moveReferences, out NDArrayMethodFlags outFlags,
+            Backends.Strings.VStringAllocator srcAllocator = null, Backends.Strings.VStringAllocator dstAllocator = null)
+        {
+            if (srcDtype == null) throw new ArgumentNullException(nameof(srcDtype));
+            if (dstDtype == null) throw new ArgumentNullException(nameof(dstDtype));
+
+            // init_cast_info: the class pair's implementation, or NumPy's TypeError for a pair without one.
+            var impl = srcDtype.Meta.GetCastingImpl(dstDtype.Meta)
+                       ?? throw new TypeError($"Cannot cast data from {srcDtype} to {dstDtype}.");
+            var given = new[] { srcDtype, dstDtype };
+            var loopDescrs = new DType[2];
+            // A refusing resolver raises its own TypeError; it is NumPy's error too (init_cast_info passes it on).
+            impl.resolve_descriptors(given, loopDescrs, out _);
+
+            // define_cast_for_descrs: a loop descriptor other than the given one needs a wrapping cast into or out of it (a
+            // byte swap, a canonicalisation), which NumPy chains as a multi-step cast. Every storage descriptor is native and
+            // every storage class's resolver returns the given descriptors, so NumSharp never needs one: refuse loudly
+            // instead of running a loop on the wrong descriptor.
+            if (!SameDescr(loopDescrs[0], srcDtype) || !SameDescr(loopDescrs[1], dstDtype))
+                throw new NotSupportedException(
+                    $"The cast from {srcDtype.ToString(true)} to {dstDtype.ToString(true)} resolves to {loopDescrs[0].ToString(true)} -> " +
+                    $"{loopDescrs[1].ToString(true)}: a multi-step cast, which NumSharp's native storage never needs.");
+
+            // The allocators ride on the context only when a StringDType operand has one (NumSharp's addition to NumPy's
+            // context, see ArrayMethodContext.Allocators).
+            var allocators = srcAllocator is null && dstAllocator is null
+                ? null
+                : new[] { srcAllocator, dstAllocator };
+            var context = new ArrayMethodContext(impl, loopDescrs, allocators);
+            var func = impl.get_strided_loop(context, aligned, new[] { srcStride, dstStride }, out outFlags);
+            return new NDCastInfo(func, context);
+        }
+
+        /// <summary>
         ///     NumPy's <c>PyArray_CheckCastSafety</c>: whether casting <paramref name="from"/> to <paramref name="to"/> (or to
         ///     the class <paramref name="toMeta"/> when <paramref name="to"/> is null) satisfies <paramref name="casting"/>.
         ///     Short-circuits on the implementation's own minimal safety and only resolves descriptors when the request is
