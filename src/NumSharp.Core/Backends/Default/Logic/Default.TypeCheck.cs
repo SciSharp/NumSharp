@@ -1,10 +1,10 @@
 // NumPy's numpy/lib/_type_check_impl.py functions that compute, as DefaultEngine's members: np.nan_to_num (the fused
 // scalar-fill pass and NumPy's copyto composition), np.isreal, np.iscomplex and np.real_if_close (whose facade is in
-// Math/). The file sits beside the facades while it calls np.*: ratchet R2
-// counts np.* calls against every file under Backends/ (the np-layer dtype plan, C3); it moves under Backends/Default/
-// in P6.
+// Math/). NumPy's ufunc and copyto statements are the engine's and the array object's members (the engine calls no np.*
+// function).
 
 using System;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 
 namespace NumSharp.Backends
@@ -127,8 +127,8 @@ namespace NumSharp.Backends
             if (tc == NPTypeCode.Complex)
             {
                 // NumPy: dest = (x.real, x.imag) — writeable strided float64 views, both fed the same fills.
-                NanToNumReplaceInto(np.real(work), nanArr, posArr, negArr);
-                NanToNumReplaceInto(np.imag(work), nanArr, posArr, negArr);
+                NanToNumReplaceInto(NDArray.RealPart(work), nanArr, posArr, negArr);
+                NanToNumReplaceInto(NDArray.ImagPart(work), nanArr, posArr, negArr);
             }
             else
             {
@@ -141,9 +141,12 @@ namespace NumSharp.Backends
         // NumPy pre-computing all three on the original values.
         private static void NanToNumReplaceInto(NDArray dest, NDArray nanArr, NDArray posArr, NDArray negArr)
         {
-            np.copyto(dest, nanArr, where: np.isnan(dest));
-            np.copyto(dest, posArr, where: np.isposinf(dest));
-            np.copyto(dest, negArr, where: np.isneginf(dest));
+            // np.copyto at its default level (same_kind) and np.isnan / np.isposinf / np.isneginf as the operand's engine
+            // members, with the arguments those facades pass (np.isposinf / np.isneginf ask for the bool loop).
+            var engine = dest.TensorEngine;
+            UnmanagedStorage.Copyto(dest, nanArr, NPY_CASTING.NPY_SAME_KIND_CASTING, engine.IsNan(dest));
+            UnmanagedStorage.Copyto(dest, posArr, NPY_CASTING.NPY_SAME_KIND_CASTING, engine.IsPosInf(dest, typeof(bool), null, null));
+            UnmanagedStorage.Copyto(dest, negArr, NPY_CASTING.NPY_SAME_KIND_CASTING, engine.IsNegInf(dest, typeof(bool), null, null));
         }
 
         /// <summary>
@@ -170,7 +173,7 @@ namespace NumSharp.Backends
             // A complex fill: copyto refuses complex -> float the same way (NumPy names complex64 for a float32 / float16
             // destination; NumSharp has one complex width).
             else if (fill is System.Numerics.Complex c) return NDArray.Scalar(c);
-            else if (fill is Array a) arr = np.array(a);
+            else if (fill is Array a) arr = NDArray.ArrayFromManaged(a, null, 0, true, 'C');
             else arr = NDArray.Scalar(FillToDouble(fill));
             // A complex or text array keeps its dtype too, for the same refusal; a real fill is cast to the destination
             // dtype up front (NumPy's copyto casts fill -> d.dtype).
@@ -194,14 +197,14 @@ namespace NumSharp.Backends
             // Text: imag(x) is the empty string, and `'' == 0` has no comparison loop, so NumPy's == answers False
             // everywhere (_failed_comparison_workaround) — a string array is never "real" (probed 2.4.2).
             if (a.GetTypeCode == NPTypeCode.String)
-                return np.zeros(Shape.Adopt(a.Shape.dimensions), NPTypeCode.Boolean);
+                return new NDArray(NPTypeCode.Boolean, Shape.Adopt(a.Shape.dimensions), true);
 
             if (a.GetTypeCode != NPTypeCode.Complex)
-                return np.ones(Shape.Adopt(a.Shape.dimensions), NPTypeCode.Boolean);
+                return NDArray.Ones(Shape.Adopt(a.Shape.dimensions), NPTypeCode.Boolean);
 
             // Complex: the imaginary lane (a strided float64 view via np.imag) compared to zero.
             // IEEE `==` gives NumPy's semantics exactly: -0.0 == 0 (real), NaN/Inf != 0 (not real).
-            return np.equal(np.imag(a), NDArray.Scalar(0d));
+            return Compare(NDArray.ImagPart(a), NDArray.Scalar(0d));
         }
 
         /// <inheritdoc />
@@ -219,7 +222,7 @@ namespace NumSharp.Backends
             {
                 // NumPy returns `res[()]` of `res = zeros(shape, bool)`: for an array that is a VIEW of the fresh buffer
                 // (flags.owndata false), for a 0-d input the scalar; the view takes its own reference on the buffer.
-                var res = np.zeros(Shape.Adopt((long[])a.Shape.dimensions.Clone()), NPTypeCode.Boolean);
+                var res = new NDArray(NPTypeCode.Boolean, Shape.Adopt((long[])a.Shape.dimensions.Clone()), true);
                 if (res.ndim == 0)
                     return res;
                 var view = new NDArray(res.Storage.Alias(res.Shape));
@@ -229,7 +232,7 @@ namespace NumSharp.Backends
 
             // Complex: the imaginary lane (a strided float64 view via np.imag) compared to zero.
             // IEEE `!=` gives NumPy's semantics exactly: -0.0 != 0 is False, NaN/Inf != 0 is True.
-            return np.not_equal(np.imag(a), NDArray.Scalar(0d));
+            return NotEqual(NDArray.ImagPart(a), NDArray.Scalar(0d));
         }
 
         /// <summary>
@@ -258,7 +261,7 @@ namespace NumSharp.Backends
             // returns true for an empty array (vacuous all -> empty complex collapses) and false the moment
             // it sees a magnitude >= tol, a NaN, or an infinity.
             if (ImagCloseScan.AllImagWithinTol(a, tol))
-                return np.real(a); // float64 view onto the real lane (shares memory), == NumPy's a.real
+                return NDArray.RealPart(a); // float64 view onto the real lane (shares memory), == NumPy's a.real
 
             // Some imaginary part is out of band (or NaN/inf): the array stays complex, unchanged.
             return a;

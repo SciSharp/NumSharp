@@ -13,9 +13,9 @@ using NumSharp.Backends.Kernels;
 //
 // History: the np-layer dtype plan's P2 moved these statements from the public np.array_equal / np.array_equiv and the
 // member NDArray.array_equal into the internal operation class ArrayEqualEngine; its phase PE (E1) made that class this
-// DefaultEngine partial. The facades and the member keep the matrix boundary's plain region and one call. The file sits
-// beside the facades, not under Backends/, because its statements call the public np.* functions NumPy's call (np.all,
-// np.isnan, np.are_broadcastable), which ratchet R2 counts under Backends/.
+// DefaultEngine partial. The facades and the member keep the matrix boundary's plain region and one call. The calls
+// NumPy's statements make (np.isnan, np.all, np.are_broadcastable) are the engine's members and Shape's broadcast
+// check, so the engine calls no np.* function.
 //
 // No scope: every array these statements make is disposed by a `using` before the answer (a bool) is returned.
 // =============================================================================
@@ -81,11 +81,11 @@ namespace NumSharp.Backends
             // `a1nan, a2nan = isnan(a1), isnan(a2)`, in this order, so an S / U first operand is the one refused (isnan has
             // no string loop); a StringDType operand's isnan is True at a NaN-like NA. The callers' plain region covers a
             // matrix or chararray operand here.
-            using var a1nan = np.isnan(a1);
-            using var a2nan = np.isnan(a2);
+            using var a1nan = IsNan(a1);
+            using var a2nan = IsNan(a2);
             // `if not (a1nan == a2nan).all(): return False`: NaN must occur at the SAME positions in both operands...
             using (var samePlaces = a1nan == a2nan)
-                if (!np.all(samePlaces))
+                if (!All(samePlaces))
                     return false;
 
             // `return builtins.bool((a1[~a1nan] == a2[~a1nan]).all())`: ...and every other slot must be equal. The form
@@ -95,7 +95,7 @@ namespace NumSharp.Backends
             // StringDType operands with different NA objects are refused as NumPy refuses the gathered ones.
             using var elementsEq = a1 == a2;
             using var okOrNan = elementsEq | a1nan;
-            return np.all(okOrNan);
+            return All(okOrNan);
         }
 
         /// <summary>
@@ -119,7 +119,7 @@ namespace NumSharp.Backends
 
             // NumPy attempts multiarray.broadcast(a1, a2) and treats a failure as "not equivalent".
             // Non-broadcastable shapes short-circuit to False before any element comparison.
-            if (!np.are_broadcastable(a1, a2))
+            if (!Shape.AreBroadcastable(a1.Shape, a2.Shape))
                 return false;
 
             // `return builtins.bool(asanyarray(a1 == a2).all())`
@@ -158,7 +158,7 @@ namespace NumSharp.Backends
             // The == operator broadcasts the operands to their common shape; all() then reduces to a
             // single bool. `using` reclaims the comparison result (all() only reads it).
             using var eq = a == b;
-            return np.all(eq);
+            return eq.TensorEngine.All(eq);
         }
 
         /// <summary>
