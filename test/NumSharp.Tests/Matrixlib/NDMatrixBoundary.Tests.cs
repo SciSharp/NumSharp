@@ -528,6 +528,50 @@ namespace NumSharp.Tests.Matrixlib
             Check(weighted, true, 2, 1);
         }
 
+        /// <summary>
+        ///     np.average of a plain operand with numpy.matrix WEIGHTS computes as a plain array: np.average's rule
+        ///     looks at the operand, and the facades open a plain region for the weights. NumPy returns a matrix there
+        ///     along an axis (its weight sum <c>wgt.sum(axis)</c> is the matrix method, and the product with the
+        ///     weights is wrapped as a matrix): matrix semantics leaking into NumPy's own Python code, not reproduced.
+        /// </summary>
+        /// <remarks>Without the region, the engine's own call of np.sum applied np.sum's matrix rule to the weights,
+        ///     a library call at depth zero: the weight sum came back as a (2, 1) / (1, 3) matrix, and the division
+        ///     into the (2,) / (3,) result raised the out= broadcast error (<c>non-broadcastable output operand with
+        ///     shape (2,) doesn't match the broadcast shape (2,2)</c>).</remarks>
+        [TestMethod]
+        [Misaligned]
+        public void Average_MatrixWeights_ComputePlain()
+        {
+            NDArray a = np.arange(6.0).reshape(2, 3);
+
+            // NumPy: a (2, 1) matrix [[1.3333333333333333], [4.133333333333334]].
+            NDArray rows = np.average(a, 1, weights: M());
+            Check(rows, false, 2);
+            rows.Should().BeOfValues(1.3333333333333333, 4.133333333333334);
+            Check(np.average(a, new[] { 1 }, weights: M()), false, 2);
+
+            // NumPy: a (1, 3) matrix [[2.4, 3.142857142857143, 4.0]].
+            NDArray columns = np.average(a, 0, weights: M());
+            Check(columns, false, 3);
+            columns.Should().BeOfValues(2.4, 3.142857142857143, 4.0);
+
+            // NumPy: the scalar 3.3333333333333335, as here.
+            NDArray all = np.average(a, (int?)null, weights: M());
+            Check(all, false);
+            ((double)all).Should().Be(3.3333333333333335);
+
+            // returned=True: NumPy's (2, 1) average and (2, 1) weight sum [[6.0], [15.0]] are matrices.
+            var (avg, sumOfWeights) = np.average_returned(a, 1, weights: M());
+            Check(avg, false, 2);
+            avg.Should().BeOfValues(1.3333333333333333, 4.133333333333334);
+            Check(sumOfWeights, false, 2);
+            sumOfWeights.Should().BeOfValues(6.0, 15.0);
+            var (avgT, sumOfWeightsT) = np.average_returned(a, new[] { 0 }, weights: M());
+            Check(avgT, false, 3);
+            Check(sumOfWeightsT, false, 3);
+            sumOfWeightsT.Should().BeOfValues(5.0, 7.0, 9.0);
+        }
+
         /// <summary>The polynomial package computes with plain arrays: mapdomain of a matrix is a plain array
         ///     (NumPy's <c>off + scl*x</c> on the matrix is a matrix).</summary>
         [TestMethod]

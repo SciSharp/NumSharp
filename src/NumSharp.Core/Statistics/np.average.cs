@@ -13,7 +13,9 @@ namespace NumSharp
         /// <param name="a">The values to average.</param>
         /// <param name="axis">The axis to average along (a negative axis counts from the end), or null for every axis.</param>
         /// <param name="weights">The weights, or null for equal weights (the mean): of <paramref name="a"/>'s shape, or 1-D
-        ///     of the averaged axis' length (then <paramref name="axis"/> is required).</param>
+        ///     of the averaged axis' length (then <paramref name="axis"/> is required). A <c>numpy.matrix</c> of
+        ///     weights beside a plain operand computes as a plain array, where NumPy returns a matrix (its weight sum
+        ///     is the matrix method).</param>
         /// <param name="keepdims">Keep the averaged axis with length 1, so the result broadcasts against
         ///     <paramref name="a"/>.</param>
         /// <returns>The average: float64 for an integer or bool operand, else the common dtype of the operand and the weights;
@@ -35,6 +37,7 @@ namespace NumSharp
             if (NDMatrixBoundary.Sees(a))
                 return AverageOfMatrix(a, axis, weights, keepdims);
             if (a is null) throw new ArgumentNullException(nameof(a));
+            using var plain = NDMatrixBoundary.PlainFor(weights);   // matrix weights compute plain (NDMatrixBoundary)
             int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
             return a.TensorEngine.Average(a, axisArr, weights, returned: false, keepdims: keepdims).avg;
         }
@@ -48,7 +51,8 @@ namespace NumSharp
         ///     axis), or null for every axis.</param>
         /// <param name="weights">The weights, or null for equal weights (the mean): of <paramref name="a"/>'s shape, or of
         ///     the averaged axes' extents in the order of <paramref name="axis"/> (NumPy transposes an unsorted tuple's
-        ///     weights to the axes' order).</param>
+        ///     weights to the axes' order). A <c>numpy.matrix</c> of weights beside a plain operand computes as a plain
+        ///     array, where NumPy returns a matrix (its weight sum is the matrix method).</param>
         /// <param name="keepdims">Keep the averaged axes with length 1, so the result broadcasts against
         ///     <paramref name="a"/>.</param>
         /// <returns>The average: float64 for an integer or bool operand, else the common dtype of the operand and the weights;
@@ -70,6 +74,7 @@ namespace NumSharp
             if (NDMatrixBoundary.Sees(a))
                 return AverageOfMatrix(a, axis, weights, keepdims);
             if (a is null) throw new ArgumentNullException(nameof(a));
+            using var plain = NDMatrixBoundary.PlainFor(weights);   // matrix weights compute plain (NDMatrixBoundary)
             return a.TensorEngine.Average(a, axis, weights, returned: false, keepdims: keepdims).avg;
         }
 
@@ -174,7 +179,9 @@ namespace NumSharp
         /// <param name="a">The values to average.</param>
         /// <param name="axis">The axis to average along (a negative axis counts from the end), or null for every axis.</param>
         /// <param name="weights">The weights, or null for equal weights (the mean): of <paramref name="a"/>'s shape, or 1-D
-        ///     of the averaged axis' length (then <paramref name="axis"/> is required).</param>
+        ///     of the averaged axis' length (then <paramref name="axis"/> is required). A <c>numpy.matrix</c> of
+        ///     weights beside a plain operand computes as a plain array, where NumPy returns a matrix (its weight sum
+        ///     is the matrix method).</param>
         /// <param name="keepdims">Keep the averaged axis with length 1, so the results broadcast against
         ///     <paramref name="a"/>.</param>
         /// <returns>The average (see <see cref="average(NDArray, int?, NDArray, bool)"/>) and the sum of weights in the
@@ -197,6 +204,7 @@ namespace NumSharp
                 return AverageReturnedOfMatrix(AverageOfMatrix(a, axis, weights, keepdims), a, axis.HasValue ? new[] { axis.Value } : null, weights);
 #pragma warning restore NDW012
             if (a is null) throw new ArgumentNullException(nameof(a));
+            using var plain = NDMatrixBoundary.PlainFor(weights);   // matrix weights compute plain (NDMatrixBoundary)
             int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
             return a.TensorEngine.Average(a, axisArr, weights, returned: true, keepdims: keepdims);
         }
@@ -209,7 +217,9 @@ namespace NumSharp
         /// <param name="axis">The axes to average over (negative ones count from the end; an empty array averages over no
         ///     axis), or null for every axis.</param>
         /// <param name="weights">The weights, or null for equal weights (the mean): of <paramref name="a"/>'s shape, or of
-        ///     the averaged axes' extents in the order of <paramref name="axis"/>.</param>
+        ///     the averaged axes' extents in the order of <paramref name="axis"/>. A <c>numpy.matrix</c> of weights
+        ///     beside a plain operand computes as a plain array, where NumPy returns a matrix (its weight sum is the
+        ///     matrix method).</param>
         /// <param name="keepdims">Keep the averaged axes with length 1, so the results broadcast against
         ///     <paramref name="a"/>.</param>
         /// <returns>The average (see <see cref="average(NDArray, int[], NDArray, bool)"/>) and the sum of weights in the
@@ -232,6 +242,7 @@ namespace NumSharp
                 return AverageReturnedOfMatrix(AverageOfMatrix(a, axis, weights, keepdims), a, axis, weights);
 #pragma warning restore NDW012
             if (a is null) throw new ArgumentNullException(nameof(a));
+            using var plain = NDMatrixBoundary.PlainFor(weights);   // matrix weights compute plain (NDMatrixBoundary)
             return a.TensorEngine.Average(a, axis, weights, returned: true, keepdims: keepdims);
         }
     }
