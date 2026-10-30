@@ -110,9 +110,14 @@ structural calls 263 -> 47, the indexers' four with batch 8), and the two defect
 (a failed iteration's buffers are not written back, `dc807d59`; `np.array(IEnumerable<T>, size)` of a shorter
 enumeration raises np.fromiter's error, `f48b5677`). An audit of the element code the plan's own commits added
 (2026-10-30) found four places and a few small ones that re-implement a kernel, the iterator or a BCL primitive the
-library already had. [§7 PA](#pa-reuse-what-the-library-already-has-the-2026-10-30-audit) plans their alignment, not
-implemented yet. Its probe found exact models of NumPy's dot functions, so the dot item also fixes np.dot where it
-differs from NumPy today. Progress goes into the [§9 state log](#9-state-log), newest entry first.
+library already had. [§7 PA](#pa-reuse-what-the-library-already-has-the-2026-10-30-audit) plans their alignment. Its
+probe found exact models of NumPy's dot functions, so the dot item also fixes np.dot where it differs from NumPy today.
+Three items were tried first (2026-10-30):
+- PA1 and PA4 are done: the same bytes, equal or faster.
+- PA2 was measured but not moved: its float forms run 2–5× slower through the shared kernels on reversed axes and short
+  rows until those kernels gain the two speedups the hand forms have.
+
+Progress goes into the [§9 state log](#9-state-log), newest entry first.
 
 **The engine layout (the owner's decision of 2026-10-28, D1 in [§5](#5-decisions-for-the-owner)).** Every NumPy function
 NumSharp moves that computes values becomes a `TensorEngine` member. Those NumPy writes in Python are declared in
@@ -1167,7 +1172,12 @@ there. Rules (decided 2026-10-30):
 - **R-4.** A move keeps the bytes (the snapshot is identical). A change of bytes is a D4 commit of its own, probed
   against NumPy, with tests that fail on its parent.
 
-- [ ] **PA1. The two rewrites R2 caused** (`75e61cae`, `5c17faec`).
+- [x] **PA1. The two rewrites R2 caused** (`75e61cae`, `5c17faec`). Done 2026-10-30 (`c51f28e4`). The bytes are
+  identical: an in-process A/B and the snapshot (520 decimal std cases, 6,553 complex product cases). The decimal roots
+  run at the same speed (DecimalMath.Sqrt dominates), and the conjugate is 1.07–1.51× faster (np.vdot at 1K / 100K / 1M:
+  1.07× / 1.49× / 1.28×; np.vecdot (1000, 100) 1.51×). A C-contiguous operand runs the unary kernel directly, because the
+  engine member's argument handling costs 0.2–0.5 µs a call. Any other layout goes through the engine member: the unary
+  kernel's own strided walk is the engine's slow fallback, 4× slower on an F-ordered operand.
   - `DefaultEngine.SqrtLikeNumPy`'s decimal roots (`Default.Reduction.VarStd.cs`): the index loop (`GetAtIndex` /
     `SetAtIndex`, a coordinate decomposition per element) becomes one iterator pass:
     `TypedIterHelpers.Build(ret, writeable: true, NPY_KEEPORDER)`, then `ForEach` with a static inner loop that applies
@@ -1208,6 +1218,21 @@ there. Rules (decided 2026-10-30):
       `reduce_start.jsonl` and `nan_order.jsonl` (raw NaN bits) pass, and so do np.average's axis-tuple tests;
     - a mutant of the shared NaN rule now also fails the reduction's tests;
     - `da7adc53`'s cells (a reversed axis, a broadcast axis, axis tuples) are measured.
+  - **Measured 2026-10-30, not moved** (the prototype is local branch `pa2-shared-add-prototype`, `70b32278`, with its
+    A/B harness):
+    - Bytes: the float64, float32 and decimal forms through the shared kernels are identical over 498 cases (NaN pairs
+      with payloads in every row, reversed and broadcast axes, np.average over axis pairs). The complex form differs on
+      reversed axes with NaN pairs, so it stays as planned.
+    - Speed, old / new:
+      - long rows: 0.93–1.06×;
+      - np.average over two axes of a 100³ array: 1.91–2.00× faster through the 2-D block kernel. The hand rows form
+        walked 10,000 rows column by column; the 2-D kernel reads them row by row.
+      - short rows (1000 × 8, 10000 × 10): 0.33–0.85×. The hand form keeps the out row in registers across rows; the 2-D
+        kernel loads and stores it on every row.
+      - reversed inner axes: 0.24–0.88×. The shell's strided route gathers where the hand form loads and permutes.
+    - So the two R-2 extensions come first, and PA2 lands after them:
+      - a reversed-run load in the Tier-3B shell's strided dispatch, and a reversed inner stride in the 2-D kernel;
+      - a short-row form with the out row stationary in registers, chosen by row length.
 
 - [ ] **PA3. One home for NumPy's dot functions** (`ee9ce021`; `SlidingDot` and `Default.Dot.Fused.cs` predate the
   plan). NumPy has one `@name@_dot` per dtype (`arraytypes.c.src`). `PyArray_MatrixProduct2`'s N-D route and
@@ -1257,11 +1282,13 @@ there. Rules (decided 2026-10-30):
     N-D np.dot, np.correlate float64 / complex128, and 1-D np.dot at 1K / 100K / 10M. The Haswell model and `SimdDot`
     use the same number of FMAs.
 
-- [ ] **PA4. The logical ufuncs' combine** (`e41c90dc`). `CombineTruth` (`Default.Logical.cs`) is a hand vector
+- [x] **PA4. The logical ufuncs' combine** (`e41c90dc`). `CombineTruth` (`Default.Logical.cs`) is a hand vector
   AND / OR / XOR over bytes, which its own comment says works "as the bitwise ufunc combines". It becomes that ufunc's
   kernel, called once per block: `GetMixedTypeKernel(new MixedTypeKernelKey(Boolean, Boolean, Boolean, op,
   ExecutionPath.SimdFull))`, vectorized on byte lanes. The truth values keep `ComparisonRun` and `Span.Fill`. Gates:
   the snapshot of np.logical_and / or / xor identical, the `logic` and `out_where` tiers, and `e41c90dc`'s cells.
+  Done 2026-10-30 (`130a9ed6`). The bytes are identical (an in-process A/B and the snapshot), the speed is equal
+  (0.95–1.11× at 1K / 100K / 1M), and 35 lines go.
 
 - [ ] **PA5. The small ones.**
   - np.eye (`NDArray.TwoDimBase.cs`, `e23cef2b`): the per-slot `Buffer.MemoryCopy` of the converted one becomes
@@ -1336,6 +1363,43 @@ candidate.
 ---
 
 ## 9. State log
+
+- **2026-10-30, PA: three items tried to confirm the plan - PA1 and PA4 done, PA2 measured and held.** The owner asked
+  to pick three items and confirm that moving to the existing code is better. One item of each kind was picked:
+  - PA4: hand vector code duplicating a kernel;
+  - PA1: the R2 rewrites;
+  - PA2: the duplicated NaN rule, the item most likely to be slower through the shared kernel.
+  - Method: the old and the new code ran side by side in one process (temporary switches, removed before the commits),
+    on the same inputs. They were compared byte for byte (raw bytes, so NaN payloads count) and timed in interleaved
+    rounds on two pinned P-cores (best of 9). The commits were then checked with the facade-move snapshot against the
+    parent, `NumSharp.Tests` on both frameworks and the oracle tiers of the touched paths.
+  - `130a9ed6` (PA4): the logical ufuncs' truth blocks are combined by the bitwise ufunc's bool kernel. Identical bytes,
+    equal speed (0.95–1.11×), 35 lines fewer.
+  - `c51f28e4` (PA1): decimal std's roots run through the iterator (`TypedIterHelpers` + `ForEach`), and the
+    conjugating products' conjugate runs through the engine's kernel. Identical bytes; the roots at the same speed, the
+    conjugate 1.07–1.51× faster.
+    - A contiguous operand runs the unary kernel directly: the engine member's argument handling costs 0.2–0.5 µs a
+      call.
+    - Any other layout goes through the engine member. The unary kernel's own strided walk is the engine's slow
+      fallback: 1,618 µs against 392 µs for an F-ordered vecdot operand.
+  - PA2 (not committed; prototype on local branch `pa2-shared-add-prototype`, `70b32278`):
+    - bytes identical for float64 / float32 / decimal; the complex form differs on reversed axes with NaN pairs, as
+      the plan allowed for;
+    - speed, old / new: through the per-call Tier-3B kernel and the 2-D block kernel, 1.9–2.0× faster for np.average
+      over axis pairs, equal for long rows, 0.33–0.85× for short rows and 0.24–0.88× for reversed inner axes.
+    - The private copies hold two real speedups the shared kernels lack: the out row kept in registers across short
+      rows, and a reversed-run load. Per R-2 those go into the shared kernels first; PA2's item lists them.
+  - Verdict: for the duplicates of whole kernels and of the iterator (PA1, PA4), the existing code is equal or better.
+    Where a copy outperformed the shared kernel (PA2), the swap has to wait for that speedup to move into the shared
+    kernel.
+  - Found on the way, not fixed:
+    - np.logical_and / or / xor / not with a StringDType `out=` and an all-false `where=` read uninitialized bytes.
+    - Between runs of one build, 6 to 9 of the snapshot's 24 such cases per function raise "invalid value encountered
+      in bool to string cast" (parent and child alike).
+    - The buffered text out= seems to cast its never-written masked-off slots back.
+  - Gates: NumSharp.Tests 20,927 / 20,926 (net10.0 / net8.0); the oracle's Logic, OutWhere, Specials, ErrorsFull,
+    Products, DecimalProducts, DecimalStat, DecimalVarStd, VarStd, VarStdChunked, NanVarStd and LinalgEmpty tiers
+    (net10.0, 12 / 12); the snapshot of 11 names (107,418 cases) identical but for those 96 nondeterministic cases.
 
 - **2026-10-30, the audit of the plan's own element code, and PA.** The owner asked whether the plan's work had made
   the mistake batch 10's first draft made: a hand-written min / max pass where np.amin / np.amax's IL kernels already
