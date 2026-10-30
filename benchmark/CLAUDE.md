@@ -123,7 +123,10 @@ benchmark/
 │   └── fusion_sheet.py → fusion_results.md
 ├── strings/                               # Subsystem: text computation over S / U / StringDType
 │   ├── strings_bench.{cs,py}              #   the NumPy twin writes the data, the C# side loads the same arrays
-│   └── strings_sheet.py → strings_results.md (+ .tsv)
+│   ├── strings_sheet.py → strings_results.md (+ .tsv)
+│   ├── strings_full_bench.{cs,py}         #   the FULL evaluation: every text op over S / U / T (~2,900 keys), standalone
+│   ├── strings_full_sheet.py → strings_full_results.md (+ .tsv)   (not run by run_benchmark.py: ~40 min)
+│   └── strings_full_evaluation.md         #   its analysis: root causes of the slow cells, NumPy defects, priorities
 │
 ├── NumSharp.Benchmark.Python/             # Python/NumPy benchmarks
 │   └── numpy_benchmark.py                 # NumPy benchmark implementation
@@ -853,6 +856,20 @@ single-call rounds (5 to 100) instead of a fixed 100 — the sheet has about a h
 object-path string functions and the 1M core set). `np.sum` of a `StringDType` array is timed at 1K only: NumPy's is
 quadratic (155 s for 100K texts of 20–40 characters). A call one side refuses for a data kind (NumPy has no loop
 for it) has no comparand and no cell.
+
+**The full strings evaluation (`strings_full_sheet.py`) is a standalone sheet, not a subsystem of the official run.**
+It times every text operation over `S` / `U` / `StringDType` (casts between every text class and the numbers, every
+`NDStringCopy` route and store, the dtype layer, ufuncs, reductions, sorts and sets, all 46 `np.strings` names, `np.char`,
+the chararray members and operators, indexing, creation, printing, `.npy` / text I/O) at 1K and 100K: ~2,900 keys, about
+20 minutes per side. The same twin protocol as the strings subsystem, plus three rules of its own: (1) each side computes
+a result signature (dtype, shape, total text length / NA count, True count or sum) and the join flags a cell whose two
+results differ (the evaluation lists the 8 it found, all NumPy defects or `np.empty`'s uninitialized `S` bytes); (2) the
+cases NumPy 2.4.2 segfaults on (`np.intersect1d` / `np.setxor1d` over `StringDType`) or cannot finish (`np.setdiff1d`
+over `StringDType` at 100K, quadratic) are constants in the NumPy twin (`NUMPY_CRASHES` / `NUMPY_STALLS`), printed as
+`CRASH` / `SKIP` lines and kept as NumSharp-only rows; (3) it pins both languages to two P-cores
+(`NUMSHARP_BENCHMARK_AFFINITY=0x14` unless already set), because one pinned CPU starves .NET's tier-1 compiler.
+`--render-only <numpy.tsv> <numsharp.tsv>` re-renders the sheet from saved outputs; `--filter` takes key prefixes (an
+entry ending in `$` is one exact key, so a 1K key does not also select its 100K twin).
 
 ### History snapshots & the publish ritual
 
