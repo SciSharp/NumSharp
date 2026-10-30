@@ -328,10 +328,35 @@ Create issues on `SciSharp/NumSharp` with `gh issue create` (`GH_TOKEN` through 
 
 ## Where else to read
 
-- Rules (`.claude/rules/`): `openblas`, `interop-packages`, `kernels`, `memory-views`, `creation-manipulation`, `matrix`,
-  `ufuncs`, `float-math`, `reductions`, `comparison`, `dtypes`, `selection-indexing`, `iteration`, `evaluate`, `sorting`,
-  `linalg-einsum`, `fft-windows`, `polynomial-series`, `polynomial-algebra`, `random`, `io-printing`, `tests`, `oracle`,
-  `ci-release`.
+- The rules (`.claude/rules/`), and what each holds:
+
+| Rule | Holds |
+|------|-------|
+| `openblas.md` | the `IBlasBackend` seam; `NumSharp.Interop.OpenBLAS`: why it exists, the bundled binary and discovery order, the macOS loader, the build-time override, what decides the result bits, API, gates, examples |
+| `interop-packages.md` | the unreleased-package policy; ONNX Runtime, ML.NET, System.Numerics.Tensors (sources, verbs, dtypes, lifetime, gates); the pythonnet examples |
+| `kernels.md` | the two IL generators' contracts, shared infrastructure, coverage, kernel rules, float16 techniques, NaN operand order, the 2-D block kernel, broadcast pattern stages |
+| `memory-views.md` | `Shape` (fields, flags, sharing), Slice / broadcasting / operator internals, views and aliases, allocation from a view's Shape, the buffer pool |
+| `creation-manipulation.md` | `np.ndarray`, the `as*` family, logspace / geomspace, set routines, `np.unique` + Array-API unique, flips / transposes, stacking, allocation and reshape guards, `np.copyto` |
+| `matrix.md` | `NDMatrix`: static type versus object (the matrix boundary), scalars, indexing, operators and scaling, reductions, construction, divergences, gates |
+| `ufuncs.md` | the ufunc surface (`dtype=`, `out=`, `where=`), fix, fabs, clip, divmod, float_power, power's float loops, gcd / lcm, bitwise |
+| `float-math.md` | correlate / convolve, inverse hyperbolic, sinc, the float32 kernels ported from NumPy, exp2, expm1 / log1p, complex128 NaN signs |
+| `reductions.md` | the reduce prologue, sum / mean, var / std, numpy.ma mean / var, max / min / ptp schedules and keywords, float16 HALF loops, cov, the NaN-aware family |
+| `comparison.md` | signbit, isin, iterable, the comparison ufuncs (the strong-literal divergence), the comparison engine |
+| `dtypes.md` | the DType model, promotion and casting, the `np.dtype(string)` parser, traps, NumPy's names, C enums and find_common_type, scalar types and `np.typing` |
+| `selection-indexing.md` | index forms, take / put / place / putmask, take_along_axis / put_along_axis / select, the `r_` / `c_` / `ix_` / `s_` / grid DSL, the diagonal and triangular family |
+| `iteration.md` | NDIter, ndindex / ndenumerate / nditer and their traps, nested_iters, flatiter, typed iteration, `nd.Unsafe` and the .NET bridges |
+| `evaluate.md` | `np.evaluate`: typing, root reductions, execution and streaming, programs, 0-d parameters, the cache, `Compile()`, Call nodes |
+| `sorting.md` | axis argmax / argmin, partition / argpartition / lexsort / nanargmax / nanargmin / sort_complex |
+| `linalg-einsum.md` | what computes with and without a backend, the seam, NumPy behaviours to keep, einsum and einsum_path, signature parity |
+| `fft-windows.md` | the window functions; `np.fft`: the pocketfft port, layer-3 semantics, the single-precision engine, the F1 divergence |
+| `polynomial-series.md` | numpy.polynomial evaluation, the additive family and polyutils, calculus, the array_like coercion |
+| `polynomial-algebra.md` | series algebra, Vandermonde matrices, companion matrices and roots |
+| `random.md` | integer types, NumPy's call spellings, the kind of array a sampler returns |
+| `io-printing.md` | `.npy` / `.npz`, savetxt / loadtxt / fromstring, array printing |
+| `tests.md` | keeping the suite fast, the memory-safety gates, the OpenBugs files and audit |
+| `oracle.md` | the differential-fuzz pipeline: layout, gate semantics, every tier, the `.npy` format oracle, traps |
+| `ci-release.md` | the workflows, no embedded package README, strong naming |
+
 - Skills: `oracle` (the differential-fuzz gate), `benchmark`, `changelog`, `pythonic`, `specialized-path`; the command
   `np-function`.
 - Nested guides: `benchmark/CLAUDE.md`, `test/NumSharp.Tests.Interop/CLAUDE.md`,

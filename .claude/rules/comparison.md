@@ -55,6 +55,14 @@ loop matching the specified signature and casting was found for ufunc <name>`). 
 `result_type(lhs, rhs)` inside the kernel (`greater(i8 2^53+1, f8 2^53)` → False, `equal` → True). Engine members follow
 the order `(inputs, typeCode, out, where)`.
 
+Divergence: the comparison type is the STRONG promotion of the two dtypes (`ComparisonKernelKey.GetComparisonType` →
+`np._FindCommonScalarType`; int64 against uint64 compares exactly), with no weak case for a 0-d operand, so every C#
+literal is strong. NumPy 2 treats a Python literal as weak (NEP 50) and casts it to the array's dtype first:
+`np.array(new[] { 0.1f }) > 0.1` is True and `== 0.1` False here (compared against the double 0.1), False and True in
+NumPy 2.4.2 (0.1 cast to float32); float16 arrays likewise. Scalar adoption (below) keeps the strong answer exact and
+fast. The arithmetic operators promote a 0-d operand through the array-scalar table instead
+(`np._FindCommonArrayScalarType`, from `np._FindCommonType(NDArray, NDArray)`).
+
 ## The comparison engine
 
 Every operand layout and dtype pair runs the vector kernels, for the operators and the `np.*` forms, with and without
