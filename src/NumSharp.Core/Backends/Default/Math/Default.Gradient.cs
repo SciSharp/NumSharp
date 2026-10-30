@@ -5,12 +5,10 @@ using NumSharp.Backends.Iteration;
 // PolyNumber's operator kinds (BinaryOp), its Python values (PyScalar) and its promotion table (PolyTyping).
 using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
-// The moved statements call the public np.* functions they called inside np (np.diff, np.empty, np.subtract, np.divide,
-// np.evaluate, np.all) and build np's GradientResult; importing np's statics keeps them verbatim. Their axis slices go
-// through NDArray.SliceAlongAxis (np's internal helper until P3's batch 7 moved np.delete's rest into the array object). In a DefaultEngine partial a name resolves to DefaultEngine's members before np's statics: of the unqualified
-// names below only the helper Add was one (DefaultEngine's ufunc member), so the three PolyNumber helpers are GradientAdd,
-// GradientMul and GradientDiv since the file joined DefaultEngine.
-using static NumSharp.np;
+// NumPy's statements call np.diff, np.empty_like, np.subtract, np.divide, np.evaluate, np.all and np.copyto; here they
+// are this engine's members and the array object's (the allocation, UnmanagedStorage.Copyto), and the result is np's
+// GradientResult, the public type np.gradient returns. The axis slices go through NDArray.SliceAlongAxis. The three
+// PolyNumber helpers are GradientAdd, GradientMul and GradientDiv: Add is DefaultEngine's ufunc member.
 
 namespace NumSharp.Backends
 {
@@ -68,8 +66,7 @@ namespace NumSharp.Backends
     //
     // History: moved from Math/np.gradient.cs statement for statement by the np-layer dtype plan's P2 into the internal
     // operation class GradientEngine (decision D1: NumPy writes gradient in Python); its phase PE (E1) made that class this
-    // DefaultEngine partial. It sits beside its facade rather than under Backends/, as Default.Trapezoid.cs does: its
-    // statements call np.* functions, which ratchet R2 counts against engine files.
+    // DefaultEngine partial.
     public partial class DefaultEngine
     {
         // ---- Core algorithm (port of numpy.gradient) ----
@@ -116,7 +113,7 @@ namespace NumSharp.Backends
         ///     <see cref="np.GradientResult"/> (an <see cref="INDArrayCarrier"/>).
         /// </remarks>
         [NDScoped]
-        public override GradientResult Gradient(NDArray f, object[] varargs, int[] axisArg = null, int edge_order = 1)
+        public override np.GradientResult Gradient(NDArray f, object[] varargs, int[] axisArg = null, int edge_order = 1)
         {
             if (f is null) throw new ArgumentNullException(nameof(f));
 
@@ -191,7 +188,7 @@ namespace NumSharp.Backends
                     // Integer coordinates are converted to float64 to avoid modular arithmetic in diff.
                     if (IsIntegerLike(distances.GetTypeCode))
                         distances = distances.astype(np.float64);
-                    NDArray diffx = np.diff(distances);
+                    NDArray diffx = Diff(distances, 1, -1, null, null);    // np.diff(distances): n=1 along the last axis
                     // Constant spacing collapses to the scalar (uniform) case — a real speedup and
                     // it matches NumPy bit-for-bit (the whole-array uniform formula runs instead).
                     // NumPy's own statement, `if (diffx == diffx[0]).all(): diffx = diffx[0]`: diffx[0] is NumPy's
@@ -199,7 +196,7 @@ namespace NumSharp.Backends
                     // eight bytes), and the comparison runs in the diffs' own dtype, so complex diffs are constant only
                     // when both parts are (the double read compared the real parts).
                     NDArray first = diffx[0];
-                    if (np.all(diffx == first))
+                    if (All(diffx == first))
                         dx[i] = PolyNumber.ScalarOf(first);                   // diffx[0]: a NumPy scalar (strong)
                     else
                         dx[i] = diffx;                                        // the diffs, in their own dtype
@@ -261,7 +258,7 @@ namespace NumSharp.Backends
                 // into), where a fresh C-ordered array of the dimensions was allocated. empty_like reads only the input's
                 // dimensions and axis order, never its offset or a stride-0 axis, and the slice stores below write through
                 // any layout.
-                NDArray outp = np.empty_like(work, otype);
+                NDArray outp = new NDArray(otype, Shape.NewLikeLayout(work.Shape, 'K', (long[])work.Shape.dimensions.Clone()), false);
 
                 // ---- interior: 2nd-order central differences over [1 : M-1] ----
                 //   uniform     : out[1:-1] = (f[2:] - f[:-2]) / (2*dx)
@@ -284,13 +281,13 @@ namespace NumSharp.Backends
                         // inexact or converted input is already the component's dtype): a bool input is refused here, as
                         // NumPy's subtract refuses it, where a dtype=float64 loop would compute it (NumPy's np.subtract
                         // computes two bools with dtype=float64).
-                        np.subtract(fp2, fm2, @out: ov);
+                        Subtract(fp2, fm2, null, ov, null);
                         PolyNumber twice = TwiceSpacing(ax_dx);
                         NPTypeCode loop = PolyNumber.LoopDtype(BinaryOp.Divide, PolyNumber.FromArray(ov), twice);
                         if (StoresInPlace(loop, otype))
                         {
                             using var divisor = twice.AsArrayOf(loop);
-                            np.divide(ov, divisor, @out: ov, dtype: loop);    // ov /= (2*dx)
+                            Divide(ov, divisor, loop, ov, null);    // ov /= (2*dx), np.divide(..., out=ov, dtype=loop)
                         }
                         else
                             StoreComponent(ov, PolyNumber.Binary(BinaryOp.Divide, PolyNumber.FromArray(ov), twice).Array);
@@ -329,9 +326,9 @@ namespace NumSharp.Backends
                         // coordinates) into a real component is NumPy's setitem, which keeps the real part, where the fused
                         // pass's out= refuses the cast: it is evaluated into a temporary and stored.
                         if (StoresInPlace(PolyTyping.Promote(a.typecode, work.typecode), otype))
-                            np.evaluate(expr, @out: ov);
+                            Evaluate(expr, ov);
                         else
-                            StoreComponent(ov, np.evaluate(expr));
+                            StoreComponent(ov, Evaluate(expr));
                         ov.Dispose();
                         dx1.Dispose(); dx2.Dispose(); sum.Dispose();
                         a.Dispose(); b.Dispose(); c.Dispose();
@@ -406,7 +403,7 @@ namespace NumSharp.Backends
                 outvals[ai] = outp;
             }
 
-            return new GradientResult(outvals, single: len_axes == 1);
+            return new np.GradientResult(outvals, single: len_axes == 1);
         }
 
         /// <summary>
@@ -558,7 +555,8 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="dst">The component's slice view.</param>
         /// <param name="value">The computed values (broadcast into <paramref name="dst"/>).</param>
-        private static void StoreComponent(NDArray dst, NDArray value) => np.copyto(dst, value, casting: "unsafe");
+        private static void StoreComponent(NDArray dst, NDArray value)
+            => UnmanagedStorage.Copyto(dst, value, NPY_CASTING.NPY_UNSAFE_CASTING, null);   // np.copyto(..., casting='unsafe')
 
         /// <summary>A Python float (weak under NEP 50): the literals of NumPy's gradient code (<c>2.</c>, <c>-1.5</c>, ...).</summary>
         /// <param name="v">The value.</param>
@@ -718,7 +716,7 @@ namespace NumSharp.Backends
                 if (nonNumeric.IsObject)
                     throw nonNumeric.Refusal;
             }
-            return np.asanyarray(v);
+            return NDArray.AnyArrayFromObject(v, null, 'K');   // np.asanyarray(v): v is no NDArray here
         }
 
         // The scalar steps and the coordinate differences are read as NumPy values (PolyNumber: SpacingOf, and

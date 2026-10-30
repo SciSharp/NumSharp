@@ -7,8 +7,7 @@
 // (the mode, the text answers, the promotion, the kernels) is the C function's, in Correlate.
 //
 // History: NumPy writes np.convolve in Python; the np-layer dtype plan's P2 moved its statements from NDArray.convolve
-// into the internal operation class ConvolveEngine, and its phase PE (E1) made that class this DefaultEngine partial. It
-// stays beside the facades with the other moved statements of numeric.py.
+// into the internal operation class ConvolveEngine, and its phase PE (E1) made that class this DefaultEngine partial.
 // =============================================================================
 
 namespace NumSharp.Backends

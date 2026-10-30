@@ -7,9 +7,9 @@ using NumSharp.Utilities;
 namespace NumSharp
 {
     // ============================== np.gradient ==============================
-    // The body is the engine member TensorEngine.Gradient (DefaultEngine's in Math/Default.Gradient.cs, beside this
-    // facade), reached through np.EngineOf: a null f is refused by the body's first statement (ArgumentNullException),
-    // not by the dispatch.
+    // The body is the engine member TensorEngine.Gradient (DefaultEngine's in Backends/Default/Math/Default.Gradient.cs),
+    // reached through np.EngineOf: a null f is refused by the body's first statement (ArgumentNullException), not by the
+    // dispatch.
     //
     // The API mirrors NumPy's `gradient(f, *varargs, axis=None, edge_order=1)`.
     // C# cannot express NumPy's keyword-only `axis`/`edge_order` alongside the

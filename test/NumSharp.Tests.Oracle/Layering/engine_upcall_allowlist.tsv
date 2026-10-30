@@ -10,6 +10,7 @@ Backends/Default/Math/Default.ATan2.cs	0	1
 Backends/Default/Math/Default.ClipNDArray.cs	0	1
 Backends/Default/Math/Default.DivMod.cs	0	1
 Backends/Default/Math/Default.GcdLcm.cs	0	1
+Backends/Default/Math/Default.Gradient.cs	0	1	# np.GradientResult: the public result type np.gradient returns (a type nested in np, as np's other result types are); the engine member builds the value the facade returns
 Backends/Default/Math/Default.Power.StrideZero.cs	0	2
 Backends/Default/Math/Default.Power.cs	0	2
 Backends/Default/Math/Default.Shift.cs	0	1

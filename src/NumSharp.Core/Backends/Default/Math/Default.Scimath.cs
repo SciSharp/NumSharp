@@ -1,7 +1,6 @@
 // NumPy's numpy/lib/_scimath_impl.py (numpy.emath) as DefaultEngine's members: each function's statements in NumPy's
-// order, over the np.* ufuncs. The file sits beside its facade (Math/np.emath.cs) while its statements call np.*: ratchet
-// R2 counts np.* calls against every file under Backends/ (the np-layer dtype plan, C3); it moves under Backends/Default/
-// in P6.
+// order, over the ufuncs' engine members (each np.* ufunc's statement: this engine, or the operand's engine in a static
+// helper). The facade is Math/np.emath.cs.
 
 using NumSharp.Backends.Kernels;
 using NumSharp.Backends.Strings;
@@ -13,22 +12,22 @@ namespace NumSharp.Backends
         /// <inheritdoc />
         [NDScoped] // reclaims the complex copy _fix_real_lt_zero may make
         public override NDArray EmathSqrt(NDArray x)
-            => np.sqrt(FixRealLtZero(x));
+            => Sqrt(FixRealLtZero(x), null, null, null);
 
         /// <inheritdoc />
         [NDScoped] // reclaims the complex copy _fix_real_lt_zero may make
         public override NDArray EmathLog(NDArray x)
-            => np.log(FixRealLtZero(x));
+            => Log(FixRealLtZero(x));
 
         /// <inheritdoc />
         [NDScoped] // reclaims the complex copy _fix_real_lt_zero may make
         public override NDArray EmathLog10(NDArray x)
-            => np.log10(FixRealLtZero(x));
+            => Log10(FixRealLtZero(x));
 
         /// <inheritdoc />
         [NDScoped] // reclaims the complex copy _fix_real_lt_zero may make
         public override NDArray EmathLog2(NDArray x)
-            => np.log2(FixRealLtZero(x));
+            => Log2(FixRealLtZero(x));
 
         /// <inheritdoc />
         [NDScoped] // reclaims the two converted operands and the two logarithms
@@ -38,7 +37,7 @@ namespace NumSharp.Backends
             // alone (logn(-2, 8)) makes log(n) complex, and the real log(x) over it promotes the quotient to complex.
             x = FixRealLtZero(x);
             n = FixRealLtZero(n);
-            return np.log(x) / np.log(n);
+            return Log(x) / Log(n);
         }
 
         /// <inheritdoc />
@@ -49,23 +48,23 @@ namespace NumSharp.Backends
             // integer exponent does not reach np.power's integer-domain "negative integer power" error.
             x = FixRealLtZero(x);
             p = FixIntLtZero(p);
-            return np.power(x, p);
+            return Power(x, p);   // np.power(x1, x2)'s statement (its null dtype)
         }
 
         /// <inheritdoc />
         [NDScoped] // reclaims the complex copy _fix_real_abs_gt_1 may make
         public override NDArray EmathArccos(NDArray x)
-            => np.arccos(FixRealAbsGt1(x));
+            => ACos(FixRealAbsGt1(x), null, null, null);
 
         /// <inheritdoc />
         [NDScoped] // reclaims the complex copy _fix_real_abs_gt_1 may make
         public override NDArray EmathArcsin(NDArray x)
-            => np.arcsin(FixRealAbsGt1(x));
+            => ASin(FixRealAbsGt1(x), null, null, null);
 
         /// <inheritdoc />
         [NDScoped] // reclaims the complex copy _fix_real_abs_gt_1 may make
         public override NDArray EmathArctanh(NDArray x)
-            => np.arctanh(FixRealAbsGt1(x));
+            => ATanh(FixRealAbsGt1(x), null, null, null);
 
         // ── Domain-fix helpers (ports of numpy/lib/_scimath_impl.py) ──────────────────────────────
         // Each returns the input UNCHANGED unless a whole-array complex/float promotion is required, in
@@ -102,7 +101,8 @@ namespace NumSharp.Backends
             // null => not the fast path, so use the composition, whose `x < 0` boolean is layout- and
             // promotion-invariant (an element is negative or it is not) and equals `any(isreal(x) & (x<0))`
             // for a real dtype (where isreal is all-true). np.any early-exits at the first true lane.
-            bool neg = EmathDomainScan.AnyNegative(x) ?? np.any(x < (NDArray)0);
+            // np.any's statement on the comparison: the engine of x (the comparison's own) answers Any.
+            bool neg = EmathDomainScan.AnyNegative(x) ?? x.TensorEngine.Any(x < (NDArray)0);
             return neg ? x.astype(np.complex128) : x;
         }
 
@@ -128,7 +128,7 @@ namespace NumSharp.Backends
                 return x;
             if (NDStringUfuncs.IsText(x))
                 throw new TypeError($"ufunc 'absolute' did not contain a loop with signature matching types {x.dtype.Meta} -> None");
-            bool big = EmathDomainScan.AnyAbsGreaterThanOne(x) ?? np.any(np.abs(x) > (NDArray)1);
+            bool big = EmathDomainScan.AnyAbsGreaterThanOne(x) ?? x.TensorEngine.Any(x.TensorEngine.Abs(x) > (NDArray)1);
             return big ? x.astype(np.complex128) : x;
         }
 
@@ -154,7 +154,7 @@ namespace NumSharp.Backends
                 return p;
             if (NDStringUfuncs.IsText(p))
                 throw LessThanZeroTextError(p);
-            bool neg = EmathDomainScan.AnyNegative(p) ?? np.any(p < (NDArray)0);
+            bool neg = EmathDomainScan.AnyNegative(p) ?? p.TensorEngine.Any(p < (NDArray)0);
             return neg ? p * 1.0 : p;
         }
 

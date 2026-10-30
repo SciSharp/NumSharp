@@ -36,8 +36,9 @@ namespace NumSharp.Tests.Layering
         internal const string WriteAllowlistVariable = "NUMSHARP_WRITE_LAYERING_ALLOWLIST";
 
         /// <summary>
-        ///     The np.* names R2 reports as structural (allocation, copies, broadcasting, dtype construction and
-        ///     promotion helpers) rather than computations. The split only labels the counts; both kinds are ratcheted.
+        ///     The np.* names R2 reports as structural (allocation, copies, broadcasting, dtype construction, promotion
+        ///     helpers, and the public result types nested in np that an engine member builds: <c>FlatIterator</c>,
+        ///     <c>GradientResult</c>) rather than computations. The split only labels the counts; both kinds are ratcheted.
         /// </summary>
         private static readonly HashSet<string> StructuralNames = new(StringComparer.Ordinal)
         {
@@ -50,7 +51,7 @@ namespace NumSharp.Tests.Layering
             "split", "array_split", "unstack", "take", "take_along_axis", "put", "put_along_axis", "repeat", "tile",
             "pad", "result_type", "promote_types", "can_cast", "_FindCommonType", "_FindCommonType_Array",
             "_FindCommonArrayType", "_FindCommonScalarType", "_FindCommonArrayScalarType", "AtLeastNdView",
-            "PrefersWriteOnce", "FlatIterator", "dtypes.StringDType", "strings.OutputDescriptor",
+            "PrefersWriteOnce", "FlatIterator", "GradientResult", "dtypes.StringDType", "strings.OutputDescriptor",
         };
 
         /// <summary>

@@ -1,7 +1,7 @@
 // NumPy's np.interp (numpy/lib/_function_base_impl.py, over compiled_base.c's arr_interp) as DefaultEngine's member:
 // the loop chosen from fp, the real (float64) and complex (complex128) loops, the period's preparation and the
-// operand conversions. The file sits beside its facade while it calls np.*: ratchet R2 counts np.* calls against every
-// file under Backends/ (the np-layer dtype plan, C3); it moves under Backends/Default/ in P6.
+// operand conversions. The period's preparation calls the operands' engine members (np.mod, np.argsort) and the array
+// object's concatenation (np.concatenate).
 
 using System;
 using System.Numerics;
@@ -432,12 +432,12 @@ namespace NumSharp.Backends
             if (xpd.Shape.dimensions[0] != fpd.Shape.dimensions[0])
                 throw new ValueError("fp and xp are not of the same length");
 
-            // normalize periodic boundaries: x %= period; xp %= period
-            xd = np.mod(xd, (NDArray)period);
-            xpd = np.mod(xpd, (NDArray)period);
+            // normalize periodic boundaries: x %= period; xp %= period (np.mod's statement: the operand's engine Mod)
+            xd = xd.TensorEngine.Mod(xd, (NDArray)period, null, null, null);
+            xpd = xpd.TensorEngine.Mod(xpd, (NDArray)period, null, null, null);
 
-            // sort by xp, reorder fp likewise
-            var order = np.argsort(xpd);
+            // sort by xp, reorder fp likewise (np.argsort's statement, ndarray.argsort's engine member with its defaults)
+            var order = xpd.TensorEngine.ArgSort(xpd, -1, null, null, null);
             xpd = xpd[order];
             fpd = fpd[order];
 
@@ -448,10 +448,10 @@ namespace NumSharp.Backends
             // returns — reclaim them here eagerly rather than holding them to the entry scope's
             // close (the [NDScoped] interp entries would sweep them anyway; Dispose is idempotent).
             using NDArray xpLow = xpLast - period, xpHigh = xpFirst + period;
-            xpd = np.concatenate(new[] { xpLow, xpd, xpHigh });
+            xpd = NDArray.ConcatenateInto(new[] { xpLow, xpd, xpHigh }, 0, null, null, "same_kind");   // np.concatenate's statement
             var fpFirst = fpd["0:1"];
             var fpLast = fpd[(fpd.size - 1).ToString() + ":"];
-            fpd = np.concatenate(new[] { fpLast, fpd, fpFirst });
+            fpd = NDArray.ConcatenateInto(new[] { fpLast, fpd, fpFirst }, 0, null, null, "same_kind");
 
             return (xd, xpd, fpd);
         }

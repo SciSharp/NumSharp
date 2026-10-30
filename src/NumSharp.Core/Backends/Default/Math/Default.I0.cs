@@ -1,7 +1,7 @@
 // NumPy's np.i0 (numpy/lib/_function_base_impl.py) as DefaultEngine's member: the null check, the text parse and
-// the dispatch by float width to the per-precision cephes kernels np.i0.cs keeps (np.kaiser shares the double one).
-// The file sits beside its facade while it calls np.*: ratchet R2 counts np.* calls against every file under Backends/
-// (the np-layer dtype plan, C3); it moves under Backends/Default/ in P6.
+// the dispatch by float width to the per-precision cephes kernels np.i0.cs keeps (np.kaiser shares the double one),
+// each applied in one fused pass of this engine's Evaluate. The kernels stay on np as delegate fields the engine reads:
+// NDExpr.Call keys its compiled kernel by the delegate's identity, and np.kaiser's window shares the double one.
 
 using System;
 using NumSharp.Backends.Iteration;
@@ -31,13 +31,13 @@ namespace NumSharp.Backends
                 case NPTypeCode.Complex:
                     throw new IncorrectTypeException("i0 not supported for complex values");
                 case NPTypeCode.Half:
-                    return np.evaluate(NDExpr.Call(np._i0Half, (NDExpr)x));
+                    return Evaluate(NDExpr.Call(np._i0Half, (NDExpr)x));
                 case NPTypeCode.Single:
-                    return np.evaluate(NDExpr.Call(np._i0Single, (NDExpr)x));
+                    return Evaluate(NDExpr.Call(np._i0Single, (NDExpr)x));
                 case NPTypeCode.Decimal:
-                    return np.evaluate(NDExpr.Call(np._i0Decimal, (NDExpr)x));
+                    return Evaluate(NDExpr.Call(np._i0Decimal, (NDExpr)x));
                 default:
-                    return np.evaluate(NDExpr.Call(np._i0Double, (NDExpr)x));
+                    return Evaluate(NDExpr.Call(np._i0Double, (NDExpr)x));
             }
         }
     }

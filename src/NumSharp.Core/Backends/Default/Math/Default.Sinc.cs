@@ -1,6 +1,5 @@
 // NumPy's np.sinc (numpy/lib/_function_base_impl.py) as DefaultEngine's member: NumPy's four statements fused into
-// one np.evaluate pass. The file sits beside its facade (Math/np.sinc.cs) while it calls np.*: ratchet R2 counts np.*
-// calls against every file under Backends/ (the np-layer dtype plan, C3); it moves under Backends/Default/ in P6.
+// one pass of this engine's Evaluate (np.evaluate's member). The facade is Math/np.sinc.cs.
 
 using System;
 using NumSharp.Backends.Iteration;
@@ -53,8 +52,9 @@ namespace NumSharp.Backends
             NDExpr t = (NDExpr)x * Math.PI;
             NDExpr y = NDExpr.Where(NDExpr.NotEqual(t, 0.0), t, eps);
 
-            // One np.evaluate pass: the operand is read once, the result written once.
-            return np.evaluate(NDExpr.Sin(y) / y);
+            // One fused pass (np.evaluate's member, its default options): the operand is read once, the result written
+            // once.
+            return Evaluate(NDExpr.Sin(y) / y);
         }
     }
 }
