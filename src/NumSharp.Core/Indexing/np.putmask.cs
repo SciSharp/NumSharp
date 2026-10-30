@@ -63,7 +63,7 @@ namespace NumSharp
         ///     raises it, before the size check. (A text mask is otherwise read by its truth values: a non-empty string is
         ///     True.)</exception>
         public static void putmask(NDArray a, NDArray mask, NDArray values)
-            => UnmanagedStorage.PutMaskCore(a, mask, values, sequence: false);
+            => UnmanagedStorage.PutMaskCore(a, mask, values);
 
         /// <summary>
         ///     <see cref="putmask(NDArray, NDArray, NDArray)"/> with the values given as a C# array — NumPy's Python LIST of
@@ -73,33 +73,28 @@ namespace NumSharp
         /// <param name="mask">Boolean mask of <paramref name="a"/>'s size.</param>
         /// <param name="values">
         ///     The values, cycled by position. NumPy converts a list STRAIGHT INTO <paramref name="a"/>'s dtype
-        ///     (<c>PyArray_FromAny(list, a.dtype)</c>), so there is no <c>'safe'</c> rule: <c>[1.9, 2.9]</c> into an int32
-        ///     array truncates — where <c>np.array([1.9, 2.9])</c> raises the cast TypeError.
+        ///     (<c>PyArray_FromAny(list, a.dtype)</c>), so there is no <c>'safe'</c> rule: every item is stored by the
+        ///     dtype's setitem — <c>[1.9, 2.9]</c> into an int32 array truncates, <c>[1, 2.5]</c> into a <c>&lt;U3</c> array
+        ///     is <c>['1', '2.5']</c> — where <c>np.array([1.9, 2.9])</c> raises the cast TypeError; a Python int the array
+        ///     cannot hold raises (<c>[1000]</c> into int8). The conversion happens after the mask's checks.
         /// </param>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> or <paramref name="mask"/> is null.</exception>
-        /// <exception cref="TypeError"><paramref name="values"/> is null (<c>None</c>) and <paramref name="a"/> is an
-        ///     integer (or <c>decimal</c>) array.</exception>
-        /// <exception cref="ValueError">The checks of <see cref="putmask(NDArray, NDArray, NDArray)"/>.</exception>
+        /// <exception cref="TypeError"><paramref name="values"/> is null (<c>None</c>), or holds None, and
+        ///     <paramref name="a"/> is an integer (or <c>decimal</c>) array.</exception>
+        /// <exception cref="ValueError">The checks of <see cref="putmask(NDArray, NDArray, NDArray)"/>; a ragged list
+        ///     (NumPy's inhomogeneous-shape text), a NaN into an integer array, a text value that does not parse into a
+        ///     numeric array.</exception>
+        /// <exception cref="OverflowException">A Python int outside an integer array's range (<c>Python integer 1000 out of
+        ///     bounds for int8</c>).</exception>
         /// <exception cref="UnicodeEncodeError">Text values that are not ASCII into an <c>S</c> array.</exception>
         /// <exception cref="UnicodeDecodeError">Byte values that are not ASCII into a <c>U</c> array.</exception>
-        /// <exception cref="ValueError">A text value that does not parse into a numeric array.</exception>
         /// <remarks>C# binds a typed array argument here rather than to the <see cref="NDArray"/> overload (a reference
         ///     conversion beats NumSharp's implicit <c>Array → NDArray</c> one): pass <c>np.array(...)</c> for NumPy's ndarray
         ///     semantics. A bare <c>null</c> binds here too (<c>Array</c> is the better conversion target), and is Python's
-        ///     <c>None</c> exactly as in the <see cref="NDArray"/> overload.</remarks>
-        [NDScoped]
+        ///     <c>None</c> exactly as in the <see cref="NDArray"/> overload. The list is converted by the body
+        ///     (<see cref="UnmanagedStorage.PutMaskCore"/>), where NumPy converts it: after the target's writeability and the
+        ///     mask's size, so a wrong-size mask is reported before a ragged list.</remarks>
         public static void putmask(NDArray a, NDArray mask, Array values)
-        {
-            // None: PutMaskCore converts it after the mask checks (a null values array is None there).
-            if (values is null)
-            {
-                UnmanagedStorage.PutMaskCore(a, mask, null, sequence: false);
-                return;
-            }
-            // The list's own dtype is discovered first, then converted into a's dtype by PutMaskCore after the size check.
-            // A StringDType target converts the list with its own descriptor (every element by setitem, as NumPy's
-            // PyArray_FromAny(values, dtype) does); the discovered U / number array would be cast instead.
-            UnmanagedStorage.PutMaskCore(a, mask, a is not null && a.Storage.IsVString ? Backends.Strings.NDVStringMove.StoreValue(values, a.dtype) : np.array(values), sequence: true);
-        }
+            => UnmanagedStorage.PutMaskCore(a, mask, values);
     }
 }

@@ -14,8 +14,6 @@ Casting/NDArray.ToString.cs	0	1
 Creation/np.dtype.cs	0	2
 DTypes/np.dtypes.cs	2	0
 Indexing/np.ndenumerate.cs	0	1
-Indexing/np.place.cs	1	0
-Indexing/np.putmask.cs	1	0
 Indexing/np.take.FancyAxis.cs	0	1
 Logic/np.can_cast.cs	1	80
 Logic/np.common_type.cs	1	6

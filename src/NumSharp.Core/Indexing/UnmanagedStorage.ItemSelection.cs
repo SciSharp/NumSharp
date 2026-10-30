@@ -580,21 +580,25 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="a">Target array (modified in place).</param>
         /// <param name="mask">Boolean mask of <paramref name="a"/>'s size.</param>
-        /// <param name="values">The values (an ndarray, or the array discovered from a list); <c>null</c> is Python's
-        ///     <c>None</c>, converted where NumPy converts values (after the mask's size check).</param>
-        /// <param name="sequence">True when <paramref name="values"/> came from a list: no <c>'safe'</c> rule.</param>
+        /// <param name="values">NumPy's <c>values0</c>: an <see cref="NDArray"/> (an ndarray), a C# <see cref="Array"/>
+        ///     (NumPy's Python LIST, the list overloads' contract), or <c>null</c> (Python's <c>None</c>). Each is converted
+        ///     where NumPy converts values, after the mask's size check (<see cref="ValuesLikeNumPy"/>).</param>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> or <paramref name="mask"/> is null.</exception>
-        /// <exception cref="TypeError"><paramref name="values"/> is null (<c>None</c>) and <paramref name="a"/> is an
-        ///     integer (or <c>decimal</c>) array.</exception>
-        /// <exception cref="ValueError">See <see cref="np.putmask(NDArray, NDArray, NDArray)"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="values"/> is neither an array, a C# array nor null (an
+        ///     internal caller's error: the facades pass only those).</exception>
+        /// <exception cref="TypeError"><paramref name="values"/> is null (<c>None</c>), or a list holds None, and
+        ///     <paramref name="a"/> is an integer (or <c>decimal</c>) array.</exception>
+        /// <exception cref="ValueError">See <see cref="np.putmask(NDArray, NDArray, NDArray)"/>; a list that is ragged, a
+        ///     NaN of a list into an integer array, a text of a list that does not parse.</exception>
+        /// <exception cref="OverflowException">A Python int of a list outside an integer array's range (NumPy's
+        ///     OverflowError).</exception>
         /// <exception cref="InvalidCastException">An ndarray of values that does not cast 'safely'.</exception>
         /// <exception cref="UnicodeEncodeError">Text values that are not ASCII into an <c>S</c> array.</exception>
         /// <exception cref="UnicodeDecodeError">Byte values that are not ASCII into a <c>U</c> array.</exception>
-        /// <exception cref="ValueError">See <see cref="np.putmask(NDArray, NDArray, NDArray)"/>.</exception>
         [NDScoped]
-        internal static void PutMaskCore(NDArray a, NDArray mask, NDArray values, bool sequence)
+        internal static void PutMaskCore(NDArray a, NDArray mask, object values)
         {
-            using var plain = NDMatrixBoundary.PlainFor(a, mask, values);   // in place: the helpers below see a matrix as a plain array
+            using var plain = NDMatrixBoundary.PlainFor(a, mask, values as NDArray);   // in place: the helpers below see a matrix as a plain array
             if (a is null) throw new ArgumentNullException(nameof(a));
             if (mask is null) throw new ArgumentNullException(nameof(mask));
 
@@ -616,20 +620,21 @@ namespace NumSharp.Backends
             if (mask.size != a.size)
                 throw new ValueError("putmask: mask and data must be the same size");
 
-            // Python's None: PyArray_FromAny(None, a.dtype, CARRAY) is ONE element of None's setitem value in a's descriptor,
-            // converted here, after the size check and whatever the mask holds (an integer array raises int(None)'s TypeError
-            // even under an all-false mask). The 0-d value is this scope's and is used like any value of a's element type.
-            if (values is null)
-                values = NDArray.NoneForStore(a.dtype);
+            // PyArray_FromAny(values, a.dtype, CARRAY), here after the size check and whatever the mask holds (an integer
+            // array raises int(None)'s TypeError, a list's out-of-range Python int its OverflowError, even under an
+            // all-false mask): None and a Python list are converted with a's descriptor, an ndarray is taken as it is. A
+            // converted value is this scope's and is used like any value of a's element type.
+            bool sequence = values is Array;
+            NDArray valuesArray = ValuesLikeNumPy(values, a);
 
-            // PyArray_FromAny(values, a.dtype, CARRAY): the 'safe' rule for an array of values (a dtype check, so empty
-            // values and an empty target raise too) and every value's conversion, before nv is read.
-            NDArray converted = PlaceValuesLikeNumPy(values, a, sequence);
+            // PyArray_FromAny's rest: the 'safe' rule for an array of values (a dtype check, so empty values and an empty
+            // target raise too) and every value's conversion, before nv is read.
+            NDArray converted = PlaceValuesLikeNumPy(valuesArray, a, sequence);
 
             // Empty values ⇒ no-op. NumPy: nv <= 0 returns None without writing (probed 2.4.2).
             // Checked after writeable + mask-size + the conversion (NumPy's order), before the contig copy so an
             // empty-values call never allocates a scratch.
-            if (values.size == 0)
+            if (valuesArray.size == 0)
                 return;
 
             // Empty a ⇒ empty mask ⇒ no-op (the loop runs zero times in NumPy).
@@ -637,7 +642,7 @@ namespace NumSharp.Backends
                 return;
 
             // The values the loop reads (a converted copy, or the caller's array of a's element type).
-            var source = converted ?? values;
+            var source = converted ?? valuesArray;
 
             // NumPy WRITEBACKIFCOPY / ENSURECOPY semantics (PyArray_PutMask): copy `a` when it is
             // non-contiguous OR may share memory with `values`/`mask`. NumPy's `arrays_overlap` is
@@ -661,7 +666,7 @@ namespace NumSharp.Backends
                 // The recursive call opens its own nested scope; the scratch itself is released by this one. It re-runs
                 // the checks on the already converted values (the same element type: nothing left to fail but the mask's).
                 var scratch = a.Shape.IsContiguous ? a.copy() : np.ascontiguousarray(a);
-                PutMaskCore(scratch, mask, source, sequence);
+                PutMaskCore(scratch, mask, source);
                 np.copyto(a, scratch, casting: "unsafe");
                 return;
             }
@@ -693,7 +698,7 @@ namespace NumSharp.Backends
                 // A StringDType target: the same putmask runs on marks (the values' element numbers, cycled by position)
                 // and the marked elements receive the strings.
                 var mk = maskCast;
-                Backends.Strings.NDVStringMove.ScatterVia(a, valsCast, (marks, index) => PutMaskCore(marks, mk, index, false));
+                Backends.Strings.NDVStringMove.ScatterVia(a, valsCast, (marks, index) => PutMaskCore(marks, mk, index));
                 return;
             }
             ExecutePutMask(a, maskCast, valsCast);
@@ -720,22 +725,25 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="arr">Target array (modified in place).</param>
         /// <param name="mask">Boolean mask of <paramref name="arr"/>'s size.</param>
-        /// <param name="vals">The values (an ndarray, or the array discovered from a list); <c>null</c> is Python's
-        ///     <c>None</c>, converted where NumPy converts values (after the mask's size check).</param>
-        /// <param name="sequence">True when <paramref name="vals"/> came from a list: NumPy converts it into the target's
-        ///     dtype without the <c>'safe'</c> rule.</param>
+        /// <param name="vals">NumPy's <c>values0</c>: an <see cref="NDArray"/> (an ndarray), a C# <see cref="Array"/>
+        ///     (NumPy's Python LIST, the list overloads' contract), or <c>null</c> (Python's <c>None</c>). Each is converted
+        ///     where NumPy converts values, after the mask's size check (<see cref="ValuesLikeNumPy"/>).</param>
         /// <exception cref="ArgumentNullException"><paramref name="arr"/> or <paramref name="mask"/> is null.</exception>
-        /// <exception cref="TypeError"><paramref name="vals"/> is null (<c>None</c>) and <paramref name="arr"/> is an
-        ///     integer (or <c>decimal</c>) array.</exception>
-        /// <exception cref="ValueError">See <see cref="np.place(NDArray, NDArray, NDArray)"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="vals"/> is neither an array, a C# array nor null (an
+        ///     internal caller's error: the facades pass only those).</exception>
+        /// <exception cref="TypeError"><paramref name="vals"/> is null (<c>None</c>), or a list holds None, and
+        ///     <paramref name="arr"/> is an integer (or <c>decimal</c>) array.</exception>
+        /// <exception cref="ValueError">See <see cref="np.place(NDArray, NDArray, NDArray)"/>; a list that is ragged, a NaN
+        ///     of a list into an integer array, a text of a list that does not parse.</exception>
+        /// <exception cref="OverflowException">A Python int of a list outside an integer array's range (NumPy's
+        ///     OverflowError).</exception>
         /// <exception cref="InvalidCastException">An ndarray of values that does not cast 'safely'.</exception>
         /// <exception cref="UnicodeEncodeError">Text values that are not ASCII into an <c>S</c> array.</exception>
         /// <exception cref="UnicodeDecodeError">Byte values that are not ASCII into a <c>U</c> array.</exception>
-        /// <exception cref="ValueError">See <see cref="np.place(NDArray, NDArray, NDArray)"/>.</exception>
         [NDScoped]
-        internal static void PlaceCore(NDArray arr, NDArray mask, NDArray vals, bool sequence)
+        internal static void PlaceCore(NDArray arr, NDArray mask, object vals)
         {
-            using var plain = NDMatrixBoundary.PlainFor(arr, mask, vals);   // in place: the helpers below see a matrix as a plain array
+            using var plain = NDMatrixBoundary.PlainFor(arr, mask, vals as NDArray);   // in place: the helpers below see a matrix as a plain array
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (mask is null) throw new ArgumentNullException(nameof(mask));
 
@@ -756,15 +764,16 @@ namespace NumSharp.Backends
             if (mask.size != arr.size)
                 throw new ValueError("place: mask and data must be the same size");
 
-            // Python's None: PyArray_FromAny(None, arr.dtype, CARRAY) is ONE element of None's setitem value, converted here
-            // whatever the mask holds (an integer array raises int(None)'s TypeError even under an all-false mask). The 0-d
-            // value is this scope's.
-            if (vals is null)
-                vals = NDArray.NoneForStore(arr.dtype);
+            // PyArray_FromAny(vals, arr.dtype, CARRAY), here after the size check and whatever the mask holds (an integer
+            // array raises int(None)'s TypeError, a list's out-of-range Python int its OverflowError, even under an
+            // all-false mask): None and a Python list are converted with arr's descriptor, an ndarray is taken as it is. A
+            // converted value is this scope's.
+            bool sequence = vals is Array;
+            NDArray valsArray = ValuesLikeNumPy(vals, arr);
 
             // NumPy converts the values before it looks at the mask's contents — the casting rule (a dtype check, so an
             // empty target raises too) and every value's conversion.
-            NDArray converted = PlaceValuesLikeNumPy(vals, arr, sequence);
+            NDArray converted = PlaceValuesLikeNumPy(valsArray, arr, sequence);
 
             // Empty arr ⇒ empty mask ⇒ no-op.
             if (arr.size == 0)
@@ -779,7 +788,7 @@ namespace NumSharp.Backends
                 // The recursive call opens its own nested scope; the scratch itself is released by this one. It re-runs
                 // the checks on the already converted values (the same dtype: nothing left to fail but the mask's).
                 var scratch = np.ascontiguousarray(arr);
-                PlaceCore(scratch, mask, converted ?? vals, sequence);
+                PlaceCore(scratch, mask, converted ?? valsArray);
                 np.copyto(arr, scratch, casting: "unsafe");
                 return;
             }
@@ -801,13 +810,13 @@ namespace NumSharp.Backends
                     : mask.astype(NPTypeCode.Boolean, copy: true, order: 'C');
             }
 
-            if (vals.size == 0 && AnyTrueMask(maskCast))
+            if (valsArray.size == 0 && AnyTrueMask(maskCast))
                 throw new ValueError("Cannot insert from an empty array!");
 
-            if (vals.size == 0)
+            if (valsArray.size == 0)
                 return;   // mask all-false and empty vals — NumPy treats as no-op
 
-            NDArray valsCast = converted ?? (vals.Shape.IsContiguous ? vals : np.ascontiguousarray(vals));
+            NDArray valsCast = converted ?? (valsArray.Shape.IsContiguous ? valsArray : np.ascontiguousarray(valsArray));
             // The reference-holding route PyArray_PutMask takes (PyDataType_REFCHK of the target's descriptor). NumPy's
             // arr_place has none: it copies each item with the dtype's ArrFuncs copyswap, which StringDType lacks.
             if (arr.dtype.Meta.HasReferences)
@@ -815,10 +824,246 @@ namespace NumSharp.Backends
                 // A StringDType target: the same place runs on marks (the values' element numbers, cycled over the True
                 // positions) and the marked elements receive the strings. (NumPy 2.4.2 crashes the process here.)
                 var mk = maskCast;
-                Backends.Strings.NDVStringMove.ScatterVia(arr, valsCast, (marks, index) => PlaceCore(marks, mk, index, false));
+                Backends.Strings.NDVStringMove.ScatterVia(arr, valsCast, (marks, index) => PlaceCore(marks, mk, index));
                 return;
             }
             ExecutePlace(arr, maskCast, valsCast);
+        }
+
+        /// <summary>
+        ///     The first half of NumPy's <c>PyArray_FromAny(values0, PyArray_DESCR(self), 0, 0, NPY_ARRAY_CARRAY, NULL)</c> in
+        ///     <c>arr_place</c> and <c>PyArray_PutMask</c>: what the caller's values ARE before the casting rule
+        ///     (<see cref="PlaceValuesLikeNumPy"/>). None is one element of None's setitem value in
+        ///     <paramref name="target"/>'s descriptor, a Python list is discovered INTO that descriptor
+        ///     (<see cref="ListValuesLikeNumPy"/>), an ndarray is taken as it is.
+        /// </summary>
+        /// <param name="values">An <see cref="NDArray"/>, a C# <see cref="Array"/> (NumPy's Python list, the list overloads'
+        ///     contract) or <c>null</c> (Python's <c>None</c>).</param>
+        /// <param name="target">The array written into: its descriptor converts None and a list.</param>
+        /// <returns>The values as an array: the caller's own ndarray, or a conversion the calling scope reclaims.</returns>
+        /// <exception cref="ArgumentException"><paramref name="values"/> is none of the three (an internal caller's
+        ///     error).</exception>
+        /// <exception cref="TypeError">None (or a None item of a list) into an integer or decimal array (<c>int()</c>'s
+        ///     text), an item the descriptor cannot convert.</exception>
+        /// <exception cref="OverflowException">A Python int of a list outside an integer array's range.</exception>
+        /// <exception cref="ValueError">A ragged list, a NaN item into an integer array, a text item that does not
+        ///     parse.</exception>
+        private static NDArray ValuesLikeNumPy(object values, NDArray target)
+        {
+            switch (values)
+            {
+                case null:
+                    // Python's None: ONE element of None's setitem value (NaN, nan+nanj, False, 'None'; int()'s TypeError for
+                    // an integer array, even under an all-false mask, because the conversion does not read the mask).
+                    return NDArray.NoneForStore(target.dtype);
+                case NDArray array:
+                    // An ndarray: PyArray_FromArray checks the 'safe' rule and casts, in PlaceValuesLikeNumPy.
+                    return array;
+                case Array list:
+                    return ListValuesLikeNumPy(list, target);
+                default:
+                    throw new ArgumentException(
+                        $"np.place / np.putmask values must be an NDArray, a C# array or null, not {values.GetType().Name}.",
+                        nameof(values));
+            }
+        }
+
+        /// <summary>
+        ///     NumPy's <c>PyArray_FromAny(list, descr)</c> for the list overloads of np.place / np.putmask: a C# array is
+        ///     NumPy's Python LIST of its items, read as NumSharp's coercion of a list reads them (a C# integer a Python int,
+        ///     a double or float a Python float, a bool a Python bool, a Complex a Python complex; Half, char and decimal
+        ///     NumPy scalars of their own dtype: a char is its code in a numeric array and its character in a text array),
+        ///     discovered INTO <paramref name="target"/>'s descriptor — every item stored by the descriptor's setitem, so
+        ///     there is no <c>'safe'</c> rule, but a Python int outside an integer array raises NumPy's OverflowError, a NaN
+        ///     into an integer array <c>int()</c>'s ValueError, and a number into a text array is its own <c>str()</c>
+        ///     (<c>[1, 2.5]</c> into <c>&lt;U3</c> is <c>['1', '2.5']</c>).
+        /// </summary>
+        /// <param name="list">The caller's C# array (any rank: its items in C order, the order the values are read in).</param>
+        /// <param name="target">The array written into.</param>
+        /// <returns>The values in <paramref name="target"/>'s descriptor, or a typed array a safe cast turns into them
+        ///     exactly; owned by the calling scope.</returns>
+        /// <exception cref="TypeError">An item the descriptor cannot convert (None into an integer array, a complex number
+        ///     into a real one).</exception>
+        /// <exception cref="OverflowException">A Python int outside an integer array's range.</exception>
+        /// <exception cref="ValueError">A ragged list, a NaN into an integer array, a text that does not parse.</exception>
+        /// <exception cref="UnicodeEncodeError">A text item that is not ASCII into an <c>S</c> array.</exception>
+        /// <remarks>
+        ///     <para><b>Why a typed array is a list here.</b> NumPy code writes <c>np.putmask(a, m, [1, 2])</c>, whose C#
+        ///     spelling is <c>new[] { 1, 2 }</c>; the list overloads document every C# array as that list (pass
+        ///     <c>np.array(...)</c> for an ndarray's <c>'safe'</c> rule). Until 2026-10-30 the list was discovered on its
+        ///     own (<c>np.array</c>) and then cast unsafely: <c>[1000]</c> into int8 stored -24 where NumPy raises, and
+        ///     <c>[1, 2.5]</c> into <c>&lt;U3</c> stored <c>'1.0'</c>.</para>
+        ///     <para><b>The fast route.</b> A typed array of numbers is discovered whole and cast later where the cast stores
+        ///     exactly what each item's setitem stores and no item can raise (<see cref="CastStoresEachItemsValue"/>): a
+        ///     widening, any numbers into bool, Python floats into a float class of any width, Python ints or floats into an
+        ///     integer class when the values' min and max show every item in range (<see cref="ItemsFitIntegerClass"/>,
+        ///     through np.amin / np.amax's IL kernels). Per-item storing costs a boxed object per item (100,000 doubles into
+        ///     float32: 5.6-6.8 ms against 0.1 ms for the cast; 1,024 doubles into int32: 80 µs against 3.2 µs with the range
+        ///     check). A list with an item out of range, a NaN or an infinity takes the per-item route, which raises NumPy's
+        ///     error at the first such item, and so do text targets, fixed-width and <c>StringDType</c> alike: each item's
+        ///     <c>str()</c> is its Python number's, and a float32 item is the Python float 1.100000023841858, where the
+        ///     float32 discovery writes <c>'1.1'</c> (the parent's answer).</para>
+        /// </remarks>
+        private static NDArray ListValuesLikeNumPy(Array list, NDArray target)
+        {
+            DType descr = target.Storage.Descr;
+            Type elementType = list.GetType().GetElementType();
+            bool typedNumbers = elementType is { IsValueType: true };
+            // Text targets store each item's str() (a float32 item is a Python float: '1.100000023841858', not the float32
+            // '1.1'), so they take the per-item stores: StringDTypeMeta is the fixed-width S / U class, HasReferences
+            // StringDType's.
+            if (typedNumbers && !descr.Meta.HasReferences && descr.Meta is not StringDTypeMeta)
+            {
+                var discovered = new NDArray(list);
+                if (CastStoresEachItemsValue(discovered, elementType, descr))
+                    return discovered;
+                discovered.Dispose();
+            }
+
+            if (typedNumbers)
+            {
+                // The coercion of a Python list of the items (a typed array is not one: NumSharp's coercion reads it as an
+                // ndarray of its own dtype). Enumerated row-major for a multi-dimensional array: C order.
+                var items = new object[list.Length];
+                long i = 0;
+                foreach (object item in list)
+                    items[i++] = item;
+                return NDArray.AnyArrayFromObject(items, descr, 'C');
+            }
+            // An array of references (object[], string[], a jagged array, object[,]) is the Python list itself.
+            return NDArray.AnyArrayFromObject(list, descr, 'C');
+        }
+
+        /// <summary>
+        ///     Whether casting a typed C# array's discovered values into <paramref name="descr"/> stores exactly what the
+        ///     descriptor's setitem stores for each of its items (the Python numbers they spell), with no item able to raise
+        ///     — the condition under which <see cref="ListValuesLikeNumPy"/> may skip the per-item stores.
+        /// </summary>
+        /// <param name="discovered">The typed array's values in their C# element's dtype (read by the range check).</param>
+        /// <param name="elementType">The C# element type: a <c>double</c> or a <c>float</c> is a Python float, a C#
+        ///     integer a Python int; Half, char, decimal and Complex items take only the <c>'safe'</c> rule and the bool
+        ///     target.</param>
+        /// <param name="descr">The numeric target descriptor (text targets, fixed-width and StringDType, never
+        ///     ask).</param>
+        /// <returns>True for a widening (the <c>'safe'</c> rule: every item fits, the cast is exact), for a bool target
+        ///     (every number stores its truth value, as the cast does: NaN is True in both), for Python floats into an IEEE
+        ///     float or complex class of any width (one rounding of the same value, which is the cast's; an overflow is inf,
+        ///     nothing raises), and for Python ints or floats into an integer class when every item lies in its range
+        ///     (<see cref="ItemsFitIntegerClass"/>: the cast's values, a float truncated toward zero as <c>int()</c>
+        ///     truncates). False otherwise: an item outside an integer class, a NaN or an infinity must raise NumPy's error
+        ///     at the first such item, and NumPy scalars (Half, char, decimal items) and complex items convert by their own
+        ///     rules.</returns>
+        private static bool CastStoresEachItemsValue(NDArray discovered, Type elementType, DType descr)
+        {
+            if (DTypeCasting.CanCastTypeTo(discovered.dtype, descr, NPY_CASTING.NPY_SAFE_CASTING))
+                return true;
+            if (descr.kind == 'b')
+                return true;
+            // A float32 item is a Python float holding the float's value exactly, so both element types round the same
+            // real value once into the target, as the cast from their discovered dtype does.
+            bool pythonFloats = elementType == typeof(double) || elementType == typeof(float);
+            if (pythonFloats && (descr.kind == 'c' || (descr.kind == 'f' && descr.type != typeof(decimal))))
+                return true;
+            // An integer class (NumSharp's char, whose setitem reads text, excluded): the cast's values when every item fits.
+            // The check is two kernel passes, cheaper than the per-item stores from 4 items on and within 0.15 µs below
+            // that (np.place over an all-True mask, two pinned P-cores: int8 <- int[1] 1.43 against 1.29 µs per item,
+            // int8 <- int[32] 1.42 against 2.77, int32 <- double[1024] 3.15 against 80.0).
+            bool pythonInts = elementType == typeof(sbyte) || elementType == typeof(byte) || elementType == typeof(short) ||
+                              elementType == typeof(ushort) || elementType == typeof(int) || elementType == typeof(uint) ||
+                              elementType == typeof(long) || elementType == typeof(ulong);
+            if ((descr.kind == 'i' || descr.kind == 'u') && descr.type != typeof(char) && (pythonInts || pythonFloats))
+                return ItemsFitIntegerClass(discovered, descr);
+            return false;
+        }
+
+        /// <summary>
+        ///     Whether every value of <paramref name="values"/> (Python ints, or Python floats truncated toward zero as
+        ///     <c>int()</c> truncates them) lies in the integer class <paramref name="descr"/>: then each item's setitem
+        ///     stores the value the cast stores and none raises. The values' min and max decide, from the IL reduction
+        ///     kernels np.amin / np.amax run (<see cref="TryMinMax{T}"/>); a NaN propagates through both and fails the
+        ///     bounds, as an infinity does.
+        /// </summary>
+        /// <param name="values">The discovered values: the NDArray constructor's fresh C-contiguous copy of a C# array
+        ///     of 8- to 64-bit integers, floats or doubles, read in place.</param>
+        /// <param name="descr">The integer target class (its width and kind give its range).</param>
+        /// <returns>True when every value fits; false sends the list to the per-item route, which raises NumPy's
+        ///     OverflowError (or <c>int()</c>'s ValueError for a NaN) at the first item that does not, as it does when no
+        ///     kernel can be built.</returns>
+        /// <remarks>
+        ///     The bounds are exact. Integers compare as <see cref="Int128"/> (every 8- to 64-bit value and both bounds of
+        ///     every class are Int128 values). A float's truncation compares with the class's lower bound and with its upper
+        ///     bound plus one, both powers of two and so exact doubles: an integer-valued <c>t</c> satisfies
+        ///     <c>t &lt;= hi</c> exactly when <c>t &lt; hi + 1</c>. Decimal bounds built from a double are NOT exact: .NET
+        ///     rounds a double to 15 significant digits on its way to <see cref="decimal"/>, so <c>(decimal)Math.Pow(2, 63)</c>
+        ///     is 9223372036854780000, which let 2^63 pass into int64 and wrap to -2^63 (found by NumPy's boundary cases).
+        /// </remarks>
+        private static bool ItemsFitIntegerClass(NDArray values, DType descr)
+        {
+            if (values.size == 0)
+                return true;
+            int bits = (int)descr.itemsize * 8;
+            bool signed = descr.kind == 'i';
+            Int128 lo = signed ? -(Int128.One << (bits - 1)) : Int128.Zero;
+            Int128 hi = signed ? (Int128.One << (bits - 1)) - 1 : (Int128.One << bits) - 1;
+            // The truncated float's bounds: the lower bound itself (-2^(bits-1), or 0) and the upper bound plus one
+            // (2^(bits-1) or 2^bits), each exact in a double.
+            double floatLo = signed ? -Math.ScaleB(1.0, bits - 1) : 0.0;
+            double floatHiExclusive = Math.ScaleB(1.0, signed ? bits - 1 : bits);
+            switch (values.typecode)
+            {
+                case NPTypeCode.SByte: return TryMinMax(values, out sbyte i8Min, out sbyte i8Max) && i8Min >= lo && i8Max <= hi;
+                case NPTypeCode.Byte: return TryMinMax(values, out byte u8Min, out byte u8Max) && u8Min >= lo && u8Max <= hi;
+                case NPTypeCode.Int16: return TryMinMax(values, out short i16Min, out short i16Max) && i16Min >= lo && i16Max <= hi;
+                case NPTypeCode.UInt16: return TryMinMax(values, out ushort u16Min, out ushort u16Max) && u16Min >= lo && u16Max <= hi;
+                case NPTypeCode.Int32: return TryMinMax(values, out int i32Min, out int i32Max) && i32Min >= lo && i32Max <= hi;
+                case NPTypeCode.UInt32: return TryMinMax(values, out uint u32Min, out uint u32Max) && u32Min >= lo && u32Max <= hi;
+                case NPTypeCode.Int64: return TryMinMax(values, out long i64Min, out long i64Max) && i64Min >= lo && i64Max <= hi;
+                case NPTypeCode.UInt64: return TryMinMax(values, out ulong u64Min, out ulong u64Max) && u64Min >= lo && u64Max <= hi;
+                // A float32 widens to its exact double; a NaN fails both comparisons, an infinity truncates to itself and
+                // fails a bound.
+                case NPTypeCode.Single:
+                    return TryMinMax(values, out float f32Min, out float f32Max)
+                           && Math.Truncate((double)f32Min) >= floatLo && Math.Truncate((double)f32Max) < floatHiExclusive;
+                case NPTypeCode.Double:
+                    return TryMinMax(values, out double f64Min, out double f64Max)
+                           && Math.Truncate(f64Min) >= floatLo && Math.Truncate(f64Max) < floatHiExclusive;
+                default:
+                    // Not a discovery of C# numbers (CastStoresEachItemsValue asks only for those): the per-item route.
+                    return false;
+            }
+        }
+
+        /// <summary>
+        ///     The minimum and the maximum of a contiguous array through the flat IL reduction kernels np.amin / np.amax run
+        ///     (<see cref="DirectILKernelGenerator.TryGetTypedElementReductionKernel{TResult}"/>, <see cref="ReductionOp.Min"/>
+        ///     and <see cref="ReductionOp.Max"/>), called on the buffer: the same SIMD passes, without the two 0-d result
+        ///     arrays the public calls build (~1.2 µs a call of fixed cost the range check paid on short lists).
+        /// </summary>
+        /// <typeparam name="T">The array's element type (its dtype's C# type), the kernels' result type.</typeparam>
+        /// <param name="values">A non-empty C-contiguous array of element type <typeparamref name="T"/>.</param>
+        /// <param name="min">The smallest value (a float NaN when one is present: the kernels propagate it).</param>
+        /// <param name="max">The largest value (a float NaN when one is present).</param>
+        /// <returns>False when a kernel cannot be built (no dynamic code): the caller takes the per-item route.</returns>
+        private static unsafe bool TryMinMax<T>(NDArray values, out T min, out T max) where T : unmanaged
+        {
+            min = max = default;
+            var minKernel = DirectILKernelGenerator.TryGetTypedElementReductionKernel<T>(
+                new ElementReductionKernelKey(values.typecode, values.typecode, ReductionOp.Min, IsContiguous: true));
+            var maxKernel = DirectILKernelGenerator.TryGetTypedElementReductionKernel<T>(
+                new ElementReductionKernelKey(values.typecode, values.typecode, ReductionOp.Max, IsContiguous: true));
+            if (minKernel is null || maxKernel is null)
+                return false;
+            // The kernel contract of DefaultEngine's flat reductions: the first element's address, the element strides
+            // and dimensions (read only by the strided form), the rank and the element count.
+            var shape = values.Shape;
+            void* first = (byte*)values.Storage.Address + shape.offset * values.dtypesize;
+            fixed (long* strides = shape.strides)
+            fixed (long* dims = shape.dimensions)
+            {
+                min = minKernel(first, strides, dims, values.ndim, values.size);
+                max = maxKernel(first, strides, dims, values.ndim, values.size);
+            }
+            return true;
         }
 
         /// <summary>

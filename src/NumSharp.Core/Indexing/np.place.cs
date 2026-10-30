@@ -57,7 +57,7 @@ namespace NumSharp
         ///     opened), so the scope never disposes it.</para>
         /// </remarks>
         public static void place(NDArray arr, NDArray mask, NDArray vals)
-            => UnmanagedStorage.PlaceCore(arr, mask, vals, sequence: false);
+            => UnmanagedStorage.PlaceCore(arr, mask, vals);
 
         /// <summary>
         ///     <see cref="place(NDArray, NDArray, NDArray)"/> with the values given as a C# array — NumPy's Python LIST of
@@ -68,36 +68,30 @@ namespace NumSharp
         /// <param name="vals">
         ///     The values, cycled over the True positions. NumPy converts a list STRAIGHT INTO <paramref name="arr"/>'s dtype
         ///     (<c>PyArray_FromAny(list, arr.dtype)</c>, as <c>np.array(vals, dtype=arr.dtype)</c> does), so there is no
-        ///     <c>'safe'</c> rule: <c>'RRRR'</c> into a <c>&lt;U3</c> array truncates to <c>'RRR'</c>, <c>1.9</c> into an int
-        ///     array truncates to 1 — where an ndarray of the same values raises the cast TypeError.
+        ///     <c>'safe'</c> rule: every item is stored by the dtype's setitem — <c>'RRRR'</c> into a <c>&lt;U3</c> array
+        ///     truncates to <c>'RRR'</c>, <c>1.9</c> into an int array truncates to 1, <c>[1, 2.5]</c> into a <c>&lt;U3</c>
+        ///     array is <c>['1', '2.5']</c> — where an ndarray of the same values raises the cast TypeError; a Python int
+        ///     the array cannot hold raises (<c>[1000]</c> into int8). The conversion happens after the mask's checks.
         /// </param>
         /// <exception cref="ArgumentNullException"><paramref name="arr"/> or <paramref name="mask"/> is null.</exception>
-        /// <exception cref="TypeError"><paramref name="vals"/> is null (<c>None</c>) and <paramref name="arr"/> is an
-        ///     integer (or <c>decimal</c>) array.</exception>
-        /// <exception cref="ValueError">The checks of <see cref="place(NDArray, NDArray, NDArray)"/>.</exception>
+        /// <exception cref="TypeError"><paramref name="vals"/> is null (<c>None</c>), or holds None, and
+        ///     <paramref name="arr"/> is an integer (or <c>decimal</c>) array.</exception>
+        /// <exception cref="ValueError">The checks of <see cref="place(NDArray, NDArray, NDArray)"/>; a ragged list (NumPy's
+        ///     inhomogeneous-shape text), a NaN into an integer array, a text value that does not parse into a numeric
+        ///     array.</exception>
+        /// <exception cref="OverflowException">A Python int outside an integer array's range (<c>Python integer 1000 out of
+        ///     bounds for int8</c>).</exception>
         /// <exception cref="UnicodeEncodeError">Text values that are not ASCII into an <c>S</c> array.</exception>
         /// <exception cref="UnicodeDecodeError">Byte values that are not ASCII into a <c>U</c> array.</exception>
-        /// <exception cref="ValueError">A text value that does not parse into a numeric array.</exception>
         /// <remarks>
         ///     C# binds a typed array argument (<c>double[]</c>, <c>string[]</c>) here rather than to the
         ///     <see cref="NDArray"/> overload: an identity/reference conversion beats NumSharp's implicit
         ///     <c>Array → NDArray</c> conversion. Pass <c>np.array(...)</c> to get NumPy's ndarray semantics. A bare
         ///     <c>null</c> binds here too, and is Python's <c>None</c> exactly as in the <see cref="NDArray"/> overload.
+        ///     The list is converted by the body (<see cref="UnmanagedStorage.PlaceCore"/>), where NumPy converts it: after
+        ///     the target's writeability and the mask's size, so a wrong-size mask is reported before a ragged list.
         /// </remarks>
-        [NDScoped]
         public static void place(NDArray arr, NDArray mask, Array vals)
-        {
-            // None: PlaceCore converts it after the mask checks (a null values array is None there).
-            if (vals is null)
-            {
-                UnmanagedStorage.PlaceCore(arr, mask, null, sequence: false);
-                return;
-            }
-            // The list's own dtype is discovered first (np.array), then converted into arr's dtype by PlaceCore after the
-            // size check, as NumPy's conversion follows its mask checks. The discovered array is released with the scope.
-            // A StringDType target converts the list with its own descriptor (every element by setitem, as NumPy's
-            // PyArray_FromAny(vals, dtype) does); the discovered U / number array would be cast instead.
-            UnmanagedStorage.PlaceCore(arr, mask, arr is not null && arr.Storage.IsVString ? Backends.Strings.NDVStringMove.StoreValue(vals, arr.dtype) : np.array(vals), sequence: true);
-        }
+            => UnmanagedStorage.PlaceCore(arr, mask, vals);
     }
 }
