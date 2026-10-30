@@ -32,7 +32,8 @@ namespace NumSharp
         ///     of 'C', 'F', 'A', or 'K' (got 'Z')</c>), or it is A or K (<c>only 'C' or 'F' order is permitted</c>);
         ///     <paramref name="N"/> or <paramref name="M"/> is negative (<c>negative dimensions are not allowed</c>); or the
         ///     dtype's setitem refuses the Python int 1 (a <c>StringDType(coerce=False)</c>).</exception>
-        /// <exception cref="ArgumentException"><paramref name="device"/> is neither null nor <c>"cpu"</c>.</exception>
+        /// <exception cref="ValueError"><paramref name="device"/> is neither null nor <c>"cpu"</c> (NumPy's <c>Device not
+        ///     understood. Only "cpu" is allowed, but received: ...</c>).</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.eye.html. NumPy's eye is
         ///     <c>m = zeros((N, M), dtype=dtype, order=order, device=device)</c> and so raises in np.zeros' order, which this

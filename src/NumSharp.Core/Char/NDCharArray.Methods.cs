@@ -197,7 +197,7 @@ namespace NumSharp
         /// <param name="stream">Must be <c>null</c>.</param>
         /// <returns>This chararray.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="device"/> is <c>null</c>.</exception>
-        /// <exception cref="ArgumentException">Another device, or a stream.</exception>
+        /// <exception cref="ValueError">A stream, then another device: <see cref="NDArray.to_device"/>'s NumPy texts.</exception>
         public new NDCharArray to_device(string device, object stream = null) => (NDCharArray)base.to_device(device, stream);
 
         #endregion

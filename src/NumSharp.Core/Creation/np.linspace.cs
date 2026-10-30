@@ -24,8 +24,8 @@ namespace NumSharp
         ///     dtype and which results are views).</returns>
         /// <exception cref="ValueError">A negative <paramref name="num"/> (<c>Number of samples, -1, must be
         ///     non-negative.</c>), checked first, as NumPy checks it.</exception>
-        /// <exception cref="ArgumentException">A <paramref name="device"/> other than <c>"cpu"</c>, checked after the
-        ///     count.</exception>
+        /// <exception cref="ValueError">A <paramref name="device"/> other than <c>"cpu"</c> (NumPy's <c>Device not understood.
+        ///     Only "cpu" is allowed, but received: ...</c>), checked after the count.</exception>
         /// <exception cref="NotSupportedException">A <paramref name="dtype"/> without a storage lane (a datetime
         ///     descriptor); a text dtype formats the float64 samples, as NumPy's astype does.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linspace.html

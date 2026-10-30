@@ -66,8 +66,10 @@ namespace NumSharp
         ///     <paramref name="dtype"/> is null: NumPy builds an object array, a dtype NumSharp does not have. With a dtype,
         ///     <c>None</c> is the 0-d array of its setitem value (NaN, <c>nan+nanj</c>, <c>False</c>, <c>'None'</c>, a
         ///     <c>StringDType</c> NA object).</exception>
-        /// <exception cref="ArgumentException">An unsupported <paramref name="device"/>, or <paramref name="copy"/> is
-        ///     <c>false</c> and a copy (or a C# literal's or <c>None</c>'s conversion) is required.</exception>
+        /// <exception cref="ValueError">An unsupported <paramref name="device"/> (NumPy's <c>Device not understood. Only "cpu"
+        ///     is allowed, but received: ...</c>).</exception>
+        /// <exception cref="ArgumentException"><paramref name="copy"/> is <c>false</c> and a copy (or a C# literal's or
+        ///     <c>None</c>'s conversion) is required.</exception>
         /// <exception cref="OverflowException">A C# literal out of <paramref name="dtype"/>'s integer range (NumPy's
         ///     OverflowError texts).</exception>
         /// <exception cref="ValueError">A float NaN literal into an integer <paramref name="dtype"/>.</exception>
@@ -90,11 +92,9 @@ namespace NumSharp
             if (NDCharArrayBoundary.Sees(a))
                 return NDCharArrayBoundary.Plain((a, dtype, order, copy, like, device), static s => asarray(s.a, s.dtype, s.order, s.copy, s.like, s.device));
 
-            // Only "cpu" is supported (matches NumPy 2.x). null is treated as "default".
-            if (device != null && !string.Equals(device, "cpu", StringComparison.Ordinal))
-                throw new ArgumentException(
-                    $"Device not understood. Only \"cpu\" is allowed, but received: {device}",
-                    nameof(device));
+            // Only "cpu" is supported (matches NumPy 2.x). null is treated as "default". The creation functions' one check
+            // (PyArray_DeviceConverterOptional), with NumPy's ValueError text.
+            ValidateDevice(device);
 
             // `like` exists for NumPy's __array_function__ dispatch protocol. NumSharp has
             // no array-subclass dispatch, so the value is accepted but never read.

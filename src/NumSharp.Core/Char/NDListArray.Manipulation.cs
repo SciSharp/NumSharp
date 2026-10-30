@@ -108,9 +108,9 @@ namespace NumSharp
         /// <returns>This array.</returns>
         /// <exception cref="ArgumentNullException">A null device (NumPy's TypeError <c>to_device() argument 1 must be str,
         ///     not None</c>).</exception>
-        /// <exception cref="ArgumentException">Another device (<c>Unsupported device: gpu. Only 'cpu' is accepted.</c>) or a
-        ///     stream (<c>The stream argument in to_device() is not supported</c>): <see cref="NDArray.to_device"/>'s
-        ///     types and texts.</exception>
+        /// <exception cref="ValueError">A stream (<c>The stream argument in to_device() is not supported</c>), then another
+        ///     device (<c>Unsupported device: gpu. Only 'cpu' is accepted.</c>): <see cref="NDArray.to_device"/>'s types and
+        ///     texts, NumPy's.</exception>
         /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
         public NDListArray to_device(string device, object stream = null)
         {

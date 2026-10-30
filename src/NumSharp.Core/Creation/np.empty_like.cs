@@ -38,7 +38,8 @@ namespace NumSharp
         /// <exception cref="ValueError"><paramref name="order"/> is not one of C, F, A, K in either case (<c>order must be one
         ///     of 'C', 'F', 'A', or 'K' (got 'Z')</c>), reported before the device, as NumPy's empty_like converts its
         ///     arguments in order.</exception>
-        /// <exception cref="ArgumentException"><paramref name="device"/> is neither null nor <c>"cpu"</c>.</exception>
+        /// <exception cref="ValueError"><paramref name="device"/> is neither null nor <c>"cpu"</c> (NumPy's <c>Device not
+        ///     understood. Only "cpu" is allowed, but received: ...</c>).</exception>
         public static NDArray empty_like(NDArray prototype, DType dtype, Shape shape, char order, string device = null)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)

@@ -45,8 +45,8 @@ namespace NumSharp
         ///     A negative <paramref name="num"/> (<c>Number of samples, -1, must be non-negative.</c>), NumPy's first
         ///     check: before the device and before anything is allocated.
         /// </exception>
-        /// <exception cref="ArgumentException"><paramref name="device"/> is neither null nor <c>"cpu"</c> (NumPy's
-        ///     <c>Device not understood. Only "cpu" is allowed, but received: ...</c>, a ValueError there).</exception>
+        /// <exception cref="ValueError"><paramref name="device"/> is neither null nor <c>"cpu"</c> (NumPy's
+        ///     <c>Device not understood. Only "cpu" is allowed, but received: ...</c>).</exception>
         /// <exception cref="NotSupportedException"><paramref name="dtype"/> has no storage lane (a datetime
         ///     descriptor).</exception>
         /// <remarks>

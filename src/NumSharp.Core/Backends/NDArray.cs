@@ -728,7 +728,9 @@ namespace NumSharp
         /// <param name="stream">Accepted for Array-API signature parity; must be <c>null</c> (NumSharp models no streams).</param>
         /// <returns>This array, unchanged.</returns>
         /// <exception cref="ArgumentNullException">If <paramref name="device"/> is <c>null</c> (NumPy raises <c>TypeError</c>).</exception>
-        /// <exception cref="ArgumentException">If <paramref name="device"/> is not <c>"cpu"</c>, or <paramref name="stream"/> is non-null.</exception>
+        /// <exception cref="ValueError">If <paramref name="stream"/> is non-null (<c>The stream argument in to_device() is not
+        ///     supported</c>), or <paramref name="device"/> is not <c>"cpu"</c> (<c>Unsupported device: gpu. Only 'cpu' is
+        ///     accepted.</c>): NumPy's ValueError, in that order.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.to_device.html</remarks>
         public NDArray to_device(string device, object stream = null)
         {
@@ -737,11 +739,11 @@ namespace NumSharp
             if (device is null)
                 throw new ArgumentNullException(nameof(device), "to_device() argument 1 must be str, not None");
             if (stream != null)
-                throw new ArgumentException("The stream argument in to_device() is not supported");
+                throw new ValueError("The stream argument in to_device() is not supported");
             // Single quotes around 'cpu' here — the creation-path device= message uses double quotes.
             // The asymmetry is deliberate and matches NumPy 2.x verbatim.
             if (!string.Equals(device, "cpu", StringComparison.Ordinal))
-                throw new ArgumentException($"Unsupported device: {device}. Only 'cpu' is accepted.");
+                throw new ValueError($"Unsupported device: {device}. Only 'cpu' is accepted.");
             return this;
         }
 
