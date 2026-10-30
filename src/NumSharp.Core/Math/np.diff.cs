@@ -76,27 +76,5 @@ namespace NumSharp
                 return NDMatrixBoundary.Wrapped((a, n, axis, prepend, append), static s => diff(s.a, s.n, s.axis, s.prepend, s.append));
             return np.EngineOf(a).Diff(a, n, axis, prepend, append);
         }
-
-        /// <summary>
-        ///     The rank and axis checks <see cref="diff"/> makes before differencing (after its <c>n</c>
-        ///     checks), shared with the callers that compose NumPy's <c>diff(a, axis=axis)</c> into a fused
-        ///     pass instead of calling it (<see cref="trapezoid"/>), so they reject exactly what diff rejects,
-        ///     with the same errors.
-        /// </summary>
-        /// <param name="a">The array to be differenced.</param>
-        /// <param name="axis">The caller's axis; negative counts from the end (NumPy's <c>normalize_axis_index</c>).</param>
-        /// <returns>The axis in <c>[0, a.ndim)</c>.</returns>
-        /// <exception cref="ValueError"><paramref name="a"/> is 0-D ("diff requires input that is at least one dimensional").</exception>
-        /// <exception cref="AxisError"><paramref name="axis"/> is outside <c>[-a.ndim, a.ndim-1]</c>.</exception>
-        internal static int DiffAxis(NDArray a, int axis)
-        {
-            int nd = a.ndim;
-            if (nd == 0)
-                throw new ValueError(
-                    "diff requires input that is at least one dimensional");
-
-            // normalize_axis_index(axis, nd)
-            return Backends.DefaultEngine.check_and_adjust_axis(nd, axis);
-        }
     }
 }

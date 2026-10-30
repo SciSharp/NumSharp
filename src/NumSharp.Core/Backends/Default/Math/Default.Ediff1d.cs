@@ -1,9 +1,8 @@
-// NumPy's np.ediff1d (numpy/lib/_arraysetops_impl.py) as DefaultEngine's member, over np.diff's stencil helpers. The
-// file sits beside its facade while it calls np.*: ratchet R2 counts np.* calls against every file under Backends/
-// (the np-layer dtype plan, C3); it moves under Backends/Default/ in P6.
+// NumPy's np.ediff1d (numpy/lib/_arraysetops_impl.py) as DefaultEngine's member, over np.diff's stencil helpers.
 
 using System;
 using System.Collections.Generic;
+using NumSharp.Backends.Iteration;
 
 namespace NumSharp.Backends
 {
@@ -17,7 +16,7 @@ namespace NumSharp.Backends
 
             // ravel() always returns a fresh wrapper (it may share the caller's storage);
             // it is released by this method's scope, which never frees the caller's buffer.
-            var flat = np.ravel(ary);
+            var flat = NDArray.Ravel(ary, 'C');
             NPTypeCode dt = flat.GetTypeCode;
 
             NDArray begin = null, end = null, middle = null;
@@ -71,7 +70,7 @@ namespace NumSharp.Backends
             if (begin is not null) parts.Add(begin);
             parts.Add(middle);
             if (end is not null) parts.Add(end);
-            return np.concatenate(parts.ToArray(), 0);
+            return NDArray.ConcatenateInto(parts.ToArray(), 0, null, null, "same_kind");
         }
 
         /// <summary>
@@ -98,11 +97,11 @@ namespace NumSharp.Backends
         {
             if (value is null) return null;
 
-            NDArray src = value is NDArray nd ? nd : np.asanyarray(value);
+            NDArray src = value is NDArray nd ? nd : NDArray.AnyArrayFromObject(value, null, 'K');
 
             // NumPy's np.can_cast(to_begin, dtype_req, casting="same_kind") on the two DESCRIPTORS: a string operand or
             // a string input is judged by its class and width (float64 -> <U2 is same_kind, <U2 -> float64 is not).
-            if (!np.can_cast(src.dtype, dt, "same_kind"))
+            if (!DTypeCasting.CanCastTypeTo(src.dtype, dt, NPY_CASTING.NPY_SAME_KIND_CASTING))
                 throw new ArgumentException(
                     $"dtype of `{name}` must be compatible with input `ary` " +
                     "under the `same_kind` rule.", name);
@@ -111,7 +110,7 @@ namespace NumSharp.Backends
             if (dt.Meta is StringDTypeMeta)
                 return null;
 
-            var flat = np.ravel(src);
+            var flat = NDArray.Ravel(src, 'C');
             return flat.astype(dt, copy: true);
         }
     }

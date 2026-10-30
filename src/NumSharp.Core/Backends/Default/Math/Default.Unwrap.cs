@@ -1,7 +1,6 @@
 // NumPy's np.unwrap (numpy/lib/_function_base_impl.py) as DefaultEngine's member: the period's Python type picks the
-// float or integer path, then UnwrapImpl runs NumPy's statements. The file sits beside its facade while it calls np.*:
-// ratchet R2 counts np.* calls against every file under Backends/ (the np-layer dtype plan, C3); it moves under
-// Backends/Default/ in P6.
+// float or integer path, then UnwrapImpl runs NumPy's statements (np.diff, the fused pass, np.cumsum: the operand's
+// engine members).
 
 using System;
 using NumSharp.Backends.Iteration;
@@ -169,7 +168,7 @@ namespace NumSharp.Backends
             if (len < 2 || p.size == 0)
                 return up;
 
-            dd = np.diff(p, axis: ax);
+            dd = p.TensorEngine.Diff(p, 1, ax, null, null);
 
             // On the integer path a BOOL input computes in int64 (a weak int is higher-kind
             // than bool, so NEP50 promotes bool -> the int's default int64). Materialize that
@@ -212,11 +211,11 @@ namespace NumSharp.Backends
             phExpr = NDExpr.Where(
                 NDExpr.Less(NDExpr.Abs(d), NDExpr.Const(disc)), NDExpr.Const(0L), phExpr);
 
-            ph = np.evaluate(phExpr);                 // one fused pass, no intermediates
+            ph = p.TensorEngine.Evaluate(phExpr);     // one fused pass, no intermediates (np.evaluate's default options)
 
             // up[1:] = p[1:] + cumsum(ph_correct) along the axis. cumsum widens integer
             // ph_correct to int64/uint64 (NEP50); the assignment casts it back to `outdt`.
-            correction = np.cumsum(ph, axis: ax);
+            correction = ph.TensorEngine.ReduceCumAdd(ph, ax, null, null);
             pTail = NDArray.SliceAlongAxis(p, ax, 1, len); // p[1:] (read-only view)
             tail = pTail + correction;                // result_type(p, correction)
 

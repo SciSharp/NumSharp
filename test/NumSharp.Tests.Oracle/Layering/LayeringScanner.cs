@@ -61,6 +61,16 @@ namespace NumSharp.Tests.Layering
             @"\bnp\s*\.\s*((?:@?[a-z_]\w*\s*\.\s*)*@?[a-zA-Z_]\w*)(?:\s*<[^<>()]*>)?\s*\(",
             RegexOptions.Compiled);
 
+        /// <summary>
+        ///     <c>using static NumSharp.np;</c> (or <c>using static np;</c>, <c>global::</c> allowed): a file that imports
+        ///     np's statics calls them without the <c>np.</c> prefix, so <see cref="NpCall"/> cannot see those calls. R2
+        ///     counts the directive itself as one computation in an engine file, so an engine file cannot hide its np.*
+        ///     calls behind it (the partials beside the facades held it until P6 converted their calls).
+        /// </summary>
+        private static readonly Regex UsingStaticNp = new(
+            @"^\s*using\s+static\s+(?:global\s*::\s*)?(?:NumSharp\s*\.\s*)?np\s*;",
+            RegexOptions.Compiled);
+
         /// <summary>The dtype tests R1 counts as numeric decisions (comparisons, switches, case arms, predicates).</summary>
         private static readonly Regex NumericDecision = new(string.Join("|", new[]
         {
@@ -384,6 +394,12 @@ namespace NumSharp.Tests.Layering
                 string[] stripped = Strip(File.ReadAllText(Path.Combine(core, file))).Split('\n');
                 for (int k = 0; k < stripped.Length; k++)
                 {
+                    // The directive that would hide the file's np.* calls counts as one computation of its own.
+                    if (UsingStaticNp.IsMatch(stripped[k]))
+                    {
+                        computations++;
+                        found.Add($"{file}:{k + 1}: computation: using static np (hides the file's np.* calls from this count)");
+                    }
                     foreach (Match m in NpCall.Matches(stripped[k]))
                     {
                         string name = Regex.Replace(m.Groups[1].Value, @"[\s@]", "");

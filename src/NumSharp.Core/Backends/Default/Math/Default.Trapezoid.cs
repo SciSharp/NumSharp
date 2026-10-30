@@ -1,11 +1,9 @@
 using System;
 using NumSharp.Backends;
 using NumSharp.Backends.Iteration;
-// The moved statements call the public np.* functions they called inside np (np.diff, np.sum, np.evaluate,
-// np.ascontiguousarray, np.add) and np's internal DiffAxis; importing np's statics keeps them verbatim. In a DefaultEngine
-// partial a name resolves to DefaultEngine's members before np's statics: none of the unqualified names below is a
-// DefaultEngine member (checked when the file joined DefaultEngine).
-using static NumSharp.np;
+// NumPy's statements call np.diff, np.sum, np.evaluate, np.ascontiguousarray and np.add; here they are the engine's
+// members (this engine, or the operand's engine in a static helper) and the array object's AsContiguousArray, and the
+// axis check is DefaultEngine.DiffAxis, which np.diff's member shares.
 
 namespace NumSharp.Backends
 {
@@ -148,7 +146,7 @@ namespace NumSharp.Backends
                     // d.shape[0] on `axis`. NumPy's `shape[axis] = …` assignment is where an axis
                     // outside y fails, so y's axis is checked here, after the diff. The difference
                     // has one element per sample, so it is cheap to materialize.
-                    dd = np.diff(x);
+                    dd = Diff(x, 1, -1, null, null);
                     ax = TrapezoidAxis(axis, nd);
                     long[] shp = new long[nd];
                     for (int i = 0; i < nd; i++) shp[i] = 1;
@@ -322,7 +320,7 @@ namespace NumSharp.Backends
                     if (x.ndim == 1)
                     {
                         // d = diff(x), then `shape[axis] = d.shape[0]`, where an axis outside y fails, and the reshape.
-                        diffed = np.diff(x);
+                        diffed = x.TensorEngine.Diff(x, 1, -1, null, null);
                         int dax = TrapezoidAxis(axis, nd);
                         long[] shp = new long[nd];
                         for (int i = 0; i < nd; i++) shp[i] = 1;
@@ -330,7 +328,7 @@ namespace NumSharp.Backends
                         d = diffed.reshape(Shape.Adopt(shp));
                     }
                     else
-                        d = diffed = np.diff(x, 1, axis);
+                        d = diffed = x.TensorEngine.Diff(x, 1, axis, null, null);
                 }
 
                 // slice1[axis] / slice2[axis]: the list assignments, then y[1:] + y[:-1], the multiply, the division and the
@@ -339,10 +337,10 @@ namespace NumSharp.Backends
                 var (next, prev) = TrapezoidSlices(y.Shape, ax);
                 using var y1 = new NDArray(y.Storage, next);
                 using var y2 = new NDArray(y.Storage, prev);
-                using var concatenated = np.add(y1, y2);
+                using var concatenated = y1.TensorEngine.Add(y1, y2);
                 using var product = d is null ? dx * concatenated : d * concatenated;
                 using var half = product / 2.0;
-                return np.sum(half, axis);
+                return half.TensorEngine.Sum(half, axis: axis, dtype: null, keepdims: false);
             }
             finally
             {
@@ -515,8 +513,8 @@ namespace NumSharp.Backends
             try
             {
                 if (perm is null)
-                    return np.sum(half, axis);
-                NDArray r = np.sum(half, Array.IndexOf(perm, axis));
+                    return half.TensorEngine.Sum(half, axis: axis, dtype: null, keepdims: false);
+                NDArray r = half.TensorEngine.Sum(half, axis: Array.IndexOf(perm, axis), dtype: null, keepdims: false);
                 // A 1-D (or 0-D) sum has no axis order to restore.
                 return layout.NDim <= 2 ? r : NDArray.AdoptLayout(r, TrapezoidResultLayout(layout, perm, axis));
             }
@@ -626,7 +624,7 @@ namespace NumSharp.Backends
 
                 Shape hs = hFlat.Shape;
                 halfT = new NDArray(hFlat.Storage, new Shape(tdims, tstrides, hs.offset, hs.bufferSize));
-                NDArray r = np.sum(halfT, Array.IndexOf(perm, ax));
+                NDArray r = halfT.TensorEngine.Sum(halfT, axis: Array.IndexOf(perm, ax), dtype: null, keepdims: false);
                 // A 1-D sum has no axis order to restore, and a C layout's is already C.
                 return nd <= 2 || layout.IsContiguous ? r : NDArray.AdoptLayout(r, TrapezoidResultLayout(layout, perm, ax));
             }
@@ -651,7 +649,7 @@ namespace NumSharp.Backends
                 return half;
             try
             {
-                return np.ascontiguousarray(half);
+                return NDArray.AsContiguousArray(half, null);
             }
             finally
             {
@@ -690,8 +688,9 @@ namespace NumSharp.Backends
 
         /// <summary>
         ///     Computes the trapezoidal element <c>d * (y1 + y2) / 2.0</c> as a single fused pass over the
-        ///     operands via <see cref="np.evaluate"/> (no intermediate temporaries): <c>d</c> is the materialized
-        ///     1-D difference, or an N-D x's difference computed in the same pass from its two slices
+        ///     operands via the engine's <c>Evaluate</c>, np.evaluate's member (no intermediate temporaries):
+        ///     <c>d</c> is the materialized 1-D difference, or an N-D x's difference computed in the same pass from
+        ///     its two slices
         ///     (<c>x1 - x2</c>, or <c>x1 != x2</c> for a bool x — NumPy's diff), or the scalar
         ///     <paramref name="dx"/> (a weak NEP50 literal, matching NumPy). Falls back to a bit-identical
         ///     plain-operator composition if the fused kernel rejects the operand set.
@@ -730,7 +729,8 @@ namespace NumSharp.Backends
                     // The spacing is the multiply's FIRST operand for dx too (NumPy's `d * (...)` with d = dx): the order
                     // decides which NaN a product of two NaNs keeps, and a complex product's parts (its 0 * NaN terms).
                     NDExpr expr = spacing is null ? dx * inner / 2.0 : spacing * inner / 2.0;
-                    return np.evaluate(expr);
+                    // np.evaluate(expr): the engine member with np.evaluate's default options, on the operands' engine.
+                    return ops.Y1.TensorEngine.Evaluate(expr);
                 }
                 catch (NotSupportedException) { /* fall through to the composition */ }
             }

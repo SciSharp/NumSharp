@@ -74,6 +74,10 @@ namespace NumSharp.Tests.Layering
                 File.WriteAllText(Path.Combine(core, "Backends", "Default", "Default.Thing.cs"),
                     "var a = np.zeros(3);\nvar b = np.linalg.inv(a) + np.@char.upper(a) + np.array<int>(c);\n// np.sum(a)\n" +
                     "var s = \"np.max(a)\";\n");
+                // An engine file that imports np's statics: its unqualified calls are invisible to the call pattern, so
+                // the directive itself counts (once), and a commented-out one does not.
+                File.WriteAllText(Path.Combine(core, "Backends", "Default", "Default.Hidden.cs"),
+                    "using System;\nusing static NumSharp.np;\n// using static np;\nvar z = zeros(3);\n");
                 File.WriteAllText(Path.Combine(core, "Math", "np.thing.cs"),
                     "if (NDStringUfuncs.IsText(a)) x();\nif (a.typecode == NPTypeCode.Double) y();\n" +
                     "switch (a.typecode) {\ncase NPTypeCode.Half: break; }\nvar t = a.astype(NPTypeCode.Double);\n" +
@@ -83,6 +87,9 @@ namespace NumSharp.Tests.Layering
                 Assert.AreEqual((2, 2), engine["Backends/Default/Default.Thing.cs"],
                     "np.zeros + np.array<int> are structural; np.linalg.inv + np.@char.upper are computations; " +
                     "the comment and the string are not calls");
+                Assert.AreEqual((1, 0), engine["Backends/Default/Default.Hidden.cs"],
+                    "using static NumSharp.np counts as one computation (it hides the unqualified zeros call); the " +
+                    "commented-out directive does not count");
 
                 var facade = LayeringScanner.CountFacadeDtypeTests(core, out var lines);
                 Assert.AreEqual((2, 3), facade["Math/np.thing.cs"],

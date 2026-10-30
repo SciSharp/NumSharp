@@ -1,6 +1,5 @@
 // NumPy's np.diff (numpy/lib/_function_base_impl.py) as DefaultEngine's member, with the adjacent-difference stencil
-// helpers np.diff and np.ediff1d share. The file sits beside its facade while it calls np.*: ratchet R2 counts np.*
-// calls against every file under Backends/ (the np-layer dtype plan, C3); it moves under Backends/Default/ in P6.
+// helpers np.diff and np.ediff1d share, and the axis check (DiffAxis) np.trapezoid's member shares.
 
 using System;
 using System.Collections.Generic;
@@ -25,7 +24,7 @@ namespace NumSharp.Backends
                     $"order must be non-negative but got {n}", nameof(n));
 
             int nd = a.ndim;
-            int ax = np.DiffAxis(a, axis);
+            int ax = DiffAxis(a, axis);
 
             // Fast path: a single difference along a C-contiguous innermost axis with no
             // prepend/append is an adjacent-difference stencil — one fused kernel over the
@@ -63,7 +62,7 @@ namespace NumSharp.Backends
                 if (append is not null)
                     parts.Add(DiffPrepareEnd(append, a, ax, toDispose));
 
-                work = np.concatenate(parts.ToArray(), ax);
+                work = NDArray.ConcatenateInto(parts.ToArray(), ax, null, null, "same_kind");
                 workOwned = true;
 
                 // Dispose intermediates view-before-owner (reverse insertion).
@@ -172,7 +171,7 @@ namespace NumSharp.Backends
                 v = nd;                       // caller-owned; do not dispose
             else
             {
-                v = np.asanyarray(value);
+                v = NDArray.AnyArrayFromObject(value, null, 'K');   // np.asanyarray's statement (an NDArray is the branch above)
                 toDispose.Add(v);
             }
 
@@ -181,7 +180,7 @@ namespace NumSharp.Backends
                 long[] dims = new long[a.ndim];
                 for (int i = 0; i < a.ndim; i++) dims[i] = a.Shape.dimensions[i];
                 dims[axis] = 1;
-                var bcast = np.broadcast_to(v, Shape.Adopt(dims));
+                var bcast = NDArray.BroadcastTo(v, Shape.Adopt(dims));
                 toDispose.Add(bcast);
                 return bcast;
             }
@@ -274,5 +273,27 @@ namespace NumSharp.Backends
             NPTypeCode.Complex => "npy_diff_sub_Complex",
             _ => "npy_diff_sub_" + dt,
         };
+
+        /// <summary>
+        ///     The rank and axis checks <see cref="np.diff"/> makes before differencing (after its <c>n</c>
+        ///     checks), shared with the callers that compose NumPy's <c>diff(a, axis=axis)</c> into a fused
+        ///     pass instead of calling it (<see cref="np.trapezoid"/>'s member), so they reject exactly what diff
+        ///     rejects, with the same errors.
+        /// </summary>
+        /// <param name="a">The array to be differenced.</param>
+        /// <param name="axis">The caller's axis; negative counts from the end (NumPy's <c>normalize_axis_index</c>).</param>
+        /// <returns>The axis in <c>[0, a.ndim)</c>.</returns>
+        /// <exception cref="ValueError"><paramref name="a"/> is 0-D ("diff requires input that is at least one dimensional").</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is outside <c>[-a.ndim, a.ndim-1]</c>.</exception>
+        internal static int DiffAxis(NDArray a, int axis)
+        {
+            int nd = a.ndim;
+            if (nd == 0)
+                throw new ValueError(
+                    "diff requires input that is at least one dimensional");
+
+            // normalize_axis_index(axis, nd)
+            return check_and_adjust_axis(nd, axis);
+        }
     }
 }
