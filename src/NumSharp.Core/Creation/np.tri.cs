@@ -1,5 +1,6 @@
 using System;
 using NumSharp.Backends;
+using NumSharp.Backends.Unmanaged.Pooling;
 
 namespace NumSharp
 {
@@ -57,12 +58,12 @@ namespace NumSharp
                 return np.zeros(Shape.Matrix(rows, cols), dtype);
 
             int elemSize = dtype.SizeOf();
-            bool writeOnce = PrefersWriteOnce((long)rows * cols * elemSize);
+            bool writeOnce = SizeBucketedBufferPool.PrefersWriteOnce((long)rows * cols * elemSize);
 
             // Below the threshold the buffer comes back dirty, so pre-zeroing it would be a
             // wasted pass — allocate uninitialised and write every byte exactly once (ones
             // prefix, then zero suffix). Above it np.zeros is free, so only the ones prefix
-            // is written. See PrefersWriteOnce.
+            // is written. See SizeBucketedBufferPool.PrefersWriteOnce.
             var res = writeOnce
                 ? new NDArray(dtype, Shape.Matrix(rows, cols), false)
                 : np.zeros(Shape.Matrix(rows, cols), dtype);
@@ -92,26 +93,6 @@ namespace NumSharp
 
             return res;
         }
-
-        /// <summary>
-        ///     Byte size at and below which a freshly allocated buffer comes back <b>dirty</b>,
-        ///     making an <c>np.zeros</c> pre-fill a genuine extra write over the whole array.
-        /// </summary>
-        /// <remarks>
-        ///     Measured, not guessed. Timing the two strategies for <c>tril</c> across
-        ///     0.8 MB → 200 MB shows a sharp cliff at 64 MiB: at 64 MB write-once takes 6.0 ms
-        ///     vs zeros+blit's 11.0 ms, while at 72 MB it inverts to 18.9 ms vs 13.5 ms. The
-        ///     allocator hands out fresh (OS-zeroed) pages above that size, so there the
-        ///     zero-fill costs nothing and only the retained half need be touched; below it the
-        ///     memory is recycled and pre-zeroing doubles the traffic.
-        /// </remarks>
-        internal const long WriteOnceMaxBytes = 64L * 1024 * 1024;
-
-        /// <summary>
-        ///     Whether to allocate uninitialised and write every byte once (true), or to lean on
-        ///     <c>np.zeros</c> and blit only the retained span (false).
-        /// </summary>
-        internal static bool PrefersWriteOnce(long totalBytes) => totalBytes <= WriteOnceMaxBytes;
 
         /// <summary>
         ///     Zero <paramref name="count"/> bytes at <paramref name="p"/>. Shared by the

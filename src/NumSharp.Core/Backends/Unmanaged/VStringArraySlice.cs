@@ -87,7 +87,7 @@ namespace NumSharp.Backends.Unmanaged
             long bytes = count * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
             var allocator = new VStringAllocator();
             IntPtr ptr;
-            if (bytes > 0 && np.PrefersWriteOnce(bytes))
+            if (bytes > 0 && SizeBucketedBufferPool.PrefersWriteOnce(bytes))
             {
                 // Up to the pool's window a recycled buffer cleared once beats calloc: calloc hands out fresh pages, whose
                 // first-touch faults cost about eight times the clear (a 100K-cell result: ~450 us of faults against ~55

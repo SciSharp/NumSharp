@@ -2,6 +2,7 @@ using System;
 using System.Numerics;
 using NumSharp.Backends;
 using NumSharp.Backends.Kernels;
+using NumSharp.Backends.Unmanaged.Pooling;
 
 // =============================================================================
 // NDPolyAlgebra.Roots.cs — numpy.polynomial's companion matrices and roots (plan U7)
@@ -440,7 +441,7 @@ namespace NumSharp
             // pages are kept, so only the pages a diagonal touches fault. (double arithmetic: n * n * size cannot overflow.)
             NDArray mat;
             double bytes = (double)n * n * size;
-            if (bytes <= long.MaxValue && np.PrefersWriteOnce((long)bytes))
+            if (bytes <= long.MaxValue && SizeBucketedBufferPool.PrefersWriteOnce((long)bytes))
             {
                 mat = new NDArray(t, new Shape(n, n), false);
                 np.ZeroBytes((byte*)mat.Storage.Address, (long)bytes);

@@ -588,9 +588,9 @@ namespace NumSharp.Tests.Polynomial
             k.GetDouble(1, 0).Should().Be(1.0);
             k.GetDouble(0, n - 1).Should().Be(-1.0 / (n + 1));
 
-            // OS-zeroed path: 2897^2 float64 = 67,141,672 bytes, past np.WriteOnceMaxBytes.
+            // OS-zeroed path: 2897^2 float64 = 67,141,672 bytes, past SizeBucketedBufferPool.WriteOnceMaxBytes.
             const int big = 2897;
-            ((long)big * big * 8).Should().BeGreaterThan(np.WriteOnceMaxBytes);
+            ((long)big * big * 8).Should().BeGreaterThan(NumSharp.Backends.Unmanaged.Pooling.SizeBucketedBufferPool.WriteOnceMaxBytes);
             using var cb = np.ones(new Shape(big + 1), NPTypeCode.Double);
             using var kb = np.polynomial.polynomial.polycompanion(cb);
             np.count_nonzero(kb).Should().Be(2 * big - 1);

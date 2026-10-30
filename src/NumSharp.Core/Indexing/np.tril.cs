@@ -1,5 +1,6 @@
 using System;
 using NumSharp.Backends;
+using NumSharp.Backends.Unmanaged.Pooling;
 
 namespace NumSharp
 {
@@ -123,7 +124,7 @@ namespace NumSharp
                 return np.zeros(Shape.Adopt((long[])m.Shape.dimensions.Clone()), m.dtype);
 
             int elemSize = m.dtypesize; // the descriptor's itemsize (a string's width), not the lane's
-            bool writeOnce = PrefersWriteOnce(size * elemSize);
+            bool writeOnce = SizeBucketedBufferPool.PrefersWriteOnce(size * elemSize);
 
             // Below the threshold the buffer comes back dirty, so allocate uninitialised and
             // write every byte of every row exactly once (zeros, retained run, zeros). Above it

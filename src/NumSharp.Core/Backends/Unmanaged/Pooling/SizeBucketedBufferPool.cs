@@ -155,6 +155,31 @@ namespace NumSharp.Backends.Unmanaged.Pooling
         public const long MaxPoolableBytes = 64L * 1024 * 1024;
 
         /// <summary>
+        ///     Byte size at and below which a freshly allocated buffer comes back <b>dirty</b>, making a zero fill
+        ///     (<c>np.zeros</c>, a zero-filled allocation) a genuine extra write over the whole buffer. Read through
+        ///     <see cref="PrefersWriteOnce"/>.
+        /// </summary>
+        /// <remarks>
+        ///     Measured, not guessed. Timing the two strategies for <c>tril</c> across 0.8 MB → 200 MB shows a sharp cliff
+        ///     at 64 MiB: at 64 MB write-once takes 6.0 ms vs zeros+blit's 11.0 ms, while at 72 MB it inverts to 18.9 ms vs
+        ///     13.5 ms. The cliff is this pool's window (<see cref="MaxPoolableBytes"/>): past it the allocator hands out
+        ///     fresh (OS-zeroed) pages, so there the zero fill costs nothing and only the retained part need be touched;
+        ///     below it the memory is recycled and pre-zeroing doubles the traffic. The policy lives beside the window
+        ///     because it is a fact about this allocator, not about the functions that consult it (np.tri, np.tril /
+        ///     np.triu, the polynomial companion matrices, StringDType's cell arrays).
+        /// </remarks>
+        internal const long WriteOnceMaxBytes = 64L * 1024 * 1024;
+
+        /// <summary>
+        ///     Whether a buffer of <paramref name="totalBytes"/> should be allocated uninitialised and written once by
+        ///     its producer (true), or zero-filled by the allocator with only the retained part written after (false).
+        ///     The producer that takes the true branch must write or clear every byte itself.
+        /// </summary>
+        /// <param name="totalBytes">The buffer's size in bytes.</param>
+        /// <returns>True up to <see cref="WriteOnceMaxBytes"/>, where a zero fill is an extra pass over recycled memory.</returns>
+        internal static bool PrefersWriteOnce(long totalBytes) => totalBytes <= WriteOnceMaxBytes;
+
+        /// <summary>
         ///     FLOOR of the dynamic per-bucket cap below <see cref="LargeBucketThreshold"/>
         ///     (the pre-Wave-2.5 flat cap). The effective cap is
         ///     <c>clamp(PaceThresholdBytes / size, MaxBuffersPerBucket, MaxBuffersPerDynamicBucket)</c>

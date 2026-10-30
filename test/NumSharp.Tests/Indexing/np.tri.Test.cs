@@ -243,7 +243,7 @@ namespace NumSharp.Tests.Indexing
         [TestMethod]
         public void Tril_AboveTheWriteOnceThreshold_StillZeroesTheDroppedTriangle()
         {
-            // tri/tril/triu pick their allocation strategy by size (np.tri.cs WriteOnceMaxBytes,
+            // tri/tril/triu pick their allocation strategy by size (SizeBucketedBufferPool.WriteOnceMaxBytes,
             // 64 MiB): below it they allocate UNINITIALISED and zero the dropped run themselves,
             // above it they lean on np.zeros. Every other test here sits on the small side, so
             // this one crosses the boundary — a missing zero-fill on the large path would leave
