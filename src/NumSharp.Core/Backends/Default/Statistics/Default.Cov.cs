@@ -17,8 +17,8 @@ using NumSharp.Backends.Kernels;
 //
 // History: the np-layer dtype plan's P2 moved these statements from the public np.cov into the internal operation class
 // CovEngine; its phase PE (E1) made that class this DefaultEngine partial. The facade keeps the matrix boundary's plain
-// region and the null check. The file sits beside the facade, not under Backends/, because its statements call the public
-// np.* functions NumPy's call (np.average, np.dot, np.concatenate, ...), which ratchet R2 counts under Backends/.
+// region and the null check. Its phase P6 made each np.* call of the statements (np.average, np.dot, np.concatenate,
+// ...) the member its facade dispatches to, and moved the file from beside the facade to Backends/Default/Statistics/.
 // =============================================================================
 
 namespace NumSharp.Backends
@@ -96,10 +96,11 @@ namespace NumSharp.Backends
                 Backends.Strings.NDStringUfuncs.IsTextRequest(dtype))
                 return CovOfText(m, y, rowvar, bias, ddof, fweights, aweights, dtype);
 
-            // Result dtype: at least float64 (complex input stays complex).
+            // Result dtype: at least float64 (complex input stays complex). np.result_type(m, [y,] float64)'s statement
+            // promotes the descriptor before the arrays (array_result_type's order).
             NPTypeCode resultType = dtype?.GetTypeCode() ?? (y is null
-                ? np.result_type(m, NPTypeCode.Double)
-                : np.result_type(m, y, NPTypeCode.Double));
+                ? DTypePromotion.ResultType(NPTypeCode.Double, m)
+                : DTypePromotion.ResultType(NPTypeCode.Double, m, y));
 
             // Every intermediate below — atleast_2d/astype/T/concatenate, the weight casts and
             // validation masks, avg and its column view, Xc/Xt and the pre-scale c — is scope-
@@ -109,7 +110,7 @@ namespace NumSharp.Backends
             int mNdim = m.ndim;
 
             // X = array(m, ndmin=2, dtype=dtype): a fresh 2-D array in the result dtype.
-            NDArray X = np.atleast_2d(m).astype(resultType);
+            NDArray X = NDArray.AtLeast2d(m).astype(resultType);
             if (!rowvar && mNdim != 1)
                 X = X.T;
 
@@ -119,10 +120,10 @@ namespace NumSharp.Backends
 
             if (y is not null)
             {
-                NDArray Y = np.atleast_2d(y).astype(resultType);
+                NDArray Y = NDArray.AtLeast2d(y).astype(resultType);
                 if (!rowvar && Y.Shape.dimensions[0] != 1)
                     Y = Y.T;
-                X = np.concatenate((X, Y), 0);
+                X = NDArray.ConcatenateInto(new[] { X, Y }, 0, null, null, "same_kind");
             }
 
             int ddofValue = ddof ?? (bias ? 0 : 1);
@@ -133,11 +134,11 @@ namespace NumSharp.Backends
             NDArray w = CovWeights(fweights, aweights, nobs, out NDArray aweightsCast);
 
             // --- Weighted mean along the observation axis. ---
-            NDArray avg = np.average(X, 1, w);
+            NDArray avg = X.TensorEngine.Average(X, new[] { 1 }, w, false, false).avg;
 
             // Real weight sum (NumPy's w_sum[0]; its imaginary part, present only for complex input,
             // is always zero). `fact` is mathematically real, so it is carried in a double.
-            double wSum = w is null ? nobs : np.sum(w).GetDouble(0);
+            double wSum = w is null ? nobs : w.TensorEngine.Sum(w, null, null, false).GetDouble(0);
 
             // --- Normalization factor (NumPy's `fact`). ---
             double fact;
@@ -149,7 +150,9 @@ namespace NumSharp.Backends
                 fact = wSum - ddofValue;
             else
             {
-                double numer = ddofValue * np.sum(w * aweightsCast).GetDouble(0); // ddof * sum(w*aweights)
+                // ddof * sum(w*aweights)
+                NDArray weighted = w * aweightsCast;
+                double numer = ddofValue * weighted.TensorEngine.Sum(weighted, null, null, false).GetDouble(0);
                 // NumPy computes `.../ w_sum`. For complex input w_sum is complex128, so NumPy divides
                 // via Smith's method as numer*(1/w_sum) — a reciprocal-multiply whose real part rounds
                 // 1 ULP differently from real division. It only matters when fact lands ~0 (degenerate
@@ -185,8 +188,8 @@ namespace NumSharp.Backends
                 NDArray Xt = w is null ? Xc.T : (Xc * w).T;
                 // conjugation only matters (and only allocates) for complex data.
                 c = resultType == NPTypeCode.Complex
-                    ? np.dot(Xc, np.conjugate(Xt))
-                    : np.dot(Xc, Xt);
+                    ? Xc.TensorEngine.Dot(Xc, Xt.TensorEngine.Conjugate(Xt, null, null, null), null)
+                    : Xc.TensorEngine.Dot(Xc, Xt, null);
             }
 
             // scale = true_divide(1, fact). NumPy replaces fact <= 0 with 0.0 (so 1/0 => +inf).
@@ -197,9 +200,9 @@ namespace NumSharp.Backends
             if (c.typecode != cType) // NumPy's in-place `c *= ...` preserves c's dtype.
                 c = c.astype(cType);
 
-            // squeeze returns a view of c — the view is yielded; c's tracked wrapper is released
-            // at scope exit while ARC keeps the buffer alive through the view.
-            return np.squeeze(c);
+            // NumPy's c.squeeze(), the ndarray method: a view of c — the view is yielded; c's tracked wrapper is
+            // released at scope exit while ARC keeps the buffer alive through the view.
+            return c.squeeze();
         }
 
         /// <summary>
@@ -228,13 +231,16 @@ namespace NumSharp.Backends
             if (fweights is not null)
             {
                 NDArray fw = fweights.astype(NPTypeCode.Double);
-                if (!np.all(fw == np.around(fw)))
+                NDArray rounded = fw.TensorEngine.Round(fw, decimals: 0, dtype: null, @out: null);
+                NDArray integral = fw == rounded;
+                if (!integral.TensorEngine.All(integral))
                     throw new TypeError("fweights must be integer");
                 if (fw.ndim > 1)
                     throw new RuntimeError("cannot handle multidimensional fweights");
                 if (fw.Shape.dimensions[0] != nobs)
                     throw new RuntimeError("incompatible numbers of samples and fweights");
-                if (np.any(fw < 0.0))
+                NDArray negative = fw < 0.0;
+                if (negative.TensorEngine.Any(negative))
                     throw new ValueError("fweights cannot be negative");
                 w = fw;
             }
@@ -245,7 +251,8 @@ namespace NumSharp.Backends
                     throw new RuntimeError("cannot handle multidimensional aweights");
                 if (aweightsCast.Shape.dimensions[0] != nobs)
                     throw new RuntimeError("incompatible numbers of samples and aweights");
-                if (np.any(aweightsCast < 0.0))
+                NDArray negative = aweightsCast < 0.0;
+                if (negative.TensorEngine.Any(negative))
                     throw new ValueError("aweights cannot be negative");
                 w = w is null ? aweightsCast : w * aweightsCast;
             }
@@ -259,7 +266,8 @@ namespace NumSharp.Backends
         /// </summary>
         /// <returns>The empty covariance (it keeps its base's buffer alive; disposing the base inside an
         ///     <c>[NDScoped]</c> caller is safe).</returns>
-        private static NDArray EmptyCovariance() => np.array(Array.Empty<double>()).reshape(0, 0);
+        private static NDArray EmptyCovariance()
+            => new NDArray(Unmanaged.ArraySlice.FromArray(Array.Empty<double>(), true), Shape.Vector(0)).reshape(0, 0);
 
         /// <summary>
         ///     <c>np.cov</c> over text (a string operand, or a text <c>dtype=</c> request: <c>S</c>, <c>U</c> or
@@ -355,7 +363,7 @@ namespace NumSharp.Backends
             // X = array(m, ndmin=2, dtype=dtype): numbers are formatted and text converted (np.array with a dtype casts
             // unsafely); only a text-to-text conversion can fail, and only on its content (U -> S encodes ASCII, S -> U
             // decodes it).
-            NDArray X = np.atleast_2d(m).astype(xd, true, 'K', "unsafe");
+            NDArray X = NDArray.AtLeast2d(m).astype(xd, true, 'K', "unsafe");
             if (!rowvar && m.ndim != 1)
                 X = X.T;
             if (X.Shape.dimensions[0] == 0)
@@ -366,14 +374,14 @@ namespace NumSharp.Backends
                 // y = array(y, copy=None, ndmin=2, dtype=dtype), then X = np.concatenate((X, y), axis=0): the observation
                 // counts must agree. NumPy's concatenate raises a ValueError there; NumSharp's raises its house
                 // IncorrectShapeException with the same text, so the check is made here with NumPy's type.
-                NDArray Y = np.atleast_2d(y).astype(yd, true, 'K', "unsafe");
+                NDArray Y = NDArray.AtLeast2d(y).astype(yd, true, 'K', "unsafe");
                 if (!rowvar && Y.Shape.dimensions[0] != 1)
                     Y = Y.T;
                 if (Y.Shape.dimensions[1] != X.Shape.dimensions[1])
                     throw new ValueError(
                         "all the input array dimensions except for the concatenation axis must match exactly, but along " +
                         $"dimension 1, the array at index 0 has size {X.Shape.dimensions[1]} and the array at index 1 has size {Y.Shape.dimensions[1]}");
-                X = np.concatenate((X, Y), 0);
+                X = NDArray.ConcatenateInto(new[] { X, Y }, 0, null, null, "same_kind");
             }
 
             NDArray w = CovWeights(fweights, aweights, X.Shape.dimensions[1], out _);
@@ -381,7 +389,7 @@ namespace NumSharp.Backends
             // S / U, or, weighted, the weight sum's dtype= refusal of the sized string descriptor result_type gives; for
             // StringDType the division of the concatenated text by the count (add.reduce's "no identity" over no
             // observations), or, weighted, result_type's DTypePromotionError.
-            np.average(X, 1, w);
+            X.TensorEngine.Average(X, new[] { 1 }, w, false, false);
             throw new InvalidOperationException("np.average accepted text, which NumPy's mean refuses.");
         }
 

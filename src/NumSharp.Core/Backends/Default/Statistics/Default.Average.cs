@@ -4,10 +4,6 @@ using System.Linq;
 using NumSharp.Backends;
 using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
-// The moved statements call np's internal promotion table (_FindCommonArrayType) as they did inside np; importing np's
-// statics keeps them verbatim. In a DefaultEngine partial a name resolves to DefaultEngine's members before np's statics:
-// none of the unqualified names below is a DefaultEngine member (checked when the file joined DefaultEngine).
-using static NumSharp.np;
 
 // =============================================================================
 // Default.Average.cs - DefaultEngine's np.average (numpy/lib/_function_base_impl.py: average, _weights_are_valid)
@@ -24,9 +20,9 @@ using static NumSharp.np;
 //
 // History: the np-layer dtype plan's P2 moved these statements from the public np.average / np.average_returned into the
 // internal operation class AverageEngine; its phase PE (E1) made that class this DefaultEngine partial. The facades keep
-// the numpy.matrix boundary and the null check. The file sits beside the facades, not under Backends/, because its
-// statements call the public np.* functions NumPy's call (np.mean, np.sum, np.multiply, np.true_divide, np.broadcast_to,
-// np.evaluate), which ratchet R2 counts under Backends/.
+// the numpy.matrix boundary and the null check. Its phase P6 made each np.* call of the statements (np.mean, np.sum,
+// np.multiply, np.true_divide, np.broadcast_to, np.evaluate) the member its facade dispatches to, and moved the file
+// from beside the facades to Backends/Default/Statistics/.
 // =============================================================================
 
 namespace NumSharp.Backends
@@ -122,7 +118,7 @@ namespace NumSharp.Backends
                 double count = (double)a.size / avg.size;
                 NDArray scl = NDArray.Scalar(count).astype(avg.typecode).MarkReductionScalar();
                 if (!scl.Shape.dimensions.SequenceEqual(avg.Shape.dimensions))
-                    scl = np.broadcast_to(scl, avg).copy();
+                    scl = NDArray.BroadcastTo(scl, avg.Shape).copy();
                 return (scope.Returns(avg), scope.Returns(scl));
             }
 
@@ -137,7 +133,7 @@ namespace NumSharp.Backends
                 // scl = wgt.sum(axis=axis, dtype=result_dtype, ...): a text result_dtype is a descriptor INSTANCE, which a
                 // ufunc's dtype= refuses ("only select the general DType" for a sized string). The refusal does not
                 // depend on the axes (normalized and valid by now), so the sum is asked without them.
-                using var refused = np.sum(wgt, (int?)null, false, resultDescr);
+                using var refused = wgt.TensorEngine.Sum(wgt, null, resultDescr, false);
                 throw new InvalidOperationException("np.average's weight sum in a text result dtype computed where NumPy refuses it.");
             }
             NPTypeCode resultDtype = resultDescr.GetTypeCode();
@@ -158,7 +154,7 @@ namespace NumSharp.Backends
             if (!returned) return (scope.Returns(average), null);
             // if scl.shape != avg_as_array.shape: scl = np.broadcast_to(scl, avg_as_array.shape).copy()
             if (!weightSum.Shape.dimensions.SequenceEqual(average.Shape.dimensions))
-                weightSum = np.broadcast_to(weightSum, average).copy();
+                weightSum = NDArray.BroadcastTo(weightSum, average.Shape).copy();
             return (scope.Returns(average), scope.Returns(weightSum));
         }
 
@@ -206,11 +202,13 @@ namespace NumSharp.Backends
                 NDExpr x = a.typecode == resultDtype ? NDExpr.Arr(a) : NDExpr.Cast(NDExpr.Arr(a), resultDtype);
                 NDExpr y = wgt.typecode == resultDtype ? NDExpr.Arr(wgt) : NDExpr.Cast(NDExpr.Arr(wgt), resultDtype);
                 NDExpr products = x * y;
-                return np.evaluate(flat ? NDExpr.Sum(products, keepdims) : NDExpr.Sum(products, axes[0], keepdims));
+                // np.evaluate's engine is its expression's first array's: a's.
+                return a.TensorEngine.Evaluate(
+                    flat ? NDExpr.Sum(products, keepdims) : NDExpr.Sum(products, axes[0], keepdims));
             }
 
             NDArray product = UfuncResultBuffer(resultDtype, a, wgt);
-            np.multiply(a, wgt, @out: product, dtype: resultDtype);
+            a.TensorEngine.Multiply(a, wgt, resultDtype, product, null);
             return SumWithAxes(product, axes, resultDtype, keepdims);
         }
 
@@ -245,9 +243,9 @@ namespace NumSharp.Backends
         private static NDArray Quotient(NDArray num, NDArray scl)
         {
             if (num.ndim == 0 && scl.ndim == 0)
-                return np.true_divide(num, scl).MarkReductionScalar();
+                return num.TensorEngine.Divide(num, scl, null, null, null).MarkReductionScalar();
             var r = UfuncResultBuffer(num.GetTypeCode, num, scl);
-            np.true_divide(num, scl, @out: r);
+            num.TensorEngine.Divide(num, scl, null, r, null);
             return r;
         }
 
@@ -284,8 +282,8 @@ namespace NumSharp.Backends
             // One axis is np.mean along it - tested first: a 1-D operand's (0,) keeps the one-output axis route, which
             // follows NumPy's schedule where the flat route still declines (a broadcast operand). None and a tuple of every
             // axis are one reduction in NumPy (PyUFunc_GenericReduction reads None as every axis).
-            if (axes is not null && axes.Length == 1) return np.mean(a, axes[0], keepdims);
-            if (axes is null || axes.Length == a.ndim) return np.mean(a, keepdims);
+            if (axes is not null && axes.Length == 1) return a.TensorEngine.Mean(a, axes[0], null, keepdims);
+            if (axes is null || axes.Length == a.ndim) return a.TensorEngine.Mean(a, null, null, keepdims);
             // Any other set: ONE reduction over the whole set. A mean of single-axis means rounds after each axis, and the
             // empty tuple is still a sum (of one element per output) and a division.
             return Backends.DefaultEngine.MeanOverAxes(a, axes, keepdims);
@@ -311,9 +309,9 @@ namespace NumSharp.Backends
             // One axis is np.sum along it (tested first, as in MeanWithAxes); None and a tuple of every axis are one
             // reduction (the flat sum).
             if (axes is not null && axes.Length == 1)
-                return np.sum(a, axis: axes[0], keepdims: keepdims, dtype: dtype);
+                return a.TensorEngine.Sum(a, axes[0], dtype, keepdims);
             if (axes is null || axes.Length == a.ndim)
-                return np.sum(a, axis: null, keepdims: keepdims, dtype: dtype);
+                return a.TensorEngine.Sum(a, null, dtype, keepdims);
             // Any other set: ONE reduction over the whole set (a sum of single-axis sums rounds after each axis; the empty
             // tuple adds each element to the identity, it does not return the operand).
             return Backends.DefaultEngine.ReduceAddOverAxes(a, axes, keepdims, dtype);
@@ -394,7 +392,9 @@ namespace NumSharp.Backends
         ///     listing every DType of the sequence: <c>(Int32DType, StringDType, Float64DType)</c> for an int32
         ///     operand).</exception>
         private static DType ComputeResultDtype(DType aType, DType wType)
-            => IsIntegralOrBool(aType.GetTypeCode()) ? np.result_type(aType, wType, np.float64) : np.result_type(aType, wType);
+            => IsIntegralOrBool(aType.GetTypeCode())
+                ? DTypePromotion.ResultType(aType, wType, np.float64)
+                : DTypePromotion.ResultType(aType, wType);
 
         /// <summary>NumPy's <c>issubclass(a.dtype.type, (np.integer, np.bool))</c>, with char as NumSharp's integer.</summary>
         /// <param name="t">The dtype.</param>
@@ -431,7 +431,8 @@ namespace NumSharp.Backends
         {
             if (scl.size == 0) return false;
             NDArray zero = NDArray.Scalar(0).astype(scl.typecode);
-            return np.any(scl == zero);
+            NDArray isZero = scl == zero;
+            return isZero.TensorEngine.Any(isZero);
         }
     }
 }

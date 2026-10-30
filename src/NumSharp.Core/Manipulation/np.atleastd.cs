@@ -193,15 +193,7 @@ namespace NumSharp
             if (arr is null)
                 throw new ArgumentNullException(nameof(arr));
 
-            switch (arr.ndim)
-            {
-                case 0:
-                    return arr.reshape(1, 1);
-                case 1:
-                    return np.expand_dims(arr, 0);
-                default:
-                    return arr;
-            }
+            return NDArray.AtLeast2d(arr);
         }
 
         /// <summary>
