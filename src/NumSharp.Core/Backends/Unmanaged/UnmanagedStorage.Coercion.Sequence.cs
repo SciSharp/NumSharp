@@ -70,7 +70,9 @@ using NumSharp.Backends.Kernels;
 namespace NumSharp.Backends
 {
     // NumPy's array coercion of a Python sequence (np.array(seq)), and the house test that decides which C# values ARE
-    // Python sequences (see the file header). It sits beside the facades (Creation/) because it calls np.asanyarray (C3).
+    // Python sequences (see the file header). The plan's phase P6 made its np.* calls the array object's conversion
+    // (NDArray.AnyArrayFromObject) and the engine's reductions, and moved it from beside the facades to
+    // Backends/Unmanaged/.
     public unsafe partial class UnmanagedStorage
     {
         // ---------------------------------------------------------------------------------------------
@@ -593,7 +595,7 @@ namespace NumSharp.Backends
                             d.Ragged = true;
                         continue;
                     }
-                    var a = np.asanyarray(o);
+                    var a = NDArray.AnyArrayFromObject(o, null, 'K');   // np.asanyarray(o): o is no NDArray here
                     (d.Owned ??= new List<NDArray>()).Add(a);
                     ArrayLeaf(d, node, i, a, curr + 1);
                 }
@@ -1011,7 +1013,7 @@ namespace NumSharp.Backends
         /// <returns>A new (n,) array; the caller owns it.</returns>
         private static NDArray CollectionArray(Array values)
         {
-            var a = np.asanyarray(values);   // an ndarray of T (a copy into NumSharp memory)
+            var a = NDArray.AnyArrayFromObject(values, null, 'K');   // np.asanyarray: an ndarray of T (a copy into NumSharp memory)
             NPTypeCode t = a.typecode switch
             {
                 NPTypeCode.SByte or NPTypeCode.Byte or NPTypeCode.Int16 or NPTypeCode.UInt16 or NPTypeCode.Int32
@@ -1040,8 +1042,9 @@ namespace NumSharp.Backends
         /// <returns>The dtype.</returns>
         private static NPTypeCode ULongListDtype(NDArray a)
         {
-            using var max = np.amax(a);   // 0-d reductions (house kernels): intermediates of the classification
-            using var min = np.amin(a);
+            // 0-d reductions (np.amax / np.amin's engine members): intermediates of the classification
+            using var max = a.TensorEngine.ReduceAMax(a, null, false, null, null, null, null);
+            using var min = a.TensorEngine.ReduceAMin(a, null, false, null, null, null, null);
             bool big = max.GetAtIndex<ulong>(0) > long.MaxValue;
             bool small = min.GetAtIndex<ulong>(0) <= long.MaxValue;
             return big ? (small ? NPTypeCode.Double : NPTypeCode.UInt64) : NPTypeCode.Int64;

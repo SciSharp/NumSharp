@@ -291,7 +291,7 @@ namespace NumSharp
         /// <summary>
         ///     Same-dtype fast path: when all sources match the destination
         ///     dtype and every operand (sources + dst) is C-contiguous (or
-        ///     all F-contiguous), perform a direct <see cref="Buffer.MemoryCopy"/>
+        ///     all F-contiguous), perform a direct <see cref="Buffer.MemoryCopy(void*, void*, long, long)"/>
         ///     per outer block. Skips the <c>dst[axis_range]</c> slice which
         ///     would produce a non-contig view for F-contig dst (see the
         ///     justification block in <see cref="ConcatenateInto"/>).
@@ -408,7 +408,7 @@ namespace NumSharp
         ///     when every source contributes the SAME tiny per-outer slab
         ///     (1/2/4/8/16 bytes — the (N,1) column pattern), copy via
         ///     constant-size loads/stores instead of dynamic-size
-        ///     <see cref="Buffer.MemoryCopy"/>. The o-outer order keeps dst
+        ///     <see cref="Buffer.MemoryCopy(void*, void*, long, long)"/>. The o-outer order keeps dst
         ///     writes sequential (write-combining friendly).
         /// </summary>
         /// <returns>True if the specialization applied and copied everything.</returns>
@@ -490,7 +490,7 @@ namespace NumSharp
         /// <summary>
         ///     Cross-dtype fast path: same shape/layout assumptions as
         ///     <see cref="TryDirectMemcpyConcat"/>, but drives the IL-generated
-        ///     contig cast kernel per source instead of <see cref="Buffer.MemoryCopy"/>.
+        ///     contig cast kernel per source instead of <see cref="Buffer.MemoryCopy(void*, void*, long, long)"/>.
         ///     Avoids the slice-then-NDIter detour for the same F-contig
         ///     reason (slice produces non-contig view, NDIter falls into
         ///     strided cast path, ~17x slower for F-contig).
@@ -931,7 +931,7 @@ namespace NumSharp
                 var text = numbers.astype(dtype, copy: true, order: 'K', casting: "unsafe");
                 if (ndmin <= text.ndim)
                     return text;
-                var raised = np.AtLeastNdView(text, ndmin);
+                var raised = AtLeastNdView(text, ndmin);
                 text.Dispose();
                 return raised;
             }
@@ -1025,7 +1025,7 @@ namespace NumSharp
             if (ndmin <= built.ndim)
                 return built;
             // NumPy builds the array at its discovered rank and prepends the ones as a view of it.
-            var view = np.AtLeastNdView(built, ndmin);
+            var view = AtLeastNdView(built, ndmin);
             built.Dispose();
             return view;
         }

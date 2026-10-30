@@ -51,7 +51,7 @@ namespace NumSharp.Tests.Layering
             "uint8", "uint16", "uint32", "uint64", "bool_", "complex128", "intp", "frombuffer", "ndarray", "flip",
             "split", "array_split", "unstack", "take", "take_along_axis", "put", "put_along_axis", "repeat", "tile",
             "pad", "result_type", "promote_types", "can_cast", "_FindCommonType", "_FindCommonType_Array",
-            "_FindCommonArrayType", "_FindCommonScalarType", "_FindCommonArrayScalarType", "AtLeastNdView",
+            "_FindCommonArrayType", "_FindCommonScalarType", "_FindCommonArrayScalarType", "_FindCommonType_Scalar",
             "PrefersWriteOnce", "FlatIterator", "GradientResult", "HistogramResult", "HistogramddResult",
             "Histogram2dResult", "dtypes.StringDType", "strings.OutputDescriptor",
         };

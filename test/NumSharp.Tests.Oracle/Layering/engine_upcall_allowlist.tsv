@@ -25,3 +25,4 @@ Backends/Kernels/BinaryKernel.cs	0	1
 Backends/Kernels/ComparisonRun.cs	0	1
 Backends/NDArray.cs	0	1
 Backends/Strings/NDStringMethods.cs	9	5	# numpy.strings' own Python statements (the computed-width wrappers' sizing: np.amax, np.where, np.minimum, np.subtract, np.multiply, np.add, np.less): the text API's own pass (plan section 8), not the engine's
+Backends/Unmanaged/UnmanagedStorage.Coercion.cs	0	1	# np._FindCommonType_Scalar(type codes): a promotion helper on np (the scalar promotion of a C# object list's element types). The promotion helpers move into the dtype layer after strings merges journey4, whose 88048433 rewrote np.find_common_type.cs, the file they live in (moving them first would conflict there)

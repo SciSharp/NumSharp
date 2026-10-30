@@ -33,8 +33,8 @@ namespace NumSharp.Backends
     // CPython's int() / float() / complex() and its errors quote the Python object
     // (invalid literal for int() with base 10: '3.5'), a number is packed as itself (range-checked).
     //
-    // The file sits beside its facades (Creation/) rather than under Backends/ because its statements still call np.*
-    // functions (np.AtLeastNdView), which ratchet R2 forbids under Backends/ (plan C3).
+    // The plan's phase P6 moved the ndmin padding it called (np.AtLeastNdView) to the array object
+    // (NDArray.AtLeastNdView) and the file from beside its facades (Creation/) to Backends/Unmanaged/.
     // ---------------------------------------------------------------------------------------------------------------------
     public unsafe partial class UnmanagedStorage
     {
@@ -200,7 +200,7 @@ namespace NumSharp.Backends
                 return built;
             // NumPy builds the array at its discovered rank and prepends the ones as a VIEW of it (OWNDATA False, the
             // prepended axes' strides C-like), so the result is a view here too; the built array's own reference goes.
-            var view = np.AtLeastNdView(built, ndmin);
+            var view = NDArray.AtLeastNdView(built, ndmin);
             built.Dispose();
             return view;
         }
@@ -322,7 +322,7 @@ namespace NumSharp.Backends
         ///     value's class (<see cref="DiscoverDTypeFromPyObject"/>, NumPy's <c>discover_dtype_from_pyobject</c>), its
         ///     descriptor (<see cref="FindScalarDescriptor"/>: the class's <c>discover_descr_from_pyobject</c>, cast to the
         ///     requested class), and the promotion of every value's descriptor in order (<c>handle_promotion</c>,
-        ///     <see cref="DTypePromotion.PromoteTypes"/>).
+        ///     <see cref="DTypePromotion.PromoteTypes(NumSharp.DType, NumSharp.DType)"/>).
         /// </summary>
         /// <param name="values">The element values.</param>
         /// <param name="dtype">The requested dtype: an unsized one (an unsized string class) is discovered under, a sized

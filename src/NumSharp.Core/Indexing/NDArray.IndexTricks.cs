@@ -393,14 +393,14 @@ namespace NumSharp
         ///     raises <c>ndmin must be &lt;= ndmax (64)</c>; NumSharp has no 64-dimension ceiling
         ///     anywhere, so importing one here would make the DSL refuse ranks the rest of the
         ///     library accepts. <c>ndmin</c> does arrive from a user-typed directive string, so the
-        ///     padding must be cheap rather than merely bounded: <see cref="np.AtLeastNdView"/> prepends
+        ///     padding must be cheap rather than merely bounded: <see cref="AtLeastNdView"/> prepends
         ///     all the axes in one alias (O(ndim)), where the per-axis loop it replaced was quadratic
         ///     — 27.6 s at ndmin=100 000, unbounded at 2**31-1. An ndmin genuinely too large to
         ///     allocate a shape for surfaces as <see cref="OutOfMemoryException"/>, the same answer
         ///     any other oversized NumSharp allocation gives. A ndmin of 0 or less stays a no-op,
         ///     as it is upstream.
         /// </remarks>
-        private static NDArray AtLeastNdmin(NDArray a, int ndmin) => np.AtLeastNdView(a, ndmin);
+        private static NDArray AtLeastNdmin(NDArray a, int ndmin) => AtLeastNdView(a, ndmin);
 
         /// <summary>
         ///     NumPy's <c>AxisConcatenator.__getitem__</c> for <c>np.r_</c> / <c>np.c_</c>, after the indexer's numpy.matrix

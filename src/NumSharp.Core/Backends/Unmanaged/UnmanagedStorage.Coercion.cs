@@ -5,6 +5,7 @@ using System.Linq;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
 
 namespace NumSharp.Backends
@@ -16,11 +17,23 @@ namespace NumSharp.Backends
     // lists and grids, tuples, Memory<T>, enumerables). The array object's own members (the np-layer dtype plan's D1);
     // np.array, np.asanyarray, NDArray.Scalar and the implicit conversion are facades over them.
     //
-    // The file sits beside its facades (Creation/) rather than under Backends/ because its statements still call np.*
-    // functions (np.array, np.zeros, np._FindCommonType_Scalar), which ratchet R2 forbids under Backends/ (plan C3).
+    // The plan's phase P6 made its np.array calls the statement np.array<T>(params T[]) runs (VectorOf, below) and
+    // moved the file from beside its facades (Creation/) to Backends/Unmanaged/. np._FindCommonType_Scalar stays: a
+    // promotion helper of np's, which ratchet R2 pins until the helpers move into the dtype layer.
     // ---------------------------------------------------------------------------------------------------------------------
     public partial class UnmanagedStorage
     {
+        /// <summary>
+        ///     <c>np.array(values)</c> for a C# array of one of NumSharp's element types, np.array&lt;T&gt;(params T[])'s
+        ///     statement: a new 1-D array over a copy of <paramref name="values"/>.
+        /// </summary>
+        /// <typeparam name="T">The element type (one of the 15 storage types).</typeparam>
+        /// <param name="values">The values (not null; may be empty).</param>
+        /// <returns>A new C-contiguous <c>(values.Length,)</c> array the caller owns; later writes to
+        ///     <paramref name="values"/> do not reach it.</returns>
+        private static NDArray VectorOf<T>(T[] values) where T : unmanaged
+            => new NDArray(ArraySlice.FromArray(values, true), Shape.Vector(values.Length));
+
         /// <summary>
         ///     <see cref="NDArray.Scalar(object, DType)"/>'s body once its null check ran: one value into a new 0-d array of
         ///     <paramref name="dtype"/> - a <c>StringDType</c> stores it through its setitem (its <c>str()</c>, the NA object,
@@ -292,21 +305,21 @@ namespace NumSharp.Backends
             var elementType = type.GetGenericArguments()[0];
             var isReadOnly = type.GetGenericTypeDefinition() == typeof(ReadOnlyMemory<>);
 
-            if (elementType == typeof(bool)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<bool>)a).Span : ((Memory<bool>)a).Span));
-            if (elementType == typeof(byte)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<byte>)a).Span : ((Memory<byte>)a).Span));
-            if (elementType == typeof(sbyte)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<sbyte>)a).Span : ((Memory<sbyte>)a).Span));
-            if (elementType == typeof(short)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<short>)a).Span : ((Memory<short>)a).Span));
-            if (elementType == typeof(ushort)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<ushort>)a).Span : ((Memory<ushort>)a).Span));
-            if (elementType == typeof(int)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<int>)a).Span : ((Memory<int>)a).Span));
-            if (elementType == typeof(uint)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<uint>)a).Span : ((Memory<uint>)a).Span));
-            if (elementType == typeof(long)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<long>)a).Span : ((Memory<long>)a).Span));
-            if (elementType == typeof(ulong)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<ulong>)a).Span : ((Memory<ulong>)a).Span));
-            if (elementType == typeof(char)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<char>)a).Span : ((Memory<char>)a).Span));
-            if (elementType == typeof(Half)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<Half>)a).Span : ((Memory<Half>)a).Span));
-            if (elementType == typeof(float)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<float>)a).Span : ((Memory<float>)a).Span));
-            if (elementType == typeof(double)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<double>)a).Span : ((Memory<double>)a).Span));
-            if (elementType == typeof(decimal)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<decimal>)a).Span : ((Memory<decimal>)a).Span));
-            if (elementType == typeof(Complex)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<Complex>)a).Span : ((Memory<Complex>)a).Span));
+            if (elementType == typeof(bool)) return VectorOf(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<bool>)a).Span : ((Memory<bool>)a).Span));
+            if (elementType == typeof(byte)) return VectorOf(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<byte>)a).Span : ((Memory<byte>)a).Span));
+            if (elementType == typeof(sbyte)) return VectorOf(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<sbyte>)a).Span : ((Memory<sbyte>)a).Span));
+            if (elementType == typeof(short)) return VectorOf(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<short>)a).Span : ((Memory<short>)a).Span));
+            if (elementType == typeof(ushort)) return VectorOf(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<ushort>)a).Span : ((Memory<ushort>)a).Span));
+            if (elementType == typeof(int)) return VectorOf(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<int>)a).Span : ((Memory<int>)a).Span));
+            if (elementType == typeof(uint)) return VectorOf(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<uint>)a).Span : ((Memory<uint>)a).Span));
+            if (elementType == typeof(long)) return VectorOf(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<long>)a).Span : ((Memory<long>)a).Span));
+            if (elementType == typeof(ulong)) return VectorOf(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<ulong>)a).Span : ((Memory<ulong>)a).Span));
+            if (elementType == typeof(char)) return VectorOf(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<char>)a).Span : ((Memory<char>)a).Span));
+            if (elementType == typeof(Half)) return VectorOf(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<Half>)a).Span : ((Memory<Half>)a).Span));
+            if (elementType == typeof(float)) return VectorOf(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<float>)a).Span : ((Memory<float>)a).Span));
+            if (elementType == typeof(double)) return VectorOf(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<double>)a).Span : ((Memory<double>)a).Span));
+            if (elementType == typeof(decimal)) return VectorOf(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<decimal>)a).Span : ((Memory<decimal>)a).Span));
+            if (elementType == typeof(Complex)) return VectorOf(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<Complex>)a).Span : ((Memory<Complex>)a).Span));
 
             return null;
         }
@@ -351,7 +364,7 @@ namespace NumSharp.Backends
             }
 
             if (items.Count == 0)
-                return np.array(Array.Empty<double>());
+                return VectorOf(Array.Empty<double>());
 
             var elementType = FindCommonNumericType(items);
             return ConvertObjectListToNDArray(items, elementType);
@@ -430,105 +443,105 @@ namespace NumSharp.Backends
                 var arr = GC.AllocateUninitializedArray<bool>(span.Length);
                 for (int i = 0; i < span.Length; i++)
                     arr[i] = span[i] is bool v ? v : Converts.ToBoolean(span[i]);
-                return np.array(arr);
+                return VectorOf(arr);
             }
             if (elementType == typeof(byte))
             {
                 var arr = GC.AllocateUninitializedArray<byte>(span.Length);
                 for (int i = 0; i < span.Length; i++)
                     arr[i] = span[i] is byte v ? v : Converts.ToByte(span[i]);
-                return np.array(arr);
+                return VectorOf(arr);
             }
             if (elementType == typeof(short))
             {
                 var arr = GC.AllocateUninitializedArray<short>(span.Length);
                 for (int i = 0; i < span.Length; i++)
                     arr[i] = span[i] is short v ? v : Converts.ToInt16(span[i]);
-                return np.array(arr);
+                return VectorOf(arr);
             }
             if (elementType == typeof(ushort))
             {
                 var arr = GC.AllocateUninitializedArray<ushort>(span.Length);
                 for (int i = 0; i < span.Length; i++)
                     arr[i] = span[i] is ushort v ? v : Converts.ToUInt16(span[i]);
-                return np.array(arr);
+                return VectorOf(arr);
             }
             if (elementType == typeof(int))
             {
                 var arr = GC.AllocateUninitializedArray<int>(span.Length);
                 for (int i = 0; i < span.Length; i++)
                     arr[i] = span[i] is int v ? v : Converts.ToInt32(span[i]);
-                return np.array(arr);
+                return VectorOf(arr);
             }
             if (elementType == typeof(uint))
             {
                 var arr = GC.AllocateUninitializedArray<uint>(span.Length);
                 for (int i = 0; i < span.Length; i++)
                     arr[i] = span[i] is uint v ? v : Converts.ToUInt32(span[i]);
-                return np.array(arr);
+                return VectorOf(arr);
             }
             if (elementType == typeof(long))
             {
                 var arr = GC.AllocateUninitializedArray<long>(span.Length);
                 for (int i = 0; i < span.Length; i++)
                     arr[i] = span[i] is long v ? v : Converts.ToInt64(span[i]);
-                return np.array(arr);
+                return VectorOf(arr);
             }
             if (elementType == typeof(ulong))
             {
                 var arr = GC.AllocateUninitializedArray<ulong>(span.Length);
                 for (int i = 0; i < span.Length; i++)
                     arr[i] = span[i] is ulong v ? v : Converts.ToUInt64(span[i]);
-                return np.array(arr);
+                return VectorOf(arr);
             }
             if (elementType == typeof(char))
             {
                 var arr = GC.AllocateUninitializedArray<char>(span.Length);
                 for (int i = 0; i < span.Length; i++)
                     arr[i] = span[i] is char v ? v : Converts.ToChar(span[i]);
-                return np.array(arr);
+                return VectorOf(arr);
             }
             if (elementType == typeof(float))
             {
                 var arr = GC.AllocateUninitializedArray<float>(span.Length);
                 for (int i = 0; i < span.Length; i++)
                     arr[i] = span[i] is float v ? v : Converts.ToSingle(span[i]);
-                return np.array(arr);
+                return VectorOf(arr);
             }
             if (elementType == typeof(double))
             {
                 var arr = GC.AllocateUninitializedArray<double>(span.Length);
                 for (int i = 0; i < span.Length; i++)
                     arr[i] = span[i] is double v ? v : Converts.ToDouble(span[i]);
-                return np.array(arr);
+                return VectorOf(arr);
             }
             if (elementType == typeof(decimal))
             {
                 var arr = GC.AllocateUninitializedArray<decimal>(span.Length);
                 for (int i = 0; i < span.Length; i++)
                     arr[i] = span[i] is decimal v ? v : Converts.ToDecimal(span[i]);
-                return np.array(arr);
+                return VectorOf(arr);
             }
             if (elementType == typeof(sbyte))
             {
                 var arr = GC.AllocateUninitializedArray<sbyte>(span.Length);
                 for (int i = 0; i < span.Length; i++)
                     arr[i] = span[i] is sbyte v ? v : Converts.ToSByte(span[i]);
-                return np.array(arr);
+                return VectorOf(arr);
             }
             if (elementType == typeof(Half))
             {
                 var arr = GC.AllocateUninitializedArray<Half>(span.Length);
                 for (int i = 0; i < span.Length; i++)
                     arr[i] = span[i] is Half v ? v : Converts.ToHalf(span[i]);
-                return np.array(arr);
+                return VectorOf(arr);
             }
             if (elementType == typeof(Complex))
             {
                 var arr = GC.AllocateUninitializedArray<Complex>(span.Length);
                 for (int i = 0; i < span.Length; i++)
                     arr[i] = span[i] is Complex v ? v : Converts.ToComplex(span[i]);
-                return np.array(arr);
+                return VectorOf(arr);
             }
 
             return null; // Unsupported element type

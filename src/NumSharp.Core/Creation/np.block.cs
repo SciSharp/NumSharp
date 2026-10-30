@@ -11,7 +11,7 @@ namespace NumSharp
         /// <summary>
         ///     Assemble an nd-array from nested lists of blocks.
         ///     Blocks in the innermost lists are concatenated (see
-        ///     <see cref="concatenate(NDArray[], int?, NDArray, NPTypeCode?, string)"/>)
+        ///     <see cref="concatenate(NDArray[], int?, NDArray, DType, string)"/>)
         ///     along the last dimension (-1), then these are concatenated along
         ///     the second-last dimension (-2), and so on until the outermost
         ///     list is reached.
@@ -30,7 +30,7 @@ namespace NumSharp
         ///     <see cref="IList"/> (<c>List&lt;T&gt;</c>) — a nested LIST whose
         ///     elements are classified recursively (mirrors a Python list).</item>
         ///     <item>rank ≥ 2 rectangular arrays (<c>int[,]</c>, …) — a leaf,
-        ///     converted via <see cref="asanyarray(in object, Type)"/>.</item>
+        ///     converted via <see cref="asanyarray(in object, DType, string)"/>.</item>
         ///     <item>tuples (<see cref="ITuple"/>) — rejected with
         ///     <see cref="TypeError"/>, matching NumPy ("np.block does not allow
         ///     implicit conversion from tuple to ndarray").</item>
@@ -188,38 +188,6 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Ensures <paramref name="a"/> has at least <paramref name="ndim"/>
-        ///     dimensions by prepending ones to its shape as necessary — always
-        ///     as a VIEW (NumPy's <c>array(a, ndmin=ndim, copy=None)</c>).
-        /// </summary>
-        internal static NDArray AtLeastNdView(NDArray a, int ndim)
-        {
-            if (a.ndim >= ndim)
-                return a;
-
-            if (a.size == 0)
-            {
-                // expand_dims early-returns empty arrays unchanged; reshape an
-                // empty directly instead (no data, layout is irrelevant).
-                var dims = new long[ndim];
-                int pad = ndim - a.ndim;
-                for (int i = 0; i < pad; i++)
-                    dims[i] = 1;
-                for (int i = 0; i < a.ndim; i++)
-                    dims[pad + i] = a.Shape.dimensions[i];
-                return a.reshape(Shape.Adopt(dims));
-            }
-
-            // ONE alias, not one per axis. `ndim` can be user-supplied (np.r_'s ndmin comes
-            // from a typed directive string), and expand_dims-per-axis clones dims+strides
-            // every step — quadratic, 27.6 s at ndim=100 000. PrependDimensions is the
-            // closed form of that loop, so the strides, flags and writeable bit are
-            // unchanged; only the cost is.
-            return new NDArray(a.Storage.Alias(a.Shape.PrependDimensions(ndim - a.ndim)))
-                { TensorEngine = a.TensorEngine };
-        }
-
-        /// <summary>
         ///     Returns <c>(normalized, list_ndim, result_ndim, final_size)</c> —
         ///     NumPy's <c>_block_setup</c>.
         /// </summary>
@@ -269,7 +237,7 @@ namespace NumSharp
             // list nested deeper than two levels fails in the join above as it does in NumPy (np.block([[[m]]]):
             // "axis -3 is out of bounds for array of dimension 2").
             var leaf = (NDArray)arrays;
-            return NDMatrixBoundary.IsMatrix(leaf) ? leaf : AtLeastNdView(leaf, resultNdim);
+            return NDMatrixBoundary.IsMatrix(leaf) ? leaf : NDArray.AtLeastNdView(leaf, resultNdim);
         }
 
         private static NDArray _block_concatenate(object normalized, int listNdim, int resultNdim)
@@ -375,7 +343,7 @@ namespace NumSharp
                 // We've 'bottomed out' - arrays is a leaf NDArray. Return the
                 // slice and the array inside a list to be consistent with the
                 // recursive case.
-                var arr = AtLeastNdView((NDArray)arrays, resultNdim);
+                var arr = NDArray.AtLeastNdView((NDArray)arrays, resultNdim);
                 return ((long[])arr.Shape.dimensions.Clone(),
                         new List<(long, long)[]> { Array.Empty<(long, long)>() },
                         new List<NDArray> { arr });
