@@ -25,7 +25,7 @@ namespace NumSharp.Backends
             double nd = (double)n * d;
             if (nd == 0.0)
                 throw new DivideByZeroException("float division by zero");
-            ValidateDevice(device);
+            DeviceArguments.ValidateDevice(device);
             if (n < 0)
                 throw new ValueError("negative dimensions are not allowed");
             double val = 1.0 / nd;
@@ -52,7 +52,7 @@ namespace NumSharp.Backends
             double nd = (double)n * d;
             if (nd == 0.0)
                 throw new DivideByZeroException("float division by zero");
-            ValidateDevice(device);
+            DeviceArguments.ValidateDevice(device);
             double val = 1.0 / nd;
             // N = n//2 + 1. Arithmetic right-shift is floor-division-by-2 for two's-complement ints
             // (n>>1 == n//2 for BOTH signs), so a negative n gives N<=0 exactly as NumPy's floor does
@@ -60,20 +60,6 @@ namespace NumSharp.Backends
             long N = (n >> 1) + 1;
             var results = np.arange(0L, Math.Max(0L, N)); // arange(0, N); empty float64 when N<=0
             return results * val;                         // -> float64
-        }
-
-        /// <summary>
-        ///     Array-API <c>device</c> validation shared by <c>fftfreq</c>/<c>rfftfreq</c>. NumPy accepts
-        ///     only <c>None</c> or <c>"cpu"</c>, else <c>ValueError</c> with the verbatim message.
-        /// </summary>
-        /// <param name="device">The caller's device argument.</param>
-        /// <exception cref="ValueError">A device other than null or <c>"cpu"</c>: <c>Device not understood. Only "cpu" is
-        ///     allowed, but received: {device}</c>.</exception>
-        private static void ValidateDevice(string device)
-        {
-            if (device != null && device != "cpu")
-                throw new ValueError(
-                    $"Device not understood. Only \"cpu\" is allowed, but received: {device}");
         }
     }
 }

@@ -74,7 +74,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.zeros.html</remarks>
         public static NDArray zeros(Shape shape, DType dtype, string device = null)
         {
-            ValidateDevice(device);
+            DeviceArguments.ValidateDevice(device);
             return new NDArray(dtype ?? DType.Double, shape, true); //already allocates inside.
         }
 

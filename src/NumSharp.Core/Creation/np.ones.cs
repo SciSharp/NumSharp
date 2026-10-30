@@ -78,7 +78,7 @@ namespace NumSharp
         /// </remarks>
         public static NDArray ones(Shape shape, DType dtype, string device = null)
         {
-            ValidateDevice(device);
+            DeviceArguments.ValidateDevice(device);
             return NDArray.Ones(shape, dtype);
         }
 

@@ -2,7 +2,13 @@ using System;
 
 namespace NumSharp
 {
-    public static partial class np
+    /// <summary>
+    ///     NumPy's <c>PyArray_DeviceConverterOptional</c> (<c>conversion_utils.c</c>): the check of the Array-API
+    ///     <c>device</c> argument that the creation functions, np.asarray / np.asanyarray, the engine's linspace /
+    ///     logspace / geomspace and np.fft.fftfreq / rfftfreq share. One function: it lives outside the np facade class
+    ///     so the engine calls no np.* member (ratchet R2 of the np-layer dtype plan).
+    /// </summary>
+    internal static class DeviceArguments
     {
         /// <summary>
         ///     Validates a <c>device</c> argument for the Array-API creation functions (matches NumPy 2.x).

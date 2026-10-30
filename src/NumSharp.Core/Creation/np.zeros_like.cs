@@ -46,7 +46,7 @@ namespace NumSharp
             if (NDCharArrayBoundary.Sees(a))
             {
                 Shape.NewLikeLayout(a.Shape, order, (long[])a.Shape.dimensions.Clone());   // the order check, before the device
-                ValidateDevice(device);
+                DeviceArguments.ValidateDevice(device);
                 NDCharArrayBoundary.RequireStringResult(dtype ?? a.dtype);
                 return NDCharArrayBoundary.Kept((a, dtype, order, device), static s => zeros_like(s.a, s.dtype, s.order, s.device));
             }
@@ -54,7 +54,7 @@ namespace NumSharp
             // so an unknown order is reported first (np.zeros_like(a, order='Z', device='cuda') raises the order's ValueError,
             // probed 2.4.2). The layout itself is resolved after the device, as before.
             OrderResolver.Convert(order);
-            ValidateDevice(device);
+            DeviceArguments.ValidateDevice(device);
             // PyArray_NewLikeArray's layout: order='K' keeps a's axis permutation (a transposed a gives a transposed
             // result, a broadcast one an F result), not merely C-or-F.
             var resolvedShape = Shape.NewLikeLayout(a.Shape, order, (long[])a.Shape.dimensions.Clone());

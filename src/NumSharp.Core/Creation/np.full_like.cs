@@ -56,7 +56,7 @@ namespace NumSharp
             if (NDCharArrayBoundary.Sees(a))
             {
                 Shape.NewLikeLayout(a.Shape, order, (long[])a.Shape.dimensions.Clone());   // the order check, before the device
-                ValidateDevice(device);
+                DeviceArguments.ValidateDevice(device);
                 NDCharArrayBoundary.RequireStringResult(dtype ?? a.dtype);
                 return NDCharArrayBoundary.Kept((a, fill_value, dtype, order, device), static s => full_like(s.a, s.fill_value, s.dtype, s.order, s.device));
             }
@@ -64,7 +64,7 @@ namespace NumSharp
             // so an unknown order is reported first (np.zeros_like(a, order='Z', device='cuda') raises the order's ValueError,
             // probed 2.4.2). The layout itself is resolved after the device, as before.
             OrderResolver.Convert(order);
-            ValidateDevice(device);
+            DeviceArguments.ValidateDevice(device);
             return NDArray.FullLike(a, fill_value, dtype, order);
         }
     }

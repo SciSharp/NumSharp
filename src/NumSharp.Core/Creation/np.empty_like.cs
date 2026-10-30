@@ -53,7 +53,7 @@ namespace NumSharp
             // so an unknown order is reported first (np.zeros_like(a, order='Z', device='cuda') raises the order's ValueError,
             // probed 2.4.2). The layout itself is resolved after the device, as before.
             OrderResolver.Convert(order);
-            ValidateDevice(device);
+            DeviceArguments.ValidateDevice(device);
             var dims = shape.IsEmpty ? (long[])prototype.Shape.dimensions.Clone() : (long[])shape;
             // PyArray_NewLikeArrayWithShape's layout: order='K' keeps the prototype's axis permutation (C when shape=
             // changes the rank), not merely C-or-F.

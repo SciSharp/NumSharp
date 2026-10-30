@@ -45,7 +45,7 @@ namespace NumSharp
         /// </remarks>
         public static NDArray arange(double start, double stop, double step, DType dtype, string device = null)
         {
-            ValidateDevice(device);
+            DeviceArguments.ValidateDevice(device);
             return UnmanagedStorage.ArangeObj(start, stop, step, dtype);
         }
 

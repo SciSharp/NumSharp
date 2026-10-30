@@ -44,7 +44,7 @@ namespace NumSharp
         {
             // np.zeros parses its order (PyArray_OrderConverter) before its device: an unknown letter is reported first.
             OrderResolver.Convert(order);
-            ValidateDevice(device);
+            DeviceArguments.ValidateDevice(device);
             return NDArray.Eye(N, M, k, dtype, order);
         }
     }

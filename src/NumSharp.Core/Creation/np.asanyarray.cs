@@ -44,7 +44,7 @@ namespace NumSharp
         ///     <c>decimal</c>) dtype: Python's <c>int(None)</c>.</exception>
         public static NDArray asanyarray(in object a, DType dtype, char order, string device = null)
         {
-            ValidateDevice(device);
+            DeviceArguments.ValidateDevice(device);
             // a numpy.matrix passes through as a matrix and a numpy.char.chararray as a chararray (np.asarray, which the
             // body calls for an array, strips the class); None is no array, so the boundaries run first as before
             if (a is NDArray nd)

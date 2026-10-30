@@ -1,7 +1,6 @@
 // NumPy's np.vander (numpy/lib/_twodim_base_impl.py) as DefaultEngine's member: its statements as the facade held them
 // - the 1-D check, promote_types(x.dtype, int), the column of ones and multiply.accumulate's powers, with the text
-// dtypes' refusals. The file sits beside its facade while it calls np.*: ratchet R2 counts np.* calls against every file
-// under Backends/ (the np-layer dtype plan, C3); it moves under Backends/Default/ in P6.
+// dtypes' refusals, through the engine's and the array object's members (the engine calls no np.* function).
 
 using System;
 
@@ -13,7 +12,8 @@ namespace NumSharp.Backends
         [NDScoped] // the asarray conversion, the ones column, the x column and its broadcast, the powers and the increasing matrix are this call's own: only the matrix returned leaves
         public override NDArray Vander(NDArray x, int? N = null, bool increasing = false)
         {
-            x = np.asarray(x);
+            // np.asarray(x)'s statement for a plain array (np.vander's facade turns a matrix or chararray plain first).
+            x = NDArray.ArrayFromObject(x, null, 'K', null);
             if (x.ndim != 1)
                 throw new ValueError("x must be a one-dimensional array or sequence.");
 
@@ -41,18 +41,18 @@ namespace NumSharp.Backends
                 // `if N > 0: tmp[:, 0] = 1` writes the number one as its str() — the text '1' — into every row of the single
                 // column (np.ones' string route).
                 if (n == 1)
-                    return np.ones(new Shape(m, n), text);
+                    return NDArray.Ones(new Shape(m, n), text);
                 // `empty((len(x), N), dtype)`: no column to write — the allocation is the matrix, and a negative N is its
                 // own error. A U matrix is zero-filled, as NumPy's NEEDS_INIT allocation is.
-                return np.empty(new Shape(m, n), text);
+                return new NDArray(text, new Shape(m, n), false);
             }
-            NPTypeCode dt = np.promote_types(x.typecode, NPTypeCode.Int64);
+            NPTypeCode dt = DTypePromotion.PromoteTypes(x.typecode, NPTypeCode.Int64);
 
             // NumPy allocates `empty((len(x), N))`; a negative N surfaces the allocator's own error.
             if (n <= 0)
-                return np.empty(new Shape(m, n), dt);
+                return new NDArray(dt, new Shape(m, n), false);
 
-            NDArray onesCol = np.ones(new Shape(m, 1), dt);
+            NDArray onesCol = NDArray.Ones(new Shape(m, 1), dt);
             NDArray incr;
             if (n == 1)
             {
@@ -62,10 +62,10 @@ namespace NumSharp.Backends
             {
                 // Each of the trailing N-1 columns starts as x, then a cumulative product along the
                 // columns turns column k into x^(k+1) — bit-identical to NumPy's `multiply.accumulate`.
-                var xcol = np.expand_dims(x.astype(dt), -1);                 // (M, 1)
-                var repeated = np.broadcast_to(xcol, new Shape(m, n - 1));   // (M, N-1), each column = x
-                var powered = np.cumprod(repeated, 1, dt);                   // (M, N-1), column k = x^(k+1)
-                incr = np.concatenate(new[] { onesCol, powered }, 1);        // (M, N), increasing powers
+                var xcol = NDArray.ExpandDims(x.astype(dt), -1);                     // (M, 1)
+                var repeated = NDArray.BroadcastTo(xcol, new Shape(m, n - 1));       // (M, N-1), each column = x
+                var powered = ReduceCumMul(repeated, 1, dt, null);                   // (M, N-1), column k = x^(k+1)
+                incr = NDArray.ConcatenateInto(new[] { onesCol, powered }, 1, null, null, "same_kind"); // (M, N), increasing powers
             }
 
             if (increasing)

@@ -1,8 +1,5 @@
 // NumPy's numpy/_core/function_base.py functions that compute, as DefaultEngine's members: np.linspace, np.logspace and
 // np.geomspace (real and complex ends), each function's statements as its np.* facade held them, with their helpers.
-// The file sits beside the facades while its statements call np.* (geomspace's complex path raises 10 to its exponents
-// with np.power): ratchet R2 counts np.* calls against every file under Backends/ (the np-layer dtype plan, C3); it moves
-// under Backends/Default/ in P6.
 
 using System;
 using System.Numerics;
@@ -20,7 +17,7 @@ namespace NumSharp.Backends
             // read later, by the np.arange that builds the ramp. So a negative count wins over a bad device, and neither
             // reaches the allocation (whose own text would be `negative dimensions are not allowed`).
             ValidateSampleCount(num);
-            np.ValidateDevice(device);
+            DeviceArguments.ValidateDevice(device);
             // A text dtype (S, U or StringDType: the String storage lane) has no typed fill. NumPy computes the float64
             // samples (issubdtype(dtype, integer) is false: no floor) and its final astype formats them, so
             // np.linspace(0, 1, 5, dtype='U5') is ['0.0', '0.25', '0.5', '0.75', '1.0'].
@@ -649,7 +646,8 @@ namespace NumSharp.Backends
             NDArray cLin = ComplexLinspaceCore(logStart, logStop, num, endpoint);
             // 10 ** exponent through NumSharp's npy_cpow port (best parity with NumPy's own complex power).
             NDArray base10 = NDArray.Scalar(new Complex(10.0, 0.0));
-            NDArray result = np.power(base10, cLin);
+            // np.power(base10, cLin): the operand's engine member (a static helper).
+            NDArray result = base10.TensorEngine.Power(base10, cLin);
             // cLin/base10 were pure inputs to power (which materialises a fresh result); reclaim them now.
             base10.Dispose();
             cLin.Dispose();

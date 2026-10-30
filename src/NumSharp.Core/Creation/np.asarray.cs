@@ -94,7 +94,7 @@ namespace NumSharp
 
             // Only "cpu" is supported (matches NumPy 2.x). null is treated as "default". The creation functions' one check
             // (PyArray_DeviceConverterOptional), with NumPy's ValueError text.
-            ValidateDevice(device);
+            DeviceArguments.ValidateDevice(device);
 
             // `like` exists for NumPy's __array_function__ dispatch protocol. NumSharp has
             // no array-subclass dispatch, so the value is accepted but never read.
