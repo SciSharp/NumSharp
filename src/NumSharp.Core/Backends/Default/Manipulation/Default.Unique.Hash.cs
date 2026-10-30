@@ -509,7 +509,8 @@ namespace NumSharp.Backends
                 return;
             }
             // The radix argsort reads an NDArray: a copy of the values. Then the gather, the counts in step.
-            using var arr = np.array(uv);
+            // np.array(uv)'s statement for a C# array: a 1-D array over a copy of it.
+            using var arr = new NDArray(Unmanaged.ArraySlice.FromArray(uv, true), Shape.Vector(uv.Length));
             using var perm = AxisSort.ArgSort(arr, null, NPY_SORTKIND.NPY_STABLESORT);
             long* p = (long*)perm.Address;   // a fresh C-contiguous int64 array: its first element is at its base
             var sorted = new Complex[count];

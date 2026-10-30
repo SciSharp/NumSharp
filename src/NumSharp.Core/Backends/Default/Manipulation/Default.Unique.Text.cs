@@ -1,4 +1,5 @@
 using NumSharp.Backends;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Sorting;
 
 // =============================================================================
@@ -113,28 +114,33 @@ namespace NumSharp.Backends
         private static NDArray[] UniqueTextRows(NDArray a, int axis, bool return_index, bool return_inverse, bool return_counts)
         {
             // `ar = np.moveaxis(ar, axis, 0)`, then `ar.reshape(n, prod(rest))` made C-contiguous: one row per index.
-            NDArray moved = np.moveaxis(a, axis, 0);
+            NDArray moved = a.TensorEngine.MoveAxis(a, new[] { axis }, new[] { 0 });
             var movedDims = moved.Shape.dimensions;
             long n = movedDims[0];
             long width = 1;
             for (int d = 1; d < movedDims.Length; d++)
                 width *= movedDims[d];
-            NDArray rows = np.ascontiguousarray(moved.reshape(n, width));
+            NDArray rows = NDArray.AsContiguousArray(moved.reshape(n, width), null);
 
             // The lexicographic order of the rows: np.lexsort's LAST key is its primary one, so the columns are passed from
             // the last to the first. Rows that cannot differ (no column) or cannot be reordered (at most one row) keep their
             // order.
             NDArray perm;
             if (width == 0 || n <= 1)
-                perm = np.arange(n);
+                perm = UnmanagedStorage.ArangeObj(0L, n, 1L, null);   // np.arange(n)
             else
             {
                 // rows.T is (width, n): its rows are the columns; reversed, its last key is column 0.
                 NDArray keys = rows.T["::-1"];
-                perm = np.lexsort(keys, -1);
+                // np.lexsort(keys, -1)'s statement for a key ARRAY: its first axis is the key list (width >= 1 keys here,
+                // so the facade's empty-sequence TypeError cannot fire), sorted by the first key's engine LexSort.
+                var keyList = new NDArray[keys.Shape.dimensions[0]];
+                for (int i = 0; i < keyList.Length; i++)
+                    keyList[i] = keys[i];
+                perm = keyList[0].TensorEngine.LexSort(keyList, -1);
             }
 
-            NDArray aux = np.take(rows, perm, 0);
+            NDArray aux = UnmanagedStorage.TakeFrom(rows, perm, 0, null, ClipModes.ClipModeRaise);   // np.take(rows, perm, 0)
             // mask[0] = True; mask[1:] = any(aux[1:] != aux[:-1], axis=1): a row starts a run when any column differs.
             var mask = new NDArray(NPTypeCode.Boolean, Shape.Vector(n), true);
             if (n > 0)
@@ -143,7 +149,7 @@ namespace NumSharp.Backends
                 if (n > 1)
                 {
                     NDArray differs = aux["1:"] != aux[":-1"];
-                    np.any(differs, 1, @out: mask["1:"]);
+                    differs.TensorEngine.Any(differs, 1, mask["1:"], false, null);   // np.any(differs, 1, out=mask[1:])
                 }
             }
 
@@ -154,7 +160,8 @@ namespace NumSharp.Backends
             shape[0] = distinct.Shape.dimensions[0];
             for (int d = 1; d < movedDims.Length; d++)
                 shape[d] = movedDims[d];
-            NDArray values = np.moveaxis(distinct.reshape(Shape.Adopt(shape)), 0, axis);
+            NDArray reshaped = distinct.reshape(Shape.Adopt(shape));
+            NDArray values = reshaped.TensorEngine.MoveAxis(reshaped, new[] { 0 }, new[] { axis });
             return UniqueOutputs(values, perm, mask, return_index, return_inverse, return_counts);
         }
 
@@ -180,12 +187,12 @@ namespace NumSharp.Backends
                     using var later = sorted["1:"];
                     using var earlier = sorted[":-1"];
                     if (!strip)
-                        np.not_equal(later, earlier, @out: tail);
+                        later.TensorEngine.NotEqual(later, earlier, null, tail, null);   // np.not_equal(later, earlier, out=tail)
                     else
                     {
                         // Both neighbours are one class, so the stripping comparison always answers (never NotImplemented).
                         using var differs = Backends.Strings.NDStringComparison.CompareChararrays("not_equal", later, earlier, rstrip: true);
-                        np.copyto(tail, differs);
+                        UnmanagedStorage.Copyto(tail, differs, NPY_CASTING.NPY_SAME_KIND_CASTING, null);   // np.copyto(tail, differs)
                     }
                 }
             }
@@ -216,7 +223,7 @@ namespace NumSharp.Backends
             if (return_inverse)
             {
                 // imask = np.cumsum(mask) - 1; inv_idx = np.empty(n, intp); inv_idx[perm] = imask
-                NDArray imask = np.cumsum(mask) - 1L;
+                NDArray imask = mask.TensorEngine.ReduceCumAdd(mask, null, null, null) - 1L;   // np.cumsum(mask) - 1
                 var inverse = new NDArray(NPTypeCode.Int64, Shape.Vector(mask.size), false);
                 inverse[perm] = imask;
                 outputs[at++] = inverse;
@@ -224,9 +231,11 @@ namespace NumSharp.Backends
             if (return_counts)
             {
                 // idx = np.concatenate(np.nonzero(mask) + ([mask.size],)); np.diff(idx)
-                NDArray starts = np.nonzero(mask)[0];
-                NDArray idx = np.concatenate((starts, np.array(new[] { mask.size })), 0);
-                outputs[at] = np.diff(idx);
+                NDArray starts = mask.TensorEngine.NonZero(mask)[0];
+                NDArray idx = NDArray.ConcatenateInto(
+                    new[] { starts, new NDArray(Unmanaged.ArraySlice.FromArray(new[] { mask.size }, true), Shape.Vector(1)) },
+                    0, null, null, "same_kind");
+                outputs[at] = idx.TensorEngine.Diff(idx, 1, -1, null, null);
             }
             return outputs;
         }

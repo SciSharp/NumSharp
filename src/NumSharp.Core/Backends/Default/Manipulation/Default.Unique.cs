@@ -17,8 +17,9 @@ using NumSharp.Backends;
 //
 // Two helpers were renamed in the merge, because DefaultEngine shares one namespace of member names: Compute is
 // UniqueCompute (QuantileEngine had a Compute too, QuantileCompute since it joined DefaultEngine), and Splitmix is
-// UniqueSplitmix (np.isin's helper of the same name joined DefaultEngine first). The files stay beside the facades
-// because their statements call public np.* functions, which ratchet R2 counts under Backends/.
+// UniqueSplitmix (np.isin's helper of the same name joined DefaultEngine first). NumPy's statements call np.moveaxis,
+// np.lexsort, np.take, np.any, np.cumsum, np.nonzero, np.diff, ...; here they are the operands' engine members and the
+// array object's.
 //
 // The routes, in NumPy's order:
 //   * text first: the axis range check, StringDType's refusal of the structured axis path (ThrowIfTextUnique), then

@@ -126,7 +126,7 @@ namespace NumSharp.Tests
             AssertNoMismatch(fails,
                 "np.unique's values-only and counts-only routes, np.unique_values and np.unique_counts write NumPy's sort NaN " +
                 "for a surviving float NaN of an array of two or more elements (NumPy's ar.sort() rewrites it); a one-element " +
-                "array and the index route keep the input bits — see Manipulation/Default.Unique.Kwargs.cs WriteSortNaNs");
+                "array and the index route keep the input bits — see Backends/Default/Manipulation/Default.Unique.Kwargs.cs WriteSortNaNs");
         }
 
         /// <summary>

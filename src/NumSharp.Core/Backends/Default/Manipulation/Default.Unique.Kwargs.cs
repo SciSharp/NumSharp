@@ -1060,7 +1060,7 @@ namespace NumSharp.Backends
             // NaN slab is DISTINCT (nan != nan) regardless of equal_nan. Accepted for API symmetry.
             _ = equal_nan;
             using var plain = NDMatrixBoundary.PlainFor(a);   // the member keeps the plain-array meaning for a matrix object
-            var moved = axis == 0 ? a : np.moveaxis(a, axis, 0);
+            var moved = axis == 0 ? a : a.TensorEngine.MoveAxis(a, new[] { axis }, new[] { 0 });   // np.moveaxis(a, axis, 0)
             long n = moved.Shape.dimensions[0];
 
             long slabSize = 1;
@@ -1114,7 +1114,7 @@ namespace NumSharp.Backends
             // NumPy's reshape_uniq: `np.moveaxis(uniq, 0, axis)` for every axis, axis 0 included, so the values are always
             // a VIEW of the gathered rows' buffer (flags.owndata False). The gathered owner is left to the caller's scope
             // (np.unique's boundary scope), its buffer kept alive by the view.
-            values = np.moveaxis(values, 0, axis);
+            values = values.TensorEngine.MoveAxis(values, new[] { 0 }, new[] { axis });   // np.moveaxis(values, 0, axis)
 
             var results = new List<NDArray> { values };
 

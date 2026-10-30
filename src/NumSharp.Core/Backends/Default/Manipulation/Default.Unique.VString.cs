@@ -59,7 +59,9 @@ namespace NumSharp.Backends
                 long[] picks = VStringDistinct.DistinctOrder(flat, equal_nan, sorted);
                 NDArray values = picks.Length == 0
                     ? new NDArray(flat.dtype, Shape.Vector(0), true)
-                    : np.take(flat, np.array(picks));
+                    // np.take(flat, np.array(picks)): np.take's TakeFrom (mode 'raise') over a 1-D array of the picks.
+                    : UnmanagedStorage.TakeFrom(flat, new NDArray(Unmanaged.ArraySlice.FromArray(picks, true), Shape.Vector(picks.Length)),
+                        null, null, ClipModes.ClipModeRaise);
                 return new[] { values };
             }
 
