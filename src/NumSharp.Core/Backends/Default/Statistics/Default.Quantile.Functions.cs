@@ -255,7 +255,7 @@ namespace NumSharp.Backends
                 default:
                 {
                     // Any other array_like (a list, a typed array, text): np.asanyarray(q), a strong array.
-                    var made = np.asanyarray(q);
+                    var made = NDArray.AnyArrayFromObject(q, null, 'K');
                     argument = new QuantileArgument(made);
                     return made;
                 }
@@ -379,7 +379,8 @@ namespace NumSharp.Backends
                     // weights=: see the number form; q becomes NumPy's float64 array of the list.
                     if (weights is not null)
                     {
-                        using var qArray = np.array(values);
+                        using var qArray = new NDArray(Unmanaged.ArraySlice.FromArray(values, true),
+                            Shape.Vector(values.Length));   // np.array(values)
                         return QuantileWeighted.Compute(a, qArray, axes, @out, keepdims, method, weights);
                     }
                     if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
@@ -486,7 +487,7 @@ namespace NumSharp.Backends
             {
                 // `q = np.true_divide(q, 100)` in q's own dtype (a float32 q stays float32), after the range check above.
                 using var hundred = NDArray.PythonLiteral(100L);
-                using var qArray = np.true_divide(q, hundred);
+                using var qArray = q.TensorEngine.Divide(q, hundred, null, null, null);
                 return QuantileWeighted.Compute(a, qArray, axes, @out, keepdims, method, weights);
             }
             // Text data: q's rank is NumPy's check after the axes (rank 3 and above refused), so it runs in the text route;
@@ -605,7 +606,8 @@ namespace NumSharp.Backends
                     // weights=: see the number form; q becomes NumPy's float64 array of the list.
                     if (weights is not null)
                     {
-                        using var qArray = np.array(values);
+                        using var qArray = new NDArray(Unmanaged.ArraySlice.FromArray(values, true),
+                            Shape.Vector(values.Length));   // np.array(values)
                         return QuantileWeighted.Compute(a, qArray, axes, @out, keepdims, method, weights,
                             (op, a, q, axes, @out, overwrite_input, method, keepdims), NanQuantileWithoutWeights);
                     }
@@ -737,7 +739,7 @@ namespace NumSharp.Backends
             if (weights is not null)
             {
                 using var hundred = NDArray.PythonLiteral(100L);
-                using var divided = np.true_divide(qArray, hundred);
+                using var divided = qArray.TensorEngine.Divide(qArray, hundred, null, null, null);
                 return QuantileWeighted.Compute(a, divided, axes, @out, keepdims, method, weights,
                     (op, a, q, axes, @out, overwrite_input, method, keepdims), NanQuantileWithoutWeights);
             }

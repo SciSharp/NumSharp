@@ -3,6 +3,7 @@ using System.Buffers;
 using System.Collections.Generic;
 using System.Linq;
 using NumSharp.Backends;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 using NumSharp.Statistics;
 
@@ -23,9 +24,10 @@ using NumSharp.Statistics;
 // its phase PE (E1) made that class these DefaultEngine partials. Two members were renamed in the merge, because
 // DefaultEngine is one namespace of member names: Compute is QuantileCompute (the name alone said nothing beside the
 // engine's other members), and BooleanSubtractError is QuantileBooleanSubtractError (np.var's statements have a helper
-// of that name and signature). The files stay beside the facades because their statements call public np.* functions,
-// which ratchet R2 counts under Backends/. The family's types (QuantileMethod, QuantileArgument, UReduced) stay in
-// NumSharp.Statistics: QuantileMethod is public there.
+// of that name and signature). The plan's phase P6 made every np.* call of these statements the member its facade
+// dispatches to (the operand's engine, the array object's statements, the dtype layer), and the files moved from
+// beside the facades to Backends/Default/Statistics/. The family's types (QuantileMethod, QuantileArgument, UReduced)
+// stay in NumSharp.Statistics: QuantileMethod is public there.
 // =============================================================================
 
 namespace NumSharp.Statistics
@@ -358,7 +360,7 @@ namespace NumSharp.Backends
                 if (nd == 1 || axis == nd - 1)
                     staged = data.Shape.IsContiguous ? data : data.copy();
                 else
-                    staged = np.moveaxis(data, axis, nd - 1).copy();
+                    staged = data.TensorEngine.MoveAxis(data, new[] { axis }, new[] { nd - 1 }).copy();
                 n = (int)staged.Shape.dimensions[staged.ndim - 1];
                 outerSize = 1;
                 for (int i = 0; i < staged.ndim - 1; i++) outerSize *= staged.Shape.dimensions[i];
@@ -612,8 +614,8 @@ namespace NumSharp.Backends
         {
             if (!double.IsNaN(Utilities.Converts.ToDouble(x.GetAtIndex(0))))
                 return false;
-            using var nan = np.isnan(x);
-            return np.all(nan);
+            using var nan = x.TensorEngine.IsNan(x, null, null, null);
+            return nan.TensorEngine.All(nan);
         }
 
         /// <summary>
@@ -744,7 +746,7 @@ namespace NumSharp.Backends
                     throw new ArgumentException(
                         $"Wrong shape of argument 'out', shape={string.Join(",", result.Shape.dimensions)} is required; " +
                         $"got shape={string.Join(",", @out.Shape.dimensions)}.");
-                np.copyto(@out, result);
+                UnmanagedStorage.Copyto(@out, result, NPY_CASTING.NPY_SAME_KIND_CASTING, null);
                 return @out;
             }
             // A fresh 0-d result (scalar q, axis=None — the np.median/percentile/quantile flat
@@ -818,7 +820,7 @@ namespace NumSharp.Backends
                     throw new ArgumentException(
                         $"Wrong shape of argument 'out', shape={string.Join(",", result.Shape.dimensions)} is required; " +
                         $"got shape={string.Join(",", @out.Shape.dimensions)}.");
-                np.copyto(@out, result);
+                UnmanagedStorage.Copyto(@out, result, NPY_CASTING.NPY_SAME_KIND_CASTING, null);
                 return @out;
             }
             // A fresh 0-d result (scalar q, axis=None — the np.median/percentile/quantile flat
@@ -880,9 +882,9 @@ namespace NumSharp.Backends
             if (inTc != NPTypeCode.Decimal && inTc != NPTypeCode.Complex)
             {
                 if (integerWeight)
-                    return np.promote_types(inTc, qType).GetTypeCode();
+                    return DTypePromotion.PromoteTypes(inTc, qType);
                 if (!weakQ && qType is NPTypeCode.Half or NPTypeCode.Single)
-                    return np.promote_types(inTc, qType).GetTypeCode();
+                    return DTypePromotion.PromoteTypes(inTc, qType);
             }
 
             // Continuous (interpolating) methods.
@@ -1120,7 +1122,7 @@ namespace NumSharp.Backends
         {
             if (!target.Shape.dimensions.AsSpan().SequenceEqual(resultShape))
                 throw new ValueError("output array does not match result of ndarray.take");
-            if (!np.can_cast(target.dtype, data.dtype, "safe"))
+            if (!DTypeCasting.CanCastTypeTo(target.dtype, data.dtype, NPY_CASTING.NPY_SAFE_CASTING))
                 throw new TypeError($"Cannot cast {(target.ndim == 0 ? "scalar" : "array data")} from {target.dtype.ToString(true)} " +
                                     $"to {data.dtype.ToString(true)} according to the rule 'safe'");
             if (!target.Shape.IsWriteable)
@@ -1145,7 +1147,8 @@ namespace NumSharp.Backends
         {
             NumSharpException.ThrowIfNotWriteable(target.Shape, "output array");
             DType lerp = DType.From(lerpType);
-            if (lerpType != target.typecode && !np.can_cast(lerp, target.dtype, "same_kind"))
+            if (lerpType != target.typecode
+                && !DTypeCasting.CanCastTypeTo(lerp, target.dtype, NPY_CASTING.NPY_SAME_KIND_CASTING))
                 throw new ArgumentException($"Cannot cast ufunc 'add' output from {lerp.ToString(true)} to " +
                                             $"{target.dtype.ToString(true)} with casting rule 'same_kind'");
 
@@ -1220,8 +1223,9 @@ namespace NumSharp.Backends
                 case 1:
                     // take(..., out=out): the values through an unsafe cast; then `np.copyto(result, arr[-1, ...],
                     // where=slices_having_nans)` (same_kind from the data's dtype) wherever a slice holds NaN.
-                    np.copyto(target, resultRaw, "unsafe");
-                    if (staged is not null && IsFloatTc(a.typecode) && !np.can_cast(a.dtype, target.dtype, "same_kind")
+                    UnmanagedStorage.Copyto(target, resultRaw, NPY_CASTING.NPY_UNSAFE_CASTING, null);
+                    if (staged is not null && IsFloatTc(a.typecode)
+                        && !DTypeCasting.CanCastTypeTo(a.dtype, target.dtype, NPY_CASTING.NPY_SAME_KIND_CASTING)
                         && HasNaN(staged))
                         throw new TypeError($"Cannot cast {(keptDims == 0 ? "scalar" : "array data")} from " +
                                             $"{a.dtype.ToString(true)} to {target.dtype.ToString(true)} according to the rule 'same_kind'");
@@ -1229,7 +1233,7 @@ namespace NumSharp.Backends
                 case 2:
                     // _lerp's add / subtract wrote out (broadcast; the buffer already has out's dtype when the lerp computed
                     // in it). The NaN slices' np.copyto reaches every float / complex out under same_kind.
-                    np.copyto(target, resultRaw, "unsafe");
+                    UnmanagedStorage.Copyto(target, resultRaw, NPY_CASTING.NPY_UNSAFE_CASTING, null);
                     // A TEXT out: the add (a number casts into text under same_kind) wrote it, and the subtract that follows
                     // has no loop for the text class its dtype= names (LerpTextOutError).
                     if (Backends.Strings.NDStringUfuncs.IsText(target))
@@ -1241,7 +1245,7 @@ namespace NumSharp.Backends
                     if (resultRaw.ndim == 0)
                         StoreNumPyScalar(target, resultRaw);
                     else
-                        np.copyto(target, resultRaw, "unsafe");
+                        UnmanagedStorage.Copyto(target, resultRaw, NPY_CASTING.NPY_UNSAFE_CASTING, null);
                     return @out;
                 default:
                     return FinalizeResult(resultRaw, a, axisArr, keepdims, qNdim, @out);
@@ -1294,9 +1298,9 @@ namespace NumSharp.Backends
             }
             // apply_along_axis's buffer: the kept axes, then q's, in C order; it returns the buffer transposed with q's axes
             // where the reduced axis was (`buff.transpose(buff_permute)`), and nanquantile's moveaxis then views it.
-            NDArray buffer = np.moveaxis(result, front, back).copy();
-            NDArray applied = np.moveaxis(buffer, back, atAxis);
-            return np.moveaxis(applied, from, front);
+            NDArray buffer = result.TensorEngine.MoveAxis(result, front, back).copy();
+            NDArray applied = buffer.TensorEngine.MoveAxis(buffer, back, atAxis);
+            return applied.TensorEngine.MoveAxis(applied, from, front);
         }
 
         /// <summary>
@@ -1327,7 +1331,7 @@ namespace NumSharp.Backends
             {
                 // A text out or a text answer (S / U / StringDType: the weighted branch picks elements of text data) goes
                 // through the string store, whose casts and refusals are the text paths' own.
-                np.copyto(target, scalar, "unsafe");
+                UnmanagedStorage.Copyto(target, scalar, NPY_CASTING.NPY_UNSAFE_CASTING, null);
                 return;
             }
 
@@ -1337,7 +1341,7 @@ namespace NumSharp.Backends
             using var packed = new NDArray(tt, Shape.Scalar, false);
             Buffer.MemoryCopy(slot, (byte*)packed.Address, packed.dtypesize, packed.dtypesize);
             // The packed element already has out's dtype, so the store is exact (and reaches a keepdims view's element).
-            np.copyto(target, packed, "unsafe");
+            UnmanagedStorage.Copyto(target, packed, NPY_CASTING.NPY_UNSAFE_CASTING, null);
         }
 
         /// <summary>Whether a float array holds a NaN anywhere (any of its lines holds one).</summary>
@@ -1345,8 +1349,8 @@ namespace NumSharp.Backends
         /// <returns>True when an element is NaN.</returns>
         private static bool HasNaN(NDArray x)
         {
-            using var nan = np.isnan(x);
-            return np.any(nan);
+            using var nan = x.TensorEngine.IsNan(x, null, null, null);
+            return nan.TensorEngine.Any(nan);
         }
 
         /// <summary>

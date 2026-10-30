@@ -1,4 +1,5 @@
 using System;
+using NumSharp.Backends.Iteration;
 using NumSharp.Statistics;
 
 // =============================================================================
@@ -219,7 +220,7 @@ namespace NumSharp.Backends
             if (prologue.Reduced is null)
             {
                 // `partition(a, kth, axis=None)` ravels the data; the mean then reduces axis 0 of the partition.
-                data = np.ravel(a);
+                data = NDArray.Ravel(a, 'C');
                 axis = 0;
             }
             else
@@ -241,7 +242,7 @@ namespace NumSharp.Backends
                 kth.Add((int)((sz - 1) / 2));
             if (a.typecode == NPTypeCode.Half)
                 kth.Add(-1);
-            NDArray part = np.partition(data, kth.ToArray(), axis);
+            NDArray part = data.TensorEngine.Partition(data, kth.ToArray(), axis, "introselect", null);
             long half = part.Shape.dimensions[axis] / 2;
             var indexer = new Slice[part.ndim];
             for (int d = 0; d < part.ndim; d++)
@@ -261,7 +262,7 @@ namespace NumSharp.Backends
             {
                 ReductionArguments.ValidateOperands(middle, ReductionArguments.AxisFlags(middle.ndim, axis), false, target, null, "add");
                 NDArray total = middle.TensorEngine.ReduceAdd(middle, axis, keepdims: false, loop);
-                np.copyto(target, total, casting: "unsafe");
+                UnmanagedStorage.Copyto(target, total, NPY_CASTING.NPY_UNSAFE_CASTING, null);
             }
             DefaultEngine.DivideByCountLikeNumPy(target, rcount);
             throw new InvalidOperationException("np.median's division by the count must refuse a text out.");
@@ -318,7 +319,7 @@ namespace NumSharp.Backends
             // elements at the middle POSITIONS (nothing was moved) into the out before its division refuses.
             if (MedianSumsIntoText(a, @out))
             {
-                using var part = np.ravel(a);
+                using var part = NDArray.Ravel(a, 'C');
                 long half = n / 2;
                 using var middle = n % 2 == 1 ? part[new Slice(half, half + 1)] : part[new Slice(half - 1, half + 1)];
                 // keepdims without an axis: `out[(Ellipsis,) + (0,) * nd]` (as indexed above).

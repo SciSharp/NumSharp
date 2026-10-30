@@ -202,7 +202,7 @@ namespace NumSharp.Backends
             for (int i = 0; i < destinations.Length; i++)
                 destinations[i] = i;
             // No kept axis: the moveaxis is the identity, and the whole array becomes the one merged axis.
-            NDArray moved = keep.Length == 0 ? x : np.moveaxis(x, keep, destinations);
+            NDArray moved = keep.Length == 0 ? x : x.TensorEngine.MoveAxis(x, keep, destinations);
             var merged = new long[keep.Length + 1];
             for (int d = 0; d < keep.Length; d++)
                 merged[d] = moved.Shape.dimensions[d];
