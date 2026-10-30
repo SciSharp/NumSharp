@@ -2,44 +2,44 @@
 # Counts may only go down. A rise is new dtype logic in the facade: move it down a layer, or pin it here by hand
 # with a reason in a fourth column. After a drop, rerun the test with NUMSHARP_WRITE_LAYERING_ALLOWLIST=1 and commit.
 # path<TAB>text<TAB>numeric[<TAB># reason]
-APIs/np.evaluate.cs	2	0
-APIs/np.finfo.cs	1	11
-APIs/np.flatiter.cs	1	1
-APIs/np.iinfo.cs	1	21
-APIs/np.memoryview.cs	2	16
-APIs/np.nditer.Typed.cs	0	1
-APIs/np.vectorize.cs	0	2
-Casting/Implicit/NDArray.Implicit.ValueTypes.cs	4	3
-Casting/NDArray.ToString.cs	0	1
-Creation/np.dtype.cs	0	2
-DTypes/np.dtypes.cs	2	0
-Indexing/np.ndenumerate.cs	0	1
-Indexing/np.take.FancyAxis.cs	0	1
-Logic/np.can_cast.cs	1	80
-Logic/np.common_type.cs	1	6
-Logic/np.find_common_type.cs	2	10
-Logic/np.isreal_iscomplex.cs	0	3
-Logic/np.min_scalar_type.cs	1	0
-Logic/np.type_checks.cs	2	15
-Manipulation/np.asscalar.cs	0	1
-Manipulation/np.copyto.cs	1	0
-Matrixlib/NDMatrix.Construction.cs	0	8
-Matrixlib/NDMatrix.Indexing.cs	0	3
-Matrixlib/NDMatrix.Methods.cs	0	1
-Matrixlib/NDMatrix.Operators.cs	0	12
-Matrixlib/NDMatrix.Reductions.cs	0	2
-Matrixlib/NDMatrix.cs	0	1
-Operations/Elementwise/NDArray.TextComparison.cs	1	0
-Polynomial/Package/np.polynomial.polyutils.cs	1	1
-RandomSampling/np.random.multinomial.cs	0	1
-Selection/NDArray.Indexing.Masking.cs	3	0
-Selection/NDArray.Indexing.PrepareIndex.cs	0	11
-Selection/NDArray.Indexing.Selection.Getter.cs	0	21
-Selection/NDArray.Indexing.Selection.Setter.cs	0	7
-Selection/NDArray.Indexing.Selection.cs	0	4
-Selection/NDArray.Indexing.Strings.cs	1	3
-Selection/NDArray.Indexing.VString.cs	5	0
-Selection/NDArray.Indexing.cs	2	1
-Statistics/np.nanmean.cs	0	1
-Statistics/np.nanstd.cs	0	1
-Statistics/np.nanvar.cs	0	1
+APIs/np.evaluate.cs	2	0	# P2: np.evaluate's text refusal waits for the owner's decision (its engine member is declared)
+APIs/np.finfo.cs	1	11	# stays (D): finfo describes a dtype - each float class's parameters
+APIs/np.flatiter.cs	1	1	# stays (D): the flat setter's same-type scalar store and its S / U element store
+APIs/np.iinfo.cs	1	21	# stays (D): iinfo describes a dtype - each integer class's range
+APIs/np.memoryview.cs	2	16	# stays (D): the buffer protocol's format characters of each dtype
+APIs/np.nditer.Typed.cs	0	1	# stays (C): nditer<T>'s C# element-type check (a typed ref needs the exact type)
+APIs/np.vectorize.cs	0	2	# stays (C): the C# delegate's return type and the output's dtype
+Casting/Implicit/NDArray.Implicit.ValueTypes.cs	4	3	# stays (C): the C# conversions of a 0-d array to a C# scalar (Python's int() / float() / complex(), a text parsed)
+Casting/NDArray.ToString.cs	0	1	# stays (C): NumSharp's char dtype prints as text (no NumPy dtype)
+Creation/np.dtype.cs	0	2	# stays (D): np.dtype is the dtype layer's own parser (PyArray_DescrConverter)
+DTypes/np.dtypes.cs	2	0	# stays (D): the np.dtypes module names the S and U classes
+Indexing/np.ndenumerate.cs	0	1	# stays (C): ndenumerate<T>'s C# element-type check
+Indexing/np.take.FancyAxis.cs	0	1	# stays (index kind): a contiguous 1-D int64 index takes the tiled gather
+Logic/np.can_cast.cs	1	80	# stays (D): a dtype routine - np.can_cast's rules for a Python scalar's value
+Logic/np.common_type.cs	1	6	# stays (D): a dtype routine
+Logic/np.find_common_type.cs	2	10	# stays (D): a dtype routine (NumPy 1.26.4's search)
+Logic/np.isreal_iscomplex.cs	0	3	# stays (D): isrealobj / iscomplexobj test the dtype itself
+Logic/np.min_scalar_type.cs	1	0	# stays (D): a dtype routine
+Logic/np.type_checks.cs	2	15	# stays (D): the isdtype family and the type characters (dtype routines)
+Manipulation/np.asscalar.cs	0	1	# stays (C): np.asscalar<T>'s C# element-type check
+Manipulation/np.copyto.cs	1	0	# stays (C): a C# char into an S / U array is one character of text, not NumSharp's char dtype
+Matrixlib/NDMatrix.Construction.cs	0	8	# stays (D): numpy.matrix's own class code
+Matrixlib/NDMatrix.Indexing.cs	0	3	# stays (D): numpy.matrix's own class code
+Matrixlib/NDMatrix.Methods.cs	0	1	# stays (D): numpy.matrix's own class code
+Matrixlib/NDMatrix.Operators.cs	0	12	# stays (D): numpy.matrix's own class code
+Matrixlib/NDMatrix.Reductions.cs	0	2	# stays (D): numpy.matrix's own class code
+Matrixlib/NDMatrix.cs	0	1	# stays (D): numpy.matrix's own class code
+Operations/Elementwise/NDArray.TextComparison.cs	1	0	# stays (C): the C# comparison operators' text route
+Polynomial/Package/np.polynomial.polyutils.cs	1	1	# stays (A, ported): numpy.polynomial's polyutils statements (P4)
+RandomSampling/np.random.multinomial.cs	0	1	# stays (A): np.random.multinomial's own statement on float16 / float32 pvals
+Selection/NDArray.Indexing.Masking.cs	3	0	# stays (P3 batch 8): the S / U route's unit view, the StringDType route's backend call
+Selection/NDArray.Indexing.PrepareIndex.cs	0	11	# stays (P3 batch 8): prepare_index's index-kind tests
+Selection/NDArray.Indexing.Selection.Getter.cs	0	21	# stays (P3 batch 8): index-kind tests and KeepLaneSharingClass
+Selection/NDArray.Indexing.Selection.Setter.cs	0	7	# stays (P3 batch 8): index-kind tests
+Selection/NDArray.Indexing.Selection.cs	0	4	# stays (P3 batch 8): an index array's integer dtype
+Selection/NDArray.Indexing.Strings.cs	1	3	# stays (P3 batch 8): index-kind tests and the S / U route's None store
+Selection/NDArray.Indexing.VString.cs	5	0	# stays (P3 batch 8): the StringDType route bodies' calls into the text backend
+Selection/NDArray.Indexing.cs	2	1	# stays (P3 batch 8): the S / U route's unit view and a bool index's kind
+Statistics/np.nanmean.cs	0	1	# P7: the matrix rule's result dtype (the class boundary, D7's TODO)
+Statistics/np.nanstd.cs	0	1	# P7: the matrix rule's result dtype (the class boundary, D7's TODO)
+Statistics/np.nanvar.cs	0	1	# P7: the matrix rule's result dtype (the class boundary, D7's TODO)
