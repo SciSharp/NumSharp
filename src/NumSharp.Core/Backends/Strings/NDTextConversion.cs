@@ -22,8 +22,8 @@ namespace NumSharp.Backends.Strings
     ///     (<c>NPY_LOWLEVEL_BUFFER_BLOCKSIZE</c>): each block is converted into a temporary and copied out only when every
     ///     element of it converted. So a parse error at element 200 of a contiguous copy leaves elements 0..127 written and
     ///     128.. untouched (probed against 2.4.2), and the error names the FIRST failing element in that order. This class
-    ///     walks the same order with the same blocks, so both the error and what an existing destination holds afterwards
-    ///     are NumPy's.
+    ///     runs on that walk (<see cref="UnmanagedStorage.RawArrayAssignArray"/>) with the same blocks, so both the error and
+    ///     what an existing destination holds afterwards are NumPy's.
     ///     </para>
     ///     <para>
     ///     <b>Canonical blocks.</b> A block of numbers is first converted to its family's canonical type
@@ -189,9 +189,10 @@ namespace NumSharp.Backends.Strings
         private static int ItemSize(UnmanagedStorage s) => s.IsString ? s.StringSlice.ItemSize : s.TypeCode.SizeOf();
 
         /// <summary>
-        ///     The raw assignment walk: NumPy's axis order and coalescing over the destination's strides, one
-        ///     <see cref="FormatRun"/> / <see cref="ParseRun"/> call per innermost run (per run of selected elements under a
-        ///     mask).
+        ///     The conversion's strided loop over NumPy's raw assignment walk
+        ///     (<see cref="UnmanagedStorage.RawArrayAssignArray"/>): numbers formatted into a text destination
+        ///     (<see cref="FormatRun"/>), texts parsed into a numeric one (<see cref="ParseRun"/>), one call per innermost run
+        ///     (per run of selected elements under a mask).
         /// </summary>
         /// <param name="dst">The destination.</param>
         /// <param name="src">The source (not overlapping <paramref name="dst"/>). A source of higher rank than the
@@ -199,54 +200,20 @@ namespace NumSharp.Backends.Strings
         ///     assignment strips them.</param>
         /// <param name="mask">A bool mask broadcastable to <paramref name="dst"/>, or null.</param>
         /// <param name="style">How a parse error quotes a text.</param>
+        /// <exception cref="ValueError">A text is not a number of the destination's kind, or has too many digits.</exception>
+        /// <exception cref="OverflowException">An integer text does not fit the destination.</exception>
+        /// <exception cref="SystemError">A <c>U</c> element is one unit above U+10FFFF.</exception>
+        /// <exception cref="UnicodeDecodeError">An <c>S</c> element converted to complex is not UTF-8.</exception>
         private static void Walk(UnmanagedStorage dst, UnmanagedStorage src, UnmanagedStorage mask = null,
             TextReprStyle style = TextReprStyle.ArrayElement)
         {
-            var ds = dst.Shape;
-            int ndim = ds.NDim;
-            int rank = Math.Max(ndim, 1);
-            long* shape = stackalloc long[rank];
-            long* sa = stackalloc long[rank];
-            long* sb = stackalloc long[rank];
-            long* sm = stackalloc long[rank];
-            long* oShape = stackalloc long[rank];
-            long* oa = stackalloc long[rank];
-            long* ob = stackalloc long[rank];
-            long* om = stackalloc long[rank];
-
-            int dItem = ItemSize(dst), sItem = ItemSize(src);
-            for (int d = 0; d < ndim; d++)
-            {
-                shape[d] = ds.dimensions[d];
-                sa[d] = ds.strides[d] * dItem;
-            }
-            BroadcastStrides(src.Shape, ndim, sItem, sb);
-            byte* a = dst.Address + ds.offset * dItem;
-            byte* b = src.Address + src.Shape.offset * sItem;
-            byte* m;
-            if (mask is null)
-            {
-                // No mask: the third operand repeats the source (it coalesces exactly when the source does).
-                for (int d = 0; d < ndim; d++)
-                    sm[d] = sb[d];
-                m = b;
-            }
-            else
-            {
-                BroadcastStrides(mask.Shape, ndim, 1, sm);
-                m = mask.Address + mask.Shape.offset;
-            }
-
-            int n = RawArrayIter.PrepareThree(ndim, shape, ref a, sa, ref b, sb, ref m, sm, oShape, oa, ob, om);
-            if (oShape[0] == 0)
-                return;
-
-            RunAction run;
+            NDInnerLoopFunc loop;
             if (dst.IsString)
             {
                 var slice = dst.StringSlice;
                 NPTypeCode from = src.TypeCode;
-                run = (bp, bs, ap, asd, count) => FormatRun(bp, bs, from, ap, asd, slice.IsUnicode, slice.Chars, count);
+                loop = (ptrs, strides, count, aux) =>
+                    FormatRun((byte*)ptrs[0], strides[0], from, (byte*)ptrs[1], strides[1], slice.IsUnicode, slice.Chars, count);
             }
             else
             {
@@ -254,99 +221,11 @@ namespace NumSharp.Backends.Strings
                 // One scratch for the whole walk: the ASCII rewrite of the widest element and its underscore-free copy.
                 byte[] scratch = new byte[NDTextParse.ScratchBytes(slice.Chars)];
                 NPTypeCode target = dst.TypeCode;
-                run = (bp, bs, ap, asd, count) =>
-                    ParseRun(bp, bs, slice.IsUnicode, slice.Chars, ap, asd, target, count, scratch, style);
+                loop = (ptrs, strides, count, aux) =>
+                    ParseRun((byte*)ptrs[0], strides[0], slice.IsUnicode, slice.Chars, (byte*)ptrs[1], strides[1], target, count,
+                        scratch, style);
             }
-            RunOuter(n, oShape, oa, ob, om, a, b, mask is null ? null : m, run);
-            GC.KeepAlive(dst);
-            GC.KeepAlive(src);
-            GC.KeepAlive(mask);
-        }
-
-        /// <summary>
-        ///     The byte strides of an operand broadcast to <paramref name="ndim"/> axes: right-aligned, a missing or
-        ///     length-1 axis broadcasting with stride 0; a higher-rank operand's extra leading axes (extent 1) dropped.
-        /// </summary>
-        /// <param name="s">The operand's shape.</param>
-        /// <param name="ndim">The destination's rank.</param>
-        /// <param name="item">The operand's element size in bytes.</param>
-        /// <param name="strides">Receives <paramref name="ndim"/> byte strides.</param>
-        private static void BroadcastStrides(Shape s, int ndim, int item, long* strides)
-        {
-            int lead = ndim - s.NDim;
-            for (int d = 0; d < ndim; d++)
-            {
-                int sd = d - lead;
-                strides[d] = sd < 0 || s.dimensions[sd] == 1 ? 0 : s.strides[sd] * item;
-            }
-        }
-
-        /// <summary>One innermost run: source pointer and byte stride, destination pointer and byte stride, length.</summary>
-        /// <param name="src">The run's first source element.</param>
-        /// <param name="srcStride">The source byte stride.</param>
-        /// <param name="dst">The run's first destination element.</param>
-        /// <param name="dstStride">The destination byte stride.</param>
-        /// <param name="count">The run length.</param>
-        private delegate void RunAction(byte* src, long srcStride, byte* dst, long dstStride, long count);
-
-        /// <summary>
-        ///     Walks the outer axes (1..<paramref name="n"/>-1, axis 1 fastest) of a prepared raw iteration and calls
-        ///     <paramref name="run"/> for each innermost run — for each run of SELECTED elements when a mask is given — in
-        ///     NumPy's order.
-        /// </summary>
-        /// <param name="n">The prepared number of axes.</param>
-        /// <param name="shape">The prepared extents, innermost first.</param>
-        /// <param name="da">The destination's prepared byte strides.</param>
-        /// <param name="db">The source's prepared byte strides.</param>
-        /// <param name="dm">The mask's prepared byte strides (ignored without a mask).</param>
-        /// <param name="a">The destination's first element (after the reversal of negative axes).</param>
-        /// <param name="b">The source's first element (moved alongside).</param>
-        /// <param name="m">The mask's first element, or null for no mask.</param>
-        /// <param name="run">The per-run converter.</param>
-        private static void RunOuter(int n, long* shape, long* da, long* db, long* dm, byte* a, byte* b, byte* m, RunAction run)
-        {
-            long* coord = stackalloc long[n];
-            for (int k = 0; k < n; k++)
-                coord[k] = 0;
-            long inner = shape[0];
-            while (true)
-            {
-                if (m == null)
-                    run(b, db[0], a, da[0], inner);
-                else
-                {
-                    // npy_memchr pairs: skip a run of masked-out elements, convert the run of selected ones after it.
-                    long i = 0, ms = dm[0];
-                    while (i < inner)
-                    {
-                        while (i < inner && m[i * ms] == 0)
-                            i++;
-                        long start = i;
-                        while (i < inner && m[i * ms] != 0)
-                            i++;
-                        if (i > start)
-                            run(b + start * db[0], db[0], a + start * da[0], da[0], i - start);
-                    }
-                }
-
-                int axis = 1;
-                for (; axis < n; axis++)
-                {
-                    a += da[axis];
-                    b += db[axis];
-                    if (m != null)
-                        m += dm[axis];
-                    if (++coord[axis] < shape[axis])
-                        break;
-                    a -= da[axis] * shape[axis];
-                    b -= db[axis] * shape[axis];
-                    if (m != null)
-                        m -= dm[axis] * shape[axis];
-                    coord[axis] = 0;
-                }
-                if (axis >= n)
-                    return;
-            }
+            UnmanagedStorage.RawArrayAssignArray(dst, src, mask, loop);
         }
 
         /// <summary>

@@ -60,7 +60,7 @@ namespace NumSharp.Backends
             if (!dst.Shape.IsWriteable)
                 throw new ValueError("assignment destination is read-only");
             if (!DTypeCasting.CanCastTypeTo(from, to, casting))
-                throw NDStringCasting.InvalidCast(from, to, casting, scalar);
+                throw DTypeCasting.InvalidCastError(from, to, casting, scalar);
 
             if (!to.Meta.HasReferences)
             {

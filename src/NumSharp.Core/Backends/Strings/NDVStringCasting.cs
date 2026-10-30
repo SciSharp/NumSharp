@@ -16,8 +16,8 @@ namespace NumSharp.Backends.Strings
     /// <remarks>
     ///     <para>
     ///     <b>Order and partial writes.</b> NumPy assigns through <c>raw_array_assign_array</c> (the axes sorted by the
-    ///     DESTINATION's strides, <see cref="RawArrayIter.PrepareThree"/>) and calls the cast's strided loop once per innermost
-    ///     run. These loops are ArrayMethods, not wrapped legacy casts, so they write element by element: an error leaves the
+    ///     DESTINATION's strides, <see cref="RawArrayIter.PrepareThree"/>; here <see cref="UnmanagedStorage.RawArrayAssignArray"/>)
+    ///     and calls the cast's strided loop once per innermost run. These loops are ArrayMethods, not wrapped legacy casts, so they write element by element: an error leaves the
     ///     elements before it (in that order) converted, and names the first failing element.
     ///     </para>
     ///     <para>
@@ -713,78 +713,30 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
-        ///     NumPy's raw assignment walk: the axes sorted by the destination's strides (<see cref="RawArrayIter.PrepareThree"/>),
-        ///     the source broadcast (a higher-rank source's extra leading axes are extent 1 and are dropped), one
-        ///     <paramref name="run"/> call per innermost run.
+        ///     NumPy's raw assignment walk (<see cref="UnmanagedStorage.RawArrayAssignArray"/>, unmasked: the axes sorted by the
+        ///     DESTINATION's strides, the source broadcast, one call per innermost run) with a run-shaped body.
         /// </summary>
         /// <param name="dst">The destination.</param>
         /// <param name="src">The source.</param>
         /// <param name="run">The per-run converter.</param>
+        /// <exception cref="Exception">Whatever <paramref name="run"/> raises, at the run NumPy's walk reaches it in.</exception>
         /// <remarks>
         ///     The walk order is observable for <c>StringDType</c> destinations: each duplicated arena string is appended to the
         ///     destination's arena in walk order, so the cells' offsets (<c>tobytes()</c>) are NumPy's only when the walk is
         ///     NumPy's — which is why the <c>StringDType</c> copy core uses this walk too (<see cref="NDVStringCopy"/>).
         /// </remarks>
         internal static void Walk(UnmanagedStorage dst, UnmanagedStorage src, RunAction run)
-        {
-            var ds = dst.Shape;
-            int ndim = ds.NDim;
-            int rank = Math.Max(ndim, 1);
-            long* shape = stackalloc long[rank];
-            long* sa = stackalloc long[rank];
-            long* sb = stackalloc long[rank];
-            long* sc = stackalloc long[rank];
-            long* oShape = stackalloc long[rank];
-            long* oa = stackalloc long[rank];
-            long* ob = stackalloc long[rank];
-            long* oc = stackalloc long[rank];
+            => UnmanagedStorage.RawArrayAssignArray(dst, src, null, AsLoop(run));
 
-            int dItem = dst.ItemBytes, sItem = src.ItemBytes;
-            for (int k = 0; k < ndim; k++)
-            {
-                shape[k] = ds.dimensions[k];
-                sa[k] = ds.strides[k] * dItem;
-            }
-            var ss = src.Shape;
-            int lead = ndim - ss.NDim;
-            for (int k = 0; k < ndim; k++)
-            {
-                int sd = k - lead;
-                sb[k] = sd < 0 || ss.dimensions[sd] == 1 ? 0 : ss.strides[sd] * sItem;
-                sc[k] = sb[k]; // the third operand repeats the source (it coalesces exactly when the source does)
-            }
-            byte* a = dst.Address + ds.offset * dItem;
-            byte* b = src.Address + ss.offset * sItem;
-            byte* c = b;
-
-            int nAxes = RawArrayIter.PrepareThree(ndim, shape, ref a, sa, ref b, sb, ref c, sc, oShape, oa, ob, oc);
-            if (oShape[0] == 0)
-                return;
-
-            long* coord = stackalloc long[nAxes];
-            for (int k = 0; k < nAxes; k++)
-                coord[k] = 0;
-            long inner = oShape[0];
-            while (true)
-            {
-                run(b, ob[0], a, oa[0], inner);
-                int axis = 1;
-                for (; axis < nAxes; axis++)
-                {
-                    a += oa[axis];
-                    b += ob[axis];
-                    if (++coord[axis] < oShape[axis])
-                        break;
-                    a -= oa[axis] * oShape[axis];
-                    b -= ob[axis] * oShape[axis];
-                    coord[axis] = 0;
-                }
-                if (axis >= nAxes)
-                    break;
-            }
-            GC.KeepAlive(dst);
-            GC.KeepAlive(src);
-        }
+        /// <summary>
+        ///     A run body in NumPy's strided-loop shape (<see cref="NDInnerLoopFunc"/>, what the raw walk and a cast's
+        ///     <c>get_strided_loop</c> deal in): <c>dataptrs[0]</c> / <c>strides[0]</c> the source, <c>dataptrs[1]</c> /
+        ///     <c>strides[1]</c> the destination.
+        /// </summary>
+        /// <param name="run">The run body.</param>
+        /// <returns>The loop; it ignores <c>auxdata</c> (the run captures what it needs).</returns>
+        internal static NDInnerLoopFunc AsLoop(RunAction run)
+            => (ptrs, strides, count, aux) => run((byte*)ptrs[0], strides[0], (byte*)ptrs[1], strides[1], count);
 
         // ---------------------------------------------------------------------------------------------
         // Helpers

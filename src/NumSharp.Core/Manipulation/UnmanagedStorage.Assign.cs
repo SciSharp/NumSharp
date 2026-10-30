@@ -546,7 +546,7 @@ namespace NumSharp.Backends
             {
                 DType from = srcType;
                 if (!DTypeCasting.CanCastTypeTo(from, dst.dtype, casting))
-                    throw NDStringCasting.InvalidCast(from, dst.dtype, casting, scalar: true);
+                    throw DTypeCasting.InvalidCastError(from, dst.dtype, casting, scalar: true);
                 long[] textMaskStrides = null;
                 if (@where is not null)
                     textMaskStrides = Shape.AssignmentBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides,

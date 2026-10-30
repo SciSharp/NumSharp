@@ -865,7 +865,7 @@ namespace NumSharp.Backends
             // PyArray_FromArray (an ndarray) checks the rule; a list is built in the target's dtype directly.
             if (!sequence && values.ndim != 0
                 && !DTypeCasting.CanCastTypeTo(values.dtype, target.dtype, NPY_CASTING.NPY_SAFE_CASTING))
-                throw Backends.Strings.NDStringCasting.InvalidCast(values.dtype, target.dtype, NPY_CASTING.NPY_SAFE_CASTING, scalar: false);
+                throw DTypeCasting.InvalidCastError(values.dtype, target.dtype, NPY_CASTING.NPY_SAFE_CASTING, scalar: false);
 
             if (values.HasSameElementType(target))
                 return null;

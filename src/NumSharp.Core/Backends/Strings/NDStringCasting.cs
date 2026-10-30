@@ -114,7 +114,7 @@ namespace NumSharp.Backends.Strings
                     $"according to the rule '{DTypeCasting.SameValueName}'");
 
             if (!DTypeCasting.CanCastTypeTo(from, to, rule))
-                throw InvalidCast(from, to, rule, src.ndim == 0);
+                throw DTypeCasting.InvalidCastError(from, to, rule, src.ndim == 0);
 
             // PyArray_NewLikeArray allocates the result here, as the source's subclass: a subclass's finalize rule
             // (chararray's 'Can only create a chararray from string data.') raises before any element converts.
@@ -156,21 +156,5 @@ namespace NumSharp.Backends.Strings
                     return shape.IsFContiguous;
             }
         }
-
-        /// <summary>
-        ///     NumPy's <c>npy_set_invalid_cast_error</c>: <c>Cannot cast array data from dtype('&lt;U5') to dtype('&lt;U3')
-        ///     according to the rule 'safe'</c>, or <c>Cannot cast scalar from …</c> for a 0-d source, raised as the house
-        ///     <see cref="InvalidCastException"/> (NumPy's TypeError).
-        /// </summary>
-        /// <param name="from">The source descriptor.</param>
-        /// <param name="to">The target descriptor.</param>
-        /// <param name="casting">The rule that refused the cast.</param>
-        /// <param name="scalar">True for a 0-d source (NumPy's "scalar" wording).</param>
-        /// <returns>The exception (not thrown).</returns>
-        public static InvalidCastException InvalidCast(DType from, DType to, NPY_CASTING casting, bool scalar)
-            => new InvalidCastException(
-                $"Cannot cast {(scalar ? "scalar" : "array data")} from {from.ToString(true)} to {to.ToString(true)} " +
-                $"according to the rule '{DTypeCasting.CastingToString(casting)}'");
-
     }
 }

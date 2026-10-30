@@ -720,7 +720,7 @@ namespace NumSharp
                     // too), then the conversion — a number written as its scalar's str(), a text parsed (the copy route's
                     // NDTextConversion), so a parse error is reported at its input, after the inputs before it were written.
                     if (!DTypeCasting.CanCastTypeTo(src.dtype, result, rule))
-                        throw NDStringCasting.InvalidCast(src.dtype, result, rule, scalar: false);
+                        throw DTypeCasting.InvalidCastError(src.dtype, result, rule, scalar: false);
 
                     long len = src.Shape.dimensions[axis];
                     if (len == 0)

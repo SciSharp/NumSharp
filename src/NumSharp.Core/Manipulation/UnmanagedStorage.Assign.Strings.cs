@@ -65,7 +65,7 @@ namespace NumSharp.Backends
             NumSharpException.ThrowIfNotWriteable(dst.Shape);
 
             if (!DTypeCasting.CanCastTypeTo(from, to, casting))
-                throw NDStringCasting.InvalidCast(from, to, casting, scalar);
+                throw DTypeCasting.InvalidCastError(from, to, casting, scalar);
             // A cast the rule allows between text and numbers formats / parses values (NDTextConversion) — reached only after
             // NumPy's shape checks, and only for the elements NumPy converts.
             if (!src.Storage.IsString || !dst.Storage.IsString)

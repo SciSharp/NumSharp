@@ -225,6 +225,23 @@ namespace NumSharp
             }
         }
 
+        /// <summary>
+        ///     NumPy's <c>npy_set_invalid_cast_error</c> (<c>convert_datatype.c</c>), the error of a cast the rule refuses:
+        ///     <c>Cannot cast array data from dtype('&lt;U5') to dtype('&lt;U3') according to the rule 'safe'</c>, or
+        ///     <c>Cannot cast scalar from …</c> for a 0-d source, as the house <see cref="InvalidCastException"/> (NumPy's
+        ///     TypeError). Every route that checks a descriptor-level rule before it casts raises it: astype, the assignment,
+        ///     the item-selection values, np.concatenate's string route.
+        /// </summary>
+        /// <param name="from">The source descriptor.</param>
+        /// <param name="to">The target descriptor.</param>
+        /// <param name="casting">The rule that refused the cast.</param>
+        /// <param name="scalar">True for a 0-d source (NumPy's "scalar" wording).</param>
+        /// <returns>The exception (not thrown: the caller throws it, so the compiler sees the control flow end).</returns>
+        internal static InvalidCastException InvalidCastError(DType from, DType to, NPY_CASTING casting, bool scalar)
+            => new InvalidCastException(
+                $"Cannot cast {(scalar ? "scalar" : "array data")} from {from.ToString(true)} to {to.ToString(true)} " +
+                $"according to the rule '{CastingToString(casting)}'");
+
         /// <summary>NumPy's <c>npy_casting_to_string</c>: the casting string of a level.</summary>
         public static string CastingToString(NPY_CASTING casting)
         {
