@@ -1,12 +1,14 @@
 // NumPy's numpy/_core/einsumfunc.py (np.einsum's optimize= path, bmm_einsum) as DefaultEngine's Einsum: the argument
-// checks, the parse, the view path, then a left-to-right pairwise fold over the matrix products. The file sits beside
-// its facade (LinearAlgebra/np.einsum.cs) while its statements call np.*: ratchet R2 counts np.* calls against every
-// file under Backends/ (the np-layer dtype plan, C3); it moves under Backends/Default/ in P6.
+// checks, the parse, the view path, then a left-to-right pairwise fold over the matrix products. NumPy's statements call
+// np.result_type, np.can_cast, np.copyto, np.diagonal, np.sum, np.transpose, np.reshape, np.matmul, np.multiply,
+// np.ascontiguousarray and np.asfortranarray; here they are the dtype layer's, the array object's and the operands'
+// engine members. The facade is LinearAlgebra/np.einsum.cs.
 
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Text;
+using NumSharp.Backends.Iteration;
 
 namespace NumSharp.Backends
 {
@@ -86,11 +88,19 @@ namespace NumSharp.Backends
             // too (NPY_ITER_COMMON_DTYPE over every operand): int8 operands with an int64 out are summed in int64.
             // EVERY operand must reach the loop dtype under the casting rule — which is what makes casting='no'
             // reject mixed dtypes — with NumPy's iterator wording verbatim.
+            // np.result_type(arrays)'s statement: DTypePromotion.ResultType over the arrays (one array's canonical
+            // descriptor, which is np.result_type's one-array shortcut), as ThrowIfEinsum's text check computes it.
             NPTypeCode computeType = dtype?.GetTypeCode()
-                ?? (@out is null ? np.result_type(operands) : np.result_type(WithOut(operands, @out)));
+                ?? (@out is null ? DTypePromotion.ResultType(operands) : DTypePromotion.ResultType(WithOut(operands, @out)));
+
+            // np.can_cast(from, to, casting)'s statement at the call sites below, where the two lanes always differ (its
+            // from == to shortcut never fires): the rule string is parsed per call, as the facade did.
+            bool CanCast(NPTypeCode from, NPTypeCode to)
+                => DTypeCasting.CanCastTypeTo(DType.From(from), DType.From(to), DTypeCasting.ParseCasting(casting));
+
             for (int i = 0; i < operands.Length; i++)
             {
-                if (operands[i].typecode != computeType && !np.can_cast(operands[i].typecode, computeType, casting))
+                if (operands[i].typecode != computeType && !CanCast(operands[i].typecode, computeType))
                     throw new TypeError(
                         $"Iterator operand {i} dtype could not be cast from " +
                         $"dtype('{operands[i].typecode.AsNumpyDtypeName()}') to " +
@@ -101,12 +111,12 @@ namespace NumSharp.Backends
             // the write cast (loop -> out) under the same rule, before anything is computed.
             if (@out is not null && @out.typecode != computeType)
             {
-                if (!np.can_cast(@out.typecode, computeType, casting))
+                if (!CanCast(@out.typecode, computeType))
                     throw new TypeError(
                         $"Iterator operand {operands.Length} dtype could not be cast from " +
                         $"dtype('{@out.typecode.AsNumpyDtypeName()}') to " +
                         $"dtype('{computeType.AsNumpyDtypeName()}') according to the rule '{casting}'");
-                if (!np.can_cast(computeType, @out.typecode, casting))
+                if (!CanCast(computeType, @out.typecode))
                     throw new TypeError(
                         $"Iterator requested dtype could not be cast from " +
                         $"dtype('{computeType.AsNumpyDtypeName()}') to " +
@@ -159,14 +169,14 @@ namespace NumSharp.Backends
 
             // The result must reach out='s dtype under the SAME casting rule as the inputs. NumPy's
             // iterator names out as operand <nop> in this message.
-            if (@out.typecode != result.typecode && !np.can_cast(result.typecode, @out.typecode, casting))
+            if (@out.typecode != result.typecode && !CanCast(result.typecode, @out.typecode))
                 throw new TypeError(
                     $"Iterator requested dtype could not be cast from " +
                     $"dtype('{result.typecode.AsNumpyDtypeName()}') to " +
                     $"dtype('{@out.typecode.AsNumpyDtypeName()}'), the operand {operands.Length} dtype, " +
                     $"according to the rule '{casting}'");
 
-            np.copyto(@out, result, "unsafe");
+            UnmanagedStorage.Copyto(@out, result, NPY_CASTING.NPY_UNSAFE_CASTING, null);   // np.copyto(out, result, 'unsafe')
             return @out;
         }
 
@@ -240,7 +250,7 @@ namespace NumSharp.Backends
                     break;
 
                 char label = term[p1];
-                arr = np.diagonal(arr, 0, p1, p2);
+                arr = NDArray.Diagonal(arr, 0, p1, p2);
                 term.RemoveAt(p2);
                 term.RemoveAt(p1);
                 term.Add(label);
@@ -255,7 +265,7 @@ namespace NumSharp.Backends
                     toSum.Add(i);
             for (int k = toSum.Count - 1; k >= 0; k--)
             {
-                arr = np.sum(arr, toSum[k], computeType);
+                arr = arr.TensorEngine.Sum(arr, axis: toSum[k], dtype: computeType, keepdims: false);
                 term.RemoveAt(toSum[k]);
             }
 
@@ -265,7 +275,7 @@ namespace NumSharp.Backends
                 var perm = new int[dstTerm.Length];
                 for (int i = 0; i < dstTerm.Length; i++)
                     perm[i] = term.IndexOf(dstTerm[i]);
-                arr = np.transpose(arr, perm);
+                arr = arr.TensorEngine.Transpose(arr, perm);
             }
 
             if (arr.typecode != computeType)
@@ -422,18 +432,18 @@ namespace NumSharp.Backends
 
             var left = desiredA != aTerm ? SingleTermEinsum(a, aTerm, desiredA, computeType) : a;
             if (newShapeA != null)
-                left = np.reshape(left, newShapeA);
+                left = left.reshape(newShapeA);
 
             var right = desiredB != bTerm ? SingleTermEinsum(b, bTerm, desiredB, computeType) : b;
             if (newShapeB != null)
-                right = np.reshape(right, newShapeB);
+                right = right.reshape(newShapeB);
 
-            var ab = np.matmul(left, right);
+            var ab = left.TensorEngine.Matmul(left, right, null, null, null, null, null, "same_kind", 'K');   // np.matmul's defaults
 
             if (newShapeAB != null)
-                ab = np.reshape(ab, newShapeAB);
+                ab = ab.reshape(newShapeAB);
             if (permAB != null)
-                ab = np.transpose(ab, permAB);
+                ab = ab.TensorEngine.Transpose(ab, permAB);
 
             return ab;
         }
@@ -488,12 +498,12 @@ namespace NumSharp.Backends
             }
 
             var left = desiredA.ToString() != aTerm ? SingleTermEinsum(a, aTerm, desiredA.ToString(), computeType) : a;
-            left = np.reshape(left, newShapeA);
+            left = left.reshape(newShapeA);
 
             var right = desiredB.ToString() != bTerm ? SingleTermEinsum(b, bTerm, desiredB.ToString(), computeType) : b;
-            right = np.reshape(right, newShapeB);
+            right = right.reshape(newShapeB);
 
-            return np.multiply(left, right);
+            return left.TensorEngine.Multiply(left, right);
         }
 
         /// <summary>Product of each group's label extents; null when every group is already a single axis.</summary>
@@ -578,12 +588,14 @@ namespace NumSharp.Backends
             if (result.ndim == 0)
                 return result;
 
+            // np.ascontiguousarray's statement is NDArray.AsContiguousArray; np.asfortranarray's is the conversion in F
+            // order, then a reshape to (1,) of a 0-d result, which cannot fire here (a 0-d result returned above).
             switch (order)
             {
                 case 'C':
-                    return np.ascontiguousarray(result);
+                    return NDArray.AsContiguousArray(result, null);
                 case 'F':
-                    return np.asfortranarray(result);
+                    return NDArray.ArrayFromObject(result, null, 'F', null);
                 default:                 // 'A' and 'K'
                     bool allF = true;
                     foreach (var o in operands)
@@ -595,8 +607,8 @@ namespace NumSharp.Backends
                     }
 
                     if (allF)
-                        return np.asfortranarray(result);
-                    return order == 'A' ? np.ascontiguousarray(result) : result;
+                        return NDArray.ArrayFromObject(result, null, 'F', null);
+                    return order == 'A' ? NDArray.AsContiguousArray(result, null) : result;
             }
         }
 
@@ -654,7 +666,7 @@ namespace NumSharp.Backends
         ///     null default too) and hands anything else to <c>einsum_path</c>, whose <c>path_type</c> branches accept
         ///     <c>True</c>, any string, an explicit path (an <see cref="EinsumPath"/> or a list headed
         ///     <c>'einsum_path'</c>) and a <c>(string, int | float)</c> pair (a bool is an int there), and refuse the rest:
-        ///     the same resolution <c>np.einsum_path</c> runs (<c>np.ResolveOptimize</c>). NumSharp contracts left to right
+        ///     the same resolution <c>np.einsum_path</c> runs (<c>EinsumPathPlanner.ResolveOptimize</c>). NumSharp contracts left to right
         ///     whatever the path says, so the resolved directive is dropped.
         /// </summary>
         /// <param name="optimize">The <c>optimize=</c> argument.</param>
@@ -664,7 +676,7 @@ namespace NumSharp.Backends
         {
             if (optimize is null || optimize is false)
                 return;
-            np.ResolveOptimize(optimize);
+            EinsumPathPlanner.ResolveOptimize(optimize);
         }
 
         /// <summary>

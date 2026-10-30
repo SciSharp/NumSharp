@@ -33,7 +33,7 @@ namespace NumSharp
     ///     which NumPy itself does not pin.
     ///     </para>
     /// </remarks>
-    internal static class EinsumPathPlanner
+    internal static partial class EinsumPathPlanner
     {
         // NumPy's einsum_symbols — UPPER case first, so index order equals ASCII order.
         private const string EinsumSymbols =
