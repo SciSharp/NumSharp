@@ -152,6 +152,31 @@ None of these computes NumSharp operations: each converts tensors between NumSha
 - Gate: `test/NumSharp.Tests.Interop.System.Numerics.Tensors`, both TFMs, in the `interop-test` CI job.
 - Docs: `docs/website-src/docs/interop/system-numerics-tensors.md`.
 
+## The pythonnet bridge carries text
+
+- `S` / `U` are ordinary buffers and VIEW both ways (`<U1` and a 4-byte `wchar_t` buffer import as `U1`, never `Char`;
+  a big-endian `U` copies byte-swapped; `np.str_` / `np.bytes_` are 0-d `U` / `S`).
+- A `T` array crosses as an exact COPY through numpy's `_ARRAY_API` capsule
+  (`src/NumSharp.Interop.pythonnet/NumpyStringApi.cs`: slots 313 load, 314 pack, 315 pack_null, 316 acquire, 318
+  release, 160 `PyArray_GetPtr` for the data address) with `NpyString_dup`'s rules, so its cells equal numpy's own
+  copy's. An object array of `str` copies to `StringDType()` (a `str` SUBCLASS element too: numpy's `coerce=False` cast
+  takes only an exact `str` / `np.str_`, so such an array goes through the coercing cast, which stores `str(x)`), any
+  other is refused, and so is an NA object with no C# form (`pd.NA`). An EMPTY source keeps its writeability like any
+  other (a read-only empty one is refused by default, non-writeable on opt-in; an empty broadcast exports read-only).
+- Traps: numpy's `na_eq_cmp` is not reflexive for an `np.float16` NaN (only identity matches), so write a `T` array's NA
+  with `descr.na_object` (a second boxed `Half.NaN` is the TEXT `'nan'`); pythonnet's `As<double>()` refuses an
+  `np.float16` (convert through Python's `float()`); `np.empty(shape, T)` gives the result a NEW descriptor instance with
+  its own allocator, so lock `result.dtype`'s allocator, not the descriptor passed in; a failed `memoryview` through
+  pythonnet costs ~10 µs of .NET exceptions, so the import routes probe with `PythonRuntimeInterop.TryMemoryview`
+  (Python's own `try`, `None` on failure); pythonnet's `As<string>()` compares the type with `str` EXACTLY, so it refuses
+  an `np.str_` (read a possible `str` subclass through Python's `str()`); a `T` cell written short over an arena string
+  keeps the old offset's high bytes behind its text and numpy's `NpyString_dup` moves them: compare cells, and they must
+  move too.
+- Gates: `TextFixedWidthCrossingTests`, `TextStringDTypeCrossingTests` (live numpy, every NA kind × `coerce` × layout),
+  `TextCrossingEdgeCaseTests` (cell histories, UTF-8 size boundaries, ranks 5–6, empty / read-only sources, a 64 KiB+
+  arena, seeded random arrays and views, eight threads, `str` subclasses, corrupt cells on both sides failing cleanly with
+  numpy's allocator lock released, 64 dimensions both ways and numpy's own refusal of 65).
+
 ## The pythonnet examples
 
 - `.github/workflows/example-pythonnet.yml` runs `examples/NumSharpPythonnetGhActionsCicd`: an MSTest project that

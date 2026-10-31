@@ -183,8 +183,8 @@ reductions and `np.cov` over text (parsed first).
   per type, float16 / float32 shortest digits, complex forms; an unsized `'U'` / `'S'` takes `REQUIRED_STR_LEN`: 21 for
   int64, 32 for the floats, 64 for complex). NumSharp's `char` converts as uint16 and `decimal` as float64. A Python int
   (a C# `BigInteger`) goes through `NDTextFormat.FormatPythonInt`, which refuses more than 4300 digits with CPython's
-  `str()` ValueError, so a `U` / `S` / coercing `T` store of one, an unsized discovery and `StringDType(na_object=10**4300)`
-  raise as in NumPy.
+  `str()` ValueError, so a `U` / `S` / coercing `T` store of one, an unsized discovery and
+  `StringDType(na_object=10**4300)` raise as in NumPy.
 - Text → number is CPython 3.12's `int()` / `float()` / `complex()` (`NDTextParse.cs`, with the pinned Unicode tables of
   `Utilities/PyUnicode.cs`: decimal digits of every script, `str.isspace()`, the 4300-digit limit, strict UTF-8 for
   `S → complex`). Overflow texts are the LP64 ones (`Python int too large to convert to C long`).
@@ -192,35 +192,45 @@ reductions and `np.cov` over text (parsed first).
   earlier blocks written, as NumPy does), converts only the selected runs under a mask, and quotes the NumPy scalar in an
   array cast's error (`np.str_('x')`) but the Python object in a store of a C# string (`'x'`).
 - `Converts` and the other converter classes speak NumPy's text too: number → text is the scalar's `str()` and text →
-  number NumPy's store of a Python str, culture-invariant, through ONE pair of helpers (`Utilities/Converts.NumPyText.cs`:
-  `NumPyStr`, `ParseNumPyText<T>`, `NumPyTextTruth`) that every route reaches (the typed / object `To*` and `ToString`,
-  every `ChangeType`, `FindConverter` / `Converts<T>`, `NonGenericConvert`, `TypelessConvert`, `ArrayConvert`,
-  `py.complex`). A string source must never reach `CreateIntegerConverter`: its `IConvertible.ToDouble` parses in the
-  CURRENT culture and truncates. An `IFormatProvider` is ignored for dtype values; a char target follows astype (numbers
-  through the int32 intermediate, text as a uint16); `np.loadtxt` stores a converter's result by `PyArray_Pack`
-  (`ReductionInitial.TryPack`), never `System.Convert` (which rounds). Gates `test/NumSharp.Tests/Casting/ConvertsNumPyTextTests.cs`,
-  `TextNumberConversionTests`.
+  number NumPy's store of a Python str, culture-invariant, through ONE pair of helpers
+  (`Utilities/Converts.NumPyText.cs`: `NumPyStr`, `ParseNumPyText<T>`, `NumPyTextTruth`) that every route reaches (the
+  typed / object `To*` and `ToString`, every `ChangeType`, `FindConverter` / `Converts<T>`, `NonGenericConvert`,
+  `TypelessConvert`, `ArrayConvert`, `py.complex`). A string source must never reach `CreateIntegerConverter`: its
+  `IConvertible.ToDouble` parses in the CURRENT culture and truncates. An `IFormatProvider` is ignored for dtype values;
+  a char target follows astype (numbers through the int32 intermediate, text as a uint16); `np.loadtxt` stores a
+  converter's result by `PyArray_Pack` (`ReductionInitial.TryPack`), never `System.Convert` (which rounds). Gates
+  `test/NumSharp.Tests/Casting/ConvertsNumPyTextTests.cs`, `TextNumberConversionTests`.
+- Promotion: every internal engine is the table (`NDIterCasting.PromoteTypes`, `NDExprTypeRules.PromoteStrong`: char
+  beside bool / uint8 stays char), and a SET of three or more types is NumPy's order-independent
+  `PyArray_PromoteDTypeSequence` (`dtypes.md`). A C# number literal is WEAK wherever a promotion reads the mark
+  (`NDArray.Nep50Operand`; an `object` overload builds its operand with `NDArray.FromPythonOperand`), so text beside a
+  literal is NumPy's `DTypePromotionError` in `np.where` / `np.choose` / `np.select` / `np.r_`, and a literal inside an
+  `NDArray[]` stays weak in their numeric routes. The ufuncs and `np.where`'s numeric route read EVERY 0-d operand as
+  weak (the house rule, `[Misaligned]`). Gates `DTypes/PromotionEngineParityTests.cs`,
+  `APIs/Nep50LiteralPromotionTests.cs`.
 - The float digits are `Backends/Printing/FloatDigits.cs` (Ryu shortest digits per precision, exact half-even `%f` /
   `%e` rounding by one 64×64 → 128-bit multiply, tables generated from `BigInteger`), which also feeds scalar str / repr
   (`NDTextFormat.FormatFloatAscii`), array printing (`Dragon4`) and `np.strings.mod`. TRAP: the .NET 10 runtime's `"R"`
   writes 16 digits for 2^-25 and 2^-958 that read back as the neighbouring double, where NumPy prints 17: never format
   NumPy's digits through `"R"`.
 - `None` into fixed-width text stores `'None'` cut to the width, and into a `StringDType` its NA object or `'None'` (the
-  general rule for `None` in a store: `creation-manipulation.md`).
+  general rule for `None` in a store: `selection-indexing.md`).
 
 ## Gates
 
-- The string oracle: `test/oracle/gen_strings_oracle.py` → `test/NumSharp.Tests.Oracle/Strings/corpus/strings_<section>.jsonl`,
-  one file per section (`--sections titer,cvtext` regenerates a subset, byte-identical to a full run; the generator warns
-  past 50 MiB per section, for GitHub's 100 MiB file limit). Every case is strict. `T` values travel as values, never
-  cells (`"t"` + `"values"`, `{"na": true}`), and `tobytes()` cells are compared with the heap pointers masked; NumPy's
-  `T` → complex defect stays invisible by construction (the cast reads only texts whose two parts are equal).
+- The string oracle: `test/oracle/gen_strings_oracle.py` →
+  `test/NumSharp.Tests.Oracle/Strings/corpus/strings_<section>.jsonl`, one file per section (`--sections titer,cvtext`
+  regenerates a subset, byte-identical to a full run; the generator warns past 50 MiB per section, for GitHub's 100 MiB
+  file limit). Every case is strict. `T` values travel as values, never cells (`"t"` + `"values"`, `{"na": true}`), and
+  `tobytes()` cells are compared with the heap pointers masked; NumPy's `T` → complex defect stays invisible by
+  construction (the cast reads only texts whose two parts are equal).
 - The soak: `test/oracle/soak_strings_oracle.py` draws fresh random cases for every computing family over `S` / `U` / `T`
   in random layouts, NA kinds and texts holding NULs, non-ASCII and arena / heap sizes; `StringOracleTests.StringSoak`
   replays the directory `NUMSHARP_STRING_ORACLE_SOAK_DIR` names (Inconclusive when unset; the corpora are not committed).
-- Unit tests `test/NumSharp.Tests/Backends/Strings/*` (call order: `StringCallOrderTests`, `StringShapeDecidedTests`; storage and moves:
-  `StringDTypeStorageTests`, `StringDTypeFillTests`, `StringDTypeFaultTests`, `StringDTypeHeapPagesTests`; conversions:
-  `TextNumberConversionTests`); `DTypes/StringDTypeDescriptorTests.cs`, `Backends/Strings/StringDTypeProtocolTests.cs`.
+- Unit tests `test/NumSharp.Tests/Backends/Strings/*` (call order: `StringCallOrderTests`, `StringShapeDecidedTests`;
+  storage and moves: `StringDTypeStorageTests`, `StringDTypeFillTests`, `StringDTypeFaultTests`,
+  `StringDTypeHeapPagesTests`; conversions: `TextNumberConversionTests`); `DTypes/StringDTypeDescriptorTests.cs`,
+  `Backends/Strings/StringDTypeProtocolTests.cs`.
 - Coverage of a change is measured on the lines it ADDED (a cobertura run of the unit and oracle suites joined with
   `git diff -U0 <base>`). In a mutation pass a crashed test host counts as a kill (a corrupt cell can end it without a
   "Failed" line); `NUMSHARP_DEBUG_GUARD_PAGES=1` bypasses the buffer pool, so a junk-filled-pool test cannot see an

@@ -128,6 +128,23 @@ Every store entry point packs a C# literal as NumPy's `PyArray_Pack` of a Python
   `np.pad` stores one or two constants as NumPy scalars (`ReductionInitial.PackNumPyScalar`: `_as_pairs` runs
   `np.array(constant_values)`, so int8 refuses 1000 where uint8 pads with 232) and a larger table as the Python scalars
   of its `tolist()` (`TryPack`: `-1` into uint8 raises).
+- `None` is a value in every store route: a C# `null` where NumPy passes `None` stores NumPy's setitem of `None`: float
+  NaN as NumPy's `NPY_NAN` (the POSITIVE quiet NaN, `0x7ff8…` / `0x7fc00000` / `0x7e00`; .NET's `double.NaN` is
+  negative), complex `nan+nanj`, bool `False`, `'None'` truncated to an `S` / `U` width, a `StringDType`'s NA object or
+  `'None'`; every integer dtype and `char` raise `int(None)`'s TypeError, `decimal` Python's `decimal.Decimal(None)`
+  TypeError. ONE primitive: `ReductionInitial.PackNone` / `PackStore` / `BoxNone` (store paths never call `TryPack` with a
+  null: there null means a reduction's `initial=None`) and `NDArray.NoneForStore(descr)` (a 0-d value of any
+  descriptor). Each route converts at NumPy's point, so the errors keep NumPy's ORDER: the indexers after an integer
+  index's bounds but before a fancy index's, and for an empty slice; `fill` even when empty; `np.put` / `putmask` /
+  `place` after the target, index-cast and mask-size checks; `np.insert` after a scalar position's check, and for an
+  EMPTY position list too; the flat iterator's slice / list setters convert the value BEFORE resolving positions. Three
+  routes see `None` as NumPy's 0-d OBJECT array, cast per element: `np.full` / `np.full_like` (an empty result converts
+  nothing) and `np.copyto(dst, (NDArray)null)` (`'unsafe'` only, converted once up front for a destination of more than
+  one element, not for `StringDType`, whose descriptor NumPy's `REFCHK` exempts). `np.full(shape, null)` /
+  `np.asarray((NDArray)null)` / `np.asanyarray(null)` WITHOUT a dtype are NumPy's object array, refused
+  (`NDArray.NoneWithoutDtype`); with one they build the 0-d value (`np.asanyarray(null, dtype)` binds the `MemoryView`
+  overload, which therefore treats null as None). Divergences: `np.pad(constant_values: null)` is the omitted default (C#
+  cannot tell an explicit null). Gates: the string oracle's `storenone` section, `Backends/NoneStoreTests.cs`.
 - Kept as casts: `SetValue` / `itemset` (NumSharp's low-level typed setters; `itemset` is gone from NumPy 2.0), an
   unmarked 0-d array everywhere, and a 0-d view from integer indexing (`a[i] = b[j]`: NumPy's `b[j]` is a NumPy scalar,
   which a SIGNED integer destination would range-check: `[Misaligned]`). Text into a numeric store is parsed like NumPy's
@@ -177,23 +194,24 @@ Every store entry point packs a C# literal as NumPy's `PyArray_Pack` of a Python
   bool indices pass, float and complex are refused (`SelectionTests` `Take_FloatIndices_Throws_SameKind`,
   `Put_FloatIndices_Throws_Safe`, `Take_UInt64Indices_Allowed_But_Put_Rejects`).
 - `np.putmask(a, mask, values)` (NumPy's `PyArray_PutMask` / `npy_fastputmask`; `Indexing/np.putmask.cs` over
-  `UnmanagedStorage.PutMaskCore`, kernel `DirectILKernelGenerator.PutMask.cs`) writes
-  `a.flat[i] = values.flat[i % values.size]` wherever `mask` is True, walking both in C order. It shares `place`'s structure (the writeable check first, the same-`size` mask contract, a
-  non-bool mask cast to `!= 0` with NaN/inf → True, the `ascontiguousarray` + `copyto` writeback for non-contiguous
-  targets, and the `arrays_overlap` → ENSURECOPY guard: `NDMemOverlap.SolveMayShareMemory(maxWork: 0)`, NumPy's
-  `NPY_MAY_SHARE_BOUNDS`, gives a fresh copy of `a` when `values`/`mask` may alias it). It differs from `place` in two
-  ways: the values cursor advances by POSITION (every element, in lockstep with `i`, wrapping at `nv`), not per True, and
-  an empty `values` is a silent no-op (`place` raises ValueError). The kernel has a cursor-free `nv == 1` broadcast path
-  (NumPy's `if (nv == 1)`). Errors: read-only → `"putmask: output array is read-only"` (first, before the mask size and
-  nv), a wrong size → `"putmask: mask and data must be the same size"`. `values` is converted as NumPy's
-  `PyArray_FromAny(values, a.dtype)` converts it, after the mask's size check (`PutMaskCore`, shared with place's
-  `PlaceCore`): an array of values must cast under the `'safe'` rule (NumPy's TypeError text), a 0-d array (a NumPy
-  scalar) converts without it, a C# literal is packed with Python's range checks, and a C# array is NumPy's Python LIST,
-  discovered into `a`'s dtype item by item (`ListValuesLikeNumPy`: `[1000, 2]` into int8 raises `OverflowError`,
-  `[1, 2.5]` into `<U3` stores `['1', '2.5']`, a NaN into an integer array raises `int()`'s `ValueError`). A typed array
-  is cast in one pass only where the cast stores exactly those values (a widening; numbers into bool; doubles into a
-  float or complex class; numbers into an integer class when the values' min and max, taken by np.amin / np.amax's IL
-  kernels on the buffer, lie in the class). Gates: `Indexing/SelectionTests.cs` (`PutMask_*`) and the `putmask` tier.
+  `UnmanagedStorage.PutMaskCore`, kernel `DirectILKernelGenerator.PutMask.cs`) writes `a.flat[i] = values.flat[i %
+  values.size]` wherever `mask` is True, walking both in C order. It shares `place`'s structure (the writeable check
+  first, the same-`size` mask contract, a non-bool mask cast to `!= 0` with NaN/inf → True, the `ascontiguousarray` +
+  `copyto` writeback for non-contiguous targets, and the `arrays_overlap` → ENSURECOPY guard:
+  `NDMemOverlap.SolveMayShareMemory(maxWork: 0)`, NumPy's `NPY_MAY_SHARE_BOUNDS`, gives a fresh copy of `a` when
+  `values`/`mask` may alias it). It differs from `place` in two ways: the values cursor advances by POSITION (every
+  element, in lockstep with `i`, wrapping at `nv`), not per True, and an empty `values` is a silent no-op (`place`
+  raises ValueError). The kernel has a cursor-free `nv == 1` broadcast path (NumPy's `if (nv == 1)`). Errors: read-only
+  → `"putmask: output array is read-only"` (first, before the mask size and nv), a wrong size → `"putmask: mask and data
+  must be the same size"`. `values` is converted as NumPy's `PyArray_FromAny(values, a.dtype)` converts it, after the
+  mask's size check (`PutMaskCore`, shared with place's `PlaceCore`): an array of values must cast under the `'safe'`
+  rule (NumPy's TypeError text), a 0-d array (a NumPy scalar) converts without it, a C# literal is packed with Python's
+  range checks, and a C# array is NumPy's Python LIST, discovered into `a`'s dtype item by item (`ListValuesLikeNumPy`:
+  `[1000, 2]` into int8 raises `OverflowError`, `[1, 2.5]` into `<U3` stores `['1', '2.5']`, a NaN into an integer array
+  raises `int()`'s `ValueError`). A typed array is cast in one pass only where the cast stores exactly those values (a
+  widening; numbers into bool; doubles into a float or complex class; numbers into an integer class when the values' min
+  and max, taken by np.amin / np.amax's IL kernels on the buffer, lie in the class). Gates: `Indexing/SelectionTests.cs`
+  (`PutMask_*`) and the `putmask` tier.
 
 ## `take_along_axis` / `put_along_axis` / `select`
 
@@ -255,15 +273,16 @@ Every store entry point packs a C# literal as NumPy's `PyArray_Pack` of a Python
 ## `unravel_index` / `ravel_multi_index`
 
 - `np.unravel_index` is NumPy's statements (`TensorEngine.UnravelIndex`,
-  `Backends/Default/Indexing/Default.UnravelIndex.cs`): the order letter (both cases), the dims overflow, the index dtype's TypeError, then `only 'C' or 'F' order is
-  permitted`; an out-of-range index is NumPy's ValueError, the FIRST one in the iteration order; `shape=()` is legal. The
-  result is the columns of ONE interleaved `indices.shape + (len(dims),)` buffer (element stride `len(dims)`), laid out
-  along the index array's iteration order (`NpyIter_CreateCompatibleStrides`, KEEPORDER with `DONT_NEGATE_STRIDES`, is
-  `Shape.NpyIterOutputShape` over the index array: an F index array gives F-strided coordinates, a broadcast or reversed
-  one C). Every coordinate array reports OWNDATA false, and a 0-d index array gives NumPy's scalars (fresh read-only 0-d
-  arrays): code that reads their raw buffers must use the strides. Positive dimensions take a Granlund–Montgomery
-  reciprocal IL kernel (multiply-high and shifts: RyuJIT emits TWO hardware divides for `val % m` and `val / m`); a zero
-  or negative dimension keeps the divmod kernel.
+  `Backends/Default/Indexing/Default.UnravelIndex.cs`): the order letter (both cases), the dims overflow, the index
+  dtype's TypeError, then `only 'C' or 'F' order is permitted`; an out-of-range index is NumPy's ValueError, the FIRST
+  one in the iteration order; `shape=()` is legal. The result is the columns of ONE interleaved `indices.shape +
+  (len(dims),)` buffer (element stride `len(dims)`), laid out along the index array's iteration order
+  (`NpyIter_CreateCompatibleStrides`, KEEPORDER with `DONT_NEGATE_STRIDES`, is `Shape.NpyIterOutputShape` over the index
+  array: an F index array gives F-strided coordinates, a broadcast or reversed one C). Every coordinate array reports
+  OWNDATA false, and a 0-d index array gives NumPy's scalars (fresh read-only 0-d arrays): code that reads their raw
+  buffers must use the strides. Positive dimensions take a Granlund–Montgomery reciprocal IL kernel (multiply-high and
+  shifts: RyuJIT emits TWO hardware divides for `val % m` and `val / m`); a zero or negative dimension keeps the divmod
+  kernel.
 - `np.ravel_multi_index` is `arr_ravel_multi_index` (`TensorEngine.RavelMultiIndex`,
   `Backends/Default/Indexing/Default.RavelMultiIndex.cs`, with NumPy's `astype_anyint`, which the unravel member shares
   and which asks the descriptor's kind): the result is its iterator's ALLOCATE output (KEEPORDER over the coordinate
