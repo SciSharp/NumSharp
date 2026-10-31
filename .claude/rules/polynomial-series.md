@@ -8,15 +8,17 @@ paths:
   - "benchmark/polynomial/**"
 ---
 
-# The polynomial package (1/2): evaluation, the additive family and polyutils, calculus
+# The polynomial package (1/4): evaluation, the additive family and polyutils, calculus
 
 The `numpy.polynomial` PACKAGE (not the legacy `np.polyval` family): facade `np.polynomial.{polynomial, chebyshev,
 legendre, laguerre, hermite, hermite_e}`, instance-property modules (a nested static class cannot share `np.polynomial`'s
-name, CS0542). Series algebra, Vandermonde matrices and roots: `polynomial-algebra.md`.
+name, CS0542). Series algebra, Vandermonde matrices and roots: `polynomial-algebra.md`; weights, nodes, quadrature,
+interpolation and fits: `polynomial-quadrature.md`; the series classes and printing: `polynomial-classes.md`.
 
 ## Evaluation: `{p}val`, `{p}val2d`, `{p}val3d`, `{p}grid2d`, `{p}grid3d`, `{p}valnd`
 
-(`polyval`/`chebval`/`legval`/`lagval`/`hermval`/`hermeval` and their twins; `polyvalfromroots` is not implemented.)
+(`polyval`/`chebval`/`legval`/`lagval`/`hermval`/`hermeval` and their twins; `polyvalfromroots` has its own section
+below.)
 - Driver `Polynomial/Package/NDPolyEval.cs`, NumPy's Python layer: `np.array(c, ndmin=1)`, int/bool series → float64, a
   Python-scalar x stays weak, the `tensor` reshape, the `_valnd`/`_gridnd` two-pass compositions, NumPy's errors.
 - Kernels `Backends/Kernels/ILKernelGenerator.Polynomial{,.Typing,.Emitter,.Lanes,.ConstPool,.Eval}.cs`: per-chunk IL over
@@ -24,7 +26,8 @@ name, CS0542). Series algebra, Vandermonde matrices and roots: `polynomial-algeb
   never re-associated, each node typed by NEP 50), so there is no per-basis or per-dtype C#.
 - Bit-exact with NumPy 2.4.2 on every dtype pair and layout, the result LAYOUT included: the tier `polyeval.jsonl` (zero
   excused; section L is a "strides" facet over every x × series layout; section J a Python-sequence x (tuples, nested
-  lists, empty, ragged, NumPy-scalar items, coerced by `PolySequence`) and a Python int x past int64 (a C# `BigInteger`,
+  lists, empty, ragged, NumPy-scalar items, coerced by `UnmanagedStorage.FromSequence`) and a Python int x past int64 (a
+  C# `BigInteger`,
   weak: CPython int arithmetic on the x-only terms, inf / OverflowError past float64); section K an array_like c and
   array_like ordinates). `MisalignedRegistry`'s generic unary/complex ULP branches are carved out for these ops.
 - Every array_like parameter is `object`: c of `{p}val*`/`{p}grid*`/`{p}valnd` (NumPy's `np.array(c, ndmin=1)`, converted
@@ -77,10 +80,46 @@ name, CS0542). Series algebra, Vandermonde matrices and roots: `polynomial-algeb
     (`--no-cache` after every Core edit); one warm-up pass only QUEUES tier-1 (warm, sleep for the background JIT, warm
     again); NumPy's loops are cheapest when L1/L2-resident, so a 100K-only dtype sweep hides the worst cells.
 
+## `polyvalfromroots`
+
+- `np.polynomial.polynomial.polyvalfromroots(object x, object r, bool tensor = true)`; x and r take every argument kind
+  of the evaluation family (NDArray, typed C# array, tuple / list, Python or NumPy scalar), plus a str and None.
+- Engine: `Polynomial/Package/NDPolyEval.FromRoots.cs` runs NumPy's statements in order (`np.array(r, ndmin=1)`, an
+  integer / bool r as float64, a tuple / list x `np.asarray`'d, the tensor reshape or `x.ndim must be < r.ndim when
+  tensor == False`, then `np.prod(x - r, axis=0)`) over the evaluation kernels' third skeleton, the ROOT PRODUCT
+  (`PolyEvalProgram.RootProduct`, `EmitPolyRootProduct`): per point `acc = 1`, then `acc *= x - r[k]` for k = 0, 1, …,
+  the roots read once, the value written once, no `x - r` temporary. The operand forms (a 1-D r in auxdata, an N-D r as
+  the `r[0]` operand read at a stride), lane kinds, weak-x constant pool and NEP 50 typing are the evaluation family's.
+- The product form follows NumPy's iteration, for complex128 AND float16 (`PolyRootForm` in the kernel key): when the
+  roots axis is the innermost axis longer than one of the `x - r` temporary as NpyIter lays it out
+  (`Shape.NpyIterOutputShape` over x and the reshaped r: one result element, an F-ordered r under tensor=False, a scalar
+  x over F-ordered columns), np.prod's inner loop walks the roots with the output's stride 0: CDOUBLE_multiply's
+  MSVC-contracted fallback product (`PolyComplexProduct.LoopScalar`) and HALF_multiply's float32 accumulation narrowed
+  ONCE; otherwise simd_cmul and a narrow per root. The reduce form runs scalar chains. One inner-loop call holds every
+  root: nothing is cast, so nothing is buffered under any `np.setbufsize`.
+- Result layout: `Shape.ReductionOutputShape` of that temporary (x's memory order under tensor, so an F x gives an F
+  result; the columns' order for a scalar x). An integer r is NumPy's `astype(np.double)` K-order copy: a broadcast int64
+  r is laid out like that copy, not like the view (the stride-0 axis sorts innermost).
+- Empty roots fill np.prod's identity (`y.fill(1)`) after the weak x's conversion (a Python int past float64 still raises
+  `int too large to convert to float`).
+- NumPy's object and str paths: a bare None (x or r) is np.subtract's object loop: the broadcast check, then CPython's
+  `unsupported operand type(s) for -: 'NoneType' and 'float'`, each operand's element named as the object cast makes it
+  ('float' for every float dtype, 'int' for every integer, 'str' for a str array; an integer r is float64 by then); None
+  with an empty 1-D r is the Python int 1 (a 0-d int64 array); a Python int past uint64 among the roots at a scalar x is
+  computed with Python numbers (`PolyNumber`); an object-array result is `NotSupportedException`. A str operand is
+  np.subtract's no-loop TypeError (`NDStringUfuncs.BinaryError`), raised before any broadcast check, as NumPy resolves
+  the loop first.
+- The scalar float16 → float32 widen every kernel uses (`DirectILKernelGenerator.HalfToFloatScalarExact`,
+  `Converts.ToSingle(Half)`, so `HalfArithBits` and every `EmitConvertTo(Half, Single)`) is Giesen's branch-free rescale
+  (`HalfFiniteBitsToSingle`): the BCL's `(float)Half` is never inlined by the JIT. Same bits for all 65,536 patterns
+  (`Backends/Kernels/HalfScalarWidenTests.cs`).
+- Gates: section M of the `polyeval.jsonl` tier, `Polynomial/PolynomialValFromRootsTests.cs`.
+
 ## The additive family and `np.polynomial.polyutils`
 
 `{p}add`, `{p}sub`, `{p}trim`, `{p}line` for the six bases, the 24 module constants `{p}domain/zero/one/x`, and
-`polyutils.as_series`, `trimseq`, `trimcoef`, `getdomain`, `mapparms`, `mapdomain` (`format_float` is not here). Engine:
+`polyutils.as_series`, `trimseq`, `trimcoef`, `getdomain`, `mapparms`, `mapdomain` (`format_float`:
+`polynomial-classes.md`). Engine:
 `Polynomial/Package/NDPolyNumber.cs` (`PolyNumber`: one operand of NumPy's Python-level scalar code) + `NDPolySeries.cs`
 (the functions) + the facade `Polynomial/Package/np.polynomial.polyutils.cs` (`[ModuleName("np.polynomial.polyutils")]`);
 every element loop is an IL kernel in `Backends/Kernels/Direct/DirectILKernelGenerator.PolySeries.cs` (the trim scan, the
@@ -248,10 +287,11 @@ sequence makes them exact; byte dumps per dtype family; kernel structure), `Poly
   float32 `out` in float32. A complex scale into a real series raises NumPy's UFuncTypeError there.
 - Argument kinds: every array_like of the package (`{p}der`/`{p}int`'s c, k, lbnd and scl, `{p}val*`/`{p}grid*`'s c and
   x, the ordinates, `mapdomain`'s x, `as_series`' items, `{p}add`/`{p}sub`'s operands, `trimseq`'s items) goes through
-  `Polynomial/Package/NDPolySequence.cs` (`PolySequence`), a port of `array_coercion.c`
-  (`PyArray_DiscoverDTypeAndShape_Recursive` + `update_shape`) and its fill:
-  - The C# map (header of `NDPolyNumber.cs`): `ITuple` (ValueTuple, System.Tuple) is a Python tuple; `object[]` and every
-    other C# array whose elements are not a NumSharp dtype (jagged `double[][]`, `NDArray[]`, `BigInteger[]`) and any
+  `Backends/Unmanaged/UnmanagedStorage.Coercion.Sequence.cs` (`UnmanagedStorage.FromSequence`, the array object's
+  coercion, which numpy.char, numpy.matrix, np.histogramdd and np.gradient read their array_like arguments with too), a
+  port of `array_coercion.c` (`PyArray_DiscoverDTypeAndShape_Recursive` + `update_shape`) and its fill:
+  - The C# map (the header of `UnmanagedStorage.Coercion.Sequence.cs`): `ITuple` (ValueTuple, System.Tuple) is a Python
+    tuple; `object[]` and every other C# array whose elements are not a NumSharp dtype (jagged `double[][]`, `NDArray[]`, `BigInteger[]`) and any
     other `IList`/`IEnumerable` are lists, a multi-dimensional `object[,]` a list of rows; a typed dtype array (`double[]`,
     `float[,]`) and a `Memory<T>` of a dtype are NDARRAYS (strong dtype); `bool`/integer primitives/`BigInteger`/`float`/
     `double`/`Complex` are Python scalars, `Half`/`char`/`decimal` NumPy scalars, a string a str. A list of ONE scalar kind
@@ -268,7 +308,8 @@ sequence makes them exact; byte dumps per dtype family; kernel structure), `Poly
     int past uint64 and any unknown object are refused (`NotSupportedException`) AFTER the walk, so a ragged input still
     reports NumPy's ValueError; that holds where NumPy computes with the array at once (evaluation, calculus).
     `polyutils.as_series` (the additive family, the whole series algebra) first checks every argument's size and dims and
-    then its common type, so there `ToArrayOrNonNumeric` hands back NumPy's str / object array as a SHAPE plus a deferred
+    then its common type, so there `UnmanagedStorage.FromSequenceOrNonNumeric` hands back NumPy's str / object array as
+    a SHAPE plus a deferred
     refusal (`PolySeriesView.NonNumericArray`).
   - Calculus-specific order: `np.ndim` runs on lbnd and scl before anything is converted (a ragged sequence raises the
     inhomogeneous text there; a str is 0-d); k's items are converted only when their order uses them, AFTER that order's

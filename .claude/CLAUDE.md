@@ -192,9 +192,11 @@ Tested against NumPy 2.4.2. Each line: the `np.*` names, then the rule that hold
 - Window functions: `bartlett`, `blackman`, `hamming`, `hanning`, `kaiser`; Fourier: `np.fft.fft`, `ifft`, `fft2`,
   `ifft2`, `fftn`, `ifftn`, `rfft`, `irfft`, `rfft2`, `irfft2`, `rfftn`, `irfftn`, `hfft`, `ihfft`, `fftfreq`, `rfftfreq`,
   `fftshift`, `ifftshift`, plus `conjugate`/`conj`, `real`, `imag`, `angle` → `fft-windows.md`.
-- `np.polynomial.*` (the six bases): `{p}val*`/`{p}grid*`, `{p}add`/`{p}sub`/`{p}trim`/`{p}line`, the constants,
-  `polyutils`, `{p}der`/`{p}int` → `polynomial-series.md`; `{p}mulx`/`{p}mul`/`{p}div`/`{p}pow`/`{p}fromroots`,
-  `X2poly`/`poly2X`, `{p}vander*`, `{p}companion`/`{p}roots` → `polynomial-algebra.md`.
+- `np.polynomial.*` (the six bases): `{p}val*`/`{p}grid*`, `polyvalfromroots`, `{p}add`/`{p}sub`/`{p}trim`/`{p}line`,
+  the constants, `polyutils`, `{p}der`/`{p}int` → `polynomial-series.md`; `{p}mulx`/`{p}mul`/`{p}div`/`{p}pow`/
+  `{p}fromroots`, `X2poly`/`poly2X`, `{p}vander*`, `{p}companion`/`{p}roots` → `polynomial-algebra.md`; `{p}weight`,
+  `chebpts1/2`, `{p}gauss`, `chebinterpolate`, `{p}fit` → `polynomial-quadrature.md`; the six series classes,
+  `format_float`, `set_default_printstyle` → `polynomial-classes.md`.
 - Random (`np.random.*`): `bernoulli`, `beta`, `binomial`, `chisquare`, `choice`, `dirichlet`, `exponential`, `f`,
   `gamma`, `geometric`, `get_bit_generator`, `gumbel`, `hypergeometric`, `laplace`, `logistic`, `lognormal`, `logseries`,
   `multinomial`, `multivariate_normal`, `negative_binomial`, `noncentral_chisquare`, `noncentral_f`, `normal`, `pareto`,
@@ -370,6 +372,8 @@ Create issues on `SciSharp/NumSharp` with `gh issue create` (`GH_TOKEN` through 
 | `fft-windows.md` | the window functions; `np.fft`: the pocketfft port, layer-3 semantics, the single-precision engine, the F1 divergence |
 | `polynomial-series.md` | numpy.polynomial evaluation, the additive family and polyutils, calculus, the array_like coercion |
 | `polynomial-algebra.md` | series algebra, Vandermonde matrices, companion matrices and roots |
+| `polynomial-quadrature.md` | weights, Chebyshev points, Gauss quadrature, Chebyshev interpolation, least-squares fits |
+| `polynomial-classes.md` | the six series classes (protocol, lifetimes, printing) and the printing helpers |
 | `random.md` | integer types, NumPy's call spellings, the kind of array a sampler returns |
 | `io-printing.md` | `.npy` / `.npz`, savetxt / loadtxt / fromstring, array printing |
 | `tests.md` | keeping the suite fast, the memory-safety gates, the OpenBugs files and audit |

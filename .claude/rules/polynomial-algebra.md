@@ -2,14 +2,14 @@
 paths:
   - "src/NumSharp.Core/Polynomial/**"
   - "src/NumSharp.Core/Backends/Kernels/**/*Poly*.cs"
-  - "src/NumSharp.Core/Math/NDArray.SlidingDot*.cs"
+  - "src/NumSharp.Core/Backends/Default/Math/Sliding/SlidingDot*.cs"
   - "test/NumSharp.Tests/Polynomial/**"
   - "test/NumSharp.Tests.Oracle/Fuzz/OpRegistry.Poly*.cs"
   - "test/NumSharp.Tests.Oracle/Fuzz/corpus/poly*.jsonl"
   - "benchmark/polynomial/**"
 ---
 
-# The polynomial package (2/2): series algebra, Vandermonde matrices, companion matrices and roots
+# The polynomial package (2/4): series algebra, Vandermonde matrices, companion matrices and roots
 
 Evaluation, the additive family, polyutils, calculus and the shared argument coercion: `polynomial-series.md`.
 
@@ -27,7 +27,7 @@ bases.
     CDOUBLE_divide's Smith, the HALF loop);
   - as_series / `_add` / `_sub`: the additive family's substrate (`TrimLength`, `CopyInto`, `CombineInto`);
   - `{p}mulx`: an integral-layout calculus kernel (`PolyCalcKey.Mulx`); chebmulx of ≥ 2 terms the fused one-pass kernel;
-  - `np.convolve`: `NDArray.SlidingCorrelateInto`, the engine `np.convolve` itself runs, its OpenBLAS route included;
+  - `np.convolve`: `SlidingDot.SlidingCorrelateInto`, the engine `np.convolve` itself runs, its OpenBLAS route included;
   - scalarmath: the one-element kernels (the naive complex product, NumPy's scalar division).
 
   So the only C# is NumPy's own Python: its loops are over SERIES, never elements.
@@ -58,7 +58,7 @@ bases.
   has two tiers: the generator records every `np.convolve` a case makes (`_PAConvRecorder`) and routes a case with a
   BLAS-bound product to the host-pinned file; `BlasBackendDelta` replays the affected ordinary cases with the backend on
   (the outcome flips are byte-checked against NumPy).
-- The long managed products (`Math/NDArray.SlidingDot.Long.cs`) are blocked kernels: a block of B consecutive output
+- The long managed products (`Backends/Default/Math/Sliding/SlidingDot.Long.cs`) are blocked kernels: a block of B consecutive output
   positions shares ONE loop over the kernel; each step is one broadcast plus one load per vector, with fused multiply-adds
   into eight independent chains; the core reads the data directly, and the ≤ B − 1 head/tail steps read tiny zero-padded
   edge windows. A padding lane adds `0·k[s]`, which is 0 only for a FINITE kernel, so a kernel holding inf/NaN declines to
@@ -103,8 +103,8 @@ bases.
   - A None / str series: `polyutils.as_series` converts every argument, checks sizes and dims, and only THEN meets the
     common type: a str array (a list holding a str) fails it (`Coefficient arrays have no common type`), an object array
     (None, a non-numeric object, an oversized int) makes NumPy compute with Python objects. So
-    `PolySequence.ToArrayOrNonNumeric` reports such a sequence as NumPy's array SHAPE (`PolyNonNumericArray`: dims,
-    object-or-str, the refusal), `AsCoefficientArray` makes it a `PolySeriesView.NonNumericArray` (None and an
+    `UnmanagedStorage.FromSequenceOrNonNumeric` reports such a sequence as NumPy's array SHAPE (`PolyNonNumericArray`:
+    dims, object-or-str, the refusal), `AsCoefficientArray` makes it a `PolySeriesView.NonNumericArray` (None and an
     unconvertible scalar are one-element object arrays), and the refusal is raised by `NDPolySeries.CommonType`, or later
     where NumPy still has checks to run: div's `c2[-1] == 0` (on the object copies: `polydiv([None], [False])` is
     ZeroDivisionError) and pow's power checks. Evaluation and calculus compute at once and refuse on conversion.
@@ -208,9 +208,9 @@ Inconclusive off the pinned host), zero excused; `Polynomial/PolynomialRootsTest
 - The dtype rule decides the bits: the helper vectors (`scl`, `top`, `mid`) are float64, so wherever one meets the series
   the loop is `result_type(c.dtype, float64)`. A float16/float32 series' cheb/leg/herm/herme last column is therefore
   computed in float64 and rounded ONCE into the matrix; poly/lag stay in the series dtype.
-- The zero matrix is a write-once allocation following `np.tri`'s policy (`np.PrefersWriteOnce`): up to 64 MiB a pooled
-  buffer plus `np.ZeroBytes`, above that OS-zeroed pages (a calloc'd matrix would fault every fresh page on the diagonal
-  writes).
+- The zero matrix is a write-once allocation following `np.tri`'s policy (`SizeBucketedBufferPool.PrefersWriteOnce`):
+  up to 64 MiB a pooled buffer plus `np.ZeroBytes`, above that OS-zeroed pages (a calloc'd matrix would fault every
+  fresh page on the diagonal writes).
 - `np.linalg.eig`/`eigvals` of a float32 operand with complex eigenvalues round each component to float32 (NumPy returns
   complex64, geev in double then `astype(complex64)`; `CollapseEig`: one cast and copy through a float64 view of a
   contiguous result, the per-lane form otherwise). `AssertFinite` (eig/eigvals) uses the fused `FiniteScan.IsAllFinite`

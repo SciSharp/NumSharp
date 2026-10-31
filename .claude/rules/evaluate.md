@@ -139,6 +139,11 @@ before promoting, as NumPy's unfused sequence does.
   everything.
 - Prefer a 0-d array over a literal for any scalar that varies at run time: a literal is baked into the IL and compiles
   one kernel per value (a JIT each and a kernel-cache entry each; the structural cache clears at 4096).
+- A literal's kernel is keyed by the literal's BITS (`ConstNode.AppendSignature`): the kernel bakes the literal into its
+  IL, so the text key must tell apart every two literals the IL tells apart. .NET's text does not: every NaN prints
+  alike, the .NET 10 runtime prints 2^-25 and the double below it alike, and an unqualified `ToString` prints
+  `Complex(1.5, 2)` and `Complex(1, 5.2)` both as `1,5,2` under a comma decimal separator; a collision runs another
+  literal's kernel, a silent wrong result. Never put culture- or runtime-formatted numbers into a kernel cache key.
 - `expr.Compile()` / `expr.Compile(params NPTypeCode[] inputTypes)` → `CompiledExpression`, the explicit handle
   (numexpr's `NumExpr(expr)`): eager JIT, `Evaluate(out)` for embedded arrays / `Evaluate(operands, out)` for positional
   trees, `IsPositional`/`IsReduction`/`InputTypes`/`ResultType`. A positional handle PINS its dtype signature (a
