@@ -35,6 +35,8 @@ namespace NumSharp.Backends
         ///     or <c>"unsafe"</c>.</param>
         /// <returns>True when <paramref name="from"/> casts to <paramref name="to"/> under the rule.</returns>
         /// <exception cref="ValueError">An unknown rule name (NumPy's <c>casting must be one of ...</c>).</exception>
+        /// <exception cref="TypeError"><paramref name="casting"/> is null, Python's None (NumPy's <c>casting must be str,
+        ///     not NoneType</c>).</exception>
         private static bool CanCastTypeCodes(NPTypeCode from, NPTypeCode to, string casting)
         {
             var rule = DTypeCasting.ParseCasting(casting);

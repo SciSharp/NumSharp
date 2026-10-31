@@ -16,7 +16,10 @@ namespace NumSharp
         /// <param name="type2">Second data type.</param>
         /// <returns>The promoted descriptor.</returns>
         /// <exception cref="DTypePromotionError">No common dtype exists (<c>promote_types('M8[s]', 'f8')</c>) — NumPy's verbatim text.</exception>
-        /// <exception cref="TypeError">Incompatible non-linear datetime units (<c>promote_types('m8[Y]', 'm8[D]')</c>) — verbatim.</exception>
+        /// <exception cref="TypeError">
+        ///     Incompatible non-linear datetime units (<c>promote_types('m8[Y]', 'm8[D]')</c>) — verbatim; or a null type
+        ///     (NumPy's <c>None</c>): "did not understand one of the types".
+        /// </exception>
         /// <remarks>
         /// https://numpy.org/doc/stable/reference/generated/numpy.promote_types.html
         ///
@@ -33,8 +36,10 @@ namespace NumSharp
         /// </example>
         public static DType promote_types(DType type1, DType type2)
         {
-            if (type1 is null) throw new ArgumentNullException(nameof(type1));
-            if (type2 is null) throw new ArgumentNullException(nameof(type2));
+            // array_promote_types converts both with PyArray_DescrConverter2, which turns None into NULL, then refuses a
+            // NULL with this TypeError — None is not float64 here, unlike np.dtype(None).
+            if (type1 is null || type2 is null)
+                throw new TypeError("did not understand one of the types");
             return DTypePromotion.PromoteTypes(type1, type2);
         }
 

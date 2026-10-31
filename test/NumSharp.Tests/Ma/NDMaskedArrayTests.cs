@@ -1203,6 +1203,7 @@ namespace NumSharp.Tests.Ma
         /// (which needs the LAPACK backend). A clean line with one masked outlier recovers slope 2, intercept 1.
         /// Skips loudly if no LAPACK-capable BLAS is present.</summary>
         [TestMethod]
+        [DoNotParallelize] // binds the process-wide OpenBLAS backend (TensorEngine.Blas)
         public void Polyfit_DropsMaskedObservations()
         {
             try { OpenBlasEngine.Enable(); }
@@ -1828,6 +1829,7 @@ namespace NumSharp.Tests.Ma
         /// <summary><c>masked_print_option</c> is a live global: <c>set_display</c> changes the token and
         /// <c>enable(false)</c> switches to the fill-value (aligned) rendering — both observable through
         /// <c>ToString()</c>, restored afterward so the shared option does not leak into other tests.</summary>
+        [DoNotParallelize] // changes the process-wide np.ma.masked_print_option, which every masked array's printing reads
         [TestMethod]
         public void MaskedPrintOption_DisplayAndEnable()
         {

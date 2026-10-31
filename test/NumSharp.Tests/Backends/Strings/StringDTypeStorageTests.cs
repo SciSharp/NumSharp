@@ -640,6 +640,7 @@ namespace NumSharp.Tests.Backends.Strings
         ///     the garbage collector: no allocator (no arena, no heap string) outlives its last array.
         /// </summary>
         [TestMethod]
+        [DoNotParallelize] // counts the process-wide live StringDType allocators
         public void Lifetime_LiveAllocatorsReturnToBaseline()
         {
             GcQuiescence.CollectFull();

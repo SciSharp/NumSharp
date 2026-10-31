@@ -499,6 +499,7 @@ namespace NumSharp.Tests.APIs
         ///     finalizer ran (found by the oracle's leak gate on the nditer_protocol tier's error cases).
         /// </summary>
         [TestMethod]
+        [DoNotParallelize] // forces collections, which suspend every worker
         public void FailedConstruction_ReleasesTheOutputItAllocated()
         {
             using var x = np.arange(24).reshape(2, 3, 4);

@@ -334,11 +334,20 @@ namespace NumSharp.Tests.Build.Analyzer
         public bool CallsDetach(string typeFullName, string methodName, int? paramCount = null)
         {
             using var asm = ReadCecil();
-            var m = Find(asm.MainModule, typeFullName, methodName, paramCount);
-            return m.HasBody && m.Body.Instructions.Any(i => i.OpCode.FlowControl == FlowControl.Call &&
-                                                            i.Operand is MethodReference mr &&
-                                                            mr.Name == "Detach" && mr.DeclaringType.FullName == NDScopeFullName);
+            return CallsDetach(Find(asm.MainModule, typeFullName, methodName, paramCount));
         }
+
+        /// <summary>
+        ///     Whether <paramref name="m"/>'s OWN body calls <c>NDScope.Detach</c> — the weave of an
+        ///     <c>[NDScopedExit]</c> parameter, own or inherited (an async method's detach lands in its stub,
+        ///     not in <c>MoveNext</c>, so the state machine is not consulted).
+        /// </summary>
+        /// <param name="m">A method of a woven module.</param>
+        /// <returns>True when the body calls <c>NDScope.Detach</c>; false for a method without a body.</returns>
+        public static bool CallsDetach(MethodDefinition m)
+            => m.HasBody && m.Body.Instructions.Any(i => i.OpCode.FlowControl == FlowControl.Call &&
+                                                        i.Operand is MethodReference mr &&
+                                                        mr.Name == "Detach" && mr.DeclaringType.FullName == NDScopeFullName);
 
         // ---------------------------------------------------------------- the woven code, executed
 

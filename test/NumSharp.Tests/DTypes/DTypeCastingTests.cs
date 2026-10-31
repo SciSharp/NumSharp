@@ -177,6 +177,32 @@ namespace NumSharp.Tests.DTypes
             np.can_cast(np.dtype("i4"), np.dtype("i8"), NPY_CASTING.NPY_SAFE_CASTING).Should().BeTrue();
         }
 
+        /// <summary>
+        ///     NumPy's None handling of <c>np.can_cast</c> (probed against 2.4.2): a None <c>from_</c> or <c>to</c> is
+        ///     "did not understand one of the types; 'None' not accepted", a None <c>casting</c> is
+        ///     <c>PyArray_CastingConverter</c>'s "casting must be str, not NoneType" (TypeErrors both), and NumPy converts
+        ///     <c>to</c> and <c>casting</c> while parsing the arguments, before <c>from_</c>. The ValueError text quotes the
+        ///     bad name with Python's repr.
+        /// </summary>
+        [TestMethod]
+        public void CanCast_NoneArguments_AreNumPysTypeErrors_InNumPysOrder()
+        {
+            const string NoneType = "did not understand one of the types; 'None' not accepted";
+            new Action(() => np.can_cast((DType)null, DType.Int64)).Should().Throw<TypeError>().WithMessage(NoneType);
+            new Action(() => np.can_cast((string)null, DType.Int64)).Should().Throw<TypeError>().WithMessage(NoneType);
+            new Action(() => np.can_cast((NDArray)null, DType.Int64)).Should().Throw<TypeError>().WithMessage(NoneType);
+            new Action(() => np.can_cast((DType)null, DType.Int64, NPY_CASTING.NPY_SAFE_CASTING)).Should().Throw<TypeError>().WithMessage(NoneType);
+            new Action(() => np.can_cast(DType.Int32, DType.Int64, (string)null)).Should().Throw<TypeError>()
+                .WithMessage("casting must be str, not NoneType");
+            // Order: `to`, then `casting`, then `from_`.
+            new Action(() => np.can_cast((DType)null, (DType)null, "bogus")).Should().Throw<TypeError>().WithMessage(NoneType);
+            new Action(() => np.can_cast((DType)null, DType.Int64, "bogus")).Should().Throw<ValueError>();
+            new Action(() => np.can_cast("not-a-dtype", (DType)null)).Should().Throw<TypeError>().WithMessage(NoneType);
+            new Action(() => np.can_cast("not-a-dtype", DType.Int64, "bogus")).Should().Throw<ValueError>();
+            new Action(() => np.can_cast(DType.Int32, DType.Int64, "it's")).Should().Throw<ValueError>()
+                .WithMessage("casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe' (got \"it's\")");
+        }
+
         [TestMethod]
         public void MinCastSafety_TakesTheLessSafe()
         {

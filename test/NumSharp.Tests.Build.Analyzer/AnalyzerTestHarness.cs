@@ -79,8 +79,28 @@ namespace NumSharp.Tests.Build.Analyzer
             var analyzers = ImmutableArray.Create<DiagnosticAnalyzer>(
                 new NDArrayLeakAnalyzer(), new NDScopedTargetAnalyzer(), new NDArrayHolderAnalyzer());
             var all = await comp.WithAnalyzers(analyzers).GetAnalyzerDiagnosticsAsync();
+            AssertNoAnalyzerException(all, displayPath);
             var ndw = all.Where(d => d.Id.StartsWith("NDW", StringComparison.Ordinal)).ToImmutableArray();
             return new AnalyzerResult(ndw, compileErrors);
+        }
+
+        /// <summary>
+        ///     Fails the test when an analyzer threw. Roslyn turns an analyzer exception into an
+        ///     <c>AD0001</c> diagnostic, and the callers keep only <c>NDW*</c> diagnostics — so without this
+        ///     check a crashing analyzer simply reports nothing, and every test that expects "no warning"
+        ///     passes over the crash. A real build shows AD0001 as a warning and loses that analyzer's
+        ///     results for the symbol that threw, so a crash is never an acceptable outcome of a fixture.
+        /// </summary>
+        /// <param name="all">Every diagnostic the analyzers produced, AD0001 included.</param>
+        /// <param name="displayPath">The fixture's file name, for the failure message.</param>
+        /// <exception cref="AssertFailedException">At least one AD0001 was produced; the message carries each exception's text.</exception>
+        private static void AssertNoAnalyzerException(ImmutableArray<Diagnostic> all, string displayPath)
+        {
+            var crashes = all.Where(d => d.Id == "AD0001").ToList();
+            if (crashes.Count == 0)
+                return;
+            Assert.Fail($"an analyzer threw while analyzing '{displayPath}' ({crashes.Count} AD0001):\n  " +
+                        string.Join("\n  ", crashes.Select(d => d.GetMessage())));
         }
 
         /// <summary>Locates a fixture .cs file copied next to the test assembly (see the csproj glob).</summary>
@@ -123,8 +143,45 @@ namespace NumSharp.Tests.Build.Analyzer
                 ? comp.WithAnalyzers(analyzers)
                 : comp.WithAnalyzers(analyzers, new AnalyzerOptions(ImmutableArray<AdditionalText>.Empty, configOptions));
             var all = await withAnalyzers.GetAnalyzerDiagnosticsAsync();
+            AssertNoAnalyzerException(all, displayPath);
             var ndw = all.Where(d => d.Id.StartsWith("NDW", StringComparison.Ordinal))
                          .OrderBy(LineOf).ThenBy(d => d.Id, StringComparer.Ordinal)
+                         .ToImmutableArray();
+            return new AnalyzerResult(ndw, compileErrors);
+        }
+
+        /// <summary>
+        ///     Runs the three analyzers over a project of several files compiled as one assembly, with
+        ///     Roslyn's callbacks either CONCURRENT (several threads at once, as a real build runs them) or
+        ///     SEQUENTIAL (one callback at a time, in Roslyn's own fixed order). The two settings are what a
+        ///     determinism test compares: an answer that depends on which callback asked the shared model
+        ///     first shows up as a difference between them, or between two concurrent runs.
+        /// </summary>
+        /// <param name="files">The files, each a display path and its source, compiled together.</param>
+        /// <param name="assemblyName">The compilation's assembly name (also the failure messages' label).</param>
+        /// <param name="concurrentAnalysis">True for concurrent callbacks (a build's setting); false for one at a time.</param>
+        /// <returns>The NDW diagnostics ordered by file, line, id and message (an order independent of the run), and the compile errors.</returns>
+        /// <exception cref="AssertFailedException">An analyzer threw (AD0001).</exception>
+        public static async Task<AnalyzerResult> RunProjectAsync(IReadOnlyList<(string Path, string Source)> files, string assemblyName, bool concurrentAnalysis)
+        {
+            var trees = files.Select(f => CSharpSyntaxTree.ParseText(SourceText.From(f.Source), path: f.Path)).ToArray();
+            var options = new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, allowUnsafe: true);
+            var comp = CSharpCompilation.Create(assemblyName, trees, LazyRefs.Value, options);
+            var compileErrors = comp.GetDiagnostics()
+                .Where(d => d.Severity == DiagnosticSeverity.Error)
+                .ToImmutableArray();
+
+            var analyzers = ImmutableArray.Create<DiagnosticAnalyzer>(
+                new NDArrayLeakAnalyzer(), new NDScopedTargetAnalyzer(), new NDArrayHolderAnalyzer());
+            var withAnalyzers = comp.WithAnalyzers(analyzers, new CompilationWithAnalyzersOptions(
+                new AnalyzerOptions(ImmutableArray<AdditionalText>.Empty), onAnalyzerException: null,
+                concurrentAnalysis: concurrentAnalysis, logAnalyzerExecutionTime: false));
+            var all = await withAnalyzers.GetAnalyzerDiagnosticsAsync();
+            AssertNoAnalyzerException(all, assemblyName);
+            var ndw = all.Where(d => d.Id.StartsWith("NDW", StringComparison.Ordinal))
+                         .OrderBy(d => d.Location.SourceTree?.FilePath, StringComparer.Ordinal)
+                         .ThenBy(LineOf).ThenBy(d => d.Id, StringComparer.Ordinal)
+                         .ThenBy(d => d.GetMessage(), StringComparer.Ordinal)
                          .ToImmutableArray();
             return new AnalyzerResult(ndw, compileErrors);
         }

@@ -31,7 +31,10 @@ namespace NumSharp.Tests.Polynomial
         {
             actual.dtype.name.Should().Be(dtype, because);
             actual.shape.Should().Equal(shape, because);
-            using var c = np.ascontiguousarray(actual);
+            // np.ascontiguousarray hands a C-contiguous operand back itself: only a copy it made is this helper's to
+            // dispose (disposing actual would free the caller's array under it).
+            var c = np.ascontiguousarray(actual);
+            using var cCopy = ReferenceEquals(c, actual) ? null : c;
             var bytes = new byte[c.size * c.dtypesize];
             unsafe
             {
@@ -372,7 +375,10 @@ namespace NumSharp.Tests.Polynomial
         /// <summary>The raw bytes of a result in logical C order (dtype and shape asserted by the caller).</summary>
         private static byte[] RawBytes(NDArray a)
         {
-            using var c = np.ascontiguousarray(a);
+            // np.ascontiguousarray hands a C-contiguous operand back itself: only a copy it made is this helper's to
+            // dispose (disposing a would free the caller's array under it).
+            var c = np.ascontiguousarray(a);
+            using var cCopy = ReferenceEquals(c, a) ? null : c;
             var bytes = new byte[c.size * c.dtypesize];
             unsafe
             {

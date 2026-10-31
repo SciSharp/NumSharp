@@ -171,6 +171,7 @@ namespace NumSharp.Tests.IO
         ///     one process (3 live allocators at the baseline, 1 after the loop).
         /// </remarks>
         [TestMethod]
+        [DoNotParallelize] // counts the process-wide live StringDType allocators
         public void LoadedArrays_ReleaseTheirAllocators()
         {
             using var a = np.array(new[] { "a", "bcdefghijklmnopqrs", "c" }, np.dtypes.StringDType());

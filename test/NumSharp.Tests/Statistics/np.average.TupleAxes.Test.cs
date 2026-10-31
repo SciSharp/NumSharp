@@ -20,7 +20,10 @@ namespace NumSharp.Tests.Statistics
         /// <returns>The bits.</returns>
         private static long[] Bits(NDArray a)
         {
-            using var c = np.ascontiguousarray(a);
+            // np.ascontiguousarray hands a C-contiguous operand back itself: only a copy it made is this helper's to
+            // dispose (disposing a would free the caller's array under it).
+            var c = np.ascontiguousarray(a);
+            using var cCopy = ReferenceEquals(c, a) ? null : c;
             return c.ToArray<double>().Select(BitConverter.DoubleToInt64Bits).ToArray();
         }
 
@@ -29,7 +32,10 @@ namespace NumSharp.Tests.Statistics
         /// <returns>The bits, real then imaginary per element.</returns>
         private static long[] ComplexBits(NDArray a)
         {
-            using var c = np.ascontiguousarray(a);
+            // np.ascontiguousarray hands a C-contiguous operand back itself: only a copy it made is this helper's to
+            // dispose (disposing a would free the caller's array under it).
+            var c = np.ascontiguousarray(a);
+            using var cCopy = ReferenceEquals(c, a) ? null : c;
             return c.ToArray<Complex>().SelectMany(z => new[] { BitConverter.DoubleToInt64Bits(z.Real), BitConverter.DoubleToInt64Bits(z.Imaginary) }).ToArray();
         }
 

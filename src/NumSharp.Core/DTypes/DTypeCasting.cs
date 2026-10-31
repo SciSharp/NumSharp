@@ -233,9 +233,16 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     NumPy's <c>PyArray_CastingConverter</c>: the case-sensitive casting strings.
+        ///     NumPy's <c>PyArray_CastingConverter</c> (<c>string_converter_helper</c> + <c>casting_parser</c>): the
+        ///     case-sensitive casting strings.
         /// </summary>
-        /// <exception cref="ValueError"><c>casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe' (got '…')</c>.</exception>
+        /// <param name="casting">The casting name.</param>
+        /// <returns>The casting level.</returns>
+        /// <exception cref="TypeError"><paramref name="casting"/> is null: NumPy's <c>casting must be str, not NoneType</c>.</exception>
+        /// <exception cref="ValueError">
+        ///     Another string: <c>casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe' (got …)</c>, the string
+        ///     quoted by Python's <c>repr</c> (NumPy's <c>%R</c>), so <c>"it's"</c> shows as <c>(got "it's")</c>.
+        /// </exception>
         public static NPY_CASTING ParseCasting(string casting)
         {
             switch (casting)
@@ -245,8 +252,11 @@ namespace NumSharp
                 case "safe": return NPY_CASTING.NPY_SAFE_CASTING;
                 case "same_kind": return NPY_CASTING.NPY_SAME_KIND_CASTING;
                 case "unsafe": return NPY_CASTING.NPY_UNSAFE_CASTING;
+                case null:
+                    // string_converter_helper's non-str branch: "%s must be str, not %s" with the object's type name.
+                    throw new TypeError("casting must be str, not NoneType");
                 default:
-                    throw new ValueError($"casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe' (got '{casting}')");
+                    throw new ValueError($"casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe' (got {NumSharp.IO.PyLiteral.Repr(casting)})");
             }
         }
 

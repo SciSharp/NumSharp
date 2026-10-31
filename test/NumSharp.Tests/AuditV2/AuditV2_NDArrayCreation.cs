@@ -231,16 +231,20 @@ public class AuditV2_NDArrayCreation
     //   weak Python int with NumPy's range check, so `arr + 1000` raises
     //   OverflowError. This test is the regression pin.
     // -----------------------------------------------------------------------
-    /// <summary>Guards the NEP 50 promotion (uint8) and the range check of the Python int 1000 against it.</summary>
+    /// <summary>
+    ///     Guards the range check of the Python int 1000 against a uint8 array (NEP 50 keeps the array's uint8, so the int
+    ///     must fit), and np.find_common_type's own answer for the pair, which is not NEP 50's.
+    /// </summary>
     [TestMethod]
     public void T1_46_FindCommonType_UInt8Array_PlusLargeInt_SilentOverflow()
     {
         var arr = np.array(new byte[] { 1, 2, 3 });
 
-        // Type promotion *resolves* to uint8 (matches NumPy NEP50 type rule).
+        // np.find_common_type is NumPy 1.26.4's search (88048433), never the NEP 50 arithmetic rule: a scalar type of a
+        // higher kind than the arrays' (int32 beside uint8) takes _find_common_coerce, so the answer is int32.
         np.find_common_type(new[] { typeof(byte) }, new[] { typeof(int) })
-            .Should().Be(NPTypeCode.Byte,
-                "NEP50: uint8 array + Python int -> uint8 dtype is correct");
+            .Should().Be(NPTypeCode.Int32,
+                "NumPy 1.26.4: np.find_common_type([np.uint8], [np.int32]) is int32");
 
         // But the actual `arr + 1000` must raise OverflowError, not wrap to 233.
         Action act = () => { var _ = arr + 1000; };

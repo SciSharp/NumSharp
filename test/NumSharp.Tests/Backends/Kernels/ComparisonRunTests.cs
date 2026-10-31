@@ -911,6 +911,7 @@ namespace NumSharp.Tests.Backends.Kernels
         ///     With the run switched off every comparison takes its former route, and the two routes agree bit for
         ///     bit on every layout (the former route is the per-element kernel NumPy's results were validated on).
         /// </summary>
+        [DoNotParallelize] // flips the process-wide ComparisonRun.Disabled, which every comparison of every running test reads
         [TestMethod]
         public void RunAndFormerRoutes_Agree()
         {

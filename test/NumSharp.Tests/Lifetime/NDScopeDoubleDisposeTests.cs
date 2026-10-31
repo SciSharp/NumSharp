@@ -23,6 +23,7 @@ namespace NumSharp.Tests.Lifetime
     /// </para>
     /// </summary>
     [TestClass]
+    [DoNotParallelize] // forces garbage collections, which suspend every thread: it runs with the serial set
     public class NDScopeDoubleDisposeTests
     {
         // --------------------------------------------------------- the mechanism, made observable

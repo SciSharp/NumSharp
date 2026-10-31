@@ -18,6 +18,7 @@ namespace NumSharp.Tests.Backends
     ///     signatures (all dtypes × modes × shapes × layouts × batch × errors) on the reference host.
     /// </remarks>
     [TestClass]
+    [DoNotParallelize] // binds the process-wide OpenBLAS backend (TensorEngine.Blas)
     public class CholeskyQrFactorisationTests
     {
         private const double Tol = 1e-9;

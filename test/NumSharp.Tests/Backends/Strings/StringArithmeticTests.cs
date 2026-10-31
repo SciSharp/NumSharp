@@ -602,6 +602,7 @@ namespace NumSharp.Tests.Backends.Strings
         ///     <c>np.multiply</c> route checked here.
         /// </remarks>
         [TestMethod]
+        [DoNotParallelize] // switches IL kernel generation off process-wide (DirectILKernelGenerator.Enabled)
         public void ManagedRoute_MatchesTheILRoute()
         {
             var calls = new Func<NDArray>[]

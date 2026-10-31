@@ -215,6 +215,7 @@ namespace NumSharp.Tests.Indexing
         ///     slots, and disposing one coordinate array leaves the others valid (each view holds a counted reference).
         /// </summary>
         [TestMethod]
+        [DoNotParallelize] // forces collections, which suspend every worker
         public void UnravelIndex_CoordinatesShareTheBuffer_AndOutliveEachOther()
         {
             var r = np.unravel_index(np.array(new long[] { 1, 5, 4 }), new[] { 2, 3 });

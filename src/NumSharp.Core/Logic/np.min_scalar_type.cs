@@ -9,13 +9,18 @@ namespace NumSharp
         /// kind which can hold its value. For an array of one or more dimensions (or of a non-number dtype such as
         /// bool or a string class), returns the array's own dtype unmodified, as NumPy does.
         /// </summary>
-        /// <param name="value">The scalar value to check, a C# string (a Python <c>str</c>: <c>&lt;U</c> of its code
-        /// points), or an <see cref="NDArray"/>.</param>
+        /// <param name="value">The value to check: a C# scalar (NumPy's Python scalar or NumPy scalar), a C# string (a Python
+        /// <c>str</c>: <c>&lt;U</c> of its code points), or an <see cref="NDArray"/> - a 0-d number array is a scalar (its
+        /// element decides), any other array answers its own dtype.</param>
         /// <returns>The minimum dtype that can represent the value; an array's dtype for an array.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="value"/> is null.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="value"/> is null (NumPy's <c>None</c> is an object scalar,
+        /// which NumSharp has no dtype for).</exception>
         /// <remarks>
         /// https://numpy.org/doc/stable/reference/generated/numpy.min_scalar_type.html
         ///
+        /// NumPy's <c>array_min_scalar_type</c> converts the argument to an array and runs
+        /// <c>PyArray_MinScalarType</c>: an array with <c>ndim &gt; 0</c> keeps its dtype, a 0-d numeric array is demoted by
+        /// the VALUE it holds (<c>min_scalar_type_num</c>, keyed by the element's own type).
         /// For integers, finds the smallest integer type that can hold the value.
         /// For floats, finds the smallest float type whose RANGE (magnitude) can hold the
         /// value — matching NumPy, precision loss is allowed (e.g. 1e-40 reports float16).
@@ -27,6 +32,8 @@ namespace NumSharp
         /// np.min_scalar_type(1000)    // UInt16
         /// np.min_scalar_type(1.0)     // Half (float16)
         /// np.min_scalar_type(true)    // Boolean
+        /// np.min_scalar_type(np.arange(4, dtype: np.float64))   // float64 (not a scalar: its dtype)
+        /// np.min_scalar_type(np.array(1000L))                   // uint16 (a 0-d array is a scalar)
         /// </code>
         /// </example>
         public static DType min_scalar_type(object value)

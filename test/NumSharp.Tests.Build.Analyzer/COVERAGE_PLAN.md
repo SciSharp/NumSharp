@@ -48,15 +48,44 @@ and configuration space — with each new case landing as a fixture tag + an in-
   method, static abstract members); `WeaverShapeTests` (every return/egress/body shape on BOTH Release
   and Debug IL, executed, temps reclaimed, results alive; resultless tasks; out carriers; 300-local /
   long-branch bodies; 64-thread parallel execution; values under forced GCs); `WeaverAnalyzerParityTests`
-  (both resolvers over the same fixtures agree per method, and each matches its own output — the scope
-  local, the NDW012 placement); `WeaverHierarchyFuzzTests` (40 seeded random chains + interface vs a
+  (9 fixtures: both resolvers over the same fixtures agree per method on the scope walk AND the
+  `[NDScopedExit]` walk, and each matches its own output — the scope local, the `NDScope.Detach` call,
+  the NDW012 placement; `InterfaceLattices` adds chains and diamonds with unscoped members at every level
+  and one generic interface under two instantiations, `InterfaceKeys` the instantiation key's edges
+  (`List<int>`/`List<string>`, array ranks, nullable/tuple arguments, a generic base's context),
+  `GetterShapes` the getter gate's shapes, `InterfaceMapping` the CLR's interface map — an interface
+  listed on a base that does not declare the slot, an explicit implementation beside a same-signature
+  public virtual, re-implementation, explicit-for-one-instantiation — and `DepthBoundary` a 67-level
+  chain straddling the walk's 64-level limit for a method, a getter and an exit parameter at once);
+  `WeaverInterfaceMappingTests` (7: the EXPECTED verdict of every interface-map shape on both layers,
+  weave + NDW012 placement + runtime — the array an unwoven forwarding method keeps survives, an inherited
+  exit argument survives the caller's scope); `WeaverInterfaceWalkTests`
+  (the walk's cost and its generic bookkeeping: a 40-deep chain and an 18-level diamond lattice with
+  unscoped members everywhere weave in bounded time — the walk without its per-instantiation memory was
+  2^k, a minute at 26 levels — and `IBase<int>`/`IBase<string>`/`IBase<U[]>`, nested generic arguments,
+  array ranks, nullable and tuple arguments are each still searched, while one instantiation listed twice
+  is searched once; a 100-deep chain past the depth limit, explicit implementations of a deep chain, the
+  exit-parameter walk through a deep chain and a diamond lattice, a getter through a lattice);
+  `WeaverGetterGateTests` (8: the getter gate changes cost only — 3,000 plain properties, indexers,
+  static and generic properties, a derived type inheriting from its base's property, a property-level
+  `[NDScopedCovered]` stopping the inheritance, a method named like a getter, three same-named types in
+  three weaves; only an INHERITING getter reads the gate, a getter's own property attribute is found by
+  `CollectTargets`); `WeaverHierarchyFuzzTests` (40 seeded random chains + interface vs a
   reference model, weaver AND analyzer); `WeaverCliTests` (the tool PROCESS: exit codes, rsp, `--snk`,
   `--verbose`, NDW001 — unreachable in-process because Cecil resolves through the host's
   TRUSTED_PLATFORM_ASSEMBLIES).
 - **Contract**: NDW012 severity == Warning + enabled-by-default; a real leak is a Warning not an Error;
   gate diagnostics are Errors (`AnalyzerContractTests`).
 - **Harness**: teeth (real leak warns / clean is silent / broken source reported / `[NDScoped]` exempt),
-  non-vacuity floors, per-gate-code presence, NDW013 build test (`AnalyzerBuild`).
+  non-vacuity floors, per-gate-code presence, NDW013 build test (`AnalyzerBuild`); every analyzer run
+  fails on an analyzer exception (AD0001 — Roslyn reports a crash as a diagnostic, so a test expecting
+  "no warning" would otherwise pass on a crashed analyzer); `RunProjectAsync` analyzes a multi-file
+  project sequentially or concurrently, ordering the results so two runs compare equal.
+- **NDW012's pay-for-play exit** (`LeakAnalyzerPayForPlayTests`, 12): a method body without an owned
+  operation ends after one walk, so every place an owned value can hide must still be seen — lambdas,
+  local functions, async lambdas, tuples, owning disposables, constrained generics, every member body
+  kind (accessors, operators, constructors, finalizers, indexers, expression bodies); `nameof`/`typeof`/
+  `default` draw nothing; one leak among hundreds of methods, and concurrent files over shared types.
 
 **Not yet covered:** almost all of the control-flow, escape-nuance, scope-nuance, type-system, and
 configuration space below.
@@ -360,6 +389,20 @@ actually yielded, so a gate-clean `[NDScoped]` method could hand back DISPOSED a
   branch — a possibly-aliasing branch makes reclaiming unsafe, mirroring CF-3). Do not "simplify" the
   two to one rule: any-element on conditionals flags mixed ternaries (R2 false positives), and
   every-element on tuples goes silent on `(temp, alias)` drops (real leaks — `np.setops` had one).
+- **Which interface member a method implements is the CLR's interface map, on both layers** (2026-10-24,
+  `WeaverInterfaceMappingTests` + the `InterfaceMapping` parity fixture). The analyzer asks Roslyn's
+  `FindImplementationForInterfaceMember` — of the method's OWN type, also for interfaces listed on a
+  base between the type and its slot (step 2b: Roslyn answers the slot, never the override, so the plain
+  step 2 cannot see them). The weaver matches by name and signature but skips a member the listing type
+  implements explicitly. Do not "simplify" either back to the name match or to the listing base's map:
+  the name match wove forwarding methods beside an explicit implementation (disposing the arrays they
+  keep), and the listing base's map ignores a type that re-implements the interface.
+- **The weaver's interface dedup is per LEVEL of the walk, not per walk.** Within a level the most
+  derived listing type decides; the next level asks its own type's map. A walk-wide memory let an
+  explicit skip at one level hide the base declaration's own implementation one level up.
+- **Both layers stop at the same depth.** The weaver searches a level's interfaces one level deeper than
+  its method; the analyzer therefore searches none at its deepest level (`DepthBoundary` fixture). Change
+  `MaxDepth` or the depth accounting on one side only and the parity test fails at the boundary.
 
 ---
 
@@ -380,15 +423,29 @@ member or a type. Full semantics: `docs/LEAK_ANALYZER.md` §10.
 | contagion (NDW012) | `ContagionScenarios.cs` (9 tagged) | dropped/dead/factory/discarded holder instance, holder array literal, `np.nditer` dropped / walked by foreach, produced NDArray walked by foreach, temp handed to `np.nditer`; clean: using/dispose/return/store/sink/using-statement/`close()`/using-then-foreach, `[NDBorrowed]` disposable, non-disposable wrapper, NDArray[] foreach, alias foreach, `[NDScoped]` twin |
 | metamorphic | `OwnershipMetamorphicTests` (19 pairs) | IDisposable turns 016→017, dispose call →clean, IAsyncDisposable, `[NDBorrowed]` member/type, static, computed, carrier, ref-struct pattern, chain resolving one level at a time, contagion stopping at `[NDBorrowed]`, `using` a dropped holder, holder non-disposable moves the verdict to the type, `close()`, foreach-over-produced until `using`, helper reachability, override of inherited Dispose, foreach-dispose of a collection |
 | property fuzz | `OwnershipPropertyFuzzTests` (120 seeded types) | NDW016 == non-disposable holder types, NDW017 == undisposed holders, NDW012 == 0, over a 14-template grammar × 3 Dispose shapes |
-| robustness | `OwnershipRobustnessTests` (19) | cycles ± arrays, self-reference, 25-deep chain, disposing chain, generic definition vs `Box<NDArray>`/`Box<int>`, alias, nullable, nested, partial, 300 members, 200 types, static/interface/enum/delegate, no-NumSharp no-op, malformed, unresolved member type, arrays of holders, `Cell<NDArray>`, other-instance helper |
+| robustness | `OwnershipRobustnessTests` (21) | cycles ± arrays, self-reference, 25-deep chain, disposing chain, generic definition vs `Box<NDArray>`/`Box<int>`, alias, nullable, nested, partial, 300 members, 200 types, static/interface/enum/delegate, no-NumSharp no-op, malformed, unresolved member type, arrays of holders, `Cell<NDArray>`, other-instance helper, a 14-type densely cyclic model with and without an array |
+| cycles & back-references | `OwnershipCycleTests` (20) | the holder rule on cycles, member by member: self-reference / linked-list link, parent pointer + child list + sibling array, NumSharp's `NDScope._parent` and `NDIterator._nestedChild` shapes, every container of the own type, a ring, the `HolderTypeScenarios` cycle pair, a base/derived cycle, a source `NDArray` subclass with a wrapper pointing back, mutual holders, parent/child owner, a gate other than the owner, two routes, two anchors; the model queried in 200 warm-up orders and from 16 threads (identical answers); a 10,000-type chain and 3,000-type random entity models ± an array (no stack overflow) |
+| cycle edge cases | `OwnershipCycleTests.EdgeCases.cs` (33) | doubly linked lists, nullable-annotated / jagged / nested / BCL containers of the own type, a tuple carrying an array beside the own type, static/event/computed self-references, explicit backing fields, partial classes, interface-typed links, records, structs; generic trees (unconstrained and `T : NDArray` payloads), a curiously recurring base, another instantiation of the own generic, nested types; `[NDBorrowed]` members and types on a cycle (a type outside it storing the borrowed type proves the model never expands it); several components, every-type-holds rings, base/derived peers; scale: a 2,000-type ring, a 300-spoke star, a 3,000-level inheritance chain, an 8,000-level chain through generic containers (no stack overflow); the message's member names and counts; disposal and contagion through a cycle; unresolved types in a cycle; determinism across files and in a 40-file random project analyzed concurrently vs sequentially |
+| model API | `OwnershipModelApiTests` (8) | the model queried directly: null and array-free answers, every type kind (arrays, pointers, dynamic, type parameters through their constraints, delegates, enums, the non-holding generic families, constructed generics, borrowed, interfaces, tuples, carriers) in any query order, holder members as fresh lists in declaration order with field/property kinds, a type holding only through its base, owning disposables on a cycle, repeated queries |
+| graph oracle | `OwnershipGraphOracleTests` (4) | 630 seeded random type graphs (cycles, self-references, base types, `List`/array/tuple/`Box`/auto-property edges, borrowed/delegate/comparer/static/computed/scalar non-edges): every type's exact holder set (NDW017 per holder, NDW016's member list) against an independent breadth-first oracle of "reaches an NDArray without passing through the declaring type"; 360 more graphs over the extended shapes (pairs, nested lists, dictionary values, jagged arrays, nullable tuples, `Lazy`, sequences, key/value pairs, a pair with an array, generic bases); and 12 graphs of 100–300 types queried in random order straight through the model |
 | contract | `AnalyzerContractTests` | NDW016/NDW017 are Warnings, enabled, anchored help links; the three analyzers own disjoint ids |
 
 **Guardrails added by this pass:**
 - **The hand-off rule is type-gated.** An argument counts as a hand-off of a holder only when the
   argument's OWN type holds NDArrays and it is not a call result — `Log(x.size)` on a loop element and
   `Log(_a.ToString())` are not disposals. Dropping the gate silently cleared `ForeachWithoutDispose`.
-- **Only root `HoldsNDArrays` answers are memoized when a cycle cut them.** A nested answer computed
-  while its type was on the visiting stack may be inexact; memoizing it turned a real holder clean.
+- **"Holds" is decided per strongly connected component, by one iterative pass.** The first design
+  memoized only answers whose walk cut no cycle, so a domain model whose types reference each other
+  re-walked every path (321 s of analyzer time on one consumer project, PR #632) and its recursion
+  overflowed the stack at a few thousand types (a dead compiler process); memoizing a cut answer had
+  turned a real holder clean. Now Tarjan's algorithm, with its own stack and no early exit, decides
+  every component exactly, once, under one lock (the components must be exact: "outside the owner's
+  component" is read as "cannot reach the owner").
+- **A member that holds only through its owner is not a holder.** Inside the owner's component the
+  question is "does the owner dominate the member type" on the component's reversed edges (rooted at
+  the types that hold by themselves or through something outside): parent pointers, linked-list links
+  and the owner's own `List<Self>` stay clean (NumSharp's `NDScope._parent`), and the answer no longer
+  depends on what another callback memoized first — the first design's answer did.
 - **Metadata types are consulted, never reported**, and only from assemblies that can name NDArray.
 - **`INDArrayCarrier` types are exempt from NDW016/NDW017 on purpose** — they are the transient result
   vocabulary the scope yields through; demanding IDisposable there contradicts the carrier contract.

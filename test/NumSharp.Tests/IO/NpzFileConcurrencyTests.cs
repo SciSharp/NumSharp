@@ -14,6 +14,7 @@ namespace NumSharp.Tests.IO
     ///     one instance, and that disposing during reads ends them with <see cref="ObjectDisposedException"/>.
     /// </summary>
     [TestClass]
+    [DoNotParallelize] // a race test calibrated to run alone: its threads must own the cores to overlap
     public class NpzFileConcurrencyTests
     {
         /// <summary>Members per archive.</summary>

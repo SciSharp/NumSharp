@@ -282,6 +282,7 @@ namespace NumSharp.Tests.Backends.Kernels
         ///     plain variant — two scalar bounds, array bounds, one-sided clips, misaligned outputs and the sizes around
         ///     the peel and unroll boundaries.
         /// </summary>
+        [DoNotParallelize] // sets the process-wide DirectILKernelGenerator.ClipStreamingOverride, which every running np.clip reads
         [TestMethod]
         public void FlatKernel_StreamingStores_MatchPlainStores()
         {

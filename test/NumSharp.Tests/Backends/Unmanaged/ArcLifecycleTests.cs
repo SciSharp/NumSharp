@@ -23,6 +23,7 @@ namespace NumSharp.Tests.Backends.Unmanaged
     ///     </list>
     /// </summary>
     [TestClass]
+    [DoNotParallelize] // a race test calibrated to run alone: its threads must own the cores to overlap
     public class ArcLifecycleTests
     {
         // ----- helpers ------------------------------------------------------

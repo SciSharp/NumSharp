@@ -21,6 +21,7 @@ namespace NumSharp.Tests.Backends
     ///     NumPy 2.4.2 on the reference host.
     /// </remarks>
     [TestClass]
+    [DoNotParallelize] // binds the process-wide OpenBLAS backend (TensorEngine.Blas)
     public class LapackSvdTests
     {
         private const double Tol = 1e-9;

@@ -84,7 +84,7 @@
   - name: System.Numerics.Tensors
     href: interop/system-numerics-tensors.md
   # The ONNX Runtime and ML.NET pages are deliberately absent: those packages are unreleased and
-  # docfx.json excludes their pages. See "Unreleased packages" in .claude/CLAUDE.md.
+  # docfx.json excludes their pages. See "Unreleased packages" in .claude/rules/interop-packages.md.
   - name: System.Drawing
     href: extensions/bitmap.md
 - name: NumPy API Coverage & Support

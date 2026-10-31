@@ -1,6 +1,6 @@
 # Oracle system map
 
-The full narrative is the project `.claude/CLAUDE.md` → "Differential-Fuzz Pipeline (NumPy oracle)". This is the
+The full narrative is the project rule `.claude/rules/oracle.md` (the differential-fuzz pipeline). This is the
 condensed structural map. **Six** independent oracles share one philosophy: **NumPy (or an independent scalar oracle)
 is the source of truth; the corpus is committed; no Python at test time.** Four (op, advanced-indexing, Decimal, npy)
 plus the two sibling oracles (flags §6, layout-parity §7) that live in the *main* test project. On top of the value

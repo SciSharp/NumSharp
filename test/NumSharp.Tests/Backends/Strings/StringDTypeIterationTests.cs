@@ -833,6 +833,7 @@ namespace NumSharp.Tests.Backends.Strings
         ///     allocator is freed with its buffer, deterministically (no collection needed).
         /// </summary>
         [TestMethod]
+        [DoNotParallelize] // counts the process-wide live StringDType allocators
         public void Buffers_ReleaseTheirAllocators()
         {
             using var t = np.array(new[] { "a", Medium('m'), Long, "" }, T);
@@ -894,6 +895,7 @@ namespace NumSharp.Tests.Backends.Strings
         ///     one past the first fill's count fails the second fill.
         /// </summary>
         [TestMethod]
+        [DoNotParallelize] // arms the process-wide StringDType allocator fault injection (VStringAllocator.FailAllocationAfter) and counts live allocators
         public void BufferFill_AllocationFailure_ReleasesTheBuffers()
         {
             var texts = new[] { new string('a', 16), new string('b', 17), new string('c', 60), new string('d', 61) };

@@ -51,11 +51,15 @@ namespace NumSharp
         public override DType default_descr() => DTypeRegistry.FromTypeCode(_defaultCode).singleton;
 
         /// <summary>
-        ///     The slot <c>discover_descr_from_pyobject</c>: the descriptor array coercion gives a Python scalar of this
-        ///     category. For a Python int NumPy's <c>discover_descriptor_from_pylong</c>, which reads the VALUE: int64 when it
-        ///     fits (NumPy's <c>intp</c>), uint64 when only that holds it (<c>2**64 - 1</c>), and NumPy's object descriptor
-        ///     past 64 bits, which NumSharp refuses. A Python float is float64 and a Python complex complex128 whatever their
-        ///     value (<c>discover_descriptor_from_pyfloat</c> / <c>_pycomplex</c>).
+        ///     The slot <c>discover_descr_from_pyobject</c> (NumPy's <c>discover_descriptor_from_py{long,float,complex}</c>,
+        ///     <c>abstractdtypes.c</c>): the descriptor array coercion gives a Python scalar of this category, which is also what
+        ///     <c>np.result_type(literal)</c> answers (a lone operand skips promotion and returns the dtype of
+        ///     <c>np.asarray(literal)</c>). For a Python int NumPy's <c>discover_descriptor_from_pylong</c> reads the VALUE:
+        ///     int64 when it fits (NumPy's <c>intp</c>), uint64 when only that holds it (<c>2**64 - 1</c>;
+        ///     <c>np.result_type(2**63)</c> is uint64), and NumPy's object descriptor past 64 bits, which NumSharp refuses. A
+        ///     Python float is float64 and a Python complex complex128 whatever their value
+        ///     (<c>discover_descriptor_from_pyfloat</c> / <c>_pycomplex</c>). As an operand among others the literal stays weak
+        ///     and its value never matters (<c>np.result_type(np.uint8, 2**63)</c> is uint8).
         /// </summary>
         /// <param name="obj">A value of this category in the C# boundary map: an integer primitive or
         ///     <see cref="System.Numerics.BigInteger"/> for <c>_PyLongDType</c>.</param>

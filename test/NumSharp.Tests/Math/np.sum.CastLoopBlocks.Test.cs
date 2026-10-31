@@ -53,6 +53,7 @@ namespace NumSharp.Tests.Math
         ///     The blocked axis cast loop returns the whole-copy route's bits for every dtype pair, layout, axis and
         ///     keepdims, at block sizes of one or two indices, a few indices and about a third of the operand.
         /// </summary>
+        [DoNotParallelize] // sets the process-wide DefaultEngine.CastLoopBlockElements, which every running cast-loop sum reads
         [TestMethod]
         public void AxisSum_CastLoop_BlockedEqualsTheWholeCastCopy()
         {
@@ -119,6 +120,7 @@ namespace NumSharp.Tests.Math
         ///     addition, logical OR), so any partition is NumPy's answer — and the blocked route really runs
         ///     (<c>DefaultEngine.CastLoopFlatBlockedRuns</c>), or the equality would hold vacuously.
         /// </summary>
+        [DoNotParallelize] // sets the process-wide DefaultEngine.CastLoopBlockElements, which every running cast-loop sum reads
         [TestMethod]
         public void FlatSum_OrderFreeCastLoop_BlockedEqualsTheWholeCastCopy()
         {

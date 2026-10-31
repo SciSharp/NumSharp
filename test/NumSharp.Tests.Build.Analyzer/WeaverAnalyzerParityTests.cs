@@ -96,6 +96,151 @@ namespace NumSharp.Tests.Build.Analyzer
             "}\n" +
             "public class Leaf : Lib.GBase<int> { public override NDArray Map(int x, NDArray a) { var t = a + x; return a.copy(); } }\n";
 
+        /// <summary>
+        ///     Interface hierarchies the weaver deduplicates its search over (it searches each interface
+        ///     instantiation once per level of a method's walk): a chain and a diamond lattice with unscoped members at every
+        ///     level, one generic interface reached under two instantiations, the same instantiation reached
+        ///     along two paths, and a generic implementer instantiating over its own type parameter. The
+        ///     analyzer resolves through Roslyn's own deduplicated interface set, so the two must agree.
+        /// </summary>
+        private static readonly string InterfaceLattices = Prelude +
+            "public interface IC0 { [NDScoped] NDArray Apply(NDArray a); NDArray M0(NDArray a); }\n" +
+            "public interface IC1 : IC0 { NDArray M1(NDArray a); }\npublic interface IC2 : IC1 { NDArray M2(NDArray a); }\npublic interface IC3 : IC2 { NDArray M3(NDArray a); }\n" +
+            "public class ChainImpl : IC3 { public NDArray Apply(NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray M0(NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray M1(NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray M2(NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray M3(NDArray a) { var t = a + 1.0; return a.copy(); } }\n" +
+            "public interface IRoot { [NDScoped] NDArray Run(NDArray a); }\npublic interface IA1 : IRoot { }\npublic interface IB1 : IRoot { }\npublic interface IA2 : IA1, IB1 { }\npublic interface IB2 : IA1, IB1 { }\n" +
+            "public class Lattice : IA2, IB2 { public NDArray Run(NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray Other(NDArray a) { var t = a + 1.0; return a.copy(); } }\n" +
+            "public interface IBase<T> { [NDScoped] NDArray M(T x, NDArray a); NDArray Plain(T x, NDArray a); }\n" +
+            "public interface IA : IBase<int> { }\npublic interface IB : IBase<string> { }\npublic interface IL : IBase<double> { }\npublic interface IR : IBase<double> { }\n" +
+            "public class Both : IA, IB { public NDArray M(int x, NDArray a) { var t = a + x; return a.copy(); } public NDArray M(string x, NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray Plain(int x, NDArray a) { var t = a + x; return a.copy(); } public NDArray Plain(string x, NDArray a) { var t = a + 1.0; return a.copy(); } }\n" +
+            "public class Same : IL, IR { public NDArray M(double x, NDArray a) { var t = a + x; return a.copy(); } public NDArray Plain(double x, NDArray a) { var t = a + x; return a.copy(); } }\n" +
+            "public class Open<U> : IA, IBase<U[]> { public NDArray M(int x, NDArray a) { var t = a + x; return a.copy(); } public NDArray M(U[] x, NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray Plain(int x, NDArray a) { var t = a + x; return a.copy(); } public NDArray Plain(U[] x, NDArray a) { var t = a + 1.0; return a.copy(); } }\n";
+
+        /// <summary>
+        ///     The instantiation key's edges, for both resolvers: arguments that differ only inside a type
+        ///     argument (List&lt;int&gt; / List&lt;string&gt;), array ranks and nesting, nullable and tuple
+        ///     arguments, and an interface listed on a generic base class read in the base's context
+        ///     (IBase&lt;T&gt; from GBase&lt;int&gt;) beside the derived class's own instantiation.
+        /// </summary>
+        private static readonly string InterfaceKeys = Prelude +
+            "public interface IBase<T> { [NDScoped] NDArray M(T x, NDArray a); NDArray Plain(T x, NDArray a); }\n" +
+            "public interface IL1 : IBase<List<int>> { }\npublic interface IL2 : IBase<List<string>> { }\n" +
+            "public class Lists : IL1, IL2 { public NDArray M(List<int> x, NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray M(List<string> x, NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray Plain(List<int> x, NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray Plain(List<string> x, NDArray a) { var t = a + 1.0; return a.copy(); } }\n" +
+            "public interface IR1 : IBase<int[]> { }\npublic interface IR2 : IBase<int[,]> { }\npublic interface IR3 : IBase<int[][]> { }\n" +
+            "public class Ranks : IR1, IR2, IR3 { public NDArray M(int[] x, NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray M(int[,] x, NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray M(int[][] x, NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray Plain(int[] x, NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray Plain(int[,] x, NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray Plain(int[][] x, NDArray a) { var t = a + 1.0; return a.copy(); } }\n" +
+            "public interface IN1 : IBase<int?> { }\npublic interface IN2 : IBase<int> { }\npublic interface IT1 : IBase<(int, string)> { }\npublic interface IT2 : IBase<(string, int)> { }\n" +
+            "public class Specials : IN1, IN2, IT1, IT2 { public NDArray M(int? x, NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray M(int x, NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray M((int, string) x, NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray M((string, int) x, NDArray a) { var t = a + 1.0; return a.copy(); }" +
+            " public NDArray Plain(int? x, NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray Plain(int x, NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray Plain((int, string) x, NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray Plain((string, int) x, NDArray a) { var t = a + 1.0; return a.copy(); } }\n" +
+            "public class GBase<T> : IBase<T> { public virtual NDArray M(T x, NDArray a) { var t = a + 1.0; return a.copy(); } public virtual NDArray Plain(T x, NDArray a) { var t = a + 1.0; return a.copy(); } }\n" +
+            "public class GDerived : GBase<int>, IBase<string> { public override NDArray M(int x, NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray M(string x, NDArray a) { var t = a + 1.0; return a.copy(); } public override NDArray Plain(int x, NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray Plain(string x, NDArray a) { var t = a + 1.0; return a.copy(); } }\n";
+
+        /// <summary>
+        ///     Property shapes the weaver's getter gate decides, for both resolvers: a property-level
+        ///     [NDScopedCovered] between a scoped interface property and an override (the opt-out must stop
+        ///     the inheritance on both sides), a derived type with many plain properties overriding a scoped
+        ///     base property, a scoped virtual indexer and its override, a scoped static property, and a scoped
+        ///     property of a generic type.
+        /// </summary>
+        private static readonly string GetterShapes = Prelude +
+            "public interface IRoot { [NDScoped] NDArray V { get; } }\n" +
+            "public class Mid : IRoot { [NDScopedCovered] public virtual NDArray V { get { var t = np.arange(3) + 1.0; return t.copy(); } } }\n" +
+            "public class Leaf : Mid { public override NDArray V { get { var t = np.arange(3) + 2.0; return t.copy(); } } }\n" +
+            "public class PBase { [NDScoped] public virtual NDArray W { get { var t = np.arange(3) + 1.0; return t.copy(); } } }\n" +
+            "public class PDerived : PBase {" + string.Concat(Enumerable.Range(0, 20).Select(i => $" public int A{i} {{ get; set; }}")) +
+            " public override NDArray W { get { var t = np.arange(3) + 2.0; return t.copy(); } } }\n" +
+            "public class Grid { [NDScoped] public virtual NDArray this[int i] { get { var t = np.arange(3) + i; return t.copy(); } } }\n" +
+            "public class SubGrid : Grid { public override NDArray this[int i] { get { var t = np.arange(3) * i; return t.copy(); } } }\n" +
+            "public static class Defaults { [NDScoped] public static NDArray Ramp { get { var t = np.arange(3) + 1.0; return t.copy(); } } }\n" +
+            "public class Holder<T> { [NDScoped] public NDArray Ramp { get { var t = np.arange(3) + 1.0; return t.copy(); } } public T Item { get; set; } }\n";
+
+        /// <summary>
+        ///     How the CLR maps an interface member onto a method, in the shapes where a name-and-signature
+        ///     match and the interface map disagree, for both resolvers (all found by a parity probe on
+        ///     2026-10-24; both layers now follow the map):
+        ///     <list type="bullet">
+        ///         <item>an interface listed on a base that does not declare the slot (<c>Stage : StageRoot, IStage</c>):
+        ///         the override below it runs for calls through the interface and inherits — through one and two
+        ///         levels, sealed, abstract, a slot two bases up, a generic slot, a property getter and an
+        ///         <c>[NDScopedExit]</c> parameter; a <c>new virtual</c> below it is a new slot and inherits nothing.
+        ///         The analyzer missed all of these (NDW012 inside methods the weaver wove).</item>
+        ///         <item>an explicit implementation beside a public virtual of the same signature
+        ///         (<c>Forwarder</c>): the interface runs the explicit one, so the public method — and its
+        ///         override — inherit nothing. The weaver wove them by the name match, which disposes any
+        ///         array they keep.</item>
+        ///         <item>re-implementation: a type listing the interface again implements it with its public
+        ///         method (<c>Reimplementer</c>); a type that re-lists it explicitly still inherits through the
+        ///         slot's declaring base when that base implements the interface (<c>ExplicitOverrider</c>), and
+        ///         inherits nothing when only a base below the slot listed it (<c>ReExplicit</c>, <c>BelowExplicit</c>).</item>
+        ///         <item>one generic interface implemented explicitly for one instantiation and implicitly for
+        ///         another (<c>Mixed</c>), and an explicit implementation of a base interface's member on a type
+        ///         that lists the derived interface (<c>ViaDerived</c>).</item>
+        ///     </list>
+        /// </summary>
+        private static readonly string InterfaceMapping = Prelude +
+            "public interface IStage { [NDScoped] NDArray Run(NDArray a); }\n" +
+            "public class StageRoot { public virtual NDArray Run(NDArray a) { var t = a + 1.0; return a.copy(); } }\n" +
+            "public class Stage : StageRoot, IStage { }\n" +
+            "public class MyStage : Stage { public override NDArray Run(NDArray a) { var t = a + 2.0; return a.copy(); } }\n" +
+            "public class MyStage2 : MyStage { public override NDArray Run(NDArray a) { var t = a + 3.0; return a.copy(); } }\n" +
+            "public class SealedStage : Stage { public sealed override NDArray Run(NDArray a) { var t = a + 4.0; return a.copy(); } }\n" +
+            "public class NewSlotStage : Stage { public new virtual NDArray Run(NDArray a) { var t = a + 5.0; return a.copy(); } }\n" +
+            "public abstract class AbstractRoot { public abstract NDArray Run(NDArray a); }\n" +
+            "public abstract class AbstractStage : AbstractRoot, IStage { }\n" +
+            "public class ConcreteStage : AbstractStage { public override NDArray Run(NDArray a) { var t = a + 6.0; return a.copy(); } }\n" +
+            "public class GapRoot { public virtual NDArray Run(NDArray a) { var t = a + 7.0; return a.copy(); } }\n" +
+            "public class GapMiddle : GapRoot { }\npublic class GapStage : GapMiddle, IStage { }\n" +
+            "public class GapLeaf : GapStage { public override NDArray Run(NDArray a) { var t = a + 8.0; return a.copy(); } }\n" +
+            "public interface IGStage<T> { [NDScoped] NDArray Run(T x, NDArray a); }\n" +
+            "public class GRoot<T> { public virtual NDArray Run(T x, NDArray a) { var t = a + 1.0; return a.copy(); } }\n" +
+            "public class GStage : GRoot<int>, IGStage<int> { }\n" +
+            "public class GLeaf : GStage { public override NDArray Run(int x, NDArray a) { var t = a + x; return a.copy(); } }\n" +
+            "public interface IProp { [NDScoped] NDArray Value { get; } }\n" +
+            "public class PropRoot { public virtual NDArray Value { get { var t = np.arange(3) + 1.0; return t.copy(); } } }\n" +
+            "public class PropStage : PropRoot, IProp { }\n" +
+            "public class PropLeaf : PropStage { public override NDArray Value { get { var t = np.arange(3) + 2.0; return t.copy(); } } }\n" +
+            "public interface IKeep { void Keep([NDScopedExit] NDArray w); }\n" +
+            "public class KeepRoot { public NDArray Kept; public virtual void Keep(NDArray w) => Kept = w; }\n" +
+            "public class KeepStage : KeepRoot, IKeep { }\n" +
+            "public class KeepLeaf : KeepStage { public override void Keep(NDArray w) => Kept = w; }\n" +
+            "public interface IOp { [NDScoped] NDArray Apply(NDArray a); }\n" +
+            "public class Forwarder : IOp { NDArray IOp.Apply(NDArray a) { var t = a + 1.0; return Apply(a).copy(); } public virtual NDArray Apply(NDArray a) { var t = a + 2.0; return a.copy(); } }\n" +
+            "public class ForwarderLeaf : Forwarder { public override NDArray Apply(NDArray a) { var t = a + 3.0; return a.copy(); } }\n" +
+            "public class ExplicitBase : IOp { NDArray IOp.Apply(NDArray a) { var t = a + 1.0; return a.copy(); } }\n" +
+            "public class Reimplementer : ExplicitBase, IOp { public NDArray Apply(NDArray a) { var t = a + 2.0; return a.copy(); } }\n" +
+            "public class ImplRoot : IOp { public virtual NDArray Apply(NDArray a) { var t = a + 1.0; return a.copy(); } }\n" +
+            "public class ExplicitOverrider : ImplRoot, IOp { NDArray IOp.Apply(NDArray a) { var t = a + 2.0; return a.copy(); } public override NDArray Apply(NDArray a) { var t = a + 3.0; return a.copy(); } }\n" +
+            "public class PlainRoot { public virtual NDArray Apply(NDArray a) { var t = a + 1.0; return a.copy(); } }\n" +
+            "public class ExplicitListing : PlainRoot, IOp { NDArray IOp.Apply(NDArray a) { var t = a + 2.0; return a.copy(); } }\n" +
+            "public class BelowExplicit : ExplicitListing { public override NDArray Apply(NDArray a) { var t = a + 3.0; return a.copy(); } }\n" +
+            "public class ImplicitListing : PlainRoot, IOp { }\n" +
+            "public class ReExplicit : ImplicitListing, IOp { NDArray IOp.Apply(NDArray a) { var t = a + 4.0; return a.copy(); } public override NDArray Apply(NDArray a) { var t = a + 5.0; return a.copy(); } }\n" +
+            "public interface IGOp<T> { [NDScoped] NDArray Map(T x, NDArray a); }\n" +
+            "public class Mixed : IGOp<int>, IGOp<string> { NDArray IGOp<int>.Map(int x, NDArray a) { var t = a + x; return a.copy(); } public virtual NDArray Map(int x, NDArray a) { var t = a + x; return a.copy(); } public virtual NDArray Map(string x, NDArray a) { var t = a + 1.0; return a.copy(); } }\n" +
+            "public interface IOpEx : IOp { }\n" +
+            "public class ViaDerived : IOpEx { NDArray IOp.Apply(NDArray a) { var t = a + 1.0; return a.copy(); } public virtual NDArray Apply(NDArray a) { var t = a + 2.0; return a.copy(); } }\n";
+
+        /// <summary>The number of override levels in <see cref="DepthBoundary"/>: enough to put the root's interface past the walk's 64-level limit for the three most derived types.</summary>
+        internal const int DepthBoundaryLevels = 67;
+
+        /// <summary>
+        ///     A <see cref="DepthBoundaryLevels"/>-level override chain whose ROOT implements an interface with
+        ///     a scoped method, a scoped property and an <c>[NDScopedExit]</c> parameter: from <c>C{k}</c> the
+        ///     root's interface is <c>66 - k</c> levels up, and both walks give up past their 64-level limit at
+        ///     the same place — C0 to C2 inherit nothing, C3 and up inherit all three. The analyzer used to
+        ///     search interfaces one level deeper than the weaver, and called C2 scoped (and dropped its
+        ///     NDW012) while the weave left it unwoven (found by a parity probe on 2026-10-24).
+        /// </summary>
+        /// <returns>The fixture's source.</returns>
+        internal static string DepthBoundary()
+        {
+            int top = DepthBoundaryLevels - 1;
+            var sb = new System.Text.StringBuilder(Prelude);
+            sb.AppendLine("public interface IDeep { [NDScoped] NDArray Apply(NDArray a); [NDScoped] NDArray Value { get; } void Keep([NDScopedExit] NDArray w); }");
+            sb.AppendLine($"public class C{top} : IDeep {{ public NDArray Kept; public virtual NDArray Apply(NDArray a) {{ var t = a + 1.0; return a.copy(); }} public virtual NDArray Value {{ get {{ var t = np.arange(3) + 1.0; return t.copy(); }} }} public virtual void Keep(NDArray w) => Kept = w; }}");
+            for (int k = top - 1; k >= 0; k--)
+                sb.AppendLine($"public class C{k} : C{k + 1} {{ public override NDArray Apply(NDArray a) {{ var t = a + {k}.0; return a.copy(); }} public override NDArray Value {{ get {{ var t = np.arange(3) + {k}.0; return t.copy(); }} }} public override void Keep(NDArray w) => Kept = w; }}");
+            return sb.ToString();
+        }
+
         /// <summary>The fixtures by short name (the DataRow carries only the name, so a failure reads as one line, not a source dump).</summary>
         private static (string Source, string BaseLibrary) Fixture(string name) => name switch
         {
@@ -103,14 +248,38 @@ namespace NumSharp.Tests.Build.Analyzer
             "Interfaces" => (Interfaces, null),
             "PropertiesAndCovariance" => (PropertiesAndCovariance, null),
             "CrossAssembly" => (Consumer, BaseLibrary),
+            "InterfaceLattices" => (InterfaceLattices, null),
+            "InterfaceKeys" => (InterfaceKeys, null),
+            "GetterShapes" => (GetterShapes, null),
+            "InterfaceMapping" => (InterfaceMapping, null),
+            "DepthBoundary" => (DepthBoundary(), null),
             _ => throw new ArgumentOutOfRangeException(nameof(name), name, "unknown parity fixture"),
         };
 
+        /// <summary>
+        ///     For every method of the named fixture, the weaver's and the analyzer's resolvers agree on the
+        ///     scope kind, on whether it was inherited and on the declaration it came from; the weave puts a
+        ///     scope local exactly where the weaver's resolver sees a target, and NDW012 lands only in
+        ///     methods the weave left alone. A divergence would be a silent leak or warning noise.
+        ///     <para>
+        ///     The second walk over the same graph — <c>[NDScopedExit]</c> parameters, inherited by position —
+        ///     is compared the same way: the effective positions, whether they were inherited and from which
+        ///     declaration, and the weave's own output (a <c>NDScope.Detach</c> call exactly where the weaver's
+        ///     resolver sees retained parameters and there is a body).
+        ///     </para>
+        /// </summary>
+        /// <param name="name">The fixture's short name (see <see cref="Fixture"/>).</param>
+        /// <exception cref="AssertFailedException">The fixture does not compile or weave, or any method diverges.</exception>
         [DataTestMethod]
         [DataRow("Chains")]
         [DataRow("Interfaces")]
         [DataRow("PropertiesAndCovariance")]
         [DataRow("CrossAssembly")]
+        [DataRow("InterfaceLattices")]
+        [DataRow("InterfaceKeys")]
+        [DataRow("GetterShapes")]
+        [DataRow("InterfaceMapping")]
+        [DataRow("DepthBoundary")]
         public async Task BothResolvers_AgreeOnEveryMethod_AndMatchTheirOwnOutputs(string name)
         {
             var (source, baseLibrary) = Fixture(name);
@@ -139,7 +308,7 @@ namespace NumSharp.Tests.Build.Analyzer
             using var asm = run.ReadCecil();
             var cecil = new CecilScope();
 
-            int compared = 0, inheritedSeen = 0;
+            int compared = 0, inheritedSeen = 0, exitInheritedSeen = 0;
             var failures = new List<string>();
             foreach (var type in AllTypes(comp.Assembly.GlobalNamespace))
             {
@@ -187,6 +356,29 @@ namespace NumSharp.Tests.Build.Analyzer
                     if (expectedWoven != woven)
                         failures.Add($"{Display(method)}: resolver says target={expectedWoven} but woven={woven}");
 
+                    // The [NDScopedExit] walk: the same graph, a different test for what counts as a declaration.
+                    var rExit = AnalyzerExitPositions(method, known, out var rExitSource);
+                    var cExit = cecil.EffectiveExitParameters(def);
+                    var cExitSource = cecil.ExitParametersSource(def);
+                    if (!rExit.SequenceEqual(cExit))
+                        failures.Add($"{Display(method)}: [NDScopedExit] positions analyzer [{string.Join(",", rExit)}] vs weaver [{string.Join(",", cExit)}]");
+                    else if ((rExitSource != null) != (cExitSource != null))
+                        failures.Add($"{Display(method)}: [NDScopedExit] inherited? analyzer {rExitSource != null}, weaver {cExitSource != null}");
+                    else if (rExitSource != null)
+                    {
+                        exitInheritedSeen++;
+                        var rName = rExitSource.ContainingType.MetadataName + "." + rExitSource.MetadataName;
+                        var cName = cExitSource.DeclaringType.Name + "." + cExitSource.Name;
+                        if (rName != cName)
+                            failures.Add($"{Display(method)}: [NDScopedExit] inherited from analyzer '{rName}' vs weaver '{cName}'");
+                    }
+
+                    // ... and the weave's output: a Detach call iff the resolver sees retained parameters and
+                    // there is a body to put it in.
+                    bool expectDetach = cExit.Length > 0 && def.HasBody;
+                    if (expectDetach != WeaveRun.CallsDetach(def))
+                        failures.Add($"{Display(method)}: exit resolver says detach={expectDetach} but the weave {(expectDetach ? "has no" : "has a")} NDScope.Detach call");
+
                     compared++;
                 }
             }
@@ -216,6 +408,8 @@ namespace NumSharp.Tests.Build.Analyzer
             Assert.AreEqual(0, failures.Count, $"{name}: weaver/analyzer parity failures:\n  " + string.Join("\n  ", failures));
             Assert.IsTrue(compared >= 8, $"{name}: the parity walk should have compared a real surface (compared {compared})");
             Assert.IsTrue(inheritedSeen >= 3, $"{name}: the fixture should exercise inherited declarations (saw {inheritedSeen})");
+            if (name == "InterfaceMapping" || name == "DepthBoundary")
+                Assert.IsTrue(exitInheritedSeen >= 1, $"{name}: the fixture should exercise inherited [NDScopedExit] parameters (saw {exitInheritedSeen})");
         }
 
         // ---------------------------------------------------------------- symbol ↔ metadata matching
@@ -261,6 +455,44 @@ namespace NumSharp.Tests.Build.Analyzer
             return p.RefKind == RefKind.None ? core : core + "&";
         }
 
+        /// <summary>
+        ///     Cecil's <c>FullName</c> spelling of a type as it appears in a signature: namespace-qualified, nested
+        ///     types joined by '/', generic arguments in angle brackets without spaces, arrays with their rank
+        ///     (Cecil's "0..." lower bounds are stripped from the Cecil side before comparing), type parameters
+        ///     by name. Precise enough to tell <c>List&lt;int&gt;</c> from <c>List&lt;string&gt;</c> and <c>int[,]</c>
+        ///     from <c>int[][]</c>, which <see cref="ParamName"/>'s bare names cannot.
+        /// </summary>
+        /// <param name="t">A parameter type.</param>
+        /// <returns>The Cecil-style full name.</returns>
+        private static string CecilTypeName(ITypeSymbol t) => t switch
+        {
+            IArrayTypeSymbol arr => CecilTypeName(arr.ElementType) + "[" + new string(',', arr.Rank - 1) + "]",
+            IPointerTypeSymbol ptr => CecilTypeName(ptr.PointedAtType) + "*",
+            ITypeParameterSymbol tp => tp.Name,
+            INamedTypeSymbol named when named.IsGenericType => CecilName(named.OriginalDefinition) + "<" + string.Join(",", named.TypeArguments.Select(CecilTypeName)) + ">",
+            INamedTypeSymbol named => CecilName(named),
+            _ => t.MetadataName,
+        };
+
+        /// <summary>A parameter's <see cref="CecilTypeName"/>, with Cecil's '&amp;' for a by-reference parameter.</summary>
+        /// <param name="p">The parameter.</param>
+        /// <returns>The Cecil-style full name of its type.</returns>
+        private static string ParamFullName(IParameterSymbol p)
+        {
+            string core = CecilTypeName(p.Type);
+            return p.RefKind == RefKind.None ? core : core + "&";
+        }
+
+        /// <summary>
+        ///     The Cecil method behind a Roslyn method: same declaring type, name and parameter count; among
+        ///     overloads, the one whose parameter types match by full name, and failing that (a signature the
+        ///     full-name spelling does not cover, such as an <c>in</c> parameter's modreq) by bare name — the
+        ///     original rule, so a fixture that paired before still pairs the same way.
+        /// </summary>
+        /// <param name="module">The woven module.</param>
+        /// <param name="type">The Roslyn declaring type.</param>
+        /// <param name="method">The Roslyn method.</param>
+        /// <returns>The Cecil method, or null when none matches.</returns>
         private static MethodDefinition FindCecil(ModuleDefinition module, INamedTypeSymbol type, IMethodSymbol method)
         {
             var typeName = CecilName(type);
@@ -269,15 +501,44 @@ namespace NumSharp.Tests.Build.Analyzer
                 .ToList();
             if (candidates.Count == 1)
                 return candidates[0];
-            return candidates.FirstOrDefault(m => m.Parameters.Select(p => p.ParameterType.Name).SequenceEqual(method.Parameters.Select(ParamName)));
+            var exact = candidates.FirstOrDefault(m => m.Parameters.Select(p => p.ParameterType.FullName.Replace("0...", "")).SequenceEqual(method.Parameters.Select(ParamFullName)));
+            return exact ?? candidates.FirstOrDefault(m => m.Parameters.Select(p => p.ParameterType.Name).SequenceEqual(method.Parameters.Select(ParamName)));
         }
 
+        /// <summary>
+        ///     The analyzer's inherited declaration spelled the way the weaver's is compared: "Type`arity.Member",
+        ///     a property by its METADATA name — an indexer is "this[]" to Roslyn but "Item" in metadata, where
+        ///     the weaver finds it through its getter <c>get_Item</c>.
+        /// </summary>
+        /// <param name="source">The declaration the analyzer inherited from (a method, or the property of a property-level attribute).</param>
+        /// <returns>The normalized name.</returns>
         private static string SourceName(ISymbol source)
         {
-            var name = source is IPropertySymbol p ? p.Name : source.Name.Replace("get_", "");
+            var name = source is IPropertySymbol p ? p.MetadataName : source.Name.Replace("get_", "");
             return source.ContainingType.MetadataName + "." + name;
         }
 
         private static string Display(IMethodSymbol m) => m.ContainingType.Name + "." + m.MetadataName;
+
+        /// <summary>
+        ///     The analyzer's effective <c>[NDScopedExit]</c> positions for <paramref name="method"/>, computed
+        ///     the way the weaver's <c>EffectiveExitParameters</c> defines them: its own marks when it marks any,
+        ///     else the nearest inherited declaration's marks, clamped to its own parameter count.
+        /// </summary>
+        /// <param name="method">The method asked about.</param>
+        /// <param name="known">The resolved NumSharp attribute types.</param>
+        /// <param name="source">Receives the declaration the positions were inherited from, or null when they are the method's own (or there are none).</param>
+        /// <returns>The positions, ascending; empty when nothing is retained.</returns>
+        private static int[] AnalyzerExitPositions(IMethodSymbol method, RoslynKnown known, out IMethodSymbol source)
+        {
+            source = null;
+            var own = RoslynScope.OwnExitParameters(method, known);
+            if (own.Length > 0)
+                return own;
+            source = RoslynScope.InheritedExitSource(method, known);
+            return source == null
+                ? Array.Empty<int>()
+                : RoslynScope.OwnExitParameters(source, known).Where(i => i < method.Parameters.Length).ToArray();
+        }
     }
 }

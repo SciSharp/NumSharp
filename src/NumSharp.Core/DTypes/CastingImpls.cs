@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using NumSharp.Backends.Iteration;
 
 namespace NumSharp
@@ -43,7 +44,20 @@ namespace NumSharp
 
         private readonly LegacyBuiltinDTypeMeta _from;
         private readonly LegacyBuiltinDTypeMeta _to;
-        private NPY_CASTING? _casting;
+
+        /// <summary>The value <see cref="_casting"/> holds until the first read computes it (no <see cref="NPY_CASTING"/> is negative).</summary>
+        private const int CastingNotComputed = -1;
+
+        /// <summary>
+        ///     The cached <see cref="casting"/> as an <see cref="int"/>, <see cref="CastingNotComputed"/> until the first read.
+        ///     One 4-byte field on purpose: a read of it is a single atomic load, so a thread racing the first computation
+        ///     sees either the sentinel or the final value. A <c>Nullable&lt;NPY_CASTING&gt;</c> read with <c>??=</c> is
+        ///     two loads (the value, then <c>HasValue</c>), and a reader whose two loads straddle the other thread's
+        ///     8-byte store returned <c>default</c> — <see cref="NPY_CASTING.NPY_NO_CASTING"/> —, which made
+        ///     <see cref="DTypeCasting.CheckCastSafety"/>'s shortcut answer True for every rule
+        ///     (<c>np.can_cast(float64, int32, 'no')</c>; measured 32 of 2,000,000 racing first reads).
+        /// </summary>
+        private int _casting = CastingNotComputed;
 
         /// <summary>
         ///     The minimal safety of this numeric cast — NumPy's <c>add_numeric_cast</c> value (<c>equiv</c> within a class,
@@ -52,10 +66,23 @@ namespace NumSharp
         ///     the promotion table is <c>np._nptypemap_arr_arr</c>, built by <c>np</c>'s static constructor, and <c>np</c>'s
         ///     field initializers (<c>np.float64</c> is a <see cref="DType"/>) are what first construct
         ///     <see cref="DTypeRegistry"/> — so reading the table while the registry registers the 15×15 impls would observe
-        ///     it before it exists. The value is a constant, so the lazy evaluation is unobservable (a benign race at worst
-        ///     computes it twice).
+        ///     it before it exists. The value is a constant, so two threads racing the first read compute the same value
+        ///     and either store wins; each reads the cache with one volatile load (see <see cref="_casting"/>).
         /// </summary>
-        public override NPY_CASTING casting => _casting ??= ComputeCasting(_from, _to);
+        public override NPY_CASTING casting
+        {
+            get
+            {
+                int cached = Volatile.Read(ref _casting);
+                if (cached != CastingNotComputed)
+                    return (NPY_CASTING)cached;
+                var computed = ComputeCasting(_from, _to);
+                // Publish after computing: a reader that sees the stored value sees a complete one (a single int store),
+                // and a reader that still sees the sentinel computes the same constant itself.
+                Volatile.Write(ref _casting, (int)computed);
+                return computed;
+            }
+        }
 
         /// <summary>NumPy's <c>add_numeric_cast</c> safety level for one class pair (see <see cref="casting"/>).</summary>
         /// <param name="from">The source class.</param>

@@ -386,6 +386,7 @@ namespace NumSharp.Tests.Backends.Strings
         ///     rows route really ran.
         /// </summary>
         [TestMethod]
+        [DoNotParallelize] // flips the process-wide string-comparison route switches (NDStringComparison)
         public void Comparisons_RowsRoute_MatchesThePerRowRoute()
         {
             if (!ILKernelGenerator.TextKernelsAvailable)
@@ -426,6 +427,7 @@ namespace NumSharp.Tests.Backends.Strings
         ///     (<c>out=m, where=m</c>); each the same bytes as the per-run route, masked-off elements untouched.
         /// </summary>
         [TestMethod]
+        [DoNotParallelize] // flips the process-wide string-comparison route switches (NDStringComparison)
         public void Comparisons_BlendRoute_MatchesThePerRunRoute()
         {
             if (!ILKernelGenerator.TextKernelsAvailable)
@@ -502,6 +504,7 @@ namespace NumSharp.Tests.Backends.Strings
         ///     U+10FFFF in a later row (the rows kernel's call-wide flag), while the nonzero flavor does not.
         /// </summary>
         [TestMethod]
+        [DoNotParallelize] // flips the process-wide string-truth route switch (NDStringTruth.RowsDisabled)
         public void Truth_RowsRoute_MatchesThePerRowRoute_AndRaisesFromAnyRow()
         {
             if (!ILKernelGenerator.TextKernelsAvailable)

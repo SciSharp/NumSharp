@@ -1048,6 +1048,7 @@ namespace NumSharp.Tests.Backends.Strings
         ///     through the scalar cast loop instead of the house IL cast kernel, with the same answers.
         /// </summary>
         [TestMethod]
+        [DoNotParallelize] // switches IL kernel generation off process-wide (DirectILKernelGenerator.Enabled)
         public void TextNumberCasts_WithoutDynamicCode_GiveTheSameAnswers()
         {
             using var ints = np.array(new[] { 1, -22, 333 });

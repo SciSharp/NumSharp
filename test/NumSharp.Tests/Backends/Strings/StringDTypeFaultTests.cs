@@ -13,6 +13,7 @@ namespace NumSharp.Tests.Backends.Strings
     ///     result is disposed at once (no allocator outlives the call), and the operands stay intact.
     /// </summary>
     [TestClass]
+    [DoNotParallelize] // arms the process-wide StringDType allocator fault injection (VStringAllocator.FailAllocationAfter) and counts live allocators
     public class StringDTypeFaultTests
     {
         /// <summary>A fresh <c>StringDType()</c> descriptor.</summary>

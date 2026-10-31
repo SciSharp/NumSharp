@@ -208,6 +208,47 @@ public class NpMinScalarTypeBattleTests
 
     #endregion
 
+    #region Arrays
+
+    /// <summary>
+    ///     NumPy's <c>PyArray_MinScalarType</c>: an array of one or more dimensions answers its own dtype, whatever it
+    ///     holds (<c>np.min_scalar_type(np.array([1, 2], 'f8'))</c> is float64, not float16). It used to fall through to
+    ///     <c>value.GetType().GetTypeCode()</c> and answer null for every array.
+    /// </summary>
+    [TestMethod]
+    public void MinScalarType_Array_KeepsItsDtype()
+    {
+        foreach (var dt in new DType[] { np.bool_, np.int8, np.uint8, np.int16, np.uint16, np.int32, np.uint32, np.int64,
+                     np.uint64, np.float16, np.float32, np.float64, np.complex128, DType.Decimal, DType.Char })
+        {
+            var a = np.zeros(new Shape(3), dt);
+            np.min_scalar_type(a).Should().BeSameAs(dt, dt.name);
+            np.min_scalar_type(np.zeros(new Shape(2, 0), dt)).Should().BeSameAs(dt, "an empty array is no scalar either");
+        }
+    }
+
+    /// <summary>
+    ///     A 0-d array is a scalar to NumPy: its ONE value decides, by the rules of its own dtype (probed against 2.4.2:
+    ///     <c>np.array(1000, 'i8')</c> → uint16, <c>np.array(-5, 'i2')</c> → int8, <c>np.array(1e10, 'f8')</c> → float32,
+    ///     <c>np.array(1.0, 'f4')</c> → float16, <c>np.array(True)</c> → bool). A 0-d VIEW of a larger array reads its own
+    ///     element.
+    /// </summary>
+    [TestMethod]
+    public void MinScalarType_ZeroDimensionalArray_IsDemotedByItsValue()
+    {
+        np.min_scalar_type(np.array(1000L)).Should().Be(NPTypeCode.UInt16);
+        np.min_scalar_type(np.array((short)-5)).Should().Be(NPTypeCode.SByte);
+        np.min_scalar_type(np.array(1e10)).Should().Be(NPTypeCode.Single);
+        np.min_scalar_type(np.array(1.0f)).Should().Be(NPTypeCode.Half);
+        np.min_scalar_type(np.array(true)).Should().Be(NPTypeCode.Boolean);
+        np.min_scalar_type(np.array(70000.0)).Should().Be(NPTypeCode.Single);
+        var row = np.array(new long[] { 1, -300, 70000 });
+        np.min_scalar_type(row[1]).Should().Be(NPTypeCode.Int16, "row[1] is a 0-d view of -300");
+        np.min_scalar_type(row[2]).Should().Be(NPTypeCode.UInt32, "row[2] is a 0-d view of 70000");
+    }
+
+    #endregion
+
     #region Error Cases
 
     [TestMethod]

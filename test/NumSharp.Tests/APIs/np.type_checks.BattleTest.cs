@@ -45,6 +45,25 @@ public class NpTypeChecksBattleTests
         np.issctype(null).Should().BeFalse();
     }
 
+    /// <summary>
+    ///     NumPy 1.x's <c>np.issctype(np.int32)</c> is True. Since Stage B <c>np.int32</c> is a <see cref="DType"/>
+    ///     (it was <c>typeof(int)</c>), and <c>issctype</c>'s <c>object</c> parameter let the call compile while the
+    ///     descriptor fell through to false; a descriptor now answers by its storage code like the other spellings.
+    /// </summary>
+    [TestMethod]
+    public void IsSctype_DType_AnswersLikeItsStorageCode()
+    {
+        np.issctype(np.int32).Should().BeTrue();
+        np.issctype(np.float64).Should().BeTrue();
+        np.issctype(np.bool_).Should().BeTrue();
+        np.issctype(np.complex128).Should().BeTrue();
+        np.issctype(np.@decimal).Should().BeTrue();
+        np.issctype(np.dtype("<i4")).Should().BeTrue();
+        np.issctype(np.dtype(">f8")).Should().BeTrue("a non-native byte order still names float64's storage");
+        np.issctype(np.dtype("M8[s]")).Should().BeFalse("datetime64 has no storage lane, as NPTypeCode.Empty");
+        np.issctype(np.dtype("String")).Should().BeFalse("the string classes' lane, as NPTypeCode.String");
+    }
+
     #endregion
 
     #region isdtype Tests - NPTypeCode

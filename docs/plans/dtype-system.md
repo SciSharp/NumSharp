@@ -177,9 +177,9 @@ DTypePromotionError : TypeError   numpy.exceptions.DTypePromotionError, verbatim
 | Int64 / UInt64 | Int64DType / UInt64DType | LP64 **7 / 8**, LLP64 **9 / 10** | i / u | LP64 `l / L`, LLP64 `q / Q` | **platform-resolved**; `LongLongDType` alias; `LongDType` on LP64 |
 | Half / Single / Double | Float16/32/64DType | 23 / 11 / 12 | f | e / f / d | `LongDoubleDType` → Float64 (`'g'` collapses) |
 | Complex | Complex128DType | 15 | c | D | `CLongDoubleDType` → Complex128; complex64 stays unsupported |
-| Decimal | DecimalDType (NumSharp) | 256 | f | q (legacy `ToTYPECHAR`) | `isbuiltin 2` (user-defined range), name `decimal`, str `<f16` |
-| Char | CharDType (NumSharp) | 257 | u (was `'S'`) | c | promotes/prints as uint16 everywhere; name `char`, str `<u2` |
-| String (vestigial) | — | 19 | U | none | no storage; only the `"string"`/`"String"` aliases reach it |
+| Decimal | DecimalDType (NumSharp) | 256 | f | q (borrowed: int64's letter) | `isbuiltin 2` (user-defined range), name `decimal`, str `<f16`; `NPTypeCode.ToTYPECHAR` REFUSES it (2026-10-29): NumPy has no decimal dtype, and the borrowed `'q'` made `find_common_type` rank a decimal as int64 |
+| Char | CharDType (NumSharp) | 257 | u (was `'S'`) | c (borrowed: NumPy's `S1`) | promotes/prints as uint16 everywhere; name `char`, str `<u2`; `ToTYPECHAR` refuses it like decimal |
+| String (vestigial) | — | 19 | U | U | no storage; only the `"string"`/`"String"` aliases reach it; `ToTYPECHAR(NPTypeCode.String)` is `'U'` |
 | — | DateTime64DType | 21 | M | M | parametric, descriptor-level in stage A |
 | — | TimeDelta64DType | 22 | m | m | parametric, descriptor-level in stage A |
 

@@ -12,6 +12,7 @@ namespace NumSharp.Tests.Ma
     ///     after the scope closed: a regression is a use-after-dispose, not a leak. Every value is NumPy 2.4.2's.
     /// </summary>
     [TestClass]
+    [DoNotParallelize] // forces garbage collections, which suspend every thread: it runs with the serial set
     public class NDMaskedArrayScopeTests
     {
         /// <summary>Full boolean mask as a managed array (never the nomask sentinel).</summary>

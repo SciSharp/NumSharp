@@ -101,6 +101,7 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     have that input's shape.
         /// </exception>
         /// <exception cref="ValueError"><paramref name="casting"/> is not one of the five rule names.</exception>
+        /// <exception cref="TypeError"><paramref name="casting"/> is null, Python's None: NumPy's <c>casting must be str, not NoneType</c>.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a member of <see cref="OnnxCodecMode"/>.</exception>
         /// <exception cref="InvalidCastException">An input's dtype does not cast to the declared one under <paramref name="casting"/>.</exception>
         /// <exception cref="InvalidOperationException">
@@ -189,6 +190,7 @@ namespace NumSharp.Interop.OnnxRuntime
         /// </exception>
         /// <exception cref="ArgumentException"><paramref name="outputNames"/> is empty; the model has no input or output of a given name; or an input's shape contradicts the declared one.</exception>
         /// <exception cref="ValueError"><paramref name="casting"/> is not one of the five rule names.</exception>
+        /// <exception cref="TypeError"><paramref name="casting"/> is null, Python's None: NumPy's <c>casting must be str, not NoneType</c>.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a member of <see cref="OnnxCodecMode"/>.</exception>
         /// <exception cref="InvalidCastException">An input's dtype does not cast to the declared one under <paramref name="casting"/>.</exception>
         /// <exception cref="InvalidOperationException"><paramref name="mode"/> is <see cref="OnnxCodecMode.View"/> and an input needs a copy.</exception>

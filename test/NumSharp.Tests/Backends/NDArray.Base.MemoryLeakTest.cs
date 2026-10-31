@@ -13,6 +13,7 @@ namespace NumSharp.Tests.Backends
     /// 3. Circular reference scenarios are handled
     /// </summary>
     [TestClass]
+    [DoNotParallelize] // forces garbage collections, which suspend every thread: it runs with the serial set
     public class NDArray_Base_MemoryLeakTest
     {
         #region Memory Pressure Tests

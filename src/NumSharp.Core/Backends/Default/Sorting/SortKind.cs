@@ -12,17 +12,40 @@ namespace NumSharp.Backends.Sorting
     ///     one algorithm (NumPy clears the heapsort bit before it looks a legacy sort function up) and the stable kind another;
     ///     <c>StringDType</c> refuses the heapsort kind; NumSharp's numeric sorts give one answer for every kind but keep the
     ///     input NaN bits in the stable kind's float value sort, as NumPy's do.
+    ///     <para>
+    ///     The members are NumPy 2.4.2's header enum, in its order and with its values, aliases and NumPy's new-style names
+    ///     included (the dtype oracle's C-enum gate holds the mirror to the header). Compare values, never names: .NET's
+    ///     <c>ToString()</c> of an aliased value may print either name.
+    ///     </para>
     /// </remarks>
     internal enum NPY_SORTKIND
     {
+        /// <summary>NumPy's private "no kind given" sentinel; no converter returns it.</summary>
+        _NPY_SORT_UNDEFINED = -1,
+
         /// <summary>The default kind: <c>kind=None</c> / <c>'quicksort'</c> (NumPy's introsort, not stable).</summary>
         NPY_QUICKSORT = 0,
 
         /// <summary><c>kind='heapsort'</c>: the default kind for every legacy dtype, refused by <c>StringDType</c>.</summary>
         NPY_HEAPSORT = 1,
 
+        /// <summary>The legacy name of the stable kind (<c>kind='mergesort'</c>): <see cref="NPY_STABLESORT"/>'s value.</summary>
+        NPY_MERGESORT = 2,
+
         /// <summary><c>kind='stable'</c> / <c>'mergesort'</c> / <c>stable=True</c>: the stable sort.</summary>
         NPY_STABLESORT = 2,
+
+        /// <summary>NumPy's private new-style name of the heapsort kind (<see cref="NPY_HEAPSORT"/>'s value).</summary>
+        _NPY_SORT_HEAPSORT = 1,
+
+        /// <summary>NumPy's new-style name of the default kind (<see cref="NPY_QUICKSORT"/>'s value).</summary>
+        NPY_SORT_DEFAULT = 0,
+
+        /// <summary>NumPy's new-style name of the stable kind (<see cref="NPY_STABLESORT"/>'s value).</summary>
+        NPY_SORT_STABLE = 2,
+
+        /// <summary>NumPy's new-style descending flag; no NumPy 2.4.2 Python call sets it, and no NumSharp sort reads it.</summary>
+        NPY_SORT_DESCENDING = 4,
     }
 
     /// <summary>

@@ -158,6 +158,7 @@ namespace NumSharp.Tests.Backends.Strings
         ///     <c>U</c> and <c>S</c> alike. The fallback counter proves the heapsort ran.
         /// </summary>
         [TestMethod]
+        [DoNotParallelize] // flips the process-wide text-sort route switches and IL kernel generation (TextSort, DirectILKernelGenerator.Enabled)
         public void Argsort_HeapsortFallback_IsNumPys()
         {
             var u = U(Adversary.Select(v => v.ToString("D3")).ToArray());
@@ -397,6 +398,7 @@ namespace NumSharp.Tests.Backends.Strings
         ///     call) and strided short rows (keyed one row at a time). The counters prove each route ran.
         /// </summary>
         [TestMethod]
+        [DoNotParallelize] // flips the process-wide text-sort route switches and IL kernel generation (TextSort, DirectILKernelGenerator.Enabled)
         public void Routes_GiveOnePermutation()
         {
             var rng = new System.Random(11);
@@ -465,6 +467,7 @@ namespace NumSharp.Tests.Backends.Strings
         ///     off) gives the same permutation.
         /// </summary>
         [TestMethod]
+        [DoNotParallelize] // flips the process-wide text-sort route switches and IL kernel generation (TextSort, DirectILKernelGenerator.Enabled)
         public void CertainDuplicates_TakeTheDirectPort()
         {
             var values = Enumerable.Range(0, 40000)

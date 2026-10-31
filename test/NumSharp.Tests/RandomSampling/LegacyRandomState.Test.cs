@@ -937,6 +937,7 @@ namespace NumSharp.Tests.RandomSampling
         ///     Jacobi SVD cannot reproduce LAPACK's singular-vector signs in general).
         /// </summary>
         [TestMethod]
+        [DoNotParallelize] // binds the process-wide OpenBLAS backend (TensorEngine.Blas)
         public void MultivariateNormal_WithLapackBackend_ByteIdenticalToNumPy()
         {
             try
@@ -1364,6 +1365,7 @@ namespace NumSharp.Tests.RandomSampling
         ///     values two threads receive are exactly a split of what one thread would have drawn call by call.
         /// </summary>
         [TestMethod]
+        [DoNotParallelize] // a race test calibrated to run alone: its threads must own the cores to overlap
         public void ConcurrentCalls_InterleaveWholeCalls()
         {
             const int calls = 400;

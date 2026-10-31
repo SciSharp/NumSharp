@@ -910,8 +910,10 @@ namespace NumSharp
         /// <param name="obj">The operand: a <see cref="DType"/>, a C# <see cref="System.Type"/>, an <see cref="NPTypeCode"/> or a dtype string.</param>
         /// <returns>True when <paramref name="obj"/> denotes an equal descriptor.</returns>
         /// <remarks>
-        ///     NumPy reads <c>None</c> as <c>float64</c> (<c>np.dtype('f8') == None</c> is True); C#'s null is NumSharp's
-        ///     "no dtype" and is unequal to every descriptor, so the two differ there by design.
+        ///     NumPy reads <c>None</c> as <c>float64</c> here too (<c>np.dtype('f8') == None</c> is True), and NumSharp's
+        ///     converters do (<c>np.dtype((DType)null)</c> and <c>np.result_type((DType)null)</c> are float64), but equality
+        ///     cannot: <c>descr == null</c> is how the engine tests for a missing descriptor, so null is unequal to every
+        ///     descriptor by design.
         /// </remarks>
         public override bool Equals(object obj)
         {

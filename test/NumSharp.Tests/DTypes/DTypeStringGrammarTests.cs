@@ -165,6 +165,169 @@ namespace NumSharp.Tests.DTypes
             }
         }
 
+        /// <summary>
+        ///     NumPy looks a NAME up in its type dictionary by the WHOLE string (<c>PyDict_GetItemWithError(typeDict, obj)</c>),
+        ///     and no name starts with a byte-order character, so a prefix before a name is "not understood" — while the same
+        ///     prefix before a type code or a kind + size is read as a byte order. NumSharp's own C# aliases follow the
+        ///     same rule. Probed against NumPy 2.4.2.
+        /// </summary>
+        [DataTestMethod]
+        [DataRow("<float64")]
+        [DataRow(">float64")]
+        [DataRow("=float64")]
+        [DataRow("|float64")]
+        [DataRow("|bool")]
+        [DataRow(">double")]
+        [DataRow("<int")]
+        [DataRow("=complex128")]
+        [DataRow("<cdouble")]
+        [DataRow("<datetime")]
+        [DataRow("<Int32")]
+        public void ByteOrderPrefix_BeforeAName_IsNotUnderstood(string spelling)
+        {
+            Action act = () => np.dtype(spelling);
+            act.Should().Throw<NotSupportedException>().WithMessage($"data type '{spelling}' not understood");
+        }
+
+        /// <summary>The same prefixes before type codes and sized codes are byte orders (NumPy strips them first).</summary>
+        [TestMethod]
+        public void ByteOrderPrefix_BeforeACode_IsAByteOrder()
+        {
+            np.dtype("<f8").Should().BeSameAs(DType.Double, "an explicit host order folds into the native singleton");
+            np.dtype(">d").ToString(true).Should().Be("dtype('>f8')");
+            np.dtype("|?").Should().BeSameAs(DType.Boolean);
+            np.dtype("=b1").Should().BeSameAs(DType.Boolean);
+            np.dtype(">n").ToString(true).Should().Be(IntPtr.Size == 8 ? "dtype('>i8')" : "dtype('>i4')");
+        }
+
+        /// <summary>
+        ///     NumPy 2.x names and codes the old table lacked: <c>'cdouble'</c> (complex128's C name, in
+        ///     <c>np.sctypeDict</c>) and the intp letters <c>'n'</c> / <c>'N'</c> (NumPy 2.0 moved <c>np.intp</c> to
+        ///     <c>'n'</c>; <c>'p'</c> stays pointer-sized, the same integer on every platform NumSharp runs on).
+        /// </summary>
+        [TestMethod]
+        public void NumPy2Spellings_cdouble_n_N()
+        {
+            np.dtype("cdouble").Should().BeSameAs(DType.Complex);
+            np.dtype("n").Should().BeSameAs(IntPtr.Size == 8 ? DType.Int64 : DType.Int32);
+            np.dtype("N").Should().BeSameAs(IntPtr.Size == 8 ? DType.UInt64 : DType.UInt32);
+            np.dtype("p").Should().BeSameAs(np.dtype("n"));
+            foreach (var key in np.sctypeDict.Keys)
+                np.dtype(key).Should().Be(np.sctypeDict[key], $"np.dtype('{key}') reads the same table as np.sctypeDict");
+        }
+
+        /// <summary>
+        ///     NumPy's error texts quote the dtype string with Python's <c>repr</c> (<c>%R</c>): a single quote inside
+        ///     switches to double quotes and a control character is escaped; the removed-alias text quotes the whole
+        ///     string, prefix included.
+        /// </summary>
+        [TestMethod]
+        public void ErrorTexts_QuoteTheStringWithPythonRepr()
+        {
+            Action quote = () => np.dtype("a'b");
+            quote.Should().Throw<NotSupportedException>().WithMessage("data type \"a'b\" not understood");
+            Action newline = () => np.dtype("i4\n");
+            newline.Should().Throw<NotSupportedException>().WithMessage("data type 'i4\\n' not understood");
+            Action prefixedAlias = () => np.dtype("<int0");
+            prefixedAlias.Should().Throw<NotSupportedException>()
+                .WithMessage("Alias '<int0' was removed in NumPy 2.0. Use a name without a digit at the end.");
+        }
+
+        /// <summary>
+        ///     The size tail is parsed with C's <c>strtol</c>, which skips only C's six ASCII whitespace characters — a
+        ///     tab or a line feed before the size is fine, a no-break space or any other Unicode space is not.
+        /// </summary>
+        [TestMethod]
+        public void SizeTail_SkipsOnlyCWhitespace()
+        {
+            np.dtype("f\t8").Should().BeSameAs(DType.Double);
+            np.dtype("f\n8").Should().BeSameAs(DType.Double);
+            np.dtype("i\v4").Should().BeSameAs(DType.Int32);
+            Action nbsp = () => np.dtype("f\u00a08");
+            nbsp.Should().Throw<NotSupportedException>().WithMessage("data type 'f\\xa08' not understood");
+            Action enQuad = () => np.dtype("f\u20008");
+            enQuad.Should().Throw<NotSupportedException>().WithMessage("data type 'f\\u20008' not understood");
+        }
+
+        /// <summary>
+        ///     A lone character below <c>'\x18'</c> is a TYPE NUMBER to NumPy's <c>PyArray_DescrFromType</c>, not a letter:
+        ///     <c>'\x00'</c> is bool, <c>'\x0c'</c> float64, <c>'\x17'</c> float16, <c>'\x0d'</c> the long double (NumSharp's
+        ///     own <c>LongDoubleDType</c> over the 8-byte float64 lane, <c>dtype('float64')</c> with character <c>'g'</c> as on
+        ///     NumPy's Windows build), <c>'\x12'</c> / <c>'\x13'</c> the unsized bytes / str builtins (<c>dtype('S')</c>,
+        ///     <c>dtype('&lt;U')</c>); a byte-order prefix still applies, and a number NumSharp has no class for (complex64,
+        ///     object, void) is refused as unsupported. <c>'\x18'</c> (the expired <c>NPY_CHAR</c>) is not a dtype.
+        /// </summary>
+        [TestMethod]
+        public void ControlCharacters_AreTypeNumbers()
+        {
+            np.dtype("\x00").Should().BeSameAs(DType.Boolean);
+            np.dtype("\x01").Should().BeSameAs(DType.SByte);
+            np.dtype("\x0c").Should().BeSameAs(DType.Double);
+            np.dtype("\x0d").Should().BeSameAs(DTypeRegistry.LongDouble.singleton);
+            np.dtype("\x0d").ToString(true).Should().Be("dtype('float64')");
+            np.dtype("\x0d").@char.Should().Be('g');
+            np.dtype("\x0f").Should().BeSameAs(DType.Complex);
+            np.dtype("\x12").Should().BeSameAs(DTypeRegistry.Bytes.singleton);
+            np.dtype("\x13").Should().BeSameAs(DTypeRegistry.Str.singleton);
+            np.dtype("\x17").Should().BeSameAs(DType.Half);
+            np.dtype("\x15").Should().BeSameAs(DTypeRegistry.DateTime64.singleton);
+            np.dtype(">\x0c").ToString(true).Should().Be("dtype('>f8')");
+            Action complex64 = () => np.dtype("\x0e");
+            complex64.Should().Throw<NotSupportedException>();
+            Action obj = () => np.dtype("\x11");
+            obj.Should().Throw<NotSupportedException>();
+            Action voidType = () => np.dtype("\x14");
+            voidType.Should().Throw<NotSupportedException>();
+            Action expiredChar = () => np.dtype("\x18");
+            expiredChar.Should().Throw<NotSupportedException>().WithMessage("data type '\\x18' not understood");
+        }
+
+        /// <summary>
+        ///     Parentheses outside a comma string are no sub-array to NumPy: <c>'(2)f8'</c>, <c>'( )f8'</c> and
+        ///     <c>'f8()'</c> are "not understood". A leading empty tuple, also after a byte-order character, IS a comma
+        ///     string (<c>_check_for_commastring</c>), which NumSharp refuses as structured.
+        /// </summary>
+        [TestMethod]
+        public void Parentheses_FollowNumPysCommaStringTest()
+        {
+            foreach (var s in new[] { "(2)f8", "( )f8", "f8()", "(f8)" })
+            {
+                Action act = () => np.dtype(s);
+                act.Should().Throw<NotSupportedException>().WithMessage($"data type '{s}' not understood");
+            }
+            foreach (var s in new[] { "()f8", "<()f8", "(2,)f8" })
+            {
+                Action act = () => np.dtype(s);
+                act.Should().Throw<NotSupportedException>().WithMessage("NumSharp does not support structured*");
+            }
+        }
+
+        /// <summary>
+        ///     Valid NumPy dtypes NumSharp has no class for (complex64, object, void) are "not supported"; the same spellings
+        ///     NumPy itself refuses keep NumPy's "not understood" (a prefixed name - NumPy looks names up by the whole string,
+        ///     so <c>'&lt;str'</c> and <c>'&lt;bytes'</c> too -, the alias <c>'a'</c> with a prefix, <c>'O16'</c>). The string
+        ///     classes are NumSharp's own: <c>'a'</c>, <c>'bytes'</c>, <c>'&gt;S'</c>, <c>'T'</c> and <c>'&lt;T'</c> parse.
+        /// </summary>
+        [TestMethod]
+        public void UnsupportedClasses_AreTold_FromInvalidStrings()
+        {
+            foreach (var s in new[] { "csingle", "complex64", "object", "O4", "O8", "<O8", "void", "V" })
+            {
+                Action act = () => np.dtype(s);
+                act.Should().Throw<NotSupportedException>().WithMessage("*is not supported by NumSharp", s);
+            }
+            foreach (var s in new[] { "<object", "|a", "O16", "O2", "<csingle", "<str", "<bytes" })
+            {
+                Action act = () => np.dtype(s);
+                act.Should().Throw<NotSupportedException>().WithMessage($"data type '{s}' not understood", s);
+            }
+            np.dtype("a").Should().BeSameAs(DTypeRegistry.Bytes.singleton);
+            np.dtype("bytes").Should().BeSameAs(DTypeRegistry.Bytes.singleton);
+            np.dtype(">S").Should().BeSameAs(DTypeRegistry.Bytes.singleton);
+            np.dtype("T").Meta.Should().BeSameAs(DTypeRegistry.VString);
+            np.dtype("<T").Meta.Should().BeSameAs(DTypeRegistry.VString);
+        }
+
         [TestMethod]
         public void StringDTypeGrammar_ParsesNumPysSpellings()
         {

@@ -242,6 +242,7 @@ namespace NumSharp.Tests.Backends.Strings
         ///     axes; the counters prove each route ran.
         /// </summary>
         [TestMethod]
+        [DoNotParallelize] // flips the process-wide text-search route switches and IL kernel generation (TextArgReduce, TextSearch, DirectILKernelGenerator.Enabled)
         public void ArgReductions_Routes_GiveOneAnswer()
         {
             var rng = new System.Random(16);
@@ -426,6 +427,7 @@ namespace NumSharp.Tests.Backends.Strings
         ///     prefixes; the counters prove each route ran.
         /// </summary>
         [TestMethod]
+        [DoNotParallelize] // flips the process-wide text-search route switches and IL kernel generation (TextArgReduce, TextSearch, DirectILKernelGenerator.Enabled)
         public void SearchSorted_Routes_GiveNumPysAnswers()
         {
             var rng = new System.Random(32);
@@ -486,6 +488,7 @@ namespace NumSharp.Tests.Backends.Strings
         ///     prefix but for one element in the middle (and keys that break it in one place) is searched from unit 0 there.
         /// </summary>
         [TestMethod]
+        [DoNotParallelize] // flips the process-wide text-search route switches and IL kernel generation (TextArgReduce, TextSearch, DirectILKernelGenerator.Enabled)
         public void SearchSorted_ThePrefixBreakerInTheMiddle_IsSeen()
         {
             var rng = new System.Random(5);
@@ -564,6 +567,7 @@ namespace NumSharp.Tests.Backends.Strings
         ///     check compares the tails of equal keys), so NumPy's exact path answers.
         /// </summary>
         [TestMethod]
+        [DoNotParallelize] // flips the process-wide text-search route switches and IL kernel generation (TextArgReduce, TextSearch, DirectILKernelGenerator.Enabled)
         public void SearchSorted_EqualKeysWithDescendingTails_AreNotSorted()
         {
             foreach (var kind in new[] { "U12", "S12" })
@@ -585,6 +589,7 @@ namespace NumSharp.Tests.Backends.Strings
         ///     defer to it (sorted and unsorted haystacks, keys sorted and not).
         /// </summary>
         [TestMethod]
+        [DoNotParallelize] // flips the process-wide text-search route switches and IL kernel generation (TextArgReduce, TextSearch, DirectILKernelGenerator.Enabled)
         public void SearchSorted_KeysOneUnitShort_DeferToTheLastUnit()
         {
             var rng = new System.Random(3);
@@ -615,6 +620,7 @@ namespace NumSharp.Tests.Backends.Strings
         ///     every route.
         /// </summary>
         [TestMethod]
+        [DoNotParallelize] // flips the process-wide text-search route switches and IL kernel generation (TextArgReduce, TextSearch, DirectILKernelGenerator.Enabled)
         public void Searches_ReadNothingOutsideTheirOperands()
         {
             if (!FencedMemory.IsSupported)

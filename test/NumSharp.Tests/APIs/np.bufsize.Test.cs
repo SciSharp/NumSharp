@@ -11,6 +11,7 @@ namespace NumSharp.Tests.APIs
     ///     (see <c>numpy._core._ufunc_config.setbufsize</c> + <c>umath/extobj.c</c>).
     /// </summary>
     [TestClass]
+    [DoNotParallelize] // redirects the process-wide Console.Out
     public class np_bufsize_Test
     {
         // bufsize is thread-local and persists until changed; reset after every test so a value

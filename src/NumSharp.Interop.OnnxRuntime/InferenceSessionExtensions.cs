@@ -47,6 +47,7 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <exception cref="ArgumentNullException"><paramref name="session"/> or <paramref name="input"/> is null.</exception>
         /// <exception cref="InvalidOperationException">The model has more than one input or output (use the named overloads), or <paramref name="mode"/> is <see cref="OnnxCodecMode.View"/> and the input needs a copy.</exception>
         /// <exception cref="ValueError"><paramref name="casting"/> is not one of the five rule names.</exception>
+        /// <exception cref="TypeError"><paramref name="casting"/> is null, Python's None: NumPy's <c>casting must be str, not NoneType</c>.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a member of <see cref="OnnxCodecMode"/>.</exception>
         /// <exception cref="InvalidCastException">The input's dtype does not cast to the declared one under <paramref name="casting"/>.</exception>
         /// <exception cref="ArgumentException">The input's shape contradicts the declared one.</exception>
@@ -74,6 +75,7 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <exception cref="ArgumentNullException"><paramref name="session"/>, <paramref name="inputName"/>, <paramref name="input"/> or <paramref name="outputName"/> is null.</exception>
         /// <exception cref="ArgumentException">The model has no such input, or the input's shape contradicts the declared one.</exception>
         /// <exception cref="ValueError"><paramref name="casting"/> is not one of the five rule names.</exception>
+        /// <exception cref="TypeError"><paramref name="casting"/> is null, Python's None: NumPy's <c>casting must be str, not NoneType</c>.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a member of <see cref="OnnxCodecMode"/>.</exception>
         /// <exception cref="InvalidCastException">The input's dtype does not cast to the declared one under <paramref name="casting"/>.</exception>
         /// <exception cref="InvalidOperationException"><paramref name="mode"/> is <see cref="OnnxCodecMode.View"/> and the input needs a copy.</exception>
@@ -120,6 +122,7 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <exception cref="ArgumentNullException"><paramref name="session"/> or <paramref name="inputs"/> is null, or an input name or array in it is null.</exception>
         /// <exception cref="ArgumentException">The model has no input of a given name, or an input's shape contradicts the declared one.</exception>
         /// <exception cref="ValueError"><paramref name="casting"/> is not one of the five rule names.</exception>
+        /// <exception cref="TypeError"><paramref name="casting"/> is null, Python's None: NumPy's <c>casting must be str, not NoneType</c>.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a member of <see cref="OnnxCodecMode"/>.</exception>
         /// <exception cref="InvalidCastException">An input's dtype does not cast to the declared one under <paramref name="casting"/>.</exception>
         /// <exception cref="InvalidOperationException"><paramref name="mode"/> is <see cref="OnnxCodecMode.View"/> and an input needs a copy; or an output lives in device memory.</exception>
@@ -203,6 +206,7 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     in memory; or the array for an output that is a fed input does not have that input's shape.
         /// </exception>
         /// <exception cref="ValueError"><paramref name="casting"/> is not one of the five rule names.</exception>
+        /// <exception cref="TypeError"><paramref name="casting"/> is null, Python's None: NumPy's <c>casting must be str, not NoneType</c>.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a member of <see cref="OnnxCodecMode"/>.</exception>
         /// <exception cref="InvalidCastException">An input's dtype does not cast to the declared one under <paramref name="casting"/>.</exception>
         /// <exception cref="InvalidOperationException">

@@ -485,10 +485,15 @@ namespace NumSharp
         ///     <c>decimal</c> is STRONG (contributes its dtype), while a C# integer, <c>float</c>/<c>double</c> or
         ///     <see cref="Complex"/> literal is WEAK — it contributes only its NEP 50 class (<c>_PyLongDType</c>,
         ///     <c>_PyFloatDType</c>, <c>_PyComplexDType</c>) and no width, so <c>result_type(int8_array, 300)</c> is
-        ///     <c>int8</c>. A <see cref="DTypeMeta"/> operand contributes the class alone.
+        ///     <c>int8</c>. A <see cref="DTypeMeta"/> operand contributes the class alone, and a null operand is NumPy's
+        ///     <c>None</c>: the strong float64 descriptor (<c>np.result_type(None, np.int8)</c> is float64).
         /// </summary>
+        /// <param name="arraysAndDtypes">The operands, classified by <see cref="ClassifyOperand"/>.</param>
+        /// <returns>The result descriptor.</returns>
         /// <exception cref="ValueError"><c>at least one array or dtype is required</c>.</exception>
         /// <exception cref="DTypePromotionError">No common dtype exists.</exception>
+        /// <exception cref="TypeError">An operand that is no dtype (see <see cref="ClassifyOperand"/>).</exception>
+        /// <exception cref="NotSupportedException">A dtype string or <see cref="Type"/> NumSharp has no class for.</exception>
         public static DType ResultType(params object[] arraysAndDtypes)
         {
             if (arraysAndDtypes == null || arraysAndDtypes.Length == 0)
@@ -506,7 +511,11 @@ namespace NumSharp
             if (n == 1)
             {
                 /* If the input is a single value, skip promotion. */
-                return allDescriptors[0] != null ? allDTypes[0].ensure_canonical(allDescriptors[0]) : allDTypes[0].default_descr();
+                // NumPy's lone operand is `PyArray_DTYPE(np.asarray(obj))`: a literal is discovered by value (a C# ulong
+                // past int64 is uint64, as 2**63 is in NumPy), and a class operand stands for its default descriptor.
+                return allDescriptors[0] != null
+                    ? allDTypes[0].ensure_canonical(allDescriptors[0])
+                    : allDTypes[0].discover_descr_from_pyobject(arraysAndDtypes[0]);
             }
 
             var commonDType = PromoteDTypeSequence(allDTypes);
@@ -575,12 +584,28 @@ namespace NumSharp
         /// <summary>
         ///     Sorts one <c>result_type</c> operand into (class, descriptor-or-null): the NEP 50 weak/strong rule for C#.
         /// </summary>
+        /// <param name="operand">
+        ///     The operand: an <see cref="NDArray"/>, <see cref="DType"/>, <see cref="DTypeMeta"/>, <see cref="NPTypeCode"/>,
+        ///     <see cref="Type"/>, dtype string, a C# scalar, or null — NumPy's <c>None</c>, the strong float64 descriptor
+        ///     (<see cref="np.DefaultTypeDescr"/>).
+        /// </param>
+        /// <param name="meta">The operand's DType class (an abstract <c>_Py*DType</c> class for a weak literal).</param>
+        /// <param name="descr">The operand's descriptor when it is strong; null when it is a weak literal or a bare class.</param>
+        /// <exception cref="TypeError">An object that is no dtype (<c>Cannot interpret '…' as a data type</c>), or a malformed datetime unit in a dtype string.</exception>
+        /// <exception cref="NotSupportedException">A dtype string or <see cref="Type"/> NumSharp has no class for (NumPy's texts).</exception>
+        /// <exception cref="ValueError">A datetime divisor in a dtype string that is not a multiple of a lower unit.</exception>
+        /// <exception cref="ArgumentException"><see cref="NPTypeCode.Empty"/>, which has no class.</exception>
         internal static void ClassifyOperand(object operand, out DTypeMeta meta, out DType descr)
         {
             switch (operand)
             {
                 case null:
-                    throw new ArgumentNullException(nameof(operand), "result_type operands cannot be null");
+                    // NumPy's array_result_type converts an operand that is neither an array nor a scalar with
+                    // PyArray_DescrConverter, whose None is the default float64 descriptor: a STRONG operand
+                    // (np.result_type(None, np.int8) is float64).
+                    descr = np.DefaultTypeDescr;
+                    meta = descr.Meta;
+                    return;
                 case DType d:
                     meta = d.Meta;
                     descr = d;

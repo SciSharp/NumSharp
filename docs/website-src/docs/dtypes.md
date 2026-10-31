@@ -91,7 +91,8 @@ NumSharp's `np.dtype(string)` mirrors NumPy 2.x exactly for every form NumSharp 
 | `"i"` / `"I"` | `Int32` / `UInt32` | C `int`, always 32-bit; on Windows its own class `np.intc` / `np.uintc` (see [C-type classes](#c-type-classes)) |
 | `"l"` / `"L"` | **platform-dependent** | C `long` - see [Platform-Dependent Types](#platform-dependent-types) |
 | `"q"` / `"Q"` | `Int64` / `UInt64` | C `long long`, always 64-bit; on Linux/macOS its own class `np.longlong` / `np.ulonglong` |
-| `"n"` / `"N"`, `"p"` / `"P"` | pointer-sized | see [Platform-Dependent Types](#platform-dependent-types) |
+| `"n"` / `"N"` | pointer-sized | NumPy 2.x's letters for `np.intp` / `np.uintp` |
+| `"p"` / `"P"` | pointer-sized | see [Platform-Dependent Types](#platform-dependent-types) |
 | `"e"` | `Half` | NumPy: float16 |
 | `"f"` | `Single` | NumPy: float32 |
 | `"d"` / `"g"` | `Double` | `g` is the long double: its own class `np.longdouble`, stored as float64 (8 bytes, as on NumPy's Windows build) |
@@ -102,6 +103,8 @@ NumSharp's `np.dtype(string)` mirrors NumPy 2.x exactly for every form NumSharp 
 | `"T"` | `StringDType()` | variable-width UTF-8; use `np.dtypes.StringDType(na_object: ..., coerce: ...)` for parameters |
 | `"V"` / `"O"` | **throws** | void, object-not supported |
 | `"M"` / `"m"` | datetime64 / timedelta64 descriptors | parse, promote and cast-check; arrays cannot be allocated yet |
+
+A single control character below `"\x18"` is a type NUMBER, as in NumPy (`np.dtype("\x0c")` is float64, `np.dtype("\x00")` bool, `np.dtype("\x13")` the unsized `<U`).
 
 ### Sized variants
 
@@ -138,13 +141,17 @@ NumSharp's `np.dtype(string)` mirrors NumPy 2.x exactly for every form NumSharp 
 | `"float32"` / `"single"` | `Single` |
 | `"float64"` / `"double"` | `Double` |
 | `"float"` | `Double` (NumPy: `float` → float64) |
-| `"complex128"` / `"complex"` | `Complex` |
-| `"complex64"` | **throws** |
+| `"complex128"` / `"complex"` / `"cdouble"` | `Complex` |
+| `"complex64"` / `"csingle"` | **throws** |
 | `"bool"` / `"bool_"` | `Boolean` |
 | `"str"` / `"str_"` / `"unicode"` | `<U` (unsized) |
 | `"bytes"` / `"bytes_"` | `S` (unsized) |
 
-Byte-order prefixes (`<`, `>`, `=`, `|`) are parsed, not discarded. An explicit host order normalizes to native (`np.dtype("<i4")` on a little-endian host); a non-native descriptor keeps its order (`np.dtype(">U5").byteorder == '>'`). Buffer and file readers convert non-native data where required. `S` has no byte order. `StringDType` also has no byte order, and its `newbyteorder` operation raises NumPy's `TypeError`.
+Byte-order prefixes (`<`, `>`, `=`, `|`) are parsed, not discarded, before a single-character or sized code. An explicit host order normalizes to native (`np.dtype("<i4")` on a little-endian host); a non-native descriptor keeps its order (`np.dtype(">U5").byteorder == '>'`, `np.dtype(">i4").isnative` is false). Buffer and file readers convert non-native data where required. `S` has no byte order. `StringDType` also has no byte order, and its `newbyteorder` operation raises NumPy's `TypeError`. A NAME takes no prefix, as in NumPy, which looks names up by the whole string: `np.dtype("<float64")` throws `data type '<float64' not understood`, and `np.dtype("<str")` throws the same way.
+
+An invalid string throws `NotSupportedException` with NumPy's text, the string quoted the way Python's `repr` quotes it
+(`data type "a'b" not understood`). A string that NumPy accepts but whose dtype NumSharp has no storage for (complex64,
+void, object) says `is not supported by NumSharp`.
 
 ---
 
@@ -162,12 +169,16 @@ Type clr = np.int32.type;                        // typeof(int)
 
 Names that clash with C# keywords use `@`: `np.@byte`, `np.@short`, `np.@long`, `np.@bool`, `np.@decimal`. **`np.@char` is the `numpy.char` module**, with an implicit conversion to the existing Char descriptor for compatibility. Use `np.dtype(typeof(char))` when you want the descriptor itself; `np.@char.array(...)` creates a chararray of `S` / `U` strings, not a `Char` array.
 
-Aliases and parsed descriptors compare as descriptors:
+Aliases and parsed descriptors compare as descriptors, and a builtin alias and the string parser resolve to the same descriptor object (this invariant is guaranteed):
 
 ```csharp
 np.int32 == np.dtype("int32");     // true
 np.str_ == np.dtype("U");         // true
 np.dtype("U3") == np.dtype("U5"); // false: width matters
+// These are always true on every platform:
+ReferenceEquals(np.int32, np.dtype("int32"))
+ReferenceEquals(np.@long, np.dtype("long"))
+ReferenceEquals(np.float16, np.dtype("float16"))
 ```
 
 Use `.type` or an explicit `(Type)` cast only when a .NET API needs the CLR element type. It is not a replacement for a text descriptor.
@@ -220,9 +231,9 @@ NumPy has several dtype families that NumSharp does not store as arrays. They ar
 | `complex64` | `F`, `c8` | NumSharp has only one complex type (`complex128`). Silently widening would double memory without asking. See [Complex: Only 128-bit Is Supported](#complex-only-128-bit-is-supported). |
 | `void` / `V` | `V` | NumPy "raw bytes" scalar. No .NET equivalent; use `byte[]` or `Memory<byte>`. |
 | `object` / `O` | `O` | Arbitrary Python-object arrays. Use .NET collections; `NDArray<object>` is not supported. The string split functions return the specialized `NDListArray`, not a general object dtype. |
-| `datetime64` | `M`, `M8[ns]` etc. | The descriptors parse, promote and cast-check, but arrays cannot be allocated until the storage lands (Stage C of the dtype plan). Use `DateTime[]` directly, or `long[]` with epoch seconds. |
-| `timedelta64` | `m`, `m8[us]` etc. | Same reason as `datetime64`. Use `TimeSpan[]` or `long[]`. |
-| Structured / record dtypes | `(...)` in dtype string | NumPy allows composite dtypes like `np.dtype([('x', 'f4'), ('y', 'i4')])` for heterogeneous records. NumSharp throws on any dtype string containing `(`. Use a struct array or multiple parallel `NDArray`s. |
+| `datetime64` | `M`, `M8[ns]` etc. | The descriptors exist (they parse, print, promote and cast-check with NumPy's unit rules), but arrays of them cannot be allocated yet. Use `DateTime[]` directly, or `long[]` with epoch seconds. |
+| `timedelta64` | `m`, `m8[us]` etc. | Same as `datetime64`: descriptors only. Use `TimeSpan[]` or `long[]`. |
+| Structured / record dtypes | comma strings: `"f8,i4"`, `"3f8"`, `"(2,)f8"` | NumPy allows composite dtypes like `np.dtype([('x', 'f4'), ('y', 'i4')])` for heterogeneous records. NumSharp throws on every string NumPy reads as a comma string (a top-level comma, a leading digit or a leading `()`). Use a struct array or multiple parallel `NDArray`s. |
 | Sub-array dtypes | `('f4', (3,))` | NumPy dtype-with-subshape. Not supported. |
 
 Every row above is tested in `test/NumSharp.Tests/Creation/DTypeStringParityTests.cs` with an `ExpectThrow` assertion. If you run into one of these in ported NumPy code, the exception message tells you which NumSharp alternative to use.
@@ -586,6 +597,10 @@ Quick reference for common pairs:
 | `float16` | `float32` | `float32` | higher precision wins |
 | numeric | `complex128` | `complex128` | complex absorbs numeric operands; text follows descriptor promotion |
 
+For any pair, ask `np.promote_types(a, b)` or `np.result_type(...)`; the full 15×15 table is `_nptypemap_arr_arr` in `src/NumSharp.Core/Logic/np.find_common_type.cs`. Tests in `test/NumSharp.Tests/Casting/DtypeConversionMatrixTests.cs` verify every pair against NumPy 2.4.2.
+
+`np.find_common_type` is not this rule. It is NumPy 1.26.4's older function (deprecated in 1.25, removed in 2.0), ported as it was: the arrays' type is the first entry of the list `?bBhHiIlLqQefdgFDGO` that every array type casts to safely, and a scalar type changes it only when it is of a higher kind. So `np.find_common_type(new[] { np.int8 }, new[] { np.int64 })` is int8, where `np.result_type(np.int8, np.int64)` is int64.
+
 String promotion also accounts for the descriptor's width and missing-value policy: `S3` with `U2` promotes to `U3`; `T` with `U` promotes to `T`; `T` with `S` or a numeric dtype has no common dtype. Fixed-width text can promote with a strong numeric dtype to a wide enough string, but an individual ufunc still needs a loop for its operands. Promotion does not make `text + number` numeric addition or implicit concatenation.
 
 ```csharp
@@ -732,6 +747,7 @@ On `NDArray` itself the key properties are `.dtype` (a `DType`, NumPy's `ndarray
 | `np.dtype("int32").name` | `string` | NumPy's dtype name (`"int32"`, `"datetime64[s]"`) |
 | `np.dtype("int32").byteorder` | `char` | `'='` native, `'\|'` for 1-byte dtypes, `'>'` / `'<'` when given explicitly non-native (`np.dtype(">i4")`) |
 | `DType d = typeof(int);` | `DType` | A C# type, an `NPTypeCode` or a dtype string converts to `DType` implicitly |
+| `np.dtype((DType)null)` | `DType` | NumPy's `np.dtype(None)`: the float64 descriptor, for every `np.dtype` overload and every `np.result_type` operand. Write the null typed: a bare `null` matches the string and `Type` overloads alike |
 | `InfoOf<T>.Size` | `int` | Byte size of an unmanaged CLR element type; use `arr.itemsize` for a string dtype |
 | `InfoOf<T>.NPTypeCode` | `NPTypeCode` | `NPTypeCode` for CLR type `T` |
 
@@ -752,7 +768,6 @@ On `NDArray` itself the key properties are `.dtype` (a `DType`, NumPy's `ndarray
 | `UnicodeEncodeError` / `UnicodeDecodeError` | An invalid encoding conversion, such as non-ASCII `U` → `S` or invalid UTF-8 `S` → `T` |
 | `TypeError` | Complex → non-complex scalar cast (`(int)complexScalar`, etc.) |
 | `IncorrectShapeException` | NDArray → scalar cast on non-0-d array (matches NumPy 2.x's strict 0-d requirement) |
-| `ArgumentNullException` | `np.dtype(null)` |
 
 ---
 

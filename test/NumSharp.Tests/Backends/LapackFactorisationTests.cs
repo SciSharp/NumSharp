@@ -20,6 +20,7 @@ namespace NumSharp.Tests.Backends
     ///     the claim, and it was verified bit-exact against NumPy on the reference host.
     /// </remarks>
     [TestClass]
+    [DoNotParallelize] // binds the process-wide OpenBLAS backend (TensorEngine.Blas)
     public class LapackFactorisationTests
     {
         private const double Tol = 1e-9;

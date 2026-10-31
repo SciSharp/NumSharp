@@ -484,6 +484,7 @@ namespace NumSharp.Tests.RandomSampling
         ///     values fall outside the stream (measured: 72–99% before the fix).
         /// </summary>
         [TestMethod]
+        [DoNotParallelize] // a race test calibrated to run alone: its threads must own the cores to overlap
         public void SharedGenerator_ConcurrentDraws_ConsumeTheSequentialStream()
         {
             const int threads = 4, per = 50_000;
@@ -504,6 +505,7 @@ namespace NumSharp.Tests.RandomSampling
         ///     produce exactly the values of the sequential stream (as a multiset).
         /// </summary>
         [TestMethod]
+        [DoNotParallelize] // a race test calibrated to run alone: its threads must own the cores to overlap
         public void SharedGenerator_ConcurrentScalarDraws_ConsumeTheSequentialStream()
         {
             const int total = 20_000;
@@ -522,6 +524,7 @@ namespace NumSharp.Tests.RandomSampling
         ///     bit generator's), so their concurrent draws also partition one sequential stream.
         /// </summary>
         [TestMethod]
+        [DoNotParallelize] // a race test calibrated to run alone: its threads must own the cores to overlap
         public void TwoGeneratorsOverOneBitGenerator_ShareTheLock()
         {
             const int per = 50_000;

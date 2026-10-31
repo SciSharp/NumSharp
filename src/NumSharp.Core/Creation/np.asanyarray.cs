@@ -16,8 +16,16 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">Input data, in any form that can be converted to an array. This includes scalars, lists, lists of tuples, tuples, tuples of tuples, tuples of lists, and ndarrays.</param>
         /// <param name="dtype">By default, the data-type is inferred from the input data.</param>
+        /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
         /// <returns>Array interpretation of a. If a is an ndarray or a subclass of ndarray, it is returned as-is and no copy is performed.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asanyarray.html</remarks>
+        /// <exception cref="ValueError"><paramref name="device"/> is neither null nor <c>"cpu"</c> (NumPy's <c>Device not
+        ///     understood</c>), or a <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer
+        ///     than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="NotSupportedException"><paramref name="a"/> is null and <paramref name="dtype"/> is null (NumPy's
+        ///     object array).</exception>
+        /// <exception cref="TypeError"><paramref name="a"/> is null and <paramref name="dtype"/> is an integer (or
+        ///     <c>decimal</c>) dtype: Python's <c>int(None)</c>.</exception>
         public static NDArray asanyarray(in object a, DType dtype = null, string device = null)
             => asanyarray(in a, dtype, 'K', device);
 

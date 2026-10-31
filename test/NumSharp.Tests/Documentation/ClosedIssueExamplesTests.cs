@@ -96,6 +96,7 @@ namespace NumSharp.Tests.Documentation
 
         // Issue #454 - np.linalg.lstsq (OpenBLAS)
         [TestMethod]
+        [DoNotParallelize] // binds the process-wide OpenBLAS backend (TensorEngine.Blas)
         public void Issue454_Lstsq_MatchesNumPy()
         {
             if (!TryEnableOpenBlas()) { Assert.Inconclusive("OpenBLAS backend not available on this host."); return; }
@@ -110,6 +111,7 @@ namespace NumSharp.Tests.Documentation
 
         // Issue #497 - np.linalg.pinv (OpenBLAS)
         [TestMethod]
+        [DoNotParallelize] // binds the process-wide OpenBLAS backend (TensorEngine.Blas)
         public void Issue497_Pinv_MatchesNumPy()
         {
             if (!TryEnableOpenBlas()) { Assert.Inconclusive("OpenBLAS backend not available on this host."); return; }
@@ -124,6 +126,7 @@ namespace NumSharp.Tests.Documentation
 
         // Issue #472 - np.linalg.matrix_rank (OpenBLAS)
         [TestMethod]
+        [DoNotParallelize] // binds the process-wide OpenBLAS backend (TensorEngine.Blas)
         public void Issue472_MatrixRank_MatchesNumPy()
         {
             if (!TryEnableOpenBlas()) { Assert.Inconclusive("OpenBLAS backend not available on this host."); return; }
@@ -457,6 +460,7 @@ namespace NumSharp.Tests.Documentation
 
         // Issue #496 - polyfit (1-D) and a polynomial surface via lstsq (OpenBLAS)
         [TestMethod]
+        [DoNotParallelize] // binds the process-wide OpenBLAS backend (TensorEngine.Blas)
         public void Issue496_Polyfit_And_SurfaceLstsq()
         {
             if (!TryEnableOpenBlas()) { Assert.Inconclusive("OpenBLAS backend not available on this host."); return; }
@@ -512,6 +516,7 @@ namespace NumSharp.Tests.Documentation
 
         // Issue #116 - OpenBLAS is the pluggable provider (MKL alternative)
         [TestMethod]
+        [DoNotParallelize] // binds the process-wide OpenBLAS backend (TensorEngine.Blas)
         public void Issue116_OpenBlasProvider()
         {
             if (!TryEnableOpenBlas()) { Assert.Inconclusive("OpenBLAS backend not available on this host."); return; }

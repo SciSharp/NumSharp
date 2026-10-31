@@ -20,8 +20,10 @@ namespace NumSharp.Tests.DTypes
     ///     NumPy structs the DTypes folder ports (<see cref="ArrayMethod"/>, <see cref="ArrayMethodContext"/>,
     ///     <see cref="DatetimeMetaData"/>, <see cref="VStringParameters"/>), and the StringDType allocator
     ///     (<see cref="VStringAllocator"/>, NumPy's <c>NpyString_*</c> functions and static-string macros): every member
-    ///     NumPy names must exist here under NumPy's exact spelling, and every probed value, error, comparison, promotion,
-    ///     class attribute and casting resolution must equal NumPy's. No Python runs at test time.
+    ///     NumPy names must exist here under NumPy's exact spelling, the C enums NumSharp mirrors (<see cref="NPY_TYPES"/>,
+    ///     <see cref="NPY_TYPECHAR"/>, ...) must have the members, values and order of NumPy's headers, and every probed
+    ///     dtype string, value, error, comparison, promotion, class attribute and casting resolution must equal NumPy's.
+    ///     No Python runs at test time.
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -95,6 +97,7 @@ namespace NumSharp.Tests.DTypes
             Of("promote").Count.Should().BeGreaterThan(700);
             Of("class").Count.Should().BeGreaterThan(30);
             Of("cast").Count.Should().BeGreaterThan(1500);
+            Of("parse").Count.Should().BeGreaterThan(1500);
         }
 
         // ---------------------------------------------------------------------------------------------------------
@@ -457,6 +460,144 @@ namespace NumSharp.Tests.DTypes
         }
 
         // ---------------------------------------------------------------------------------------------------------
+        // NumPy's C enums
+        // ---------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     The C enums of NumPy's <c>ndarraytypes.h</c> that a NumSharp enum of the same name mirrors. A mirror must hold
+        ///     every NumPy member under NumPy's name and value, in NumPy's order, and nothing else, so a mirror that falls
+        ///     behind the header fails <see cref="CEnums_MirrorNumPysHeader"/> (as <see cref="NPY_TYPECHAR"/> had: it kept
+        ///     NumPy 1.x's <c>NPY_INTPLTR</c>/<c>NPY_UINTPLTR</c> and lacked NumPy 2's <c>NPY_VSTRINGLTR</c>).
+        /// </summary>
+        private static readonly Dictionary<string, Type> EnumPorts = new(StringComparer.Ordinal)
+        {
+            ["NPY_TYPES"] = typeof(NPY_TYPES),
+            ["NPY_TYPECHAR"] = typeof(NPY_TYPECHAR),
+            ["NPY_SCALARKIND"] = typeof(NPY_SCALARKIND),
+            ["NPY_ORDER"] = typeof(NPY_ORDER),
+            ["NPY_CASTING"] = typeof(NPY_CASTING),
+            ["NPY_DATETIMEUNIT"] = typeof(NPY_DATETIMEUNIT),
+            ["NPY_SORTKIND"] = typeof(NumSharp.Backends.Sorting.NPY_SORTKIND),
+        };
+
+        /// <summary>
+        ///     The <c>ndarraytypes.h</c> enums no NumSharp enum mirrors, and why. Each must stay without a NumSharp enum of its
+        ///     name: adding one turns the test red until its entry moves to <see cref="EnumPorts"/>.
+        /// </summary>
+        private static readonly Dictionary<string, string> NotPortedEnums = new(StringComparer.Ordinal)
+        {
+            ["NPY_SELECTKIND"] = "np.partition takes NumPy's kind string 'introselect'",
+            ["NPY_SEARCHSIDE"] = "np.searchsorted takes NumPy's side strings 'left' / 'right'",
+            ["NPY_CLIPMODE"] = "np.take / np.put / np.choose take NumPy's mode strings 'raise' / 'wrap' / 'clip'",
+            ["NPY_CORRELATEMODE"] = "np.correlate / np.convolve take NumPy's mode strings 'valid' / 'same' / 'full'",
+            ["NPY_BUSDAY_ROLL"] = "NumSharp has no business-day functions (np.busday_offset)",
+        };
+
+        /// <summary>The shared reason of the four <see cref="NPY_ORDER"/> divergences.</summary>
+        private const string NpyOrderNumbering =
+            "NumSharp numbers NPY_ORDER from NPY_KEEPORDER = 0 to NPY_ANYORDER = 3, NumPy from NPY_ANYORDER = -1 to NPY_KEEPORDER = 2; " +
+            "renumbering changes what default(NPY_ORDER) means (K today, C under NumPy's values), so it needs an audit of every use";
+
+        /// <summary>
+        ///     Members of a mirrored enum that knowingly differ from NumPy (absent, or another value), and why. Each must still
+        ///     differ: matching NumPy turns the test red until its entry is removed.
+        /// </summary>
+        private static readonly Dictionary<(string Enum, string Member), string> EnumMemberDivergences = new()
+        {
+            [("NPY_ORDER", "NPY_ANYORDER")] = NpyOrderNumbering,
+            [("NPY_ORDER", "NPY_CORDER")] = NpyOrderNumbering,
+            [("NPY_ORDER", "NPY_FORTRANORDER")] = NpyOrderNumbering,
+            [("NPY_ORDER", "NPY_KEEPORDER")] = NpyOrderNumbering,
+            [("NPY_CASTING", "_NPY_ERROR_OCCURRED_IN_CAST")] = "a NumSharp cast that fails throws; no call returns NumPy's -1 sentinel",
+            [("NPY_CASTING", "NPY_SAME_VALUE_CASTING")] = "NumPy 2.4's 'same_value' casting is not implemented",
+        };
+
+        /// <summary>
+        ///     Members of a mirrored enum with no NumPy counterpart, and why. Each must stay absent from NumPy's header: if
+        ///     NumPy gains the name, the test turns red so the two meanings are reconciled.
+        /// </summary>
+        private static readonly Dictionary<(string Enum, string Member), string> EnumExtensions = new()
+        {
+            [("NPY_TYPES", "NUMSHARP_DECIMAL")] = "NumSharp's decimal dtype, numbered in NumPy's user-defined range",
+            [("NPY_TYPES", "NUMSHARP_CHAR")] = "NumSharp's char dtype, numbered in NumPy's user-defined range",
+        };
+
+        /// <summary>
+        ///     Every named enum of NumPy's <c>ndarraytypes.h</c> (the <c>c_enums</c> of the <c>members</c> record, which the
+        ///     generator reads from the header with C's value rules) is mirrored by the NumSharp enum of its name, with NumPy's
+        ///     members, values and declaration order and only the listed extensions, or is listed as not mirrored.
+        /// </summary>
+        [TestMethod]
+        public void CEnums_MirrorNumPysHeader()
+        {
+            var m = Of("members").Single();
+            var problems = new List<string>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            var numSharpEnums = typeof(DType).Assembly.GetTypes().Where(t => t.IsEnum).Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
+
+            foreach (var en in m.GetProperty("c_enums").EnumerateObject())
+            {
+                seen.Add(en.Name);
+                var numpy = en.Value.EnumerateArray().Select(p => (Name: p[0].GetString(), Value: p[1].GetInt64())).ToList();
+                if (!EnumPorts.TryGetValue(en.Name, out var port))
+                {
+                    if (!NotPortedEnums.ContainsKey(en.Name))
+                        problems.Add($"enum {en.Name}: a NumPy enum this test does not map (add it to EnumPorts or NotPortedEnums)");
+                    else if (numSharpEnums.Contains(en.Name))
+                        problems.Add($"enum {en.Name} now has a NumSharp mirror: move it from NotPortedEnums to EnumPorts");
+                    continue;
+                }
+
+                // An enum's fields come back from reflection in declaration (metadata) order, aliases included.
+                var mine = port.GetFields(BindingFlags.Public | BindingFlags.Static)
+                    .Select(f => (Name: f.Name, Value: Convert.ToInt64(f.GetRawConstantValue(), CultureInfo.InvariantCulture)))
+                    .ToList();
+                var mineByName = mine.ToDictionary(x => x.Name, x => x.Value, StringComparer.Ordinal);
+                var numpyNames = numpy.Select(x => x.Name).ToHashSet(StringComparer.Ordinal);
+
+                foreach (var (name, value) in numpy)
+                {
+                    bool present = mineByName.TryGetValue(name, out long mineValue);
+                    if (EnumMemberDivergences.ContainsKey((en.Name, name)))
+                    {
+                        if (present && mineValue == value)
+                            problems.Add($"{en.Name}.{name} now matches NumPy ({value}): remove it from EnumMemberDivergences");
+                    }
+                    else if (!present)
+                        problems.Add($"{en.Name}.{name} = {value}: missing from the NumSharp enum");
+                    else if (mineValue != value)
+                        problems.Add($"{en.Name}.{name}: NumSharp value {mineValue}, NumPy {value}");
+                }
+
+                foreach (var (name, _) in mine)
+                {
+                    bool extension = EnumExtensions.ContainsKey((en.Name, name));
+                    if (numpyNames.Contains(name))
+                    {
+                        if (extension)
+                            problems.Add($"{en.Name}.{name} is now NumPy's own name: remove it from EnumExtensions");
+                    }
+                    else if (!extension)
+                        problems.Add($"{en.Name}.{name}: not a member of NumPy's {en.Name} (removed from NumPy, or misspelled)");
+                }
+
+                // Order, over the members both sides have and agree on.
+                var compared = numpy.Select(p => p.Name)
+                    .Where(n => mineByName.ContainsKey(n) && !EnumMemberDivergences.ContainsKey((en.Name, n)))
+                    .ToList();
+                var comparedSet = compared.ToHashSet(StringComparer.Ordinal);
+                var mineOrder = mine.Select(x => x.Name).Where(comparedSet.Contains).ToList();
+                if (!compared.SequenceEqual(mineOrder, StringComparer.Ordinal))
+                    problems.Add($"{en.Name}: out of NumPy's order: NumPy [{string.Join(", ", compared)}], NumSharp [{string.Join(", ", mineOrder)}]");
+            }
+
+            foreach (var mapped in EnumPorts.Keys.Concat(NotPortedEnums.Keys).Where(k => !seen.Contains(k)))
+                problems.Add($"{mapped} is mapped here, but the oracle no longer records it");
+
+            AssertNoProblems(problems);
+        }
+
+        // ---------------------------------------------------------------------------------------------------------
         // Descriptors
         // ---------------------------------------------------------------------------------------------------------
 
@@ -511,6 +652,163 @@ namespace NumSharp.Tests.DTypes
                 string id = rec.GetProperty("id").GetString();
                 string actual = Raised(() => Build(rec.GetProperty("recipe")));
                 Check(problems, id, "error", actual, ErrorText(rec.GetProperty("error")));
+            }
+            AssertNoProblems(problems);
+        }
+
+        // ---------------------------------------------------------------------------------------------------------
+        // dtype strings
+        // ---------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumSharp's own C# spellings of <see cref="np.dtype(string, bool, bool, IReadOnlyDictionary{string, object})"/>
+        ///     (the documented superset of NumPy's grammar), the twin of the generator's <c>NUMSHARP_ALIASES</c>. NumPy
+        ///     must still refuse each one (the replay asserts it, so the list cannot rot) and NumSharp must accept it.
+        /// </summary>
+        private static readonly HashSet<string> NumSharpAliases = new(StringComparer.Ordinal)
+        {
+            "Int32", "Bool", "Boolean", "boolean", "Half", "Single", "Double", "Complex", "Char", "char", "Decimal",
+            "decimal", "SByte", "sbyte", "Byte", "UByte", "Int16", "UInt16", "UInt32", "Int64", "UInt64", "Float",
+            "String", "string",
+        };
+
+        /// <summary>
+        ///     The long-double classes: NumSharp's own classes over the 8-byte float64 / complex128 lanes, so a Linux NumPy
+        ///     record (a 16-byte long double) is compared by class only.
+        /// </summary>
+        private static readonly HashSet<string> LongDoubleClasses = new(StringComparer.Ordinal) { "LongDoubleDType", "CLongDoubleDType" };
+
+        /// <summary>The text NumSharp refuses NumPy's comma strings (structured and sub-array dtypes) with.</summary>
+        private const string StructuredRefusal = "NumSharp does not support structured (comma-string / field list) dtypes";
+
+        /// <summary>
+        ///     Every probed dtype string through <c>np.dtype(str)</c>: the same descriptor as NumPy's (repr, str, byte order,
+        ///     isbuiltin, kind, item size, type number and character, the C-name classes NumSharp shares a lane with
+        ///     included) or the same error text, under the house rules:
+        ///     <list type="bullet">
+        ///       <item><description>NumPy's <c>TypeError</c> "data type … not understood" / "Alias … was removed" is
+        ///       NumSharp's <see cref="NotSupportedException"/> with the same text; every other NumPy error keeps its
+        ///       type.</description></item>
+        ///       <item><description>A valid NumPy dtype of a class NumSharp has no storage for (<see cref="AbsentClasses"/>)
+        ///       raises <see cref="NotSupportedException"/>.</description></item>
+        ///       <item><description>A comma string (structured or sub-array, decided by NumPy's own
+        ///       <c>_check_for_commastring</c>) may raise <see cref="StructuredRefusal"/> whatever NumPy answers — the one
+        ///       representable outcome, <c>'()f8'</c> = float64, included.</description></item>
+        ///       <item><description>NumPy's long double (8 bytes on Windows, 16 on Linux) is NumSharp's own
+        ///       <c>LongDoubleDType</c> / <c>CLongDoubleDType</c> class over the 8-byte float64 / complex128 lane under its C
+        ///       names (<c>'g'</c>, <c>'longdouble'</c>, the type numbers): equal to NumPy's descriptor where NumPy's is 8 bytes
+        ///       too, the same class only on Linux; a spelling that names Linux's 16-byte width (<c>'f16'</c>,
+        ///       <c>'float128'</c>) has no NumSharp lane and raises <see cref="NotSupportedException"/>.</description></item>
+        ///     </list>
+        /// </summary>
+        [TestMethod]
+        public void Parse_Strings_MatchNumPy()
+        {
+            var problems = new List<string>();
+            foreach (var rec in Of("parse"))
+            {
+                string id = rec.GetProperty("id").GetString();
+                string spec = rec.GetProperty("spec").GetString();
+                bool commastring = rec.GetProperty("commastring").GetBoolean();
+                var numpy = rec.GetProperty("outcome");
+                bool numpyOk = numpy.GetProperty("ok").GetBoolean();
+
+                DType d = null;
+                Exception error = null;
+                try
+                {
+                    d = np.dtype(spec);
+                }
+                catch (Exception e)
+                {
+                    error = e;
+                }
+
+                if (NumSharpAliases.Contains(spec))
+                {
+                    if (numpyOk)
+                        problems.Add($"{id}: NumPy now accepts this NumSharp alias; remove it from NumSharpAliases and the generator's NUMSHARP_ALIASES");
+                    if (error != null)
+                        problems.Add($"{id}: the NumSharp alias raised {ErrorText(error)}");
+                    continue;
+                }
+
+                if (commastring && error is NotSupportedException && error.Message == StructuredRefusal)
+                    continue; // the structured / sub-array family NumSharp refuses as a whole
+
+                if (!numpyOk)
+                {
+                    string type = numpy.GetProperty("type").GetString();
+                    string text = numpy.GetProperty("text").GetString();
+                    if (error == null)
+                    {
+                        problems.Add($"{id}: returned {d.ToString(true)}, NumPy raised {type}: {text}");
+                        continue;
+                    }
+                    // The house rule: a dtype string NumSharp cannot use is a NotSupportedException carrying NumPy's text.
+                    bool notUnderstood = type == "TypeError" && (text.StartsWith("data type ", StringComparison.Ordinal) || text.StartsWith("Alias ", StringComparison.Ordinal));
+                    string expectedType = notUnderstood ? nameof(NotSupportedException) : type;
+                    string actualType = error switch { TypeError => "TypeError", ValueError => "ValueError", _ => error.GetType().Name };
+                    if (actualType != expectedType || error.Message != text)
+                        problems.Add($"{id}: raised {actualType}: {Show(error.Message)}, expected {expectedType}: {Show(text)}");
+                    continue;
+                }
+
+                string cls = numpy.GetProperty("cls").GetString();
+                if (AbsentClasses.ContainsKey(cls))
+                {
+                    if (error is not NotSupportedException)
+                        problems.Add($"{id}: NumPy's {cls} has no NumSharp storage, so it must raise NotSupportedException; got {(error == null ? d.ToString(true) : ErrorText(error))}");
+                    continue;
+                }
+
+                if (LongDoubleClasses.Contains(cls))
+                {
+                    // NumSharp's long-double classes are classes of their own over the 8-byte float64 / complex128 lanes
+                    // (DTypeRegistry.LongDouble / CLongDouble): the C names ('g', 'longdouble') and the type numbers 13 / 16
+                    // give them.
+                    var own = cls == "LongDoubleDType" ? DTypeRegistry.LongDouble : DTypeRegistry.CLongDouble;
+                    int numpySize = numpy.GetProperty("itemsize").GetInt32();
+                    if (error != null)
+                    {
+                        // Linux's long double is 16 bytes: the spellings that name that WIDTH ('f16', 'c32', 'float128',
+                        // 'complex256') have no NumSharp lane.
+                        if (!(error is NotSupportedException && numpySize != own.ItemSize))
+                            problems.Add($"{id}: raised {ErrorText(error)}, NumPy {numpy.GetProperty("repr").GetString()}");
+                        continue;
+                    }
+                    if (!ReferenceEquals(d.Meta, own))
+                        problems.Add($"{id}: NumPy's {cls} must be NumSharp's {own}, got {d.Meta}");
+                    // Windows' long double is the 8-byte double: there the descriptor must equal NumPy's in every attribute.
+                    // Linux's 16-byte one differs from NumSharp's 8 bytes by design (the generator's UNMODELLED_CLASSES).
+                    if (numpySize == d.itemsize)
+                    {
+                        Check(problems, id, "repr", d.ToString(true), numpy.GetProperty("repr").GetString());
+                        Check(problems, id, "str", d.str, numpy.GetProperty("str").GetString());
+                        Check(problems, id, "kind", d.kind.ToString(), numpy.GetProperty("kind").GetString());
+                        Check(problems, id, "num", d.num.ToString(CultureInfo.InvariantCulture), numpy.GetProperty("num").GetInt32().ToString(CultureInfo.InvariantCulture));
+                        Check(problems, id, "char", d.@char.ToString(), numpy.GetProperty("char").GetString());
+                    }
+                    continue;
+                }
+
+                if (error != null)
+                {
+                    problems.Add($"{id}: raised {ErrorText(error)}, NumPy {numpy.GetProperty("repr").GetString()}");
+                    continue;
+                }
+
+                Check(problems, id, "repr", d.ToString(true), numpy.GetProperty("repr").GetString());
+                Check(problems, id, "str", d.str, numpy.GetProperty("str").GetString());
+                Check(problems, id, "byteorder", d.byteorder.ToString(), numpy.GetProperty("byteorder").GetString());
+                Check(problems, id, "isbuiltin", d.isbuiltin.ToString(CultureInfo.InvariantCulture), numpy.GetProperty("isbuiltin").GetInt32().ToString(CultureInfo.InvariantCulture));
+                Check(problems, id, "kind", d.kind.ToString(), numpy.GetProperty("kind").GetString());
+                Check(problems, id, "itemsize", d.itemsize.ToString(CultureInfo.InvariantCulture), numpy.GetProperty("itemsize").GetInt32().ToString(CultureInfo.InvariantCulture));
+                // A C-name class NumPy keeps beside the sized class of its width (IntDType on Windows, LongLongDType on
+                // Linux) has its own number and character, and so does NumSharp's lane-sharing class of that name
+                // (DTypeRegistry.CInt, CLongLong, ...): the number and the character are compared for every class.
+                Check(problems, id, "num", d.num.ToString(CultureInfo.InvariantCulture), numpy.GetProperty("num").GetInt32().ToString(CultureInfo.InvariantCulture));
+                Check(problems, id, "char", d.@char.ToString(), numpy.GetProperty("char").GetString());
             }
             AssertNoProblems(problems);
         }

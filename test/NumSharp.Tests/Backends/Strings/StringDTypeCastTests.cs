@@ -286,6 +286,7 @@ namespace NumSharp.Tests.Backends.Strings
         ///     answers: int32 → text widens to the canonical int64 first, text → int32 narrows from it.
         /// </summary>
         [TestMethod]
+        [DoNotParallelize] // switches IL kernel generation off process-wide (DirectILKernelGenerator.Enabled)
         public void NumberCasts_WithoutDynamicCode_GiveTheSameAnswers()
         {
             using var ints = np.array(new[] { 1, -22, 333 });

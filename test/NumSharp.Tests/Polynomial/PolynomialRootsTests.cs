@@ -22,6 +22,7 @@ namespace NumSharp.Tests.Polynomial
     ///     parity is the host-pinned <c>PolyrootsParity</c> oracle tier); everything before LAPACK is asserted bit for bit.
     /// </remarks>
     [TestClass]
+    [DoNotParallelize] // binds the process-wide OpenBLAS backend (TensorEngine.Blas)
     public class PolynomialRootsTests
     {
         /// <summary>One basis's companion / roots pair plus what NumPy's tests build them from.</summary>
@@ -80,7 +81,10 @@ namespace NumSharp.Tests.Polynomial
         /// <returns>The hex text.</returns>
         private static string Hex(NDArray a)
         {
-            using var c = np.ascontiguousarray(a);
+            // np.ascontiguousarray hands a C-contiguous operand back itself: only a copy it made is this helper's to
+            // dispose (disposing a would free the caller's array under it).
+            var c = np.ascontiguousarray(a);
+            using var cCopy = ReferenceEquals(c, a) ? null : c;
             var bytes = new byte[c.size * c.dtypesize];
             unsafe
             {

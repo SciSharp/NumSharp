@@ -172,6 +172,7 @@ namespace NumSharp.Tests.Documentation
         // ── 6. Random (seed parity) ────────────────────────────────────────────────────────────────
 
         [TestMethod]
+        [DoNotParallelize] // seeds the global np.random singleton and expects its stream
         public void Random_ShapesAndSeedReproducibility()
         {
             np.random.seed(42);

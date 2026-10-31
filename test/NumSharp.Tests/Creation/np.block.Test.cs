@@ -341,6 +341,7 @@ namespace NumSharp.Tests.Creation
         // -- differential case pinned from live NumPy 2.4.2 --
 
         [TestMethod]
+        [DoNotParallelize] // seeds the global np.random singleton and expects its stream
         public void Differential_MixedDtypeBlockMatrix_MatchesNumPy()
         {
             // rng = np.random.RandomState(42); A=(rand(3,4)*100).astype(i4);

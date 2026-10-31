@@ -275,6 +275,7 @@ namespace NumSharp.Tests.Collections
         }
 
         [TestMethod]
+        [DoNotParallelize] // forces garbage collections, which suspend every thread: it runs with the serial set
         public void TailPop_RetainsTheValue_UntilTheNextAppendCopiesTheArrays()
         {
             // Everything the retention check below reasons about is built after this epoch, so CollectSince can
@@ -312,6 +313,7 @@ namespace NumSharp.Tests.Collections
         }
 
         [TestMethod]
+        [DoNotParallelize] // forces garbage collections, which suspend every thread: it runs with the serial set
         public void InteriorRemove_ReleasesTheRemovedValueImmediately()
         {
             var d = new ConcurrentOrderedCompactDictionary<int, object>();
@@ -334,6 +336,7 @@ namespace NumSharp.Tests.Collections
         }
 
         [TestMethod]
+        [DoNotParallelize] // forces garbage collections, which suspend every thread: it runs with the serial set
         public void Clear_ReleasesEverything()
         {
             var d = new ConcurrentOrderedCompactDictionary<int, object>();
@@ -374,6 +377,7 @@ namespace NumSharp.Tests.Collections
         }
 
         [TestMethod]
+        [DoNotParallelize] // forces garbage collections, which suspend every thread: it runs with the serial set
         public void HeldEnumerator_PinsItsSnapshotArrays_ReleasedWhenDropped()
         {
             var since = GcQuiescence.Epoch.Capture();

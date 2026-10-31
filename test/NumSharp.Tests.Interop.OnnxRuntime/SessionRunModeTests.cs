@@ -20,7 +20,9 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
         /// <summary>
         ///     The rule name is checked on EVERY call, by every form. It was checked only when some input needed a cast,
         ///     so <c>casting: "sfae"</c> ran without complaint until the first input of another dtype. The names are
-        ///     NumPy's and case-sensitive; <c>null</c> is not a rule.
+        ///     NumPy's and case-sensitive, and an unknown one is NumPy's ValueError; <c>null</c> is Python's None, which
+        ///     NumPy's converter refuses with a TypeError before it reads any name (<c>casting must be str, not
+        ///     NoneType</c>).
         /// </summary>
         [TestMethod]
         public void CastingRule_IsValidatedOnEveryCall_EvenWhenNoInputNeedsACast()
@@ -31,15 +33,21 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             var inputs = new Dictionary<string, NDArray> { { "X", x } };
             var outputs = new Dictionary<string, NDArray> { { "Y", y } };
 
-            foreach (string bad in new[] { "bogus", "Safe", "same-kind", "", null })
+            foreach (string bad in new[] { "bogus", "Safe", "same-kind", "" })
             {
-                string why = bad ?? "<null>";
-                new Action(() => session.Run(x, casting: bad)).Should().Throw<ValueError>(why)
+                new Action(() => session.Run(x, casting: bad)).Should().Throw<ValueError>(bad)
                     .WithMessage("casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe' (got '*')");
-                new Action(() => session.Run("X", x, "Y", casting: bad)).Should().Throw<ValueError>(why);
-                new Action(() => session.Run(inputs, casting: bad)).Should().Throw<ValueError>(why);
-                new Action(() => session.RunInto(inputs, outputs, casting: bad)).Should().Throw<ValueError>(why);
+                new Action(() => session.Run("X", x, "Y", casting: bad)).Should().Throw<ValueError>(bad);
+                new Action(() => session.Run(inputs, casting: bad)).Should().Throw<ValueError>(bad);
+                new Action(() => session.RunInto(inputs, outputs, casting: bad)).Should().Throw<ValueError>(bad);
             }
+
+            // None is no string at all: NumPy's string_converter_helper raises TypeError, on every form alike.
+            new Action(() => session.Run(x, casting: null)).Should().Throw<TypeError>()
+                .WithMessage("casting must be str, not NoneType");
+            new Action(() => session.Run("X", x, "Y", casting: null)).Should().Throw<TypeError>();
+            new Action(() => session.Run(inputs, casting: null)).Should().Throw<TypeError>();
+            new Action(() => session.RunInto(inputs, outputs, casting: null)).Should().Throw<TypeError>();
 
             foreach (string good in new[] { "no", "equiv", "safe", "same_kind", "unsafe" })
                 using (NDArray ok = session.Run(x, casting: good))

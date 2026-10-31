@@ -267,9 +267,13 @@ namespace NumSharp.Tests.AuditV2
         /// Measured on 2026-10-05 (i9-13900K): 4-6 ms in Release (CI's configuration) and 12-17 ms in a Debug build, so
         /// on that host the limit holds with a 5× margin in Release and about 2× in Debug. Like every hard-coded
         /// wall-clock limit it can fail on a host that is several times slower or heavily loaded; a failure there is a
-        /// host signal first.
+        /// host signal first. The limit applies to the FASTEST of five batches of ten calls: an interruption (a
+        /// collection, another process taking the core) can only add time to a batch, while a regression of the code
+        /// slows every batch. With one batch, the test failed 2 of 3 runs at the end of a parallel run on a host whose
+        /// other work kept half the cores busy (2026-10-16: 52 ms against the 4-6 ms above).
         /// </remarks>
         [TestMethod] // RESOLVED: within 2× of NumPy (was [OpenBugs] audit-v2-T2-nonzero-perf).
+        [DoNotParallelize] // asserts wall-clock time
         public void T2_NonZero_Is_Much_Slower_Than_NumPy()
         {
             const long numpyBaselineMs = 16;
@@ -277,11 +281,16 @@ namespace NumSharp.Tests.AuditV2
             var arr = np.arange(n) % 2;
 
             for (int i = 0; i < 3; i++) np.nonzero(arr);
-            var sw = Stopwatch.StartNew();
-            for (int i = 0; i < 10; i++) np.nonzero(arr);
-            sw.Stop();
+            long fastest = long.MaxValue;
+            for (int batch = 0; batch < 5; batch++)
+            {
+                var sw = Stopwatch.StartNew();
+                for (int i = 0; i < 10; i++) np.nonzero(arr);
+                sw.Stop();
+                fastest = System.Math.Min(fastest, sw.ElapsedMilliseconds);
+            }
 
-            sw.ElapsedMilliseconds.Should().BeLessThan(2 * numpyBaselineMs,
+            fastest.Should().BeLessThan(2 * numpyBaselineMs,
                 "np.nonzero on 1M int32 must be within 2× of NumPy (currently ~17×, audit reports up to 29×)");
         }
     }

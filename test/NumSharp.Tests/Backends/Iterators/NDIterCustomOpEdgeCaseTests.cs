@@ -477,6 +477,7 @@ namespace NumSharp.Tests.Backends.Iterators
         // =====================================================================
 
         [TestMethod]
+        [DoNotParallelize] // clears and counts the process-wide inner-loop kernel cache
         public void Cache_AutoDerivedKey_StructurallyEquivalentTreesShareDelegate()
         {
             // Clear cache so we can observe growth precisely.
@@ -506,6 +507,7 @@ namespace NumSharp.Tests.Backends.Iterators
         }
 
         [TestMethod]
+        [DoNotParallelize] // clears and counts the process-wide inner-loop kernel cache
         public void Cache_DistinctStructure_DistinctEntries()
         {
             InvokeClearCache();
@@ -527,6 +529,7 @@ namespace NumSharp.Tests.Backends.Iterators
         }
 
         [TestMethod]
+        [DoNotParallelize] // clears and counts the process-wide inner-loop kernel cache
         public void Cache_SameTreeDifferentInputTypes_DistinctEntries()
         {
             InvokeClearCache();

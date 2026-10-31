@@ -36,8 +36,8 @@ public class MatMulStridedTests
     public void Dot_Float_TransposedA_Large_BlockedPath()
     {
         // Dims > BLOCKING_THRESHOLD (128) → blocked GEBP with packer.
-        np.random.seed(42);
-        var l = np.random.randn(200L, 150L).astype(NPTypeCode.Single);
+        var rng = np.random.RandomState(42); // a private stream: the global np.random is shared by the tests running in parallel
+        var l = rng.randn(200L, 150L).astype(NPTypeCode.Single);
         var lt = l.transpose();
 
         var result = np.dot(lt, l);
@@ -63,8 +63,8 @@ public class MatMulStridedTests
     public void Dot_Float_ContigByTransposedB_Large()
     {
         // L @ Lt — B is transposed-contiguous, exercises PackB bStride0==1.
-        np.random.seed(7);
-        var l = np.random.randn(500L, 400L).astype(NPTypeCode.Single);
+        var rng = np.random.RandomState(7); // a private stream: the global np.random is shared by the tests running in parallel
+        var l = rng.randn(500L, 400L).astype(NPTypeCode.Single);
         var lt = l.transpose();
 
         var result = np.dot(l, lt);
@@ -91,9 +91,9 @@ public class MatMulStridedTests
     [TestMethod]
     public void Dot_Float_BothTransposed_Large_BlockedPath()
     {
-        np.random.seed(11);
-        var a = np.random.randn(200L, 300L).astype(NPTypeCode.Single);
-        var b = np.random.randn(200L, 150L).astype(NPTypeCode.Single);
+        var rng = np.random.RandomState(11); // a private stream: the global np.random is shared by the tests running in parallel
+        var a = rng.randn(200L, 300L).astype(NPTypeCode.Single);
+        var b = rng.randn(200L, 150L).astype(NPTypeCode.Single);
         var bt = b.transpose();
         var result = np.dot(bt, a);
         var reference = np.dot(bt.copy(), a);
@@ -105,10 +105,10 @@ public class MatMulStridedTests
     public void Dot_Float_SlicedRows_BlockedPath()
     {
         // Every other row — strides (2*cols, 1), non-contiguous, offset 0.
-        np.random.seed(23);
-        var big = np.random.randn(400L, 200L).astype(NPTypeCode.Single);
+        var rng = np.random.RandomState(23); // a private stream: the global np.random is shared by the tests running in parallel
+        var big = rng.randn(400L, 200L).astype(NPTypeCode.Single);
         var sliced = big["::2, :"];
-        var b = np.random.randn(200L, 100L).astype(NPTypeCode.Single);
+        var b = rng.randn(200L, 100L).astype(NPTypeCode.Single);
 
         sliced.Shape.IsContiguous.Should().BeFalse();
         var result = np.dot(sliced, b);
@@ -193,8 +193,8 @@ public class MatMulStridedTests
         // PackADoublePanelsStrided's two-vector-load fast path. Bit-exact vs
         // the contiguous copy because packing normalizes both operands into
         // identical panels, so the micro-kernel FMA order is the same.
-        np.random.seed(42);
-        var l = np.random.randn(200L, 150L).astype(NPTypeCode.Double);
+        var rng = np.random.RandomState(42); // a private stream: the global np.random is shared by the tests running in parallel
+        var l = rng.randn(200L, 150L).astype(NPTypeCode.Double);
         var lt = l.transpose();
 
         var result = np.dot(lt, l);
@@ -210,8 +210,8 @@ public class MatMulStridedTests
         // L @ Lt — B transposed-contiguous, exercises PackB bStride0==1.
         // This is the np.cov pattern (dot(Xc, Xc.T)) that motivated the
         // blocked double kernel.
-        np.random.seed(7);
-        var l = np.random.randn(500L, 400L).astype(NPTypeCode.Double);
+        var rng = np.random.RandomState(7); // a private stream: the global np.random is shared by the tests running in parallel
+        var l = rng.randn(500L, 400L).astype(NPTypeCode.Double);
         var lt = l.transpose();
 
         var result = np.dot(l, lt);
@@ -226,10 +226,10 @@ public class MatMulStridedTests
     {
         // 2D slice — non-contiguous with Shape.offset > 0 at blocked size,
         // exercises PackA's general (scalar) branch plus the offset path.
-        np.random.seed(23);
-        var big = np.random.randn(300L, 260L).astype(NPTypeCode.Double);
+        var rng = np.random.RandomState(23); // a private stream: the global np.random is shared by the tests running in parallel
+        var big = rng.randn(300L, 260L).astype(NPTypeCode.Double);
         var sliced = big["1:, 2:"];                      // (299, 258)
-        var b = np.random.randn(258L, 130L).astype(NPTypeCode.Double);
+        var b = rng.randn(258L, 130L).astype(NPTypeCode.Double);
 
         sliced.Shape.offset.Should().BeGreaterThan(0);
         sliced.Shape.IsContiguous.Should().BeFalse();
@@ -449,9 +449,9 @@ public class MatMulStridedTests
     [TestMethod]
     public void Dot_Float_MlpGradW_InputTransposed()
     {
-        np.random.seed(1337);
-        var input = np.random.randn(64L, 784L).astype(NPTypeCode.Single);
-        var gradPreact = np.random.randn(64L, 128L).astype(NPTypeCode.Single);
+        var rng = np.random.RandomState(1337); // a private stream: the global np.random is shared by the tests running in parallel
+        var input = rng.randn(64L, 784L).astype(NPTypeCode.Single);
+        var gradPreact = rng.randn(64L, 128L).astype(NPTypeCode.Single);
         var inputT = input.transpose();
 
         var gradW = np.dot(inputT, gradPreact);
@@ -465,9 +465,9 @@ public class MatMulStridedTests
     [TestMethod]
     public void Dot_Float_MlpInputGrad_WeightTransposed()
     {
-        np.random.seed(1337);
-        var w = np.random.randn(784L, 128L).astype(NPTypeCode.Single);
-        var gradPreact = np.random.randn(64L, 128L).astype(NPTypeCode.Single);
+        var rng = np.random.RandomState(1337); // a private stream: the global np.random is shared by the tests running in parallel
+        var w = rng.randn(784L, 128L).astype(NPTypeCode.Single);
+        var gradPreact = rng.randn(64L, 128L).astype(NPTypeCode.Single);
         var wT = w.transpose();
 
         var inputGrad = np.dot(gradPreact, wT);

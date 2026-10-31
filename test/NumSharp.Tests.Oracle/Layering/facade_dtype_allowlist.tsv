@@ -11,16 +11,16 @@ APIs/np.nditer.Typed.cs	0	1	# stays (C): nditer<T>'s C# element-type check (a ty
 APIs/np.vectorize.cs	0	2	# stays (C): the C# delegate's return type and the output's dtype
 Casting/Implicit/NDArray.Implicit.ValueTypes.cs	4	3	# stays (C): the C# conversions of a 0-d array to a C# scalar (Python's int() / float() / complex(), a text parsed)
 Casting/NDArray.ToString.cs	0	1	# stays (C): NumSharp's char dtype prints as text (no NumPy dtype)
-Creation/np.dtype.cs	0	2	# stays (D): np.dtype is the dtype layer's own parser (PyArray_DescrConverter)
+Creation/np.dtype.cs	0	3	# stays (D): np.dtype is the dtype layer's own parser (PyArray_DescrConverter), its None arm included (np.dtype(None) is float64)
 DTypes/np.dtypes.cs	2	0	# stays (D): the np.dtypes module names the S and U classes
 Indexing/np.ndenumerate.cs	0	1	# stays (C): ndenumerate<T>'s C# element-type check
 Indexing/np.take.FancyAxis.cs	0	1	# stays (index kind): a contiguous 1-D int64 index takes the tiled gather
 Logic/np.can_cast.cs	1	80	# stays (D): a dtype routine - np.can_cast's rules for a Python scalar's value
 Logic/np.common_type.cs	1	6	# stays (D): a dtype routine
-Logic/np.find_common_type.cs	2	10	# stays (D): a dtype routine (NumPy 1.26.4's search)
+Logic/np.find_common_type.cs	2	5	# stays (D): a dtype routine (NumPy 1.26.4's search)
 Logic/np.isreal_iscomplex.cs	0	3	# stays (D): isrealobj / iscomplexobj test the dtype itself
 Logic/np.min_scalar_type.cs	1	0	# stays (D): a dtype routine
-Logic/np.type_checks.cs	2	15	# stays (D): the isdtype family and the type characters (dtype routines)
+Logic/np.type_checks.cs	3	15	# stays (D): the isdtype family and the type characters (dtype routines); the 3 text lines are np.issctype's NPTypeCode.String tests, one per spelling (NPTypeCode, Type, DType)
 Manipulation/np.asscalar.cs	0	1	# stays (C): np.asscalar<T>'s C# element-type check
 Manipulation/np.copyto.cs	1	0	# stays (C): a C# char into an S / U array is one character of text, not NumSharp's char dtype
 Matrixlib/NDMatrix.Construction.cs	0	8	# stays (D): numpy.matrix's own class code

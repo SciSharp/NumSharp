@@ -144,6 +144,7 @@ namespace NumSharp.Tests.Backends
         }
 
         [TestMethod]
+        [DoNotParallelize] // forces garbage collections, which suspend every thread: it runs with the serial set
         public void Write_True_OnMemmapR_Refused_OwnerAndView()
         {
             string dir = Path.Combine(Path.GetTempPath(), "ns_setflags_" + Guid.NewGuid().ToString("N"));
@@ -173,6 +174,7 @@ namespace NumSharp.Tests.Backends
         }
 
         [TestMethod]
+        [DoNotParallelize] // forces garbage collections, which suspend every thread: it runs with the serial set
         public void Write_True_OnMemmapR_FortranOrder_Refused()
         {
             // The F-order memmap is a transpose VIEW over the wrap storage — the read-only protection
@@ -199,6 +201,7 @@ namespace NumSharp.Tests.Backends
         }
 
         [TestMethod]
+        [DoNotParallelize] // forces garbage collections, which suspend every thread: it runs with the serial set
         public void Write_True_OnMemmapRPlus_RoundTrips()
         {
             // NumPy: an 'r+' memmap's buffer is writable, so write=False → write=True round-trips.

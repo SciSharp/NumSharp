@@ -538,8 +538,8 @@ namespace NumSharp.Tests
         /// <remarks>
         ///     Root cause: <c>Default.Reduction.Add.cs</c> <c>ReduceAddInCastLoop</c>'s axis route casts blocks along the
         ///     outermost kept axis and sums each reduced row in one pairwise call; NumPy's fills come from
-        ///     <c>npyiter_find_buffering_setup</c> (<c>.claude/CLAUDE.md</c> names it among np.sum's residuals: "an axis
-        ///     reduction in a cast loop whose reduced runs exceed the buffer is not modeled"). Found by the varstd oracle
+        ///     <c>npyiter_find_buffering_setup</c> (<c>.claude/rules/reductions.md</c> lists it among np.sum's open
+        ///     residuals: an axis reduction in a cast loop whose reduced runs exceed the buffer). Found by the varstd oracle
         ///     tier's section B (2026-10-05, plan <c>docs/plans/api-parameter-parity.md</c> A2), which carves these cells
         ///     (<c>gen_oracle.gen_varstd</c>, "pinned row longer than the buffer") and names this test. NumPy 2.4.2's
         ///     default-buffer answers, which NumSharp gives today, differ from these at elements 1, 6 and 7 (sum) and

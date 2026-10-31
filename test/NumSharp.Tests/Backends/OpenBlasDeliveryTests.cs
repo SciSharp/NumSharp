@@ -17,6 +17,7 @@ namespace NumSharp.Tests.Backends
     ///     <c>matmul_parity</c> corpus; the packaging contract by <c>MatmulParityBackendTests</c>.
     /// </summary>
     [TestClass]
+    [DoNotParallelize] // sets process-wide environment variables and binds the process-wide OpenBLAS backend
     public class OpenBlasDeliveryTests
     {
         private const string MarkerFileName = "openblas.source.json";

@@ -343,7 +343,7 @@ namespace NumSharp.Tests.DTypes
                 new Action(() => np.dtype(cls)).Should().Throw<TypeError>().WithMessage(text);
                 new Action(() => _ = (DType)cls).Should().Throw<TypeError>().WithMessage(text);
             }
-            new Action(() => np.dtype((NDScalarType)null)).Should().Throw<ArgumentNullException>();
+            np.dtype((NDScalarType)null).Should().BeSameAs(DType.Double, "a null class is NumPy's None, float64");
         }
 
         /// <summary>

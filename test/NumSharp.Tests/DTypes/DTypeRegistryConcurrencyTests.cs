@@ -19,6 +19,7 @@ namespace NumSharp.Tests.DTypes
     ///     <see cref="DTypeRegistry.All"/> only require it to contain the builtins and to hold unique type numbers.
     /// </remarks>
     [TestClass]
+    [DoNotParallelize] // a race test calibrated to run alone: its threads must own the cores to overlap
     public class DTypeRegistryConcurrencyTests
     {
         /// <summary>The next unused type number for a probe class; <see cref="Reserve"/> hands out ranges of it.</summary>

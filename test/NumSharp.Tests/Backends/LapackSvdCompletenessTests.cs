@@ -19,6 +19,7 @@ namespace NumSharp.Tests.Backends
     ///     normal equations, storage-independence) that hold on ANY input and so need no oracle.
     /// </remarks>
     [TestClass]
+    [DoNotParallelize] // binds the process-wide OpenBLAS backend (TensorEngine.Blas)
     public class LapackSvdCompletenessTests
     {
         private const double Tol = 1e-9;

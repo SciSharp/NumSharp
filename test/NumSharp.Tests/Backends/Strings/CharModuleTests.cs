@@ -360,6 +360,7 @@ namespace NumSharp.Tests.Backends.Strings
         ///     against <see cref="NumPyStripCompare"/> element by element, with and without the rows kernels.
         /// </summary>
         [TestMethod]
+        [DoNotParallelize] // flips the process-wide string-comparison route switches (NDStringComparison)
         public void Comparisons_OverLayouts_MatchTheElementwisePort()
         {
             var rng = new System.Random(3);

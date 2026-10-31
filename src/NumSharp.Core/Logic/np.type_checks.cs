@@ -5,15 +5,32 @@ namespace NumSharp
     public partial class np
     {
         /// <summary>
-        /// Determines whether the given object represents a scalar dtype.
+        /// Determines whether the given object represents a scalar dtype — NumPy 1.x's <c>np.issctype(rep)</c>. Kept on
+        /// purpose, so code written against NumPy 1.x compiles and runs unchanged, although NumPy 2.0 removed it
+        /// (<c>AttributeError: `np.issctype` was removed in the NumPy 2.0 release. Use `issubclass(rep, np.generic)`
+        /// instead.</c>). New code writes NumPy 2's test, <c>np.generic.__subclasscheck__(rep)</c>.
         /// </summary>
-        /// <param name="rep">The object to check.</param>
-        /// <returns>True if rep represents a scalar dtype.</returns>
+        /// <param name="rep">
+        /// The object to check: a <see cref="DType"/> (what <c>np.int32</c> is), an <see cref="NPTypeCode"/> or a C#
+        /// <see cref="Type"/>. Anything else, null included, is not a scalar type.
+        /// </param>
+        /// <returns>
+        /// True when <paramref name="rep"/> names a NumSharp storage type: every dtype except <see cref="NPTypeCode.Empty"/>
+        /// and <see cref="NPTypeCode.String"/>, the lane of the string classes (NumPy 1.x answered True for <c>np.str_</c>,
+        /// <c>np.bytes_</c> and their descriptors).
+        /// </returns>
         /// <remarks>
-        /// https://numpy.org/doc/stable/reference/generated/numpy.issctype.html
+        /// https://numpy.org/doc/1.26/reference/generated/numpy.issctype.html
+        /// <para>
+        /// The answer is the descriptor's STORAGE code, so a datetime64 / timedelta64 descriptor (no storage lane yet)
+        /// answers false where NumPy 1.x answered true. <see cref="NDScalarType"/> classes are not accepted (NumPy 1.x
+        /// answered true for every subclass of <c>np.generic</c>, abstract ones included): ask
+        /// <c>np.generic.__subclasscheck__</c> for those.
+        /// </para>
         /// </remarks>
         /// <example>
         /// <code>
+        /// np.issctype(np.int32)          // True
         /// np.issctype(typeof(int))       // True
         /// np.issctype(NPTypeCode.Int32)  // True
         /// np.issctype(typeof(NDArray))   // False
@@ -28,6 +45,10 @@ namespace NumSharp
             {
                 NPTypeCode tc => tc != NPTypeCode.Empty && tc != NPTypeCode.String,
                 Type t => t.GetTypeCode() is var tc && tc != NPTypeCode.Empty && tc != NPTypeCode.String,
+                // np.int32 has been a DType since Stage B (it was typeof(int)); without this arm the NumPy 1.x spelling
+                // np.issctype(np.int32) fell through to false. A descriptor answers by its class's storage code, like the
+                // arms above; Meta.TypeCode is Empty for the storage-less datetime classes, where GetTypeCode() throws.
+                DType d => d.Meta.TypeCode is var tc && tc != NPTypeCode.Empty && tc != NPTypeCode.String,
                 _ => false
             };
         }
@@ -419,13 +440,20 @@ namespace NumSharp
         }
 
         /// <summary>
-        /// Determine if a class is a subclass of a second class.
+        /// Determine if a class is a subclass of a second class — NumPy 1.x's <c>np.issubsctype(arg1, arg2)</c>. Kept on
+        /// purpose, so code written against NumPy 1.x compiles and runs unchanged, although NumPy 2.0 removed it
+        /// (<c>AttributeError: `np.issubsctype` was removed in the NumPy 2.0 release. Use `np.issubdtype` instead.</c>).
+        /// New code writes <see cref="issubdtype(NPTypeCode, NPTypeCode)"/>, which this delegates to.
         /// </summary>
-        /// <param name="arg1">The dtype to check.</param>
-        /// <param name="arg2">The dtype to compare against.</param>
+        /// <param name="arg1">The dtype to check; a <see cref="DType"/> such as <c>np.int32</c> converts implicitly.</param>
+        /// <param name="arg2">The dtype to compare against; a <see cref="DType"/> converts implicitly.</param>
         /// <returns>True if arg1 is a subtype of arg2.</returns>
         /// <remarks>
-        /// https://numpy.org/doc/stable/reference/generated/numpy.issubsctype.html
+        /// https://numpy.org/doc/1.26/reference/generated/numpy.issubsctype.html
+        /// <para>
+        /// Only concrete dtypes are accepted (two storage codes), so the abstract-class form NumPy 1.x allowed
+        /// (<c>np.issubsctype(np.int32, np.integer)</c>) does not compile; <c>np.issubdtype</c> takes the classes.
+        /// </para>
         /// </remarks>
         public static bool issubsctype(NPTypeCode arg1, NPTypeCode arg2)
         {
@@ -433,12 +461,23 @@ namespace NumSharp
         }
 
         /// <summary>
-        /// Return the string representation of a scalar dtype.
+        /// Return the string representation of a scalar dtype — NumPy 1.x's <c>np.sctype2char(sctype)</c>. Kept on
+        /// purpose, so code written against NumPy 1.x compiles and runs unchanged, although NumPy 2.0 removed it
+        /// (<c>AttributeError: `np.sctype2char` was removed in the NumPy 2.0 release. Use `np.dtype(obj).char`
+        /// instead.</c>). New code reads <see cref="DType.@char"/>.
         /// </summary>
-        /// <param name="sctype">A scalar type.</param>
+        /// <param name="sctype">A scalar type; a <see cref="DType"/> such as <c>np.int32</c> converts implicitly.</param>
         /// <returns>The character code for the type.</returns>
         /// <remarks>
-        /// https://numpy.org/doc/stable/reference/generated/numpy.sctype2char.html
+        /// https://numpy.org/doc/1.26/reference/generated/numpy.sctype2char.html
+        /// <para>
+        /// The table is fixed and PORTABLE: each letter maps back to the same dtype through <c>np.dtype(letter)</c> on
+        /// every host (<c>'i'</c> int32, <c>'q'</c> int64). NumPy 1.x answered <c>np.dtype(sctype).char</c>, which follows
+        /// the host's C <c>long</c>: int32 is <c>'l'</c> on Windows and int64 is <c>'l'</c> on Linux and macOS, and
+        /// <see cref="DType.@char"/> answers that way. Three answers have no NumPy counterpart: <see cref="NPTypeCode.Char"/>
+        /// is <c>'H'</c> (its uint16 storage), <see cref="NPTypeCode.Decimal"/> is <c>'d'</c>, and a code without a dtype
+        /// (<see cref="NPTypeCode.Empty"/>) is <c>'?'</c> where NumPy 1.x raised <c>ValueError: unrecognized type</c>.
+        /// </para>
         ///
         /// Character codes (NumPy):
         /// '?' - boolean
@@ -485,14 +524,24 @@ namespace NumSharp
         }
 
         /// <summary>
-        /// Return the scalar type of highest precision of the same kind as the input.
+        /// Return the scalar type of highest precision of the same kind as the input — NumPy 1.x's
+        /// <c>np.maximum_sctype(t)</c>. Kept on purpose, so code written against NumPy 1.x compiles and runs unchanged,
+        /// although NumPy 2.0 removed it (<c>AttributeError: `np.maximum_sctype` was removed in the NumPy 2.0 release. Use
+        /// a specific dtype instead. You should avoid relying on any implicit mechanism and select the largest dtype of a
+        /// kind explicitly in the code.</c>). New code names the dtype it wants.
         /// </summary>
-        /// <param name="t">The input scalar type.</param>
+        /// <param name="t">The input scalar type; a <see cref="DType"/> such as <c>np.int32</c> converts implicitly.</param>
         /// <returns>The highest precision type of the same kind.</returns>
         /// <remarks>
-        /// https://numpy.org/doc/stable/reference/generated/numpy.maximum_sctype.html
+        /// https://numpy.org/doc/1.26/reference/generated/numpy.maximum_sctype.html
         ///
         /// Uses NPTypeHierarchy for consistent type categorization across all typing functions.
+        /// <para>
+        /// Signed integers give int64, unsigned integers (and <see cref="NPTypeCode.Char"/>) uint64, float16 / float32 /
+        /// float64 give float64, and bool, complex128 and decimal give themselves. NumPy 1.x gave <c>np.longdouble</c> for a
+        /// float and <c>np.clongdouble</c> for a complex: the same float64 / complex128 on Windows, 16-byte extended types on
+        /// Linux, which NumSharp does not have.
+        /// </para>
         /// </remarks>
         /// <example>
         /// <code>

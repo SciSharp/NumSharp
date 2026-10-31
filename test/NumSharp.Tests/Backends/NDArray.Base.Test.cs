@@ -258,6 +258,7 @@ namespace NumSharp.Tests.Backends
         /// This tests that the shared memory isn't prematurely freed.
         /// </summary>
         [TestMethod]
+        [DoNotParallelize] // forces garbage collections, which suspend every thread: it runs with the serial set
         public void Base_ViewKeepsDataAlive()
         {
             // Everything this test reasons about is built after this epoch, so CollectSince decides it with a
@@ -284,6 +285,7 @@ namespace NumSharp.Tests.Backends
         /// Verify nested views keep data alive through the chain.
         /// </summary>
         [TestMethod]
+        [DoNotParallelize] // forces garbage collections, which suspend every thread: it runs with the serial set
         public void Base_NestedViews_KeepDataAlive()
         {
             // Everything this test reasons about is built after this epoch, so CollectSince decides it with a
@@ -309,6 +311,7 @@ namespace NumSharp.Tests.Backends
         /// Verify broadcast views keep original data alive.
         /// </summary>
         [TestMethod]
+        [DoNotParallelize] // forces garbage collections, which suspend every thread: it runs with the serial set
         public void Base_BroadcastView_KeepsDataAlive()
         {
             // Everything this test reasons about is built after this epoch, so CollectSince decides it with a
@@ -339,6 +342,7 @@ namespace NumSharp.Tests.Backends
         /// Verify reshape views keep original data alive.
         /// </summary>
         [TestMethod]
+        [DoNotParallelize] // forces garbage collections, which suspend every thread: it runs with the serial set
         public void Base_ReshapeView_KeepsDataAlive()
         {
             // Everything this test reasons about is built after this epoch, so CollectSince decides it with a
@@ -368,6 +372,7 @@ namespace NumSharp.Tests.Backends
         /// Verify transpose views keep original data alive.
         /// </summary>
         [TestMethod]
+        [DoNotParallelize] // forces garbage collections, which suspend every thread: it runs with the serial set
         public void Base_TransposeView_KeepsDataAlive()
         {
             // Everything this test reasons about is built after this epoch, so CollectSince decides it with a

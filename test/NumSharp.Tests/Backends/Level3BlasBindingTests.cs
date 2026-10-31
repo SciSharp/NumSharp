@@ -20,6 +20,7 @@ namespace NumSharp.Tests.Backends
     ///     BLAS, exactly like <see cref="MatmulParityBackendTests"/>.
     /// </summary>
     [TestClass]
+    [DoNotParallelize] // binds the process-wide OpenBLAS backend (TensorEngine.Blas)
     public unsafe class Level3BlasBindingTests
     {
         private const double Alpha = 0.75, Beta = -0.5, Sentinel = -98765.0;
