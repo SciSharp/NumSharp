@@ -78,6 +78,10 @@ A view keeps its owner's buffer alive, and so does a byte-reinterpreting alias:
 - NumPy's consequences follow: the owner's refcount counts each live alias, so `ndarray.resize(refcheck: true)` refuses
   while one lives, and the buffer returns to the pool when the last of owner and aliases is released. Gate:
   `Backends/Unmanaged/ArcLifecycleTests.cs` (`ReinterpretingAlias_*`).
+- A method that reads an operand's raw pointer and runs a kernel with no later use of the operand needs that operand
+  rooted, or optimized code lets a temporary operand's block be finalized under the kernel: an `[NDScoped]` method gets
+  its operands rooted by the weaver (`ScopeWeaver.InjectParameterAnchors`), an unscoped entry point carries
+  `[NDAnchored]`; never a hand-placed `GC.KeepAlive` (the lifetime gate: `oracle.md`).
 - An internal alias must be disposed, or created inside an `[NDScoped]` member: an undisposed one holds the owner's
   buffer out of the pool until the finalizer runs. The `real`/`imag` setters and `setfield` are `[NDScoped]`;
   `view<T>()` and `getfield<T>()` construct the typed array directly (an untyped NDArray followed by `AsGeneric<T>()`

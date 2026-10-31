@@ -794,7 +794,13 @@ The C# side runs under `OfficialBenchmarkConfig` (Infrastructure/BenchmarkConfig
   `SetProcessAffinityMask(GetCurrentProcess(), …)` call with no `argtypes`/`restype` fails
   SILENTLY (the pseudo-handle -1 is truncated to a 32-bit int → invalid HANDLE → returns 0) — the
   probes' `numpy_twins.py` carried exactly that and was never actually pinned; `benchmark_host`
-  declares the signatures and reads the mask back, so a pin is proven, never assumed. **Every runner
+  declares the signatures and reads the mask back, so a pin is proven, never assumed. **Trap: `start /affinity`
+  launched from Git Bash does NOT pin:** `cmd //c "start \"\" /wait /b /affinity 14 cmd /c X.cmd"` runs X, but every
+  child gets the full mask 0xFFFFFFFF, and the thread migrates to the E-cores, where a memory-bound copy runs at half
+  speed (`np.copyto` cells read 0.46× NumPy that way, 1.00× pinned). Launch from PowerShell (`cmd /c 'start "" /wait /b
+  /affinity 14 cmd /c X.cmd'`) or through a wrapper that sets its own `ProcessorAffinity` (children inherit it), and read
+  the mask a child reports (`[Diagnostics.Process]::GetCurrentProcess().ProcessorAffinity`) or
+  `Thread.GetCurrentProcessorId()` in the harness. **Every runner
   is covered, not just the op matrix:** a child process inherits its parent's affinity mask at spawn
   (verified child AND grandchild), so each *driver* pins itself after its build — `run_benchmark.py`,
   every `*_sheet.py` through `bench_common.run_cs/run_py` (lazily, at the first measured child),

@@ -238,6 +238,9 @@ Stream, sep="", format="%s")`. The facades (`APIs/np.{fromstring,fromfile,tofile
   write would leave the old tail.)
 - Gates: the text I/O oracle tier (five functions), `IO/TextReaderPortTests.cs`, `IO/FromStringTests.cs`,
   `Casting/NDArray.fromfile.Test.cs`.
+- The other byte-level array members: `Backends/Unmanaged/UnmanagedStorage.Convert.cs` (`ToBytes`, ndarray.tobytes'
+  `PyArray_ToString`), `UnmanagedStorage.Byteswap.cs` (ndarray.byteswap's `PyArray_Byteswap`), `Utilities/NDByteOrder.cs`
+  (the byte-order kernels behind `DTypeMeta.copyswapn`); np.frombuffer: `creation-manipulation.md`.
 
 ## Not implemented
 

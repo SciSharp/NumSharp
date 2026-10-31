@@ -104,6 +104,12 @@ mapped memory ends. Two tools make it fail:
     needs; a gather with a full mask does not.
   - A test whose two sides share a wrong operand proves nothing (an assertion that reads the same wrong mask on both
     sides passes).
+- Trap (.NET 8): the .NET 8 runtime's TIER-0 code boxes a `Half` loaded through a pointer (`object o = *(Half*)p;`, also
+  `Half h = *p; return h;` and `Unsafe.ReadUnaligned<Half>(p)` boxed) with a read past its two bytes; a float16 at the end
+  of mapped memory ends the process with "Fatal error. Internal CLR error. (0x80131506)" and no useful stack. .NET 10 and
+  optimized code (`DOTNET_TieredCompilation=0`) do not. Box a `Half` built from its bits (`UnmanagedStorage.HalfAt`:
+  `BitConverter.UInt16BitsToHalf(*(ushort*)p)`). A fenced test hits it only while the getter is still tier-0 code, so it
+  shows when the test runs ALONE (never in the full parallel run): run a fenced test by itself on net8.0 too.
 - Mutation scripts: a test host that ends in the middle of a run still prints a summary line for the tests that finished
   ("Passed! - Failed: 0, Passed: 1, Total: 1"), so an out-of-bounds mutant can read as a survivor. Compare the summary's
   total with a clean run's, or look for "aborted".
@@ -113,34 +119,39 @@ mapped memory ends. Two tools make it fail:
 `[OpenBugs]` tests are known-failing reproductions, excluded from CI; remove the attribute when the bug is fixed.
 - The files: `OpenBugs.cs` (general), `OpenBugs.Bitmap.cs`, `OpenBugs.ApiAudit.cs`, `OpenBugs.ILKernelBattle.cs`
   (regression pins only), `OpenBugs.Random.cs`, `OpenBugs.BroadcastReduce.cs` (regression pins only), `OpenBugs.Char.cs`
-  (regression pins only; `gen_oracle.char_tier` carves the same combos out of the corpus), `OpenBugs.MatrixOperand.cs` (np.gradient and
-  np.meshgrid return plain arrays in their result structs where NumPy returns matrices, MO06 / MO07),
+  (regression pins only; `gen_oracle.char_tier` carves the same combos out of the corpus), `OpenBugs.NpLayer.cs` (the
+  np-layer dtype plan's divergences, pinned and deferred, NL1 to NL8: np.copyto into StringDType under `where=`
+  converting masked-off source elements, complex np.median without `_median_nancheck`, the flat float32 / float64 np.prod
+  in SIMD lane order, 1-D np.polyval's complex zero, np.nested_iters / np.einsum argument order, np.array of a ragged
+  jagged C# array, the subclass boundary's depth reaching user callbacks, and NL8: which NaN a run of NaNs keeps in a
+  DEBUG build, where the JIT's reduce step differs from Release; CI runs Release), `OpenBugs.MatrixOperand.cs`
+  (np.gradient and np.meshgrid return plain arrays in their result structs where NumPy returns matrices, MO06 / MO07),
   `OpenBugs.Reductions.cs` (how a reduction STARTS: flat `cumsum` loses a leading `-0.0`; the managed size-1 `dot`/`inner`
   operands take the opposite of NumPy's scalar branch; complex one-element `prod` skips the `1+0j` identity; `median`
   returns the middle element instead of its `np.mean`; complex `cumprod` multiplies element 0 by `1+0j`; the default
   `einsum`'s zero-filled accumulator for bare products; the N-D size-1 flat `cumprod` returning 0-d; which NaN a flat sum
-  of several NaNs keeps; an axis sum in a cast loop whose pinned rows are longer than `np.getbufsize()`; an axis sum over
-  a view with a reversed axis walking memory order; the flat sum of a broadcast operand not following NumPy's per-row
-  call schedule; an axis sum of a broadcast operand; the engine's flat mean of a broadcast float16 / complex128 operand
-  ignoring `dtype=`; raw-bit asserts, because `0.0 == -0.0`), `OpenBugs.FancyIndex.cs` (fancy indexing against NumPy's
+  of several NaNs keeps (and a complex128 short run's NaN per part); an axis sum in a cast loop whose pinned rows are
+  longer than `np.getbufsize()`; the plain C-contiguous sum along an outer axis keeping a column's first NaN where NumPy
+  keeps the later row's (group 15); raw-bit asserts, because `0.0 == -0.0`; the reversed / broadcast operands' sums and
+  means and np.average over a tuple axis are fixed, their tests in `Math/np.sum.ReversedBroadcast.Test.cs` and
+  `Statistics/np.average.TupleAxes.Test.cs`), `OpenBugs.FancyIndex.cs` (fancy indexing against NumPy's
   three `mapping.c` routes: an N-D index array that is not C-contiguous beside a slice / ellipsis / integer is read in
   memory order, and the result LAYOUT: NumPy's transposed MapIter view for an index behind a slice, the index arrays'
   order for a lone index or arrays on every axis, the source's order for the other axes of a non-C source, including
   `Generator.permutation` of a non-C 3-D source), `OpenBugs.EmptyStrides.cs` (a zero-size array NumPy allocates has
   all-zero strides, and a slice keeps its parent's strides on an extent-0 axis), `OpenBugs.PolynomialNaN.cs` (the
   polynomial step-table integral kernels keep the wrong NaN per statement: `lagint` float16 overflow, `hermeint` float16
-  NaN in `k`, `lagint` float64 `scl=+inf`; raw-bit asserts, win-amd64), `OpenBugs.SortUniqueNaN.cs` (`np.unique` /
-  `unique_values` keep a float32/float64 NaN's payload and sign where NumPy's sort-first unique returns the canonical
-  positive quiet NaN; `np.sort` ignores `kind`, canonicalizing where NumPy's `stable`/`mergesort` keep every NaN's bits),
-  `OpenBugs.Matrix.cs` (the array library below numpy.matrix: `np.dot` N-D × M-D computes complex128 in float64, the flat
-  `np.prod` in a cast loop, a fancy assignment into an offset view throws, four result-layout gaps), `OpenBugs.ErrorParity.cs`
-  (error-message parity: `vstack`/`hstack`/`dstack`/`stack` raise .NET's "Value cannot be an empty collection." for an
-  empty list instead of NumPy's `ValueError` "need at least one array to concatenate" / "…to stack";
-  `moveaxis`/`rollaxis`/`swapaxes` report an out-of-range axis as `axis (5) … dimension (2)` and `squeeze` raises .NET's
-  generic range message, where NumPy's AxisError is `axis 5 … dimension 2` with a `source:`/`destination:`/`axis2:` role
-  prefix; `moveaxis`'s source/destination length mismatch is a bare `Exception` whose text ends in a stray backtick),
-  `OpenBugs.NaNOperandOrder.cs`, `OpenBugs.Surface.cs`, `OpenBugs.MaSurface.cs`, `OpenBugs.Relayout.cs`,
-  `OpenBugs.ViewFlags.cs`.
+  NaN in `k`, `lagint` float64 `scl=+inf`; raw-bit asserts, win-amd64), `OpenBugs.SortUniqueNaN.cs` (regression pins
+  only: the unique family's value routes write NumPy's sort NaN, the positive quiet NaN, for float32 / float64, and
+  `np.sort`'s `stable`/`mergesort` keep every NaN's bits), `OpenBugs.Matrix.cs` (the array library below numpy.matrix: a
+  fancy assignment into an offset view throws, and three result-layout gaps: cumprod, round of a broadcast operand,
+  conjugate of a transposed strided view; the imag-of-a-real-F-array pin is a regression test), `OpenBugs.ErrorParity.cs`
+  (regression pins only: the stacking family's empty-list texts, the moveaxis / rollaxis / swapaxes / squeeze AxisError
+  texts, moveaxis' length mismatch as NumPy's ValueError), `OpenBugs.NaNOperandOrder.cs`, `OpenBugs.Surface.cs`,
+  `OpenBugs.MaSurface.cs`, `OpenBugs.Relayout.cs`, `OpenBugs.ViewFlags.cs`.
+- The LIFETIME OpenBugs (lost GC anchors) live in the Oracle project, because the bug exists only in optimized code and
+  needs the lifetime child process (`oracle.md`): none is open; a new open gap gets a `Lifetime_LT<nn>_*` test beside the
+  aggregate `Lifetime_KnownGaps` (and `LifetimeOracleTests.Scaled.cs`'s `LifetimeScaled_KnownGaps`).
 - Auditing the category: run `TestCategory=OpenBugs&TestCategory!=HighMemory` (`[LargeMemoryTest]` adds the OpenBugs
   category to memory-heavy NON-bug tests) in Release AND Debug on both TFMs; a test that passes in all four has its tag
   removed, its comments rewritten as a regression pin, and a `<summary>` of what it guards. Kept on purpose:

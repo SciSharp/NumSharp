@@ -312,7 +312,8 @@ Ported from NumPy's C (gates `Backends/AllocationGuardTests.cs`, `Manipulation/R
 ## `np.copyto`
 
 `np.copyto(dst, src, casting='same_kind', where=True)` is NumPy's `array_copyto` → `PyArray_AssignArray` /
-`PyArray_AssignRawScalar`, statement for statement (`Manipulation/np.copyto.cs`).
+`PyArray_AssignRawScalar`, statement for statement (`Manipulation/np.copyto.cs`, the facades over
+`UnmanagedStorage.CopytoAssignArray` / `CopytoAssignRawScalar` in `Backends/Unmanaged/UnmanagedStorage.Assign.cs`).
 - Arguments: the casting name first (`ValueError` "casting must be one of …", `TypeError` for null), then the mask's dtype
   (NumPy's "Cannot cast array data|scalar from dtype('int64') to dtype('bool') according to the rule 'safe'", as
   `ArgumentException`). A C# integer / `float` / `double` / `Complex` binds `copyto<T>` and is NumPy's weak Python scalar
@@ -332,11 +333,11 @@ Ported from NumPy's C (gates `Backends/AllocationGuardTests.cs`, `Manipulation/R
   `PyArray_PrepareThreeRawArrayIter`: axes by dst's |stride|, negative dst strides flipped, coalescing) plus the 1-D
   backward rule. An IL walker drives a run stage: a SIMD blend for contiguous runs (`ConditionalSelect`, AVX2 `vpmovzx`
   mask widening, a hoisted vector for a broadcast source), a branch-free select off running pointers for strided runs
-  and tails, memmove / fill for a constant-true run. With more than one prepared axis the operands cannot overlap, so the
-  innermost axis is the one where most operands are contiguous (NumPy's order wins ties; `np.CopytoNumPyOrderOnly` is
-  the A/B hook). A source of another dtype, or an overlapping one NumPy copies first, is staged in dst's memory order
-  (one element per distinct source element, on the stack up to 16 KB, else a pooled buffer) through NDIter.Copy's cast
-  kernels.
+  and tails, memmove / fill for a constant-true run. With more than one prepared axis the operands cannot overlap, so
+  the innermost axis is the one where most operands are contiguous (NumPy's order wins ties;
+  `UnmanagedStorage.CopytoNumPyOrderOnly` is the A/B hook). A source of another dtype, or an overlapping one NumPy
+  copies first, is staged in dst's memory order (one element per distinct source element, on the stack up to 16 KB, else
+  a pooled buffer) through NDIter.Copy's cast kernels.
 - The unmasked copy is `NDIter.Copy`, whose overlap rule is NumPy's for every caller (slice assignment too): copy first
   for a multi-axis destination or an opposite-direction 1-D one; otherwise NumPy's raw 1-D order
   (`DirectILKernelGenerator.AssignRaw1D`), which reads its own writes when the strides differ (`a[3:19:2] = a[6:14]`).

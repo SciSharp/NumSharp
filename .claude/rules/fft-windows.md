@@ -36,7 +36,8 @@ taper (NumPy forces at least float64 through `np.array([0.0, M])`).
 ## Fourier transforms (`np.fft.*`)
 
 `fft`, `ifft`, `fft2`, `ifft2`, `fftn`, `ifftn`, `rfft`, `irfft`, `rfft2`, `irfft2`, `rfftn`, `irfftn`, `hfft`, `ihfft`,
-`fftfreq`, `rfftfreq`, `fftshift`, `ifftshift`, plus the complex accessors `conjugate`/`conj`, `real`, `imag`, `angle`.
+`fftfreq`, `rfftfreq`, `fftshift`, `ifftshift`, plus the complex accessors `conjugate`/`conj`, `real`, `imag`, `angle`
+(np.real / np.imag's statements are `NDArray.RealPart` / `ImagPart` in `Backends/NDArray.TypeCheck.cs`).
 - A pure-managed C# port of pocketfft, NumPy's own FFT engine (`src/NumSharp.Core/Fourier/`, no native dependency). The
   double/complex128 path is bit-for-bit identical to NumPy 2.4.2: the port is a faithful scalar transcription, NumPy's
   win-amd64 wheel is itself scalar (`POCKETFFT_NO_VECTORS` under MSVC), and the twiddles come from the same CRT
@@ -70,10 +71,10 @@ taper (NumPy forces at least float64 through `np.array([0.0, M])`).
   64-entry plan cache that is bit-neutral: NumPy's build has `POCKETFFT_CACHE_SIZE == 0`, so caching only saves twiddle
   setup).
 - Layer-3 semantics (`DefaultFftEngine.RawFft.cs`, a port of `_pocketfft.py`): the norm factor `fct` (forward
-  `None/backward → 1`, `ortho → 1/√n`, `forward → 1/n`; the inverse swaps direction FIRST, so `ifft` divides by n); `n < 1` →
-  `ValueError("Invalid number of FFT data points ({n}) specified.")`; `n` truncates/zero-pads; `rfft` output `n//2+1`;
-  `irfft`/`hfft` default `n = 2*(m-1)`; the N-D `s`/`axes` cook (`s` without `axes` → the last `len(s)` axes, the
-  `s[i] == -1` sentinel, `len(s) != len(axes)` → `ValueError("Shape and axes have different lengths.")`).
+  `None/backward → 1`, `ortho → 1/√n`, `forward → 1/n`; the inverse swaps direction FIRST, so `ifft` divides by n); `n <
+  1` → `ValueError("Invalid number of FFT data points ({n}) specified.")`; `n` truncates/zero-pads; `rfft` output
+  `n//2+1`; `irfft`/`hfft` default `n = 2*(m-1)`; the N-D `s`/`axes` cook (`s` without `axes` → the last `len(s)` axes,
+  the `s[i] == -1` sentinel, `len(s) != len(axes)` → `ValueError("Shape and axes have different lengths.")`).
 - Errors in NumPy's line order: the bad-`norm` message has no space after the first comma on a FORWARD transform but a
   space on the inverse/`hfft`/`ihfft` (`_swap_direction`'s KeyError path); an out-of-range axis is `IndexError("tuple
   index out of range")` when `n` is omitted (the `a.shape[axis]` subscript fires first) but `AxisError` when `n` is

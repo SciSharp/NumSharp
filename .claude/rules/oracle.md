@@ -58,10 +58,10 @@ test/NumSharp.Tests.Oracle/Fuzz/      C# replay harness (no Python)
 - Dtype coverage: the per-mode dtype axes span `ALL_DTYPES`; Char (no NumPy dtype) through uint16-proxy rows; Decimal
   through the independent C# scalar oracle. Real product bugs are carved and pinned (`[OpenBugs]`) or fixed, never
   excused in the registry.
-- Regenerate (deterministic; needs `numpy==2.4.2`): `python test/oracle/gen_oracle.py <mode>` (modes include
-  `conversion creation multioutput iter dtype_text out_where errors_full smoke astype_full binary divmod_power comparison
-  unary reduce where place matmul rounding bitwise unary_extra nanreduce scan stat logic modf manip sort tail params
-  aliasing copyto copyto_full power_fast errors groupa numpy_f32 matmul_parity linalg_parity poly einsum specials
+- Regenerate (deterministic; needs `numpy==2.4.2`): `python test/oracle/gen_oracle.py <mode>` (modes include `conversion
+  creation multioutput iter dtype_text out_where errors_full smoke astype_full binary divmod_power comparison unary
+  reduce where place matmul rounding bitwise unary_extra nanreduce scan stat logic modf manip sort tail params aliasing
+  copyto copyto_full power_fast weak_scalar errors groupa numpy_f32 matmul_parity linalg_parity poly einsum specials
   precision products random_parity fft`; `precision` also needs `mpmath`) and the index / Decimal / NPY generators, then
   `dotnet build` to copy the corpus assets.
 - Managed and OpenBLAS without duplicate noise: the ordinary tiers always run Core managed; the host-pinned
@@ -69,13 +69,29 @@ test/NumSharp.Tests.Oracle/Fuzz/      C# replay harness (no Python)
   backend can affect: identical outcomes are deduplicated, and the flips are byte-compared with NumPy on the pinned host.
   Outcome equality includes threw/result, dtype, shape and bytes; a backend change on a non-CBLAS dtype is a hard failure.
 - Per-API parity in the coverage artifact: `coverage/generate_coverage.py` joins every committed contract of the corpus,
-  plus the `.npy`/flags/layout oracles, onto its API row (`coverage/oracle_evidence.py` + the reviewed
-  `coverage/oracle_map.json`): each row reads available AND oracle-verified (direct contracts, an identity alias (the same
-  NumPy object mapped to the same NumSharp member) or a reviewed delegation alias). The join is strict: a new op key must
-  resolve (bare keys go to `np.*` first, dotted keys by namespace, anything else needs a `fuzz.keys` entry), a new corpus
-  file must be named by a replay suite, and stale or redundant map entries fail; otherwise the coverage generator (docs
-  CI) fails, naming the key. Gate `coverage/test_oracle_evidence.py` (including a cross-check that every C#
+  plus the `.npy`/flags/layout oracles and the string oracle's `numpy.strings` calls, onto its API row
+  (`coverage/oracle_evidence.py` + the reviewed `coverage/oracle_map.json`): each row reads available AND
+  oracle-verified (direct contracts, an identity alias (the same NumPy object mapped to the same NumSharp member) or a
+  reviewed delegation alias). The join is strict: a new op key must resolve (bare keys go to `np.*` first, dotted keys
+  by namespace, anything else needs a `fuzz.keys` entry), a new corpus file must be named by a replay suite, and stale
+  or redundant map entries fail; otherwise the coverage generator (docs CI) fails, naming the key. Gate
+  `coverage/test_oracle_evidence.py` (including a cross-check that every C#
   `EquivalentAliases`/`NdarrayAliases`/`MaAliases` entry has its reviewed alias).
+- Signature parity in the coverage artifact: availability credits a NumPy API by NAME, which says nothing about the call
+  (a member of that name with no `out=` reads "available / exact"). The generator runs the gap map's tools
+  (`tools/api-parameter-parity`: `dump_modules.cs`, `binding_probe.py`, `signature_diff.py`, through
+  `coverage/signature_gap.py`; it needs the .NET 10 SDK), and `coverage/signature_parity.py` joins each C# spelling onto
+  the catalog row of the NumPy API it spells (module functions and members, a `(constructor)` onto the class row,
+  `NDArray<T>` onto ndarray's, extension methods; an alias or inherited member adopts the spelling of the row with the
+  same C# member AND the same NumPy object); a credited row the gap map does not reach keeps the inventory's own
+  comparison (`source: inventory`, never compile-probed). Row `signature`: `identical` / `differs` / `not-compared`, the
+  gap map's symbol per mark, every spelling. Marks: M (a NumPy parameter no overload offers; a rename counts), X (a
+  parameter NumPy lacks), O (more than one overload), T (a dtype as `NPTypeCode` / `Type`), B (a NumPy-style call that
+  does not compile), L (`null` refused for None), Q (an integer sequence refused), N (credited through another name).
+  A row turns `identical` by itself once its API is fixed. Strict: a credited call the index cannot resolve, a gap
+  spelling that joins no row or an uncredited row, and a stale `GAP_JOIN_EXEMPT` entry fail the generator. Gates
+  `coverage/test_signature_parity.py` (with the committed `docs/plans/numpy-signature-diff.csv`),
+  `test_object_surfaces.py`, `test_dashboard.cjs`.
 
 ## Tiers
 
@@ -92,7 +108,19 @@ test/NumSharp.Tests.Oracle/Fuzz/      C# replay harness (no Python)
   bases, the trivial loop's cast copies, NpyIter's buffering threshold at `np.setbufsize(256)` and the default, varying
   exponents, `out=`/`where=` layouts and `dtype=`; bases hold values on which the fast path and pow differ. Zero excuses.
   Not generated: a 0-d float32/float16 base with a Python-scalar exponent (the NEP 50 0-d divergence), complex bases with
-  non-integer exponents (F5), unsigned bases with -1, an `out=` that does not broadcast.
+  non-integer exponents (F5), unsigned bases with -1, an `out=` that does not broadcast (its text is NumPy's, pinned by
+  `UfuncOutWhereTests`).
+- `weak_scalar.jsonl` (`gen_oracle.py weak_scalar`): NEP 50 weak Python scalars: the six comparisons and the binary ufuncs
+  with one operand the C# literal NumPy's Python int / float / complex / bool maps to, every dtype against the scalars
+  where the precision decides, both sides, np.* and both operator overloads, `out=` / `where=`, the iterator layouts, ints
+  past 2^53 into float16 / float32 loops (two roundings), weak ints into integer loops (NumPy's OverflowError), long
+  arrays through the scalar-broadcast kernels' packed vector loops (section W), empty broadcasts, and section S: the
+  literal STORED at every store entry point (the indexer routes, fill, full, full_like, put, putmask, place,
+  put_along_axis, insert, fill_diagonal, pad, the flat iterator, asarray, copyto), Python scalars and the NumPy scalars
+  Half / char. Every other tier passes arrays, which NumPy treats as strong. Zero excuses. Generator drops: a where=
+  comparison of an integer array with an out-of-range Python int (NumPy 2.4.2 segfaults there), a bool array against an
+  int past int64, a store error naming the platform C long (the unit tests pin the LP64 texts), np.copyto's complex64
+  cast text.
 - `precision.jsonl`: each case carries `expected.truth`, the correctly rounded mathematical reference (exact `Fraction` /
   200-bit mpmath, generator-side), over precision-adversarial inputs (wide-magnitude and cancellation sums, large-mean
   variance, near-1 products, expm1/log1p at small |x|). Bit-exact to NumPy passes without truth being read; truth only
@@ -114,25 +142,71 @@ test/NumSharp.Tests.Oracle/Fuzz/      C# replay harness (no Python)
 - `ma_meanvar.jsonl` (`gen_ma_oracle.py meanvar`): numpy.ma's mean/var/std/anom statements over every layout × dtypes ×
   nomask / all-False / some masks, the mask classes, keepdims and ddof, `dtype=`, the `mean=` forms, special values and
   NumPy's errors; each case also records `raw` (the data at every slot) and `form` (singleton / scalar / nomask / mask),
-  which `FuzzCorpusTests.Ma` compares. Zero excuses (valueclass `mameanvar`). The carve (`_mv_carved`) holds the cells
-  whose mean sums the operand view on a layout np.sum orders differently (reversed axes, broadcast operands), only where
-  the sum is not order-free; `python gen_ma_oracle.py meanvar --uncarved <path>` writes the whole matrix.
+  which `FuzzCorpusTests.Ma` compares. Zero excuses (valueclass `mameanvar`) and no carve: the cells whose mean sums the
+  operand view on a layout np.sum used to order differently (reversed axes, broadcast operands) are in the gate since
+  that sum follows NumPy's schedule.
 - `copyto_full.jsonl`: np.copyto over dtypes × destination and source layouts × mask forms, long runs at every element
   width, cast pairs, overlapping views of one buffer (masked and unmasked), C# literal sources as Python scalars, 0-d and
   empty destinations, and the error jobs that gate NumPy's check ORDER; every case records the destination's whole base
   buffer. Zero excuses.
+- Ownership, the deterministic over-disposal (`Fuzz/Ownership/` +
+  `UndisposedIntermediateTests.{Ownership,ForeignMemory}.cs`; README "Ownership gate"): no call may dispose, release,
+  under-count, swap or pool memory it does not own (its caller's operands, masks, index and value arrays, `out=`
+  targets, the leak fixtures, the process-wide shared arrays: `np.ma.nomask`, the masked constant, the numpy.polynomial
+  module constants and class attributes). The leak sweep's pool balance CANNOT see it: `NDArray.Dispose` is idempotent
+  and every sweep family runs an unmeasured warm call first, so an op that disposes its operand returns the buffer there
+  and the measured window balances (`PoolBalance_CannotSeeADisposedOperand`). `OwnershipLedger` snapshots each array
+  (its block's ARC kind, counted references and freed flag through `ArcProbe`'s compiled accessors on the private
+  `Disposer`) and checks it after every region of every case in all four leak runners, plus a `PoolScan` of the 64 most
+  recent buffers of the caller memory's bucket sizes. `Corpus_ForeignOperands_StayTheCallers` replays one case per (op,
+  layout, dtype) with every operand rebuilt over six `ForeignKind`s (pooled, a pinned caller `T[]`, `np.ndarray(buffer:
+  byte[])`, `np.frombuffer`, a non-owning raw pointer, caller memory with a release action). `ReferenceRetained` (a
+  reference to the caller's memory outlived the call) is printed, not judged.
+- Lifetime, lost GC anchors (`Fuzz/Lifetime/`, `test/oracle/gen_lifetime_oracle.py`; README "Lifetime gate" and "Scaled
+  lifetime tier"): a method that reads an operand's raw pointer and runs its kernel with no later use of the operand lets
+  optimized code drop the operand at the pointer read; when the caller passed a temporary, a collection during the kernel
+  finalizes its block and the buffer is pooled or freed under the kernel (silently wrong values, spurious IndexErrors,
+  fatal access violations). No other tier can see it: they hold their operands.
+  - Cases carry operand RECIPES (NumPy's answer as dtype / shape / SHA-256) in `Fuzz/Lifetime/corpus/`, outside the
+    generic sweeps. The replay runs the Oracle assembly as a CHILD process with `DOTNET_TieredCompilation=0` (tier-0 keeps
+    every local alive and hides the bug; a crash ends only the child, which resumes after the crashed case; entry point
+    `LifetimeChildProgram.Main`, so the csproj sets `GenerateProgramFile=false`), builds each temporary operand inside the
+    call expression, and a stress thread collects, drains finalizers and poisons the buffers they return. A control must
+    be caught or the run is inconclusive. Release only: a Debug build keeps every local live, so the tests are
+    inconclusive there (`dotnet test -c Release`; CI does).
+  - Gate `LifetimeOracleTests.Lifetime` (`[FuzzMatrix]`): its cases PIN the fixed gaps LT01–LT30
+    (`Lifetime_CorpusContract`; a red pinned case reads `FIXED gaps regressed: LTnn`); open gaps (none) are carved into
+    `lifetime_gaps.jsonl` (`GAPS` in the generator, `FIXED` the rest). The scaled tier
+    (`Fuzz/Lifetime/LifetimeScaled.cs`, gate `LifetimeScaled_EveryOpKey`) runs every op key of the ordinary and
+    masked-array corpus with its operands enlarged into ~2 MiB temporaries against the same call over held operands (no
+    NumPy answer needed); `KnownScaledGaps` (empty) maps an op key to the open lifetime gap whose site it reaches;
+    `NUMSHARP_LIFETIME_SCALED_REPS` sets the depth (the nightly `lifetime-scaled` job runs 32).
+  - The fix is the weaver's OPERAND ROOTS, never a hand-placed `GC.KeepAlive` (a scope roots only arrays built while it is
+    open, never the caller's operands): every method that opens an NDScope copies its NDArray-reaching parameters (and
+    `this` of a class) into `object` shadow locals at entry and passes them to `NDScope.Anchor` before every `ret`
+    (`ScopeWeaver.InjectParameterAnchors`); an unscoped entry point that hands an operand's address to a kernel carries
+    `[NDAnchored]` (roots only, no scope, not inherited; NDW019 refuses a body-less / async / iterator / tail-call /
+    also-scoped / nothing-to-root method; NDW013 and the MSBuild fallback scan cover it). A new site: scope or anchor its
+    entry point. Deterministic guards: `test/NumSharp.Tests/Lifetime/OperandRootsTests.cs` reads the woven IL, and
+    `WeaverOperandRootTests` (Build.Analyzer) pins the transform.
+  - Traps: JIT liveness is per call site over every later path (`astype` keeps its receiver because a later branch reads
+    `this.Shape`; the same cast through `TensorEngine.Cast` loses it); a pass is not proof (short windows go uncaught for
+    many runs); the child watchdog is per case (`CaseTimeout`); detection is a race, never a false positive, so a red gate
+    is a real lost anchor (carve it under a new LT id).
 - The array-object oracle (`test/oracle/gen_viewflags_oracle.py`; README "The array-object oracle") gates the OBJECT an
   API returns: values plus a `mem` facet (C / F / OWNDATA / WRITEABLE / ALIGNED flags, byte strides, view-of / IS each
   operand, tuple slot sharing). `view_flags.jsonl` (APIs × source layouts), `out_flags.jsonl` (out-capable APIs × out
   layouts: it returns the out ITSELF and writes only its slots), `shape_args.jsonl` (the same dims as `Shape` / `long[]`
   / `int[]` / `int` / a view's Shape), `array_args.jsonl` (secondary operand positions × layouts). Operands rebuild as
-  owners (`own: true`) or read-only (`writeable: false`). Zero excuses; every known divergence is CARVED by `_gap_of` into
-  `corpus/gaps/<tier>_gaps.jsonl` (exact: each carved case diverges, no kept case does), replayed by the `*_KnownGaps`
-  `[OpenBugs]` tests, with repros in `NumSharp.Tests/OpenBugs.ViewFlags.cs`. The worst open class: C-contiguous views at a
-  non-zero offset (`np.split` / `np.unstack` / `np.array_split` children) are read from the parent's start by some
-  functions (silent wrong values). Coverage join: `oracle_map.json` `viewflags` / `outflags` / `shapearg` param keys
-  (`params.fn`); the leak sweep labels these keys' families `op:fn`, and the leaks they found sit in `KnownEscapes` with
-  ceilings. Portability: libm-backed `out=` rows take zeros; FFT lengths stay in {2, 3, 4, 6}.
+  owners (`own: true`) or read-only (`writeable: false`). Zero excuses; every known divergence is CARVED by `_gap_of`
+  into `corpus/gaps/<tier>_gaps.jsonl` (exact: each carved case diverges, no kept case does), replayed by the
+  `*_KnownGaps` `[OpenBugs]` tests, with repros in `NumSharp.Tests/OpenBugs.ViewFlags.cs`. The worst class found:
+  C-contiguous views at a non-zero offset (`np.split` / `np.unstack` / `np.array_split` children) read from the parent's
+  start (silent wrong values); still open in `np.where`, `np.ldexp` and the flat `np.nansum` / `np.nanprod`, fixed in
+  `np.repeat`, `np.unique`, the set routines and `np.searchsorted`; `a[:, idx]` on such a view throws. Coverage join:
+  `oracle_map.json` `viewflags` / `outflags` / `shapearg` param keys (`params.fn`); the leak sweep labels these keys'
+  families `op:fn`, and the leaks they found sit in `KnownEscapes` with ceilings. Portability: libm-backed `out=` rows
+  take zeros; FFT lengths stay in {2, 3, 4, 6}.
 - The relayout tiers (`test/oracle/gen_relayout_oracle.py`; README "The relayout tiers"; run it AFTER every other
   generator, its sources are their files): every (op key, operand position, dtype class) cell is surveyed for 19 ndarray
   KINDS (C / F / permuted / stepped, each also at an extra offset; reversed; stepped and reversed; broadcast and
@@ -142,8 +216,9 @@ test/NumSharp.Tests.Oracle/Fuzz/      C# replay harness (no Python)
   `relayout_host.jsonl` (via `RunHostLibmCorpus`). A variant inherits its source tier's excuses, so
   `RelayoutLayoutInvariance` holds, with no registry, that NumSharp's outcome equals its own outcome on a C-ordered copy
   (`FuzzCorpus.ReconstructCanonical`) wherever NumPy's does not change; the relayout tiers are exempt from the NEP 50 0-d
-  branches (`MisalignedRegistry.IsRelayoutCase`). Carved gaps RL01–RL07 (`gaps/relayout_gaps.jsonl`, repros in
-  `NumSharp.Tests/OpenBugs.Relayout.cs`). An empty operand descriptor with a buffer rebuilds as an empty VIEW over it.
+  branches (`MisalignedRegistry.IsRelayoutCase`). Carved gaps: the open ids of RL01–RL07 (`gaps/relayout_gaps.jsonl`,
+  repros in `NumSharp.Tests/OpenBugs.Relayout.cs`). It and the matrix-operand generator skip each other's files, so their
+  order does not matter. An empty operand descriptor with a buffer rebuilds as an empty VIEW over it.
 - The surface tier (`test/oracle/gen_surface_oracle.py`; README "The surface tier"): contracts for APIs the coverage
   inventory lists as available (the Array-API linalg forms, the histogram family, array_equiv, shares_memory /
   may_share_memory, broadcast_shapes, apply_along_axis / apply_over_axes, bmat, the text formatters, ndarray members,
@@ -152,8 +227,9 @@ test/NumSharp.Tests.Oracle/Fuzz/      C# replay harness (no Python)
   the operand corpus cannot express ride params: a FUNCTION is a name from a fixed menu both sides map to one
   computation, two VIEWS of one buffer are step recipes applied to one owner, global options are set and restored inside
   the case. Op keys are the API names (`coverage/oracle_map.json` prefix rules). `surface.jsonl` (valueclass `surface`,
-  zero excuses) and `gaps/surface_gaps.jsonl` (ids SU01…SU42, carved exactly by modelling each bug; repros in
-  `NumSharp.Tests/OpenBugs.Surface.cs`). The relayout generator skips this tier. Not provable by design:
+  zero excuses; its section dragon4 holds the float formatters) and `gaps/surface_gaps.jsonl` (the open ids of
+  SU01…SU42, carved exactly by modelling each bug; repros in `NumSharp.Tests/OpenBugs.Surface.cs`, a fixed id's repro
+  kept as an untagged regression pin). The relayout generator skips this tier. Not provable by design:
   numpy.ma.polyfit (needs a LAPACK backend), numpy.nditer.debug_print (a C-level stdout dump) and the `BitGenerator` /
   engine `.lock` rows (a `threading.Lock`).
 - The numpy.ma surface tier (`test/oracle/gen_ma_surface_oracle.py`): contracts for the numpy.ma functions (creation
@@ -162,7 +238,8 @@ test/NumSharp.Tests.Oracle/Fuzz/      C# replay harness (no Python)
   apply_over_axes) over masked operands in every relayout data kind × eight mask patterns. The ma harness has `tuple` and
   `text` result kinds (a Python object as its normalized repr) and `RunMaGapCorpus`; masked results record the FORM and,
   where NumPy defines it, the RAW data at masked slots. `ma_surface.jsonl` (valueclass `masurface`, zero excuses) and
-  `gaps/ma_surface_gaps.jsonl` (MS1–MS37; repros in `NumSharp.Tests/OpenBugs.MaSurface.cs`).
+  `gaps/ma_surface_gaps.jsonl` (the open ids of MS1–MS37; repros in `NumSharp.Tests/OpenBugs.MaSurface.cs`, a fixed id's
+  repro kept as an untagged regression pin).
 - The matrix tier: `matrix.md`. The matrix-operand tier (`test/oracle/gen_matrix_operand_oracle.py`; run it AFTER every
   other generator): corpus cases that a plain NumPy call reproduces, re-emitted with one 2-D operand typed as a matrix
   (`"matrix": true`, layout `matrix@<position>`), NumPy's answer recomputed (class, dtype, shape, values, or error type
@@ -218,6 +295,38 @@ The same philosophy, a separate corpus, and a stronger claim: NumSharp's writer 
   64-byte bucket (10¹⁷ elements); the v1.0 → v2.0 auto-selection boundary sits at 21,817 dimensions.
 - Reverse interop (manual; Python + the SDK): `python test/oracle/verify_npy_interop.py` has NumSharp write files and
   real NumPy read them, the only proof for `.npz` output, whose ZIP framing differs from Python's `zipfile`.
+
+## The text I/O oracle
+
+`test/oracle/gen_textio_oracle.py` → `test/NumSharp.Tests.Oracle/TextIO/corpus/textio_<section>.jsonl`, replayed by
+`TextIO/TextIOOracleTests.cs` (category `TextIOOracle`, one test per section, zero excuses): `np.fromstring`,
+`np.fromfile`, `np.loadtxt`, `np.savetxt` and `ndarray.tofile` over every dtype, StringDType included (`text-io.md`).
+- Sections: `fromtext` (random `fromstring` / text `fromfile` calls: separators, counts, offsets, the file position
+  afterwards, texts past the C `FILE` model's 64 KB chunk), `frombin` (binary reads), `fromedges` (a FIXED grid: every
+  scanner token alone, after a clean element and before one; every separator in seven placements; bytes at or past
+  0x80), `loadtxt` (every option and source), `ltfields` (numeric fields, every refused one alone), `lttokens` (tokenizer
+  edges), `savetxt`, `tofile`.
+- Regenerate with LINUX NumPy (the host check refuses anything else: NumSharp pins a 64-bit C `long` and glibc's
+  `fscanf`): `wsl -e bash -lc 'cd ~ && ~/np242/bin/python /mnt/k/source/NumSharp/test/oracle/gen_textio_oracle.py'` (from
+  `~`: `refs/numpy`'s sources would shadow the package), `--sections a,b` for a subset, then `dotnet build`.
+  Deterministic (one seed per section).
+- Newlines: a file NAME written by `np.savetxt` goes through Python's text mode (`\n` → `os.linesep`), and so does
+  NumSharp. Each such case carries a `crlf` twin recorded through `io.TextIOWrapper(io.BytesIO(), newline="\r\n")`, which
+  the generator first proves equal to the real file with `newline="\n"`; the replay picks it on a Windows host. Gated on
+  Windows AND Linux (WSL: `~/.dotnet/dotnet test <copied output>/NumSharp.Tests.Oracle.dll --filter
+  TestCategory=TextIOOracle`), both TFMs.
+- Left out on purpose (documented divergences, unit-tested): results NumPy builds with zero-width string elements; a
+  non-native dtype's TEXT read (the case records NumPy's answer for the native dtype); `tofile` of a non-ASCII element
+  (crashes NumPy 2.4.2).
+- The `fromedges` grid exists because a random text fails on an early token before an overflowing value is read, so two
+  planted scanner bugs (fromfile's saturation by sign, the `0xFF` a signed `char` loses) survived the random sections.
+  Error classes: only `OverflowError` → `OverflowException` is aliased; every other error the corpus records is raised
+  under NumPy's own class name.
+- Trap: a temp file costs ~2.4 ms in the user's `%TEMP%` (~6 ms inside the test host: the antivirus scans a new file on
+  its first open) against ~0.6 ms in the build output on K:, so the replay writes beside the test assembly
+  (`TextIO/tmp_<pid>`).
+- Trap: `cond ? long : double` is typed `double` in C#: the replay's JSON decoder needs `(object)l`, or a Python int in a
+  parameter list (`comments=[1]`) reaches NumSharp as `1.0` ("not float" where NumPy says "not int").
 
 ## Traps
 

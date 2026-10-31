@@ -262,8 +262,8 @@ Suite speed, the parallel rules, guard pages and the OpenBugs inventory: `tests.
 - Ratios are NPY/NS = NumPy_ms / NumSharp_ms: > 1 means NumSharp is faster, < 1 slower; higher is better. Icons:
   ✅ ≥ 1.0 · 🟡 ≥ 0.5 · 🟠 ≥ 0.2 · 🔴 < 0.2.
 - Time Release builds only (`dotnet run -c Release - < script.cs`; Debug taints hand-written kernels about 2×), pin a C#
-  timing process to TWO CPUs (`start /affinity 14`: two P-cores here; a single CPU starves the background tier-1
-  compiler, so hot paths stay at tier 0), pin the NumPy twin the same way, take the best of several rounds with warm-up
+  timing process to TWO CPUs (`start /affinity 14` from PowerShell: from Git Bash it does NOT pin; two P-cores here; a
+  single CPU starves the background tier-1 compiler, so hot paths stay at tier 0), pin the NumPy twin the same way, take the best of several rounds with warm-up
   excluded, and check correctness before every timed row.
 - The harness, its subsystems, the BenchmarkDotNet configuration, the snapshots (local `benchmark/history/`, published to
   the `data` branch through the `refs/data` submodule) and the report/UI surfaces: `benchmark/CLAUDE.md` and the
