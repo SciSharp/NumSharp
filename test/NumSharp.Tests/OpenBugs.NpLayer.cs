@@ -32,6 +32,10 @@ namespace NumSharp.Tests
     //        boundary's depth raised, so a numpy.matrix or chararray the callback passes to an np.* function comes back
     //        plain. P7 would have removed the depth; the owner dropped P7 the same day ("Drop because np.* uses the lhs
     //        to pick which"), so B3 stays open and is pinned here with the six.
+    //   NL8  np.sum's add.reduce step `*acc += pairwise_sum(call)` leaves the NaN of a NaN + NaN to the JIT: a Debug
+    //        build of NumSharp.Core keeps the call's NaN where NumPy (and a Release build, by the JIT's operand order)
+    //        keeps the accumulator's. Found by the journey4 merge's Debug gate, where it fails
+    //        ShortRows_SeveralNaNs_KeepTheRunningSumsNaN and Trapezoid_NaNSpacing_IsTheProductsFirstOperand.
     //
     // Every expected value below is NumPy 2.4.2's answer for the same call (probed on win-amd64). EXPECTED (when fixed):
     // each test passes; remove its [OpenBugs], move it next to its API's tests, and drop the oracle excuse named in its
@@ -470,6 +474,49 @@ namespace NumSharp.Tests
             result.ToArray<double>().Should().Equal(5.0, 7.0, 9.0);
             sumClass.Should().Be(typeof(NDMatrix));
             sumShape.Should().Equal(1L, 2L);
+        }
+
+        // ------------------------------------------------------------------
+        // NL8 — np.sum's reduce step leaves the NaN of NaN + NaN to the JIT
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     <c>np.sum</c> of a run whose first element is a NaN and whose rest holds another NaN keeps the FIRST
+        ///     element's NaN in NumPy: add.reduce seeds the accumulator with the first element, then runs
+        ///     <c>io1 += pairwise_sum(rest)</c>, and x86's <c>addsd</c> keeps its first operand's NaN when both are NaN.
+        ///     NumPy 2.4.2 (probed, win-amd64): <c>[nan(1), 2, nan(2)]</c> sums to payload 1 in float64 and float32, and
+        ///     rows <c>[[nan(1), 2, nan(2)], [1, nan(3), nan(4)]]</c> along axis 1 to payloads 1 and 3.
+        /// </summary>
+        /// <remarks>
+        ///     Root cause: <c>Default.Reduction.Add.Exact.cs</c>'s <c>AccumulateDouble</c> / <c>AccumulateSingle</c> write
+        ///     the step as C#'s <c>*acc = *acc + s</c>, and C# leaves the operand order of a commutative <c>+</c> to the JIT
+        ///     (<c>kernels.md</c>: encode NaN priority explicitly). A Debug build of NumSharp.Core compiles the step without
+        ///     optimization, loads <c>s</c> first and keeps the pairwise sum's NaN (payloads 2 and 4); a Release build
+        ///     happens to keep the accumulator in its register, NumPy's order, so this test FAILS in a Debug build and
+        ///     passes in Release, and so do <c>NDEvaluateStreamingTests.ShortRows_SeveralNaNs_KeepTheRunningSumsNaN</c> and
+        ///     <c>NpTrapezoidTest.Trapezoid_NaNSpacing_IsTheProductsFirstOperand</c> (np.trapezoid's final sum), which
+        ///     stay unmarked so CI's Release run keeps guarding NumPy's answer. The fix chooses the accumulator's NaN
+        ///     explicitly in both steps (and in any other <c>acc + s</c> combine the reductions write in C#).
+        /// </remarks>
+        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL8")]
+        public void NpLayer_Sum_RunOfNaNs_ShouldKeepTheAccumulatorsNaN_InEveryBuild()
+        {
+            static double N64(long payload) => BitConverter.Int64BitsToDouble(0x7FF8000000000000 | payload);
+            static float N32(int payload) => BitConverter.Int32BitsToSingle(0x7FC00000 | payload);
+            static long Bits64(NDArray r, int i) => BitConverter.DoubleToInt64Bits(r.GetDouble(i));
+
+            using var a = np.array(new[] { N64(1), 2.0, N64(2) });
+            using var s = np.sum(a);
+            BitConverter.DoubleToInt64Bits(s.GetDouble()).Should().Be(0x7FF8000000000001, "float64 run: the first element's NaN");
+
+            using var x = np.array(new[,] { { N64(1), 2.0, N64(2) }, { 1.0, N64(3), N64(4) } });
+            using var rows = np.sum(x, 1);
+            Bits64(rows, 0).Should().Be(0x7FF8000000000001, "row 0 keeps the accumulator's NaN");
+            Bits64(rows, 1).Should().Be(0x7FF8000000000003, "row 1 keeps the accumulator's NaN");
+
+            using var f = np.array(new[] { N32(1), 2f, N32(2) });
+            using var sf = np.sum(f);
+            BitConverter.SingleToInt32Bits(sf.GetSingle()).Should().Be(0x7FC00001, "float32 run: the first element's NaN");
         }
     }
 }
