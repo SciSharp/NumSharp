@@ -390,21 +390,28 @@ namespace NumSharp.Tests.Interop
                 $"find_common_type({string.Join(",", types.Select(t => t.Name))}) == numpy result_type");
         }
 
+        /// <summary>
+        ///     NumPy 1.26.4's <c>_can_coerce_all(dtypelist, start)</c>: <c>start</c> is the index into the candidate ladder
+        ///     <c>__test_types = '?bBhHiIlLqQefdgFDGO'</c> where the search begins, NOT an index into the list (the list is
+        ///     never sliced). NumPy 2 removed the function with <c>find_common_type</c>, so the live NumPy cannot be asked:
+        ///     the answers are NumPy 1.26.4's, probed (<c>numpy.core.numerictypes._can_coerce_all</c>).
+        /// </summary>
         [TestMethod]
-        public void T1_47_CanCoerceAll_VariousStarts_NoThrow_Match_Numpy_ResultType()
+        public void T1_47_CanCoerceAll_VariousStarts_NoThrow_Match_NumPy1264()
         {
             var arr = new[] { NPTypeCode.Int32, NPTypeCode.Single, NPTypeCode.Double };
 
-            // start 0/1/2 -> promote the tail sub-list; cross-checked against numpy result_type of that tail.
-            AssertCanCoerce(arr, 0, "np.int32, np.float32, np.float64");
-            AssertCanCoerce(arr, 1, "np.float32, np.float64");
-            AssertCanCoerce(arr, 2, "np.float64");
+            // [i4, f4, f8] from any candidate up to 'd' (index 13): float64, the first type all three cast to safely.
+            foreach (int start in new[] { 0, 1, 2, 3, 13 })
+                CanCoerce(arr, start).Should().Be(NPTypeCode.Double, $"_can_coerce_all([i4, f4, f8], start={start})");
 
-            // start == length -> empty tail -> Empty (no numpy analog; assert no-crash + Empty).
-            MethodInfo mArr = CanCoerceArrayMethod();
+            // [i1, i2] from 'B' (index 2): the search skips uint8 and lands on int16.
+            CanCoerce(new[] { NPTypeCode.SByte, NPTypeCode.Int16 }, 2).Should().Be(NPTypeCode.Int16);
+
+            // A start at the ladder's end (19) leaves no candidate: NumPy's None, NumSharp's Empty - and no crash.
             object empty = null;
-            ((Action)(() => empty = mArr.Invoke(null, new object[] { arr, 3 })))
-                .Should().NotThrow("start==length must not crash");
+            ((Action)(() => empty = CanCoerceArrayMethod().Invoke(null, new object[] { arr, 19 })))
+                .Should().NotThrow("a start at the ladder's end must not crash");
             ((NPTypeCode)empty).Should().Be(NPTypeCode.Empty);
 
             // The List<> sibling overload with start>0 must also not throw and give the same result.
@@ -418,19 +425,18 @@ namespace NumSharp.Tests.Interop
             ((NPTypeCode)listResult).Should().Be(NPTypeCode.Double);
         }
 
+        /// <summary>The internal <c>np._can_coerce_all(NPTypeCode[], int)</c>, reached by reflection.</summary>
+        /// <returns>The method (null when the overload is gone, which the callers' assertions report).</returns>
         private static MethodInfo CanCoerceArrayMethod() =>
             typeof(np).GetMethod("_can_coerce_all", BindingFlags.NonPublic | BindingFlags.Static, null,
                 new[] { typeof(NPTypeCode[]), typeof(int) }, null);
 
-        private void AssertCanCoerce(NPTypeCode[] arr, int start, string npTailScalars)
-        {
-            MethodInfo m = CanCoerceArrayMethod();
-            object result = null;
-            ((Action)(() => result = m.Invoke(null, new object[] { arr, start })))
-                .Should().NotThrow($"_can_coerce_all(start={start}) must not throw");
-            string npName = PyStr($"np.result_type({npTailScalars})");
-            ((NPTypeCode)result).AsNumpyDtypeName().Should().Be(npName,
-                $"_can_coerce_all(start={start}) == numpy result_type of the tail");
-        }
+        /// <summary>Runs <c>np._can_coerce_all(dtypelist, start)</c> and returns its answer.</summary>
+        /// <param name="dtypelist">The dtypes to coerce.</param>
+        /// <param name="start">The index into NumPy 1.26.4's candidate ladder where the search begins.</param>
+        /// <returns>The first candidate every entry casts to safely, or <see cref="NPTypeCode.Empty"/> for none.</returns>
+        /// <exception cref="TargetInvocationException">The search itself threw (the assertion then fails with it).</exception>
+        private static NPTypeCode CanCoerce(NPTypeCode[] dtypelist, int start) =>
+            (NPTypeCode)CanCoerceArrayMethod().Invoke(null, new object[] { dtypelist, start });
     }
 }
