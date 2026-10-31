@@ -6,7 +6,8 @@ namespace NumSharp
     {
         // Helper routines — ports of numpy/fft/_helper.py. fftshift / ifftshift roll the array object
         // (compositions over np.roll, kept here); fftfreq / rfftfreq compute values, so they are members of
-        // the TensorEngine.Fft sub-engine (Fourier/DefaultFftEngine.Helper.cs holds the default's statements).
+        // the TensorEngine.Fft sub-engine (Backends/Default/Fourier/DefaultFftEngine.Helper.cs holds the default's
+        // statements).
 
         /// <summary>
         ///     Shift the zero-frequency component to the center of the spectrum. Rolls every axis by

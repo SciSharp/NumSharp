@@ -2,6 +2,7 @@
 paths:
   - "src/NumSharp.Core/Fourier/**"
   - "src/NumSharp.Core/Backends/FftEngine.cs"
+  - "src/NumSharp.Core/Backends/Default/Fourier/**"
   - "src/NumSharp.Core/Math/np.{windows,i0}.cs"
   - "src/NumSharp.Core/Backends/Default/Math/Default.I0.cs"
   - "src/NumSharp.Core/Math/np.{conjugate,real,imag,angle}.cs"
@@ -56,12 +57,13 @@ taper (NumPy forces at least float64 through `np.array([0.0, M])`).
   Apple agree on its sizes' twiddles. A larger corpus size can turn host-pinned.
 - The facade is the `np.random` house shape: a lowercase property `np.fft` returning `FourierModule`, so `np.fft.fft(x)`
   ports verbatim. Each `FourierModule` function but the two shifts is one call into the `TensorEngine.Fft` sub-engine
-  (`Backends/FftEngine.cs`; the default `DefaultFftEngine` in `Fourier/DefaultFftEngine*.cs` holds NumPy's statements;
-  hfft keeps its class boundary in the facade; `openblas.md` for the seam). Three 1-D kernels do the work:
-  `DefaultFftEngine`'s `protected virtual` `C2CKernel` / `R2CKernel` / `C2RKernel`, each a call into
-  `PocketFFTDriver.Execute` (`c2c`/`r2c`/`c2r`); every N-D/2-D form
-  composes 1-D transforms over `_raw_fftnd`, and `hfft`/`ihfft` compose `irfft`/`rfft` with `np.conjugate` and the norm
-  swap. The strided all-but-axis driver (`PocketFFTDriver.cs`, a port of `_pocketfft_umath.cpp`) does `copy_input`
+  (`Backends/FftEngine.cs`; the default `DefaultFftEngine` in `Backends/Default/Fourier/DefaultFftEngine*.cs` holds
+  NumPy's statements and calls members, never an np.* facade: its own `Irfft` / `Rfft` / `Rfftn` / `Irfftn`, the
+  operand engine's `Conjugate`, the array object's arange and concatenate; hfft keeps its class boundary in the facade;
+  `openblas.md` for the seam). Three 1-D kernels do the work: `DefaultFftEngine`'s `protected virtual` `C2CKernel` /
+  `R2CKernel` / `C2RKernel`, each a call into `PocketFFTDriver.Execute` (`c2c`/`r2c`/`c2r`); every N-D/2-D form
+  composes 1-D transforms over `_raw_fftnd`, and `hfft`/`ihfft` compose `irfft`/`rfft` with the conjugate ufunc and the
+  norm swap. The strided all-but-axis driver (`PocketFFTDriver.cs`, a port of `_pocketfft_umath.cpp`) does `copy_input`
   (gather `min(nin, n)` strided elements, zero-pad) → `plan.Exec(buf, fct, dir)` → `copy_output` per lane, reading each
   operand's strides/offset (every layout works), with the FFTPACK half-complex packing (`R0,R1,I1,…`, I0 = 0, the even-n
   Nyquist term) where NumPy's `rfft_impl`/`irfft_loop` apply it. Engine files: `PocketFFT.Twiddle.cs`
@@ -101,5 +103,5 @@ taper (NumPy forces at least float64 through `np.array([0.0, M])`).
   mixed-radix codelet's ido > 1 branch: pass3/5/7/8/11/passg), `OpRegistry`'s 16 transforms and 4 helpers,
   `gen_oracle.gen_fft`, `MisalignedRegistry` F1, and the `Fourier`-namespace unit tests (`FftSubEngineTests` for the
   sub-engine). Sources: `Fourier/np.fft.{cs,Standard,Real,Hermitian,Helper}.cs` (the facades),
-  `Fourier/DefaultFftEngine{,.Standard,.Real,.Hermitian,.Helper,.RawFft,.Kernels}.cs`, `Backends/FftEngine.cs`,
-  `Fourier/PocketFFT*.cs`.
+  `Backends/Default/Fourier/DefaultFftEngine{,.Standard,.Real,.Hermitian,.Helper,.RawFft,.Kernels}.cs`,
+  `Backends/FftEngine.cs`, `Fourier/PocketFFT*.cs`.

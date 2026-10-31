@@ -4,7 +4,7 @@ namespace NumSharp.Backends
     {
         // Real transforms (rfft: real -> complex half-spectrum; irfft: complex half -> real).
         // Ports of numpy/fft/_pocketfft.py. Rfft/Irfft resolve fully then reach the r2c / c2r kernels;
-        // Rfftn/Irfftn run _raw_fft per axis, and the 2-D wrappers call the np.fft facades of the N-D forms.
+        // Rfftn/Irfftn run _raw_fft per axis, and the 2-D wrappers call this engine's N-D members (never an np.* facade).
 
         /// <inheritdoc/>
         /// <remarks>
@@ -33,12 +33,12 @@ namespace NumSharp.Backends
 
         /// <inheritdoc/>
         /// <remarks>
-        ///     NumPy's one statement <c>return rfftn(a, s, axes, norm, out=out)</c> with <c>axes=(-2, -1)</c> for null: the
-        ///     np.fft facade, so the engine assigned to <see cref="TensorEngine.Fft"/> computes it. It opens no scope (the
-        ///     result is the callee's own).
+        ///     NumPy's one statement <c>return rfftn(a, s, axes, norm, out=out)</c> with <c>axes=(-2, -1)</c> for null: this
+        ///     engine's <see cref="FftEngine.Rfftn"/> (the member np.fft.rfftn dispatches to), so a subclass that overrides
+        ///     it computes rfft2 too. It opens no scope (the result is the callee's own).
         /// </remarks>
         public override NDArray Rfft2(NDArray a, int[] s = null, int[] axes = null, string norm = null, NDArray @out = null)
-            => np.fft.rfftn(a, s, axes ?? new[] { -2, -1 }, norm, @out);
+            => Rfftn(a, s, axes ?? new[] { -2, -1 }, norm, @out);
 
         /// <inheritdoc/>
         /// <remarks>
@@ -64,11 +64,12 @@ namespace NumSharp.Backends
 
         /// <inheritdoc/>
         /// <remarks>
-        ///     NumPy's one statement <c>return irfftn(a, s, axes, norm, out=None)</c> with <c>axes=(-2, -1)</c> for null: the
-        ///     np.fft facade, without the provided out. It opens no scope.
+        ///     NumPy's one statement <c>return irfftn(a, s, axes, norm, out=None)</c> with <c>axes=(-2, -1)</c> for null: this
+        ///     engine's <see cref="FftEngine.Irfftn"/> (the member np.fft.irfftn dispatches to), without the provided out.
+        ///     It opens no scope.
         /// </remarks>
         public override NDArray Irfft2(NDArray a, int[] s = null, int[] axes = null, string norm = null, NDArray @out = null)
-            => np.fft.irfftn(a, s, axes ?? new[] { -2, -1 }, norm, @out: null);
+            => Irfftn(a, s, axes ?? new[] { -2, -1 }, norm, @out: null);
 
         /// <inheritdoc/>
         /// <remarks>

@@ -2,10 +2,11 @@ namespace NumSharp
 {
     public partial class FourierModule
     {
-        // Hermitian transforms — compositions of irfft/rfft + np.conjugate + the norm swap, exactly as
+        // Hermitian transforms — compositions of irfft/rfft + conjugate + the norm swap, exactly as
         // numpy/fft/_pocketfft.py defines them: each is one call into the TensorEngine.Fft sub-engine
-        // (Backends/FftEngine.cs; the default's statements are Fourier/DefaultFftEngine.Hermitian.cs),
-        // hfft behind the class boundary its np.conjugate needs.
+        // (Backends/FftEngine.cs; the default's statements are Backends/Default/Fourier/DefaultFftEngine.Hermitian.cs,
+        // which call the conjugate ufunc's engine member, not np.conjugate), hfft behind NumPy's asarray class
+        // boundary (a numpy.matrix or numpy.char.chararray operand gives a plain array).
 
         /// <summary>
         ///     Compute the FFT of a signal that has Hermitian symmetry (a real spectrum). Defined as

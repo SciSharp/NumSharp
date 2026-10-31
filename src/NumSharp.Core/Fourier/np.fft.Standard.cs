@@ -6,7 +6,7 @@ namespace NumSharp
     {
         // Standard (complex-to-complex) transforms. Ports of numpy/fft/_pocketfft.py: each is one call
         // into the TensorEngine.Fft sub-engine (Backends/FftEngine.cs; the default's statements are
-        // Fourier/DefaultFftEngine.Standard.cs). The result is a plain array, as NumPy's asarray makes it.
+        // Backends/Default/Fourier/DefaultFftEngine.Standard.cs). The result is a plain array, as NumPy's asarray makes it.
 
         /// <summary>
         ///     Compute the one-dimensional discrete Fourier Transform.

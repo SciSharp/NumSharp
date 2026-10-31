@@ -6,7 +6,7 @@ namespace NumSharp
     {
         // Real transforms (rfft: real -> complex half-spectrum; irfft: complex half -> real).
         // Ports of numpy/fft/_pocketfft.py: each is one call into the TensorEngine.Fft sub-engine
-        // (Backends/FftEngine.cs; the default's statements are Fourier/DefaultFftEngine.Real.cs).
+        // (Backends/FftEngine.cs; the default's statements are Backends/Default/Fourier/DefaultFftEngine.Real.cs).
 
         /// <summary>
         ///     Compute the one-dimensional discrete Fourier Transform for real input. The output length

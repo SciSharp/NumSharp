@@ -4,9 +4,11 @@ namespace NumSharp.Backends
 {
     public partial class DefaultFftEngine
     {
-        // The sample-frequency helpers of numpy/fft/_helper.py — compositions of existing np.*
-        // functions (arange / concatenate / arithmetic) that compute FULLY (no kernel). fftshift and
-        // ifftshift are not members: they roll the array object (np.fft's facades over np.roll).
+        // The sample-frequency helpers of numpy/fft/_helper.py — NumPy's statements over the array object's own
+        // routines (np.arange's PyArray_ArangeObj, np.concatenate's ConcatenateInto) and the operand engine's
+        // arithmetic; they compute FULLY (no kernel) and call no np.* facade, so the engine layer never re-enters the
+        // facade's class boundary. fftshift and ifftshift are not members: they roll the array object (np.fft's facades
+        // over np.roll).
 
         /// <inheritdoc/>
         /// <remarks>
@@ -30,9 +32,13 @@ namespace NumSharp.Backends
                 throw new ValueError("negative dimensions are not allowed");
             double val = 1.0 / nd;
             long N = (n - 1) / 2 + 1;                     // n>=1 here, so int division == floor division.
-            var p1 = np.arange(0L, N);                    // [0 .. N-1]
-            var p2 = np.arange(-(n / 2), 0L);             // [-(n/2) .. -1]
-            var results = np.concatenate((p1, p2));       // length n
+            // np.arange(start, stop) is UnmanagedStorage.ArangeObj with step 1 and no dtype (int64 for Python ints), and
+            // np.concatenate of the two plain halves is the array object's ConcatenateInto along axis 0 with
+            // np.concatenate's default 'same_kind' casting: the facades' own bodies, without their class-boundary test
+            // (both halves are plain arrays the engine just made).
+            var p1 = UnmanagedStorage.ArangeObj(0L, N, 1L, null);          // [0 .. N-1]
+            var p2 = UnmanagedStorage.ArangeObj(-(n / 2), 0L, 1L, null);   // [-(n/2) .. -1]
+            var results = NDArray.ConcatenateInto(new[] { p1, p2 }, 0, null, null, "same_kind");   // length n
             return results * val;                         // -> float64
         }
 
@@ -58,7 +64,8 @@ namespace NumSharp.Backends
             // (n>>1 == n//2 for BOTH signs), so a negative n gives N<=0 exactly as NumPy's floor does
             // (C#'s '/' truncates toward zero, which would wrongly make rfftfreq(-1) -> [0.0]).
             long N = (n >> 1) + 1;
-            var results = np.arange(0L, Math.Max(0L, N)); // arange(0, N); empty float64 when N<=0
+            // np.arange(0, N)'s body (UnmanagedStorage.ArangeObj, step 1, no dtype); an empty result when N <= 0.
+            var results = UnmanagedStorage.ArangeObj(0L, Math.Max(0L, N), 1L, null);
             return results * val;                         // -> float64
         }
     }

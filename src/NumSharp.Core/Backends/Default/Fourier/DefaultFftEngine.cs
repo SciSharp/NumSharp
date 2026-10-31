@@ -17,16 +17,19 @@ namespace NumSharp.Backends
     ///     the normalization factor and a shape-checked <c>out=</c>, and every N-D, real and Hermitian function reaches it.
     ///     Call the base kernel for the operands it does not serve. Assign the instance to <see cref="TensorEngine.Fft"/> of
     ///     the cached engine.</para>
-    ///     <para><b>Nested calls.</b> A member that calls another numpy.fft function where NumPy's statement calls the module
-    ///     function calls its public facade (hfft's <c>irfft</c>, ihfft's <c>rfft</c>, rfft2's <c>rfftn</c>, irfft2's
-    ///     <c>irfftn</c>), so the engine assigned to <see cref="TensorEngine.Fft"/> computes it. The N-D transforms
-    ///     (fft2, ifft2, fftn, ifftn, rfftn, irfftn) run this engine's own <c>_raw_fft</c> statements per axis where NumPy
-    ///     calls its module <c>fft</c> / <c>rfft</c> / ...: NumSharp's intermediate is complex128 where NumPy's is
-    ///     complex64, so only the statements can carry the original operand's precision to every axis.</para>
+    ///     <para><b>Nested calls.</b> A member never calls back up into a public np.* facade. Where NumPy's statement calls
+    ///     another numpy.fft function (hfft's <c>irfft</c>, ihfft's <c>rfft</c>, rfft2's <c>rfftn</c>, irfft2's
+    ///     <c>irfftn</c>), it calls this engine's own virtual member, so a subclass that overrides one computes it for every
+    ///     caller; where it calls a main-namespace function (conjugate, arange, concatenate), it calls the member that
+    ///     function's facade dispatches to (the operand engine's <see cref="TensorEngine.Conjugate"/>, the array object's
+    ///     <c>arange</c> and <c>concatenate</c>). The N-D transforms (fft2, ifft2, fftn, ifftn, rfftn, irfftn) run this
+    ///     engine's own <c>_raw_fft</c> statements per axis where NumPy calls its module <c>fft</c> / <c>rfft</c> / ...:
+    ///     NumSharp's intermediate is complex128 where NumPy's is complex64, so only the statements can carry the original
+    ///     operand's precision to every axis.</para>
     ///     <para>The statements were the <c>np.fft</c> module's own bodies (<c>FourierModule</c>, until phase PE's E3 of the
-    ///     np-layer dtype plan). The files sit beside the <c>np.fft</c> facades: the statements call np.* functions
-    ///     (<c>np.conjugate</c>, <c>np.arange</c>, <c>np.concatenate</c>), which ratchet R2 counts against engine files
-    ///     under <c>Backends/</c>, and the kernels sit beside the pocketfft port they call.</para>
+    ///     np-layer dtype plan); P6b of that plan made them call members instead of np.* facades and moved the files under
+    ///     <c>Backends/Default/Fourier/</c>, where ratchet R2 holds them at zero np.* calls. The kernels call the pocketfft
+    ///     port that stays in <c>Fourier/</c>.</para>
     /// </remarks>
     public partial class DefaultFftEngine : FftEngine
     {
