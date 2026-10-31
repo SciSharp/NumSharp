@@ -280,10 +280,12 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>np.dtype('cdouble')</c> is complex128 in NumPy; NumSharp raises <c>data type 'cdouble' not understood</c>
+        ///     FIXED by branch strings' merge of journey4 (f87de210; journey4's 0a96ddba reads a dtype name by the whole
+        ///     string, as NumPy's typeDict): NumSharp gives NumPy's answer now, and this test pins it. Before the fix:
+        ///     <c>np.dtype('cdouble')</c> is complex128 in NumPy; NumSharp raised <c>data type 'cdouble' not understood</c>
         ///     (gap SU35).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "surface-SU35")]
+        [TestMethod]
         public void Surface_Dtype_CdoubleName_IsComplex128()
         {
             np.dtype("cdouble").typecode.Should().Be(NPTypeCode.Complex);

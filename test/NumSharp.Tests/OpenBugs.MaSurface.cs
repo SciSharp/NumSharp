@@ -290,10 +290,12 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
+        ///     FIXED by 32bfa4a7 (np.frombuffer is NumPy's PyArray_FromBuffer: the buffer-size rule only for a negative
+        ///     count): NumSharp gives NumPy's answer now, and this test pins it. Before the fix:
         ///     <c>ma.frombuffer(bytes(24), dtype=complex128, count=0)</c>: NumPy checks the selected range and returns an
-        ///     empty complex128 array; NumSharp rejects the whole 24-byte buffer as not a multiple of 16 (gap MS22).
+        ///     empty complex128 array; NumSharp rejected the whole 24-byte buffer as not a multiple of 16 (gap MS22).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "ma-surface-MS22")]
+        [TestMethod]
         public void MaSurface_Frombuffer_CountZero_OfANonMultipleBuffer_IsEmpty()
         {
             var r = np.ma.frombuffer(new byte[24], np.complex128, 0);

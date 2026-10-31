@@ -996,6 +996,9 @@ SECTIONS = [gen_create, gen_join, gen_fill, gen_query, gen_putmask, gen_products
 # cast, the edge finders of an empty array, compress_nd's axis check, the 0-d / 2-D product refusals) made MS3, MS6-
 # MS14, MS16, MS25, MS28 and MS35 match NumPy, and MS2 for column_stack / dstack / diagflat; those rules are dropped
 # (the replay of the gap file found which). The 0-d convolve cases MS35 carved that still differ are MS1's class.
+# MS22 (ma.frombuffer's whole-buffer item-size check) matches NumPy since np.frombuffer became NumPy's
+# PyArray_FromBuffer (32bfa4a7: the buffer-size rule only for a negative count); the gap replay after the journey4
+# merge of 2026-10-31 reported its 4 cases matching, so its rule is dropped.
 GAPS = {
     "MS1": "convolve / correlate / cov / apply_along_axis drop an all-False result mask to nomask; NumPy keeps the mask "
            "array (masked_array(data, mask=mask) never shrinks)",
@@ -1009,9 +1012,6 @@ GAPS = {
     "MS19": "np.ma.ndenumerate has no compressed parameter (NumPy's compressed=False yields masked entries too)",
     "MS20": "creation wrappers lack NumPy parameters: ma.arange dtype= and a lone float stop, ma.zeros / ones / empty "
             "order=, ma.indices sparse=",
-    "MS22": "ma.frombuffer requires the WHOLE buffer to be a multiple of the item size before count / offset select a "
-            "range; NumPy checks the selected range (count=0 is an empty array, a short range 'buffer is smaller than "
-            "requested size')",
     "MS23": "ma.nonzero of a 0-d array returns a result; NumPy raises ValueError ('Calling nonzero on 0d arrays is not "
             "allowed')",
     "MS24": "clump_masked / clump_unmasked of a 0-d or empty array with a mask return a list; NumPy's _ezclump raises "
@@ -1094,8 +1094,6 @@ def _gap_of(c):
     if (op == "arange" and ("dtype" in p or (len(p["args"]) == 1 and not isinstance(p["args"][0], int)))) \
             or (op in ("zeros", "ones", "empty") and "order" in p) or (op == "indices" and "sparse" in p):
         return "MS20"
-    if op == "frombuffer" and p.get("dtype") == "complex128" and p["count"] >= 0 and 0 <= p["offset"] <= 24:
-        return "MS22"
     if op == "nonzero" and err:
         return "MS23"
     if op in ("clump_masked", "clump_unmasked") and err:

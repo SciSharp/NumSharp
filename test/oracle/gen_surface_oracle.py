@@ -1530,6 +1530,9 @@ def _with_bufsize(n, fn):
 # The gap replay of that day found SU3 (complex histogram edges) and SU4 (the estimators over complex data) matching
 # NumPy too, fixed by 98ea7bcf (np.histogram's complex data meet NumPy's equal-width statements in complex128); their
 # rules are dropped.
+# SU35 (the dtype name 'cdouble') matches NumPy since branch strings merged journey4 (f87de210, 2026-10-31): journey4's
+# np.dtype reads a name by the whole string, as NumPy's typeDict (0a96ddba), so 'cdouble' is complex128. Its rule is
+# dropped: the 'cdouble' cell of finfo.minexp falls to SU12 (complex128's minexp), the other twelve attributes are kept.
 GAPS = {
     "SU10": "ndarray.setfield with a Python int outside the field dtype's range wraps it (-1 into a uint8 field is "
             "255); NumPy raises OverflowError 'Python integer -1 out of bounds for uint8'",
@@ -1552,8 +1555,6 @@ GAPS = {
             "NumPy's _leading_trailing(a, 0) takes a[-0:] (the whole array), so 1e-9 and 1e5 make it scientific",
     "SU24": "dtype.type of a datetime64 / timedelta64 descriptor is null (no CLR element type before Stage C); NumPy's "
             "is numpy.datetime64 / numpy.timedelta64",
-    "SU35": "the dtype name 'cdouble' (NumPy's alias of complex128) is not understood: np.dtype / np.finfo raise "
-            "\"data type 'cdouble' not understood\"",
     "SU36":"numpy.cumulative_sum / cumulative_prod are aliased to np.cumsum / np.cumprod, which have no "
             "include_initial (NumPy prepends the identity: cumulative_sum([1, 2], include_initial=True) is [0, 1, 3])",
     "SU37": "np.cumsum / np.cumprod (the cumulative_* aliases) flatten an N-D input without axis; numpy.cumulative_sum / "
@@ -1592,8 +1593,6 @@ def _gap_of(case):
     if op == "ndarray.setfield" and err and err["type"] == "OverflowError":
         return "SU10"
     if op.startswith("finfo."):
-        if p["dtype"] == "cdouble":
-            return "SU35"
         if err:
             return "SU11"
         if op == "finfo.minexp" and dt in ("float32", "float64", "complex128"):
