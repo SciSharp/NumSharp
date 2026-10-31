@@ -123,6 +123,20 @@ Three items were tried first (2026-10-30):
 - PA2 was measured but not moved: its float forms run 2–5× slower through the shared kernels on reversed axes and short
   rows until those kernels gain the two speedups the hand forms have.
 
+**The owner's decisions of 2026-10-31** ([§5](#5-decisions-for-the-owner), D7 to D17, asked with each option's code):
+- P7 applies each class rule once, to the public function's result, so no library code may call a public np.*
+  function, and the depth counter and the plain regions go.
+- The 61 functions without dtype logic move too (P8), and the linalg and FFT engines stop calling np.* (P6b).
+- `TensorEngine.Default` becomes the settable default engine; results and views keep the engine that made them (P9).
+- The reductions and the product gufuncs take NumPy's whole signature, np.evaluate keeps one overload whose engine
+  member takes the keywords, `astype(null)` is float64, and np.squeeze with nothing to remove returns `a.view()`
+  (P10).
+- PA2 waits for its two kernel speedups; the ten array-object members shipped on `TensorEngine` stay; `strings` is
+  rebased onto `journey4` before the next work (C13).
+
+Order of the work left (proposed 2026-10-31): the rebase; P6b, P8 and the three `NDArray` homes (P7a); P9; P7b to
+P7d; P10; PA3, PA5, PA2 after its kernel work, PA6.
+
 Progress goes into the [§9 state log](#9-state-log), newest entry first.
 
 **The engine layout (the owner's decision of 2026-10-28, D1 in [§5](#5-decisions-for-the-owner)).** Every NumPy function
@@ -511,6 +525,14 @@ the open pull request (#631).
 **Consequence.** Batches are small (one family per commit, so a conflict stays local), on `strings` for every family
 with a text line (D6).
 
+**The rebase (D17, decided 2026-10-31).** `strings` is rebased onto `journey4` (733 commits on 44; merge base
+`f6086479`), not merged. 144 of the replayed commits edit the old `.claude/CLAUDE.md`, which `journey4` split into a
+26 KB root and `.claude/rules/` (`cef9f1ab`, `8e5324b0`): during the rebase that file keeps `journey4`'s side (a merge
+driver that keeps "ours"), and the documentation `strings` added since the merge base is carried into the rule files
+in one commit afterwards. The other conflicts (`journey4`'s `0a96ddba`, `9e75f362` and `88048433` in `DTypes/` and
+`np.find_common_type.cs`, the coverage and oracle files) resolve per commit. Every SHA this plan cites changes; the
+rebase records the old -> new map, as the 2026-10-12 rebase did.
+
 ---
 
 ## 4. What can move as it is
@@ -538,9 +560,17 @@ The owner's answers (2026-10-24; D1 again twice on 2026-10-28), and what they me
 | D4 | yes, small bugfix commits | A divergence found on the way gets its own commit (the pilot: `3f88d53f`). |
 | D5 | yes, on `strings` only | R1 / R2 run on `strings`. |
 | D6 | `strings` | Everything lands on `strings`. |
-| D7 | a TODO after the last phase | The class boundary stays in the facades until P7. |
-| D8 | open | The 61 NumPy Python functions whose facades hold no dtype logic (marked † in [Appendix D](#appendix-d-where-every-numpy-function-lives)) are outside this plan, which moves dtype logic. Under the narrowed D1, 47 of them belong to the array object (the stack and split families, `broadcast_to`, the flips, `tri*`, `meshgrid`, ...), 12 compute (the five windows, `corrcoef`, `outer`, `tensordot`, `polyder`, `polyfit`, `fix`, `einsum_path`), and 2 format a Python int (`base_repr`, `binary_repr`). Recommended: in a later pass, the 12 become `TensorEngine` members and the 47 move into their `NDArray` / `Shape` partials, so that every array function has one home; the 2 stay facades. The alternative leaves them all as facades. |
-| D9 | open | Installing an overriding `TensorEngine` for every array. `BackendFactory` has no setter, and an array binds its engine when it is created, so a `DefaultEngine` subclass reaches only the arrays it is given. The sub-engine properties sit on the cached engine and reach every array. |
+| D7 | a TODO after the last phase. 2026-10-31: "Rule on the result", "Update our plan" | The class boundary stays in the facades until P7. P7 applies each rule to the public function's result, and no library code calls a public np.* ([§7 P7](#p7-the-class-boundary-the-rule-on-the-result)). |
+| D8 | 2026-10-31, after examples: all 61 | P8. Before: the 61 NumPy Python functions whose facades hold no dtype logic (marked † in [Appendix D](#appendix-d-where-every-numpy-function-lives)) are outside this plan, which moves dtype logic. Under the narrowed D1, 47 of them belong to the array object (the stack and split families, `broadcast_to`, the flips, `tri*`, `meshgrid`, ...), 12 compute (the five windows, `corrcoef`, `outer`, `tensordot`, `polyder`, `polyfit`, `fix`, `einsum_path`), and 2 format a Python int (`base_repr`, `binary_repr`). Recommended: in a later pass, the 12 become `TensorEngine` members and the 47 move into their `NDArray` / `Shape` partials, so that every array function has one home; the 2 stay facades. The alternative leaves them all as facades. P7 needs the move: a facade body that calls a public np.* would re-apply a class rule once the depth goes. |
+| D9 | 2026-10-31, after a probe: a settable default, and results inherit; "a.TensorEngine should resolve if its null to default engine, no custom logic per call" | P9. Before: installing an overriding `TensorEngine` for every array. `BackendFactory` has no setter, and an array binds its engine when it is created, so a `DefaultEngine` subclass reaches only the arrays it is given. The sub-engine properties sit on the cached engine and reach every array. The probe (2026-10-31): an engine set on an array decides its call, but the call's result, `np.sqrt(a)`, `np.sum(a)` and a slice bind the fixed default (only `a.T` and `a.copy()` keep it). |
+| D10 | 2026-10-31: one NumPy signature | P10: np.sum / np.prod / np.mean / np.var / np.std take one overload each with NumPy's whole signature (`out=`, `where=`, `initial=`; var / std also `ddof`, `mean=`, `correction=`); np.vecdot / np.matvec / np.vecmat gain `casting=` / `order=`. |
+| D11 | 2026-10-31: the engine takes the keywords; "one overload for np.evaluate where the optionals are default value" | P2's last item, in P10: one np.evaluate overload with default optional parameters; `TensorEngine.Evaluate` takes the raw keywords and runs the writeable check, the text refusal and the keyword checks in today's order. |
+| D12 | 2026-10-31: convert like P6 | P6b: the linalg and FFT engines' np.* calls become members, and their files move under `Backends/Default/`. |
+| D13 | 2026-10-31: keep all ten | The ten array-object members `TensorEngine` shipped in 0.70.0 stay (E7). |
+| D14 | 2026-10-31: `astype(null)` = float64 | P10: `ndarray.astype(null)` is NumPy's `astype(None)`, the default float64. |
+| D15 | 2026-10-31: "Use np.view" | P10: np.squeeze with nothing to remove returns `a.view()`, a fresh view and never the operand, so disposing the result never disposes the input (VF04 / VA04 stay carved). |
+| D16 | 2026-10-31: kernel speedups first | PA2 lands after its two shared-kernel speedups. |
+| D17 | 2026-10-31: "rebase strings ontop of journey4" | Before the next work ([C13](#c13-branch-logistics)). |
 
 The recommendations as written before the answers:
 
@@ -647,7 +677,7 @@ The recommendations as written before the answers:
       path reaches it with an out today: np.sum has no `out=` keyword). So the step is: give those members NumPy's
       `out=` (D2), route the matrix members through them, and let np.sum / np.prod / np.mean / np.var / np.std expose
       `out=` (the api-parameter-parity items). Done ([§9](#9-state-log)) but for the last part: the facades' `out=`
-      keyword is a signature change, which waits on the owner's one-signature decision.
+      keyword is a signature change, which waits on the owner's one-signature decision. Decided 2026-10-31 (D10): P10.
 
 ### P2. Compositions above the engine (K3, 150 lines in 43 files)
 
@@ -674,7 +704,8 @@ positional operands' refusal. They run before the keyword checks that `BuildEval
 moving them alone would reorder the errors, and moving both means a `TensorEngine.Evaluate` that takes the keywords
 (`dtype`, `casting`, `order`, `where`) and checks them after the operands, declared in `TensorEngine.cs`. The
 snapshot tool cannot referee it either: np.evaluate's `NDExpr` argument is SKIP. Open for the owner (2026-10-29):
-whether the engine member takes the raw keywords.
+whether the engine member takes the raw keywords. Decided 2026-10-31 (D11): it does, and np.evaluate keeps one
+overload whose optional parameters have default values (P10).
 
 ### PE. The engine layout
 
@@ -1170,6 +1201,12 @@ The 255 text lines are P3's K4 files, np.evaluate's two (P2's) and np.fft.RawFft
         `View/Shape.Axes.cs` (group 11), seven of the ten `NDArray` homes under `Backends/` (group 12). Left for P7:
         `NDArray.Multiarray.cs`, `NDArray.FunctionBase.cs` and `NDArray.IndexTricks.cs`, some of whose calls rely on a
         facade's class rule.
+- [ ] **P6b, the linalg and FFT engines** (decided 2026-10-31, D12). `DefaultLinalgEngine`'s 169 np.* calls (13 files
+      in `LinearAlgebra/linalg/`) and `DefaultFftEngine`'s 10 (7 files in `Fourier/`) become the members their
+      facades dispatch to: the core functions through `a.TensorEngine` (`np.sum(np.abs(a), axis)` ->
+      `e.ReduceAdd(e.Abs(a), axis)`), numpy.linalg and numpy.fft through the sub-engine's own members
+      (`np.linalg.svdvals(y)` -> `Svdvals(y)`, `np.fft.irfft(...)` -> `Irfft(...)`). The files move under
+      `Backends/Default/LinearAlgebra/` and `Backends/Default/Fourier/`, where R2 scans them. P7 needs it.
 
 ### PA. Reuse what the library already has (the 2026-10-30 audit)
 
@@ -1208,7 +1245,8 @@ there. Rules (decided 2026-10-30):
     np.vecmat (the complex pools) identical; `decimal_varstd.jsonl`, `products.jsonl`; the cells decimal std and complex
     vdot at 1K and 100K.
 
-- [ ] **PA2. The add loops of the reduction iterator** (`da7adc53`; `NumPyAddLoops` in `Default.Reduction.Add.Axes.cs`).
+- [ ] **PA2. The add loops of the reduction iterator** (`da7adc53`; `NumPyAddLoops` in `Default.Reduction.Add.Axes.cs`;
+  the order below decided 2026-10-31, D16).
   The float64 and float32 elementwise forms (`DoubleBinary` / `SingleBinary` with their contiguous, broadcast, reversed
   and rows vector loops, about 250 lines) re-implement the rule for which NaN an add keeps, a rule the kernels already
   carry (`DirectILKernelGenerator.NaNOperandOrder.cs`). That makes two copies of a subtle rule that must agree.
@@ -1345,9 +1383,82 @@ Order: PA1 and PA2 first (the R2 regressions, then the duplicated NaN rule, the 
 then the move), PA4, PA5 and PA6. Every commit runs §6's gates. Perf cells are measured NPY/NS on two pinned P-cores,
 with the old route switchable in the same process.
 
-### P7. The class boundary
+### P7. The class boundary: the rule on the result
 
-- [ ] Its own plan (D7).
+Decided 2026-10-31 (D7, "Rule on the result"). np.* functions keep following the object (the NDMatrix decision of
+2026-10-10), and each public function applies its class rule once, to its result, as NumPy's `__array_wrap__` and
+the subclass methods do. No library code calls a public np.* function, so nothing needs the per-thread depth or the
+plain regions, and user callbacks get NumPy's classes ([Appendix B3](#b3-the-boundary-depth-reaches-user-code-input-to-p7)).
+Rejected on the same day: dropping the boundary (np.* follow the static type: 3,209 of 4,305 matrix-operand cases
+change class or shape), stripping the operands inside the rule helpers (the 10-27 prototype: +330 to +510 ns a matrix
+call) and keeping the depth with a reset around callbacks.
+
+A public function after P7:
+
+```csharp
+public static NDArray insert(NDArray arr, long obj, NDArray values, int? axis = null)
+{
+    if (arr is null) throw new ArgumentNullException(nameof(arr));
+    var result = NDArray.Insert(arr, obj, values, axis);   // O: computes plain through static typing, calls no np.*
+    return SubclassRule.Wrap(arr, result);                  // the class rule, once, on the result
+}
+```
+
+- [ ] **P7a, no library code calls a public np.*.** The three `NDArray` homes P6 left (`NDArray.Multiarray.cs`,
+      `NDArray.FunctionBase.cs`, `NDArray.IndexTricks.cs`), NDMatrix's and NDArray's members that call np.*, the
+      polynomial helpers, the linalg and FFT engines (P6b) and the 61 bodies of P8 call members; then the three homes
+      move under `Backends/`. Gate: the caller audit (`MatrixOperand_LibraryNeverReachesAMatrixRule`) with every region
+      off finds no path (39 on 2026-10-27, the engine's since removed by P6).
+- [ ] **P7b, the rules act on results.** `Wrapped`, `Reduced`, `Plain`, `Kept` and their forms become result rules: the
+      function computes through its member and the rule maps the result. A rule that must look at the operand first
+      (a matrix's keepdims TypeError, a chararray's finalize refusal) checks before the computation. The nan*
+      facades' matrix result-dtype lines (R1's P7 rows) become the rule's.
+- [ ] **P7c, the depth goes.** `t_depth`, the 230 `PlainFor` regions, `Inside`, `PlainOf` and `AtOutermostCall` are
+      deleted; `Sees` is a type test.
+- [ ] **P7d, B3.** A NumPy-probed test: a callback inside np.apply_along_axis, np.piecewise and np.apply_over_axes
+      gets NumPy's classes.
+- Gates: the matrix, matrix_operand (and host), strcharfn / strcharops / strcharmeth tiers; the Matrixlib and
+  NDCharArray unit tests; the caller audit; the leak gates; the cost of a matrix call (no depth, no region).
+
+### P8. The 61 Python functions without dtype logic
+
+Decided 2026-10-31 (D8, all 61, after examples). P7a needs it: each of these bodies calls a public np.*.
+- [ ] The 12 that compute become `TensorEngine` members: bartlett, blackman, hamming, hanning, kaiser and corrcoef
+      (`FunctionBase`), outer and tensordot (`Numeric`), polyder and polyfit (`Polynomial`), fix (`UfuncLike`),
+      einsum_path (`EinsumFunc`). The five windows have no operand: they run on `TensorEngine.Default` (P9).
+- [ ] The 47 of the array object move into their `NDArray` / `Shape` partials (Appendix D). 11 have their member
+      already, from P6: flip / fliplr / flipud (`NDArray.FlipAxes`), expand_dims, broadcast_to / broadcast_arrays /
+      broadcast_shapes, atleast_1d / atleast_2d, diagflat, identity (`NDArray.Eye`). About 36 are left (vstack ->
+      `NDArray.VStack`, append -> `NDArray.Append`, tril / triu -> `NDArray.Tril` / `Triu`, ...).
+- base_repr and binary_repr stay facades (they format a Python int).
+
+### P9. Which engine an array uses
+
+Decided 2026-10-31 (D9). The probe that decided it: an engine set on `a` decides `a + a`, but the result, `np.sqrt(a)`,
+`np.sum(a)` and `a["1:4"]` bind the fixed default, because the engine allocates its results with
+`new NDArray(dtype, shape, ...)` (326 such constructions under `Backends/Default`, 4 that pass the engine); only `a.T`
+and `a.copy()` keep it.
+- [ ] `TensorEngine.Default`, a settable static property: the engine an array binds when nothing else decides
+      (np.zeros, a function with no operand). Set it, and arrays created afterwards bind the new engine; older arrays
+      keep theirs. `BackendFactory.GetEngine()` (shipped) forwards to it.
+- [ ] `NDArray.TensorEngine` resolves an unset engine to `TensorEngine.Default`. Call sites name `a.TensorEngine` (an
+      operand decides) or `TensorEngine.Default` (none does), with no fallback logic per call; `np.EngineOf` (154
+      calls) goes. A facade whose operand may be null checks it at its entry (C#'s convention).
+- [ ] Results and views bind the engine that made them: the engine allocates through one member that passes itself
+      (`NewArray(dtype, shape, fillZeros)`), and a view keeps its source's engine.
+- Gate: a `DefaultEngine` subclass that counts its calls through chained operations, views, reductions and np.zeros
+  after setting `TensorEngine.Default`.
+
+### P10. Decided API changes
+
+- [ ] np.sum / np.prod / np.mean / np.var / np.std: one overload each with NumPy's whole signature (D10), after a
+      caller census (A4d's method: [Obsolete] tags, a scratch solution of every project). The engine members gain
+      `where=` / `initial=` (var / std: `mean=`, `correction=`), as `ReduceAMax` / `ReduceAMin` did in E5.
+- [ ] np.vecdot / np.matvec / np.vecmat gain `casting=` / `order=` (D10).
+- [ ] np.evaluate: one overload with default optional parameters, and `TensorEngine.Evaluate` takes the raw keywords
+      (D11); R1 loses np.evaluate.cs.
+- [ ] `ndarray.astype(null)` is float64 (D14; `np.DefaultTypeDescr` once `journey4`'s `9e75f362` is on `strings`).
+- [ ] np.squeeze with nothing to remove returns `a.view()` (D15).
 - [ ] The three `NDArray` homes P6 left beside their facades (`NDArray.Multiarray.cs`, `NDArray.FunctionBase.cs`,
       `NDArray.IndexTricks.cs`): decide how their calls that rely on a facade's class rule keep the class
       ([§9](#9-state-log), 2026-10-30), then convert their calls and move them under `Backends/` as P6 moved the other
@@ -1359,14 +1470,10 @@ A loop registry (NEP 43 `ArrayMethod` loops for ufuncs, registered per DType cla
 no-loop error) would replace the 205 per-member text guards inside `DefaultEngine`. `docs/plans/dtype-system.md`
 already specifies it for ufuncs; today `ArrayMethod` serves casts only.
 
-D8's pass, if the owner takes it: of the 61 NumPy Python functions without dtype logic (marked † in
-[Appendix D](#appendix-d-where-every-numpy-function-lives)), the 12 that compute become `TensorEngine` members and the
-47 of the array object move into their `NDArray` / `Shape` partials, by the same method. D9 is the open question of
-installing an overriding engine for every array.
+D8's pass is P8 and D9's answer P9 (decided 2026-10-31).
 
-The ten array-object members `TensorEngine` shipped in 0.70.0 (E7) stay until a decision of their own: removing them
-breaks a subclass or a direct caller for a layering reason alone. `CreateNDArray`, which nothing calls, is the first
-candidate.
+The ten array-object members `TensorEngine` shipped in 0.70.0 (E7) stay (decided 2026-10-31, D13): removing them
+breaks a subclass or a direct caller for a layering reason alone.
 
 ---
 
@@ -1377,13 +1484,36 @@ candidate.
 - The engine's per-member text guards (205 lines in 62 files): already deep. See "Later".
 - numpy.random, the numpy.polynomial package and numpy.ma keep their own object models (D1). Their internals do not
   become `TensorEngine` members.
-- The class boundary (P7).
-- Removing the ten array-object members `TensorEngine` shipped in 0.70.0 (see "Later").
-- Behavior changes, except a divergence found and proven during a move (D4).
+- Removing the ten array-object members `TensorEngine` shipped in 0.70.0 (D13).
+- Behavior changes, except a divergence found and proven during a move (D4) and the changes the owner decided on
+  2026-10-31 (P7, P9, P10).
 
 ---
 
 ## 9. State log
+
+- **2026-10-31, the owner's decisions on the open questions (D7 to D17).** No code changed. The questions of the
+  2026-10-30 review were asked through pages that showed each option's explanation, consequences and code change
+  (today's code against the proposed one); four were asked again with more detail.
+  - D7, the class boundary: "Rule on the result" ("Update our plan"): P7's design in §7.
+  - D10, the reductions: one NumPy signature; D11, np.evaluate: the engine takes the keywords, with one public overload
+    whose optional parameters have default values. Both in P10.
+  - D8: asked first with one example a group, then ("show me more examples") with six, and again without
+    `np.EngineOf` ("No EngineOf... ask again"): all 61 (P8).
+  - D9: the first question named a global default, a per-array engine and results inheriting; the owner pointed out
+    that the default exists, every array carries its engine, and the lhs decides. A probe (a `DefaultEngine` subclass
+    set on `a`) then showed the gap: the subclass decided `a + a`, but the result, `np.sqrt(a)`, `np.sum(a)` and
+    `a["1:4"]` bound the fixed default; only `a.T` and `a.copy()` kept it. Answer: a settable default and results
+    that inherit; for the default's spelling, `TensorEngine.Default`, with "a.TensorEngine should resolve if its null
+    to default engine, no custom logic per call" (P9).
+  - D12, the linalg / FFT engines: convert like P6 (P6b). D13, the ten shipped array-object members: keep all ten.
+    D14, `astype(null)`: float64. D15, np.squeeze with nothing to remove: "Use np.view", a fresh `a.view()` (NumPy
+    returns the operand itself). D16, PA2: the kernel speedups first. D17, the branches: "rebase strings ontop of
+    journey4" (C13).
+  - Recorded with them: the order of the work left (the status above) and the open question the D9 comment leaves
+    for the implementation: a null operand cannot reach an instance property in C#, so the facades whose operand may
+    be null check it at their entry (their null errors move ahead of the arguments NumPy reads first; null is C#'s
+    convention, not a NumPy value).
 
 - **2026-10-30, P6: the structural calls (families 7 to 10), the partials beside the facades (groups 1 to 10), the shape
   math (group 11), seven of the array object's homes (group 12) and three D4 fixes. P6 is done but for three homes,
