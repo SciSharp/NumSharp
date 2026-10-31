@@ -103,6 +103,11 @@ dimensions, so `np.empty(x.Shape)` must not hand the allocator the view's addres
   every element.
 - Internal code that must install a specific layout over a fresh buffer (`np.ones`'s KEEPORDER result) uses
   `new UnmanagedStorage(IArraySlice, Shape)`, which trusts its layout like NumPy's C API.
+- An `order` argument is read by NumPy's `PyArray_OrderConverter` texts: `OrderResolver.Resolve` (A / K against a source
+  array; without one, a creation function's `only 'C' or 'F' order is permitted`), `ResolveBufferOrder` (a caller's
+  buffer: every order but F is C) and `Convert` (the parse-time conversion, for a function that decides later what each
+  order means) raise the ValueError `order must be one of 'C', 'F', 'A', or 'K' (got 'Q')`, and accept every letter in
+  either case (np.nditer included). `memoryview.tobytes` keeps CPython's rule (upper case only, None is C).
 - Gates: `View/Shape.ForFreshAllocation.Tests.cs`, `View/Shape.Immutability.Tests.cs`, `View/Shape.CallerArrays.Tests.cs`,
   `Creation/FreshAllocation.ViewShape.Tests.cs`, `Creation/WrapConstructor.ViewShape.Tests.cs`,
   `RandomSampling/RandomSizeViewShape.Test.cs`, and the oracle replay `FuzzCorpusTests.RandomApiSizeLayouts` (every

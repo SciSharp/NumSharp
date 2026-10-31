@@ -3,11 +3,41 @@ paths:
   - "src/NumSharp.Core/Sorting_Searching_Counting/**"
   - "src/NumSharp.Core/Backends/Default/Sorting/**"
   - "src/NumSharp.Core/Backends/Default/Math/Reduction/Default.Reduction.Arg*.cs"
+  - "src/NumSharp.Core/Backends/Default/Indexing/Default.{Argwhere,FlatNonZero}.cs"
   - "src/NumSharp.Core/Utilities/QuickSelect.cs"
   - "test/NumSharp.Tests/{Sorting,Sorting_Searching_Counting}/**"
 ---
 
 # Sorting and searching
+
+The engine members are DefaultEngine's `TensorEngine.Sort` / `SortInPlace` / `ArgSort` / `Partition` /
+`PartitionInPlace` / `ArgPartition` (`Backends/Default/Sorting/Default.Sort.cs`) and `LexSort` (`Default.LexSort.cs`),
+over the AxisSort / AxisPartition kernels; `Sorting_Searching_Counting/np.*.cs` are the facades. Text (`S` / `U` /
+`StringDType`) sorts, searches and set routines: `strings-compute.md`.
+
+## `np.argsort`: one stable radix order
+
+`np.argsort` is one stable LSD radix order for every numeric dtype but decimal (`Backends/Default/Sorting/AxisSort.cs`
+over `RadixSort.ArgSortU32/U64`). The kind is ignored: every kind gets NumPy's stable (mergesort) order. An argsort only
+orders indices, so it can fold what NumPy's comparators call equal, which the VALUE sorts of float16 and complex128
+cannot (they rebuild values from keys and need distinct keys for ±0 and the NaN payloads, so they keep the comparison
+sort):
+- float16 (`ArgLineF16`): `HArgKey16` maps the sign-magnitude bits to an unsigned order with both zeros on one key, the
+  non-NaN indices go through the 4-byte core with two key bytes, and the NaN indices follow in input order (`HALF_LT`
+  with ties by index).
+- complex128 (`ArgLineC128`): `CDOUBLE_LT` is lexicographic on (class, first key, second key), so the line is
+  partitioned stably by class (no NaN part; `R+nanj`; `nan+Rj`; `nan+nanj`), the first class radix-sorted by its
+  imaginary key and then stably by its real key, the second and third by their one key, the fourth kept in input order.
+- np.unique's argsort-and-gather routes run on it (`unique.md`). Gate `Sorting/np.argsort.HalfComplex.Test.cs` (NumPy's
+  stable indices under every kind, past the insertion thresholds).
+
+## `np.argwhere` / `np.flatnonzero`
+
+Both return views of one buffer, as NumPy's do (`Backends/Default/Indexing/Default.{Argwhere,FlatNonZero}.cs`):
+`np.flatnonzero` is the column of nonzero's `(k, 1)` buffer; `np.argwhere` the TRANSPOSE of the `(ndim, k)` stack
+`np.asarray(np.nonzero(a))` makes, F-contiguous with byte strides `(8, 8k)` (a 0-d input: `argwhere(atleast_1d(a))[:,
+:0]`). Both report OWNDATA false; code that reads their raw buffers must use the strides. Gates: the layout-parity
+oracle's argwhere / flatnonzero families, the string oracle (no layout excuse) and `Indexing/IndexSearchLayout.Test.cs`.
 
 ## Axis `argmax` / `argmin`
 
@@ -28,8 +58,9 @@ u16), f32 and f64; Half/Decimal/Complex and rank > 64 decline (hooks `DefaultEng
   `DirectILKernelGenerator.Reduction.Arg.cs`, the port of `simd_argmax_{s64,u64}`): `Vector256.Max<long>/<ulong>` has no
   AVX2 instruction. A 32-bit tournament is slower in cache, so 8-, 16- and 32-bit lanes keep the two-pass kernel; the
   routing is gated on `Vector256.IsHardwareAccelerated`.
-- Open: `ReduceArgMax`/`ReduceArgMin` wrap an out-of-range NEGATIVE axis (`while (axis < 0) axis += ndim`) instead of
-  raising NumPy's AxisError (`np.argmax(a2d, -3)` → `[1 1]`).
+- An out-of-range axis is NumPy's AxisError (`np.argmax(a2d, -3)`; a 0-d input is raveled first, `PyArray_CheckAxis`:
+  `axis-arguments.md`). `out=` is `TensorEngine.ReduceArgMax` / `ReduceArgMin`'s contract (`Default.ArgOut.cs`: the out's
+  shape, its safe cast to intp, then the unsafe copy; a text operand's out is checked before its comparison).
 - Gate: `Backends/Kernels/AxisArgFastPathTests.cs`.
 
 ## `partition`, `argpartition`, `lexsort`, `nanargmax`, `nanargmin`, `sort_complex`
@@ -37,7 +68,9 @@ u16), f32 and f64; Half/Decimal/Complex and rank > 64 decline (hooks `DefaultEng
 Compositions and wrappers over introselect (`Utilities/QuickSelect.cs`, the median/percentile primitive), the stable
 radix argsort (`AxisSort`) and the engine's `ArgMax`/`ArgMin`. Gates: `Sorting/np.{partition,lexsort,nanargmax,
 sort_complex}.Test.cs` and the `sort`/`nanreduce` tiers. Sources:
-`Sorting_Searching_Counting/np.{partition,argpartition,lexsort,nanargmax,sort_complex}.cs`.
+`Sorting_Searching_Counting/np.{partition,argpartition,lexsort,nanargmax,sort_complex}.cs` (the facades),
+`Backends/Default/Sorting/Default.NanArgMax.cs` (`TensorEngine.NanArgMax` / `NanArgMin`: the axis check, the text route,
+`_replace_nan` and the arg reduction) and `Default.{Sort,LexSort}.cs`.
 - `partition(a, kth, axis=-1, kind='introselect', order=null)` and the in-place `ndarray.partition`: the kth element(s)
   land in their sorted position, the sides unordered. `Backends/Default/Sorting/AxisPartition.cs` drives one introselect
   line kernel per 1-D lane through `AxisSort.DriveAllButAxis` (the NDIter IterAllButAxis loop the sorts use).
@@ -64,7 +97,8 @@ sort_complex}.Test.cs` and the `sort`/`nanreduce` tiers. Sources:
   raises AxisError. Float NaN indices go to the tail in encounter order (argsort's policy). The tier pins the DERIVED kth
   values (`take(partition(a, ks), ks)` / the take_along_axis gather at ks): the arrangement between kth anchors is
   implementation-specific on both sides, so the two-sided ≤/≥ invariant is unit-test-pinned instead.
-- `lexsort(keys, axis=-1)`: an indirect stable sort, the LAST key primary, reproducing `PyArray_LexSort` pass for pass:
+- `lexsort(keys, axis=-1)` (`TensorEngine.LexSort`): an indirect stable sort, the LAST key primary, reproducing
+  `PyArray_LexSort` pass for pass:
   successive stable argsorts first → last key, each re-sorting the running permutation through `take_along_axis`
   (identical indices to NumPy's mergesort passes, ties included, because the radix argsort is stable). Errors: `need
   sequence of keys with len > 0 in lexsort` (TypeError), `all keys need to be the same shape` (ValueError); 0-d keys let
@@ -81,8 +115,8 @@ sort_complex}.Test.cs` and the `sort`/`nanreduce` tiers. Sources:
     index ≠ 0), the same instance returns, a strided out writes through its base, and the all-NaN guard fires before out
     is touched. The third positional is `out` (NumPy's order), so pass `keepdims:` by name (the implicit bool → NDArray
     conversion would otherwise bind a positional bool to `out`).
-  - Axis validation runs first for every dtype path (refusing the engine argmax's negative-axis wrap above), with NumPy's
-    rule that a 0-d array accepts axis 0/-1. NumPy's NaN+Inf tie caveats fall out of the composition identically.
+  - Axis validation runs first for every dtype path, with NumPy's rule that a 0-d array accepts axis 0/-1. NumPy's
+    NaN+Inf tie caveats fall out of the composition identically.
 - Flat `argmax`/`argmin` engine facts: Decimal takes the `ExecuteReducing` fallback family (`DecimalArg{Max,Min}Kernel`;
   the IL arg kernel's `Bgt`/`Blt` cannot compare a 16-byte struct); Char rides the zero-copy uint16 reinterpret its amax
   uses; the strided/scalar IL step compares floats with ORDERED `Bgt`/`Blt` (the unordered `_Un` branches also fire when

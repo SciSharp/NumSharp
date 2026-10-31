@@ -50,6 +50,18 @@ public abstract partial class TensorEngine
   `a.Shape.Strides` (all public). `a.GetData<T>().Address` densifies a non-contiguous view, so never pair it with strides.
 - `TryMatMulBatched` takes a whole stacked product, so per-product setup is hoisted out of the loop as NumPy hoists it
   out of its gufunc's outer loop; bit-identical to the per-element route.
+- The factorisations reach `Blas` through numpy.linalg's sub-engine, a second settable property on the same engine:
+  `TensorEngine.Linalg` (`Backends/LinalgEngine.cs`: numpy.linalg's computing functions as the abstract `LinalgEngine`;
+  the default `DefaultLinalgEngine` is NumPy's `_linalg.py` statements over ten `protected virtual` kernels,
+  `CholeskyKernel` … `SvdKernel`, which ask the operand engine's `Blas`, then the managed LU or
+  `OpenBlasMissingBackendException`; null restores the default). A package that supplies LAPACK never touches it; it is
+  for a provider that computes a factorisation another way (override a kernel of a `DefaultLinalgEngine` subclass and
+  assign it) or replaces numpy.linalg's statements.
+- numpy.fft has the third settable property, `TensorEngine.Fft` (`Backends/FftEngine.cs`: numpy.fft's computing functions
+  as the abstract `FftEngine`; the default `DefaultFftEngine` is NumPy's `_pocketfft.py` / `_helper.py` statements over
+  three `protected virtual` kernels, `C2CKernel` / `R2CKernel` / `C2RKernel`, that run the managed pocketfft port; null
+  restores the default). It needs no `Blas`: an MKL / FFTW / cuFFT provider overrides the kernels of a
+  `DefaultFftEngine` subclass and assigns it.
 
 ## Why the package exists
 

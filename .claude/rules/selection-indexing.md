@@ -298,17 +298,22 @@ tiers `manip`/`matmul`; sources `Creation/np.tri.cs`, `Indexing/np.{diag,tril,di
   `array must be at least 2-d`, `All dimensions of input must be of equal length`, `underlying array is read-only`. The
   targets resolve to real strides and are written by `DiagWrite` (one stride-`Σstrides` run, or `ceil(count/cols)`
   equally strided blocks when wrapping), so it writes correctly through transposed, sliced, F-order and negative-stride
-  views. `val` is `object` (scalars, `NDArray`, C# arrays (a rectangular 2-D one ravels), `IEnumerable`); only genuine
-  scalars take the `NDArray.Scalar` path; `Half`/`Complex`/arrays route through `asanyarray`. A null `val` throws
-  `ArgumentNullException` (NumPy writes nan for a float array: a null in C# is a caller bug).
+  views. `val` is `object` (scalars, `NDArray`, C# arrays (a rectangular 2-D one ravels), `IEnumerable`), converted the
+  way NumPy's flat assignment converts it, `PyArray_FromAny(val, a.dtype, FORCECAST)`, BEFORE the diagonal is walked,
+  so an empty array still raises (`NDArray.FlatStoreValue`, `Indexing/NDArray.IndexTricks.cs`): a scalar or str by the
+  dtype's setitem (a Python int range-checked, a str parsed by `int()` / `float()` / `complex()` and quoted as the str,
+  its `str()` into `S` / `U`, a `BigInteger` included), an `object[]` or collection item by item the same way
+  (`new object[] { 300, 2 }` into int8 raises), an `NDArray` or typed C# array by an unsafe cast. A null `val` is Python's
+  `None`: NaN for a float array, `False` for bool, `'None'` for text, `int(None)`'s TypeError for an integer array,
+  converted after the read-only check and before the empty-diagonal return, as NumPy's `a.flat[:end:step] = None` does.
 - `diag_indices(n, ndim=2)` / `diag_indices_from(arr)` / `tril_indices(n, k=0, m=None)` / `triu_indices` /
   `tril_indices_from(arr, k=0)` / `triu_indices_from` / `mask_indices(n, mask_func, k=0)` return `NDArray<long>[]`,
   the first six OWNING arrays as NumPy's fresh ones are, `mask_indices` the views `np.nonzero` returns. `diag_indices`
   returns the same array instance in every slot (NumPy's `(idx,) * ndim` aliasing); `ndim <= 0` gives an
   empty array. `mask_indices`' arity follows the mask function's rank (`diag` yields one array). `tril_indices` /
   `triu_indices` emit the triangle's row/column runs directly in O(output), with no N×M bool mask.
-- The triangular fills pick their allocation by size: below 64 MiB (`WriteOnceMaxBytes`) a pooled buffer comes back
-  dirty, so they allocate uninitialised and write every byte once; above it `np.zeros` rides free OS zero pages and only
-  the kept run is written.
+- The triangular fills pick their allocation by size: below 64 MiB (`SizeBucketedBufferPool.WriteOnceMaxBytes`) a pooled
+  buffer comes back dirty, so they allocate uninitialised and write every byte once; above it `np.zeros` rides free OS
+  zero pages and only the kept run is written.
 - `diag` / `diagflat` construction allocates a fresh `n×n` buffer and faults about n scattered pages on the sparse
   diagonal write; NumPy's benchmark loop reuses a warm block, which NumSharp's allocator does not cache.

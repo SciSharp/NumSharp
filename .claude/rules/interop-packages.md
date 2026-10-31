@@ -42,33 +42,60 @@ None of these computes NumSharp operations: each converts tensors between NumSha
 ### `NumSharp.Interop.OnnxRuntime` (unreleased)
 
 - `NDArrayOnnxInterop` verbs, `InferenceSessionExtensions`, `Postprocess`. Sources (`src/NumSharp.Interop.OnnxRuntime/`):
-  `NDArrayOnnxInterop.{cs,Export.cs,Import.cs,NonTensor.cs}` (dtype maps, the export and import verbs, non-tensor
-  outputs), `OrtTensor.cs` (the `OrtTensor` / `OrtTensor<T>` handles and the `ImportLease`), `UnmanagedMemoryManager.cs`
-  (a `Memory<T>` over the unmanaged buffer), `InferenceSessionExtensions.cs`, `Postprocess.cs`. ONNX Runtime's C# sources
-  are vendored for reference at `refs/onnxruntime/csharp/` (a sparse submodule), its official samples at
-  `refs/onnxruntime-inference-examples/c_sharp/`.
-- Export: `nd.AsOrtValue()` (a zero-copy `OrtValue` over the NumSharp buffer, C-contiguous only, held by the ARC-rooted
-  handle `OrtTensor`), `nd.ToOrtValue()` (an ORT-allocated copy), `AsDenseTensor<T>` / `ToDenseTensor<T>` (ORT's legacy
-  tier).
-- Import: `ortValue.ToNDArray()` (an owning copy), `ortValue.AsNDArray(ownsValue)` (a zero-copy lease over ORT's buffer,
-  CPU only). Importing a tensor of 2 GB or more is refused up front: ORT exposes tensor memory only as an `int`-length
-  Span.
-- `session.Run(NDArray…)`: input names from the model metadata, NumPy-`casting` dtype coercion, declared-shape
-  validation, and copy / owning-view / pre-allocated outputs. `Postprocess.{Softmax,LogSoftmax,Sigmoid,Argmax,TopK}`.
+  `NDArrayOnnxInterop.{cs,Export.cs,Import.cs,NonTensor.cs,Text.cs}` (dtype maps, the export and import verbs,
+  non-tensor outputs, text tensors), `OnnxCodecMode.cs`, `OrtTensor.cs` (the `OrtTensor` / `OrtTensor<T>` handles and the
+  `ImportLease`), `UnmanagedMemoryManager.cs` (a `Memory<T>` over the unmanaged buffer),
+  `InferenceSessionExtensions{,.Async}.cs`; `Postprocess.cs` is one source file compiled into both bridges
+  (`src/NumSharp.Interop.Shared/`). ONNX Runtime's C# sources are vendored for reference at `refs/onnxruntime/csharp/` (a
+  sparse submodule), its official samples at `refs/onnxruntime-inference-examples/c_sharp/`.
+- `OnnxCodecMode { Auto, View, Copy }` (the members of the pythonnet codec's `NumpyCodecMode`) on every entry that could
+  share memory: Auto is a view when ORT can read the buffer in place (C-contiguous and a bit-exact dtype), else a copy
+  the handle owns; View throws instead of copying; Copy always copies.
+- Export: `nd.AsOrtValue(mode)` (an `OrtValue` over the NumSharp buffer, held by the ARC-rooted handle `OrtTensor`, whose
+  `IsView` says view or copy), `nd.ToOrtValue()` (an ORT-allocated copy), `AsDenseTensor<T>(mode)` / `ToDenseTensor<T>`
+  (ORT's legacy tier, always row-major).
+- Import: `ortValue.ToNDArray()` (an owning copy), `ortValue.AsNDArray(ownsValue, mode)` (a zero-copy lease over ORT's
+  buffer, CPU only; a counted NumSharp alias for a value the package made). Imports of NumSharp memory (a value the
+  package made, a fed input passed through) are counted aliases that inherit read-only; only an OWNING view adds GC
+  memory pressure. Importing a tensor of 2 GB or more that ORT owns is refused up front: ORT exposes tensor memory only as
+  an `int`-length Span.
+- `session.Run(NDArray…)`: input names from the model metadata (overridable initializers and `optional(tensor)` inputs
+  included), NumPy-`casting` dtype coercion checked on every call, declared-shape validation, copy / owning-view outputs.
+  `session.RunInto` fills pre-allocated outputs (an output that overlaps an input is computed from a copy under Auto,
+  refused under View). `session.RunIntoAsync` / `RunAsync` + `IsRunAsyncSupported` are ORT's native async (ORT 1.30.0 or
+  later, a session with two or more intra-op threads; `RunAsync` allocates only a numeric output of a fixed declared
+  shape). `Postprocess.{Softmax,LogSoftmax,Sigmoid,Argmax,TopK}`.
 - Depends on `Microsoft.ML.OnnxRuntime.Managed [1.16.0, 2.0.0)` only: the native flavours (CPU, Gpu, DirectML) are
   mutually exclusive, so the consumer picks one.
 - Dtypes: 12 zero-copy, including a Half↔Float16 bit reinterpretation; Char→UInt16; Decimal→Double through a temp the
-  handle owns; Complex and BFloat16 refused.
+  handle owns (Auto / Copy; `Run` needs `casting: "same_kind"`); text: fixed-width `U` / `S` ↔ ORT string tensors, always
+  a copy (a trailing NUL is lost; text ↔ number casts do not exist); Complex and BFloat16 refused; sparse tensors,
+  non-tensor `Run` inputs and non-`NDArray` inputs are not served.
 - Non-tensor outputs read as NumSharp pieces: `ortValue.ToNDArrays()` (a sequence of tensors), `ToMap()` / `ToMaps()`
-  (a map, or a ZipMap sequence of maps → (keys, values) NDArrays), `ReadStringTensor()` → `string[]` (NumSharp has no
-  string dtype; a string or sequence model input is refused).
+  (a map, or a ZipMap sequence of maps → (keys, values) NDArrays), `GetMapKeys`, `ReadStringTensor()` → `string[]`; each
+  numeric array is a view that OWNS ORT's copy of its element.
+- Five ORT facts the package is built around (`docs/plans/onnxruntime-rework.md`): (1) a model OUTPUT that is a FED
+  input (no node produces it) is never written into a pre-allocated buffer, and the value ORT returns for it lies in the
+  fed memory, so `InferenceSessionExtensions.FedTensor` (by name, ORT's own rule) makes `RunInto` copy it and the
+  zero-copy form alias it; (2) ORT completes `RunAsync` on its OWN intra-op thread, where `session.Dispose()` never
+  returns, and awaits without `ConfigureAwait(false)`, so the bridge's task uses `RunContinuationsAsynchronously` and
+  hides the caller's context and scheduler from ORT; before 1.30.0 the managed `RunAsync` does not pin its argument
+  arrays, so the forms refuse older ORT; (3) ORT does not guard a RELEASED `OrtValue` (a native call on one is an access
+  violation that ends the process), so the handle records its disposed value in a weak table and every import verb
+  throws `ObjectDisposedException`; (4) `NodeMetadata` reports a declared scalar and an unknown rank identically
+  (`dims=[]`), so `RunAsync` does not allocate such an output and `Run`'s shape check leaves it to ORT; (5) the 1.16.0
+  managed assembly carries AssemblyVersion 0.0.0.0, so only the NuGet range sets the floor.
 - Lifetime: finalizers abandon, never free eagerly; an `OrtValue` keeps its handle alive through a ConditionalWeakTable,
   and a tensor's memory manager keeps it by back-reference.
-- Gate: `test/NumSharp.Tests.Interop.OnnxRuntime`, over committed `.onnx` models from `test/oracle/gen_onnx_models.py`:
-  the every-dtype × layout export matrix, property-based, metamorphic, ORT-consumer (six feed routes through ORT's own
-  Identity), bit-pattern fuzz, concurrency stress, ARC/fault injection, boundary and API-approval suites, and
-  `LifetimeGcTests` (every finalization order of eight scenarios as a staged real collection). The `interop-test` CI job
-  runs it against ONNX Runtime 1.16.0 and 1.29.0, with no Python.
+- Gate: `test/NumSharp.Tests.Interop.OnnxRuntime`, over committed `.onnx` models from `test/oracle/gen_onnx_models.py`
+  (which takes model names, so a new model does not rewrite the committed ones): the every-dtype × layout export matrix
+  (a cell per mode), property-based, metamorphic, ORT-consumer (six feed routes through ORT's own Identity), bit-pattern
+  fuzz, concurrency stress, ARC/fault injection, boundary and API-approval suites, `LifetimeGcTests` (every finalization
+  order of eight scenarios as a staged real collection), and `SessionRunModeTests`, `ImportAliasTests`, `TextTests`,
+  `PassThroughOutputTests`, `SessionRunAsyncTests`, `ValueOwnershipTests`, `MemoryManagerTests`. The `interop-test` CI job
+  runs it against ONNX Runtime 1.16.0 (the async tests Inconclusive, the refusal tested) and 1.31.0 (the only leg that
+  runs the async tests: never set it below 1.30.0), with no Python. Mutation runs restore a file from memory only: copy
+  untracked files out of the tree before one.
 - Docs: `docs/website-src/docs/interop/onnxruntime.md` (excluded from the site).
 
 ### `NumSharp.Interop.MLNet` (unreleased)
