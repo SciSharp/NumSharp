@@ -116,9 +116,11 @@ their calls rely on a facade's class rule. The five defects its snapshots, readi
 (a failed iteration's buffers are not written back, `dc807d59`; `np.array(IEnumerable<T>, size)` of a shorter
 enumeration raises np.fromiter's error, `f48b5677`; a bad `device=` raises NumPy's ValueError, `85167352`;
 np.nansum / np.nanprod along an axis with an empty result, `eeaac035`; np.average with numpy.matrix weights,
-`e169b25d`). An audit of the element code the plan's own commits added
-(2026-10-30) found four places and a few small ones that re-implement a kernel, the iterator or a BCL primitive the
-library already had. [§7 PA](#pa-reuse-what-the-library-already-has-the-2026-10-30-audit) plans their alignment. Its
+`e169b25d`). P6b is done (2026-11-01): the linalg and FFT sub-engines call the members their facades dispatch to (a
+nested numpy.linalg / numpy.fft call is the sub-engine's own virtual member) and sit under `Backends/Default/`; R2 pins
+their three calls of np.outer / np.tensordot, which get engine members in P8. An audit of the element code the plan's
+own commits added (2026-10-30) found four places and a few small ones that re-implement a kernel, the iterator or a
+BCL primitive the library already had. [§7 PA](#pa-reuse-what-the-library-already-has-the-2026-10-30-audit) plans their alignment. Its
 probe found exact models of NumPy's dot functions, so the dot item also fixes np.dot where it differs from NumPy today.
 Three items were tried first (2026-10-30):
 - PA1 and PA4 are done: the same bytes, equal or faster.
@@ -141,8 +143,9 @@ Three items were tried first (2026-10-30):
 - PA5 waits: its `Span<T>` items cannot index past `int.MaxValue` elements (D20). The divergences found on the way are
   pinned as `[OpenBugs]` tests and their fixes deferred (D21).
 
-Order of the work left (decided 2026-10-31 in the step round, D22): the merge (done); P6b; P8, its rename commit first;
-P9; P10; PA3; PA2. Later: PA5, PA6 and the fixes of the pinned divergences (`OpenBugs.NpLayer.cs`, NL1 to NL8).
+Order of the work left (decided 2026-10-31 in the step round, D22): the merge (done); P6b (done 2026-11-01); P8, its
+rename commit first; P9; P10; PA3; PA2. Later: PA5, PA6 and the fixes of the pinned divergences (`OpenBugs.NpLayer.cs`,
+NL1 to NL8).
 
 Progress goes into the [§9 state log](#9-state-log), newest entry first.
 
@@ -1217,13 +1220,15 @@ The 255 text lines are P3's K4 files, np.evaluate's two (P2's) and np.fft.RawFft
         last item (P7 was dropped):
         `NDArray.Multiarray.cs`, `NDArray.FunctionBase.cs` and `NDArray.IndexTricks.cs`, some of whose calls rely on a
         facade's class rule.
-- [ ] **P6b, the linalg and FFT engines** (decided 2026-10-31, D12). `DefaultLinalgEngine`'s 169 np.* calls (13 files
+- [x] **P6b, the linalg and FFT engines** (decided 2026-10-31, D12). `DefaultLinalgEngine`'s 169 np.* calls (13 files
       in `LinearAlgebra/linalg/`) and `DefaultFftEngine`'s 10 (7 files in `Fourier/`) become the members their
       facades dispatch to: the core functions through `a.TensorEngine` (`np.sum(np.abs(a), axis)` ->
       `e.ReduceAdd(e.Abs(a), axis)`), numpy.linalg and numpy.fft through the sub-engine's own members
       (`np.linalg.svdvals(y)` -> `Svdvals(y)`, `np.fft.irfft(...)` -> `Irfft(...)`). The files move under
       `Backends/Default/LinearAlgebra/` and `Backends/Default/Fourier/`, where R2 scans them. (P7 needed it; with P7
-      dropped, P6b stands on its own: the engines call members as P6's homes do.)
+      dropped, P6b stands on its own: the engines call members as P6's homes do.) Done 2026-11-01 (see the state log):
+      173 linalg calls (as counted at `950f0b05`) and 10 FFT calls; 3 stay, np.outer and np.tensordot's, whose
+      statements are still their facades' own, pinned in R2 until P8 gives them `TensorEngine` members.
 
 ### PA. Reuse what the library already has (the 2026-10-30 audit)
 
@@ -1548,6 +1553,39 @@ breaks a subclass or a direct caller for a layering reason alone.
 ---
 
 ## 9. State log
+
+- **2026-11-01, the docs port, and P6b: the linalg and FFT engines stop calling np.* - P6b is done.** Thirteen commits
+  on `strings` before this entry (not pushed).
+  - The merge entry's "left from the merge": the documentation `strings` had added to its old `.claude/CLAUDE.md`
+    since `f6086479` is in `journey4`'s rule layout, rewritten as current state: `f445335d`, `ff7e41d3`, `f166df23`,
+    `00748585`, `fb73c31c`, `34ccdbfd`, `d97bbe4f`, `0293f5f2`, `609882a6` (parts 1 to 9) and `785a7e25` (the
+    completeness pass). New rules: `unique.md`, `axis-arguments.md`, `index-tricks.md`, `polynomial-quadrature.md`,
+    `polynomial-classes.md`, `text-io.md`; every rule under the 40,000-character cap, the root under 32 KiB.
+  - `950f0b05` (D4): `DefaultLinalgEngine.AbsSquared`, norm's |x|² of a complex operand, never disposed its hand-driven
+    writer enumerator, so every complex call leaked one native iterator state (2,158 bytes per call over 100,000
+    np.linalg.norm calls; a constant 14 MiB after the fix, at 100,000 and at 400,000 calls).
+  - `8158a0b6`, the FFT engine: its 10 calls (np.arange 3, np.concatenate, np.conjugate 2, np.fft.irfft / rfft / rfftn /
+    irfftn) became `UnmanagedStorage.ArangeObj`, `NDArray.ConcatenateInto`, the operand engine's `Conjugate` and the
+    engine's own `Irfft` / `Rfft` / `Rfftn` / `Irfftn`; the 7 files moved to `Backends/Default/Fourier/` (no R2 row).
+  - `61f85758`, the linalg engine: its 173 calls (counted at `950f0b05`; this plan counted 169 before the merge) became
+    the operand engine's members, the array object's, and the engine's own virtual members for nested numpy.linalg calls
+    (`Inv`, `Solve`, `Svdvals`, `Norm`); np.matmul / np.dot are two helpers (`CoreMatmul`, `CoreDot`), AbsSquared's two
+    typed walks one two-operand `NDIterRef`. The 13 files moved to `Backends/Default/LinearAlgebra/`. R2 pins the 3
+    calls left on `DefaultLinalgEngine.ArrayApi.cs`: np.outer and np.tensordot (2), whose statements are still their
+    facades' own, until P8 gives them `TensorEngine` members. Three places where a numpy.char.chararray operand met a
+    facade's chararray rule keep their results (matrix_power(a, 0)'s identity and QR's factored copy lost a plain region
+    the facade call needed; multi_dot's chararray vector end is a plain view now, under a dot whose result is plain);
+    np.linalg.trace(null) still raises np.trace's ArgumentNullException (a null operand is dispatched to the default
+    engine, np.EngineOf's rule).
+  - Evidence: the snapshot tool, byte for byte against `785a7e25`: np.fft 138,720 cases; np.linalg and
+    NDArray.matrix_power 65,877 cases with the OpenBLAS backend at one thread and 65,877 managed. A first FFT run
+    differed on 8 lines only in NaN sign bits (rfft2 / rfftn over float16 / float32 NaN inputs); a rerun of those
+    functions and the final full run match the baseline, so they were a run-to-run variation of the JIT's commutative
+    operand order. Gates in Release with CI's filter: NumSharp.Tests 21,016 / 21,015 passed (12 skipped) on net10.0 /
+    net8.0; the oracle 414 passed and 2 skipped (the two soaks) on both, with LinalgParity, MatmulParity, MatrixOperand
+    and MatrixOperand_LibraryNeverReachesAMatrixRule; the matrix-operand KnownGaps replays still carve exactly (330 and
+    10 cases); the layering tests pass.
+  - Next: P8, its rename commit first (D18).
 
 - **2026-10-31, `strings` merges `journey4` (D17 as decided again: "Merge journey4 in"), and what its gates found.**
   Five commits on `strings` before this entry, landed by fast-forward (not pushed). Backups of the parent `227bf2f3`:
