@@ -15,12 +15,17 @@ namespace NumSharp
         /// <see cref="Type"/>. Anything else, null included, is not a scalar type.
         /// </param>
         /// <returns>
-        /// True when <paramref name="rep"/> names a NumSharp storage type: every dtype except <see cref="NPTypeCode.Empty"/>
-        /// and <see cref="NPTypeCode.String"/>, the lane of the string classes (NumPy 1.x answered True for <c>np.str_</c>,
-        /// <c>np.bytes_</c> and their descriptors).
+        /// True when <paramref name="rep"/> names a NumSharp storage type: every dtype except <see cref="NPTypeCode.Empty"/>.
+        /// The string classes count, as in NumPy 1.x, where <c>np.issctype(np.str_)</c>, <c>np.issctype(np.dtype('S3'))</c>
+        /// and <c>np.issctype(str)</c> are True: their descriptors (<c>np.str_</c>, <c>np.bytes_</c>, <c>'U5'</c>,
+        /// <c>'S3'</c>, <c>StringDType</c>), <c>typeof(string)</c> and their lane <see cref="NPTypeCode.String"/>.
         /// </returns>
         /// <remarks>
         /// https://numpy.org/doc/1.26/reference/generated/numpy.issctype.html
+        /// <para>
+        /// NumPy 1.x answered False only for <c>object_</c> (and for anything that is no type or dtype), and NumSharp
+        /// cannot store <c>object_</c>, so every descriptor with a storage lane answers True.
+        /// </para>
         /// <para>
         /// The answer is the descriptor's STORAGE code, so a datetime64 / timedelta64 descriptor (no storage lane yet)
         /// answers false where NumPy 1.x answered true. <see cref="NDScalarType"/> classes are not accepted (NumPy 1.x
@@ -33,6 +38,7 @@ namespace NumSharp
         /// np.issctype(np.int32)          // True
         /// np.issctype(typeof(int))       // True
         /// np.issctype(NPTypeCode.Int32)  // True
+        /// np.issctype(np.str_)           // True
         /// np.issctype(typeof(NDArray))   // False
         /// </code>
         /// </example>
@@ -41,14 +47,16 @@ namespace NumSharp
             if (rep == null)
                 return false;
 
+            // NPTypeCode.String is the lane of the string classes (bytes_, str_, StringDType), each a scalar type to NumPy
+            // 1.x's issctype, so only Empty - NumSharp's "no dtype" - names no scalar type.
             return rep switch
             {
-                NPTypeCode tc => tc != NPTypeCode.Empty && tc != NPTypeCode.String,
-                Type t => t.GetTypeCode() is var tc && tc != NPTypeCode.Empty && tc != NPTypeCode.String,
+                NPTypeCode tc => tc != NPTypeCode.Empty,
+                Type t => t.GetTypeCode() is var tc && tc != NPTypeCode.Empty,
                 // np.int32 has been a DType since Stage B (it was typeof(int)); without this arm the NumPy 1.x spelling
                 // np.issctype(np.int32) fell through to false. A descriptor answers by its class's storage code, like the
                 // arms above; Meta.TypeCode is Empty for the storage-less datetime classes, where GetTypeCode() throws.
-                DType d => d.Meta.TypeCode is var tc && tc != NPTypeCode.Empty && tc != NPTypeCode.String,
+                DType d => d.Meta.TypeCode is var tc && tc != NPTypeCode.Empty,
                 _ => false
             };
         }

@@ -16,13 +16,13 @@ public class NpTypeChecksBattleTests
         np.issctype(NPTypeCode.Int32).Should().BeTrue();
         np.issctype(NPTypeCode.Double).Should().BeTrue();
         np.issctype(NPTypeCode.Boolean).Should().BeTrue();
+        np.issctype(NPTypeCode.String).Should().BeTrue("the lane of the string classes, each a scalar type in NumPy 1.x");
     }
 
     [TestMethod]
     public void IsSctype_NPTypeCode_Invalid()
     {
         np.issctype(NPTypeCode.Empty).Should().BeFalse();
-        np.issctype(NPTypeCode.String).Should().BeFalse();
     }
 
     [TestMethod]
@@ -30,13 +30,13 @@ public class NpTypeChecksBattleTests
     {
         np.issctype(typeof(int)).Should().BeTrue();
         np.issctype(typeof(double)).Should().BeTrue();
+        np.issctype(typeof(string)).Should().BeTrue("NumPy 1.26.4: np.issctype(str) is True");
     }
 
     [TestMethod]
     public void IsSctype_Type_Invalid()
     {
         np.issctype(typeof(NDArray)).Should().BeFalse();
-        np.issctype(typeof(string)).Should().BeFalse();
     }
 
     [TestMethod]
@@ -61,7 +61,33 @@ public class NpTypeChecksBattleTests
         np.issctype(np.dtype("<i4")).Should().BeTrue();
         np.issctype(np.dtype(">f8")).Should().BeTrue("a non-native byte order still names float64's storage");
         np.issctype(np.dtype("M8[s]")).Should().BeFalse("datetime64 has no storage lane, as NPTypeCode.Empty");
-        np.issctype(np.dtype("String")).Should().BeFalse("the string classes' lane, as NPTypeCode.String");
+        np.issctype(np.dtype("String")).Should().BeTrue("'<U0', a string class in the String lane");
+    }
+
+    /// <summary>
+    ///     NumPy 1.x's issctype is False only for <c>object_</c> and for what is no type or dtype, so the string classes
+    ///     are scalar types: probed on NumPy 1.26.4, <c>np.issctype</c> of <c>np.str_</c>, <c>np.bytes_</c>,
+    ///     <c>np.dtype('U5')</c>, <c>np.dtype('S3')</c>, <c>np.dtype('U')</c>, <c>np.dtype('S')</c>, <c>np.dtype('c')</c>,
+    ///     <c>str</c> and <c>bytes</c> is True. NumSharp answered False for all of them: its three arms excluded the String
+    ///     lane, which holds every string class. StringDType is NumPy 2's, so 1.26.4 cannot be asked; its scalar type is
+    ///     <c>str</c>, which answers True.
+    /// </summary>
+    [TestMethod]
+    public void IsSctype_StringClasses_AreScalarTypes_LikeNumPy1()
+    {
+        np.issctype(np.str_).Should().BeTrue();
+        np.issctype(np.bytes_).Should().BeTrue();
+        np.issctype(np.dtype("U5")).Should().BeTrue();
+        np.issctype(np.dtype("S3")).Should().BeTrue();
+        np.issctype(np.dtype("U")).Should().BeTrue();
+        np.issctype(np.dtype("S")).Should().BeTrue();
+        np.issctype(np.dtype("c")).Should().BeTrue("'c' is S1");
+        np.issctype(np.dtype("T")).Should().BeTrue("StringDType's scalar type is str");
+        np.issctype(typeof(string)).Should().BeTrue();
+
+        // The array's own descriptor answers like the dtype it reports.
+        using var text = np.array(new[] { "ab", "cde" });
+        np.issctype(text.dtype).Should().BeTrue();
     }
 
     #endregion

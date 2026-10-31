@@ -20,7 +20,7 @@ Logic/np.common_type.cs	1	6	# stays (D): a dtype routine
 Logic/np.find_common_type.cs	2	5	# stays (D): a dtype routine (NumPy 1.26.4's search)
 Logic/np.isreal_iscomplex.cs	0	3	# stays (D): isrealobj / iscomplexobj test the dtype itself
 Logic/np.min_scalar_type.cs	1	0	# stays (D): a dtype routine
-Logic/np.type_checks.cs	3	15	# stays (D): the isdtype family and the type characters (dtype routines); the 3 text lines are np.issctype's NPTypeCode.String tests, one per spelling (NPTypeCode, Type, DType)
+Logic/np.type_checks.cs	0	18	# stays (D): the isdtype family and the type characters (dtype routines); 3 of the numeric lines are np.issctype's NPTypeCode.Empty tests, one per spelling (NPTypeCode, Type, DType), counted as text while they also excluded the String lane
 Manipulation/np.asscalar.cs	0	1	# stays (C): np.asscalar<T>'s C# element-type check
 Manipulation/np.copyto.cs	1	0	# stays (C): a C# char into an S / U array is one character of text, not NumSharp's char dtype
 Matrixlib/NDMatrix.Construction.cs	0	8	# stays (D): numpy.matrix's own class code
