@@ -1,7 +1,8 @@
 ---
 paths:
   - "src/NumSharp.Core/Utilities/{NDFloatMath,NDComplexMath}*.cs"
-  - "src/NumSharp.Core/Math/NDArray.{SlidingDot,Correlate,Convolve}*.cs"
+  - "src/NumSharp.Core/Math/NDArray.{Correlate,Convolve}*.cs"
+  - "src/NumSharp.Core/Backends/Default/Math/{Sliding/SlidingDot,Default.Correlate,Default.Convolve,Default.Sinc}*.cs"
   - "src/NumSharp.Core/Math/np.{correlate,convolve,sinc,arcsinh,arccosh,arctanh,exp,exp2,expm1,log,log1p,sin,cos,tanh}*.cs"
   - "src/NumSharp.Core/Backends/ISlidingDotBackend.cs"
   - "test/NumSharp.Tests/Math/**"
@@ -11,13 +12,28 @@ paths:
 
 ## `np.correlate` / `np.convolve`
 
-NumPy's `_pyarray_correlate` + `small_correlate` (`Math/NDArray.SlidingDot.cs`). `np.correlate(a, v, mode='valid')` is
-`c_k = Σ_n a_{n+k}·conj(v_n)`; `np.convolve(a, v, mode='full')` is `correlate(a, v[::-1])` (no conjugation).
+NumPy's `_pyarray_correlate` + `small_correlate` (`Backends/Default/Math/Sliding/SlidingDot.cs`).
+`np.correlate(a, v, mode='valid')` is `c_k = Σ_n a_{n+k}·conj(v_n)`; `np.convolve(a, v, mode='full')` is
+`correlate(a, v[::-1])` (no conjugation).
+- Layers: NumPy's C functions `multiarray.correlate` / `correlate2` (`PyArray_Correlate` / `PyArray_Correlate2` with
+  `_pyarray_correlate`'s checks) are the engine members `TensorEngine.Correlate` / `Correlate2`
+  (`Backends/Default/Math/Default.Correlate.cs`); np.convolve's Python statements (`ndmin=1`, its own `a cannot be empty`
+  / `v cannot be empty`, the swap by length, `v[::-1]`) are `TensorEngine.Convolve` (`Default.Convolve.cs`); the four
+  facades are one call each, `NDArray.convolve` / `correlate` keeping `[NDScoped]` so the weaver roots their operands at
+  the public entry (`OperandRootsTests`).
 - One 3-region engine for both: the left ramp (scalar), the middle (vectorized over OUTPUT positions, `Vector<T>`
   separate multiply-add for the 10 SIMD dtypes; char through ushort), the right ramp, plus a length-gated `DotSimd` inner
   reduction (length ≥ 32) for the ramps and few-output tails of large kernels. correlate is non-commutative: when
-  `len(a) < len(v)` the operands swap and the output is time-reversed (`_pyarray_revert`), and a complex `v` is
-  conjugated. Mode strings are case-sensitive (NumPy's two near-miss messages reproduced).
+  `len(a) < len(v)` the operands swap and the output is time-reversed (`_pyarray_revert`, in the result's own buffer as
+  NumPy does: `SlidingDot.RevertInPlace`), and a complex `v` is conjugated.
+- The mode is NumPy's `PyArray_CorrelatemodeConverter` (`SlidingDot.ParseSlidingMode`): case-SENSITIVE; a text whose
+  first letter names a mode but is not its exact name is `ValueError("Use one of 'valid', 'same', or 'full' for
+  convolve/correlate mode")`, any other text `ValueError("mode must be one of 'valid', 'same', or 'full' (got 'x')")`
+  with the argument in Python's repr; a null mode is NumPy's `None`, `TypeError("convolve/correlate mode not
+  understood")`; a lone surrogate is CPython's `UnicodeEncodeError`. np.convolve checks emptiness before the mode;
+  np.correlate parses the mode before its operands. NumPy's integer modes (0 / 1 / 2) have no counterpart.
+- `MaterializeForSliding` copies a one-dimensional view of the compute dtype (np.convolve's reversed kernel, a stepped,
+  offset or broadcast operand) with ONE call of the strided move kernel (`CopyOneDimensional`).
 - Bit parity without a backend: vectorizing over outputs keeps each output's `Σ_t a[i+t]·k[t]` in t order, so it is
   byte-identical to the sequential sum, hence to NumPy, for the small-kernel regime. Integer, bool, decimal and Half are
   exact at every size (integer SIMD wrap and the reordered reduction are modular-exact). Long float32/float64 kernels,
@@ -35,7 +51,7 @@ NumPy's `_pyarray_correlate` + `small_correlate` (`Math/NDArray.SlidingDot.cs`).
     `blas_stride` refuses; CDOUBLE_dot's plain loop runs (`CdoubleDotPlain`). The caller decides with
     `DotOperandBlasable` (np.convolve reverses its kernel's stride, np.correlate's `conj(v)` is always fresh, a cast is
     always fresh). The backend is skipped there too, as NumPy skips cblas.
-- Long products without the backend (`Math/NDArray.SlidingDot.Long.cs`): blocked kernels over the positions at or past
+- Long products without the backend (`Backends/Default/Math/Sliding/SlidingDot.Long.cs`): blocked kernels over the positions at or past
   the vector block. B consecutive outputs share one loop over the kernel (a broadcast, one load per vector, FMAs into
   eight chains); the head/tail steps read tiny zero-padded edge windows, which requires a FINITE kernel (inf/NaN declines
   to the per-position kernels). float16 (HALF_dot: a sequential float32 sum at every length) has an exact blocked kernel,
@@ -80,7 +96,8 @@ positional-dtype convenience overloads.
 ## `np.sinc`
 
 The normalized sinc `sin(pi*x)/(pi*x)`, a port of NumPy 2.4.2's `numpy/lib/_function_base_impl.py::sinc`; a plain
-function with no `out=`/`where=`/`dtype=`. NumPy's composition is `y = pi*x; eps = finfo(y.dtype).eps if y.dtype.kind
+function with no `out=`/`where=`/`dtype=`: the facade `Math/np.sinc.cs` calls `TensorEngine.Sinc` (DefaultEngine's fused
+pass in `Backends/Default/Math/Default.Sinc.cs`). NumPy's composition is `y = pi*x; eps = finfo(y.dtype).eps if y.dtype.kind
 == 'f' else 1e-20; y = where(y != 0, y, eps); sin(y)/y`.
 - The dtype follows `pi*x` (a NEP 50 weak float): bool, every integer width and Char → float64 (not np.sin's i8 → f16
   tiers); float16/float32/float64 kept; complex → complex128. The zero test is on `pi*x`, not `x`, so sub-underflow

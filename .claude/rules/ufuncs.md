@@ -46,8 +46,19 @@ Supported on the binary ufuncs `add`/`subtract`/`multiply`/`divide`/`true_divide
 `rint`. Engine plumbing: `Backends/Default/Math/DefaultEngine.UfuncOut.cs`.
 - `out` joins the broadcast but is never stretched, needs a same_kind cast from the loop dtype (resolved from the
   inputs), is returned itself, and may alias an input (overlap-safe through COPY_IF_OVERLAP). `where` must be bool,
-  broadcasts and joins the output shape; masked-off `out` slots keep their contents. Error order: a bad `where` →
-  no loop → the out cast → the shape.
+  broadcasts and joins the output shape; masked-off `out` slots keep their contents.
+- NumPy's order of the refusals, every ufunc: the `dtype=` class check, a read-only `out`, a non-bool mask (both parsed
+  by `UfuncLoopCode` for every operand), the loop (no-loop / input cast), the out cast, then the shapes in NumPy's two
+  phases: every operand broadcast together first, the failure listing the inputs, then `out`, then `where` (a trailing
+  space), and only then `out`'s no-stretch check against the joint shape (`ResolveUfuncIterationShape`,
+  `BroadcastUfuncInputs`). A fresh result under `where=` takes NumPy's iterator layout, the mask voting
+  (`WhereResultShape`: F operands under an F mask give an F result). The ufuncs that handle `out=` themselves (`ldexp`,
+  `divmod`, `modf`, `frexp`) keep their own texts and order.
+- A weak Python int (a 0-d C# integer literal) is range-checked against the FINAL loop dtype before any kernel runs
+  (`ExecuteBinaryOp` → `CheckWeakPyIntOperand`: `np.maximum(int8, 1000)` is NumPy's `OverflowError: Python integer 1000
+  out of bounds for int8`; a bool array meets the int in the int64 loop; np.power checks it before its negative-power
+  error), and an int past 2^53 is re-packed into a float16 / float32 loop (`RepackWeakIntForFloatLoop`). The comparisons
+  pack every weak scalar the same way (`comparison.md`).
 - A passed-in masked out is flagged READWRITE (NumPy's masked ufunc rule), so an out that overlaps an input keeps its
   masked-off positions instead of receiving buffer contents.
 - Trivial loop: a binary call whose operands are all trivially iterable (one dtype, out C- or F-contiguous, array inputs
@@ -208,8 +219,7 @@ answers differ (`757.7617475757002 ** 2`: `x*x` `...03c1`, pow `...03c2`; `-0.0 
   float/double: the broadcast loops hand it a uniform exponent vector, one compare selects one vector op); everything
   else is pow. float16 (HALF_power) and np.float_power have no fast path.
 - Open divergences: np.evaluate's Power node has no fast path, so `np.kaiser` differs from NumPy by 1–2 ULP in some
-  windows; `np.power(unsigned, -1)` raises ValueError where NumPy raises OverflowError; the out= broadcast error text omits
-  the out's shape.
+  windows; `np.power(unsigned, -1)` raises ValueError where NumPy raises OverflowError.
 - Gates: the `power_fast` tier (zero excuses), `Math/np.power.StrideZero.Test.cs`.
 
 ## `np.gcd` / `np.lcm`

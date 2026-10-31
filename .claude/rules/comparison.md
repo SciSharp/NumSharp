@@ -23,20 +23,40 @@ paths:
   types…` TypeError). It rides the fused predicate kernel of `isnan`/`isinf`: Single/Double and Int32/Int64 vectorize
   through a per-lane `ExtractMostSignificantBits` plus a PDEP bool store; narrow, unsigned, Half and Decimal take the
   scalar route. `dtype=` is validate-only (bool loops only). Gates: `Logic/np.signbit.Test.cs`, the `logic` tier.
-- `np.isin(element, test_elements, assume_unique=false, invert=false, kind=null)` (NumPy's `_arraysetops_impl.py`): a
-  bool array of `element`'s shape, compared in `result_type(element, test)`. NumSharp picks the method by the test set's
-  value range (`kind` only trades speed for memory in NumPy too): an integer/bool pair with a range ≤
-  `6·(|element|+|test|)` takes a counting-table gather (a bool lookup over `[min, max]`, then one `take(mode='clip')` per
-  element with a range mask, in the element's own dtype); everything else (float, complex, decimal, char) sorts plus
-  `searchsorted` plus an equality probe (complex sorts lexicographically). NaN is never a member. uint64 paired with a
-  signed integer would promote to float64 under NEP 50 and call distinct integers past 2^53 equal, so that pair runs in
-  the uint64 domain with a sign filter (`isin(uint64[2^63+1], int64[2^63-1])` is False). `kind` is validated: `Invalid
-  kind: '…'. Please use None, 'sort' or 'table'.` (ValueError); `kind='table'` with a non-integer input raises `The 'table'
-  method is only supported for boolean or integer arrays…` (ValueError), and a signed range past the dtype max raises
-  NumPy's RuntimeError text (as `InvalidOperationException`). A non-contiguous `element` is read in logical C order and
-  the result is C-contiguous. `[Misaligned]`: `assume_unique=true` on non-unique inputs returns the correct membership
-  (NumPy documents incorrect results that depend on its method); `kind='table'` with a large but range-safe range uses
-  `searchsorted` and does not raise `MemoryError`. Gates: `Manipulation/np.isin.Test.cs`, the `groupa` tier.
+- `np.isin(element, test_elements, assume_unique=false, invert=false, kind=null)` runs NumPy's `_isin`
+  (`numpy/lib/_arraysetops_impl.py`) after the facade's class boundary, as `TensorEngine.Isin`
+  (`Backends/Default/Manipulation/Default.Isin.cs`; `Default.Isin.VString.cs` holds the `StringDType` route). NumPy
+  answers on one of three paths, and NumSharp takes the same one (`NumPyPath`):
+  - the table method (an integer or bool pair, a char array being NumPy's uint16; `kind` None or `'table'`; the set's
+    range safe for its dtype and at most `6·(len(ar1)+len(ar2))`, or `kind='table'`) runs as one pass
+    (`TableMembership`): elements of one byte, and of two bytes from 8,192 on, read a table over their dtype's whole
+    domain (256 or 65,536 flags indexed by the element's bits); wider elements read NumPy's bool table over the set's
+    range (inverted under `invert`), each element as its 64 bits, one `(ulong)(v - min) <= range` test and one load,
+    exact modulo 2**64 (a uint64 operand beside a signed one is declined);
+  - the loop path (`len(ar2) < 10·len(ar1)**0.145`) runs as one pass (`LoopProbe`, hosts with 256-bit vectors): four
+    element vectors per step against every broadcast set value, at most 9 values per vector lane; float16 / complex /
+    decimal and the int64 / uint64 pair decline;
+  - the sort path runs NumPy's statements (`SortPathFlat`: unique, one concatenate, a stable argsort, the
+    adjacent-equality flags) where they are not the exact membership: a 64-bit integer past 2**53 concatenated in
+    float64 / complex128 (two values merge and the first is flagged: `np.isin(uint64 [2**64-1, 2**64-2, 3],
+    np.arange(24.))` is `[False, True, True]`), and `assume_unique` (an element is flagged when an equal value follows
+    it or lies in the set).
+
+  Every other case, and each pair a kernel declines, is the exact membership in `result_type(ar1, ar2)`
+  (`ComputeMembership`: a counting table for a narrow integer range, else an open-addressing hash with a splitmix64
+  finalizer for the integer and float32 / float64 dtypes, else sort + `searchsorted`; uint64 beside a signed integer
+  through the uint64 domain with a sign filter), which is NumPy's answer there. NaN is never a member; -0.0 equals 0.0.
+  A non-contiguous `element` is read in logical C order, and the answer is a view of a fresh 1-D array reshaped to
+  `element`'s dimensions, as NumPy's `reshape` returns it. Text runs NumPy's loop and sort statements over the text
+  kernels (`strings-compute.md`; a number beside text compares unequal on the loop path but EQUAL on the sort path,
+  NumPy's own disagreement). Errors in NumPy's order and texts: `Invalid kind: '…'. Please use None, 'sort' or 'table'.`
+  (ValueError, case-sensitive), `kind='table'` on a non-integer array (ValueError), a range past the set dtype's maximum
+  (NumPy's RuntimeError text, as `InvalidOperationException`), a range of `2**63 - 1` or more (`ValueError: Maximum
+  allowed dimension exceeded`, NumPy's table allocation; an empty element too). One deliberate divergence
+  (`[Misaligned]`): a `kind='table'` range NumPy can address but not allocate (its 8 EiB `MemoryError`) is answered, the
+  membership needing no table. Floor: `assume_unique` over presorted floats (NumPy's timsort finds the two sorted runs).
+  An AVX2 gather of the range table is faster but not taken: Intel's GDS microcode mitigation slows gathers on 6th–11th
+  generation cores. Gates: `Manipulation/np.isin.Test.cs`, `np.isin.NumPyPort.Test.cs`, the `groupa` tier.
 - `np.iterable(y)` is NumPy's `try: iter(y); return True; except TypeError: return False`, an O(1) type check
   (`Logic/np.is.cs`): `null` → false; an `NDArray` → `ndim != 0` (a 0-d array is the only non-iterable array, as
   `NDArray.GetEnumerator()` throws for it); `string` → true; any `IEnumerable` → true; scalar value types → false. The
@@ -55,13 +75,31 @@ loop matching the specified signature and casting was found for ufunc <name>`). 
 `result_type(lhs, rhs)` inside the kernel (`greater(i8 2^53+1, f8 2^53)` → False, `equal` → True). Engine members follow
 the order `(inputs, typeCode, out, where)`.
 
-Divergence: the comparison type is the STRONG promotion of the two dtypes (`ComparisonKernelKey.GetComparisonType` →
-`np._FindCommonScalarType`; int64 against uint64 compares exactly), with no weak case for a 0-d operand, so every C#
-literal is strong. NumPy 2 treats a Python literal as weak (NEP 50) and casts it to the array's dtype first:
-`np.array(new[] { 0.1f }) > 0.1` is True and `== 0.1` False here (compared against the double 0.1), False and True in
-NumPy 2.4.2 (0.1 cast to float32); float16 arrays likewise. Scalar adoption (below) keeps the strong answer exact and
-fast. The arithmetic operators promote a 0-d operand through the array-scalar table instead
-(`np._FindCommonArrayScalarType`, from `np._FindCommonType(NDArray, NDArray)`).
+A Python scalar is WEAK in every comparison (NEP 50). `ExecuteComparison` (`DefaultEngine.CompareOp.WeakScalar.cs`)
+converts a 0-d Python-scalar operand (a C# bool / integer / float / double / `Complex`; `Half` / `char` / `decimal` are
+strong NumPy scalars) against an array into the array's precision before either route runs: `PyArray_Pack`, i.e. the
+correctly rounded double, then the float16 / float32 narrow (an int past 2^53 rounds twice, overflow is inf), complex
+parts to float32 (complex64). So `np.greater(f32 [0.1, 0.5], 0.1)` is `[False, True]` and `== 0.1` `[True, False]`, as
+NumPy's. A 0-d against a 0-d stays strong; a 0-d NDArray against an array is read as the literal (`[Misaligned]`,
+np.clip's rule). An integer array against an in-range Python int of another width is re-packed into the array's dtype
+(NumPy's `special_integer_comparisons` in-range branch: values unchanged, the same-dtype kernel runs). numpy.ma stays
+STRONG (`PromoteMaScalar(strongOperand)`; its domains see `getdata` data). Otherwise the comparison type is the promotion
+of the two dtypes (`ComparisonKernelKey.GetComparisonType` → `np._FindCommonScalarType`; int64 against uint64 compares
+exactly). The binary ufuncs' weak Python int is checked against the loop dtype the same way (`ufuncs.md`). Gates: the
+`weak_scalar` tier (zero excuses), `Logic/np.comparison.WeakScalar.Test.cs`, `Ma/np.ma.StrongScalar.Test.cs`.
+
+The logical ufuncs `np.logical_and` / `np.logical_or` / `np.logical_xor` / `np.logical_not` are `TensorEngine.LogicalAnd`
+/ `LogicalOr` / `LogicalXor` / `LogicalNot` (`Backends/Default/Logic/Default.Logical.cs`); the facades keep the
+numpy.matrix and numpy.char.chararray boundaries. NumPy's loops are bool-output only (a non-bool `dtype=` has no loop,
+`dtype=bool` is a no-op); a text operand reads its truth (non-empty is True) through NumPy's bool cast, and logical_not has
+no string loop (a fixed-width operand under `dtype=bool` fails the input cast, under another `dtype=` finds no loop). The
+composition reduces a numeric operand to `x != 0` (logical_not: `x == 0`) and combines through the bitwise ufunc, which
+combines a bool operand's TRUTH (bytes 2 and 1 AND to 1). One-pass routes serve the common call (`TryLogicalRun` /
+`TryLogicalNotRun`): contiguous operands of one shape (both C or both F) or one of one value, no `where=`, no out or a
+bool out of that layout sharing no memory; per 4,096-element block the comparison engine's run writes the truth values
+on the stack and one `Vector<byte>` operation combines them: the composition's bytes, layout and result type by
+construction (gate `Logic/np.logical.OnePassRoute.Test.cs`, hooks `DefaultEngine.DisableLogicalRun` / `LogicalRuns`).
+Floors: the bool-bool cells and logical_not of bool (the composition's one SIMD pass) and memory-bound 10M float64 cells.
 
 ## The comparison engine
 
@@ -102,7 +140,11 @@ Every operand layout and dtype pair runs the vector kernels, for the operators a
     call (`ExecuteComparisonUfuncInto`; an out of another dtype is filled through the iterator's Boolean buffer). The
     `out=` route then tries the whole-array kernel (`NDIterRef.TryExecuteComparison`) when the inputs share a dtype and
     the out needs no cast. `where=` keeps its masked route.
-- Scalar adoption is exact, never a cast (`ComparisonRun.ScalarAdoption`). NumPy's comparison is
+- Scalar adoption is exact, never a cast (`ComparisonRun.ScalarAdoption`). The weak-scalar step above runs BEFORE it, so
+  an operand NEP 50 treats as weak arrives in the array's dtype already, and adoption serves the strong 0-d operands
+  (`char`, `Half`, `decimal`) and the out-of-range Python ints (`ComparisonRunTests` holds its element reference to that
+  rule: `Expected` / `PackWeak` for a Python scalar against a float16 / float32 array, `RaisesOverflow` for a bool array
+  against a Python int at or past 2^63). NumPy's comparison is
   `convert(a) op convert(v)` in the promoted dtype, which has the same answer as `a op a'` for one value `a'` of the
   array's dtype, or the same answer for every element:
   - integer array, integer value: `a' = v` inside the array dtype's range; outside it, the chunk is decided;
@@ -110,7 +152,7 @@ Every operand layout and dtype pair runs the vector kernels, for the operators a
     `a < ceil(t)`, `a <= t` is `a <= floor(t)`; `==` can hold only for an integral `t` in range;
   - float16 / float32 array, wider value `t`: `>` and `<=` use the largest array-dtype value not above `t`, `>=` and `<`
     the smallest not below it (one step on the stored bit pattern from the rounded value); `==` can hold only when `t`
-    is an array-dtype value (so `float32_array > 0.1` still compares against the double 0.1);
+    is an array-dtype value;
   - a NaN value decides the chunk (False; True for `!=`).
 
   Not adopted (they keep the staged conversion): a 64-bit integer array against a float, complex, decimal or char value.
@@ -165,5 +207,6 @@ Every operand layout and dtype pair runs the vector kernels, for the operators a
 - Performance floors (the cells under parity with NumPy): two stepped float64/int64 operands larger than L2 (NumPy's
   scalar loop overlaps its work with the memory latency); a C# literal operand on a small call (its 0-d temporary is a
   large share of the call; a held 0-d operand is faster); `np.less(a, b, out)` of two float64 arrays near L2 size (the
-  transfer bound); an empty result such as `(0,3) < (3,)` has no early-exit guard. Contiguous operands at L2 size run at
-  the transfer bound on both sides.
+  transfer bound). Contiguous operands at L2 size run at the transfer bound on both sides. An empty broadcast result
+  such as `(0,3) < (3,)` returns before any kernel (the `result.size == 0` guard of `DefaultEngine.CompareOp.cs`: the
+  kernels assume at least one element).

@@ -348,7 +348,7 @@ Create issues on `SciSharp/NumSharp` with `gh issue create` (`GH_TOKEN` through 
 | `reductions.md` | the reduce prologue, sum / mean, var / std, numpy.ma mean / var, max / min / ptp schedules and keywords, float16 HALF loops, cov, the NaN-aware family |
 | `quantile.md` | the quantile family: `q`'s dtype and the lerp, `out=`, the nan forms, `weights=`, the partition |
 | `masked-arrays.md` | numpy.ma: semantics by result kind, the fill value, the set routines, `ma.put`, text and `StringDType` |
-| `comparison.md` | signbit, isin, iterable, the comparison ufuncs (the strong-literal divergence), the comparison engine |
+| `comparison.md` | signbit, isin, iterable, the comparison ufuncs (NEP 50 weak scalars), the logical ufuncs, the comparison engine |
 | `dtypes.md` | the DType model, the C-type classes, promotion and casting, the `np.dtype(string)` parser, the element slots, traps, NumPy's names, C enums and find_common_type |
 | `scalar-types.md` | `NDScalarType` and Python's built-in classes, issubdtype / isdtype / issctype / finfo / iinfo of a class, `np.typing` |
 | `strings.md` | the string dtypes: the refuse-or-compute rule, the C# boundary, movement, `StringDType` arrays, text ↔ number, gates |
