@@ -24,6 +24,13 @@ namespace NumSharp.Backends
         ///     of that element, marked like NumPy's scalars (<see cref="NDArray.MarkReductionScalar"/>), never a view of the
         ///     product or of the out array. <c>result.ravel()</c> of the C-ordered (1, k) or (k, 1) product is a view of it.
         ///     </para>
+        ///     <para>
+        ///     <b>Members, not facades.</b> Every dot is np.dot's member (<see cref="CoreDot"/>), the promotions and the
+        ///     ravel the array object's (<see cref="NDArray.AtLeast2d"/>, <see cref="NDArray.Ravel"/>). The
+        ///     np.linalg.multi_dot facade has a matrix rule only, so a numpy.char.chararray vector end used to stay a
+        ///     chararray through np.atleast_2d; it is a plain view now, which changes no result: every chain of three or
+        ///     more ends in a dot, whose result is plain either way, and a text chain is refused by the dot.
+        ///     </para>
         /// </remarks>
         [NDScoped]
         public override NDArray MultiDot(NDArray[] arrays, NDArray @out = null)
@@ -33,7 +40,7 @@ namespace NumSharp.Backends
 
             int n = arrays.Length;
             if (n == 2)
-                return np.dot(arrays[0], arrays[1], @out);
+                return CoreDot(arrays[0], arrays[1], @out);
 
             var work = (NDArray[])arrays.Clone();
 
@@ -42,9 +49,9 @@ namespace NumSharp.Backends
             // column (np.dot never reads an extent-1 axis's stride, so the views' strides there are immaterial).
             int ndimFirst = work[0].ndim, ndimLast = work[n - 1].ndim;
             if (ndimFirst == 1)
-                work[0] = np.atleast_2d(work[0]);
+                work[0] = NDArray.AtLeast2d(work[0]);
             if (ndimLast == 1)
-                work[n - 1] = np.atleast_2d(work[n - 1]).T;
+                work[n - 1] = NDArray.AtLeast2d(work[n - 1]).T;
 
             // NumPy runs `_assert_2d(*arrays)` over the PROMOTED operands, so every array other
             // than a vector endpoint (already lifted to 2-D just above) must be exactly
@@ -61,7 +68,7 @@ namespace NumSharp.Backends
             if (ndimFirst == 1 && ndimLast == 1)
                 return result[0, 0].copy().MarkReductionScalar();   // NumPy's result[0, 0]: a scalar, not a view
             if (ndimFirst == 1 || ndimLast == 1)
-                return np.ravel(result);
+                return NDArray.Ravel(result, 'C');                   // result.ravel(): np.ravel's member, order 'C'
             return result;
         }
 
@@ -81,7 +88,7 @@ namespace NumSharp.Backends
         /// <exception cref="IncorrectShapeException">Misaligned operands (np.dot's text).</exception>
         /// <remarks>NumPy's costs are Python integers, exact at any size; <see cref="Int128"/> keeps them exact for every
         ///     chain whose products could exist (three dimensions of at most 2^42 each).</remarks>
-        [NDScopedCovered] // only caller: [NDScoped] multi_dot (the inner dot of the chosen parenthesisation is scope-reclaimed)
+        [NDScopedCovered /* only caller: [NDScoped] multi_dot (the inner dot of the chosen parenthesisation is scope-reclaimed) */]
         private static NDArray ThreeInBestOrder(NDArray a, NDArray b, NDArray c, NDArray @out)
         {
             Int128 a0 = a.Shape.dimensions[0];
@@ -92,9 +99,10 @@ namespace NumSharp.Backends
             Int128 cost1 = a0 * b1c0 * (a1b0 + c1);
             Int128 cost2 = a1b0 * c1 * (a0 + b1c0);
 
+            // np.dot's member at each step (CoreDot), the inner product computed first as the nested call did.
             return cost1 < cost2
-                ? np.dot(np.dot(a, b), c, @out)
-                : np.dot(a, np.dot(b, c), @out);
+                ? CoreDot(CoreDot(a, b, null), c, @out)
+                : CoreDot(a, CoreDot(b, c, null), @out);
         }
 
         /// <summary>
@@ -155,10 +163,11 @@ namespace NumSharp.Backends
         ///     the top level never is: a chain of three or more has a split).</returns>
         /// <exception cref="ValueError">An out array np.dot refuses.</exception>
         /// <exception cref="IncorrectShapeException">Misaligned operands (np.dot's text).</exception>
-        [NDScopedCovered] // only caller: [NDScoped] multi_dot (every recursive partial product is scope-reclaimed)
+        [NDScopedCovered /* only caller: [NDScoped] multi_dot (every recursive partial product is scope-reclaimed) */]
         private static NDArray Chain(NDArray[] arrays, int[,] split, int i, int j, NDArray @out = null)
             => i == j
                 ? arrays[i]
-                : np.dot(Chain(arrays, split, i, split[i, j]), Chain(arrays, split, split[i, j] + 1, j), @out);
+                // np.dot's member (CoreDot); the left sub-chain is computed before the right, as the call's arguments were.
+                : CoreDot(Chain(arrays, split, i, split[i, j]), Chain(arrays, split, split[i, j] + 1, j), @out);
     }
 }

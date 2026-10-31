@@ -1,4 +1,5 @@
 using System;
+using NumSharp.Backends.Iteration;
 
 namespace NumSharp.Backends
 {
@@ -55,29 +56,34 @@ namespace NumSharp.Backends
         ///     in order up to three elements and reorders them from four; NumSharp's argsort is stable. Where two absolute
         ///     eigenvalues of a matrix of four or more rows are equal, S is the same and the tied columns of U, with their
         ///     rows of Vh, can come in another order.
+        ///     <para>Each statement calls the member its main-namespace function dispatches to, on eigh's plain factors:
+        ///     the operand engine's sign, abs, argsort (ndarray.argsort), multiply, swapaxes and conjugate, the array
+        ///     object's take_along_axis, expand_dims and empty_like allocation.</para>
         /// </remarks>
         [NDScoped] // the eigh factors, the sign / abs / argsort temps and the product behind Vh; U, S and Vh are yielded
         private (NDArray U, NDArray S, NDArray Vh) SvdHermitian(NDArray a)
         {
             var (w, v) = Eigh(a, 'L');
-            var sgn = np.sign(w);
-            var s = np.abs(w);
-            var sidx = ReverseLastAxis(np.argsort(s, -1));
-            sgn = np.take_along_axis(sgn, sidx, -1);
-            s = np.take_along_axis(s, sidx, -1);
+            var sgn = w.TensorEngine.Sign(w);
+            var s = w.TensorEngine.Abs(w);
+            var sidx = ReverseLastAxis(s.TensorEngine.ArgSort(s, -1, null, null, null));
+            sgn = NDArray.TakeAlongAxis(sgn, sidx, -1);
+            s = NDArray.TakeAlongAxis(s, sidx, -1);
             // sidx[..., None, :] and sgn[..., None, :]: one index / sign row broadcast over the rows of each matrix.
-            var u = np.take_along_axis(v, np.expand_dims(sidx, -2), -1);
-            var vt = np.swapaxes(np.multiply(u, np.expand_dims(sgn, -2)), -1, -2);
+            var u = NDArray.TakeAlongAxis(v, NDArray.ExpandDims(sidx, -2), -1);
+            // transpose(u * sgn[..., None, :]): the product, then the swap of its last two axes.
+            var scaled = u.TensorEngine.Multiply(u, NDArray.ExpandDims(sgn, -2));
+            var vt = scaled.TensorEngine.SwapAxes(scaled, -1, -2);
             // transpose(...).conjugate(): the conjugate ufunc for a complex product; a real one is returned itself, so Vh
             // stays the transposed view (the scope's release of the product leaves the view's own reference).
             if (vt.typecode == NPTypeCode.Complex)
             {
                 // NumPy's ufunc allocates its result in the view's K order (F for one matrix, the swapped permutation for
                 // a stack). NumSharp's eager unary ufunc writes C order for a permuted operand (the library's layout gap
-                // that the matrix tier's MX05 records for np.conjugate), so the result is allocated in that order and
-                // filled through out=.
-                var conj = np.empty_like(vt);
-                np.conjugate(vt, conj);
+                // that the matrix tier's MX05 records for np.conjugate), so the result is allocated in that order (np.empty_like's
+                // own allocation: vt's dtype over its K layout, uninitialised) and filled through out=.
+                var conj = new NDArray(vt.dtype, Shape.NewLikeLayout(vt.Shape, 'K', (long[])vt.Shape.dimensions.Clone()), false);
+                vt.TensorEngine.Conjugate(vt, null, conj, null);
                 vt = conj;
             }
             return (u, s, vt);
@@ -95,10 +101,15 @@ namespace NumSharp.Backends
         /// <exception cref="ArgumentException">A text operand (eigvalsh's gufunc input cast).</exception>
         /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves.</exception>
         /// <remarks>eigvalsh is not eigh without the vectors: LAPACK computes the values in another way when it computes no
-        ///     vectors, so these can differ from <see cref="SvdHermitian"/>'s S in the last bits, in NumPy as here.</remarks>
+        ///     vectors, so these can differ from <see cref="SvdHermitian"/>'s S in the last bits, in NumPy as here. The
+        ///     absolute value and the sort are the members np.abs and np.sort dispatch to, on the plain eigenvalues.</remarks>
         [NDScoped] // the eigenvalues and their absolute values; the reversed view of the sorted copy is yielded
         private NDArray SvdvalsHermitian(NDArray a)
-            => ReverseLastAxis(np.sort(np.abs(Eigvalsh(a, 'L')), -1));
+        {
+            var w = Eigvalsh(a, 'L');
+            var s = w.TensorEngine.Abs(w);
+            return ReverseLastAxis(s.TensorEngine.Sort(s, -1, null, null, null));
+        }
 
         /// <summary>NumPy's <c>x[..., ::-1]</c>: a view of <paramref name="x"/> with its last axis reversed.</summary>
         /// <param name="x">An array of at least one axis.</param>
@@ -124,7 +135,7 @@ namespace NumSharp.Backends
         /// <remarks>
         ///     NumPy's statements: the tolerance arguments, NumPy's predicate below two axes (<c>int(not all(A == 0))</c>),
         ///     and otherwise the count of singular values (this engine's <see cref="Svd(NDArray, bool, bool, bool)"/>)
-        ///     above the tolerance.
+        ///     above the tolerance, through the members np.amax, np.multiply, np.greater and np.count_nonzero dispatch to.
         /// </remarks>
         [NDScoped]
         public override NDArray MatrixRank(NDArray A, double? tol = null, bool hermitian = false, double? rtol = null)
@@ -160,7 +171,9 @@ namespace NumSharp.Backends
                 // the singular values' own — float32's for a float32 operand, float64's otherwise.
                 double eps = s.typecode == NPTypeCode.Single ? 1.1920928955078125e-07 : 2.220446049250313e-16;
                 double rtolVal = rtol ?? (Math.Max(m, n) * eps);
-                tolArr = np.multiply(np.amax(s, -1, keepdims: true), NDArray.Scalar(rtolVal));
+                // amax(S, axis=-1, keepdims=True) * rtol: np.amax's member, then np.multiply's.
+                var largest = s.TensorEngine.ReduceAMax(s, -1, true, null, null, null, null);
+                tolArr = largest.TensorEngine.Multiply(largest, NDArray.Scalar(rtolVal));
             }
             else
             {
@@ -168,15 +181,18 @@ namespace NumSharp.Backends
                 tolArr = NDArray.Scalar(tol.Value);
             }
 
-            return np.count_nonzero(np.greater(s, tolArr), -1);
+            // count_nonzero(S > tol, axis=-1): np.greater's member, then np.count_nonzero's.
+            var above = s.TensorEngine.Greater(s, tolArr);
+            return above.TensorEngine.CountNonZero(above, -1, false);
         }
 
         /// <inheritdoc/>
         /// <remarks>
         ///     NumPy's statements: the empty-operand refusal, the hashability of the order, the singular-value orders
-        ///     (through the public <c>np.linalg.svdvals</c>), or <c>norm(x, p) * norm(inv(x), p)</c> for the others (the
-        ///     inverse by <see cref="InvKernel"/> in float64 / complex128, NaN for a singular matrix), and NumPy's NaN-to-inf
-        ///     tail.
+        ///     (through this engine's <see cref="Svdvals"/>, NumPy's <c>svd(x, compute_uv=False)</c>), or
+        ///     <c>norm(x, p) * norm(inv(x), p)</c> for the others (the inverse by <see cref="InvKernel"/> in float64 /
+        ///     complex128, NaN for a singular matrix; the norms by this engine's <see cref="Norm"/>), and NumPy's
+        ///     NaN-to-inf tail. The divisions and the product are np.divide's and np.multiply's members.
         /// </remarks>
         [NDScoped]
         public override NDArray Cond(NDArray x, object p = null)
@@ -194,7 +210,7 @@ namespace NumSharp.Backends
                 // The default and ±2 orders come straight from the singular values: the ratio of the
                 // largest to the smallest (2/None), or its reciprocal (-2). Division by a zero
                 // singular value gives inf/nan here rather than raising, matching NumPy's errstate.
-                var s = np.linalg.svdvals(x);
+                var s = Svdvals(x);
                 // NumPy's `s[..., 0]` / `s[..., -1]`. Built as Slice[] rather than the "..., 0"
                 // STRING form, whose per-call Regex.Split+Regex.Match parse (Slice.ParseSlices)
                 // costs ~1.7µs EACH — the dominant managed overhead of this tiny wrapper, on top
@@ -203,7 +219,7 @@ namespace NumSharp.Backends
                 // leading ones), so the extracted first/last singular values are byte-identical.
                 var sMax = s[new[] {Slice.Ellipsis, Slice.Index(0)}];
                 var sMin = s[new[] {Slice.Ellipsis, Slice.Index(-1)}];
-                r = IsOrder(p, -2) ? np.divide(sMin, sMax) : np.divide(sMax, sMin);
+                r = IsOrder(p, -2) ? sMin.TensorEngine.Divide(sMin, sMax) : sMax.TensorEngine.Divide(sMax, sMin);
             }
             else
             {
@@ -225,13 +241,14 @@ namespace NumSharp.Backends
                 // first: a bad order is refused by norm ("Invalid norm order for matrices.") even for a singular matrix,
                 // and the nuclear norm of a singular matrix's NaN inverse raises the SVD's "SVD did not converge".
                 var invx = InvIgnoringErrors(ToCommon(x, common == NPTypeCode.Complex ? NPTypeCode.Complex : NPTypeCode.Double));
-                var normX = np.linalg.norm(x, p, new[] {-2, -1});
-                var normInv = np.linalg.norm(invx, p, new[] {-2, -1});
+                var normX = Norm(x, p, new[] {-2, -1}, false);
+                var normInv = Norm(invx, p, new[] {-2, -1}, false);
                 // One matrix's two norms are NumPy scalars, so `*` is scalarmath (the float64 product: a float32 norm
-                // widens exactly) and astype keeps a scalar; a stack's are arrays, multiplied by the ufunc.
+                // widens exactly) and astype keeps a scalar; a stack's are arrays, multiplied by the ufunc (np.multiply's
+                // member).
                 r = normX.ndim == 0
                     ? NDArray.Scalar(normX.astype(np.float64).GetDouble() * normInv.GetDouble()).astype(realT).MarkReductionScalar()
-                    : np.multiply(normX, normInv).astype(realT, false);
+                    : normX.TensorEngine.Multiply(normX, normInv).astype(realT, false);
             }
 
             return CondNanToInf(r, x);
@@ -251,8 +268,13 @@ namespace NumSharp.Backends
         ///     first singular matrix, so a stack is inverted whole first (one call, the common case) and only after that
         ///     error matrix by matrix. Each matrix is factorised independently on both routes (the OpenBLAS <c>gesv</c> loop
         ///     and the managed LU), so every regular matrix's inverse is the same bits either way.
+        ///     <para>The reshapes, the allocation and the per-matrix stores are the array object's members (np.reshape's
+        ///     <c>reshape</c>, np.empty's allocation, np.copyto's <c>UnmanagedStorage.Copyto</c> with its default
+        ///     <c>same_kind</c> rule, under which a float64 / complex128 inverse or NaN into its own dtype is always
+        ///     safe).</para>
         /// </remarks>
-        [NDScopedCovered] // only caller: [NDScoped] cond; the per-matrix views, inverses and the NaN scalar ride its scope
+        /// <exception cref="LinAlgError">Any factorisation error but <c>Singular matrix</c>, which this swallows.</exception>
+        [NDScopedCovered /* only caller: [NDScoped] cond; the per-matrix views, inverses and the NaN scalar ride its scope */]
         private NDArray InvIgnoringErrors(NDArray x)
         {
             try
@@ -269,8 +291,9 @@ namespace NumSharp.Backends
             long m = x.Shape.dimensions[nd - 1];
             // a singular matrix was found, so there is at least one element: m > 0 and the matrix count is size / m^2
             long count = x.size / (m * m);
-            var matrices = np.reshape(x, Shape.Adopt(new[] {count, m, m}));
-            var inverses = np.empty(Shape.Adopt(new[] {count, m, m}), x.dtype);
+            var matrices = x.reshape(Shape.Adopt(new[] {count, m, m}));
+            // np.empty(shape, x.dtype)'s own allocation: uninitialised, every matrix is written by the loop below.
+            var inverses = new NDArray(x.dtype, Shape.Adopt(new[] {count, m, m}), false);
             double nan = BitConverter.Int64BitsToDouble(0x7FF8000000000000L); // NPY_NAN; .NET's double.NaN is negative
             var nanValue = x.typecode == NPTypeCode.Complex
                 ? NDArray.Scalar(new System.Numerics.Complex(nan, nan))
@@ -280,15 +303,15 @@ namespace NumSharp.Backends
                 var slot = inverses[new[] {Slice.Index(k)}];
                 try
                 {
-                    np.copyto(slot, InvKernel(matrices[new[] {Slice.Index(k)}]));
+                    UnmanagedStorage.Copyto(slot, InvKernel(matrices[new[] {Slice.Index(k)}]), NPY_CASTING.NPY_SAME_KIND_CASTING, null);
                 }
                 catch (LinAlgError e) when (e.Message == "Singular matrix")
                 {
-                    np.copyto(slot, nanValue);
+                    UnmanagedStorage.Copyto(slot, nanValue, NPY_CASTING.NPY_SAME_KIND_CASTING, null);
                 }
             }
 
-            return np.reshape(inverses, Shape.Adopt((long[])x.Shape.dimensions.Clone()));
+            return inverses.reshape(Shape.Adopt((long[])x.Shape.dimensions.Clone()));
         }
 
         /// <summary>Whether an order is the number <paramref name="value"/> (NumPy's <c>p in {2, -2}</c> and <c>p == -2</c>).</summary>
@@ -335,18 +358,24 @@ namespace NumSharp.Backends
         /// <param name="x">The operand they came from.</param>
         /// <returns><paramref name="r"/> itself when it holds no NaN to replace; else, for one matrix, NumPy's scalar
         ///     <c>r.dtype.type(inf)</c> (a read-only 0-d array), and for a stack a fresh array with the NaNs replaced.</returns>
-        [NDScopedCovered] // only caller: [NDScoped] cond (the isnan/logical/inf-scalar temps are scope-reclaimed)
+        /// <remarks>The predicates, the reductions and the selection are the members np.isnan, np.any, np.logical_not,
+        ///     np.logical_and and np.where dispatch to, over the plain condition numbers and the cond facade's plain
+        ///     operand.</remarks>
+        [NDScopedCovered /* only caller: [NDScoped] cond (the isnan/logical/inf-scalar temps are scope-reclaimed) */]
         private static NDArray CondNanToInf(NDArray r, NDArray x)
         {
-            var nanMask = np.isnan(r);
-            if (!np.any(nanMask))
+            var nanMask = r.TensorEngine.IsNan(r);
+            if (!nanMask.TensorEngine.Any(nanMask))
                 return r;
 
             NDArray apply = nanMask;
             if (x.typecode is NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Half or NPTypeCode.Complex)
             {
-                var xNan = np.any(np.isnan(x), new[] {-2, -1}, null);
-                apply = np.logical_and(nanMask, np.logical_not(xNan));
+                // `x_nan = isnan(x).any(axis=(-2, -1))`, then `nan_mask & ~x_nan`.
+                var xIsNan = x.TensorEngine.IsNan(x);
+                var xNan = xIsNan.TensorEngine.Any(xIsNan, new[] {-2, -1}, null, false, null);
+                var notXNan = xNan.TensorEngine.LogicalNot(xNan);
+                apply = nanMask.TensorEngine.LogicalAnd(nanMask, notXNan);
             }
 
             // NumPy's `elif nan_mask: r = r.dtype.type(inf)` ("Convention is to return scalars instead of 0d arrays"): a
@@ -356,7 +385,7 @@ namespace NumSharp.Backends
                     ? NDArray.Scalar(double.PositiveInfinity).astype(r.typecode).MarkReductionScalar()
                     : r;
 
-            return np.where(apply, NDArray.Scalar(double.PositiveInfinity).astype(r.typecode), r);
+            return NDArray.Where(apply, NDArray.Scalar(double.PositiveInfinity).astype(r.typecode), r);
         }
     }
 }

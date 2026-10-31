@@ -8,16 +8,19 @@ namespace NumSharp.Backends
         /// <remarks>
         ///     NumPy's statements: the 1-D <c>b</c> promotion, <c>_assert_2d</c>, the row check, <c>_commonType</c>, the text
         ///     refusal of the <c>lstsq</c> gufunc's input casts, the default cutoff, the <c>nrhs == 0</c> padding,
-        ///     <see cref="LstsqKernel"/>, and NumPy's tail (the squeeze, the discarded residuals, the casts).
+        ///     <see cref="LstsqKernel"/>, and NumPy's tail (the squeeze, the discarded residuals, the casts). The
+        ///     promotion, the allocations and the squeeze are the array object's members (np.expand_dims', np.zeros' and
+        ///     np.reshape's), not their facades.
         /// </remarks>
         [NDScoped] // reclaims the column-promoted b, the ToCommon casts and the nrhs==0 padding temps; the 4-tuple is yielded
         public override (NDArray Solution, NDArray Residuals, NDArray Rank, NDArray SingularValues) Lstsq(
             NDArray a, NDArray b, double? rcond = null)
         {
             // A 1-D b is promoted to a single column, exactly as NumPy's `b = b[:, newaxis]`; the
-            // solution is squeezed back at the end. _assert_2d then rejects any higher rank.
+            // solution is squeezed back at the end. _assert_2d then rejects any higher rank. np.expand_dims' member:
+            // np.linalg.lstsq's plain region (or its matrix rule's) already kept the facade's class rules from firing.
             bool is1d = b.ndim == 1;
-            var b2 = is1d ? np.expand_dims(b, -1) : b;
+            var b2 = is1d ? NDArray.ExpandDims(b, -1) : b;
 
             Assert2d(a, b2);
 
@@ -41,27 +44,28 @@ namespace NumSharp.Backends
             var aC = ToCommon(a, common);
             var bC = ToCommon(b2, common);
 
-            // LAPACK can't take nrhs == 0 — NumPy pads b with one column, then trims x/resids back.
+            // LAPACK can't take nrhs == 0 — NumPy pads b with one column, then trims x/resids back. Each np.zeros below
+            // is its own allocation (a zero-filled owner), without the call up into np.*.
             bool padded = nRhs == 0;
             if (padded)
-                bC = np.zeros(new Shape(m, 1), common);
+                bC = new NDArray(common, new Shape(m, 1), true);
 
             var (x, resids, rank, s) = LstsqKernel(aC, bC, cutoff);
 
             if (padded)
             {
-                x = np.zeros(Shape.Adopt(new long[] {n, 0}), common);            // x[..., :0]
-                resids = np.zeros(Shape.Adopt(new long[] {0}), NPTypeCode.Double); // resids[..., :0]
+                x = new NDArray(common, Shape.Adopt(new long[] {n, 0}), true);            // x[..., :0]
+                resids = new NDArray(NPTypeCode.Double, Shape.Adopt(new long[] {0}), true); // resids[..., :0]
             }
 
             if (is1d)
-                x = np.reshape(x, new long[] {n});                             // squeeze(axis=-1)
+                x = x.reshape(new long[] {n});                             // squeeze(axis=-1), np.reshape's member
 
             // Residuals are documented meaningful ONLY for a full-rank over-determined system; NumPy
             // discards them otherwise, replacing them with an empty array of the real result type.
             long rankVal = Convert.ToInt64(rank.GetAtIndex(0));
             if (rankVal != n || m <= n)
-                resids = np.zeros(Shape.Adopt(new long[] {0}), realCommon);
+                resids = new NDArray(realCommon, Shape.Adopt(new long[] {0}), true);
             else
                 resids = resids.astype(realCommon);
 

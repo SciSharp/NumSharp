@@ -10,7 +10,12 @@ namespace NumSharp.Backends
         ///     NumPy's statements: <c>x.astype(float)</c> of a text operand, the float conversion of an integer / bool one,
         ///     the fast path of the default order over the whole array (raveled in memory order, <c>sqrt(x.dot(x))</c>, and for
         ///     a complex operand <c>sqrt(x_real.dot(x_real) + x_imag.dot(x_imag))</c>), then the one-axis
-        ///     (<see cref="NormVectorBranch"/>) or two-axis (<see cref="NormMatrixBranch"/>) branch.
+        ///     (<see cref="NormVectorBranch"/>) or two-axis (<see cref="NormMatrixBranch"/>) branch. Every main-namespace
+        ///     call of those statements (ravel, real, imag, dot, sqrt, sum, abs, amax, amin, not_equal, power, reciprocal,
+        ///     evaluate, transpose, moveaxis, reshape, ascontiguousarray, add, the allocations) is the member its facade
+        ///     dispatches to, on the plain operands np.linalg.norm's class boundary leaves (a numpy.matrix and a
+        ///     numpy.char.chararray operand are computed plain inside its region), and each nested norm or svdvals is this
+        ///     engine's own member.
         /// </remarks>
         [NDScoped]
         public override NDArray Norm(NDArray x, object ord = null, int[] axis = null, bool keepdims = false)
@@ -32,8 +37,8 @@ namespace NumSharp.Backends
                  || (IsNumber(ord, out double two) && two == 2d && nd == 1)))
             {
                 // `x = x.ravel(order='K')`: memory order, so an F-ordered or transposed operand is summed in the order
-                // NumPy's dot reads it (a view where the memory is one run, as NumPy's).
-                var flat = np.ravel(a, 'K');
+                // NumPy's dot reads it (a view where the memory is one run, as NumPy's). np.ravel's member.
+                var flat = NDArray.Ravel(a, 'K');
                 NDArray squared;
                 if (a.typecode == NPTypeCode.Complex)
                 {
@@ -41,17 +46,18 @@ namespace NumSharp.Backends
                     // (a BLAS ddot of stride two, as NumPy's) - not the reduction of the complex squares the axis forms
                     // take, which rounds differently. Each dot of two vectors is a NumPy scalar, so `+` is scalarmath,
                     // which keeps the FIRST operand's NaN where the array ufunc keeps the second's: PolyNumber's
-                    // scalar add, not np.add of two 0-d arrays.
-                    var re = np.real(flat);
-                    var im = np.imag(flat);
-                    squared = PolyNumber.Binary(Backends.Kernels.BinaryOp.Add, PolyNumber.ScalarOf(np.dot(re, re)),
-                        PolyNumber.ScalarOf(np.dot(im, im))).ToNDArray();
+                    // scalar add, not np.add of two 0-d arrays. The parts are np.real / np.imag's members, each dot
+                    // np.dot's (CoreDot), the real part's first.
+                    var re = NDArray.RealPart(flat);
+                    var im = NDArray.ImagPart(flat);
+                    squared = PolyNumber.Binary(Backends.Kernels.BinaryOp.Add, PolyNumber.ScalarOf(CoreDot(re, re, null)),
+                        PolyNumber.ScalarOf(CoreDot(im, im, null))).ToNDArray();
                 }
                 else
                 {
-                    squared = np.dot(flat, flat);
+                    squared = CoreDot(flat, flat, null);
                 }
-                var whole = np.sqrt(squared);
+                var whole = squared.TensorEngine.Sqrt(squared);   // np.sqrt's member
                 // NumPy's `ret = ret.reshape(ndim * [1])`.
                 return keepdims ? ReshapeLikeNumPy(whole, Ones(nd)) : whole;
             }
@@ -70,9 +76,10 @@ namespace NumSharp.Backends
 
         /// <inheritdoc/>
         /// <remarks>
-        ///     NumPy's tuple branch: the reduced axes moved to the front and merged into one, then norm's one-axis branch over
-        ///     axis 0 (through the public <c>np.linalg.norm</c>, so the engine's <see cref="Norm"/> computes it); without
-        ///     axes, the norm of the flattened operand.
+        ///     NumPy's tuple branch: the reduced axes moved to the front and merged into one (np.transpose's member and the
+        ///     array object's reshape), then norm's one-axis branch over axis 0 (through this engine's <see cref="Norm"/>,
+        ///     NumPy's <c>norm(x, ...)</c>, so a subclass that overrides it computes vector_norm too); without axes, the
+        ///     norm of the flattened operand (np.ravel's member).
         /// </remarks>
         [NDScoped]
         public override NDArray VectorNorm(NDArray x, int[] axis = null, bool keepdims = false, object ord = null)
@@ -104,8 +111,8 @@ namespace NumSharp.Backends
                     mergedShape[r++] = x.Shape.dimensions[d];
                 }
 
-                var merged = np.transpose(x, permutation).reshape(Shape.Adopt(mergedShape));
-                var res = np.linalg.norm(merged, order, new[] {0}, false);
+                var merged = x.TensorEngine.Transpose(x, permutation).reshape(Shape.Adopt(mergedShape));
+                var res = Norm(merged, order, new[] {0}, false);
                 if (!keepdims)
                     return res;
 
@@ -118,15 +125,15 @@ namespace NumSharp.Backends
             }
 
             // Flatten first, then reduce — and restore the rank afterwards when keepdims asks,
-            // because the ravel has already erased it.
-            var flattened = np.linalg.norm(np.ravel(ToFloating(x)), order, new[] {0}, false);
+            // because the ravel has already erased it. np.ravel's member (order 'C'), then this engine's Norm.
+            var flattened = Norm(NDArray.Ravel(ToFloating(x), 'C'), order, new[] {0}, false);
             return keepdims ? ReshapeLikeNumPy(flattened, Ones(x.ndim)) : flattened;
         }
 
         /// <inheritdoc/>
         /// <remarks>
         ///     <para>
-        ///     NumPy's <c>res = norm(x, axis=_axis, ord=ord)</c> (through the public <c>np.linalg.norm</c>, without keepdims)
+        ///     NumPy's <c>res = norm(x, axis=_axis, ord=ord)</c> (through this engine's <see cref="Norm"/>, without keepdims)
         ///     and, for keepdims, <c>res.reshape(tuple(shape))</c> with the reduced axis of the input's shape set to 1.
         ///     </para>
         ///     <para>
@@ -138,7 +145,7 @@ namespace NumSharp.Backends
         [NDScoped]
         public override NDArray VectorNorm(NDArray x, int axis, bool keepdims = false, object ord = null)
         {
-            var res = np.linalg.norm(x, ord ?? 2, new[] {axis}, false);
+            var res = Norm(x, ord ?? 2, new[] {axis}, false);
             if (!keepdims)
                 return res;
 
@@ -151,12 +158,13 @@ namespace NumSharp.Backends
 
         /// <inheritdoc/>
         /// <remarks>
-        ///     NumPy's one statement <c>return norm(x, axis=(-2, -1), keepdims=keepdims, ord=ord)</c>, through the public
-        ///     <c>np.linalg.norm</c> (so the engine's <see cref="Norm"/> computes it), the null order standing for NumPy's
-        ///     default <c>"fro"</c>. It opens no scope: the call is the whole body and its result is returned as it is.
+        ///     NumPy's one statement <c>return norm(x, axis=(-2, -1), keepdims=keepdims, ord=ord)</c>, through this engine's
+        ///     <see cref="Norm"/> (so a subclass that overrides it computes matrix_norm too), the null order standing for
+        ///     NumPy's default <c>"fro"</c>. It opens no scope: the call is the whole body and its result is returned as it
+        ///     is.
         /// </remarks>
         public override NDArray MatrixNorm(NDArray x, bool keepdims = false, object ord = null)
-            => np.linalg.norm(x, ord ?? "fro", new[] {-2, -1}, keepdims);
+            => Norm(x, ord ?? "fro", new[] {-2, -1}, keepdims);
 
         /// <summary>
         ///     NumPy's <c>r.reshape(shape)</c> of a norm result, which may be one of NumPy's scalars: an array's reshape is a
@@ -171,9 +179,10 @@ namespace NumSharp.Backends
         /// <remarks>
         ///     Every 0-d norm result stands for NumPy's scalar: NumPy's reductions and ufuncs return scalars for 0-d results.
         ///     A view of NumSharp's read-only scalar stand-in would stay read-only, where NumPy's reshape of a scalar is
-        ///     writeable, so the view is taken of a copy (a 0-d copy costs one element).
+        ///     writeable, so the view is taken of a copy (a 0-d copy costs one element). The reshape is the array object's,
+        ///     np.reshape's member, over a plain norm result.
         /// </remarks>
-        [NDScopedCovered] // only callers: the [NDScoped] norm bodies and NormMatrixBranch under them; the copy lives on as the view's base
+        [NDScopedCovered /* only callers: the [NDScoped] norm bodies and NormMatrixBranch under them; the copy lives on as the view's base */]
         private static NDArray ReshapeLikeNumPy(NDArray r, long[] shape)
         {
             if (r.ndim == 0)
@@ -182,7 +191,7 @@ namespace NumSharp.Backends
                     return r;
                 r = r.copy();
             }
-            return np.reshape(r, Shape.Adopt(shape));
+            return r.reshape(Shape.Adopt(shape));
         }
 
         /// <summary>
@@ -216,9 +225,16 @@ namespace NumSharp.Backends
                 // and complex keep the eager form (np.evaluate's float16 sum is not NumPy's HALF schedule, and a
                 // complex |x|^2 is the real part of NumPy's fused complex product, AbsSquared), as does a host without
                 // dynamic code (no fused kernels).
+                // np.evaluate's member with its default options (the expression's first leaf, a, names the engine, as
+                // np.evaluate's resolution did), np.sum's and np.sqrt's members.
                 if (Backends.Kernels.DirectILKernelGenerator.Enabled && a.typecode is NPTypeCode.Double or NPTypeCode.Single)
-                    return np.sqrt(np.evaluate(NDExpr.Sum((NDExpr)a * a, axis, keepdims)));
-                return np.sqrt(np.sum(AbsSquared(a), axis, keepdims));
+                {
+                    var streamed = a.TensorEngine.Evaluate(NDExpr.Sum((NDExpr)a * a, axis, keepdims));
+                    return streamed.TensorEngine.Sqrt(streamed);
+                }
+                var squares = AbsSquared(a);
+                var summed = squares.TensorEngine.Sum(squares, axis, null, keepdims);
+                return summed.TensorEngine.Sqrt(summed);
             }
 
             if (IsText(ord, out var word))
@@ -230,28 +246,41 @@ namespace NumSharp.Backends
 
             // NumPy 2.x reduces with initial=0 (`abs(x).max(axis=axis, keepdims=keepdims, initial=0)`): an EMPTY
             // vector's inf-norm is 0.0, not the empty-max ValueError. Every |x| is >= 0, so a non-empty answer is
-            // unchanged (a NaN still propagates).
+            // unchanged (a NaN still propagates). np.abs' member, then np.amax's / np.amin's with the keywords given.
             if (double.IsPositiveInfinity(order))
-                return np.amax(np.abs(a), axis, keepdims: keepdims, initial: 0);
+            {
+                var magnitudes = a.TensorEngine.Abs(a);
+                return magnitudes.TensorEngine.ReduceAMax(magnitudes, axis, keepdims, null, null, 0, null);
+            }
             if (double.IsNegativeInfinity(order))
-                return np.amin(np.abs(a), axis, keepdims: keepdims);
+            {
+                var magnitudes = a.TensorEngine.Abs(a);
+                return magnitudes.TensorEngine.ReduceAMin(magnitudes, axis, keepdims, null, null, null, null);
+            }
             if (order == 0d)
             {
                 // NumPy counts non-zeros in `x.real.dtype`, NOT `x.dtype` — so a COMPLEX operand's
                 // zero-"norm" is float64, not complex. For every real dtype the real component's
-                // dtype is the dtype itself, so only Complex needs the substitution.
+                // dtype is the dtype itself, so only Complex needs the substitution. np.not_equal's member, then
+                // np.sum's.
                 var countType = a.typecode == NPTypeCode.Complex ? NPTypeCode.Double : a.typecode;
-                return np.sum(np.not_equal(a, NDArray.Scalar(0)).astype(countType), axis, keepdims);
+                var counted = a.TensorEngine.NotEqual(a, NDArray.Scalar(0)).astype(countType);
+                return counted.TensorEngine.Sum(counted, axis, null, keepdims);
             }
             if (order == 1d)
-                return np.sum(np.abs(a), axis, keepdims);
+            {
+                var magnitudes = a.TensorEngine.Abs(a);
+                return magnitudes.TensorEngine.Sum(magnitudes, axis, null, keepdims);
+            }
 
-            // decimal has no NumPy dtype, so no NumPy statement to follow: it keeps NumSharp's own three steps.
+            // decimal has no NumPy dtype, so no NumPy statement to follow: it keeps NumSharp's own three steps, each the
+            // member np.abs / np.power / np.sum dispatch to.
             if (a.typecode == NPTypeCode.Decimal)
             {
-                var raised = np.power(np.abs(a), NDArray.Scalar(order));
-                var reduced = np.sum(raised, axis, keepdims);
-                return np.power(reduced, NDArray.Scalar(1d / order));
+                var magnitudes = a.TensorEngine.Abs(a);
+                var raised = magnitudes.TensorEngine.Power(magnitudes, NDArray.Scalar(order));
+                var reduced = raised.TensorEngine.Sum(raised, axis, null, keepdims);
+                return reduced.TensorEngine.Power(reduced, NDArray.Scalar(1d / order));
             }
 
             // NumPy's general order, statement for statement:
@@ -260,18 +289,21 @@ namespace NumSharp.Backends
             //     ret **= reciprocal(ord, dtype=ret.dtype)
             // `absx **= ord` is the ufunc in place with a Python scalar, which NEP 50 keeps weak: the loop is absx's own
             // float dtype (float16 / float32 stay), and np.power's zero-exponent-step fast path decides the orders 0.5
-            // (sqrt) and -1 (the reciprocal) where NumPy's does.
-            var absx = np.abs(a);
-            np.power(absx, NDArray.Scalar(order), @out: absx);
-            var ret = np.sum(absx, axis, keepdims);
+            // (sqrt) and -1 (the reciprocal) where NumPy's does. Each statement is its function's member: np.abs',
+            // np.power's with out= (the facade's (x1, x2, dtype, out, where) call), np.sum's.
+            var absx = a.TensorEngine.Abs(a);
+            absx.TensorEngine.Power(absx, NDArray.Scalar(order), null, absx, null);
+            var ret = absx.TensorEngine.Sum(absx, axis, null, keepdims);
             // `reciprocal(ord, dtype=ret.dtype)`: ord converted to ret's dtype, then 1 / ord IN that dtype - float32's
             // 1 / 1.1 is one ULP from the float64 quotient rounded to float32, which the last power then carries.
-            var recip = np.reciprocal(NDArray.Scalar(order), dtype: ret.dtype);
+            // np.reciprocal's member, dtype= passed as the facade passes it.
+            var ordinal = NDArray.Scalar(order);
+            var recip = ordinal.TensorEngine.Reciprocal(ordinal, ret.dtype, null, null);
             if (ret.ndim > 0)
             {
                 // An array's `**=` is the ufunc in place: the 0-d exponent takes np.power's fast path where NumPy's does
                 // (1 / 0.5 = 2 squares, 1 / -1 = -1 takes the reciprocal).
-                np.power(ret, recip, @out: ret);
+                ret.TensorEngine.Power(ret, recip, null, ret, null);
                 return ret;
             }
 
@@ -330,8 +362,10 @@ namespace NumSharp.Backends
         /// <exception cref="AxisError">An axis out of range.</exception>
         /// <exception cref="TypeError">An order that is neither null, a number nor a string.</exception>
         /// <exception cref="OpenBlasMissingBackendException">An order 2, -2 or "nuc" over a non-empty matrix with no matrix backend.</exception>
-        [NDScopedCovered] // always dispatched from the [NDScoped] Norm body; rides its scope
-        private static NDArray NormMatrixBranch(NDArray a, object ord, int[] axes, int nd, bool keepdims)
+        /// <remarks>An instance member because the 2 / -2 / nuclear orders take this engine's own singular values
+        ///     (<see cref="SingularValueNorm"/>, through <see cref="Svdvals"/>).</remarks>
+        [NDScopedCovered /* always dispatched from the [NDScoped] Norm body; rides its scope */]
+        private NDArray NormMatrixBranch(NDArray a, object ord, int[] axes, int nd, bool keepdims)
         {
             int rowAxis = NormalizeAxis(axes[0], nd);
             int colAxis = NormalizeAxis(axes[1], nd);
@@ -371,13 +405,13 @@ namespace NumSharp.Backends
                 if (order == 2d || order == -2d)
                     result = SingularValueNorm(a, rowAxis, colAxis, order == 2d ? "2" : "-2");
                 else if (order == 1d)
-                    result = np.amax(np.sum(np.abs(a), rowAxis), Shift(colAxis, rowAxis), initial: 0);
+                    result = ExtremeOfAxisSums(a, rowAxis, Shift(colAxis, rowAxis), largest: true);
                 else if (order == -1d)
-                    result = np.amin(np.sum(np.abs(a), rowAxis), Shift(colAxis, rowAxis));
+                    result = ExtremeOfAxisSums(a, rowAxis, Shift(colAxis, rowAxis), largest: false);
                 else if (double.IsPositiveInfinity(order))
-                    result = np.amax(np.sum(np.abs(a), colAxis), Shift(rowAxis, colAxis), initial: 0);
+                    result = ExtremeOfAxisSums(a, colAxis, Shift(rowAxis, colAxis), largest: true);
                 else if (double.IsNegativeInfinity(order))
-                    result = np.amin(np.sum(np.abs(a), colAxis), Shift(rowAxis, colAxis));
+                    result = ExtremeOfAxisSums(a, colAxis, Shift(rowAxis, colAxis), largest: false);
                 else
                     throw new ValueError("Invalid norm order for matrices.");
             }
@@ -392,6 +426,33 @@ namespace NumSharp.Backends
             retShape[rowAxis] = 1;
             retShape[colAxis] = 1;
             return ReshapeLikeNumPy(result, retShape);
+        }
+
+        /// <summary>
+        ///     NumPy's 1 / -1 / inf / -inf matrix orders, <c>add.reduce(abs(x), axis=sumAxis).max(axis=extremeAxis,
+        ///     initial=0)</c> or <c>.min(axis=extremeAxis)</c>: the absolute values summed along one matrix axis, then the
+        ///     largest or smallest of those sums along the other.
+        /// </summary>
+        /// <param name="a">The floating operand.</param>
+        /// <param name="sumAxis">The normalized axis summed first (the rows for 1 / -1, the columns for inf / -inf).</param>
+        /// <param name="extremeAxis">The other matrix axis, as numbered after <paramref name="sumAxis"/> was reduced away
+        ///     (<see cref="Shift"/>).</param>
+        /// <param name="largest">True for the maximum with <c>initial=0</c> (the 1 and inf orders: an empty matrix gives
+        ///     0.0); false for the minimum, which keeps NumPy's empty-min error.</param>
+        /// <returns>The reduced norm, a fresh array.</returns>
+        /// <exception cref="ValueError">The minimum of an empty axis (<c>zero-size array to reduction operation minimum
+        ///     which has no identity</c>).</exception>
+        /// <remarks>Each step is the member its main-namespace function dispatches to, in the statement's order:
+        ///     np.abs', np.sum's (no dtype, no keepdims), then np.amax's / np.amin's with only <c>initial</c> set for the
+        ///     maximum.</remarks>
+        [NDScopedCovered /* only reached via NormMatrixBranch, itself under the [NDScoped] Norm scope */]
+        private static NDArray ExtremeOfAxisSums(NDArray a, int sumAxis, int extremeAxis, bool largest)
+        {
+            var magnitudes = a.TensorEngine.Abs(a);
+            var sums = magnitudes.TensorEngine.Sum(magnitudes, sumAxis, null, false);
+            return largest
+                ? sums.TensorEngine.ReduceAMax(sums, extremeAxis, false, null, null, 0, null)
+                : sums.TensorEngine.ReduceAMin(sums, extremeAxis, false, null, null, null, null);
         }
 
         /// <summary>
@@ -416,15 +477,18 @@ namespace NumSharp.Backends
         ///     buffer, as the <c>sqrt</c> NumPy returns does.</para>
         ///     <para><b>Not modelled.</b> An empty operand keeps the two one-axis sums: every sum is the identity's 0 (or
         ///     the result holds no element), whatever the order.</para>
+        ///     <para>The sums, the root, the transpose and the contiguous copy are the members np.sum, np.sqrt,
+        ///     np.transpose and np.ascontiguousarray dispatch to.</para>
         /// </remarks>
-        [NDScopedCovered] // only reached via NormMatrixBranch, itself under the [NDScoped] Norm scope
+        [NDScopedCovered /* only reached via NormMatrixBranch, itself under the [NDScoped] Norm scope */]
         private static NDArray FrobeniusOverBoth(NDArray a, int rowAxis, int colAxis)
         {
             if (a.size == 0)
             {
                 var squares = AbsSquared(a);
-                var once = np.sum(squares, rowAxis);
-                return np.sqrt(np.sum(once, Shift(colAxis, rowAxis)));
+                var once = squares.TensorEngine.Sum(squares, rowAxis, null, false);
+                var twice = once.TensorEngine.Sum(once, Shift(colAxis, rowAxis), null, false);
+                return twice.TensorEngine.Sqrt(twice);
             }
 
             int nd = a.ndim;
@@ -437,7 +501,7 @@ namespace NumSharp.Backends
             for (int i = 0; i < nd && identity; i++)
                 identity = perm[i] == i;
 
-            var inOrder = identity ? a : np.transpose(a, perm);
+            var inOrder = identity ? a : a.TensorEngine.Transpose(a, perm);
             int pr = identity ? rowAxis : Array.IndexOf(perm, rowAxis);
             int pc = identity ? colAxis : Array.IndexOf(perm, colAxis);
 
@@ -445,9 +509,10 @@ namespace NumSharp.Backends
             // AbsSquared allocates a fresh C-ordered result over a C-ordered operand; should a kernel ever hand back
             // another layout, a C copy keeps the walk below a C-order walk (the values do not depend on the layout).
             if (!squared.Shape.IsContiguous)
-                squared = np.ascontiguousarray(squared);
+                squared = NDArray.AsContiguousArray(squared, null);
 
-            var root = np.sqrt(SumAxisPairOfCOrderSquares(squared, Math.Min(pr, pc), Math.Max(pr, pc)));
+            var sums = SumAxisPairOfCOrderSquares(squared, Math.Min(pr, pc), Math.Max(pr, pc));
+            var root = sums.TensorEngine.Sqrt(sums);
             if (identity || root.ndim < 2)
                 return root;   // the kept axes are already in the operand's order (one or none is in any order)
 
@@ -465,7 +530,7 @@ namespace NumSharp.Backends
 
         /// <summary>
         ///     NumPy's <c>add.reduce</c> over two axes of a C-contiguous array of squares, in the order its reduction
-        ///     iterator adds them, built from one-axis <see cref="np.sum(NDArray, int)"/> calls
+        ///     iterator adds them, built from one-axis sums - the member <see cref="np.sum(NDArray, int)"/> dispatches to
         ///     (each NumPy's own add.reduce over one axis, bit for bit).
         /// </summary>
         /// <param name="s">The squares: C-contiguous, non-empty, a float dtype or decimal.</param>
@@ -491,7 +556,7 @@ namespace NumSharp.Backends
         ///         (a square is never <c>-0.0</c>, and <c>0 + NaN</c> keeps the NaN), so it drops out.</item>
         ///     </list>
         /// </remarks>
-        [NDScopedCovered] // only caller: FrobeniusOverBoth, under the [NDScoped] Norm scope; the views and copies ride it
+        [NDScopedCovered /* only caller: FrobeniusOverBoth, under the [NDScoped] Norm scope; the views and copies ride it */]
         private static NDArray SumAxisPairOfCOrderSquares(NDArray s, int lo, int hi)
         {
             long[] d = s.Shape.dimensions;
@@ -527,7 +592,7 @@ namespace NumSharp.Backends
             }
             else if (qLo < 0 || qHi < 0)
             {
-                r = np.sum(y, qLo < 0 ? qHi : qLo);
+                r = AxisSum(y, qLo < 0 ? qHi : qLo);
             }
             else if (qHi == qLo + 1)
             {
@@ -538,26 +603,40 @@ namespace NumSharp.Backends
                         continue;
                     merged[j++] = i == qLo ? squeezed[qLo] * squeezed[qHi] : squeezed[i];
                 }
-                r = np.sum(y.reshape(merged), qLo);
+                r = AxisSum(y.reshape(merged), qLo);
             }
             else if (qHi == big - 1)
             {
-                r = y.typecode == NPTypeCode.Half ? HalfRunSumsAddedInTurn(y, qLo, qHi) : np.sum(np.sum(y, qHi), qLo);
+                r = y.typecode == NPTypeCode.Half ? HalfRunSumsAddedInTurn(y, qLo, qHi) : AxisSum(AxisSum(y, qHi), qLo);
             }
             else
             {
-                var front = np.ascontiguousarray(np.moveaxis(y, new[] {qLo, qHi}, new[] {0, 1}));
+                // np.ascontiguousarray(np.moveaxis(...)): np.moveaxis' member, then the array object's contiguous copy.
+                var front = NDArray.AsContiguousArray(y.TensorEngine.MoveAxis(y, new[] {qLo, qHi}, new[] {0, 1}), null);
                 var chain = new long[big - 1];
                 chain[0] = squeezed[qLo] * squeezed[qHi];
                 for (int i = 0, j = 1; i < big; i++)
                     if (i != qLo && i != qHi)
                         chain[j++] = squeezed[i];
-                r = np.sum(front.reshape(chain), 0);
+                r = AxisSum(front.reshape(chain), 0);
             }
 
             // Put the kept axes of extent 1 back (a view of the C-ordered sums).
             return r.ndim == target.Length ? r : r.reshape(target);
         }
+
+        /// <summary>
+        ///     <c>np.sum(x, axis)</c>'s member: <see cref="TensorEngine.Sum"/> of <paramref name="x"/>'s engine over one
+        ///     axis, no dtype, no keepdims - NumPy's own add.reduce over that axis, bit for bit.
+        /// </summary>
+        /// <param name="x">The operand (plain; its engine computes the sum).</param>
+        /// <param name="axis">The axis to reduce; a negative value counts from the end, as np.sum's does.</param>
+        /// <returns>A fresh array without <paramref name="axis"/>, of the sum's NEP 50 dtype (the operand's own for
+        ///     every float dtype these callers pass).</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range for <paramref name="x"/>.</exception>
+        /// <remarks>The one-axis sum the axis-pair schedules and the nuclear norm repeat, kept as one call so each
+        ///     statement reads as the np.sum it stands for.</remarks>
+        private static NDArray AxisSum(NDArray x, int axis) => x.TensorEngine.Sum(x, axis, null, false);
 
         /// <summary>
         ///     NumPy's float16 reduction over two reduced axes that do not merge, the inner one innermost: HALF_add's
@@ -576,16 +655,19 @@ namespace NumSharp.Backends
         ///     the outer reduced index, each addition in float32 and stored with one rounding (np.add's float32 loop
         ///     into a float16 out). The other float dtypes need none of this: their run sum is already in the
         ///     result's precision.
+        ///     <para>The sum, the axis move, the allocation and the additions are the members np.sum, np.moveaxis,
+        ///     np.zeros and np.add (with out=) dispatch to.</para>
         /// </remarks>
-        [NDScopedCovered] // only caller: SumAxisPairOfCOrderSquares, under the [NDScoped] Norm scope
+        [NDScopedCovered /* only caller: SumAxisPairOfCOrderSquares, under the [NDScoped] Norm scope */]
         private static NDArray HalfRunSumsAddedInTurn(NDArray y, int qLo, int qHi)
         {
-            var runs = np.sum(y.astype(np.float32), qHi);
+            var runs = AxisSum(y.astype(np.float32), qHi);
             // runs keeps qLo where it was (qHi was after it); its slabs along qLo are the per-run sums to add in turn.
-            var slabs = np.moveaxis(runs, qLo, 0);
-            var acc = np.zeros(Shape.Adopt((long[])slabs.Shape.dimensions[1..]), NPTypeCode.Half);
+            var slabs = runs.TensorEngine.MoveAxis(runs, new[] {qLo}, new[] {0});
+            // np.zeros(shape, float16)'s own allocation: the zero-filled accumulator.
+            var acc = new NDArray(NPTypeCode.Half, Shape.Adopt((long[])slabs.Shape.dimensions[1..]), true);
             for (long i = 0; i < slabs.Shape.dimensions[0]; i++)
-                np.add(acc, slabs[i], @out: acc);
+                acc.TensorEngine.Add(acc, slabs[i], null, acc, null);
             return acc;
         }
 
@@ -606,21 +688,25 @@ namespace NumSharp.Backends
         /// <returns>The reduced norm.</returns>
         /// <exception cref="OpenBlasMissingBackendException">No matrix backend computes the singular values of a non-empty operand.</exception>
         /// <exception cref="ValueError">"-2" of an empty matrix (the empty-min error).</exception>
-        [NDScopedCovered] // only reached via NormMatrixBranch, itself under the [NDScoped] Norm scope
-        private static NDArray SingularValueNorm(NDArray a, int rowAxis, int colAxis, string which)
+        /// <remarks>An instance member because the singular values are this engine's <see cref="Svdvals"/> (NumPy's
+        ///     <c>svd(y, compute_uv=False)</c>, so a subclass that overrides it computes the 2 / -2 / nuclear norms too);
+        ///     the axis move and the reductions are the members np.moveaxis, np.amax, np.amin and np.sum dispatch
+        ///     to.</remarks>
+        [NDScopedCovered /* only reached via NormMatrixBranch, itself under the [NDScoped] Norm scope */]
+        private NDArray SingularValueNorm(NDArray a, int rowAxis, int colAxis, string which)
         {
             // NumPy's _multi_svd_norm: move the two matrix axes to the end, take the singular values
             // over them, then reduce — 2 → largest, -2 → smallest, 'nuc' → sum of the singulars.
             // NumPy calls `_multi_svd_norm(x, row, col, amax, 0)`: the largest singular value of an
             // EMPTY matrix is 0.0 (singular values are >= 0, so a non-empty answer is unchanged).
             // 'nuc' passes initial=0 to the sum, which the add identity already is.
-            var y = np.moveaxis(a, new[] {rowAxis, colAxis}, new[] {-2, -1});
-            var s = np.linalg.svdvals(y);
+            var y = a.TensorEngine.MoveAxis(a, new[] {rowAxis, colAxis}, new[] {-2, -1});
+            var s = Svdvals(y);
             return which switch
             {
-                "2" => np.amax(s, -1, initial: 0),
-                "-2" => np.amin(s, -1),
-                _ => np.sum(s, -1), // "nuc"
+                "2" => s.TensorEngine.ReduceAMax(s, -1, false, null, null, 0, null),
+                "-2" => s.TensorEngine.ReduceAMin(s, -1, false, null, null, null, null),
+                _ => AxisSum(s, -1), // "nuc"
             };
         }
 

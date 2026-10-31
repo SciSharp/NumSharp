@@ -14,8 +14,12 @@ Sources: the facades `LinearAlgebra/np.{inner,vdot,vecdot,matvec,vecmat,tensordo
 product members of `Backends/TensorEngine.LinearAlgebra.cs`; the gufuncs
 `Backends/Default/LinearAlgebra/Default.Gufuncs.cs` with `GufuncGuard.cs` / `GufuncSignature.cs`; the `np.linalg` bodies
 on the `TensorEngine.Linalg` sub-engine (`Backends/LinalgEngine.cs`, implemented by
-`LinearAlgebra/linalg/DefaultLinalgEngine.*.cs`, whose `DefaultLinalgEngine.cs` holds the `_assert_*` / `_commonType`
-ports); `Exceptions/LinAlgError.cs`.
+`Backends/Default/LinearAlgebra/DefaultLinalgEngine.*.cs`, whose `DefaultLinalgEngine.cs` holds the `_assert_*` /
+`_commonType` ports and the `CoreMatmul` / `CoreDot` calls of the main-namespace products); `Exceptions/LinAlgError.cs`.
+The sub-engine's statements call members, never an np.* facade: a nested numpy.linalg function is its own virtual member
+(`Inv`, `Solve`, `Svdvals`, `Norm`, ...), a main-namespace function the member its facade dispatches to. The three
+exceptions are `np.outer` and `np.tensordot`, whose statements are still their facades' own: those calls are pinned in
+ratchet R2's allowlist until the np-layer dtype plan's P8 gives them `TensorEngine` members.
 
 ## What computes with and without a backend
 

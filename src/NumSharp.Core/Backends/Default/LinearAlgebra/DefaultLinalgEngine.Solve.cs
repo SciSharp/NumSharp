@@ -36,8 +36,16 @@ namespace NumSharp.Backends
         /// <remarks>
         ///     <para>
         ///     NumPy's statements: the axis move, <c>oldshape = a.shape[-(an - b.ndim):]</c>, the size check, the square system
-        ///     <c>a.reshape(prod, prod)</c> against <c>b.ravel()</c> (through the public <c>np.linalg.solve</c>, so the engine's
-        ///     <see cref="Solve"/> computes it) and <c>res.shape = oldshape</c>.
+        ///     <c>a.reshape(prod, prod)</c> against <c>b.ravel()</c> (through this engine's <see cref="Solve"/>, NumPy's
+        ///     <c>solve(a, b)</c>, so a subclass that overrides it computes the tensor system too) and
+        ///     <c>res.shape = oldshape</c>.
+        ///     </para>
+        ///     <para>
+        ///     The axis move, the reshape and the ravel are the members np.transpose, np.reshape and np.ravel dispatch to.
+        ///     None of their class rules could fire here: np.linalg.tensorsolve wraps a numpy.matrix <paramref name="a"/>
+        ///     and makes a numpy.char.chararray operand plain before it calls in, and a matrix <paramref name="b"/> beside a
+        ///     plain <paramref name="a"/> meets np.ravel, which has no matrix rule (its member's view is a plain array,
+        ///     so the system was always solved plain).
         ///     </para>
         ///     <para>
         ///     NumPy takes <c>oldshape</c> with a Python slice whose edges are part of the answer: when <c>a.ndim ==
@@ -70,7 +78,7 @@ namespace NumSharp.Backends
                     order.Add(k);
                 }
 
-                work = np.transpose(a, order.ToArray());
+                work = a.TensorEngine.Transpose(a, order.ToArray());   // np.transpose's member
             }
 
             // oldshape = a.shape[-(an - b.ndim):], Python's slice of the shape tuple: more axes in a than in b keep the
@@ -98,12 +106,12 @@ namespace NumSharp.Backends
                     "prod(a.shape[b.ndim:]) == prod(a.shape[:b.ndim])");
             }
 
-            var square = np.reshape(work, new[] {prod, prod});
-            var rhs = np.ravel(b);
+            var square = work.reshape(new[] {prod, prod});   // np.reshape's member
+            var rhs = NDArray.Ravel(b, 'C');                  // b.ravel(): np.ravel's member, order 'C'
 
             // `res = wrap(solve(a, b)); res.shape = oldshape`: solve's fresh solution relabelled IN PLACE (it keeps owning
             // its data), not a reshaped view of it.
-            var res = np.linalg.solve(square, rhs);
+            var res = Solve(square, rhs);
             res.shape = oldshape;
             return res;
         }

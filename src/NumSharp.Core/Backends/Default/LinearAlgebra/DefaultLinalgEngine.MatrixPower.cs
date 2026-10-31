@@ -1,4 +1,5 @@
 using System;
+using NumSharp.Backends.Iteration;
 
 namespace NumSharp.Backends
 {
@@ -6,9 +7,10 @@ namespace NumSharp.Backends
     {
         /// <inheritdoc/>
         /// <remarks>
-        ///     NumPy's statements: <c>_assert_stacked_square</c>, the inverse for a negative power (through the public
-        ///     <c>np.linalg.inv</c>, so the engine's <see cref="Inv"/> computes it), the identity for 0, the operand itself for
-        ///     1, and binary exponentiation with <c>np.matmul</c> above.
+        ///     NumPy's statements: <c>_assert_stacked_square</c>, the inverse for a negative power (through this engine's
+        ///     <see cref="Inv"/>, NumPy's <c>inv(a)</c>, so a subclass that overrides it computes this inverse too), the
+        ///     identity for 0, the operand itself for 1, and binary exponentiation with the core <c>matmul</c> above
+        ///     (<see cref="CoreMatmul"/>, the member <see cref="np.matmul"/> dispatches to).
         /// </remarks>
         [NDScoped]
         public override NDArray MatrixPower(NDArray a, int n)
@@ -20,7 +22,7 @@ namespace NumSharp.Backends
             {
                 // Raises without a backend — deliberately BEFORE the identity/short-power cases,
                 // exactly as NumPy inverts first and then exponentiates the inverse.
-                work = np.linalg.inv(a);
+                work = Inv(a);
                 n = -n;
             }
 
@@ -31,9 +33,9 @@ namespace NumSharp.Backends
             if (n == 1)
                 return work;
             if (n == 2)
-                return np.matmul(work, work);
+                return CoreMatmul(work, work);
             if (n == 3)
-                return np.matmul(np.matmul(work, work), work);
+                return CoreMatmul(CoreMatmul(work, work), work);
 
             // Binary exponentiation. `result` stays null until the first set bit so the identity
             // multiply is skipped, which is what NumPy's `if result is None` does.
@@ -42,11 +44,11 @@ namespace NumSharp.Backends
             while (n > 0)
             {
                 if ((n & 1) == 1)
-                    result = result is null ? z : np.matmul(result, z);
+                    result = result is null ? z : CoreMatmul(result, z);
 
                 n >>= 1;
                 if (n > 0)
-                    z = np.matmul(z, z);
+                    z = CoreMatmul(z, z);
             }
 
             return result;
@@ -61,26 +63,32 @@ namespace NumSharp.Backends
         /// <param name="a">The (square-stacked) operand; a numpy.char.chararray one arrives as it is.</param>
         /// <returns>A new plain array of <paramref name="a"/>'s dtype, shape and K-order layout holding the identity.</returns>
         /// <exception cref="OverflowException">The matrix side exceeds <see cref="int.MaxValue"/>.</exception>
-        /// <remarks>The identity is built IN the operand's dtype, as NumPy's <c>eye(..., dtype=a.dtype)</c> is: for a text
+        /// <remarks>
+        ///     <para>The identity is built IN the operand's dtype, as NumPy's <c>eye(..., dtype=a.dtype)</c> is: for a text
         ///     dtype the diagonal stores the Python int 1 as its <c>str()</c> (<c>'1'</c>) and the rest stays empty, where
-        ///     a float64 identity cast to text would read <c>'1.0'</c> / <c>'0.0'</c>.</remarks>
-        [NDScopedCovered] // only caller: [NDScoped] MatrixPower; the eye temp rides its scope
+        ///     a float64 identity cast to text would read <c>'1.0'</c> / <c>'0.0'</c>.</para>
+        ///     <para>The three statements are the members their facades dispatch to: np.eye's <see cref="NDArray.Eye"/>,
+        ///     np.empty_like's allocation (a new plain array over <see cref="Shape.NewLikeLayout"/>'s K layout) and
+        ///     np.copyto's <c>UnmanagedStorage.Copyto</c> with its default <c>same_kind</c> rule. None of them has a class
+        ///     rule, so a numpy.char.chararray operand (the np.linalg.matrix_power facade has no chararray rule) gets the
+        ///     plain identity this function always returned, without the plain region np.empty_like's chararray rule
+        ///     needed (NumPy's empty_like keeps the chararray class: the class boundary's work, not this function's).</para>
+        /// </remarks>
+        [NDScopedCovered /* only caller: [NDScoped] MatrixPower; the eye temp rides its scope */]
         private static NDArray Identity(NDArray a)
         {
             long side = a.Shape.dimensions[a.ndim - 1];
             if (side > int.MaxValue)
                 throw new OverflowException($"Matrix dimension {side} exceeds int.MaxValue for np.eye");
 
-            var eye = np.eye((int)side, dtype: a.dtype);
-            // A plain region: a numpy.char.chararray operand arrives as it is (the facade has no chararray rule), and
-            // np.empty_like must not apply its chararray rule from inside the library. The identity stays the plain array
-            // this function always returned (NumPy's empty_like keeps the chararray class: the class boundary's work,
-            // not this function's). The region does nothing for a plain operand.
-            using var plain = NDMatrixBoundary.PlainFor(a);
+            // np.eye(side, dtype=a.dtype): the facade's default order 'C' (its order and device checks pass for the
+            // defaults), then the array object's identity.
+            var eye = NDArray.Eye((int)side, null, 0, a.dtype, 'C');
             // empty_like keeps the operand's order (a C-ordered copy of eye did not), and the assignment broadcasts the one
-            // identity over the stack's leading axes.
-            var result = np.empty_like(a);
-            np.copyto(result, eye);
+            // identity over the stack's leading axes. np.empty_like(a) is an uninitialised array of a's dtype in a's K
+            // layout; np.copyto(result, eye) the same_kind assignment.
+            var result = new NDArray(a.dtype, Shape.NewLikeLayout(a.Shape, 'K', (long[])a.Shape.dimensions.Clone()), false);
+            UnmanagedStorage.Copyto(result, eye, NPY_CASTING.NPY_SAME_KIND_CASTING, null);
             return result;
         }
     }

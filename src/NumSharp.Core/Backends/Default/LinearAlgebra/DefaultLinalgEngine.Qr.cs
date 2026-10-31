@@ -1,4 +1,5 @@
 using System;
+using NumSharp.Backends.Iteration;
 
 namespace NumSharp.Backends
 {
@@ -40,10 +41,15 @@ namespace NumSharp.Backends
         /// <returns>h's values: for float64 / complex128 a view of a new <c>(..., M, N)</c> array in <paramref name="a"/>'s
         ///     K order (F-contiguous for a C operand, C-contiguous for an F one, not an owner), for float32 a new array in
         ///     that view's order.</returns>
-        [NDScopedCovered] // only caller: [NDScoped] Qr; the factored copy behind the returned view and h's transposed view ride its scope
+        /// <remarks>The two transposes are np.swapaxes' member (<see cref="TensorEngine.SwapAxes"/>) over plain arrays (the
+        ///     kernel's reflectors and <see cref="FactoredCopy"/>'s new array), so no class rule is skipped.</remarks>
+        [NDScopedCovered /* only caller: [NDScoped] Qr; the factored copy behind the returned view and h's transposed view ride its scope */]
         private static NDArray RawFactor(NDArray a, NDArray h)
         {
-            var q = np.swapaxes(FactoredCopy(a, np.swapaxes(h, -1, -2)), -1, -2);
+            // np.swapaxes(FactoredCopy(a, np.swapaxes(h, -1, -2)), -1, -2), the inner transpose first.
+            var hT = h.TensorEngine.SwapAxes(h, -1, -2);
+            var factored = FactoredCopy(a, hT);
+            var q = factored.TensorEngine.SwapAxes(factored, -1, -2);
             // t differs from result_t only for float32 (computed in float64): astype(float32, copy=False) of the float64
             // view is then a copy, in the view's K order.
             return q.typecode == NPTypeCode.Single ? q.copy('K') : q;
@@ -60,14 +66,19 @@ namespace NumSharp.Backends
         ///     NumPy's is (its <c>_makearray</c> took <c>asarray(a)</c>).</param>
         /// <param name="factored">The packed factorisation, shape <c>(..., M, N)</c>, of the result dtype.</param>
         /// <returns>The new array, owning its data, never a chararray or a matrix.</returns>
+        /// <remarks>The allocation and the assignment are np.empty_like's and np.copyto's members (a new plain array over
+        ///     <see cref="Shape.NewLikeLayout"/>'s K layout of <paramref name="a"/>, then <c>UnmanagedStorage.Copyto</c>
+        ///     with the <c>same_kind</c> rule, which cannot refuse: <paramref name="factored"/> has the copy's own dtype),
+        ///     neither of which has a class rule: the plain region np.empty_like's chararray rule needed (it wrapped the
+        ///     float64 copy as a chararray: "Can only create a chararray from string data.") is gone with the facade
+        ///     call.</remarks>
         private static NDArray FactoredCopy(NDArray a, NDArray factored)
         {
-            // A plain region: np.empty_like must not apply its chararray rule to a chararray operand from inside the
-            // library (it wrapped the float64 copy as a chararray: "Can only create a chararray from string data."). The
-            // region does nothing for a plain operand, and a matrix one reaches here plain already (the facade's rule).
-            using var plain = NDMatrixBoundary.PlainFor(a);
-            var copy = np.empty_like(a, factored.dtype);
-            np.copyto(copy, factored);
+            // np.empty_like(a, factored.dtype): order 'K' keeps a's axis permutation; uninitialised, every element is
+            // written by the copy below.
+            var copy = new NDArray(factored.dtype, Shape.NewLikeLayout(a.Shape, 'K', (long[])a.Shape.dimensions.Clone()), false);
+            // np.copyto(copy, factored): the same_kind assignment.
+            UnmanagedStorage.Copyto(copy, factored, NPY_CASTING.NPY_SAME_KIND_CASTING, null);
             return copy;
         }
 

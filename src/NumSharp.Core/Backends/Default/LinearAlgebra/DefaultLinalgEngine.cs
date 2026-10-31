@@ -1,5 +1,6 @@
 using System;
 using System.Numerics;
+using NumSharp.Backends.Iteration;
 
 namespace NumSharp.Backends
 {
@@ -24,15 +25,20 @@ namespace NumSharp.Backends
     ///     operands already cast to the loop dtype (float32, float64 or complex128) and its result goes through NumPy's
     ///     collapse, casts and result layouts. Call the base kernel for the operands it does not serve (an empty one,
     ///     another dtype). Assign the instance to <see cref="TensorEngine.Linalg"/> of the cached engine.</para>
-    ///     <para><b>Nested calls.</b> A member that needs another numpy.linalg function calls its public facade
-    ///     (<c>np.linalg.inv</c>, <c>np.linalg.svdvals</c>, <c>np.linalg.norm</c>, ...) where NumPy's statement calls the
-    ///     module function, so the engine assigned to <see cref="TensorEngine.Linalg"/> computes it and the class boundary
-    ///     meets it where NumPy's would; one that calls a sibling directly in NumPy (pinv's and matrix_rank's <c>svd</c>,
-    ///     the hermitian svd's <c>eigh</c>) calls this engine's own virtual member.</para>
+    ///     <para><b>Nested calls.</b> A member never calls back up into a public np.* facade: where NumPy's statement calls
+    ///     another numpy.linalg function (<c>inv</c>, <c>svdvals</c>, <c>norm</c>, <c>solve</c>, ...) or a sibling (pinv's
+    ///     and matrix_rank's <c>svd</c>, the hermitian svd's <c>eigh</c>), it calls this engine's own virtual member, so a
+    ///     subclass that overrides one computes it for every caller; where it calls a main-namespace function
+    ///     (<c>sum</c>, <c>matmul</c>, <c>abs</c>, ...), it calls the member that function's facade dispatches to - the
+    ///     operand engine's <see cref="TensorEngine"/> member, or the array object's (<c>NDArray</c> /
+    ///     <c>UnmanagedStorage</c>) for the allocations, copies and views. The operands are plain arrays: every
+    ///     <c>np.linalg</c> facade applies NumPy's class boundary before it calls in, so a facade's class rule would never
+    ///     fire on these calls. The exceptions are <c>np.outer</c> and <c>np.tensordot</c>, whose statements are still
+    ///     their facades' own (no engine member until the np-layer dtype plan's phase P8): their three calls are pinned
+    ///     in ratchet R2's allowlist (np-layer dtype plan, P6b).</para>
     ///     <para>The statements were the internal operation class <c>LinalgEngine</c> (the np-layer dtype plan's P2) and
     ///     the kernels the ten <see cref="TensorEngine"/> members of the same names (0.70.0); phase PE's E2 made the class
-    ///     this public sub-engine. The files sit beside the <c>np.linalg</c> facades rather than under <c>Backends/</c>:
-    ///     the statements call np.* functions, which ratchet R2 counts against engine files. The kernels are
+    ///     this public sub-engine, and P6b made its statements call members instead of np.* facades. The kernels are
     ///     <c>Backends/Default/LinearAlgebra/DefaultLinalgEngine.Kernels.cs</c>.</para>
     /// </remarks>
     public partial class DefaultLinalgEngine : LinalgEngine
@@ -258,6 +264,42 @@ namespace NumSharp.Backends
             => a.typecode == common ? a : a.TensorEngine.Cast(a, common.AsType(), copy: false);
 
         /// <summary>
+        ///     NumPy's main-namespace <c>matmul(x1, x2)</c> as numpy.linalg's statements call it (matrix_power's products,
+        ///     pinv's recombination): the member <see cref="np.matmul"/> dispatches to,
+        ///     <see cref="TensorEngine.Matmul(NDArray, NDArray, NDArray, int[][], int?, bool?, DType, string, char)"/> of
+        ///     <paramref name="x1"/>'s engine, with every keyword at np.matmul's default.
+        /// </summary>
+        /// <param name="x1">The left operand (its engine computes the product).</param>
+        /// <param name="x2">The right operand.</param>
+        /// <returns>The matrix product, a fresh array (a 1-D operand's inserted axis dropped, as np.matmul's).</returns>
+        /// <exception cref="ValueError">The core dimensions do not match, or the stacked axes do not broadcast (NumPy's
+        ///     gufunc texts).</exception>
+        /// <remarks>
+        ///     Not this engine's <see cref="Matmul(NDArray, NDArray)"/>: that is <c>np.linalg.matmul</c>, a public virtual
+        ///     member a subclass may override, and NumPy's numpy.linalg statements call the core matmul, not the Array-API
+        ///     wrapper. The operands are plain arrays, so np.matmul's class rule would not fire on this call.
+        /// </remarks>
+        internal static NDArray CoreMatmul(NDArray x1, NDArray x2)
+            => x1.TensorEngine.Matmul(x1, x2, null, null, null, null, null, "same_kind", 'K');
+
+        /// <summary>
+        ///     NumPy's main-namespace <c>dot(a, b, out)</c> as numpy.linalg's statements call it (multi_dot's chain, norm's
+        ///     <c>x.dot(x)</c>): the member <see cref="np.dot"/> dispatches to,
+        ///     <see cref="TensorEngine.Dot(NDArray, NDArray, NDArray)"/> of <paramref name="a"/>'s engine.
+        /// </summary>
+        /// <param name="a">The left operand (its engine computes the product).</param>
+        /// <param name="b">The right operand.</param>
+        /// <param name="out">np.dot's out array (no cast, no broadcast: <c>new_array_for_sum</c>'s check), or null.</param>
+        /// <returns>The product: <paramref name="out"/> itself when given, else a fresh array (a 0-d one for two
+        ///     vectors).</returns>
+        /// <exception cref="IncorrectShapeException">Misaligned operands (np.dot's <c>shapes (2,3) and (2,3) not
+        ///     aligned</c> text).</exception>
+        /// <exception cref="ValueError">An out array np.dot refuses (shape, dtype or contiguity).</exception>
+        /// <remarks>The operands are plain arrays, so np.dot's matrix rule would not fire on this call.</remarks>
+        internal static NDArray CoreDot(NDArray a, NDArray b, NDArray @out)
+            => a.TensorEngine.Dot(a, b, @out);
+
+        /// <summary>
         ///     Element-wise <c>|x|²</c> as a REAL array — NumPy's <c>(x.conj() * x).real</c>, rounded as NumPy rounds it.
         /// </summary>
         /// <param name="x">The operand (a float or complex dtype, or decimal: norm converts the others first).</param>
@@ -282,29 +324,59 @@ namespace NumSharp.Backends
         ///     Not modelled: which NaN the complex product returns when its operands hold several (the MSVC-compiled
         ///     <c>simd_cmul</c>'s operand order decides it), so a complex NaN's sign or payload can differ.
         ///     </para>
+        ///     <para>
+        ///     The complex walk is one two-operand <see cref="NDIterRef"/> in C order (the engine's own iterator, no
+        ///     np.nditer facade), disposed by its <c>using</c>: the iterator owns a native state block.
+        ///     </para>
         /// </remarks>
-        [NDScopedCovered] // only callers: the norm helpers, themselves covered under the [NDScoped] norm entries
-        internal static NDArray AbsSquared(NDArray x)
+        [NDScopedCovered /* only callers: the norm helpers, themselves covered under the [NDScoped] norm entries */]
+        internal static unsafe NDArray AbsSquared(NDArray x)
         {
+            // np.multiply(x, x)'s member: a real operand's x.conj() is a copy of it, so NumPy's product is x * x.
             if (x.typecode != NPTypeCode.Complex)
-                return np.multiply(x, x);
+                return x.TensorEngine.Multiply(x, x);
 
-            var magnitudes = np.zeros(Shape.Adopt(x.Shape.dimensions), NPTypeCode.Double);
+            // np.zeros(x.shape, float64)'s own allocation (a zero-filled, C-ordered owner), without the call up into np.*.
+            var magnitudes = new NDArray(NPTypeCode.Double, Shape.Adopt(x.Shape.dimensions), true);
 
-            // Both walks are pinned to 'C' — the typed iterator defaults to 'K' (MEMORY order),
-            // which for a strided or transposed source visits elements in a different sequence
-            // than it does for the freshly allocated C-contiguous destination.
-            // The writer is driven by hand, so nothing disposes it but this `using`: its enumerator owns a native
-            // iterator state block (NDIterRef), which leaked on every complex call while the enumerator was a plain local.
-            using var writer = np.nditer<double>(magnitudes, writeable: true, order: 'C').GetEnumerator();
-            foreach (Complex z in np.nditer<Complex>(x, order: 'C'))
-            {
-                writer.MoveNext();
-                // simd_cmul's real lane for conj(x) * x: re * re fused with the rounded im * im (remarks).
-                writer.Current = Math.FusedMultiplyAdd(z.Real, z.Real, z.Imaginary * z.Imaginary);
-            }
-
+            // ONE iterator over the operand and the result, pinned to 'C': a multi-operand iterator pairs the elements of
+            // the same index, so each z lands in its own slot whatever x's layout (strided, transposed, reversed,
+            // broadcast), the pairing the two lockstep C-order walks this replaced made. No op_dtypes and no BUFFERED flag:
+            // the chunks are complex128 and float64 in place, never a cast copy. An empty x runs no chunk; a 0-d x one
+            // chunk of one element.
+            using var it = NDIterRef.MultiNew(2, new[] {x, magnitudes}, NDIterGlobalFlags.EXTERNAL_LOOP,
+                NPY_ORDER.NPY_CORDER, NPY_CASTING.NPY_SAFE_CASTING,
+                new[] {NDIterPerOpFlags.READONLY, NDIterPerOpFlags.WRITEONLY});
+            it.ForEach(s_absSquaredLoop);
             return magnitudes;
+        }
+
+        /// <summary>
+        ///     <see cref="AbsSquared"/>'s complex inner loop as an iterator kernel (<see cref="NDIterRef.ForEach"/>'s
+        ///     contract). One delegate for the process, so a call allocates nothing for it.
+        /// </summary>
+        private static readonly unsafe NDInnerLoopFunc s_absSquaredLoop = AbsSquaredChunk;
+
+        /// <summary>
+        ///     One inner-loop chunk of <see cref="AbsSquared"/>'s complex branch: <paramref name="count"/> complex128
+        ///     elements from <c>dataptrs[0]</c> and as many float64 slots from <c>dataptrs[1]</c>, each walked with its own
+        ///     byte stride (any sign; a chunk of one element may report 0).
+        /// </summary>
+        /// <param name="dataptrs">The chunk starts: the operand's, then the result's.</param>
+        /// <param name="strides">The two byte strides, in the same order.</param>
+        /// <param name="count">The chunk's element count.</param>
+        /// <param name="auxdata">Unused.</param>
+        private static unsafe void AbsSquaredChunk(void** dataptrs, long* strides, long count, void* auxdata)
+        {
+            byte* src = (byte*)dataptrs[0];
+            byte* dst = (byte*)dataptrs[1];
+            long srcStride = strides[0], dstStride = strides[1];
+            for (long i = 0; i < count; i++, src += srcStride, dst += dstStride)
+            {
+                Complex z = *(Complex*)src;
+                // simd_cmul's real lane for conj(x) * x: re * re fused with the rounded im * im (remarks).
+                *(double*)dst = Math.FusedMultiplyAdd(z.Real, z.Real, z.Imaginary * z.Imaginary);
+            }
         }
     }
 }

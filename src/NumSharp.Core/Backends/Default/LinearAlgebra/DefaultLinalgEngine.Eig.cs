@@ -1,4 +1,5 @@
 using System;
+using NumSharp.Backends.Iteration;
 
 namespace NumSharp.Backends
 {
@@ -47,6 +48,12 @@ namespace NumSharp.Backends
         /// <param name="v">The gufunc's complex128 eigenvectors, or null for <c>eigvals</c>.</param>
         /// <param name="common">The loop dtype the operand ran at.</param>
         /// <returns>The eigenvalues and eigenvectors (null when <paramref name="v"/> is) in NumPy's result dtype.</returns>
+        /// <remarks>
+        ///     The accessors and the reduction are the members np.imag, np.real and np.any dispatch to
+        ///     (<see cref="NDArray.ImagPart"/>, <see cref="NDArray.RealPart"/>, <see cref="TensorEngine.Any(NDArray)"/>):
+        ///     <paramref name="w"/> and <paramref name="v"/> are the kernel's plain results, so the facades' class rules
+        ///     have nothing to see.
+        /// </remarks>
         private static (NDArray eigenvalues, NDArray eigenvectors) CollapseEig(NDArray w, NDArray v, NPTypeCode common)
         {
             NPTypeCode resultType;
@@ -55,12 +62,13 @@ namespace NumSharp.Backends
             // is, so `!any(imag)` is True iff every imaginary part is 0 AND none is NaN — bit-for-bit
             // the same predicate as `all(equal(imag, 0))` (verified on zero/nonzero/NaN), but a single
             // reduction over the strided imaginary view instead of `equal` (which allocates a bool
-            // array) followed by `all`.
-            if (common != NPTypeCode.Complex && !np.any(np.imag(w)))
+            // array) followed by `all`. The view is taken only for a real operand (the && short-circuits first), and
+            // np.any's member runs on the view's own engine, as the facade's `a.TensorEngine.Any(a)` did.
+            if (common != NPTypeCode.Complex && NDArray.ImagPart(w) is var imag && !imag.TensorEngine.Any(imag))
             {
                 // Every eigenvalue is real — drop the (zero) imaginary part and take the real dtype.
-                w = np.real(w);
-                v = v is null ? null : np.real(v);
+                w = NDArray.RealPart(w);
+                v = v is null ? null : NDArray.RealPart(v);
                 resultType = common == NPTypeCode.Single ? NPTypeCode.Single : NPTypeCode.Double;
             }
             else
@@ -101,19 +109,22 @@ namespace NumSharp.Backends
         ///     the small sizes numpy.polynomial's <c>{p}roots</c> runs (0.7 of 1.4 µs on a degree-10 float32 series).
         ///     Any other layout (an F-ordered eigenvector matrix: <c>view</c> needs a contiguous last axis) rounds the
         ///     real and the imaginary lane separately, strided float64 views of the same buffer.
+        ///     <para>Each copy back is np.copyto's member, <c>UnmanagedStorage.Copyto</c> with np.copyto's default
+        ///     <c>same_kind</c> rule (a float32 into float64 is a safe cast), and the lanes are np.real / np.imag's
+        ///     members (<see cref="NDArray.RealPart"/>, <see cref="NDArray.ImagPart"/>): no np.* facade runs.</para>
         /// </remarks>
         private static void RoundComponentsToSingle(NDArray z)
         {
             if (z.Shape.IsContiguous)
             {
                 var parts = z.view(np.float64);
-                np.copyto(parts, parts.astype(NPTypeCode.Single));
+                UnmanagedStorage.Copyto(parts, parts.astype(NPTypeCode.Single), NPY_CASTING.NPY_SAME_KIND_CASTING, null);
                 return;
             }
-            var re = np.real(z);
-            np.copyto(re, re.astype(NPTypeCode.Single));
-            var im = np.imag(z);
-            np.copyto(im, im.astype(NPTypeCode.Single));
+            var re = NDArray.RealPart(z);
+            UnmanagedStorage.Copyto(re, re.astype(NPTypeCode.Single), NPY_CASTING.NPY_SAME_KIND_CASTING, null);
+            var im = NDArray.ImagPart(z);
+            UnmanagedStorage.Copyto(im, im.astype(NPTypeCode.Single), NPY_CASTING.NPY_SAME_KIND_CASTING, null);
         }
 
         /// <inheritdoc/>

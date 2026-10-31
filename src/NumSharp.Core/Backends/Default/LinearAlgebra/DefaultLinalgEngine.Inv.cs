@@ -27,7 +27,10 @@ namespace NumSharp.Backends
         /// <remarks>
         ///     NumPy's statements: the tolerance arguments, NumPy's empty-operand answer (<c>_is_empty_2d</c>, the
         ///     operand's own dtype), the conjugation, the singular value decomposition through this engine's
-        ///     <see cref="Svd(NDArray, bool, bool, bool)"/>, the cutoff and the recombination of the factors.
+        ///     <see cref="Svd(NDArray, bool, bool, bool)"/>, the cutoff and the recombination of the factors. Every
+        ///     main-namespace call of those statements is the member its facade dispatches to (the operand engine's
+        ///     conjugate, amax, multiply, greater, reciprocal, swapaxes and matmul; the array object's allocation,
+        ///     where and expand_dims), evaluated in the statements' order.
         /// </remarks>
         [NDScoped]
         public override NDArray Pinv(NDArray a, double? rcond = null, bool hermitian = false, double? rtol = null)
@@ -54,7 +57,9 @@ namespace NumSharp.Backends
                 long m0 = emptyDims[nd - 2];
                 emptyDims[nd - 2] = emptyDims[nd - 1];
                 emptyDims[nd - 1] = m0;
-                return np.zeros(Shape.Adopt(emptyDims), a.dtype);
+                // np.zeros(shape, a.dtype)'s own allocation (a zero-filled owner of the operand's dtype, text included),
+                // without the call up into np.*.
+                return new NDArray(a.dtype, Shape.Adopt(emptyDims), true);
             }
 
             // NumPy's `a = a.conjugate()` is next: ndarray.conjugate refuses a non-numeric dtype before svd
@@ -68,24 +73,40 @@ namespace NumSharp.Backends
                 AssertStackedSquare(a);
 
             var common = CommonType(a);
-            var aConj = np.conjugate(ToCommon(a, common));
+            // `a = a.conjugate()`: np.conjugate's member on the loop-dtype operand.
+            var operand = ToCommon(a, common);
+            var aConj = operand.TensorEngine.Conjugate(operand);
             // NumPy's `u, s, vt = svd(a, full_matrices=False, hermitian=hermitian)`: with hermitian, the eigh-based factors
             // of the matrix the conjugate's lower triangle holds.
             var (u, s, vt) = Svd(aConj, full_matrices: false, compute_uv: true, hermitian);
 
             // Discard singular values at or below rcond * largest, reciprocate the rest, and recombine
             // with the (plain, since `a` was conjugated) transposed factors — NumPy's exact sequence.
-            var cutoff = np.multiply(np.amax(s, -1, keepdims: true), NDArray.Scalar(rc));
-            var large = np.greater(s, cutoff);
-            var sInv = np.where(large, np.reciprocal(s), np.zeros_like(s));
-            return np.matmul(np.swapaxes(vt, -1, -2),
-                np.multiply(np.expand_dims(sInv, -1), np.swapaxes(u, -1, -2)));
+            // NumPy's `cutoff = rcond[..., newaxis] * amax(s, axis=-1, keepdims=True)`: np.amax's member, then
+            // np.multiply's, the maximum on the left as this statement always had it.
+            var largest = s.TensorEngine.ReduceAMax(s, -1, true, null, null, null, null);
+            var cutoff = largest.TensorEngine.Multiply(largest, NDArray.Scalar(rc));
+            // `large = s > cutoff` (np.greater's member), then NumPy's `s = divide(1, s, where=large, out=s);
+            // s[~large] = 0` as np.where(large, reciprocal(s), zeros_like(s)) - its arguments evaluated left to right,
+            // as the call evaluated them.
+            var large = s.TensorEngine.Greater(s, cutoff);
+            var reciprocals = s.TensorEngine.Reciprocal(s);
+            // np.zeros_like(s)'s own allocation: order 'K' keeps s's axis permutation, zero-filled, s's dtype.
+            var zeros = new NDArray(s.dtype, Shape.NewLikeLayout(s.Shape, 'K', (long[])s.Shape.dimensions.Clone()), true);
+            var sInv = NDArray.Where(large, reciprocals, zeros);
+            // `res = matmul(transpose(vt), multiply(s[..., newaxis], transpose(u)))`, the operands in that order.
+            var vtT = vt.TensorEngine.SwapAxes(vt, -1, -2);
+            var column = NDArray.ExpandDims(sInv, -1);
+            var uT = u.TensorEngine.SwapAxes(u, -1, -2);
+            return CoreMatmul(vtT, column.TensorEngine.Multiply(column, uT));
         }
 
         /// <inheritdoc/>
         /// <remarks>
-        ///     NumPy's statements: the shape arithmetic, the reshape to a square matrix, its inverse through the public
-        ///     <c>np.linalg.inv</c> (so the engine's <see cref="Inv"/> computes it) and the reshape to the inverted shape.
+        ///     NumPy's statements: the shape arithmetic, the reshape to a square matrix (the array object's
+        ///     <c>reshape</c>, np.reshape's member), its inverse through this engine's <see cref="Inv"/> (NumPy's
+        ///     <c>inv(a)</c>, so a subclass that overrides it computes tensorinv's inverse too) and the reshape to the
+        ///     inverted shape.
         /// </remarks>
         [NDScoped]
         public override NDArray Tensorinv(NDArray a, int ind = 2)
@@ -111,15 +132,17 @@ namespace NumSharp.Backends
                 invertedShape[j++] = dims[i];
 
             // a.reshape(prod, -1): an empty operand with prod 0 is NumPy's own reshape refusal
-            // ("cannot reshape array of size 0 into shape (0,newaxis)").
-            var square = np.reshape(a, new[] {prod, -1L});
-            var inverse = np.linalg.inv(square);
+            // ("cannot reshape array of size 0 into shape (0,newaxis)"). The array object's reshape, np.reshape's member:
+            // np.linalg.tensorinv's plain region already kept np.reshape's class rules from firing on a matrix or a
+            // numpy.char.chararray operand, so the view is the one np.reshape returned here.
+            var square = a.reshape(new[] {prod, -1L});
+            var inverse = Inv(square);
             // `return ia.reshape(*invshape)`: a 0-d operand's invshape is (), and Python calls reshape() with no argument,
             // which ndarray.reshape refuses - after the inverse, so a singular or unsupported 0-d operand reports inv's
             // error first.
             if (invertedShape.Length == 0)
                 throw new TypeError("reshape() takes exactly 1 argument (0 given)");
-            return np.reshape(inverse, invertedShape);
+            return inverse.reshape(invertedShape);
         }
     }
 }
