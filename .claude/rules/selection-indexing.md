@@ -2,7 +2,10 @@
 paths:
   - "src/NumSharp.Core/Selection/**"
   - "src/NumSharp.Core/Indexing/**"
-  - "src/NumSharp.Core/Creation/np.{r_,c_,ogrid,mgrid,meshgrid,tri}.cs"
+  - "src/NumSharp.Core/Creation/np.tri.cs"
+  - "src/NumSharp.Core/Backends/NDArray.{PythonLiteral,ShapeBase,TwoDimBase}.cs"
+  - "src/NumSharp.Core/Backends/Unmanaged/UnmanagedStorage.{Mapping,ItemSelection}.cs"
+  - "src/NumSharp.Core/Backends/Default/Indexing/Default.{RavelMultiIndex,UnravelIndex,BooleanMask}.cs"
   - "src/NumSharp.Core/Backends/Kernels/Direct/*{Take,Put,Place,PutMask,Select,GatherFlat,DiagWrite,TakeAlongAxis,PutAlongAxis,TakeLeading}*.cs"
   - "test/NumSharp.Tests/{Indexing,Selection}/**"
 ---
@@ -11,12 +14,60 @@ paths:
 
 ## Index forms
 
-- Integer and slice-string indexing (`nd[0]`, `nd["1:3"]`, `nd["::-1"]`); boolean masks (`nd[mask]`; `nd[mask] = v` is
-  `TensorEngine.BooleanMaskSet`, NumPy's `array_assign_boolean_subscript`, below); fancy indexing (`nd[indices]`).
-- A raw `int[]`/`long[]` as the ONLY index is fancy (NumPy parity): `nd[new int[]{0,2}]` selects rows 0 and 2 (shape
-  `(2,…)`), not the element at `(0,2)`. `nd[0,2]` (separate scalar ints) is a coordinate. Coordinate access by array is
-  `nd.GetData(int[]/long[])` (`Backends/NDArray.cs`), and internal coordinate callers must use it. The typed
-  `NDArray<T>.this[int[]]` returns a scalar `T` (always a coordinate).
+- ONE indexer per array class, NumPy's `__getitem__(key)` / `__setitem__(key, value)`: `NDArray` has only
+  `public virtual NDArray this[params object[] key]`, one `__getitem__(object key)` and one `__setitem__(object key,
+  object value)` (an `object[]` / `Slice[]` / C# tuple key is the index tuple; a typed `int[]` / `bool[]` key is ONE
+  entry, NumPy's list: an index array or a mask). Gate `Selection/NDArray.Indexer.OneSignature.Test.cs`.
+  - Integer and slice-string indexing (`nd[0]`, `nd["1:3"]`, `nd["::-1"]`); boolean masks (`nd[mask]`; `nd[mask] = v` is
+    `TensorEngine.BooleanMaskSet`, NumPy's `array_assign_boolean_subscript`, below); fancy indexing (`nd[indices]`).
+  - A raw `int[]`/`long[]` as the ONLY index is fancy (NumPy parity): `nd[new int[]{0,2}]` selects rows 0 and 2 (shape
+    `(2,…)`), not the element at `(0,2)`. `nd[0,2]` (separate scalar ints) is a coordinate. Coordinate access by array is
+    `nd.GetData(int[]/long[])` (`Backends/NDArray.cs`), and internal coordinate callers must use it.
+  - The dispatch: a `Slice[]` passed whole, ONE string (slice notation, comma-separated), or entries that are each a
+    `Slice`, a string (one slice) or an integer of a type C# converts to `int`/`long` (`sbyte` … `uint`, `long`, `char`,
+    `nint`) take the view body (`TryBasicIndex`: `GetView` + `AssignThroughView`); a lone `NDArray<bool>` takes the mask
+    body; everything else the general one. Trap: the general path has no `case long` / `case short` for a single entry,
+    so without that pre-dispatch `a[5L]` would raise "only integers…"; a `ulong` keeps the general path (no implicit
+    conversion to `long`).
+  - `NDArray<T>` overrides the GETTER only, returning `NDArray<T>` (C# lets an override narrow its type only without a
+    setter, CS1715); the setter is `NDArray`'s, so through an `NDArray<T>` variable the value must be an `NDArray<T>` or a
+    `T` (`implicit operator NDArray<T>(T)`: `typed[0] = 3.14`, `mask[m] = false`); assign an untyped value through an
+    `NDArray` reference or `__setitem__`. There is no scalar indexer: an element is a 0-d view, read with a cast
+    (`(double)typed[0]`) or, in a hot loop, `GetValue<T>(…)` (the view costs about 0.4 µs). Virtual dispatch reaches the
+    override through an `NDArray` reference too, so a typed array's selection is an `NDArray<T>` at run time. Trap: an
+    advanced result is wrapped over its OWN storage object (`new NDArray<T>(result.Storage)`, then the untyped wrapper
+    disposed), never `MakeGeneric`: an alias reads as a view, so the gather would lose `flags.owndata`.
+  - `NDCharArray` and `NDMatrix` HIDE the indexer (`new`), they do not override it: their rules (a stripped element; a
+    matrix row or column) apply through their static type, while library code that receives such an object as `NDArray`
+    indexes it as a plain array (`NDMatrixBoundary` hands the matrix object itself to computations that run with
+    plain-array semantics: `np.piecewise`'s `x[cond]` would otherwise gather a `(1, K)` matrix). `NDMatrix` also keeps
+    `NDArray this[long row, long column]`. `NDListArray` (not an `NDArray`) has one `NDListArray this[params object[]
+    key]`: a full integer index is the list's 0-d stand-in, an index array or mask gathers the ids (the lists are shared,
+    as NumPy's object pointers), the pieces come from `item()` / `tolist()`.
+- An index is read as NumPy's `prepare_index` reads it (`Selection/NDArray.Indexing.PrepareIndex.cs`), and a store
+  follows `array_assign_subscript` (gates `Selection/*.NumPyPort.Test.cs`):
+  - Entries: a double / float16 / decimal is refused; a C# bool is NumPy's 0-d bool array (alone the 0-d mask, beside
+    other entries an advanced entry); a 0-d integer array with no index array beside it is a VIEW index
+    (`HAS_SCALAR_ARRAY`: the getter copies the view in K order, the setter assigns through it); `Slice.Index(n)` and the
+    notation `"n"` beside an advanced entry are NumPy's integer (`NormalizeIndexInputs` turns them into longs).
+  - Errors in NumPy's order: the boolean indices' shapes (a mask with more dimensions than the array is `too many indices
+    for array: array is 1-dimensional, but 2 were indexed`, checked first; then the first mask axis of non-zero length
+    that differs, `boolean index did not match indexed array along axis 1; size of axis is 3 but size of corresponding
+    boolean axis is 4`; a zero-length mask axis matches any length), an index array neither integer nor bool (empty and
+    0-d included: `arrays used as indices must be of integer (or boolean) type`, before the too-many check), the
+    integers' bounds, the index arrays' broadcast (`... with shapes (2,) (3,) `, a space after every shape), then the index
+    arrays' values.
+  - Placement: the advanced block goes in FRONT when a slice, a new axis or the ellipsis separates two advanced entries,
+    an ellipsis that spans no axis included (`AdvancedEntriesAreConsecutive` reads the tuple as given, not the
+    ellipsis-expanded list).
+  - Stores: the index is validated, the value converted with the array's own descriptor (a list item by item through its
+    setitem; a list into a view limited to the view's rank; an array into a view is `PyArray_AssignArray`, leading unit
+    dimensions stripped), then the index arrays' values are checked. The caller's key array is never written
+    (`NormalizeIndexInputs` copies it at the first conversion).
+  - The typed fetch and store are `UnmanagedStorage.MapIterGet` / `MapIterSet`
+    (`Backends/Unmanaged/UnmanagedStorage.Mapping.cs`); NDArray's protected `FetchIndices` / `SetIndices` / `...ND` /
+    `...NDNonLinear` forward to them. The boolean-mask getter's result is not zero-filled: both of its gathers write every
+    element, so `DefaultEngine.BooleanMask` allocates with `NDArray.ForOverwrite`.
 - `NDArray.PrepareAssignedValue` (`Selection/NDArray.Indexing.AssignedValue.cs`) is NumPy's MapIter value rule for every
   index-array assignment: a value with more axes than the selection loses its leading axes (a `(1, N)` matrix row fits an
   `(N,)` selection), and a value that does not fit raises `shape mismatch: value array of shape ... could not be
@@ -47,7 +98,68 @@ paths:
   block-copy `SetIndicesND<T>`. Gates: the index oracle's `order='K'` setter cases (`gen_index_oracle` copies view bases
   with `order='K'`, so the SET runs into a non-contiguous destination) and `AuditV2` `T1_15a`/`T1_15b`.
 
+## Storing a C# literal
+
+Every store entry point packs a C# literal as NumPy's `PyArray_Pack` of a Python scalar (gates section S of the
+`weak_scalar` tier, zero excuses, and `Indexing/np.store.PythonLiteral.Test.cs`).
+- The marks. An `NDArray` parameter receives the literal `1000` and an explicit `np.array(1000)` as the same 0-d array,
+  and NumPy stores them differently (`a[0] = 1000` on int8 raises `OverflowError: Python integer 1000 out of bounds for
+  int8`; `a[0] = np.array(1000)` casts to -24). So the implicit conversion operators MARK the 0-d array
+  (`Backends/NDArray.PythonLiteral.cs`): an integer primitive / `float` / `double` / `Complex` is `WasPythonLiteral`
+  (NumPy's own `NPY_ARRAY_WAS_PYTHON_LITERAL` flag), a `Half` / `char` is `WasNumPyScalar` (`np.float16` / `np.uint16`);
+  `bool` and `decimal` are unmarked. The mark belongs to that one object (a view, copy, reshape or result is unmarked);
+  `NDArray.Scalar(x)` / `np.array(x)` build an unmarked, strong 0-d. ONLY the store paths read the marks; the ufuncs and
+  comparisons read every 0-d operand as weak (np.clip's rule), because library code builds its scalar operands with
+  `NDArray.Scalar`.
+- The pack. `NDArray.PackForStore(value, dtype, pyArrayPackRoute)` packs a marked value with `ReductionInitial.TryPack`
+  (the complete `PyArray_Pack` port: a Python int range-checked with the LP64 texts, a float truncated then range-checked,
+  NaN / inf / complex refused with Python's texts, an int past 2^53 rounded TWICE into float16 / float32, a bool dtype
+  takes the truth). A NumPy scalar follows NumPy's route split: the `PyArray_Pack` routes (an integer index, a slice or
+  ellipsis view, `fill`, `flat[i]`, `np.pad`) int()-convert it with the range check into a SIGNED integer
+  (`a[0] = (Half)300` on int8 raises); the `PyArray_FromAny` routes (fancy, mask, `np.put`, `putmask`, `place`,
+  `put_along_axis`, `insert`, `full`, `asarray`, flat slices) CAST it (44).
+- The entry points: the indexer setters (`UnmanagedStorage.SetData` after an integer index's bounds check; the fancy core
+  after the too-many-indices check but BEFORE the index bounds, as NumPy; the mask setter after the mask's shape check;
+  an empty selection packs too), `fill` (`CoerceFillValue`, one `TryPack`), `np.full` / `full_like` (NumPy's
+  `copyto(casting='unsafe')`: a Python int range-checked, a float or complex cast unsafely,
+  `UnmanagedStorage.TryCopytoUnsafeScalarElement`), `np.put`, `putmask`, `place`, `put_along_axis`, `insert`,
+  `fill_diagonal` (it packs before its early returns, so an empty array still refuses), the flat iterator (`flat[i]`
+  reports any pack failure as NumPy's `ValueError: Error setting single item of array.`) and `np.asarray(literal, dtype)`.
+  `np.pad` stores one or two constants as NumPy scalars (`ReductionInitial.PackNumPyScalar`: `_as_pairs` runs
+  `np.array(constant_values)`, so int8 refuses 1000 where uint8 pads with 232) and a larger table as the Python scalars
+  of its `tolist()` (`TryPack`: `-1` into uint8 raises).
+- Kept as casts: `SetValue` / `itemset` (NumSharp's low-level typed setters; `itemset` is gone from NumPy 2.0), an
+  unmarked 0-d array everywhere, and a 0-d view from integer indexing (`a[i] = b[j]`: NumPy's `b[j]` is a NumPy scalar,
+  which a SIGNED integer destination would range-check: `[Misaligned]`). Text into a numeric store is parsed like NumPy's
+  setitem of a Python `str` (`float64.fill("5.5")` is 5.5, `int32[0] = "hello"` raises `invalid literal for int() with
+  base 10: 'hello'`).
+
 ## `take` / `put` / `place` / `putmask`
+
+- `np.put` / `np.take` are NumPy's `PyArray_PutTo` / `PyArray_TakeFrom`, statement for statement
+  (`Indexing/np.{put,take}.cs`, `Indexing/ClipModes.cs`; gates `Indexing/np.put.take.NumPyPort.Test.cs`, the `ma_put`
+  tier and the aliasing tier's `put_selfvals` / `put_selfidx`, where the values or indices are a view of the target):
+  - The mode is `ClipmodeConverter` (NumPy's `PyArray_ClipmodeConverter` + `clipmode_parser`), shared by `put`, `take`,
+    `choose` and `ravel_multi_index`, and parsed FIRST: the first character selects, the exact lowercase spelling is
+    required (`"Raise"` is `ValueError: Use one of 'clip', 'raise', or 'wrap' for clip mode`), an empty or unknown string
+    is `ValueError: clipmode must be one of 'clip', 'raise', or 'wrap' (got 'bogus')`, `null` is NumPy's None (raise).
+    `ravel_multi_index`'s `modes` is `ConvertClipmodeSequence` (`list of clipmodes has wrong length (1 instead of 2)`),
+    converted before the coordinates are counted.
+  - put's order: mode → writeability → the index cast (safe; an EMPTY float index array is the TypeError too) →
+    IndexError `cannot replace elements of an empty array` → the value packing (a literal is range-checked even when
+    nothing is written) → the no-op of empty values → the kernel (out of bounds: IndexError, the indices before it
+    written into a contiguous target, as NumPy's loop writes). NumPy writes into a copy of the target when it may share
+    memory with the converted values or indices (`arrays_overlap`): `np.put(a, [1, 2, 3], a[0:3])` is `[0, 0, 1, 2, 4]`.
+  - take's order: AxisError (a 0-d source is raveled first, so only axis 0 / -1) → the index cast → the `out` checks
+    (ValueError `output array does not match result of ndarray.take`, the safe cast, `WRITEBACKIFCOPY base is
+    read-only`) → IndexError `cannot do a non-empty take from an empty axes.` only when the RESULT is non-empty → the
+    gather, whose raise loop checks every index of every outer position even when the slabs are empty
+    (`np.take(np.zeros((3, 0, 0)), [0], axis=1)` raises; an empty outer block checks nothing). Out of bounds is NumPy's
+    IndexError.
+  - C-order casts: put's values, the take / put index cast (`CastIndicesToInt64`), place's values and mask and putmask's
+    mask are converted with `order: 'C'`, because the kernels read them linearly (a `'K'` cast of an F-order operand
+    would be read in memory order); unravel_index's index cast is laid out in NumPy's iteration order with its result
+    (below).
 
 - Negative indices under `mode='raise'` follow NumPy's `check_and_adjust_index`: normalized once (`idx += n`) before the
   bounds test, so `take(a, [-1])` / `put(a, -1, v)` address the last element, and an index still out of range raises with
@@ -64,21 +176,29 @@ paths:
   `same_kind` (a `uint64` index is allowed), `put` under `safe` (`uint64` rejected); each names its own rule. Integer and
   bool indices pass, float and complex are refused (`SelectionTests` `Take_FloatIndices_Throws_SameKind`,
   `Put_FloatIndices_Throws_Safe`, `Take_UInt64Indices_Allowed_But_Put_Rejects`).
-- `np.putmask(a, mask, values)` (NumPy's `PyArray_PutMask` / `npy_fastputmask`; `Indexing/np.putmask.cs`, kernel
-  `DirectILKernelGenerator.PutMask.cs`) writes `a.flat[i] = values.flat[i % values.size]` wherever `mask` is True,
-  walking both in C order. It shares `place`'s structure (the writeable check first, the same-`size` mask contract, a
+- `np.putmask(a, mask, values)` (NumPy's `PyArray_PutMask` / `npy_fastputmask`; `Indexing/np.putmask.cs` over
+  `UnmanagedStorage.PutMaskCore`, kernel `DirectILKernelGenerator.PutMask.cs`) writes
+  `a.flat[i] = values.flat[i % values.size]` wherever `mask` is True, walking both in C order. It shares `place`'s structure (the writeable check first, the same-`size` mask contract, a
   non-bool mask cast to `!= 0` with NaN/inf → True, the `ascontiguousarray` + `copyto` writeback for non-contiguous
   targets, and the `arrays_overlap` → ENSURECOPY guard: `NDMemOverlap.SolveMayShareMemory(maxWork: 0)`, NumPy's
   `NPY_MAY_SHARE_BOUNDS`, gives a fresh copy of `a` when `values`/`mask` may alias it). It differs from `place` in two
   ways: the values cursor advances by POSITION (every element, in lockstep with `i`, wrapping at `nv`), not per True, and
   an empty `values` is a silent no-op (`place` raises ValueError). The kernel has a cursor-free `nv == 1` broadcast path
   (NumPy's `if (nv == 1)`). Errors: read-only → `"putmask: output array is read-only"` (first, before the mask size and
-  nv), a wrong size → `"putmask: mask and data must be the same size"`. Like `place`/`put`, `values` is cast to `a`'s
-  dtype with `astype`. Gates: `Indexing/SelectionTests.cs` (`PutMask_*`) and the `putmask` tier.
+  nv), a wrong size → `"putmask: mask and data must be the same size"`. `values` is converted as NumPy's
+  `PyArray_FromAny(values, a.dtype)` converts it, after the mask's size check (`PutMaskCore`, shared with place's
+  `PlaceCore`): an array of values must cast under the `'safe'` rule (NumPy's TypeError text), a 0-d array (a NumPy
+  scalar) converts without it, a C# literal is packed with Python's range checks, and a C# array is NumPy's Python LIST,
+  discovered into `a`'s dtype item by item (`ListValuesLikeNumPy`: `[1000, 2]` into int8 raises `OverflowError`,
+  `[1, 2.5]` into `<U3` stores `['1', '2.5']`, a NaN into an integer array raises `int()`'s `ValueError`). A typed array
+  is cast in one pass only where the cast stores exactly those values (a widening; numbers into bool; doubles into a
+  float or complex class; numbers into an integer class when the values' min and max, taken by np.amin / np.amax's IL
+  kernels on the buffer, lie in the class). Gates: `Indexing/SelectionTests.cs` (`PutMask_*`) and the `putmask` tier.
 
 ## `take_along_axis` / `put_along_axis` / `select`
 
-- `np.take_along_axis(arr, indices, axis=-1)` (`numpy/lib/_shape_base_impl.py`) is the per-slice gather that inverts
+- `np.take_along_axis(arr, indices, axis=-1)` (`numpy/lib/_shape_base_impl.py`; its statements are
+  `NDArray.TakeAlongAxis` in `Backends/NDArray.ShapeBase.cs`) is the per-slice gather that inverts
   `argsort`/`argmax(keepdims=True)` (`take_along_axis(a, a.argsort(axis), axis)` ≡ `sort(a, axis)`). One whole-array
   strided-odometer IL gather (`DirectILKernelGenerator.TakeAlongAxis.cs`: an outer odometer around a tight loop over the
   innermost axis, dtype-agnostic through a byte-width-keyed copy). `indices` must be an INTEGER array
@@ -95,7 +215,8 @@ paths:
   differs; the type, axis and size match, and `argsort`/`argmax` output is always exact). There is no SIMD gather: a
   hardware `VPGATHERQD/QQ` gather is barely faster than the scalar loop on AVX2 before the bounds validation a raise-mode
   gather still needs. Gates: `Indexing/TakeAlongAxisTests.cs` and the `groupa` tier.
-- `np.put_along_axis(arr, indices, values, axis)` is the setter twin, in place (returns `void`); `axis` is required.
+- `np.put_along_axis(arr, indices, values, axis)` is the setter twin (`NDArray.PutAlongAxis`), in place (returns
+  `void`); `axis` is required.
   A whole-array strided odometer (`DirectILKernelGenerator.PutAlongAxis.cs`) sharing take's iteration shape and
   non-axis broadcast, plus three setter rules: (1) `values` is BROADCAST, not cycled, to the indexing result shape
   (right-aligned, extra leading size-1 dims stripped); a mismatch raises `shape mismatch: value array of shape … could
@@ -112,85 +233,47 @@ paths:
 - `np.select(condlist, choicelist, default=0)` (`numpy/lib/_function_base_impl.py`) draws each element from the choice
   whose condition is true, the FIRST true condition winning, else `default`. C# shapes: `condlist` is `NDArray[]`,
   `choicelist` is `object[]` (an `NDArray[]` binds through array covariance; scalar choices need `new object[]{…}`),
-  `default` is `object` (null is NumPy's `0`). Weak scalars, select's own rule: only `int`/`float`/`double`/`Complex`
-  literals are weak (they adopt the other operands' dtype); `bool`, `char`, `Half`, `decimal`, arrays and every `NDArray`
-  are strong (NumPy's `type(x) in (int,float,complex) else asarray(x)`), so a weak-int default that overflows the
-  resolved dtype WRAPS (`int8` choice + `1000` default → -24); the result dtype is `result_type(*choices, default)`
-  through `NDExprTypeRules.PromoteStrong`. Conditions and choices broadcast in two separate groups; a non-bool condition
-  is `TypeError("invalid entry {i} in condlist: should be boolean ndarray")`; a length mismatch and an empty condlist are
-  `ValueError`. Contiguous, no-cast, full-size array choices run one fused IL kernel (`DirectILKernelGenerator.Select.cs`:
+  `default` is `object` (null is NumPy's `0`). Weak scalars, select's own rule: every C# integer primitive, `float`,
+  `double` and `Complex` literal is weak (it adopts the other operands' dtype); `bool`, `char`, `Half`, `decimal`, arrays
+  and every `NDArray` are strong (NumPy's `type(x) in (int,float,complex) else asarray(x)`), so a weak-int default that
+  overflows the resolved dtype WRAPS (`int8` choice + `1000` default → -24); the result dtype is
+  `result_type(*choices, default)` through `NDExprTypeRules.PromoteStrong`. The copies receive what NumPy's
+  `np.broadcast_arrays` makes of a weak literal (`np.asarray` of the Python scalar: int64 / float64 / complex128, of the
+  choice group's shape), so a C# `byte` beside a uint8 array is refused as NumPy's Python int is (`Cannot cast array data
+  from dtype('int64') to dtype('uint8') according to the rule 'same_kind'`). Conditions and choices broadcast in two
+  separate groups (NumPy's `np.broadcast_arrays`, `Shape.BroadcastShape`: a mismatch names the two operands of its
+  group); a non-bool condition is `TypeError("invalid entry {i} in condlist: should be boolean ndarray")`; a length
+  mismatch and an empty condlist are `ValueError`. `Indexing/np.select.cs` is the facade, NumPy's statements are
+  `NDArray.Select` (`Manipulation/NDArray.FunctionBase.cs`). Contiguous, no-cast, full-size array choices run one fused
+  IL kernel (`DirectILKernelGenerator.Select.cs`:
   a reverse `Vector.ConditionalSelect` chain seeded with the default, choices overlaid n-1 → 0 so the first true
   condition wins, 4× unrolled with four accumulators, the scalar default hoisted with `CreateBroadcast`, `np.where`'s
   `EmitInlineMaskCreation` for the bool → lane expansion). Every other shape (broadcast, strided, cast, scalar choices)
   takes NumPy's structure: allocate the default-filled result, then `np.copyto(where=cond)` each choice in reverse.
-  Gates: `Indexing/np.select.Test.cs` and the `select` op of the `groupa` tier.
+  Gates: `Indexing/np.select.Test.cs`, `Indexing/np.select.NumPyOrder.Test.cs` and the `select` op of the `groupa` tier.
 
-## The grid / slice-expression DSL: `r_`, `c_`, `ix_`, `s_`, `index_exp`
+## `unravel_index` / `ravel_multi_index`
 
-NumPy's `_index_tricks_impl.py`; tests `Creation/np.r_.Test.cs`, `Indexing/np.ix_.Test.cs`; oracle cases `r_`/`c_`/`ix_`
-in the `manip` tier. Sources `Creation/np.{r_,c_}.cs`, `Indexing/np.{ix_,s_}.cs`.
-- A Python slice literal is a STRING in C#: `np.r_[0:5]` is `np.r_["0:5"]`. A string containing `':'` is a slice
-  expression; a string without one is a NumPy special directive (`"r"`, `"c"`, `"-1"`, `"0,2"`, `"1,2,0"`). One string
-  may hold several comma-separated slices (`np.r_["1:3, 5:8"]`), and a `Slice` / `Slice[]` object works as an entry, so
-  `np.s_[…]` composes into `np.r_[…]`.
-- `np.r_[…]` / `np.c_[…]` are static properties returning `RClass`/`CClass` (`AxisConcatenator` subclasses with a
-  `this[params object[] key]` indexer, the port of NumPy's `__getitem__`). `r_` concatenates along axis 0; `c_` is
-  `r_["-1,2,0", …]` (entries upgraded to ≥ 2-D with the 1s post-pended, a 1-D entry becomes a column, stacked on the last
-  axis). Slice entries become `arange(start, stop, step)` or, for an imaginary step (`"-1:1:6j"`), `linspace(start, stop,
-  N)` with the stop inclusive. Integer-ness follows the LITERAL (`"0:5"` is int64, `"0.0:5"` float64). A missing stop
-  re-reads start as stop (`np.r_["2:"]` is `[0, 1]`, `np.r_["5::2"]` is `[0, 2, 4]`). Directives: axis, `axis,ndmin`,
-  `axis,ndmin,trans1d` (NumPy's two upgrade paths: the array branch's `defaxes` permutation and the slice branch's
-  `swapaxes(-1, trans1d)`), a silently ignored fourth field, and `"r"`/`"c"` matrix coercion (the result is an
-  `NDMatrix` typed `NDArray`). Errors: `special directives must be the first entry.`, `unknown special directive` /
-  `unknown special directive '0,q'` (the comma form quotes).
-- `ndmin` is uncapped (NumSharp has no 64-dimension ceiling; NumPy raises `ndmin must be <= ndmax (64)`), and cheap:
-  `np.AtLeastNdView` prepends every axis in one `Storage.Alias` over `Shape.PrependDimensions` (O(ndim)); a prepended
-  axis takes stride `dimensions[0] * strides[0]` (0 for a 0-d source), so strides, flags and the writeable bit equal a
-  per-axis `expand_dims` loop. An `ndmin` too large to allocate a shape for raises `OutOfMemoryException`; a non-positive
-  `ndmin` is a no-op.
-- `np.ix_(params object[])` → `NDArray[]` (an open mesh). The dtype is preserved (no integer validation; a float or int8
-  sequence fails only at the later indexing call), except that an EMPTY non-ndarray input becomes int64; a bool sequence
-  is a mask (`nonzero`). Results are views that write through, built with `expand_dims` (not `reshape`) so a
-  stride-0/read-only operand keeps its strides and its read-only flag. `ValueError("Cross index must be 1 dimensional")`,
-  which a null sequence also raises.
-- `np.s_[…]` / `np.index_exp[…]` capture an index expression; `arr[X]` ≡ `arr[np.s_[X]]` for every X. Three indexers:
-  `this[string]` and `this[params Slice[]]` → `Slice[]` for basic expressions (`int` and `string` convert to `Slice`), and
-  `this[params object[]]` → `object[]` as soon as an entry cannot be a `Slice` (an `NDArray` index or mask,
-  `int[]`/`long[]`/`bool[]`, an `IList`, a basic/advanced mix). Both feed `arr[…]` directly. `s_` and `index_exp` are
-  identical in C# (NumPy's differ only by `maketuple`, which C# cannot observe).
-- Weak scalars by C# type: `bool`, the eight integer primitives, `float`, `double` and `Complex` are weak (the C# literal
-  is the Python literal); `char`, `Half`, `decimal` and every `NDArray` (0-d included) are strong
-  (`np.r_[i8, NDArray.Scalar(1L)]` is int64, `np.r_[i8, 1L]` int8). A weak integer that does not fit the adopted dtype
-  raises `OverflowException("Python integer 1000 out of bounds for int8")` (`NDExprTypeRules.CheckIntLiteralFits`); a
-  weak float saturates to ±inf. An all-literal key whose integer does not fit int64 lifts the default to uint64. One
-  complex width: `result_type(float32, 1j)` is complex128.
-- Matched, no need to re-prove: `-0.0` keeps its sign; NaN/±inf/subnormals round-trip; the weak-integer boundaries are
-  exact (`i8+127` fits, `+128` raises); `9e18:9e18+2` collapses to empty; huge slice expressions raise
-  `OutOfMemoryException`; NumPy's error order holds. `np.r_`/`np.c_` are stateless singletons (a directive is copied to
-  locals per call).
-- Divergences: a `null` entry throws (NumPy builds an object array); `np.ix_("abc")` is accepted as a char sequence;
-  a sub-1e-15 slice step reports `np.arange`'s "step can't be 0". No `bmat` branch: NumPy routes a lone bare string key
-  into `matrixlib.bmat`, which resolves words against the caller's Python frame (and raises `NameError` for every
-  literal), so a lone string is read like any other entry.
-- `np.ogrid[...]` (`Creation/np.ogrid.cs`, `OGridClass`): the open mesh, with the same slice grammar
-  (`AxisConcatenator.ParseSliceToken`/`SliceSpec`) and no directives. One slice returns a 1-D array (arange, or linspace
-  for an imaginary step); several return N arrays each of extent 1 on every axis but its own. The whole mesh shares one
-  dtype (int64 iff every field of every slice is an integer literal, else float64; an imaginary step floats the mesh).
-  A single slice may omit its stop; a multi-slice may not (`ValueError`), and an imaginary step always needs a stop.
-  `OGridResult` converts implicitly to `NDArray` (one slice) or `NDArray[]` and deconstructs
-  (`var (y, x) = np.ogrid["0:3", "0:5"];`). Gate: `Creation/np.ogrid.Test.cs`.
-- `np.mgrid[...]` (`Creation/np.mgrid.cs`, a property): one slice returns a 1-D array; several return ONE stacked array
-  `(N, size_0, …, size_{N-1})`, built as `np.indices(sizes, typ)` with each non-trivial axis (start ≠ 0, step ≠ 1,
-  imaginary) overwritten by its 1-D line broadcast across the grid (`np.copyto`), so `np.mgrid[0:a, 0:b]` is one fused
-  `indices` fill. NumPy sizes each axis by `ceil((stop-start)/step)`, which may be negative: `mgrid[5:0, 0:3]` raises
-  `"negative dimensions are not allowed"` where `ogrid[5:0, 0:3]` gives an empty axis, and a zero step divides by zero.
-  `MGridResult` converts to `NDArray`, deconstructs (`var (x, y) = np.mgrid["0:5", "0:3"];`) and indexes the per-axis
-  grids. Gate: `Creation/np.mgrid.Test.cs`.
-- `np.meshgrid(x1, x2[, x3], string indexing="xy", bool sparse=false, bool copy=true)` plus `meshgrid(NDArray[] xi, …)`
-  (`Creation/np.meshgrid.cs`): `"xy"` swaps the first two axes ((N, M) for 2-D) against `"ij"` ((M, N)); `sparse` keeps
-  the open-mesh `(1,…,Ni,…,1)` shapes; `copy=false` returns broadcast views. Each grid keeps its input's dtype. A bad
-  `indexing` raises `ValueError "Valid values for \`indexing\` are 'xy' and 'ij'."`. `MeshgridResult` converts to
-  `NDArray[]`, deconstructs and indexes. Gate: `Creation/np.meshgrid.Test.cs`.
+- `np.unravel_index` is NumPy's statements (`TensorEngine.UnravelIndex`,
+  `Backends/Default/Indexing/Default.UnravelIndex.cs`): the order letter (both cases), the dims overflow, the index dtype's TypeError, then `only 'C' or 'F' order is
+  permitted`; an out-of-range index is NumPy's ValueError, the FIRST one in the iteration order; `shape=()` is legal. The
+  result is the columns of ONE interleaved `indices.shape + (len(dims),)` buffer (element stride `len(dims)`), laid out
+  along the index array's iteration order (`NpyIter_CreateCompatibleStrides`, KEEPORDER with `DONT_NEGATE_STRIDES`, is
+  `Shape.NpyIterOutputShape` over the index array: an F index array gives F-strided coordinates, a broadcast or reversed
+  one C). Every coordinate array reports OWNDATA false, and a 0-d index array gives NumPy's scalars (fresh read-only 0-d
+  arrays): code that reads their raw buffers must use the strides. Positive dimensions take a Granlund–Montgomery
+  reciprocal IL kernel (multiply-high and shifts: RyuJIT emits TWO hardware divides for `val % m` and `val / m`); a zero
+  or negative dimension keeps the divmod kernel.
+- `np.ravel_multi_index` is `arr_ravel_multi_index` (`TensorEngine.RavelMultiIndex`,
+  `Backends/Default/Indexing/Default.RavelMultiIndex.cs`, with NumPy's `astype_anyint`, which the unravel member shares
+  and which asks the descriptor's kind): the result is its iterator's ALLOCATE output (KEEPORDER over the coordinate
+  arrays: an F pair gives F, a mixed pair C), the checks run in NumPy's order (order letter, modes, ravel strides, count,
+  dtypes, broadcast with the iterator's text), `dims=()` gives 0, a zero dimension raises `cannot unravel if shape has
+  zero entries (is empty).` in every mode, and the errors are ValueError. Its `mode` is NumPy's mode object (a string for
+  every axis, a sequence of strings, None: `ClipModes.ConvertClipmodeSequence(object, int)`), and a null coordinate array
+  is NumPy's None (`TypeError: only int indices permitted`).
+- Gates: the layout-parity oracle's `unravel` / `ravelmi` families, the string oracle (no layout excuse) and
+  `Indexing/IndexSearchLayout.Test.cs`.
 
 ## The diagonal and triangular family
 
@@ -202,6 +285,8 @@ tiers `manip`/`matmul`; sources `Creation/np.tri.cs`, `Indexing/np.{diag,tril,di
   route when dynamic codegen is unavailable, as under AOT). A 2-D input EXTRACTS through `diagonal(v, k)`: a read-only
   view sharing storage. Anything else raises `ValueError("Input must be 1- or 2-d.")`.
 - `diagflat(v, k=0)` is `diag`'s 1-D branch for any rank: the input is raveled in logical C order first; 0-d → `(1,1)`.
+  The statements of both and their diagonal scatter are `NDArray.Diag` / `DiagFlat` (`Backends/NDArray.TwoDimBase.cs`,
+  beside `NDArray.Eye`); the `StringDType` route asks `HasReferences`.
 - `tri(N, M=None, k=0, dtype=float)`: ones at and below the k-th diagonal, written as a prefix of one pre-built ones row
   per row; negative `N`/`M` give an empty axis.
 - `tril(m, k=0)` / `triu(m, k=0)`: always a fresh writeable C-contiguous copy, the dtype kept, applied to the last two
@@ -217,8 +302,9 @@ tiers `manip`/`matmul`; sources `Creation/np.tri.cs`, `Indexing/np.{diag,tril,di
   scalars take the `NDArray.Scalar` path; `Half`/`Complex`/arrays route through `asanyarray`. A null `val` throws
   `ArgumentNullException` (NumPy writes nan for a float array: a null in C# is a caller bug).
 - `diag_indices(n, ndim=2)` / `diag_indices_from(arr)` / `tril_indices(n, k=0, m=None)` / `triu_indices` /
-  `tril_indices_from(arr, k=0)` / `triu_indices_from` / `mask_indices(n, mask_func, k=0)` return `NDArray<long>[]`.
-  `diag_indices` returns the same array instance in every slot (NumPy's `(idx,) * ndim` aliasing); `ndim <= 0` gives an
+  `tril_indices_from(arr, k=0)` / `triu_indices_from` / `mask_indices(n, mask_func, k=0)` return `NDArray<long>[]`,
+  the first six OWNING arrays as NumPy's fresh ones are, `mask_indices` the views `np.nonzero` returns. `diag_indices`
+  returns the same array instance in every slot (NumPy's `(idx,) * ndim` aliasing); `ndim <= 0` gives an
   empty array. `mask_indices`' arity follows the mask function's rank (`diag` yields one array). `tril_indices` /
   `triu_indices` emit the triangle's row/column runs directly in O(output), with no N×M bool mask.
 - The triangular fills pick their allocation by size: below 64 MiB (`WriteOnceMaxBytes`) a pooled buffer comes back

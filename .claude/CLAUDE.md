@@ -139,8 +139,8 @@ Tested against NumPy 2.4.2. Each line: the `np.*` names, then the rule that hold
 - Array creation: `arange`, `array`, `asanyarray`, `asarray`, `asarray_chkfinite`, `ascontiguousarray`, `asfortranarray`,
   `asmatrix`, `bmat`, `copy`, `empty`, `empty_like`, `eye`, `frombuffer`, `full`, `full_like`, `geomspace`, `identity`,
   `linspace`, `logspace`, `matrix`, `meshgrid`, `mgrid`, `ndarray`, `ogrid`, `ones`, `ones_like`, `require`, `tri`,
-  `zeros`, `zeros_like` → `creation-manipulation.md` (`matrix.md` for `matrix`/`asmatrix`/`bmat`, `selection-indexing.md`
-  for the grids and `tri`).
+  `zeros`, `zeros_like` → `creation-manipulation.md` (`matrix.md` for `matrix`/`asmatrix`/`bmat`, `index-tricks.md` for
+  the grids, `selection-indexing.md` for `tri`).
 - Shape manipulation: `append`, `array_split`, `atleast_1d`, `atleast_2d`, `atleast_3d`, `block`, `c_`, `column_stack`,
   `concat`, `concatenate`, `delete`, `dsplit`, `dstack`, `expand_dims`, `flatten`, `flip`, `fliplr`, `flipud`, `hsplit`,
   `hstack`, `insert`, `intersect1d`, `matrix_transpose`, `moveaxis`, `pad`, `permute_dims`, `r_`, `ravel`, `repeat`,
@@ -174,7 +174,8 @@ Tested against NumPy 2.4.2. Each line: the `np.*` names, then the rule that hold
   → `strings-compute.md`; `np.char.*` and `np.char.chararray` → `char-chararray.md`. Masked arrays: `np.ma.*`
   (`NDMaskedArray`) → `masked-arrays.md`.
 - Selection: `choose`, `compress`, `extract`, `index_exp`, `indices`, `ix_`, `place`, `put`, `put_along_axis`, `putmask`,
-  `ravel_multi_index`, `s_`, `select`, `take`, `take_along_axis`, `unravel_index`, `where` → `selection-indexing.md`.
+  `ravel_multi_index`, `s_`, `select`, `take`, `take_along_axis`, `unravel_index`, `where` → `selection-indexing.md`
+  (`index-tricks.md` for `index_exp`, `indices`, `ix_`, `s_`, `r_`, `c_`).
 - Iteration: `nditer`, `ndenumerate`, `ndindex`, `nested_iters`, `flatiter`, `broadcast`, and the typed `nditer<T>` /
   `nditer_chunks<T>` / `flat<T>` → `iteration.md`. Fused expressions: `evaluate` → `evaluate.md`.
 - Sorting and searching: `argmax`, `argmin`, `argpartition`, `argsort`, `argwhere`, `flatnonzero`, `lexsort`,
@@ -360,7 +361,8 @@ Create issues on `SciSharp/NumSharp` with `gh issue create` (`GH_TOKEN` through 
 | `strings-compute.md` | the text kernels, `StringDType` computation and NA rules, text sorts / searches / set routines, ordering `T` |
 | `strings-methods.md` | the 46 `np.strings` functions: search / strip / pad, predicates, case maps, translate, mod, encode / decode |
 | `char-chararray.md` | `numpy.char`, `NDCharArray` and its boundary, the object path (`NDListArray`) |
-| `selection-indexing.md` | index forms, take / put / place / putmask, take_along_axis / put_along_axis / select, the `r_` / `c_` / `ix_` / `s_` / grid DSL, the diagonal and triangular family |
+| `selection-indexing.md` | the one indexer and its index forms, storing a C# literal, take / put / place / putmask, take_along_axis / put_along_axis / select, unravel_index / ravel_multi_index, the diagonal and triangular family |
+| `index-tricks.md` | the `r_` / `c_` / `ix_` / `s_` / `index_exp` DSL, `mgrid` / `ogrid` / `meshgrid`, `np.indices` |
 | `iteration.md` | NDIter, ndindex / ndenumerate / nditer and their traps, nested_iters, flatiter, typed iteration, `nd.Unsafe` and the .NET bridges |
 | `evaluate.md` | `np.evaluate`: typing, root reductions, execution and streaming, programs, 0-d parameters, the cache, `Compile()`, Call nodes |
 | `sorting.md` | axis argmax / argmin, partition / argpartition / lexsort / nanargmax / nanargmin / sort_complex |
