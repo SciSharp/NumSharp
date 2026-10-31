@@ -107,7 +107,8 @@ partials, and the two divergences found on the way are fixed per D4 (np.argmax /
 `d313e41b`). P6 is done (2026-10-30) but for three of the array object's homes, which wait for P10's last item (P7, which was to
 take them, was dropped on 2026-10-31): the engine calls
 np.* only where R2 lists the call with its reason (24 files: numpy.strings' own 9 computations, and 37 structural
-calls, 23 of them the promotion helpers, which move into the dtype layer after `strings` merges `journey4`), every
+calls, 23 of them the promotion helpers, which can move into the dtype layer since `strings` merged `journey4`
+on 2026-10-31; one more since the merge, `NPTypeCode.cs`' np.dtype parser call), every
 `DefaultEngine` and `UnmanagedStorage` partial sits under `Backends/`, the axis math is `Shape`'s
 (`View/Shape.Axes.cs`), and seven of the ten `NDArray` homes moved to `Backends/` once they called no np.* function.
 `NDArray.Multiarray.cs`, `NDArray.FunctionBase.cs` and `NDArray.IndexTricks.cs` stay beside their facades: some of
@@ -134,13 +135,14 @@ Three items were tried first (2026-10-30):
 - The reductions and the product gufuncs take NumPy's whole signature, np.evaluate keeps one overload whose engine
   member takes the keywords, `astype(null)` is float64, and np.squeeze with nothing to remove returns `a.view()`
   (P10); an overload P10 replaces is removed, not marked `[Obsolete]` (D19).
-- PA2 waits for its two kernel speedups; the ten array-object members shipped on `TensorEngine` stay; `strings` is
-  rebased onto `journey4` before the next work (C13).
+- PA2 waits for its two kernel speedups; the ten array-object members shipped on `TensorEngine` stay; `strings`
+  merges `journey4` before the next work (C13; asked as a rebase first, then "Merge journey4 in": done the same day,
+  `f87de210`).
 - PA5 waits: its `Span<T>` items cannot index past `int.MaxValue` elements (D20). The divergences found on the way are
   pinned as `[OpenBugs]` tests and their fixes deferred (D21).
 
-Order of the work left (decided 2026-10-31 in the step round, D22): the rebase; P6b; P8, its rename commit first; P9;
-P10; PA3; PA2. Later: PA5, PA6 and the fixes of the pinned divergences (`OpenBugs.NpLayer.cs`, NL1 to NL7).
+Order of the work left (decided 2026-10-31 in the step round, D22): the merge (done); P6b; P8, its rename commit first;
+P9; P10; PA3; PA2. Later: PA5, PA6 and the fixes of the pinned divergences (`OpenBugs.NpLayer.cs`, NL1 to NL8).
 
 Progress goes into the [§9 state log](#9-state-log), newest entry first.
 
@@ -530,13 +532,16 @@ the open pull request (#631).
 **Consequence.** Batches are small (one family per commit, so a conflict stays local), on `strings` for every family
 with a text line (D6).
 
-**The rebase (D17, decided 2026-10-31).** `strings` is rebased onto `journey4` (733 commits on 44; merge base
-`f6086479`), not merged. 144 of the replayed commits edit the old `.claude/CLAUDE.md`, which `journey4` split into a
-26 KB root and `.claude/rules/` (`cef9f1ab`, `8e5324b0`): during the rebase that file keeps `journey4`'s side (a merge
-driver that keeps "ours"), and the documentation `strings` added since the merge base is carried into the rule files
-in one commit afterwards. The other conflicts (`journey4`'s `0a96ddba`, `9e75f362` and `88048433` in `DTypes/` and
-`np.find_common_type.cs`, the coverage and oracle files) resolve per commit. Every SHA this plan cites changes; the
-rebase records the old -> new map, as the 2026-10-12 rebase did.
+**The merge (D17, decided 2026-10-31; done the same day, `f87de210`).** D17 was first a rebase of `strings` onto
+`journey4` (733 commits replayed over 44, 144 of them editing the old `.claude/CLAUDE.md`, which `journey4` split into
+a 26 KB root and `.claude/rules/` in `cef9f1ab` / `8e5324b0`); shown that size, the owner chose "Merge journey4 in".
+The merge keeps every SHA this plan cites. Its tree is `git merge-tree --write-tree --merge-base=8a477103 227bf2f3
+8e5324b0`, not the true base `f6086479`: every `journey4` commit up to `8a477103` (18 of them) already had a ported
+twin on `strings`, so the true base replayed them against their twins (60 conflicted files) where `8a477103` leaves
+18, and merging `8a477103` with the true base changes nothing outside those 18. `.claude/CLAUDE.md` takes `journey4`'s
+root; the documentation `strings` added since `f6086479` is carried into the rule files afterwards. The second parent
+is `8e5324b0`, so the next merge of `journey4` starts from there. The resolutions, the adaptations and the gates are
+in the merge's message and in the §9 entry of 2026-10-31.
 
 ---
 
@@ -575,11 +580,11 @@ The owner's answers (2026-10-24; D1 again twice on 2026-10-28), and what they me
 | D14 | 2026-10-31: `astype(null)` = float64 | P10: `ndarray.astype(null)` is NumPy's `astype(None)`, the default float64. |
 | D15 | 2026-10-31: "Use np.view" | P10: np.squeeze with nothing to remove returns `a.view()`, a fresh view and never the operand, so disposing the result never disposes the input (VF04 / VA04 stay carved). |
 | D16 | 2026-10-31: kernel speedups first | PA2 lands after its two shared-kernel speedups. |
-| D17 | 2026-10-31: "rebase strings ontop of journey4" | Before the next work ([C13](#c13-branch-logistics)). |
+| D17 | 2026-10-31: "rebase strings ontop of journey4"; asked again the same day with the rebase's measured size (733 commits replayed, 144 of them over the old `.claude/CLAUDE.md`): "Merge journey4 in" | Before the next work ([C13](#c13-branch-logistics)): a merge, not a rebase. Done 2026-10-31, `f87de210`. |
 | D18 | 2026-10-31, step 3 (P8): "Ask again, as I have a problem with the casing of NDArray.* as it doesn't match NumPy's"; asked again: NumPy's names on NDArray | P8: the array object's internal statics take the NumPy function's name, case for case (`NDArray.vstack`, `NDArray.where`, `NDArray.take_along_axis`). A name that clashes with an ndarray property takes NumPy's own clash convention, a trailing underscore (`NDArray.real_`, `NDArray.imag_`). The ~45 existing PascalCase members are renamed with their callers in one commit before P8. `TensorEngine`, `UnmanagedStorage` and `Shape` keep C# casing (`TensorEngine`'s members shipped public in 0.70.0). |
 | D19 | 2026-10-31, step 7 (P10): "No obsolete, just remove, maintain NumPy's overload's structure and if its a custom NumSharp function then we should have one overload" | P10: an overload the change replaces is removed, not tagged `[Obsolete]`; the overloads keep NumPy's structure; a function NumPy does not have keeps one overload. |
 | D20 | 2026-10-31, step 9 (PA5): "We can't support that as we need long index support which span doesn't do."; asked again without the `Span` items: "Drop PA5", "Note that for later (defer)" | PA5 waits (Later). Its `Span<T>` items are rejected for good: a `Span`'s length is an `int`, and NumSharp indexes with `long`. The items whose replacement takes long counts (np.eye's `DiagWrite`, np.unique's take-kernel gathers, the int64 ramp kernel, the allocation's NaN fill) wait with it. |
-| D21 | 2026-10-31, step 12 (the divergences found on the way): "Create an open bug reproducing the problem/s and defer to tackle them later" | Each is an `[OpenBugs]` reproduction in `test/NumSharp.Tests/OpenBugs.NpLayer.cs`, every expected value NumPy 2.4.2's: NL1 to NL6 (`f2eee1d1`) and B3 as NL7 (`efc50d14`, once P7 was dropped). Their fixes are deferred; each will be a D4 commit. |
+| D21 | 2026-10-31, step 12 (the divergences found on the way): "Create an open bug reproducing the problem/s and defer to tackle them later" | Each is an `[OpenBugs]` reproduction in `test/NumSharp.Tests/OpenBugs.NpLayer.cs`, every expected value NumPy 2.4.2's: NL1 to NL6 (`f2eee1d1`) and B3 as NL7 (`efc50d14`, once P7 was dropped); NL8 (`2cad8823`), found by the merge's Debug gate. Their fixes are deferred; each will be a D4 commit. |
 | D22 | 2026-10-31, the step round: the rebase, P6b, P8, P9, P10 and P7b-d "Accept and start" (P7b-d dropped later, D7); P7a "Skip"; PA3 "Defer until after P7"; PA2 "Defer until after PA3"; PA6 "Defer until after PA5" | The order of the work: the rebase; P6b; P8; P9; P10; PA3 (where P7 stood); PA2. PA5 and PA6 later (D20). |
 
 The recommendations as written before the answers:
@@ -1520,6 +1525,9 @@ commit of its own, with its oracle excuse narrowed where it has one:
   path for completeness.
 - NL6: np.array of a ragged jagged C# array truncates (or throws `IndexOutOfRangeException`).
 - NL7: B3, the boundary depth reaching user callbacks (P7 dropped).
+- NL8: np.sum's add.reduce step (`AccumulateDouble` / `AccumulateSingle`, `*acc = *acc + s`) leaves the NaN of
+  NaN + NaN to the JIT: a Debug build keeps the pairwise sum's NaN where NumPy keeps the accumulator's (a Release build
+  happens to agree with NumPy). The fix chooses the accumulator's NaN explicitly.
 
 The ten array-object members `TensorEngine` shipped in 0.70.0 (E7) stay (decided 2026-10-31, D13): removing them
 breaks a subclass or a direct caller for a layering reason alone.
@@ -1540,6 +1548,33 @@ breaks a subclass or a direct caller for a layering reason alone.
 ---
 
 ## 9. State log
+
+- **2026-10-31, `strings` merges `journey4` (D17 as decided again: "Merge journey4 in"), and what its gates found.**
+  Five commits on `strings` before this entry, landed by fast-forward (not pushed). Backups of the parent `227bf2f3`:
+  the local branch `strings-backup-31-10-2026` and `K:\source\NumSharp-backups\strings-backup-31-10-2026.bundle`.
+  - `f87de210`, the merge of `journey4` `8e5324b0` (C13 records the base): `journey4`'s DType review (`0a96ddba`,
+    `9e75f362`, `88048433`), the parallel NumSharp.Tests (`59c9b99e`), the NDW012 / weaver review of PR #632, the
+    commented NPTypeCode members and the `.claude/rules` split, beside `strings`' string classes, C-type classes and
+    boundary map. Its message lists the 18 conflicts' resolutions and the adaptations: the texts that called the String
+    lane vestigial, NPY_SORTKIND completed for `journey4`'s C-enum gate, 22 `[DoNotParallelize]` methods and a class
+    among `strings`' tests, 14 test helpers that disposed a caller's array through np.ascontiguousarray, `strings`' ONNX
+    test moved to `journey4`'s `casting=None` TypeError. The layering ratchets: R2 pins `NPTypeCode.cs`' np.dtype call
+    (the parser, class D), R1 pins np.dtype.cs' None arm and tightens np.find_common_type.cs (2 / 10 -> 2 / 5).
+  - Gates: NumSharp.Tests in Release (CI's configuration) 21,013 / 21,012 passed on net10.0 / net8.0; the analyzer,
+    MLNet, ParquetNet, Tensors and ONNX Runtime test projects pass; the oracle's only failures are the `[OpenBugs]`
+    KnownGaps replays. Three findings, each its own commit:
+    - `adb6e6a0`, D4: np.issctype refused the String lane in all three arms, where NumPy 1.26.4 answers True for every
+      string class (probed: a numpy==1.26.4 wheel installed into a scratch folder). R1: np.type_checks.cs 3 / 15 ->
+      0 / 18, the same lines (a line with a text test counted as text).
+    - `3e4e8648`: the interop test T1_47 read `_can_coerce_all`'s start as a list index; `journey4`'s `88048433` made it
+      NumPy 1.26.4's ladder index (the test fails on `8e5324b0` too).
+    - `2cad8823`, NL8 (D21): in a Debug build ShortRows_SeveralNaNs_KeepTheRunningSumsNaN and
+      Trapezoid_NaNSpacing_IsTheProductsFirstOperand fail, as they do on `227bf2f3` and since they were added: np.sum's
+      reduce step leaves NaN + NaN to the JIT. Pinned and deferred.
+  - `542a0828`: the surface and ma_surface gap corpora re-carved (SU35, the dtype name 'cdouble', fixed by the merge;
+    MS22, ma.frombuffer, fixed by `32bfa4a7` and never re-carved), the two public-call repros now regression pins.
+  - Left from the merge: the documentation `strings` added to the old `.claude/CLAUDE.md` since `f6086479` goes into the
+    rule files, and `journey4`'s rules are corrected where they describe `journey4`'s model.
 
 - **2026-10-31, the step round: what runs next, P7 dropped, the divergences found on the way pinned.** Two test
   commits on `strings` (`f2eee1d1`, `efc50d14`); no source changed.
