@@ -1,7 +1,7 @@
 ---
 paths:
   - "src/NumSharp.Core/IO/**"
-  - "src/NumSharp.Core/APIs/np.{save,load,savetxt,loadtxt,fromstring,fromfile,array2string}*.cs"
+  - "src/NumSharp.Core/APIs/np.{save,load,array2string}*.cs"
   - "src/NumSharp.Core/Backends/Printing/**"
   - "src/NumSharp.Core/Casting/NDArray.ToString.cs"
   - "test/NumSharp.Tests/IO/**"
@@ -34,12 +34,41 @@ lifts it.
 | Boolean/SByte/Byte | `\|b1` / `\|i1` / `\|u1` | single-byte types take the `\|` prefix, never `<` |
 | Int16…UInt64, Half, Single, Double | `<i2`…`<u8`, `<f2`, `<f4`, `<f8` | direct |
 | Complex | `<c16` | `<c8` widens to `Complex` on read |
-| Char | `<U1` | 2-byte UTF-16 ↔ 4-byte UCS-4; non-BMP rejected (a surrogate pair) |
+| `S` / `U` (fixed width) | `\|S<n>` / `<U<n>` | byte for byte, mmap too; a `>U` file swaps per 4-byte code point |
+| `StringDType` (`T`) | `\|O` + NumPy's pickle | below |
+| Char | `<U1` | WRITES `<U1` (2-byte UTF-16 widened to 4-byte UCS-4; non-BMP rejected); a `<U1` file reads back as a `U1` string array |
 | Decimal | — | `NotSupportedException`: no NumPy dtype (cast to Double) |
 
-- Object arrays, structured/subarray dtypes, `datetime64`/`timedelta64`, `|S`/`<U`n>1/`|V`, `<f16` and `<c32` are parsed,
-  then rejected with a precise message; the zero-width `<U0`/`|S0`/`|V0` are valid NumPy dtypes and report "unsupported",
-  never "invalid descriptor".
+- Object arrays (but a `T` array's pickle), structured/subarray dtypes, `datetime64`/`timedelta64`, `|V`, `<f16` and
+  `<c32` are parsed, then rejected with a precise message; the zero-width `<U0`/`|S0`/`|V0` are valid NumPy dtypes and
+  report "unsupported", never "invalid descriptor".
+- `.npy` / `.npz` hold a `T` array as NumPy's pickle: NumPy writes the header `'descr': '|O'` and
+  `pickle.dump(array, protocol=4)`, and `IO/NpyPickle.cs` writes the same bytes and reads them back, for a `T` array ONLY
+  (NumSharp has no general unpickler).
+  - Writer = CPython 3.12's C pickler for that object graph: a frame is committed at the first `save()` that finds it at
+    64 KiB or more (EVERY save starts with that boundary check, atoms too), a frame under 4 bytes loses its header, a
+    payload of 64 KiB or more goes outside the frames, `MEMOIZE` per memoized object, `BINGET` only where CPython hands
+    out the SAME object (its cached strings `''` and one character below U+0100, and the na_object), `MARK … APPENDS`
+    per 1000 items (a one-element list is item + `APPEND`). Elements in C logical order; `is_fortran` for an F-and-not-C
+    array. It refuses an na_object with no pickle form it writes (`Half`, `decimal`).
+  - Reader = the binary opcodes of protocols 2–5 over inert values (a global is two names, a `REDUCE` a record, nothing is
+    ever called), then exactly NumPy's graph (`_reconstruct(ndarray, (0,), b'b')` + `(1, shape,
+    _convert_to_stringdtype_kwargs(coerce[, na]), is_fortran, [elements])`); any other pickle is refused by name. The
+    whole pickle sits in ONE buffer from `SizeBucketedBufferPool` (raw `NativeMemory` there fails the oracle gate
+    `EveryRawNativeAllocation_IsAKnownChokepoint`), each text is an offset into it, and its UTF-8 bytes are packed
+    straight into its cell (validated strictly; a string na_object compared by bytes), the arena reserved once: no string
+    per element. The buffer grows only by what the stream delivers (a frame claiming 1 TB is a FormatException, never an
+    allocation). An F array is filled in C order at F positions (the arena order NumPy's `_setlist_pkl` gives). A sparse
+    `LONG_BINPUT` goes to a dictionary and counts towards `memo_len` as in CPython.
+  - NumPy's texts: `Object arrays cannot be loaded when allow_pickle=False` (house FormatException), `Object arrays cannot
+    be saved when allow_pickle=False` (ValueError, after the header), `Array can't be memory-mapped: Python objects in
+    dtype.`, and `read_array`'s `UnicodeError: Unpickling a python object failed: UnicodeDecodeError('utf-8', b'\xff', 0,
+    1, 'invalid start byte')` + its `encoding=` line for a text that is not UTF-8. NumPy ignores the header's shape and
+    order for a pickle; so does NumSharp.
+  - Gates: the `.npy` oracle's section 12 (`tpickle` byte-exact writes + reads with memory-order cells, `tpickle_raw`
+    protocols 2–5 and an F source, `tnpz`), `IO/NpyOracleStringDTypeTests.cs`, `IO/NpyStringDTypePickleTests.cs`
+    (several pickles in one stream, hostile lengths, the memo, refusals), and the reverse gate
+    `test/oracle/verify_npy_interop.py` (NumPy reads `T` files and an `.npz` member NumSharp wrote).
 - `mmap_mode` (`NpyFormat.OpenMemmap`, a port of NumPy's `open_memmap` + `numpy.memmap`): `np.load(path, mmap_mode=…)`
   returns an `NDArray` over a `MemoryMappedFile` view, zero-copy, the mapping released with the array and its views on
   dispose/GC. As NumPy behaves through `np.load`: `r`/`readonly` → a read-only view; `r+` → read-write (flushes to disk);
@@ -48,8 +77,9 @@ lifts it.
   mode: '<mode>b'"` (they contain the letter w, so `open_memmap` misroutes them into its create branch; NumSharp does not
   truncate the file as NumPy's `w+` does). Validation happens only on the `.npy` branch: an `.npz` ignores `mmap_mode`
   (even an invalid value). mmap needs a real path: a stream / `byte[]` npy raises `ValueError "…Memmap cannot use existing
-  file handles"`. Big-endian, `<U1` and `<c8` files are refused (`NotSupportedException`): NumSharp byte-swaps / widens
-  them on read and cannot present them as a zero-copy view. Tests: `IO/NpyMemmapTests.cs`.
+  file handles"`. Big-endian and `<c8` files are refused (`NotSupportedException`): NumSharp byte-swaps / widens them on
+  read and cannot present them as a zero-copy view; an object (`T` pickle) file is NumPy's `ValueError "Array can't be
+  memory-mapped: Python objects in dtype."`. Tests: `IO/NpyMemmapTests.cs`.
 - Intentional divergences: the five unsupported dtypes above are the only files NumPy loads that NumSharp refuses. NumPy
   reports `shape: (True,)` and overflowing dims through a later TypeError/OverflowError where NumSharp rejects them up
   front (both refuse; the text differs). Big-endian files byte-swap to native (NumPy keeps a byte-swapped dtype), and
@@ -81,67 +111,8 @@ lifts it.
 
 ## Text I/O
 
-- `np.savetxt(fname, X, fmt='%.18e', delimiter=' ', newline='\n', header='', footer='', comments='# ', encoding=None)` is
-  a port of NumPy 2.4.2's `_npyio_impl.py::savetxt` (`APIs/np.savetxt.cs`), byte-for-byte NumPy's output.
-  - A 1-D array writes one value per line (NumPy's `atleast_2d(X).T`, `ncol=1`); a 2-D array a row per line; 0-D / ≥3-D
-    raise `ValueError("Expected 1D or 2D array, got {n}D array instead")`.
-  - Each row is `format % tuple(row)`, where `format` is the single spec joined `ncol` times by `delimiter`, a
-    caller-supplied multi-`%` string (the delimiter then ignored), or the joined list/tuple of specs, with NumPy's errors
-    (`ValueError "fmt has wrong number of % formats:  …"`, `AttributeError "fmt has wrong shape.  …"`).
-  - The `%` engine is `PrintfFormatter` (shared with `ndarray.tofile`; Python's `%` operator: flags `-+ 0#`, width,
-    `.precision`, `d i u x X o e E f F g G s c %%`, a 2-digit minimum exponent, `nan`/`inf`, `-0.0`); the multi-column
-    path is `PrintfFormatter.FormatRow`/`FormatRowInto`. Numeric specs widen to double (NumPy's `float()`/`int()`
-    coercion, so int64 past 2^53 and float32 render at the double value); `%s` uses each dtype's shortest scalar repr. On
-    an INTEGER conversion (`d i u x X o`) a `.precision` is Python's minimum digit count, left-zero-filled (`%.5d` →
-    `00042`, `%.0d % 0` → `0`), the `0` flag composes with it (`%08.3d % 7` → `00000007`), and with `#` the zero fill lands
-    between the `0x`/`0o` prefix and the digits (`%#08x` → `0x0000ff`). `%c` renders a true integer's code point in
-    `[0, 0x10FFFF]` and raises `OverflowError("%c arg not in range(0x110000)")` outside it; `%c`, `%x`, `%X`, `%o` on a bool
-    are the TypeError (dtype/format mismatch), while `%d`/`%i`/`%u` accept a bool. Complex wraps a single spec as
-    `' (%s+%sj)'` per column, with the `+-` → `-` fix-up.
-  - Targets: a filename (`.gz` → gzip; Python's text-mode `\n` → `os.linesep`, so a file matches NumPy on the same
-    platform: CRLF on Windows), an open `Stream`, a `TextWriter` (both verbatim `\n`). Any layout is read in logical C
-    order through `GetAtIndex`; all 15 dtypes.
-  - `[Misaligned]`: `%d`/`%i`/`%u` on inf raises `System.OverflowException` (the message is NumPy's `OverflowError`; nan
-    raises ValueError verbatim), and the AttributeError renders a C# `string[]` as a Python list repr.
-  - Gate: `IO/SaveTxtTests.cs`. Source `Backends/Printing/PrintfFormatter.cs`.
-- `np.loadtxt(fname, dtype=float, comments='#', delimiter=None, converters=None, skiprows=0, usecols=None, unpack=False,
-  ndmin=0, encoding=None, max_rows=None, quotechar=None)` is a port of NumPy 2.4.2's `_npyio_impl.py::loadtxt` → `_read`
-  plus its C text reader (`textreading/{tokenize.cpp,conversions.c,str_to_int.c,rows.c}`), in `APIs/np.loadtxt.cs`; it
-  round-trips `np.savetxt`.
-  - The C reader yields a 2-D `(rows, cols)` array; `ndmin` then squeezes size-1 axes (a single row/col → 1-D, a lone value
-    → 0-d) or expands.
-  - The tokenizer: `delimiter=None` splits on runs of whitespace (leading/trailing stripped; blank or comment-only lines
-    give 0 fields and are skipped), an explicit single-character delimiter (`' '` included) keeps empty fields;
-    `quotechar` protects delimiters and comments and doubles as an escape; a single-character comment strips to the line
-    end (a multi-character comment is stripped per line, and rejected with `quotechar`). Whitespace is NumPy's
-    `Py_UNICODE_ISSPACE`: `char.IsWhiteSpace` plus the four C0 information separators U+001C..U+001F
-    (`IsLoadtxtWhitespace`/`TrimLoadtxtWs`).
-  - The parsers: bool via int64 (`"0"`/`"1"`, `-1` → True, `"True"` → error); integers range-check (`int8 "200"` → error)
-    and unsigned rejects negatives (`uint8 "-1"` → error); float uses `PyOS_string_to_double` semantics (case-insensitive
-    `inf`/`infinity`/`nan`; hex, `_`, trailing junk and empty rejected; NaN → `+qNaN 0x7FF8…`); complex is `to_complex_int`
-    with the imaginary unit lowercase `j` only (`a`/`aj`/`a+bj`/`(a+bj)`/`1+-2j`; `"1+2J"` → error). All 15 dtypes.
-  - `converters` (a `Func<string,object>` for all columns, or an `IDictionary<int,Func<string,object>>` per column),
-    `usecols` (int[], negatives from the end), `unpack` (transpose), `skiprows`/`max_rows` (blank and comment lines do not
-    count toward `max_rows`), `encoding`. Inputs: a filename (`.gz` decompressed; universal newlines), a `Stream`, a
-    `TextReader`, an `IEnumerable<string>` of lines. Fields are parsed from the line's char span (no per-field string).
-  - Errors (NumPy's texts): `ValueError("the number of columns changed from {a} to {b} at row {n}; …")`, `ValueError("could
-    not convert string '{tok}' to {dtype} at row {r}, column {c}.")` (the row 0-based, the column 1-based),
-    `ValueError("invalid column index {k} at row {n} with {c} columns")`, `ValueError("Illegal value of ndmin keyword: …")`,
-    `TypeError` for a multi-character or newline delimiter.
-  - Divergence: the empty-input `UserWarning` is not emitted (NumSharp has no warnings module). Float-heavy input is bound
-    by the correctly rounded `double.Parse` (NumPy's `strtod`). Gate: `IO/LoadTxtTests.cs`.
-- `np.fromstring(string, dtype=float, count=-1, sep)` (`APIs/np.fromstring.cs`) parses a 1-D array from the numbers in a
-  string with `np.fromfile`'s text item reader (`SplitTokens`/`SelectTokens`/`TokensToArray`, as NumPy shares `fromstr`):
-  a whitespace-only `sep` splits on any whitespace run, a non-whitespace `sep`'s spaces are a wildcard, one trailing
-  separator is tolerated, and a bad or missing item raises `ValueError("string or file could not be read to its end due
-  to unmatched data")`. `count` caps the items. NumPy removed the binary mode, so an empty/null `sep` raises
-  `ValueError("The binary mode of fromstring is removed, use frombuffer instead")`. The shared parser is a lenient
-  superset of NumPy's: the parenthesised `"(1+2j)"` is accepted (it round-trips `tofile`; NumPy rejects it), and integer
-  overflow wraps deterministically where NumPy's C parser is platform-specific (NumPy raises on a narrow-unsigned
-  negative such as `uint8 "-1"` and clamps overflow through `strtol`); `loadtxt` carries strict range-checking parsers
-  instead. The imaginary unit is lowercase `j` only. Gate: `IO/FromStringTests.cs`.
-- Not implemented: `genfromtxt`/`fromregex` (both require structured/record dtypes, and `genfromtxt` masked arrays and
-  missing values; their non-structured subset would only re-expose `loadtxt`).
+`np.savetxt`, `np.loadtxt`, `np.fromstring`, `np.fromfile`, `ndarray.tofile`, Python's codecs and the `%` operator:
+`text-io.md`.
 
 ## Printing
 
@@ -151,8 +122,43 @@ lifts it.
 `np.array_repr` (`array([0, 1, 2], dtype=…)`). It covers decimal-point float alignment, the maxprec/unique/fixed float
 modes, the exp-format cutoffs (per dtype, native-precision ratio), nan/inf fields, complex, summarization at `threshold`
 (with `…` and edgeitems), line wrapping at `linewidth`, the 0-d `str`/`repr` asymmetry (`5.0` / `5.`), and the repr
-dtype/shape suffixes. Digit generation uses .NET's shortest round-trip `ToString("R")` (= Dragon4 unique), but every
-rounding goes through `ToString("F"|"E"+precision)` (which rounds the true binary value half to even), never through the
-shortest string. NumSharp's `Char` dtype renders as strings (no NumPy equivalent). API: `array2string`, `array_repr`,
-`array_str`, `format_float_positional`, `format_float_scientific`, `get_printoptions`, `printoptions` (an IDisposable
-context), `set_printoptions`.
+dtype/shape suffixes. The shortest digits come from Ryu in the value's own precision (`FloatDigits.Shortest`; .NET's
+`"R"`, kept for reference as `ShortestR`, differs on the .NET 10 runtime for 2^-25 and 2^-958), but every rounding goes
+through `ToString("F"|"E"+precision)` (which rounds the true binary value half to even), never through the shortest
+string. NumSharp's `Char` dtype renders as strings (no NumPy equivalent). API: `array2string`, `array_repr`, `array_str`,
+`format_float_positional`, `format_float_scientific`, `get_printoptions`, `printoptions` (an IDisposable context),
+`set_printoptions`.
+
+`np.format_float_positional` / `np.format_float_scientific` are NumPy's `dragon4.c`, statement for statement
+(`Backends/Printing/Dragon4.Port.cs`, `Dragon4.BigInt.cs`). The array printer keeps the emulation of `Dragon4.cs` (exact
+for the options it uses); the scalar formatters take NumPy's WHOLE option set, where only NumPy's code gives NumPy's text.
+- Signatures are NumPy's: `format_float_positional(object x, int? precision = null, bool unique = true, bool fractional
+  = true, string trim = "k", bool sign = false, int? pad_left = null, int? pad_right = null, int? min_digits = null)` and
+  `format_float_scientific(object x, int? precision = null, bool unique = true, string trim = "k", bool sign = false,
+  int? pad_left = null, int? exp_digits = null, int? min_digits = null)`.
+- x: a `Half` / `float` / `double` is the np.float16 / np.float32 / np.float64 scalar, each printed with its OWN digits
+  (`0.1f` → `'0.1'`); anything else is CPython's `PyFloat_AsDouble` to float64: a C# integer, `BigInteger` or `bool` is a
+  Python int, correctly rounded (`int too large to convert to float`, OverflowError); a `char` is np.uint16; a `decimal`
+  its float64; a 0-d NDArray is `float(a)` (its element, a 0-d text array parsed; complex: `float() argument must be a
+  string or a real number, not 'complex'`); a 1-D array `only 0-dimensional arrays can be converted to Python scalars`;
+  anything else `must be real number, not str` / `NoneType` / `list` / `tuple` / `bytes`.
+- Check order is NumPy's: the `_none_or_positive_arg` ValueErrors (precision, pad_left, pad_right / exp_digits,
+  min_digits), `precision must be greater than 0 if fractional=False`, `min_digits must be less than or equal to
+  precision`, then C's: trim's converter (TypeError, `str(trim)` right-aligned in 100 characters), ``in non-unique mode
+  `precision` must be supplied``, then x.
+- Digits: a unique request whose cutoffs do not bind is Ryu's shortest digits (`FloatDigits.Shortest`, the fast path);
+  every other request runs NumPy's Dragon4 loop over NumPy's BigInt arithmetic, ported IN PLACE with 64-bit blocks
+  (allocation-free; the division normalized to bit 59 of the top block, NumPy's rule for 32-bit blocks). Two exact
+  shortcuts NumPy's loop does not take: in unique mode the margins are dropped once they reach the scale, and where the
+  margins no longer matter 19 digits come out of ONE Knuth single-word division. The same loop on
+  `System.Numerics.BigInteger` stays as the test reference (`Dragon4.UseReferenceDigits`). Inf / nan are NumPy's
+  PrintInfNan (`inf` / `-inf` / `+inf`, `nan` never signed, never padded).
+- NumPy's buffer: 16384 characters (`RuntimeError: Float formatting result too large`), and NumPy's FormatScientific
+  overrun reproduced (its zero padding does not count the buffer down: `format_float_scientific(1.5, precision=20000,
+  unique=False)` is 16387 characters).
+- Gates: the surface tier's formatter cases (its section dragon4: random bit patterns of every width under random option
+  sets, x as a 0-d array of every dtype, Python ints past float64, exact digits that END inside the precision (only
+  scientific trim `'-'` shows a kept zero: `'1e+22'`, not `'1.e+22'`) and powers of two under min_digits, the only
+  values whose last digit the high margin alone decides after a forced continuation) and `Casting/Dragon4PortTests.cs`
+  (the three digit generators held to each other over every float16 pattern and sampled float32 / float64 patterns,
+  Knuth's division against BigInteger's).

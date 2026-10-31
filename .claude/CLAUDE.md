@@ -205,7 +205,8 @@ Tested against NumPy 2.4.2. Each line: the `np.*` names, then the rule that hold
   `uniform`, `vonmises`, `wald`, `weibull`, `zipf`, plus `Generator`/`default_rng` → `random.md`.
 - File I/O: `fromfile`, `fromstring`, `load`, `load_npy`, `load_npz`, `loadtxt`, `save`, `savetxt`, `savez`,
   `savez_compressed`, `tofile`; printing: `array2string`, `array_repr`, `array_str`, `format_float_positional`,
-  `format_float_scientific`, `get_printoptions`, `printoptions`, `set_printoptions` → `io-printing.md`.
+  `format_float_scientific`, `get_printoptions`, `printoptions`, `set_printoptions` → `io-printing.md` (the text
+  functions: `text-io.md`).
 - Other: `around`, `asscalar`, `copyto` (`creation-manipulation.md`), `round_`, `size`, `multithreading`.
 - Operators: arithmetic `+`, `-`, `*`, `/`, `%`, unary `-`; comparison `==`, `!=`, `<`, `>`, `<=`, `>=` (they return
   `NDArray<bool>`); logical `&`, `|`, `!`.
@@ -375,7 +376,8 @@ Create issues on `SciSharp/NumSharp` with `gh issue create` (`GH_TOKEN` through 
 | `polynomial-quadrature.md` | weights, Chebyshev points, Gauss quadrature, Chebyshev interpolation, least-squares fits |
 | `polynomial-classes.md` | the six series classes (protocol, lifetimes, printing) and the printing helpers |
 | `random.md` | integer types, NumPy's call spellings, the kind of array a sampler returns |
-| `io-printing.md` | `.npy` / `.npz`, savetxt / loadtxt / fromstring, array printing |
+| `io-printing.md` | `.npy` / `.npz` (the `T` pickle), array printing, the Dragon4 float formatters |
+| `text-io.md` | savetxt / loadtxt / fromstring / fromfile / tofile, Python's codecs, the `%` operator |
 | `tests.md` | keeping the suite fast, the memory-safety gates, the OpenBugs files and audit |
 | `oracle.md` | the differential-fuzz pipeline: layout, gate semantics, every tier, the `.npy` format oracle, traps |
 | `ci-release.md` | the workflows, no embedded package README, strong naming |
