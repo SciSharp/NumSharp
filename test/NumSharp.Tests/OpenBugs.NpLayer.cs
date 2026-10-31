@@ -28,6 +28,10 @@ namespace NumSharp.Tests
     //        checked for completeness.
     //   NL6  np.array of a ragged jagged C# array (int[][], double[][], ...) truncates or throws IndexOutOfRangeException
     //        where NumPy raises its inhomogeneous-shape ValueError.
+    //   NL7  the plan's B3: user code that np.apply_along_axis / np.apply_over_axes call back runs with the subclass
+    //        boundary's depth raised, so a numpy.matrix or chararray the callback passes to an np.* function comes back
+    //        plain. P7 would have removed the depth; the owner dropped P7 the same day ("Drop because np.* uses the lhs
+    //        to pick which"), so B3 stays open and is pinned here with the six.
     //
     // Every expected value below is NumPy 2.4.2's answer for the same call (probed on win-amd64). EXPECTED (when fixed):
     // each test passes; remove its [OpenBugs], move it next to its API's tests, and drop the oracle excuse named in its
@@ -393,6 +397,79 @@ namespace NumSharp.Tests
             shorterSecondRow.Should().Throw<ValueError>().WithMessage(afterOne);
             doubles.Should().Throw<ValueError>().WithMessage(afterOne);
             threeLevels.Should().Throw<ValueError>().WithMessage(afterTwo);
+        }
+
+        // ------------------------------------------------------------------
+        // NL7 — the boundary depth reaches user callbacks (the plan's B3)
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     <c>np.apply_along_axis(f, 1, matrix)</c> where <c>f</c> calls <c>np.sum(other_matrix, 0)</c> and
+        ///     <c>np.ravel(chararray)</c>: in NumPy the callback is ordinary user code, so it gets a 1 x 2 matrix
+        ///     <c>[[4, 6]]</c> and a chararray, exactly as outside (and as NumSharp gives with a PLAIN outer operand).
+        ///     NumSharp's callback gets a plain (2,) array and a plain array: <c>NDMatrixBoundary.Wrapped</c> raises the
+        ///     per-thread depth around the whole computation, the user's callback included, and every boundary rule reads
+        ///     a raised depth as "nested library call, stay plain". The plan's Appendix B3; its fix was P7 (rules on
+        ///     results, the depth deleted), which the owner dropped on 2026-10-31.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL7")]
+        public void NpLayer_ApplyAlongAxis_MatrixOperand_CallbackShouldSeeNumPysClasses()
+        {
+            using var m = np.asmatrix(np.array(new double[,] { { 1, 2 }, { 3, 4 } }));
+            using var other = np.asmatrix(np.array(new double[,] { { 1, 2 }, { 3, 4 } }));
+            using var text = np.@char.array(new[] { "ab", "cd" });
+            // What the callback saw on its LAST call (both rows see the same): the classes and the sum's shape and values.
+            Type sumClass = null, ravelClass = null;
+            long[] sumShape = null;
+            double[] sumValues = null;
+
+            NDArray RowSum(NDArray row)
+            {
+                using var s = np.sum(other, 0);
+                using var r = np.ravel(text);
+                sumClass = s.GetType();
+                sumShape = s.shape;
+                sumValues = s.ToArray<double>();
+                ravelClass = r.GetType();
+                return np.sum(row);
+            }
+
+            using var result = np.apply_along_axis(RowSum, 1, m);
+
+            sumClass.Should().Be(typeof(NDMatrix));
+            sumShape.Should().Equal(1L, 2L);
+            sumValues.Should().Equal(4.0, 6.0);
+            ravelClass.Should().Be(typeof(NDCharArray));
+        }
+
+        /// <summary>
+        ///     <c>np.apply_over_axes(h, matrix, [0])</c> where <c>h</c> calls <c>np.sum(other_matrix, 0)</c>: NumPy's callback
+        ///     gets a 1 x 2 matrix; NumSharp's gets a plain (2,) array, because the call runs inside the boundary's plain
+        ///     region for the matrix operand (the depth raised, as in
+        ///     <see cref="NpLayer_ApplyAlongAxis_MatrixOperand_CallbackShouldSeeNumPysClasses"/>). The result itself agrees
+        ///     (a plain (1, 3) array <c>[[5, 7, 9]]</c> in both).
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL7")]
+        public void NpLayer_ApplyOverAxes_MatrixOperand_CallbackShouldSeeNumPysClasses()
+        {
+            using var m = np.asmatrix(np.array(new double[,] { { 1, 2, 3 }, { 4, 5, 6 } }));
+            using var other = np.asmatrix(np.array(new double[,] { { 1, 2 }, { 3, 4 } }));
+            Type sumClass = null;
+            long[] sumShape = null;
+
+            NDArray AxisSum(NDArray arr, int axis)
+            {
+                using var s = np.sum(other, 0);
+                sumClass = s.GetType();
+                sumShape = s.shape;
+                return np.sum(arr, axis);
+            }
+
+            using var result = np.apply_over_axes(AxisSum, m, new[] { 0 });
+
+            result.ToArray<double>().Should().Equal(5.0, 7.0, 9.0);
+            sumClass.Should().Be(typeof(NDMatrix));
+            sumShape.Should().Equal(1L, 2L);
         }
     }
 }
