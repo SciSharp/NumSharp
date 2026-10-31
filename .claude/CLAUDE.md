@@ -146,7 +146,8 @@ Tested against NumPy 2.4.2. Each line: the `np.*` names, then the rule that hold
   `hstack`, `insert`, `intersect1d`, `matrix_transpose`, `moveaxis`, `pad`, `permute_dims`, `r_`, `ravel`, `repeat`,
   `reshape`, `resize`, `roll`, `rollaxis`, `rot90`, `setdiff1d`, `setxor1d`, `split`, `squeeze`, `stack`, `swapaxes`,
   `tile`, `transpose`, `trim_zeros`, `union1d`, `unique`, `unique_all`, `unique_counts`, `unique_inverse`,
-  `unique_values`, `unstack`, `vsplit`, `vstack` → `creation-manipulation.md`.
+  `unique_values`, `unstack`, `vsplit`, `vstack` → `creation-manipulation.md` (`unique.md` for `unique` and `unique_*`;
+  every axis argument: `axis-arguments.md`).
 - Broadcasting: `are_broadcastable`, `broadcast`, `broadcast_arrays`, `broadcast_to`.
 - Math, arithmetic: `abs`, `absolute`, `acosh`, `add`, `arccos`, `arccosh`, `arcsin`, `arcsinh`, `arctan`, `arctan2`,
   `arctanh`, `asinh`, `atanh`, `cbrt`, `ceil`, `clip`, `convolve`, `correlate`, `cos`, `cosh`, `deg2rad`, `degrees`,
@@ -317,6 +318,8 @@ Create issues on `SciSharp/NumSharp` with `gh issue create` (`GH_TOKEN` through 
   `object[]` arm and an `NDArray` arm is typed `NDArray`; a switch expression takes its arms' natural type (cast arms to
   `object`). A lone `object[]` passed to `params object[]` IS the params array.
 - `stackalloc` is zero-filled unless the method carries `[SkipLocalsInit]`.
+- Normalize an axis with `Shape.check_and_adjust_axis` / `Shape.normalize_axis_tuple` (test as given, then wrap): a
+  `while (axis < 0) axis += ndim` loop never ends on a 0-d input (`axis-arguments.md`).
 - A DynamicMethod whose JIT inline budget is spent inlines nothing more, `AggressiveInlining` included: split large
   emitted kernels into stages (one DynamicMethod each) and check with `DOTNET_JitDisasm` + `DOTNET_JitStdOutFile`.
 - Read `TensorEngine.Blas` into a local before calling it; a test-then-call on the settable property races
@@ -341,7 +344,9 @@ Create issues on `SciSharp/NumSharp` with `gh issue create` (`GH_TOKEN` through 
 | `interop-packages.md` | the unreleased-package policy; ONNX Runtime, ML.NET, System.Numerics.Tensors (sources, verbs, dtypes, lifetime, gates); the pythonnet examples |
 | `kernels.md` | the two IL generators' contracts, shared infrastructure, coverage, kernel rules, float16 techniques, NaN operand order, the 2-D block kernel, broadcast pattern stages |
 | `memory-views.md` | `Shape` (fields, flags, sharing), Slice / broadcasting / operator internals, views and aliases, allocation from a view's Shape, the buffer pool |
-| `creation-manipulation.md` | `np.ndarray`, the `as*` family, logspace / geomspace, set routines, `np.unique` + Array-API unique, flips / transposes, stacking, allocation and reshape guards, `np.copyto` |
+| `creation-manipulation.md` | `np.arange`, `np.ndarray`, the `as*` family, object-list coercion, full / ones / eye, `np.frombuffer`, linspace / logspace / geomspace, set routines, flips / transposes, stacking, resize / tolist, allocation and reshape guards, `np.copyto` |
+| `unique.md` | `np.unique` (`UniqueResult`, the axis path, NumPy's flat routes) and the Array-API unique family, the hash path |
+| `axis-arguments.md` | `Shape.check_and_adjust_axis` / `normalize_axis_tuple`, the rules every axis argument follows, NumPy's errors around axes |
 | `matrix.md` | `NDMatrix`: static type versus object (the matrix boundary), scalars, indexing, operators and scaling, reductions, construction, divergences, gates |
 | `ufuncs.md` | the ufunc surface (`dtype=`, `out=`, `where=`), fix, fabs, clip, divmod, float_power, power's float loops, gcd / lcm, bitwise |
 | `float-math.md` | correlate / convolve, inverse hyperbolic, sinc, the float32 kernels ported from NumPy, exp2, expm1 / log1p, complex128 NaN signs |

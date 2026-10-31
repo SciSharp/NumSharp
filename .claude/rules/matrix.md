@@ -46,9 +46,9 @@ to `NumSharp.NDMatrix` (all members but `ctypes` / `dump` / `dumps`, which ndarr
     to a `static` lambda (a capturing lambda would allocate at method entry on every call, plain arrays included).
   - A function without a rule opens a region (`using var plain = NDMatrixBoundary.PlainFor(a, ...)`): its result is the
     plain array NumPy's `asarray`-based functions return, and the safe answer where NumPy's is not implemented. A
-    container stores the plain view (`NDMatrixBoundary.PlainOf`): numpy.ma (the masked array's data and mask, `AsData`,
-    `MaskOperand`) and the samplers' converted parameters (`RandomParam.Convert`), because a region cannot cover calls
-    made after it closed.
+    container stores the plain view (`NDMatrixBoundary.PlainOf`): numpy.ma (the masked array's data and mask in its
+    constructor, and `AsData`) and the samplers' converted parameters (`RandomParam.Convert`), because a region cannot
+    cover calls made after it closed.
   - The contract is measured: no method of the library may reach the matrix rule of a public function at depth zero.
     `FuzzCorpusTests.MatrixOperand_LibraryNeverReachesAMatrixRule` replays every corpus case with a 2-D operand (the
     ordinary, numpy.ma and index tiers) with those operands typed as matrices while
@@ -70,8 +70,8 @@ to `NumSharp.NDMatrix` (all members but `ctypes` / `dump` / `dumps`, which ndarr
 
 - A 0-d `NDMatrix` is a scalar, not a matrix. The 15 C# scalar types convert implicitly to a 0-d `NDMatrix`, so `m * 2`,
   `m + 1.5` and `m[mask] = 0` compile and bind the `(NDMatrix, NDMatrix)` operators; `*` with a 0-d operand scales.
-  Members whose NumPy result is always a scalar return a 0-d `NDArray` (`m[0, 0]`, `m.sum()`); the general indexers
-  return a 0-d `NDMatrix` for a full integer index.
+  Members whose NumPy result is always a scalar return a 0-d `NDArray` (`m[0, 0]`, `m.sum()`); the general indexer
+  (`this[params object[]]`, the one C# form of `matrix.__getitem__`) returns a 0-d `NDMatrix` for a full integer index.
 - An explicit 0-d ARRAY is not a scalar to `*`. NumPy's `matrix.__mul__` tests `isinstance(other, ndarray)` before
   `isscalar(other)`, so `m * np.array(2)` is `np.dot(m, asmatrix(np.array(2)))`, the product with a 1 × 1 matrix:
   `ValueError: shapes (2,3) and (1,1) not aligned` unless `m` has one column. NumSharp has one 0-d type for both roles,
@@ -103,8 +103,9 @@ to `NumSharp.NDMatrix` (all members but `ctypes` / `dump` / `dumps`, which ndarr
 - Assignment: matrix has no `__setitem__`, but ndarray's assignment gets the subclass view through its own `__getitem__`
   for an index of integers and slices, so the value is broadcast into the row or COLUMN: `m[:, 0] = [7, 8, 9]` raises
   `could not broadcast input array from shape (3,) into shape (3,1)`. One element is stored through the dtype's setitem
-  (an array value is refused; bool takes a one-element array's truth value; complex128 raises TypeError). The typed
-  indexers take an `NDMatrix` or a number; `__setitem__(index, object)` takes any value.
+  (an array value is refused; bool takes a one-element array's truth value; complex128 raises TypeError). The general
+  indexer takes an `NDMatrix` or a number (`m[row, column]` any `NDArray`); `__setitem__(index, object)` takes any
+  value.
 
 ## Operators
 
@@ -140,9 +141,9 @@ to `NumSharp.NDMatrix` (all members but `ctypes` / `dump` / `dumps`, which ndarr
 - Constructor (`NDMatrix.Construction.cs`): the four branches of `matrix.__new__` in NumPy's order. A matrix literal
   (`"1 2; 3 4"`, `"[1.5, 2; 3 4j]"`) is `_convert_from_string` plus a port of `ast.literal_eval` for one token (four
   number bases, `_`, floats, imaginary numbers, signs, parentheses, `True` / `False`; `SyntaxError` and `malformed node`
-  errors). A sequence goes through `PolySequence`; with a `dtype` each element is stored by `PyArray_Pack`
-  (`ReductionInitial.TryPack`): a Python int out of range raises OverflowError, a complex number into a real dtype
-  raises TypeError.
+  errors). A sequence goes through `UnmanagedStorage.FromSequence`; with a `dtype` each element is stored by
+  `PyArray_Pack` (`ReductionInitial.TryPack`): a Python int out of range raises OverflowError, a complex number into a
+  real dtype raises TypeError.
 
 ## Divergences and the library rules it relies on
 
@@ -164,10 +165,12 @@ to `NumSharp.NDMatrix` (all members but `ctypes` / `dump` / `dumps`, which ndarr
   against each operand) and NumPy's error type and text, over 14 source layouts and the dtypes; operands rebuild as
   `NDMatrix` (`"matrix": true`). It is replayed once per scaling route: `Matrix` (production: a counter proves the direct
   pass ran), `Matrix_FusedScaling` (direct pass off, fused pass forced) and `Matrix_TwoPassScaling` (both off), through
-  `NDMatrix.DisableDirectScale` / `FusedScaleMinElementsTestOverride`. Gap ids MX01–MX11 are carved into
-  `gaps/matrix_gaps.jsonl`; every one is an `NDArray` member or `np.*` function below the class (pins in
-  `OpenBugs.Matrix.cs`: `np.dot` of an N-D operand with an M-D one computes complex128 in float64, the flat `np.prod` in a
-  cast loop, a fancy assignment into a C-contiguous view at an offset throws, and four result-layout gaps).
+  `NDMatrix.DisableDirectScale` / `FusedScaleMinElementsTestOverride`. 111 cases are carved into
+  `gaps/matrix_gaps.jsonl` under six gap ids; every one is an `NDArray` member or `np.*` function below the class. Pins in
+  `OpenBugs.Matrix.cs`: a fancy assignment into a C-contiguous view at an offset throws (MX07), and the result layouts of
+  np.cumsum / np.cumprod (MX02), ndarray.round of a broadcast operand (MX04) and np.conjugate of a transposed strided view
+  (MX05); MX01 (the fancy getter's layout) and MX09 (complex128 np.prod's zero sign) are pinned by
+  `OpenBugs.FancyIndex.cs` and `OpenBugs.Reductions.cs`.
 - The matrix-operand tier (`test/oracle/gen_matrix_operand_oracle.py`, `oracle.md`): the public `np.*` functions with a
   matrix operand; gaps MO01–MO05 carved into `gaps/matrix_operand{,_host}_gaps.jsonl`.
 - Unit tests: `Matrixlib/NDMatrix.Tests.cs` (NumPy's `test_defmatrix.py` ported plus the design pins;
