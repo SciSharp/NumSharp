@@ -70,6 +70,8 @@ symptom.
   F16C widening (`kernels.md`). complex128 runs scalar through `System.Numerics.Complex` (about 2× slower than NumPy);
   its unary ufuncs match NumPy bit for bit, NaN sign included (`float-math.md`). Decimal runs scalar (`DecimalMath`):
   the highest precision and the slowest.
+- Text: one more lane, `NPTypeCode.String`, stores NumPy's `bytes_` (`S`), `str_` (`U`) and NEP 55 `StringDType` (`T`);
+  the descriptor carries the class and the width, and every computation NumPy runs on text computes (`strings.md`).
 - NEP 50 result dtypes: `sum`/`prod`/`cumsum` of int32 → int64; `abs`/`sign` keep the dtype; `power(int32, float)` →
   float64.
 
@@ -154,19 +156,22 @@ Tested against NumPy 2.4.2. Each line: the `np.*` names, then the rule that hold
   `true_divide`, `trunc` → `ufuncs.md` and `float-math.md`.
 - Math, reductions: `all`, `amax`, `amin`, `any`, `argmax`, `argmin`, `average`, `average_returned`, `count_nonzero`,
   `cov`, `cumprod`, `cumsum`, `diff`, `ediff1d`, `max`, `mean`, `median`, `min`, `percentile`, `prod`, `ptp`, `quantile`,
-  `std`, `sum`, `var` → `reductions.md`.
+  `std`, `sum`, `var` → `reductions.md` (median / percentile / quantile: `quantile.md`).
 - Math, NaN-aware: `nanmax`, `nanmean`, `nanmedian`, `nanmin`, `nanpercentile`, `nanprod`, `nanquantile`, `nanstd`,
-  `nansum`, `nanvar` → `reductions.md`.
+  `nansum`, `nanvar` → `reductions.md` (the nan quantile forms: `quantile.md`).
 - Bitwise: `bitwise_and`, `bitwise_or`, `bitwise_xor`, `invert`, `left_shift`, `right_shift` → `ufuncs.md`.
 - Comparison and logic: `all`, `allclose`, `any`, `array_equal`, `equal`, `fmax`, `fmin`, `greater`, `greater_equal`,
   `isclose`, `iscomplex`, `iscomplexobj`, `isfinite`, `isin`, `isinf`, `isnan`, `isreal`, `isrealobj`, `isscalar`,
   `iterable`, `less`, `less_equal`, `logical_and`, `logical_not`, `logical_or`, `logical_xor`, `maximum`, `minimum`,
   `not_equal`, `signbit` → `comparison.md`.
-- Type promotion and dtypes: `can_cast`, `character`, `common_type`, `complexfloating`, `datetime_data`, `dtype`,
-  `dtypes` (the `np.dtypes` class module), `False_`, `find_common_type`, `finfo`, `flexible`, `floating`, `generic`,
-  `iinfo`, `inexact`, `integer`, `isdtype`, `issubdtype`, `longdouble`, `min_scalar_type`, `mintypecode`, `number`,
-  `promote_types`, `result_type`, `sctypeDict`, `signedinteger`, `True_`, `typecodes`, `typing` (the `np.typing`
-  module), `unsignedinteger` → `dtypes.md`.
+- Type promotion and dtypes: `bytes_`, `can_cast`, `character`, `common_type`, `complexfloating`, `datetime_data`,
+  `dtype`, `dtypes` (the `np.dtypes` class module), `False_`, `find_common_type`, `finfo`, `flexible`, `floating`,
+  `generic`, `iinfo`, `inexact`, `integer`, `isdtype`, `issctype`, `issubdtype`, `longdouble`, `min_scalar_type`,
+  `mintypecode`, `number`, `promote_types`, `result_type`, `ScalarType`, `sctypeDict`, `signedinteger`, `str_`, `True_`,
+  `typecodes`, `typing` (the `np.typing` module), `unsignedinteger` → `dtypes.md` (the classes: `scalar-types.md`).
+- Text: `np.strings.*` (NumPy's 46 names) → `strings-methods.md`; text comparisons, arithmetic, reductions and ordering
+  → `strings-compute.md`; `np.char.*` and `np.char.chararray` → `char-chararray.md`. Masked arrays: `np.ma.*`
+  (`NDMaskedArray`) → `masked-arrays.md`.
 - Selection: `choose`, `compress`, `extract`, `index_exp`, `indices`, `ix_`, `place`, `put`, `put_along_axis`, `putmask`,
   `ravel_multi_index`, `s_`, `select`, `take`, `take_along_axis`, `unravel_index`, `where` → `selection-indexing.md`.
 - Iteration: `nditer`, `ndenumerate`, `ndindex`, `nested_iters`, `flatiter`, `broadcast`, and the typed `nditer<T>` /
@@ -341,8 +346,15 @@ Create issues on `SciSharp/NumSharp` with `gh issue create` (`GH_TOKEN` through 
 | `ufuncs.md` | the ufunc surface (`dtype=`, `out=`, `where=`), fix, fabs, clip, divmod, float_power, power's float loops, gcd / lcm, bitwise |
 | `float-math.md` | correlate / convolve, inverse hyperbolic, sinc, the float32 kernels ported from NumPy, exp2, expm1 / log1p, complex128 NaN signs |
 | `reductions.md` | the reduce prologue, sum / mean, var / std, numpy.ma mean / var, max / min / ptp schedules and keywords, float16 HALF loops, cov, the NaN-aware family |
+| `quantile.md` | the quantile family: `q`'s dtype and the lerp, `out=`, the nan forms, `weights=`, the partition |
+| `masked-arrays.md` | numpy.ma: semantics by result kind, the fill value, the set routines, `ma.put`, text and `StringDType` |
 | `comparison.md` | signbit, isin, iterable, the comparison ufuncs (the strong-literal divergence), the comparison engine |
-| `dtypes.md` | the DType model, promotion and casting, the `np.dtype(string)` parser, traps, NumPy's names, C enums and find_common_type, scalar types and `np.typing` |
+| `dtypes.md` | the DType model, the C-type classes, promotion and casting, the `np.dtype(string)` parser, the element slots, traps, NumPy's names, C enums and find_common_type |
+| `scalar-types.md` | `NDScalarType` and Python's built-in classes, issubdtype / isdtype / issctype / finfo / iinfo of a class, `np.typing` |
+| `strings.md` | the string dtypes: the refuse-or-compute rule, the C# boundary, movement, `StringDType` arrays, text ↔ number, gates |
+| `strings-compute.md` | the text kernels, `StringDType` computation and NA rules, text sorts / searches / set routines, ordering `T` |
+| `strings-methods.md` | the 46 `np.strings` functions: search / strip / pad, predicates, case maps, translate, mod, encode / decode |
+| `char-chararray.md` | `numpy.char`, `NDCharArray` and its boundary, the object path (`NDListArray`) |
 | `selection-indexing.md` | index forms, take / put / place / putmask, take_along_axis / put_along_axis / select, the `r_` / `c_` / `ix_` / `s_` / grid DSL, the diagonal and triangular family |
 | `iteration.md` | NDIter, ndindex / ndenumerate / nditer and their traps, nested_iters, flatiter, typed iteration, `nd.Unsafe` and the .NET bridges |
 | `evaluate.md` | `np.evaluate`: typing, root reductions, execution and streaming, programs, 0-d parameters, the cache, `Compile()`, Call nodes |

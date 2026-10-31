@@ -280,8 +280,9 @@ namespace NumSharp
 
             // NEP 55 StringDType: a NEW-STYLE class (no builtin singleton — each descriptor instance is its own, as in
             // NumPy where every instance carries a string allocator). It shares the NPTypeCode.String lane with S / U
-            // (decision D4) but owns neither the lane nor the C# string type, so `(DType)NPTypeCode.String` and
-            // `np.dtype(typeof(string))` keep meaning `<U`.
+            // (decision D4) but owns neither the lane nor the C# string type, so FromTypeCode(NPTypeCode.String) keeps
+            // naming the StrDType class and `np.dtype(typeof(string))` keeps meaning `<U` (the descriptor-level
+            // DType.From(NPTypeCode.String) refuses: the lane carries no width).
             VString = new VStringDTypeMeta();
             Add(VString);
 
