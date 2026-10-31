@@ -294,7 +294,9 @@ namespace NumSharp.Backends
             // Both walks are pinned to 'C' — the typed iterator defaults to 'K' (MEMORY order),
             // which for a strided or transposed source visits elements in a different sequence
             // than it does for the freshly allocated C-contiguous destination.
-            var writer = np.nditer<double>(magnitudes, writeable: true, order: 'C').GetEnumerator();
+            // The writer is driven by hand, so nothing disposes it but this `using`: its enumerator owns a native
+            // iterator state block (NDIterRef), which leaked on every complex call while the enumerator was a plain local.
+            using var writer = np.nditer<double>(magnitudes, writeable: true, order: 'C').GetEnumerator();
             foreach (Complex z in np.nditer<Complex>(x, order: 'C'))
             {
                 writer.MoveNext();
