@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using NumSharp.Backends;
 using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
@@ -7,12 +8,15 @@ using NumSharp.Backends.Kernels;
 namespace NumSharp
 {
     // ============================== lib/_shape_base_impl.py ==============================
-    // NumPy's take_along_axis, put_along_axis and apply_along_axis as members of the array object (P3's batch 7):
-    // take_along_axis, put_along_axis with its scatter core, and apply_along_axis. The facades keep their numpy.matrix
-    // / numpy.char rules and their null checks; np.apply_along_axis's *args overload wraps its delegate and calls the
-    // one-argument facade. The statements call the members the np.* functions dispatch to (the plan's phase P6), but
-    // for the ndindex iterator apply_along_axis walks (np.NDIndex, NumPy's ndindex: a public type nested in np, which
-    // ratchet R2 pins), and the file sits under Backends/, beside the array object's class (plan C3).
+    // NumPy's numpy/lib/_shape_base_impl.py array-object functions as members of the array object: expand_dims,
+    // take_along_axis, put_along_axis with its scatter core and apply_along_axis (P3's batch 7), and the split family
+    // (split, array_split, hsplit, vsplit, dsplit, with SplitContext's view builder), tile, column_stack and dstack_ (P8).
+    // The facades keep their numpy.matrix / numpy.char rules and their null checks; np.apply_along_axis's *args overload
+    // wraps its delegate and calls the one-argument facade. np.apply_over_axes stays a facade: its np.expand_dims of the
+    // callback's result applies the chararray rule (NumPy's asanyarray + reshape keep a chararray result's class), which
+    // these plain statements would not. The statements call the members the np.* functions dispatch to (the plan's phase
+    // P6), but for the ndindex iterator apply_along_axis walks (np.NDIndex, NumPy's ndindex: a public type nested in np,
+    // which ratchet R2 pins), and the file sits under Backends/, beside the array object's class (plan C3).
     public partial class NDArray
     {
         // ---------------------------- np.expand_dims ----------------------------
@@ -781,6 +785,904 @@ namespace NumSharp
                 if (a[i] != b[i])
                     return false;
             return true;
+        }
+
+        // ---------------------------- np.column_stack ----------------------------
+
+        /// <summary>
+        ///     NumPy's <c>numpy.column_stack(tup)</c> after the facade's class rules and null check: an array below two
+        ///     dimensions becomes a column (NumPy's <c>array(arr, copy=None, subok=True, ndmin=2).T</c>, one view here), an
+        ///     array of two dimensions or more passes through, and the list joins along axis 1. The column views are this
+        ///     call's own and are released once the join has copied them, on the join's error path too.
+        /// </summary>
+        /// <param name="tup">The arrays (the array itself not null; a null entry is refused before anything joins).</param>
+        /// <returns>A new array: concatenate's result along axis 1, in its promoted dtype and NumPy's layout vote (the column
+        ///     of a contiguous 1-d array is both C- and F-contiguous, so columns alone vote C).</returns>
+        /// <exception cref="ArgumentNullException">A null entry (the parameter is named <c>tup[i]</c> with the first null
+        ///     entry's index). The columns made for the entries before it are left to the finalizer.</exception>
+        /// <exception cref="ValueError">No array: concatenate's <c>need at least one array to concatenate</c>, the text NumPy's
+        ///     column_stack([]) raises.</exception>
+        /// <exception cref="IncorrectShapeException">Arrays whose ranks or first dimensions differ once turned into columns
+        ///     (concatenate's NumPy texts).</exception>
+        /// <exception cref="InvalidCastException">An array that does not cast to the result dtype (concatenate's
+        ///     refusal).</exception>
+        /// <remarks>No class boundary runs here: the facade applies its rules (a matrix result wrapped, a chararray operand
+        ///     computed plain) before it calls this. Every error but a null entry comes from concatenate, exactly as in NumPy,
+        ///     whose column_stack ends with <c>_nx.concatenate(arrays, 1)</c>.</remarks>
+        internal static NDArray column_stack(NDArray[] tup)
+        {
+            // Port of numpy/lib/_shape_base_impl.py::column_stack —
+            //   arr = array(arr, copy=None, subok=True, ndmin=2).T  when ndim < 2
+            // ndmin=2 prepends a leading 1 as a VIEW: (N,) → (1,N), () → (1,1);
+            // the transpose then turns the row into a column: (N,1) / (1,1).
+            // Inputs of ndim >= 2 pass through untouched. Errors (empty tup,
+            // ndim/shape mismatches, promotion) all flow from concatenate,
+            // exactly as in NumPy.
+            var arrays = new NDArray[tup.Length];
+            NDArray[] columnViews = null; // views created here; released post-concat
+            for (int i = 0; i < tup.Length; i++)
+            {
+                var arr = tup[i];
+                if (arr is null)
+                    throw new ArgumentNullException($"{nameof(tup)}[{i}]");
+
+                if (arr.ndim < 2)
+                {
+                    arr = AsColumnView(arr);
+                    (columnViews ??= new NDArray[tup.Length])[i] = arr;
+                }
+
+                arrays[i] = arr;
+            }
+
+            try
+            {
+                return concatenate(arrays, 1, null, null, "same_kind");
+            }
+            finally
+            {
+                // The (N,1) wrappers alias caller storage and are dead after the
+                // copy — release them eagerly (same pattern as concatenate's
+                // axis=null ravel intermediates).
+                if (columnViews != null)
+                    for (int i = 0; i < columnViews.Length; i++)
+                        columnViews[i]?.Dispose();
+            }
+        }
+
+        /// <summary>
+        ///     <c>array(arr, copy=None, ndmin=2).T</c> as ONE view: (N,) → (N,1)
+        ///     and () → (1,1), preserving stride/offset (a strided 1-d input stays
+        ///     a view, like NumPy's ndmin path). The dim-1 column stride mirrors
+        ///     what the (1,N)-transpose produces (N*stride), keeping the view
+        ///     both C- and F-contiguous for contiguous inputs — which is what the
+        ///     concatenate layout vote (ambiguous → C order) keys off, per NumPy.
+        /// </summary>
+        /// <param name="arr">An array of rank 0 or 1 (not null); a higher rank would be read as its first axis only.</param>
+        /// <returns>A new (N,1) or (1,1) view over <paramref name="arr"/>'s buffer, in <paramref name="arr"/>'s engine: it
+        ///     holds its own reference on the buffer, so the caller must dispose it (column_stack does once the join has
+        ///     copied it).</returns>
+        private static NDArray AsColumnView(NDArray arr)
+        {
+            var sh = arr.Shape;
+            long n, stride0;
+            if (arr.ndim == 0)
+            {
+                n = 1;
+                stride0 = 1;
+            }
+            else
+            {
+                n = sh.dimensions[0];
+                stride0 = sh.strides[0];
+            }
+
+            var column = new Shape(new[] { n, 1L }, new[] { stride0, n * stride0 }, sh.offset, sh.bufferSize);
+            return new NDArray(arr.Storage.Alias(column), arr.TensorEngine, skipEngineResolve: true);
+        }
+
+        // ---------------------------- np.dstack ----------------------------
+
+        /// <summary>
+        ///     NumPy's <c>numpy.dstack(tup)</c> after the facade's class rules and null check: <c>arrs = atleast_3d(*tup);
+        ///     return concatenate(arrs, 2)</c> - a 1-d array of length N becomes (1, N, 1), a 2-d array (M, N) becomes
+        ///     (M, N, 1), and the arrays join along the third axis.
+        /// </summary>
+        /// <param name="tup">The arrays (the array itself not null; a null entry is NumPy's None, refused).</param>
+        /// <returns>A new array of three dimensions or more: concatenate's result, in its promoted dtype and NumPy's layout
+        ///     vote.</returns>
+        /// <exception cref="ValueError">No array: <c>atleast_3d(*tup)</c> of nothing is the empty tuple, and concatenating it
+        ///     is concatenate's <c>need at least one array to concatenate</c>, the text NumPy's dstack([]) raises.</exception>
+        /// <exception cref="NullReferenceException">A null entry (read by atleast_3d).</exception>
+        /// <exception cref="IncorrectShapeException">Arrays whose ranks, or dimensions other than the third, differ
+        ///     (concatenate's NumPy texts).</exception>
+        /// <exception cref="InvalidCastException">An array that does not cast to the result dtype (concatenate's
+        ///     refusal).</exception>
+        /// <remarks>No class boundary runs here: the facade applies its rules (a matrix result wrapped, a chararray operand
+        ///     computed plain) before it calls this, so the inner atleast_3d and concatenate are the members. The atleast_3d
+        ///     views are not released here, as <see cref="vstack_"/>'s atleast_2d views are not: each holds its input's buffer
+        ///     until it is collected. The trailing underscore is NumPy's convention for a name already taken (D18):
+        ///     <see cref="dstack(NDArray[])"/> is the array object's public instance method that stacks the array with
+        ///     others.</remarks>
+        internal static NDArray dstack_(NDArray[] tup)
+        {
+            // NumPy's atleast_3d(*tup) of no arrays is the empty tuple, and concatenating it is np.concatenate's ValueError —
+            // the text NumPy's dstack([]) raises.
+            if (tup.Length == 0)
+                throw new ValueError("need at least one array to concatenate");
+
+            var arrs = new NDArray[tup.Length];
+            for (int i = 0; i < tup.Length; i++)
+                arrs[i] = atleast_3d(tup[i]);
+            return concatenate(arrs, 2, null, null, "same_kind");
+        }
+
+        // ---------------------------- np.array_split / np.split ----------------------------
+
+        /// <summary>
+        ///     NumPy's <c>numpy.array_split(ary, indices_or_sections, axis)</c> for a section count, after the facade's class
+        ///     rules and null check: <c>Ntotal = ary.shape[axis]</c> first, then the count's check, then
+        ///     <paramref name="indices_or_sections"/> views along the axis - the first <c>Ntotal % sections</c> of them one
+        ///     element longer than the rest, so the count need not divide the axis.
+        /// </summary>
+        /// <param name="ary">The array to divide (not null).</param>
+        /// <param name="indices_or_sections">The number of sections; their lengths differ by at most one.</param>
+        /// <param name="axis">The axis to split along; negative counts from the end.</param>
+        /// <returns>The sections, each a VIEW of <paramref name="ary"/>'s buffer (it writes through and keeps the buffer
+        ///     alive; a read-only or broadcast operand gives read-only views), plain arrays whatever <paramref name="ary"/>'s
+        ///     class. A count larger than the axis gives empty views at the end.</returns>
+        /// <exception cref="IndexError"><paramref name="axis"/> is out of range ("tuple index out of range": NumPy reads
+        ///     <c>ary.shape[axis]</c>, a Python tuple index, before anything else; a 0-d array refuses every axis).</exception>
+        /// <exception cref="ValueError"><paramref name="indices_or_sections"/> is not positive ("number sections must be
+        ///     larger than 0.").</exception>
+        /// <remarks>No class boundary runs here: np.array_split applies its rules before it calls this.</remarks>
+        internal static NDArray[] array_split(NDArray ary, int indices_or_sections, int axis)
+        {
+            // `Ntotal = ary.shape[axis]` first, then `Nsections = int(…); if Nsections <= 0: raise`.
+            int ax = NormalizeSplitAxis(axis, ary.ndim);
+            if (indices_or_sections <= 0)
+                throw new ValueError("number sections must be larger than 0.");
+            return SplitContext.FromParent(ary, ax).SplitBySections(indices_or_sections);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>numpy.array_split(ary, indices_or_sections, axis)</c> for split points, after the facade's class
+        ///     rules and null check: one view per span of <c>[0, indices..., Ntotal]</c> along the axis, each point clamped as
+        ///     a Python slice bound (a negative point counts from the end, a point past the axis is its length), and a span
+        ///     that runs backwards empty.
+        /// </summary>
+        /// <param name="ary">The array to divide (not null).</param>
+        /// <param name="indices">The split points along the axis, in the caller's order: nothing is sorted, so unsorted
+        ///     points give empty views, as NumPy's slices do.</param>
+        /// <param name="axis">The axis to split along; negative counts from the end.</param>
+        /// <returns><c>indices.Length + 1</c> views of <paramref name="ary"/>'s buffer (writing through, keeping the buffer
+        ///     alive, read-only when the operand is), plain arrays whatever <paramref name="ary"/>'s class.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="indices"/> is null.</exception>
+        /// <exception cref="IndexError"><paramref name="axis"/> is out of range ("tuple index out of range"; a 0-d array
+        ///     refuses every axis).</exception>
+        /// <remarks>No class boundary runs here: np.array_split, and np.split / np.hsplit / np.vsplit / np.dsplit through
+        ///     <see cref="split(NDArray, long[], int)"/>, apply their rules before they reach this.</remarks>
+        internal static NDArray[] array_split(NDArray ary, long[] indices, int axis)
+        {
+            // NumSharp's own guard - NumPy's single indices_or_sections argument reads a None as a count (int(None)'s
+            // TypeError). It lives here because every split-points route reaches this member (np.split and the h/v/d
+            // splits after their rank check), after the facade's `ary` check and before the axis: the order the
+            // np.array_split facade has always checked them in.
+            if (indices is null) throw new ArgumentNullException(nameof(indices));
+
+            int ax = NormalizeSplitAxis(axis, ary.ndim);
+            return SplitContext.FromParent(ary, ax).SplitIndices(indices);
+        }
+
+        /// <summary>
+        ///     <see cref="array_split(NDArray, long[], int)"/> for <see cref="int"/> split points: the same spans and clamping,
+        ///     each point widened as it is read (no <see cref="long"/> copy of the list is made).
+        /// </summary>
+        /// <param name="ary">The array to divide (not null).</param>
+        /// <param name="indices">The split points along the axis, in the caller's order (unsorted points give empty
+        ///     views).</param>
+        /// <param name="axis">The axis to split along; negative counts from the end.</param>
+        /// <returns><c>indices.Length + 1</c> views of <paramref name="ary"/>'s buffer (writing through, keeping the buffer
+        ///     alive, read-only when the operand is), plain arrays whatever <paramref name="ary"/>'s class.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="indices"/> is null.</exception>
+        /// <exception cref="IndexError"><paramref name="axis"/> is out of range ("tuple index out of range"; a 0-d array
+        ///     refuses every axis).</exception>
+        /// <remarks>No class boundary runs here: np.array_split, and np.split / np.hsplit / np.vsplit / np.dsplit through
+        ///     <see cref="split(NDArray, int[], int)"/>, apply their rules before they reach this.</remarks>
+        internal static NDArray[] array_split(NDArray ary, int[] indices, int axis)
+        {
+            // NumSharp's own guard, before the axis: see the long[] overload.
+            if (indices is null) throw new ArgumentNullException(nameof(indices));
+
+            int ax = NormalizeSplitAxis(axis, ary.ndim);
+            return SplitContext.FromParent(ary, ax).SplitIndices(indices);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>numpy.split(ary, indices_or_sections, axis)</c> for a section count, after the facade's class rules
+        ///     and null check: <c>N = ary.shape[axis]</c> first, then the count must divide the axis, then
+        ///     <paramref name="indices_or_sections"/> equal views.
+        /// </summary>
+        /// <param name="ary">The array to divide (not null).</param>
+        /// <param name="indices_or_sections">The number of equal sections; it must divide the axis' length.</param>
+        /// <param name="axis">The axis to split along; negative counts from the end.</param>
+        /// <returns>The equal sections, each a view of <paramref name="ary"/>'s buffer (writing through, keeping the buffer
+        ///     alive, read-only when the operand is), plain arrays whatever <paramref name="ary"/>'s class.</returns>
+        /// <exception cref="IndexError"><paramref name="axis"/> is out of range ("tuple index out of range"; a 0-d array
+        ///     refuses every axis).</exception>
+        /// <exception cref="ValueError"><paramref name="indices_or_sections"/> is not positive ("number sections must be
+        ///     larger than 0.", checked before the division), or does not divide the axis ("array split does not result
+        ///     in an equal division").</exception>
+        /// <remarks>No class boundary runs here: the facades (np.split, np.hsplit, np.vsplit, np.dsplit) apply their rules
+        ///     before they reach this.</remarks>
+        internal static NDArray[] split(NDArray ary, int indices_or_sections, int axis)
+        {
+            // `N = ary.shape[axis]` is NumPy's first statement: the axis is checked before the sections.
+            int ax = NormalizeSplitAxis(axis, ary.ndim);
+
+            // array_split's argument validation handles section<=0; we validate here
+            // so the equal-division check below doesn't divide by zero (NumPy: raw
+            // int % 0 throws ZeroDivisionError, but array_split's ValueError is clearer
+            // and is what NumPy raises for the same count one call later).
+            if (indices_or_sections <= 0)
+                throw new ValueError("number sections must be larger than 0.");
+
+            long N = ary.Shape.dimensions[ax];
+            if (N % indices_or_sections != 0)
+                throw new ValueError("array split does not result in an equal division");
+
+            return SplitContext.FromParent(ary, ax).SplitBySections(indices_or_sections);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>numpy.split(ary, indices_or_sections, axis)</c> for split points: there is no division to check, so
+        ///     it is <see cref="array_split(NDArray, long[], int)"/>, as NumPy's split ends in array_split.
+        /// </summary>
+        /// <param name="ary">The array to divide (not null).</param>
+        /// <param name="indices">The split points along the axis (unsorted points give empty views).</param>
+        /// <param name="axis">The axis to split along; negative counts from the end.</param>
+        /// <returns><c>indices.Length + 1</c> views of <paramref name="ary"/>'s buffer, plain arrays.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="indices"/> is null (array_split's guard).</exception>
+        /// <exception cref="IndexError"><paramref name="axis"/> is out of range ("tuple index out of range").</exception>
+        /// <remarks>No class boundary runs here: the facades apply their rules before they reach this.</remarks>
+        internal static NDArray[] split(NDArray ary, long[] indices, int axis) => array_split(ary, indices, axis);
+
+        /// <summary>
+        ///     NumPy's <c>numpy.split(ary, indices_or_sections, axis)</c> for <see cref="int"/> split points: it is
+        ///     <see cref="array_split(NDArray, int[], int)"/>, as NumPy's split ends in array_split.
+        /// </summary>
+        /// <param name="ary">The array to divide (not null).</param>
+        /// <param name="indices">The split points along the axis (unsorted points give empty views).</param>
+        /// <param name="axis">The axis to split along; negative counts from the end.</param>
+        /// <returns><c>indices.Length + 1</c> views of <paramref name="ary"/>'s buffer, plain arrays.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="indices"/> is null (array_split's guard).</exception>
+        /// <exception cref="IndexError"><paramref name="axis"/> is out of range ("tuple index out of range").</exception>
+        /// <remarks>No class boundary runs here: the facades apply their rules before they reach this.</remarks>
+        internal static NDArray[] split(NDArray ary, int[] indices, int axis) => array_split(ary, indices, axis);
+
+        /// <summary>
+        ///     The split family's axis: NumPy reads <c>ary.shape[axis]</c> before anything else, a Python tuple index, so an
+        ///     axis outside <c>[-ndim, ndim)</c> is the IndexError Python raises there — not an AxisError (NumPy never
+        ///     normalizes it first). A 0-d array has the empty shape, which no index fits.
+        /// </summary>
+        /// <param name="axis">The axis; negative values count from the end.</param>
+        /// <param name="ndim">The array's rank.</param>
+        /// <returns>The non-negative axis.</returns>
+        /// <exception cref="IndexError"><paramref name="axis"/> is out of range ("tuple index out of range").</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static int NormalizeSplitAxis(int axis, int ndim)
+        {
+            if (axis < -ndim || axis >= ndim)
+                throw new IndexError("tuple index out of range");
+            return axis < 0 ? axis + ndim : axis;
+        }
+
+        /// <summary>
+        ///     Shared state for one split call. Snapshots the parent's shape /
+        ///     storage / engine / per-axis derivation once and exposes
+        ///     <see cref="SplitBySections"/> for the integer-section paths
+        ///     (<c>split(a, N)</c> / <c>array_split(a, N)</c>) and
+        ///     <see cref="SplitIndices(long[])"/> / <see cref="SplitIndices(int[])"/>
+        ///     for the explicit-indices paths
+        ///     (<c>split(a, [3,5,6])</c> / <c>array_split(a, [3,5,6])</c>).
+        ///     Naming note: "Sections" refers to NumPy's
+        ///     <c>indices_or_sections</c> integer mode — NOT a dtype. Split is
+        ///     dtype-agnostic; only views are produced, no element loop runs.
+        ///     Each per-sub-array call:
+        ///     <list type="bullet">
+        ///         <item>Reuses a shared dims[] when the previous sub had the same length on the split axis (typical case for int sections — at most 2 distinct lengths)</item>
+        ///         <item>Derives sub flags once per distinct sub-length via <see cref="DeriveSubFlags"/> — an O(ndim) recompute with the canonical Shape walks (parent-flag algebra cannot express NumPy's size-1 contiguity relaxation)</item>
+        ///         <item>Derives sub size in O(1) from <c>parent.size * subLen / parent.dim[axis]</c></item>
+        ///         <item>Constructs Shape through the no-walk ctor</item>
+        ///     </list>
+        ///     This pulls the per-sub-array cost from ~640ns (Shape + Alias + NDArray)
+        ///     to ~540ns on a 1-D arange(1000) → 4 split benchmark.
+        /// </summary>
+        /// <remarks>Sub-arrays sharing a length share one dims[] array: safe only because nothing writes into a Shape's
+        ///     dimensions after construction (the Shape sharing rule), so a caller that did would change every sibling.</remarks>
+        [NDBorrowed /* the array being split belongs to the caller; the pieces are views yielded to them */]
+        private readonly struct SplitContext
+        {
+            /// <summary>The array being split: its storage is aliased by every piece.</summary>
+            private readonly NDArray _ary;
+            /// <summary>The parent's dimensions, copied into each distinct piece length's dims[].</summary>
+            private readonly long[] _srcDims;
+            /// <summary>The parent's strides, shared by every piece (a split keeps the layout).</summary>
+            private readonly long[] _srcStrides;
+            /// <summary>The parent's stride along the split axis: a piece's offset advances by it per element.</summary>
+            private readonly long _axisStride;
+            /// <summary>The parent's offset into its buffer: the first piece starts here.</summary>
+            private readonly long _baseOffset;
+            /// <summary>The parent's buffer size (its element count when the shape reports none), given to every piece.</summary>
+            private readonly long _bufSize;
+            /// <summary>The parent's length along the split axis (parent.dimensions[axis]).</summary>
+            private readonly long _axisDim;
+            /// <summary>One slab's element count along the axis (parent.size / axisDim; 0 for an empty axis).</summary>
+            private readonly long _otherDimsProduct;
+            /// <summary>The parent's engine, handed to every piece without re-resolving it.</summary>
+            private readonly TensorEngine _engine;
+            /// <summary>The parent's rank.</summary>
+            private readonly int _ndim;
+            /// <summary>The normalized split axis.</summary>
+            private readonly int _axis;
+            /// <summary>The parent's cached <see cref="ArrayFlags"/>, read for its WRITEABLE bit.</summary>
+            private readonly int _parentFlags;
+
+            /// <summary>Snapshots <paramref name="ary"/>'s layout for splitting along <paramref name="axis"/>.</summary>
+            /// <param name="ary">The array to split (not null).</param>
+            /// <param name="axis">The normalized split axis (<c>0 .. ndim - 1</c>; not checked here).</param>
+            private SplitContext(NDArray ary, int axis)
+            {
+                _ary = ary;
+                _engine = ary.TensorEngine;
+                var shp = ary.Shape;
+                _srcDims = shp.dimensions;
+                _srcStrides = shp.strides;
+                _axisStride = _srcStrides[axis];
+                _baseOffset = shp.offset;
+                _bufSize = shp.bufferSize > 0 ? shp.bufferSize : shp.size;
+                _ndim = _srcDims.Length;
+                _axis = axis;
+                _axisDim = _srcDims[axis];
+                _parentFlags = shp._flags;
+                // Per-slab size: parent.size / axisDim. For axisDim==0 the parent is
+                // empty; we keep otherDimsProduct=0 so sub-size collapses to 0.
+                _otherDimsProduct = _axisDim == 0 ? 0 : shp.size / _axisDim;
+            }
+
+            /// <summary>The split state of <paramref name="ary"/> along <paramref name="axis"/>.</summary>
+            /// <param name="ary">The array to split (not null).</param>
+            /// <param name="axis">The normalized split axis (<c>0 .. ndim - 1</c>; the callers normalize it with
+            ///     <see cref="NormalizeSplitAxis"/>, nothing is checked here).</param>
+            /// <returns>The snapshot the split methods read.</returns>
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+            internal static SplitContext FromParent(NDArray ary, int axis) => new SplitContext(ary, axis);
+
+            /// <summary>
+            ///     Equal-section split (NumPy <c>split(a, N)</c> /
+            ///     <c>array_split(a, N)</c> when <c>indices_or_sections</c> is an
+            ///     integer). <c>extras = N % Nsections</c> sub-arrays get size
+            ///     <c>N/Nsections + 1</c>, the rest get <c>N/Nsections</c>.
+            ///     Only TWO distinct sub-lengths exist — we materialise dims[]
+            ///     for each and share across all subs with the matching length.
+            /// </summary>
+            /// <param name="Nsections">Number of sections to split into. Must be &gt; 0 (the callers check; zero would
+            ///     divide by zero here).</param>
+            /// <returns><paramref name="Nsections"/> views, the longer ones first.</returns>
+            internal NDArray[] SplitBySections(int Nsections)
+            {
+                long Neach = _axisDim / Nsections;
+                long extras = _axisDim % Nsections;
+
+                long[] dimsLarge = null;   // for subs of size Neach+1
+                long[] dimsSmall = null;   // for subs of size Neach
+                // Pre-compute the (flags, size, hash) tuple for both sub-lengths once.
+                int flagsLarge = 0, flagsSmall = 0;
+                long sizeLarge = 0, sizeSmall = 0;
+                int hashLarge = 0, hashSmall = 0;
+                if (extras > 0)
+                {
+                    dimsLarge = BuildSubDims(Neach + 1);
+                    flagsLarge = DeriveSubFlags(dimsLarge);
+                    sizeLarge = _otherDimsProduct * (Neach + 1);
+                    hashLarge = ComputeHashFromDims(dimsLarge, sizeLarge);
+                }
+                if (Nsections > extras)
+                {
+                    dimsSmall = BuildSubDims(Neach);
+                    flagsSmall = DeriveSubFlags(dimsSmall);
+                    sizeSmall = _otherDimsProduct * Neach;
+                    hashSmall = ComputeHashFromDims(dimsSmall, sizeSmall);
+                }
+
+                var sub_arys = new NDArray[Nsections];
+                long cursor = 0;
+                for (int i = 0; i < Nsections; i++)
+                {
+                    bool isLarge = i < extras;
+                    long size = isLarge ? Neach + 1 : Neach;
+                    sub_arys[i] = BuildView(
+                        isLarge ? dimsLarge : dimsSmall,
+                        isLarge ? flagsLarge : flagsSmall,
+                        isLarge ? sizeLarge : sizeSmall,
+                        isLarge ? hashLarge : hashSmall,
+                        cursor);
+                    cursor += size;
+                }
+
+                return sub_arys;
+            }
+
+            /// <summary>
+            ///     <see cref="SplitIndices(int[])"/> for <see cref="long"/> split points: the same two-cursor walk over
+            ///     <c>0, indices[0..^1], Ntotal</c> with the same per-length cache.
+            /// </summary>
+            /// <param name="indices">The split points (not null), clamped as Python slice bounds.</param>
+            /// <returns><c>indices.Length + 1</c> views; a span that runs backwards is empty.</returns>
+            internal NDArray[] SplitIndices(long[] indices)
+            {
+                int Nsections = indices.Length + 1;
+                var sub_arys = new NDArray[Nsections];
+                long prev = 0;
+                long lastSubLen = -1;
+                long[] cachedDims = null;
+                int cachedFlags = 0;
+                long cachedSize = 0;
+                int cachedHash = 0;
+
+                for (int i = 0; i < Nsections; i++)
+                {
+                    long raw = (i == indices.Length) ? _axisDim : indices[i];
+                    long cur = ClampSlicePoint(raw, _axisDim);
+                    long st = prev;
+                    long end = cur < st ? st : cur;
+                    long subLen = end - st;
+
+                    // Cache the dims/flags/size/hash quadruple keyed on subLen so
+                    // adjacent same-length sub-arrays share allocations (common for
+                    // even indices like [3,6,9] or repeated indices).
+                    if (subLen != lastSubLen)
+                    {
+                        cachedDims = BuildSubDims(subLen);
+                        cachedFlags = DeriveSubFlags(cachedDims);
+                        cachedSize = _otherDimsProduct * subLen;
+                        cachedHash = ComputeHashFromDims(cachedDims, cachedSize);
+                        lastSubLen = subLen;
+                    }
+                    sub_arys[i] = BuildView(cachedDims, cachedFlags, cachedSize, cachedHash, st);
+                    prev = cur;
+                }
+                return sub_arys;
+            }
+
+            /// <summary>
+            ///     Indices-mode split that walks the indices array directly without
+            ///     allocating a div_points scratch buffer. Walks the boundary list
+            ///     <c>0, indices[0..^1], Ntotal</c> with two cursors (prev, cur).
+            ///     Caches the most recently used (dims, flags, size, hash) tuple so
+            ///     repeated same-length sub-arrays don't realloc.
+            /// </summary>
+            /// <param name="indices">The split points (not null), clamped as Python slice bounds.</param>
+            /// <returns><c>indices.Length + 1</c> views; a span that runs backwards is empty.</returns>
+            internal NDArray[] SplitIndices(int[] indices)
+            {
+                int Nsections = indices.Length + 1;
+                var sub_arys = new NDArray[Nsections];
+                long prev = 0;
+                long lastSubLen = -1;
+                long[] cachedDims = null;
+                int cachedFlags = 0;
+                long cachedSize = 0;
+                int cachedHash = 0;
+
+                for (int i = 0; i < Nsections; i++)
+                {
+                    long raw = (i == indices.Length) ? _axisDim : indices[i];
+                    long cur = ClampSlicePoint(raw, _axisDim);
+                    long st = prev;
+                    long end = cur < st ? st : cur;
+                    long subLen = end - st;
+
+                    if (subLen != lastSubLen)
+                    {
+                        cachedDims = BuildSubDims(subLen);
+                        cachedFlags = DeriveSubFlags(cachedDims);
+                        cachedSize = _otherDimsProduct * subLen;
+                        cachedHash = ComputeHashFromDims(cachedDims, cachedSize);
+                        lastSubLen = subLen;
+                    }
+                    sub_arys[i] = BuildView(cachedDims, cachedFlags, cachedSize, cachedHash, st);
+                    prev = cur;
+                }
+                return sub_arys;
+            }
+
+            /// <summary>
+            ///     Build the sub-array's dims[] by cloning parent's dims and patching
+            ///     <c>dims[axis] = subLen</c>. Shape stores dims by reference so
+            ///     callers can share this array across same-length sub-arrays.
+            /// </summary>
+            /// <param name="subLen">The piece's length along the split axis.</param>
+            /// <returns>A new dims[] (never the parent's own array).</returns>
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+            private long[] BuildSubDims(long subLen)
+            {
+                var dims = new long[_ndim];
+                // System.Array: inside NDArray the bare name binds the array object's Array property.
+                System.Array.Copy(_srcDims, dims, _ndim);
+                dims[_axis] = subLen;
+                return dims;
+            }
+
+            /// <summary>
+            ///     Build a sub-array NDArray view from a pre-computed (dims, flags,
+            ///     size, hash) tuple and a start offset (in elements) along the
+            ///     split axis. The Shape uses the no-walk ctor.
+            /// </summary>
+            /// <param name="dims">The piece's dimensions (possibly shared with same-length siblings).</param>
+            /// <param name="flags">The piece's <see cref="ArrayFlags"/> from <see cref="DeriveSubFlags"/>.</param>
+            /// <param name="size">The piece's element count.</param>
+            /// <param name="hash">The piece's Shape hash from <see cref="ComputeHashFromDims"/>.</param>
+            /// <param name="startElems">The piece's first index along the split axis.</param>
+            /// <returns>A new view over the parent's storage (it holds its own reference on the buffer).</returns>
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+            private NDArray BuildView(long[] dims, int flags, long size, int hash, long startElems)
+            {
+                long newOffset = _baseOffset + startElems * _axisStride;
+                var newShape = new Shape(dims, _srcStrides, newOffset, _bufSize, flags, size, hash);
+                // Hot-path ctor: pre-resolved engine, no `?? BackendFactory.GetEngine()`
+                // guard, no `Storage.Engine = tensorEngine` writeback.
+                return new NDArray(_ary.Storage.Alias(newShape), _engine, skipEngineResolve: true);
+            }
+
+            /// <summary>
+            ///     Derive sub-array <see cref="ArrayFlags"/> from parent flags in O(1).
+            ///     <list type="bullet">
+            ///       <item>Empty sub (any dim==0): NumPy convention → both C and F contig, WRITEABLE, ALIGNED, no BROADCASTED.</item>
+            ///       <item>Parent broadcasted: sub inherits BROADCASTED + !WRITEABLE (its stride-0 axes are untouched).</item>
+            ///       <item>Parent C-contig: sub stays C-contig iff <c>axis==0</c> or <c>subLen == parent.dim[axis]</c>; otherwise the <c>strides[i] == dims[i+1]*strides[i+1]</c> invariant breaks at <c>i = axis-1</c>.</item>
+            ///       <item>Parent F-contig: symmetric — stays F-contig iff <c>axis==ndim-1</c> or <c>subLen == parent.dim[axis]</c>.</item>
+            ///       <item>WRITEABLE inherits from parent: read-only views (e.g. <c>np.diagonal</c> output) propagate their non-writeable status to sub-arrays.</item>
+            ///     </list>
+            /// </summary>
+            /// <param name="subDims">The piece's dimensions.</param>
+            /// <returns>The piece's flag bits (ALIGNED always; WRITEABLE from the parent unless broadcast).</returns>
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+            private int DeriveSubFlags(long[] subDims)
+            {
+                // NumPy convention: any 0-dim → both C and F contig (vacuously),
+                // ALIGNED. WRITEABLE inherits from parent (so a read-only view's
+                // empty sub stays read-only).
+                int parentWriteable = _parentFlags & (int)ArrayFlags.WRITEABLE;
+                for (int i = 0; i < subDims.Length; i++)
+                {
+                    if (subDims[i] == 0)
+                        return (int)(ArrayFlags.C_CONTIGUOUS | ArrayFlags.F_CONTIGUOUS
+                                    | ArrayFlags.ALIGNED) | parentWriteable;
+                }
+
+                // Broadcastness is RECOMPUTED for the child's dims (same rule as the walking Shape
+                // ctor): collapsing the split axis to length 1 ENDS a broadcast running along it —
+                // a stride-0 axis of size 1 is not broadcast — after which contiguity is judged
+                // normally. BROADCASTED implies non-writeable per NumPy, and a child of a read-only
+                // broadcast stays read-only on the non-broadcast path too (parentWriteable is 0).
+                if (Shape.ComputeIsBroadcastedStatic(subDims, _srcStrides))
+                    return (int)(ArrayFlags.BROADCASTED | ArrayFlags.ALIGNED);
+
+                // Contiguity is RECOMPUTED with NumPy's _UpdateContiguousFlags walk over the
+                // child's dims (size-1 dims skipped) — parent-flag algebra cannot express the
+                // relaxation. Probed against NumPy 2.4.2: np.split of a C-contiguous (3,4) into
+                // three (1,4) children gives C1 F1 num=259 (the collapsed axis stops mattering,
+                // making the child BOTH-contiguous), and a (1,6) parent split on axis 1 keeps its
+                // (1,3) children C-contiguous — both were mis-derived by the old
+                // parent-C/parent-F × axis-position inference.
+                var (isC, isF) = Shape.ComputeContiguousFlagsStatic(subDims, _srcStrides);
+                int flags = (int)ArrayFlags.ALIGNED | parentWriteable;
+                if (isC)
+                    flags |= (int)ArrayFlags.C_CONTIGUOUS;
+                if (isF)
+                    flags |= (int)ArrayFlags.F_CONTIGUOUS;
+                return flags;
+            }
+
+            /// <summary>
+            ///     Reconstruct Shape's standard hash for a sub-dims[] array. Mirrors
+            ///     <c>ComputeSizeAndHash</c> exactly — same seed (<c>'C' * 397</c>),
+            ///     same XOR formula — so Shape.GetHashCode stays consistent and
+            ///     IsEmpty (which checks <c>_hashCode == 0</c>) never misfires.
+            /// </summary>
+            /// <param name="dims">The piece's dimensions.</param>
+            /// <param name="finalSize">The piece's element count (unused by the fold, which recomputes the running
+            ///     product).</param>
+            /// <returns>The hash the walking Shape constructor would compute; <see cref="int.MinValue"/> for no
+            ///     dimensions.</returns>
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+            private static int ComputeHashFromDims(long[] dims, long finalSize)
+            {
+                if (dims == null || dims.Length == 0)
+                    return int.MinValue;
+                // Seed must match Shape.ComputeSizeAndHash: `layout * 397` where
+                // layout == 'C' (67). Without the non-zero seed, XOR-fold can land
+                // on 0 (e.g. dims=[4,2]) and Shape.IsEmpty reads as true.
+                int hash = unchecked('C' * 397);
+                long size = 1;
+                unchecked
+                {
+                    foreach (var v in dims)
+                    {
+                        size *= v;
+                        hash ^= ((int)(size & 0x7FFFFFFF) * 397) * ((int)(v & 0x7FFFFFFF) * 397);
+                    }
+                }
+                return hash;
+            }
+        }
+
+        /// <summary>
+        ///     NumPy slice clamping: <c>n &lt; 0 ? max(0, n + N) : min(n, N)</c>.
+        /// </summary>
+        /// <param name="n">The split point as given (negative counts from the end).</param>
+        /// <param name="N">The axis' length.</param>
+        /// <returns>The point clamped into <c>[0, N]</c>.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static long ClampSlicePoint(long n, long N)
+        {
+            if (n < 0)
+            {
+                long wrapped = n + N;
+                return wrapped < 0 ? 0 : wrapped;
+            }
+            return n > N ? N : n;
+        }
+
+        // ---------------------------- np.hsplit / np.vsplit / np.dsplit ----------------------------
+
+        /// <summary>
+        ///     NumPy's <c>numpy.hsplit(ary, indices_or_sections)</c> for a section count, after the facade's class rules: a
+        ///     0-d array is refused, then the array splits along axis 1 when it has two dimensions or more and along axis 0
+        ///     when it is 1-d (its only, "horizontal" axis).
+        /// </summary>
+        /// <param name="ary">The array to divide; its rank is read first (np.hsplit passes a null through).</param>
+        /// <param name="indices_or_sections">The number of equal sections; it must divide the axis' length.</param>
+        /// <returns>The equal sections, views of <paramref name="ary"/>'s buffer (see
+        ///     <see cref="split(NDArray, int, int)"/>).</returns>
+        /// <exception cref="ArgumentException"><paramref name="ary"/> is 0-d ("hsplit only works on arrays of 1 or more
+        ///     dimensions"; NumPy raises the text as a ValueError).</exception>
+        /// <exception cref="ValueError">The count is not positive, or does not divide the axis (split's texts).</exception>
+        /// <exception cref="NullReferenceException"><paramref name="ary"/> is null.</exception>
+        /// <remarks>No class boundary runs here: np.hsplit applies its rules before it calls this.</remarks>
+        internal static NDArray[] hsplit(NDArray ary, int indices_or_sections)
+        {
+            if (ary.ndim == 0)
+                throw new ArgumentException("hsplit only works on arrays of 1 or more dimensions");
+
+            int axis = ary.ndim > 1 ? 1 : 0;
+            return split(ary, indices_or_sections, axis);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>numpy.hsplit(ary, indices_or_sections)</c> for split points, after the facade's class rules: a 0-d
+        ///     array is refused, then the array splits at <paramref name="indices"/> along axis 1 (two dimensions or more) or
+        ///     axis 0 (1-d).
+        /// </summary>
+        /// <param name="ary">The array to divide; its rank is read first (np.hsplit passes a null through).</param>
+        /// <param name="indices">The split points along the axis: <c>[2, 3]</c> gives <c>ary[:, :2]</c>,
+        ///     <c>ary[:, 2:3]</c>, <c>ary[:, 3:]</c> (unsorted points give empty views).</param>
+        /// <returns><c>indices.Length + 1</c> views of <paramref name="ary"/>'s buffer, plain arrays.</returns>
+        /// <exception cref="ArgumentException"><paramref name="ary"/> is 0-d ("hsplit only works on arrays of 1 or more
+        ///     dimensions"; NumPy raises the text as a ValueError).</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="indices"/> is null (array_split's guard, after the rank
+        ///     check).</exception>
+        /// <exception cref="NullReferenceException"><paramref name="ary"/> is null.</exception>
+        /// <remarks>No class boundary runs here: np.hsplit applies its rules before it calls this.</remarks>
+        internal static NDArray[] hsplit(NDArray ary, int[] indices)
+        {
+            if (ary.ndim == 0)
+                throw new ArgumentException("hsplit only works on arrays of 1 or more dimensions");
+
+            int axis = ary.ndim > 1 ? 1 : 0;
+            return split(ary, indices, axis);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>numpy.vsplit(ary, indices_or_sections)</c> for a section count, after the facade's class rules: an
+        ///     array below two dimensions is refused, then the array splits along axis 0 (row-wise).
+        /// </summary>
+        /// <param name="ary">The array to divide; its rank is read first (np.vsplit passes a null through).</param>
+        /// <param name="indices_or_sections">The number of equal sections; it must divide the first axis' length.</param>
+        /// <returns>The equal sections, views of <paramref name="ary"/>'s buffer, plain arrays.</returns>
+        /// <exception cref="ArgumentException"><paramref name="ary"/> has fewer than two dimensions ("vsplit only works on
+        ///     arrays of 2 or more dimensions"; NumPy raises the text as a ValueError).</exception>
+        /// <exception cref="ValueError">The count is not positive, or does not divide the axis (split's texts).</exception>
+        /// <exception cref="NullReferenceException"><paramref name="ary"/> is null.</exception>
+        /// <remarks>No class boundary runs here: np.vsplit applies its rules before it calls this.</remarks>
+        internal static NDArray[] vsplit(NDArray ary, int indices_or_sections)
+        {
+            if (ary.ndim < 2)
+                throw new ArgumentException("vsplit only works on arrays of 2 or more dimensions");
+
+            return split(ary, indices_or_sections, axis: 0);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>numpy.vsplit(ary, indices_or_sections)</c> for split points, after the facade's class rules: an array
+        ///     below two dimensions is refused, then the array splits at <paramref name="indices"/> along axis 0.
+        /// </summary>
+        /// <param name="ary">The array to divide; its rank is read first (np.vsplit passes a null through).</param>
+        /// <param name="indices">The split points along axis 0: <c>[2, 3]</c> gives <c>ary[:2]</c>, <c>ary[2:3]</c>,
+        ///     <c>ary[3:]</c> (unsorted points give empty views).</param>
+        /// <returns><c>indices.Length + 1</c> views of <paramref name="ary"/>'s buffer, plain arrays.</returns>
+        /// <exception cref="ArgumentException"><paramref name="ary"/> has fewer than two dimensions ("vsplit only works on
+        ///     arrays of 2 or more dimensions"; NumPy raises the text as a ValueError).</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="indices"/> is null (array_split's guard, after the rank
+        ///     check).</exception>
+        /// <exception cref="NullReferenceException"><paramref name="ary"/> is null.</exception>
+        /// <remarks>No class boundary runs here: np.vsplit applies its rules before it calls this.</remarks>
+        internal static NDArray[] vsplit(NDArray ary, int[] indices)
+        {
+            if (ary.ndim < 2)
+                throw new ArgumentException("vsplit only works on arrays of 2 or more dimensions");
+
+            return split(ary, indices, axis: 0);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>numpy.dsplit(ary, indices_or_sections)</c> for a section count, after the facade's class rules: an
+        ///     array below three dimensions is refused, then the array splits along axis 2 (depth-wise).
+        /// </summary>
+        /// <param name="ary">The array to divide; its rank is read first (np.dsplit passes a null through).</param>
+        /// <param name="indices_or_sections">The number of equal sections; it must divide the third axis' length.</param>
+        /// <returns>The equal sections, views of <paramref name="ary"/>'s buffer, plain arrays.</returns>
+        /// <exception cref="ArgumentException"><paramref name="ary"/> has fewer than three dimensions ("dsplit only works on
+        ///     arrays of 3 or more dimensions"; NumPy raises the text as a ValueError).</exception>
+        /// <exception cref="ValueError">The count is not positive, or does not divide the axis (split's texts).</exception>
+        /// <exception cref="NullReferenceException"><paramref name="ary"/> is null.</exception>
+        /// <remarks>No class boundary runs here: np.dsplit applies its rules before it calls this.</remarks>
+        internal static NDArray[] dsplit(NDArray ary, int indices_or_sections)
+        {
+            if (ary.ndim < 3)
+                throw new ArgumentException("dsplit only works on arrays of 3 or more dimensions");
+
+            return split(ary, indices_or_sections, axis: 2);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>numpy.dsplit(ary, indices_or_sections)</c> for split points, after the facade's class rules: an array
+        ///     below three dimensions is refused, then the array splits at <paramref name="indices"/> along axis 2.
+        /// </summary>
+        /// <param name="ary">The array to divide; its rank is read first (np.dsplit passes a null through).</param>
+        /// <param name="indices">The split points along axis 2: <c>[2, 3]</c> gives <c>ary[:, :, :2]</c>,
+        ///     <c>ary[:, :, 2:3]</c>, <c>ary[:, :, 3:]</c> (unsorted points give empty views).</param>
+        /// <returns><c>indices.Length + 1</c> views of <paramref name="ary"/>'s buffer, plain arrays.</returns>
+        /// <exception cref="ArgumentException"><paramref name="ary"/> has fewer than three dimensions ("dsplit only works on
+        ///     arrays of 3 or more dimensions"; NumPy raises the text as a ValueError).</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="indices"/> is null (array_split's guard, after the rank
+        ///     check).</exception>
+        /// <exception cref="NullReferenceException"><paramref name="ary"/> is null.</exception>
+        /// <remarks>No class boundary runs here: np.dsplit applies its rules before it calls this.</remarks>
+        internal static NDArray[] dsplit(NDArray ary, int[] indices)
+        {
+            if (ary.ndim < 3)
+                throw new ArgumentException("dsplit only works on arrays of 3 or more dimensions");
+
+            return split(ary, indices, axis: 2);
+        }
+
+        // ---------------------------- np.tile ----------------------------
+
+        /// <summary>
+        ///     NumPy's <c>numpy.tile(A, reps)</c> after the facade's class rules and null checks: <paramref name="A"/>'s shape
+        ///     and <paramref name="reps"/> are padded with leading 1s to a common rank, all-ones repetitions give a keep-order
+        ///     copy, an empty result a zero-element array, and anything else the interleaved reshape - broadcast - copy -
+        ///     reshape that lays the repetitions out in C order.
+        /// </summary>
+        /// <param name="A">The array to repeat (not null).</param>
+        /// <param name="reps">The repetitions along each axis (not null, every entry non-negative): fewer entries than
+        ///     <paramref name="A"/>'s rank repeat its trailing axes, more promote <paramref name="A"/> by leading axes.</param>
+        /// <returns>The tiled array, of rank <c>max(reps.Length, A.ndim)</c> and <paramref name="A"/>'s dtype, plain whatever
+        ///     <paramref name="A"/>'s class: a fresh C-contiguous array for a real repetition; for all-ones repetitions a
+        ///     keep-order copy that owns its data (an F-contiguous <paramref name="A"/> stays F-contiguous); for an empty
+        ///     result a view - of <paramref name="A"/>'s own buffer when <paramref name="A"/> is empty, of a fresh
+        ///     zero-filled buffer otherwise (owndata false either way, as NumPy's final reshape gives).</returns>
+        /// <exception cref="ArgumentException">An entry of the padded repetitions is negative (<c>reps[i] must be
+        ///     non-negative, got r.</c>, parameter <c>reps</c>). The index counts the PADDED list: a <paramref name="reps"/>
+        ///     shorter than <paramref name="A"/>'s rank reports an index past its own length.</exception>
+        /// <remarks>
+        ///     Scoped by <c>[NDScoped]</c>: the interleaved reshape of <paramref name="A"/>, its broadcast view and the
+        ///     materialized copy are released on return, and the final reshape (a view that holds its own reference on the
+        ///     copy's buffer) is yielded; the all-ones path releases the reshape of a lower-rank <paramref name="A"/>, and the
+        ///     empty path the zero-filled array its returned view aliases. No class boundary runs here: both np.tile
+        ///     overloads apply their rules before they call this.
+        /// </remarks>
+        [NDScoped /* the interleaved reshape, its broadcast view, the materialized copy and the empty path's zeros are released; the result is yielded */]
+        internal static NDArray tile(NDArray A, long[] reps)
+        {
+            int d = reps.Length;
+            int aDim = A.ndim;
+            int outDim = Math.Max(d, aDim);
+
+            // Pad A's shape with leading 1s when reps has more entries than A.ndim.
+            // Pad reps with leading 1s when A.ndim is larger than reps' length.
+            // Both yield a common ndim = max(d, aDim) where in[i] aligns with rep[i].
+            var aShape = new long[outDim];
+            var tup = new long[outDim];
+            for (int i = 0; i < outDim - aDim; i++) aShape[i] = 1;
+            for (int i = 0; i < aDim; i++) aShape[outDim - aDim + i] = A.Shape.dimensions[i];
+            for (int i = 0; i < outDim - d; i++) tup[i] = 1;
+            for (int i = 0; i < d; i++) tup[outDim - d + i] = reps[i];
+
+            for (int i = 0; i < outDim; i++)
+                if (tup[i] < 0)
+                    throw new ArgumentException($"reps[{i}] must be non-negative, got {tup[i]}.", nameof(reps));
+
+            // Compute output shape.
+            var outShape = new long[outDim];
+            long outSize = 1;
+            for (int i = 0; i < outDim; i++)
+            {
+                outShape[i] = aShape[i] * tup[i];
+                outSize *= outShape[i];
+            }
+
+            // Trivial case: all reps are 1 → return a keep-order copy preserving the
+            // (possibly promoted) shape. Matches NumPy's array(A, copy=True, ndmin=d)
+            // shortcut: F-contiguous inputs stay F-contiguous, other views materialize as C.
+            // NumPy tests the all-ones reps FIRST, so an EMPTY input with all-ones reps is this owning copy too (probed
+            // 2.4.2: np.tile(np.zeros((0, 3)), (1, 1)).flags.owndata is True), not the view the empty branch below makes.
+            bool allOnes = true;
+            for (int i = 0; i < outDim; i++) if (tup[i] != 1) { allOnes = false; break; }
+            if (allOnes)
+            {
+                var c = aDim == outDim ? A.copy('K') : A.reshape(Shape.Adopt(aShape)).copy('K');
+                return c;
+            }
+
+            // Empty result: any rep==0 or any aShape[i]==0 → a zero-element array of the correct shape and dtype.
+            // NumPy ends tile with `c.reshape(shape_out)`: for an EMPTY input c is A itself (or its ndmin view), so the
+            // result is a view of A; for a zero repetition of a non-empty input c is the fresh repeat, so the result is a
+            // view of a fresh buffer — owndata false either way.
+            if (outSize == 0)
+            {
+                if (A.size == 0)
+                {
+                    var c = aDim == outDim ? A : A.reshape(Shape.Adopt(aShape));
+                    return c.reshape(Shape.Adopt(outShape));
+                }
+                // np.zeros(shape, dtype)'s statement: a zero-filled allocation of A's dtype.
+                var fresh = new NDArray(A.dtype, Shape.Adopt(outShape), true);
+                return new NDArray(fresh.Storage.Alias(fresh.Shape)) { TensorEngine = A.TensorEngine };
+            }
+
+            // General case: insert size-1 axes between A's axes to create a tile axis next to each
+            // input axis, then broadcast and copy to materialize, then collapse.
+            //
+            //   A.shape (a0, a1, ..., a_{n-1})
+            //     ↓ reshape to interleaved (1, a0, 1, a1, ..., 1, a_{n-1})
+            //     ↓ broadcast_to (r0, a0, r1, a1, ..., r_{n-1}, a_{n-1})  — each leading 1 expands
+            //     ↓ copy() → contiguous (size = product of all)
+            //     ↓ reshape to (r0*a0, r1*a1, ..., r_{n-1}*a_{n-1})
+            //
+            // This composes broadcast + copy + reshape (all O(N)) and produces NumPy-aligned output.
+            var interleaved = new long[2 * outDim];
+            var broadcastTarget = new long[2 * outDim];
+            for (int i = 0; i < outDim; i++)
+            {
+                interleaved[2 * i] = 1;
+                interleaved[2 * i + 1] = aShape[i];
+                broadcastTarget[2 * i] = tup[i];
+                broadcastTarget[2 * i + 1] = aShape[i];
+            }
+
+            // promoted is a new wrapper (view or copy depending on A's contiguity);
+            // broadcasted is a stride-0 broadcast view of promoted; contiguous is a
+            // fresh materialized copy. All three are intermediates that the final
+            // reshape doesn't keep, released by this method's scope — the returned
+            // NDArray shares contiguous's storage but holds its own ARC ref via
+            // InitializeArc, so releasing contiguous does not free that buffer.
+            var promoted = A.reshape(Shape.Adopt(interleaved));
+            var broadcasted = broadcast_to(promoted, Shape.Adopt(broadcastTarget));
+            var contiguous = broadcasted.copy();
+            return contiguous.reshape(Shape.Adopt(outShape));
         }
     }
 }

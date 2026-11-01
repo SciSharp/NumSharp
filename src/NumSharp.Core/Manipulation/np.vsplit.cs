@@ -21,6 +21,11 @@ namespace NumSharp
         /// https://numpy.org/doc/stable/reference/generated/numpy.vsplit.html
         /// </remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="ArgumentException"><paramref name="ary"/> has fewer than two dimensions ("vsplit only works on
+        ///     arrays of 2 or more dimensions"; NumPy raises the text as a ValueError).</exception>
+        /// <exception cref="ValueError">The sections are not positive ("number sections must be larger than 0."), or do not
+        ///     divide the axis ("array split does not result in an equal division").</exception>
+        /// <exception cref="NullReferenceException"><paramref name="ary"/> is null (its rank is read first).</exception>
         public static NDArray[] vsplit(NDArray ary, int indices_or_sections)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
@@ -29,10 +34,9 @@ namespace NumSharp
             // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
             if (NDCharArrayBoundary.Sees(ary))
                 return NDCharArrayBoundary.KeptAll((ary, indices_or_sections), static s => vsplit(s.ary, s.indices_or_sections));
-            if (ary.ndim < 2)
-                throw new ArgumentException("vsplit only works on arrays of 2 or more dimensions");
 
-            return split(ary, indices_or_sections, axis: 0);
+            // NumPy's statements (the rank check, split along axis 0) are the array object's.
+            return NDArray.vsplit(ary, indices_or_sections);
         }
 
         /// <summary>
@@ -52,6 +56,10 @@ namespace NumSharp
         /// https://numpy.org/doc/stable/reference/generated/numpy.vsplit.html
         /// </remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="ArgumentException"><paramref name="ary"/> has fewer than two dimensions ("vsplit only works on
+        ///     arrays of 2 or more dimensions"; NumPy raises the text as a ValueError).</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="indices"/> is null (checked after the rank).</exception>
+        /// <exception cref="NullReferenceException"><paramref name="ary"/> is null (its rank is read first).</exception>
         public static NDArray[] vsplit(NDArray ary, int[] indices)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
@@ -60,10 +68,9 @@ namespace NumSharp
             // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
             if (NDCharArrayBoundary.Sees(ary))
                 return NDCharArrayBoundary.KeptAll((ary, indices), static s => vsplit(s.ary, s.indices));
-            if (ary.ndim < 2)
-                throw new ArgumentException("vsplit only works on arrays of 2 or more dimensions");
 
-            return split(ary, indices, axis: 0);
+            // NumPy's statements (the rank check, split along axis 0) are the array object's.
+            return NDArray.vsplit(ary, indices);
         }
     }
 }
