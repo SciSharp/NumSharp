@@ -144,8 +144,8 @@ Three items were tried first (2026-10-30):
   pinned as `[OpenBugs]` tests and their fixes deferred (D21).
 
 Order of the work left (decided 2026-10-31 in the step round, D22): the merge (done); P6b (done 2026-11-01); P8, its
-rename commit first; P9; P10; PA3; PA2. Later: PA5, PA6 and the fixes of the pinned divergences (`OpenBugs.NpLayer.cs`,
-NL1 to NL8).
+rename commit first (the rename done 2026-11-01, `838fccfd`); P9; P10; PA3; PA2. Later: PA5, PA6 and the fixes of the
+pinned divergences (`OpenBugs.NpLayer.cs`, NL1 to NL8).
 
 Progress goes into the [§9 state log](#9-state-log), newest entry first.
 
@@ -1458,10 +1458,11 @@ public static NDArray insert(NDArray arr, long obj, NDArray values, int? axis = 
 
 Decided 2026-10-31 (D8, all 61, after examples), so that every array function has one home (P7a needed it too, before
 P7 was dropped). The array object's internal members take NumPy's names (D18).
-- [ ] First, the rename (D18): the ~45 internal statics of the array object's homes take NumPy's names with their
+- [x] First, the rename (D18): the ~45 internal statics of the array object's homes take NumPy's names with their
       callers, in one mechanical commit (`NDArray.Where` -> `NDArray.where`, `TakeAlongAxis` -> `take_along_axis`,
       `AtLeast1d` -> `atleast_1d`, `RealPart` -> `real_`, ...). A member that is not one NumPy function (a helper of
-      several) keeps its C# name.
+      several) keeps its C# name. Done 2026-11-01 (`838fccfd`, see the state log): 40 names onto 38 (`pad` and `array`
+      take two old names each), by Roslyn's semantic rename, the IL's call targets identical before and after.
 - [ ] The 12 that compute become `TensorEngine` members: bartlett, blackman, hamming, hanning, kaiser and corrcoef
       (`FunctionBase`), outer and tensordot (`Numeric`), polyder and polyfit (`Polynomial`), fix (`UfuncLike`),
       einsum_path (`EinsumFunc`). The five windows have no operand: they run on `TensorEngine.Default` (P9).
@@ -1553,6 +1554,31 @@ breaks a subclass or a direct caller for a layering reason alone.
 ---
 
 ## 9. State log
+
+- **2026-11-01, P8's rename (D18): the array object's internal statics take NumPy's names.** One commit on `strings`,
+  `838fccfd` (not pushed).
+  - The members: the NDArray statics each np.* facade dispatches to as its tail, plus the homes' internal statics that
+    are one NumPy function's statements. 40 PascalCase names onto 38 NumPy names: `where`, `take_along_axis`,
+    `put_along_axis`, `apply_along_axis`, `expand_dims`, `ravel`, `concatenate`, `asarray`, `asanyarray`, `array`
+    (`ArrayFromManaged` and the two `ArrayFromTyped`), `ascontiguousarray`, `asarray_chkfinite`, `atleast_1d`,
+    `atleast_2d`, `broadcast_to`, `broadcast_arrays`, `full`, `full_like`, `ones`, `eye`, `diag`, `diagflat`,
+    `diagonal`, `fill_diagonal`, `ix_`, `mgrid`, `ogrid`, `indices`, `indices_sparse`, `insert`, `delete`, `extract`,
+    `select`, `piecewise`, `pad` (`Pad` and `PadCallable`), `conjugate` (ndarray.conjugate's body), `real_`, `imag_`.
+    Helpers of several functions keep their names (`FlipAxes`, `Scalar`, `FromPythonOperand`, `AtLeastNdView`, ...).
+  - How: Roslyn's Renamer (Workspaces.MSBuild 5.0.0) over the solution, one overload at a time, every reference bound
+    (same-named members of other types untouched). Proof: the call targets of every method body of NumSharp.dll,
+    NumSharp.Tests.dll and NumSharp.Tests.Oracle.dll, dumped through System.Reflection.Metadata before and after with
+    the rename map applied, are identical (666,488 call instructions). By hand: the comments and rules that name the
+    members, two crefs Roslyn could not bind, and OperandRootsTests' LT07 row (it finds `NDArray.where` by name).
+  - Gates: NumSharp.Tests 21,016 / 21,015 passed on net10.0 / net8.0, the oracle 414 on both.
+  - Finding, not caused by the rename and not pinned: `LongIndexedFallback_GivesTheManagedOutputs`
+    (`Manipulation/np.unique.ArgsortRoute.Test.cs`) failed in two of eight full net10.0 runs (float32, n = 1000,
+    return_index and return_inverse, equal_nan=False: one NaN's sign differs between np.unique and the long-indexed
+    fallback in the values output). Every run of it alone passes (a fresh and an 0xFF-poisoned pool,
+    `DOTNET_TieredCompilation=0`, `TC_QuickJitForLoops=0`, `TieredPGO=1`), the same patch on a clean worktree passed
+    twice, and `6b475c7c` passed its four full runs. The cause needs the suite's conditions (a race or shared state);
+    a pin that passes by luck is worse than none, so it waits for a deterministic reproduction.
+  - Next: P8's 12 computing functions as `TensorEngine` members, then the 36 array-object functions without a member.
 
 - **2026-11-01, the docs port, and P6b: the linalg and FFT engines stop calling np.* - P6b is done.** Thirteen commits
   on `strings` before this entry (not pushed).
