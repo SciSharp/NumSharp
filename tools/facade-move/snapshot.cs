@@ -175,7 +175,9 @@
 // no array: their operand is an OBJECT from ObjectProbeLabels - null, C# numbers of every kind, bool / char / str,
 // NDArrays of each rank, C# arrays and collections, tuples, Type objects and other objects), np.append's values (an array:
 // the second-operand variants; a C# value: np.insert's object values) and np.meshgrid's coordinate vectors (the array
-// overload's xi: the stacking family's array lists; x3: the second-operand variants);
+// overload's xi: the stacking family's array lists; x3: the second-operand variants), np.diag_indices' (its size n from
+// TriangleSizeLabels as the triangle generators', its ndim the IntArg variants) and np.require's requirements (a list from
+// RequireListLabels or a string from RequireStringLabels - each flag, pairs, both orders, aliases, unknown names, null);
 // an overload
 // with a required parameter of another
 // kind is reported once as SKIP. An int
@@ -606,8 +608,9 @@ static class Snapshot
         // np.roll's shift as an int or a long (RollShiftLabels: one place first, none, back, past the axis, the extremes
         // of the parameter's type). np.isscalar / np.iterable take no array: their OBJECT is the operand
         // (ObjectProbeLabels: null, every C# number kind, bool / char / str, NDArrays of each rank, C# arrays and
-        // collections, tuples, Type objects and other objects), built in Call (MakeObjectProbe).
-        RollShift, ObjectProbe,
+        // collections, tuples, Type objects and other objects), built in Call (MakeObjectProbe). np.require's requirements
+        // as a list or a string (RequireListLabels / RequireStringLabels, MakeRequirements).
+        RollShift, ObjectProbe, RequireReqs,
         Default, Unsupported,
     }
 
@@ -2697,18 +2700,18 @@ static class Snapshot
     }
 
     /// <summary>
-    ///     Whether an overload is a triangle generator - np.tri, np.tril_indices or np.triu_indices (NumPy's
-    ///     <c>lib/_twodim_base_impl.py</c>) - which takes no array: its operand is the row count (np.tri's N, the indices'
-    ///     n), built as a constructor's shape operand (<see cref="TryMakeCtorShape"/>: the first dim of the label) from
-    ///     <see cref="TriangleSizeLabels"/>.
+    ///     Whether an overload is a triangle or diagonal generator - np.tri, np.tril_indices or np.triu_indices (NumPy's
+    ///     <c>lib/_twodim_base_impl.py</c>) or np.diag_indices (<c>lib/_index_tricks_impl.py</c>) - which takes no array:
+    ///     its operand is the row count (np.tri's N, the others' n), built as a constructor's shape operand
+    ///     (<see cref="TryMakeCtorShape"/>: the first dim of the label) from <see cref="TriangleSizeLabels"/>.
     /// </summary>
     /// <param name="m">The overload.</param>
     /// <returns>True for a public static overload of one of those names on np.</returns>
     /// <remarks>Kept apart from <see cref="IsCtor(MethodInfo)"/>: the constructor family's fill value, creation order and
-    ///     generic instantiations must not reach these, whose only other parameters are the column count, the diagonal and
-    ///     np.tri's dtype.</remarks>
+    ///     generic instantiations must not reach these, whose only other parameters are the column count, the diagonal,
+    ///     np.tri's dtype and np.diag_indices' ndim.</remarks>
     private static bool IsTriangleGenerator(MethodInfo m) =>
-        m.DeclaringType == typeof(np) && m.Name is "tri" or "tril_indices" or "triu_indices";
+        m.DeclaringType == typeof(np) && m.Name is "tri" or "tril_indices" or "triu_indices" or "diag_indices";
 
     /// <summary>Whether a parameter belongs to a triangle generator (<see cref="IsTriangleGenerator(MethodInfo)"/>).</summary>
     /// <param name="p">The parameter.</param>
@@ -2729,6 +2732,43 @@ static class Snapshot
     ///     Python-style modulo must not overflow.
     /// </summary>
     private static readonly string[] RollShiftLabels = { "1", "0", "-1", "2", "3", "-4", "7", "100", "-100", "max", "min" };
+
+    /// <summary>
+    ///     np.require's requirements as a list (its <c>string[]</c> overload): None first (asanyarray only), then the empty
+    ///     list (also asanyarray), each flag letter, pairs that copy or not, all three of the copy flags, both orders (NumPy's
+    ///     <c>Cannot specify both "C" and "F" order</c>), the long and lower-case aliases, an unknown name and a null entry
+    ///     (NumPy's KeyError, NumSharp's ValueError).
+    /// </summary>
+    private static readonly string[] RequireListLabels =
+        { "null", "[]", "[C]", "[F]", "[A]", "[W]", "[O]", "[E]", "[C,W]", "[F,O]", "[A,W,O]", "[C,F]", "[F_CONTIGUOUS]", "[fortran]", "[OWNDATA]", "[bogus]", "[null]" };
+
+    /// <summary>
+    ///     np.require's requirements as one string (its <c>string</c> overload, iterated character by character as NumPy
+    ///     iterates a str): C first, then each flag letter, pairs, the three copy flags, both orders, the empty string, a
+    ///     lower-case letter, a long name (its '_' is no flag), an unknown letter and null.
+    /// </summary>
+    private static readonly string[] RequireStringLabels = { "C", "F", "A", "W", "O", "E", "CW", "FO", "AWO", "CF", "", "c", "F_CONTIGUOUS", "x", "null" };
+
+    /// <summary>The requirements of a <see cref="RequireListLabels"/> / <see cref="RequireStringLabels"/> label in the
+    ///     parameter's type.</summary>
+    /// <param name="t">The requirements parameter's type: string[] or string.</param>
+    /// <param name="label">The label: <c>null</c>, or a bracketed comma-separated list (<c>null</c> inside is a null
+    ///     entry), or the string itself.</param>
+    /// <returns>A fresh array of the names, the string, or null.</returns>
+    /// <exception cref="ArgumentException">Another parameter type (a bug in the tool).</exception>
+    private static object MakeRequirements(Type t, string label)
+    {
+        if (label == "null")
+            return null;
+        if (t == typeof(string))
+            return label;
+        if (t == typeof(string[]))
+        {
+            string body = label.Trim('[', ']');
+            return body.Length == 0 ? Array.Empty<string>() : body.Split(',').Select(s => s == "null" ? null : s).ToArray();
+        }
+        throw new ArgumentException("not a requirements parameter: " + t);
+    }
 
     /// <summary>A shift of a <see cref="RollShiftLabels"/> label in the parameter's type.</summary>
     /// <param name="t">The shift parameter's type: int or long.</param>
@@ -3645,6 +3685,13 @@ static class Snapshot
         // np.roll's shift (only its).
         if (p.Member.DeclaringType == typeof(np) && p.Member.Name == "roll" && n == "shift" && (t == typeof(int) || t == typeof(long)))
             return Role.RollShift;
+        // np.require's requirements, a list or a string (only its).
+        if (p.Member.DeclaringType == typeof(np) && p.Member.Name == "require" && n == "requirements" && (t == typeof(string[]) || t == typeof(string)))
+            return Role.RequireReqs;
+        // np.diag_indices' ndim (only its: the coercion family's ndim takes its own role): the IntArg variants around its
+        // default 2 (none, one, a negative count - an empty tuple - and five).
+        if (p.Member.DeclaringType == typeof(np) && p.Member.Name == "diag_indices" && n == "ndim" && t == typeof(int))
+            return Role.IntArg;
         // The triangle generators' column count (np.tri's M, the indices' m: None, none, fewer and more columns, negative)
         // and diagonal k take np.eye's variants (only theirs; np.tri's dtype takes the general role below).
         if (IsTriangleGenerator(p))
@@ -5006,6 +5053,10 @@ static class Snapshot
             case Role.RollShift:
                 foreach (var label in RollShiftLabels)
                     Add(label, () => MakeRollShift(p.ParameterType, label));
+                break;
+            case Role.RequireReqs:
+                foreach (var label in p.ParameterType == typeof(string) ? RequireStringLabels : RequireListLabels)
+                    Add(label, () => MakeRequirements(p.ParameterType, label));
                 break;
             case Role.Ord:
                 // No order first (NumPy's None: the Frobenius / 2-norm default, cond's 2-norm), then the orders NumPy's norms
