@@ -173,7 +173,9 @@
 // variants), whose k the triangles of an array (np.tril / np.triu / np.tril_indices_from / np.triu_indices_from) vary too,
 // np.roll's shift (RollShiftLabels, as an int or a long), and the type predicates' (np.isscalar / np.iterable, which take
 // no array: their operand is an OBJECT from ObjectProbeLabels - null, C# numbers of every kind, bool / char / str,
-// NDArrays of each rank, C# arrays and collections, tuples, Type objects and other objects);
+// NDArrays of each rank, C# arrays and collections, tuples, Type objects and other objects), np.append's values (an array:
+// the second-operand variants; a C# value: np.insert's object values) and np.meshgrid's coordinate vectors (the array
+// overload's xi: the stacking family's array lists; x3: the second-operand variants);
 // an overload
 // with a required parameter of another
 // kind is reported once as SKIP. An int
@@ -2588,6 +2590,18 @@ static class Snapshot
         m.DeclaringType == typeof(np)
         && m.Name is "hstack" or "vstack" or "dstack" or "column_stack" or "stack" or "atleast_1d" or "atleast_2d" or "atleast_3d";
 
+    /// <summary>Whether an overload is np.meshgrid, whose array overload's coordinate vectors <c>xi</c> take the stacking
+    ///     family's array lists (<see cref="Role.StackArrays"/>).</summary>
+    /// <param name="m">The overload.</param>
+    /// <returns>True for a public static np.meshgrid overload.</returns>
+    private static bool IsMeshgrid(MethodInfo m) => m.DeclaringType == typeof(np) && m.Name == "meshgrid";
+
+    /// <summary>Whether a parameter belongs to np.append, whose values take the second-operand variants (an array) or
+    ///     np.insert's object values (a C# value).</summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True for a parameter of a public static np.append overload.</returns>
+    private static bool IsAppend(ParameterInfo p) => p.Member.DeclaringType == typeof(np) && p.Member.Name == "append";
+
     /// <summary>The stacking family's array-list variants (see <see cref="MakeStackArrays"/>); the first, the operand and a
     ///     copy of it, is the base.</summary>
     private static readonly string[] StackArraysLabels =
@@ -3703,6 +3717,11 @@ static class Snapshot
         // np.where's x / y as a C# value (only its object overloads: its NDArray x / y take the second-operand role below).
         if (IsWhere(p) && n is "x" or "y" && t == typeof(object))
             return Role.WhereScalar;
+        // np.append's values as a C# value (its object overload): np.insert's object values (a Python int / float / str /
+        // bool, None, an int past the small ranges, a list, a mixed list, an NDArray passed as object). Its NDArray values
+        // take the second-operand role below.
+        if (IsAppend(p) && n == "values" && t == typeof(object))
+            return Role.InsertValue;
         // An NDMatrix parameter (numpy.matrix's out=, typed as the matrix NumPy requires) takes the array roles too; other
         // NDArray subclasses (NDArray<bool> masks, ...) keep falling through, so the snapshots of the np.* and NDArray targets
         // are unchanged by the NDMatrix support.
@@ -3729,7 +3748,10 @@ static class Snapshot
                 // a2: np.array_equiv(a1, a2) and the legacy polyadd / polysub / polymul (a1, the first array, is the operand).
                 // ar2: the set routines np.union1d / np.intersect1d / np.setxor1d / np.setdiff1d (ar1 is the operand), which
                 // run np.unique's body over their concatenation.
-                : n is "lhs" or "rhs" or "left" or "right" or "x" or "y" or "other" or "x2" or "b" or "a2" or "ar2" ? Role.Operand2
+                // x3: np.meshgrid's third coordinate vector (x1 is the operand, x2 the general second operand).
+                : n is "lhs" or "rhs" or "left" or "right" or "x" or "y" or "other" or "x2" or "x3" or "b" or "a2" or "ar2" ? Role.Operand2
+                // np.append's values array (arr is the operand): the second-operand variants.
+                : n == "values" && IsAppend(p) ? Role.Operand2
                 // np.emath.power's exponent (np.emath.logn's x is caught by the names above).
                 : n == "p" && IsEmath(p) ? Role.Operand2
                 // np.insert / np.delete's index array or mask, and np.insert's values array.
@@ -5456,8 +5478,9 @@ static class Snapshot
                 continue;
             }
             // The stacking family's array list carries the operand (MakeStackArrays), before the multi_dot rule below would
-            // read np.stack's `arrays` as multi_dot's list.
-            if (!sawArray && ps[i].ParameterType == typeof(NDArray[]) && IsStacking(m) && ps[i].Name is "tup" or "arrays" or "arys")
+            // read np.stack's `arrays` as multi_dot's list. np.meshgrid's coordinate vectors xi take the same lists.
+            if (!sawArray && ps[i].ParameterType == typeof(NDArray[])
+                && ((IsStacking(m) && ps[i].Name is "tup" or "arrays" or "arys") || (IsMeshgrid(m) && ps[i].Name == "xi")))
             {
                 roles[i] = Role.StackArrays;
                 sawArray = true;
