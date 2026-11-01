@@ -265,5 +265,88 @@ namespace NumSharp.Tests.LinearAlgebra
             np.vecdot(np.ones(new Shape(2L, 3L)), np.ones(new Shape(2L, 3L)), bigger);
             bigger.Should().BeOfValues(3.0, 3.0).And.BeShaped(1, 2);
         }
+
+        /// <summary>
+        ///     <c>casting=</c> on np.vecdot / np.matvec / np.vecmat (the plan's P10, D10): each input's cast to the loop and the
+        ///     answer's cast into <c>out=</c> are checked under the caller's rule, NumPy's texts, with the casting name checked
+        ///     before the order name.
+        /// </summary>
+        [TestMethod]
+        public void Casting_ChecksEveryCastUnderTheCallersRule()
+        {
+            var i32 = np.arange(3).astype(np.int32);
+            var f64 = np.arange(3.0);
+            // np.vecdot(a_int32, b_f64, casting='no') -> UFuncTypeError: Cannot cast ufunc 'vecdot' input 0 from
+            // dtype('int32') to dtype('float64') with casting rule 'no' (and 'equiv'); 'safe' / 'same_kind' / 'unsafe' -> 5.0
+            new Action(() => np.vecdot(i32, f64, casting: "no")).Should().Throw<ArgumentException>()
+                .WithMessage("Cannot cast ufunc 'vecdot' input 0 from dtype('int32') to dtype('float64') with casting rule 'no'");
+            new Action(() => np.vecdot(i32, f64, casting: "equiv")).Should().Throw<ArgumentException>()
+                .WithMessage("*with casting rule 'equiv'");
+            foreach (var rule in new[] { "safe", "same_kind", "unsafe" })
+                np.vecdot(i32, f64, casting: rule).GetDouble().Should().Be(5.0, rule);
+            // np.vecdot(a_int32, a_int32, dtype=np.float32, casting='safe') -> input 0 to float32 refused; same_kind -> 5.0
+            new Action(() => np.vecdot(i32, i32, dtype: np.float32, casting: "safe")).Should().Throw<ArgumentException>()
+                .WithMessage("Cannot cast ufunc 'vecdot' input 0 from dtype('int32') to dtype('float32') with casting rule 'safe'");
+            np.vecdot(i32, i32, dtype: np.float32).GetSingle().Should().Be(5f);
+            // a float64 answer into an int32 out: refused under same_kind, stored under unsafe
+            var o = np.zeros(new Shape(), np.int32);
+            new Action(() => np.vecdot(f64, f64, o)).Should().Throw<ArgumentException>()
+                .WithMessage("Cannot cast ufunc 'vecdot' output from dtype('float64') to dtype('int32') with casting rule 'same_kind'");
+            np.vecdot(f64, f64, o, casting: "unsafe").Should().BeSameAs(o);
+            o.GetInt32().Should().Be(5);
+            // the names: casting first (np.vecdot(b, b, casting='bogus', order='Z') reports the casting)
+            new Action(() => np.vecdot(f64, f64, casting: "bogus", order: 'Z')).Should().Throw<ValueError>()
+                .WithMessage("casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe' (got 'bogus')");
+            new Action(() => np.matvec(np.ones(new Shape(2L, 3L)), np.ones(new Shape(3L)), order: 'z')).Should().Throw<ValueError>()
+                .WithMessage("order must be one of 'C', 'F', 'A', or 'K' (got 'z')");
+            new Action(() => np.vecmat(np.ones(new Shape(3L)), np.ones(new Shape(3L, 2L)), casting: "no", order: 'C'))
+                .Should().NotThrow("float64 operands need no cast");
+        }
+
+        /// <summary>
+        ///     <c>order=</c> lays out the result NumPy's iterator allocates (probed 2.4.2): <c>'K'</c> keeps the loop axes in
+        ///     the inputs' memory order, <c>'C'</c> / <c>'F'</c> lay out the whole result in that order, and <c>'A'</c> is F
+        ///     when both inputs are F-contiguous; lowercase letters work. The values do not change.
+        /// </summary>
+        [TestMethod]
+        public void Order_LaysOutTheAllocatedResult()
+        {
+            var x = np.ones(new Shape(3L, 4L, 5L));
+            var xf = np.asfortranarray(x);
+            // np.vecdot(x, x, order=o) of C operands: K, C, A -> C; F -> F (strides (8, 24))
+            np.vecdot(x, x, order: 'K').Shape.IsContiguous.Should().BeTrue();
+            np.vecdot(x, x, order: 'C').Shape.IsContiguous.Should().BeTrue();
+            np.vecdot(x, x, order: 'A').Shape.IsContiguous.Should().BeTrue();
+            var vf = np.vecdot(x, x, order: 'F');
+            vf.Shape.IsFContiguous.Should().BeTrue();
+            vf.strides.Should().Equal(8L, 24L);
+            // of F operands: K, F, A -> F; C -> C (strides (32, 8))
+            np.vecdot(xf, xf, order: 'K').Shape.IsFContiguous.Should().BeTrue();
+            np.vecdot(xf, xf, order: 'A').Shape.IsFContiguous.Should().BeTrue();
+            var vc = np.vecdot(xf, xf, order: 'c');
+            vc.Shape.IsContiguous.Should().BeTrue();
+            vc.strides.Should().Equal(32L, 8L);
+            np.vecdot(xf, xf, order: 'C').ToArray<double>().Should().Equal(np.vecdot(x, x).ToArray<double>());
+
+            var m = np.ones(new Shape(2L, 3L, 4L, 5L));
+            var v = np.ones(new Shape(2L, 3L, 5L));
+            var mf = np.asfortranarray(m);
+            var vfv = np.asfortranarray(v);
+            // np.matvec(m, v, order=o): C operands -> F strides (8, 16, 48) for 'F', C (96, 32, 8) otherwise
+            np.matvec(m, v, order: 'F').strides.Should().Equal(8L, 16L, 48L);
+            np.matvec(m, v, order: 'A').strides.Should().Equal(96L, 32L, 8L);
+            // F operands: K keeps the loop axes F-ordered with the core axis innermost (32, 64, 8); C -> (96, 32, 8);
+            // F and A -> (8, 16, 48)
+            np.matvec(mf, vfv).strides.Should().Equal(32L, 64L, 8L);
+            np.matvec(mf, vfv, order: 'C').strides.Should().Equal(96L, 32L, 8L);
+            np.matvec(mf, vfv, order: 'F').strides.Should().Equal(8L, 16L, 48L);
+            np.matvec(mf, vfv, order: 'A').strides.Should().Equal(8L, 16L, 48L);
+            // np.vecmat(vm, M, order=o) of C operands: K / C / A -> (96, 32, 8), F -> (8, 16, 48)
+            var vm = np.ones(new Shape(2L, 3L, 5L));
+            var mm = np.ones(new Shape(2L, 3L, 5L, 4L));
+            np.vecmat(vm, mm, order: 'K').strides.Should().Equal(96L, 32L, 8L);
+            np.vecmat(vm, mm, order: 'F').strides.Should().Equal(8L, 16L, 48L);
+            np.matvec(np.ones(new Shape(2L, 3L)), np.ones(new Shape(3L)), order: 'f').Should().BeOfValues(3.0, 3.0);
+        }
     }
 }

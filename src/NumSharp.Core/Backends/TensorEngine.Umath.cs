@@ -182,7 +182,7 @@ namespace NumSharp
             DType dtype, string casting, char order);
 
         /// <summary>
-        ///     NumPy's <c>np.vecdot(x1, x2, out, axes, axis, keepdims, dtype)</c> — the gufunc <c>(n),(n)-&gt;()</c>,
+        ///     NumPy's <c>np.vecdot(x1, x2, out, axes, axis, keepdims, dtype, casting, order)</c> — the gufunc <c>(n),(n)-&gt;()</c>,
         ///     <paramref name="x1"/> conjugated — the whole call: the argument checks, the core axis (<c>axes=</c> or
         ///     <c>axis=</c>, both operands' moved last), the core sizes, the loop <paramref name="dtype"/> selects, the
         ///     product (<see cref="Vecdot(NDArray, NDArray)"/>), the kept axis under <paramref name="keepdims"/>, and the
@@ -190,41 +190,58 @@ namespace NumSharp
         /// </summary>
         /// <param name="x1">The first operand, at least 1-D; conjugated when complex.</param>
         /// <param name="x2">The second operand, at least 1-D.</param>
-        /// <param name="out">Where the answer is delivered (with <c>np.copyto</c>'s same_kind rule), or null.</param>
+        /// <param name="out">Where the answer is delivered (its cast checked under <paramref name="casting"/>), or
+        ///     null.</param>
         /// <param name="axes">The core axis of each operand (<c>{x1, x2}</c>, or <c>{x1, x2, out}</c> where the output
         ///     entry is empty, or holds the kept axis under <paramref name="keepdims"/>), or null.</param>
         /// <param name="axis">The core axis of both operands, or null (the last).</param>
         /// <param name="keepdims">Whether the contracted axis stays in the result with length 1.</param>
         /// <param name="dtype">The loop dtype, or null.</param>
+        /// <param name="casting">The rule the input-to-loop and answer-to-out casts are checked under: <c>no</c>,
+        ///     <c>equiv</c>, <c>safe</c>, <c>same_kind</c> (NumPy's default) or <c>unsafe</c>.</param>
+        /// <param name="order">The layout of an allocated answer: <c>'K'</c> (NumPy's default: the loop axes in the
+        ///     inputs' memory order), <c>'C'</c>, <c>'F'</c>, or <c>'A'</c> (F when both inputs are F-contiguous, else C);
+        ///     ignored with <paramref name="out"/>. Lowercase letters are accepted.</param>
         /// <returns>The vector dot products, or <paramref name="out"/> itself holding them.</returns>
         /// <exception cref="TypeError"><paramref name="axis"/> with <paramref name="axes"/>; a <paramref name="dtype"/>
         ///     with details beyond its class; text operands or a text <paramref name="dtype"/> (no vecdot loop).</exception>
         /// <exception cref="ValueError">A 0-d operand; core axes of different lengths; an <c>axes=</c> list of the wrong
         ///     length; a read-only <paramref name="out"/>, or one the answer does not broadcast into.</exception>
         /// <exception cref="AxisError">An <c>axes=</c> entry of the wrong length, or an axis out of range.</exception>
-        /// <exception cref="InvalidCastException">The answer cannot be cast into <paramref name="out"/> under
-        ///     same_kind.</exception>
+        /// <exception cref="ArgumentException">An input cannot be cast to the loop, or the answer into
+        ///     <paramref name="out"/>, under <paramref name="casting"/> (NumPy's UFuncTypeError text).</exception>
+        /// <exception cref="ValueError">A <paramref name="casting"/> or <paramref name="order"/> name NumPy refuses
+        ///     (<c>casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe' (got '…')</c>, <c>order must be one
+        ///     of 'C', 'F', 'A', or 'K' (got '…')</c>), checked casting first.</exception>
+        /// <exception cref="TypeError">A null <paramref name="casting"/> (<c>casting must be str, not
+        ///     NoneType</c>).</exception>
         /// <exception cref="IncorrectShapeException">Loop axes that do not broadcast.</exception>
         /// <exception cref="NotSupportedException"><paramref name="dtype"/> is a class without storage yet.</exception>
         /// <exception cref="NullReferenceException"><paramref name="x2"/> is null.</exception>
         /// <remarks>New in 0.71.0 (the np-layer dtype plan, P2): the public <c>np.vecdot</c> keeps the matrix boundary and
         ///     calls this.</remarks>
         public abstract NDArray Vecdot(NDArray x1, NDArray x2, NDArray @out, int[][] axes, int? axis, bool keepdims,
-            DType dtype);
+            DType dtype, string casting, char order);
 
         /// <summary>
-        ///     NumPy's <c>np.matvec(x1, x2, out, axes, axis, keepdims, dtype)</c> — the gufunc <c>(m,n),(n)-&gt;(m)</c> —
+        ///     NumPy's <c>np.matvec(x1, x2, out, axes, axis, keepdims, dtype, casting, order)</c> — the gufunc <c>(m,n),(n)-&gt;(m)</c> —
         ///     the whole call: the argument checks, the core axes <c>axes=</c> names, the core sizes, the loop
         ///     <paramref name="dtype"/> selects, the product (<see cref="Matvec(NDArray, NDArray)"/>), the result's core axis
         ///     placed, and the delivery into <paramref name="out"/>.
         /// </summary>
         /// <param name="x1">The matrix operand, at least 2-D.</param>
         /// <param name="x2">The vector operand, at least 1-D; not conjugated.</param>
-        /// <param name="out">Where the answer is delivered (with <c>np.copyto</c>'s same_kind rule), or null.</param>
+        /// <param name="out">Where the answer is delivered (its cast checked under <paramref name="casting"/>), or
+        ///     null.</param>
         /// <param name="axes">The core axes per operand (<c>{(m,n), (n), (m)}</c>, all three entries), or null.</param>
         /// <param name="axis">Refused for any value (the two core dimensions are distinct), or null.</param>
         /// <param name="keepdims">Refused when true.</param>
         /// <param name="dtype">The loop dtype, or null.</param>
+        /// <param name="casting">The rule the input-to-loop and answer-to-out casts are checked under: <c>no</c>,
+        ///     <c>equiv</c>, <c>safe</c>, <c>same_kind</c> (NumPy's default) or <c>unsafe</c>.</param>
+        /// <param name="order">The layout of an allocated answer: <c>'K'</c> (NumPy's default: the loop axes in the
+        ///     inputs' memory order), <c>'C'</c>, <c>'F'</c>, or <c>'A'</c> (F when both inputs are F-contiguous, else C);
+        ///     ignored with <paramref name="out"/>. Lowercase letters are accepted.</param>
         /// <returns>The matrix-vector products, or <paramref name="out"/> itself holding them.</returns>
         /// <exception cref="TypeError"><paramref name="axis"/> with <paramref name="axes"/>, or either given; a
         ///     <paramref name="dtype"/> with details beyond its class; text operands or a text <paramref name="dtype"/>;
@@ -233,18 +250,23 @@ namespace NumSharp
         ///     <c>axes=</c> list without three entries; a read-only <paramref name="out"/>, or one the answer does not
         ///     broadcast into.</exception>
         /// <exception cref="AxisError">An <c>axes=</c> entry of the wrong length, or an axis out of range.</exception>
-        /// <exception cref="InvalidCastException">The answer cannot be cast into <paramref name="out"/> under
-        ///     same_kind.</exception>
+        /// <exception cref="ArgumentException">An input cannot be cast to the loop, or the answer into
+        ///     <paramref name="out"/>, under <paramref name="casting"/> (NumPy's UFuncTypeError text).</exception>
+        /// <exception cref="ValueError">A <paramref name="casting"/> or <paramref name="order"/> name NumPy refuses
+        ///     (<c>casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe' (got '…')</c>, <c>order must be one
+        ///     of 'C', 'F', 'A', or 'K' (got '…')</c>), checked casting first.</exception>
+        /// <exception cref="TypeError">A null <paramref name="casting"/> (<c>casting must be str, not
+        ///     NoneType</c>).</exception>
         /// <exception cref="IncorrectShapeException">Loop axes that do not broadcast (the product's text).</exception>
         /// <exception cref="NotSupportedException"><paramref name="dtype"/> is a class without storage yet.</exception>
         /// <exception cref="NullReferenceException"><paramref name="x2"/> is null.</exception>
         /// <remarks>New in 0.71.0 (the np-layer dtype plan, P2): the public <c>np.matvec</c> keeps the matrix boundary and
         ///     calls this.</remarks>
         public abstract NDArray Matvec(NDArray x1, NDArray x2, NDArray @out, int[][] axes, int? axis, bool keepdims,
-            DType dtype);
+            DType dtype, string casting, char order);
 
         /// <summary>
-        ///     NumPy's <c>np.vecmat(x1, x2, out, axes, axis, keepdims, dtype)</c> — the gufunc <c>(n),(n,m)-&gt;(m)</c>,
+        ///     NumPy's <c>np.vecmat(x1, x2, out, axes, axis, keepdims, dtype, casting, order)</c> — the gufunc <c>(n),(n,m)-&gt;(m)</c>,
         ///     <paramref name="x1"/> conjugated — the whole call: the argument checks, the core axes <c>axes=</c> names,
         ///     the core sizes, the loop <paramref name="dtype"/> selects, the product
         ///     (<see cref="Vecmat(NDArray, NDArray)"/>), the result's core axis placed, and the delivery into
@@ -252,11 +274,17 @@ namespace NumSharp
         /// </summary>
         /// <param name="x1">The vector operand, at least 1-D; conjugated when complex.</param>
         /// <param name="x2">The matrix operand, at least 2-D.</param>
-        /// <param name="out">Where the answer is delivered (with <c>np.copyto</c>'s same_kind rule), or null.</param>
+        /// <param name="out">Where the answer is delivered (its cast checked under <paramref name="casting"/>), or
+        ///     null.</param>
         /// <param name="axes">The core axes per operand (<c>{(n), (n,m), (m)}</c>, all three entries), or null.</param>
         /// <param name="axis">Refused for any value (the two core dimensions are distinct), or null.</param>
         /// <param name="keepdims">Refused when true.</param>
         /// <param name="dtype">The loop dtype, or null.</param>
+        /// <param name="casting">The rule the input-to-loop and answer-to-out casts are checked under: <c>no</c>,
+        ///     <c>equiv</c>, <c>safe</c>, <c>same_kind</c> (NumPy's default) or <c>unsafe</c>.</param>
+        /// <param name="order">The layout of an allocated answer: <c>'K'</c> (NumPy's default: the loop axes in the
+        ///     inputs' memory order), <c>'C'</c>, <c>'F'</c>, or <c>'A'</c> (F when both inputs are F-contiguous, else C);
+        ///     ignored with <paramref name="out"/>. Lowercase letters are accepted.</param>
         /// <returns>The vector-matrix products, or <paramref name="out"/> itself holding them.</returns>
         /// <exception cref="TypeError"><paramref name="axis"/> with <paramref name="axes"/>, or either given; a
         ///     <paramref name="dtype"/> with details beyond its class; text operands or a text <paramref name="dtype"/>;
@@ -265,15 +293,20 @@ namespace NumSharp
         ///     <c>axes=</c> list without three entries; a read-only <paramref name="out"/>, or one the answer does not
         ///     broadcast into.</exception>
         /// <exception cref="AxisError">An <c>axes=</c> entry of the wrong length, or an axis out of range.</exception>
-        /// <exception cref="InvalidCastException">The answer cannot be cast into <paramref name="out"/> under
-        ///     same_kind.</exception>
+        /// <exception cref="ArgumentException">An input cannot be cast to the loop, or the answer into
+        ///     <paramref name="out"/>, under <paramref name="casting"/> (NumPy's UFuncTypeError text).</exception>
+        /// <exception cref="ValueError">A <paramref name="casting"/> or <paramref name="order"/> name NumPy refuses
+        ///     (<c>casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe' (got '…')</c>, <c>order must be one
+        ///     of 'C', 'F', 'A', or 'K' (got '…')</c>), checked casting first.</exception>
+        /// <exception cref="TypeError">A null <paramref name="casting"/> (<c>casting must be str, not
+        ///     NoneType</c>).</exception>
         /// <exception cref="IncorrectShapeException">Loop axes that do not broadcast (the product's text).</exception>
         /// <exception cref="NotSupportedException"><paramref name="dtype"/> is a class without storage yet.</exception>
         /// <exception cref="NullReferenceException"><paramref name="x2"/> is null.</exception>
         /// <remarks>New in 0.71.0 (the np-layer dtype plan, P2): the public <c>np.vecmat</c> keeps the matrix boundary and
         ///     calls this.</remarks>
         public abstract NDArray Vecmat(NDArray x1, NDArray x2, NDArray @out, int[][] axes, int? axis, bool keepdims,
-            DType dtype);
+            DType dtype, string casting, char order);
 
         public abstract NDArray Abs(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
         // np.fabs — the FLOAT-ONLY absolute value: promotes int/bool to float (NEP50 tier) and has NO

@@ -99,6 +99,6 @@ namespace NumSharp.Backends
         ///     <paramref name="x1"/>'s engine, with <paramref name="axis"/> and every other keyword at np.vecdot's default
         ///     (no out, axes or dtype; keepdims false).</remarks>
         public override NDArray Vecdot(NDArray x1, NDArray x2, int axis = -1)
-            => x1.TensorEngine.Vecdot(x1, x2, null, null, axis, false, null);
+            => x1.TensorEngine.Vecdot(x1, x2, null, null, axis, false, null, "same_kind", 'K');
     }
 }

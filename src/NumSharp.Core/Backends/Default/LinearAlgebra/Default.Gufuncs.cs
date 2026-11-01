@@ -106,23 +106,26 @@ namespace NumSharp.Backends
         /// <inheritdoc/>
         /// <remarks>
         ///     The checks run in this order: NumPy's argument parse (<c>axis</c> with <c>axes</c>, the <c>dtype=</c> class, a
-        ///     read-only <c>out=</c>), the loop refusal of text, each input's and the output's cast under same_kind (NumPy's
-        ///     default rule; this gufunc takes no casting=), each operand's rank, the <c>axes=</c> list or the <c>axis=</c>
-        ///     value, the core sizes; the delivery is an unsafe <c>np.copyto</c> (the cast validated). Moved from the
-        ///     public <c>np.vecdot</c> by the np-layer dtype plan's P2.
+        ///     read-only <c>out=</c>), the loop refusal of text, each input's and the output's cast under <c>casting</c> (its name
+        ///     and <c>order</c>'s checked first), each operand's rank, the <c>axes=</c> list or the <c>axis=</c> value, the
+        ///     core sizes; the delivery is an unsafe <c>np.copyto</c> (the cast validated). Moved from the public
+        ///     <c>np.vecdot</c> by the np-layer dtype plan's P2; <c>casting=</c> / <c>order=</c> since P10 (D10).
         /// </remarks>
         [NDScoped] // engine boundary: the moved operands, the loop casts and the answer before its delivery are reclaimed
         public override NDArray Vecdot(NDArray x1, NDArray x2, NDArray @out, int[][] axes, int? axis, bool keepdims,
-            DType dtype)
+            DType dtype, string casting, char order)
         {
             // NumPy's argument parse (ufunc_generic_fastcall): axis with axes, the dtype= class, a read-only out, then
             // the loop resolution — all before any core-dimension, axis or keepdims check.
             GufuncGuard.CheckParsedArguments(axes, axis, dtype, @out);
+            // then the casting and order names (convert_ufunc_arguments), as np.matmul's: casting before order
+            GufuncGuard.RequireCasting(casting);
+            order = GufuncGuard.RequireOrder(order);   // a lowercase letter is NumPy's too
             GufuncGuard.ThrowIfText("vecdot", x1, x2, dtype);
-            // NumPy's validate_casting under its default rule (this gufunc takes no casting=): each input's cast to the
-            // loop, then the loop's cast to out=, before the gufunc checks.
+            // NumPy's validate_casting under the caller's rule: each input's cast to the loop, then the loop's cast to
+            // out=, before the gufunc checks.
             var loop = GufuncGuard.ResolveLoop(x1, x2, dtype);
-            GufuncGuard.ValidateCasting("vecdot", x1, x2, loop, @out, "same_kind");
+            GufuncGuard.ValidateCasting("vecdot", x1, x2, loop, @out, casting);
             // NumPy's gufunc checks, over x1, x2 and out=: keepdims support (this signature allows it), the ranks,
             // axes= / axis=, the core sizes.
             var layout = GufuncGuard.CheckCoreDimensions(GufuncSignature.Vecdot, new[] { x1, x2, @out }, axes, axis,
@@ -165,7 +168,8 @@ namespace NumSharp.Backends
             // product already in that order and copies any other).
             Shape loopLayout = default;
             int[] loopPerm = null;
-            bool voted = @out is null && GufuncLoopOrder(a, 1, b, 1, 1, out loopLayout, out loopPerm);
+            // only order='K' keeps the vote; 'C' / 'F' / 'A' lay out the whole output below (ApplyGufuncOrder)
+            bool voted = @out is null && order == 'K' && GufuncLoopOrder(a, 1, b, 1, 1, out loopLayout, out loopPerm);
 
             a = GufuncGuard.ToLoop(a, dtype);
             b = GufuncGuard.ToLoop(b, dtype);
@@ -186,6 +190,9 @@ namespace NumSharp.Backends
             var result = Vecdot(a, b);
             if (voted)
                 result = AdoptLoopLayout(result, loopLayout);
+            // order= lays out the output NumPy's iterator allocates; with out= the answer is copied into out's layout.
+            if (@out is null)
+                result = ApplyGufuncOrder(result, order, x1, x2);
 
             if (keepdims)
             {
@@ -217,23 +224,26 @@ namespace NumSharp.Backends
         /// <inheritdoc/>
         /// <remarks>
         ///     The checks run in this order: NumPy's argument parse (<c>axis</c> with <c>axes</c>, the <c>dtype=</c> class, a
-        ///     read-only <c>out=</c>), the loop refusal of text, each input's and the output's cast under same_kind
-        ///     (NumPy's default rule; this gufunc takes no casting=), <c>axis</c> / <c>keepdims</c>, each operand's rank,
-        ///     the <c>axes=</c> list, the core sizes; the delivery is an unsafe <c>np.copyto</c> (the cast validated).
-        ///     Moved from the public <c>np.matvec</c> by the np-layer dtype plan's P2.
+        ///     read-only <c>out=</c>), the loop refusal of text, each input's and the output's cast under <c>casting</c>
+        ///     (its name and <c>order</c>'s checked first), <c>axis</c> / <c>keepdims</c>, each operand's rank, the
+        ///     <c>axes=</c> list, the core sizes; the delivery is an unsafe <c>np.copyto</c> (the cast validated). Moved
+        ///     from the public <c>np.matvec</c> by the np-layer dtype plan's P2; <c>casting=</c> / <c>order=</c> since P10.
         /// </remarks>
         [NDScoped] // engine boundary: the moved operands, the loop casts and the answer before its delivery are reclaimed
         public override NDArray Matvec(NDArray x1, NDArray x2, NDArray @out, int[][] axes, int? axis, bool keepdims,
-            DType dtype)
+            DType dtype, string casting, char order)
         {
             // NumPy's argument parse (ufunc_generic_fastcall): axis with axes, the dtype= class, a read-only out, then
             // the loop resolution — all before any core-dimension, axis or keepdims check.
             GufuncGuard.CheckParsedArguments(axes, axis, dtype, @out);
+            // then the casting and order names (convert_ufunc_arguments), as np.matmul's: casting before order
+            GufuncGuard.RequireCasting(casting);
+            order = GufuncGuard.RequireOrder(order);   // a lowercase letter is NumPy's too
             GufuncGuard.ThrowIfText("matvec", x1, x2, dtype);
-            // NumPy's validate_casting under its default rule (this gufunc takes no casting=): each input's cast to the
-            // loop, then the loop's cast to out=, before the gufunc checks.
+            // NumPy's validate_casting under the caller's rule: each input's cast to the loop, then the loop's cast to
+            // out=, before the gufunc checks.
             var loop = GufuncGuard.ResolveLoop(x1, x2, dtype);
-            GufuncGuard.ValidateCasting("matvec", x1, x2, loop, @out, "same_kind");
+            GufuncGuard.ValidateCasting("matvec", x1, x2, loop, @out, casting);
             // NumPy's gufunc checks, over x1, x2 and out=: keepdims and axis support (this signature has two distinct
             // core dimensions, so both are refused), the ranks, axes=, the core sizes.
             var layout = GufuncGuard.CheckCoreDimensions(GufuncSignature.Matvec, new[] { x1, x2, @out }, axes, axis,
@@ -258,7 +268,7 @@ namespace NumSharp.Backends
             // The batched product writes C order, so only a vote against C order needs work.
             Shape loopLayout = default;
             int[] loopPerm = null;
-            if (@out is null)
+            if (@out is null && order == 'K')   // 'C' / 'F' / 'A' lay out the whole output below
                 GufuncLoopOrder(a, 2, b, 1, a.Shape.dimensions[a.ndim - 2], out loopLayout, out loopPerm);
 
             a = GufuncGuard.ToLoop(a, dtype);
@@ -272,6 +282,10 @@ namespace NumSharp.Backends
             var result = Matvec(a, b);
             if (loopPerm != null)
                 result = AdoptLoopLayout(result, loopLayout);
+            // order= lays out the iterator's axes (the loop axes, then the core axis) and axes= remaps them after, as
+            // in Matmul; with out= the answer is copied into out's own layout.
+            if (@out is null)
+                result = ApplyGufuncOrder(result, order, x1, x2);
 
             if (outputAxes.Length == 1)
                 result = PlaceOutputCore(result, outputAxes);
@@ -282,23 +296,26 @@ namespace NumSharp.Backends
         /// <inheritdoc/>
         /// <remarks>
         ///     The checks run in this order: NumPy's argument parse (<c>axis</c> with <c>axes</c>, the <c>dtype=</c> class, a
-        ///     read-only <c>out=</c>), the loop refusal of text, each input's and the output's cast under same_kind
-        ///     (NumPy's default rule; this gufunc takes no casting=), <c>axis</c> / <c>keepdims</c>, each operand's rank,
-        ///     the <c>axes=</c> list, the core sizes; the delivery is an unsafe <c>np.copyto</c> (the cast validated).
-        ///     Moved from the public <c>np.vecmat</c> by the np-layer dtype plan's P2.
+        ///     read-only <c>out=</c>), the loop refusal of text, each input's and the output's cast under <c>casting</c>
+        ///     (its name and <c>order</c>'s checked first), <c>axis</c> / <c>keepdims</c>, each operand's rank, the
+        ///     <c>axes=</c> list, the core sizes; the delivery is an unsafe <c>np.copyto</c> (the cast validated). Moved
+        ///     from the public <c>np.vecmat</c> by the np-layer dtype plan's P2; <c>casting=</c> / <c>order=</c> since P10.
         /// </remarks>
         [NDScoped] // engine boundary: the moved operands, the loop casts and the answer before its delivery are reclaimed
         public override NDArray Vecmat(NDArray x1, NDArray x2, NDArray @out, int[][] axes, int? axis, bool keepdims,
-            DType dtype)
+            DType dtype, string casting, char order)
         {
             // NumPy's argument parse (ufunc_generic_fastcall): axis with axes, the dtype= class, a read-only out, then
             // the loop resolution — all before any core-dimension, axis or keepdims check.
             GufuncGuard.CheckParsedArguments(axes, axis, dtype, @out);
+            // then the casting and order names (convert_ufunc_arguments), as np.matmul's: casting before order
+            GufuncGuard.RequireCasting(casting);
+            order = GufuncGuard.RequireOrder(order);   // a lowercase letter is NumPy's too
             GufuncGuard.ThrowIfText("vecmat", x1, x2, dtype);
-            // NumPy's validate_casting under its default rule (this gufunc takes no casting=): each input's cast to the
-            // loop, then the loop's cast to out=, before the gufunc checks.
+            // NumPy's validate_casting under the caller's rule: each input's cast to the loop, then the loop's cast to
+            // out=, before the gufunc checks.
             var loop = GufuncGuard.ResolveLoop(x1, x2, dtype);
-            GufuncGuard.ValidateCasting("vecmat", x1, x2, loop, @out, "same_kind");
+            GufuncGuard.ValidateCasting("vecmat", x1, x2, loop, @out, casting);
             // NumPy's gufunc checks, over x1, x2 and out=: keepdims and axis support (this signature has two distinct
             // core dimensions, so both are refused), the ranks, axes=, the core sizes.
             var layout = GufuncGuard.CheckCoreDimensions(GufuncSignature.Vecmat, new[] { x1, x2, @out }, axes, axis,
@@ -321,7 +338,7 @@ namespace NumSharp.Backends
             // The batched product writes C order, so only a vote against C order needs work.
             Shape loopLayout = default;
             int[] loopPerm = null;
-            if (@out is null)
+            if (@out is null && order == 'K')   // 'C' / 'F' / 'A' lay out the whole output below
                 GufuncLoopOrder(a, 1, b, 2, b.Shape.dimensions[b.ndim - 1], out loopLayout, out loopPerm);
 
             a = GufuncGuard.ToLoop(a, dtype);
@@ -335,6 +352,10 @@ namespace NumSharp.Backends
             var result = Vecmat(a, b);
             if (loopPerm != null)
                 result = AdoptLoopLayout(result, loopLayout);
+            // order= lays out the iterator's axes (the loop axes, then the core axis) and axes= remaps them after, as
+            // in Matmul; with out= the answer is copied into out's own layout.
+            if (@out is null)
+                result = ApplyGufuncOrder(result, order, x1, x2);
 
             if (outputAxes.Length == 1)
                 result = PlaceOutputCore(result, outputAxes);
@@ -586,6 +607,44 @@ namespace NumSharp.Backends
             if (result.Shape.IsFContiguous && result.Shape.IsContiguous)
                 return NDArray.AdoptLayout(result, layout);
             return result.copy('F');
+        }
+
+        /// <summary>
+        ///     The output layout <c>order=</c> asks for, for the gufuncs whose answer comes from a kernel that does not lay the
+        ///     output out itself (<c>np.vecdot</c>, <c>np.matvec</c>, <c>np.vecmat</c>): NumPy's iterator allocates the
+        ///     output in that order (probed 2.4.2: <c>np.vecdot(x, x, order='F')</c> of two C (3,4,5) arrays is F-contiguous,
+        ///     <c>np.matvec</c> of F operands with <c>order='C'</c> is C-contiguous).
+        /// </summary>
+        /// <param name="result">The answer, a fresh array the caller owns (the loop-order vote already applied for
+        ///     <c>'K'</c>).</param>
+        /// <param name="order">The validated order letter: <c>'K'</c> keeps the vote's layout, <c>'C'</c> / <c>'F'</c> lay
+        ///     the whole output out in that order, <c>'A'</c> is F when both inputs are F-contiguous, else C (NumPy's
+        ///     <c>NPY_ANYORDER</c> for a ufunc's allocated output).</param>
+        /// <param name="x1">The first input as the caller gave it (its layout votes for <c>'A'</c>).</param>
+        /// <param name="x2">The second input as the caller gave it.</param>
+        /// <returns><paramref name="result"/> itself when it already has the layout, relabelled when it is both C- and
+        ///     F-contiguous and F is asked for (NumPy's exact F strides for its extent-1 axes, the buffer kept), else a copy
+        ///     in the asked order (the original is reclaimed by the caller's scope).</returns>
+        private static NDArray ApplyGufuncOrder(NDArray result, char order, NDArray x1, NDArray x2)
+        {
+            // 'K' is the vote's layout; a 0-d answer (two vectors) is both orders at once, and NumPy allocates the 0-d
+            // output whatever the order.
+            if (order == 'K' || result.ndim == 0)
+                return result;
+
+            bool fortran = order == 'F' || (order == 'A' && x1.Shape.IsFContiguous && x2.Shape.IsFContiguous);
+            if (fortran)
+            {
+                if (!result.Shape.IsFContiguous)
+                    return result.copy('F');
+                // Both orders at once (at most one axis longer than 1): C and F address the elements alike, so relabel
+                // with exact F strides and keep the buffer, as ApplyMatmulOrder does.
+                return result.Shape.IsContiguous
+                    ? NDArray.AdoptLayout(result, Shape.Adopt((long[])result.Shape.dimensions.Clone(), 'F'))
+                    : result;
+            }
+
+            return result.Shape.IsContiguous ? result : result.copy('C');
         }
     }
 }

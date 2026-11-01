@@ -22,11 +22,10 @@ namespace NumSharp.Tests.LinearAlgebra
     ///     transcribes verbatim.
     ///     </para>
     ///     <para>
-    ///     <b>Four NumPy ufunc keywords are deliberately absent</b> from the three gufuncs:
-    ///     <c>casting</c>, <c>order</c>, <c>subok</c> and <c>signature</c>. NumSharp models none of
-    ///     them anywhere in its ufunc surface — <c>signature</c> is what <c>dtype</c> already does
-    ///     and <c>subok</c> concerns ndarray subclasses the library does not have — so accepting and
-    ///     ignoring them would be worse than not offering them.
+    ///     <b>Two NumPy ufunc keywords are deliberately absent</b> from the three gufuncs:
+    ///     <c>subok</c> and <c>signature</c>: <c>signature</c> is what <c>dtype</c> already does and
+    ///     <c>subok</c> concerns ndarray subclasses, which the numpy.matrix boundary decides. <c>casting</c>
+    ///     and <c>order</c> follow <c>dtype</c>, as on <c>np.matmul</c> (the np-layer dtype plan's P10, D10).
     ///     </para>
     /// </remarks>
     [TestClass]
@@ -38,9 +37,9 @@ namespace NumSharp.Tests.LinearAlgebra
         {
             ("inner", new[] {"a", "b"}),
             ("vdot", new[] {"a", "b"}),
-            ("vecdot", new[] {"x1", "x2", "out", "axes", "axis", "keepdims", "dtype"}),
-            ("matvec", new[] {"x1", "x2", "out", "axes", "axis", "keepdims", "dtype"}),
-            ("vecmat", new[] {"x1", "x2", "out", "axes", "axis", "keepdims", "dtype"}),
+            ("vecdot", new[] {"x1", "x2", "out", "axes", "axis", "keepdims", "dtype", "casting", "order"}),
+            ("matvec", new[] {"x1", "x2", "out", "axes", "axis", "keepdims", "dtype", "casting", "order"}),
+            ("vecmat", new[] {"x1", "x2", "out", "axes", "axis", "keepdims", "dtype", "casting", "order"}),
             ("tensordot", new[] {"a", "b", "axes"}),
             // NumPy's printed signature is einsum(*operands, out, optimize, **kwargs); the DOCUMENTED
             // form it expands to is einsum(subscripts, *operands, out, dtype, order, casting, optimize).
