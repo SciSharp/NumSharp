@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-
 namespace NumSharp
 {
     public static partial class np
@@ -15,10 +13,21 @@ namespace NumSharp
         ///     (the default) is the double contraction. A NEGATIVE count contracts nothing — NumPy
         ///     forms <c>range(-axes, 0)</c>, which is empty for any <c>axes &lt;= 0</c>.
         /// </param>
+        /// <param name="a">The first tensor (not null).</param>
+        /// <param name="b">The second tensor (not null).</param>
+        /// <returns>A new array of <paramref name="a"/>'s kept axes followed by <paramref name="b"/>'s.</returns>
+        /// <exception cref="IndexError">More axes than an operand has (<c>tuple index out of range</c>).</exception>
+        /// <exception cref="ValueError">Contracted extents that differ (<c>shape-mismatch for sum</c>), or the final dot's
+        ///     refusals of text.</exception>
+        /// <exception cref="TypeError">The final dot's refusals of text operands.</exception>
+        /// <exception cref="System.NotSupportedException">A <c>StringDType</c> operand beside a number (NumPy's object
+        ///     product).</exception>
+        /// <exception cref="System.NullReferenceException"><paramref name="a"/> or <paramref name="b"/> is null.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.tensordot.html</remarks>
         /// <remarks>
         ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
-        ///     ends with <c>np.concatenate</c>), which drops the class.
+        ///     ends with <c>np.concatenate</c>), which drops the class. The statements are
+        ///     <see cref="TensorEngine.Tensordot(NDArray, NDArray, int)"/>, on <paramref name="a"/>'s engine.
         /// </remarks>
         public static NDArray tensordot(NDArray a, NDArray b, int axes = 2)
         {
@@ -28,31 +37,36 @@ namespace NumSharp
             // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
             if (NDCharArrayBoundary.Sees(a, b))
                 return NDCharArrayBoundary.Plain((a, b, axes), static s => tensordot(s.a, s.b, s.axes));
-            // Text reaches the final dot after NumPy's axis checks (which come first), and dot answers for it.
-            var axesA = new List<int>();
-            var axesB = new List<int>();
-            for (int k = -axes; k < 0; k++)
-                axesA.Add(k);
-            for (int k = 0; k < axes; k++)
-                axesB.Add(k);
-
-            return tensordot(a, b, axesA.ToArray(), axesB.ToArray());
+            // NumPy's body (the two axis lists from the count, the axis checks, the final dot) is the engine's.
+            return a.TensorEngine.Tensordot(a, b, axes);
         }
 
         /// <summary>
         ///     Tensor contraction pairing one axis of <paramref name="a"/> with one of
         ///     <paramref name="b"/> — NumPy's <c>axes=(int, int)</c> spelling.
         /// </summary>
+        /// <param name="a">The first tensor (not null).</param>
+        /// <param name="b">The second tensor (not null).</param>
+        /// <param name="axes">The axis of <paramref name="a"/> and the axis of <paramref name="b"/> to contract.</param>
+        /// <returns>A new array of <paramref name="a"/>'s kept axes followed by <paramref name="b"/>'s.</returns>
+        /// <exception cref="IndexError">An axis out of range (<c>tuple index out of range</c>).</exception>
+        /// <exception cref="ValueError">Extents that differ (<c>shape-mismatch for sum</c>), or the final dot's refusals of
+        ///     text.</exception>
+        /// <exception cref="TypeError">The final dot's refusals of text operands.</exception>
+        /// <exception cref="System.NotSupportedException">A <c>StringDType</c> operand beside a number.</exception>
+        /// <exception cref="System.NullReferenceException"><paramref name="a"/> or <paramref name="b"/> is null.</exception>
         /// <remarks>
         ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
-        ///     ends with <c>np.concatenate</c>), which drops the class.
+        ///     ends with <c>np.concatenate</c>), which drops the class. NumPy's <c>axes_a, axes_b = axes</c> with two ints makes
+        ///     the one-element lists <c>[axes_a]</c> / <c>[axes_b]</c>, so the pair calls
+        ///     <see cref="TensorEngine.Tensordot(NDArray, NDArray, int[], int[])"/>, on <paramref name="a"/>'s engine.
         /// </remarks>
         public static NDArray tensordot(NDArray a, NDArray b, (int AxisA, int AxisB) axes)
             => NDMatrixBoundary.Sees(a, b)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             ? NDMatrixBoundary.Plain((a, b, axes), static s => tensordot(s.a, s.b, s.axes))
             : NDCharArrayBoundary.Sees(a, b)   // a numpy.char.chararray operand too: asarray drops either class
             ? NDCharArrayBoundary.Plain((a, b, axes), static s => tensordot(s.a, s.b, s.axes))
-            : tensordot(a, b, new[] {axes.AxisA}, new[] {axes.AxisB});
+            : a.TensorEngine.Tensordot(a, b, new[] {axes.AxisA}, new[] {axes.AxisB});
 
         /// <summary>
         ///     Tensor contraction pairing <paramref name="axesA"/> of <paramref name="a"/> with
@@ -70,11 +84,22 @@ namespace NumSharp
         ///     mismatch. A mismatched extent found earlier in the list settles as the shape mismatch
         ///     first, hiding a later out-of-range axis.
         /// </exception>
+        /// <exception cref="TypeError">The final dot's refusals of text operands.</exception>
+        /// <exception cref="System.NotSupportedException">A <c>StringDType</c> operand beside a number (NumPy's object
+        ///     product).</exception>
+        /// <exception cref="System.NullReferenceException"><paramref name="a"/>, <paramref name="b"/> or an axis list is
+        ///     null.</exception>
+        /// <param name="a">The first tensor (not null).</param>
+        /// <param name="b">The second tensor (not null).</param>
+        /// <param name="axesA">The axes of <paramref name="a"/> to contract, in pairing order.</param>
+        /// <param name="axesB">The axes of <paramref name="b"/> to contract, paired element by element with
+        ///     <paramref name="axesA"/>.</param>
+        /// <returns>A new array of <paramref name="a"/>'s kept axes followed by <paramref name="b"/>'s.</returns>
         /// <remarks>
         ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
-        ///     ends with <c>np.concatenate</c>), which drops the class.
+        ///     ends with <c>np.concatenate</c>), which drops the class. The statements are
+        ///     <see cref="TensorEngine.Tensordot(NDArray, NDArray, int[], int[])"/>, on <paramref name="a"/>'s engine.
         /// </remarks>
-        [NDScoped]
         public static NDArray tensordot(NDArray a, NDArray b, int[] axesA, int[] axesB)
         {
             // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
@@ -83,142 +108,8 @@ namespace NumSharp
             // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
             if (NDCharArrayBoundary.Sees(a, b))
                 return NDCharArrayBoundary.Plain((a, b, axesA, axesB), static s => tensordot(s.a, s.b, s.axesA, s.axesB));
-            // Port of numpy/_core/numeric.py :: tensordot. Text runs every axis check below, then the final dot
-            // (np.dot of the two reshaped matrices) gives NumPy's answer for it.
-            var shapeA = a.Shape.dimensions;
-            var shapeB = b.Shape.dimensions;
-            int na = axesA.Length;
-            int nb = axesB.Length;
-
-            // NumPy rejects LITERAL duplicates first — `len(set(axes_a)) != len(axes_a)` — on the
-            // RAW axis values, ahead of every shape check and before negatives are normalized. So
-            // `([5,5],[0,1])` is a duplicate, not an out-of-range index, and `([0,-2],…)` (a repeat
-            // only AFTER normalization) is NOT caught here — it slips through exactly as upstream.
-            if (HasDuplicateAxis(axesA) || HasDuplicateAxis(axesB))
-                throw new ValueError("duplicate axes are not allowed in tensordot");
-
-            var la = (int[])axesA.Clone();
-            var lb = (int[])axesB.Clone();
-
-            bool equal = na == nb;
-            if (equal)
-            {
-                for (int k = 0; k < na; k++)
-                {
-                    // NumPy indexes the shape TUPLE with the raw axis (`as_[axes_a[k]]`), so an
-                    // out-of-range axis raises IndexError "tuple index out of range", NOT a shape
-                    // mismatch. Both operands are indexed before the extents are compared and the
-                    // comparison short-circuits the loop, so a mismatch at k hides an out-of-range
-                    // axis at k+1 — which is why `([0,1],[0,5])` settles as a shape mismatch (a[0] !=
-                    // b[0]) while `([5,0],[0,1])` is an IndexError (a[5] is reached first).
-                    int ia = ResolveContractionAxis(la[k], a.ndim);
-                    int ib = ResolveContractionAxis(lb[k], b.ndim);
-                    if (shapeA[ia] != shapeB[ib])
-                    {
-                        equal = false;
-                        break;
-                    }
-
-                    la[k] = ia;
-                    lb[k] = ib;
-                }
-            }
-
-            if (!equal)
-                throw new ValueError("shape-mismatch for sum");
-
-            // Move the contracted axes to the END of a and to the FRONT of b, collapse each side to
-            // a matrix, and let the ordinary matrix product do the work.
-            var keptA = Complement(a.ndim, la);
-            var keptB = Complement(b.ndim, lb);
-
-            long innerA = 1;
-            foreach (int axis in la)
-                innerA *= shapeA[axis];
-            long outerA = 1;
-            var oldA = new long[keptA.Length];
-            for (int i = 0; i < keptA.Length; i++)
-            {
-                oldA[i] = shapeA[keptA[i]];
-                outerA *= oldA[i];
-            }
-
-            long innerB = 1;
-            foreach (int axis in lb)
-                innerB *= shapeB[axis];
-            long outerB = 1;
-            var oldB = new long[keptB.Length];
-            for (int i = 0; i < keptB.Length; i++)
-            {
-                oldB[i] = shapeB[keptB[i]];
-                outerB *= oldB[i];
-            }
-
-            var at = reshape(transpose(a, Concat(keptA, la)), new[] {outerA, innerA});
-            var bt = reshape(transpose(b, Concat(lb, keptB)), new[] {innerB, outerB});
-
-            var product = dot(at, bt);
-
-            var resultShape = new long[oldA.Length + oldB.Length];
-            oldA.CopyTo(resultShape, 0);
-            oldB.CopyTo(resultShape, oldA.Length);
-            return reshape(product, resultShape);
-        }
-
-        /// <summary>NumPy's <c>len(set(axes)) != len(axes)</c> — a literal repeat among the raw axis values.</summary>
-        private static bool HasDuplicateAxis(int[] axes)
-        {
-            for (int i = 0; i < axes.Length; i++)
-            for (int j = i + 1; j < axes.Length; j++)
-            {
-                if (axes[i] == axes[j])
-                    return true;
-            }
-
-            return false;
-        }
-
-        /// <summary>
-        ///     Resolves one contraction axis the way NumPy's <c>shape[axis]</c> does: a negative index
-        ///     wraps, and anything still out of range is an <see cref="IndexError"/>
-        ///     "tuple index out of range" — never a shape mismatch.
-        /// </summary>
-        private static int ResolveContractionAxis(int axis, int ndim)
-        {
-            int resolved = axis < 0 ? axis + ndim : axis;
-            if (resolved < 0 || resolved >= ndim)
-                throw new IndexError("tuple index out of range");
-            return resolved;
-        }
-
-        /// <summary>The axes of a rank-<paramref name="ndim"/> array not named in <paramref name="taken"/>, in order.</summary>
-        private static int[] Complement(int ndim, int[] taken)
-        {
-            var kept = new List<int>(ndim);
-            for (int k = 0; k < ndim; k++)
-            {
-                bool found = false;
-                foreach (int t in taken)
-                {
-                    if (t != k)
-                        continue;
-                    found = true;
-                    break;
-                }
-
-                if (!found)
-                    kept.Add(k);
-            }
-
-            return kept.ToArray();
-        }
-
-        private static int[] Concat(int[] first, int[] second)
-        {
-            var joined = new int[first.Length + second.Length];
-            first.CopyTo(joined, 0);
-            second.CopyTo(joined, first.Length);
-            return joined;
+            // NumPy's body (the axis checks, the two transposes and reshapes, the final dot) is the engine's.
+            return a.TensorEngine.Tensordot(a, b, axesA, axesB);
         }
     }
 }

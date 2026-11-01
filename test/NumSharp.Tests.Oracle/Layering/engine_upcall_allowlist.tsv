@@ -3,7 +3,6 @@
 # engine member or the family core instead, or pin it here by hand with a reason in a fourth column. After a drop,
 # rerun the test with NUMSHARP_WRITE_LAYERING_ALLOWLIST=1 and commit.
 # path<TAB>computations<TAB>structural[<TAB># reason]
-Backends/Default/LinearAlgebra/DefaultLinalgEngine.ArrayApi.cs	3	0	# np.outer (Outer) and np.tensordot (the two Tensordot forms): NumPy's _core_outer / _core_tensordot, whose statements are still their facades' own (np.outer.cs, np.tensordot.cs: no TensorEngine member to call); they convert when the np-layer dtype plan's P8 makes outer and tensordot TensorEngine members (D8)
 Backends/Default/Math/BLAS/Default.Dot.NDMD.cs	0	1	# np._FindCommonArrayType(lhs, rhs): a promotion helper on np. The promotion helpers move into the dtype layer after strings merges journey4, whose 88048433 rewrote np.find_common_type.cs, the file they live in (moving them first would conflict there)
 Backends/Default/Math/BLAS/Default.MatMul.2D2D.cs	0	1	# np._FindCommonArrayType(left, right): a promotion helper on np. The promotion helpers move into the dtype layer after strings merges journey4, whose 88048433 rewrote np.find_common_type.cs, the file they live in (moving them first would conflict there)
 Backends/Default/Math/BLAS/Default.MatMul.cs	0	1	# np._FindCommonArrayType(lhs, rhs): a promotion helper on np. The promotion helpers move into the dtype layer after strings merges journey4, whose 88048433 rewrote np.find_common_type.cs, the file they live in (moving them first would conflict there)

@@ -196,5 +196,89 @@ namespace NumSharp
         /// <remarks>DefaultEngine composes NumPy's statements over multiply, negative, subtract and moveaxis (no kernel of its
         ///     own). The 2-vector forms are deprecated in NumPy 2.0; the warning is not modelled.</remarks>
         public abstract NDArray Cross(NDArray a, NDArray b, int axisa = -1, int axisb = -1, int axisc = -1, int? axis = null);
+
+        /// <summary>
+        ///     NumPy's <c>np.outer(a, b, out=None)</c>: <c>multiply(a.ravel()[:, newaxis], b.ravel()[newaxis, :], out)</c>,
+        ///     every product <c>a[i] * b[j]</c> of the two inputs flattened - one multiply ufunc call, so its loops, its
+        ///     promotion and its <c>out=</c> rules are outer's.
+        /// </summary>
+        /// <param name="a">The first input, any shape (flattened; not null).</param>
+        /// <param name="b">The second input, any shape (flattened; not null).</param>
+        /// <param name="out">An array to write the products into, or null: it joins the multiply's broadcast (never
+        ///     stretched) and takes a same_kind cast from the product dtype; it is returned itself.</param>
+        /// <returns>A new <c>(a.size, b.size)</c> array in the multiply's promoted dtype, or <paramref name="out"/>.</returns>
+        /// <exception cref="NullReferenceException"><paramref name="a"/> or <paramref name="b"/> is null.</exception>
+        /// <exception cref="TypeError">Operands the multiply has no loop for (text with numbers, two texts; NumPy's no-loop
+        ///     texts), or a text product without <paramref name="out"/>'s string multiply.</exception>
+        /// <exception cref="ValueError">A read-only <paramref name="out"/> (<c>output array is read-only</c>).</exception>
+        /// <exception cref="ArgumentException">An <paramref name="out"/> the product dtype does not reach under same_kind
+        ///     (<c>Cannot cast ufunc 'multiply' output from ...</c>), or one the products do not broadcast into (<c>operands
+        ///     could not be broadcast together with shapes ...</c>).</exception>
+        /// <remarks>
+        ///     NumPy writes outer in Python (<c>numpy/_core/numeric.py</c>); DefaultEngine runs its one statement over the
+        ///     array object's ravel and expand_dims and <paramref name="a"/>'s engine's <see cref="Multiply"/>.
+        ///     <c>np.outer</c> calls it inside the matrix boundary's plain region, and numpy.linalg's Array-API
+        ///     <c>outer</c> after its one-dimensional check; an override replaces both for every array whose engine it is.
+        /// </remarks>
+        public abstract NDArray Outer(NDArray a, NDArray b, NDArray @out = null);
+
+        /// <summary>
+        ///     NumPy's <c>np.tensordot(a, b, axes=2)</c> with an integer <paramref name="axes"/>: the sum of products over the
+        ///     last <paramref name="axes"/> axes of <paramref name="a"/> and the first <paramref name="axes"/> axes of
+        ///     <paramref name="b"/> - NumPy's <c>axes_a = list(range(-axes, 0))</c>, <c>axes_b = list(range(0, axes))</c>,
+        ///     then the statements of <see cref="Tensordot(NDArray, NDArray, int[], int[])"/>.
+        /// </summary>
+        /// <param name="a">The first tensor (not null).</param>
+        /// <param name="b">The second tensor (not null).</param>
+        /// <param name="axes">The number of axes to contract: 0 is the outer (tensor) product, 1 the matrix product, 2 the
+        ///     double contraction. A negative count contracts nothing (NumPy's <c>range(-axes, 0)</c> is empty).</param>
+        /// <returns>A new array of <paramref name="a"/>'s kept axes followed by <paramref name="b"/>'s, the dot product's
+        ///     dtype.</returns>
+        /// <exception cref="IndexError">More axes than an operand has (<c>tuple index out of range</c>).</exception>
+        /// <exception cref="ValueError">Contracted extents that differ (<c>shape-mismatch for sum</c>), and the final dot's
+        ///     refusals of text (<c>data type must provide an itemsize</c>).</exception>
+        /// <exception cref="TypeError">The final dot's refusals of text operands (NumPy's texts).</exception>
+        /// <exception cref="NotSupportedException">A <c>StringDType</c> operand beside a number, which NumPy computes as
+        ///     Python objects (an object array NumSharp does not have).</exception>
+        /// <exception cref="NullReferenceException"><paramref name="a"/> or <paramref name="b"/> is null.</exception>
+        /// <remarks>
+        ///     NumPy writes tensordot in Python (<c>numpy/_core/numeric.py</c>); DefaultEngine builds the two axis lists and
+        ///     runs the list form. <c>np.tensordot</c> calls it after the matrix and chararray boundaries, and numpy.linalg's
+        ///     Array-API <c>tensordot</c> directly; an override replaces both for every array whose engine it is.
+        /// </remarks>
+        public abstract NDArray Tensordot(NDArray a, NDArray b, int axes = 2);
+
+        /// <summary>
+        ///     NumPy's <c>np.tensordot(a, b, axes=(axes_a, axes_b))</c>: the sum of products pairing axis
+        ///     <c>axesA[k]</c> of <paramref name="a"/> with axis <c>axesB[k]</c> of <paramref name="b"/> - each operand
+        ///     transposed so its contracted axes meet, reshaped to a matrix, one dot product, and the result reshaped to the
+        ///     kept axes.
+        /// </summary>
+        /// <param name="a">The first tensor (not null).</param>
+        /// <param name="b">The second tensor (not null).</param>
+        /// <param name="axesA">The axes of <paramref name="a"/> to contract, in pairing order (negative counts from the
+        ///     end).</param>
+        /// <param name="axesB">The axes of <paramref name="b"/> to contract, paired element by element with
+        ///     <paramref name="axesA"/>.</param>
+        /// <returns>A new array of <paramref name="a"/>'s kept axes followed by <paramref name="b"/>'s, the dot product's
+        ///     dtype.</returns>
+        /// <exception cref="ValueError">A list that repeats a RAW axis value (<c>duplicate axes are not allowed in
+        ///     tensordot</c>, checked first); lists of different lengths or contracted extents that differ (<c>shape-mismatch
+        ///     for sum</c>); the final dot's refusals of text.</exception>
+        /// <exception cref="IndexError">An axis out of range (<c>tuple index out of range</c>: NumPy indexes the shape tuple
+        ///     with the raw axis). A mismatched extent earlier in the lists settles as the shape mismatch first, hiding a
+        ///     later out-of-range axis.</exception>
+        /// <exception cref="TypeError">The final dot's refusals of text operands (NumPy's texts).</exception>
+        /// <exception cref="NotSupportedException">A <c>StringDType</c> operand beside a number, which NumPy computes as
+        ///     Python objects.</exception>
+        /// <exception cref="NullReferenceException"><paramref name="a"/>, <paramref name="b"/> or an axis list is
+        ///     null.</exception>
+        /// <remarks>
+        ///     DefaultEngine runs NumPy's statements over the operand engines' <see cref="Transpose"/> and
+        ///     <see cref="Dot"/> and the array object's reshape, so the product takes the OpenBLAS backend when one is
+        ///     installed. <c>np.tensordot</c>'s list and <c>(int, int)</c> forms call it (the pair as two one-element lists,
+        ///     NumPy's <c>[axes_a]</c> / <c>[axes_b]</c>), and numpy.linalg's Array-API <c>tensordot</c> directly.
+        /// </remarks>
+        public abstract NDArray Tensordot(NDArray a, NDArray b, int[] axesA, int[] axesB);
     }
 }

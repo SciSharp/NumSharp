@@ -8,9 +8,8 @@ namespace NumSharp.Backends
         /// <remarks>
         ///     NumPy's two statements: the rank check (<c>Input arrays must be one-dimensional, but they are x1.ndim={n} and
         ///     x2.ndim={m}.</c>), then <c>_core_outer(x1, x2, out=None)</c>, which is <see cref="np.outer"/> (on its own it would
-        ///     flatten anything). np.outer is still a composition in its facade, with no engine member to call, so this is the
-        ///     engine's one call up into np.* left in this file (pinned in ratchet R2's allowlist): it converts when the
-        ///     np-layer dtype plan's phase P8 makes outer a <see cref="TensorEngine"/> member.
+        ///     flatten anything): the member that facade dispatches to, <see cref="TensorEngine.Outer"/> of
+        ///     <paramref name="x1"/>'s engine, without an out.
         /// </remarks>
         public override NDArray Outer(NDArray x1, NDArray x2)
         {
@@ -18,7 +17,7 @@ namespace NumSharp.Backends
                 throw new ValueError(
                     $"Input arrays must be one-dimensional, but they are x1.ndim={x1.ndim} and x2.ndim={x2.ndim}.");
 
-            return np.outer(x1, x2);
+            return x1.TensorEngine.Outer(x1, x2, null);
         }
 
         /// <inheritdoc/>
@@ -55,9 +54,7 @@ namespace NumSharp.Backends
         // is no temporary to reclaim; the result is the callee's own). The call is the member the main namespace's facade
         // dispatches to (the operand engine's TensorEngine member), not the facade: the np.linalg facades apply the callee's
         // class boundary before they call these, so a numpy.matrix operand arrives inside the facade's region and the
-        // facade's rule would only be skipped there anyway. tensordot is the exception: np.tensordot's statements are
-        // still its facade's own (no engine member until the np-layer dtype plan's phase P8), so its two forms keep the
-        // facade call, pinned in ratchet R2's allowlist.
+        // facade's rule would only be skipped there anyway.
 
         /// <inheritdoc/>
         /// <remarks>NumPy's one statement <c>return _core_matmul(x1, x2)</c>: the member <see cref="np.matmul"/> dispatches
@@ -70,17 +67,18 @@ namespace NumSharp.Backends
 
         /// <inheritdoc/>
         /// <remarks>NumPy's one statement <c>return _core_tensordot(x1, x2, axes=axes)</c> with an integer
-        ///     <paramref name="axes"/>: <see cref="np.tensordot(NDArray, NDArray, int)"/>, whose statements are its facade's
-        ///     own (no engine member yet), so the call stays a facade call (pinned in ratchet R2's allowlist until phase P8
-        ///     makes tensordot a <see cref="TensorEngine"/> member).</remarks>
-        public override NDArray Tensordot(NDArray x1, NDArray x2, int axes = 2) => np.tensordot(x1, x2, axes);
+        ///     <paramref name="axes"/>: the member <see cref="np.tensordot(NDArray, NDArray, int)"/> dispatches to,
+        ///     <see cref="TensorEngine.Tensordot(NDArray, NDArray, int)"/> of <paramref name="x1"/>'s engine. A null
+        ///     <paramref name="x1"/> fails at the dispatch with a <see cref="NullReferenceException"/>, as it did inside
+        ///     np.tensordot's statements.</remarks>
+        public override NDArray Tensordot(NDArray x1, NDArray x2, int axes = 2) => x1.TensorEngine.Tensordot(x1, x2, axes);
 
         /// <inheritdoc/>
-        /// <remarks>NumPy's one statement <c>return _core_tensordot(x1, x2, axes=axes)</c> with the pair of axis lists:
-        ///     <see cref="np.tensordot(NDArray, NDArray, int[], int[])"/>, a facade call for the reason the integer form
-        ///     gives.</remarks>
+        /// <remarks>NumPy's one statement <c>return _core_tensordot(x1, x2, axes=axes)</c> with the pair of axis lists: the
+        ///     member <see cref="np.tensordot(NDArray, NDArray, int[], int[])"/> dispatches to,
+        ///     <see cref="TensorEngine.Tensordot(NDArray, NDArray, int[], int[])"/> of <paramref name="x1"/>'s engine.</remarks>
         public override NDArray Tensordot(NDArray x1, NDArray x2, int[] axesA, int[] axesB)
-            => np.tensordot(x1, x2, axesA, axesB);
+            => x1.TensorEngine.Tensordot(x1, x2, axesA, axesB);
 
         /// <inheritdoc/>
         /// <remarks>NumPy's one statement <c>return _core_trace(x, offset, axis1=-2, axis2=-1, dtype=dtype)</c>: the member
