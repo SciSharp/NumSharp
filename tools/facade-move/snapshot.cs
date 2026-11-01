@@ -170,7 +170,10 @@
 // (TileRepsLabels), as int[] or long[] where the overload takes them, and the triangle generators' (np.tri /
 // np.tril_indices / np.triu_indices, which take no array: their operand is the row count N, the first dim of a shape from
 // TriangleSizeLabels - typical, unit, zero and negative counts - with the column count and the diagonal k taking np.eye's
-// variants), whose k the triangles of an array (np.tril / np.triu / np.tril_indices_from / np.triu_indices_from) vary too;
+// variants), whose k the triangles of an array (np.tril / np.triu / np.tril_indices_from / np.triu_indices_from) vary too,
+// np.roll's shift (RollShiftLabels, as an int or a long), and the type predicates' (np.isscalar / np.iterable, which take
+// no array: their operand is an OBJECT from ObjectProbeLabels - null, C# numbers of every kind, bool / char / str,
+// NDArrays of each rank, C# arrays and collections, tuples, Type objects and other objects);
 // an overload
 // with a required parameter of another
 // kind is reported once as SKIP. An int
@@ -598,6 +601,11 @@ static class Snapshot
         // indices_or_sections (SplitSectionsLabels) and the split points indices as an int[] or a long[]
         // (SplitIndicesLabels). np.tile's reps as an int[] or a long[] (TileRepsLabels).
         SplitSections, SplitIndices, TileReps,
+        // np.roll's shift as an int or a long (RollShiftLabels: one place first, none, back, past the axis, the extremes
+        // of the parameter's type). np.isscalar / np.iterable take no array: their OBJECT is the operand
+        // (ObjectProbeLabels: null, every C# number kind, bool / char / str, NDArrays of each rank, C# arrays and
+        // collections, tuples, Type objects and other objects), built in Call (MakeObjectProbe).
+        RollShift, ObjectProbe,
         Default, Unsupported,
     }
 
@@ -2700,6 +2708,109 @@ static class Snapshot
     /// </summary>
     private static readonly string[] TriangleSizeLabels = { "(3,)", "(4,)", "(1,)", "(0,)", "(-1,)", "(2,)", "(6,)" };
 
+    /// <summary>
+    ///     np.roll's shifts, one place forward first: none (NumPy's empty_like + copies still run), one back, two and three
+    ///     (wrapping on the pool's short axes), four back, more than any pool axis, a hundred either way, and the extremes of
+    ///     the parameter's type (<c>max</c> / <c>min</c>: int's for the int overload, long's for the long one), whose
+    ///     Python-style modulo must not overflow.
+    /// </summary>
+    private static readonly string[] RollShiftLabels = { "1", "0", "-1", "2", "3", "-4", "7", "100", "-100", "max", "min" };
+
+    /// <summary>A shift of a <see cref="RollShiftLabels"/> label in the parameter's type.</summary>
+    /// <param name="t">The shift parameter's type: int or long.</param>
+    /// <param name="label">The label (an invariant integer, or <c>max</c> / <c>min</c>).</param>
+    /// <returns>The boxed shift.</returns>
+    /// <exception cref="ArgumentException">Another parameter type (a bug in the tool).</exception>
+    private static object MakeRollShift(Type t, string label)
+    {
+        if (t == typeof(int))
+            return label switch { "max" => int.MaxValue, "min" => int.MinValue, _ => int.Parse(label, CultureInfo.InvariantCulture) };
+        if (t == typeof(long))
+            return label switch { "max" => long.MaxValue, "min" => long.MinValue, _ => long.Parse(label, CultureInfo.InvariantCulture) };
+        throw new ArgumentException("not a shift parameter: " + t);
+    }
+
+    /// <summary>
+    ///     Whether an overload is a type predicate - np.isscalar (NumPy's <c>_core/numeric.py</c>) or np.iterable
+    ///     (<c>lib/_function_base_impl.py</c>) - whose operand is any object (<see cref="ObjectProbeLabels"/>), not an array.
+    /// </summary>
+    /// <param name="m">The overload.</param>
+    /// <returns>True for a public static overload of one of the two names on np.</returns>
+    private static bool IsTypePredicate(MethodInfo m) =>
+        m.DeclaringType == typeof(np) && m.Name is "isscalar" or "iterable";
+
+    /// <summary>
+    ///     The objects the type predicates run on (their operand, the stand-in dtype label "object"; the object is their
+    ///     only argument, so only phase A runs): null; a C# number of every kind (the Python scalars and the NumPy scalars
+    ///     NumSharp's C# types stand for, a Python int past int64, a nullable boxed as its value, an enum); bool, char and
+    ///     str (empty too); NDArrays of each rank and size (0-d of a number, of a str and of a bool, one element, a matrix
+    ///     shape, an empty one, a numpy.matrix); C# arrays (typed, object, jagged, rectangular) and collections (a list, a
+    ///     lazy sequence, a bare enumerator); tuples (ValueTuple, System.Tuple); Type objects (a scalar type, an array
+    ///     type, string's, decimal's); and other objects (a plain object, a DateTime, an IntPtr, a Slice, a DType).
+    /// </summary>
+    private static readonly string[] ObjectProbeLabels =
+    {
+        "null", "int", "long", "short", "byte", "sbyte", "ushort", "uint", "ulong", "double", "float", "half", "decimal",
+        "complex", "bigint", "nullable", "enum", "bool", "char", "str", "emptystr", "nd0d", "nd0d_str", "nd0d_bool", "nd1",
+        "nd2d", "ndempty", "matrix", "intarr", "objarr", "jagged", "rect", "list", "lazy", "enumerator", "valuetuple",
+        "systemtuple", "type_int", "type_arr", "type_str", "type_decimal", "object", "datetime", "intptr", "slice", "dtype",
+    };
+
+    /// <summary>The object of an <see cref="ObjectProbeLabels"/> label.</summary>
+    /// <param name="label">The label.</param>
+    /// <returns>A fresh object (a fresh array for the array labels), or null.</returns>
+    /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
+    private static object MakeObjectProbe(string label) => label switch
+    {
+        "null" => null,
+        "int" => 1,
+        "long" => 1L,
+        "short" => (short)1,
+        "byte" => (byte)1,
+        "sbyte" => (sbyte)1,
+        "ushort" => (ushort)1,
+        "uint" => 1u,
+        "ulong" => 1ul,
+        "double" => 1.5,
+        "float" => 1.5f,
+        "half" => (Half)1.5,
+        "decimal" => 1.5m,
+        "complex" => new Complex(1, 2),
+        "bigint" => BigInteger.Pow(2, 70),
+        "nullable" => (object)(int?)3,
+        "enum" => NPTypeCode.Int32,
+        "bool" => true,
+        "char" => 'a',
+        "str" => "abc",
+        "emptystr" => "",
+        "nd0d" => np.array(1.0),
+        "nd0d_str" => np.array("ab"),
+        "nd0d_bool" => np.array(true),
+        "nd1" => np.array(new[] { 1.0 }),
+        "nd2d" => np.ones(new Shape(2, 2)),
+        "ndempty" => np.empty(new Shape(0)),
+        "matrix" => np.asmatrix(np.ones(new Shape(2, 2))),
+        "intarr" => new[] { 1, 2 },
+        "objarr" => new object[] { 1, 2 },
+        "jagged" => new[] { new[] { 1 }, new[] { 2 } },
+        "rect" => new int[2, 2],
+        "list" => new List<int> { 1, 2 },
+        "lazy" => Enumerable.Range(0, 3),
+        "enumerator" => Enumerable.Range(0, 3).GetEnumerator(),
+        "valuetuple" => (1, 2),
+        "systemtuple" => Tuple.Create(1, 2),
+        "type_int" => typeof(int),
+        "type_arr" => typeof(int[]),
+        "type_str" => typeof(string),
+        "type_decimal" => typeof(decimal),
+        "object" => new object(),
+        "datetime" => new DateTime(2000, 1, 1),
+        "intptr" => (IntPtr)1,
+        "slice" => new Slice(0, 3),
+        "dtype" => np.dtype("float64"),
+        _ => throw new ArgumentException("unknown object probe " + label),
+    };
+
     /// <summary>Whether an overload is np.block, whose nested list is its operand (<see cref="Role.BlockArrays"/>).</summary>
     /// <param name="m">The overload.</param>
     /// <returns>True for a public static np.block overload.</returns>
@@ -3517,6 +3628,9 @@ static class Snapshot
             return Role.SplitIndices;
         if (p.Member.DeclaringType == typeof(np) && p.Member.Name == "tile" && n == "reps" && (t == typeof(int[]) || t == typeof(long[])))
             return Role.TileReps;
+        // np.roll's shift (only its).
+        if (p.Member.DeclaringType == typeof(np) && p.Member.Name == "roll" && n == "shift" && (t == typeof(int) || t == typeof(long)))
+            return Role.RollShift;
         // The triangle generators' column count (np.tri's M, the indices' m: None, none, fewer and more columns, negative)
         // and diagonal k take np.eye's variants (only theirs; np.tri's dtype takes the general role below).
         if (IsTriangleGenerator(p))
@@ -4867,6 +4981,10 @@ static class Snapshot
                 foreach (var label in role == Role.SplitIndices ? SplitIndicesLabels : TileRepsLabels)
                     Add(label, () => MakeIntList(p.ParameterType, label));
                 break;
+            case Role.RollShift:
+                foreach (var label in RollShiftLabels)
+                    Add(label, () => MakeRollShift(p.ParameterType, label));
+                break;
             case Role.Ord:
                 // No order first (NumPy's None: the Frobenius / 2-norm default, cond's 2-norm), then the orders NumPy's norms
                 // and cond know (Python ints, the infinities as floats, a fraction, the names) and the ones they refuse.
@@ -5272,6 +5390,13 @@ static class Snapshot
                 sawArray = true;
                 continue;
             }
+            // np.isscalar / np.iterable's object: the operand, built per call from its label (MakeObjectProbe).
+            if (i == 0 && !instance && IsTypePredicate(m))
+            {
+                roles[i] = Role.ObjectProbe;
+                sawArray = true;
+                continue;
+            }
             // np.ravel_multi_index's coordinate list carries the pool operand (MakeRavelCoords); its scalar overload's
             // coordinate tuple is that overload's operand, built per call from its label (MakeRavelScalarCoords).
             if (i == 0 && !instance && IsMultiarrayIndexing(ps[0]) && ps[0].ParameterType == typeof(NDArray[])
@@ -5406,7 +5531,7 @@ static class Snapshot
             yield return $"{signature}\tSKIP unsupported required parameter {TypeName(ps[unsupported].ParameterType)} {ps[unsupported].Name}";
             yield break;
         }
-        var variants = ps.Select((p, i) => roles[i] is Role.Operand or Role.HostOperand or Role.SpacePair or Role.CtorShape or Role.BufferOperand or Role.TextSource or Role.FileSource or Role.GridKey or Role.RavelScalarCoords or Role.WindowM ? null : Variants(p, roles[i])).ToArray();
+        var variants = ps.Select((p, i) => roles[i] is Role.Operand or Role.HostOperand or Role.SpacePair or Role.CtorShape or Role.BufferOperand or Role.TextSource or Role.FileSource or Role.GridKey or Role.RavelScalarCoords or Role.WindowM or Role.ObjectProbe ? null : Variants(p, roles[i])).ToArray();
         int operandIndex = Array.IndexOf(roles, Role.Operand);
         // A coercion overload's operand is its host operand, built per call from the pool operand.
         int hostIndex = Array.IndexOf(roles, Role.HostOperand);
@@ -5433,6 +5558,11 @@ static class Snapshot
         bool gridKey = operandIndex < 0 && keyIndex >= 0;
         if (gridKey)
             operandIndex = keyIndex;
+        // np.isscalar / np.iterable's operand is their object.
+        int probeIndex = Array.IndexOf(roles, Role.ObjectProbe);
+        bool probe = operandIndex < 0 && probeIndex >= 0;
+        if (probe)
+            operandIndex = probeIndex;
         // np.ravel_multi_index's scalar overload's operand is its coordinate tuple.
         int coordsIndex = Array.IndexOf(roles, Role.RavelScalarCoords);
         bool ravelScalar = operandIndex < 0 && coordsIndex >= 0;
@@ -5465,6 +5595,7 @@ static class Snapshot
             Role.EinsumPathArgs => EinsumPathArgsLabels.Length - 1,
             Role.CtorShape => 0,
             Role.GridKey => 0,
+            Role.ObjectProbe => 0,
             Role.RavelScalarCoords => 0,
             Role.RavelCoords => RavelCoordsVariantLabels.Length - 1,
             Role.BufferOperand => 0,
@@ -5573,6 +5704,16 @@ static class Snapshot
             reducedLayouts = fullLayouts;
             pairLayouts = fullLayouts.Take(3).ToArray();
             dtypes = new[] { "key" };
+            pairDtypes = dtypes;
+        }
+        if (probe)
+        {
+            // np.isscalar / np.iterable take no pool operand: their pool is the objects, one stand-in dtype label
+            // ("object"). The object is their only argument, so only phase A runs; the other pools are kept for symmetry.
+            fullLayouts = ObjectProbeLabels;
+            reducedLayouts = fullLayouts;
+            pairLayouts = fullLayouts.Take(3).ToArray();
+            dtypes = new[] { "object" };
             pairDtypes = dtypes;
         }
         if (ravelScalar)
@@ -6498,10 +6639,13 @@ static class Snapshot
         bool ravelScalarCall = operandIndex >= 0 && roles[operandIndex] == Role.RavelScalarCoords;
         // A window function's operand is its point count M: a fresh 0-d array stands in too.
         bool windowCall = operandIndex >= 0 && roles[operandIndex] == Role.WindowM;
+        // A type predicate's operand is its object (an NDArray among them is built fresh per call): a fresh 0-d array stands
+        // in too.
+        bool probeCall = operandIndex >= 0 && roles[operandIndex] == Role.ObjectProbe;
         // A host operand's layout is "layout:form" (RunOverload): the pool operand of the layout, then its C# form.
-        int formAt = gridKeyCall ? -1 : layout.IndexOf(':');
+        int formAt = gridKeyCall || probeCall ? -1 : layout.IndexOf(':');
         string baseLayout = formAt < 0 ? layout : layout.Substring(0, formAt);
-        NDArray operand = spacingCall || ctorCall || gridKeyCall || ravelScalarCall || windowCall
+        NDArray operand = spacingCall || ctorCall || gridKeyCall || ravelScalarCall || windowCall || probeCall
             ? np.array(0.0)
             : MakeOperand(dt, baseLayout);
         // A matrix receiver is np.asmatrix's view of the pool operand (0-d -> (1, 1), 1-D -> (1, N)); a layout it refuses
@@ -6522,6 +6666,8 @@ static class Snapshot
             operandArg = MakeRavelScalarCoords(layout);
         if (windowCall)
             operandArg = MakeWindowValue(layout);
+        if (probeCall)
+            operandArg = MakeObjectProbe(layout);
         if (operandIndex >= 0 && roles[operandIndex] == Role.HostOperand)
         {
             // The coercion family's C# value of the operand; a form this operand does not have makes no line at all.
