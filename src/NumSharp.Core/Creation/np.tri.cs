@@ -1,6 +1,4 @@
 using System;
-using NumSharp.Backends;
-using NumSharp.Backends.Unmanaged.Pooling;
 
 namespace NumSharp
 {
@@ -29,7 +27,7 @@ namespace NumSharp
         ///     Because row <c>i</c> is exactly <c>c_i = clamp(i + k + 1, 0, M)</c> ones followed
         ///     by zeros, NumSharp instead allocates the (already zeroed) result and blits a
         ///     prefix of a single pre-built ones row into each row. That is one
-        ///     <see cref="Buffer.MemoryCopy"/> per row over an untouched zero tail — no
+        ///     <see cref="Buffer.MemoryCopy(void*, void*, long, long)"/> per row over an untouched zero tail — no
         ///     comparison kernel, no mask temporary, and completely dtype-agnostic (the copy
         ///     only ever sees bytes).
         ///     </para>
@@ -37,79 +35,10 @@ namespace NumSharp
         ///     Negative <paramref name="N"/>/<paramref name="M"/> clamp to zero, matching
         ///     NumPy (whose <c>arange</c> of a negative count yields an empty axis).
         ///     </para>
+        ///     <para>The dtype is read as its storage lane (<see cref="DType.GetTypeCode"/>), which the array object's tri
+        ///     fills; it has no operand, so no class rule applies.</para>
         /// </remarks>
         public static NDArray tri(int N, int? M = null, int k = 0, DType dtype = null)
-            => TriCore(N, M, k, dtype?.GetTypeCode() ?? NPTypeCode.Double);
-
-        /// <summary>
-        ///     The storage-lane core behind <see cref="tri(int,int?,int,DType)"/> (whose single <see cref="DType"/>
-        ///     descriptor parameter mirrors NumPy's <c>dtype=</c>): ones at and below the given diagonal, zeros elsewhere.
-        /// </summary>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.tri.html</remarks>
-        [NDScoped]
-        private static unsafe NDArray TriCore(int N, int? M, int k, NPTypeCode dtype)
-        {
-            // NumPy builds the row/column axes with arange, so a negative extent simply
-            // produces an empty axis rather than an error.
-            int rows = N < 0 ? 0 : N;
-            int cols = (M ?? N) < 0 ? 0 : (M ?? N);
-
-            if (rows == 0 || cols == 0)
-                return np.zeros(Shape.Matrix(rows, cols), dtype);
-
-            int elemSize = dtype.SizeOf();
-            bool writeOnce = SizeBucketedBufferPool.PrefersWriteOnce((long)rows * cols * elemSize);
-
-            // Below the threshold the buffer comes back dirty, so pre-zeroing it would be a
-            // wasted pass — allocate uninitialised and write every byte exactly once (ones
-            // prefix, then zero suffix). Above it np.zeros is free, so only the ones prefix
-            // is written. See SizeBucketedBufferPool.PrefersWriteOnce.
-            var res = writeOnce
-                ? new NDArray(dtype, Shape.Matrix(rows, cols), false)
-                : np.zeros(Shape.Matrix(rows, cols), dtype);
-
-            // One row of ones, blitted as a prefix into every output row.
-            var onesRow = np.ones(new Shape(cols), dtype);
-            byte* src = onesRow.Storage.Address + onesRow.Shape.Offset * elemSize;
-            byte* dst = res.Storage.Address + res.Shape.Offset * elemSize;
-            long rowBytes = (long)cols * elemSize;
-
-            for (long i = 0; i < rows; i++)
-            {
-                // Columns j <= i + k are kept => the first clamp(i + k + 1, 0, cols) entries.
-                long keep = i + k + 1;
-                if (keep < 0) keep = 0;
-                else if (keep > cols) keep = cols;
-
-                byte* row = dst + i * rowBytes;
-                long onesBytes = keep * elemSize;
-
-                if (onesBytes > 0)
-                    Buffer.MemoryCopy(src, row, onesBytes, onesBytes);
-
-                if (writeOnce)
-                    ZeroBytes(row + onesBytes, rowBytes - onesBytes);
-            }
-
-            return res;
-        }
-
-        /// <summary>
-        ///     Zero <paramref name="count"/> bytes at <paramref name="p"/>. Shared by the
-        ///     write-once triangular fills (<see cref="tri(int,int?,int,NPTypeCode)"/>,
-        ///     <see cref="tril"/>/<see cref="triu"/>), which allocate uninitialised and must
-        ///     clear the dropped span themselves. Chunked because <see cref="Span{T}"/> is
-        ///     int-length while a single row can in principle exceed 2 GB.
-        /// </summary>
-        internal static unsafe void ZeroBytes(byte* p, long count)
-        {
-            while (count > 0)
-            {
-                int chunk = count > int.MaxValue ? int.MaxValue : (int)count;
-                new Span<byte>(p, chunk).Clear();
-                p += chunk;
-                count -= chunk;
-            }
-        }
+            => NDArray.tri(N, M, k, dtype?.GetTypeCode() ?? NPTypeCode.Double);
     }
 }

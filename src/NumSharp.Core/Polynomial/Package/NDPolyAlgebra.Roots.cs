@@ -444,7 +444,7 @@ namespace NumSharp
             if (bytes <= long.MaxValue && SizeBucketedBufferPool.PrefersWriteOnce((long)bytes))
             {
                 mat = new NDArray(t, new Shape(n, n), false);
-                np.ZeroBytes((byte*)mat.Storage.Address, (long)bytes);
+                NDArray.ZeroBytes((byte*)mat.Storage.Address, (long)bytes);
             }
             else
                 mat = new NDArray(t, new Shape(n, n), true);
