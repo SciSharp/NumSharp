@@ -167,7 +167,10 @@
 // transpose, a row, a 0-d, an empty array, a null entry, none) and np.block's nested lists (BlockArraysLabels: a row, a
 // bare leaf, a column, a grid, mixed dtypes, scalars, the depth mismatches, empty lists, a tuple, null), and the split
 // family's section counts and split points (SplitSectionsLabels, SplitIndicesLabels) and np.tile's repetitions
-// (TileRepsLabels), as int[] or long[] where the overload takes them;
+// (TileRepsLabels), as int[] or long[] where the overload takes them, and the triangle generators' (np.tri /
+// np.tril_indices / np.triu_indices, which take no array: their operand is the row count N, the first dim of a shape from
+// TriangleSizeLabels - typical, unit, zero and negative counts - with the column count and the diagonal k taking np.eye's
+// variants), whose k the triangles of an array (np.tril / np.triu / np.tril_indices_from / np.triu_indices_from) vary too;
 // an overload
 // with a required parameter of another
 // kind is reported once as SKIP. An int
@@ -2671,6 +2674,32 @@ static class Snapshot
         throw new ArgumentException("not an int list parameter: " + t);
     }
 
+    /// <summary>
+    ///     Whether an overload is a triangle generator - np.tri, np.tril_indices or np.triu_indices (NumPy's
+    ///     <c>lib/_twodim_base_impl.py</c>) - which takes no array: its operand is the row count (np.tri's N, the indices'
+    ///     n), built as a constructor's shape operand (<see cref="TryMakeCtorShape"/>: the first dim of the label) from
+    ///     <see cref="TriangleSizeLabels"/>.
+    /// </summary>
+    /// <param name="m">The overload.</param>
+    /// <returns>True for a public static overload of one of those names on np.</returns>
+    /// <remarks>Kept apart from <see cref="IsCtor(MethodInfo)"/>: the constructor family's fill value, creation order and
+    ///     generic instantiations must not reach these, whose only other parameters are the column count, the diagonal and
+    ///     np.tri's dtype.</remarks>
+    private static bool IsTriangleGenerator(MethodInfo m) =>
+        m.DeclaringType == typeof(np) && m.Name is "tri" or "tril_indices" or "triu_indices";
+
+    /// <summary>Whether a parameter belongs to a triangle generator (<see cref="IsTriangleGenerator(MethodInfo)"/>).</summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True when its method is one of the triangle generators.</returns>
+    private static bool IsTriangleGenerator(ParameterInfo p) => p.Member is MethodInfo m && IsTriangleGenerator(m);
+
+    /// <summary>
+    ///     The triangle generators' row counts (the first dim of each shape label): a 3-row base, then 4, one row, none and a
+    ///     negative count (NumPy's arange of a negative count is an empty axis, so these give empty results rather than
+    ///     errors) - phase B's five - then 2 and 6 for phase A. Phase C takes the first three.
+    /// </summary>
+    private static readonly string[] TriangleSizeLabels = { "(3,)", "(4,)", "(1,)", "(0,)", "(-1,)", "(2,)", "(6,)" };
+
     /// <summary>Whether an overload is np.block, whose nested list is its operand (<see cref="Role.BlockArrays"/>).</summary>
     /// <param name="m">The overload.</param>
     /// <returns>True for a public static np.block overload.</returns>
@@ -3488,6 +3517,13 @@ static class Snapshot
             return Role.SplitIndices;
         if (p.Member.DeclaringType == typeof(np) && p.Member.Name == "tile" && n == "reps" && (t == typeof(int[]) || t == typeof(long[])))
             return Role.TileReps;
+        // The triangle generators' column count (np.tri's M, the indices' m: None, none, fewer and more columns, negative)
+        // and diagonal k take np.eye's variants (only theirs; np.tri's dtype takes the general role below).
+        if (IsTriangleGenerator(p))
+        {
+            if (n is "M" or "m" && t == typeof(int?)) return Role.EyeM;
+            if (n == "k" && t == typeof(int)) return Role.EyeK;
+        }
         // The item-selection family's own parameters (only theirs; its operand, axis, out and refcheck take the general
         // roles below), before the general array roles would read an index array or a mask as a second operand.
         if (IsItemSelection(p) && ItemArgLabels(p) is not null)
@@ -3644,8 +3680,11 @@ static class Snapshot
         if (n is "offset" or "axis1" or "axis2" or "ddof" or "ind" or "axes" && t == typeof(int)) return Role.IntArg;
         // np.diag / np.diagflat's diagonal k, the same diagonal as np.eye's (0 the main one, a positive value above, a
         // negative one below): np.eye's variants, so the 1-D branch builds matrices padded on either side and far past the
-        // vector, and the 2-D branch reads diagonals beyond either corner.
-        if (n == "k" && t == typeof(int) && p.Member is MethodInfo km && km.DeclaringType == typeof(np) && km.Name is "diag" or "diagflat")
+        // vector, and the 2-D branch reads diagonals beyond either corner. The triangles of an array (np.tril / np.triu and
+        // np.tril_indices_from / np.triu_indices_from) take the same diagonals: rows kept whole, emptied, and cut on either
+        // side of the main diagonal.
+        if (n == "k" && t == typeof(int) && p.Member is MethodInfo km && km.DeclaringType == typeof(np)
+            && km.Name is "diag" or "diagflat" or "tril" or "triu" or "tril_indices_from" or "triu_indices_from")
             return Role.EyeK;
         // np.cov's nullable ddof (null = bias's default).
         if (n == "ddof" && t == typeof(int?)) return Role.Ddof;
@@ -5217,8 +5256,9 @@ static class Snapshot
             }
             // A constructor's operand when it takes no array: its shape (np.eye's N, np.identity's n), built per call from
             // the shape label in the parameter's C# form (TryMakeCtorShape). A _like form's prototype is the general operand.
-            // np.indices / np.indices_sparse's dimensions are such a shape too.
-            if (i == 0 && !instance && (IsCtor(m) || IsIndices(m)) && ps[0].ParameterType != typeof(NDArray))
+            // np.indices / np.indices_sparse's dimensions are such a shape too, and so is a triangle generator's row count
+            // (np.tri's N, the indices' n: the label's first dim).
+            if (i == 0 && !instance && (IsCtor(m) || IsIndices(m) || IsTriangleGenerator(m)) && ps[0].ParameterType != typeof(NDArray))
             {
                 roles[i] = Role.CtorShape;
                 sawArray = true;
@@ -5516,9 +5556,10 @@ static class Snapshot
             // A constructor takes no pool operand: its pools are shapes, one stand-in dtype label ("shape"), the first five
             // shapes for phase B and the first three for phase C. np.indices' grids are tiny and a dtype's arange decides on
             // the later ones (a bool arange of more than two elements, an int8 one that wraps), so its phase B takes them
-            // all.
+            // all. A triangle generator's pool is its row counts (TriangleSizeLabels), the special ones within the first
+            // five.
             bool grid = IsIndices(m);
-            fullLayouts = grid ? IndicesShapeLabels : CtorShapeLabels;
+            fullLayouts = grid ? IndicesShapeLabels : IsTriangleGenerator(m) ? TriangleSizeLabels : CtorShapeLabels;
             reducedLayouts = grid ? fullLayouts : fullLayouts.Take(5).ToArray();
             pairLayouts = fullLayouts.Take(3).ToArray();
             dtypes = new[] { "shape" };
