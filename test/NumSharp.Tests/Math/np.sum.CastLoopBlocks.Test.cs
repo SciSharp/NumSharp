@@ -90,13 +90,13 @@ namespace NumSharp.Tests.Math
                             foreach (bool keepdims in new[] { false, true })
                             {
                                 DefaultEngine.CastLoopBlockElements = long.MaxValue;
-                                var whole = np.sum(a, axis, keepdims, loop);
+                                var whole = np.sum(a, axis, keepdims: keepdims, dtype: loop);
                                 string w = $"{whole.dtype.name} ({string.Join(",", whole.shape)}) {Convert.ToHexString(whole.tobytes())}";
                                 // Several block sizes: one-or-two-index blocks, a few indices, about a third of the operand.
                                 foreach (long block in new long[] { 1, 64, 200 })
                                 {
                                     DefaultEngine.CastLoopBlockElements = block;
-                                    var blocked = np.sum(a, axis, keepdims, loop);
+                                    var blocked = np.sum(a, axis, keepdims: keepdims, dtype: loop);
                                     string b = $"{blocked.dtype.name} ({string.Join(",", blocked.shape)}) {Convert.ToHexString(blocked.tobytes())}";
                                     if (w != b)
                                         fails.Add($"{src.name}->{loop.name} {name} axis={axis} keepdims={keepdims} block={block}");
@@ -161,13 +161,13 @@ namespace NumSharp.Tests.Math
                         foreach (bool keepdims in new[] { false, true })
                         {
                             DefaultEngine.CastLoopBlockElements = long.MaxValue;
-                            var whole = np.sum(a, null, keepdims, loop);
+                            var whole = np.sum(a, null, keepdims: keepdims, dtype: loop);
                             string w = $"{whole.dtype.name} ({string.Join(",", whole.shape)}) {Convert.ToHexString(whole.tobytes())}";
                             foreach (long block in new long[] { 1, 64, 200 })
                             {
                                 DefaultEngine.CastLoopBlockElements = block;
                                 int runs = DefaultEngine.CastLoopFlatBlockedRuns;
-                                var blocked = np.sum(a, null, keepdims, loop);
+                                var blocked = np.sum(a, null, keepdims: keepdims, dtype: loop);
                                 string b = $"{blocked.dtype.name} ({string.Join(",", blocked.shape)}) {Convert.ToHexString(blocked.tobytes())}";
                                 if (w != b)
                                     fails.Add($"{src.name}->{loop.name} {name} keepdims={keepdims} block={block}: {b} vs {w}");

@@ -170,18 +170,74 @@ namespace NumSharp
             => a.TensorEngine.Convolve(a, v, mode);
 
         /// <summary>
-        ///     Return the product of array elements over a given axis.
+        ///     Return the product of array elements over a given axis — NumPy's <c>np.prod(a, axis=None, dtype=None,
+        ///     out=None, keepdims=&lt;no value&gt;, initial=&lt;no value&gt;, where=&lt;no value&gt;)</c>, i.e.
+        ///     <c>np.multiply.reduce(a, axis, dtype, out, keepdims=keepdims, initial=initial, where=where)</c>. This is the only
+        ///     overload: NumPy's whole signature, with NumPy's names, order and defaults (np-layer dtype plan P10, D10).
         /// </summary>
-        /// <param name="a">Input data.</param>
-        /// <param name="axis">Axis or axes along which a product is performed. The default, axis=None, will calculate the product of all the elements in the input array. If axis is negative it counts from the last to the first axis.</param>
-        /// <param name="dtype">The type of the returned array, as well as of the accumulator in which the elements are multiplied. The dtype of a is used by default unless a has an integer dtype of less precision than the default platform integer. In that case, if a is signed then the platform integer is used while if a is unsigned then an unsigned integer of the same precision as the platform integer is used.</param>
-        /// <param name="keepdims">If this is set to True, the axes which are reduced are left in the result as dimensions with size one. With this option, the result will broadcast correctly against the input array.</param>
-        /// <returns>An array shaped as a but with the specified axis removed.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.prod.html</remarks>
-        public static NDArray prod(NDArray a, int? axis = null, DType dtype = null, bool keepdims = false) //todo impl a version with keepdims
-            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
-            ? NDMatrixBoundary.Reduced((a, axis, dtype, keepdims), static s => prod(s.a, s.axis, s.dtype, s.keepdims), axis, keepdims, "prod")
-            : a.TensorEngine.ReduceProduct(a, axis, keepdims, dtype);
+        /// <param name="a">Input data (any numeric dtype; text has no multiply loop and is refused).</param>
+        /// <param name="axis">The axis to multiply over (negative counts from the end); <c>null</c> multiplies every element.
+        ///     A 0-d array accepts 0 and -1 as every axis (ufunc.reduce's rule).</param>
+        /// <param name="dtype">The accumulator and result dtype: every element is cast to it before it is multiplied.
+        ///     <c>null</c> is NumPy's default: int64 for bool and the signed integers narrower than 64 bits, uint64 for the
+        ///     unsigned ones, the input's own dtype otherwise — or, with <paramref name="out"/>, <c>promote_types(out, a)</c>
+        ///     (no small-integer widening).</param>
+        /// <param name="out">The array the product is written into and returned (the result's shape, any dtype: the values
+        ///     are cast in unsafely). Footgun: the FOURTH positional parameter, as in NumPy, so write
+        ///     <c>keepdims: true</c> by name.</param>
+        /// <param name="keepdims">Keep the reduced axes as length-1 dimensions.</param>
+        /// <param name="initial">The value every product starts from instead of 1, converted into the loop dtype as NumPy's
+        ///     element setter converts a Python value (a C# integer range-checked, a <c>double</c> truncated into an integer
+        ///     loop, a 0-d array cast). An empty product is the initial value. <c>null</c> is the identity 1.</param>
+        /// <param name="where">A bool mask broadcast against <paramref name="a"/>: only the selected elements are multiplied
+        ///     in; an output with none selected is the start value. The C# <c>true</c> literal is NumPy's default.
+        ///     <c>null</c> is no mask.</param>
+        /// <returns><paramref name="out"/> itself when given; else a fresh array — 0-d (NumPy's read-only scalar) for a
+        ///     product over every axis without <paramref name="keepdims"/>.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <exception cref="TypeError">A C# scalar passed as <paramref name="out"/>; a complex <paramref name="initial"/> for
+        ///     a real loop; text (NumPy's refusal); a <c>numpy.matrix</c> operand with <paramref name="keepdims"/>,
+        ///     <paramref name="initial"/> or <paramref name="where"/> (<c>matrix.prod() got an unexpected keyword argument
+        ///     'keepdims'</c>).</exception>
+        /// <exception cref="ValueError">A read-only or misshapen <paramref name="out"/>; a mask with more axes than
+        ///     <paramref name="a"/>; an unconvertible <paramref name="initial"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array (NumPy's TypeError text).</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="where"/> or <paramref name="out"/> does not broadcast.</exception>
+        /// <exception cref="OverflowException"><paramref name="initial"/> does not fit an integer loop.</exception>
+        /// <exception cref="AttributeError">A <c>numpy.matrix</c> operand with a plain (non-matrix) <paramref name="out"/>.</exception>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.prod.html. With <paramref name="initial"/> or
+        ///     <paramref name="where"/> the product is NumPy's sequential multiply loop through its reduction iterator (a
+        ///     NaN keeps the payload of the first NaN met); without them a flat float product multiplies in SIMD lane order,
+        ///     which can differ from NumPy's in the last bit (the open NL3).
+        /// </remarks>
+        public static NDArray prod(NDArray a, int? axis = null, DType dtype = null, NDArray @out = null, bool keepdims = false,
+            object initial = null, NDArray @where = null)
+        {
+            if (a is null)
+                throw new ArgumentNullException(nameof(a));
+            if (NDMatrixBoundary.Sees(a))
+            {
+                // NumPy hands a numpy.matrix to matrix.prod(axis, dtype, out) with every keyword the caller passed, in its
+                // signature's order; the method takes none of them, so the first one passed is its TypeError.
+                if (keepdims)
+                    throw NDMatrixBoundary.KeywordError("prod", "keepdims");
+                if (initial is not null)
+                    throw NDMatrixBoundary.KeywordError("prod", "initial");
+                if (@where is not null)
+                    throw NDMatrixBoundary.KeywordError("prod", "where");
+                if (@out is not null)
+                    return NDMatrixBoundary.ReducedInto(a, @out, (axis, dtype),
+                        static (m, o, s) => m.prod(s.axis, s.dtype, o),
+                        static (m, o, s) => m.TensorEngine.ReduceProduct(m, s.axis, keepdims: true, s.dtype, o));
+                // a row, a column or the scalar, as NumPy's matrix method returns
+                return NDMatrixBoundary.Reduced((a, axis, dtype), static s => prod(s.a, s.axis, s.dtype), axis, false, "prod");
+            }
+
+            // The whole call is the engine's: TensorEngine.ReduceProduct of a's engine takes every keyword.
+            return a.TensorEngine.ReduceProduct(a, axis, keepdims, dtype, @out, initial, @where);
+        }
 
         /// <summary>
         ///     Numerical positive, element-wise (identity: returns +x, a copy).

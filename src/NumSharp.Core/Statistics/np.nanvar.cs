@@ -26,7 +26,7 @@ namespace NumSharp
         /// <remarks>
         ///     <para>
         ///     An array that cannot hold NaN (integer, bool, char, decimal) has no NaN to ignore: the result is
-        ///     <see cref="var(NDArray, int, bool, int?, DType)"/>'s, keywords included. For a float or complex array the
+        ///     <see cref="var(NDArray, int?, DType, NDArray, int, bool, NDArray, NDArray, int?)"/>'s, keywords included. For a float or complex array the
         ///     arithmetic is NumPy's <c>_nanfunctions_impl.nanvar</c> (see <c>TensorEngine.NanVar</c>), which
         ///     differs from np.var in three observable ways: the deviations are rounded into the input's dtype before they
         ///     are squared (with <c>dtype=float64</c>, a float32 input squares float32 deviations), a complex square is the

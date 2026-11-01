@@ -75,7 +75,7 @@ namespace NumSharp.Tests.Strings
             object initial = p.TryGetValue("initial", out var ie) ? StringOracleCorpus.Decode(ie) : null;
             return Str(p, "name") switch
             {
-                "sum" => np.sum(a, axis, keepdims, dt),
+                "sum" => np.sum(a, axis, keepdims: keepdims, dtype: dt),
                 "max" => np.max(a, axis, @out, keepdims, initial, where),
                 "min" => np.min(a, axis, @out, keepdims, initial, where),
                 "amax" => np.amax(a, axis, @out, keepdims, initial, where),
@@ -91,7 +91,7 @@ namespace NumSharp.Tests.Strings
                 "cumprod" => np.cumprod(a, axis, dt, @out),
                 "nancumprod" => np.nancumprod(a, axis, dt, @out),
                 "nansum" => np.nansum(a, axis, keepdims),
-                "prod" => np.prod(a, axis, dt, keepdims),
+                "prod" => np.prod(a, axis, dt, keepdims: keepdims),
                 "nanprod" => np.nanprod(a, axis, keepdims),
                 var other => throw new InvalidOperationException($"the string oracle has no StringDType reduction '{other}'"),
             };
@@ -121,16 +121,16 @@ namespace NumSharp.Tests.Strings
             {
                 case "mean":
                     if (dt is not null)
-                        return np.mean(a, axis ?? throw new InvalidOperationException("np.mean's dtype= needs an axis"), dt, keepdims);
-                    return axis is { } m ? np.mean(a, m, keepdims) : np.mean(a, keepdims);
+                        return np.mean(a, axis ?? throw new InvalidOperationException("np.mean's dtype= needs an axis"), dt, keepdims: keepdims);
+                    return axis is { } m ? np.mean(a, m, keepdims: keepdims) : np.mean(a, keepdims: keepdims);
                 case "average":
                     return np.average(a, axis, weights, keepdims);
                 case "nanmean":
                     return np.nanmean(a, axis, keepdims, dt);
                 case "var":
-                    return axis is { } v ? np.var(a, v, keepdims, ddof, dt) : np.var(a, keepdims, ddof, dt);
+                    return axis is { } v ? np.var(a, v, dt, ddof: ddof ?? 0, keepdims: keepdims) : np.var(a, dtype: dt, ddof: ddof ?? 0, keepdims: keepdims);
                 case "std":
-                    return axis is { } s ? np.std(a, s, keepdims, ddof, dt) : np.std(a, keepdims, ddof, dt);
+                    return axis is { } s ? np.std(a, s, dt, ddof: ddof ?? 0, keepdims: keepdims) : np.std(a, dtype: dt, ddof: ddof ?? 0, keepdims: keepdims);
                 case "nanvar":
                     return np.nanvar(a, axis, keepdims, ddof ?? 0, dt);
                 case "nanstd":

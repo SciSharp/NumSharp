@@ -240,14 +240,14 @@ namespace NumSharp.Tests.Fuzz
                 // NumSharp's ndarray methods spell axis=None with an axis-less overload, and NumPy's scalar result of a
                 // flat reduction is gated on that overload's own result object.
                 case "ndarray.sum":
-                    return VfOptInt(p, "axis") is int sAx ? a.sum(sAx, VfKeepdims(p)) : a.sum();
+                    return VfOptInt(p, "axis") is int sAx ? a.sum(sAx, keepdims: VfKeepdims(p)) : a.sum();
                 case "ndarray.mean":
-                    return VfOptInt(p, "axis") is int mAx ? a.mean(mAx, VfKeepdims(p)) : a.mean();
+                    return VfOptInt(p, "axis") is int mAx ? a.mean(mAx, keepdims: VfKeepdims(p)) : a.mean();
                 case "ndarray.std":
-                    return VfOptInt(p, "axis") is int sdAx ? a.std(sdAx, VfKeepdims(p)) : a.std(VfKeepdims(p));
+                    return VfOptInt(p, "axis") is int sdAx ? a.std(sdAx, keepdims: VfKeepdims(p)) : a.std(keepdims: VfKeepdims(p));
                 case "ndarray.var":
-                    return VfOptInt(p, "axis") is int vAx ? a.var(vAx, VfKeepdims(p)) : a.var(VfKeepdims(p));
-                case "ndarray.prod": return a.prod(VfOptInt(p, "axis"), null, VfKeepdims(p));
+                    return VfOptInt(p, "axis") is int vAx ? a.var(vAx, keepdims: VfKeepdims(p)) : a.var(keepdims: VfKeepdims(p));
+                case "ndarray.prod": return a.prod(VfOptInt(p, "axis"), null, keepdims: VfKeepdims(p));
                 case "ndarray.argmax": return a.argmax(p["axis"].GetInt32(), VfKeepdims(p));
                 case "ndarray.argmin": return a.argmin(p["axis"].GetInt32(), VfKeepdims(p));
                 case "ndarray.argsort": return a.argsort(VfOptInt(p, "axis"));

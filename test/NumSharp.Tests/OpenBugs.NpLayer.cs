@@ -48,6 +48,19 @@ namespace NumSharp.Tests
     //        where NumPy answers True, and True for a Type object of a primitive (typeof(int)), where NumPy's isscalar(int)
     //        is False. Found by P8's snapshot tool, whose object operand (18835e6b) first ran np.isscalar over them; the
     //        move onto the array object (4cea01d6) kept the behaviour.
+    //   NL12 np.broadcast_to's refusals are not NumPy's texts: a 1-tuple prints without its comma and the separator before
+    //        "and requested shape" is one space where NumPy has two, and a source with more axes than the target gets the
+    //        shape text where NumPy raises "input operand has more dimensions than allowed by the axis remapping".
+    //        np.mean / np.var / np.std with a where= mask that does not broadcast to the operand reach it, because
+    //        _count_reduce_items broadcasts the mask first. Found by P10 item 1's reduce_kwargs cells.
+    //   NL13 np.max / np.min / np.amax / np.amin / np.nanmax / np.nanmin with a numpy.matrix operand: NumPy calls the
+    //        matrix method (matrix.max(axis, out)), so initial= / where= raise its TypeError ("matrix.max() got an
+    //        unexpected keyword argument 'initial'") where NumSharp computes, and a matrix out= returns the method's
+    //        out._collapse(None), out[0, 0], where NumSharp raises the plain reduction's rank error. Found by P10 item 1,
+    //        whose np.sum / np.prod / np.mean / np.var / np.std apply the method's rules.
+    //   NL3 also covers the axis products: an axis np.prod of float32 / float64 multiplies a row in SIMD lane order too
+    //        (and so does the out= route, which computes the plain product); np.prod with initial= or a mask runs
+    //        NumPy's sequential loop and is exact. Found by P10 item 1's reduce_kwargs cells (carved there).
     //
     // Every expected value below is NumPy 2.4.2's answer for the same call (probed on win-amd64). EXPECTED (when fixed):
     // each test passes; remove its [OpenBugs], move it next to its API's tests, and drop the oracle excuse named in its
@@ -261,6 +274,74 @@ namespace NumSharp.Tests
 
             BitConverter.DoubleToInt64Bits((double)r1.GetValue()).Should().Be(unchecked((long)0xFFF8000000000000));
             BitConverter.DoubleToInt64Bits((double)r2.GetValue()).Should().Be(0L);
+        }
+
+        /// <summary>
+        ///     The AXIS <c>np.prod</c> of float64 rows: NumPy's reduce form over each row is the same sequential loop, so
+        ///     <c>[[1e200, 1e200, 0, 1], [1e200, 0, 1e200, 1]]</c> along axis 1 is <c>[nan, 0]</c>; NumSharp's axis kernel
+        ///     multiplies a row in lane order and answers <c>[0, nan]</c>. The <c>out=</c> route computes the same plain
+        ///     product. With <c>initial=</c> or a mask the product runs NumPy's iterator and loop
+        ///     (<c>NumPyMultiplyLoops</c>) and is exact, so the fix can route the plain product through the same loop.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL3")]
+        public void NpLayer_Prod_Float64Axis_ShouldMultiplyInNumPysSequentialOrder()
+        {
+            using var x = np.array(new[,] { { 1e200, 1e200, 0.0, 1.0 }, { 1e200, 0.0, 1e200, 1.0 } });
+            using var r = np.prod(x, 1);
+            using var o = np.zeros(new Shape(2));
+            np.prod(x, 1, @out: o);
+
+            BitConverter.DoubleToInt64Bits(r.GetAtIndex<double>(0)).Should().Be(unchecked((long)0xFFF8000000000000));
+            BitConverter.DoubleToInt64Bits(r.GetAtIndex<double>(1)).Should().Be(0L);
+            BitConverter.DoubleToInt64Bits(o.GetAtIndex<double>(0)).Should().Be(unchecked((long)0xFFF8000000000000));
+        }
+
+        // ------------------------------------------------------------------
+        // NL12 — np.broadcast_to's error texts
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's broadcast_to refuses through its iterator, whose texts print a 1-tuple with its comma and put TWO
+        ///     spaces before "and requested shape" (probed: <c>np.broadcast_to(np.ones(2), (3,))</c> is <c>operands could not
+        ///     be broadcast together with remapped shapes [original->remapped]: (2,)  and requested shape (3,)</c>), and a
+        ///     source with more axes than the target is <c>input operand has more dimensions than allowed by the axis
+        ///     remapping</c> (a ValueError). np.mean with a mask that does not broadcast to the operand raises the same text,
+        ///     because <c>_count_reduce_items</c> broadcasts the mask first.
+        /// </summary>
+        /// <remarks>Root cause: <c>Shape.ValidateBroadcastTo</c> (src/NumSharp.Core/View/Shape.Broadcasting.cs) formats its
+        ///     own text for both refusals.</remarks>
+        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL12")]
+        public void NpLayer_BroadcastTo_ErrorTexts_ShouldBeNumPys()
+        {
+            new Action(() => np.broadcast_to(np.ones(new Shape(2)), new Shape(3))).Should().Throw<IncorrectShapeException>()
+                .WithMessage("operands could not be broadcast together with remapped shapes [original->remapped]: (2,)  and requested shape (3,)");
+            new Action(() => np.mean(np.arange(3.0), where: np.ones(new Shape(2), np.@bool))).Should().Throw<IncorrectShapeException>()
+                .WithMessage("operands could not be broadcast together with remapped shapes [original->remapped]: (2,)  and requested shape (3,)");
+            new Action(() => np.broadcast_to(np.ones(new Shape(2, 3)), new Shape(3))).Should().Throw<ValueError>()
+                .WithMessage("input operand has more dimensions than allowed by the axis remapping");
+        }
+
+        // ------------------------------------------------------------------
+        // NL13 — the max / min family with a numpy.matrix operand
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's np.max hands a numpy.matrix to <c>matrix.max(axis, out)</c> with the keywords the caller passed, so
+        ///     <c>initial=</c> is the method's TypeError (probed), and a matrix out is the method's
+        ///     <c>out._collapse(None)</c>, the scalar <c>out[0, 0]</c> (<c>np.max(m, out=np.matrix([[0.0]]))</c> is 4.0).
+        ///     NumSharp's facades apply the plain reduction to the matrix: initial= computes, and the matrix out meets the
+        ///     plain reduction's rank check.
+        /// </summary>
+        /// <remarks>Root cause: <c>np.max</c> / <c>np.min</c> / ... (src/NumSharp.Core/Sorting_Searching_Counting/
+        ///     np.max.Keywords.cs) pass every keyword through <c>NDMatrixBoundary.Reduced</c>; np.sum's facade shows the
+        ///     method rule (<c>KeywordError</c>, <c>ReducedInto</c>).</remarks>
+        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL13")]
+        public void NpLayer_MaxMatrixOperand_FollowsTheMatrixMethod()
+        {
+            NDArray m = np.matrix(np.array(new[,] { { 1.0, 2.0 }, { 3.0, 4.0 } }));
+            new Action(() => np.max(m, initial: 1)).Should().Throw<TypeError>()
+                .WithMessage("matrix.max() got an unexpected keyword argument 'initial'");
+            np.max(m, @out: np.matrix(np.array(new[,] { { 0.0 } }))).GetAtIndex<double>(0).Should().Be(4.0);
         }
 
         // ------------------------------------------------------------------

@@ -52,8 +52,8 @@ namespace NumSharp.Tests.Fuzz
                 {
                     bool keepdims = p.TryGetValue("keepdims", out JsonElement k) && k.ValueKind == JsonValueKind.True;
                     result = p.TryGetValue("axis", out JsonElement ax) && ax.ValueKind == JsonValueKind.Number
-                        ? np.mean(ops[0], ax.GetInt32(), keepdims)
-                        : np.mean(ops[0], keepdims);
+                        ? np.mean(ops[0], ax.GetInt32(), keepdims: keepdims)
+                        : np.mean(ops[0], keepdims: keepdims);
                     return true;
                 }
                 case "add": result = np.add(ops[0], ops[1]); return true;

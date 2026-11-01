@@ -260,9 +260,9 @@ namespace NumSharp.Tests.Fuzz
 
                 // Parameter sweep (W12): ddof=1 std/var, order='F' ravel.
                 case "std_ddof": { var ax = ParseAxis(p); int dd = p["ddof"].GetInt32();
-                    return ax.HasValue ? np.std(ops[0], ax.Value, false, dd) : np.std(ops[0], false, dd); }
+                    return ax.HasValue ? np.std(ops[0], ax.Value, keepdims: false, ddof: dd) : np.std(ops[0], keepdims: false, ddof: dd); }
                 case "var_ddof": { var ax = ParseAxis(p); int dd = p["ddof"].GetInt32();
-                    return ax.HasValue ? np.var(ops[0], ax.Value, false, dd) : np.var(ops[0], false, dd); }
+                    return ax.HasValue ? np.var(ops[0], ax.Value, keepdims: false, ddof: dd) : np.var(ops[0], keepdims: false, ddof: dd); }
                 case "ravel_f": return np.ravel(ops[0], 'F');
 
                 // Statistics (T12).
@@ -1230,8 +1230,8 @@ namespace NumSharp.Tests.Fuzz
                 int? axis = ParseAxis(p);
                 bool keepdims = ParseKeepdims(p);
                 if (op == "var")
-                    return axis.HasValue ? np.var(a, axis.Value, keepdims, ddof, loop) : np.var(a, keepdims, ddof, loop);
-                return axis.HasValue ? np.std(a, axis.Value, keepdims, ddof, loop) : np.std(a, keepdims, ddof, loop);
+                    return axis.HasValue ? np.var(a, axis.Value, keepdims: keepdims, ddof: ddof, dtype: loop) : np.var(a, keepdims: keepdims, ddof: ddof, dtype: loop);
+                return axis.HasValue ? np.std(a, axis.Value, keepdims: keepdims, ddof: ddof, dtype: loop) : np.std(a, keepdims: keepdims, ddof: ddof, dtype: loop);
             }
             // nanvarstd.jsonl: np.nanvar / np.nanstd with ddof= and dtype= (a NumPy dtype name or null).
             if ((op == "nanvar" || op == "nanstd") && (p.ContainsKey("ddof") || p.ContainsKey("dtype")))
@@ -1254,7 +1254,7 @@ namespace NumSharp.Tests.Fuzz
                     : null;
                 int? axis = ParseAxis(p);
                 bool keepdims = ParseKeepdims(p);
-                return axis.HasValue ? np.mean(a, axis.Value, loop, keepdims) : a.TensorEngine.Mean(a, null, loop, keepdims);
+                return axis.HasValue ? np.mean(a, axis.Value, loop, keepdims: keepdims) : a.TensorEngine.Mean(a, null, loop, keepdims);
             }
             // nanmean.jsonl: np.nanmean with dtype= (a NumPy dtype name or null) — NumPy's nanmean (plan
             // api-parameter-parity A7).
@@ -1266,7 +1266,7 @@ namespace NumSharp.Tests.Fuzz
                 return np.nanmean(a, ParseAxis(p), ParseKeepdims(p), loop);
             }
             if (op == "sum" && p.TryGetValue("dtype", out var sumDtype))
-                return np.sum(a, ParseAxis(p), ParseKeepdims(p), (DType)FuzzCorpus.DtypeToTC(sumDtype.GetString()));
+                return np.sum(a, ParseAxis(p), keepdims: ParseKeepdims(p), dtype: (DType)FuzzCorpus.DtypeToTC(sumDtype.GetString()));
             return ApplyReduce(op, ParseAxis(p), ParseKeepdims(p), a);
         }
 
@@ -1274,13 +1274,13 @@ namespace NumSharp.Tests.Fuzz
         {
             switch (op)
             {
-                case "sum": return np.sum(a, axis, keepdims);
-                case "prod": return np.prod(a, axis, (Type)null, keepdims);
+                case "sum": return np.sum(a, axis, keepdims: keepdims);
+                case "prod": return np.prod(a, axis, (Type)null, keepdims: keepdims);
                 case "min": return np.min(a, axis, keepdims: keepdims);
                 case "max": return np.max(a, axis, keepdims: keepdims);
-                case "mean": return axis.HasValue ? np.mean(a, axis.Value, keepdims) : np.mean(a, keepdims);
-                case "std": return axis.HasValue ? np.std(a, axis.Value, keepdims) : np.std(a, keepdims);
-                case "var": return axis.HasValue ? np.var(a, axis.Value, keepdims) : np.var(a, keepdims);
+                case "mean": return axis.HasValue ? np.mean(a, axis.Value, keepdims: keepdims) : np.mean(a, keepdims: keepdims);
+                case "std": return axis.HasValue ? np.std(a, axis.Value, keepdims: keepdims) : np.std(a, keepdims: keepdims);
+                case "var": return axis.HasValue ? np.var(a, axis.Value, keepdims: keepdims) : np.var(a, keepdims: keepdims);
                 // axis=None (keepdims=False only — the flat long form has no keepdims): wraps the
                 // scalar back to the 0-d int64 NumPy returns. G13: this is the path whose Decimal
                 // IL compare was silently wrong and whose Char case threw — now oracle-gated.

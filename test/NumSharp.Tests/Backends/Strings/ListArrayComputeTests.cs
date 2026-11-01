@@ -351,7 +351,7 @@ namespace NumSharp.Tests.Backends.Strings
             Action boolLoop = () => r.sum(null, np.dtype("bool"));
             boolLoop.Should().Throw<NotSupportedException>().WithMessage("*np.sum(lists.astype(dtype), ...) in that dtype*");
             using (var truths = r.astype(np.dtype("bool")))
-            using (var b = np.sum(truths, np.dtype("bool"))) Values(b).Should().Be("True", "the OR of the lists' truths");
+            using (var b = np.sum(truths, dtype: np.dtype("bool"))) Values(b).Should().Be("True", "the OR of the lists' truths");
             // where= without initial (get_initial_from_ufunc): a non-empty object reduction uses no identity, so the mask is
             // NumPy's refusal; an EMPTY one takes the identity, the int 0, which a list array cannot hold — no refusal (the
             // mutation pass found this split untested).

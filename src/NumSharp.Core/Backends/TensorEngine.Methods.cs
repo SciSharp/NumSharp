@@ -14,7 +14,49 @@ namespace NumSharp
 {
     public abstract partial class TensorEngine
     {
-        public abstract NDArray ReduceAdd(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null, NDArray @out = null);
+        /// <summary>
+        ///     NumPy's <c>np.sum</c> (<c>np.add.reduce</c>), the whole call: the add reduction over <paramref name="axis_"/>
+        ///     (every axis when null), started from the add identity or <paramref name="initial"/>, over the elements
+        ///     <paramref name="where"/> selects, stored into <paramref name="out"/> when given. <c>np.sum</c> and
+        ///     <c>ndarray.sum</c> are this member after the numpy.matrix boundary.
+        /// </summary>
+        /// <param name="arr">The array (any dtype, any layout; <c>StringDType</c> concatenates, fixed-width text is
+        ///     refused).</param>
+        /// <param name="axis_">The reduced axis (negative counts from the end), or null for every axis. A 0-d input accepts
+        ///     0 and -1 as every axis (ufunc.reduce's backward-compatibility rule).</param>
+        /// <param name="keepdims">Whether the reduced axes stay in the result with length 1.</param>
+        /// <param name="dtype">The loop dtype (<c>dtype=</c>), or null: NEP 50's accumulator of the input without
+        ///     <paramref name="out"/> (int64 for bool and the signed integers, uint64 for the unsigned ones),
+        ///     <c>promote_types(out, arr)</c> with it (no small-integer widening).</param>
+        /// <param name="out">NumPy's <c>out=</c>, an array of the result's shape that receives the sum with an unsafe cast and
+        ///     is returned, or null for a fresh result.</param>
+        /// <param name="initial">NumPy's <c>initial=</c>: the value every output starts from instead of the identity, packed
+        ///     into the loop dtype as <c>PyArray_Pack</c> packs it (a C# integer is a Python int, range-checked and never
+        ///     wrapped; a <c>double</c> a Python float, truncated into an integer loop; a 0-d array is cast), or null for the
+        ///     identity (C# cannot pass NumPy's <c>initial=None</c>, which copies each output's first element instead).</param>
+        /// <param name="where">NumPy's <c>where=</c>: a bool mask broadcast against <paramref name="arr"/>; only the selected
+        ///     elements are added, an output with none selected keeps the start value. Null, or a 0-d true mask, is no
+        ///     mask.</param>
+        /// <returns><paramref name="out"/> itself when given; otherwise a fresh array, NumPy's read-only scalar for a full
+        ///     reduction without keepdims.</returns>
+        /// <exception cref="TypeError">A C# scalar passed as <paramref name="out"/> (<c>return arrays must be of
+        ///     ArrayType</c>), NumPy's text refusals, or an <paramref name="initial"/> the loop cannot take (a complex into a
+        ///     real loop).</exception>
+        /// <exception cref="ValueError">A read-only or misshapen <paramref name="out"/>, a mask with more axes than
+        ///     <paramref name="arr"/> (the reduce prologue's texts), or an <paramref name="initial"/> the loop cannot hold (a
+        ///     NaN into an integer loop, a sequence).</exception>
+        /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array (NumPy's TypeError text).</exception>
+        /// <exception cref="AxisError"><paramref name="axis_"/> is out of range.</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="out"/> or <paramref name="where"/> does not broadcast
+        ///     against <paramref name="arr"/>.</exception>
+        /// <exception cref="OverflowException">An integer <paramref name="initial"/> past the loop's range.</exception>
+        /// <remarks>
+        ///     <paramref name="out"/> joined the contract in 0.71.0 (the np-layer dtype plan's P1d), <paramref name="initial"/>
+        ///     and <paramref name="where"/> in its P10 (decision D10): a breaking change for a subclass, which must add the
+        ///     parameters. <see cref="Sum"/> stays for callers of the shipped member; <c>np.sum</c> calls this one.
+        /// </remarks>
+        public abstract NDArray ReduceAdd(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null, NDArray @out = null,
+            object initial = null, NDArray @where = null);
         /// <summary>
         ///     NumPy's <c>np.cumsum</c> (<c>np.add.accumulate</c>), the whole call: the running sums along
         ///     <paramref name="axis_"/> (the flattened array when null), stored into <paramref name="out"/> when given.
@@ -75,21 +117,56 @@ namespace NumSharp
         ///     SUM into it (in <c>promote_types(out, arr)</c> when <paramref name="dtype"/> is null and the input is not a bool,
         ///     integer or float16 one) and then divides it in place, both with an unsafe cast: an integer out holds truncated
         ///     values.</param>
+        /// <param name="where">NumPy's keyword-only <c>where=</c>: a bool mask broadcast against <paramref name="arr"/>; the
+        ///     mean of each output is the sum of its selected elements divided by their count (<c>_count_reduce_items</c>:
+        ///     the mask broadcast to the array's shape and summed), so an output with none selected is <c>0 / 0</c> (NaN in a
+        ///     float loop, NumPy's unsafe cast of it in an integer one). Null, or a 0-d true mask, is no mask.</param>
         /// <returns><paramref name="out"/> itself when given; otherwise a fresh array, NumPy's read-only scalar for a full
         ///     reduction.</returns>
-        /// <exception cref="AxisError"><paramref name="axis_"/> is out of range (every axis is, for a 0-d input).</exception>
+        /// <exception cref="AxisError"><paramref name="axis_"/> is out of range (every axis is, for a 0-d input without a
+        ///     mask; with one, ufunc.reduce's rule reads axis 0 / -1 of a 0-d input as every axis).</exception>
         /// <exception cref="ValueError"><paramref name="out"/> is read-only or does not have the result's shape (NumPy's
         ///     reduce prologue texts), or text a numeric loop must parse does not parse.</exception>
-        /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not broadcast against the input.</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not broadcast against the input, or
+        ///     <paramref name="where"/> does not broadcast to its shape.</exception>
+        /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array (NumPy's TypeError text), raised
+        ///     by the sum after the count.</exception>
         /// <exception cref="TypeError">A text operand, out or request NumPy's loop resolution refuses.</exception>
         /// <remarks>
         ///     The engine owns NumPy's whole call, dtype decisions included (the np-layer dtype plan). <paramref name="out"/>
-        ///     was added to the contract in 0.71.0 (P1d, decision D2: a breaking change for a subclass); numpy.matrix's
-        ///     <c>mean(out=)</c> runs through it.
+        ///     was added to the contract in 0.71.0 (P1d, decision D2: a breaking change for a subclass), and
+        ///     <paramref name="where"/> in its P10 (D10); numpy.matrix's <c>mean(out=)</c> runs through it. <see cref="Mean"/>
+        ///     stays for callers of the shipped member; <c>np.mean</c> calls this one.
         /// </remarks>
-        public abstract NDArray ReduceMean(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null, NDArray @out = null);
+        public abstract NDArray ReduceMean(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null, NDArray @out = null,
+            NDArray @where = null);
 
+        /// <summary>
+        ///     The mean without <c>out=</c> / <c>where=</c>: <see cref="ReduceMean"/> under its shipped (0.70.0) signature, kept
+        ///     for callers and subclasses of that member.
+        /// </summary>
+        /// <param name="nd">The array to average.</param>
+        /// <param name="axis">The reduced axis, or null for every axis.</param>
+        /// <param name="dtype">The sum's loop dtype, or null for <c>_mean</c>'s default.</param>
+        /// <param name="keepdims">Whether the reduced axes stay with length 1.</param>
+        /// <returns>The mean (see <see cref="ReduceMean"/>).</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <remarks>Footgun: <c>np.mean</c> and <c>ndarray.mean</c> call <see cref="ReduceMean"/> since 0.71.0, so an override
+        ///     of this member no longer intercepts them; override <see cref="ReduceMean"/>.</remarks>
         public abstract NDArray Mean(NDArray nd, int? axis = null, DType dtype = null, bool keepdims = false);
+
+        /// <summary>
+        ///     The sum without <c>out=</c> / <c>initial=</c> / <c>where=</c>: <see cref="ReduceAdd"/> under its shipped (0.70.0)
+        ///     signature, kept for callers and subclasses of that member.
+        /// </summary>
+        /// <param name="nd">The array to sum.</param>
+        /// <param name="axis">The reduced axis, or null for every axis.</param>
+        /// <param name="dtype">The loop dtype, or null for NEP 50's accumulator.</param>
+        /// <param name="keepdims">Whether the reduced axes stay with length 1.</param>
+        /// <returns>The sum (see <see cref="ReduceAdd"/>).</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <remarks>Footgun: <c>np.sum</c> and <c>ndarray.sum</c> call <see cref="ReduceAdd"/> since 0.71.0, so an override of
+        ///     this member no longer intercepts them; override <see cref="ReduceAdd"/>.</remarks>
 
         public abstract NDArray Sum(NDArray nd, int? axis = null, DType dtype = null, bool keepdims = false);
 
@@ -470,19 +547,34 @@ namespace NumSharp
         ///     <paramref name="out"/>, <c>promote_types(out, arr)</c> with it (no small-integer widening then).</param>
         /// <param name="out">NumPy's <c>out=</c>, an array of the result's shape that receives it with unsafe casting, or
         ///     null for a fresh result.</param>
+        /// <param name="initial">NumPy's <c>initial=</c>: the value every output starts from instead of the identity 1, packed
+        ///     into the loop dtype as <c>PyArray_Pack</c> packs it (see <see cref="ReduceAdd"/>), or null for the
+        ///     identity.</param>
+        /// <param name="where">NumPy's <c>where=</c>: a bool mask broadcast against <paramref name="arr"/>; only the selected
+        ///     elements are multiplied in, an output with none selected keeps the start value. Null, or a 0-d true mask, is
+        ///     no mask.</param>
         /// <returns><paramref name="out"/> itself when given; otherwise a fresh array, NumPy's read-only scalar for a full
         ///     reduction.</returns>
         /// <exception cref="AxisError"><paramref name="axis_"/> is out of range.</exception>
         /// <exception cref="ValueError"><paramref name="out"/> is read-only or does not have the result's shape (NumPy's
-        ///     reduce prologue texts), or text a numeric loop must parse does not parse.</exception>
-        /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not broadcast against the input.</exception>
+        ///     reduce prologue texts), text a numeric loop must parse does not parse, or an <paramref name="initial"/> the
+        ///     loop cannot hold.</exception>
+        /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array (NumPy's TypeError text).</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="out"/> or <paramref name="where"/> does not broadcast
+        ///     against the input.</exception>
+        /// <exception cref="OverflowException">An integer <paramref name="initial"/> past the loop's range.</exception>
         /// <exception cref="TypeError">Text, or a string request: NumPy's refusal (no multiply loop reduces text into itself;
-        ///     integer counts into a text out repeat).</exception>
+        ///     integer counts into a text out repeat); a C# scalar as <paramref name="out"/>; a complex
+        ///     <paramref name="initial"/> for a real loop.</exception>
         /// <remarks>
         ///     <paramref name="out"/> was added to the contract in 0.71.0 (the np-layer dtype plan's P1d, decision D2: a
-        ///     breaking change for a subclass); numpy.matrix's <c>prod(out=)</c> runs through it.
+        ///     breaking change for a subclass), <paramref name="initial"/> and <paramref name="where"/> in its P10 (D10);
+        ///     numpy.matrix's <c>prod(out=)</c> runs through it. With either keyword the product is NumPy's sequential
+        ///     <c>multiply.reduce</c> loop through its reduction iterator, which can differ in the last bit of a float product
+        ///     from the call without them (that call's flat float loop multiplies in SIMD lane order, the open NL3).
         /// </remarks>
-        public abstract NDArray ReduceProduct(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null, NDArray @out = null);
+        public abstract NDArray ReduceProduct(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null, NDArray @out = null,
+            object initial = null, NDArray @where = null);
 
         /// <summary>
         ///     NumPy's <c>np.std</c> (<c>_methods._std</c>), the whole call: the square root of <see cref="ReduceVar"/>, stored
@@ -496,18 +588,31 @@ namespace NumSharp
         ///     own dtype).</param>
         /// <param name="out">NumPy's <c>out=</c>: a FLOAT or complex array of the result's shape, or null. NumPy hands it to
         ///     the variance's last sum (whose loop it joins), divides it in place and takes the square root in place.</param>
+        /// <param name="where">NumPy's keyword-only <c>where=</c> (see <see cref="ReduceVar"/>), or null.</param>
+        /// <param name="mean">NumPy's keyword-only <c>mean=</c> (see <see cref="ReduceVar"/>), or null to compute it.</param>
+        /// <param name="correction">NumPy's keyword-only <c>correction=</c>, the Array API's name of <paramref name="ddof"/>
+        ///     (see <see cref="ReduceVar"/>), or null.</param>
         /// <returns><paramref name="out"/> itself when given; otherwise a fresh array, a read-only 0-d scalar when the result
         ///     has no dimensions.</returns>
-        /// <exception cref="AxisError"><paramref name="axis_"/> is outside the operand (a 0-d operand included).</exception>
-        /// <exception cref="TypeError">A bool input with <c>dtype=bool</c>, or text NumPy's loop resolution refuses.</exception>
-        /// <exception cref="ValueError"><paramref name="out"/> is read-only or does not have the result's shape.</exception>
+        /// <exception cref="AxisError"><paramref name="axis_"/> is outside the operand (a 0-d operand included, without a
+        ///     mask).</exception>
+        /// <exception cref="TypeError">A bool input with <c>dtype=bool</c> or a bool <paramref name="mean"/> against a bool
+        ///     input (NumPy's boolean-subtract refusal), or text NumPy's loop resolution refuses.</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> is read-only or does not have the result's shape; both
+        ///     <paramref name="ddof"/> (nonzero) and <paramref name="correction"/> given (<c>ddof and correction can't be
+        ///     provided simultaneously.</c>).</exception>
         /// <exception cref="ArgumentException">An integer or bool <paramref name="dtype"/> (with a result that has dimensions)
-        ///     or <paramref name="out"/>: NumPy's <c>sqrt</c> output-cast error under <c>same_kind</c>.</exception>
+        ///     or <paramref name="out"/>: NumPy's <c>sqrt</c> output-cast error under <c>same_kind</c>; a non-bool
+        ///     <paramref name="where"/>.</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="where"/> or <paramref name="mean"/> does not broadcast
+        ///     with the operand.</exception>
         /// <remarks>
-        ///     <paramref name="out"/> was added to the contract in 0.71.0 (the np-layer dtype plan's P1d, decision D2);
+        ///     <paramref name="out"/> was added to the contract in 0.71.0 (the np-layer dtype plan's P1d, decision D2),
+        ///     <paramref name="where"/>, <paramref name="mean"/> and <paramref name="correction"/> in its P10 (D10);
         ///     numpy.matrix's <c>std(out=)</c> runs through it.
         /// </remarks>
-        public abstract NDArray ReduceStd(NDArray arr, int? axis_, bool keepdims = false, int? ddof = null, DType dtype = null, NDArray @out = null);
+        public abstract NDArray ReduceStd(NDArray arr, int? axis_, bool keepdims = false, int? ddof = null, DType dtype = null, NDArray @out = null,
+            NDArray @where = null, NDArray mean = null, int? correction = null);
 
         /// <summary>
         ///     NumPy's <c>np.var</c> (<c>_methods._var</c>), the whole call: the mean of the squared deviations from the mean,
@@ -522,17 +627,37 @@ namespace NumSharp
         /// <param name="out">NumPy's <c>out=</c>, an array of the result's shape, or null. NumPy hands it to its LAST sum only
         ///     (the squared deviations', whose loop is <c>promote_types(out, x)</c> without <paramref name="dtype"/>), then
         ///     divides it in place.</param>
+        /// <param name="where">NumPy's keyword-only <c>where=</c>: a bool mask broadcast against <paramref name="arr"/>. Each
+        ///     output's count, mean and sum of squared deviations take only its selected elements, and the divisor is
+        ///     <c>max(count - ddof, 0)</c> per output. Null, or a 0-d true mask, is no mask.</param>
+        /// <param name="mean">NumPy's keyword-only <c>mean=</c>: the mean to subtract instead of computing it, an array that
+        ///     broadcasts against <paramref name="arr"/> (the keepdims mean <c>np.mean(arr, axis, keepdims=True)</c> gives),
+        ///     or a C# number standing for a Python scalar; null computes it. Footgun: NumPy does not divide or cast it, so the
+        ///     deviations take <c>arr - mean</c>'s own dtype (an int32 array with an integer mean subtracts and squares in
+        ///     int32, wrapping), and a mean that broadcasts to a LARGER shape makes the result larger.</param>
+        /// <param name="correction">NumPy's keyword-only <c>correction=</c>, the Array API's name of <paramref name="ddof"/>:
+        ///     it replaces <paramref name="ddof"/> when that is null or 0, or null for none.</param>
         /// <returns><paramref name="out"/> itself when given; otherwise a fresh array, a read-only 0-d scalar when the result
         ///     has no dimensions.</returns>
-        /// <exception cref="AxisError"><paramref name="axis_"/> is outside the operand (a 0-d operand included).</exception>
-        /// <exception cref="TypeError">A bool input with <c>dtype=bool</c>, a text out for a float or complex input, or text
-        ///     NumPy's loop resolution refuses.</exception>
-        /// <exception cref="ValueError"><paramref name="out"/> is read-only or does not have the result's shape.</exception>
+        /// <exception cref="AxisError"><paramref name="axis_"/> is outside the operand (a 0-d operand included, without a
+        ///     mask).</exception>
+        /// <exception cref="TypeError">A bool input with <c>dtype=bool</c> or a bool <paramref name="mean"/> against a bool
+        ///     input (NumPy's boolean-subtract refusal), a text out for a float or complex input, or text NumPy's loop
+        ///     resolution refuses.</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> is read-only or does not have the result's shape; both
+        ///     <paramref name="ddof"/> (nonzero) and <paramref name="correction"/> given (<c>ddof and correction can't be
+        ///     provided simultaneously.</c>, raised before anything else, as NumPy's <c>np.var</c> raises it).</exception>
+        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/> (NumPy's TypeError text).</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="where"/> or <paramref name="mean"/> does not broadcast
+        ///     with the operand.</exception>
         /// <remarks>
-        ///     <paramref name="out"/> was added to the contract in 0.71.0 (the np-layer dtype plan's P1d, decision D2);
-        ///     numpy.matrix's <c>var(out=)</c> runs through it.
+        ///     <paramref name="out"/> was added to the contract in 0.71.0 (the np-layer dtype plan's P1d, decision D2),
+        ///     <paramref name="where"/>, <paramref name="mean"/> and <paramref name="correction"/> in its P10 (D10);
+        ///     numpy.matrix's <c>var(out=)</c> runs through it. <c>ndarray.var</c> has no <c>correction=</c> in NumPy 2.4.2
+        ///     (its <c>_var</c> refuses the keyword), so <see cref="NDArray.var"/> passes null.
         /// </remarks>
-        public abstract NDArray ReduceVar(NDArray arr, int? axis_, bool keepdims = false, int? ddof = null, DType dtype = null, NDArray @out = null);
+        public abstract NDArray ReduceVar(NDArray arr, int? axis_, bool keepdims = false, int? ddof = null, DType dtype = null, NDArray @out = null,
+            NDArray @where = null, NDArray mean = null, int? correction = null);
 
         public abstract NDArray ArgMax(NDArray a);
         public abstract NDArray ArgMax(NDArray a, int axis, bool keepdims = false);

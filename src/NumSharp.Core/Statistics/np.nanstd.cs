@@ -28,7 +28,7 @@ namespace NumSharp
         ///     <para>
         ///     NumPy's <c>nanstd</c> is <c>sqrt(nanvar(...), out=var)</c> for an array and
         ///     <c>var.dtype.type(np.sqrt(var))</c> for a scalar; for an array that cannot hold NaN that is exactly
-        ///     <see cref="std(NDArray, int, bool, int?, DType)"/>.
+        ///     <see cref="std(NDArray, int?, DType, NDArray, int, bool, NDArray, NDArray, int?)"/>.
         ///     </para>
         ///     <para>https://numpy.org/doc/stable/reference/generated/numpy.nanstd.html</para>
         /// </remarks>

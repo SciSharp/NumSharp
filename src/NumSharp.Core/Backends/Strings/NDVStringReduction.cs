@@ -212,11 +212,75 @@ namespace NumSharp.Backends.Strings
             return Sum(t, axis, keepdims, @out);
         }
 
+        /// <summary>
+        ///     <c>np.sum</c> / <c>ndarray.sum</c> of a <c>StringDType</c> array with NumPy's <c>initial=</c> and <c>where=</c>:
+        ///     <c>PyUFunc_ReduceWrapper</c>'s order once the caller parsed the arguments (an out that is not an array, the
+        ///     read-only out, the mask's dtype, the axis) — the loop resolution on (out, a), the reorderable check, the out's
+        ///     and the mask's shapes, <c>initial=</c> packed into the loop's descriptor (<c>PyArray_Pack</c>), a mask without
+        ///     <c>initial=</c> (<c>StringDType</c>'s add has no identity), an empty reduction without it — then the
+        ///     concatenation: every output starts as the initial text and appends its selected elements in order.
+        /// </summary>
+        /// <param name="a">The input (a numeric or fixed-width input into a <c>StringDType</c> out has no loop).</param>
+        /// <param name="axis">The axis (already validated), or null for every axis.</param>
+        /// <param name="out">The output, or null.</param>
+        /// <param name="keepdims">Keep the reduced axis.</param>
+        /// <param name="initial">The <c>initial=</c> value (a str, a number under <c>coerce</c>, the NA object, a 0-d array
+        ///     cast), or null for none.</param>
+        /// <param name="where">The bool mask broadcastable to <paramref name="a"/> (a 0-d true mask is no mask), or null.</param>
+        /// <returns><paramref name="out"/> itself, or the fresh result (a read-only 0-d array for a flat reduction without
+        ///     keepdims).</returns>
+        /// <exception cref="TypeError">No loop: an out or input of another class, two incompatible NA objects.</exception>
+        /// <exception cref="ValueError">Two or more reduced axes, a misshapen out, a mask without <c>initial=</c>
+        ///     (<c>reduction operation 'add' does not have an identity, so to use a where mask one has to specify
+        ///     'initial'</c>), an empty reduction without <c>initial=</c>, an <c>initial=</c> that is not text under
+        ///     <c>coerce=False</c>, or an NA met by an add under the <c>None</c>-like rule (<c>Cannot add null that is not a
+        ///     nan-like value</c>).</exception>
+        /// <exception cref="IncorrectShapeException">The out or the mask does not broadcast.</exception>
+        /// <exception cref="OutOfMemoryException">NumPy's <c>MemoryError</c> texts.</exception>
+        internal static NDArray SumNumPyKeywords(NDArray a, int? axis, NDArray @out, bool keepdims, object initial, NDArray where)
+        {
+            // A numeric (or fixed-width) input into a StringDType out: no loop pairs them with StringDType.
+            if (!NDStringUfuncs.IsVString(a))
+                throw NDStringUfuncs.VStringNoLoop("add", new[] { NDStringUfuncs.DispatchClass(@out), NDStringUfuncs.DispatchClass(a) });
+            if (NDStringUfuncs.VStringReduceLoopAnswer("sum", a, null, @out) is { } refusal)
+                throw refusal;
+            int nd = a.ndim;
+            int[] axes = axis is { } ax0 && nd > 0 ? new[] { ax0 < 0 ? ax0 + nd : ax0 } : null;
+            if (NDStringUfuncs.VStringNotReorderable("add", a, axes) is { } many)
+                throw many;
+            ReductionArguments.ValidateOperands(a, ReductionArguments.AxisFlags(nd, axis), keepdims, @out, where, "add");
+
+            // where=True (a 0-d true mask: C# spells NumPy's literal as one) is no mask at all, as on the numeric path.
+            if (where is not null && where.ndim == 0 && where.GetTypeCode == NPTypeCode.Boolean && where.GetAtIndex<bool>(0))
+                where = null;
+
+            // initial= packed into the loop's descriptor (the out's when it is StringDType), after every shape error.
+            DType loopDescr = NDStringUfuncs.IsVString(@out) ? @out.dtype : a.dtype;
+            using var init = initial is null ? null : PackInitial(initial, loopDescr);
+            if (init is null)
+            {
+                // StringDType's add has no identity: a mask needs initial=, and without either keyword it is the plain sum.
+                if (where is not null)
+                    throw new ValueError(
+                        "reduction operation 'add' does not have an identity, so to use a where mask one has to specify 'initial'");
+                if (NDStringUfuncs.VStringNoIdentity("add", a, axes) is { } empty)
+                    throw empty;
+                return Sum(a, axis, keepdims, @out);
+            }
+            // The lanes read the mask along the reduced axis: a mask that broadcasts is viewed at the input's shape.
+            using var mask = where is null || where.Shape.Equals(a.Shape) ? null : NDArray.broadcast_to(where, a.Shape);
+            return Reduce(ReduceKind.SumInitial, a, axis, keepdims, @out, init, mask ?? where, "add");
+        }
+
         /// <summary>The reductions <see cref="Reduce"/> runs.</summary>
         private enum ReduceKind
         {
             /// <summary><c>add.reduce</c>.</summary>
             Sum,
+
+            /// <summary><c>add.reduce</c> with <c>initial=</c> (and possibly <c>where=</c>): every output starts as the initial
+            ///     text and every selected element is added to it.</summary>
+            SumInitial,
 
             /// <summary><c>maximum.reduce</c>.</summary>
             Max,
@@ -404,6 +468,16 @@ namespace NumSharp.Backends.Strings
                         AxisSort.DriveAllButAxis(new[] { input, outLanes }, new[] { NDIterPerOpFlags.READONLY, NDIterPerOpFlags.READWRITE },
                             axis, s_sumLane, &h);
                     }
+                    else if (kind == ReduceKind.SumInitial)
+                    {
+                        // initial= / where=: one pass per lane (the sizes, then the one allocation and the copies), the mask
+                        // riding as a third operand when there is one.
+                        var ops = mask is null ? new[] { input, outLanes } : new[] { input, outLanes, mask };
+                        var flags = mask is null
+                            ? new[] { NDIterPerOpFlags.READONLY, NDIterPerOpFlags.READWRITE }
+                            : new[] { NDIterPerOpFlags.READONLY, NDIterPerOpFlags.READWRITE, NDIterPerOpFlags.READONLY };
+                        AxisSort.DriveAllButAxis(ops, flags, axis, s_sumInitialLane, &h);
+                    }
                     else
                     {
                         var ops = mask is null ? new[] { input, outLanes } : new[] { input, outLanes, mask };
@@ -428,6 +502,13 @@ namespace NumSharp.Backends.Strings
 
         /// <summary>The reducing pass of <c>sum</c>, one call per lane (<see cref="SumLane"/>).</summary>
         private static readonly NDInnerLoopFunc s_sumLane = static (p, s, c, a) => SumLane((byte*)p[0], (byte*)p[1], VStringReduceContext.FromAux(a));
+
+        /// <summary>The pass of <c>sum</c> with <c>initial=</c> / <c>where=</c>, one call per lane (<see cref="SumInitialLane"/>).</summary>
+        private static readonly NDInnerLoopFunc s_sumInitialLane = static (p, s, c, a) =>
+        {
+            var ctx = VStringReduceContext.FromAux(a);
+            SumInitialLane((byte*)p[0], (byte*)p[1], ctx.HasMask ? (byte*)p[2] : null, ctx);
+        };
 
         /// <summary>The reducing pass of <c>max</c> / <c>min</c>, one call per lane (<see cref="MaxMinLane"/>).</summary>
         private static readonly NDInnerLoopFunc s_maxMinLane = static (p, s, c, a) =>
@@ -595,6 +676,97 @@ namespace NumSharp.Backends.Strings
                 Buffer.MemoryCopy(buf, dst + pos, total - pos, size);
                 pos += size;
             }
+        }
+
+        /// <summary>
+        ///     One lane of <c>add.reduce</c> with <c>initial=</c> (and possibly a mask): NumPy sets the output to the initial
+        ///     text (<c>raw_array_assign_scalar</c>, a copy) and then adds every selected element to it, <c>acc = acc + x</c>.
+        ///     So with no element selected the output is the initial value copied, an NA included; with any, the result is
+        ///     the initial text followed by the selected elements', under the NA rules of each add: a NaN-like NA anywhere
+        ///     makes the output NA, a <c>None</c>-like one is NumPy's refusal, any other NA reads as the descriptor's default
+        ///     string. No first-element copy happens, so an NA element is never cast to its name here.
+        /// </summary>
+        /// <param name="lane">The lane's first cell.</param>
+        /// <param name="o">The output cell.</param>
+        /// <param name="mask">The lane's first mask byte, or null.</param>
+        /// <param name="ctx">The context (<see cref="VStringReduceContext.InitialCell"/> is set).</param>
+        /// <exception cref="ValueError">An NA met by an add under the <c>None</c>-like rule.</exception>
+        /// <exception cref="OutOfMemoryException">A failed allocation, load or free (NumPy's <c>MemoryError</c> texts).</exception>
+        private static void SumInitialLane(byte* lane, byte* o, byte* mask, VStringReduceContext ctx)
+        {
+            long n = ctx.N, stride = ctx.InStride, mstride = ctx.MaskStride;
+            byte* init = ctx.InitialCell;
+            // The sizes first: the initial text and every selected element (an NA counts the default string's size).
+            long total = CellSize(init, ctx, out bool anyNA);
+            long selected = 0;
+            for (long i = 0; i < n; i++)
+            {
+                if (mask != null && mask[i * mstride] == 0)
+                    continue;
+                total += CellSize(lane + i * stride, ctx, out bool na);
+                anyNA |= na;
+                selected++;
+            }
+            if (selected == 0)
+            {
+                // Nothing added: the output holds the assigned initial value (a copy keeps an NA as NA).
+                VStringAllocator.FreeAndCopy(ctx.InitialAllocator, ctx.Out, init, o, ctx.Name);
+                return;
+            }
+            if (anyNA)
+            {
+                if (ctx.Rule == VStringNARule.NaN)
+                {
+                    // A NaN-like NA propagates through every add (pack_null releases the cell's old text itself).
+                    if (ctx.Out.pack_null(o) < 0)
+                        throw new OutOfMemoryException("Failed to deallocate string in add");
+                    return;
+                }
+                if (ctx.Rule == VStringNARule.Null)
+                    throw new ValueError("Cannot add null that is not a nan-like value");
+            }
+            // The output may hold the assigned initial text (a caller's out, or an earlier pass): released before the
+            // concatenation is built in a fresh allocation of the exact size.
+            if (ctx.Out.free(o) < 0)
+                throw new OutOfMemoryException("Failed to deallocate string in add");
+            if (ctx.Out.newemptysize(total, o) < 0)
+                throw new OutOfMemoryException("Failed to allocate string in add");
+            if (ctx.Out.load(o, out byte* dst, out _) < 0)
+                throw new OutOfMemoryException("Failed to load string in add");
+            // The initial text, then each selected element's, every NA reading as the default string.
+            long pos = AppendCell(ctx.InitialAllocator, init, dst, 0, total, ctx);
+            for (long i = 0; i < n; i++)
+            {
+                if (mask != null && mask[i * mstride] == 0)
+                    continue;
+                pos = AppendCell(ctx.In, lane + i * stride, dst, pos, total, ctx);
+            }
+        }
+
+        /// <summary>
+        ///     Copies one cell's text (or, for an NA, the descriptor's default string) to <paramref name="dst"/> at
+        ///     <paramref name="pos"/>.
+        /// </summary>
+        /// <param name="alloc">The allocator the cell's text lives in.</param>
+        /// <param name="cell">The cell.</param>
+        /// <param name="dst">The destination text.</param>
+        /// <param name="pos">The write position in <paramref name="dst"/>.</param>
+        /// <param name="total">The destination's size (the bound of the copy).</param>
+        /// <param name="ctx">The context (its default string).</param>
+        /// <returns>The position after the copied text.</returns>
+        /// <exception cref="OutOfMemoryException">The cell cannot be loaded (NumPy's <c>MemoryError</c> text).</exception>
+        private static long AppendCell(VStringAllocator alloc, byte* cell, byte* dst, long pos, long total, VStringReduceContext ctx)
+        {
+            int isNull = alloc.load(cell, out byte* buf, out long size);
+            if (isNull < 0)
+                throw new OutOfMemoryException("Failed to load string in add");
+            if (isNull != 0)
+            {
+                buf = ctx.DefaultText;
+                size = ctx.DefaultSize;
+            }
+            Buffer.MemoryCopy(buf, dst + pos, total - pos, size);
+            return pos + size;
         }
 
         // =============================================================================================================

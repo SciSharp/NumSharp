@@ -4681,7 +4681,7 @@ namespace NumSharp
         private static NDArray CountUnmasked(NDArray mask, Shape shape, int? axis, bool keepdims)
         {
             var unmasked = mask is null ? np.ones(shape, np.@bool) : np.logical_not(mask);
-            return np.sum(unmasked, axis, keepdims, np.int64);
+            return np.sum(unmasked, axis, keepdims: keepdims, dtype: np.int64);
         }
 
         /// <summary>Boxes a computed reduction result + its (possibly null) mask, collapsing a fully-masked
@@ -4789,14 +4789,14 @@ namespace NumSharp
         /// <param name="dtype">Accumulator dtype (NumPy sum dtype=).</param><param name="keepdims">Keep reduced axes.</param>
         /// <returns>The masked sum.</returns>
         public NDMaskedArray sum(object a, int? axis = null, DType dtype = null, bool keepdims = false)
-            => ReduceIdentity(a, 0, (x, ax, kd) => np.sum(x, ax, kd, dtype), axis, keepdims);
+            => ReduceIdentity(a, 0, (x, ax, kd) => np.sum(x, ax, keepdims: kd, dtype: dtype), axis, keepdims);
 
         /// <summary>Product over the axis; masked slots contribute 1.</summary>
         /// <param name="a">Operand.</param><param name="axis">Axis or null.</param>
         /// <param name="dtype">Accumulator dtype.</param><param name="keepdims">Keep reduced axes.</param>
         /// <returns>The masked product.</returns>
         public NDMaskedArray prod(object a, int? axis = null, DType dtype = null, bool keepdims = false)
-            => ReduceIdentity(a, 1, (x, ax, kd) => np.prod(x, ax, dtype, kd), axis, keepdims);
+            => ReduceIdentity(a, 1, (x, ax, kd) => np.prod(x, ax, dtype, keepdims: kd), axis, keepdims);
 
         /// <summary>Alias of <see cref="prod"/> (NumPy's <c>product</c>).</summary>
         /// <param name="a">Operand.</param><param name="axis">Axis or null.</param>
@@ -5027,7 +5027,7 @@ namespace NumSharp
             }
 
             // ret = umr_sum(arr, axis, dtype, out=None, keepdims); true_divide(ret, rcount, out=ret, casting='unsafe').
-            var ret = WriteableReduction(np.sum(d, axis, keepdims, dtype));
+            var ret = WriteableReduction(np.sum(d, axis, keepdims: keepdims, dtype: dtype));
             DefaultEngine.DivideByCountLikeNumPy(ret, rcount);
             var mask = ArrayWrapDivideDomainFill(ret, rcount);
 
@@ -5172,7 +5172,7 @@ namespace NumSharp
             {
                 // arrmean = umr_sum(arr, axis, dtype, keepdims=True); true_divide(arrmean, rcount, out=arrmean) — whose wrap
                 // writes 1 into (and masks) the means in ma's divide domain.
-                var arrmean = WriteableReduction(np.sum(d, axis, true, dtype));
+                var arrmean = WriteableReduction(np.sum(d, axis, keepdims: true, dtype: dtype));
                 DefaultEngine.DivideByCountLikeNumPy(arrmean, rcount);
                 meanMasked = ArrayWrapDivideDomainFill(arrmean, rcount) is not null;
                 x = StrongSubtract(d, arrmean);
@@ -5230,7 +5230,7 @@ namespace NumSharp
             }
 
             // ret = umr_sum(x, axis, dtype, out, keepdims); true_divide(ret, max(rcount - ddof, 0), out=ret).
-            var ret = WriteableReduction(np.sum(x2, axis, keepdims, dtype));
+            var ret = WriteableReduction(np.sum(x2, axis, keepdims: keepdims, dtype: dtype));
             long rc = Math.Max(rcount - ddof, 0);
             DefaultEngine.DivideByCountLikeNumPy(ret, rc);
             var rmask = ArrayWrapDivideDomainFill(ret, rc);
@@ -7431,7 +7431,7 @@ namespace NumSharp
         public NDArray count_masked(object a, int? axis = null)
         {
             var m = (a as NDMaskedArray)?._mask ?? np.zeros(DimsOf(AsData(a)), np.@bool);
-            return np.sum(m, axis, false, np.int64);
+            return np.sum(m, axis, keepdims: false, dtype: np.int64);
         }
 
         /// <summary>An empty masked array of the given shape with EVERY element masked (NumPy's <c>masked_all</c>) —

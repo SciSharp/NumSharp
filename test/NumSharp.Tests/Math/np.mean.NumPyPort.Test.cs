@@ -90,7 +90,7 @@ namespace NumSharp.Tests.Math
             var fails = new List<string>();
             var h = ((np.arange(2 * 2049) % 37) * 0.173 + 8.0).astype(np.float16).reshape(2, 2049);
             Check(fails, "mean f16 (2,2049) axis1", () => np.mean(h, 1), "float16 (2,) 498d 498f");
-            Check(fails, "mean f16 (2,2049) axis1 keepdims", () => np.mean(h, 1, true), "float16 (2,1) 498d 498f");
+            Check(fails, "mean f16 (2,2049) axis1 keepdims", () => np.mean(h, 1, keepdims: true), "float16 (2,1) 498d 498f");
             Check(fails, "mean f16 (2049,) axis0", () => np.mean(h["0"], 0), "float16 () 498d");
             var i = (np.arange(24).astype(np.int32) * 3001).reshape(4, 6);
             Check(fails, "mean i32 (4,6) axis1 dtype=f16", () => np.mean(i, 1, np.float16), "float16 (4,) 6f53 7c00 7c00 7c00");

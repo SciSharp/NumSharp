@@ -32,7 +32,7 @@ namespace NumSharp.Tests.Math
         public void FlatSumAndProduct_WrapInTheUInt16Loop()
         {
             using var a = Values();
-            using (var s = np.sum(a, Char))
+            using (var s = np.sum(a, dtype: Char))
             {
                 s.typecode.Should().Be(NPTypeCode.Char);
                 s.ndim.Should().Be(0);
@@ -73,7 +73,7 @@ namespace NumSharp.Tests.Math
         public void OtherInput_IsCastIntoTheLoop()
         {
             using var a = np.array(new sbyte[] { -1, 3, 2 });
-            using (var s = np.sum(a, Char))
+            using (var s = np.sum(a, dtype: Char))
             {
                 s.typecode.Should().Be(NPTypeCode.Char);
                 Ints(s).Should().Equal(4);
@@ -128,7 +128,7 @@ namespace NumSharp.Tests.Math
         public void EmptyInput_GivesTheIdentities()
         {
             using var e = np.zeros(new Shape(0, 3), Char);
-            using (var s = np.sum(e, Char))
+            using (var s = np.sum(e, dtype: Char))
                 Ints(s).Should().Equal(0);
             using (var p = np.prod(e, 0, Char))
             {

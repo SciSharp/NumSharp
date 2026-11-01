@@ -64,7 +64,7 @@ namespace NumSharp.Tests.Math
             ((bool)flat.GetAtIndex(0)).Should().BeFalse();
             var m = np.array(new long[,] { { 1, 0, 2 }, { 3, 4, 0 } });
             np.prod(m, 1, np.@bool).ToArray<bool>().Should().Equal(false, false);
-            var kept = np.prod(m, 0, np.@bool, true);
+            var kept = np.prod(m, 0, np.@bool, keepdims: true);
             kept.shape.Should().Equal(1L, 3L);
             kept.ToArray<bool>().Should().Equal(true, false, false);
         }

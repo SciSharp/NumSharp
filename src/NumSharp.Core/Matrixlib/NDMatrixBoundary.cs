@@ -529,6 +529,46 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     The rule of a reduction NumPy runs through the operand's METHOD when the caller passed <c>out=</c>
+        ///     (<c>np.sum(m, axis, dtype, out)</c> is <c>m.sum(axis, dtype, out)</c>, which computes
+        ///     <c>ndarray.sum(self, axis, dtype, out, keepdims=True)._collapse(axis)</c>): a matrix out gets the matrix
+        ///     member's answer (the out itself, or its scalar without an axis); a plain out receives the values and then
+        ///     fails, because a plain ndarray has no <c>_collapse</c>.
+        /// </summary>
+        /// <typeparam name="TState">The arguments of the function, packed by value.</typeparam>
+        /// <param name="a">The matrix operand.</param>
+        /// <param name="out">The caller's out (not null).</param>
+        /// <param name="state">The arguments, handed to both calls unchanged.</param>
+        /// <param name="method">The <see cref="NDMatrix"/> member NumPy calls (<c>m.sum(axis, dtype, out)</c>). Pass a
+        ///     <c>static</c> lambda.</param>
+        /// <param name="intoPlainOut">The method's first statement for a plain out: the engine's reduction with
+        ///     <c>keepdims: true</c> into it. Pass a <c>static</c> lambda.</param>
+        /// <returns>The matrix member's result.</returns>
+        /// <exception cref="AttributeError"><paramref name="out"/> is not a matrix (NumPy's <c>'numpy.ndarray' object has
+        ///     no attribute '_collapse'</c>), raised after the values were stored, as in NumPy.</exception>
+        /// <exception cref="Exception">Whatever the reduction raises first (a misshapen out: its rank error).</exception>
+        internal static NDArray ReducedInto<TState>(NDArray a, NDArray @out, TState state,
+            Func<NDMatrix, NDMatrix, TState, NDArray> method, Func<NDArray, NDArray, TState, NDArray> intoPlainOut)
+        {
+            if (@out is NDMatrix matrixOut)
+                return method((NDMatrix)a, matrixOut, state);
+
+            // A plain out: the engine reduction runs at depth > 0 (plain semantics), then NumPy's _collapse fails.
+            t_depth++;
+            try
+            {
+#pragma warning disable NDW012 // not a leak: a reduction with out= returns the caller's out itself, which the caller owns
+                intoPlainOut(a, @out, state);
+#pragma warning restore NDW012
+            }
+            finally
+            {
+                t_depth--;
+            }
+            throw new AttributeError("'numpy.ndarray' object has no attribute '_collapse'");
+        }
+
+        /// <summary>
         ///     The rule of a function NumPy converts its operand in with <c>asarray</c> (<c>np.ravel</c>,
         ///     <c>np.where</c>, <c>np.asarray</c> itself): the plain result, computed with plain-array semantics.
         /// </summary>

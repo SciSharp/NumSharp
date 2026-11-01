@@ -7,18 +7,37 @@ namespace NumSharp
     public partial class NDArray
     {
         /// <summary>
-        ///     Return the product of array elements over a given axis.
+        ///     NumPy's <c>ndarray.prod(axis=None, dtype=None, out=None, *, keepdims=&lt;no value&gt;, initial=&lt;no value&gt;,
+        ///     where=&lt;no value&gt;)</c> (<c>_methods._prod</c>, i.e. <c>np.multiply.reduce</c>): the product of the
+        ///     elements over <paramref name="axis"/>. This is the only overload: NumPy's whole signature (np-layer dtype plan
+        ///     P10, D10); the parameters behave as <see cref="np.prod"/>'s.
         /// </summary>
-        /// <param name="axis">Axis or axes along which a product is performed. The default, axis=None, will calculate the product of all the elements in the input array. If axis is negative it counts from the last to the first axis.</param>
-        /// <param name="dtype">The type of the returned array, as well as of the accumulator in which the elements are multiplied. The dtype of a is used by default unless a has an integer dtype of less precision than the default platform integer. In that case, if a is signed then the platform integer is used while if a is unsigned then an unsigned integer of the same precision as the platform integer is used.</param>
-        /// <param name="keepdims">If this is set to True, the axes which are reduced are left in the result as dimensions with size one. With this option, the result will broadcast correctly against the input array.</param>
-        /// <returns>An array shaped as a but with the specified axis removed.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.prod.html</remarks>
-        public NDArray prod(int? axis = null, DType dtype = null, bool keepdims = false)
+        /// <param name="axis">The axis to multiply over (negative counts from the end); <c>null</c> multiplies every
+        ///     element.</param>
+        /// <param name="dtype">The accumulator and result dtype, or <c>null</c> for NumPy's default.</param>
+        /// <param name="out">The array the product is written into and returned. Footgun: the THIRD positional parameter, as
+        ///     in NumPy, so write <c>keepdims: true</c> by name (a positional bool there is a C# scalar passed as out and
+        ///     raises).</param>
+        /// <param name="keepdims">Keep the reduced axes as length-1 dimensions.</param>
+        /// <param name="initial">The value every product starts from instead of 1, or <c>null</c>.</param>
+        /// <param name="where">A bool mask of the elements to multiply, or <c>null</c>.</param>
+        /// <returns><paramref name="out"/> itself when given; else a fresh array — 0-d (NumPy's read-only scalar) for a
+        ///     product over every axis without <paramref name="keepdims"/>.</returns>
+        /// <exception cref="TypeError">A C# scalar passed as <paramref name="out"/>; an <paramref name="initial"/> the loop
+        ///     cannot take; text (NumPy's refusal).</exception>
+        /// <exception cref="ValueError">A read-only or misshapen <paramref name="out"/>; a mask with more axes; an
+        ///     unconvertible <paramref name="initial"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="out"/> or <paramref name="where"/> does not broadcast.</exception>
+        /// <exception cref="OverflowException"><paramref name="initial"/> does not fit an integer loop.</exception>
+        /// <remarks>The member keeps the plain-array meaning for a numpy.matrix object reached through an
+        ///     <see cref="NDArray"/> reference.</remarks>
+        public NDArray prod(int? axis = null, DType dtype = null, NDArray @out = null, bool keepdims = false,
+            object initial = null, NDArray @where = null)
         {
             using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
-            return np.prod(this, axis, dtype, keepdims);
+            return TensorEngine.ReduceProduct(this, axis, keepdims, dtype, @out, initial, @where);
         }
-
     }
 }

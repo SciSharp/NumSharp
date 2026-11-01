@@ -36,7 +36,7 @@ namespace NumSharp
             ///     <b>Every order works WITHOUT a matrix backend except three</b> — matrix
             ///     <c>ord</c> 2, -2 and <c>"nuc"</c>, which are defined through singular values and so
             ///     raise <see cref="OpenBlasMissingBackendException"/>. The rest are reductions
-            ///     (<see cref="np.abs(NDArray)"/>, <see cref="np.sum(NDArray)"/>, <see cref="np.amax"/>,
+            ///     (<see cref="np.abs(NDArray)"/>, <see cref="np.sum(NDArray, int?, DType, NDArray, bool, object, NDArray)"/>, <see cref="np.amax"/>,
             ///     <see cref="np.power(NDArray, NDArray)"/>) and compute normally.
             ///     </para>
             ///     <para>

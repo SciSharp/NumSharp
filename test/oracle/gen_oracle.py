@@ -1206,11 +1206,25 @@ def gen_clip_ufunc(dtypes=None, extras=True):
 # ---------------------------------------------------------------------------------------------
 
 REDUCE_KWARGS_FNS = {
-    # name: (NumPy callable, whether it takes initial=)
-    "all": (np.all, False),
-    "any": (np.any, False),
+    # name: (NumPy callable, whether it takes initial=, whether NumSharp's overload takes a tuple axis)
+    "all": (np.all, False, True),
+    "any": (np.any, False, True),
+    # np-layer dtype plan, P10 item 1 (api-parameter-parity B1-B4): one NumPy signature each, over a single axis (a
+    # tuple axis is not in NumSharp's overloads, so those cells are not generated for these five).
+    "sum": (np.sum, True, False),
+    "prod": (np.prod, True, False),
+    "mean": (np.mean, False, False),
+    "var": (np.var, False, False),
+    "std": (np.std, False, False),
 }
 REDUCE_KWARGS_DTYPES = ["bool", "int8", "uint8", "int32", "int64", "float16", "float32", "float64", "complex128"]
+
+# The functions whose masked count is _count_reduce_items' umr_sum(broadcast_to(where, arr.shape), ...): a mask that does
+# not broadcast to the input fails in np.broadcast_to, whose texts NumSharp does not reproduce yet (NL12, pinned in
+# NumSharp.Tests/OpenBugs.NpLayer.cs), so those error cells are not generated for them.
+REDUCE_KWARGS_COUNTED = ("mean", "var", "std")
+REDUCE_KWARGS_NL12 = ("mask_then_shape", "mask_short", "mask_more_dims", "mask_lead1", "input_stretch",
+                      "input_stretch_flat", "rank_before_shape", "stretch_and_out", "out_extent_0d_masked")
 
 
 def gen_reduce_kwargs(fns=None, dtypes=None):
@@ -1233,16 +1247,22 @@ def gen_reduce_kwargs(fns=None, dtypes=None):
 
         def resolve(spec):
             if "py" in spec:
-                return spec["py"]
+                # a Python complex rides as [re, im] (JSON has no complex)
+                return complex(*spec["py"]) if spec.get("t") == "complex" else spec["py"]
             return ops[spec["op"]]
 
         kw = {}
         if "axis" in args:
             ax = args["axis"]
             kw["axis"] = tuple(ax) if isinstance(ax, list) else ax
-        for name in ("out", "where", "initial"):
+        for name in ("out", "where", "initial", "mean"):
             if name in args:
                 kw[name] = resolve(args[name])
+        for name in ("ddof", "correction"):
+            if name in args:
+                kw[name] = args[name]
+        if "dtype" in args:
+            kw["dtype"] = np.dtype(args["dtype"])
         if "keepdims" in args:
             kw["keepdims"] = args["keepdims"]
         params = dict(args, fn=fn)
@@ -1290,6 +1310,13 @@ def gen_reduce_kwargs(fns=None, dtypes=None):
         return tuple(d for i, d in enumerate(shape) if i not in axes)
 
     for fn in fns:
+        _, takes_initial, tuple_ok = REDUCE_KWARGS_FNS[fn]
+        counted = fn in REDUCE_KWARGS_COUNTED
+
+        def axes_of(*candidates):
+            """The axis forms the function's overload takes (a tuple axis only where NumSharp has one)."""
+            return [a for a in candidates if tuple_ok or not isinstance(a, list)]
+
         for s in dtypes:
             dt = np.dtype(s)
 
@@ -1308,13 +1335,15 @@ def gen_reduce_kwargs(fns=None, dtypes=None):
                     "zerodF": _same(np.array(False)),
                 }
                 for mk, mask in masks.items():
-                    for axis in (None, 0, -1, [0, 1]):
+                    for axis in axes_of(None, 0, -1, [0, 1]):
                         for keepdims in (False, True):
                             if mk not in ("full", "row") and (axis == [0, 1] or keepdims):
                                 continue                    # the rarer forms ride the plain axes only
                             args = {"a": {"op": 0}, "axis": axis, "keepdims": keepdims, "where": {"op": 1}}
                             emit(f"A/{short}/{mk}/{axis}/{int(keepdims)}", fn, [(base, view), mask], args, f"where_{mk}")
                 for pyw in (True, False):
+                    if fn == "prod" and pyw and dt.kind in "fc":
+                        continue                            # where=True is the plain product: NL3's multiply order
                     emit(f"A/{short}/py{pyw}", fn, [(base, view)],
                          {"a": {"op": 0}, "axis": 0, "keepdims": False, "where": {"py": pyw, "t": "bool"}}, "where_pybool")
 
@@ -1323,7 +1352,7 @@ def gen_reduce_kwargs(fns=None, dtypes=None):
                 base, view = LAYOUTS[ln](dt)
                 shape = view.shape
                 for mk, mask in {"full": bool_mask(shape, 1), "mid": bool_mask((shape[0], shape[1], 1), 2)}.items():
-                    for axis in (1, [0, 2], None):
+                    for axis in axes_of(1, [0, 2], None):
                         emit(f"A3/{ln}/{mk}/{axis}", fn, [(base, view), mask],
                              {"a": {"op": 0}, "axis": axis, "keepdims": False, "where": {"op": 1}}, f"where3_{mk}")
 
@@ -1331,6 +1360,8 @@ def gen_reduce_kwargs(fns=None, dtypes=None):
             base, view = LAYOUTS["c_contiguous_2d"](dt)
             shape = view.shape
             for axis, keepdims in ((None, False), (0, False), (1, False), (1, True), ([0, 1], True)):
+                if isinstance(axis, list) and not tuple_ok:
+                    continue
                 rshape = result_shape(shape, axis, keepdims)
                 for odt in ("bool", "int8", "float64", "complex128"):
                     for okind in ("C", "S", "F"):
@@ -1340,6 +1371,10 @@ def gen_reduce_kwargs(fns=None, dtypes=None):
                             continue
                         ob = fresh(rshape, odt, okind, 3)
                         for masked in (False, True):
+                            if fn == "prod" and not masked and np.result_type(np.dtype(odt), dt).kind in "fc":
+                                # an unmasked product into an out is the plain product in promote_types(out, a): an
+                                # inexact loop multiplies in NumSharp's own order there (NL3)
+                                continue
                             operands = [(base, view), ob]
                             args = {"a": {"op": 0}, "axis": axis, "keepdims": keepdims, "out": {"op": 1}}
                             if masked:
@@ -1398,6 +1433,10 @@ def gen_reduce_kwargs(fns=None, dtypes=None):
                  {"a": {"op": 0}, "axis": 0, "keepdims": False, "out": {"op": 1}, "where": {"op": 2}}),
             ]
             for tag, operands, args in err_cases:
+                if isinstance(args.get("axis"), list) and not tuple_ok:
+                    continue
+                if counted and tag in REDUCE_KWARGS_NL12:
+                    continue                            # np.broadcast_to's texts: NL12
                 emit(f"C/{tag}", fn, operands, args, "errors")
 
             # 0-d input: axis 0 and -1 mean "no axis"; a mask with an axis is too many dimensions.
@@ -1405,8 +1444,9 @@ def gen_reduce_kwargs(fns=None, dtypes=None):
             for axis in (None, 0, -1, 1):
                 emit(f"Z/axis{axis}", fn, [(z_base, z_view), _same(np.array(False))],
                      {"a": {"op": 0}, "axis": axis, "keepdims": False, "where": {"op": 1}}, "scalar_0d")
-            emit("Z/mask1d", fn, [(z_base, z_view), bool_mask((1,), 0)],
-                 {"a": {"op": 0}, "axis": None, "keepdims": False, "where": {"op": 1}}, "scalar_0d")
+            if not counted:                             # np.broadcast_to's too-many-dimensions text: NL12
+                emit("Z/mask1d", fn, [(z_base, z_view), bool_mask((1,), 0)],
+                     {"a": {"op": 0}, "axis": None, "keepdims": False, "where": {"op": 1}}, "scalar_0d")
             emit("Z/out0d", fn, [(z_base, z_view), fresh((), "float64")],
                  {"a": {"op": 0}, "axis": None, "keepdims": True, "out": {"op": 1}}, "scalar_0d")
 
@@ -1415,6 +1455,88 @@ def gen_reduce_kwargs(fns=None, dtypes=None):
             for axis in (None, 0, 1):
                 emit(f"E/axis{axis}", fn, [(e_base, e_view), bool_mask(e_view.shape, 0)],
                      {"a": {"op": 0}, "axis": axis, "keepdims": False, "where": {"op": 1}}, "empty_2d")
+
+            # ---- I. initial= (sum / prod): Python ints, floats and bools packed into the loop, with and without a
+            # mask, over C and F inputs, into an out; an empty reduction is the initial value; NumPy's packing errors.
+            if takes_initial:
+                inits = {"i2": {"py": 2, "t": "int"}, "im1": {"py": -1, "t": "int"}, "f05": {"py": 0.5, "t": "float"},
+                         "bT": {"py": True, "t": "bool"}, "fneg0": {"py": -0.0, "t": "float"}}
+                for ln, short in (("c_contiguous_2d", "C"), ("f_contiguous_2d", "F")):
+                    base, view = LAYOUTS[ln](dt)
+                    shape = view.shape
+                    for ik, init in inits.items():
+                        for axis in (None, 0, 1):
+                            for masked in (False, True):
+                                operands = [(base, view)]
+                                args = {"a": {"op": 0}, "axis": axis, "keepdims": False, "initial": init}
+                                if masked:
+                                    operands.append(bool_mask(shape, 1))
+                                    args["where"] = {"op": 1}
+                                emit(f"I/{short}/{ik}/{axis}/{'w' if masked else 'u'}", fn, operands, args, f"initial_{short}")
+                    for odt in ("int8", "float64"):
+                        ob = fresh((shape[1],), odt, "C", 2)
+                        emit(f"I/{short}/out/{odt}", fn, [(base, view), ob, bool_mask(shape, 2)],
+                             {"a": {"op": 0}, "axis": 0, "keepdims": False, "out": {"op": 1}, "where": {"op": 2},
+                              "initial": {"py": 3, "t": "int"}}, f"initial_out_{short}")
+                emit("I/empty", fn, [(e_base, e_view)],
+                     {"a": {"op": 0}, "axis": None, "keepdims": False, "initial": {"py": 7, "t": "int"}}, "empty_2d")
+                emit("I/empty_axis", fn, [(e_base, e_view)],
+                     {"a": {"op": 0}, "axis": 0, "keepdims": True, "initial": {"py": 7, "t": "int"}}, "empty_2d")
+                base, view = LAYOUTS["c_contiguous_2d"](dt)
+                emit("I/err/overflow", fn, [(base, view)],
+                     {"a": {"op": 0}, "axis": None, "keepdims": False, "dtype": "int8", "initial": {"py": 1000, "t": "int"}}, "errors")
+                # (a NaN initial has no JSON spelling here; the unit tests hold its ValueError)
+                emit("I/trunc_int8", fn, [(base, view)],
+                     {"a": {"op": 0}, "axis": None, "keepdims": False, "dtype": "int8", "initial": {"py": 2.75, "t": "float"}},
+                     "dtype_initial")
+                emit("I/err/complex_real", fn, [(base, view)],
+                     {"a": {"op": 0}, "axis": None, "keepdims": False, "dtype": "float64", "initial": {"py": [1.0, 2.0], "t": "complex"}},
+                     "errors")
+
+            # ---- D. dtype= with a mask: the loop the elements are cast into before they reduce (np.all / np.any take
+            # no dtype=) -----------------------------------------------------------------------------------------------
+            base, view = LAYOUTS["c_contiguous_2d"](dt)
+            shape = view.shape
+            for loop in ("float64", "float32", "int64", "complex128"):
+                if fn in ("all", "any"):
+                    break
+                if s == "complex128" and loop != "complex128":
+                    continue                               # a complex input into a real loop: a ComplexWarning cast
+                for axis in (None, 1):
+                    emit(f"D/{loop}/{axis}", fn, [(base, view), bool_mask(shape, 1)],
+                         {"a": {"op": 0}, "axis": axis, "keepdims": False, "dtype": loop, "where": {"op": 1}}, "dtype_where")
+
+            # ---- M. var / std: mean= (an array or a Python scalar, used as given), ddof, correction -------------------
+            if fn in ("var", "std"):
+                for ln, short in (("c_contiguous_2d", "C"), ("transposed_2d", "T")):
+                    base, view = LAYOUTS[ln](dt)
+                    shape = view.shape
+                    with warnings.catch_warnings(), np.errstate(all="ignore"):
+                        warnings.simplefilter("ignore")
+                        kd_mean = np.mean(view, axis=1, keepdims=True)
+                    means = {"kd": _same(np.ascontiguousarray(kd_mean)), "pyf": {"py": 0.5, "t": "float"},
+                             "pyi": {"py": 1, "t": "int"}}
+                    for mk, mean in means.items():
+                        for ddof in (0, 1):
+                            for masked in (False, True):
+                                operands = [(base, view)]
+                                args = {"a": {"op": 0}, "axis": 1, "keepdims": False, "ddof": ddof}
+                                if isinstance(mean, tuple):
+                                    operands.append(mean)
+                                    args["mean"] = {"op": len(operands) - 1}
+                                else:
+                                    args["mean"] = mean
+                                if masked:
+                                    operands.append(bool_mask(shape, 1))
+                                    args["where"] = {"op": len(operands) - 1}
+                                emit(f"M/{short}/{mk}/{ddof}/{'w' if masked else 'u'}", fn, operands, args, f"mean_{short}")
+                    for corr in (1, 2):
+                        emit(f"M/{short}/corr{corr}", fn, [(base, view)],
+                             {"a": {"op": 0}, "axis": None, "keepdims": False, "correction": corr}, f"correction_{short}")
+                    emit(f"M/{short}/corr_ddof", fn, [(base, view)],
+                         {"a": {"op": 0}, "axis": 9, "keepdims": False, "ddof": 1, "correction": 1}, "errors")
+                    emit(f"M/{short}/mean_shape", fn, [(base, view), _same(np.zeros(shape[:1]))],
+                         {"a": {"op": 0}, "axis": 1, "keepdims": False, "mean": {"op": 1}}, "errors")
     return cases
 
 

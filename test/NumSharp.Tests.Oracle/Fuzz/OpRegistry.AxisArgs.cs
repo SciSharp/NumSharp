@@ -131,8 +131,8 @@ namespace NumSharp.Tests.Fuzz
                     return WithCallbackResults(made => np.apply_along_axis(x => made.Keep(np.sum(x)), ax, a));
                 case "apply_over_axes":
                     return WithCallbackResults(made => tuple
-                        ? np.apply_over_axes((x, axis) => made.Keep(np.sum(x, axis, true)), a, axt)
-                        : np.apply_over_axes((x, axis) => made.Keep(np.sum(x, axis, true)), a, ax));
+                        ? np.apply_over_axes((x, axis) => made.Keep(np.sum(x, axis, keepdims: true)), a, axt)
+                        : np.apply_over_axes((x, axis) => made.Keep(np.sum(x, axis, keepdims: true)), a, ax));
                 case "trim_zeros": return tuple ? np.trim_zeros(a, "fb", axt) : np.trim_zeros(a, "fb", ax);
                 case "packbits": return np.packbits(a, ax);
                 case "unpackbits": return np.unpackbits(a, ax);

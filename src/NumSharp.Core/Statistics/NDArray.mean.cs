@@ -6,75 +6,31 @@ namespace NumSharp
     public partial class NDArray
     {
         /// <summary>
-        ///     Compute the arithmetic mean along the specified axis.
-        ///     Returns the average of the array elements.
-        ///     The average is taken over the flattened array by default, otherwise over the specified axis.
-        ///     float64 intermediate and return values are used for integer inputs.
+        ///     NumPy's <c>ndarray.mean(axis=None, dtype=None, out=None, *, keepdims=&lt;no value&gt;, where=&lt;no value&gt;)</c>
+        ///     (<c>_methods._mean</c>): the arithmetic mean over <paramref name="axis"/>. This is the only overload: NumPy's
+        ///     whole signature (np-layer dtype plan P10, D10); the parameters behave as <see cref="np.mean"/>'s.
         /// </summary>
-        /// <param name="nd">Array containing numbers whose mean is desired. If a is not an array, a conversion is attempted.</param>
-        /// <param name="axis">Axis or axes along which the means are computed. The default is to compute the mean of the flattened array.</param>
-        /// <param name="type">Type to use in computing the mean. For integer inputs, the default is float64; for floating point inputs, it is the same as the input dtype.</param>
-        /// <param name="keepdims">
-        ///     If this is set to True, the axes which are reduced are left in the result as dimensions with size one. With this option, the result will broadcast correctly against the input array.
-        ///     If the default value is passed, then keepdims will not be passed through to the mean method of sub-classes of ndarray, however any non-default value will be.If the sub-class’ method does not implement keepdims any exceptions will be raised.
-        /// </param>
-        /// <returns> returns a new array containing the mean values, otherwise a reference to the output array is returned.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.mean.html</remarks>
-        public NDArray mean()
-            => TensorEngine.Mean(this);
-
-        /// <summary>
-        ///     Compute the arithmetic mean along the specified axis.
-        ///     Returns the average of the array elements.
-        ///     The average is taken over the flattened array by default, otherwise over the specified axis.
-        ///     float64 intermediate and return values are used for integer inputs.
-        /// </summary>
-        /// <param name="nd">Array containing numbers whose mean is desired. If a is not an array, a conversion is attempted.</param>
-        /// <param name="axis">Axis or axes along which the means are computed. The default is to compute the mean of the flattened array.</param>
-        /// <param name="type">Type to use in computing the mean. For integer inputs, the default is float64; for floating point inputs, it is the same as the input dtype.</param>
-        /// <param name="keepdims">
-        ///     If this is set to True, the axes which are reduced are left in the result as dimensions with size one. With this option, the result will broadcast correctly against the input array.
-        ///     If the default value is passed, then keepdims will not be passed through to the mean method of sub-classes of ndarray, however any non-default value will be.If the sub-class’ method does not implement keepdims any exceptions will be raised.
-        /// </param>
-        /// <returns> returns a new array containing the mean values, otherwise a reference to the output array is returned.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.mean.html</remarks>
-        public NDArray mean(int axis)
-            => TensorEngine.Mean(this, axis);
-
-        /// <summary>
-        ///     Compute the arithmetic mean along the specified axis.
-        ///     Returns the average of the array elements.
-        ///     The average is taken over the flattened array by default, otherwise over the specified axis.
-        ///     float64 intermediate and return values are used for integer inputs.
-        /// </summary>
-        /// <param name="nd">Array containing numbers whose mean is desired. If a is not an array, a conversion is attempted.</param>
-        /// <param name="axis">Axis or axes along which the means are computed. The default is to compute the mean of the flattened array.</param>
-        /// <param name="type">Type to use in computing the mean. For integer inputs, the default is float64; for floating point inputs, it is the same as the input dtype.</param>
-        /// <param name="keepdims">
-        ///     If this is set to True, the axes which are reduced are left in the result as dimensions with size one. With this option, the result will broadcast correctly against the input array.
-        ///     If the default value is passed, then keepdims will not be passed through to the mean method of sub-classes of ndarray, however any non-default value will be.If the sub-class’ method does not implement keepdims any exceptions will be raised.
-        /// </param>
-        /// <returns> returns a new array containing the mean values, otherwise a reference to the output array is returned.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.mean.html</remarks>
-        public NDArray mean(int axis, DType dtype, bool keepdims = false)
-            => TensorEngine.Mean(this, axis, dtype, keepdims);
-
-        /// <summary>
-        ///     Compute the arithmetic mean along the specified axis.
-        ///     Returns the average of the array elements.
-        ///     The average is taken over the flattened array by default, otherwise over the specified axis.
-        ///     float64 intermediate and return values are used for integer inputs.
-        /// </summary>
-        /// <param name="nd">Array containing numbers whose mean is desired. If a is not an array, a conversion is attempted.</param>
-        /// <param name="axis">Axis or axes along which the means are computed. The default is to compute the mean of the flattened array.</param>
-        /// <param name="type">Type to use in computing the mean. For integer inputs, the default is float64; for floating point inputs, it is the same as the input dtype.</param>
-        /// <param name="keepdims">
-        ///     If this is set to True, the axes which are reduced are left in the result as dimensions with size one. With this option, the result will broadcast correctly against the input array.
-        ///     If the default value is passed, then keepdims will not be passed through to the mean method of sub-classes of ndarray, however any non-default value will be.If the sub-class’ method does not implement keepdims any exceptions will be raised.
-        /// </param>
-        /// <returns> returns a new array containing the mean values, otherwise a reference to the output array is returned.</returns>
-        public NDArray mean(int axis, bool keepdims)
-            => TensorEngine.Mean(this, axis, null, keepdims);
-        
+        /// <param name="axis">The axis to average over (negative counts from the end); <c>null</c> averages every element.</param>
+        /// <param name="dtype">The dtype the sum is computed in and the mean returned in, or <c>null</c> for NumPy's default
+        ///     (float64 for bool / integer input, float32 summing a float16 input into a float16 result).</param>
+        /// <param name="out">The array the mean is written into and returned (the sum is stored into it and divided in place,
+        ///     with unsafe casts). Footgun: the THIRD positional parameter, as in NumPy, so write <c>keepdims: true</c> by
+        ///     name.</param>
+        /// <param name="keepdims">Keep the reduced axes as length-1 dimensions.</param>
+        /// <param name="where">A bool mask of the elements each output averages, or <c>null</c>.</param>
+        /// <returns><paramref name="out"/> itself when given; else a fresh array — 0-d (NumPy's read-only scalar) for a mean
+        ///     over every axis without <paramref name="keepdims"/>.</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
+        /// <exception cref="ValueError">A read-only or misshapen <paramref name="out"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array.</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="out"/> or <paramref name="where"/> does not broadcast.</exception>
+        /// <exception cref="TypeError">A C# scalar passed as <paramref name="out"/>; NumPy's text refusals.</exception>
+        /// <remarks>The member keeps the plain-array meaning for a numpy.matrix object reached through an
+        ///     <see cref="NDArray"/> reference.</remarks>
+        public NDArray mean(int? axis = null, DType dtype = null, NDArray @out = null, bool keepdims = false, NDArray @where = null)
+        {
+            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
+            return TensorEngine.ReduceMean(this, axis, keepdims, dtype, @out, @where);
+        }
     }
 }

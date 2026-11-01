@@ -21,15 +21,29 @@ namespace NumSharp.Backends
         /// <param name="out">NumPy's <c>out=</c>, an array of the result's shape, or null for a fresh result:
         /// <c>_mean</c> with an out (<see cref="MeanIntoOut"/>) — the sum stored into it, then divided in place, both with an
         /// unsafe cast.</param>
+        /// <param name="where">NumPy's <c>where=</c> mask, or null. A mask (anything but the C# <c>true</c> literal, NumPy's
+        /// <c>where=True</c>) takes <c>_mean</c>'s masked statements (<see cref="MeanWhereNumPy"/>): per-output counts, the
+        /// masked sum, the division.</param>
         /// <returns><paramref name="out"/> itself when given; otherwise the mean: a read-only 0-d scalar for a full reduction
         /// without keepdims, a fresh array else.</returns>
-        /// <exception cref="AxisError"><paramref name="axis_"/> is out of range (every axis is, for a 0-d input).</exception>
+        /// <exception cref="AxisError"><paramref name="axis_"/> is out of range (every axis is, for a 0-d input without a
+        /// mask).</exception>
         /// <exception cref="ValueError"><paramref name="out"/> is read-only or does not have the result's shape (the reduce
         /// prologue's texts).</exception>
-        /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not broadcast against the input.</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not broadcast against the input, or
+        /// <paramref name="where"/> does not broadcast to its shape.</exception>
+        /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array (NumPy's TypeError text).</exception>
         /// <exception cref="TypeError">Text NumPy's loop resolution refuses (a text out has no division loop).</exception>
-        public override NDArray ReduceMean(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null, NDArray @out = null)
+        public override NDArray ReduceMean(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null, NDArray @out = null,
+            NDArray @where = null)
         {
+            // where=: _mean's masked statements. NumPy tests `where is True`, so only the C# true literal is no mask; an
+            // explicit 0-d true array is a mask (the same values, ufunc.reduce's axis rule).
+            if (IsPythonTrueMask(@where))
+                @where = null;
+            if (@where is not null)
+                return MeanWhereNumPy(arr, axis_, keepdims, dtype, @out, @where);
+
             // out=: _mean with an out argument stores the SUM into out and divides out in place (MeanIntoOut), a route of its
             // own; the plain call below allocates its result.
             if (@out is not null)

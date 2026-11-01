@@ -182,7 +182,7 @@ namespace NumSharp.Tests.Logic
             r2.flags.owndata.Should().BeTrue();
             r2.ToArray<long>().Should().Equal(1L, 0L, 2L);
 
-            var s = np.sum(np.array(new[,] { { true, false }, { true, true } }), 1, true, np.int64);
+            var s = np.sum(np.array(new[,] { { true, false }, { true, true } }), 1, keepdims: true, dtype: np.int64);
             s.shape.Should().Equal(new long[] { 2, 1 });
             s.flags.owndata.Should().BeTrue();
             s.ToArray<long>().Should().Equal(1L, 2L);

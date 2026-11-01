@@ -1,5 +1,6 @@
 using System;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
 using NumSharp.Backends.Iteration;
@@ -245,10 +246,43 @@ namespace NumSharp.Backends
         private static double DoubleReduce(double acc, double* x, long stride, long n)
         {
             if (stride == 0)
-                return acc + PairwiseOfCopies(*x, n);
+                return AddRunSum(acc, PairwiseOfCopies(*x, n));
             var fold = ILKernelGenerator.TryGetPairwiseFoldDouble();
             double s = fold != null ? fold(x, n, stride) : ILKernelGenerator.PairwiseFold(x, n, stride);
-            return acc + s;
+            return AddRunSum(acc, s);
+        }
+
+        /// <summary>
+        ///     The last statement of DOUBLE_add's reduce form, <c>*out += pairwise_sum(run)</c>, as NumPy's win-amd64 build
+        ///     computes it: MSVC adds the out's value to the run's sum (<c>addsd sum, [out]</c>), so when both are NaN the
+        ///     RUN's NaN survives (probed 2.4.2: <c>np.sum([p2], initial=p1)</c> keeps p2's payload).
+        /// </summary>
+        /// <param name="acc">The out's running value.</param>
+        /// <param name="s">The run's pairwise sum.</param>
+        /// <returns><c>acc + s</c>, the run's NaN (quieted) when both are NaN.</returns>
+        /// <remarks>Explicit because RyuJIT may swap a commutative add's operands. The out's value is NaN only after an
+        ///     earlier call produced one, or with a NaN <c>initial=</c>; a running sum that starts at the identity never is.</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static double AddRunSum(double acc, double s)
+        {
+            double r = acc + s;
+            if (double.IsNaN(r) && double.IsNaN(s))
+                r = s + s;
+            return r;
+        }
+
+        /// <summary>FLOAT_add's last reduce statement (see <see cref="AddRunSum(double, double)"/>): the run's NaN survives
+        ///     when both are NaN.</summary>
+        /// <param name="acc">The out's running value.</param>
+        /// <param name="s">The run's pairwise sum (float32).</param>
+        /// <returns><c>acc + s</c> in float32, the run's NaN when both are NaN.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static float AddRunSum(float acc, float s)
+        {
+            float r = acc + s;
+            if (float.IsNaN(r) && float.IsNaN(s))
+                r = s + s;
+            return r;
         }
 
         /// <summary>
@@ -505,10 +539,10 @@ namespace NumSharp.Backends
         private static float SingleReduce(float acc, float* x, long stride, long n)
         {
             if (stride == 0)
-                return acc + PairwiseOfCopies(*x, n);
+                return AddRunSum(acc, PairwiseOfCopies(*x, n));
             var fold = ILKernelGenerator.TryGetPairwiseFoldSingle();
             float s = fold != null ? fold(x, n, stride) : ILKernelGenerator.PairwiseFold(x, n, stride);
-            return acc + s;
+            return AddRunSum(acc, s);
         }
 
         /// <summary>NumPy's <c>FLOAT_pairwise_sum</c> of <paramref name="n"/> copies of <paramref name="v"/> (see

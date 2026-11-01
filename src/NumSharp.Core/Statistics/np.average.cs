@@ -8,7 +8,7 @@ namespace NumSharp
         /// <summary>
         ///     Compute the weighted average along the specified axis.
         ///     Equivalent to <c>sum(a * weights) / sum(weights)</c>. When <paramref name="weights"/>
-        ///     is null this reduces to <see cref="mean(NDArray)"/> over the same axes.
+        ///     is null this reduces to <see cref="mean(NDArray, int?, DType, NDArray, bool, NDArray)"/> over the same axes.
         /// </summary>
         /// <param name="a">The values to average.</param>
         /// <param name="axis">The axis to average along (a negative axis counts from the end), or null for every axis.</param>

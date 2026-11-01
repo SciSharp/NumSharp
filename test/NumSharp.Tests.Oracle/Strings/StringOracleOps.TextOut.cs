@@ -72,8 +72,8 @@ namespace NumSharp.Tests.Strings
                 case "cumprod": return np.cumprod(a, axis, dt, @out);
                 case "nancumsum": return np.nancumsum(a, axis, dt, @out);
                 case "nancumprod": return np.nancumprod(a, axis, dt, @out);
-                case "sum": return np.sum(a, axis, keepdims, dt);
-                case "prod": return np.prod(a, axis, dt, keepdims);
+                case "sum": return np.sum(a, axis, keepdims: keepdims, dtype: dt);
+                case "prod": return np.prod(a, axis, dt, keepdims: keepdims);
                 case "median": return np.median(a, axis, @out, false, keepdims);
                 case "nanmedian": return np.nanmedian(a, axis, @out, false, keepdims);
                 // An absent initial= / where= is NumPy's no-initial / where=True.
@@ -94,12 +94,12 @@ namespace NumSharp.Tests.Strings
                 case "mean":
                     // NumSharp's np.mean takes dtype= with an explicit axis (the generator always gives one with a request).
                     if (dt is not null)
-                        return np.mean(a, axis ?? throw new InvalidOperationException("np.mean's dtype= needs an axis"), dt, keepdims);
-                    return axis is { } m ? np.mean(a, m, keepdims) : np.mean(a, keepdims);
+                        return np.mean(a, axis ?? throw new InvalidOperationException("np.mean's dtype= needs an axis"), dt, keepdims: keepdims);
+                    return axis is { } m ? np.mean(a, m, keepdims: keepdims) : np.mean(a, keepdims: keepdims);
                 case "var":
-                    return axis is { } v ? np.var(a, v, keepdims, ddof, dt) : np.var(a, keepdims, ddof, dt);
+                    return axis is { } v ? np.var(a, v, dt, ddof: ddof ?? 0, keepdims: keepdims) : np.var(a, dtype: dt, ddof: ddof ?? 0, keepdims: keepdims);
                 case "std":
-                    return axis is { } s ? np.std(a, s, keepdims, ddof, dt) : np.std(a, keepdims, ddof, dt);
+                    return axis is { } s ? np.std(a, s, dt, ddof: ddof ?? 0, keepdims: keepdims) : np.std(a, dtype: dt, ddof: ddof ?? 0, keepdims: keepdims);
                 case "nanmean": return np.nanmean(a, axis, keepdims, dt);
                 case "nanvar": return np.nanvar(a, axis, keepdims, ddof ?? 0, dt);
                 case "nanstd": return np.nanstd(a, axis, keepdims, ddof ?? 0, dt);

@@ -56,16 +56,24 @@ namespace NumSharp.Tests.Backends
                 return base.Sqrt(nd, dtype, @out, where);
             }
 
-            /// <summary>Counts the call, then sums as the built-in engine does.</summary>
-            /// <param name="nd">The operand.</param>
-            /// <param name="axis">The axis, or null for every axis.</param>
-            /// <param name="dtype">The accumulator dtype, or null.</param>
+            /// <summary>
+            ///     Counts the call, then sums as the built-in engine does. <see cref="TensorEngine.ReduceAdd"/> is np.sum's
+            ///     whole call (np.sum and ndarray.sum call it since the np-layer dtype plan's P10 item 1; the shipped
+            ///     <see cref="TensorEngine.Sum"/> no longer sees them).
+            /// </summary>
+            /// <param name="arr">The operand.</param>
+            /// <param name="axis_">The axis, or null for every axis.</param>
             /// <param name="keepdims">Whether the reduced axis stays with length one.</param>
+            /// <param name="dtype">The accumulator dtype, or null.</param>
+            /// <param name="out">The output, or null.</param>
+            /// <param name="initial">The start value, or null.</param>
+            /// <param name="where">The mask, or null.</param>
             /// <returns>The sum.</returns>
-            public override NDArray Sum(NDArray nd, int? axis = null, DType dtype = null, bool keepdims = false)
+            public override NDArray ReduceAdd(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null, NDArray @out = null,
+                object initial = null, NDArray @where = null)
             {
                 Sums++;
-                return base.Sum(nd, axis, dtype, keepdims);
+                return base.ReduceAdd(arr, axis_, keepdims, dtype, @out, initial, @where);
             }
         }
 

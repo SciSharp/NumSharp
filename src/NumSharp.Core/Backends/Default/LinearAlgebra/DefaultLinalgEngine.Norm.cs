@@ -530,7 +530,7 @@ namespace NumSharp.Backends
 
         /// <summary>
         ///     NumPy's <c>add.reduce</c> over two axes of a C-contiguous array of squares, in the order its reduction
-        ///     iterator adds them, built from one-axis sums - the member <see cref="np.sum(NDArray, int)"/> dispatches to
+        ///     iterator adds them, built from one-axis sums - the member <see cref="np.sum(NDArray, int?, DType, NDArray, bool, object, NDArray)"/> dispatches to
         ///     (each NumPy's own add.reduce over one axis, bit for bit).
         /// </summary>
         /// <param name="s">The squares: C-contiguous, non-empty, a float dtype or decimal.</param>

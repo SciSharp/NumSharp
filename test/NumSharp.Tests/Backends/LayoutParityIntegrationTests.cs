@@ -446,7 +446,7 @@ namespace NumSharp.Tests.Backends
             var scalars = new (string name, NDArray r)[]
             {
                 ("sum_empty_ax", np.sum(empty, -1)), ("sum_empty_int_ax", np.sum(emptyInt, 0)),
-                ("sum_empty_dtype", np.sum(empty, 0, false, np.int64)), ("prod_empty_ax", np.prod(empty, -1)),
+                ("sum_empty_dtype", np.sum(empty, 0, keepdims: false, dtype: np.int64)), ("prod_empty_ax", np.prod(empty, -1)),
                 ("mean_empty_ax", np.mean(empty, -1)), ("nanmean_empty_int_ax", np.nanmean(emptyInt, -1)),
                 ("count_nonzero_empty_ax", np.count_nonzero(empty, -1)),
                 ("count_nonzero_0d", np.count_nonzero(np.array(5), 0)),
@@ -477,7 +477,7 @@ namespace NumSharp.Tests.Backends
                          ("count_nonzero_empty_keepdims", np.count_nonzero(empty, 0, true)),
                          ("count_nonzero_0x3", np.count_nonzero(np.zeros(new Shape(0L, 3L)), 0)),
                          ("sum_0x3", np.sum(np.zeros(new Shape(0L, 3L)), 0)),
-                         ("sum_empty_keepdims", np.sum(empty, 0, true)),
+                         ("sum_empty_keepdims", np.sum(empty, 0, keepdims: true)),
                          ("nansum_keepdims", np.nansum(np.array(new[] { 1.0, double.NaN }), 0, true)),
                          ("nansum_2x3", np.nansum(np.ones(new Shape(2L, 3L)), 0)),
                      })
@@ -528,13 +528,13 @@ namespace NumSharp.Tests.Backends
         public void ReductionScalars_KeepdimsArrays_StayWriteable()
         {
             var a = np.arange(12).astype(NPTypeCode.Int64).reshape(3, 4);
-            var kd = np.sum(a, true);
+            var kd = np.sum(a, keepdims: true);
             kd.ndim.Should().Be(2);
             kd.flags.writeable.Should().BeTrue("keepdims yields an ARRAY, not a scalar");
             kd.SetAtIndex(1L, 0);
             kd.GetInt64(0, 0).Should().Be(1L);
 
-            np.sum(NDArray.Scalar(5L), true).flags.writeable
+            np.sum(NDArray.Scalar(5L), keepdims: true).flags.writeable
                 .Should().BeFalse("keepdims over a 0-d input is STILL NumPy's scalar (probed 2.4.2)");
         }
 

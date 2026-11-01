@@ -28,13 +28,21 @@ namespace NumSharp.Backends
         /// loop is <paramref name="dtype"/>, else <c>promote_types(out.dtype, arr.dtype)</c> WITHOUT the NEP 50 widening (an
         /// int8 sum into a bool out wraps in int8 and stores False for [100, 100, 56]; a float32 sum into a float64 out adds
         /// in float64), and the result reaches it with an unsafe cast (see the remarks for the one residual).</param>
+        /// <param name="initial">NumPy's <c>initial=</c>: the start value of every output instead of the identity, or null.
+        /// With it (or with <paramref name="where"/>) the call is PyUFunc_ReduceWrapper's keyword path
+        /// (<see cref="AddMulNumPy"/>).</param>
+        /// <param name="where">NumPy's <c>where=</c> mask of the elements to add, or null (a 0-d true mask is no mask).</param>
         /// <returns>The sum: a read-only 0-d scalar for a full reduction without keepdims, otherwise a fresh array (or
         /// <paramref name="out"/>).</returns>
         /// <exception cref="AxisError"><paramref name="axis_"/> is out of range for <paramref name="arr"/>'s rank.</exception>
         /// <exception cref="ValueError"><paramref name="out"/> is read-only, or has the wrong rank or a length that cannot hold
-        /// the result (the reduce prologue's texts).</exception>
-        /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not broadcast against the input (NumPy's
-        /// "remapped shapes" text).</exception>
+        /// the result (the reduce prologue's texts); an <paramref name="initial"/> the loop cannot hold.</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="out"/> or <paramref name="where"/> does not broadcast
+        /// against the input (NumPy's "remapped shapes" text).</exception>
+        /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array (NumPy's TypeError text).</exception>
+        /// <exception cref="OverflowException">An integer <paramref name="initial"/> past the loop's range.</exception>
+        /// <exception cref="TypeError">A C# scalar as <paramref name="out"/>, a complex <paramref name="initial"/> for a real
+        /// loop, or NumPy's text refusals.</exception>
         /// <remarks>
         ///     <para>
         ///     The loop dtype decides the arithmetic, so three dtype relations are told apart before anything is summed:
@@ -55,8 +63,17 @@ namespace NumSharp.Backends
         ///     where this route rounds into out once.
         ///     </para>
         /// </remarks>
-        public override NDArray ReduceAdd(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null, NDArray @out = null)
+        public override NDArray ReduceAdd(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null, NDArray @out = null,
+            object initial = null, NDArray @where = null)
         {
+            // initial= / where=: PyUFunc_ReduceWrapper's statements through NumPy's reduction iterator (AddMulNumPy) — the
+            // start value replaced, the masked runs. Python's where=True (a 0-d true mask) is no mask, and add has an
+            // identity, so such a call is the plain call below.
+            if (IsTrueScalarMask(@where))
+                @where = null;
+            if (initial is not null || @where is not null)
+                return AddMulNumPy(arr, axis_, keepdims, dtype, @out, initial, @where, multiply: false);
+
             // out=: add.reduce with an out operand (ReduceIntoOut) — the text routes into out, the reduce prologue on
             // (out, arr), the loop promote_types(out, arr) when dtype= is null (NumPy adds no NEP 50 widening once out is
             // given), the unsafe store. It computes the sum through this method again without out, so every route below

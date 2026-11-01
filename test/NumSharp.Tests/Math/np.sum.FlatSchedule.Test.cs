@@ -128,9 +128,9 @@ namespace NumSharp.Tests.Math
             var fails = new List<string>();
             const string f32 = "float32 () 6233ce6c";
             Check(fails, "sum float64 1-D axis 0 dtype=float32", () => np.sum(Ramp(20000, np.float64), 0, np.float32), f32);
-            Check(fails, "sum float64 1-D axis -1 keepdims dtype=float32", () => np.sum(Ramp(20000, np.float64), -1, true, np.float32), "float32 (1,) 6233ce6c");
+            Check(fails, "sum float64 1-D axis -1 keepdims dtype=float32", () => np.sum(Ramp(20000, np.float64), -1, keepdims: true, dtype: np.float32), "float32 (1,) 6233ce6c");
             Check(fails, "sum float64 (n,1) axis 0 dtype=float32", () => np.sum(Ramp(20000, np.float64).reshape(20000, 1), 0, np.float32), "float32 (1,) 6233ce6c");
-            Check(fails, "sum float64 (1,n) axis 1 keepdims dtype=float32", () => np.sum(Ramp(20000, np.float64).reshape(1, 20000), 1, true, np.float32), "float32 (1,1) 6233ce6c");
+            Check(fails, "sum float64 (1,n) axis 1 keepdims dtype=float32", () => np.sum(Ramp(20000, np.float64).reshape(1, 20000), 1, keepdims: true, dtype: np.float32), "float32 (1,1) 6233ce6c");
             Check(fails, "sum float64 (1,n,1) axis -2 dtype=float32", () => np.sum(Ramp(20000, np.float64).reshape(1, 20000, 1), -2, np.float32), "float32 (1,1) 6233ce6c");
             Check(fails, "sum float64 [::2] axis 0 dtype=float32", () => np.sum(Ramp(40000, np.float64)["::2"], 0, np.float32), "float32 () e0235140");
             Check(fails, "sum float64 reversed axis 0 dtype=float32", () => np.sum(Ramp(30000, np.float64)["::-1"], 0, np.float32), "float32 () e293ec22");
@@ -185,7 +185,7 @@ namespace NumSharp.Tests.Math
             Check(fails, "sum float16 transposed (200,200)", () => np.sum(Ramp(40000, np.float16).reshape(200, 200).T), "float16 () 659b");
             Check(fails, "sum float16 F-order (30,40,50)", () => np.sum(Ramp(60000, np.float16).reshape(50, 40, 30).T), "float16 () 5e3c");
             Check(fails, "sum float16 reversed both axes", () => np.sum(Ramp(60000, np.float16).reshape(300, 200)["::-1, ::-1"]), "float16 () 5e3c");
-            Check(fails, "sum float64 transposed (200,200) keepdims", () => np.sum(Ramp(40000, np.float64).reshape(200, 200).T, true), "float64 (1,1) c4353025d7bfce14");
+            Check(fails, "sum float64 transposed (200,200) keepdims", () => np.sum(Ramp(40000, np.float64).reshape(200, 200).T, keepdims: true), "float64 (1,1) c4353025d7bfce14");
             AssertNoMismatch(fails, "a single run is one pairwise call added to the +0.0 identity");
         }
 
@@ -223,7 +223,7 @@ namespace NumSharp.Tests.Math
             Check(fails, "sum float16 3-D blocks (100,30,5)[...,:4]", () => np.sum(Ramp(15000, np.float16).reshape(100, 30, 5)[":, :, :4"]), "float16 () 66ef");
             Check(fails, "sum float16 4-D outer blocks (7,100,30,5)[...,:4]", () => np.sum(Ramp(105000, np.float16).reshape(7, 100, 30, 5)["..., :4"]), "float16 () 64bb");
             Check(fails, "sum float16 reversed runs (300,200)[:,::-1]", () => np.sum(Ramp(60000, np.float16).reshape(300, 200)[":, ::-1"]), "float16 () 5e40");
-            Check(fails, "sum float16 rows of 100 (400,100)[::2] keepdims", () => np.sum(Ramp(40000, np.float16).reshape(400, 100)["::2"], true), "float16 (1,1) 67aa");
+            Check(fails, "sum float16 rows of 100 (400,100)[::2] keepdims", () => np.sum(Ramp(40000, np.float16).reshape(400, 100)["::2"], keepdims: true), "float16 (1,1) 67aa");
             AssertNoMismatch(fails, "short runs are reduced one buffer fill at a time");
         }
 
@@ -259,45 +259,45 @@ namespace NumSharp.Tests.Math
         {
             var fails = new List<string>();
             // float32 -> float64
-            Check(fails, "sum float32->float64 contiguous 20000", () => np.sum(Ramp(20000, np.float32), np.float64), "float64 () 426a98b40852fbf0");
-            Check(fails, "sum float32->float64 strided [::2]", () => np.sum(Ramp(40000, np.float32)["::2"], np.float64), "float64 () c264dc7c9944bb9f");
-            Check(fails, "sum float32->float64 rows of 100 (400,100)[::2]", () => np.sum(Ramp(40000, np.float32).reshape(400, 100)["::2"], np.float64), "float64 () c25a4eb2c2819eac");
-            Check(fails, "sum float32->float64 runs of 9000 (3,9000)[:2]", () => np.sum(Ramp(27000, np.float32).reshape(3, 9000)[":2"], np.float64), "float64 () 425e16421ed6c638");
+            Check(fails, "sum float32->float64 contiguous 20000", () => np.sum(Ramp(20000, np.float32), dtype: np.float64), "float64 () 426a98b40852fbf0");
+            Check(fails, "sum float32->float64 strided [::2]", () => np.sum(Ramp(40000, np.float32)["::2"], dtype: np.float64), "float64 () c264dc7c9944bb9f");
+            Check(fails, "sum float32->float64 rows of 100 (400,100)[::2]", () => np.sum(Ramp(40000, np.float32).reshape(400, 100)["::2"], dtype: np.float64), "float64 () c25a4eb2c2819eac");
+            Check(fails, "sum float32->float64 runs of 9000 (3,9000)[:2]", () => np.sum(Ramp(27000, np.float32).reshape(3, 9000)[":2"], dtype: np.float64), "float64 () 425e16421ed6c638");
             // float64 -> float32
-            Check(fails, "sum float64->float32 contiguous 20000", () => np.sum(Ramp(20000, np.float64), np.float32), "float32 () 6233ce6c");
-            Check(fails, "sum float64->float32 strided [::2]", () => np.sum(Ramp(40000, np.float64)["::2"], np.float32), "float32 () e0235140");
-            Check(fails, "sum float64->float32 rows of 100 (400,100)[::2]", () => np.sum(Ramp(40000, np.float64).reshape(400, 100)["::2"], np.float32), "float32 () 6310c916");
-            Check(fails, "sum float64->float32 runs of 9000 (3,9000)[:2]", () => np.sum(Ramp(27000, np.float64).reshape(3, 9000)[":2"], np.float32), "float32 () 60b508c0");
+            Check(fails, "sum float64->float32 contiguous 20000", () => np.sum(Ramp(20000, np.float64), dtype: np.float32), "float32 () 6233ce6c");
+            Check(fails, "sum float64->float32 strided [::2]", () => np.sum(Ramp(40000, np.float64)["::2"], dtype: np.float32), "float32 () e0235140");
+            Check(fails, "sum float64->float32 rows of 100 (400,100)[::2]", () => np.sum(Ramp(40000, np.float64).reshape(400, 100)["::2"], dtype: np.float32), "float32 () 6310c916");
+            Check(fails, "sum float64->float32 runs of 9000 (3,9000)[:2]", () => np.sum(Ramp(27000, np.float64).reshape(3, 9000)[":2"], dtype: np.float32), "float32 () 60b508c0");
             // float64 -> float16
-            Check(fails, "sum float64->float16 contiguous 20000", () => np.sum(SmallRamp(20000, np.float64), np.float16), "float16 () 62b2");
-            Check(fails, "sum float64->float16 strided [::2]", () => np.sum(SmallRamp(40000, np.float64)["::2"], np.float16), "float16 () d923");
-            Check(fails, "sum float64->float16 rows of 100 (400,100)[::2]", () => np.sum(SmallRamp(40000, np.float64).reshape(400, 100)["::2"], np.float16), "float16 () 67aa");
-            Check(fails, "sum float64->float16 runs of 9000 (3,9000)[:2]", () => np.sum(SmallRamp(27000, np.float64).reshape(3, 9000)[":2"], np.float16), "float16 () 63b6");
+            Check(fails, "sum float64->float16 contiguous 20000", () => np.sum(SmallRamp(20000, np.float64), dtype: np.float16), "float16 () 62b2");
+            Check(fails, "sum float64->float16 strided [::2]", () => np.sum(SmallRamp(40000, np.float64)["::2"], dtype: np.float16), "float16 () d923");
+            Check(fails, "sum float64->float16 rows of 100 (400,100)[::2]", () => np.sum(SmallRamp(40000, np.float64).reshape(400, 100)["::2"], dtype: np.float16), "float16 () 67aa");
+            Check(fails, "sum float64->float16 runs of 9000 (3,9000)[:2]", () => np.sum(SmallRamp(27000, np.float64).reshape(3, 9000)[":2"], dtype: np.float16), "float16 () 63b6");
             // float16 -> float32
-            Check(fails, "sum float16->float32 contiguous 20000", () => np.sum(Ramp(20000, np.float16), np.float32), "float32 () 44563800");
-            Check(fails, "sum float16->float32 strided [::2]", () => np.sum(Ramp(40000, np.float16)["::2"], np.float32), "float32 () c324c000");
-            Check(fails, "sum float16->float32 rows of 100 (400,100)[::2]", () => np.sum(Ramp(40000, np.float16).reshape(400, 100)["::2"], np.float32), "float32 () 44f54000");
-            Check(fails, "sum float16->float32 runs of 9000 (3,9000)[:2]", () => np.sum(Ramp(27000, np.float16).reshape(3, 9000)[":2"], np.float32), "float32 () 4476c000");
+            Check(fails, "sum float16->float32 contiguous 20000", () => np.sum(Ramp(20000, np.float16), dtype: np.float32), "float32 () 44563800");
+            Check(fails, "sum float16->float32 strided [::2]", () => np.sum(Ramp(40000, np.float16)["::2"], dtype: np.float32), "float32 () c324c000");
+            Check(fails, "sum float16->float32 rows of 100 (400,100)[::2]", () => np.sum(Ramp(40000, np.float16).reshape(400, 100)["::2"], dtype: np.float32), "float32 () 44f54000");
+            Check(fails, "sum float16->float32 runs of 9000 (3,9000)[:2]", () => np.sum(Ramp(27000, np.float16).reshape(3, 9000)[":2"], dtype: np.float32), "float32 () 4476c000");
             // int32 -> float64
-            Check(fails, "sum int32->float64 contiguous 20000", () => np.sum(Ramp(20000, np.int32), np.float64), "float64 () 40b4cd0000000000");
-            Check(fails, "sum int32->float64 strided [::2]", () => np.sum(Ramp(40000, np.int32)["::2"], np.float64), "float64 () 4084500000000000");
-            Check(fails, "sum int32->float64 rows of 100 (400,100)[::2]", () => np.sum(Ramp(40000, np.int32).reshape(400, 100)["::2"], np.float64), "float64 () c0ec0b2000000000");
-            Check(fails, "sum int32->float64 runs of 9000 (3,9000)[:2]", () => np.sum(Ramp(27000, np.int32).reshape(3, 9000)[":2"], np.float64), "float64 () 40b4370000000000");
+            Check(fails, "sum int32->float64 contiguous 20000", () => np.sum(Ramp(20000, np.int32), dtype: np.float64), "float64 () 40b4cd0000000000");
+            Check(fails, "sum int32->float64 strided [::2]", () => np.sum(Ramp(40000, np.int32)["::2"], dtype: np.float64), "float64 () 4084500000000000");
+            Check(fails, "sum int32->float64 rows of 100 (400,100)[::2]", () => np.sum(Ramp(40000, np.int32).reshape(400, 100)["::2"], dtype: np.float64), "float64 () c0ec0b2000000000");
+            Check(fails, "sum int32->float64 runs of 9000 (3,9000)[:2]", () => np.sum(Ramp(27000, np.int32).reshape(3, 9000)[":2"], dtype: np.float64), "float64 () 40b4370000000000");
             // complex128 -> float64
-            Check(fails, "sum complex128->float64 contiguous 20000", () => np.sum(Ramp(20000, np.complex128), np.float64), "float64 () 444679cd12d6ca8a");
-            Check(fails, "sum complex128->float64 strided [::2]", () => np.sum(Ramp(40000, np.complex128)["::2"], np.float64), "float64 () c4046a264d66b040");
-            Check(fails, "sum complex128->float64 rows of 100 (400,100)[::2]", () => np.sum(Ramp(40000, np.complex128).reshape(400, 100)["::2"], np.float64), "float64 () 44621922fb4cc22a");
-            Check(fails, "sum complex128->float64 runs of 9000 (3,9000)[:2]", () => np.sum(Ramp(27000, np.complex128).reshape(3, 9000)[":2"], np.float64), "float64 () 4416a11335210210");
+            Check(fails, "sum complex128->float64 contiguous 20000", () => np.sum(Ramp(20000, np.complex128), dtype: np.float64), "float64 () 444679cd12d6ca8a");
+            Check(fails, "sum complex128->float64 strided [::2]", () => np.sum(Ramp(40000, np.complex128)["::2"], dtype: np.float64), "float64 () c4046a264d66b040");
+            Check(fails, "sum complex128->float64 rows of 100 (400,100)[::2]", () => np.sum(Ramp(40000, np.complex128).reshape(400, 100)["::2"], dtype: np.float64), "float64 () 44621922fb4cc22a");
+            Check(fails, "sum complex128->float64 runs of 9000 (3,9000)[:2]", () => np.sum(Ramp(27000, np.complex128).reshape(3, 9000)[":2"], dtype: np.float64), "float64 () 4416a11335210210");
             // float64 -> complex128
-            Check(fails, "sum float64->complex128 contiguous 20000", () => np.sum(Ramp(20000, np.float64), np.complex128), "complex128 () 444679cd12d6ca8e 0000000000000000");
-            Check(fails, "sum float64->complex128 strided [::2]", () => np.sum(Ramp(40000, np.float64)["::2"], np.complex128), "complex128 () c4046a264d66b0a0 0000000000000000");
-            Check(fails, "sum float64->complex128 rows of 100 (400,100)[::2]", () => np.sum(Ramp(40000, np.float64).reshape(400, 100)["::2"], np.complex128), "complex128 () 44621922fb4cc22c 0000000000000000");
-            Check(fails, "sum float64->complex128 runs of 9000 (3,9000)[:2]", () => np.sum(Ramp(27000, np.float64).reshape(3, 9000)[":2"], np.complex128), "complex128 () 4416a11335210220 0000000000000000");
+            Check(fails, "sum float64->complex128 contiguous 20000", () => np.sum(Ramp(20000, np.float64), dtype: np.complex128), "complex128 () 444679cd12d6ca8e 0000000000000000");
+            Check(fails, "sum float64->complex128 strided [::2]", () => np.sum(Ramp(40000, np.float64)["::2"], dtype: np.complex128), "complex128 () c4046a264d66b0a0 0000000000000000");
+            Check(fails, "sum float64->complex128 rows of 100 (400,100)[::2]", () => np.sum(Ramp(40000, np.float64).reshape(400, 100)["::2"], dtype: np.complex128), "complex128 () 44621922fb4cc22c 0000000000000000");
+            Check(fails, "sum float64->complex128 runs of 9000 (3,9000)[:2]", () => np.sum(Ramp(27000, np.float64).reshape(3, 9000)[":2"], dtype: np.complex128), "complex128 () 4416a11335210220 0000000000000000");
             // bool -> float16
-            Check(fails, "sum bool->float16 contiguous 20000", () => np.sum(Ramp(20000, np.@bool), np.float16), "float16 () 6e82");
-            Check(fails, "sum bool->float16 strided [::2]", () => np.sum(Ramp(40000, np.@bool)["::2"], np.float16), "float16 () 6e84");
-            Check(fails, "sum bool->float16 rows of 100 (400,100)[::2]", () => np.sum(Ramp(40000, np.@bool).reshape(400, 100)["::2"], np.float16), "float16 () 6e83");
-            Check(fails, "sum bool->float16 runs of 9000 (3,9000)[:2]", () => np.sum(Ramp(27000, np.@bool).reshape(3, 9000)[":2"], np.float16), "float16 () 6ddc");
+            Check(fails, "sum bool->float16 contiguous 20000", () => np.sum(Ramp(20000, np.@bool), dtype: np.float16), "float16 () 6e82");
+            Check(fails, "sum bool->float16 strided [::2]", () => np.sum(Ramp(40000, np.@bool)["::2"], dtype: np.float16), "float16 () 6e84");
+            Check(fails, "sum bool->float16 rows of 100 (400,100)[::2]", () => np.sum(Ramp(40000, np.@bool).reshape(400, 100)["::2"], dtype: np.float16), "float16 () 6e83");
+            Check(fails, "sum bool->float16 runs of 9000 (3,9000)[:2]", () => np.sum(Ramp(27000, np.@bool).reshape(3, 9000)[":2"], dtype: np.float16), "float16 () 6ddc");
             AssertNoMismatch(fails, "a cast operand is reduced one buffer fill at a time, in the loop dtype");
         }
 
@@ -320,14 +320,14 @@ namespace NumSharp.Tests.Math
                 Check(fails, "bufsize 16 sum float16 short runs (24,16)[:,:5]", () => np.sum(Ramp(384, np.float16).reshape(24, 16)[":, :5"]), "float16 () 65f6");
                 Check(fails, "bufsize 16 sum float16 long runs (6,40)[:,:33]", () => np.sum(Ramp(240, np.float16).reshape(6, 40)[":, :33"]), "float16 () 66d0");
                 Check(fails, "bufsize 16 sum float16 3-D blocks (9,7,6)[...,:4]", () => np.sum(Ramp(378, np.float16).reshape(9, 7, 6)[":, :, :4"]), "float16 () 637c");
-                Check(fails, "bufsize 16 sum float32->float64 one run 83", () => np.sum(Ramp(83, np.float32), np.float64), "float64 () 426bbb97f7e457b4");
-                Check(fails, "bufsize 16 sum float32->float64 short runs (24,16)[:,:5]", () => np.sum(Ramp(384, np.float32).reshape(24, 16)[":, :5"], np.float64), "float64 () 4241f2368df7c1f9");
-                Check(fails, "bufsize 16 sum float32->float64 long runs (6,40)[:,:33]", () => np.sum(Ramp(240, np.float32).reshape(6, 40)[":, :33"], np.float64), "float64 () 4279423a1fbea0f3");
-                Check(fails, "bufsize 16 sum float32->float64 3-D blocks (9,7,6)[...,:4]", () => np.sum(Ramp(378, np.float32).reshape(9, 7, 6)[":, :, :4"], np.float64), "float64 () 42634f6a70c8515a");
-                Check(fails, "bufsize 16 sum int32->float64 one run 83", () => np.sum(Ramp(83, np.int32), np.float64), "float64 () 40aeba0000000000");
-                Check(fails, "bufsize 16 sum int32->float64 short runs (24,16)[:,:5]", () => np.sum(Ramp(384, np.int32).reshape(24, 16)[":, :5"], np.float64), "float64 () c0a1220000000000");
-                Check(fails, "bufsize 16 sum int32->float64 long runs (6,40)[:,:33]", () => np.sum(Ramp(240, np.int32).reshape(6, 40)[":, :33"], np.float64), "float64 () c092d80000000000");
-                Check(fails, "bufsize 16 sum int32->float64 3-D blocks (9,7,6)[...,:4]", () => np.sum(Ramp(378, np.int32).reshape(9, 7, 6)[":, :, :4"], np.float64), "float64 () 409d700000000000");
+                Check(fails, "bufsize 16 sum float32->float64 one run 83", () => np.sum(Ramp(83, np.float32), dtype: np.float64), "float64 () 426bbb97f7e457b4");
+                Check(fails, "bufsize 16 sum float32->float64 short runs (24,16)[:,:5]", () => np.sum(Ramp(384, np.float32).reshape(24, 16)[":, :5"], dtype: np.float64), "float64 () 4241f2368df7c1f9");
+                Check(fails, "bufsize 16 sum float32->float64 long runs (6,40)[:,:33]", () => np.sum(Ramp(240, np.float32).reshape(6, 40)[":, :33"], dtype: np.float64), "float64 () 4279423a1fbea0f3");
+                Check(fails, "bufsize 16 sum float32->float64 3-D blocks (9,7,6)[...,:4]", () => np.sum(Ramp(378, np.float32).reshape(9, 7, 6)[":, :, :4"], dtype: np.float64), "float64 () 42634f6a70c8515a");
+                Check(fails, "bufsize 16 sum int32->float64 one run 83", () => np.sum(Ramp(83, np.int32), dtype: np.float64), "float64 () 40aeba0000000000");
+                Check(fails, "bufsize 16 sum int32->float64 short runs (24,16)[:,:5]", () => np.sum(Ramp(384, np.int32).reshape(24, 16)[":, :5"], dtype: np.float64), "float64 () c0a1220000000000");
+                Check(fails, "bufsize 16 sum int32->float64 long runs (6,40)[:,:33]", () => np.sum(Ramp(240, np.int32).reshape(6, 40)[":, :33"], dtype: np.float64), "float64 () c092d80000000000");
+                Check(fails, "bufsize 16 sum int32->float64 3-D blocks (9,7,6)[...,:4]", () => np.sum(Ramp(378, np.int32).reshape(9, 7, 6)[":, :, :4"], dtype: np.float64), "float64 () 409d700000000000");
                 Check(fails, "bufsize 16 mean float16 one run 83", () => np.mean(Ramp(83, np.float16)), "float16 () 3869");
                 Check(fails, "bufsize 16 mean float16 short runs (24,16)[:,:5]", () => np.mean(Ramp(384, np.float16).reshape(24, 16)[":, :5"]), "float16 () 4a5a");
                 Check(fails, "bufsize 16 mean float16 long runs (6,40)[:,:33]", () => np.mean(Ramp(240, np.float16).reshape(6, 40)[":, :33"]), "float16 () 4867");

@@ -1389,7 +1389,7 @@ namespace NumSharp.Tests.Fuzz
             ["specials.jsonl"] = 1920,
             ["stat.jsonl"] = 3412,
             ["clip_ufunc.jsonl"] = 2100,   // np.clip as a ufunc call: 2,302 at delivery (broadcast bounds, out=, where=, overlap, the float loop choice, errors)
-            ["reduce_kwargs.jsonl"] = 4500, // the reductions' keyword surface: 4,752 at delivery (np.all / np.any)
+            ["reduce_kwargs.jsonl"] = 16000, // the reductions' keyword surface: 4,752 at delivery (np.all / np.any), 16,444 with np.sum / np.prod / np.mean / np.var / np.std (np-layer dtype plan P10 item 1)
             ["minmax_kwargs.jsonl"] = 35000, // the max / min family with out= / initial= / where= (2026-10-05, plan api-parameter-parity A4): 35,689 at delivery, sections A / M / O / V / V2 / F / P / E / X / L / K / R / W + the char proxy weave
             ["clip_pyint.jsonl"] = 3900,   // np.clip with Python-int bounds: 4,175 at delivery (8 integer dtypes + Char x bound pairs x 12 layouts, the dtype=/out= rows, bool/float/complex)
             ["tail.jsonl"] = 1872,

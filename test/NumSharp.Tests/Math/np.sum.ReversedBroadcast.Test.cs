@@ -84,7 +84,7 @@ namespace NumSharp.Tests.Math
             Check(fails, "sum f16 (3,1)->(3,7) axis1", () => np.sum(h, 1), "float16 (3,) 4940 508d cce7");
             var row = np.broadcast_to(np.array(new[] { 257711264, 906851054, -438111839, -971706796, 1928501897, 1173551007, -1835420885, 201676561, -1955788270 })
                                         .reshape(1, 9), new Shape(4, 9));
-            Check(fails, "sum i32 (1,9)->(4,9) axis1 dtype=f32", () => np.sum(row, 1, false, np.float32),
+            Check(fails, "sum i32 (1,9)->(4,9) axis1 dtype=f32", () => np.sum(row, 1, keepdims: false, dtype: np.float32),
                   "float32 (4,) ce2eb2aa ce2eb2aa ce2eb2aa ce2eb2aa");
             AssertNoMismatch(fails, "NumPy adds a broadcast operand along an axis in its iterator's call schedule");
         }

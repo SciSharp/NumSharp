@@ -19,16 +19,35 @@ namespace NumSharp.Backends
         /// <param name="out">NumPy's <c>out=</c>, an array of the result's shape, or null for a fresh result: NumPy's
         ///     <c>multiply.reduce</c> with an out operand (<see cref="ReduceIntoOut"/>) — the text routes, the reduce
         ///     prologue, the out= loop rule, the unsafe store.</param>
+        /// <param name="initial">NumPy's <c>initial=</c>: the start value of every output instead of the identity 1, or null.
+        ///     With it (or with <paramref name="where"/>) the call is PyUFunc_ReduceWrapper's keyword path
+        ///     (<see cref="AddMulNumPy"/>): NumPy's sequential multiply loop, which can differ in the last bit of a float
+        ///     product from this call's own flat loop (NL3).</param>
+        /// <param name="where">NumPy's <c>where=</c> mask of the elements to multiply, or null (a 0-d true mask is no
+        ///     mask).</param>
         /// <returns><paramref name="out"/> itself when given; otherwise the product (a read-only 0-d scalar for a full
         ///     reduction).</returns>
         /// <exception cref="AxisError"><paramref name="axis_"/> is out of range — checked before any shortcut.</exception>
         /// <exception cref="TypeError">Text, or a string <paramref name="dtype"/>: NumPy's refusal (its verbatim text; no
-        ///     multiply loop reduces text into itself).</exception>
-        /// <exception cref="ValueError">A numeric <paramref name="dtype"/> over text that does not parse as that number, or
-        ///     a read-only / misshapen <paramref name="out"/> (the reduce prologue's texts).</exception>
-        /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not broadcast against the input.</exception>
-        public override NDArray ReduceProduct(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null, NDArray @out = null)
+        ///     multiply loop reduces text into itself); a C# scalar as <paramref name="out"/>; a complex
+        ///     <paramref name="initial"/> for a real loop.</exception>
+        /// <exception cref="ValueError">A numeric <paramref name="dtype"/> over text that does not parse as that number, a
+        ///     read-only / misshapen <paramref name="out"/> (the reduce prologue's texts), or an <paramref name="initial"/>
+        ///     the loop cannot hold.</exception>
+        /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array (NumPy's TypeError text).</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="out"/> or <paramref name="where"/> does not broadcast
+        ///     against the input.</exception>
+        /// <exception cref="OverflowException">An integer <paramref name="initial"/> past the loop's range.</exception>
+        public override NDArray ReduceProduct(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null, NDArray @out = null,
+            object initial = null, NDArray @where = null)
         {
+            // initial= / where=: PyUFunc_ReduceWrapper's statements through NumPy's reduction iterator (AddMulNumPy). A 0-d
+            // true mask is Python's where=True, no mask; multiply has an identity, so that call is the plain call below.
+            if (IsTrueScalarMask(@where))
+                @where = null;
+            if (initial is not null || @where is not null)
+                return AddMulNumPy(arr, axis_, keepdims, dtype, @out, initial, @where, multiply: true);
+
             // out=: multiply.reduce with an out operand, whose checks and loop differ from the plain call's (the text routes
             // into out, the reduce prologue on (out, arr), promote_types(out, arr) as the loop). It computes the product
             // through this method again, without out.

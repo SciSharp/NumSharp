@@ -62,7 +62,7 @@ namespace NumSharp.Tests.Math
             Check(fails, "sum c128 [-0-0j]", () => np.sum(C128(1)), "complex128 () 0000000000000000 0000000000000000");
             Check(fails, "sum f64 0-d -0", () => np.sum(NDArray.Scalar(-0.0)), "float64 () 0000000000000000");
             Check(fails, "ndarray.sum f64 [-0]", () => F64(1).sum(), "float64 () 0000000000000000");
-            Check(fails, "sum f32 [-0] dtype=f64", () => np.sum(F32(1), np.float64), "float64 () 0000000000000000");
+            Check(fails, "sum f32 [-0] dtype=f64", () => np.sum(F32(1), dtype: np.float64), "float64 () 0000000000000000");
             AssertNoMismatch(fails, "NumPy's add.reduce adds the lone element to the +0.0 identity");
         }
 
@@ -452,23 +452,23 @@ namespace NumSharp.Tests.Math
         public void Sum_DtypeLoop_CastsEveryElementBeforeTheIdentityAdd()
         {
             var fails = new List<string>();
-            Check(fails, "sum f32[-0]*3 dtype=f64", () => np.sum(F32(3), np.float64), "float64 () 0000000000000000");
-            Check(fails, "sum f64[-0]*3 dtype=f32", () => np.sum(F64(3), np.float32), "float32 () 00000000");
-            Check(fails, "sum f64[-0]*3 dtype=f16", () => np.sum(F64(3), np.float16), "float16 () 0000");
-            Check(fails, "sum f16[-0]*3 dtype=c128", () => np.sum(F16(3), np.complex128), "complex128 () 0000000000000000 0000000000000000");
-            Check(fails, "sum f64[-0] dtype=c128", () => np.sum(F64(1), np.complex128), "complex128 () 0000000000000000 0000000000000000");
-            Check(fails, "sum c128[-0-0j]*3 dtype=f64", () => np.sum(C128(3), np.float64), "float64 () 0000000000000000");
-            Check(fails, "sum f64[1.9,2.9,3.9] dtype=i32", () => np.sum(np.array(new[] { 1.9, 2.9, 3.9 }), np.int32), "int32 () 6");
-            Check(fails, "sum f64[-0,0.5] dtype=i64", () => np.sum(np.array(new[] { -0.0, 0.5 }), np.int64), "int64 () 0");
-            Check(fails, "sum i32[0,2,0] dtype=bool", () => np.sum(np.array(new[] { 0, 2, 0 }), np.@bool), "bool () True");
-            Check(fails, "sum i32[0,0] dtype=bool", () => np.sum(np.array(new[] { 0, 0 }), np.@bool), "bool () False");
-            Check(fails, "sum c128[1+2j,3+4j] dtype=i64", () => np.sum(np.array(new[] { new Complex(1, 2), new Complex(3, 4) }), np.int64), "int64 () 4");
-            Check(fails, "sum bool[T,T,F] dtype=f16", () => np.sum(np.array(new[] { true, true, false }), np.float16), "float16 () 4000");
+            Check(fails, "sum f32[-0]*3 dtype=f64", () => np.sum(F32(3), dtype: np.float64), "float64 () 0000000000000000");
+            Check(fails, "sum f64[-0]*3 dtype=f32", () => np.sum(F64(3), dtype: np.float32), "float32 () 00000000");
+            Check(fails, "sum f64[-0]*3 dtype=f16", () => np.sum(F64(3), dtype: np.float16), "float16 () 0000");
+            Check(fails, "sum f16[-0]*3 dtype=c128", () => np.sum(F16(3), dtype: np.complex128), "complex128 () 0000000000000000 0000000000000000");
+            Check(fails, "sum f64[-0] dtype=c128", () => np.sum(F64(1), dtype: np.complex128), "complex128 () 0000000000000000 0000000000000000");
+            Check(fails, "sum c128[-0-0j]*3 dtype=f64", () => np.sum(C128(3), dtype: np.float64), "float64 () 0000000000000000");
+            Check(fails, "sum f64[1.9,2.9,3.9] dtype=i32", () => np.sum(np.array(new[] { 1.9, 2.9, 3.9 }), dtype: np.int32), "int32 () 6");
+            Check(fails, "sum f64[-0,0.5] dtype=i64", () => np.sum(np.array(new[] { -0.0, 0.5 }), dtype: np.int64), "int64 () 0");
+            Check(fails, "sum i32[0,2,0] dtype=bool", () => np.sum(np.array(new[] { 0, 2, 0 }), dtype: np.@bool), "bool () True");
+            Check(fails, "sum i32[0,0] dtype=bool", () => np.sum(np.array(new[] { 0, 0 }), dtype: np.@bool), "bool () False");
+            Check(fails, "sum c128[1+2j,3+4j] dtype=i64", () => np.sum(np.array(new[] { new Complex(1, 2), new Complex(3, 4) }), dtype: np.int64), "int64 () 4");
+            Check(fails, "sum bool[T,T,F] dtype=f16", () => np.sum(np.array(new[] { true, true, false }), dtype: np.float16), "float16 () 4000");
             Check(fails, "sum f32 (1,3) axis0 dtype=f64", () => np.sum(F32(3).reshape(1, 3), 0, np.float64),
                   "float64 (3,) 0000000000000000 0000000000000000 0000000000000000");
             Check(fails, "sum f64 (2,3) -0 axis1 dtype=f32", () => np.sum(F64(6).reshape(2, 3), 1, np.float32), "float32 (2,) 00000000 00000000");
-            Check(fails, "sum i8[100,100] dtype=i8", () => np.sum(np.array(new sbyte[] { 100, 100 }), np.int8), "int8 () -56");
-            Check(fails, "sum u8[200,100] dtype=i8", () => np.sum(np.array(new byte[] { 200, 100 }), np.int8), "int8 () 44");
+            Check(fails, "sum i8[100,100] dtype=i8", () => np.sum(np.array(new sbyte[] { 100, 100 }), dtype: np.int8), "int8 () -56");
+            Check(fails, "sum u8[200,100] dtype=i8", () => np.sum(np.array(new byte[] { 200, 100 }), dtype: np.int8), "int8 () 44");
             AssertNoMismatch(fails, "NumPy's dtype= selects the loop: each element is cast to it, then summed from its identity");
         }
 
@@ -676,11 +676,11 @@ namespace NumSharp.Tests.Math
             var fails = new List<string>();
             var fi8 = np.asfortranarray(np.arange(1, 10).astype(np.int8).reshape(3, 3));
             var fbool = np.asfortranarray(np.array(new[,] { { true, false }, { true, true } }));
-            Check(fails, "sum F i8 dtype=i8", () => np.sum(fi8, np.int8), "int8 () 45");
+            Check(fails, "sum F i8 dtype=i8", () => np.sum(fi8, dtype: np.int8), "int8 () 45");
             Check(fails, "sum F i8", () => np.sum(fi8), "int64 () 45");
-            Check(fails, "sum F i8 dtype=i16", () => np.sum(fi8, np.int16), "int16 () 45");
+            Check(fails, "sum F i8 dtype=i16", () => np.sum(fi8, dtype: np.int16), "int16 () 45");
             Check(fails, "sum F bool", () => np.sum(fbool), "int64 () 3");
-            Check(fails, "sum F bool dtype=i8", () => np.sum(fbool, np.int8), "int8 () 3");
+            Check(fails, "sum F bool dtype=i8", () => np.sum(fbool, dtype: np.int8), "int8 () 3");
             Check(fails, "sum F bool again", () => np.sum(fbool), "int64 () 3");
             AssertNoMismatch(fails, "a reduction kernel is cached per accumulator, not per input dtype alone");
         }
