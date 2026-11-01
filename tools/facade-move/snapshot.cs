@@ -155,7 +155,14 @@
 // that does not broadcast; IndexValueLabels / IndexObjectValueLabels), and NDArray.astype's (the cast family: its dtype
 // over every class a cast reaches - the numeric dtypes, S / U at three widths and unsized, StringDType with and without an
 // NA object - and its casting rule with astype's own 'same_value'; CastDTypeLabels / CastCastingLabels, on a reduced
-// pool that keeps the special layouts and the strided, reversed and broadcast views, and pairs over every pool dtype);
+// pool that keeps the special layouts and the strided, reversed and broadcast views, and pairs over every pool dtype),
+// and the window functions' (np.bartlett / np.blackman / np.hamming / np.hanning / np.kaiser take no array: their operand
+// is the point count M from WindowMLabels - negative, zero, fractional, one, small and large counts, NaN and the
+// infinities - with kaiser's beta varied, WindowBetaLabels), np.polyder's order m (the IntArg variants), np.polyfit's
+// degree deg, its weights w (the general weights variants) and its cov flag (null, both bools, 'unscaled', other strings),
+// np.einsum_path's subscripts, operand list and optimize (np.einsum's roles) and its variadic overload's whole argument
+// list (EinsumPathArgsLabels: the string-first spelling, the sublist spelling, the lists NumPy refuses), and np.tensordot's
+// (int, int) axes pair (AxesTupleLabels);
 // an overload
 // with a required parameter of another
 // kind is reported once as SKIP. An int
@@ -168,7 +175,9 @@
 // and multi_dot's array list is built from the operand (MakeLinalgArrays). A result that is a struct of arrays (np.histogram's
 // HistogramResult, np.histogramdd's HistogramddResult) renders each array field, and one that keeps its arrays in
 // properties (np.unique's UniqueResult, np.unique_all / unique_counts / unique_inverse's result structs) each NDArray
-// property, null for an output not requested; np.gradient's GradientResult renders as GRAD1(array) or GRADN(array; ...).
+// property, null for an output not requested; np.gradient's GradientResult renders as GRAD1(array) or GRADN(array; ...),
+// and np.polyfit's PolyfitResult as POLYFIT(coeffs=...; residuals=...; rank=...; singular_values=...; rcond=<bits>;
+// covariance=...), the arrays NumPy does not return rendering as null.
 // An np.nditer iterator is pulled to its end and renders as ITER nop=N dtypes=[...] steps=S with, per operand, its views'
 // dtype, the run-length list of their shapes, their flag sets and one hash over every step's view (RenderIterator); take
 // nditer snapshots under NUMSHARP_DEBUG_GUARD_PAGES=1, where an allocated output's memory reads as zeros. Take the coercion
@@ -555,6 +564,20 @@ static class Snapshot
         // array), StringDType with and without an NA object - and its casting rule with astype's own 'same_value'
         // (CastDTypeLabels, CastCastingLabels). copy and order take the general Bool / Order roles.
         CastDType, CastCasting,
+        // The window functions (np.bartlett / np.blackman / np.hamming / np.hanning / np.kaiser) take no array: their
+        // operand is the point count M (WindowMLabels, built in Call by MakeWindowM), and kaiser's shape parameter beta takes
+        // its own variants (WindowBetaLabels).
+        WindowM, WindowBeta,
+        // np.polyfit: the degree deg (required) and the cov flag (an object: NumPy's truthiness of a bool, a name or any
+        // other object). Its y takes the second-operand role, its w the general weights, rcond the nullable tolerance and
+        // full the general Bool.
+        PolyfitDeg, PolyfitCov,
+        // np.einsum_path's variadic overload (params object[] operands): its whole argument list, built from the operand
+        // (EinsumPathArgsLabels, MakeEinsumPathArgs) - the string-first spelling, the sublist spelling and the lists NumPy
+        // refuses. Its other overloads take np.einsum's roles.
+        EinsumPathArgs,
+        // np.tensordot's (int, int) axes pair (AxesTupleLabels): one axis of each operand.
+        AxesTuple,
         Default, Unsupported,
     }
 
@@ -2418,6 +2441,115 @@ static class Snapshot
     private static bool IsSpacing(ParameterInfo p) => p.Member is MethodInfo m && IsSpacing(m);
 
     /// <summary>
+    ///     Whether an overload is a window function - np.bartlett, np.blackman, np.hamming, np.hanning or np.kaiser (NumPy's
+    ///     <c>lib/_function_base_impl.py</c>) - whose operand is the point count M rather than an array.
+    /// </summary>
+    /// <param name="m">The overload.</param>
+    /// <returns>True for a public static overload of one of those names on np.</returns>
+    private static bool IsWindow(MethodInfo m) =>
+        m.DeclaringType == typeof(np) && m.Name is "bartlett" or "blackman" or "hamming" or "hanning" or "kaiser";
+
+    /// <summary>Whether a parameter belongs to a window function (<see cref="IsWindow(MethodInfo)"/>).</summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True when its method is one of the window functions.</returns>
+    private static bool IsWindow(ParameterInfo p) => p.Member is MethodInfo m && IsWindow(m);
+
+    /// <summary>
+    ///     The point counts M of the window functions, phase A's pool (phase B, kaiser's beta, takes the first eight):
+    ///     typical odd and even counts first, then the special cases (one, the M &lt; 1 guard of the cosine windows that
+    ///     kaiser lacks: zero, negative, a fraction below one, -0.0, a subnormal-sized count), fractional counts (NumPy's
+    ///     length <c>len(arange(1 - M, M, 2))</c>, kaiser's trailing NaN once <c>|(n - alpha) / alpha| &gt; 1</c>), larger
+    ///     counts, and what arange cannot size: NaN and the infinities.
+    /// </summary>
+    private static readonly string[] WindowMLabels =
+    {
+        "5", "12", "1", "0", "-3", "0.5", "2", "2.5", "3", "5.7", "13", "64", "1000.5", "0.999", "-0.5", "-0", "1e-300",
+        "nan", "inf", "-inf",
+    };
+
+    /// <summary>
+    ///     kaiser's shape parameters beta, the base (NumPy's docstring example, 14) first: zero (a rectangular window), the
+    ///     docstring's 5 and 8.6, a negative one (i0 is even), a fraction, values whose i0 nears and passes float64's range
+    ///     (inf / inf is NaN at the window's centre), NaN, an infinity and -0.0.
+    /// </summary>
+    private static readonly string[] WindowBetaLabels = { "14", "0", "5", "8.6", "-3", "0.5", "700", "1000", "nan", "inf", "-0" };
+
+    /// <summary>
+    ///     A real number from a window label: <c>nan</c> (Python's positive quiet NaN, as <c>float('nan')</c>: .NET's
+    ///     <see cref="double.NaN"/> is the negative one), <c>inf</c>, <c>-inf</c>, or a number in invariant notation
+    ///     (<c>-0</c> parses as -0.0).
+    /// </summary>
+    /// <param name="label">The label (<see cref="WindowMLabels"/> or <see cref="WindowBetaLabels"/>).</param>
+    /// <returns>The value.</returns>
+    /// <exception cref="FormatException">A label that is not a number (a bug in the tool).</exception>
+    private static double MakeWindowValue(string label) => label switch
+    {
+        "nan" => BitConverter.Int64BitsToDouble(0x7FF8000000000000),
+        "inf" => double.PositiveInfinity,
+        "-inf" => double.NegativeInfinity,
+        _ => double.Parse(label, NumberStyles.Float, CultureInfo.InvariantCulture),
+    };
+
+    /// <summary>
+    ///     Whether a parameter belongs to np.polyfit, whose <c>deg</c>, <c>w</c> and <c>cov</c> roles are its alone (no other
+    ///     snapshot target names them so).
+    /// </summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True for a parameter of a public static np.polyfit overload.</returns>
+    private static bool IsPolyfit(ParameterInfo p) =>
+        p.Member.DeclaringType == typeof(np) && p.Member.Name == "polyfit";
+
+    /// <summary>
+    ///     Whether a parameter belongs to np.einsum_path, whose variadic overload's argument list
+    ///     (<see cref="Role.EinsumPathArgs"/>) is its alone.
+    /// </summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True for a parameter of a public static np.einsum_path overload.</returns>
+    private static bool IsEinsumPath(ParameterInfo p) =>
+        p.Member.DeclaringType == typeof(np) && p.Member.Name == "einsum_path";
+
+    /// <summary>
+    ///     np.einsum_path's variadic argument lists (see <see cref="MakeEinsumPathArgs"/>); the first, the string-first
+    ///     spelling over the operand alone, is the base.
+    /// </summary>
+    private static readonly string[] EinsumPathArgsLabels = { "str", "strpair", "sublist", "sublistout", "nonarray", "nullop", "empty", "null" };
+
+    /// <summary>
+    ///     Builds np.einsum_path's variadic argument list from the operand: the string-first spelling over the operand
+    ///     alone (the identity subscripts), over the operand and its copy (their full contraction), NumPy's sublist spelling
+    ///     with the operand's axes (alone; with its copy and an explicit empty output list, a full contraction), and the
+    ///     lists NumPy refuses: a string followed by a number (an operand that is no array), a null operand, an empty list
+    ///     and null itself (no subscripts, no operand).
+    /// </summary>
+    /// <param name="label">The variant (<see cref="EinsumPathArgsLabels"/>).</param>
+    /// <param name="operand">The pool operand (its rank labels the subscripts and the sublists).</param>
+    /// <returns>A fresh argument list, or null for the <c>null</c> variant.</returns>
+    /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
+    private static object[] MakeEinsumPathArgs(string label, NDArray operand)
+    {
+        int[] axes = Enumerable.Range(0, operand.ndim).ToArray();
+        return label switch
+        {
+            "str" => new object[] { MakeEinsumSubscripts("id", operand), operand },
+            "strpair" => new object[] { MakeEinsumSubscripts("pairsum", operand), operand, operand.copy() },
+            "sublist" => new object[] { operand, axes },
+            "sublistout" => new object[] { operand, axes, operand.copy(), axes.ToArray(), Array.Empty<int>() },
+            "nonarray" => new object[] { MakeEinsumSubscripts("id", operand), 5 },
+            "nullop" => new object[] { MakeEinsumSubscripts("id", operand), null },
+            "empty" => Array.Empty<object>(),
+            "null" => null,
+            _ => throw new ArgumentException("unknown einsum_path argument-list variant " + label),
+        };
+    }
+
+    /// <summary>
+    ///     np.tensordot's (int, int) axes pairs, the first axis of each operand first (the operand and its copy agree on it):
+    ///     the second, the last, a last against a first (a mismatch unless the extents agree), a negative second index,
+    ///     and an axis out of range on either side (NumPy's IndexError).
+    /// </summary>
+    private static readonly string[] AxesTupleLabels = { "(0,0)", "(1,1)", "(-1,-1)", "(-1,0)", "(0,-2)", "(5,0)", "(0,5)" };
+
+    /// <summary>
     ///     The (start, stop) pairs of the real spacing overloads: increasing, decreasing and equal pairs, zero at either end
     ///     (geomspace's "Geometric sequence cannot include zero"), all-negative and mixed-sign pairs (geomspace's rotation
     ///     and its NaN interior), a NaN and an infinite end, signed zeros, the extremes of float64, fractions.
@@ -3012,13 +3144,14 @@ static class Snapshot
     };
 
     /// <summary>
-    ///     Whether a parameter belongs to np.einsum, whose <c>subscripts</c> / <c>operands</c> / <c>optimize</c> roles are its
-    ///     alone: no other snapshot target declares them.
+    ///     Whether a parameter belongs to np.einsum or np.einsum_path, whose <c>subscripts</c> / <c>operands</c> /
+    ///     <c>optimize</c> roles are theirs alone: no other snapshot target declares them. np.einsum_path's variadic
+    ///     overload takes its own argument-list role (<see cref="IsEinsumPath"/>).
     /// </summary>
     /// <param name="p">The parameter.</param>
-    /// <returns>True for a parameter of a public static np.einsum overload.</returns>
+    /// <returns>True for a parameter of a public static np.einsum or np.einsum_path overload.</returns>
     private static bool IsEinsum(ParameterInfo p) =>
-        p.Member.DeclaringType == typeof(np) && p.Member.Name == "einsum";
+        p.Member.DeclaringType == typeof(np) && p.Member.Name is "einsum" or "einsum_path";
 
     /// <summary>
     ///     Whether a parameter belongs to np.nditer, whose <c>op</c> list, <c>flags</c>, <c>op_flags</c>, <c>op_dtypes</c>,
@@ -3165,6 +3298,23 @@ static class Snapshot
             if (n == "k" && t == typeof(NDArray)) return Role.PolyintK;
             if (n == "k" && t == typeof(double)) return Role.PolyintKDouble;
         }
+        // np.polyder's order (only its): m around its default 1 like np.polyint's (0, 2, a negative order NumPy refuses, 5,
+        // past most pool lengths).
+        if (p.Member.DeclaringType == typeof(np) && p.Member.Name == "polyder" && n == "m" && t == typeof(int))
+            return Role.IntArg;
+        // The window functions' shape parameter (kaiser's beta; their M is the operand, set in RunOverload).
+        if (IsWindow(p) && n == "beta" && t == typeof(double))
+            return Role.WindowBeta;
+        // np.polyfit's degree and cov flag (only its; its w is the general weights below, y the second operand, rcond the
+        // nullable tolerance and full the general Bool).
+        if (IsPolyfit(p))
+        {
+            if (n == "deg" && t == typeof(int)) return Role.PolyfitDeg;
+            if (n == "cov" && t == typeof(object)) return Role.PolyfitCov;
+        }
+        // np.tensordot's (int, int) axes pair.
+        if (n == "axes" && t == typeof((int, int)))
+            return Role.AxesTuple;
         // The item-selection family's own parameters (only theirs; its operand, axis, out and refcheck take the general
         // roles below), before the general array roles would read an index array or a mask as a second operand.
         if (IsItemSelection(p) && ItemArgLabels(p) is not null)
@@ -3273,6 +3423,8 @@ static class Snapshot
                 // setters copy into the array (the array is the operand).
                 : n == "arr" && IsExtract(p) ? Role.Operand2
                 : n == "value" && IsComplexPartSetter(p) ? Role.Operand2
+                // np.polyfit's weights (one per sample point: the general weights variants, built from the operand x).
+                : n == "w" && IsPolyfit(p) ? Role.Weights
                 : n == "q" ? Role.QArray
                 : n == "bins" ? Role.BinsArray
                 : p.HasDefaultValue ? Role.Default : Role.Unsupported;
@@ -3866,6 +4018,38 @@ static class Snapshot
                 Add("null", () => null);
                 foreach (var nCols in new[] { 0, 1, 3, 9, -1 })
                     Add(nCols.ToString(CultureInfo.InvariantCulture), () => (int?)nCols);
+                break;
+            case Role.WindowBeta:
+                foreach (var label in WindowBetaLabels)
+                    Add(label, () => MakeWindowValue(label));
+                break;
+            case Role.PolyfitDeg:
+                // A line first, then a constant, a parabola, a cubic, the degree NumPy refuses ("expected deg >= 0") and one
+                // past most pool lengths (a rank-deficient fit: NumPy's RankWarning is not modelled, the values are).
+                foreach (var deg in new[] { 1, 0, 2, 3, -1, 12 })
+                    Add(deg.ToString(CultureInfo.InvariantCulture), () => deg);
+                break;
+            case Role.PolyfitCov:
+                // None first (no covariance), then the two bools, NumPy's 'unscaled', the empty string (falsy: no
+                // covariance) and another string (truthy: the scaled covariance).
+                foreach (var (label, cov) in new (string, object)[]
+                         {
+                             ("null", null), ("false", false), ("true", true), ("unscaled", "unscaled"), ("empty", ""), ("other", "x"),
+                         })
+                    Add(label, () => cov);
+                break;
+            case Role.EinsumPathArgs:
+                // Built from the operand (MakeEinsumPathArgs); the factory here is never called.
+                Add(EinsumPathArgsLabels[0], () => null);
+                break;
+            case Role.AxesTuple:
+                foreach (var label in AxesTupleLabels)
+                {
+                    // "(a,b)" -> (a, b): the label is the tuple as C# prints it.
+                    string[] parts = label.Trim('(', ')').Split(',');
+                    var pair = (int.Parse(parts[0], CultureInfo.InvariantCulture), int.Parse(parts[1], CultureInfo.InvariantCulture));
+                    Add(label, () => pair);
+                }
                 break;
             case Role.CtorShape:
                 // Built from the shape label in Call (TryMakeCtorShape); the factory here is never called.
@@ -4666,6 +4850,15 @@ static class Snapshot
     /// <summary>The small pool of np.convolve / np.correlate (phase C).</summary>
     private static readonly string[] SlidingPairLayouts = { "1d", "long1d", "0d", "c2d" };
 
+    /// <summary>The reduced pool of np.polyfit (phase B, where y, deg, rcond, full, w and cov vary): 1-D sample points -
+    ///     plain, the 24-element run (more points than the larger degrees need), strided and reversed views, special values
+    ///     and none - then one 2-D and one 0-d operand for x's rank check.</summary>
+    private static readonly string[] PolyfitReducedLayouts =
+        { "1d", "long1d", "strided1d", "reversed1d", "sorted1d_special", "empty1d", "c2d", "0d" };
+
+    /// <summary>The small pool of np.polyfit (phase C): two 1-D runs of different lengths and a 2-D operand.</summary>
+    private static readonly string[] PolyfitPairLayouts = { "1d", "long1d", "c2d" };
+
     /// <summary>
     ///     The layouts np.trim_zeros adds to the general pool (phase A): operands with zero borders - a 1-D one with two
     ///     zeros at each end, a 2-D one inside a zero frame, a 3-D one inside a zero box - and an all-zero 2-D one (every
@@ -4748,12 +4941,16 @@ static class Snapshot
     ///     matrices, stacks and rectangles (<see cref="LinalgLayouts"/>); for np.savetxt, the general pool in phase A and
     ///     the 1-D and 2-D layouts it writes when another parameter varies (<see cref="SaveTxtReducedLayouts"/>); for np.ix_
     ///     and np.r_ / np.c_, the general pool with 1-D operands first in phase B; for np.diag and np.diagflat, the general
-    ///     pool and a strided and a reversed vector, 1-D operands first in phase B (<see cref="DiagReducedLayouts"/>).
+    ///     pool and a strided and a reversed vector, 1-D operands first in phase B (<see cref="DiagReducedLayouts"/>); for
+    ///     np.polyfit, whose x must be 1-D (a general pool's 2-D operand fails its first check, so the varied degrees, weights
+    ///     and flags would never reach the fit), the general pool and 1-D sample points (<see cref="PolyfitReducedLayouts"/>).
     /// </summary>
     /// <param name="m">The overload.</param>
     /// <returns>The layouts of phase A, phase B and phase C.</returns>
     private static (string[] Full, string[] Reduced, string[] Pair) PoolsFor(MethodInfo m) =>
-        m.Name == "searchsorted"
+        m.Name == "polyfit" && m.DeclaringType == typeof(np)
+            ? (Layouts.Concat(SortedLayouts).Append("long1d").ToArray(), PolyfitReducedLayouts, PolyfitPairLayouts)
+        : m.Name == "searchsorted"
             ? (Layouts.Concat(SortedLayouts).ToArray(), SortedReducedLayouts, SortedPairLayouts)
             : (m.Name is "convolve" or "correlate" && (m.DeclaringType == typeof(np) || m.DeclaringType == typeof(NDArray)))
               || (m.Name == "vander" && m.DeclaringType == typeof(np))
@@ -4812,6 +5009,20 @@ static class Snapshot
             if (IsSpacing(m) && ps[i].Name == "stop")
             {
                 roles[i] = Role.SpaceStop;
+                continue;
+            }
+            // A window function's operand: its point count M, built per call from the label (WindowMLabels, MakeWindowValue).
+            if (IsWindow(m) && ps[i].Name == "M")
+            {
+                roles[i] = Role.WindowM;
+                sawArray = true;
+                continue;
+            }
+            // np.einsum_path's variadic overload: its whole argument list carries the operand (MakeEinsumPathArgs).
+            if (!sawArray && ps[i].ParameterType == typeof(object[]) && ps[i].Name == "operands" && IsEinsumPath(ps[i]))
+            {
+                roles[i] = Role.EinsumPathArgs;
+                sawArray = true;
                 continue;
             }
             // A constructor's operand when it takes no array: its shape (np.eye's N, np.identity's n), built per call from
@@ -4950,7 +5161,7 @@ static class Snapshot
             yield return $"{signature}\tSKIP unsupported required parameter {TypeName(ps[unsupported].ParameterType)} {ps[unsupported].Name}";
             yield break;
         }
-        var variants = ps.Select((p, i) => roles[i] is Role.Operand or Role.HostOperand or Role.SpacePair or Role.CtorShape or Role.BufferOperand or Role.TextSource or Role.FileSource or Role.GridKey or Role.RavelScalarCoords ? null : Variants(p, roles[i])).ToArray();
+        var variants = ps.Select((p, i) => roles[i] is Role.Operand or Role.HostOperand or Role.SpacePair or Role.CtorShape or Role.BufferOperand or Role.TextSource or Role.FileSource or Role.GridKey or Role.RavelScalarCoords or Role.WindowM ? null : Variants(p, roles[i])).ToArray();
         int operandIndex = Array.IndexOf(roles, Role.Operand);
         // A coercion overload's operand is its host operand, built per call from the pool operand.
         int hostIndex = Array.IndexOf(roles, Role.HostOperand);
@@ -4962,6 +5173,11 @@ static class Snapshot
         bool spacing = operandIndex < 0 && pairIndex >= 0;
         if (spacing)
             operandIndex = pairIndex;
+        // A window function's operand is its point count M.
+        int windowIndex = Array.IndexOf(roles, Role.WindowM);
+        bool window = operandIndex < 0 && windowIndex >= 0;
+        if (window)
+            operandIndex = windowIndex;
         // A constructor's operand is its shape.
         int shapeIndex = Array.IndexOf(roles, Role.CtorShape);
         bool ctor = operandIndex < 0 && shapeIndex >= 0;
@@ -5000,6 +5216,8 @@ static class Snapshot
             Role.Operand => 0,
             Role.HostOperand => 0,
             Role.SpacePair => 0,
+            Role.WindowM => 0,
+            Role.EinsumPathArgs => EinsumPathArgsLabels.Length - 1,
             Role.CtorShape => 0,
             Role.GridKey => 0,
             Role.RavelScalarCoords => 0,
@@ -5073,6 +5291,17 @@ static class Snapshot
             reducedLayouts = fullLayouts.Take(5).ToArray();
             pairLayouts = fullLayouts.Take(3).ToArray();
             dtypes = new[] { "pair" };
+            pairDtypes = dtypes;
+        }
+        if (window)
+        {
+            // A window takes no pool operand: its pool is the point counts M, one stand-in dtype label ("M"), the first eight
+            // counts for phase B (kaiser's beta: typical, one, the guards, fractions) and the first three for phase C (no
+            // window has two varied parameters, so phase C writes nothing).
+            fullLayouts = WindowMLabels;
+            reducedLayouts = fullLayouts.Take(8).ToArray();
+            pairLayouts = fullLayouts.Take(3).ToArray();
+            dtypes = new[] { "M" };
             pairDtypes = dtypes;
         }
         if (ctor)
@@ -5995,6 +6224,7 @@ static class Snapshot
             Role.NditerItershape => NditerItershapeVariantLabels[v],
             Role.EinsumSubscripts => EinsumSubscriptsVariantLabels[v],
             Role.EinsumOps => EinsumOpsVariantLabels[v],
+            Role.EinsumPathArgs => EinsumPathArgsLabels[v],
             Role.LexKeys => LexKeysVariantLabels[v],
             Role.RavelCoords => RavelCoordsVariantLabels[v],
             Role.EvalExpr or Role.EvalExprPositional => EvalExprVariantLabels[v],
@@ -6016,10 +6246,12 @@ static class Snapshot
         bool gridKeyCall = operandIndex >= 0 && roles[operandIndex] == Role.GridKey;
         // np.ravel_multi_index's scalar overload's operand is its coordinate tuple: a fresh 0-d array stands in too.
         bool ravelScalarCall = operandIndex >= 0 && roles[operandIndex] == Role.RavelScalarCoords;
+        // A window function's operand is its point count M: a fresh 0-d array stands in too.
+        bool windowCall = operandIndex >= 0 && roles[operandIndex] == Role.WindowM;
         // A host operand's layout is "layout:form" (RunOverload): the pool operand of the layout, then its C# form.
         int formAt = gridKeyCall ? -1 : layout.IndexOf(':');
         string baseLayout = formAt < 0 ? layout : layout.Substring(0, formAt);
-        NDArray operand = spacingCall || ctorCall || gridKeyCall || ravelScalarCall
+        NDArray operand = spacingCall || ctorCall || gridKeyCall || ravelScalarCall || windowCall
             ? np.array(0.0)
             : MakeOperand(dt, baseLayout);
         // A matrix receiver is np.asmatrix's view of the pool operand (0-d -> (1, 1), 1-D -> (1, N)); a layout it refuses
@@ -6038,6 +6270,8 @@ static class Snapshot
             operandArg = MakeGridKey(layout);
         if (ravelScalarCall)
             operandArg = MakeRavelScalarCoords(layout);
+        if (windowCall)
+            operandArg = MakeWindowValue(layout);
         if (operandIndex >= 0 && roles[operandIndex] == Role.HostOperand)
         {
             // The coercion family's C# value of the operand; a form this operand does not have makes no line at all.
@@ -6080,6 +6314,7 @@ static class Snapshot
                     : roles[i] == Role.NditerOps ? MakeNditerOps(NditerOpsVariantLabels[0], operand)
                     : roles[i] == Role.EinsumSubscripts ? MakeEinsumSubscripts(EinsumSubscriptsVariantLabels[0], operand)
                     : roles[i] == Role.EinsumOps ? MakeEinsumOps(EinsumOpsVariantLabels[0], operand)
+                    : roles[i] == Role.EinsumPathArgs ? MakeEinsumPathArgs(EinsumPathArgsLabels[0], operand)
                     : roles[i] == Role.LexKeys ? MakeLexKeys(LexKeysVariantLabels[0], operand)
                     : roles[i] == Role.RavelCoords ? MakeRavelCoords(RavelCoordsVariantLabels[0], operand)
                     : roles[i] == Role.EvalExpr ? MakeEvalExpr(EvalExprVariantLabels[0], operand, positional: false)
@@ -6161,6 +6396,9 @@ static class Snapshot
                         break;
                     case Role.EinsumOps:
                         argv[p] = MakeEinsumOps(EinsumOpsVariantLabels[v], operand);
+                        break;
+                    case Role.EinsumPathArgs:
+                        argv[p] = MakeEinsumPathArgs(EinsumPathArgsLabels[v], operand);
                         break;
                     case Role.LexKeys:
                         argv[p] = MakeLexKeys(LexKeysVariantLabels[v], operand);
@@ -7827,6 +8065,14 @@ static class Snapshot
                 // for NumPy's bare ndarray (one requested axis), GRADN for its tuple, each component in axis order.
                 return (g.IsSingle ? "GRAD1(" : "GRADN(") +
                        string.Join("; ", Enumerable.Range(0, g.Length).Select(k => Render(g[k], outArray))) + ")";
+            case PolyfitResult fit:
+                // np.polyfit's result holds a double beside its arrays (rcond), so the struct-of-arrays rule below would
+                // render only its type name: each field in NumPy's tuple order, rcond as its bits, an array NumPy does not
+                // return (the diagnostics without full=True, the covariance without cov=) as null.
+                return "POLYFIT(coeffs=" + Render(fit.coeffs, outArray) + "; residuals=" + Render(fit.residuals, outArray) +
+                       "; rank=" + Render(fit.rank, outArray) + "; singular_values=" + Render(fit.singular_values, outArray) +
+                       "; rcond=" + BitConverter.DoubleToInt64Bits(fit.rcond).ToString("x16") +
+                       "; covariance=" + Render(fit.covariance, outArray) + ")";
             case np.MGridResult mg:
                 // np.mgrid's result is NumPy's ndarray (the dense grid, or a single slice's 1-D array): rendered as that
                 // array, so the line reads like NumPy's.
