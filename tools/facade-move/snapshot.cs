@@ -165,7 +165,9 @@
 // (int, int) axes pair (AxesTupleLabels), and the stacking family's array lists (np.hstack / np.vstack / np.dstack /
 // np.column_stack / np.stack and the atleast_Nd array overloads: StackArraysLabels - copies, another dtype, text, a
 // transpose, a row, a 0-d, an empty array, a null entry, none) and np.block's nested lists (BlockArraysLabels: a row, a
-// bare leaf, a column, a grid, mixed dtypes, scalars, the depth mismatches, empty lists, a tuple, null);
+// bare leaf, a column, a grid, mixed dtypes, scalars, the depth mismatches, empty lists, a tuple, null), and the split
+// family's section counts and split points (SplitSectionsLabels, SplitIndicesLabels) and np.tile's repetitions
+// (TileRepsLabels), as int[] or long[] where the overload takes them;
 // an overload
 // with a required parameter of another
 // kind is reported once as SKIP. An int
@@ -589,6 +591,10 @@ static class Snapshot
         // one and two levels of nesting, mixed dtypes and scalars, the depth mismatches and empty lists NumPy refuses, a
         // tuple and null.
         BlockArrays,
+        // The split family (np.split / np.array_split / np.hsplit / np.vsplit / np.dsplit): the section count
+        // indices_or_sections (SplitSectionsLabels) and the split points indices as an int[] or a long[]
+        // (SplitIndicesLabels). np.tile's reps as an int[] or a long[] (TileRepsLabels).
+        SplitSections, SplitIndices, TileReps,
         Default, Unsupported,
     }
 
@@ -2615,6 +2621,56 @@ static class Snapshot
         }
     }
 
+    /// <summary>Whether a parameter belongs to the split family (np.split, np.array_split, np.hsplit, np.vsplit, np.dsplit),
+    ///     whose section count and split points take <see cref="Role.SplitSections"/> / <see cref="Role.SplitIndices"/>.</summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True for a parameter of a public static overload of one of those names on np.</returns>
+    private static bool IsSplit(ParameterInfo p) =>
+        p.Member.DeclaringType == typeof(np) && p.Member.Name is "split" or "array_split" or "hsplit" or "vsplit" or "dsplit";
+
+    /// <summary>
+    ///     The split family's section counts, one section (always possible) first: two, three and four sections (equal or
+    ///     not, so np.split's equal-division error and np.array_split's uneven sizes both show), seven (more sections than
+    ///     most pool axes: empty pieces), zero and a negative count (NumPy's "number sections must be larger than 0.").
+    /// </summary>
+    private static readonly string[] SplitSectionsLabels = { "1", "2", "3", "4", "7", "0", "-1" };
+
+    /// <summary>
+    ///     The split family's split points, one point first: none (one piece), the start, two points in order and out of
+    ///     order (an empty piece), a negative point (from the end), a point past the axis (clamped), a repeated point, and
+    ///     null.
+    /// </summary>
+    private static readonly string[] SplitIndicesLabels = { "[1]", "[]", "[0]", "[1,2]", "[2,1]", "[-1]", "[5]", "[1,1]", "null" };
+
+    /// <summary>
+    ///     np.tile's repetition counts, two along the last axis first: one (a copy), none (A itself, copied), two on two axes,
+    ///     ones on two axes (the all-ones copy), a zero (an empty result), more counts than most pool ranks (A's shape
+    ///     padded), a negative count (NumPy's error), and null.
+    /// </summary>
+    private static readonly string[] TileRepsLabels = { "[2]", "[1]", "[]", "[2,2]", "[1,1]", "[0]", "[3,1,2]", "[-1]", "null" };
+
+    /// <summary>
+    ///     An int list label (<c>"[1,2]"</c>, <c>"[]"</c>) as the parameter's array type, <c>null</c> for <c>"null"</c>.
+    /// </summary>
+    /// <param name="t">The parameter type: int[] or long[].</param>
+    /// <param name="label">The label.</param>
+    /// <returns>A fresh array of <paramref name="t"/>, or null.</returns>
+    /// <exception cref="ArgumentException">Another parameter type (a bug in the tool).</exception>
+    private static object MakeIntList(Type t, string label)
+    {
+        if (label == "null")
+            return null;
+        string body = label.Trim('[', ']');
+        long[] values = body.Length == 0
+            ? Array.Empty<long>()
+            : body.Split(',').Select(s => long.Parse(s, CultureInfo.InvariantCulture)).ToArray();
+        if (t == typeof(long[]))
+            return values;
+        if (t == typeof(int[]))
+            return values.Select(v => (int)v).ToArray();
+        throw new ArgumentException("not an int list parameter: " + t);
+    }
+
     /// <summary>Whether an overload is np.block, whose nested list is its operand (<see cref="Role.BlockArrays"/>).</summary>
     /// <param name="m">The overload.</param>
     /// <returns>True for a public static np.block overload.</returns>
@@ -3425,6 +3481,13 @@ static class Snapshot
         // np.tensordot's (int, int) axes pair.
         if (n == "axes" && t == typeof((int, int)))
             return Role.AxesTuple;
+        // The split family's section count and split points, and np.tile's repetitions (only theirs).
+        if (IsSplit(p) && n == "indices_or_sections" && t == typeof(int))
+            return Role.SplitSections;
+        if (IsSplit(p) && n == "indices" && (t == typeof(int[]) || t == typeof(long[])))
+            return Role.SplitIndices;
+        if (p.Member.DeclaringType == typeof(np) && p.Member.Name == "tile" && n == "reps" && (t == typeof(int[]) || t == typeof(long[])))
+            return Role.TileReps;
         // The item-selection family's own parameters (only theirs; its operand, axis, out and refcheck take the general
         // roles below), before the general array roles would read an index array or a mask as a second operand.
         if (IsItemSelection(p) && ItemArgLabels(p) is not null)
@@ -4752,6 +4815,18 @@ static class Snapshot
             case Role.BlockArrays:
                 // Built from the operand (MakeStackArrays / MakeBlockArrays); the factory here is never called.
                 Add(role == Role.StackArrays ? StackArraysLabels[0] : BlockArraysLabels[0], () => null);
+                break;
+            case Role.SplitSections:
+                foreach (var label in SplitSectionsLabels)
+                {
+                    int sections = int.Parse(label, CultureInfo.InvariantCulture);
+                    Add(label, () => sections);
+                }
+                break;
+            case Role.SplitIndices:
+            case Role.TileReps:
+                foreach (var label in role == Role.SplitIndices ? SplitIndicesLabels : TileRepsLabels)
+                    Add(label, () => MakeIntList(p.ParameterType, label));
                 break;
             case Role.Ord:
                 // No order first (NumPy's None: the Frobenius / 2-norm default, cond's 2-norm), then the orders NumPy's norms
