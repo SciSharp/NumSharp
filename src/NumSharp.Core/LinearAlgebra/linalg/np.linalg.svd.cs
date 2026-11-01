@@ -34,15 +34,17 @@ namespace NumSharp
             /// <exception cref="LinAlgError">Fewer than two axes, or a non-square operand with <paramref name="hermitian"/>.</exception>
             /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
             /// <exception cref="ArgumentException">A text operand (NumPy's gufunc input-cast refusal).</exception>
+            /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
             [NDScoped] // the class boundary's temporaries; the Linalg member scopes the computation's own
             public static (NDArray U, NDArray S, NDArray Vh) svd(NDArray a, bool full_matrices = true,
                 bool compute_uv = true, bool hermitian = false)
             {
+                if (a is null) throw new ArgumentNullException(nameof(a));
                 // a numpy.matrix operand: NumPy returns wrap(u), the plain singular values and wrap(vh)
                 if (NDMatrixBoundary.Sees(a))
                     return NDMatrixBoundary.WrappedTriple((a, full_matrices, compute_uv, hermitian),
                         static s => svd(s.a, s.full_matrices, s.compute_uv, s.hermitian), wrap0: true, wrap1: false, wrap2: true);
-                return EngineOf(a).Linalg.Svd(a, full_matrices, compute_uv, hermitian);
+                return a.TensorEngine.Linalg.Svd(a, full_matrices, compute_uv, hermitian);
             }
 
             /// <summary>
@@ -56,11 +58,13 @@ namespace NumSharp
             /// <exception cref="LinAlgError">Fewer than two axes.</exception>
             /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
             /// <exception cref="ArgumentException">A text operand (NumPy's gufunc input-cast refusal).</exception>
+            /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
             [NDScoped] // the facade keeps its scope over the call; the Linalg member scopes the computation's own
             public static NDArray svdvals(NDArray x)
             {
+                if (x is null) throw new ArgumentNullException(nameof(x));
                 using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-                return EngineOf(x).Linalg.Svdvals(x);
+                return x.TensorEngine.Linalg.Svdvals(x);
             }
 
             /// <summary>
@@ -79,12 +83,14 @@ namespace NumSharp
             /// <exception cref="LinAlgError">A non-square operand with <paramref name="hermitian"/>.</exception>
             /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
             /// <exception cref="ArgumentException">A text operand of two or more axes (NumPy's gufunc input-cast refusal).</exception>
+            /// <exception cref="ArgumentNullException"><paramref name="A"/> is null.</exception>
             [NDScoped] // the facade keeps its scope over the call; the Linalg member scopes the computation's own
             public static NDArray matrix_rank(NDArray A, double? tol = null, bool hermitian = false,
                 double? rtol = null)
             {
+                if (A is null) throw new ArgumentNullException(nameof(A));
                 using var plain = NDMatrixBoundary.PlainFor(A);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-                return EngineOf(A).Linalg.MatrixRank(A, tol, hermitian, rtol);
+                return A.TensorEngine.Linalg.MatrixRank(A, tol, hermitian, rtol);
             }
 
             /// <summary>
@@ -117,11 +123,13 @@ namespace NumSharp
             ///     <c>"nuc"</c> of a singular matrix (the SVD of its NaN inverse: <c>SVD did not converge</c>).</exception>
             /// <exception cref="ValueError">An order the norm refuses.</exception>
             /// <exception cref="ArgumentException">A text operand (NumPy's gufunc input-cast refusal).</exception>
+            /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
             [NDScoped] // the facade keeps its scope over the call; the Linalg member scopes the computation's own
             public static NDArray cond(NDArray x, object p = null)
             {
+                if (x is null) throw new ArgumentNullException(nameof(x));
                 using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-                return EngineOf(x).Linalg.Cond(x, p);
+                return x.TensorEngine.Linalg.Cond(x, p);
             }
         }
     }

@@ -18,6 +18,45 @@ namespace NumSharp
     public abstract partial class TensorEngine
     {
         /// <summary>
+        ///     The engine an array binds when nothing else decides, and the engine of the np.* functions that take no array
+        ///     (np.zeros, np.arange, np.linspace, np.fft.fftfreq, the window functions): every array created without an
+        ///     engine of its own binds the engine this property returns at that moment. Assign an engine (a
+        ///     <see cref="DefaultEngine"/> subclass that overrides some members, typically) to have every array created
+        ///     from then on compute on it.
+        /// </summary>
+        /// <value>The assigned engine, or the built-in <see cref="DefaultEngine"/> (the instance
+        ///     <c>BackendFactory.GetEngine&lt;DefaultEngine&gt;()</c> returns); never null. Assigning null restores the
+        ///     built-in engine. <see cref="BackendFactory.GetEngine(BackendType)"/> returns this property.</value>
+        /// <remarks>
+        ///     <para>
+        ///     An array binds its engine once, when it is created, so an assignment reaches the arrays created afterwards
+        ///     and every array that already exists keeps the engine it bound (assign <see cref="NDArray.TensorEngine"/> to
+        ///     move one). An engine binds the results it computes to itself and a view binds its source's engine, so the
+        ///     arrays derived from an existing array stay on that array's engine after the default changes.
+        ///     </para>
+        ///     <para>
+        ///     Footgun: <see cref="Blas"/>, <see cref="Linalg"/> and <see cref="Fft"/> belong to each engine instance, and a
+        ///     new engine starts with none of what was assigned to the previous default. <c>NumSharp.Interop.OpenBLAS</c>
+        ///     installs its backend on the engine that is the default when the package loads, so an engine assigned later
+        ///     computes its matrix products with the managed kernels until its own <see cref="Blas"/> is set: copy it over
+        ///     (<c>engine.Blas = TensorEngine.Default.Blas;</c>) before the assignment.
+        ///     </para>
+        ///     <para>
+        ///     Process-wide and not synchronized: an array created on another thread while the property changes binds
+        ///     either engine. Assign it at startup, or around single-threaded work (tests that assign it must not run in
+        ///     parallel with tests that create arrays).
+        ///     </para>
+        /// </remarks>
+        public static TensorEngine Default
+        {
+            get => _default ?? BackendFactory.BuiltIn;
+            set => _default = value;
+        }
+
+        /// <summary>The engine assigned to <see cref="Default"/>, or null for the built-in <see cref="DefaultEngine"/>.</summary>
+        private static TensorEngine _default;
+
+        /// <summary>
         ///     An external BLAS this engine delegates its matrix products to, or null (the default)
         ///     to compute them with NumSharp's own managed SIMD kernels.
         /// </summary>
@@ -28,8 +67,9 @@ namespace NumSharp
         ///     null. A backend only answers for what it implements (see
         ///     <see cref="IBlasBackend"/>); everything else falls back to the managed kernels.
         ///     <para>
-        ///     Engines are cached singletons (<see cref="BackendFactory"/>), so assigning this
-        ///     affects every array that resolves to the engine — including ones already created.
+        ///     The property belongs to this engine instance, which every array bound to it shares, so assigning it
+        ///     reaches those arrays, existing ones included. An engine assigned to <see cref="Default"/> later starts
+        ///     with its own value (null unless set): copy this one over to keep an installed backend.
         ///     </para>
         /// </remarks>
         public IBlasBackend Blas { get; set; }
@@ -51,10 +91,11 @@ namespace NumSharp
         ///     <see cref="LinalgEngine"/> of your own to replace whole functions.
         ///     </para>
         ///     <para>
-        ///     Engines are cached singletons (<see cref="BackendFactory"/>), so an assignment reaches every array bound to
-        ///     the engine, existing ones included, from the next <c>np.linalg</c> call on: each call reads the property
-        ///     once, so one already running finishes with the engine it read. Do not assign it while another thread runs
-        ///     np.linalg functions whose results you compare: they may straddle the change.
+        ///     The property belongs to this engine instance, which every array bound to it shares, so an assignment reaches
+        ///     every array bound to the engine, existing ones included, from the next <c>np.linalg</c> call on: each call
+        ///     reads the property once, so one already running finishes with the engine it read. Do not assign it while
+        ///     another thread runs np.linalg functions whose results you compare: they may straddle the change. An engine
+        ///     assigned to <see cref="Default"/> later starts with the shared default here.
         ///     </para>
         /// </remarks>
         public LinalgEngine Linalg
@@ -82,10 +123,11 @@ namespace NumSharp
         ///     functions. <c>fftshift</c> and <c>ifftshift</c> are not members: they roll the array object.
         ///     </para>
         ///     <para>
-        ///     Engines are cached singletons (<see cref="BackendFactory"/>), so an assignment reaches every array bound to
-        ///     the engine, existing ones included, from the next <c>np.fft</c> call on: each call reads the property once,
-        ///     so one already running finishes with the engine it read. Do not assign it while another thread runs np.fft
-        ///     functions whose results you compare: they may straddle the change.
+        ///     The property belongs to this engine instance, which every array bound to it shares, so an assignment reaches
+        ///     every array bound to the engine, existing ones included, from the next <c>np.fft</c> call on: each call reads
+        ///     the property once, so one already running finishes with the engine it read. Do not assign it while another
+        ///     thread runs np.fft functions whose results you compare: they may straddle the change. An engine assigned to
+        ///     <see cref="Default"/> later starts with the shared default here.
         ///     </para>
         /// </remarks>
         public FftEngine Fft

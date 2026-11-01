@@ -1148,7 +1148,7 @@ namespace NumSharp.Backends
         private static unsafe NDArray ComputeLinspaceInDtype(double first, double last, int num, NPTypeCode dtype)
         {
             if (dtype == NPTypeCode.Double)
-                return BackendFactory.GetEngine().Linspace(first, last, num, true, NPTypeCode.Double, null);
+                return TensorEngine.Default.Linspace(first, last, num, true, NPTypeCode.Double, null);
 
             NPTypeCode binType = dtype;
             var edges = new NDArray(binType, Shape.Vector(num), false);

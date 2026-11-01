@@ -27,10 +27,14 @@ namespace NumSharp
         /// <exception cref="DTypePromotionError">A text input.</exception>
         /// <exception cref="ArgumentException">An <paramref name="out"/> dtype complex128 cannot be cast to under
         ///     same_kind.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.rfft.html
         ///     <para>Computed by <see cref="TensorEngine.Fft"/> of the operand's engine (<see cref="FftEngine.Rfft"/>).</para></remarks>
         public NDArray rfft(NDArray a, int? n = null, int axis = -1, string norm = null, NDArray @out = null)
-            => np.EngineOf(a).Fft.Rfft(a, n, axis, norm, @out);
+        {
+            if (a is null) throw new ArgumentNullException(nameof(a));
+            return a.TensorEngine.Fft.Rfft(a, n, axis, norm, @out);
+        }
 
         /// <summary>
         ///     Compute the inverse of <see cref="rfft"/> — a real-valued output. For <c>n</c> output
@@ -51,10 +55,14 @@ namespace NumSharp
         /// <exception cref="DTypePromotionError">A text input.</exception>
         /// <exception cref="ArgumentException">An <paramref name="out"/> dtype float64 cannot be cast to under
         ///     same_kind.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.irfft.html
         ///     <para>Computed by <see cref="TensorEngine.Fft"/> of the operand's engine (<see cref="FftEngine.Irfft"/>).</para></remarks>
         public NDArray irfft(NDArray a, int? n = null, int axis = -1, string norm = null, NDArray @out = null)
-            => np.EngineOf(a).Fft.Irfft(a, n, axis, norm, @out);
+        {
+            if (a is null) throw new ArgumentNullException(nameof(a));
+            return a.TensorEngine.Fft.Irfft(a, n, axis, norm, @out);
+        }
 
         /// <summary>
         ///     Compute the 2-dimensional FFT of a real array. <c>rfft2</c> is <c>rfftn</c> with the
@@ -72,10 +80,14 @@ namespace NumSharp
         /// <exception cref="AxisError">An axis out of range for a one-dimensional transform.</exception>
         /// <exception cref="TypeError">A complex input.</exception>
         /// <exception cref="DTypePromotionError">A text input.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.rfft2.html
         ///     <para>Computed by <see cref="TensorEngine.Fft"/> of the operand's engine (<see cref="FftEngine.Rfft2"/>).</para></remarks>
         public NDArray rfft2(NDArray a, int[] s = null, int[] axes = null, string norm = null, NDArray @out = null)
-            => np.EngineOf(a).Fft.Rfft2(a, s, axes, norm, @out);
+        {
+            if (a is null) throw new ArgumentNullException(nameof(a));
+            return a.TensorEngine.Fft.Rfft2(a, s, axes, norm, @out);
+        }
 
         /// <summary>
         ///     Compute the N-dimensional discrete Fourier Transform for real input: <see cref="rfft"/>
@@ -95,10 +107,14 @@ namespace NumSharp
         /// <exception cref="AxisError">An axis out of range for a one-dimensional transform.</exception>
         /// <exception cref="TypeError">A complex input.</exception>
         /// <exception cref="DTypePromotionError">A text input.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.rfftn.html
         ///     <para>Computed by <see cref="TensorEngine.Fft"/> of the operand's engine (<see cref="FftEngine.Rfftn"/>).</para></remarks>
         public NDArray rfftn(NDArray a, int[] s = null, int[] axes = null, string norm = null, NDArray @out = null)
-            => np.EngineOf(a).Fft.Rfftn(a, s, axes, norm, @out);
+        {
+            if (a is null) throw new ArgumentNullException(nameof(a));
+            return a.TensorEngine.Fft.Rfftn(a, s, axes, norm, @out);
+        }
 
         /// <summary>
         ///     Compute the inverse of <see cref="rfft2"/>. <c>irfft2</c> is <c>irfftn</c> with the
@@ -116,10 +132,14 @@ namespace NumSharp
         /// <exception cref="IndexError">An axis out of range, or no axis to transform.</exception>
         /// <exception cref="AxisError">An axis out of range for a one-dimensional transform.</exception>
         /// <exception cref="DTypePromotionError">A text input.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.irfft2.html
         ///     <para>Computed by <see cref="TensorEngine.Fft"/> of the operand's engine (<see cref="FftEngine.Irfft2"/>).</para></remarks>
         public NDArray irfft2(NDArray a, int[] s = null, int[] axes = null, string norm = null, NDArray @out = null)
-            => np.EngineOf(a).Fft.Irfft2(a, s, axes, norm, @out);
+        {
+            if (a is null) throw new ArgumentNullException(nameof(a));
+            return a.TensorEngine.Fft.Irfft2(a, s, axes, norm, @out);
+        }
 
         /// <summary>
         ///     Compute the inverse of <see cref="rfftn"/>: <see cref="ifft"/> over all axes but the last,
@@ -138,9 +158,13 @@ namespace NumSharp
         ///     of range</c>).</exception>
         /// <exception cref="AxisError">An axis out of range for a one-dimensional transform.</exception>
         /// <exception cref="DTypePromotionError">A text input.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.irfftn.html
         ///     <para>Computed by <see cref="TensorEngine.Fft"/> of the operand's engine (<see cref="FftEngine.Irfftn"/>).</para></remarks>
         public NDArray irfftn(NDArray a, int[] s = null, int[] axes = null, string norm = null, NDArray @out = null)
-            => np.EngineOf(a).Fft.Irfftn(a, s, axes, norm, @out);
+        {
+            if (a is null) throw new ArgumentNullException(nameof(a));
+            return a.TensorEngine.Fft.Irfftn(a, s, axes, norm, @out);
+        }
     }
 }

@@ -55,12 +55,14 @@ namespace NumSharp
         /// <param name="weights">Unused for edge computation (accepted for signature parity, only shape-checked).</param>
         /// <returns>The bin edges (length <paramref name="bins"/> + 1), dtype float (or the input's float width).</returns>
         /// <exception cref="ValueError"><paramref name="bins"/> &lt; 1, or the range is invalid/non-finite.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.histogram_bin_edges.html <para>Scoped (<c>[NDScoped]</c>): the raveled input, any weights ravel and every estimator/linspace intermediate are reclaimed; only the edge array leaves (an explicit edge array the caller passed through unchanged stays the caller's).</para></remarks>
         [NDScoped]
         public static NDArray histogram_bin_edges(NDArray a, int bins = 10, (double, double)? range = null, NDArray weights = null)
         {
+            if (a is null) throw new ArgumentNullException(nameof(a));
             using var plain = NDMatrixBoundary.PlainFor(a, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return EngineOf(a).HistogramBinEdges(a, bins, range, weights);
+            return a.TensorEngine.HistogramBinEdges(a, bins, range, weights);
         }
 
         /// <summary>
@@ -75,12 +77,14 @@ namespace NumSharp
         /// <returns>The estimator-chosen bin edges.</returns>
         /// <exception cref="ValueError"><paramref name="bins"/> is not a known estimator, or the range is invalid.</exception>
         /// <exception cref="TypeError"><paramref name="weights"/> is supplied (unsupported for estimators).</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <remarks>Scoped (<c>[NDScoped]</c>): the raveled input, any weights ravel and every estimator/linspace intermediate are reclaimed; only the edge array leaves (an explicit edge array the caller passed through unchanged stays the caller's).</remarks>
         [NDScoped]
         public static NDArray histogram_bin_edges(NDArray a, string bins, (double, double)? range = null, NDArray weights = null)
         {
+            if (a is null) throw new ArgumentNullException(nameof(a));
             using var plain = NDMatrixBoundary.PlainFor(a, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return EngineOf(a).HistogramBinEdges(a, bins, range, weights);
+            return a.TensorEngine.HistogramBinEdges(a, bins, range, weights);
         }
 
         /// <summary>
@@ -94,12 +98,14 @@ namespace NumSharp
         /// <param name="weights">Ignored for edge computation.</param>
         /// <returns>The edges array (dtype preserved).</returns>
         /// <exception cref="ValueError">The edges are not 1-D or not monotonically increasing.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <remarks>Scoped (<c>[NDScoped]</c>): the raveled input, any weights ravel and every estimator/linspace intermediate are reclaimed; only the edge array leaves (an explicit edge array the caller passed through unchanged stays the caller's).</remarks>
         [NDScoped]
         public static NDArray histogram_bin_edges(NDArray a, NDArray bins, (double, double)? range = null, NDArray weights = null)
         {
+            if (a is null) throw new ArgumentNullException(nameof(a));
             using var plain = NDMatrixBoundary.PlainFor(a, bins, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return EngineOf(a).HistogramBinEdges(a, bins, range, weights);
+            return a.TensorEngine.HistogramBinEdges(a, bins, range, weights);
         }
 
         /// <summary>
@@ -112,12 +118,14 @@ namespace NumSharp
         /// <param name="range">Ignored when explicit edges are given.</param>
         /// <param name="weights">Ignored for edge computation.</param>
         /// <returns>The edges array (float64).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <remarks>Scoped (<c>[NDScoped]</c>): the raveled input, any weights ravel and every estimator/linspace intermediate are reclaimed; only the edge array leaves (an explicit edge array the caller passed through unchanged stays the caller's).</remarks>
         [NDScoped]
         public static NDArray histogram_bin_edges(NDArray a, double[] bins, (double, double)? range = null, NDArray weights = null)
         {
+            if (a is null) throw new ArgumentNullException(nameof(a));
             using var plain = NDMatrixBoundary.PlainFor(a, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return EngineOf(a).HistogramBinEdges(a, (NDArray)np.array(bins), range, weights);
+            return a.TensorEngine.HistogramBinEdges(a, (NDArray)np.array(bins), range, weights);
         }
 
         // ---------------------------------------------------------------------
@@ -142,12 +150,14 @@ namespace NumSharp
         /// </param>
         /// <returns>A <see cref="HistogramResult"/> carrying the histogram values and the bin edges.</returns>
         /// <exception cref="ValueError"><paramref name="bins"/> &lt; 1, or the range is invalid/non-finite.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.histogram.html <para>Scoped (<c>[NDScoped]</c>; <see cref="HistogramResult"/> is an <see cref="INDArrayCarrier"/>): the raveled input and weights, the per-sample bin indices, the bincount/cumulative scratch and the density quotients are reclaimed; only the histogram and its edges leave.</para></remarks>
         [NDScoped]
         public static HistogramResult histogram(NDArray a, int bins = 10, (double, double)? range = null, bool density = false, NDArray weights = null)
         {
+            if (a is null) throw new ArgumentNullException(nameof(a));
             using var plain = NDMatrixBoundary.PlainFor(a, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return EngineOf(a).Histogram(a, bins, range, density, weights);
+            return a.TensorEngine.Histogram(a, bins, range, density, weights);
         }
 
         /// <summary>
@@ -161,12 +171,14 @@ namespace NumSharp
         /// <param name="weights">Weighted data is not supported for automatic estimation.</param>
         /// <returns>A <see cref="HistogramResult"/> carrying the histogram values and the bin edges.</returns>
         /// <exception cref="TypeError"><paramref name="weights"/> is supplied together with an estimator name.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="HistogramResult"/> is an <see cref="INDArrayCarrier"/>): the raveled input and weights, the per-sample bin indices, the bincount/cumulative scratch and the density quotients are reclaimed; only the histogram and its edges leave.</remarks>
         [NDScoped]
         public static HistogramResult histogram(NDArray a, string bins, (double, double)? range = null, bool density = false, NDArray weights = null)
         {
+            if (a is null) throw new ArgumentNullException(nameof(a));
             using var plain = NDMatrixBoundary.PlainFor(a, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return EngineOf(a).Histogram(a, bins, range, density, weights);
+            return a.TensorEngine.Histogram(a, bins, range, density, weights);
         }
 
         /// <summary>
@@ -182,12 +194,14 @@ namespace NumSharp
         /// <exception cref="ArgumentException">Bool <paramref name="weights"/> over data: NumPy's UFuncTypeError <c>Cannot
         ///     cast ufunc 'add' output from dtype('int64') to dtype('bool') with casting rule 'same_kind'</c> (NumPy adds the
         ///     weights' int64 cumulative sum into a bool total in place).</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="HistogramResult"/> is an <see cref="INDArrayCarrier"/>): the raveled input and weights, the per-sample bin indices, the bincount/cumulative scratch and the density quotients are reclaimed; only the histogram and its edges leave.</remarks>
         [NDScoped]
         public static HistogramResult histogram(NDArray a, NDArray bins, (double, double)? range = null, bool density = false, NDArray weights = null)
         {
+            if (a is null) throw new ArgumentNullException(nameof(a));
             using var plain = NDMatrixBoundary.PlainFor(a, bins, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return EngineOf(a).Histogram(a, bins, range, density, weights);
+            return a.TensorEngine.Histogram(a, bins, range, density, weights);
         }
 
         /// <summary>
@@ -203,12 +217,14 @@ namespace NumSharp
         /// <exception cref="ArgumentException">Bool <paramref name="weights"/> over data: NumPy's UFuncTypeError <c>Cannot
         ///     cast ufunc 'add' output from dtype('int64') to dtype('bool') with casting rule 'same_kind'</c> (NumPy adds the
         ///     weights' int64 cumulative sum into a bool total in place).</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="HistogramResult"/> is an <see cref="INDArrayCarrier"/>): the raveled input and weights, the per-sample bin indices, the bincount/cumulative scratch and the density quotients are reclaimed; only the histogram and its edges leave.</remarks>
         [NDScoped]
         public static HistogramResult histogram(NDArray a, double[] bins, (double, double)? range = null, bool density = false, NDArray weights = null)
         {
+            if (a is null) throw new ArgumentNullException(nameof(a));
             using var plain = NDMatrixBoundary.PlainFor(a, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return EngineOf(a).Histogram(a, (NDArray)np.array(bins), range, density, weights);
+            return a.TensorEngine.Histogram(a, (NDArray)np.array(bins), range, density, weights);
         }
     }
 }

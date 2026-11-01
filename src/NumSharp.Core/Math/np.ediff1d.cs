@@ -61,8 +61,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray ediff1d(NDArray ary, object to_end = null, object to_begin = null)
         {
+            if (ary is null) throw new ArgumentNullException(nameof(ary));
             using var plain = NDMatrixBoundary.PlainFor(ary);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return np.EngineOf(ary).Ediff1d(ary, to_end, to_begin);
+            return ary.TensorEngine.Ediff1d(ary, to_end, to_begin);
         }
     }
 }

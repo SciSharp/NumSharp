@@ -109,14 +109,13 @@ namespace NumSharp
             // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
             if (NDCharArrayBoundary.Sees(operands))
                 return NDCharArrayBoundary.Plain((subscripts, operands, @out, dtype, order, casting, optimize), static s => einsum(s.subscripts, s.operands, s.@out, s.dtype, s.order, s.casting, s.optimize));
-            // The engine of the first operand, as np.dot dispatches on its first; with no operand there is none, and
-            // the default engine raises NumPy's error for it. The engine member checks the arguments, parses and
-            // validates the subscripts (rank, ellipsis grammar, operand count, output labels, out='s rank, every
-            // diagonal and every label extent) and contracts over the matrix products, so it reaches a backend the same
-            // indirect way tensordot / multi_dot do, through matmul.
-            NDArray first = operands is { Length: > 0 } ? operands[0] : null;
-            return (first?.TensorEngine ?? BackendFactory.GetEngine())
-                .Einsum(subscripts, operands, @out, dtype, order, casting, optimize);
+            // The engine of the first operand, as np.dot dispatches on its first; with no operand (or a null first one)
+            // none decides, and TensorEngine.Default's member raises NumPy's error for it. The engine member checks the
+            // arguments, parses and validates the subscripts (rank, ellipsis grammar, operand count, output labels,
+            // out='s rank, every diagonal and every label extent) and contracts over the matrix products, so it reaches a
+            // backend the same indirect way tensordot / multi_dot do, through matmul.
+            TensorEngine engine = operands is { Length: > 0 } && operands[0] is { } first ? first.TensorEngine : TensorEngine.Default;
+            return engine.Einsum(subscripts, operands, @out, dtype, order, casting, optimize);
         }
 
         /// <summary>

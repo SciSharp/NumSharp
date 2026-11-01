@@ -107,8 +107,9 @@ namespace NumSharp
         /// </exception>
         public static NDArray sinc(NDArray x)
         {
+            if (x is null) throw new ArgumentNullException(nameof(x));
             using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return np.EngineOf(x).Sinc(x);
+            return x.TensorEngine.Sinc(x);
         }
     }
 }

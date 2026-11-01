@@ -16,6 +16,7 @@ namespace NumSharp
         ///     ramp.</exception>
         /// <exception cref="IndexError">A 0-d <paramref name="p"/>.</exception>
         /// <exception cref="TypeError">Text coefficients.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="p"/> is null.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.polyder.html
         ///     <para>The statements are <see cref="TensorEngine.Polyder"/>, on <paramref name="p"/>'s engine (the default one
@@ -23,8 +24,9 @@ namespace NumSharp
         /// </remarks>
         public static NDArray polyder(NDArray p, int m = 1)
         {
+            if (p is null) throw new ArgumentNullException(nameof(p));
             using var plain = NDMatrixBoundary.PlainFor(p);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return np.EngineOf(p).Polyder(p, m);
+            return p.TensorEngine.Polyder(p, m);
         }
     }
 }

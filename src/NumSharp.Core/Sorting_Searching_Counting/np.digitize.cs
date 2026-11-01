@@ -33,7 +33,6 @@ namespace NumSharp
         /// <exception cref="TypeError">A <c>StringDType</c> <paramref name="x"/>: NumPy's searchsorted compares the numeric bins
         ///     and the text as Python objects and refuses the first mixed pair (<c>'&lt;' not supported between instances of
         ///     'float' and 'str'</c>), or two keys Python cannot order.</exception>
-
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.digitize.html
         ///     <para>
@@ -52,8 +51,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray digitize(NDArray x, NDArray bins, bool right = false)
         {
+            if (x is null) throw new ArgumentNullException(nameof(x));
             using var plain = NDMatrixBoundary.PlainFor(x, bins);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return np.EngineOf(x).Digitize(x, bins, right);
+            return x.TensorEngine.Digitize(x, bins, right);
         }
     }
 }

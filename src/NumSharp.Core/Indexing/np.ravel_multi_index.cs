@@ -65,9 +65,11 @@ namespace NumSharp
         public static NDArray<long> ravel_multi_index(NDArray[] multi_index, int[] dims, string mode = "raise", char order = 'C')
         {
             using var plain = NDMatrixBoundary.PlainFor(multi_index);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // The engine of the first coordinate array (the default one for an empty, null or null-led list) computes the
-            // call, its argument checks included; one mode string serves every dimension.
-            return EngineOf(multi_index is { Length: > 0 } ? multi_index[0] : null).RavelMultiIndex(multi_index, dims, mode, order);
+            // The engine of the first coordinate array computes the call, its argument checks included; an empty, null or
+            // null-led list has no operand to decide, so TensorEngine.Default's member reports NumPy's error for it. One
+            // mode string serves every dimension.
+            TensorEngine engine = multi_index is { Length: > 0 } && multi_index[0] is { } first ? first.TensorEngine : TensorEngine.Default;
+            return engine.RavelMultiIndex(multi_index, dims, mode, order);
         }
 
         /// <summary>
@@ -97,9 +99,11 @@ namespace NumSharp
         public static NDArray<long> ravel_multi_index(NDArray[] multi_index, int[] dims, string[] modes, char order = 'C')
         {
             using var plain = NDMatrixBoundary.PlainFor(multi_index);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // The engine of the first coordinate array computes the call; the modes array is NumPy's mode tuple (null is
-            // NumPy's None, which raises on every dimension).
-            return EngineOf(multi_index is { Length: > 0 } ? multi_index[0] : null).RavelMultiIndex(multi_index, dims, modes, order);
+            // The engine of the first coordinate array computes the call (TensorEngine.Default's for an empty, null or
+            // null-led list, which has no operand to decide); the modes array is NumPy's mode tuple (null is NumPy's
+            // None, which raises on every dimension).
+            TensorEngine engine = multi_index is { Length: > 0 } && multi_index[0] is { } first ? first.TensorEngine : TensorEngine.Default;
+            return engine.RavelMultiIndex(multi_index, dims, modes, order);
         }
 
         /// <summary>

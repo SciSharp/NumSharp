@@ -81,12 +81,16 @@ namespace NumSharp
         ///     np.dot(a, b) dispatches on <c>a.TensorEngine</c>; np.evaluate follows the same rule
         ///     with the first array the tree references (ARCHITECTURE.md P2), so an array bound to
         ///     an alternative engine is evaluated by that engine. A constant-only tree names no
-        ///     engine and falls to the default, whose validation rejects it.
+        ///     array, so no operand decides and <see cref="TensorEngine.Default"/> evaluates it (its
+        ///     validation rejects it).
         /// </summary>
+        /// <param name="expr">The tree, or null (the engine member refuses it).</param>
+        /// <param name="operands">The positional operands, or null when the tree's own leaves hold the arrays.</param>
+        /// <returns>The engine of the first operand (or the tree's first array leaf), else <see cref="TensorEngine.Default"/>.</returns>
         private static TensorEngine ResolveEngine(NDExpr expr, NDArray[] operands)
         {
             NDArray first = operands is { Length: > 0 } ? operands[0] : expr?.FirstArray();
-            return first?.TensorEngine ?? BackendFactory.GetEngine();
+            return first is null ? TensorEngine.Default : first.TensorEngine;
         }
 
         /// <summary>

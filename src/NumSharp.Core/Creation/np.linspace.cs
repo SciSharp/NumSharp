@@ -32,7 +32,7 @@ namespace NumSharp
         ///     <para>Computed by the default engine's <see cref="TensorEngine.Linspace"/>: there is no operand to choose
         ///     another.</para></remarks>
         public static NDArray linspace(double start, double stop, long num, bool endpoint = true, DType dtype = null, string device = null)
-            => np.EngineOf(null).Linspace(start, stop, num, endpoint, dtype, device);
+            => TensorEngine.Default.Linspace(start, stop, num, endpoint, dtype, device);
 
         /// <summary>
         ///     Return evenly spaced numbers over a specified interval.<br></br>

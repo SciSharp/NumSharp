@@ -111,8 +111,10 @@ namespace NumSharp
         /// <exception cref="IndexOutOfRangeException">An ellipsis with no operand to read its rank from.</exception>
         private static (EinsumPath path, string repr) EinsumPathOnEngine(string subscripts, NDArray[] operands, object optimize)
         {
-            NDArray first = operands is { Length: > 0 } ? operands[0] : null;
-            return (first?.TensorEngine ?? BackendFactory.GetEngine()).EinsumPath(subscripts, operands, optimize);
+            // the first operand's engine; with none (or a null first one) no operand decides, and TensorEngine.Default's
+            // member raises NumPy's error
+            TensorEngine engine = operands is { Length: > 0 } && operands[0] is { } first ? first.TensorEngine : TensorEngine.Default;
+            return engine.EinsumPath(subscripts, operands, optimize);
         }
     }
 }

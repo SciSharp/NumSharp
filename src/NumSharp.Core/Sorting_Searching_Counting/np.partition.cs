@@ -1,3 +1,5 @@
+using System;
+
 namespace NumSharp
 {
     public static partial class np
@@ -28,14 +30,18 @@ namespace NumSharp
         ///     <c>a.partition(kth, axis=...)</c> is the STRING partition
         ///     (<c>chararray.partition() got an unexpected keyword argument 'axis'</c>),
         ///     after the argument checks.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         public static NDArray partition(NDArray a, int kth, int? axis = -1, string kind = "introselect", string order = null)
-            => NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand: NumPy's a.partition(kth, axis=...) is chararray.partition(sep), which takes no axis (NDCharArrayBoundary)
+        {
+            if (a is null) throw new ArgumentNullException(nameof(a));
+            return NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand: NumPy's a.partition(kth, axis=...) is chararray.partition(sep), which takes no axis (NDCharArrayBoundary)
             ? throw NDCharArrayBoundary.PartitionKeywordError()
             : NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((a, kth, axis, kind, order), static s => partition(s.a, s.kth, s.axis, s.kind, s.order))
             // NumPy's partition is fromnumeric.partition over PyArray_Partition, the engine's: TensorEngine.Partition
-            // (EngineOf, so a null a still meets the kind and order checks first, as before the move).
-            : EngineOf(a).Partition(a, kth, axis, kind, order);
+            // of a's engine (a null a is refused above).
+            : a.TensorEngine.Partition(a, kth, axis, kind, order);
+        }
 
         /// <summary>
         ///     Return a partitioned copy of an array, partitioning around EVERY index in
@@ -55,13 +61,17 @@ namespace NumSharp
         ///     <c>a.partition(kth, axis=...)</c> is the STRING partition
         ///     (<c>chararray.partition() got an unexpected keyword argument 'axis'</c>),
         ///     after the argument checks.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         [NDScoped]
         public static NDArray partition(NDArray a, int[] kth, int? axis = -1, string kind = "introselect", string order = null)
-            => NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand: NumPy's a.partition(kth, axis=...) is chararray.partition(sep), which takes no axis (NDCharArrayBoundary)
+        {
+            if (a is null) throw new ArgumentNullException(nameof(a));
+            return NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand: NumPy's a.partition(kth, axis=...) is chararray.partition(sep), which takes no axis (NDCharArrayBoundary)
             ? throw NDCharArrayBoundary.PartitionKeywordError()
             : NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((a, kth, axis, kind, order), static s => partition(s.a, s.kth, s.axis, s.kind, s.order))
-            : EngineOf(a).Partition(a, kth, axis, kind, order);
+            : a.TensorEngine.Partition(a, kth, axis, kind, order);
+        }
 
         /// <summary>
         ///     Return a partitioned copy with the kth indices given as an ARRAY — NumPy's array-kth
@@ -77,12 +87,16 @@ namespace NumSharp
         ///     <c>a.partition(kth, axis=...)</c> is the STRING partition
         ///     (<c>chararray.partition() got an unexpected keyword argument 'axis'</c>),
         ///     after the argument checks.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         public static NDArray partition(NDArray a, NDArray kth, int? axis = -1, string kind = "introselect", string order = null)
-            => NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand: NumPy's a.partition(kth, axis=...) is chararray.partition(sep), which takes no axis (NDCharArrayBoundary)
+        {
+            if (a is null) throw new ArgumentNullException(nameof(a));
+            return NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand: NumPy's a.partition(kth, axis=...) is chararray.partition(sep), which takes no axis (NDCharArrayBoundary)
             ? throw NDCharArrayBoundary.PartitionKeywordError()
             : NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((a, kth, axis, kind, order), static s => partition(s.a, s.kth, s.axis, s.kind, s.order))
-            : EngineOf(a).Partition(a, kth, axis, kind, order);
+            : a.TensorEngine.Partition(a, kth, axis, kind, order);
+        }
     }
 
     public partial class NDArray

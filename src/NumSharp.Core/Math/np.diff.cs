@@ -67,14 +67,16 @@ namespace NumSharp
         /// <exception cref="ValueError"><paramref name="a"/> is 0-D ("diff requires input that is at least one
         ///     dimensional").</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range for <paramref name="a"/>'s rank.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         [NDScoped]
         public static NDArray diff(NDArray a, int n = 1, int axis = -1,
                                    object prepend = null, object append = null)
         {
+            if (a is null) throw new ArgumentNullException(nameof(a));
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Wrapped((a, n, axis, prepend, append), static s => diff(s.a, s.n, s.axis, s.prepend, s.append));
-            return np.EngineOf(a).Diff(a, n, axis, prepend, append);
+            return a.TensorEngine.Diff(a, n, axis, prepend, append);
         }
     }
 }

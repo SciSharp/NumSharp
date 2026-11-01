@@ -1,3 +1,5 @@
+using System;
+
 namespace NumSharp
 {
     public static partial class np
@@ -55,16 +57,18 @@ namespace NumSharp
         ///     truth values (an empty string — all NULs — is a zero): NumPy's <c>_arg_trim_zeros</c> runs <c>np.argwhere</c>,
         ///     the dtype's nonzero route, which never raises; the result is a view of the text itself.</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="filt"/> is null.</exception>
         [NDScoped]
         public static NDArray trim_zeros(NDArray filt, string trim, int[] axis)
         {
+            if (filt is null) throw new ArgumentNullException(nameof(filt));
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(filt))
                 return NDMatrixBoundary.Wrapped((filt, trim, axis), static s => trim_zeros(s.filt, s.trim, s.axis));
             // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
             if (NDCharArrayBoundary.Sees(filt))
                 return NDCharArrayBoundary.Kept((filt, trim, axis), static s => trim_zeros(s.filt, s.trim, s.axis));
-            return np.EngineOf(filt).TrimZeros(filt, trim, axis);
+            return filt.TensorEngine.TrimZeros(filt, trim, axis);
         }
     }
 }

@@ -49,12 +49,14 @@ namespace NumSharp
         /// <param name="density">When true, return the probability density (<c>count / total / bin_volume</c>).</param>
         /// <param name="weights">Optional <c>(N,)</c> per-point weights.</param>
         /// <returns>A <see cref="HistogramddResult"/> carrying <c>H</c> and the per-dimension edges.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="sample"/> is null.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.histogramdd.html <para>Scoped (<c>[NDScoped]</c>; <see cref="HistogramddResult"/> is an <see cref="INDArrayCarrier"/>): the sample column views, the promoted columns, the per-dimension bin indices, the raveled multi-index and the density quotients are reclaimed; only <c>H</c> and the edge arrays leave.</para></remarks>
         [NDScoped]
         public static HistogramddResult histogramdd(NDArray sample, int bins = 10, (double, double)?[] range = null, bool density = false, NDArray weights = null)
         {
+            if (sample is null) throw new ArgumentNullException(nameof(sample));
             using var plain = NDMatrixBoundary.PlainFor(sample, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return EngineOf(sample).Histogramdd(DefaultEngine.SampleColumns(sample), bins, range, density, weights);
+            return sample.TensorEngine.Histogramdd(DefaultEngine.SampleColumns(sample), bins, range, density, weights);
         }
 
         /// <summary>Compute the D-dimensional histogram with a per-dimension bin count.</summary>
@@ -64,12 +66,14 @@ namespace NumSharp
         /// <param name="density">When true, return the probability density.</param>
         /// <param name="weights">Optional <c>(N,)</c> per-point weights.</param>
         /// <returns>A <see cref="HistogramddResult"/> carrying <c>H</c> and the per-dimension edges.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="sample"/> is null.</exception>
         /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="HistogramddResult"/> is an <see cref="INDArrayCarrier"/>): the sample column views, the promoted columns, the per-dimension bin indices, the raveled multi-index and the density quotients are reclaimed; only <c>H</c> and the edge arrays leave.</remarks>
         [NDScoped]
         public static HistogramddResult histogramdd(NDArray sample, int[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
         {
+            if (sample is null) throw new ArgumentNullException(nameof(sample));
             using var plain = NDMatrixBoundary.PlainFor(sample, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return EngineOf(sample).Histogramdd(DefaultEngine.SampleColumns(sample), bins, range, density, weights);
+            return sample.TensorEngine.Histogramdd(DefaultEngine.SampleColumns(sample), bins, range, density, weights);
         }
 
         /// <summary>Compute the D-dimensional histogram with explicit per-dimension bin edges.</summary>
@@ -79,13 +83,15 @@ namespace NumSharp
         /// <param name="density">When true, return the probability density.</param>
         /// <param name="weights">Optional <c>(N,)</c> per-point weights.</param>
         /// <returns>A <see cref="HistogramddResult"/> carrying <c>H</c> and the per-dimension edges.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="sample"/> is null.</exception>
         /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="HistogramddResult"/> is an <see cref="INDArrayCarrier"/>): the sample column views, the promoted columns, the per-dimension bin indices, the raveled multi-index and the density quotients are reclaimed; only <c>H</c> and the edge arrays leave.</remarks>
         [NDScoped]
         public static HistogramddResult histogramdd(NDArray sample, NDArray[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
         {
+            if (sample is null) throw new ArgumentNullException(nameof(sample));
             using var plain = NDMatrixBoundary.PlainFor(sample, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             using var plain2 = NDMatrixBoundary.PlainFor(bins);
-            return EngineOf(sample).Histogramdd(DefaultEngine.SampleColumns(sample), bins, range, density, weights);
+            return sample.TensorEngine.Histogramdd(DefaultEngine.SampleColumns(sample), bins, range, density, weights);
         }
 
         /// <summary>Compute the D-dimensional histogram with a mixed per-dimension bin spec (each entry an int count or an edge array).</summary>
@@ -95,12 +101,14 @@ namespace NumSharp
         /// <param name="density">When true, return the probability density.</param>
         /// <param name="weights">Optional <c>(N,)</c> per-point weights.</param>
         /// <returns>A <see cref="HistogramddResult"/> carrying <c>H</c> and the per-dimension edges.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="sample"/> is null.</exception>
         /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="HistogramddResult"/> is an <see cref="INDArrayCarrier"/>): the sample column views, the promoted columns, the per-dimension bin indices, the raveled multi-index and the density quotients are reclaimed; only <c>H</c> and the edge arrays leave.</remarks>
         [NDScoped]
         public static HistogramddResult histogramdd(NDArray sample, object[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
         {
+            if (sample is null) throw new ArgumentNullException(nameof(sample));
             using var plain = NDMatrixBoundary.PlainFor(sample, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return EngineOf(sample).Histogramdd(DefaultEngine.SampleColumns(sample), bins, range, density, weights);
+            return sample.TensorEngine.Histogramdd(DefaultEngine.SampleColumns(sample), bins, range, density, weights);
         }
 
         // ---------------------------------------------------------------------
@@ -177,13 +185,14 @@ namespace NumSharp
 
         /// <summary>
         ///     The engine a sequence sample's <c>np.histogramdd</c> call computes on: the first column's engine (the operand
-        ///     NumPy's statements read first), or the default engine for a null or empty sequence, whose refusal the column
-        ///     conversion then reports as before.
+        ///     NumPy's statements read first), or <see cref="TensorEngine.Default"/> for a null, empty or null-led sequence,
+        ///     which has no operand to decide and whose refusal the column conversion then reports as before.
         /// </summary>
         /// <param name="sample">The caller's sequence of D coordinate arrays, or null.</param>
-        /// <returns>The engine of <c>sample[0]</c>, or the default engine (see <see cref="EngineOf"/>).</returns>
+        /// <returns>The engine of <c>sample[0]</c>, or <see cref="TensorEngine.Default"/>.</returns>
         /// <remarks>Chosen before the columns are converted (the conversion may make new arrays, bound to the default
         ///     engine), and without side effects, so the conversion's errors keep their order.</remarks>
-        private static TensorEngine SequenceEngine(NDArray[] sample) => EngineOf(sample is { Length: > 0 } ? sample[0] : null);
+        private static TensorEngine SequenceEngine(NDArray[] sample)
+            => sample is { Length: > 0 } && sample[0] is { } first ? first.TensorEngine : TensorEngine.Default;
     }
 }

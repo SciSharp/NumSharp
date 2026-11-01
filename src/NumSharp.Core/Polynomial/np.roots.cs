@@ -29,7 +29,7 @@ namespace NumSharp
             if (p is null || p.ndim == 0)
                 throw new TypeError("dispatcher for __array_function__ did not return an iterable");
             using var plain = NDMatrixBoundary.PlainFor(p);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return np.EngineOf(p).Roots(p);
+            return p.TensorEngine.Roots(p);
         }
     }
 }

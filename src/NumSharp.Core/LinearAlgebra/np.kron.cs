@@ -30,9 +30,11 @@ namespace NumSharp
         ///     <c>numpy.matrix</c> and <c>numpy.char.chararray</c> rules.</para>
         /// </remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         [NDScoped]
         public static NDArray kron(NDArray a, NDArray b)
         {
+            if (a is null) throw new ArgumentNullException(nameof(a));
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(a, b))
                 return NDMatrixBoundary.Wrapped((a, b), static s => kron(s.a, s.b));
@@ -41,7 +43,7 @@ namespace NumSharp
             // chararray view (text has no multiply loop: the ufunc's TypeError), an int8 one too (NDCharArrayBoundary)
             if (NDCharArrayBoundary.Sees(a, b))
                 return NDCharArrayBoundary.Wrapped((a, b), static s => kron(s.a, s.b));
-            return np.EngineOf(a).Kron(a, b);
+            return a.TensorEngine.Kron(a, b);
         }
     }
 }

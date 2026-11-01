@@ -29,6 +29,7 @@ namespace NumSharp
             ///     matrix with no matrix backend installed (an empty matrix or a zero-size batch needs none).</exception>
             /// <exception cref="AxisError">An axis out of range.</exception>
             /// <exception cref="TypeError">An order that is neither null, a number nor a string.</exception>
+            /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
             /// <remarks>
             ///     https://numpy.org/doc/stable/reference/generated/numpy.linalg.norm.html
             ///     <para>
@@ -59,13 +60,14 @@ namespace NumSharp
             [NDScoped] // the class boundary's temporaries; the Linalg member scopes the computation's own
             public static NDArray norm(NDArray x, object ord, int[] axis, bool keepdims = false)
             {
+                if (x is null) throw new ArgumentNullException(nameof(x));
                 // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
                 if (NDMatrixBoundary.Sees(x))
                     return NDMatrixBoundary.Plain((x, ord, axis, keepdims), static s => norm(s.x, s.ord, s.axis, s.keepdims));
                 // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
                 if (NDCharArrayBoundary.Sees(x))
                     return NDCharArrayBoundary.Plain((x, ord, axis, keepdims), static s => norm(s.x, s.ord, s.axis, s.keepdims));
-                return EngineOf(x).Linalg.Norm(x, ord, axis, keepdims);
+                return x.TensorEngine.Linalg.Norm(x, ord, axis, keepdims);
             }
 
             /// <summary>
@@ -83,17 +85,21 @@ namespace NumSharp
             /// <exception cref="AxisError"><paramref name="axis"/> is out of range (a 0-d input has no axis).</exception>
             /// <exception cref="ValueError">A text order, or -inf of an empty axis.</exception>
             /// <exception cref="TypeError">An order that is neither null, a number nor a string.</exception>
+            /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
             /// <remarks>
             ///     An integer axis is NOT the one-element tuple: NumPy hands it to norm as it is, while a tuple is moved to
             ///     the front and merged first (see the <c>int[]</c> overload). Both reach the vector branch, but in different
             ///     reduction layouts, so they are kept apart.
             /// </remarks>
             public static NDArray vector_norm(NDArray x, int axis, bool keepdims = false, object ord = null)
-                => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
+            {
+                if (x is null) throw new ArgumentNullException(nameof(x));
+                return NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
                 ? NDMatrixBoundary.Plain((x, axis, keepdims, ord), static s => vector_norm(s.x, s.axis, s.keepdims, s.ord))
                 : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
                 ? NDCharArrayBoundary.Plain((x, axis, keepdims, ord), static s => vector_norm(s.x, s.axis, s.keepdims, s.ord))
-                : EngineOf(x).Linalg.VectorNorm(x, axis, keepdims, ord);
+                : x.TensorEngine.Linalg.VectorNorm(x, axis, keepdims, ord);
+            }
 
             /// <summary>
             ///     The Array-API vector norm — <c>axis</c> defaults to flattening and <c>ord</c> to 2.
@@ -112,6 +118,7 @@ namespace NumSharp
             /// <exception cref="AxisError">An axis is out of range.</exception>
             /// <exception cref="ValueError">An axis appears twice ("repeated axis"), a text order, or -inf of an empty
             ///     operand.</exception>
+            /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
             /// <remarks>
             ///     https://numpy.org/doc/stable/reference/generated/numpy.linalg.vector_norm.html
             ///     <para>
@@ -127,13 +134,14 @@ namespace NumSharp
             [NDScoped] // the class boundary's temporaries; the Linalg member scopes the computation's own
             public static NDArray vector_norm(NDArray x, int[] axis = null, bool keepdims = false, object ord = null)
             {
+                if (x is null) throw new ArgumentNullException(nameof(x));
                 // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
                 if (NDMatrixBoundary.Sees(x))
                     return NDMatrixBoundary.Plain((x, axis, keepdims, ord), static s => vector_norm(s.x, s.axis, s.keepdims, s.ord));
                 // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
                 if (NDCharArrayBoundary.Sees(x))
                     return NDCharArrayBoundary.Plain((x, axis, keepdims, ord), static s => vector_norm(s.x, s.axis, s.keepdims, s.ord));
-                return EngineOf(x).Linalg.VectorNorm(x, axis, keepdims, ord);
+                return x.TensorEngine.Linalg.VectorNorm(x, axis, keepdims, ord);
             }
 
             /// <summary>
@@ -151,17 +159,21 @@ namespace NumSharp
             /// <exception cref="AxisError">An operand of fewer than two axes.</exception>
             /// <exception cref="OpenBlasMissingBackendException">An order 2, -2 or <c>"nuc"</c> over a non-empty matrix
             ///     with no matrix backend installed.</exception>
+            /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
             /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.matrix_norm.html</remarks>
             /// <remarks>
             ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
             ///     ends with <c>np.concatenate</c>), which drops the class.
             /// </remarks>
             public static NDArray matrix_norm(NDArray x, bool keepdims = false, object ord = null)
-                => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
+            {
+                if (x is null) throw new ArgumentNullException(nameof(x));
+                return NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
                 ? NDMatrixBoundary.Plain((x, keepdims, ord), static s => matrix_norm(s.x, s.keepdims, s.ord))
                 : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
                 ? NDCharArrayBoundary.Plain((x, keepdims, ord), static s => matrix_norm(s.x, s.keepdims, s.ord))
-                : EngineOf(x).Linalg.MatrixNorm(x, keepdims, ord);
+                : x.TensorEngine.Linalg.MatrixNorm(x, keepdims, ord);
+            }
         }
     }
 }

@@ -60,12 +60,13 @@ namespace NumSharp
             int? axis = null, NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false, NDArray weights = null)
         {
+            if (a is null) throw new ArgumentNullException(nameof(a));
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims, weights), static s => nanpercentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), axis, keepdims, null);
             // NumPy's np.nanpercentile body (q divided by 100 and checked, the weighted branch, the text routes, the
             // NaN-ignoring quantile) is TensorEngine.NanPercentile's: the facade holds only the class rule above.
-            return EngineOf(a).NanPercentile(a, q, axis.HasValue ? new[] { axis.Value } : null, @out,
+            return a.TensorEngine.NanPercentile(a, q, axis.HasValue ? new[] { axis.Value } : null, @out,
                 overwrite_input, method, keepdims, weights);
         }
 
@@ -122,12 +123,13 @@ namespace NumSharp
             int? axis = null, NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false, NDArray weights = null)
         {
+            if (a is null) throw new ArgumentNullException(nameof(a));
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims, weights), static s => nanpercentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), axis, keepdims, null);
             // NumPy's np.nanpercentile body is TensorEngine.NanPercentile's (a null q is reported there, after the complex
             // check).
-            return EngineOf(a).NanPercentile(a, q, axis.HasValue ? new[] { axis.Value } : null, @out,
+            return a.TensorEngine.NanPercentile(a, q, axis.HasValue ? new[] { axis.Value } : null, @out,
                 overwrite_input, method, keepdims, weights);
         }
 
@@ -194,9 +196,10 @@ namespace NumSharp
             NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false, NDArray weights = null)
         {
+            if (a is null) throw new ArgumentNullException(nameof(a));
             using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // NumPy's np.nanpercentile body is TensorEngine.NanPercentile's.
-            return EngineOf(a).NanPercentile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
+            return a.TensorEngine.NanPercentile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
         }
 
         /// <summary>
@@ -263,10 +266,11 @@ namespace NumSharp
             NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false, NDArray weights = null)
         {
+            if (a is null) throw new ArgumentNullException(nameof(a));
             using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // NumPy's np.nanpercentile body is TensorEngine.NanPercentile's (a null q is reported there, after the complex
             // check).
-            return EngineOf(a).NanPercentile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
+            return a.TensorEngine.NanPercentile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
         }
 
         /// <summary>
@@ -324,12 +328,13 @@ namespace NumSharp
             int? axis = null, NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false, NDArray weights = null)
         {
+            if (a is null) throw new ArgumentNullException(nameof(a));
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims, weights), static s => nanpercentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), axis, keepdims, null);
             // NumPy's np.nanpercentile body is TensorEngine.NanPercentile's: a null or text q, np.true_divide(q, 100) and
             // the range check at any rank, a weak C# literal, q's rank, all in NumPy's order.
-            return EngineOf(a).NanPercentile(a, q, axis.HasValue ? new[] { axis.Value } : null, @out,
+            return a.TensorEngine.NanPercentile(a, q, axis.HasValue ? new[] { axis.Value } : null, @out,
                 overwrite_input, method, keepdims, weights);
         }
 
@@ -389,9 +394,10 @@ namespace NumSharp
             NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false, NDArray weights = null)
         {
+            if (a is null) throw new ArgumentNullException(nameof(a));
             using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // NumPy's np.nanpercentile body is TensorEngine.NanPercentile's (see the one-axis overload).
-            return EngineOf(a).NanPercentile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
+            return a.TensorEngine.NanPercentile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
         }
     }
 }

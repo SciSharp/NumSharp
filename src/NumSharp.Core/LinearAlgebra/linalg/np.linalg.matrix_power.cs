@@ -39,13 +39,15 @@ namespace NumSharp
             ///     </para>
             /// </remarks>
             /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+            /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
             [NDScoped] // the class boundary's temporaries; the Linalg member scopes the computation's own
             public static NDArray matrix_power(NDArray a, int n)
             {
+                if (a is null) throw new ArgumentNullException(nameof(a));
                 // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
                 if (NDMatrixBoundary.Sees(a))
                     return NDMatrixBoundary.Wrapped((a, n), static s => matrix_power(s.a, s.n));
-                return EngineOf(a).Linalg.MatrixPower(a, n);
+                return a.TensorEngine.Linalg.MatrixPower(a, n);
             }
         }
     }

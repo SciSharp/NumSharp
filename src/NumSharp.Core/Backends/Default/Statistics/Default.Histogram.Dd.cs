@@ -292,7 +292,7 @@ namespace NumSharp.Backends
             // Flatten the D bin numbers into one index into the padded histogram, tally, reshape, drop outliers.
             // np.ravel_multi_index(Ncount, nbin)'s statement: the first coordinate array's engine (the default one without
             // dimensions), mode 'raise', C order.
-            TensorEngine indexEngine = D > 0 ? Ncount[0].TensorEngine : BackendFactory.GetEngine();
+            TensorEngine indexEngine = D > 0 ? Ncount[0].TensorEngine : TensorEngine.Default;
             NDArray xy = indexEngine.RavelMultiIndex(Ncount, nbin, "raise", 'C');
 
             long minlen = 1;

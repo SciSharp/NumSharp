@@ -1,3 +1,5 @@
+using System;
+
 namespace NumSharp
 {
     public static partial class np
@@ -22,6 +24,7 @@ namespace NumSharp
         /// <exception cref="DTypePromotionError">A 1-D <c>StringDType</c> <paramref name="x"/>: <c>promote_types(x.dtype,
         ///     int)</c> finds no common DType (<c>The DTypes &lt;class 'numpy.dtypes.StringDType'&gt; and &lt;class
         ///     'numpy.dtypes.Int64DType'&gt; do not have a common DType. ...</c>), whatever <paramref name="N"/>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.vander.html
         /// <para>NumPy's statements: <c>v = empty((len(x), N), dtype=promote_types(x.dtype, int))</c>; <c>if N &gt; 0:
         /// tmp[:, 0] = 1</c>; <c>if N &gt; 1: tmp[:, 1:] = x[:, None]; multiply.accumulate(tmp[:, 1:], ...)</c>. A text
@@ -31,8 +34,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray vander(NDArray x, int? N = null, bool increasing = false)
         {
+            if (x is null) throw new ArgumentNullException(nameof(x));
             using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return np.EngineOf(x).Vander(x, N, increasing);
+            return x.TensorEngine.Vander(x, N, increasing);
         }
     }
 }

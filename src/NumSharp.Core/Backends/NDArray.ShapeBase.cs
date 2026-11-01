@@ -1330,7 +1330,7 @@ namespace NumSharp
             {
                 long newOffset = _baseOffset + startElems * _axisStride;
                 var newShape = new Shape(dims, _srcStrides, newOffset, _bufSize, flags, size, hash);
-                // Hot-path ctor: pre-resolved engine, no `?? BackendFactory.GetEngine()`
+                // Hot-path ctor: pre-resolved engine, no `?? TensorEngine.Default`
                 // guard, no `Storage.Engine = tensorEngine` writeback.
                 return new NDArray(_ary.Storage.Alias(newShape), _engine, skipEngineResolve: true);
             }

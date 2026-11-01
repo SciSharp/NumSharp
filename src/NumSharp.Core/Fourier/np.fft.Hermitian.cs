@@ -1,3 +1,5 @@
+using System;
+
 namespace NumSharp
 {
     public partial class FourierModule
@@ -25,6 +27,7 @@ namespace NumSharp
         /// <exception cref="IndexError"><paramref name="axis"/> out of range with <paramref name="n"/> omitted.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> out of range with <paramref name="n"/> given.</exception>
         /// <exception cref="TypeError">A text input (np.conjugate has no string loop).</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.hfft.html</remarks>
         /// <remarks>
         ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
@@ -35,13 +38,14 @@ namespace NumSharp
         [NDScoped] // the class boundary's temporaries; the Fft member scopes the computation's own
         public NDArray hfft(NDArray a, int? n = null, int axis = -1, string norm = null, NDArray @out = null)
         {
+            if (a is null) throw new ArgumentNullException(nameof(a));
             // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Plain((self: this, a, n, axis, norm, @out), static s => s.self.hfft(s.a, s.n, s.axis, s.norm, s.@out));
             // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
             if (NDCharArrayBoundary.Sees(a))
                 return NDCharArrayBoundary.Plain((self: this, a, n, axis, norm, @out), static s => s.self.hfft(s.a, s.n, s.axis, s.norm, s.@out));
-            return np.EngineOf(a).Fft.Hfft(a, n, axis, norm, @out);
+            return a.TensorEngine.Fft.Hfft(a, n, axis, norm, @out);
         }
 
         /// <summary>
@@ -63,9 +67,13 @@ namespace NumSharp
         /// <exception cref="DTypePromotionError">A text input.</exception>
         /// <exception cref="System.ArgumentException">An <paramref name="out"/> dtype complex128 cannot be cast to under
         ///     same_kind.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.ihfft.html
         ///     <para>Computed by <see cref="TensorEngine.Fft"/> of the operand's engine (<see cref="FftEngine.Ihfft"/>).</para></remarks>
         public NDArray ihfft(NDArray a, int? n = null, int axis = -1, string norm = null, NDArray @out = null)
-            => np.EngineOf(a).Fft.Ihfft(a, n, axis, norm, @out);
+        {
+            if (a is null) throw new ArgumentNullException(nameof(a));
+            return a.TensorEngine.Fft.Ihfft(a, n, axis, norm, @out);
+        }
     }
 }

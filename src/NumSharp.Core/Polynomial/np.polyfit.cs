@@ -35,6 +35,7 @@ namespace NumSharp
         /// <exception cref="LinAlgError">lstsq's SVD does not converge, or the covariance's inverse meets a singular
         ///     matrix.</exception>
         /// <exception cref="IncorrectShapeException">Weights that do not broadcast against a 2-D y's columns.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.polyfit.html
         ///     <para>
@@ -49,8 +50,9 @@ namespace NumSharp
         public static PolyfitResult polyfit(NDArray x, NDArray y, int deg, double? rcond = null,
             bool full = false, NDArray w = null, object cov = null)
         {
+            if (x is null) throw new ArgumentNullException(nameof(x));
             using var plain = NDMatrixBoundary.PlainFor(x, y, w);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return np.EngineOf(x).Polyfit(x, y, deg, rcond, full, w, cov);
+            return x.TensorEngine.Polyfit(x, y, deg, rcond, full, w, cov);
         }
     }
 

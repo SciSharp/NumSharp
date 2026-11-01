@@ -1,3 +1,5 @@
+using System;
+
 namespace NumSharp
 {
     public static partial class np
@@ -25,14 +27,17 @@ namespace NumSharp
         /// <exception cref="ValueError">A <c>numpy.char.chararray</c> operand: NumPy creates
         ///     the int64 index result as the subclass (<c>Can only create a chararray from string
         ///     data.</c>), after the argument checks.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         public static NDArray argpartition(NDArray a, int kth, int? axis = -1, string kind = "introselect", string order = null)
-            => NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand: NumPy creates the index as the subclass, so the finalize ValueError follows the plain checks (NDCharArrayBoundary)
+        {
+            if (a is null) throw new ArgumentNullException(nameof(a));
+            return NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand: NumPy creates the index as the subclass, so the finalize ValueError follows the plain checks (NDCharArrayBoundary)
             ? NDCharArrayBoundary.IndexResult((a, kth, axis, kind, order), static s => argpartition(s.a, s.kth, s.axis, s.kind, s.order), null)
             : NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((a, kth, axis, kind, order), static s => argpartition(s.a, s.kth, s.axis, s.kind, s.order))
-            // PyArray_ArgPartition, the engine's: TensorEngine.ArgPartition (EngineOf, so a null a still meets the kind and
-            // order checks first, as before the move).
-            : EngineOf(a).ArgPartition(a, kth, axis, kind, order);
+            // PyArray_ArgPartition, the engine's: TensorEngine.ArgPartition of a's engine (a null a is refused above).
+            : a.TensorEngine.ArgPartition(a, kth, axis, kind, order);
+        }
 
         /// <summary>
         ///     Indirect partition around EVERY index in <paramref name="kth"/> at once (NumPy
@@ -43,13 +48,17 @@ namespace NumSharp
         /// <exception cref="ValueError">A <c>numpy.char.chararray</c> operand: NumPy creates
         ///     the int64 index result as the subclass (<c>Can only create a chararray from string
         ///     data.</c>), after the argument checks.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         [NDScoped]
         public static NDArray argpartition(NDArray a, int[] kth, int? axis = -1, string kind = "introselect", string order = null)
-            => NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand: NumPy creates the index as the subclass, so the finalize ValueError follows the plain checks (NDCharArrayBoundary)
+        {
+            if (a is null) throw new ArgumentNullException(nameof(a));
+            return NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand: NumPy creates the index as the subclass, so the finalize ValueError follows the plain checks (NDCharArrayBoundary)
             ? NDCharArrayBoundary.IndexResult((a, kth, axis, kind, order), static s => argpartition(s.a, s.kth, s.axis, s.kind, s.order), null)
             : NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((a, kth, axis, kind, order), static s => argpartition(s.a, s.kth, s.axis, s.kind, s.order))
-            : EngineOf(a).ArgPartition(a, kth, axis, kind, order);
+            : a.TensorEngine.ArgPartition(a, kth, axis, kind, order);
+        }
 
         /// <summary>
         ///     Indirect partition with the kth indices given as an ARRAY — NumPy's array-kth form
@@ -62,12 +71,16 @@ namespace NumSharp
         /// <exception cref="ValueError">A <c>numpy.char.chararray</c> operand: NumPy creates
         ///     the int64 index result as the subclass (<c>Can only create a chararray from string
         ///     data.</c>), after the argument checks.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         public static NDArray argpartition(NDArray a, NDArray kth, int? axis = -1, string kind = "introselect", string order = null)
-            => NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand: NumPy creates the index as the subclass, so the finalize ValueError follows the plain checks (NDCharArrayBoundary)
+        {
+            if (a is null) throw new ArgumentNullException(nameof(a));
+            return NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand: NumPy creates the index as the subclass, so the finalize ValueError follows the plain checks (NDCharArrayBoundary)
             ? NDCharArrayBoundary.IndexResult((a, kth, axis, kind, order), static s => argpartition(s.a, s.kth, s.axis, s.kind, s.order), null)
             : NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((a, kth, axis, kind, order), static s => argpartition(s.a, s.kth, s.axis, s.kind, s.order))
-            : EngineOf(a).ArgPartition(a, kth, axis, kind, order);
+            : a.TensorEngine.ArgPartition(a, kth, axis, kind, order);
+        }
     }
 
     public partial class NDArray

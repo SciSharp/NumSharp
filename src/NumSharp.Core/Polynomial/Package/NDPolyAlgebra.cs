@@ -1089,7 +1089,7 @@ namespace NumSharp
             // so NumPy's dot sees a positive stride except for np.convolve's reversed ONE-element kernel, which NumPy passes
             // through as `v[::-1]` (stride -itemsize): a one-term complex factor keeps CDOUBLE_dot off cblas.
             SlidingDot.SlidingCorrelateInto(d.P, d.N, k, v.N, r.P, d.T, SlidingDot.SlidingMode.Full,
-                BackendFactory.GetEngine().Blas as ISlidingDotBackend, complexDotViaBlas: v.N != 1);
+                TensorEngine.Default.Blas as ISlidingDotBackend, complexDotViaBlas: v.N != 1);
             a.Release(mark);
             return r;
         }

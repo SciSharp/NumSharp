@@ -27,6 +27,7 @@ namespace NumSharp
         ///     according to the rule 'safe'</c>, <c>Cannot cast scalar …</c> for a 0-d x).</exception>
         /// <exception cref="ValueError">With a period, a text operand that does not parse as float64: NumPy parses the text
         ///     first (<c>np.asarray(…, dtype=float64)</c>: <c>could not convert string to float</c>).</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.interp.html
         ///     <para>
@@ -42,8 +43,9 @@ namespace NumSharp
         public static NDArray interp(NDArray x, NDArray xp, NDArray fp,
             double? left = null, double? right = null, double? period = null)
         {
+            if (x is null) throw new ArgumentNullException(nameof(x));
             using var plain = NDMatrixBoundary.PlainFor(x, xp, fp);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return np.EngineOf(x).Interp(x, xp, fp, left, right, period);
+            return x.TensorEngine.Interp(x, xp, fp, left, right, period);
         }
 
         /// <summary>
@@ -63,6 +65,7 @@ namespace NumSharp
         /// <exception cref="ValueError">As <see cref="interp(NDArray,NDArray,NDArray,double?,double?,double?)"/>.</exception>
         /// <exception cref="TypeError"><paramref name="fp"/> is not complex, no period is given, and <paramref name="left"/> or
         ///     <paramref name="right"/> is given: <c>must be real number, not complex</c>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.interp.html
         ///     <para>
@@ -76,8 +79,9 @@ namespace NumSharp
         public static NDArray interp(NDArray x, NDArray xp, NDArray fp,
             Complex? left, Complex? right = null, double? period = null)
         {
+            if (x is null) throw new ArgumentNullException(nameof(x));
             using var plain = NDMatrixBoundary.PlainFor(x, xp, fp);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return np.EngineOf(x).Interp(x, xp, fp, left, right, period);
+            return x.TensorEngine.Interp(x, xp, fp, left, right, period);
         }
     }
 }

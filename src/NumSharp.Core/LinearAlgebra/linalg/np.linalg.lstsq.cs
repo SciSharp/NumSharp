@@ -32,17 +32,19 @@ namespace NumSharp
             ///     from <paramref name="a"/>'s.</exception>
             /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
             /// <exception cref="ArgumentException">A text operand (NumPy's gufunc input-cast refusal).</exception>
+            /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
             [NDScoped] // the class boundary's temporaries; the Linalg member scopes the computation's own
             public static (NDArray Solution, NDArray Residuals, NDArray Rank, NDArray SingularValues) lstsq(
                 NDArray a, NDArray b, double? rcond = null)
             {
+                if (a is null) throw new ArgumentNullException(nameof(a));
                 // NumPy takes its wrap from b (`a, _ = _makearray(a); b, wrap = _makearray(b)`) and returns
                 // wrap(x), wrap(resids), rank, s: a numpy.matrix b gives the solution and the residuals as matrices
                 // (probed 2.4.2: a 2 x 2 matrix and a 1 x 0 matrix), a matrix a with a plain b plain arrays.
                 if (NDMatrixBoundary.IsMatrix(b) && NDMatrixBoundary.Sees(b))
                     return NDMatrixBoundary.WrappedFirstTwoOfFour((a, b, rcond), static s => lstsq(s.a, s.b, s.rcond));
                 using var plain = NDMatrixBoundary.PlainFor(a, b);   // a matrix a with a plain b: computed as plain arrays
-                return EngineOf(a).Linalg.Lstsq(a, b, rcond);
+                return a.TensorEngine.Linalg.Lstsq(a, b, rcond);
             }
         }
     }

@@ -165,7 +165,7 @@ namespace NumSharp
         ///     <para>Computed by <see cref="TensorEngine.Fft"/> of the default engine (<see cref="FftEngine.Fftfreq"/>):
         ///     there is no operand to choose another.</para></remarks>
         public NDArray fftfreq(long n, double d = 1.0, string device = null)
-            => np.EngineOf(null).Fft.Fftfreq(n, d, device);
+            => TensorEngine.Default.Fft.Fftfreq(n, d, device);
 
         /// <summary>
         ///     Non-integer <c>n</c> is rejected exactly like NumPy (which requires an <c>int</c>-typed
@@ -208,7 +208,7 @@ namespace NumSharp
         ///     <para>Computed by <see cref="TensorEngine.Fft"/> of the default engine (<see cref="FftEngine.Rfftfreq"/>):
         ///     there is no operand to choose another.</para></remarks>
         public NDArray rfftfreq(long n, double d = 1.0, string device = null)
-            => np.EngineOf(null).Fft.Rfftfreq(n, d, device);
+            => TensorEngine.Default.Fft.Rfftfreq(n, d, device);
 
         /// <summary>
         ///     Non-integer <c>n</c> is rejected exactly like NumPy: <c>ValueError("n should be an integer")</c>

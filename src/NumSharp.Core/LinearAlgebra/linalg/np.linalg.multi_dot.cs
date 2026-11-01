@@ -50,7 +50,10 @@ namespace NumSharp
                 // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
                 if (NDMatrixBoundary.Sees(arrays))
                     return NDMatrixBoundary.Wrapped((arrays, @out), static s => multi_dot(s.arrays, s.@out), @out);
-                return EngineOf(arrays is { Length: > 0 } ? arrays[0] : null).Linalg.MultiDot(arrays, @out);
+                // the first array's engine computes the chain; a null, empty or null-led list has no operand to decide,
+                // so TensorEngine.Default's member reports NumPy's "Expecting at least two arrays." (or the operand error)
+                TensorEngine engine = arrays is { Length: > 0 } && arrays[0] is { } first ? first.TensorEngine : TensorEngine.Default;
+                return engine.Linalg.MultiDot(arrays, @out);
             }
 
             /// <inheritdoc cref="multi_dot(NDArray[], NDArray)"/>

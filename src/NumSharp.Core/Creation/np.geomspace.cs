@@ -51,7 +51,7 @@ namespace NumSharp
         /// <exception cref="AxisError">If <paramref name="axis"/> is neither 0 nor -1.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.geomspace.html</remarks>
         public static NDArray geomspace(double start, double stop, long num, bool endpoint = true, DType dtype = null, int axis = 0)
-            => np.EngineOf(null).Geomspace(start, stop, num, endpoint, dtype, axis);
+            => TensorEngine.Default.Geomspace(start, stop, num, endpoint, dtype, axis);
 
         /// <summary>
         ///     Return numbers spaced evenly on a log scale for COMPLEX endpoints — a logarithmic spiral in the complex
@@ -88,6 +88,6 @@ namespace NumSharp
         /// <exception cref="AxisError">If <paramref name="axis"/> is neither 0 nor -1.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.geomspace.html</remarks>
         public static NDArray geomspace(Complex start, Complex stop, long num, bool endpoint = true, DType dtype = null, int axis = 0)
-            => np.EngineOf(null).Geomspace(start, stop, num, endpoint, dtype, axis);
+            => TensorEngine.Default.Geomspace(start, stop, num, endpoint, dtype, axis);
     }
 }

@@ -26,9 +26,11 @@ namespace NumSharp
             ///     an unknown <paramref name="mode"/> (checked before the operand).</exception>
             /// <exception cref="LinAlgError">Fewer than two axes.</exception>
             /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
+            /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
             [NDScoped] // the class boundary's temporaries; the Linalg member scopes the computation's own
             public static (NDArray Q, NDArray R) qr(NDArray a, string mode = "reduced")
             {
+                if (a is null) throw new ArgumentNullException(nameof(a));
                 // NumPy checks the mode first; the numpy.matrix rule needs it resolved (raw mode wraps h but not tau). The member
                 // resolves it again, which returns a resolved mode unchanged.
                 string resolved = Backends.DefaultLinalgEngine.ResolveQrMode(mode);
@@ -36,7 +38,7 @@ namespace NumSharp
                 // it is wrap(h) and the plain tau.
                 if (NDMatrixBoundary.Sees(a))
                     return NDMatrixBoundary.WrappedPair((a, mode), static s => qr(s.a, s.mode), wrapFirst: true, wrapSecond: resolved != "raw");
-                return EngineOf(a).Linalg.Qr(a, mode);
+                return a.TensorEngine.Linalg.Qr(a, mode);
             }
         }
     }

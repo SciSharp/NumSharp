@@ -1,3 +1,4 @@
+using System;
 using NumSharp.Backends;
 using NumSharp.Backends.Kernels;
 
@@ -48,12 +49,14 @@ namespace NumSharp
         ///     </para>
         /// </remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         public static NDArray real_if_close(NDArray a, double tol = 100)
         {
+            if (a is null) throw new ArgumentNullException(nameof(a));
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Wrapped((a, tol), static s => real_if_close(s.a, s.tol));
-            return np.EngineOf(a).RealIfClose(a, tol);
+            return a.TensorEngine.RealIfClose(a, tol);
         }
     }
 }

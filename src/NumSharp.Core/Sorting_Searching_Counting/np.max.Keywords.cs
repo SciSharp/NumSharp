@@ -1,3 +1,5 @@
+using System;
+
 namespace NumSharp
 {
     // =============================================================================
@@ -76,17 +78,21 @@ namespace NumSharp
         ///     against <paramref name="a"/> (NumPy's "remapped shapes" text).</exception>
         /// <exception cref="System.OverflowException"><paramref name="initial"/> does not fit an integer loop ("Python integer
         ///     1000 out of bounds for int8").</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.max.html. There is no <c>dtype=</c>: NumPy's np.max has
         ///     none. A flat result is a 0-d array; read it as a C# value with a cast (<c>(double)np.max(a)</c>).
         /// </remarks>
         public static NDArray max(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false, object initial = null,
             NDArray @where = null)
-            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+        {
+            if (a is null) throw new ArgumentNullException(nameof(a));
+            return NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             ? NDMatrixBoundary.Reduced((a, axis, @out, keepdims, initial, @where), static s => max(s.a, s.axis, s.@out, s.keepdims, s.initial, s.@where), axis, keepdims, "max")
-            // The whole call is the engine's: TensorEngine.ReduceAMax takes the keywords (EngineOf, so a null a still
-            // reaches the keyword path's ArgumentNullException).
-            : EngineOf(a).ReduceAMax(a, axis, keepdims, null, @out, initial, @where);
+            // The whole call is the engine's: TensorEngine.ReduceAMax of a's engine takes the keywords (a null a is
+            // refused above).
+            : a.TensorEngine.ReduceAMax(a, axis, keepdims, null, @out, initial, @where);
+        }
 
         /// <summary>
         ///     Return the maximum of an array or the maximum along an axis — NumPy's <c>np.amax</c>, an alias of
@@ -142,14 +148,18 @@ namespace NumSharp
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="where"/> or <paramref name="out"/> does not broadcast.</exception>
         /// <exception cref="System.OverflowException"><paramref name="initial"/> does not fit an integer loop.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.min.html</remarks>
         public static NDArray min(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false, object initial = null,
             NDArray @where = null)
-            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+        {
+            if (a is null) throw new ArgumentNullException(nameof(a));
+            return NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             ? NDMatrixBoundary.Reduced((a, axis, @out, keepdims, initial, @where), static s => min(s.a, s.axis, s.@out, s.keepdims, s.initial, s.@where), axis, keepdims, "min")
-            // The whole call is the engine's: TensorEngine.ReduceAMin takes the keywords (EngineOf, so a null a still
-            // reaches the keyword path's ArgumentNullException).
-            : EngineOf(a).ReduceAMin(a, axis, keepdims, null, @out, initial, @where);
+            // The whole call is the engine's: TensorEngine.ReduceAMin of a's engine takes the keywords (a null a is
+            // refused above).
+            : a.TensorEngine.ReduceAMin(a, axis, keepdims, null, @out, initial, @where);
+        }
 
         /// <summary>
         ///     Return the minimum of an array or the minimum along an axis — NumPy's <c>np.amin</c>, an alias of
@@ -210,6 +220,7 @@ namespace NumSharp
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="where"/> or <paramref name="out"/> does not broadcast.</exception>
         /// <exception cref="System.OverflowException"><paramref name="initial"/> does not fit an integer loop.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <remarks>
         ///     <para>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.nanmax.html. Per dtype:
@@ -230,11 +241,14 @@ namespace NumSharp
         /// </remarks>
         public static NDArray nanmax(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false, object initial = null,
             NDArray @where = null)
-            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+        {
+            if (a is null) throw new ArgumentNullException(nameof(a));
+            return NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             ? NDMatrixBoundary.Reduced((a, axis, @out, keepdims, initial, @where), static s => nanmax(s.a, s.axis, s.@out, s.keepdims, s.initial, s.@where), axis, keepdims, "max")
-            // The whole call is the engine's: TensorEngine.NanMax takes the keywords (EngineOf, so a null a still
-            // reaches the keyword path's ArgumentNullException).
-            : EngineOf(a).NanMax(a, axis, keepdims, @out, initial, @where);
+            // The whole call is the engine's: TensorEngine.NanMax of a's engine takes the keywords (a null a is
+            // refused above).
+            : a.TensorEngine.NanMax(a, axis, keepdims, @out, initial, @where);
+        }
 
         /// <summary>
         ///     Return the minimum of an array or the minimum along an axis, ignoring NaNs — NumPy's <c>np.nanmin(a, axis=None,
@@ -260,6 +274,7 @@ namespace NumSharp
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="where"/> or <paramref name="out"/> does not broadcast.</exception>
         /// <exception cref="System.OverflowException"><paramref name="initial"/> does not fit an integer loop.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <remarks>
         ///     <para>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.nanmin.html. Per dtype:
@@ -280,10 +295,13 @@ namespace NumSharp
         /// </remarks>
         public static NDArray nanmin(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false, object initial = null,
             NDArray @where = null)
-            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
+        {
+            if (a is null) throw new ArgumentNullException(nameof(a));
+            return NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             ? NDMatrixBoundary.Reduced((a, axis, @out, keepdims, initial, @where), static s => nanmin(s.a, s.axis, s.@out, s.keepdims, s.initial, s.@where), axis, keepdims, "min")
-            // The whole call is the engine's: TensorEngine.NanMin takes the keywords (EngineOf, so a null a still
-            // reaches the keyword path's ArgumentNullException).
-            : EngineOf(a).NanMin(a, axis, keepdims, @out, initial, @where);
+            // The whole call is the engine's: TensorEngine.NanMin of a's engine takes the keywords (a null a is
+            // refused above).
+            : a.TensorEngine.NanMin(a, axis, keepdims, @out, initial, @where);
+        }
     }
 }

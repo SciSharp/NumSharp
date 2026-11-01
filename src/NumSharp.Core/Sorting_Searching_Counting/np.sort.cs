@@ -1,3 +1,5 @@
+using System;
+
 namespace NumSharp
 {
     public static partial class np
@@ -34,14 +36,18 @@ namespace NumSharp
         ///     whose NA object is neither a string nor NaN-like (NumPy's <c>Cannot compare null that is not a nan-like
         ///     value</c>, raised after the lines before it were sorted).</exception>
         /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         public static NDArray sort(NDArray a, int? axis = -1, string kind = null, object order = null, bool? stable = null)
-            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+        {
+            if (a is null) throw new ArgumentNullException(nameof(a));
+            return NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((a, axis, kind, order, stable), static s => sort(s.a, s.axis, s.kind, s.order, s.stable))
             : NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
             ? NDCharArrayBoundary.Kept((a, axis, kind, order, stable), static s => sort(s.a, s.axis, s.kind, s.order, s.stable))
-            // NumPy's sort is fromnumeric.sort over PyArray_Sort, the engine's: TensorEngine.Sort (EngineOf, so a null a
-            // still meets the argument checks first, as before the move).
-            : EngineOf(a).Sort(a, axis, kind, order, stable);
+            // NumPy's sort is fromnumeric.sort over PyArray_Sort, the engine's: TensorEngine.Sort of a's engine (a null a
+            // is refused above).
+            : a.TensorEngine.Sort(a, axis, kind, order, stable);
+        }
     }
 
     public partial class NDArray

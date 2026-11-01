@@ -110,8 +110,9 @@ namespace NumSharp
         ///     <c>x.astype(float)</c>: <c>could not convert string to float: np.str_('x')</c>).</exception>
         public static NDArray i0(NDArray x)
         {
+            if (x is null) throw new ArgumentNullException(nameof(x));
             using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return np.EngineOf(x).I0(x);
+            return x.TensorEngine.I0(x);
         }
 
         // Per-precision delegates held as static readonly fields (internal: DefaultEngine.I0 dispatches to them):

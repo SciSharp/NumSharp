@@ -1,3 +1,5 @@
+using System;
+
 namespace NumSharp
 {
     public static partial class np
@@ -33,16 +35,18 @@ namespace NumSharp
         ///     raising. A <c>StringDType</c> array: a None-like NA in a line of two or more elements (the sort's <c>Cannot
         ///     compare null that is not a nan-like value</c>), or any NA left for the cast (<c>Arrays with missing data cannot
         ///     be converted to a non-nullable type</c>).</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         [NDScoped]
         public static NDArray sort_complex(NDArray a)
         {
+            if (a is null) throw new ArgumentNullException(nameof(a));
             // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Plain(a, static s => sort_complex(s));
             // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
             if (NDCharArrayBoundary.Sees(a))
                 return NDCharArrayBoundary.Plain(a, static s => sort_complex(s));
-            return np.EngineOf(a).SortComplex(a);
+            return a.TensorEngine.SortComplex(a);
         }
     }
 }

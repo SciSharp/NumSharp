@@ -1,3 +1,5 @@
+using System;
+
 namespace NumSharp
 {
     public static partial class np
@@ -18,11 +20,13 @@ namespace NumSharp
         /// <exception cref="ValueError">A NEP 55 <c>StringDType</c> array whose sort compares a None-like NA (an NA object
         ///     that is neither a string nor NaN-like) with another entry: NumPy's <c>Cannot compare null that is not a
         ///     nan-like value</c>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="ar1"/> is null.</exception>
         [NDScoped]
         public static NDArray setxor1d(NDArray ar1, NDArray ar2, bool assume_unique = false)
         {
+            if (ar1 is null) throw new ArgumentNullException(nameof(ar1));
             using var plain = NDMatrixBoundary.PlainFor(ar1, ar2);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return np.EngineOf(ar1).Setxor1d(ar1, ar2, assume_unique);
+            return ar1.TensorEngine.Setxor1d(ar1, ar2, assume_unique);
         }
     }
 }

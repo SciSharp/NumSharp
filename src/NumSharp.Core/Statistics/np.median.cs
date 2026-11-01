@@ -42,9 +42,11 @@ namespace NumSharp
         /// <exception cref="IndexError"><paramref name="keepdims"/> with an <paramref name="out"/> NumPy cannot index:
         ///     <c>_ureduce</c>'s <c>out[(Ellipsis,) + index_out]</c> (too few dimensions, or a reduced axis of length 0),
         ///     raised for every dtype before the text refusals.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         public static NDArray median(NDArray a,
             int? axis = null, NDArray @out = null, bool overwrite_input = false, bool keepdims = false)
         {
+            if (a is null) throw new ArgumentNullException(nameof(a));
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Reduced((a, axis, @out, overwrite_input, keepdims), static s => median(s.a, s.axis, s.@out, s.overwrite_input, s.keepdims), axis, keepdims, null);
@@ -55,7 +57,7 @@ namespace NumSharp
             // NumPy's np.median body (the text routes, then the numeric median) is TensorEngine.Median's: the facade
             // holds only the class rules above.
             // NumPy's _ureduce turns an int axis into a 1-tuple: the engine member takes the axes as an array.
-            return EngineOf(a).Median(a, axis.HasValue ? new[] { axis.Value } : null, @out, overwrite_input,
+            return a.TensorEngine.Median(a, axis.HasValue ? new[] { axis.Value } : null, @out, overwrite_input,
                 keepdims);
         }
 
@@ -100,6 +102,7 @@ namespace NumSharp
         public static NDArray median(NDArray a, int[] axis,
             NDArray @out = null, bool overwrite_input = false, bool keepdims = false)
         {
+            if (a is null) throw new ArgumentNullException(nameof(a));
             // a numpy.char.chararray operand (decided before the matrix region below, which would hide it): the STRING
             // partition's answer (MedianOfChararray, NDCharArrayBoundary)
             if (NDCharArrayBoundary.Sees(a))
@@ -107,7 +110,7 @@ namespace NumSharp
             using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // NumPy's np.median body (the text routes, then the numeric median) is TensorEngine.Median's: the facade
             // holds only the class rules above.
-            return EngineOf(a).Median(a, axis, @out, overwrite_input, keepdims);
+            return a.TensorEngine.Median(a, axis, @out, overwrite_input, keepdims);
         }
     }
 }

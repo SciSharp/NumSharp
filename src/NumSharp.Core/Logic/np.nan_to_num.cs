@@ -54,12 +54,14 @@ namespace NumSharp
         ///     according to the rule 'same_kind'</c>, NumPy's TypeError text), raised at the statement that meets the fill;
         ///     or a scalar fill of a type that does not convert to a number.</exception>
         /// <exception cref="ValueError">An array fill that does not broadcast into <paramref name="x"/>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
         public static NDArray nan_to_num(NDArray x, bool copy = true, object nan = null, object posinf = null, object neginf = null)
         {
+            if (x is null) throw new ArgumentNullException(nameof(x));
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(x))
                 return NDMatrixBoundary.Wrapped((x, copy, nan, posinf, neginf), static s => nan_to_num(s.x, s.copy, s.nan, s.posinf, s.neginf));
-            return np.EngineOf(x).NanToNum(x, copy, nan, posinf, neginf);
+            return x.TensorEngine.NanToNum(x, copy, nan, posinf, neginf);
         }
     }
 }

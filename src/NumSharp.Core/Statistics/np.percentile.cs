@@ -59,6 +59,7 @@ namespace NumSharp
             int? axis = null, NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false, NDArray weights = null)
         {
+            if (a is null) throw new ArgumentNullException(nameof(a));
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims, weights), static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), axis, keepdims, null);
@@ -75,7 +76,7 @@ namespace NumSharp
             return chararray
                 ? DefaultEngine.QuantileFunction("percentile", a, new QuantileArgument(q), axes, @out,
                     overwrite_input, method, keepdims, weights, chararray: true)
-                : EngineOf(a).Percentile(a, q, axes, @out, overwrite_input, method, keepdims, weights);
+                : a.TensorEngine.Percentile(a, q, axes, @out, overwrite_input, method, keepdims, weights);
         }
 
         /// <summary>
@@ -130,6 +131,7 @@ namespace NumSharp
             int? axis = null, NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false, NDArray weights = null)
         {
+            if (a is null) throw new ArgumentNullException(nameof(a));
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims, weights), static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), axis, keepdims, null);
@@ -143,7 +145,7 @@ namespace NumSharp
             return chararray
                 ? DefaultEngine.QuantileFunction("percentile", a, new QuantileArgument(q), axes, @out,
                     overwrite_input, method, keepdims, weights, chararray: true)
-                : EngineOf(a).Percentile(a, q, axes, @out, overwrite_input, method, keepdims, weights);
+                : a.TensorEngine.Percentile(a, q, axes, @out, overwrite_input, method, keepdims, weights);
         }
 
         /// <summary>
@@ -208,6 +210,7 @@ namespace NumSharp
             NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false, NDArray weights = null)
         {
+            if (a is null) throw new ArgumentNullException(nameof(a));
             bool chararray = NDCharArrayBoundary.Sees(a);   // the user's call decides the chararray rule (before any PlainFor region hides it)
             using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // a numpy.char.chararray operand: the weights= rule here, the flag below (see the double-q overload).
@@ -218,7 +221,7 @@ namespace NumSharp
             return chararray
                 ? DefaultEngine.QuantileFunction("percentile", a, new QuantileArgument(q), axis, @out,
                     overwrite_input, method, keepdims, weights, chararray: true)
-                : EngineOf(a).Percentile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
+                : a.TensorEngine.Percentile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
         }
 
         /// <summary>
@@ -284,6 +287,7 @@ namespace NumSharp
             NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false, NDArray weights = null)
         {
+            if (a is null) throw new ArgumentNullException(nameof(a));
             bool chararray = NDCharArrayBoundary.Sees(a);   // the user's call decides the chararray rule (before any PlainFor region hides it)
             using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // a numpy.char.chararray operand: the weights= rule here, the flag below (see the double-q overload).
@@ -294,7 +298,7 @@ namespace NumSharp
             return chararray
                 ? DefaultEngine.QuantileFunction("percentile", a, new QuantileArgument(q), axis, @out,
                     overwrite_input, method, keepdims, weights, chararray: true)
-                : EngineOf(a).Percentile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
+                : a.TensorEngine.Percentile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
         }
 
         /// <summary>
@@ -348,6 +352,7 @@ namespace NumSharp
             int? axis = null, NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false, NDArray weights = null)
         {
+            if (a is null) throw new ArgumentNullException(nameof(a));
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims, weights), static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), axis, keepdims, null);
@@ -363,7 +368,7 @@ namespace NumSharp
             return chararray
                 ? DefaultEngine.QuantileFunction("percentile", a, new QuantileArgument(q), axes, @out,
                     overwrite_input, method, keepdims, weights, chararray: true)
-                : EngineOf(a).Percentile(a, q, axes, @out, overwrite_input, method, keepdims, weights);
+                : a.TensorEngine.Percentile(a, q, axes, @out, overwrite_input, method, keepdims, weights);
         }
 
         /// <summary>
@@ -425,6 +430,7 @@ namespace NumSharp
             NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false, NDArray weights = null)
         {
+            if (a is null) throw new ArgumentNullException(nameof(a));
             bool chararray = NDCharArrayBoundary.Sees(a);   // the user's call decides the chararray rule (before any PlainFor region hides it)
             using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // a numpy.char.chararray operand: the weights= rule here, the flag below (see the double-q overload).
@@ -435,7 +441,7 @@ namespace NumSharp
             return chararray
                 ? DefaultEngine.QuantileFunction("percentile", a, new QuantileArgument(q), axis, @out,
                     overwrite_input, method, keepdims, weights, chararray: true)
-                : EngineOf(a).Percentile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
+                : a.TensorEngine.Percentile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
         }
     }
 }

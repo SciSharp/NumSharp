@@ -2,7 +2,7 @@
 // plan's phase P3, batch 9). NumPy writes them in Python over ufuncs - a ramp of np.arange times the step plus the start,
 // then np.power, np.log10 and np.sign for the log scales; here each is an engine member that DefaultEngine implements
 // with NumPy's statements. Their facades take no array operand, so np.linspace / np.logspace / np.geomspace call the
-// default engine's member (np.EngineOf(null), as np.fft.fftfreq does); an engine that derives from DefaultEngine reaches
+// default engine's member (TensorEngine.Default, as np.fft.fftfreq does); an engine that derives from DefaultEngine reaches
 // its own override by calling the member on itself. np.arange, which NumPy fills through the dtype's ArrFuncs fill and
 // no ufunc, is the array object's (UnmanagedStorage.Ctors.cs), not an engine member (Appendix D). NumSharp's spacing
 // functions take scalar ends only: array_like ends and the new axis they would place are not ported.

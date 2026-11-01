@@ -18,14 +18,16 @@ namespace NumSharp
         /// <exception cref="ValueError">A <c>numpy.char.chararray</c> operand: NumPy creates the int64 index result as the
         ///     subclass (<c>Can only create a chararray from string data.</c>), after the argument
         ///     checks.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         [NDScoped]
         public static long nanargmax(NDArray a)
         {
+            if (a is null) throw new ArgumentNullException(nameof(a));
             // a numpy.char.chararray operand: NumPy creates the index as the subclass, so the finalize ValueError follows the plain checks (NDCharArrayBoundary)
             if (NDCharArrayBoundary.Sees(a))
                 return NDCharArrayBoundary.IndexScalar(a, static s => nanargmax(s));
             // Scalar return: the flattened form's 0-d index is this scope's own.
-            return (long)np.EngineOf(a).NanArgMax(a);
+            return (long)a.TensorEngine.NanArgMax(a);
         }
 
         /// <summary>
@@ -51,6 +53,7 @@ namespace NumSharp
         ///     the int64 index result as the subclass (<c>Can only create a chararray from string
         ///     data.</c>), after the argument checks; with <paramref name="out"/> the indices are
         ///     written.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.nanargmax.html
         ///     <para>Text of every class (<c>S</c>, <c>U</c>, NEP 55 <c>StringDType</c>) is <c>np.argmax</c> /
@@ -61,13 +64,14 @@ namespace NumSharp
         [NDScoped]
         public static NDArray nanargmax(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false)
         {
+            if (a is null) throw new ArgumentNullException(nameof(a));
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Reduced((a, axis, @out, keepdims), static s => nanargmax(s.a, s.axis, s.@out, s.keepdims), axis, keepdims, null);
             // a numpy.char.chararray operand: NumPy creates the index as the subclass, so the finalize ValueError follows the plain checks (NDCharArrayBoundary)
             if (NDCharArrayBoundary.Sees(a))
                 return NDCharArrayBoundary.IndexResult((a, axis, @out, keepdims), static s => nanargmax(s.a, s.axis, s.@out, s.keepdims), @out);
-            return np.EngineOf(a).NanArgMax(a, axis, @out, keepdims);
+            return a.TensorEngine.NanArgMax(a, axis, @out, keepdims);
         }
 
         /// <summary>
@@ -84,14 +88,16 @@ namespace NumSharp
         /// <exception cref="ValueError">A <c>numpy.char.chararray</c> operand: NumPy creates the int64 index result as the
         ///     subclass (<c>Can only create a chararray from string data.</c>), after the argument
         ///     checks.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         [NDScoped]
         public static long nanargmin(NDArray a)
         {
+            if (a is null) throw new ArgumentNullException(nameof(a));
             // a numpy.char.chararray operand: NumPy creates the index as the subclass, so the finalize ValueError follows the plain checks (NDCharArrayBoundary)
             if (NDCharArrayBoundary.Sees(a))
                 return NDCharArrayBoundary.IndexScalar(a, static s => nanargmin(s));
             // Scalar return: the flattened form's 0-d index is this scope's own.
-            return (long)np.EngineOf(a).NanArgMin(a);
+            return (long)a.TensorEngine.NanArgMin(a);
         }
 
         /// <summary>
@@ -115,6 +121,7 @@ namespace NumSharp
         ///     the int64 index result as the subclass (<c>Can only create a chararray from string
         ///     data.</c>), after the argument checks; with <paramref name="out"/> the indices are
         ///     written.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.nanargmin.html
         ///     <para>Text of every class (<c>S</c>, <c>U</c>, NEP 55 <c>StringDType</c>) is <c>np.argmax</c> /
@@ -125,13 +132,14 @@ namespace NumSharp
         [NDScoped]
         public static NDArray nanargmin(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false)
         {
+            if (a is null) throw new ArgumentNullException(nameof(a));
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Reduced((a, axis, @out, keepdims), static s => nanargmin(s.a, s.axis, s.@out, s.keepdims), axis, keepdims, null);
             // a numpy.char.chararray operand: NumPy creates the index as the subclass, so the finalize ValueError follows the plain checks (NDCharArrayBoundary)
             if (NDCharArrayBoundary.Sees(a))
                 return NDCharArrayBoundary.IndexResult((a, axis, @out, keepdims), static s => nanargmin(s.a, s.axis, s.@out, s.keepdims), @out);
-            return np.EngineOf(a).NanArgMin(a, axis, @out, keepdims);
+            return a.TensorEngine.NanArgMin(a, axis, @out, keepdims);
         }
     }
 }

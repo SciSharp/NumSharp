@@ -111,11 +111,14 @@ namespace NumSharp
         ///     https://numpy.org/doc/stable/reference/generated/numpy.unwrap.html
         /// </remarks>
         public static NDArray unwrap(NDArray p, double? discont = null, int axis = -1, double period = 2 * Math.PI)
-            => NDMatrixBoundary.Sees(p)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
+        {
+            if (p is null) throw new ArgumentNullException(nameof(p));
+            return NDMatrixBoundary.Sees(p)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             ? NDMatrixBoundary.Plain((p, discont, axis, period), static s => unwrap(s.p, s.discont, s.axis, s.period))
             : NDCharArrayBoundary.Sees(p)   // a numpy.char.chararray operand too: asarray drops either class
             ? NDCharArrayBoundary.Plain((p, discont, axis, period), static s => unwrap(s.p, s.discont, s.axis, s.period))
-            : np.EngineOf(p).Unwrap(p, discont, axis, period);
+            : p.TensorEngine.Unwrap(p, discont, axis, period);
+        }
 
         /// <summary>
         ///     Unwrap <paramref name="p"/> with an INTEGER-typed <paramref name="period"/>,
@@ -159,10 +162,13 @@ namespace NumSharp
         /// </exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unwrap.html</remarks>
         public static NDArray unwrap(NDArray p, long period, double? discont = null, int axis = -1)
-            => NDMatrixBoundary.Sees(p)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
+        {
+            if (p is null) throw new ArgumentNullException(nameof(p));
+            return NDMatrixBoundary.Sees(p)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             ? NDMatrixBoundary.Plain((p, period, discont, axis), static s => unwrap(s.p, s.period, s.discont, s.axis))
             : NDCharArrayBoundary.Sees(p)   // a numpy.char.chararray operand too: asarray drops either class
             ? NDCharArrayBoundary.Plain((p, period, discont, axis), static s => unwrap(s.p, s.period, s.discont, s.axis))
-            : np.EngineOf(p).Unwrap(p, discont, axis, (object)period);
+            : p.TensorEngine.Unwrap(p, discont, axis, (object)period);
+        }
     }
 }

@@ -181,11 +181,16 @@ namespace NumSharp
         /// <summary>
         ///     Creates a new <see cref="NDArray"/> with this storage.
         /// </summary>
-        /// <param name="storage"></param>
+        /// <param name="storage">The storage, used as it is (not copied, not aliased): the array reads and writes it.</param>
+        /// <remarks>
+        ///     The array binds the storage's engine (<see cref="UnmanagedStorage.Engine"/>, which a view's storage takes from
+        ///     its source), or <see cref="NumSharp.TensorEngine.Default"/> when the storage has none (a storage built
+        ///     directly over a buffer), and writes it back into the storage.
+        /// </remarks>
         public NDArray(UnmanagedStorage storage)
         {
             Storage = storage;
-            tensorEngine = storage.Engine ?? BackendFactory.GetEngine();
+            tensorEngine = storage.Engine ?? TensorEngine.Default;
             Storage.Engine = tensorEngine;
             InitializeArc();
         }
@@ -193,12 +198,15 @@ namespace NumSharp
         /// <summary>
         ///     Creates a new <see cref="NDArray"/> with this storage.
         /// </summary>
+        /// <param name="storage">The storage whose buffer the array views (through an alias, so the storage keeps its own
+        ///     shape).</param>
         /// <param name="shape">The shape to set for this NDArray, does not perform checks.</param>
-        /// <remarks>Doesn't copy. Does not perform checks for <paramref name="shape"/>.</remarks>
+        /// <remarks>Doesn't copy. Does not perform checks for <paramref name="shape"/>. Binds the storage's engine, or
+        ///     <see cref="NumSharp.TensorEngine.Default"/> when it has none.</remarks>
         protected internal NDArray(UnmanagedStorage storage, Shape shape)
         {
             Storage = storage.Alias(ref shape);
-            tensorEngine = storage.Engine ?? BackendFactory.GetEngine();
+            tensorEngine = storage.Engine ?? TensorEngine.Default;
             Storage.Engine = tensorEngine;
             InitializeArc();
         }
@@ -206,12 +214,15 @@ namespace NumSharp
         /// <summary>
         ///     Creates a new <see cref="NDArray"/> with this storage.
         /// </summary>
+        /// <param name="storage">The storage whose buffer the array views (through an alias, so the storage keeps its own
+        ///     shape).</param>
         /// <param name="shape">The shape to set for this NDArray, does not perform checks.</param>
-        /// <remarks>Doesn't copy. Does not perform checks for <paramref name="shape"/>.</remarks>
+        /// <remarks>Doesn't copy. Does not perform checks for <paramref name="shape"/>. Binds the storage's engine, or
+        ///     <see cref="NumSharp.TensorEngine.Default"/> when it has none.</remarks>
         protected internal NDArray(UnmanagedStorage storage, ref Shape shape)
         {
             Storage = storage.Alias(ref shape);
-            tensorEngine = storage.Engine ?? BackendFactory.GetEngine();
+            tensorEngine = storage.Engine ?? TensorEngine.Default;
             Storage.Engine = tensorEngine;
             InitializeArc();
         }
@@ -219,7 +230,7 @@ namespace NumSharp
         /// <summary>
         ///     Hot-path view ctor: wraps an already-aliased storage whose Engine
         ///     field is known to be set. Skips the standard ctor's
-        ///     <c>storage.Engine ?? BackendFactory.GetEngine()</c> guard and the
+        ///     <c>storage.Engine ?? TensorEngine.Default</c> guard and the
         ///     <c>Storage.Engine = tensorEngine</c> writeback (it's already there).
         ///     Used by <c>np.split</c> sub-array construction where we already own
         ///     the parent's resolved engine.
@@ -256,8 +267,9 @@ namespace NumSharp
         ///     <see cref="NPTypeCode"/> or a NumPy dtype string (<c>"f8"</c>) convert implicitly — this is the ONE
         ///     dtype-taking constructor family (the former <see cref="NPTypeCode"/> twins were folded into it).
         /// </param>
-        /// <remarks>This constructor does not call allocation/></remarks>
-        public NDArray(DType dtype) : this(dtype, BackendFactory.GetEngine()) { }
+        /// <remarks>This constructor does not call allocation. The array binds <see cref="NumSharp.TensorEngine.Default"/> as it
+        ///     is now: an engine assigned there later does not reach it.</remarks>
+        public NDArray(DType dtype) : this(dtype, TensorEngine.Default) { }
 
         /// <summary>
         ///     Wraps a .NET array as an <see cref="NDArray"/> — the C# port of NumPy's
@@ -819,14 +831,26 @@ namespace NumSharp
         protected internal UnmanagedStorage Storage;
 
         /// <summary>
-        ///     The tensor engine that handles this <see cref="NDArray"/>.
+        ///     The engine this array computes on: np.* functions given this array as their operand call this engine's
+        ///     members, and the arrays they return bind it too (an engine binds its results to itself, a view its source's
+        ///     engine).
         /// </summary>
+        /// <value>The engine the array bound when it was created (<see cref="NumSharp.TensorEngine.Default"/> unless an engine
+        ///     created it or it views another array), or the engine assigned since; never null. An array that bound no engine
+        ///     resolves to <see cref="NumSharp.TensorEngine.Default"/> as it is at the read.</value>
+        /// <remarks>
+        ///     Assigning moves this array, and the storage object it holds, to another engine; assigning null binds
+        ///     <see cref="NumSharp.TensorEngine.Default"/> as it is now. Arrays that view the same buffer through storages of
+        ///     their own (other views, the base array) keep their engines.
+        /// </remarks>
         public TensorEngine TensorEngine
         {
-            [DebuggerStepThrough] get => tensorEngine ?? Storage.Engine ?? BackendFactory.GetEngine();
+            [DebuggerStepThrough] get => tensorEngine ?? Storage.Engine ?? TensorEngine.Default;
             set
             {
-                tensorEngine = value ?? Storage.Engine ?? BackendFactory.GetEngine();
+                // null means "the default": the same rule TensorEngine.Linalg / Fft follow, instead of keeping whatever
+                // engine the storage last saw.
+                tensorEngine = value ?? TensorEngine.Default;
                 Storage.Engine = tensorEngine;
             }
         }

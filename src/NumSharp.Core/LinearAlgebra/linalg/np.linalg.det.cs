@@ -23,12 +23,14 @@ namespace NumSharp
             /// <exception cref="LinAlgError">Fewer than two axes, or a non-square operand.</exception>
             /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
             /// <exception cref="ArgumentException">A text operand (NumPy's gufunc input-cast refusal).</exception>
+            /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
             // Scope: the facade keeps its scope over the call (the Linalg member reclaims the ToCommon dtype-cast temp).
             [NDScoped]
             public static NDArray det(NDArray a)
             {
+                if (a is null) throw new ArgumentNullException(nameof(a));
                 using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-                return EngineOf(a).Linalg.Det(a);
+                return a.TensorEngine.Linalg.Det(a);
             }
 
             /// <summary>
@@ -46,13 +48,15 @@ namespace NumSharp
             /// <exception cref="LinAlgError">Fewer than two axes, or a non-square operand.</exception>
             /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
             /// <exception cref="ArgumentException">A text operand (NumPy's gufunc input-cast refusal).</exception>
+            /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
             // Scope: the facade keeps its scope over the call; the (sign, logabsdet) tuple result is yielded through the
             // weaver's Returns<T1,T2> tuple egress (the Linalg member reclaims the ToCommon dtype-cast temp).
             [NDScoped]
             public static (NDArray sign, NDArray logabsdet) slogdet(NDArray a)
             {
+                if (a is null) throw new ArgumentNullException(nameof(a));
                 using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-                return EngineOf(a).Linalg.Slogdet(a);
+                return a.TensorEngine.Linalg.Slogdet(a);
             }
         }
     }

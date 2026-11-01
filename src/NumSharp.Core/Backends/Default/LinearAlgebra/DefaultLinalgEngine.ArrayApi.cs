@@ -83,11 +83,14 @@ namespace NumSharp.Backends
         /// <inheritdoc/>
         /// <remarks>NumPy's one statement <c>return _core_trace(x, offset, axis1=-2, axis2=-1, dtype=dtype)</c>: the member
         ///     <see cref="np.trace"/> dispatches to, <see cref="TensorEngine.Trace(NDArray, int, int, int, DType, NDArray)"/>,
-        ///     over the last two axes. A null <paramref name="x"/> is dispatched to the default engine (np.EngineOf's rule)
-        ///     because the member itself refuses it with np.trace's <see cref="ArgumentNullException"/>, which np.linalg.trace
-        ///     reported through np.trace before, rather than failing at the dispatch.</remarks>
+        ///     over the last two axes, on <paramref name="x"/>'s engine.</remarks>
+        /// <exception cref="ArgumentNullException"><paramref name="x"/> is null (np.trace's refusal, checked here before the
+        ///     dispatch reads its engine).</exception>
         public override NDArray Trace(NDArray x, int offset = 0, DType dtype = null)
-            => (x?.TensorEngine ?? BackendFactory.GetEngine()).Trace(x, offset, -2, -1, dtype, null);
+        {
+            if (x is null) throw new ArgumentNullException(nameof(x));
+            return x.TensorEngine.Trace(x, offset, -2, -1, dtype, null);
+        }
 
         /// <inheritdoc/>
         /// <remarks>NumPy's one statement <c>return _core_vecdot(x1, x2, axis=axis)</c>: the member

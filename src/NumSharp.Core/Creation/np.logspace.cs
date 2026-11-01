@@ -59,6 +59,6 @@ namespace NumSharp
         /// <exception cref="AxisError">If <paramref name="axis"/> is neither 0 nor -1.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.logspace.html</remarks>
         public static NDArray logspace(double start, double stop, long num, bool endpoint = true, double @base = 10.0, DType dtype = null, int axis = 0)
-            => np.EngineOf(null).Logspace(start, stop, num, endpoint, @base, dtype, axis);
+            => TensorEngine.Default.Logspace(start, stop, num, endpoint, @base, dtype, axis);
     }
 }

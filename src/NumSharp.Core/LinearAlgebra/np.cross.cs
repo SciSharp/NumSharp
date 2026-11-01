@@ -1,3 +1,5 @@
+using System;
+
 namespace NumSharp
 {
     public static partial class np
@@ -46,6 +48,7 @@ namespace NumSharp
         ///     rank, checked right after the broadcast).</exception>
         /// <exception cref="TypeError">A text operand: NumPy multiplies the components in the promoted dtype, which has no
         ///     string loop (checked after the shape checks).</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <remarks>
         ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
         ///     ends with <c>np.concatenate</c>), which drops the class.
@@ -54,13 +57,14 @@ namespace NumSharp
         public static NDArray cross(NDArray a, NDArray b, int axisa = -1, int axisb = -1, int axisc = -1,
             int? axis = null)
         {
+            if (a is null) throw new ArgumentNullException(nameof(a));
             // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             if (NDMatrixBoundary.Sees(a, b))
                 return NDMatrixBoundary.Plain((a, b, axisa, axisb, axisc, axis), static s => cross(s.a, s.b, s.axisa, s.axisb, s.axisc, s.axis));
             // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
             if (NDCharArrayBoundary.Sees(a, b))
                 return NDCharArrayBoundary.Plain((a, b, axisa, axisb, axisc, axis), static s => cross(s.a, s.b, s.axisa, s.axisb, s.axisc, s.axis));
-            return np.EngineOf(a).Cross(a, b, axisa, axisb, axisc, axis);
+            return a.TensorEngine.Cross(a, b, axisa, axisb, axisc, axis);
         }
     }
 }

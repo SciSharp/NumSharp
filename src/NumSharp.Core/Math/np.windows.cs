@@ -43,7 +43,7 @@ namespace NumSharp
         ///     statements are <see cref="TensorEngine.Bartlett"/>, called on the default engine (a window has no operand to
         ///     choose another).</para>
         /// </remarks>
-        public static NDArray bartlett(double M) => np.EngineOf(null).Bartlett(M);
+        public static NDArray bartlett(double M) => TensorEngine.Default.Bartlett(M);
 
         /// <summary>
         ///     Return the Blackman window — a taper formed by the first three terms of a summation of cosines.
@@ -57,7 +57,7 @@ namespace NumSharp
         ///     <para>NumPy: <c>0.42 + 0.5*cos(pi*n/(M-1)) + 0.08*cos(2.0*pi*n/(M-1))</c> with <c>n = arange(1-M, M, 2)</c>; the
         ///     statements are <see cref="TensorEngine.Blackman"/>, called on the default engine.</para>
         /// </remarks>
-        public static NDArray blackman(double M) => np.EngineOf(null).Blackman(M);
+        public static NDArray blackman(double M) => TensorEngine.Default.Blackman(M);
 
         /// <summary>
         ///     Return the Hamming window — a taper formed by a weighted cosine (raised-cosine, 0.54/0.46).
@@ -71,7 +71,7 @@ namespace NumSharp
         ///     <para>NumPy: <c>0.54 + 0.46*cos(pi*n/(M-1))</c> with <c>n = arange(1-M, M, 2)</c>; the statements are
         ///     <see cref="TensorEngine.Hamming"/>, called on the default engine.</para>
         /// </remarks>
-        public static NDArray hamming(double M) => np.EngineOf(null).Hamming(M);
+        public static NDArray hamming(double M) => TensorEngine.Default.Hamming(M);
 
         /// <summary>
         ///     Return the Hanning window — a taper formed by a weighted cosine (raised-cosine, 0.5/0.5).
@@ -85,7 +85,7 @@ namespace NumSharp
         ///     <para>NumPy: <c>0.5 + 0.5*cos(pi*n/(M-1))</c> with <c>n = arange(1-M, M, 2)</c>; the statements are
         ///     <see cref="TensorEngine.Hanning"/>, called on the default engine.</para>
         /// </remarks>
-        public static NDArray hanning(double M) => np.EngineOf(null).Hanning(M);
+        public static NDArray hanning(double M) => TensorEngine.Default.Hanning(M);
 
         /// <summary>
         ///     Return the Kaiser window — a taper formed by a Bessel function.
@@ -107,7 +107,7 @@ namespace NumSharp
         ///     NumPy's <c>np.i0</c> uses, applied per element in the fused pass (bit-identical to NumPy's piecewise
         ///     result).</para>
         /// </remarks>
-        public static NDArray kaiser(double M, double beta) => np.EngineOf(null).Kaiser(M, beta);
+        public static NDArray kaiser(double M, double beta) => TensorEngine.Default.Kaiser(M, beta);
 
         // ------------------------------------------------------------------
         // Modified Bessel function of the first kind, order 0 (I_0).

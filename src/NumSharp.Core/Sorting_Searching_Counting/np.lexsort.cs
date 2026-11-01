@@ -45,9 +45,11 @@ namespace NumSharp
             // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
             if (NDCharArrayBoundary.Sees(keys))
                 return NDCharArrayBoundary.Plain((keys, axis), static s => lexsort(s.keys, s.axis));
-            // NumPy's lexsort is PyArray_LexSort, the engine's: TensorEngine.LexSort (the first key's engine, or the default
-            // one when there is none, so a null or empty list still meets the body's checks).
-            return EngineOf(keys is { Length: > 0 } ? keys[0] : null).LexSort(keys, axis);
+            // NumPy's lexsort is PyArray_LexSort, the engine's: TensorEngine.LexSort of the first key's engine. A null,
+            // empty or null-led list has no operand to decide, so TensorEngine.Default's member meets it and raises the
+            // body's error.
+            TensorEngine engine = keys is { Length: > 0 } && keys[0] is { } first ? first.TensorEngine : TensorEngine.Default;
+            return engine.LexSort(keys, axis);
         }
 
         /// <summary>
