@@ -1,4 +1,5 @@
 using System;
+using NumSharp.Backends;
 
 namespace NumSharp
 {
@@ -30,9 +31,21 @@ namespace NumSharp
         ///     is <c>optimize: "greedy"</c>, NumPy's default for <c>einsum_path</c> (note
         ///     <see cref="einsum(string, NDArray[])"/>'s own default is <c>false</c>).
         ///     </para>
+        ///     <para>
+        ///     The statements are <see cref="TensorEngine.EinsumPath"/>, on the first operand's engine (the default one
+        ///     with none).
+        ///     </para>
         /// </remarks>
+        /// <exception cref="ArgumentNullException"><paramref name="subscripts"/> is null.</exception>
+        /// <exception cref="ValueError">A null operand, or subscripts NumPy's parser refuses (NumPy's texts); the variadic
+        ///     overload with nothing to parse.</exception>
+        /// <exception cref="KeyError">An unknown path name.</exception>
+        /// <exception cref="RuntimeError">An explicit path that does not contract every operand.</exception>
+        /// <exception cref="TypeError">An <c>optimize</c> NumPy does not understand; the variadic overload's operand that is
+        ///     not an NDArray.</exception>
+        /// <exception cref="IndexOutOfRangeException">An ellipsis with no operand to read its rank from.</exception>
         public static (EinsumPath path, string repr) einsum_path(string subscripts, NDArray[] operands)
-            => EinsumPathCore(subscripts, operands, "greedy");
+            => EinsumPathOnEngine(subscripts, operands, "greedy");
 
         /// <summary>
         ///     Evaluates the contraction order, choosing the path type via <paramref name="optimize"/>.
@@ -47,7 +60,7 @@ namespace NumSharp
         /// </param>
         /// <inheritdoc cref="einsum_path(string, NDArray[])"/>
         public static (EinsumPath path, string repr) einsum_path(string subscripts, NDArray[] operands, object optimize)
-            => EinsumPathCore(subscripts, operands, optimize);
+            => EinsumPathOnEngine(subscripts, operands, optimize);
 
         /// <summary>
         ///     Evaluates the contraction order variadically — <c>np.einsum_path("ij,jk", a, b)</c> — and
@@ -74,36 +87,32 @@ namespace NumSharp
                                         $"einsum_path operand {i - 1} must be an NDArray, got {operands[i]?.GetType().Name ?? "null"}");
                 }
 
-                return EinsumPathCore(subscripts, arrays, "greedy");
+                return EinsumPathOnEngine(subscripts, arrays, "greedy");
             }
 
             string rendered = EinsumSubscripts.FromSublists(operands, out NDArray[] parsed);
-            return EinsumPathCore(rendered, parsed, "greedy");
+            return EinsumPathOnEngine(rendered, parsed, "greedy");
         }
 
-        private static (EinsumPath path, string repr) EinsumPathCore(string subscripts, NDArray[] operands, object optimize)
+        /// <summary>
+        ///     Runs the plan on the engine np.einsum would contract on: the first operand's (as np.dot dispatches on its
+        ///     first), or the default engine when there is none or the first is null - its member then raises NumPy's
+        ///     error for that.
+        /// </summary>
+        /// <param name="subscripts">The einsum subscripts (null is refused by the member).</param>
+        /// <param name="operands">The operands, or null for none.</param>
+        /// <param name="optimize">NumPy's <c>optimize=</c>.</param>
+        /// <returns>The member's path and report.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="subscripts"/> is null.</exception>
+        /// <exception cref="ValueError">A null operand, or subscripts NumPy's parser refuses.</exception>
+        /// <exception cref="KeyError">An unknown path name.</exception>
+        /// <exception cref="RuntimeError">An explicit path that does not contract every operand.</exception>
+        /// <exception cref="TypeError">An <paramref name="optimize"/> NumPy does not understand.</exception>
+        /// <exception cref="IndexOutOfRangeException">An ellipsis with no operand to read its rank from.</exception>
+        private static (EinsumPath path, string repr) EinsumPathOnEngine(string subscripts, NDArray[] operands, object optimize)
         {
-            if (subscripts is null)
-                throw new ArgumentNullException(nameof(subscripts));
-
-            operands ??= Array.Empty<NDArray>();
-            long[][] shapes = ExtractShapes(operands);
-            EinsumPathPlanner.Directive directive = EinsumPathPlanner.ResolveOptimize(optimize);
-            var (path, repr) = EinsumPathPlanner.Compute(subscripts, shapes, directive);
-            return (new EinsumPath(path), repr);
-        }
-
-        private static long[][] ExtractShapes(NDArray[] operands)
-        {
-            var shapes = new long[operands.Length][];
-            for (int i = 0; i < operands.Length; i++)
-            {
-                if (operands[i] is null)
-                    throw new ValueError($"einsum_path operand {i} is null");
-                shapes[i] = operands[i].Shape.dimensions;
-            }
-
-            return shapes;
+            NDArray first = operands is { Length: > 0 } ? operands[0] : null;
+            return (first?.TensorEngine ?? BackendFactory.GetEngine()).EinsumPath(subscripts, operands, optimize);
         }
     }
 }

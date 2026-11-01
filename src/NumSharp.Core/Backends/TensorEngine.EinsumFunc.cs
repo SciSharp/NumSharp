@@ -1,7 +1,7 @@
-// The functions of numpy/_core/einsumfunc.py that compute: np.einsum. NumPy writes the function in Python (its
-// optimize= path, bmm_einsum) over the C core's c_einsum; here it is an engine member that DefaultEngine implements
-// with that path's statements over the matrix products. np.einsum_path plans without computing and stays a np function
-// (the plan's D8).
+// The functions of numpy/_core/einsumfunc.py that compute: np.einsum and np.einsum_path. NumPy writes einsum in Python
+// (its optimize= path, bmm_einsum) over the C core's c_einsum; here it is an engine member that DefaultEngine implements
+// with that path's statements over the matrix products. np.einsum_path computes the contraction plan and its cost report
+// from the operands' shapes (the plan's D8 counts it among the 12 that compute), so it is an engine member too.
 
 namespace NumSharp
 {
@@ -31,7 +31,7 @@ namespace NumSharp
         ///     <c>"unsafe"</c>, spelled exactly.</param>
         /// <param name="optimize">NumPy's <c>optimize=</c>: null or <c>false</c>, <c>true</c>, any string
         ///     (<c>"greedy"</c>, <c>"optimal"</c>; NumPy reads another string as greedy), a path from
-        ///     <c>np.einsum_path</c> (an <see cref="EinsumPath"/> or NumPy's raw <c>['einsum_path', ...]</c> list), or
+        ///     <c>np.einsum_path</c> (an <see cref="NumSharp.EinsumPath"/> or NumPy's raw <c>['einsum_path', ...]</c> list), or
         ///     a <c>(string, number)</c> tuple. It is checked like NumPy checks it and does not change the result: the
         ///     contraction always runs left to right.</param>
         /// <returns>
@@ -74,5 +74,40 @@ namespace NumSharp
         /// </remarks>
         public abstract NDArray Einsum(string subscripts, NDArray[] operands, NDArray @out = null,
             DType dtype = null, char order = 'K', string casting = "safe", object optimize = null);
+
+        /// <summary>
+        ///     NumPy's <c>np.einsum_path(subscripts, *operands, optimize='greedy')</c>: the order in which to contract the
+        ///     operands pairwise and NumPy's printed cost report, computed from the subscripts and the operands' SHAPES
+        ///     (no element is read): <c>_parse_einsum_input</c>, then the <c>_greedy_path</c> / <c>_optimal_path</c>
+        ///     search with the <c>_flop_count</c> cost model, then the info string.
+        /// </summary>
+        /// <param name="subscripts">The einsum subscripts, as <see cref="Einsum"/> reads them (the facade turns NumPy's
+        ///     sublist spelling into this string first).</param>
+        /// <param name="operands">The operands the subscripts label; null reads as none. Only their shapes are read.</param>
+        /// <param name="optimize">NumPy's <c>optimize=</c>, required here (NumPy's default, <c>'greedy'</c>, is the facades':
+        ///     a C# object parameter cannot default to a string), in its decision order: <c>false</c> / null (no
+        ///     optimization: the operands in order), <c>true</c>, <c>"greedy"</c> or <c>"optimal"</c>, a precomputed
+        ///     <see cref="NumSharp.EinsumPath"/> (an explicit path, checked for completeness), or a
+        ///     <c>("greedy" | "optimal", memory)</c> tuple capping the largest intermediate.</param>
+        /// <returns>The path (NumPy's <c>['einsum_path', (i, j), ...]</c> list as an <see cref="NumSharp.EinsumPath"/>) and the
+        ///     report; both byte-identical to NumPy's except the placeholder letters an ellipsis expands to in the report,
+        ///     which NumPy draws from a hash-randomized set and NumSharp deterministically.</returns>
+        /// <exception cref="System.ArgumentNullException"><paramref name="subscripts"/> is null.</exception>
+        /// <exception cref="ValueError">A null operand (<c>einsum_path operand {i} is null</c>); subscripts NumPy's Python
+        ///     parser refuses, with its texts (an operand count that differs from the terms', a second <c>-&gt;</c>, an
+        ///     invalid symbol, an output label no input has, a term of the wrong rank, extents that disagree).</exception>
+        /// <exception cref="KeyError">An unknown path name (NumPy's <c>('Path name %s not found', ...)</c>).</exception>
+        /// <exception cref="RuntimeError">An explicit path that does not contract every operand.</exception>
+        /// <exception cref="TypeError">An <paramref name="optimize"/> NumPy does not understand (<c>Did not understand the
+        ///     path: ...</c>, <c>object of type 'int' has no len()</c>).</exception>
+        /// <exception cref="System.IndexOutOfRangeException">An ellipsis with no operand to read its rank from (where NumPy fails
+        ///     indexing its operand list).</exception>
+        /// <remarks>
+        ///     The cost model is <see cref="System.Numerics.BigInteger"/> arithmetic, as NumPy's Python ints are, so products
+        ///     past 64 bits still compare correctly. An override replaces the plan of <c>np.einsum_path</c> (whose facade
+        ///     dispatches on the first operand's engine, the default one with none); <see cref="Einsum"/> resolves its own
+        ///     <c>optimize=</c> separately and contracts left to right whatever the plan.
+        /// </remarks>
+        public abstract (EinsumPath path, string repr) EinsumPath(string subscripts, NDArray[] operands, object optimize);
     }
 }

@@ -26,10 +26,14 @@ namespace NumSharp
         /// parameters (NumPy's <c>fix</c> signature is only <c>fix(x, out=None)</c>).
         /// </para>
         /// </remarks>
-        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>); a read-only <paramref name="out"/>.</exception>
+        /// <exception cref="TypeError">Text or complex input, which trunc has no loop for.</exception>
+        /// <exception cref="System.ArgumentException">An <paramref name="out"/> the result does not reach under same_kind, or
+        ///     one it does not broadcast into.</exception>
+        /// <exception cref="System.NullReferenceException"><paramref name="x"/> is null.</exception>
         public static NDArray fix(NDArray x, NDArray @out = null)
             => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((x, @out), static s => fix(s.x, s.@out), @out)
-            : trunc(x, @out);
+            : x.TensorEngine.Fix(x, @out);   // NumPy's body, `return nx.trunc(x, out=out)`, is the engine's (TensorEngine.Fix)
     }
 }
