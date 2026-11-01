@@ -55,7 +55,11 @@ namespace NumSharp
     //     and multi-index branches, the values' conversion into the array's dtype, and the refusals of an index array that
     //     is neither integer nor boolean;
     //   * delete (NumPy's numpy.delete after the facade's class boundaries and null checks): the axis context, the scalar,
-    //     slice, index-array and boolean-mask paths and the source order of the result.
+    //     slice, index-array and boolean-mask paths and the source order of the result;
+    //   * rot90, iterable, meshgrid and append (P8: the functions without dtype logic), each NumPy's statements after its
+    //     facade's class rules, with the np.* calls they made converted to the members those facades dispatch to
+    //     (np.transpose -> the engine's Transpose, np.broadcast_arrays -> broadcast_arrays, np.ravel -> ravel,
+    //     np.concatenate -> concatenate). np.copy needs none: its statement already is the array object's copy method.
     //
     // History: the np-layer dtype plan's P2 moved insert's statements from np.insert into the internal operation class
     // InsertEngine; its phase PE (E1) made that class this NDArray partial and moved delete's statements here from
@@ -67,6 +71,146 @@ namespace NumSharp
     // System.Array in full (NDArray has an Array property); no other unqualified name of it is an NDArray member.
     public partial class NDArray
     {
+        // ---------------------------- np.rot90 ----------------------------
+
+        /// <summary>
+        ///     NumPy's <c>np.rot90</c> (<c>_function_base_impl.py</c>) after the facade's class rules: the axes' checks in
+        ///     NumPy's order, <paramref name="k"/> taken modulo 4, then the flips and the transpose NumPy composes - every
+        ///     result a view of <paramref name="m"/>.
+        /// </summary>
+        /// <param name="m">The array (not null), of two dimensions or more for the default axes.</param>
+        /// <param name="k">The number of quarter turns, from the first axis toward the second; any value (Python-style
+        ///     modulo: <c>-1</c> is three turns).</param>
+        /// <param name="axes">The plane, or null for <c>(0, 1)</c>.</param>
+        /// <returns>A view of <paramref name="m"/>'s buffer (it writes through and keeps the buffer alive; a read-only or
+        ///     broadcast <paramref name="m"/> gives a read-only view): <c>m[:]</c> for <c>k % 4 == 0</c>, two flips for 2,
+        ///     a flip and a transpose for 1 and 3.</returns>
+        /// <exception cref="ValueError"><paramref name="axes"/> does not hold two axes (<c>len(axes) must be 2.</c>), names
+        ///     one axis twice or through mixed signs (<c>Axes must be different.</c>, tested before the range), or is out of
+        ///     range (<c>Axes=(a, b) out of range for array of ndim=n.</c>).</exception>
+        /// <remarks>Scoped by <c>[NDScoped]</c>: the inner view of a two-step composition is released; the result is
+        ///     yielded. No class boundary runs here: the facade applies its rules before it calls this.</remarks>
+        [NDScoped /* the inner flip or transpose of the two-step compositions is released; the result is yielded */]
+        internal static NDArray rot90(NDArray m, int k, int[] axes)
+        {
+            axes ??= new[] {0, 1};
+
+            if (axes.Length != 2)
+                throw new ValueError("len(axes) must be 2.");
+
+            int ndim = m.ndim;
+
+            // NumPy checks "same axis" before the range check, and the |a0-a1|==ndim clause
+            // catches a pair that names one physical axis through mixed signs (e.g. (0, -2) on
+            // ndim=2, or (0, 3) on ndim=3) — which therefore reports "Axes must be different"
+            // rather than "out of range".
+            if (axes[0] == axes[1] || Math.Abs(axes[0] - axes[1]) == ndim)
+                throw new ValueError("Axes must be different.");
+
+            if (axes[0] >= ndim || axes[0] < -ndim
+                || axes[1] >= ndim || axes[1] < -ndim)
+                throw new ValueError(
+                    $"Axes=({axes[0]}, {axes[1]}) out of range for array of ndim={ndim}.");
+
+            // Python-style modulo: always in [0, 3], even for negative k.
+            k = ((k % 4) + 4) % 4;
+
+            if (k == 0)
+                // NumPy returns m[:] — a full view that shares memory with m.
+                return new NDArray(m.Storage.Alias(m.Shape)) {TensorEngine = m.TensorEngine};
+
+            // Normalize the (validated) axes to [0, ndim) for the view ops below, matching
+            // Python's negative indexing of both flip(m, axis) and axes_list[axis].
+            int ax0 = axes[0] < 0 ? axes[0] + ndim : axes[0];
+            int ax1 = axes[1] < 0 ? axes[1] + ndim : axes[1];
+
+            if (k == 2)
+                return FlipAxisView(FlipAxisView(m, ax0), ax1);
+
+            // axes_list = identity permutation with ax0 and ax1 interchanged.
+            var axesList = new int[ndim];
+            for (int i = 0; i < ndim; i++)
+                axesList[i] = i;
+            (axesList[ax0], axesList[ax1]) = (axesList[ax1], axesList[ax0]);
+
+            // np.transpose(x, axes)'s statement: the engine's Transpose (the facade's class rules ran already).
+            if (k == 1)
+            {
+                var flipped = FlipAxisView(m, ax1);
+                return flipped.TensorEngine.Transpose(flipped, axesList);
+            }
+
+            // k == 3
+            return FlipAxisView(m.TensorEngine.Transpose(m, axesList), ax1);
+        }
+
+        /// <summary>
+        ///     Reverses <paramref name="m"/> along a single <paramref name="axis"/> and returns a
+        ///     view — the NumPy <c>flip(m, axis)</c> primitive for one axis. The axis' stride is
+        ///     negated and the offset advanced to that axis' last element; no data is copied.
+        /// </summary>
+        /// <param name="m">The array (not null).</param>
+        /// <param name="axis">A normalized axis, <c>0 .. ndim - 1</c> (not checked).</param>
+        /// <returns>A new view over <paramref name="m"/>'s storage in <paramref name="m"/>'s engine (read-only when the
+        ///     storage is).</returns>
+        private static NDArray FlipAxisView(NDArray m, int axis)
+        {
+            var shape = m.Shape;
+            var dims = (long[])shape.dimensions.Clone();
+            var strides = (long[])shape.strides.Clone();
+            long offset = shape.offset;
+
+            // Advance to the last element along `axis`, then reverse its stride. Guard an empty
+            // axis (dims[axis] == 0 has no last element, so leave the offset put) and note a
+            // stride-0 broadcast axis negates to 0 with an unchanged offset — reversing a
+            // stretched axis is a no-op, exactly as in NumPy.
+            if (dims[axis] > 0)
+                offset += strides[axis] * (dims[axis] - 1);
+            strides[axis] = -strides[axis];
+
+            long bufSize = shape.bufferSize > 0 ? shape.bufferSize : shape.size;
+            var flipped = new Shape(dims, strides, offset, bufSize);
+
+            // Alias inherits read-only from the source storage (broadcast / 'r' memmap).
+            return new NDArray(m.Storage.Alias(flipped)) {TensorEngine = m.TensorEngine};
+        }
+
+        // ---------------------------- np.iterable ----------------------------
+
+        /// <summary>
+        ///     NumPy's <c>np.iterable</c> (<c>_function_base_impl.py</c>: <c>try: iter(y) except TypeError: return False;
+        ///     return True</c>) over C# values: whether <paramref name="y"/> can be iterated, an O(1) type test.
+        /// </summary>
+        /// <param name="y">Any object, null included.</param>
+        /// <returns>False for null and a 0-d NDArray (the only array <c>iter()</c> refuses); true for any other NDArray, a
+        ///     string and any <see cref="System.Collections.IEnumerable"/>; false for everything else.</returns>
+        /// <remarks>A bare enumerator that is not itself <see cref="System.Collections.IEnumerable"/>, a ValueTuple and a
+        ///     Tuple answer false where Python's iterator and tuple are iterable (C# cannot foreach them): the documented
+        ///     divergences of the facade.</remarks>
+        internal static bool iterable(object y)
+        {
+            switch (y)
+            {
+                case null:
+                    return false;
+                case NDArray nd:
+                    // A 0-d array is the only non-iterable array: iter() on it raises TypeError, exactly
+                    // as NDArray.GetEnumerator() does; every rank>=1 array (incl. empty) iterates. Checked
+                    // ahead of the IEnumerable case because NDArray itself implements IEnumerable.
+                    return nd.ndim != 0;
+                case string _:
+                    // Python str is iterable (np.iterable("abc") == True). string is also IEnumerable, so
+                    // this branch documents the deliberate parity choice rather than changing the outcome.
+                    return true;
+                case System.Collections.IEnumerable _:
+                    return true;
+                default:
+                    // Scalar value types (bool/byte/sbyte/short/ushort/int/uint/long/ulong/char/float/
+                    // double/Half/decimal/Complex) are not iterable — matching iter() on a NumPy scalar.
+                    return false;
+            }
+        }
+
         // ---------------------------- np.flip ----------------------------
 
         /// <summary>
@@ -2762,6 +2906,115 @@ namespace NumSharp
             if (!ReferenceEquals(anyTrue, conds[0]))
                 anyTrue.Dispose();
             return notTrue.MakeGeneric<bool>();
+        }
+
+        // ---------------------------- np.meshgrid ----------------------------
+
+        /// <summary>
+        ///     NumPy's <c>np.meshgrid(*xi, copy, sparse, indexing)</c> (<c>_function_base_impl.py</c>) after the facade's
+        ///     class rules and null check: the indexing name's check, each vector reshaped to its open-mesh axis (the first
+        ///     two swapped for <c>'xy'</c>), broadcast to the full grid unless <paramref name="sparse"/>, and copied unless
+        ///     <paramref name="copy"/> is false.
+        /// </summary>
+        /// <param name="xi">The coordinate vectors (the array itself not null); each is read flat in C order, whatever its
+        ///     rank.</param>
+        /// <param name="indexing"><c>"xy"</c> (Cartesian: the first two grids' axes swapped) or <c>"ij"</c> (matrix).</param>
+        /// <param name="sparse">Keep each grid's open-mesh shape <c>(1, ..., Ni, ..., 1)</c> instead of broadcasting.</param>
+        /// <param name="copy">Materialize each grid as an independent C-contiguous array; false returns the reshape views
+        ///     (sparse) or read-only broadcast views (dense) of the inputs.</param>
+        /// <returns>One grid per vector, each in its vector's dtype (no promotion); none for no vectors.</returns>
+        /// <exception cref="ValueError"><paramref name="indexing"/> is neither <c>"xy"</c> nor <c>"ij"</c> (<c>Valid values
+        ///     for `indexing` are 'xy' and 'ij'.</c>), checked before the vectors.</exception>
+        /// <exception cref="ArgumentNullException">A null vector (the parameter is named <c>xi[i]</c>).</exception>
+        /// <remarks>No class boundary runs here: the facade applies its rules (a chararray vector's grid kept as a chararray,
+        ///     a matrix computed plain) before it calls this. The reshapes and broadcast views a copy replaces are not
+        ///     released here (they share the inputs' buffers until collected).</remarks>
+        internal static NDArray[] meshgrid(NDArray[] xi, string indexing, bool sparse, bool copy)
+        {
+            if (indexing != "xy" && indexing != "ij")
+                throw new ValueError("Valid values for `indexing` are 'xy' and 'ij'.");
+
+            int ndim = xi.Length;
+            if (ndim == 0)
+                return System.Array.Empty<NDArray>();
+
+            var output = new NDArray[ndim];
+
+            // Reshape each input to its open-mesh axis (size at that axis, 1 elsewhere) in ONE pass.
+            // 'ij' (matrix) puts input i at axis i; 'xy' (Cartesian) swaps the first two — input 0 → axis 1,
+            // input 1 → axis 0 — for ndim > 1.
+            bool swapXY = indexing == "xy" && ndim > 1;
+            for (int i = 0; i < ndim; i++)
+            {
+                NDArray a = xi[i] ?? throw new ArgumentNullException($"xi[{i}]",
+                    "meshgrid coordinate vectors must not be null.");
+                int axis = swapXY ? (i == 0 ? 1 : i == 1 ? 0 : i) : i;
+                output[i] = a.reshape(Shape.Adopt(OpenMeshShape(ndim, axis, a.size)));
+            }
+
+            // Dense grids: broadcast each open-mesh axis across the full shape (np.broadcast_arrays' statement: the
+            // facade's matrix region is meshgrid's own here).
+            if (!sparse)
+                output = broadcast_arrays(output);
+
+            // Materialize to independent C-contiguous arrays unless views were requested.
+            if (copy)
+                for (int i = 0; i < ndim; i++)
+                    output[i] = output[i].copy();
+
+            return output;
+        }
+
+        /// <summary>Shape that is 1 in every axis but <paramref name="axis"/>, which holds <paramref name="size"/>.</summary>
+        /// <param name="ndim">The grid's rank.</param>
+        /// <param name="axis">The vector's axis in the grid.</param>
+        /// <param name="size">The vector's element count.</param>
+        /// <returns>A new dims array (handed to <see cref="Shape.Adopt(long[])"/>, so never written after).</returns>
+        private static long[] OpenMeshShape(int ndim, int axis, long size)
+        {
+            var shape = new long[ndim];
+            for (int d = 0; d < ndim; d++)
+                shape[d] = 1L;
+            shape[axis] = size;
+            return shape;
+        }
+
+        // ---------------------------- np.append ----------------------------
+
+        /// <summary>
+        ///     NumPy's <c>np.append</c> (<c>_function_base_impl.py</c>: <c>if axis is None: arr = arr.ravel() if arr.ndim !=
+        ///     1 else arr; values = ravel(values); axis = arr.ndim - 1; return concatenate((arr, values), axis=axis)</c>)
+        ///     after the facade's class rules and null checks.
+        /// </summary>
+        /// <param name="arr">The array (not null).</param>
+        /// <param name="values">The values (not null): with an axis they must match <paramref name="arr"/> on every other
+        ///     axis; without one they are flattened.</param>
+        /// <param name="axis">The axis to append along, or null to flatten both and append along axis 0.</param>
+        /// <returns>A new array: concatenate's result, in the promoted dtype (an empty float64 <paramref name="values"/>
+        ///     promotes an integer <paramref name="arr"/>, as NumPy's does).</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range for the inputs' rank.</exception>
+        /// <exception cref="ValueError">A 0-d input with an axis (<c>zero-dimensional arrays cannot be concatenated</c>).</exception>
+        /// <exception cref="IncorrectShapeException">The inputs' ranks or other axes differ.</exception>
+        /// <exception cref="InvalidCastException">An input that does not cast to the result dtype.</exception>
+        /// <remarks>Scoped by <c>[NDScoped]</c>: the ravels of a multi-dimensional input are released, exceptions included;
+        ///     the result is yielded. A 1-D input passes to concatenate as it is (built before the scope opened, so never
+        ///     disposed). No class boundary runs here: the facade applies its rules before it calls this.</remarks>
+        [NDScoped /* the ravels of multi-dimensional inputs are released; the concatenated result is yielded */]
+        internal static NDArray append(NDArray arr, NDArray values, int? axis)
+        {
+            if (axis is null)
+            {
+                // Both inputs ravel'd into 1-D, then concatenate along axis 0.
+                // Mirrors NumPy's `arr.ravel() if arr.ndim != 1 else arr` (np.ravel's statement: the array object's ravel
+                // in C order).
+                NDArray flatArr = arr.ndim == 1 ? arr : ravel(arr, 'C');
+                NDArray flatVals = values.ndim == 1 ? values : ravel(values, 'C');
+                return concatenate(new[] { flatArr, flatVals }, 0, null, null, "same_kind");
+            }
+
+            // Axis given — concatenate handles the shape validation and dtype
+            // promotion (NEP50, mixed-dtype paths, etc.) directly.
+            return concatenate(new[] { arr, values }, axis.Value, null, null, "same_kind");
         }
     }
 }

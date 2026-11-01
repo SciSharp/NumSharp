@@ -31,7 +31,8 @@ namespace NumSharp
         /// <exception cref="ValueError"><paramref name="axes"/> does not hold two axes ("len(axes) must be 2."), names one
         ///     axis twice ("Axes must be different.", tested before the range), or is out of range ("Axes=(a, b) out of range
         ///     for array of ndim=n.") — NumPy's own ValueErrors, not normalize_axis_index's AxisError.</exception>
-        [NDScoped]
+        /// <exception cref="NullReferenceException"><paramref name="m"/> is null (its rank is read after the axes'
+        ///     length).</exception>
         public static NDArray rot90(NDArray m, int k = 1, int[] axes = null)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
@@ -40,78 +41,9 @@ namespace NumSharp
             // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
             if (NDCharArrayBoundary.Sees(m))
                 return NDCharArrayBoundary.Kept((m, k, axes), static s => rot90(s.m, s.k, s.axes));
-            axes ??= new[] {0, 1};
 
-            if (axes.Length != 2)
-                throw new ValueError("len(axes) must be 2.");
-
-            int ndim = m.ndim;
-
-            // NumPy checks "same axis" before the range check, and the |a0-a1|==ndim clause
-            // catches a pair that names one physical axis through mixed signs (e.g. (0, -2) on
-            // ndim=2, or (0, 3) on ndim=3) — which therefore reports "Axes must be different"
-            // rather than "out of range".
-            if (axes[0] == axes[1] || Math.Abs(axes[0] - axes[1]) == ndim)
-                throw new ValueError("Axes must be different.");
-
-            if (axes[0] >= ndim || axes[0] < -ndim
-                || axes[1] >= ndim || axes[1] < -ndim)
-                throw new ValueError(
-                    $"Axes=({axes[0]}, {axes[1]}) out of range for array of ndim={ndim}.");
-
-            // Python-style modulo: always in [0, 3], even for negative k.
-            k = ((k % 4) + 4) % 4;
-
-            if (k == 0)
-                // NumPy returns m[:] — a full view that shares memory with m.
-                return new NDArray(m.Storage.Alias(m.Shape)) {TensorEngine = m.TensorEngine};
-
-            // Normalize the (validated) axes to [0, ndim) for the view ops below, matching
-            // Python's negative indexing of both flip(m, axis) and axes_list[axis].
-            int ax0 = axes[0] < 0 ? axes[0] + ndim : axes[0];
-            int ax1 = axes[1] < 0 ? axes[1] + ndim : axes[1];
-
-            if (k == 2)
-                return FlipAxisView(FlipAxisView(m, ax0), ax1);
-
-            // axes_list = identity permutation with ax0 and ax1 interchanged.
-            var axesList = new int[ndim];
-            for (int i = 0; i < ndim; i++)
-                axesList[i] = i;
-            (axesList[ax0], axesList[ax1]) = (axesList[ax1], axesList[ax0]);
-
-            if (k == 1)
-                return transpose(FlipAxisView(m, ax1), axesList);
-
-            // k == 3
-            return FlipAxisView(transpose(m, axesList), ax1);
-        }
-
-        /// <summary>
-        ///     Reverses <paramref name="m"/> along a single <paramref name="axis"/> and returns a
-        ///     view — the NumPy <c>flip(m, axis)</c> primitive for one axis. The axis' stride is
-        ///     negated and the offset advanced to that axis' last element; no data is copied.
-        /// </summary>
-        private static NDArray FlipAxisView(NDArray m, int axis)
-        {
-            var shape = m.Shape;
-            var dims = (long[])shape.dimensions.Clone();
-            var strides = (long[])shape.strides.Clone();
-            long offset = shape.offset;
-
-            // Advance to the last element along `axis`, then reverse its stride. Guard an empty
-            // axis (dims[axis] == 0 has no last element, so leave the offset put) and note a
-            // stride-0 broadcast axis negates to 0 with an unchanged offset — reversing a
-            // stretched axis is a no-op, exactly as in NumPy.
-            if (dims[axis] > 0)
-                offset += strides[axis] * (dims[axis] - 1);
-            strides[axis] = -strides[axis];
-
-            long bufSize = shape.bufferSize > 0 ? shape.bufferSize : shape.size;
-            var flipped = new Shape(dims, strides, offset, bufSize);
-
-            // Alias inherits read-only from the source storage (broadcast / 'r' memmap).
-            return new NDArray(m.Storage.Alias(flipped)) {TensorEngine = m.TensorEngine};
+            // NumPy's statements (the axes' checks, k modulo 4, the flips and the transpose) are the array object's.
+            return NDArray.rot90(m, k, axes);
         }
     }
 }

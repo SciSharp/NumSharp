@@ -141,6 +141,10 @@ namespace NumSharp
         /// NDArray[] g  = np.meshgrid(a, b, sparse: true);          // (1,M) and (N,1)
         /// </code>
         /// </example>
+        /// <exception cref="ArgumentNullException"><paramref name="xi"/> is null, or one of its vectors is (the parameter is
+        ///     then named <c>xi[i]</c>, after the indexing check).</exception>
+        /// <exception cref="ValueError"><paramref name="indexing"/> is neither <c>"xy"</c> nor <c>"ij"</c> (<c>Valid values
+        ///     for `indexing` are 'xy' and 'ij'.</c>).</exception>
         public static MeshgridResult meshgrid(NDArray[] xi,
             string indexing = "xy", bool sparse = false, bool copy = true)
         {
@@ -153,47 +157,10 @@ namespace NumSharp
             using var plain = NDMatrixBoundary.PlainFor(xi);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (xi is null)
                 throw new ArgumentNullException(nameof(xi));
-            if (indexing != "xy" && indexing != "ij")
-                throw new ValueError("Valid values for `indexing` are 'xy' and 'ij'.");
 
-            int ndim = xi.Length;
-            if (ndim == 0)
-                return new MeshgridResult(Array.Empty<NDArray>());
-
-            var output = new NDArray[ndim];
-
-            // Reshape each input to its open-mesh axis (size at that axis, 1 elsewhere) in ONE pass.
-            // 'ij' (matrix) puts input i at axis i; 'xy' (Cartesian) swaps the first two — input 0 → axis 1,
-            // input 1 → axis 0 — for ndim > 1.
-            bool swapXY = indexing == "xy" && ndim > 1;
-            for (int i = 0; i < ndim; i++)
-            {
-                NDArray a = xi[i] ?? throw new ArgumentNullException($"xi[{i}]",
-                    "meshgrid coordinate vectors must not be null.");
-                int axis = swapXY ? (i == 0 ? 1 : i == 1 ? 0 : i) : i;
-                output[i] = a.reshape(Shape.Adopt(OpenMeshShape(ndim, axis, a.size)));
-            }
-
-            // Dense grids: broadcast each open-mesh axis across the full shape.
-            if (!sparse)
-                output = broadcast_arrays(output);
-
-            // Materialize to independent C-contiguous arrays unless views were requested.
-            if (copy)
-                for (int i = 0; i < ndim; i++)
-                    output[i] = output[i].copy();
-
-            return new MeshgridResult(output);
-        }
-
-        /// <summary>Shape that is 1 in every axis but <paramref name="axis"/>, which holds <paramref name="size"/>.</summary>
-        private static long[] OpenMeshShape(int ndim, int axis, long size)
-        {
-            var shape = new long[ndim];
-            for (int d = 0; d < ndim; d++)
-                shape[d] = 1L;
-            shape[axis] = size;
-            return shape;
+            // NumPy's statements (the indexing check, the open-mesh reshapes, the broadcast, the copies) are the array
+            // object's; the tuple NumPy returns is this result struct.
+            return new MeshgridResult(NDArray.meshgrid(xi, indexing, sparse, copy));
         }
     }
 }

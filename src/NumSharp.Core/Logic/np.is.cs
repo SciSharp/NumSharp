@@ -188,27 +188,8 @@ namespace NumSharp
         ///     </para>
         /// </remarks>
         public static bool iterable(object y)
-        {
-            switch (y)
-            {
-                case null:
-                    return false;
-                case NDArray nd:
-                    // A 0-d array is the only non-iterable array: iter() on it raises TypeError, exactly
-                    // as NDArray.GetEnumerator() does; every rank>=1 array (incl. empty) iterates. Checked
-                    // ahead of the IEnumerable case because NDArray itself implements IEnumerable.
-                    return nd.ndim != 0;
-                case string _:
-                    // Python str is iterable (np.iterable("abc") == True). string is also IEnumerable, so
-                    // this branch documents the deliberate parity choice rather than changing the outcome.
-                    return true;
-                case IEnumerable _:
-                    return true;
-                default:
-                    // Scalar value types (bool/byte/sbyte/short/ushort/int/uint/long/ulong/char/float/
-                    // double/Half/decimal/Complex) are not iterable — matching iter() on a NumPy scalar.
-                    return false;
-            }
-        }
+            // NumPy's `try: iter(y)` is the array object's type test (NDArray.iterable); an object has no array class to
+            // decide, so no class rule applies.
+            => NDArray.iterable(y);
     }
 }

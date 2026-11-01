@@ -38,13 +38,14 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="arr"/> or <paramref name="values"/> is null.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.append.html
-        ///     <para>Scoped by <c>[NDScoped]</c>: the raveled copies (or views) of a multi-dimensional
-        ///     <paramref name="arr"/> or <paramref name="values"/> are released on return, exceptions included, and
-        ///     the concatenated result is yielded. A 1-D input is passed to <see cref="concatenate(NDArray[], int?, NDArray, DType, string)"/>
-        ///     as-is; it was built before the scope opened, so the scope never disposes it.</para>
+        ///     <para>NumPy's statements are the array object's (<c>NDArray.append</c>), which releases the raveled copies
+        ///     (or views) of a multi-dimensional <paramref name="arr"/> or <paramref name="values"/>, exceptions included,
+        ///     and yields the concatenated result. A 1-D input is passed to concatenate as-is.</para>
         /// </remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
-        [NDScoped]
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range for the inputs' rank.</exception>
+        /// <exception cref="IncorrectShapeException">With an axis, the inputs' ranks or other axes differ.</exception>
+        /// <exception cref="InvalidCastException">An input that does not cast to the result dtype.</exception>
         public static NDArray append(NDArray arr, NDArray values, int? axis = null)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
@@ -57,18 +58,8 @@ namespace NumSharp
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (values is null) throw new ArgumentNullException(nameof(values));
 
-            if (axis is null)
-            {
-                // Both inputs ravel'd into 1-D, then concatenate along axis 0.
-                // Mirrors NumPy's `arr.ravel() if arr.ndim != 1 else arr`.
-                NDArray flatArr = arr.ndim == 1 ? arr : np.ravel(arr);
-                NDArray flatVals = values.ndim == 1 ? values : np.ravel(values);
-                return np.concatenate(new[] { flatArr, flatVals }, axis: 0);
-            }
-
-            // Axis given — concatenate handles the shape validation and dtype
-            // promotion (NEP50, mixed-dtype paths, etc.) directly.
-            return np.concatenate(new[] { arr, values }, axis: axis.Value);
+            // NumPy's statements (the ravels when axis is None, then concatenate) are the array object's.
+            return NDArray.append(arr, values, axis);
         }
 
         /// <summary>
@@ -104,6 +95,8 @@ namespace NumSharp
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (values is null) throw new ArgumentNullException(nameof(values));
 
+            // The C# value's conversion (NumPy's array_like), then the NDArray overload: its matrix rule still sees a
+            // numpy.matrix passed as object, which this overload's own rule (arr only) does not.
             var asArr = np.asanyarray(values);
             return append(arr, asArr, axis);
         }
