@@ -117,10 +117,12 @@ their calls rely on a facade's class rule. The five defects its snapshots, readi
 enumeration raises np.fromiter's error, `f48b5677`; a bad `device=` raises NumPy's ValueError, `85167352`;
 np.nansum / np.nanprod along an axis with an empty result, `eeaac035`; np.average with numpy.matrix weights,
 `e169b25d`). P6b is done (2026-11-01): the linalg and FFT sub-engines call the members their facades dispatch to (a
-nested numpy.linalg / numpy.fft call is the sub-engine's own virtual member) and sit under `Backends/Default/`. P8's
-rename and its 12 functions that compute are done (2026-11-01): every one of them is a `TensorEngine` member, the
-linalg engine's last three np.* calls (np.outer, np.tensordot) are those members, and R2 counts no computation call in
-an engine file but the text API's own `NDStringMethods.cs`. An audit of the element code the plan's
+nested numpy.linalg / numpy.fft call is the sub-engine's own virtual member) and sit under `Backends/Default/`. P8 is
+done (2026-11-01): its rename; its 12 functions that compute, every one a `TensorEngine` member (the linalg engine's last
+three np.* calls, np.outer and np.tensordot, are those members, and R2 counts no computation call in an engine file but
+the text API's own `NDStringMethods.cs`); and the array object's functions, every one an `NDArray` member in its
+Appendix D partial but np.apply_over_axes and np.mask_indices (facades, for their callbacks' results) and np.copy (the
+`copy` method already). An audit of the element code the plan's
 own commits added (2026-10-30) found four places and a few small ones that re-implement a kernel, the iterator or a
 BCL primitive the library already had. [§7 PA](#pa-reuse-what-the-library-already-has-the-2026-10-30-audit) plans their alignment. Its
 probe found exact models of NumPy's dot functions, so the dot item also fixes np.dot where it differs from NumPy today.
@@ -145,10 +147,10 @@ Three items were tried first (2026-10-30):
 - PA5 waits: its `Span<T>` items cannot index past `int.MaxValue` elements (D20). The divergences found on the way are
   pinned as `[OpenBugs]` tests and their fixes deferred (D21).
 
-Order of the work left (decided 2026-10-31 in the step round, D22): the merge (done); P6b (done 2026-11-01); P8, its
-rename commit first (the rename done 2026-11-01, `838fccfd`; the 12 functions that compute done the same day,
-`c046d2ca` .. `d0c7a582`; left: the array object's functions); P9; P10; PA3; PA2. Later: PA5, PA6 and the fixes of the
-pinned divergences (`OpenBugs.NpLayer.cs`, NL1 to NL10).
+Order of the work left (decided 2026-10-31 in the step round, D22): the merge (done); P6b (done 2026-11-01); P8 (done
+2026-11-01: the rename `838fccfd`, the 12 functions that compute `c046d2ca` .. `d0c7a582`, the array object's functions
+`690948f3` .. `75788048`); P9; P10; PA3; PA2. Later: PA5, PA6 and the fixes of the pinned divergences
+(`OpenBugs.NpLayer.cs`, NL1 to NL11).
 
 Progress goes into the [§9 state log](#9-state-log), newest entry first.
 
@@ -590,7 +592,7 @@ The owner's answers (2026-10-24; D1 again twice on 2026-10-28), and what they me
 | D18 | 2026-10-31, step 3 (P8): "Ask again, as I have a problem with the casing of NDArray.* as it doesn't match NumPy's"; asked again: NumPy's names on NDArray | P8: the array object's internal statics take the NumPy function's name, case for case (`NDArray.vstack`, `NDArray.where`, `NDArray.take_along_axis`). A name that clashes with an ndarray property takes NumPy's own clash convention, a trailing underscore (`NDArray.real_`, `NDArray.imag_`). The ~45 existing PascalCase members are renamed with their callers in one commit before P8. `TensorEngine`, `UnmanagedStorage` and `Shape` keep C# casing (`TensorEngine`'s members shipped public in 0.70.0). |
 | D19 | 2026-10-31, step 7 (P10): "No obsolete, just remove, maintain NumPy's overload's structure and if its a custom NumSharp function then we should have one overload" | P10: an overload the change replaces is removed, not tagged `[Obsolete]`; the overloads keep NumPy's structure; a function NumPy does not have keeps one overload. |
 | D20 | 2026-10-31, step 9 (PA5): "We can't support that as we need long index support which span doesn't do."; asked again without the `Span` items: "Drop PA5", "Note that for later (defer)" | PA5 waits (Later). Its `Span<T>` items are rejected for good: a `Span`'s length is an `int`, and NumSharp indexes with `long`. The items whose replacement takes long counts (np.eye's `DiagWrite`, np.unique's take-kernel gathers, the int64 ramp kernel, the allocation's NaN fill) wait with it. |
-| D21 | 2026-10-31, step 12 (the divergences found on the way): "Create an open bug reproducing the problem/s and defer to tackle them later" | Each is an `[OpenBugs]` reproduction in `test/NumSharp.Tests/OpenBugs.NpLayer.cs`, every expected value NumPy 2.4.2's: NL1 to NL6 (`f2eee1d1`) and B3 as NL7 (`efc50d14`, once P7 was dropped); NL8 (`2cad8823`), found by the merge's Debug gate; NL9 and NL10 (`401703b5`), found by P8's moves. Their fixes are deferred; each will be a D4 commit. |
+| D21 | 2026-10-31, step 12 (the divergences found on the way): "Create an open bug reproducing the problem/s and defer to tackle them later" | Each is an `[OpenBugs]` reproduction in `test/NumSharp.Tests/OpenBugs.NpLayer.cs`, every expected value NumPy 2.4.2's: NL1 to NL6 (`f2eee1d1`) and B3 as NL7 (`efc50d14`, once P7 was dropped); NL8 (`2cad8823`), found by the merge's Debug gate; NL9 and NL10 (`401703b5`), found by P8's moves; NL11 (`845f99f2`), found by P8's snapshot tool. Their fixes are deferred; each will be a D4 commit. |
 | D22 | 2026-10-31, the step round: the rebase, P6b, P8, P9, P10 and P7b-d "Accept and start" (P7b-d dropped later, D7); P7a "Skip"; PA3 "Defer until after P7"; PA2 "Defer until after PA3"; PA6 "Defer until after PA5" | The order of the work: the rebase; P6b; P8; P9; P10; PA3 (where P7 stood); PA2. PA5 and PA6 later (D20). |
 
 The recommendations as written before the answers:
@@ -1471,10 +1473,14 @@ P7 was dropped). The array object's internal members take NumPy's names (D18).
       einsum_path (`EinsumFunc`). The five windows have no operand: they run on `TensorEngine.Default` (P9). Done
       2026-11-01 in five family commits (`c046d2ca` .. `d0c7a582`, see the state log), each byte-identical in the
       snapshot tool; the windows call `np.EngineOf(null)` until P9, as np.linspace does.
-- [ ] The 47 of the array object move into their `NDArray` / `Shape` partials (Appendix D). 11 have their member
+- [x] The 47 of the array object move into their `NDArray` / `Shape` partials (Appendix D). 11 have their member
       already, from P6: flip / fliplr / flipud (`NDArray.FlipAxes`), expand_dims, broadcast_to / broadcast_arrays /
-      broadcast_shapes, atleast_1d / atleast_2d, diagflat, identity (`NDArray.Eye`). About 36 are left (vstack ->
-      `NDArray.vstack`, append -> `NDArray.append`, tril / triu -> `NDArray.tril` / `triu`, ...).
+      broadcast_shapes, atleast_1d / atleast_2d, diagflat, identity (`NDArray.Eye`). Done 2026-11-01 for the other 36 in
+      seven family commits (`690948f3` .. `75788048`, see the state log), each byte-identical in the snapshot tool: 34
+      moved (vstack -> `NDArray.vstack_`, append -> `NDArray.append`, tril / triu -> `NDArray.tril` / `triu`, ...).
+      np.apply_over_axes and np.mask_indices stay facades: a callback's result goes through np.* functions whose class
+      rules apply to it (np.expand_dims; np.not_equal and np.nonzero), which a member's plain statements would not
+      apply. np.copy needed no move: its statement already is the array object's `copy` method.
 - base_repr and binary_repr stay facades (they format a Python int).
 
 ### P9. Which engine an array uses
@@ -1544,6 +1550,9 @@ commit of its own, with its oracle excuse narrowed where it has one:
   at every order) and an N-D p whose extra product does not broadcast. The fix ports the recursion.
 - NL10: np.einsum_path with an ellipsis and too few operands lets .NET's `IndexOutOfRangeException` escape where
   NumPy's `_parse_einsum_input` raises `IndexError: list index out of range`.
+- NL11: np.isscalar answers False for a `Half` (NumPy's float16 scalar) and a `BigInteger` (a Python int), where NumPy
+  answers True, and True for a `Type` object of a primitive (`typeof(int)`), where NumPy's `isscalar(int)` is False. A
+  0-d NDArray answering True is NumSharp's convention (a 0-d array is what a NumPy scalar becomes), not part of it.
 
 The ten array-object members `TensorEngine` shipped in 0.70.0 (E7) stay (decided 2026-10-31, D13): removing them
 breaks a subclass or a direct caller for a layering reason alone.
@@ -1564,6 +1573,45 @@ breaks a subclass or a direct caller for a layering reason alone.
 ---
 
 ## 9. State log
+
+- **2026-11-01, P8's array-object functions: each one is an `NDArray` member - P8 is done.** Fourteen commits on
+  `strings` after the computing functions' (not pushed): six tool commits, seven family commits and one pin.
+  - The tool commits teach the snapshot tool what the probe skipped: `ed4a441e` (the stacking family's array lists and
+    np.block's nested lists), `d8eb4d1c` (the split family's section counts and split points, np.tile's repetitions),
+    `5427da1f` (the triangle generators' row count as an operand, the tri family's column counts and diagonals),
+    `18835e6b` (np.roll's shift; np.isscalar / np.iterable's object operand: every C# value kind), `d54ba705` (np.append's
+    values, np.meshgrid's array overload and third vector), `97c325b0` (np.diag_indices' size and ndim, np.require's
+    requirements as a list or a string).
+  - The families, one commit each, every body moved with its np.* calls converted to the members their facades dispatch
+    to; the facades keep their numpy.matrix / numpy.char.chararray rules and null checks:
+    - `690948f3`, `_core/shape_base.py` (`Backends/NDArray.CoreShapeBase.cs`): atleast_3d, vstack_ and hstack_ (D18's
+      trailing underscore: NDArray's public instance vstack / hstack take the same parameter list), stack, unstack, and
+      block with its `_block_*` helpers and route flag. np.atleast_3d(object) / (object[]) keep their statements (their
+      np.expand_dims applies the chararray rule).
+    - `3e2912e9`, `lib/_shape_base_impl.py` (`Backends/NDArray.ShapeBase.cs`): column_stack, dstack_, split /
+      array_split (three overloads each, with SplitContext), hsplit / vsplit / dsplit (np.dsplit gained np.split's class
+      rules, which it got by calling np.split), tile. The split points' null check moved into array_split's member,
+      the one place every split-points route reaches. np.apply_over_axes stays a facade.
+    - `0f2a14eb`, `lib/_twodim_base_impl.py` (`Backends/NDArray.TwoDimBase.cs`): tri, tril / triu, tril_indices /
+      triu_indices and their _from forms, and ZeroBytes (the polynomial roots now call `NDArray.ZeroBytes`).
+      np.mask_indices stays a facade.
+    - `4cea01d6`, `_core/numeric.py` (`Backends/NDArray.Numeric.cs`): zeros_like, ones_like, isfortran, roll, isscalar.
+    - `3dbc41c3`, `lib/_function_base_impl.py` (`Manipulation/NDArray.FunctionBase.cs`, beside the facades until P10):
+      rot90, iterable, meshgrid, append. np.copy needed no move.
+    - `2574ddca`, `lib/_index_tricks_impl.py` (`Indexing/NDArray.IndexTricks.cs`): diag_indices, diag_indices_from, with
+      the equal-dimensions guard np.fill_diagonal shares.
+    - `75788048`, `_core/_asarray.py` (the new `Backends/NDArray.CoreAsArray.cs`): require.
+  - Proof, the snapshot tool before (at each tool commit) and after each family commit: identical for batch A (8,750
+    cases), B (24,300), C (3,328), D (15,220), E (14,524), F (261) and G (10,368). Each family's unit tests and the classes
+    around it passed on net10.0 and net8.0, and so did the oracle's layering ratchets and matrix-operand replays (the
+    KnownGaps carves still exact, 330 and 10). Every new member file under `Backends/` makes no np.* call (R2) but
+    `NDArray.ShapeBase.cs`' pinned np.NDIndex.
+  - Found on the way and pinned (D21), `845f99f2`: NL11, np.isscalar of a `Half` and of a `BigInteger` is False where
+    NumPy's is True, and of `typeof(int)` True where NumPy's `isscalar(int)` is False (the tool's object operand ran
+    them first).
+  - Gates (Release, CI's filter, on the final tree `75788048`): NumSharp.Tests 21,016 / 21,015 passed (12 skipped) on
+    net10.0 / net8.0, the oracle 414 passed and 2 skipped (the soaks) on both, the layering ratchets included.
+  - Next: P9 (`TensorEngine.Default`, the engine an array binds).
 
 - **2026-11-01, P8's 12 functions that compute: each one is a `TensorEngine` member.** Seven commits on `strings` after
   the rename's (not pushed).
@@ -4953,7 +5001,9 @@ object kept out of the engine):
 - "NumPy" counts the callables, and "NumSharp" the names NumSharp has on the matching surface (`np`, `np.linalg`,
   `np.fft`, `np.random`, `np.emath`, `NDArray`).
 - Names in *italics* are missing from NumSharp.
-- † marks the 61 functions of D8 (a facade without dtype logic).
+- † marks the 61 functions of D8 (a facade without dtype logic). P8 (2026-11-01) gave every one its home but three:
+  np.apply_over_axes and np.mask_indices stay facades (a callback's result goes through np.* functions whose class rules
+  apply to it), and np.copy's statement already is the array object's `copy` method.
 
 Measured 2026-10-28: NumPy's side by introspection, NumSharp's names by reflection over a build of `97a3cc51`. No public
 name changed between that commit and `67249651`.

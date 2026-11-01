@@ -297,7 +297,12 @@ Every store entry point packs a C# literal as NumPy's `PyArray_Pack` of a Python
 ## The diagonal and triangular family
 
 NumPy's `_twodim_base_impl.py` + `_index_tricks_impl.py`; tests `Indexing/np.{diag,tri,diag_indices}.Test.cs`, oracle
-tiers `manip`/`matmul`; sources `Creation/np.tri.cs`, `Indexing/np.{diag,tril,diag_indices,tril_indices,fill_diagonal}.cs`.
+tiers `manip`/`matmul`; facades `Creation/np.tri.cs`, `Indexing/np.{diag,tril,diag_indices,tril_indices,fill_diagonal}.cs`.
+The statements are the array object's: `NDArray.tri` / `tril` / `triu` / `tril_indices` / `triu_indices` and the _from
+forms (`Backends/NDArray.TwoDimBase.cs`, with the write-once `NDArray.ZeroBytes`), `NDArray.diag_indices` /
+`diag_indices_from` and `fill_diagonal` (`Indexing/NDArray.IndexTricks.cs`, sharing `RequireEqualDimensions`).
+`np.mask_indices` keeps its statements: its `mask_func`'s result goes through np.not_equal and np.nonzero, whose class
+rules apply to whatever class the callback returns.
 - `diag(v, k=0)`: a 1-D input CONSTRUCTS a fresh writeable C-contiguous `(n, n)` matrix (`n = v.size + |k|`) with `v` on
   the k-th diagonal, scattered down the stride-`(n+1)` diagonal by the IL strided-store kernel
   (`DirectILKernelGenerator.DiagWrite`: a byte-width-keyed MOV loop for itemsize 1/2/4/8/16; the aliased-view + `SetData`

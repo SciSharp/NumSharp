@@ -58,11 +58,18 @@ paths:
   An AVX2 gather of the range table is faster but not taken: Intel's GDS microcode mitigation slows gathers on 6th–11th
   generation cores. Gates: `Manipulation/np.isin.Test.cs`, `np.isin.NumPyPort.Test.cs`, the `groupa` tier.
 - `np.iterable(y)` is NumPy's `try: iter(y); return True; except TypeError: return False`, an O(1) type check
-  (`Logic/np.is.cs`): `null` → false; an `NDArray` → `ndim != 0` (a 0-d array is the only non-iterable array, as
-  `NDArray.GetEnumerator()` throws for it); `string` → true; any `IEnumerable` → true; scalar value types → false. The
-  NDArray test precedes the `IEnumerable` test (NDArray implements it). `[Misaligned]`: a bare `IEnumerator` cursor and
-  `ValueTuple`/`Tuple`/`ITuple` are iterable in Python but not `foreach`-able in C#, so they return false. Unit-tested
-  only (`Logic/np.iterable.Test.cs`), like `isscalar`.
+  (`NDArray.iterable`, `Manipulation/NDArray.FunctionBase.cs`; the facade `Logic/np.is.cs`): `null` → false; an `NDArray`
+  → `ndim != 0` (a 0-d array is the only non-iterable array, as `NDArray.GetEnumerator()` throws for it); `string` →
+  true; any `IEnumerable` → true; scalar value types → false. The NDArray test precedes the `IEnumerable` test (NDArray
+  implements it). `[Misaligned]`: a bare `IEnumerator` cursor (one that is not itself `IEnumerable`; LINQ's iterators
+  are) and `ValueTuple`/`Tuple`/`ITuple` are iterable in Python but not `foreach`-able in C#, so they return false.
+  Unit-tested (`Logic/np.iterable.Test.cs`), like `isscalar`, and both run over every C# value kind in the facade-move
+  snapshot tool's object operand.
+- `np.isscalar(obj)` (`NDArray.isscalar`, `Backends/NDArray.Numeric.cs`) is True for a C# primitive, a `decimal`, a
+  `Complex`, a `bool`, a `string` and a 0-d one-element NDArray (NumSharp has no scalar objects: a 0-d array is what a
+  NumPy scalar becomes, though NumPy's own 0-d array answers False). Pinned divergences (NL11,
+  `OpenBugs.NpLayer.cs`): a `Half` (NumPy's float16 scalar) and a `BigInteger` (a Python int) answer False, and a `Type`
+  object of a primitive (`typeof(int)`) True, where NumPy's `isscalar(int)` is False.
 
 ## The comparison ufuncs
 

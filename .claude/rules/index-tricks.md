@@ -98,7 +98,8 @@ in the `manip` tier. Sources `Creation/np.{r_,c_}.cs`, `Indexing/np.{ix_,s_}.cs`
   dimension there is an empty axis (the reshape's unknown dimension), as NumPy's. Gate
   `Indexing/np.indices.NumPyPort.Test.cs`.
 - `np.meshgrid(x1, x2[, x3], string indexing="xy", bool sparse=false, bool copy=true)` plus `meshgrid(NDArray[] xi, …)`
-  (`Creation/np.meshgrid.cs`): `"xy"` swaps the first two axes ((N, M) for 2-D) against `"ij"` ((M, N)); `sparse` keeps
+  (`Creation/np.meshgrid.cs`; the statements `NDArray.meshgrid`, `Manipulation/NDArray.FunctionBase.cs`, behind the
+  facades' chararray rule and matrix region): `"xy"` swaps the first two axes ((N, M) for 2-D) against `"ij"` ((M, N)); `sparse` keeps
   the open-mesh `(1,…,Ni,…,1)` shapes; `copy=false` returns broadcast views. Each grid keeps its input's dtype. A bad
   `indexing` raises `ValueError "Valid values for \`indexing\` are 'xy' and 'ij'."`. `MeshgridResult` converts to
   `NDArray[]`, deconstructs and indexes. Gate: `Creation/np.meshgrid.Test.cs`.

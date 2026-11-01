@@ -5,7 +5,7 @@ paths:
   - "src/NumSharp.Core/Backends/Default/ArrayManipulation/**"
   - "src/NumSharp.Core/Backends/Default/Creation/Default.CoreFunctionBase.cs"
   - "src/NumSharp.Core/Backends/Default/Manipulation/Default.{SetOps,TrimZeros}.cs"
-  - "src/NumSharp.Core/Backends/NDArray.Numeric.cs"
+  - "src/NumSharp.Core/Backends/NDArray.{Numeric,CoreShapeBase,ShapeBase,CoreAsArray}.cs"
   - "src/NumSharp.Core/Backends/Unmanaged/UnmanagedStorage.{Ctors,Buffer,Coercion}*.cs"
   - "src/NumSharp.Core/Exceptions/AllocationGuard.cs"
   - "test/NumSharp.Tests/Creation/**"
@@ -76,7 +76,8 @@ paths:
 - `require(a, dtype=None, requirements=None)` parses the C/F/A/W/O/E flags and their aliases (a single string iterates
   by character like NumPy, so `"F_CONTIGUOUS"` as one string raises), resolves an order, and copies only when a remaining
   ALIGNED/WRITEABLE/OWNDATA flag is unsatisfied (ALIGNED fails after `setflags(align=False)` or over a caller's buffer at
-  a misaligning byte offset; WRITEABLE for broadcast views; OWNDATA for views).
+  a misaligning byte offset; WRITEABLE for broadcast views; OWNDATA for views). Its statements are `NDArray.require`
+  (`Backends/NDArray.CoreAsArray.cs`).
 - `asmatrix(data, dtype=None)` is `matrix(data, dtype, copy=False)` and returns an `NDMatrix` (`matrix.md`): a new view of
   an array, never the operand itself. 0-D → (1,1), 1-D → (1,N), 2-D unchanged; more than 2-D drops length-1 axes and must
   land on 2-D, else `ValueError("shape too large to be a matrix.")`. It also parses matrix literals (`"1 2; 3 4"`).
@@ -106,6 +107,7 @@ They are NumPy's coercion of a Python list (`NDArray.asanyarray` in `Creation/ND
 They are the array object's: `NDArray.full` / `full_like` / `ones` (`Backends/NDArray.Numeric.cs`, numeric.py's
 `a = empty(...); copyto(a, fill_value, casting='unsafe')`) and `NDArray.eye` (`Backends/NDArray.TwoDimBase.cs`), over
 the storage-lane fills `UnmanagedStorage.FullCore` / `FullFillElement` / `OnesCore` (`UnmanagedStorage.Ctors.cs`).
+`NDArray.zeros_like` / `ones_like` sit beside them (empty_like's order and device checks and K layout, then the fill).
 - The fill value is read as NumPy's `asarray(fill_value)` without a dtype: a 0-d array keeps its dtype, a `BigInteger` is
   a Python int (int64, uint64, or the object-array refusal), except that a C# number keeps its C# type, as `np.asarray(7)`
   does (`np.full(3, 7)` is int32 where NumPy's is int64).
@@ -211,7 +213,8 @@ construction. `Manipulation/np.{union1d,intersect1d,setxor1d,setdiff1d}.cs` are 
   and a transpose (it shares memory, read-only when the source is). `k` is taken mod 4 (negatives wrap). Validation
   (`ValueError`, NumPy's own type and texts, not normalize_axis_index's AxisError): `len(axes) != 2` → "len(axes) must
   be 2."; `axes[0] == axes[1] || |axes[0]-axes[1]| == ndim` → "Axes must be different." (checked before the range, so
-  `axes=(0,2)` on 2-D reports "different"); else out of range.
+  `axes=(0,2)` on 2-D reports "different"); else out of range. Its statements are `NDArray.rot90`
+  (`Manipulation/NDArray.FunctionBase.cs`), as `np.roll`'s are `NDArray.roll` (`Backends/NDArray.Numeric.cs`).
 - `trim_zeros(filt, trim="fb", axis=null)` crops leading/trailing all-zero hyperplanes (NumPy 2.2+'s N-D bounding box).
   `trim` is case-insensitive and validated (`ValueError "unexpected character(s) in \`trim\`: '…'"`); `axis=null` trims
   every axis, an int or `int[]` only those (NumPy's `normalize_axis_tuple(axis, ndim, argname="axis")`: every axis
@@ -235,7 +238,14 @@ construction. `Manipulation/np.{union1d,intersect1d,setxor1d,setdiff1d}.cs` are 
 
 ## Stacking and joining
 
-Tests in `Creation/np.{block,column_stack,concat,unstack}.Test.cs`.
+Tests in `Creation/np.{block,column_stack,concat,unstack}.Test.cs`. The statements are the array object's:
+`Backends/NDArray.CoreShapeBase.cs` (`atleast_1d` / `atleast_2d` / `atleast_3d`, `vstack_`, `hstack_`, `stack`,
+`unstack`, `block`) and `Backends/NDArray.ShapeBase.cs` (`column_stack`, `dstack_`, `split` / `array_split` / `hsplit` /
+`vsplit` / `dsplit`, `tile`); `NDArray.append` is in `Manipulation/NDArray.FunctionBase.cs`. The trailing underscore marks
+a name NDArray's public instance methods take with the same parameter list (`a.vstack(others)`). The facades keep the
+numpy.matrix / numpy.char.chararray rules and the null checks; `np.apply_over_axes`, `np.atleast_2d(object)` and
+`np.atleast_3d(object)` keep their statements, because an object or a callback's result meets class rules there that
+plain statements would not apply.
 - `concat` is NumPy 2.0's alias of `concatenate`, with every overload (array form with `axis`/`out`/`dtype`/`casting`,
   tuple-arity forms).
 - `unstack(x, axis=0)` returns views (write-through), each `x.shape` minus the axis, built by dropping the axis from

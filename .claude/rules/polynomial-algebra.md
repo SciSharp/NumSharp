@@ -209,7 +209,7 @@ Inconclusive off the pinned host), zero excused; `Polynomial/PolynomialRootsTest
   the loop is `result_type(c.dtype, float64)`. A float16/float32 series' cheb/leg/herm/herme last column is therefore
   computed in float64 and rounded ONCE into the matrix; poly/lag stay in the series dtype.
 - The zero matrix is a write-once allocation following `np.tri`'s policy (`SizeBucketedBufferPool.PrefersWriteOnce`):
-  up to 64 MiB a pooled buffer plus `np.ZeroBytes`, above that OS-zeroed pages (a calloc'd matrix would fault every
+  up to 64 MiB a pooled buffer plus `NDArray.ZeroBytes`, above that OS-zeroed pages (a calloc'd matrix would fault every
   fresh page on the diagonal writes).
 - `np.linalg.eig`/`eigvals` of a float32 operand with complex eigenvalues round each component to float32 (NumPy returns
   complex64, geev in double then `astype(complex64)`; `CollapseEig`: one cast and copy through a float64 view of a
