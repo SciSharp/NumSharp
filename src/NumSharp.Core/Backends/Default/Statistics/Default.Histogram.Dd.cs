@@ -118,7 +118,7 @@ namespace NumSharp.Backends
         ///     </para>
         /// </remarks>
         [NDScopedCovered] // only callers: the [NDScoped] Histogramdd and Histogram2d overrides (Histogram2dFunction)
-        internal static np.HistogramddResult HistogramddFunction(NDArray[] cols, object bins, (double, double)?[] range,
+        internal np.HistogramddResult HistogramddFunction(NDArray[] cols, object bins, (double, double)?[] range,
             bool density, NDArray weights)
         {
             // NumPy builds the internal sample via `atleast_2d(sample).T`, which STACKS the D coordinate
@@ -224,7 +224,7 @@ namespace NumSharp.Backends
                 // NumPy searches the numeric edges converted to text, so the bins follow string order, "10" before "3".)
                 cols = new NDArray[D];
                 for (int i = 0; i < D; i++)
-                    cols[i] = new NDArray(NPTypeCode.Double, Shape.Vector(0), true);
+                    cols[i] = NewArray(NPTypeCode.Double, Shape.Vector(0), true);
             }
 
             // Per-dimension bin number for every point: searchsorted(edges, x, 'right'), then pull points that
@@ -264,7 +264,7 @@ namespace NumSharp.Backends
                 {
                     NDArray colC = EnsureContiguousDtype(cols[i], cmp);
                     NDArray edgeC = EnsureContiguousDtype(edges[i], cmp);
-                    var ncnt = new NDArray(NPTypeCode.Int64, Shape.Vector(N), fillZeros: false);
+                    var ncnt = NewArray(NPTypeCode.Int64, Shape.Vector(N), fillZeros: false);
                     unsafe { searchIdx((void*)colC.Address, N, (void*)edgeC.Address, (int)edges[i].size, (long*)ncnt.Address); }
                     Ncount[i] = ncnt;
                 }
@@ -523,7 +523,7 @@ namespace NumSharp.Backends
         ///     <c>`bins[0]` must be an integer, when a scalar</c> (it used to be rounded to a count), and a text entry is the
         ///     comparison's TypeError (it used to reach <c>Convert.ToInt64</c>, a <see cref="FormatException"/>).
         /// </remarks>
-        private static object[] DdBinSpecs(object bins, int D)
+        private object[] DdBinSpecs(object bins, int D)
         {
             var result = new object[D];
             switch (bins)
@@ -565,13 +565,13 @@ namespace NumSharp.Backends
         /// <param name="entry">The entry.</param>
         /// <returns>The entry, or the <see cref="NDArray"/> of a C# number array.</returns>
         /// <exception cref="ValueError">An entry of a C# type NumPy has no counterpart for.</exception>
-        private static object NormalizeDdEntry(object entry) => entry switch
+        private object NormalizeDdEntry(object entry) => entry switch
         {
             null => null,
             NDArray nd => nd,
-            double[] d => new NDArray(Unmanaged.ArraySlice.FromArray(d, true), Shape.Vector(d.Length)),
-            long[] l => new NDArray(Unmanaged.ArraySlice.FromArray(l, true), Shape.Vector(l.Length)),
-            int[] ii => new NDArray(Unmanaged.ArraySlice.FromArray(ii, true), Shape.Vector(ii.Length)),
+            double[] d => new NDArray(Unmanaged.ArraySlice.FromArray(d, true), Shape.Vector(d.Length)) { TensorEngine = this },
+            long[] l => new NDArray(Unmanaged.ArraySlice.FromArray(l, true), Shape.Vector(l.Length)) { TensorEngine = this },
+            int[] ii => new NDArray(Unmanaged.ArraySlice.FromArray(ii, true), Shape.Vector(ii.Length)) { TensorEngine = this },
             bool or sbyte or byte or short or ushort or int or uint or long or ulong => entry,
             double or float or Half or decimal or System.Numerics.Complex or string or byte[] => entry,
             _ => throw new ValueError("each `bins` entry must be an int or a 1-D edge array")
@@ -765,7 +765,7 @@ namespace NumSharp.Backends
         ///     (<c>too many values to unpack (expected 2)</c>); and every refusal of the histogramdd engine the two arrays and
         ///     the arguments then meet.</exception>
         [NDScopedCovered] // only caller: the [NDScoped] Histogram2d override (the stacked column and every binning temporary are reclaimed)
-        internal static np.Histogram2dResult Histogram2dFunction(NDArray x, NDArray y, object bins, (double, double)?[] range,
+        internal np.Histogram2dResult Histogram2dFunction(NDArray x, NDArray y, object bins, (double, double)?[] range,
             bool density, NDArray weights)
         {
             if (x is null) throw new ArgumentNullException(nameof(x));
@@ -830,12 +830,12 @@ namespace NumSharp.Backends
         ///     counterpart for (<c>shared `bins` must be a 1-D edge array</c>).</exception>
         /// <exception cref="NotSupportedException">A list holding text or None: NumPy's array is then a str or object one,
         ///     which NumSharp's histogram edges do not model.</exception>
-        private static NDArray AsEdgeArray(object bins) => bins switch
+        private NDArray AsEdgeArray(object bins) => bins switch
         {
             NDArray nd => nd,
-            double[] a => new NDArray(Unmanaged.ArraySlice.FromArray(a, true), Shape.Vector(a.Length)),
-            int[] a => new NDArray(Unmanaged.ArraySlice.FromArray(a, true), Shape.Vector(a.Length)),
-            long[] a => new NDArray(Unmanaged.ArraySlice.FromArray(a, true), Shape.Vector(a.Length)),
+            double[] a => new NDArray(Unmanaged.ArraySlice.FromArray(a, true), Shape.Vector(a.Length)) { TensorEngine = this },
+            int[] a => new NDArray(Unmanaged.ArraySlice.FromArray(a, true), Shape.Vector(a.Length)) { TensorEngine = this },
+            long[] a => new NDArray(Unmanaged.ArraySlice.FromArray(a, true), Shape.Vector(a.Length)) { TensorEngine = this },
             NDArray[] or object[] => SharedEdgesFromList(bins),
             _ => throw new ValueError("shared `bins` must be a 1-D edge array")
         };

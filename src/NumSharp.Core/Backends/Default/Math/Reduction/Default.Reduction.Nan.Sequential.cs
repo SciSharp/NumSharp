@@ -377,7 +377,7 @@ namespace NumSharp.Backends
 
             if (axis == null)
             {
-                var r = new NDArray(tc, Shape.Scalar, false);
+                var r = NewArray(tc, Shape.Scalar, false);
                 byte* slot = (byte*)r.Address + r.Shape.offset * es;
                 if (tc == NPTypeCode.Half)
                     *(Half*)slot = isMax

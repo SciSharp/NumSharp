@@ -46,7 +46,7 @@ namespace NumSharp.Backends
         /// <remarks>Scoped: the flattened copy, the permutation, the gathered strings and the mask are reclaimed at exit; only
         ///     the returned outputs survive.</remarks>
         [NDScoped]
-        private static NDArray[] UniqueVString(NDArray a, bool return_index, bool return_inverse, bool return_counts,
+        private NDArray[] UniqueVString(NDArray a, bool return_index, bool return_inverse, bool return_counts,
             bool equal_nan, bool sorted)
         {
             if (!return_index && !return_inverse && !return_counts)
@@ -58,9 +58,9 @@ namespace NumSharp.Backends
                 NDArray flat = a.ndim == 1 ? a : a.Shape.IsContiguous ? a.reshape(-1) : a.flatten();
                 long[] picks = VStringDistinct.DistinctOrder(flat, equal_nan, sorted);
                 NDArray values = picks.Length == 0
-                    ? new NDArray(flat.dtype, Shape.Vector(0), true)
+                    ? NewArray(flat.dtype, Shape.Vector(0), true)
                     // np.take(flat, np.array(picks)): np.take's TakeFrom (mode 'raise') over a 1-D array of the picks.
-                    : UnmanagedStorage.TakeFrom(flat, new NDArray(Unmanaged.ArraySlice.FromArray(picks, true), Shape.Vector(picks.Length)),
+                    : UnmanagedStorage.TakeFrom(flat, new NDArray(Unmanaged.ArraySlice.FromArray(picks, true), Shape.Vector(picks.Length)) { TensorEngine = this },
                         null, null, ClipModes.ClipModeRaise);
                 return new[] { values };
             }

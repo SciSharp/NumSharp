@@ -74,7 +74,7 @@ namespace NumSharp
             // quantile) is TensorEngine.Percentile's: the facade holds only the class rules above.
             int[] axes = axis.HasValue ? new[] { axis.Value } : null;
             return chararray
-                ? DefaultEngine.QuantileFunction("percentile", a, new QuantileArgument(q), axes, @out,
+                ? DefaultEngine.Of(a).QuantileFunction("percentile", a, new QuantileArgument(q), axes, @out,
                     overwrite_input, method, keepdims, weights, chararray: true)
                 : a.TensorEngine.Percentile(a, q, axes, @out, overwrite_input, method, keepdims, weights);
         }
@@ -143,7 +143,7 @@ namespace NumSharp
             // NumPy's np.percentile body is TensorEngine.Percentile's (a null q is reported there, after the complex check).
             int[] axes = axis.HasValue ? new[] { axis.Value } : null;
             return chararray
-                ? DefaultEngine.QuantileFunction("percentile", a, new QuantileArgument(q), axes, @out,
+                ? DefaultEngine.Of(a).QuantileFunction("percentile", a, new QuantileArgument(q), axes, @out,
                     overwrite_input, method, keepdims, weights, chararray: true)
                 : a.TensorEngine.Percentile(a, q, axes, @out, overwrite_input, method, keepdims, weights);
         }
@@ -219,7 +219,7 @@ namespace NumSharp
                     static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
             // NumPy's np.percentile body is TensorEngine.Percentile's.
             return chararray
-                ? DefaultEngine.QuantileFunction("percentile", a, new QuantileArgument(q), axis, @out,
+                ? DefaultEngine.Of(a).QuantileFunction("percentile", a, new QuantileArgument(q), axis, @out,
                     overwrite_input, method, keepdims, weights, chararray: true)
                 : a.TensorEngine.Percentile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
         }
@@ -296,7 +296,7 @@ namespace NumSharp
                     static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
             // NumPy's np.percentile body is TensorEngine.Percentile's (a null q is reported there, after the complex check).
             return chararray
-                ? DefaultEngine.QuantileFunction("percentile", a, new QuantileArgument(q), axis, @out,
+                ? DefaultEngine.Of(a).QuantileFunction("percentile", a, new QuantileArgument(q), axis, @out,
                     overwrite_input, method, keepdims, weights, chararray: true)
                 : a.TensorEngine.Percentile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
         }
@@ -366,7 +366,7 @@ namespace NumSharp
             // NumPy's order.
             int[] axes = axis.HasValue ? new[] { axis.Value } : null;
             return chararray
-                ? DefaultEngine.QuantileFunction("percentile", a, new QuantileArgument(q), axes, @out,
+                ? DefaultEngine.Of(a).QuantileFunction("percentile", a, new QuantileArgument(q), axes, @out,
                     overwrite_input, method, keepdims, weights, chararray: true)
                 : a.TensorEngine.Percentile(a, q, axes, @out, overwrite_input, method, keepdims, weights);
         }
@@ -439,7 +439,7 @@ namespace NumSharp
                     static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
             // NumPy's np.percentile body is TensorEngine.Percentile's (see the one-axis overload).
             return chararray
-                ? DefaultEngine.QuantileFunction("percentile", a, new QuantileArgument(q), axis, @out,
+                ? DefaultEngine.Of(a).QuantileFunction("percentile", a, new QuantileArgument(q), axis, @out,
                     overwrite_input, method, keepdims, weights, chararray: true)
                 : a.TensorEngine.Percentile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
         }

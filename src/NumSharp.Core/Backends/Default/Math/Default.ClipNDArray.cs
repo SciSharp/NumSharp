@@ -193,7 +193,7 @@ namespace NumSharp.Backends
             // ---- Empty iteration — nothing to compute. Every check above still ran, as in NumPy, where
             //      clip(empty int8, 1000, 2000) raises the OverflowError.
             if (DimsSize(dims) == 0)
-                return @out ?? new NDArray(outType, ClipResultLayout(dims, lhs, min, max, where), false);
+                return @out ?? NewArray(outType, ClipResultLayout(dims, lhs, min, max, where), false);
 
             if (where is null && TryClipFlat(lhs, min, max, @out, outType, mode, dims, out NDArray flat))
                 return flat;
@@ -237,7 +237,7 @@ namespace NumSharp.Backends
                 return Cast(lhs, copyType, copy: true);
 
             if (DimsSize(dims) == 0)
-                return @out ?? new NDArray(copyType, ClipResultLayout(dims, lhs, null, null, where), false);
+                return @out ?? NewArray(copyType, ClipResultLayout(dims, lhs, null, null, where), false);
 
             return ClipViaIterator(lhs, null, null, @out, where, copyType, mode: null, dims);
         }
@@ -468,7 +468,7 @@ namespace NumSharp.Backends
                 void* loPtr = minv is null ? null : ScalarBoundPointer(minv, outType, loSlot);
                 void* hiPtr = maxv is null ? null : ScalarBoundPointer(maxv, outType, hiSlot);
 
-                NDArray dstS = outv ?? new NDArray(outType, Shape.Adopt(runDims), false);
+                NDArray dstS = outv ?? NewArray(outType, Shape.Adopt(runDims), false);
 
                 // ---- NumPy's const path with a NaN scalar bound fills the whole call with that bound's own NaN
                 //      (clip.cpp: npy_isnan(min_val) ? min_val : max_val), payload and sign included. The flat
@@ -496,7 +496,7 @@ namespace NumSharp.Backends
             NDArray loCast = PrepareFlatBound(minv, kind, outType, runDims);
             NDArray hiCast = PrepareFlatBound(maxv, kind, outType, runDims);
 
-            NDArray dst = outv ?? new NDArray(outType, Shape.Adopt(runDims), false);
+            NDArray dst = outv ?? NewArray(outType, Shape.Adopt(runDims), false);
             RunClipKernel(srcArr, dst, loCast, hiCast, outType, mode, kind);
 
             if (@out is not null)

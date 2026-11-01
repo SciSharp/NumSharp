@@ -44,13 +44,13 @@ namespace NumSharp.Backends
                     return NDArray.ones(new Shape(m, n), text);
                 // `empty((len(x), N), dtype)`: no column to write — the allocation is the matrix, and a negative N is its
                 // own error. A U matrix is zero-filled, as NumPy's NEEDS_INIT allocation is.
-                return new NDArray(text, new Shape(m, n), false);
+                return NewArray(text, new Shape(m, n), false);
             }
             NPTypeCode dt = DTypePromotion.PromoteTypes(x.typecode, NPTypeCode.Int64);
 
             // NumPy allocates `empty((len(x), N))`; a negative N surfaces the allocator's own error.
             if (n <= 0)
-                return new NDArray(dt, new Shape(m, n), false);
+                return NewArray(dt, new Shape(m, n), false);
 
             NDArray onesCol = NDArray.ones(new Shape(m, 1), dt);
             NDArray incr;

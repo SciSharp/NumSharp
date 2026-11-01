@@ -123,8 +123,7 @@ namespace NumSharp.Backends
             // even when empty (cumsum(empty int32) is int64). axis=None ravels to 1-D (NumPy shape
             // (0,)); with an axis the shape is preserved.
             if (shape.IsEmpty || shape.size == 0)
-                return new NDArray(retTypeCode,
-                    axis_ == null ? Shape.Vector(shape.size) : Shape.Adopt(shape.dimensions), false);
+                return NewArray(retTypeCode, axis_ == null ? Shape.Vector(shape.size) : Shape.Adopt(shape.dimensions), false);
 
             // 0-d scalar or single-element 1-D: cumsum is the value itself, promoted to the
             // accumulator dtype and shaped 1-D — cumsum NEVER returns 0-d (NumPy: cumsum(0-d) -> (1,),
@@ -176,7 +175,7 @@ namespace NumSharp.Backends
                     // NDIter accumulate construction fails for an exotic view; the legacy path
                     // allocates a C-contiguous output, so relay it to F when the source asked for it.
                     System.Diagnostics.Debug.WriteLine($"[cumsum] AccumulateAxis fallback: {ex.GetType().Name}: {ex.Message}");
-                    var ret = new NDArray(retTypeCode, Shape.Adopt(shape.dimensions), false);
+                    var ret = NewArray(retTypeCode, Shape.Adopt(shape.dimensions), false);
                     if (DirectILKernelGenerator.Enabled && !shape.IsBroadcasted && shape.IsContiguous && shape.offset == 0)
                     {
                         bool innerAxisContiguous = (axis == arr.ndim - 1) && (arr.Shape.strides[axis] == 1);
@@ -218,7 +217,7 @@ namespace NumSharp.Backends
 
             long[] dims = new long[ndim];
             for (int i = 0; i < ndim; i++) dims[i] = shape.dimensions[i];
-            var ret = new NDArray(retType, Shape.Adopt(dims, order), false);
+            var ret = NewArray(retType, Shape.Adopt(dims, order), false);
 
             // Scan-axis geometry (bytes). Negative for reversed views — the iterator base points
             // at scan-axis index 0 and the kernel walks forward in logical order regardless.
@@ -334,7 +333,7 @@ namespace NumSharp.Backends
                     var kernel = DirectILKernelGenerator.TryGetCumulativeKernel(key);
                     if (kernel != null)
                     {
-                        var ret = new NDArray(retType, Shape.Vector(arr.size));
+                        var ret = NewArray(retType, Shape.Vector(arr.size), true);
                         // Strided / reversed / 2-D-sliced views keep their base in Shape.offset
                         // (simple contiguous slices bake it into Address, leaving offset==0); the
                         // kernel reads from a raw base, so fold the offset in here — same base

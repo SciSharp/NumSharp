@@ -109,7 +109,7 @@ namespace NumSharp.Backends
             // `_isin(...).reshape(element.shape)`, so even this answer is a VIEW of a fresh 1-D array (flags.owndata
             // False); allocating outShape directly returned an owner.
             if (ar1.size == 0)
-                return new NDArray(NPTypeCode.Boolean, new Shape(ar1.size), true).reshape(outShape);
+                return NewArray(NPTypeCode.Boolean, new Shape(ar1.size), true).reshape(outShape);
 
             // Empty test set -> nothing is a member (all invert); a view of the 1-D answer, as above.
             if (ar2.size == 0)
@@ -185,7 +185,7 @@ namespace NumSharp.Backends
         ///     still decodes <c>ar2</c>, and the answer is empty.
         ///     </para>
         /// </remarks>
-        private static NDArray IsinText(NDArray element, NDArray test_elements, bool assume_unique, bool invert, string kind)
+        private NDArray IsinText(NDArray element, NDArray test_elements, bool assume_unique, bool invert, string kind)
         {
             // The table method exists only for boolean / integer arrays; NumPy checks before it reads a value.
             if (kind == "table")
@@ -212,7 +212,7 @@ namespace NumSharp.Backends
         /// <remarks>Scoped: the ravels, the unique arrays, the joined values, the order and the flags are reclaimed; only
         ///     the answer survives.</remarks>
         [NDScoped]
-        private static NDArray IsinTextFlat(NDArray element, NDArray test_elements, bool assume_unique, bool invert)
+        private NDArray IsinTextFlat(NDArray element, NDArray test_elements, bool assume_unique, bool invert)
         {
             NDArray ar1 = NDArray.ravel(element, 'C');
             NDArray ar2 = NDArray.ravel(test_elements, 'C');
@@ -265,7 +265,7 @@ namespace NumSharp.Backends
         ///     unique arrays, the joined values, the order and the flags are reclaimed; only the answer survives.
         /// </remarks>
         [NDScoped]
-        private static NDArray SortPathFlat(NDArray ar1, NDArray ar2, bool assume_unique, bool invert)
+        private NDArray SortPathFlat(NDArray ar1, NDArray ar2, bool assume_unique, bool invert)
         {
             // Without assume_unique each array is deduplicated (ar1 with its inverse, to map the flags back).
             NDArray revIdx = null;
@@ -286,9 +286,9 @@ namespace NumSharp.Backends
             NDArray boolAr = invert ? sar["1:"] != sar[":-1"] : sar["1:"] == sar[":-1"];
             // np.array([invert]) is np.array's statement for a C# array of one bool: a one-element array over a copy.
             NDArray flag = NDArray.concatenate(
-                new[] { boolAr, new NDArray(Unmanaged.ArraySlice.FromArray(new[] { invert }, true), Shape.Vector(1)) },
+                new[] { boolAr, new NDArray(Unmanaged.ArraySlice.FromArray(new[] { invert }, true), Shape.Vector(1)) { TensorEngine = this } },
                 0, null, null, "same_kind");
-            var ret = new NDArray(NPTypeCode.Boolean, Shape.Vector(ar.size), false);
+            var ret = NewArray(NPTypeCode.Boolean, Shape.Vector(ar.size), false);
             ret[order] = flag;
             // assume_unique keeps the first len(ar1) flags (NumPy's slice: a view); otherwise the inverse maps each original
             // element to its flag (a fresh gather).
@@ -382,7 +382,7 @@ namespace NumSharp.Backends
         ///     flags, one load per element. The tables are released before returning; a contiguous copy of an operand is
         ///     reclaimed by the caller's scope.
         /// </remarks>
-        private static unsafe NDArray TableMembership(NDArray ar1, NDArray ar2, long min, long range, bool invert)
+        private unsafe NDArray TableMembership(NDArray ar1, NDArray ar2, long min, long range, bool invert)
         {
             if (range < 0 || UInt64BesideSigned(ar1.typecode, ar2.typecode))
                 return null;
@@ -415,7 +415,7 @@ namespace NumSharp.Backends
             }
 
             long n = ar1.size;
-            var result = new NDArray(NPTypeCode.Boolean, Shape.Vector(n), false);
+            var result = NewArray(NPTypeCode.Boolean, Shape.Vector(n), false);
             bool* r = (bool*)result.Address;
             void* e = (byte*)ar1.Address + ar1.Shape.offset * ar1.dtypesize;
             ulong urange = (ulong)range;
@@ -464,7 +464,7 @@ namespace NumSharp.Backends
         ///     indexed by its two's complement bits, the bits the probe reads. Measured over 100K elements: uint8 27.4 us
         ///     and uint16 27.4 us, against the range probe's 48.8 and 49.0. The table is released before returning.
         /// </remarks>
-        private static unsafe NDArray DomainTableMembership(NDArray ar1, NPTypeCode setType, void* s, long m, bool mark,
+        private unsafe NDArray DomainTableMembership(NDArray ar1, NPTypeCode setType, void* s, long m, bool mark,
             bool invert)
         {
             int width = ar1.dtypesize;
@@ -495,7 +495,7 @@ namespace NumSharp.Backends
                 default: return null;
             }
             long n = ar1.size;
-            var result = new NDArray(NPTypeCode.Boolean, Shape.Vector(n), false);
+            var result = NewArray(NPTypeCode.Boolean, Shape.Vector(n), false);
             void* e = (byte*)ar1.Address + ar1.Shape.offset * width;
             if (width == 1)
                 DomainProbe((byte*)e, n, table, (bool*)result.Address);
@@ -674,7 +674,7 @@ namespace NumSharp.Backends
         ///     it).</returns>
         /// <remarks>Equality is IEEE's: NaN is never a member, -0.0 equals 0.0 (NumPy's == and the hash set agree). The casts
         ///     are NDArrays, reclaimed by the caller's scope.</remarks>
-        private static unsafe NDArray LoopMembership(NDArray ar1, NDArray ar2, bool invert)
+        private unsafe NDArray LoopMembership(NDArray ar1, NDArray ar2, bool invert)
         {
             // Without 256-bit vectors (arm64, an x86 host without AVX2) the kernel would compare one element with one value
             // at a time, m times per element: the membership routes' constant cost per element is lower.
@@ -692,7 +692,7 @@ namespace NumSharp.Backends
             NDArray s = ContiguousRun(ar2.typecode == t ? ar2 : ar2.astype(t));
             long n = e.size;
             int m = (int)s.size;
-            var result = new NDArray(NPTypeCode.Boolean, Shape.Vector(n), false);
+            var result = NewArray(NPTypeCode.Boolean, Shape.Vector(n), false);
             bool* r = (bool*)result.Address;
             void* ep = (byte*)e.Address + e.Shape.offset * e.dtypesize;
             void* sp = (byte*)s.Address + s.Shape.offset * s.dtypesize;
@@ -920,7 +920,7 @@ namespace NumSharp.Backends
         ///     both already flattened. Comparison happens in <c>result_type(ar1, ar2)</c> — matching NumPy, whose
         ///     brute/sort methods concatenate/compare in the promoted dtype.
         /// </summary>
-        private static NDArray ComputeMembership(NDArray ar1, NDArray ar2)
+        private NDArray ComputeMembership(NDArray ar1, NDArray ar2)
         {
             NPTypeCode t = DTypePromotion.PromoteTypes(ar1.typecode, ar2.typecode);
 
@@ -955,7 +955,7 @@ namespace NumSharp.Backends
         ///     Both operands are the same exact integer dtype (not uint64), so int64 offset math is exact.
         /// </summary>
         [NDScopedCovered] // only reached via ComputeMembership, under the [NDScoped] isin scope
-        private static NDArray TryTableMembership(NDArray elemT, NDArray testT)
+        private NDArray TryTableMembership(NDArray elemT, NDArray testT)
         {
             // Booleans have no arithmetic; NumPy promotes them to uint8 for the table (the result is
             // still the bool membership mask).
@@ -971,7 +971,7 @@ namespace NumSharp.Backends
                 return null;                                       // range too wide -> sort path
             long range = (long)urange;
 
-            NDArray table = new NDArray(NPTypeCode.Boolean, new Shape(range + 1), true);
+            NDArray table = NewArray(NPTypeCode.Boolean, new Shape(range + 1), true);
             table[testT - minS] = (NDArray)true;                   // scatter: mark each present value
 
             // Stay in the operands' own dtype (no widening of the large element array). Out-of-range
@@ -989,7 +989,7 @@ namespace NumSharp.Backends
         ///     the first equal slot); NaN never equals itself, so a NaN element is never a member.
         /// </summary>
         [NDScopedCovered] // only reached via ComputeMembership / MembershipUInt64Signed, under the [NDScoped] isin scope
-        private static NDArray SortedSearchMembership(NDArray elemT, NDArray testT)
+        private NDArray SortedSearchMembership(NDArray elemT, NDArray testT)
         {
             // Hash-set membership (O(n+m)) replaces the sort + n·searchsorted below for hashable
             // dtypes. That searchsorted — n binary searches over the m-element sorted test set — was
@@ -1005,7 +1005,7 @@ namespace NumSharp.Backends
             NDArray u = testT.TensorEngine.Sort(testT, -1, null, null, null);
             long m = u.size;
             if (m == 0)
-                return new NDArray(NPTypeCode.Boolean, new Shape(elemT.size), true);
+                return NewArray(NPTypeCode.Boolean, new Shape(elemT.size), true);
 
             NDArray idx = u.TensorEngine.SearchSorted(u, elemT, "left", null);   // int64, shape == elemT.shape (1-D)
             NDArray clamped = idx.TensorEngine.Minimum(idx, (NDArray)(m - 1), null, null, null);   // stay in-bounds for the gather
@@ -1021,7 +1021,7 @@ namespace NumSharp.Backends
         ///     char + float32/float64); declines (returns null) for Complex/Half/Decimal and for a test
         ///     set too large to index, leaving <see cref="SortedSearchMembership"/> to run.
         /// </summary>
-        private static NDArray TryHashMembership(NDArray elemT, NDArray testT)
+        private NDArray TryHashMembership(NDArray elemT, NDArray testT)
         {
             // elemT and testT are the SAME dtype here (both cast to result_type upstream).
             if (testT.size > (1L << 29))   // ~512M distinct-candidates: fall back rather than over-allocate the table
@@ -1044,7 +1044,7 @@ namespace NumSharp.Backends
             }
         }
 
-        private static unsafe NDArray HashMembership<T>(NDArray elemT, NDArray testT, bool floatSem)
+        private unsafe NDArray HashMembership<T>(NDArray elemT, NDArray testT, bool floatSem)
             where T : unmanaged
         {
             // `.Address` ignores Shape.offset, so a sliced/broadcast view must be materialized first
@@ -1073,7 +1073,7 @@ namespace NumSharp.Backends
                 inserted: ;
             }
 
-            var result = new NDArray(NPTypeCode.Boolean, new Shape(n), false);
+            var result = NewArray(NPTypeCode.Boolean, new Shape(n), false);
             bool* rp = (bool*)result.Address;
             T* ep = (T*)elemT.Address;
             for (long i = 0; i < n; i++)
@@ -1130,7 +1130,7 @@ namespace NumSharp.Backends
         ///     the signed operand's negatives out.
         /// </summary>
         [NDScopedCovered] // only reached via ComputeMembership, under the [NDScoped] isin scope
-        private static NDArray MembershipUInt64Signed(NDArray ar1, NDArray ar2)
+        private NDArray MembershipUInt64Signed(NDArray ar1, NDArray ar2)
         {
             if (ar1.typecode == NPTypeCode.UInt64)
             {

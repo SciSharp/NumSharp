@@ -189,7 +189,7 @@ namespace NumSharp.Backends
                 }
                 if (ret is null)
                 {
-                    var x2 = new NDArray(sqT, layout, false);
+                    var x2 = NewArray(sqT, layout, false);
                     FillSquaredDeviations(arr, meanOperand, x2, xT, square, eager);
                     ret = ReduceAdd(x2, axis, keepdims, sumLoop, @out: null);
                 }
@@ -454,7 +454,7 @@ namespace NumSharp.Backends
                     x2c = reused;
                 else
                 {
-                    x2c = new NDArray(sqT, DenseInOrder(cdims, order), false);
+                    x2c = NewArray(sqT, DenseInOrder(cdims, order), false);
                     if (e == per)
                         reused = x2c;
                 }
@@ -541,7 +541,7 @@ namespace NumSharp.Backends
             // The running sums, one per output, in the kept axes' memory order: the identity +0 (np.zeros), which NumPy
             // assigns before the first slab.
             NPTypeCode accT = loop?.GetTypeCode() ?? sqT;
-            var acc = new NDArray(accT, new Shape(nOut), true);
+            var acc = NewArray(accT, new Shape(nOut), true);
             NDArray block = null;
             long blockRows = -1;
             for (long a0 = 0; a0 < rows; a0 += rowsPer)
@@ -553,7 +553,7 @@ namespace NumSharp.Backends
                     var memDims = new long[nd];
                     for (int p = 0; p < nd; p++)
                         memDims[p] = order[p] == axis ? r : dims[order[p]];
-                    block = new NDArray(sqT, Shape.Adopt(memDims), false);
+                    block = NewArray(sqT, Shape.Adopt(memDims), false);
                     blockRows = r;
                 }
 
@@ -674,7 +674,7 @@ namespace NumSharp.Backends
             double accD = 0d;
             float accF = 0f;
             double accRe = 0d, accIm = 0d;
-            var buffer = new NDArray(sqT, new Shape(per), false);
+            var buffer = NewArray(sqT, new Shape(per), false);
             for (long s0 = 0; s0 < n; s0 += per)
             {
                 long m = Math.Min(per, n - s0);
@@ -712,9 +712,9 @@ namespace NumSharp.Backends
 
             NDArray ret = loopT switch
             {
-                NPTypeCode.Single => NDArray.Scalar(accF),
-                NPTypeCode.Double => NDArray.Scalar(accD),
-                _ => NDArray.Scalar(new System.Numerics.Complex(accRe, accIm)),
+                NPTypeCode.Single => NewScalar(accF),
+                NPTypeCode.Double => NewScalar(accD),
+                _ => NewScalar(new System.Numerics.Complex(accRe, accIm)),
             };
             if (keepdims)
             {
@@ -746,7 +746,7 @@ namespace NumSharp.Backends
         ///     for every integer up to 32 bits and every narrower float, round-to-nearest-even for int64 / uint64) before
         ///     it subtracts.
         /// </remarks>
-        private static void FillSquaredDeviations(NDArray arr, NDArray mean, NDArray x2, NPTypeCode xT, DeviationSquare square, bool eager)
+        private void FillSquaredDeviations(NDArray arr, NDArray mean, NDArray x2, NPTypeCode xT, DeviationSquare square, bool eager)
         {
             if (eager)
             {
@@ -800,12 +800,12 @@ namespace NumSharp.Backends
         /// operand of the same kind as a WEAK scalar, while NumPy's mean is an array (strong): a float32 input with a
         /// float64 mean must subtract in float64.</param>
         /// <param name="square">How the deviation is squared.</param>
-        private static void SquaredDeviationsEager(NDArray arr, NDArray mean, NDArray x2, NPTypeCode xT, DeviationSquare square)
+        private void SquaredDeviationsEager(NDArray arr, NDArray mean, NDArray x2, NPTypeCode xT, DeviationSquare square)
         {
             using var plain = NDMatrixBoundary.PlainFor(arr, mean, x2);   // an engine method computes plain: no matrix rule may apply inside the engine members called below
             if (square == DeviationSquare.Modulus)
             {
-                var x = new NDArray(NPTypeCode.Complex, x2.Shape, false);
+                var x = NewArray(NPTypeCode.Complex, x2.Shape, false);
                 arr.TensorEngine.Subtract(arr, mean, xT, x);
                 // np.real / np.imag of the complex deviations: views of the real and imaginary lanes.
                 var re = new NDArray(x.Storage.AliasComplexLane(imaginary: false));

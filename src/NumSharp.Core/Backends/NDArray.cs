@@ -483,6 +483,22 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     The allocation constructor behind <see cref="NumSharp.TensorEngine.NewArray(DType, Shape, bool)"/>: a new array
+        ///     bound to <paramref name="engine"/> instead of <see cref="NumSharp.TensorEngine.Default"/>, its storage from that
+        ///     engine's <see cref="NumSharp.TensorEngine.GetStorage(DType)"/>.
+        /// </summary>
+        /// <param name="dtype">The dtype descriptor.</param>
+        /// <param name="shape">The dimensions (a view's layout is laid out again in C order, as for every allocation).</param>
+        /// <param name="fillZeros">Zero the buffer; false leaves pool noise the caller must overwrite completely.</param>
+        /// <param name="engine">The engine the array binds (the engine computing the result it will hold); not null.</param>
+        /// <exception cref="ValueError">A dimension is negative, or the byte count overflows.</exception>
+        internal NDArray(DType dtype, Shape shape, bool fillZeros, TensorEngine engine) : this(dtype, engine)
+        {
+            Storage.Allocate(shape, dtype, fillZeros);
+            InitializeArc();
+        }
+
+        /// <summary>
         ///     The allocation constructor behind <see cref="ForOverwrite"/>: no zero fill, not even a <c>U</c> array's
         ///     <c>NPY_NEEDS_INIT</c> one.
         /// </summary>
@@ -490,7 +506,9 @@ namespace NumSharp
         /// <param name="shape">The dimensions.</param>
         /// <param name="fillZeros">Zero the buffer (false for every caller: <see cref="ForOverwrite"/>).</param>
         /// <param name="overwriteAll">Must be true (the marker that selects this overload).</param>
-        private NDArray(DType dtype, Shape shape, bool fillZeros, bool overwriteAll) : this(dtype)
+        /// <param name="engine">The engine the array binds, or null for <see cref="NumSharp.TensorEngine.Default"/>.</param>
+        private NDArray(DType dtype, Shape shape, bool fillZeros, bool overwriteAll, TensorEngine engine)
+            : this(dtype, engine ?? TensorEngine.Default)
         {
             Storage.Allocate(shape, dtype, fillZeros, overwriteAll);
             InitializeArc();
@@ -503,13 +521,17 @@ namespace NumSharp
         /// </summary>
         /// <param name="dtype">The dtype descriptor.</param>
         /// <param name="shape">The dimensions (a view's layout is re-laid out in C order, as for every allocation).</param>
+        /// <param name="engine">The engine the array binds: an engine member passes itself, so the result it fills stays
+        ///     on the engine that computed it; null (the array object's copies) binds
+        ///     <see cref="NumSharp.TensorEngine.Default"/>.</param>
         /// <returns>The new array, its bytes undefined until written.</returns>
         /// <exception cref="ValueError">A dimension is negative, or the byte count overflows.</exception>
         /// <remarks>
         ///     Footgun: a caller that can throw after allocating MUST NOT hand the array out (an unwritten <c>U</c> element
         ///     holds pool noise — possibly units no code point maps to); dispose it on the failure path instead.
         /// </remarks>
-        internal static NDArray ForOverwrite(DType dtype, Shape shape) => new NDArray(dtype, shape, false, true);
+        internal static NDArray ForOverwrite(DType dtype, Shape shape, TensorEngine engine = null)
+            => new NDArray(dtype, shape, false, true, engine);
 
         private NDArray(IArraySlice array, Shape shape) : this(array.TypeCode)
         {

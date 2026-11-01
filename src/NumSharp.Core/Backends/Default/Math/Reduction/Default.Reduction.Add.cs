@@ -84,7 +84,7 @@ namespace NumSharp.Backends
                 // The UNINITIALIZED shape sentinel (not a size-0 array — that is the next branch): the identity of the loop.
                 var defaultVal = loopType.GetDefaultValue();
                 if (@out is not null) { @out.SetAtIndex(defaultVal, 0); return @out; }
-                return NDArray.Scalar(defaultVal);
+                return NewScalar(defaultVal);
             }
 
             // A char loop (dtype=char; no input's accumulator is char) is NumSharp's uint16 proxy, which the add kernels
@@ -412,7 +412,7 @@ namespace NumSharp.Backends
         {
             var result = sum_elementwise_il(arr, typeCode);
             if (@out is not null) { @out.SetAtIndex(result, 0); return @out; }
-            var r = NDArray.Scalar(result);
+            var r = NewScalar(result);
             if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(Shape.Adopt(ks)); }
             else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1) r.Storage.Reshape(Shape.Scalar);
             return r.MarkReductionScalar();
@@ -497,14 +497,14 @@ namespace NumSharp.Backends
         /// <param name="inputShape">The reduced array's shape (the layout the order is taken from).</param>
         /// <param name="axis">The reduced axis, already normalized.</param>
         /// <returns>A fresh, uninitialized result.</returns>
-        internal static NDArray AllocateReductionResult(NPTypeCode outputType, long[] outputDims, Shape inputShape, int axis)
+        internal NDArray AllocateReductionResult(NPTypeCode outputType, long[] outputDims, Shape inputShape, int axis)
         {
             if (outputDims.Length == 0)
-                return new NDArray(outputType, Shape.Scalar, false);
+                return NewArray(outputType, Shape.Scalar, false);
             // A 1-D result has one layout, and a C-contiguous input's order is C's (NpyIter's sort keeps it).
             if (outputDims.Length == 1 || inputShape.IsContiguous)
-                return new NDArray(outputType, Shape.Adopt(outputDims), false);
-            return new NDArray(outputType, Shape.ReductionOutputShape(outputDims, inputShape, axis), false);
+                return NewArray(outputType, Shape.Adopt(outputDims), false);
+            return NewArray(outputType, Shape.ReductionOutputShape(outputDims, inputShape, axis), false);
         }
 
         /// <summary>
@@ -514,11 +514,11 @@ namespace NumSharp.Backends
         ///     the executors above, <paramref name="dims"/> is already the FINAL result shape (the
         ///     caller having applied keepdims), so no ExpandDimension follows.
         /// </summary>
-        internal static NDArray AllocateReductionZeros(NPTypeCode outputType, long[] dims, Shape inputShape)
+        internal NDArray AllocateReductionZeros(NPTypeCode outputType, long[] dims, Shape inputShape)
         {
             var order = dims.Length >= 2 ? OrderResolver.Resolve('K', inputShape) : 'C';
             var zeroShape = order == 'F' ? Shape.Adopt(dims, 'F') : Shape.Adopt(dims);
-            return new NDArray(outputType, zeroShape, true);
+            return NewArray(outputType, zeroShape, true);
         }
 
         /// <summary>
@@ -671,7 +671,7 @@ namespace NumSharp.Backends
             // return an empty array of the correct shape
             var resultShape = Shape.GetAxis(shape, axis);
             var outputType = typeCode ?? arr.GetTypeCode;
-            var result = new NDArray(outputType, Shape.Adopt(resultShape), false);
+            var result = NewArray(outputType, Shape.Adopt(resultShape), false);
 
             if (keepdims)
             {
@@ -709,14 +709,14 @@ namespace NumSharp.Backends
                 var defaultType = typeCode ?? arr.typecode.GetAccumulatingType();
                 var defaultVal = defaultType.GetDefaultValue();
                 if (@out is not null) { @out.SetAtIndex(defaultVal, 0); return @out; }
-                var r = NDArray.Scalar(defaultVal);
+                var r = NewScalar(defaultVal);
                 if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(Shape.Adopt(ks)); }
                 return r.MarkReductionScalar();
             }
             var axis = NormalizeAxis(axis_.Value, arr.ndim);
             var resultShape = Shape.GetAxis(shape, axis);
             var outputType = typeCode ?? arr.GetTypeCode.GetAccumulatingType();
-            var result = new NDArray(outputType, Shape.Adopt(resultShape), true);
+            var result = NewArray(outputType, Shape.Adopt(resultShape), true);
             if (keepdims)
             {
                 var ks = new long[arr.ndim];
@@ -781,7 +781,7 @@ namespace NumSharp.Backends
             {
                 var v = arr.GetAtIndex(0);
                 if (outputType != arr.GetTypeCode) v = Converts.ChangeType(v, outputType);
-                return NDArray.Scalar(v).MarkReductionScalar();
+                return NewScalar(v).MarkReductionScalar();
             }
             // KEEPORDER: reducing a size-1 axis of an F-contiguous input keeps F-contig; SetAtIndex
             // writes each element through the result's strides, so an F-order buffer fills correctly

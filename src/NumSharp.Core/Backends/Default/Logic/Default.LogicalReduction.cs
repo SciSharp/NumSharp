@@ -63,7 +63,7 @@ namespace NumSharp.Backends
             }
             // A typed array allocated directly owns its buffer, as NumPy's result does (a MakeGeneric wrapper over a
             // temporary 0-d array reported OWNDATA False).
-            var result = new NDArray<bool>(shape, fillZeros: !scalar);
+            var result = NewArray<bool>(shape, fillZeros: !scalar);
             if (scalar)
                 result.Storage.InternalArray.Fill(true);
             return result;
@@ -86,7 +86,7 @@ namespace NumSharp.Backends
             if (nd.ndim == 0)
             {
                 if (axis == 0 || axis == -1)
-                    return NDArray.Scalar(reduceAll ? All(nd) : Any(nd)).AsGeneric<bool>() ?? throw new InvalidOperationException("np.all/np.any expected a Boolean result.");
+                    return NewScalar(reduceAll ? All(nd) : Any(nd)).AsGeneric<bool>() ?? throw new InvalidOperationException("np.all/np.any expected a Boolean result.");
 
                 throw new AxisError(axis, 0);
             }
@@ -257,7 +257,7 @@ namespace NumSharp.Backends
                 if (axis.Length != 1 || (axis[0] != 0 && axis[0] != -1))
                     throw new AxisError(axis.Length > 0 ? axis[0] : 0, 0);
 
-                return NDArray.Scalar(reduceAll ? All(nd) : Any(nd)).AsGeneric<bool>() ?? throw new InvalidOperationException("np.all/np.any expected a Boolean result.");
+                return NewScalar(reduceAll ? All(nd) : Any(nd)).AsGeneric<bool>() ?? throw new InvalidOperationException("np.all/np.any expected a Boolean result.");
             }
 
             int ndim = nd.ndim;
@@ -269,7 +269,7 @@ namespace NumSharp.Backends
             if (normalized.Length == ndim)
             {
                 bool scalar = reduceAll ? All(nd) : Any(nd);
-                var result = NDArray.Scalar(scalar).AsGeneric<bool>() ?? throw new InvalidOperationException("np.all/np.any expected a Boolean result.");
+                var result = NewScalar(scalar).AsGeneric<bool>() ?? throw new InvalidOperationException("np.all/np.any expected a Boolean result.");
                 if (keepdims)
                 {
                     var dims = new long[ndim];
@@ -414,11 +414,11 @@ namespace NumSharp.Backends
             return result;
         }
 
-        private static NDArray<bool> CreateLogicalResult(Shape resultShape, bool fillTrue)
+        private NDArray<bool> CreateLogicalResult(Shape resultShape, bool fillTrue)
         {
             var result = fillTrue
                 ? NDArray.ones(resultShape, NPTypeCode.Boolean)
-                : new NDArray(NPTypeCode.Boolean, resultShape, true);
+                : NewArray(NPTypeCode.Boolean, resultShape, true);
 
             return result.AsGeneric<bool>() ?? throw new InvalidOperationException("np.all/np.any expected a Boolean result.");
         }

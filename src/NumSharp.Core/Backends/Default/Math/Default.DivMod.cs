@@ -81,8 +81,8 @@ namespace NumSharp.Backends
             var aC = MaterializeContiguous(lhs, cleanShape, resultType);
             var bC = MaterializeContiguous(rhs, cleanShape, resultType);
 
-            var q = new NDArray(resultType, cleanShape, fillZeros: false);
-            var r = new NDArray(resultType, cleanShape, fillZeros: false);
+            var q = NewArray(resultType, cleanShape, fillZeros: false);
+            var r = NewArray(resultType, cleanShape, fillZeros: false);
 
             unsafe
             {

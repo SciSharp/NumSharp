@@ -622,8 +622,7 @@ namespace NumSharp.Backends
                 // (it warns; values are unobservable). fillZeros:false matches.
                 // The fresh result takes NumPy's ufunc output layout: the inputs and the mask vote
                 // (NpyIter's allocation; two F inputs under an F mask stay F, one C operand makes it C).
-                target = @out ?? new NDArray(resultType,
-                    WhereResultShape(iterShape.Clean(), lhs.Shape, rhs.Shape, where), false);
+                target = @out ?? NewArray(resultType, WhereResultShape(iterShape.Clean(), lhs.Shape, rhs.Shape, where), false);
             }
 
             if (target.size == 0)
@@ -795,8 +794,7 @@ namespace NumSharp.Backends
 
                 // 'where' without 'out': unmasked slots stay uninitialized
                 // (NumPy warns; values are unobservable garbage). The layout is NumPy's (see the binary route).
-                target = @out ?? new NDArray(NPTypeCode.Boolean,
-                    WhereResultShape(iterShape.Clean(), lhs.Shape, rhs.Shape, where), false);
+                target = @out ?? NewArray(NPTypeCode.Boolean, WhereResultShape(iterShape.Clean(), lhs.Shape, rhs.Shape, where), false);
             }
 
             if (target.size == 0)
@@ -964,7 +962,7 @@ namespace NumSharp.Backends
                     nd.Shape.Clean(), new[] { nd }, @out, where);
 
                 // A fresh result under where= takes NumPy's layout (see the binary route).
-                target = @out ?? new NDArray(outputType, WhereResultShape(iterShape.Clean(), nd.Shape, null, where), false);
+                target = @out ?? NewArray(outputType, WhereResultShape(iterShape.Clean(), nd.Shape, null, where), false);
             }
 
             if (target.size == 0)

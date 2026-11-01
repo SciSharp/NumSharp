@@ -76,7 +76,7 @@ namespace NumSharp.Backends
         {
             // np.empty_like(a, factored.dtype): order 'K' keeps a's axis permutation; uninitialised, every element is
             // written by the copy below.
-            var copy = new NDArray(factored.dtype, Shape.NewLikeLayout(a.Shape, 'K', (long[])a.Shape.dimensions.Clone()), false);
+            var copy = a.TensorEngine.NewArray(factored.dtype, Shape.NewLikeLayout(a.Shape, 'K', (long[])a.Shape.dimensions.Clone()), false);
             // np.copyto(copy, factored): the same_kind assignment.
             UnmanagedStorage.Copyto(copy, factored, NPY_CASTING.NPY_SAME_KIND_CASTING, null);
             return copy;

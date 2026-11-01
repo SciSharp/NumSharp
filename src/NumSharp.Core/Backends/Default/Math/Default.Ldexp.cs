@@ -45,7 +45,7 @@ namespace NumSharp.Backends
             // Broadcast to the common result shape (the exponent never widens the mantissa's dtype).
             var (xShape, _) = Broadcast(x1.Shape, x2.Shape);
             var cleanShape = xShape.Clean();
-            var result = new NDArray(floatType, cleanShape, fillZeros: false);
+            var result = NewArray(floatType, cleanShape, fillZeros: false);
 
             long n = cleanShape.size;
             if (n == 0)

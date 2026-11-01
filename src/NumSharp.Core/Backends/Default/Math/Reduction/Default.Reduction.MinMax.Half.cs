@@ -399,7 +399,7 @@ namespace NumSharp.Backends
             if (axis == null)
             {
                 ushort bits = NumPyHalfMinMaxReduce.Flat(x, shape.dimensions, shape.strides, isMax, nanIgnore);
-                var r = new NDArray(NPTypeCode.Half, Shape.Scalar, false);
+                var r = NewArray(NPTypeCode.Half, Shape.Scalar, false);
                 *(ushort*)((byte*)r.Address + r.Shape.offset * sizeof(ushort)) = bits;
                 if (keepdims)
                 {

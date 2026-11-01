@@ -94,7 +94,7 @@ namespace NumSharp.Backends
         ///     where NumPy's sort compares an NA (<see cref="UniqueVString"/>).</exception>
         /// <exception cref="NotSupportedException">A dtype no route serves (none of the 15 numeric dtypes or the three
         ///     text dtypes reaches it).</exception>
-        internal static NDArray[] UniqueCompute(
+        internal NDArray[] UniqueCompute(
             NDArray a,
             bool return_index,
             bool return_inverse = false,

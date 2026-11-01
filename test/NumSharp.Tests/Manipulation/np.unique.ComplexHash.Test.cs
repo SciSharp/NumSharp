@@ -226,7 +226,7 @@ namespace NumSharp.Tests.Manipulation
         [TestMethod]
         public void AboveTheHashBound_TheArgsortRoutesGiveTheHashAnswer()
         {
-            var flags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static;
+            var flags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
             var managed = typeof(DefaultEngine).GetMethods(flags).First(m => m.Name == "uniqueValuesOnlyComplex");
             var longIndexed = typeof(DefaultEngine).GetMethods(flags).First(m => m.Name == "uniqueFlatSortedLongComplex");
 
@@ -245,8 +245,8 @@ namespace NumSharp.Tests.Manipulation
             {
                 var a = np.array(line);
                 var want = Bits(np.unique(a, equal_nan: en).values);
-                Bits((NDArray)managed.Invoke(null, new object[] { a, (long)a.size, en })).Should().Equal(want, $"n={a.size} en={en}");
-                var r = (NDArray[])longIndexed.Invoke(null, new object[] { a, (long)a.size, en, false, false, false });
+                Bits((NDArray)managed.Invoke(BackendFactory.GetEngine<DefaultEngine>(), new object[] { a, (long)a.size, en })).Should().Equal(want, $"n={a.size} en={en}");
+                var r = (NDArray[])longIndexed.Invoke(BackendFactory.GetEngine<DefaultEngine>(), new object[] { a, (long)a.size, en, false, false, false });
                 Bits(r[0]).Should().Equal(want, $"long n={a.size} en={en}");
             }
         }

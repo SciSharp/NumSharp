@@ -176,7 +176,7 @@ namespace NumSharp.Backends
             }
 
             // Every one of the size slots is written by RunRows, so the buffer is taken as it comes.
-            var result = new NDArray<bool>(resultShape, false);
+            var result = NewArray<bool>(resultShape, false);
             run.RunRows(
                 (byte*)lhs.Address + ls.offset * lItem, lInner, lOuter,
                 (byte*)rhs.Address + rs.offset * rItem, rInner, rOuter,

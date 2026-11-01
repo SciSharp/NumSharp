@@ -65,7 +65,7 @@ namespace NumSharp.Backends
         /// <exception cref="InvalidCastException">An operand that does not cast 'safely' to float64.</exception>
         /// <exception cref="ValueError">A period with a text operand that does not parse as float64.</exception>
         /// <exception cref="TypeError"><paramref name="complexFill"/> is true.</exception>
-        private static unsafe NDArray InterpReal(NDArray x, NDArray xp, NDArray fp,
+        private unsafe NDArray InterpReal(NDArray x, NDArray xp, NDArray fp,
             double? left, double? right, double? period, bool complexFill)
         {
             if (period.HasValue)
@@ -87,7 +87,7 @@ namespace NumSharp.Backends
             if (complexFill)
                 throw new TypeError("must be real number, not complex");
 
-            var result = new NDArray(NPTypeCode.Double, Shape.Adopt(x.Shape.dimensions), fillZeros: false);
+            var result = NewArray(NPTypeCode.Double, Shape.Adopt(x.Shape.dimensions), fillZeros: false);
             long lenx = xc.size;
 
             double* dx = (double*)axp.Address;
@@ -169,7 +169,7 @@ namespace NumSharp.Backends
         /// <exception cref="ValueError">A rank, emptiness, length or period error (see the public overload).</exception>
         /// <exception cref="InvalidCastException">xp or x does not cast 'safely' to float64.</exception>
         /// <exception cref="ValueError">A period with a text x or xp that does not parse as float64.</exception>
-        private static unsafe NDArray InterpComplex(NDArray x, NDArray xp, NDArray fp,
+        private unsafe NDArray InterpComplex(NDArray x, NDArray xp, NDArray fp,
             Complex? left, Complex? right, double? period)
         {
             if (period.HasValue)
@@ -187,7 +187,7 @@ namespace NumSharp.Backends
             if (afp.size != lenxp)
                 throw new ValueError("fp and xp are not of the same length.");
 
-            var result = new NDArray(NPTypeCode.Complex, Shape.Adopt(x.Shape.dimensions), fillZeros: false);
+            var result = NewArray(NPTypeCode.Complex, Shape.Adopt(x.Shape.dimensions), fillZeros: false);
             long lenx = xc.size;
 
             double* dx = (double*)axp.Address;

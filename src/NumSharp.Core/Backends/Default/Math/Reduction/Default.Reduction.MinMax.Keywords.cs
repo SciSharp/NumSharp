@@ -1466,7 +1466,7 @@ namespace NumSharp.Backends
         ///     <paramref name="out"/>, <paramref name="initial"/> and <paramref name="where"/> until it returns, so a
         ///     caller's temporary operand or mask cannot be collected under the kernel.</remarks>
         [NDAnchored]
-        internal static unsafe NDArray MaxMinNumPy(NDArray a, int? axis, NDArray @out, bool keepdims, object initial, NDArray @where,
+        internal unsafe NDArray MaxMinNumPy(NDArray a, int? axis, NDArray @out, bool keepdims, object initial, NDArray @where,
             MinMaxOp op)
         {
             if (a is null)
@@ -1680,7 +1680,7 @@ namespace NumSharp.Backends
         /// <param name="loop">The loop dtype.</param>
         /// <param name="op">The reduction.</param>
         /// <returns>The result (<paramref name="out"/> when given), or <c>null</c> when the shortcut does not apply.</returns>
-        private static unsafe NDArray MaxMinBroadcastShortcut(NDArray a, bool[] flags, int? axis, bool keepdims, NDArray @out,
+        private unsafe NDArray MaxMinBroadcastShortcut(NDArray a, bool[] flags, int? axis, bool keepdims, NDArray @out,
             object initial, NPTypeCode loop, MinMaxOp op)
         {
             if (loop is NPTypeCode.Single or NPTypeCode.Double)
@@ -1714,7 +1714,7 @@ namespace NumSharp.Backends
             for (int d = 0; d < flags.Length; d++)
                 if (!flags[d] || keepdims)
                     partDims[pd++] = flags[d] ? 1 : one.Shape.dimensions[d];
-            using var part = new NDArray(loop, pd == 0 ? Shape.Scalar : Shape.Adopt(partDims[..pd]), false);
+            using var part = NewArray(loop, pd == 0 ? Shape.Scalar : Shape.Adopt(partDims[..pd]), false);
             MaxMinNumPy(one, axis, part, keepdims, initial, null, op);
             if (@out is not null)
             {
@@ -1724,7 +1724,7 @@ namespace NumSharp.Backends
 
             var it = NumPyReduceIterator.Build(a.Shape, flags, keepdims, null, null, false, a.GetTypeCode != loop,
                 NDIterBufferManager.CurrentBufferSize);
-            var result = new NDArray(loop, it.ResultDims.Length == 0 ? Shape.Scalar : Shape.Adopt(it.ResultDims, it.ResultStrides), false);
+            var result = NewArray(loop, it.ResultDims.Length == 0 ? Shape.Scalar : Shape.Adopt(it.ResultDims, it.ResultStrides), false);
             UnmanagedStorage.Copyto(result, part, NPY_CASTING.NPY_SAME_KIND_CASTING);
             return result;
         }
@@ -1805,7 +1805,7 @@ namespace NumSharp.Backends
         /// <param name="seed">The packed initial value, or <c>null</c>.</param>
         /// <param name="op">The reduction.</param>
         /// <returns><paramref name="out"/>, or the fresh result.</returns>
-        private static unsafe NDArray MaxMinThroughIterator(NDArray a, bool[] flags, bool keepdims, NDArray @out, NDArray @where,
+        private unsafe NDArray MaxMinThroughIterator(NDArray a, bool[] flags, bool keepdims, NDArray @out, NDArray @where,
             NPTypeCode loop, byte* seed, MinMaxOp op)
         {
             // COPY_IF_OVERLAP: an input or mask that may share memory with the out is read from a copy, as NumPy's iterator
@@ -1830,12 +1830,12 @@ namespace NumSharp.Backends
 
                 // The result: the out, or a fresh array in the loop dtype laid out in the iteration order
                 // (npyiter_new_temp_array).
-                result = @out ?? new NDArray(loop, it.ResultDims.Length == 0 ? Shape.Scalar : Shape.Adopt(it.ResultDims, it.ResultStrides), false);
+                result = @out ?? NewArray(loop, it.ResultDims.Length == 0 ? Shape.Scalar : Shape.Adopt(it.ResultDims, it.ResultStrides), false);
                 long skip = 0;
                 if (seed != null)
                 {
                     // raw_array_assign_scalar: the initial value, cast from the loop dtype into the result's.
-                    using var init = new NDArray(loop, Shape.Scalar, false);
+                    using var init = NewArray(loop, Shape.Scalar, false);
                     Buffer.MemoryCopy(seed, (byte*)init.Address, loop.SizeOf(), loop.SizeOf());
                     UnmanagedStorage.Copyto(result, init, NPY_CASTING.NPY_UNSAFE_CASTING);
                 }

@@ -119,7 +119,7 @@ namespace NumSharp.Backends
                 // (count, 1) base). The base matrix is byte-identical to np.argwhere's result, so
                 // the ndim>1 fill drives the SAME row-expand IL kernel (one sequential write
                 // stream — better locality than ndim separate column streams).
-                var multiIndex = new NDArray(NPTypeCode.Int64, new Shape(count, ndim), false);
+                var multiIndex = NewArray(NPTypeCode.Int64, new Shape(count, ndim), false);
                 long* resPtr = (long*)multiIndex.Storage.Address;
 
                 // ndim == 1: the (count, 1) matrix's single column IS the flat index list —
@@ -181,11 +181,11 @@ namespace NumSharp.Backends
             }
         }
 
-        private static NDArray<long>[] MakeEmptyNonZeroResult(int ndim)
+        private NDArray<long>[] MakeEmptyNonZeroResult(int ndim)
         {
             // NumPy: even the empty result is columns of a shared (0, ndim) multi-index buffer —
             // each tuple entry keeps byte stride ndim*8 and owndata=False (probed 2.4.2).
-            var emptyBase = new NDArray(NPTypeCode.Int64, new Shape(0, ndim), false);
+            var emptyBase = NewArray(NPTypeCode.Int64, new Shape(0, ndim), false);
             var views = MakeNonZeroColumnViews(emptyBase, 0, ndim);
             emptyBase.Dispose(); // each column view holds its own counted ref on the shared buffer
             return views;
@@ -273,7 +273,7 @@ namespace NumSharp.Backends
 
                 var resultShape = Shape.GetAxis(nd.Shape, axis);
                 // np.zeros(shape, int64)'s own allocation (a zero-filled owner), without the call up into np.*.
-                var empty = new NDArray(NPTypeCode.Int64, Shape.Adopt(resultShape), true);
+                var empty = NewArray(NPTypeCode.Int64, Shape.Adopt(resultShape), true);
                 if (keepdims)
                 {
                     var ks = new long[nd.ndim];
@@ -298,7 +298,7 @@ namespace NumSharp.Backends
                     throw new AxisError(axis, 0);
                 // The sum of a 0-d input is NumPy's scalar, keepdims or not (np.count_nonzero(np.array(5), axis=0) is
                 // np.int64(1)); NDArray.Scalar alone is a writeable 0-d array.
-                return NDArray.Scalar(CountNonZero(nd)).MarkReductionScalar();
+                return NewScalar(CountNonZero(nd)).MarkReductionScalar();
             }
 
             axis = Shape.check_and_adjust_axis(nd.ndim, axis);

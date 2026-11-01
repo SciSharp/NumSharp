@@ -72,7 +72,7 @@ namespace NumSharp.Backends
             NDArray lo = min is not null && min.ndim == 0 && min.GetTypeCode != loop ? CastScalarBound(min, loop) : min;
             NDArray hi = max is not null && max.ndim == 0 && max.GetTypeCode != loop ? CastScalarBound(max, loop) : max;
 
-            NDArray target = @out ?? new NDArray(loop, ClipResultLayout(dims, lhs, min, max, where), false);
+            NDArray target = @out ?? NewArray(loop, ClipResultLayout(dims, lhs, min, max, where), false);
 
             // NumPy's const-vs-general float loop, decided from the caller's operands (the decision
             // reads strides, dtypes and overlap of what NumPy would see, not of the casted copies).
@@ -138,12 +138,12 @@ namespace NumSharp.Backends
         /// <returns>A new 0-d array of <paramref name="loop"/> (a transient of the calling ClipNDArray scope).</returns>
         /// <remarks>astype's general dispatch cost ~0.35 µs per bound, a third of a 1K float32 clip with Python-float
         /// bounds. A pair without the contiguous kernel (bool, char, half, complex or decimal involved) uses astype.</remarks>
-        private static unsafe NDArray CastScalarBound(NDArray bound, NPTypeCode loop)
+        private unsafe NDArray CastScalarBound(NDArray bound, NPTypeCode loop)
         {
             var cast = DirectILKernelGenerator.TryGetCastKernel(bound.GetTypeCode, loop);
             if (cast is null)
                 return bound.astype(loop);
-            var converted = new NDArray(loop, Shape.NewScalar(), false);
+            var converted = NewArray(loop, Shape.NewScalar(), false);
             cast((byte*)bound.Address + bound.Shape.offset * bound.dtypesize, (void*)converted.Address, 1);
             return converted;
         }

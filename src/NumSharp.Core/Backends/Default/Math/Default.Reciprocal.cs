@@ -53,7 +53,7 @@ namespace NumSharp.Backends
             return ExecuteUnaryOp(nd, UnaryOp.Reciprocal, ResolveUnaryReturnType(nd, typeCode), @out, where);
         }
 
-        private static unsafe NDArray ReciprocalInteger(NDArray nd)
+        private unsafe NDArray ReciprocalInteger(NDArray nd)
         {
             // NumPy: 1/x with C truncating integer division (so |x| >= 2 -> 0, 1 -> 1,
             // -1 -> -1). The 1/0 result is per-type and was probed bit-exact against
@@ -65,7 +65,7 @@ namespace NumSharp.Backends
             // strided / transposed / broadcast (stride=0) views are consumed in place —
             // no materializing copy — while the result is freshly C-contiguous.
             var tc = nd.GetTypeCode;
-            var result = new NDArray(tc, Shape.Adopt((long[])nd.Shape.dimensions.Clone()), false);
+            var result = NewArray(tc, Shape.Adopt((long[])nd.Shape.dimensions.Clone()), false);
             long n = nd.size;
             bool contig = nd.Shape.IsContiguous;
             var dims = nd.Shape.dimensions;

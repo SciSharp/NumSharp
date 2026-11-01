@@ -57,7 +57,7 @@ namespace NumSharp.Backends
                 // discarded with the scratch buffer.
                 if (count > 0)
                 {
-                    var scratch = new NDArray(NPTypeCode.Int64, new Shape(count), false);
+                    var scratch = NewArray(NPTypeCode.Int64, new Shape(count), false);
                     UnravelInto(indices, layout, (long*)scratch.Storage.Address, UnitDimension, 1, cOrder);
                 }
                 if (indices.ndim != 0)
@@ -77,7 +77,7 @@ namespace NumSharp.Backends
             }
             bufDims[idxNdim] = ndims;
             bufStrides[idxNdim] = 1;
-            var coords = NDArray.ForOverwrite(NPTypeCode.Int64, Shape.Adopt(bufDims, bufStrides));
+            var coords = NDArray.ForOverwrite(NPTypeCode.Int64, Shape.Adopt(bufDims, bufStrides), this);
 
             if (count > 0)
                 UnravelInto(indices, layout, (long*)coords.Storage.Address, shape, unravelSize, cOrder);
@@ -90,7 +90,7 @@ namespace NumSharp.Backends
                 long* row = (long*)coords.Storage.Address;
                 for (int j = 0; j < ndims; j++)
                 {
-                    var scalar = new NDArray<long>(Shape.NewScalar(), false);
+                    var scalar = NewArray<long>(Shape.NewScalar(), false);
                     *(long*)scalar.Storage.Address = row[j];
                     scalar.MarkReductionScalar();
                     result[j] = scalar;

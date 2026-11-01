@@ -48,14 +48,14 @@ namespace NumSharp.Backends
             // is its own allocation (a zero-filled owner), without the call up into np.*.
             bool padded = nRhs == 0;
             if (padded)
-                bC = new NDArray(common, new Shape(m, 1), true);
+                bC = a.TensorEngine.NewArray(common, new Shape(m, 1), true);
 
             var (x, resids, rank, s) = LstsqKernel(aC, bC, cutoff);
 
             if (padded)
             {
-                x = new NDArray(common, Shape.Adopt(new long[] {n, 0}), true);            // x[..., :0]
-                resids = new NDArray(NPTypeCode.Double, Shape.Adopt(new long[] {0}), true); // resids[..., :0]
+                x = a.TensorEngine.NewArray(common, Shape.Adopt(new long[] {n, 0}), true);            // x[..., :0]
+                resids = a.TensorEngine.NewArray(NPTypeCode.Double, Shape.Adopt(new long[] {0}), true); // resids[..., :0]
             }
 
             if (is1d)
@@ -65,7 +65,7 @@ namespace NumSharp.Backends
             // discards them otherwise, replacing them with an empty array of the real result type.
             long rankVal = Convert.ToInt64(rank.GetAtIndex(0));
             if (rankVal != n || m <= n)
-                resids = new NDArray(realCommon, Shape.Adopt(new long[] {0}), true);
+                resids = a.TensorEngine.NewArray(realCommon, Shape.Adopt(new long[] {0}), true);
             else
                 resids = resids.astype(realCommon);
 

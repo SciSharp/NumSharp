@@ -64,7 +64,7 @@ namespace NumSharp.Backends
 
             // numpy: empty dot → scalar 0 of the INPUT dtype (not the widened sum dtype).
             if (n == 0)
-                return NDArray.Scalar(tc.GetDefaultValue(), tc);
+                return NewScalar(tc.GetDefaultValue(), tc);
 
             long sa = left.Shape.strides[0];
             long sb = right.Shape.strides[0];
@@ -77,27 +77,27 @@ namespace NumSharp.Backends
                     double* a = (double*)left.Address + left.Shape.offset;
                     double* b = (double*)right.Address + right.Shape.offset;
                     double r = contig ? DotContiguousF64(a, b, n) : DotStridedF64(a, sa, b, sb, n);
-                    return NDArray.Scalar(r);
+                    return NewScalar(r);
                 }
                 case NPTypeCode.Single:
                 {
                     float* a = (float*)left.Address + left.Shape.offset;
                     float* b = (float*)right.Address + right.Shape.offset;
                     float r = contig ? DotContiguousF32(a, b, n) : DotStridedF32(a, sa, b, sb, n);
-                    return NDArray.Scalar(r);
+                    return NewScalar(r);
                 }
-                case NPTypeCode.Boolean: return NDArray.Scalar(DotBool(left, right, sa, sb, n));
-                case NPTypeCode.Complex: return NDArray.Scalar(DotComplex(left, right, sa, sb, n));
-                case NPTypeCode.Byte:    return NDArray.Scalar(DotGeneric<byte>(left, right, sa, sb, n));
-                case NPTypeCode.SByte:   return NDArray.Scalar(DotGeneric<sbyte>(left, right, sa, sb, n));
-                case NPTypeCode.Int16:   return NDArray.Scalar(DotGeneric<short>(left, right, sa, sb, n));
-                case NPTypeCode.UInt16:  return NDArray.Scalar(DotGeneric<ushort>(left, right, sa, sb, n));
-                case NPTypeCode.Int32:   return NDArray.Scalar(DotGeneric<int>(left, right, sa, sb, n));
-                case NPTypeCode.UInt32:  return NDArray.Scalar(DotGeneric<uint>(left, right, sa, sb, n));
-                case NPTypeCode.Int64:   return NDArray.Scalar(DotGeneric<long>(left, right, sa, sb, n));
-                case NPTypeCode.UInt64:  return NDArray.Scalar(DotGeneric<ulong>(left, right, sa, sb, n));
-                case NPTypeCode.Half:    return NDArray.Scalar(DotHalf(left, right, sa, sb, n));
-                case NPTypeCode.Decimal: return NDArray.Scalar(DotGeneric<decimal>(left, right, sa, sb, n));
+                case NPTypeCode.Boolean: return NewScalar(DotBool(left, right, sa, sb, n));
+                case NPTypeCode.Complex: return NewScalar(DotComplex(left, right, sa, sb, n));
+                case NPTypeCode.Byte:    return NewScalar(DotGeneric<byte>(left, right, sa, sb, n));
+                case NPTypeCode.SByte:   return NewScalar(DotGeneric<sbyte>(left, right, sa, sb, n));
+                case NPTypeCode.Int16:   return NewScalar(DotGeneric<short>(left, right, sa, sb, n));
+                case NPTypeCode.UInt16:  return NewScalar(DotGeneric<ushort>(left, right, sa, sb, n));
+                case NPTypeCode.Int32:   return NewScalar(DotGeneric<int>(left, right, sa, sb, n));
+                case NPTypeCode.UInt32:  return NewScalar(DotGeneric<uint>(left, right, sa, sb, n));
+                case NPTypeCode.Int64:   return NewScalar(DotGeneric<long>(left, right, sa, sb, n));
+                case NPTypeCode.UInt64:  return NewScalar(DotGeneric<ulong>(left, right, sa, sb, n));
+                case NPTypeCode.Half:    return NewScalar(DotHalf(left, right, sa, sb, n));
+                case NPTypeCode.Decimal: return NewScalar(DotGeneric<decimal>(left, right, sa, sb, n));
                 default:
                     // Char (no INumber<char>) or anything unforeseen → existing path.
                     var product = left * right;

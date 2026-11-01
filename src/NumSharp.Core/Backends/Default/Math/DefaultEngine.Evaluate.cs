@@ -330,7 +330,7 @@ namespace NumSharp.Backends
                 ? Shape.Adopt((long[])iterShape.dimensions.Clone(), 'F')
                 : iterShape;
 
-            var target = @out ?? new NDArray(targetType, targetShape, false);
+            var target = @out ?? NewArray(targetType, targetShape, false);
             if (target.size == 0)
                 return target;
 
@@ -759,7 +759,7 @@ namespace NumSharp.Backends
                     *(ulong*)(imSlot + 8) = 0;
                     ExactIntegerMeanSumInto(program, inputs, n, imSlot);
                     DivideAccByCount(imSlot, NPTypeCode.Double, n);   // np._mean: true_divide(sum, count) in float64
-                    var imResult = @out ?? new NDArray(resultType, FlatReduceShape(childNdim, reduce.Keepdims), false);
+                    var imResult = @out ?? NewArray(resultType, FlatReduceShape(childNdim, reduce.Keepdims), false);
                     byte* imDst = (byte*)imResult.Address + (long)imResult.Shape.offset * imResult.typecode.SizeOf();
                     NDIterCasting.ConvertValue(imSlot, imDst, NPTypeCode.Double, imResult.typecode);
                     return imResult;
@@ -782,7 +782,7 @@ namespace NumSharp.Backends
                     {
                         // Min / Max preserve the child dtype, so the slot already holds the result dtype; a caller
                         // out= (validated above) takes the same same_kind conversion the fold path uses.
-                        var mmResult = @out ?? new NDArray(resultType, FlatReduceShape(childNdim, reduce.Keepdims), false);
+                        var mmResult = @out ?? NewArray(resultType, FlatReduceShape(childNdim, reduce.Keepdims), false);
                         byte* mmDst = (byte*)mmResult.Address + (long)mmResult.Shape.offset * mmResult.typecode.SizeOf();
                         NDIterCasting.ConvertValue(mmSlot, mmDst, exprType, mmResult.typecode);
                         return mmResult;
@@ -822,7 +822,7 @@ namespace NumSharp.Backends
                     // Flat keepdims (plan P2 M5) allocates (1,)*childNdim — still ONE element at offset
                     // 0, so the direct single-element write below is unchanged; only the wrapper rank
                     // differs. A caller out= (already ValidateFlatReduceOut'd) is used as given.
-                    var reduceResult = @out ?? new NDArray(resultType, FlatReduceShape(childNdim, reduce.Keepdims), false);
+                    var reduceResult = @out ?? NewArray(resultType, FlatReduceShape(childNdim, reduce.Keepdims), false);
                     byte* rDst = (byte*)reduceResult.Address
                                  + (long)reduceResult.Shape.offset * reduceResult.typecode.SizeOf();
                     NDIterCasting.ConvertValue(accSlot, rDst, exprType, reduceResult.typecode);
@@ -914,7 +914,7 @@ namespace NumSharp.Backends
 
             // Flat keepdims (plan P2 M5): (1,)*childNdim is one element at offset 0, so the direct write
             // is unchanged — only the result's wrapper rank differs from the 0-d scalar form.
-            var result = @out ?? new NDArray(resultType, FlatReduceShape(childNdim, reduce.Keepdims), false);
+            var result = @out ?? NewArray(resultType, FlatReduceShape(childNdim, reduce.Keepdims), false);
             byte* dst = (byte*)result.Address
                         + (long)result.Shape.offset * result.typecode.SizeOf();
             NDIterCasting.ConvertValue(slot, dst, accType, result.typecode);
@@ -1061,7 +1061,7 @@ namespace NumSharp.Backends
             // left it to its caller's scope, and not every route into this host runs under one (the engine's
             // compiled-program and positional Evaluate overloads open none).
             using var index = isMax ? ArgMax(materialized) : ArgMin(materialized);
-            return NDArray.Scalar((long)index);
+            return NewScalar((long)index);
         }
 
         // =====================================================================================
@@ -1356,7 +1356,7 @@ namespace NumSharp.Backends
                 }
 
                 // Build the NaN-cleaned buffer and count the finite elements (memory order).
-                var cleaned = new NDArray(accT, new Shape(n), false);
+                var cleaned = NewArray(accT, new Shape(n), false);
                 byte* cp = (byte*)cleaned.Address;
                 long count = BuildCleanedFlat(src, cp, n, accT);
 
@@ -1384,8 +1384,8 @@ namespace NumSharp.Backends
             else
             {
                 // Per-slab: nansum(cleaned) / count(present). `cleaned` is NaN→0, `present` is 1.0/0.0.
-                var cleaned = new NDArray(accT, w.Shape.Clone(), false);
-                var present = new NDArray(NPTypeCode.Double, w.Shape.Clone(), false);
+                var cleaned = NewArray(accT, w.Shape.Clone(), false);
+                var present = NewArray(NPTypeCode.Double, w.Shape.Clone(), false);
                 BuildCleanedAndPresent(
                     (byte*)w.Address + (long)w.Shape.offset * accT.SizeOf(),
                     (byte*)cleaned.Address, (double*)present.Address, w.size, accT);
@@ -1431,7 +1431,7 @@ namespace NumSharp.Backends
                 DivideSlotByCount(meanSlot, accT, n);
 
                 // d2[i] = (x−mean)² (real) or |x−mean|² (complex), in memory order → a devT buffer.
-                var d2flat = new NDArray(devT, new Shape(n), false);
+                var d2flat = NewArray(devT, new Shape(n), false);
                 BuildSquaredDeviationsFlat(src, (byte*)d2flat.Address, meanSlot, n, accT, devT);
 
                 byte* ssum = stackalloc byte[NDExprParamPlan.SlotBytes];
@@ -1460,7 +1460,7 @@ namespace NumSharp.Backends
             meanReduced.Dispose();                                 // meanKD is a view of it; consumed by the subtract
 
             // d2[i] = (x−mean)² / |x−mean|², memory order → devT buffer of d's shape.
-            var d2 = new NDArray(devT, d.Shape.Clone(), false);
+            var d2 = NewArray(devT, d.Shape.Clone(), false);
             BuildSquaredDeviationsContig(
                 (byte*)d.Address + (long)d.Shape.offset * accT.SizeOf(),
                 (byte*)d2.Address, d.size, accT, devT);
@@ -1489,7 +1489,7 @@ namespace NumSharp.Backends
                 *(ulong*)slot = 0; *(ulong*)(slot + 8) = 0;
                 byte* src = (byte*)a.Address + (long)a.Shape.offset * accT.SizeOf();
                 PairwiseSumInto(src, a.size, accT, slot);
-                var r = new NDArray(accT, Shape.NewScalar(), false);
+                var r = NewArray(accT, Shape.NewScalar(), false);
                 NDIterCasting.ConvertValue(slot, (byte*)r.Address + (long)r.Shape.offset * accT.SizeOf(), accT, accT);
                 return r;
             }
@@ -1509,7 +1509,7 @@ namespace NumSharp.Backends
         /// float64 buffer and widens the child's memory-order elements into it (via per-element
         /// <see cref="NDIterCasting.ConvertValue"/>, so every source dtype is handled uniformly).
         /// </summary>
-        private static unsafe NDArray StatFlatSource(NDArray m, NPTypeCode accT, out byte* src)
+        private unsafe NDArray StatFlatSource(NDArray m, NPTypeCode accT, out byte* src)
         {
             NPTypeCode ct = m.typecode;
             if (ct == accT)
@@ -1519,7 +1519,7 @@ namespace NumSharp.Backends
             }
 
             long n = m.size;
-            var buf = new NDArray(accT, new Shape(n), false);
+            var buf = NewArray(accT, new Shape(n), false);
             byte* srcB = (byte*)m.Address + (long)m.Shape.offset * ct.SizeOf();
             byte* dstB = (byte*)buf.Address;
             int ss = ct.SizeOf(), ds = accT.SizeOf();
@@ -1536,7 +1536,7 @@ namespace NumSharp.Backends
                 : m.astype(DType.From(accT)); // astype returns a fresh C-contiguous array
 
         /// <summary>Flat mean of a real/complex source into a fresh 0-d scalar (accT) cast to <paramref name="resultT"/>.</summary>
-        private static unsafe NDArray FlatMeanScalar(byte* src, long n, NPTypeCode accT, long count, NPTypeCode resultT)
+        private unsafe NDArray FlatMeanScalar(byte* src, long n, NPTypeCode accT, long count, NPTypeCode resultT)
         {
             byte* slot = stackalloc byte[NDExprParamPlan.SlotBytes];
             *(ulong*)slot = 0; *(ulong*)(slot + 8) = 0;
@@ -1546,9 +1546,9 @@ namespace NumSharp.Backends
         }
 
         /// <summary>Wrap a 16-byte accumulator slot of dtype <paramref name="fromT"/> into a fresh 0-d array cast to <paramref name="toT"/>.</summary>
-        private static unsafe NDArray ScalarFromSlot(byte* slot, NPTypeCode fromT, NPTypeCode toT)
+        private unsafe NDArray ScalarFromSlot(byte* slot, NPTypeCode fromT, NPTypeCode toT)
         {
-            var r = new NDArray(toT, Shape.NewScalar(), false);
+            var r = NewArray(toT, Shape.NewScalar(), false);
             NDIterCasting.ConvertValue(slot, (byte*)r.Address + (long)r.Shape.offset * toT.SizeOf(), fromT, toT);
             return r;
         }
@@ -1851,7 +1851,7 @@ namespace NumSharp.Backends
                          ?? TryStreamAxisBoolFold(program, inputs, axis, reduce.Kind, accType, reducedShape);
                 if (outAcc is null)
                 {
-                    outAcc = new NDArray(accType, reducedShape, false);
+                    outAcc = NewArray(accType, reducedShape, false);
                     if (outAcc.size != 0)
                     {
                         // Seed the accumulator with the reduction identity (Mean accumulates a Sum).
@@ -2117,7 +2117,7 @@ namespace NumSharp.Backends
                 *(ulong*)(accSlot + 8) = 0;
                 byte* src = (byte*)child.Address + (long)child.Shape.offset * tc.SizeOf();
                 PairwiseSumInto(src, child.size, tc, accSlot);
-                var scalar = new NDArray(tc, reducedShape, false);
+                var scalar = NewArray(tc, reducedShape, false);
                 NDIterCasting.ConvertValue(accSlot,
                     (byte*)scalar.Address + (long)scalar.Shape.offset * tc.SizeOf(), tc, tc);
                 return scalar;
@@ -2150,7 +2150,7 @@ namespace NumSharp.Backends
         /// <param name="reducedShape">The output shape (input shape with <paramref name="axis"/> removed).</param>
         /// <returns>A fresh C-contiguous reduced array holding the sequential products.</returns>
         /// <exception cref="NotSupportedException"><paramref name="tc"/> is not Single or Double.</exception>
-        private static unsafe NDArray SequentialAxisProd(NDArray child, int axis, NPTypeCode tc, Shape reducedShape)
+        private unsafe NDArray SequentialAxisProd(NDArray child, int axis, NPTypeCode tc, Shape reducedShape)
         {
             var dims = child.Shape.dimensions;
             int nd = dims.Length;
@@ -2158,7 +2158,7 @@ namespace NumSharp.Backends
             long inner = 1; for (int d = axis + 1; d < nd; d++) inner *= dims[d];
             long outer = 1; for (int d = 0; d < axis; d++) outer *= dims[d];
 
-            var result = new NDArray(tc, reducedShape, false); // C-contiguous, outer*inner elements
+            var result = NewArray(tc, reducedShape, false); // C-contiguous, outer*inner elements
             byte* srcB = (byte*)child.Address + (long)child.Shape.offset * tc.SizeOf();
             byte* dstB = (byte*)result.Address + (long)result.Shape.offset * tc.SizeOf();
 

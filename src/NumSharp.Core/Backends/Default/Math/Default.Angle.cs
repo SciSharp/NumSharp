@@ -51,7 +51,7 @@ namespace NumSharp.Backends
                 // NumPy's angle tier is bit-exact with NumPy computing directly at that tier (verified);
                 // this also reuses the existing arctan2 kernel per NumPy's own composition.
                 var x = z.astype(NPTypeCode.Double);
-                a = x.TensorEngine.ATan2(NDArray.Scalar(0.0), x);
+                a = x.TensorEngine.ATan2(NewScalar(0.0), x);
                 NPTypeCode tier = AngleRealTier(z.typecode);
                 if (tier != NPTypeCode.Double)
                     a = a.astype(tier);
@@ -64,7 +64,7 @@ namespace NumSharp.Backends
                 // loop dtype. The ordinary `NDArray * double` operator happens to preserve the tier
                 // for non-scalar arrays, but promotes a 0-D Half/Single result to Double — exactly the
                 // shape-dependent dtype bug the differential oracle caught.
-                using var scale = NDArray.Scalar(180.0 / Math.PI, a.typecode);
+                using var scale = NewScalar(180.0 / Math.PI, a.typecode);
                 a = a.TensorEngine.Multiply(a, scale, a.typecode);
             }
 

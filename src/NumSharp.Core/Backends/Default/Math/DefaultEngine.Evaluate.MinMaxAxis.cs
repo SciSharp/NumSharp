@@ -169,7 +169,7 @@ namespace NumSharp.Backends
                 if (!TryExactFlatMinMax(child, inputs, inputShape.size, op, t, slot))
                     return null;
 
-                var flat = new NDArray(t, Shape.Scalar, false);
+                var flat = NewArray(t, Shape.Scalar, false);
                 Buffer.MemoryCopy(slot, (byte*)flat.Address + flat.Shape.offset * t.SizeOf(), t.SizeOf(), t.SizeOf());
                 childNdim = nd;
                 // The engine's np.nanmax returns a read-only numpy-scalar 0-d (PyArray_Return); keep that contract.
@@ -256,7 +256,7 @@ namespace NumSharp.Backends
         /// <param name="reducedShape">The result shape.</param>
         /// <returns>The fresh reduced array.</returns>
         /// <exception cref="NotSupportedException"><paramref name="t"/> is not a supported dtype.</exception>
-        private static unsafe NDArray StreamExactAxisMinMax(NDExprProgram child, NDArray[] inputs, NDArray[] ops, int axis,
+        private unsafe NDArray StreamExactAxisMinMax(NDExprProgram child, NDArray[] inputs, NDArray[] ops, int axis,
             MinMaxOp op, NPTypeCode t, Shape reducedShape)
         {
             var stream = new NDExprChildStream { Kernel = child.Kernel };
@@ -308,8 +308,8 @@ namespace NumSharp.Backends
             }
 
             var result = fOrder && reducedShape.NDim > 1
-                ? new NDArray(t, Shape.Adopt((long[])reducedShape.dimensions.Clone(), 'F'), false)
-                : new NDArray(t, reducedShape, false);
+                ? NewArray(t, Shape.Adopt((long[])reducedShape.dimensions.Clone(), 'F'), false)
+                : NewArray(t, reducedShape, false);
             try
             {
                 byte* dst = (byte*)result.Address;
@@ -541,7 +541,7 @@ namespace NumSharp.Backends
                 axes[mem[i]] = i;   // logical axis mem[i] is memory position i
             }
 
-            buffer = new NDArray(child.ResultType, Shape.Adopt(memDims), false);
+            buffer = NewArray(child.ResultType, Shape.Adopt(memDims), false);
             NDArray view = null;
             try
             {

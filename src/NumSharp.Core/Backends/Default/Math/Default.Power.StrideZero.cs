@@ -218,14 +218,14 @@ namespace NumSharp.Backends
                 if (SameDims(lhs.Shape, iterShape))
                     return ExecuteUnaryOp(lhs, StrideZeroUnaryOp(fastOp), loop);
                 // The exponent adds leading axes ((3,) ** (1,1) is (1,3)): compute into a result of the broadcast shape.
-                var result = new NDArray(loop, PowerPlainResultShape(lhs, rhs, iterShape), false);
+                var result = NewArray(loop, PowerPlainResultShape(lhs, rhs, iterShape), false);
                 ExecuteUnaryOp(lhs, StrideZeroUnaryOp(fastOp), loop, result, null);
                 return result;
             }
 
             // where= without out: NumPy leaves the masked-off positions uninitialized (fillZeros: false), and lays the
             // result out by the operands' and the mask's axis order (WhereResultShape: an F base under an F mask is F).
-            NDArray target = @out ?? new NDArray(loop, WhereResultShape(iterShape, lhs.Shape, rhs.Shape, where), false);
+            NDArray target = @out ?? NewArray(loop, WhereResultShape(iterShape, lhs.Shape, rhs.Shape, where), false);
 
             if (where is null)
             {
@@ -244,7 +244,7 @@ namespace NumSharp.Backends
             // output does — 2.5-9x faster than one unary kernel call per mask-true run (measured on runs of two).
             if (fastOp == PowerStrideZeroOp.One)
             {
-                using var one = NDArray.Scalar(1.0, loop);
+                using var one = NewScalar(1.0, loop);
                 UnmanagedStorage.Copyto(target, one, NPY_CASTING.NPY_UNSAFE_CASTING, where);
             }
             else
@@ -283,9 +283,7 @@ namespace NumSharp.Backends
                                                           NDArray @out, NDArray where)
         {
             // A fresh result: the plain call's layout without a mask, NumPy's where= layout with one (WhereResultShape).
-            NDArray target = @out ?? new NDArray(loop,
-                where is null ? PowerPlainResultShape(lhs, rhs, iterShape) : WhereResultShape(iterShape, lhs.Shape, rhs.Shape, where),
-                false);
+            NDArray target = @out ?? NewArray(loop, where is null ? PowerPlainResultShape(lhs, rhs, iterShape) : WhereResultShape(iterShape, lhs.Shape, rhs.Shape, where), false);
 
             NPTypeCode lhsType = lhs.GetTypeCode, rhsType = rhs.GetTypeCode;
             Action<ILGenerator> scalarBody = il => DirectILKernelGenerator.EmitPowerStrideZeroBody(il, lhsType, rhsType, loop);

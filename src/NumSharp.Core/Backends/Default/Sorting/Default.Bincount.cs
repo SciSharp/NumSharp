@@ -73,7 +73,7 @@ namespace NumSharp.Backends
             // Empty input returns zeros(minlength) as int64 — even when weights are present and
             // mismatched, NumPy returns here before ever looking at weights.
             if (len == 0)
-                return new NDArray(NPTypeCode.Int64, Shape.Vector(minlength), true);
+                return NewArray(NPTypeCode.Int64, Shape.Vector(minlength), true);
 
             MinMaxInt64(xi, len, out long mn, out long mx);
             if (mn < 0)
@@ -167,9 +167,9 @@ namespace NumSharp.Backends
         /// <param name="ansSize">The number of bins.</param>
         /// <returns>A new int64 array of <paramref name="ansSize"/> counts.</returns>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe NDArray BincountCount(NDArray xi, long len, long ansSize)
+        private unsafe NDArray BincountCount(NDArray xi, long len, long ansSize)
         {
-            NDArray ans = new NDArray(NPTypeCode.Int64, Shape.Vector(ansSize), true);
+            NDArray ans = NewArray(NPTypeCode.Int64, Shape.Vector(ansSize), true);
             long* xp = (long*)xi.Address;
             long* a0 = (long*)ans.Address;
 
@@ -255,9 +255,9 @@ namespace NumSharp.Backends
         /// <param name="ansSize">The number of bins.</param>
         /// <returns>A new float64 array of <paramref name="ansSize"/> weighted sums.</returns>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe NDArray BincountWeighted(NDArray xi, NDArray w64, long len, long ansSize)
+        private unsafe NDArray BincountWeighted(NDArray xi, NDArray w64, long len, long ansSize)
         {
-            NDArray ans = new NDArray(NPTypeCode.Double, Shape.Vector(ansSize), true);
+            NDArray ans = NewArray(NPTypeCode.Double, Shape.Vector(ansSize), true);
             long* xp = (long*)xi.Address;
             double* wp = (double*)w64.Address;
             double* dans = (double*)ans.Address;

@@ -147,10 +147,10 @@ namespace NumSharp.Tests.Manipulation
             var view = np.split(full, 2)[1];   // [3+1j, 1+0j, 3+1j] at offset 3
             view.Shape.offset.Should().Be(3);
             var method = typeof(DefaultEngine)
-                .GetMethods(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)
+                .GetMethods(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
                 .First(m => m.Name == "uniqueFlatSortedLongComplex");
             // signature: (NDArray a, long n, bool equal_nan, bool return_index, bool return_inverse, bool return_counts)
-            var r = (NDArray[])method.Invoke(null, new object[] { view, view.size, true, true, true, true });
+            var r = (NDArray[])method.Invoke(BackendFactory.GetEngine<DefaultEngine>(), new object[] { view, view.size, true, true, true, true });
             var expected = np.unique(view.copy(), return_index: true, return_inverse: true, return_counts: true).ToArray();
             for (int o = 0; o < 4; o++)
                 r[o].array_equal(expected[o]).Should().BeTrue($"output {o}");

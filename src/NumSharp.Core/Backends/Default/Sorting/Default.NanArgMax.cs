@@ -93,7 +93,7 @@ namespace NumSharp.Backends
         ///     replaced.</returns>
         /// <exception cref="ValueError">A slice (or the whole flattened array) is entirely NaN (<c>All-NaN slice
         ///     encountered</c>).</exception>
-        private static NDArray NanArgReplace(NDArray a, double fill, int? axis)
+        private NDArray NanArgReplace(NDArray a, double fill, int? axis)
         {
             switch (a.typecode)
             {
@@ -124,7 +124,7 @@ namespace NumSharp.Backends
             // np.copyto(a_copy, val, where=mask): the double scalar casts into the operand's own
             // dtype (Half/float/double; Complex becomes (fill, 0) — probed identical to NumPy).
             var replaced = a.copy();
-            UnmanagedStorage.Copyto(replaced, NDArray.Scalar(fill), NPY_CASTING.NPY_SAME_KIND_CASTING, mask);
+            UnmanagedStorage.Copyto(replaced, NewScalar(fill), NPY_CASTING.NPY_SAME_KIND_CASTING, mask);
             return replaced;
         }
     }

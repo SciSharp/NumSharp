@@ -57,7 +57,7 @@ namespace NumSharp.Backends
                     : ReduceAdd(proxy, axis, keepdims, np.uint16);
                 // A fresh array of the uint16 result's dims and strides (Shape.ForFreshAllocation keeps a fresh buffer's
                 // layout, and always allocates it writeable).
-                var result = new NDArray(NPTypeCode.Char, reduced.Shape, false);
+                var result = NewArray(NPTypeCode.Char, reduced.Shape, false);
                 // uint16 -> char is the identity on the 16 bits (both are 2-byte unsigned lanes), so the cast copy moves the
                 // loop's results unchanged in whatever layout the uint16 route gave them.
                 NDIter.Copy(result, reduced);

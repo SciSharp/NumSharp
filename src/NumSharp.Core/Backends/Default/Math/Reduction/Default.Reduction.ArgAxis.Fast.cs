@@ -642,7 +642,7 @@ namespace NumSharp.Backends
             // Zero mode is complete the moment the result exists: allocate it zeroed and skip the runner entirely.
             // Every other mode writes every result element (Slab clears its lanes per chunk), so an uninitialized
             // allocation is safe and saves the memset.
-            var ret = new NDArray(NPTypeCode.Int64, axisedShape, plan.Mode == AxisArgMode.Zero);
+            var ret = NewArray(NPTypeCode.Int64, axisedShape, plan.Mode == AxisArgMode.Zero);
             if (plan.Mode != AxisArgMode.Zero)
             {
                 long* outerDims = stackalloc long[nd];

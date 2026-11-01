@@ -118,7 +118,7 @@ namespace NumSharp.Backends
         /// <exception cref="AxisError">An axis is out of range: "axis1: axis …" / "axis2: axis …" (axis1 checked
         ///     first).</exception>
         /// <exception cref="ValueError">The two axes are the same axis ("axis1 and axis2 cannot be the same").</exception>
-        private static unsafe bool TryTraceFast(
+        private unsafe bool TryTraceFast(
             NDArray a, int offset, int axis1, int axis2, out NDArray result)
         {
             result = null;
@@ -192,11 +192,11 @@ namespace NumSharp.Backends
             long outerDstStride = accumBytes;
             if (ndim == 2)
             {
-                result = new NDArray(accumCode, Shape.NewScalar());
+                result = NewArray(accumCode, Shape.NewScalar(), true);
             }
             else
             {
-                result = new NDArray(accumCode, new Shape(outerSize), false);
+                result = NewArray(accumCode, new Shape(outerSize), false);
             }
 
             byte* srcPtr = (byte*)a.Storage.Address;

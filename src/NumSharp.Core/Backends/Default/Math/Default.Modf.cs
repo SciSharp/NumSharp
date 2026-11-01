@@ -145,8 +145,8 @@ namespace NumSharp.Backends
             bool fracReusesSource = !fracDirect && sourceIsFreshCopy;
             NDArray fracTarget = fracDirect ? outFrac
                                 : fracReusesSource ? source
-                                : new NDArray(loopType, ccShape, false);
-            NDArray intTarget = intDirect ? outIntegral : new NDArray(loopType, ccShape, false);
+                                : NewArray(loopType, ccShape, false);
+            NDArray intTarget = intDirect ? outIntegral : NewArray(loopType, ccShape, false);
 
             if (fracTarget.size > 0)
                 RunModfKernel(loopType, source, fracTarget, intTarget);

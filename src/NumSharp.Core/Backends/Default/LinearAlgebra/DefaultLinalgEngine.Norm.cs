@@ -665,7 +665,7 @@ namespace NumSharp.Backends
             // runs keeps qLo where it was (qHi was after it); its slabs along qLo are the per-run sums to add in turn.
             var slabs = runs.TensorEngine.MoveAxis(runs, new[] {qLo}, new[] {0});
             // np.zeros(shape, float16)'s own allocation: the zero-filled accumulator.
-            var acc = new NDArray(NPTypeCode.Half, Shape.Adopt((long[])slabs.Shape.dimensions[1..]), true);
+            var acc = y.TensorEngine.NewArray(NPTypeCode.Half, Shape.Adopt((long[])slabs.Shape.dimensions[1..]), true);
             for (long i = 0; i < slabs.Shape.dimensions[0]; i++)
                 acc.TensorEngine.Add(acc, slabs[i], null, acc, null);
             return acc;

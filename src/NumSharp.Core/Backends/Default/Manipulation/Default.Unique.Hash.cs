@@ -37,7 +37,7 @@ namespace NumSharp.Backends
         ///     each distinct).</returns>
         /// <remarks>NumPy returns its hash set's iteration order for the integer and complex dtypes; this returns them
         ///     sorted (the same set: the documented divergence of <c>np.unique_values</c>).</remarks>
-        internal static NDArray uniqueValuesFast(NDArray a)
+        internal NDArray uniqueValuesFast(NDArray a)
         {
             switch (a.typecode)
             {
@@ -66,7 +66,7 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="a">The numeric operand (any layout; only read).</param>
         /// <returns>[values, counts]: the sorted distinct values and their int64 occurrence counts.</returns>
-        internal static NDArray[] uniqueCountsFast(NDArray a)
+        internal NDArray[] uniqueCountsFast(NDArray a)
         {
             switch (a.typecode)
             {
@@ -103,15 +103,15 @@ namespace NumSharp.Backends
         ///     np.unique's flat path; that path's own hash routes stop at the same bound, so the two cannot recurse.
         ///     </para>
         /// </remarks>
-        private static unsafe (NDArray values, NDArray counts) UniqueHashSortedInt<T>(NDArray a, bool wantCounts)
+        private unsafe (NDArray values, NDArray counts) UniqueHashSortedInt<T>(NDArray a, bool wantCounts)
             where T : unmanaged, IComparable<T>, IEquatable<T>
         {
             long n = a.size;
             if (n == 0)
             {
-                var emptyV = new NDArray(new ArraySlice<T>(new UnmanagedMemoryBlock<T>(0)), Shape.Vector(0));
+                var emptyV = new NDArray(new ArraySlice<T>(new UnmanagedMemoryBlock<T>(0)), Shape.Vector(0)) { TensorEngine = this };
                 var emptyC = wantCounts
-                    ? new NDArray(new ArraySlice<long>(new UnmanagedMemoryBlock<long>(0)), Shape.Vector(0))
+                    ? new NDArray(new ArraySlice<long>(new UnmanagedMemoryBlock<long>(0)), Shape.Vector(0)) { TensorEngine = this }
                     : null;
                 return (emptyV, emptyC);
             }
@@ -243,7 +243,7 @@ namespace NumSharp.Backends
         /// <param name="arr">The source; only its first <paramref name="count"/> elements are copied.</param>
         /// <param name="count">The element count of the result.</param>
         /// <returns>A fresh 1-D array that owns a copy of the elements (the managed array may be reused or dropped).</returns>
-        private static unsafe NDArray VectorFromManaged<T>(T[] arr, long count) where T : unmanaged
+        private unsafe NDArray VectorFromManaged<T>(T[] arr, long count) where T : unmanaged
         {
             var block = new UnmanagedMemoryBlock<T>(count);
             if (count > 0)
@@ -254,7 +254,7 @@ namespace NumSharp.Backends
                     Buffer.MemoryCopy(src, block.Address, bytes, bytes);
                 }
             }
-            return new NDArray(new ArraySlice<T>(block), Shape.Vector(count));
+            return new NDArray(new ArraySlice<T>(block), Shape.Vector(count)) { TensorEngine = this };
         }
 
         // ============================================================================
@@ -297,13 +297,13 @@ namespace NumSharp.Backends
         ///     With <paramref name="equalNan"/> the caller (np.unique's values-only path) keeps arrays above 2^28 elements on
         ///     the sort path: this method's own large-array bail-out re-enters np.unique, which would come back here.
         /// </remarks>
-        private static unsafe (NDArray values, NDArray counts) UniqueHashSortedComplex(NDArray a, bool wantCounts, bool equalNan = false)
+        private unsafe (NDArray values, NDArray counts) UniqueHashSortedComplex(NDArray a, bool wantCounts, bool equalNan = false)
         {
             long n = a.size;
             if (n == 0)
             {
-                var ev = new NDArray(new ArraySlice<Complex>(new UnmanagedMemoryBlock<Complex>(0)), Shape.Vector(0));
-                var ec = wantCounts ? new NDArray(new ArraySlice<long>(new UnmanagedMemoryBlock<long>(0)), Shape.Vector(0)) : null;
+                var ev = new NDArray(new ArraySlice<Complex>(new UnmanagedMemoryBlock<Complex>(0)), Shape.Vector(0)) { TensorEngine = this };
+                var ec = wantCounts ? new NDArray(new ArraySlice<long>(new UnmanagedMemoryBlock<long>(0)), Shape.Vector(0)) { TensorEngine = this } : null;
                 return (ev, ec);
             }
             if (n > (1L << 28))
@@ -409,7 +409,7 @@ namespace NumSharp.Backends
         /// <param name="wantCounts">Also build the counts.</param>
         /// <returns>The fresh 1-D values and, when <paramref name="wantCounts"/>, the aligned int64 counts (null
         ///     otherwise).</returns>
-        private static unsafe (NDArray values, NDArray counts) AppendNaNsAndBuild<T>(
+        private unsafe (NDArray values, NDArray counts) AppendNaNsAndBuild<T>(
             T[] finite, long[] finiteCnt, int finiteCount, List<T> nans, int nanCount, bool wantCounts) where T : unmanaged
         {
             long total = (long)finiteCount + nanCount;
@@ -417,7 +417,7 @@ namespace NumSharp.Backends
             T* vp = vblock.Address;
             for (int i = 0; i < finiteCount; i++) vp[i] = finite[i];
             for (int i = 0; i < nanCount; i++) vp[finiteCount + i] = nans[i];
-            var values = new NDArray(new ArraySlice<T>(vblock), Shape.Vector(total));
+            var values = new NDArray(new ArraySlice<T>(vblock), Shape.Vector(total)) { TensorEngine = this };
 
             NDArray counts = null;
             if (wantCounts)
@@ -426,7 +426,7 @@ namespace NumSharp.Backends
                 long* cp = cblock.Address;
                 for (int i = 0; i < finiteCount; i++) cp[i] = finiteCnt[i];
                 for (int i = 0; i < nanCount; i++) cp[finiteCount + i] = 1;
-                counts = new NDArray(new ArraySlice<long>(cblock), Shape.Vector(total));
+                counts = new NDArray(new ArraySlice<long>(cblock), Shape.Vector(total)) { TensorEngine = this };
             }
             return (values, counts);
         }
@@ -475,7 +475,7 @@ namespace NumSharp.Backends
         /// <param name="equalNan">NumPy's <c>equal_nan</c>.</param>
         /// <param name="values">The elements in C order when the caller extracted them already; null extracts them.</param>
         /// <returns>The sorted values and, when <paramref name="wantCounts"/>, the aligned int64 counts (null otherwise).</returns>
-        private static (NDArray values, NDArray counts) ArgsortedHashAnswer(NDArray a, long n, bool wantCounts, bool equalNan,
+        private (NDArray values, NDArray counts) ArgsortedHashAnswer(NDArray a, long n, bool wantCounts, bool equalNan,
             Complex[] values = null)
         {
             var r = uniqueFlatArgsorted<Complex>(a, n, false, false, wantCounts, equalNan, values);
@@ -501,7 +501,7 @@ namespace NumSharp.Backends
         /// <param name="uv">The distinct values; sorted in place. Its length is <paramref name="count"/>.</param>
         /// <param name="uc">Their counts, moved with them; null when no counts are wanted.</param>
         /// <param name="count">The number of distinct values.</param>
-        private static unsafe void SortDistinctComplex(Complex[] uv, long[] uc, int count)
+        private unsafe void SortDistinctComplex(Complex[] uv, long[] uc, int count)
         {
             if (count < RadixDistinctComplexMin)
             {
@@ -510,7 +510,7 @@ namespace NumSharp.Backends
             }
             // The radix argsort reads an NDArray: a copy of the values. Then the gather, the counts in step.
             // np.array(uv)'s statement for a C# array: a 1-D array over a copy of it.
-            using var arr = new NDArray(Unmanaged.ArraySlice.FromArray(uv, true), Shape.Vector(uv.Length));
+            using var arr = new NDArray(Unmanaged.ArraySlice.FromArray(uv, true), Shape.Vector(uv.Length)) { TensorEngine = this };
             using var perm = AxisSort.ArgSort(arr, null, NPY_SORTKIND.NPY_STABLESORT);
             long* p = (long*)perm.Address;   // a fresh C-contiguous int64 array: its first element is at its base
             var sorted = new Complex[count];

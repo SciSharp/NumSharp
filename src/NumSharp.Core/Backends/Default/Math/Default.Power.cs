@@ -313,7 +313,7 @@ namespace NumSharp.Backends
         /// <returns>True when a running element's exponent is negative.</returns>
         /// <remarks>When the exponents and the mask do not broadcast, this answers false: the ufunc route then raises
         ///     NumPy's broadcast error, which lists every operand (NumPy builds its iterator before any loop runs).</remarks>
-        private static bool ContainsNegative(NDArray nd, NDArray where)
+        private bool ContainsNegative(NDArray nd, NDArray where)
         {
             if (where is null)
                 return ContainsNegative(nd);
@@ -321,7 +321,7 @@ namespace NumSharp.Backends
                 return false;
             try
             {
-                using var negative = nd.TensorEngine.Less(nd, NDArray.Scalar(0L));
+                using var negative = nd.TensorEngine.Less(nd, NewScalar(0L));
                 using var selected = negative.TensorEngine.LogicalAnd(negative, where);
                 return selected.TensorEngine.Any(selected);
             }

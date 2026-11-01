@@ -59,7 +59,7 @@ namespace NumSharp.Backends
         ///     <see cref="ReduceAdd"/>. float16 and hosts without dynamic code take NumPy's eager statements.
         ///     </para>
         /// </remarks>
-        internal static NDArray NanMeanNumPy(NDArray a, int? axis_, bool keepdims, DType dtype)
+        internal NDArray NanMeanNumPy(NDArray a, int? axis_, bool keepdims, DType dtype)
         {
             // Text is not inexact, so _replace_nan leaves it alone and nanmean IS np.mean: the delegation below reaches
             // ReduceMean's guard, which validates the axis (a 0-d input refuses every axis) and refuses with add.reduce's
@@ -102,7 +102,7 @@ namespace NumSharp.Backends
             {
                 // NumPy's own statements: the mask, the copy with zeros, the count of ~mask, the sum.
                 var mask = engine.IsNan(a);
-                var arr0 = new NDArray(inT, shape.KeepOrder(), false);
+                var arr0 = NewArray(inT, shape.KeepOrder(), false);
                 UnmanagedStorage.Copyto(arr0, a, NPY_CASTING.NPY_SAME_KIND_CASTING);
                 ZeroWhereMask(arr0, mask);
                 cnt = engine.ReduceAdd(engine.LogicalNot(mask), axis, keepdims, np.int64, @out: null);
@@ -124,7 +124,7 @@ namespace NumSharp.Backends
                 }
                 else
                 {
-                    var arr0 = new NDArray(inT, shape.KeepOrder(), false);
+                    var arr0 = NewArray(inT, shape.KeepOrder(), false);
                     engine.Evaluate(zeroed, arr0);
                     tot = engine.ReduceAdd(arr0, axis, keepdims, dtype, @out: null);
                 }

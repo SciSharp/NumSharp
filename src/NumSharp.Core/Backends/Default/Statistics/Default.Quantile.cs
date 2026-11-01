@@ -231,7 +231,7 @@ namespace NumSharp.Backends
         ///     with casting rule 'same_kind'</c> (the house type of the ufunc out= routes). The legacy routes: an
         ///     <paramref name="out"/> of another shape than the result.</exception>
         [NDScoped]
-        internal static NDArray QuantileCompute(
+        internal NDArray QuantileCompute(
             NDArray a, double[] q, int[] axisArr, NDArray @out,
             bool overwrite_input, QuantileMethod method, bool keepdims, bool qIsScalar,
             bool emptyReturnsNaN = false, bool ignoreNaN = false, bool allowBooleanContinuous = false,
@@ -389,7 +389,7 @@ namespace NumSharp.Backends
             // ── np.median's empty reduction axis: NaN (its mean of nothing). ──
             if (n == 0 && emptyReturnsNaN)
             {
-                NDArray nanResult = new NDArray(outTypeCode, resultShape);
+                NDArray nanResult = NewArray(outTypeCode, resultShape, true);
                 FillWithNaN(nanResult, outTypeCode);
                 return FinalizeResult(nanResult, a, axisArr, keepdims, qNdim, @out);
             }
@@ -447,7 +447,7 @@ namespace NumSharp.Backends
                     if (outRoute == 2)
                         LerpOutChecks(target, outTypeCode, outShape);
                 }
-                NDArray emptyResult = new NDArray(outTypeCode, resultShape);
+                NDArray emptyResult = NewArray(outTypeCode, resultShape, true);
                 return FinishResult(emptyResult, a, axisArr, keepdims, qNdim, @out, target, outRoute, staged: null, outerDims);
             }
 
@@ -481,7 +481,7 @@ namespace NumSharp.Backends
                     bufferType = target.typecode;
             }
 
-            NDArray resultRaw = new NDArray(bufferType, resultShape);
+            NDArray resultRaw = NewArray(bufferType, resultShape, true);
 
             // The plain path's partition indexes: every plan index made partition-ready (NumPy's -1 is the last element),
             // kept per quantile for the cells and sorted + deduplicated for the partition. Deduplicating shrinks the
@@ -672,7 +672,7 @@ namespace NumSharp.Backends
         ///     shape (an ArgumentException otherwise), where NumPy's store broadcasts: a larger out takes the answer in
         ///     every row, and a q-first out is NumPy's ValueError.
         /// </remarks>
-        private static NDArray AllNaNSlicesResult(NDArray a, int[] axisArr, bool keepdims, long[] qShape, NDArray @out,
+        private NDArray AllNaNSlicesResult(NDArray a, int[] axisArr, bool keepdims, long[] qShape, NDArray @out,
             NDArray target, bool legacyOut, int? numpyAxis)
         {
             var dims = new List<long>(qShape);
@@ -683,7 +683,7 @@ namespace NumSharp.Backends
                     if (!reduced.Contains(i))
                         dims.Add(a.Shape.dimensions[i]);
             }
-            var result = new NDArray(a.typecode, Shape.Adopt(dims.ToArray()));
+            var result = NewArray(a.typecode, Shape.Adopt(dims.ToArray()), true);
             FillWithNumPyNaN(result, a.typecode);
             if (numpyAxis is int axis && dims.Count > qShape.Length)
                 // Along an axis (a kept axis exists): np.apply_along_axis's buffer and nanquantile's moveaxis.
@@ -780,7 +780,7 @@ namespace NumSharp.Backends
         ///     widths preserved, everything else → float64). The q dimension is dropped to
         ///     match NumPy's <c>return np.nanmean(a, axis, out, keepdims)</c> short-circuit.
         /// </summary>
-        private static NDArray BuildEmptyNanResult(NDArray a, int[] axisArr, bool keepdims, NDArray @out)
+        private NDArray BuildEmptyNanResult(NDArray a, int[] axisArr, bool keepdims, NDArray @out)
         {
             NPTypeCode tc =
                 IsFloatTc(a.typecode)            ? a.typecode :
@@ -810,8 +810,8 @@ namespace NumSharp.Backends
             }
 
             NDArray result = shapeArr.Length == 0
-                ? new NDArray(tc, new Shape())
-                : new NDArray(tc, Shape.Adopt(shapeArr));
+                ? NewArray(tc, new Shape(), true)
+                : NewArray(tc, Shape.Adopt(shapeArr), true);
             FillWithNaN(result, tc);
 
             if (@out is not null)
@@ -1213,7 +1213,7 @@ namespace NumSharp.Backends
         ///     cast to under same_kind (NumPy's <c>np.copyto(result, arr[-1, ...], where=slices_having_nans)</c>: <c>Cannot
         ///     cast scalar from dtype('float64') to dtype('int64') according to the rule 'same_kind'</c>, "array data" with
         ///     kept axes) — after the take wrote out, as NumPy's does.</exception>
-        private static NDArray FinishResult(NDArray resultRaw, NDArray a, int[] axisArr, bool keepdims, int qNdim, NDArray @out,
+        private NDArray FinishResult(NDArray resultRaw, NDArray a, int[] axisArr, bool keepdims, int qNdim, NDArray @out,
             NDArray target, int outRoute, NDArray staged, int keptDims)
         {
             switch (outRoute)

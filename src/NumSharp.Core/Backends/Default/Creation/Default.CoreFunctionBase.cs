@@ -48,7 +48,7 @@ namespace NumSharp.Backends
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linspace.html
         ///     <para>Each sample is NumPy's float64 ramp value (<see cref="LinspaceValue"/>), floored for an integer type,
         ///     then converted in one typed loop per storage lane.</para></remarks>
-        private static NDArray LinspaceCore(double start, double stop, long num, bool endpoint, NPTypeCode typeCode)
+        private NDArray LinspaceCore(double start, double stop, long num, bool endpoint, NPTypeCode typeCode)
         {
             if (typeCode == NPTypeCode.Empty)
                 throw new ArgumentException("Invalid typeCode", nameof(typeCode));
@@ -61,7 +61,7 @@ namespace NumSharp.Backends
                                 || typeCode == NPTypeCode.Int64 || typeCode == NPTypeCode.UInt64
                                 || typeCode == NPTypeCode.Char;
 
-            NDArray ret = new NDArray(typeCode, new Shape(num), false);
+            NDArray ret = NewArray(typeCode, new Shape(num), false);
 
             if (num == 0)
                 return ret;
@@ -307,10 +307,10 @@ namespace NumSharp.Backends
         ///     <c>arange*step + start</c>, and <see cref="Math.Pow(double,double)"/> is the same <c>ucrtbase</c> routine
         ///     NumPy's <c>npy_pow</c> calls on win-amd64, so the float64 result is byte-exact.
         /// </remarks>
-        private static NDArray LogspaceCore(double start, double stop, long num, bool endpoint, double @base)
+        private NDArray LogspaceCore(double start, double stop, long num, bool endpoint, double @base)
         {
             // fillZeros:false — every element is written below, so zeroing the buffer first would be wasted work.
-            NDArray ret = new NDArray(NPTypeCode.Double, new Shape(num), false);
+            NDArray ret = NewArray(NPTypeCode.Double, new Shape(num), false);
 
             if (num == 0)
                 return ret;
@@ -476,7 +476,7 @@ namespace NumSharp.Backends
                 throw new ValueError("Geometric sequence cannot include zero");
             // A text dtype fails NumPy's next statements, before the count and the axis are read.
             if (dtype != null && dtype.GetTypeCode() == NPTypeCode.String)
-                RefuseGeomspaceTextDtype(NDArray.Scalar(start), num, dtype);
+                RefuseGeomspaceTextDtype(NewScalar(start), num, dtype);
             ValidateSampleCount(num);
             ValidateSpacingAxis(axis);
 
@@ -499,7 +499,7 @@ namespace NumSharp.Backends
                 throw new ValueError("Geometric sequence cannot include zero");
             // A text dtype fails NumPy's next statements, before the count and the axis are read.
             if (dtype != null && dtype.GetTypeCode() == NPTypeCode.String)
-                RefuseGeomspaceTextDtype(NDArray.Scalar(start), num, dtype);
+                RefuseGeomspaceTextDtype(NewScalar(start), num, dtype);
             ValidateSampleCount(num);
             ValidateSpacingAxis(axis);
 
@@ -572,7 +572,7 @@ namespace NumSharp.Backends
         ///     <c>out_sign * Math.Pow(10, log_start + i*step)</c> equals NumPy's <c>power(10, linspace_val) * out_sign</c>
         ///     (multiplication commutes; ±1 is exact). Mixed-sign inputs give NaN interiors exactly as NumPy does.
         /// </remarks>
-        private static NDArray GeomspaceRealCore(double start, double stop, long num, bool endpoint)
+        private NDArray GeomspaceRealCore(double start, double stop, long num, bool endpoint)
         {
             // out_sign = np.sign(start): ±1 for a finite/inf non-zero, but NaN for a NaN start (start != 0 is
             // guaranteed and -0.0 was rejected by the ==0.0 check). Propagating NaN here is load-bearing — NumPy's
@@ -583,7 +583,7 @@ namespace NumSharp.Backends
             double logStart = Math.Log10(startR);
             double logStop = Math.Log10(stopR);              // NaN when stopR < 0 (mixed-sign inputs)
 
-            NDArray ret = new NDArray(NPTypeCode.Double, new Shape(num), false);
+            NDArray ret = NewArray(NPTypeCode.Double, new Shape(num), false);
             if (num == 0)
                 return ret;
 
@@ -633,7 +633,7 @@ namespace NumSharp.Backends
         ///     endpoints become <c>start_r*out_sign</c> / <c>stop_r*out_sign</c> (not necessarily the original inputs,
         ///     since complex divide-then-multiply is not exact), matching NumPy; then the moveaxis and the cast.
         /// </remarks>
-        private static NDArray GeomspaceComplexCore(Complex start, Complex stop, long num, bool endpoint, DType dtype, int axis)
+        private NDArray GeomspaceComplexCore(Complex start, Complex stop, long num, bool endpoint, DType dtype, int axis)
         {
             // sign(z) = z / |z| (NumPy 2.x complex sign); z != 0 guaranteed by the caller.
             Complex outSign = start / Complex.Abs(start);
@@ -645,7 +645,7 @@ namespace NumSharp.Backends
             // Complex linspace of the log-space exponents (a straight line between the two log10 values).
             NDArray cLin = ComplexLinspaceCore(logStart, logStop, num, endpoint);
             // 10 ** exponent through NumSharp's npy_cpow port (best parity with NumPy's own complex power).
-            NDArray base10 = NDArray.Scalar(new Complex(10.0, 0.0));
+            NDArray base10 = NewScalar(new Complex(10.0, 0.0));
             // np.power(base10, cLin): the operand's engine member (a static helper).
             NDArray result = base10.TensorEngine.Power(base10, cLin);
             // cLin/base10 were pure inputs to power (which materialises a fresh result); reclaim them now.
@@ -683,9 +683,9 @@ namespace NumSharp.Backends
         /// <param name="num">Number of samples (already validated non-negative).</param>
         /// <param name="endpoint">Whether <paramref name="stop"/> is the final sample.</param>
         /// <returns>A fresh, C-contiguous, owning complex128 array of length <paramref name="num"/>.</returns>
-        private static NDArray ComplexLinspaceCore(Complex start, Complex stop, long num, bool endpoint)
+        private NDArray ComplexLinspaceCore(Complex start, Complex stop, long num, bool endpoint)
         {
-            NDArray ret = new NDArray(NPTypeCode.Complex, new Shape(num), false);
+            NDArray ret = NewArray(NPTypeCode.Complex, new Shape(num), false);
             if (num == 0)
                 return ret;
             if (num == 1)

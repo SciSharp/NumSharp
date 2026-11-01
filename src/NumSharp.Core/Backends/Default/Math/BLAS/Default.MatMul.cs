@@ -109,7 +109,7 @@ namespace NumSharp.Backends
             // writes the result. (The ordinary path does not need it — every 2-D kernel clears C
             // before accumulating, exactly as NumPy's matmul_inner_noblas stores 0 before its
             // summation loop.)
-            var ret = new NDArray(resultType, resultShape, fillZeros: true);
+            var ret = NewArray(resultType, resultShape, fillZeros: true);
 
             // An external BLAS, when one is installed — offered the WHOLE stack first. The trailing
             // strides are identical for every element of it, so a backend can hoist its route

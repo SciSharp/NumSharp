@@ -237,7 +237,7 @@ namespace NumSharp.Tests.Manipulation
         [TestMethod]
         public void LongIndexedFallback_GivesTheManagedOutputs()
         {
-            var flags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static;
+            var flags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
             var longFloat = typeof(DefaultEngine).GetMethods(flags).First(m => m.Name == "uniqueFlatSortedLongFloat" && m.IsGenericMethodDefinition);
             var longComplex = typeof(DefaultEngine).GetMethods(flags).First(m => m.Name == "uniqueFlatSortedLongComplex");
 
@@ -281,8 +281,8 @@ namespace NumSharp.Tests.Manipulation
                 NDArray[] want = np.unique(a, return_index: ri, return_inverse: rv, return_counts: rc, equal_nan: en);
                 var args = new object[] { a, (long)a.size, en, ri, rv, rc };
                 var got = a.typecode == NPTypeCode.Complex
-                    ? (NDArray[])longComplex.Invoke(null, args)
-                    : (NDArray[])longFloat.MakeGenericMethod(a.dtype.type).Invoke(null, args);
+                    ? (NDArray[])longComplex.Invoke(BackendFactory.GetEngine<DefaultEngine>(), args)
+                    : (NDArray[])longFloat.MakeGenericMethod(a.dtype.type).Invoke(BackendFactory.GetEngine<DefaultEngine>(), args);
                 got.Length.Should().Be(want.Length);
                 for (int k = 0; k < got.Length; k++)
                 {

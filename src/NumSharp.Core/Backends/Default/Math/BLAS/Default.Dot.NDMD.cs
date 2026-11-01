@@ -18,7 +18,7 @@ namespace NumSharp.Backends
         /// for every combination of dimension counts. The new implementation uses dynamic iteration
         /// with optional SIMD optimization for contiguous float/double arrays.
         /// </remarks>
-        public static NDArray DotNDMD(NDArray lhs, NDArray rhs)
+        public NDArray DotNDMD(NDArray lhs, NDArray rhs)
         {
 #if MINIMAL
             return null;
@@ -39,7 +39,7 @@ namespace NumSharp.Backends
             Array.Copy(rshape, 0, retShape, lshape.Length, rshape.Length);
 
             var resultType = np._FindCommonArrayType(lhs.typecode, rhs.typecode);
-            var result = new NDArray(resultType, Shape.Adopt(retShape));
+            var result = NewArray(resultType, Shape.Adopt(retShape), true);
 
             // Try SIMD fast path for contiguous same-type float/double
             if (TryDotNDMDSimd(lhs, rhs, result, lshape, rshape, contractDim))

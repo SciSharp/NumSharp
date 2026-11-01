@@ -118,7 +118,7 @@ namespace NumSharp.Backends
         ///     the comparison run or the fill. The 16-byte zero is cleared explicitly.</para>
         /// </remarks>
         [System.Runtime.CompilerServices.SkipLocalsInit]
-        private static unsafe NDArray TryLogicalRun(NDArray lhs, NDArray rhs, BinaryOp op, NDArray @out, NDArray where)
+        private unsafe NDArray TryLogicalRun(NDArray lhs, NDArray rhs, BinaryOp op, NDArray @out, NDArray where)
         {
             if (where is not null || DisableLogicalRun)
                 return null;
@@ -173,7 +173,7 @@ namespace NumSharp.Backends
             NDArray result;
             if (@out is null)
             {
-                result = new NDArray(NPTypeCode.Boolean, CanonicalResultShape(arrShape, runIsF), false);
+                result = NewArray(NPTypeCode.Boolean, CanonicalResultShape(arrShape, runIsF), false);
             }
             else
             {
@@ -241,7 +241,7 @@ namespace NumSharp.Backends
         ///     it out (C, or F for a strictly F operand). The run reads its whole input and writes its whole output in one
         ///     call, so an operand and an <c>out=</c> that share no memory need no ordering.
         /// </remarks>
-        private static unsafe NDArray TryLogicalNotRun(NDArray nd, NDArray @out, NDArray where)
+        private unsafe NDArray TryLogicalNotRun(NDArray nd, NDArray @out, NDArray where)
         {
             if (where is not null || DisableLogicalRun)
                 return null;
@@ -256,7 +256,7 @@ namespace NumSharp.Backends
             NDArray result;
             if (@out is null)
             {
-                result = new NDArray<bool>(CanonicalResultShape(s, runIsF), false);
+                result = NewArray<bool>(CanonicalResultShape(s, runIsF), false);
             }
             else
             {
@@ -394,7 +394,7 @@ namespace NumSharp.Backends
                 Strings.NDStringUfuncs.ThrowIfOutWhereInvalid(@out, where);
                 ResolveUfuncIterationShape(nd.Shape.Clean(), new[] { nd }, @out, where);
             }
-            return Compare(nd, NDArray.Scalar(0), null, @out, where);
+            return Compare(nd, NewScalar(0), null, @out, where);
         }
     }
 }

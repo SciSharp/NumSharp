@@ -46,9 +46,9 @@ namespace NumSharp.Backends
             }
 
             if (nd == 0)
-                return NDArray.Scalar(0L);
+                return NewScalar(0L);
             if (first.size <= 1)
-                return new NDArray(NPTypeCode.Int64, Shape.Adopt(first.Shape.dimensions), true); // [0] for one element, [] for none
+                return NewArray(NPTypeCode.Int64, Shape.Adopt(first.Shape.dimensions), true); // [0] for one element, [] for none
 
             // First pass over an identity permutation IS the first key's stable argsort;
             // every later key re-sorts the permutation it receives (stably), so the LAST

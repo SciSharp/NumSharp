@@ -173,7 +173,7 @@ namespace NumSharp.Backends
         /// <param name="wantCounts">Also build the run-length counts.</param>
         /// <returns>The fresh 1-D distinct values and, when <paramref name="wantCounts"/>, the aligned int64 counts (null
         ///     otherwise).</returns>
-        private static unsafe (NDArray values, NDArray counts) RadixDedupSortedInt<T>(T[] sorted, int n, bool wantCounts)
+        private unsafe (NDArray values, NDArray counts) RadixDedupSortedInt<T>(T[] sorted, int n, bool wantCounts)
             where T : unmanaged, IEquatable<T>
         {
             long uc = 1;
@@ -199,8 +199,8 @@ namespace NumSharp.Backends
             }
             if (wantCounts) cp[vi - 1] = n - runStart;
 
-            var values = new NDArray(new ArraySlice<T>(vblock), Shape.Vector(uc));
-            var counts = wantCounts ? new NDArray(new ArraySlice<long>(cblock), Shape.Vector(uc)) : null;
+            var values = new NDArray(new ArraySlice<T>(vblock), Shape.Vector(uc)) { TensorEngine = this };
+            var counts = wantCounts ? new NDArray(new ArraySlice<long>(cblock), Shape.Vector(uc)) { TensorEngine = this } : null;
             return (values, counts);
         }
 

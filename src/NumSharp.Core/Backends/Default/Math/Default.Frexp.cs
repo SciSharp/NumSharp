@@ -67,8 +67,8 @@ namespace NumSharp.Backends
             // fresh int32 exponent is always C-contiguous). np.frexp then relabels both to F together.
             var cShape = Shape.Adopt(x.Shape.dimensions);
             var src = MaterializeContiguous(x, cShape, floatType);
-            var mant = new NDArray(floatType, cShape, fillZeros: false);
-            var exp = new NDArray(NPTypeCode.Int32, cShape, fillZeros: false);
+            var mant = NewArray(floatType, cShape, fillZeros: false);
+            var exp = NewArray(NPTypeCode.Int32, cShape, fillZeros: false);
 
             long len = cShape.size;
             unsafe

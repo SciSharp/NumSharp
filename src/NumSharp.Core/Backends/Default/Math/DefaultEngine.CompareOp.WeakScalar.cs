@@ -79,7 +79,7 @@ namespace NumSharp.Backends
         ///     the promoted one. The scalar is read once, through a boxed read of its single element; the conversion is per
         ///     call, not per element.
         /// </remarks>
-        internal static NDArray AdoptWeakComparisonScalar(NDArray lhs, NDArray rhs, out bool scalarIsLhs)
+        internal NDArray AdoptWeakComparisonScalar(NDArray lhs, NDArray rhs, out bool scalarIsLhs)
         {
             scalarIsLhs = false;
             bool lhsScalar = lhs.ndim == 0, rhsScalar = rhs.ndim == 0;
@@ -109,7 +109,7 @@ namespace NumSharp.Backends
                 if (v < min || v > max)
                     return null;
                 scalarIsLhs = lhsScalar;
-                return NDArray.Scalar(boxed, arrayType);
+                return NewScalar(boxed, arrayType);
             }
             // Only a float16 / float32 array compares narrower than the promotion (see the remarks); a scalar of the
             // array's own dtype is already the loop dtype.
@@ -189,7 +189,7 @@ namespace NumSharp.Backends
         ///     the common path allocates nothing. A float operand needs no repack: the cast from a double rounds once, like
         ///     the pack.
         /// </remarks>
-        internal static NDArray RepackWeakIntForFloatLoop(NDArray operand, NPTypeCode loop)
+        internal NDArray RepackWeakIntForFloatLoop(NDArray operand, NPTypeCode loop)
         {
             if ((loop != NPTypeCode.Half && loop != NPTypeCode.Single) || operand is null || operand.ndim != 0)
                 return null;
@@ -272,7 +272,7 @@ namespace NumSharp.Backends
         /// <param name="rhs">The right operand; replaced when it is the re-packed one.</param>
         /// <param name="loop">The ufunc's final loop dtype.</param>
         /// <returns>The replacement, which the caller disposes after the ufunc ran, or null when nothing changed.</returns>
-        internal static NDArray AdoptWeakIntOperand(ref NDArray lhs, ref NDArray rhs, NPTypeCode loop)
+        internal NDArray AdoptWeakIntOperand(ref NDArray lhs, ref NDArray rhs, NPTypeCode loop)
         {
             bool lhsScalar = lhs.ndim == 0;
             if (lhsScalar == (rhs.ndim == 0))

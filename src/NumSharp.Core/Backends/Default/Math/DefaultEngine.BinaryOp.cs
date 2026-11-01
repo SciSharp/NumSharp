@@ -303,7 +303,7 @@ namespace NumSharp.Backends
                 : cleanShape;
 
             // Allocate result
-            var result = new NDArray(resultType, resultShape, false);
+            var result = NewArray(resultType, resultShape, false);
 
             // Empty broadcast result: no elements to compute. The kernels below assume
             // >= 1 element and walk stride-0 broadcast dims as if non-empty, corrupting
@@ -491,7 +491,7 @@ namespace NumSharp.Backends
                 ? Shape.Adopt((long[])cleanShape.dimensions.Clone(), 'F')
                 : cleanShape;
 
-            var result = new NDArray(resultType, resultShape, false);
+            var result = NewArray(resultType, resultShape, false);
 
             // Empty broadcast result (a stride-0 broadcast dim alongside a zero-size
             // dim, e.g. (3,1,1) op (1,0,2) -> (3,0,2)): there is nothing to compute.
@@ -699,7 +699,7 @@ namespace NumSharp.Backends
             // instead of cloning dims + reconstructing strides/flags. bothF implies
             // strictly column-major ls (1-D would have satisfied bothC first).
             Shape resultShape = CanonicalResultShape(ls, bothF);
-            var result = new NDArray(resultType, resultShape, false);
+            var result = NewArray(resultType, resultShape, false);
 
             // Empty result: nothing to compute (the kernel assumes >= 1 element).
             if (result.size == 0)
@@ -751,7 +751,7 @@ namespace NumSharp.Backends
                 return null;
 
             Shape resultShape = CanonicalResultShape(arrShape, isF);
-            var result = new NDArray(resultType, resultShape, false);
+            var result = NewArray(resultType, resultShape, false);
             if (result.size == 0)
                 return result;
 
@@ -1350,7 +1350,7 @@ namespace NumSharp.Backends
         /// Continue binary scalar dispatch with typed LHS value.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-        private static NDArray InvokeBinaryScalarLhs<TLhs>(
+        private NDArray InvokeBinaryScalarLhs<TLhs>(
             Delegate func, TLhs lhsVal, NDArray rhs, NPTypeCode rhsType, NPTypeCode resultType)
         {
             // Dispatch based on rhs type
@@ -1379,27 +1379,27 @@ namespace NumSharp.Backends
         /// Complete binary scalar dispatch with typed LHS and RHS values.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-        private static NDArray InvokeBinaryScalarRhs<TLhs, TRhs>(
+        private NDArray InvokeBinaryScalarRhs<TLhs, TRhs>(
             Delegate func, TLhs lhsVal, TRhs rhsVal, NPTypeCode resultType)
         {
             // Dispatch based on result type
             return resultType switch
             {
-                NPTypeCode.Boolean => NDArray.Scalar(((Func<TLhs, TRhs, bool>)func)(lhsVal, rhsVal)),
-                NPTypeCode.Byte => NDArray.Scalar(((Func<TLhs, TRhs, byte>)func)(lhsVal, rhsVal)),
-                NPTypeCode.SByte => NDArray.Scalar(((Func<TLhs, TRhs, sbyte>)func)(lhsVal, rhsVal)),
-                NPTypeCode.Int16 => NDArray.Scalar(((Func<TLhs, TRhs, short>)func)(lhsVal, rhsVal)),
-                NPTypeCode.UInt16 => NDArray.Scalar(((Func<TLhs, TRhs, ushort>)func)(lhsVal, rhsVal)),
-                NPTypeCode.Int32 => NDArray.Scalar(((Func<TLhs, TRhs, int>)func)(lhsVal, rhsVal)),
-                NPTypeCode.UInt32 => NDArray.Scalar(((Func<TLhs, TRhs, uint>)func)(lhsVal, rhsVal)),
-                NPTypeCode.Int64 => NDArray.Scalar(((Func<TLhs, TRhs, long>)func)(lhsVal, rhsVal)),
-                NPTypeCode.UInt64 => NDArray.Scalar(((Func<TLhs, TRhs, ulong>)func)(lhsVal, rhsVal)),
-                NPTypeCode.Char => NDArray.Scalar(((Func<TLhs, TRhs, char>)func)(lhsVal, rhsVal)),
-                NPTypeCode.Half => NDArray.Scalar(((Func<TLhs, TRhs, Half>)func)(lhsVal, rhsVal)),
-                NPTypeCode.Single => NDArray.Scalar(((Func<TLhs, TRhs, float>)func)(lhsVal, rhsVal)),
-                NPTypeCode.Double => NDArray.Scalar(((Func<TLhs, TRhs, double>)func)(lhsVal, rhsVal)),
-                NPTypeCode.Decimal => NDArray.Scalar(((Func<TLhs, TRhs, decimal>)func)(lhsVal, rhsVal)),
-                NPTypeCode.Complex => NDArray.Scalar(((Func<TLhs, TRhs, System.Numerics.Complex>)func)(lhsVal, rhsVal)),
+                NPTypeCode.Boolean => NewScalar(((Func<TLhs, TRhs, bool>)func)(lhsVal, rhsVal)),
+                NPTypeCode.Byte => NewScalar(((Func<TLhs, TRhs, byte>)func)(lhsVal, rhsVal)),
+                NPTypeCode.SByte => NewScalar(((Func<TLhs, TRhs, sbyte>)func)(lhsVal, rhsVal)),
+                NPTypeCode.Int16 => NewScalar(((Func<TLhs, TRhs, short>)func)(lhsVal, rhsVal)),
+                NPTypeCode.UInt16 => NewScalar(((Func<TLhs, TRhs, ushort>)func)(lhsVal, rhsVal)),
+                NPTypeCode.Int32 => NewScalar(((Func<TLhs, TRhs, int>)func)(lhsVal, rhsVal)),
+                NPTypeCode.UInt32 => NewScalar(((Func<TLhs, TRhs, uint>)func)(lhsVal, rhsVal)),
+                NPTypeCode.Int64 => NewScalar(((Func<TLhs, TRhs, long>)func)(lhsVal, rhsVal)),
+                NPTypeCode.UInt64 => NewScalar(((Func<TLhs, TRhs, ulong>)func)(lhsVal, rhsVal)),
+                NPTypeCode.Char => NewScalar(((Func<TLhs, TRhs, char>)func)(lhsVal, rhsVal)),
+                NPTypeCode.Half => NewScalar(((Func<TLhs, TRhs, Half>)func)(lhsVal, rhsVal)),
+                NPTypeCode.Single => NewScalar(((Func<TLhs, TRhs, float>)func)(lhsVal, rhsVal)),
+                NPTypeCode.Double => NewScalar(((Func<TLhs, TRhs, double>)func)(lhsVal, rhsVal)),
+                NPTypeCode.Decimal => NewScalar(((Func<TLhs, TRhs, decimal>)func)(lhsVal, rhsVal)),
+                NPTypeCode.Complex => NewScalar(((Func<TLhs, TRhs, System.Numerics.Complex>)func)(lhsVal, rhsVal)),
                 _ => throw new NotSupportedException($"Result type {resultType} not supported")
             };
         }

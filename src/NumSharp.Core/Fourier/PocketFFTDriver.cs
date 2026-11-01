@@ -99,7 +99,7 @@ namespace NumSharp
                     // irfft's float64 into a complex128 (imag=0) or float32 out. Compute in the loop
                     // dtype, then cast into out at the end. (fft/rfft's loop is complex128, whose only
                     // same_kind target here is complex128, so those still require a complex out.)
-                    result = new NDArray(outDtype, outShape, false);
+                    result = a.TensorEngine.NewArray(outDtype, outShape, false);
                     castTarget = @out;
                 }
                 else
@@ -114,7 +114,9 @@ namespace NumSharp
             }
             else
             {
-                result = new NDArray(outDtype, outShape, false);
+                // the transform's result binds the operand's engine, the engine whose np.fft call this is (the shared
+                // FFT sub-engine has none of its own)
+                result = a.TensorEngine.NewArray(outDtype, outShape, false);
             }
 
             long nin = src.Shape.dimensions[ax];

@@ -82,7 +82,7 @@ namespace NumSharp.Backends
                 // a stack). NumSharp's eager unary ufunc writes C order for a permuted operand (the library's layout gap
                 // that the matrix tier's MX05 records for np.conjugate), so the result is allocated in that order (np.empty_like's
                 // own allocation: vt's dtype over its K layout, uninitialised) and filled through out=.
-                var conj = new NDArray(vt.dtype, Shape.NewLikeLayout(vt.Shape, 'K', (long[])vt.Shape.dimensions.Clone()), false);
+                var conj = vt.TensorEngine.NewArray(vt.dtype, Shape.NewLikeLayout(vt.Shape, 'K', (long[])vt.Shape.dimensions.Clone()), false);
                 vt.TensorEngine.Conjugate(vt, null, conj, null);
                 vt = conj;
             }
@@ -293,7 +293,7 @@ namespace NumSharp.Backends
             long count = x.size / (m * m);
             var matrices = x.reshape(Shape.Adopt(new[] {count, m, m}));
             // np.empty(shape, x.dtype)'s own allocation: uninitialised, every matrix is written by the loop below.
-            var inverses = new NDArray(x.dtype, Shape.Adopt(new[] {count, m, m}), false);
+            var inverses = x.TensorEngine.NewArray(x.dtype, Shape.Adopt(new[] {count, m, m}), false);
             double nan = BitConverter.Int64BitsToDouble(0x7FF8000000000000L); // NPY_NAN; .NET's double.NaN is negative
             var nanValue = x.typecode == NPTypeCode.Complex
                 ? NDArray.Scalar(new System.Numerics.Complex(nan, nan))

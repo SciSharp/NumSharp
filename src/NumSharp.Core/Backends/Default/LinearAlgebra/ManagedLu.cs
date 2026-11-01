@@ -359,13 +359,13 @@ namespace NumSharp.Backends
             double* plog = null;
             if (wantDet)
             {
-                det = new NDArray(InfoOf<T>.NPTypeCode, batchShape, fillZeros: false);
+                det = a.TensorEngine.NewArray(InfoOf<T>.NPTypeCode, batchShape, fillZeros: false);
                 pdet = (T*)det.Address + det.Shape.offset;
             }
             else
             {
-                sign = new NDArray(InfoOf<T>.NPTypeCode, batchShape, fillZeros: false);
-                logdet = new NDArray(NPTypeCode.Double, batchShape, fillZeros: false);
+                sign = a.TensorEngine.NewArray(InfoOf<T>.NPTypeCode, batchShape, fillZeros: false);
+                logdet = a.TensorEngine.NewArray(NPTypeCode.Double, batchShape, fillZeros: false);
                 psign = (T*)sign.Address + sign.Shape.offset;
                 plog = (double*)logdet.Address + logdet.Shape.offset;
             }
@@ -412,7 +412,7 @@ namespace NumSharp.Backends
             int nd = shape.NDim;
             long m = shape.dimensions[nd - 1];
 
-            var result = new NDArray(InfoOf<T>.NPTypeCode, Shape.Adopt((long[])shape.dimensions.Clone()), fillZeros: false);
+            var result = a.TensorEngine.NewArray(InfoOf<T>.NPTypeCode, Shape.Adopt((long[])shape.dimensions.Clone()), fillZeros: false);
             if (result.size == 0)
                 return result; // (…,0,0) → empty inverse, matching NumPy
 
@@ -513,7 +513,7 @@ namespace NumSharp.Backends
             for (int i = 0; i < trailing.Length; i++)
                 outDims[nb + i] = trailing[i];
 
-            var result = new NDArray(InfoOf<T>.NPTypeCode, Shape.Adopt(outDims), fillZeros: false);
+            var result = a.TensorEngine.NewArray(InfoOf<T>.NPTypeCode, Shape.Adopt(outDims), fillZeros: false);
             if (result.size == 0)
                 return result;
 

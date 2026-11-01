@@ -212,7 +212,7 @@ namespace NumSharp.Backends
         /// <returns>The width with its dtype; a zero (Python's 0 / 0.0) means one bin.</returns>
         /// <exception cref="ValueError">An unknown name (unreachable: the caller checked it first); an error of stone's
         ///     histograms.</exception>
-        private static NpScalar EstimateWidthNumPy(string name, NDArray x, (double, double)? range)
+        private NpScalar EstimateWidthNumPy(string name, NDArray x, (double, double)? range)
         {
             switch (name)
             {
@@ -295,7 +295,7 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="x">The non-empty data.</param>
         /// <returns>The width.</returns>
-        private static NpScalar DoaneWidth(NDArray x)
+        private NpScalar DoaneWidth(NDArray x)
         {
             long n = x.size;
             if (n > 2)
@@ -308,7 +308,7 @@ namespace NumSharp.Backends
                     using NDArray mean = x.TensorEngine.Mean(x);
                     using NDArray temp = x.TensorEngine.Subtract(x, mean, null, null, null);
                     temp.TensorEngine.Divide(temp, sigma, null, temp, null);
-                    using (NDArray three = NDArray.Scalar(3))
+                    using (NDArray three = NewScalar(3))
                         temp.TensorEngine.Power(temp, three, temp.dtype, temp, null); // a Python int exponent: the data's loop
                     using NDArray g1 = temp.TensorEngine.Mean(temp);
                     double absG1 = Math.Abs(g1.astype(NPTypeCode.Double).GetAtIndex<double>(0));
@@ -335,7 +335,7 @@ namespace NumSharp.Backends
         ///     managed sum's otherwise, which differ in the last bit on 16 bins or more: two candidate counts whose jhat values
         ///     are that close can then be picked differently.
         /// </remarks>
-        private static NpScalar StoneWidth(NDArray x, (double, double)? range)
+        private NpScalar StoneWidth(NDArray x, (double, double)? range)
         {
             long n = x.size;
             NpScalar ptp = PtpScalar(x);
@@ -352,7 +352,7 @@ namespace NumSharp.Backends
                 np.HistogramResult h = HistogramFunction(x, nbins, range, false, null);
                 using (h.hist)
                 using (h.bin_edges)
-                using (NDArray count = NDArray.Scalar((double)n))
+                using (NDArray count = NewScalar((double)n))
                 using (NDArray pk = h.hist.TensorEngine.Divide(h.hist, count, null, null, null))
                 using (NDArray dot = pk.TensorEngine.Dot(pk, pk, null))
                     j = (2 - (n + 1) * dot.GetAtIndex<double>(0)) / hh.Value;

@@ -57,6 +57,98 @@ namespace NumSharp
         private static TensorEngine _default;
 
         /// <summary>
+        ///     A new array of <paramref name="dtype"/> and <paramref name="shape"/> bound to this engine: the one allocation
+        ///     an engine makes its results with, so the result of a computation stays on the engine that computed it (and
+        ///     the next operation on that result computes there too).
+        /// </summary>
+        /// <param name="dtype">The dtype descriptor of the elements (a <see cref="Type"/>, an <see cref="NPTypeCode"/> or a
+        ///     NumPy dtype string converts implicitly).</param>
+        /// <param name="shape">The dimensions. A view's layout (strides, offset, broadcast) is laid out again in C order and a
+        ///     fresh dense or KEEPORDER layout is kept, as for every allocation (<see cref="Shape.ForFreshAllocation"/>).</param>
+        /// <param name="fillZeros">True to zero the buffer; false leaves pool noise the caller must overwrite completely
+        ///     before anyone reads it (a fixed-width <c>U</c> array is zeroed either way, NumPy's <c>NPY_NEEDS_INIT</c>).</param>
+        /// <returns>The new array, owning its buffer, bound to this engine (<see cref="NDArray.TensorEngine"/> is
+        ///     <c>this</c>).</returns>
+        /// <exception cref="ValueError">A dimension is negative, or the byte count overflows.</exception>
+        /// <remarks>
+        ///     The storage comes from this engine's <see cref="GetStorage(DType)"/>, so an engine that overrides it
+        ///     allocates its results through its own override. A result built any other way (<c>new NDArray(dtype,
+        ///     shape)</c>, <c>NDArray.Scalar</c>, <c>np.zeros</c>) binds <see cref="Default"/> instead: an engine member that
+        ///     builds its result so moves it off the engine that computed it whenever that engine is not the default (a
+        ///     wrap of a buffer the engine filled names the engine in its initializer: <c>{ TensorEngine = this }</c>).
+        /// </remarks>
+        protected internal NDArray NewArray(DType dtype, Shape shape, bool fillZeros)
+            => new NDArray(dtype, shape, fillZeros, this);
+
+        /// <summary>
+        ///     The typed form of <see cref="NewArray(DType, Shape, bool)"/>: a new <see cref="NDArray{T}"/> of
+        ///     <paramref name="shape"/> bound to this engine.
+        /// </summary>
+        /// <typeparam name="T">The element type; its <see cref="NPTypeCode"/> is the dtype.</typeparam>
+        /// <param name="shape">The dimensions (a view's layout is laid out again in C order, as for every allocation).</param>
+        /// <param name="fillZeros">True to zero the buffer; false leaves pool noise the caller must overwrite completely.</param>
+        /// <returns>The new typed array, owning its buffer, bound to this engine.</returns>
+        /// <exception cref="ValueError">A dimension is negative, or the byte count overflows.</exception>
+        protected internal NDArray<T> NewArray<T>(Shape shape, bool fillZeros) where T : unmanaged
+            => new NDArray<T>(shape, fillZeros, this);
+
+        /// <summary>
+        ///     <see cref="NDArray.Scalar{T}(T)"/> bound to this engine: the 0-d value an engine member returns (a flat
+        ///     reduction, a 0-d operation) or computes with stays on the engine that made it.
+        /// </summary>
+        /// <typeparam name="T">The element type; its <see cref="NPTypeCode"/> is the dtype.</typeparam>
+        /// <param name="value">The value.</param>
+        /// <returns>A new writeable 0-d array holding <paramref name="value"/>, bound to this engine.</returns>
+        protected internal NDArray NewScalar<T>(T value) where T : unmanaged
+            => Bind(NDArray.Scalar(value));
+
+        /// <summary>
+        ///     <see cref="NDArray.Scalar{T}(object)"/> bound to this engine: <paramref name="value"/> converted to
+        ///     <typeparamref name="T"/> first.
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <param name="value">The value, converted with <c>Converts.ChangeType</c> unless it already is a
+        ///     <typeparamref name="T"/>.</param>
+        /// <returns>A new writeable 0-d array, bound to this engine.</returns>
+        /// <exception cref="InvalidCastException"><paramref name="value"/> does not convert to <typeparamref name="T"/>.</exception>
+        protected internal NDArray NewScalar<T>(object value) where T : unmanaged
+            => Bind(NDArray.Scalar<T>(value));
+
+        /// <summary>
+        ///     <see cref="NDArray.Scalar(object)"/> bound to this engine: the dtype is the value's own (its C# type).
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <returns>A new writeable 0-d array, bound to this engine.</returns>
+        /// <exception cref="NotSupportedException"><paramref name="value"/>'s type is no NumSharp dtype.</exception>
+        protected internal NDArray NewScalar(object value)
+            => Bind(NDArray.Scalar(value));
+
+        /// <summary>
+        ///     <see cref="NDArray.Scalar(object, DType)"/> bound to this engine: <paramref name="value"/> stored as
+        ///     <paramref name="dtype"/>.
+        /// </summary>
+        /// <param name="value">The value (converted when it is not of <paramref name="dtype"/>).</param>
+        /// <param name="dtype">The dtype descriptor.</param>
+        /// <returns>A new writeable 0-d array, bound to this engine.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
+        /// <exception cref="ValueError">A non-text value into a <c>coerce=False</c> <c>StringDType</c>.</exception>
+        protected internal NDArray NewScalar(object value, DType dtype)
+            => Bind(NDArray.Scalar(value, dtype));
+
+        /// <summary>
+        ///     Moves a fresh array the engine made by another route (a scalar, a conversion) onto this engine, and returns it.
+        /// </summary>
+        /// <param name="fresh">An array no one else holds yet (its storage object moves with it).</param>
+        /// <returns><paramref name="fresh"/>, now bound to this engine.</returns>
+        private NDArray Bind(NDArray fresh)
+        {
+            // the property's setter writes both the array's and its storage's engine, as a construction with the engine
+            // would have
+            fresh.TensorEngine = this;
+            return fresh;
+        }
+
+        /// <summary>
         ///     An external BLAS this engine delegates its matrix products to, or null (the default)
         ///     to compute them with NumSharp's own managed SIMD kernels.
         /// </summary>

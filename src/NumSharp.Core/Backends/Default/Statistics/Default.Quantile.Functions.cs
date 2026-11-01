@@ -211,7 +211,7 @@ namespace NumSharp.Backends
         /// <exception cref="Exception">Whatever <c>np.asanyarray</c> raises for an object it cannot convert.</exception>
         /// <remarks>The facades pass exactly the first three forms (a C# integer arrives as the array its overload made),
         ///     so their calls take the forms they took before the plan's phase PE.</remarks>
-        internal static NDArray QuantileQ(object q, out QuantileArgument argument)
+        internal NDArray QuantileQ(object q, out QuantileArgument argument)
         {
             switch (q)
             {
@@ -234,7 +234,7 @@ namespace NumSharp.Backends
                 case bool truth:
                 {
                     // A Python bool is an int subclass but not weak: NumPy's q is the strong 0-d bool array.
-                    var made = NDArray.Scalar(truth);
+                    var made = NewScalar(truth);
                     argument = new QuantileArgument(made);
                     return made;
                 }
@@ -323,7 +323,7 @@ namespace NumSharp.Backends
         ///     NumPy's one <c>_ureduce</c> prologue (<see cref="UReduce"/>), so the axes, keepdims' out index and the merge are
         ///     reported before anything the reduction function checks (plan Appendix B1).
         /// </remarks>
-        internal static NDArray QuantileFunction(string op, NDArray a, QuantileArgument q, int[] axes, NDArray @out,
+        internal NDArray QuantileFunction(string op, NDArray a, QuantileArgument q, int[] axes, NDArray @out,
             bool overwrite_input, string method, bool keepdims, NDArray weights, bool chararray)
         {
             // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
@@ -347,7 +347,7 @@ namespace NumSharp.Backends
                     // branch for every dtype (QuantileWeighted).
                     if (weights is not null)
                     {
-                        using var qArray = NDArray.Scalar(value);
+                        using var qArray = NewScalar(value);
                         return QuantileWeighted.Compute(a, qArray, axes, @out, keepdims, method, weights);
                     }
                     // Text: NumPy checks q (above), then the axis and the method; the selection methods (and 'linear' with an
@@ -380,7 +380,7 @@ namespace NumSharp.Backends
                     if (weights is not null)
                     {
                         using var qArray = new NDArray(Unmanaged.ArraySlice.FromArray(values, true),
-                            Shape.Vector(values.Length));   // np.array(values)
+                            Shape.Vector(values.Length)) { TensorEngine = this };   // np.array(values)
                         return QuantileWeighted.Compute(a, qArray, axes, @out, keepdims, method, weights);
                     }
                     if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
@@ -428,7 +428,7 @@ namespace NumSharp.Backends
         ///     errors of <see cref="QuantileFunction"/>.</exception>
         /// <exception cref="InvalidCastException">A q dtype without a real value (complex).</exception>
         /// <exception cref="Exception">The errors of the weighted branch, the text route and <see cref="QuantileCompute"/>.</exception>
-        private static NDArray QuantileOfArray(string op, NDArray a, NDArray q, int[] axes, NDArray @out,
+        private NDArray QuantileOfArray(string op, NDArray a, NDArray q, int[] axes, NDArray @out,
             bool overwrite_input, string method, bool keepdims, NDArray weights, bool chararray)
         {
             // `_quantile_is_valid(q)` at any rank (an empty q of rank other than 1 fails its q.min()). Every branch below
@@ -477,7 +477,7 @@ namespace NumSharp.Backends
         ///     errors of <see cref="QuantileFunction"/>.</exception>
         /// <exception cref="InvalidCastException">A q dtype without a real value (complex).</exception>
         /// <exception cref="Exception">The errors of the weighted branch, the text route and <see cref="QuantileCompute"/>.</exception>
-        private static NDArray PercentileOfArray(string op, NDArray a, NDArray q, int[] axes, NDArray @out,
+        private NDArray PercentileOfArray(string op, NDArray a, NDArray q, int[] axes, NDArray @out,
             bool overwrite_input, string method, bool keepdims, NDArray weights, bool chararray)
         {
             // `np.true_divide(q, 100)` and `_quantile_is_valid` at any rank; q's rank is `_quantile_ureduce_func`'s check,
@@ -545,7 +545,7 @@ namespace NumSharp.Backends
         ///     (NumPy's <c>np.nanmean</c> comes first) and before the reduction function's checks; non-empty data cannot fail
         ///     its merge.
         /// </remarks>
-        internal static NDArray NanQuantileFunction(string op, NDArray a, QuantileArgument q, int[] axes, NDArray @out,
+        internal NDArray NanQuantileFunction(string op, NDArray a, QuantileArgument q, int[] axes, NDArray @out,
             bool overwrite_input, string method, bool keepdims, NDArray weights)
         {
             // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
@@ -570,7 +570,7 @@ namespace NumSharp.Backends
                     // line's non-NaN values (QuantileWeighted).
                     if (weights is not null)
                     {
-                        using var qArray = NDArray.Scalar(value);
+                        using var qArray = NewScalar(value);
                         return QuantileWeighted.Compute(a, qArray, axes, @out, keepdims, method, weights,
                             (op, a, q, axes, @out, overwrite_input, method, keepdims), NanQuantileWithoutWeights);
                     }
@@ -607,7 +607,7 @@ namespace NumSharp.Backends
                     if (weights is not null)
                     {
                         using var qArray = new NDArray(Unmanaged.ArraySlice.FromArray(values, true),
-                            Shape.Vector(values.Length));   // np.array(values)
+                            Shape.Vector(values.Length)) { TensorEngine = this };   // np.array(values)
                         return QuantileWeighted.Compute(a, qArray, axes, @out, keepdims, method, weights,
                             (op, a, q, axes, @out, overwrite_input, method, keepdims), NanQuantileWithoutWeights);
                     }
@@ -650,7 +650,7 @@ namespace NumSharp.Backends
         /// <exception cref="ArgumentNullException">The q array is null.</exception>
         /// <exception cref="TypeError">A text q (NumPy's [0, 1] check or the reduction after it).</exception>
         /// <exception cref="Exception">The other errors of <see cref="NanQuantileFunction"/>.</exception>
-        private static NDArray NanQuantileOfArray(string op, NDArray a, QuantileArgument q, int[] axes, NDArray @out,
+        private NDArray NanQuantileOfArray(string op, NDArray a, QuantileArgument q, int[] axes, NDArray @out,
             bool overwrite_input, string method, bool keepdims, NDArray weights)
         {
             NDArray qArray = q.Array;
@@ -720,7 +720,7 @@ namespace NumSharp.Backends
         /// <exception cref="ArgumentNullException">The q array is null.</exception>
         /// <exception cref="TypeError">A text q (the division's refusal).</exception>
         /// <exception cref="Exception">The other errors of <see cref="NanQuantileFunction"/>.</exception>
-        private static NDArray NanPercentileOfArray(string op, NDArray a, QuantileArgument q, int[] axes, NDArray @out,
+        private NDArray NanPercentileOfArray(string op, NDArray a, QuantileArgument q, int[] axes, NDArray @out,
             bool overwrite_input, string method, bool keepdims, NDArray weights)
         {
             NDArray qArray = q.Array;
@@ -773,7 +773,7 @@ namespace NumSharp.Backends
         /// <returns><see cref="NanQuantileFunction"/>'s answer without weights.</returns>
         /// <exception cref="Exception">The errors of <see cref="NanQuantileFunction"/> (NumPy's checks run again, and pass, before
         ///     the empty input is answered; text data refuses as <c>np.nanmean</c> does).</exception>
-        private static NDArray NanQuantileWithoutWeights(
+        private NDArray NanQuantileWithoutWeights(
             (string op, NDArray a, QuantileArgument q, int[] axes, NDArray @out, bool overwrite_input, string method,
                 bool keepdims) s)
             => NanQuantileFunction(s.op, s.a, s.q, s.axes, s.@out, s.overwrite_input, s.method, s.keepdims, null);

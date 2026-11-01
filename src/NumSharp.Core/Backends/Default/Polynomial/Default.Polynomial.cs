@@ -37,7 +37,7 @@ namespace NumSharp.Backends
             }
 
             if (seq.size == 0)
-                return NDArray.Scalar(1.0);
+                return NewScalar(1.0);
 
             NPTypeCode dt = seq.typecode;
             NDArray onesScalar = NDArray.ones(new Shape(1), dt);
@@ -125,7 +125,7 @@ namespace NumSharp.Backends
             // at zero. Computing in `result_type` up front lets the whole loop reuse two buffers.
             NPTypeCode t = DTypePromotion.ResultType(p, x);
             NDArray xc = x.astype(t);
-            NDArray y = new NDArray(t, x.Shape, true);   // np.zeros(x.shape, t)
+            NDArray y = NewArray(t, x.Shape, true);   // np.zeros(x.shape, t)
 
             // Iterate from k = 0 so the very first `0 * x` reproduces NumPy's `0*inf -> nan` edge.
             for (long k = 0; k < n; k++)
@@ -148,7 +148,7 @@ namespace NumSharp.Backends
             NDArray kk;
             if (k is null)
             {
-                kk = new NDArray(NPTypeCode.Double, new Shape(m), true);   // np.zeros(m)
+                kk = NewArray(NPTypeCode.Double, new Shape(m), true);   // np.zeros(m)
             }
             else
             {
@@ -284,7 +284,7 @@ namespace NumSharp.Backends
                     throw new ValueError("the number of data points must exceed order "
                                          + "to scale the covariance matrix");
 
-                NDArray fac = unscaled ? NDArray.Scalar(1.0) : resids / (double)(x.size - order);
+                NDArray fac = unscaled ? NewScalar(1.0) : resids / (double)(x.size - order);
                 NDArray v = y.ndim == 1 ? vbase * fac : NDArray.expand_dims(vbase, -1) * fac;
                 return new PolyfitResult(c, null, null, null, rc, v);
             }
@@ -323,7 +323,7 @@ namespace NumSharp.Backends
         /// <returns>The sum or difference, in the operator's promoted dtype.</returns>
         /// <exception cref="TypeError">Coefficients the operator has no loop for.</exception>
         [NDScoped]
-        private static NDArray PolyAddSub(NDArray a1, NDArray a2, bool subtract)
+        private NDArray PolyAddSub(NDArray a1, NDArray a2, bool subtract)
         {
             a1 = NDArray.atleast_1d(a1);
             a2 = NDArray.atleast_1d(a2);
@@ -332,9 +332,9 @@ namespace NumSharp.Backends
             long diff = a2.Shape.dimensions[0] - a1.Shape.dimensions[0];
 
             if (diff > 0)
-                a1 = NDArray.concatenate(new[] { new NDArray(a1.dtype, new Shape(diff), true), a1 }, 0, null, null, "same_kind");
+                a1 = NDArray.concatenate(new[] { NewArray(a1.dtype, new Shape(diff), true), a1 }, 0, null, null, "same_kind");
             else if (diff < 0)
-                a2 = NDArray.concatenate(new[] { new NDArray(a2.dtype, new Shape(-diff), true), a2 }, 0, null, null, "same_kind");
+                a2 = NDArray.concatenate(new[] { NewArray(a2.dtype, new Shape(-diff), true), a2 }, 0, null, null, "same_kind");
 
             return subtract ? a1 - a2 : a1 + a2;
         }
@@ -390,7 +390,7 @@ namespace NumSharp.Backends
             NDArray scale = 1.0 / v["0"];
 
             long qlen = Math.Max(m - n + 1, 1);
-            NDArray q = new NDArray(w, new Shape(qlen), true);   // np.zeros(qlen, w)
+            NDArray q = NewArray(w, new Shape(qlen), true);   // np.zeros(qlen, w)
             NDArray r = u.astype(w);
 
             for (long k = 0; k < m - n + 1; k++)
@@ -419,7 +419,7 @@ namespace NumSharp.Backends
 
             // Strip leading near-zero remainder coefficients (NumPy: rtol 1e-14, keep at least one).
             // np.allclose(r[0], 0, rtol=1e-14): this engine's AllClose with np.allclose's atol and equal_nan.
-            while (r.Shape.dimensions[r.ndim - 1] > 1 && AllClose(r["0"], NDArray.Scalar(0.0), 1e-14, 1.0E-8, false))
+            while (r.Shape.dimensions[r.ndim - 1] > 1 && AllClose(r["0"], NewScalar(0.0), 1e-14, 1.0E-8, false))
                 r = r["1:"];
 
             return (q, r);
@@ -435,11 +435,11 @@ namespace NumSharp.Backends
         /// <param name="a">Left 0-D complex scalar.</param>
         /// <param name="b">Right 0-D complex scalar.</param>
         /// <returns>A 0-D complex NDArray holding the naive product.</returns>
-        private static NDArray NaiveComplexScalarMultiply(NDArray a, NDArray b)
+        private NDArray NaiveComplexScalarMultiply(NDArray a, NDArray b)
         {
             System.Numerics.Complex x = a.GetData<System.Numerics.Complex>()[0];
             System.Numerics.Complex y = b.GetData<System.Numerics.Complex>()[0];
-            return NDArray.Scalar(new System.Numerics.Complex(
+            return NewScalar(new System.Numerics.Complex(
                 x.Real * y.Real - x.Imaginary * y.Imaginary,
                 x.Real * y.Imaginary + x.Imaginary * y.Real));
         }
@@ -450,8 +450,8 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="x">The prototype (a plain array: the facades' class rules ran before the engine).</param>
         /// <returns>A fresh array of zeros the caller owns.</returns>
-        private static NDArray PolyZerosLike(NDArray x)
-            => new NDArray(x.dtype, Shape.NewLikeLayout(x.Shape, 'K', (long[])x.Shape.dimensions.Clone()), true);
+        private NDArray PolyZerosLike(NDArray x)
+            => NewArray(x.dtype, Shape.NewLikeLayout(x.Shape, 'K', (long[])x.Shape.dimensions.Clone()), true);
 
         /// <summary>
         ///     NumPy's <c>mintypecode(dtype.char)</c> as applied by <c>poly</c>: the smallest floating type
@@ -481,7 +481,7 @@ namespace NumSharp.Backends
             // Indices of the non-zero coefficients (over the flattened array).
             NDArray nonZero = NonZero(NDArray.ravel(p, 'C'))[0];   // np.nonzero(np.ravel(p))[0]
             if (nonZero.size == 0)
-                return new NDArray(Unmanaged.ArraySlice.FromArray(new double[0], true), Shape.Vector(0));   // all zeros -> no roots (empty float64)
+                return new NDArray(Unmanaged.ArraySlice.FromArray(new double[0], true), Shape.Vector(0)) { TensorEngine = this };   // all zeros -> no roots (empty float64)
 
             long first = nonZero.GetAtIndex<long>(0);
             long last = nonZero.GetAtIndex<long>((int)(nonZero.size - 1));
@@ -505,13 +505,13 @@ namespace NumSharp.Backends
             }
             else
             {
-                rootsArr = new NDArray(Unmanaged.ArraySlice.FromArray(new double[0], true), Shape.Vector(0));
+                rootsArr = new NDArray(Unmanaged.ArraySlice.FromArray(new double[0], true), Shape.Vector(0)) { TensorEngine = this };
             }
 
             // Tack the zero-roots onto the back.
             // np.hstack(rootsArr, np.zeros(trailing))'s statement: atleast_1d of each, then the concatenation along the
             // first axis when the first array is 1-D (else the second).
-            var parts = new[] { NDArray.atleast_1d(rootsArr), NDArray.atleast_1d(new NDArray(rootsArr.typecode, new Shape(trailing), true)) };
+            var parts = new[] { NDArray.atleast_1d(rootsArr), NDArray.atleast_1d(NewArray(rootsArr.typecode, new Shape(trailing), true)) };
             return NDArray.concatenate(parts, parts[0].Shape.dimensions.Length == 1 ? 0 : 1, null, null, "same_kind");
         }
 

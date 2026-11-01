@@ -101,7 +101,7 @@ namespace NumSharp.Backends
             var resultShape = yShape.Clean();
 
             // Allocate result
-            var result = new NDArray(resultType, resultShape, false);
+            var result = NewArray(resultType, resultShape, false);
 
             // Classify execution path using strides
             ExecutionPath path;
@@ -149,10 +149,10 @@ namespace NumSharp.Backends
         ///     where NumPy's loop is float16 / float32 / float64), its own shape (a (0, 1) operand against a (5,) one gave
         ///     (0, 1), NumPy (0, 5)) and no broadcast error.
         /// </remarks>
-        private static NDArray EmptyBinaryResult(NDArray a, NDArray b, NPTypeCode loopType)
+        private NDArray EmptyBinaryResult(NDArray a, NDArray b, NPTypeCode loopType)
         {
             var (shape, _) = Broadcast(a.Shape, b.Shape);
-            return new NDArray(loopType, shape.Clean(), false);
+            return NewArray(loopType, shape.Clean(), false);
         }
 
         /// <summary>
@@ -218,7 +218,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Execute scalar x scalar ATan2 operation.
         /// </summary>
-        private static NDArray ExecuteATan2ScalarScalar(
+        private NDArray ExecuteATan2ScalarScalar(
             NDArray y, NDArray x,
             NPTypeCode yType, NPTypeCode xType, NPTypeCode resultType)
         {
@@ -231,12 +231,12 @@ namespace NumSharp.Backends
             // Convert to result type
             return resultType switch
             {
-                NPTypeCode.Half => NDArray.Scalar((Half)result),
-                NPTypeCode.Single => NDArray.Scalar((float)result),
-                NPTypeCode.Double => NDArray.Scalar(result),
-                NPTypeCode.Decimal => NDArray.Scalar(Utilities.DecimalMath.ATan2(
+                NPTypeCode.Half => NewScalar((Half)result),
+                NPTypeCode.Single => NewScalar((float)result),
+                NPTypeCode.Double => NewScalar(result),
+                NPTypeCode.Decimal => NewScalar(Utilities.DecimalMath.ATan2(
                     ConvertToDecimal(y, yType), ConvertToDecimal(x, xType))),
-                _ => NDArray.Scalar(result)
+                _ => NewScalar(result)
             };
         }
 

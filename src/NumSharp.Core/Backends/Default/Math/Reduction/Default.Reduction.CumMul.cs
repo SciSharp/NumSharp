@@ -121,8 +121,7 @@ namespace NumSharp.Backends
             {
                 var emptyRetType = typeCode ?? arr.GetTypeCode.GetAccumulatingType();
 
-                return new NDArray(emptyRetType,
-                    axis_ == null ? Shape.Vector(shape.size) : Shape.Adopt(shape.dimensions), false);
+                return NewArray(emptyRetType, axis_ == null ? Shape.Vector(shape.size) : Shape.Adopt(shape.dimensions), false);
             }
 
             // 0-d scalar or single-element 1-D: cumprod is the value itself, promoted to the
@@ -161,7 +160,7 @@ namespace NumSharp.Backends
             // Create output with CONTIGUOUS strides even if input is broadcast.
             var outputShape = Shape.Adopt(shape.dimensions);  // Fresh contiguous shape
             var retTypeCode = typeCode ?? (inputArr.GetTypeCode.GetAccumulatingType());
-            var ret = new NDArray(retTypeCode, outputShape, false);
+            var ret = NewArray(retTypeCode, outputShape, false);
 
             // Fast path: use IL-generated axis kernel when available
             // Note: We only use the IL kernel for contiguous arrays without offset, as it doesn't

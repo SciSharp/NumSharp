@@ -45,7 +45,7 @@ namespace NumSharp.Backends
             // zero buffer faults its demand-zero pages during the native write (~31us on 128x128 gemm).
             // (Default.MatMul.cs's batched path keeps fillZeros:true — its k==0 branch relies on it.)
             var resultType = np._FindCommonArrayType(left.GetTypeCode, right.GetTypeCode);
-            NDArray result = @out ?? new NDArray(resultType, Shape.Matrix(M, N), fillZeros: false);
+            NDArray result = @out ?? NewArray(resultType, Shape.Matrix(M, N), fillZeros: false);
 
             if (!(@out is null))
             {

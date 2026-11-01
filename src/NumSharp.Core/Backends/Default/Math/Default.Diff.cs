@@ -126,7 +126,7 @@ namespace NumSharp.Backends
         ///     has length ≥ 2.
         ///     </para>
         /// </summary>
-        private static unsafe NDArray DiffAdjacentContiguous(NDArray a, int axis)
+        private unsafe NDArray DiffAdjacentContiguous(NDArray a, int axis)
         {
             NPTypeCode dt = a.GetTypeCode;
             var kernel = DirectILKernelGenerator.GetAdjacentDiffKernel(dt);
@@ -147,7 +147,7 @@ namespace NumSharp.Backends
             }
             outDims[nd - 1] = inLen - 1;
 
-            var outp = new NDArray(a.dtype, Shape.Adopt(outDims), false);
+            var outp = NewArray(a.dtype, Shape.Adopt(outDims), false);
             if (outp.size == 0) return outp;
 
             int elemSize = a.dtypesize;
@@ -209,7 +209,7 @@ namespace NumSharp.Backends
         ///     emitter rejects the dtype, signalling the caller to fall back to
         ///     the <c>-</c> operator.
         /// </summary>
-        private static unsafe NDArray DiffSubtractViaNDIter(NDArray hi, NDArray lo)
+        private unsafe NDArray DiffSubtractViaNDIter(NDArray hi, NDArray lo)
         {
             NPTypeCode dt = hi.GetTypeCode;
 
@@ -217,7 +217,7 @@ namespace NumSharp.Backends
             int nd = hi.ndim;
             long[] dims = new long[nd];
             for (int i = 0; i < nd; i++) dims[i] = hi.Shape.dimensions[i];
-            var outp = new NDArray(hi.dtype, Shape.Adopt(dims), false);
+            var outp = NewArray(hi.dtype, Shape.Adopt(dims), false);
 
             // Empty result: the NDIter element-wise path must not run over zero
             // elements (it walks broadcast dims as if non-empty). Nothing to do.

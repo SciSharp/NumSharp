@@ -473,8 +473,8 @@ namespace NumSharp.Backends
             // reversed reduced dims) is exactly the order the streams below write it in. Disposed on an exception
             // so a failing kernel does not strand its buffer.
             var result = fOrder && reducedShape.NDim > 1
-                ? new NDArray(childType, Shape.Adopt((long[])reducedShape.dimensions.Clone(), 'F'), false)
-                : new NDArray(childType, reducedShape, false);
+                ? NewArray(childType, Shape.Adopt((long[])reducedShape.dimensions.Clone(), 'F'), false)
+                : NewArray(childType, reducedShape, false);
             NDExpr.StreamingReductions++;
             try
             {
@@ -825,7 +825,7 @@ namespace NumSharp.Backends
         /// <exception cref="Exception">Whatever the child kernel raises mid-stream — e.g. <see cref="OverflowException"/>
         /// from a Decimal child's arithmetic, or a <c>Call</c> node's delegate — propagates unchanged after the partially
         /// written result is disposed (the declines above are checked first, so no exception means "fall back").</exception>
-        private static unsafe NDArray TryStreamAxisBoolFold(NDExprProgram program, NDArray[] inputs, int axis,
+        private unsafe NDArray TryStreamAxisBoolFold(NDExprProgram program, NDArray[] inputs, int axis,
             NDExprReduceKind kind, NPTypeCode accType, Shape reducedShape)
         {
             bool any = kind == NDExprReduceKind.Any;
@@ -917,8 +917,8 @@ namespace NumSharp.Backends
             // UNINITIALIZED: every output is written (Any / All seed their slab, the count clears its own). Disposed on an
             // exception so a failing kernel does not strand its buffer.
             var result = fOrder && reducedShape.NDim > 1
-                ? new NDArray(accType, Shape.Adopt((long[])reducedShape.dimensions.Clone(), 'F'), false)
-                : new NDArray(accType, reducedShape, false);
+                ? NewArray(accType, Shape.Adopt((long[])reducedShape.dimensions.Clone(), 'F'), false)
+                : NewArray(accType, reducedShape, false);
             NDExpr.StreamingReductions++;
             try
             {
@@ -1250,9 +1250,9 @@ namespace NumSharp.Backends
         /// <param name="slot">The 16-byte accumulator slot (value at offset 0, dtype <paramref name="t"/>).</param>
         /// <param name="t">The accumulator / result dtype.</param>
         /// <returns>The 0-d result.</returns>
-        private static unsafe NDArray ScalarFromSlot(byte* slot, NPTypeCode t)
+        private unsafe NDArray ScalarFromSlot(byte* slot, NPTypeCode t)
         {
-            var r = new NDArray(t, Shape.NewScalar(), false);
+            var r = NewArray(t, Shape.NewScalar(), false);
             NDIterCasting.ConvertValue(slot, (byte*)r.Address + (long)r.Shape.offset * t.SizeOf(), t, t);
             return r;
         }

@@ -56,7 +56,7 @@ namespace NumSharp.Backends
         /// <exception cref="NotSupportedException">A <c>StringDType</c> set whose NA object is a sequence or an array, held by
         ///     an NA cell: NumPy compares the element against that sequence ELEMENTWISE (a broadcast), which this does not
         ///     model.</exception>
-        private static NDArray IsinVString(NDArray element, NDArray test_elements, bool invert, string kind)
+        private NDArray IsinVString(NDArray element, NDArray test_elements, bool invert, string kind)
         {
             if (kind == "table")
                 throw new ValueError("The 'table' method is only supported for boolean or integer arrays. "
@@ -77,14 +77,14 @@ namespace NumSharp.Backends
         /// <exception cref="NotSupportedException">See <see cref="IsinVString"/>.</exception>
         /// <remarks>Scoped: the ravels and the per-number comparisons are reclaimed; only the answer survives.</remarks>
         [NDScoped]
-        private static NDArray IsinVStringFlat(NDArray element, NDArray test_elements, bool invert)
+        private NDArray IsinVStringFlat(NDArray element, NDArray test_elements, bool invert)
         {
             NDArray ar1 = NDArray.ravel(element, 'C');
             NDArray ar2 = NDArray.ravel(test_elements, 'C');
             using var set = new IsinObjects();
             set.Collect(ar2);
             long n1 = ar1.size;
-            var mask = new NDArray(NPTypeCode.Boolean, Shape.Vector(n1), false);
+            var mask = NewArray(NPTypeCode.Boolean, Shape.Vector(n1), false);
             if (n1 == 0)
                 return mask;
 

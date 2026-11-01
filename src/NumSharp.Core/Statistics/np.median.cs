@@ -53,7 +53,7 @@ namespace NumSharp
             // a numpy.char.chararray operand: _median partitions the chararray, and chararray.partition is the STRING
             // partition (NDCharArrayBoundary): NumPy's TypeError, or the string partition's own answer (MedianOfChararray)
             if (NDCharArrayBoundary.Sees(a))
-                throw DefaultEngine.MedianOfChararray(a, axis.HasValue ? new[] { axis.Value } : null, @out, overwrite_input, keepdims);
+                throw DefaultEngine.Of(a).MedianOfChararray(a, axis.HasValue ? new[] { axis.Value } : null, @out, overwrite_input, keepdims);
             // NumPy's np.median body (the text routes, then the numeric median) is TensorEngine.Median's: the facade
             // holds only the class rules above.
             // NumPy's _ureduce turns an int axis into a 1-tuple: the engine member takes the axes as an array.
@@ -106,7 +106,7 @@ namespace NumSharp
             // a numpy.char.chararray operand (decided before the matrix region below, which would hide it): the STRING
             // partition's answer (MedianOfChararray, NDCharArrayBoundary)
             if (NDCharArrayBoundary.Sees(a))
-                throw DefaultEngine.MedianOfChararray(a, axis, @out, overwrite_input, keepdims);
+                throw DefaultEngine.Of(a).MedianOfChararray(a, axis, @out, overwrite_input, keepdims);
             using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // NumPy's np.median body (the text routes, then the numeric median) is TensorEngine.Median's: the facade
             // holds only the class rules above.

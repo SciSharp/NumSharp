@@ -357,7 +357,7 @@ namespace NumSharp.Backends
                     }
                 }
 
-                var r = NDArray.Scalar(result);
+                var r = NewScalar(result);
                 if (keepdims)
                 {
                     var keepdimsShape = new long[arr.ndim];
@@ -395,7 +395,7 @@ namespace NumSharp.Backends
                     throw new NotSupportedException($"NaN reductions only support float/double/half, got {arr.GetTypeCode}");
             }
 
-            var r = NDArray.Scalar(result);
+            var r = NewScalar(result);
             if (keepdims)
             {
                 var keepdimsShape = new long[arr.ndim];
@@ -852,7 +852,7 @@ namespace NumSharp.Backends
                 System.Numerics.Complex sum;
                 using (var iter = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP))
                     sum = iter.ExecuteReducing<NanSumComplexKernel, System.Numerics.Complex>(default, System.Numerics.Complex.Zero);
-                var r = NDArray.Scalar(sum);
+                var r = NewScalar(sum);
                 if (keepdims)
                 {
                     var ks = new long[arr.ndim];
@@ -892,7 +892,7 @@ namespace NumSharp.Backends
         {
             var tc = arr.GetTypeCode;
             using var isNaN = IsNan(arr);
-            using var fill = NDArray.Scalar(op == ReductionOp.NanProd ? tc.GetOneValue() : tc.GetDefaultValue(), tc);
+            using var fill = NewScalar(op == ReductionOp.NanProd ? tc.GetOneValue() : tc.GetDefaultValue(), tc);
             using var replaced = NDArray.where(isNaN, fill, arr);
             return op == ReductionOp.NanProd
                 ? ReduceProduct(replaced, axis, keepdims: keepdims)

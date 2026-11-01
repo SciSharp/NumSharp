@@ -1870,7 +1870,7 @@ namespace NumSharp.Backends
                 return null;
 
             var t = arr.GetTypeCode;
-            var r = new NDArray(t, Shape.Scalar, false);
+            var r = NewArray(t, Shape.Scalar, false);
             Buffer.MemoryCopy(&slot, (byte*)r.Address + r.Shape.offset * t.SizeOf(), t.SizeOf(), t.SizeOf());
             return r;
         }

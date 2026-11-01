@@ -206,7 +206,7 @@ namespace NumSharp.Backends
         /// <exception cref="InvalidOperationException">The division did not refuse (a wiring error: it always does for
         ///     text).</exception>
         [NDScoped] // the keepdims view, the merged and partitioned data, the middle slice and the numeric sum are this call's own
-        private static void ThrowMedianIntoTextOut(NDArray a, int[] axes, NDArray @out, bool keepdims)
+        private void ThrowMedianIntoTextOut(NDArray a, int[] axes, NDArray @out, bool keepdims)
         {
             // _ureduce, the family's one prologue (UReduce): `axis = _nx.normalize_axis_tuple(axis, nd)` (every axis checked,
             // then the repeats), keepdims' `out[(Ellipsis,) + index_out]` (index 0 on every reduced axis, every axis without an
@@ -292,7 +292,7 @@ namespace NumSharp.Backends
         /// <exception cref="IndexError">keepdims with an <paramref name="out"/> NumPy cannot index (thrown here).</exception>
         /// <exception cref="IncorrectShapeException">Several reduced axes beside a kept axis of length 0 (the merge
         ///     reshape, thrown here).</exception>
-        internal static Exception MedianOfChararray(NDArray a, int[] axes, NDArray @out, bool overwrite_input, bool keepdims)
+        internal Exception MedianOfChararray(NDArray a, int[] axes, NDArray @out, bool overwrite_input, bool keepdims)
         {
             int nd = a.ndim;
             // The plain view the remaining statements read: no subclass rule may run on them.

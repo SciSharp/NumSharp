@@ -85,7 +85,7 @@ namespace NumSharp.Backends
                 // scl = avg_as_array.dtype.type(a.size / avg_as_array.size): only a NaN-like NA mean (np.float64) returns,
                 // always 0-d (an axis or keepdims meets the divide's refusal first), so the count is NumPy's float64 SCALAR
                 // (NumSharp's stand-in: a read-only 0-d owner) and needs no broadcast.
-                var sclValue = NDArray.Scalar((double)a.size / avg.size).MarkReductionScalar();
+                var sclValue = NewScalar((double)a.size / avg.size).MarkReductionScalar();
                 return (scope.Returns(avg), scope.Returns(sclValue));
             }
             if (Backends.Strings.NDStringUfuncs.IsString(a))
@@ -116,7 +116,7 @@ namespace NumSharp.Backends
                 // stand-in: a read-only 0-d owner); `np.broadcast_to(scl, avg_as_array.shape).copy()` then makes it a fresh
                 // array wherever the mean has dimensions.
                 double count = (double)a.size / avg.size;
-                NDArray scl = NDArray.Scalar(count).astype(avg.typecode).MarkReductionScalar();
+                NDArray scl = NewScalar(count).astype(avg.typecode).MarkReductionScalar();
                 if (!scl.Shape.dimensions.SequenceEqual(avg.Shape.dimensions))
                     scl = NDArray.broadcast_to(scl, avg.Shape).copy();
                 return (scope.Returns(avg), scope.Returns(scl));
@@ -188,7 +188,7 @@ namespace NumSharp.Backends
         ///     more, a 0-d operand, and hosts without dynamic code.
         ///     </para>
         /// </remarks>
-        private static NDArray SumOfProducts(NDArray a, NDArray wgt, NPTypeCode resultDtype, int[] axes, bool keepdims)
+        private NDArray SumOfProducts(NDArray a, NDArray wgt, NPTypeCode resultDtype, int[] axes, bool keepdims)
         {
             bool flat = axes is null || axes.Length == a.ndim;
             if (DirectILKernelGenerator.Enabled && a.ndim > 0
@@ -222,11 +222,11 @@ namespace NumSharp.Backends
         /// <param name="x">The operand whose dimensions the result takes.</param>
         /// <param name="y">The other operand, broadcastable to <paramref name="x"/>.</param>
         /// <returns>An uninitialized array of <paramref name="x"/>'s dimensions in NumPy's layout.</returns>
-        private static NDArray UfuncResultBuffer(NPTypeCode dtype, NDArray x, NDArray y)
+        private NDArray UfuncResultBuffer(NPTypeCode dtype, NDArray x, NDArray y)
         {
             // A private copy of the dimensions: NpyIterOutputShape adopts the array it is handed.
             var dims = x.ndim == 0 ? Array.Empty<long>() : (long[])x.Shape.dimensions.Clone();
-            return new NDArray(dtype, Shape.NpyIterOutputShape(dims, new[] { x.Shape, y.Shape }), false);
+            return NewArray(dtype, Shape.NpyIterOutputShape(dims, new[] { x.Shape, y.Shape }), false);
         }
 
         /// <summary>
@@ -240,7 +240,7 @@ namespace NumSharp.Backends
         /// <param name="scl">The weight sum (the result dtype; broadcastable to <paramref name="num"/>: its kept axes are
         ///     <paramref name="num"/>'s or 1).</param>
         /// <returns>The average: a read-only 0-d scalar, or a fresh array of <paramref name="num"/>'s dimensions.</returns>
-        private static NDArray Quotient(NDArray num, NDArray scl)
+        private NDArray Quotient(NDArray num, NDArray scl)
         {
             if (num.ndim == 0 && scl.ndim == 0)
                 return num.TensorEngine.Divide(num, scl, null, null, null).MarkReductionScalar();
@@ -277,7 +277,7 @@ namespace NumSharp.Backends
         ///     identity and divided by 1 in the mean's dtype: a float64 copy of an integer operand, a -0.0 made +0.0. A decimal
         ///     operand over axes that hold no element gives float64 NaN, as np.mean answers decimal.</returns>
         /// <exception cref="OverflowException">A decimal sum leaves decimal's range.</exception>
-        private static NDArray MeanWithAxes(NDArray a, int[] axes, bool keepdims)
+        private NDArray MeanWithAxes(NDArray a, int[] axes, bool keepdims)
         {
             // One axis is np.mean along it - tested first: a 1-D operand's (0,) keeps the one-output axis route, which
             // follows NumPy's schedule where the flat route still declines (a broadcast operand). None and a tuple of every
@@ -286,7 +286,7 @@ namespace NumSharp.Backends
             if (axes is null || axes.Length == a.ndim) return a.TensorEngine.Mean(a, null, null, keepdims);
             // Any other set: ONE reduction over the whole set. A mean of single-axis means rounds after each axis, and the
             // empty tuple is still a sum (of one element per output) and a division.
-            return Backends.DefaultEngine.MeanOverAxes(a, axes, keepdims);
+            return MeanOverAxes(a, axes, keepdims);
         }
 
         /// <summary>
@@ -304,7 +304,7 @@ namespace NumSharp.Backends
         ///     float16, float32, float64, complex128 or decimal (the weighted fallback reaches float16, complex128 and
         ///     decimal).</exception>
         /// <exception cref="OverflowException">A decimal sum leaves decimal's range.</exception>
-        private static NDArray SumWithAxes(NDArray a, int[] axes, NPTypeCode dtype, bool keepdims)
+        private NDArray SumWithAxes(NDArray a, int[] axes, NPTypeCode dtype, bool keepdims)
         {
             // One axis is np.sum along it (tested first, as in MeanWithAxes); None and a tuple of every axis are one
             // reduction (the flat sum).
@@ -314,7 +314,7 @@ namespace NumSharp.Backends
                 return a.TensorEngine.Sum(a, null, dtype, keepdims);
             // Any other set: ONE reduction over the whole set (a sum of single-axis sums rounds after each axis; the empty
             // tuple adds each element to the identity, it does not return the operand).
-            return Backends.DefaultEngine.ReduceAddOverAxes(a, axes, keepdims, dtype);
+            return ReduceAddOverAxes(a, axes, keepdims, dtype);
         }
 
         /// <summary>
@@ -427,10 +427,10 @@ namespace NumSharp.Backends
         /// <param name="scl">The weight sum.</param>
         /// <returns>True when some element is zero.</returns>
         [NDScoped] // bool boundary: the zero scalar, its astype and the == mask are all reclaimed here
-        private static bool HasZero(NDArray scl)
+        private bool HasZero(NDArray scl)
         {
             if (scl.size == 0) return false;
-            NDArray zero = NDArray.Scalar(0).astype(scl.typecode);
+            NDArray zero = NewScalar(0).astype(scl.typecode);
             NDArray isZero = scl == zero;
             return isZero.TensorEngine.Any(isZero);
         }

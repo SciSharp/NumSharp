@@ -68,7 +68,7 @@ namespace NumSharp.Backends
         /// <exception cref="ValueError">A range whose lower edge exceeds its upper one; a non-finite range; a data minimum or
         ///     maximum with a non-finite part, printed as NumPy prints complex scalars
         ///     (<c>autodetected range of [(nan+0j), (nan+0j)] is not finite</c>, <c>[infj, (1+1j)]</c>).</exception>
-        private static ComplexOuterEdges GetComplexOuterEdges(NDArray a, (double, double)? range)
+        private ComplexOuterEdges GetComplexOuterEdges(NDArray a, (double, double)? range)
         {
             if (range.HasValue)
             {
@@ -109,7 +109,7 @@ namespace NumSharp.Backends
         /// <returns>The complex128 edges with the parameters of the equal-width counting.</returns>
         /// <exception cref="ValueError">Two consecutive edges that do not increase (<c>Too many bins for data range. Cannot
         ///     create {nbins} finite-sized bins.</c>).</exception>
-        private static BinEdgesResult ComplexEqualWidthResult(int nbins, ComplexOuterEdges edges)
+        private BinEdgesResult ComplexEqualWidthResult(int nbins, ComplexOuterEdges edges)
         {
             NDArray binEdges = ComplexEqualWidthEdges(edges, nbins);
             if (AnyNonIncreasing(binEdges))
@@ -146,7 +146,7 @@ namespace NumSharp.Backends
         ///     every candidate count before it picks one, as NumPy does, so an error of the complex counting surfaces from
         ///     there first.
         /// </remarks>
-        private static int ComplexEstimatorBinCount(NDArray a, string binName, (double, double)? range, out ComplexOuterEdges edges)
+        private int ComplexEstimatorBinCount(NDArray a, string binName, (double, double)? range, out ComplexOuterEdges edges)
         {
             edges = GetComplexOuterEdges(a, range);
 
@@ -243,7 +243,7 @@ namespace NumSharp.Backends
         ///     product with a scalar operand), or, when the step underflows to zero, <c>y /= div; y *= delta</c>; then
         ///     <c>y += start</c> and <c>y[-1] = stop</c>.
         /// </remarks>
-        private static NDArray ComplexEqualWidthEdges(ComplexOuterEdges edges, int nbins)
+        private NDArray ComplexEqualWidthEdges(ComplexOuterEdges edges, int nbins)
         {
             int num = nbins + 1;
             if (!edges.Strong)
@@ -254,10 +254,10 @@ namespace NumSharp.Backends
             }
 
             int div = num - 1; // num >= 2
-            using NDArray start = NDArray.Scalar(edges.First);
-            using NDArray stop = NDArray.Scalar(edges.Last);
+            using NDArray start = NewScalar(edges.First);
+            using NDArray stop = NewScalar(edges.Last);
             using NDArray delta = stop.TensorEngine.Subtract(stop, start, null, null, null);
-            using NDArray divisor = NDArray.Scalar(new Complex(div, 0));
+            using NDArray divisor = NewScalar(new Complex(div, 0));
             using NDArray step = delta.TensorEngine.Divide(delta, divisor, null, null, null);
             // np.arange(num) as complex128
             NDArray y = UnmanagedStorage.ArangeObj(0L, (long)num, 1L, null).astype(NPTypeCode.Complex);
@@ -294,12 +294,12 @@ namespace NumSharp.Backends
         ///     <c>(x - first_edge) / (last_edge - first_edge) * n</c>, which mixes in the imaginary parts whenever the outer
         ///     edges have different imaginary parts.
         /// </remarks>
-        private static NDArray HistogramUniformComplexData(NDArray raveled, NDArray w, BinEdgesResult be, NPTypeCode ntype)
+        private NDArray HistogramUniformComplexData(NDArray raveled, NDArray w, BinEdgesResult be, NPTypeCode ntype)
         {
             long len = raveled.size;
             int nbins = be.NBins;
             NDArray binEdges = be.Edges;
-            NDArray n = new NDArray(ntype, Shape.Vector(nbins), true);
+            NDArray n = NewArray(ntype, Shape.Vector(nbins), true);
             if (len == 0)
                 return n;
 
@@ -308,9 +308,9 @@ namespace NumSharp.Backends
             // norm_numerator = n_equal_bins; norm_denom = _unsigned_subtract(last_edge, first_edge): complex128 for the data's
             // edges, float64 for a range's (no signed-to-unsigned mapping applies to either).
             using NDArray normDenom = lastEdge.TensorEngine.Subtract(lastEdge, firstEdge, null, null, null);
-            using NDArray numerator = NDArray.Scalar((long)nbins);
-            using NDArray one = NDArray.Scalar(1L);
-            using NDArray lastIndex = NDArray.Scalar((long)nbins - 1);
+            using NDArray numerator = NewScalar((long)nbins);
+            using NDArray one = NewScalar(1L);
+            using NDArray lastIndex = NewScalar((long)nbins - 1);
             bool complexWeights = ntype == NPTypeCode.Complex;
 
             for (long start = 0; start < len; start += HistogramBlock)

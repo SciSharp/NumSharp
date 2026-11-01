@@ -133,7 +133,8 @@ namespace NumSharp.Backends
             // No zero-fill: the three regions (left ramp + middle + right ramp) write EVERY one of
             // the outLen positions exactly once (nLeft + mid + nRight == outLen), so a zeroing pass
             // would only be redundant writes on the memory-bound common case.
-            var result = new NDArray(retType, Shape.Vector(SlidingOutputLength(n1, n2, mode)), false);
+            // the correlation binds the data operand's engine, the engine whose np.correlate / np.convolve this is
+            var result = data.TensorEngine.NewArray(retType, Shape.Vector(SlidingOutputLength(n1, n2, mode)), false);
             unsafe
             {
                 SlidingCorrelateInto((void*)data.Address, n1, (void*)kernel.Address, n2, (void*)result.Address, retType, mode,

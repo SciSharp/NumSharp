@@ -8,7 +8,9 @@ namespace NumSharp.Tests.Backends
     ///     else decides. An array binds its engine once, at creation, so assigning the default reaches the arrays created
     ///     afterwards (through chained operations, views, reductions and the functions without an operand), while the arrays
     ///     that already exist keep theirs; <see cref="BackendFactory.GetEngine(BackendType)"/> forwards to it, and null
-    ///     restores the built-in <see cref="DefaultEngine"/>.
+    ///     restores the built-in <see cref="DefaultEngine"/>. An engine binds the results it computes to itself
+    ///     (<c>TensorEngine.NewArray</c> / <c>NewScalar</c>) and a view binds its source's engine, so an engine assigned to
+    ///     one array keeps computing everything derived from it.
     /// </summary>
     [TestClass]
     [DoNotParallelize /* assigns the process-wide TensorEngine.Default, which every array created meanwhile would bind */]
@@ -153,7 +155,8 @@ namespace NumSharp.Tests.Backends
         }
 
         /// <summary>
-        ///     An array bound before the assignment keeps its engine: its operations do not reach the new default.
+        ///     An array bound before the assignment keeps its engine: its operations do not reach the new default, and their
+        ///     results stay on the array's own engine (the engine that computed them).
         /// </summary>
         [TestMethod]
         public void ArraysThatExist_KeepTheirEngine_WhenTheDefaultChanges()
@@ -167,11 +170,81 @@ namespace NumSharp.Tests.Backends
                 before.TensorEngine.Should().BeSameAs(builtIn, "an array binds its engine once, when it is created");
                 using var sum = before + before;
                 counting.Adds.Should().Be(0, "the existing array's own engine computed the addition");
+                sum.TensorEngine.Should().BeSameAs(builtIn, "an engine binds its results to itself, not to the default");
             }
             finally
             {
                 TensorEngine.Default = null;
             }
+        }
+
+        /// <summary>
+        ///     An engine assigned to ONE array (the default untouched) computes that array's operations, and every result it
+        ///     computes binds it too, so a chain keeps running there: elementwise, unary, comparison, reductions flat and
+        ///     along an axis, scans, sorting, set and search functions, products, the linalg and FFT sub-engines, and the
+        ///     0-d results of a 0-d operation. Views (slices, rows, transposes, reshapes, a boolean mask's gather) keep the
+        ///     source's engine.
+        /// </summary>
+        [TestMethod]
+        public void AnEngineOnOneArray_BindsEveryResultItComputes()
+        {
+            var counting = new CountingEngine();
+            NDArray A() { var x = np.arange(12.0).reshape(3, 4); x.TensorEngine = counting; return x; }
+            NDArray V() { var x = np.array(new[] { 3.0, 1.0, 2.0, 5.0 }); x.TensorEngine = counting; return x; }
+            NDArray M() { var x = np.array(new double[,] { { 2, 1 }, { 1, 3 } }); x.TensorEngine = counting; return x; }
+
+            var results = new (string what, NDArray result)[]
+            {
+                ("a + a", A() + A()), ("np.sqrt", np.sqrt(A())), ("a > 3", A() > 3), ("np.clip", np.clip(A(), 1, 5)),
+                ("np.sum flat", np.sum(A())), ("np.sum axis", np.sum(A(), 0)), ("np.mean", np.mean(A())),
+                ("np.std", np.std(A())), ("np.amax", np.amax(A())), ("np.ptp", np.ptp(A())), ("np.nansum", np.nansum(A())),
+                ("np.argmax axis", np.argmax(A(), 0)), ("np.cumsum", np.cumsum(A())), ("np.median", np.median(A())),
+                ("np.quantile", np.quantile(A(), 0.5, 0)), ("np.diff", np.diff(V())), ("np.sort", np.sort(V())),
+                ("np.argsort", np.argsort(V())), ("np.unique", (NDArray)np.unique(V())), ("np.nonzero", np.nonzero(A())[0]),
+                ("np.dot", np.dot(M(), M())), ("np.inner", np.inner(V(), V())), ("np.convolve", np.convolve(V(), V())),
+                ("np.linalg.inv", np.linalg.inv(M())), ("np.linalg.det", np.linalg.det(M())), ("np.fft.fft", np.fft.fft(V())),
+                ("a.astype", A().astype(np.float32)), ("a.copy()", A().copy()),
+                ("a[1:3]", A()["1:3"]), ("a[1]", A()[1]), ("a.T", A().T), ("a.reshape", A().reshape(4, 3)),
+                ("a[mask]", A()[A() > 3]),
+            };
+            foreach (var (what, result) in results)
+                result.TensorEngine.Should().BeSameAs(counting, what);
+
+            // a chain: each step runs on the engine its operand's previous step bound
+            var a = A();
+            counting.Adds = counting.Sqrts = counting.Sums = 0;
+            var chained = np.sum(np.sqrt(a + a), 0);
+            (counting.Adds, counting.Sqrts, counting.Sums).Should().Be((1, 1, 1));
+            chained.TensorEngine.Should().BeSameAs(counting);
+
+            // a 0-d operation's result too (the engine's NewScalar route)
+            var zeroD = NDArray.Scalar(4.0);
+            zeroD.TensorEngine = counting;
+            np.sqrt(zeroD).TensorEngine.Should().BeSameAs(counting);
+            TensorEngine.Default.Should().NotBeSameAs(counting, "nothing here assigned the default");
+        }
+
+        /// <summary>
+        ///     The array object's functions create their arrays on <see cref="TensorEngine.Default"/> (no engine computes
+        ///     them), while a view, a copy or a cast of an operand keeps the operand's engine.
+        /// </summary>
+        [TestMethod]
+        public void ArrayObjectFunctions_BindTheDefault_ViewsAndCopiesKeepTheOperandsEngine()
+        {
+            var counting = new CountingEngine();
+            var a = np.arange(6.0).reshape(2, 3);
+            a.TensorEngine = counting;
+
+            np.concatenate(new[] { a, a }).TensorEngine.Should().BeSameAs(TensorEngine.Default);
+            np.zeros_like(a).TensorEngine.Should().BeSameAs(TensorEngine.Default);
+            np.take(a, np.array(new[] { 0, 5 })).TensorEngine.Should().BeSameAs(TensorEngine.Default);
+
+            np.copy(a).TensorEngine.Should().BeSameAs(counting);
+            np.transpose(a).TensorEngine.Should().BeSameAs(counting);
+            np.expand_dims(a, 0).TensorEngine.Should().BeSameAs(counting);
+            a["::-1"].TensorEngine.Should().BeSameAs(counting);
+            a[":, 1:"].TensorEngine.Should().BeSameAs(counting, "a strided view");
+            a["5:9"].TensorEngine.Should().BeSameAs(counting, "an empty slice is a view too");
         }
 
         /// <summary>

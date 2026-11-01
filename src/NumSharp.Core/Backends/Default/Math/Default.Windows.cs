@@ -45,7 +45,7 @@ namespace NumSharp.Backends
             var e = (NDExpr)n;
             // M-1 as a 0-d operand (see the header): one kernel for every M. The same instance on both branches dedups to
             // one iterator stream.
-            var m1 = (NDExpr)NDArray.Scalar(M - 1);
+            var m1 = (NDExpr)NewScalar(M - 1);
             return Evaluate(NDExpr.Where(NDExpr.LessEqual(e, 0.0),
                                          1.0 + e / m1,
                                          1.0 - e / m1));
@@ -63,7 +63,7 @@ namespace NumSharp.Backends
             //   pi * n / (M - 1)     == (pi * n) / (M - 1)        (left to right)
             //   2.0 * pi * n / (M-1) == ((2.0 * pi) * n) / (M-1)
             // M-1 as a 0-d operand (see the header): one kernel for every M.
-            var m1 = (NDExpr)NDArray.Scalar(M - 1);
+            var m1 = (NDExpr)NewScalar(M - 1);
             var arg = np.pi * (NDExpr)n / m1;
             var arg2 = 2.0 * np.pi * (NDExpr)n / m1;
             return Evaluate(0.42 + 0.5 * NDExpr.Cos(arg) + 0.08 * NDExpr.Cos(arg2));
@@ -87,8 +87,8 @@ namespace NumSharp.Backends
             var n = UnmanagedStorage.ArangeObj(0.0, M, 1.0, np.float64);
             // alpha, beta and i0(beta) as 0-d operands (see the header): one kernel for every (M, beta) pair instead of one
             // JIT per pair. `alpha` appears twice and dedups to one stream.
-            var alpha = (NDExpr)NDArray.Scalar((M - 1) / 2.0);
-            NDArray betaScalar = NDArray.Scalar(beta);
+            var alpha = (NDExpr)NewScalar((M - 1) / 2.0);
+            NDArray betaScalar = NewScalar(beta);
             var betaOp = (NDExpr)betaScalar;
             // i0(float(beta)), NumPy's own statement: this engine's I0 over the 0-d beta runs the cephes double kernel the
             // fused pass below applies per element, so the denominator holds the same bits a scalar call of it gives.
@@ -120,14 +120,14 @@ namespace NumSharp.Backends
 
             var n = UnmanagedStorage.ArangeObj(1.0 - M, M, 2.0, np.float64);
             // M-1 as a 0-d operand (see the header).
-            var m1 = (NDExpr)NDArray.Scalar(M - 1);
+            var m1 = (NDExpr)NewScalar(M - 1);
             return Evaluate(a0 + a1 * NDExpr.Cos(np.pi * (NDExpr)n / m1));
         }
 
         /// <summary>NumPy's <c>array([], dtype=float64)</c>: the result of a cosine window with <c>M &lt; 1</c>, np.zeros of the
         ///     shape <c>(0,)</c>.</summary>
         /// <returns>A new empty float64 array.</returns>
-        private static NDArray WindowEmpty() => new NDArray(np.float64, new Shape(new int[] { 0 }), true);
+        private NDArray WindowEmpty() => NewArray(np.float64, new Shape(new int[] { 0 }), true);
 
         /// <summary>NumPy's <c>ones(1, dtype=float64)</c>: the result of every window with <c>M == 1</c>.</summary>
         /// <returns>A new one-element float64 array holding 1.0.</returns>

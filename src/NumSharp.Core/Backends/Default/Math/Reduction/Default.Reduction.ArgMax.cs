@@ -105,7 +105,7 @@ namespace NumSharp.Backends
 
                 // Reducing along non-zero axis - return empty Int64 array with reduced shape
                 var resultShape = Shape.GetAxis(shape, emptyAxis);
-                var result = new NDArray(NPTypeCode.Int64, Shape.Adopt(resultShape), false);
+                var result = NewArray(NPTypeCode.Int64, Shape.Adopt(resultShape), false);
 
                 if (keepdims)
                 {
@@ -125,7 +125,7 @@ namespace NumSharp.Backends
 
             if (shape.IsScalar || (shape.size == 1 && shape.NDim == 1))
             {
-                var r = NDArray.Scalar(0L);  // Int64 for NumPy 2.x alignment
+                var r = NewScalar(0L);  // Int64 for NumPy 2.x alignment
                 if (keepdims)
                 {
                     var keepdimsShape = new long[arr.ndim];
@@ -139,7 +139,7 @@ namespace NumSharp.Backends
             if (axis_ == null)
             {
                 // Use IL-generated kernels for element-wise reduction
-                var r = NDArray.Scalar(argmax_elementwise_il(arr));
+                var r = NewScalar(argmax_elementwise_il(arr));
                 if (keepdims)
                 {
                     // NumPy: keepdims preserves the number of dimensions, all set to 1
@@ -159,13 +159,13 @@ namespace NumSharp.Backends
                 if (keepdims)
                 {
                     // Keep the axis but reduce to size 1 (it's already 1)
-                    return new NDArray(NPTypeCode.Int64, Shape.Adopt(shape.dimensions), true);
+                    return NewArray(NPTypeCode.Int64, Shape.Adopt(shape.dimensions), true);
                 }
                 // The reduced shape is allocated directly, so the result owns its data as NumPy's does (a squeeze view
                 // of a full-shape zeros array reported OWNDATA False). A 1-D input whose only axis has size 1 reduces to
                 // a fresh 0-d — a numpy SCALAR (read-only) at the boundary.
                 var reducedDims = Shape.GetAxis(shape, axis);
-                var reduced = new NDArray(NPTypeCode.Int64, reducedDims.Length == 0 ? Shape.Scalar : Shape.Adopt(reducedDims), true);
+                var reduced = NewArray(NPTypeCode.Int64, reducedDims.Length == 0 ? Shape.Scalar : Shape.Adopt(reducedDims), true);
                 return reduced.MarkReductionScalar();
             }
 
@@ -233,7 +233,7 @@ namespace NumSharp.Backends
             }
 
             // Use IL kernel path
-            var ret = new NDArray(NPTypeCode.Int64, axisedShape, false);
+            var ret = NewArray(NPTypeCode.Int64, axisedShape, false);
             long axisSize = shape.dimensions[axis];
             long outputSize = ret.size > 0 ? ret.size : 1;
             byte* inputAddr = (byte*)arr.Address + shape.offset * arr.dtypesize;
@@ -260,7 +260,7 @@ namespace NumSharp.Backends
         private NDArray ArgReductionAxisFallback(NDArray arr, int axis, bool keepdims, Shape outputShape, Shape axisedShape, ReductionOp op)
         {
             var shape = arr.Shape;
-            var ret = new NDArray(NPTypeCode.Int64, axisedShape, false);
+            var ret = NewArray(NPTypeCode.Int64, axisedShape, false);
             var iterAxis = new NDCoordinatesAxisIncrementor(ref shape, axis);
             var iterRet = new ValueCoordinatesIncrementor(ref axisedShape);
             var iterIndex = iterRet.Index;
@@ -296,7 +296,7 @@ namespace NumSharp.Backends
             int ndim = arr.ndim;
             long axisSize = shape.dimensions[axis];
             long axisStride = shape.strides[axis];
-            var ret = new NDArray(NPTypeCode.Int64, axisedShape, false);
+            var ret = NewArray(NPTypeCode.Int64, axisedShape, false);
 
             Half* basePtr = (Half*)arr.Address + shape.offset;
             long* retPtr = (long*)ret.Address;
@@ -364,7 +364,7 @@ namespace NumSharp.Backends
             int ndim = arr.ndim;
             long axisSize = shape.dimensions[axis];
             long axisStride = shape.strides[axis];
-            var ret = new NDArray(NPTypeCode.Int64, axisedShape, false);
+            var ret = NewArray(NPTypeCode.Int64, axisedShape, false);
 
             System.Numerics.Complex* basePtr = (System.Numerics.Complex*)arr.Address + shape.offset;
             long* retPtr = (long*)ret.Address;

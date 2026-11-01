@@ -70,7 +70,7 @@ namespace NumSharp.Backends
             {
                 // NumPy parity: prod of empty array uses accumulating type (int/bool -> int64/uint64, floats preserved).
                 var emptyType = typeCode ?? arr.typecode.GetAccumulatingType();
-                return NDArray.Scalar(emptyType.GetOneValue());
+                return NewScalar(emptyType.GetOneValue());
             }
 
             if (shape.size == 0)
@@ -78,7 +78,7 @@ namespace NumSharp.Backends
                 if (axis_ == null)
                 {
                     var emptyType = typeCode ?? arr.typecode.GetAccumulatingType();
-                    var r = NDArray.Scalar(emptyType.GetOneValue());
+                    var r = NewScalar(emptyType.GetOneValue());
                     if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(Shape.Adopt(ks)); }
                     return r.MarkReductionScalar();
                 }
@@ -107,7 +107,7 @@ namespace NumSharp.Backends
             if (axis_ == null)
             {
                 var result = prod_elementwise_il(arr, typeCode);
-                var r = NDArray.Scalar(result);
+                var r = NewScalar(result);
                 if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(Shape.Adopt(ks)); }
                 else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1) r.Storage.Reshape(Shape.Scalar);
                 return r.MarkReductionScalar();

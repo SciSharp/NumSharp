@@ -54,7 +54,7 @@ namespace NumSharp.Backends
             long trueCount = CountMaskTrue(mask.MakeGeneric<bool>());
 
             if (trueCount == 0)
-                return new NDArray(arr.dtype, BooleanMaskResultShape(0, arr, leadNdim));
+                return NewArray(arr.dtype, BooleanMaskResultShape(0, arr, leadNdim), true);
 
             // An EMPTY trailing block (blockSize == 0 — a mask on an array with a 0-length
             // trailing axis, e.g. arr[:, 6:-4][mask] where the slice emptied the last axis)
@@ -64,13 +64,13 @@ namespace NumSharp.Backends
             // zero-length buffer, an out-of-bounds heap write. (NumPy: arr shaped (3,0), mask
             // (3,) -> result (3,0), empty.)
             if (blockSize == 0)
-                return new NDArray(arr.dtype, BooleanMaskResultShape(trueCount, arr, leadNdim));
+                return NewArray(arr.dtype, BooleanMaskResultShape(trueCount, arr, leadNdim), true);
 
             // Flat gather buffer of trueCount*B elements, reshaped to (count,)+trailing below. Both gathers below write
             // EVERY element (one per True, counted from the same mask bytes), so the buffer is not zero-filled: the zero
             // fill came from OS-zeroed pages, whose first touch page-faulted on every call — 165 of the 184 us of a
             // 40,000-element int64 selection (2026-10-08; the pool's recycled buffer costs nothing to touch).
-            var result = NDArray.ForOverwrite(arr.dtype, new Shape(trueCount * blockSize));
+            var result = NDArray.ForOverwrite(arr.dtype, new Shape(trueCount * blockSize), this);
 
             bool simd = DirectILKernelGenerator.Enabled && DirectILKernelGenerator.VectorBits > 0;
 

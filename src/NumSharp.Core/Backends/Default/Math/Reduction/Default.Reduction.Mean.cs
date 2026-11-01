@@ -49,7 +49,7 @@ namespace NumSharp.Backends
             var meanType = typeCode ?? arr.GetTypeCode.GetComputingType();
 
             if (shape.IsEmpty)
-                return NDArray.Scalar(double.NaN);
+                return NewScalar(double.NaN);
 
             var inT = arr.GetTypeCode;
             // Decimal (no NumPy dtype) keeps the routes below.
@@ -73,7 +73,7 @@ namespace NumSharp.Backends
                 var nan = NaNOfMeanType(meanType, out var nanType);
                 if (axis_ == null)
                 {
-                    var r = NDArray.Scalar(nan, nanType);
+                    var r = NewScalar(nan, nanType);
                     if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(Shape.Adopt(ks)); }
                     return r.MarkReductionScalar();
                 }
@@ -83,10 +83,10 @@ namespace NumSharp.Backends
                 NDArray result;
                 if (shape[axis] == 0)
                 {
-                    result = new NDArray(outputType, Shape.Adopt(resultShape), false);
+                    result = NewArray(outputType, Shape.Adopt(resultShape), false);
                     for (long i = 0; i < result.size; i++) result.SetAtIndex(nan, i);
                 }
-                else result = new NDArray(outputType, Shape.Adopt(resultShape), false);
+                else result = NewArray(outputType, Shape.Adopt(resultShape), false);
                 if (keepdims)
                 {
                     var ks = new long[arr.ndim];
@@ -147,7 +147,7 @@ namespace NumSharp.Backends
                                          float16Result: MeanIsFloat16Result(arr, dtype));
 
                 var result = mean_elementwise_il(arr, typeCode);
-                var r = NDArray.Scalar(result);
+                var r = NewScalar(result);
                 if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(Shape.Adopt(ks)); }
                 else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1) r.Storage.Reshape(Shape.Scalar);
                 return r.MarkReductionScalar();
@@ -321,7 +321,7 @@ namespace NumSharp.Backends
         ///     (<see cref="DivideByCountLikeNumPy(NDArray, long)"/>: complex divides by <c>rcount + 0j</c>, an integer or bool
         ///     loop casts unsafely, so 0 / 0 is INT_MIN or True).
         /// </remarks>
-        private static NDArray FinishMeanLikeNumPy(NDArray ret, long count, NPTypeCode loop, bool float16Result)
+        private NDArray FinishMeanLikeNumPy(NDArray ret, long count, NPTypeCode loop, bool float16Result)
         {
             bool scalar = ret.ndim == 0;
 
@@ -330,7 +330,7 @@ namespace NumSharp.Backends
                 // arr.dtype.type(ret / rcount): np.float32 / np.intp promotes to float64, rounded once into float16.
                 double q = ret.GetSingle() / (double)count;
                 ret.Dispose();
-                var h = new NDArray(NPTypeCode.Half, Shape.Scalar, false);
+                var h = NewArray(NPTypeCode.Half, Shape.Scalar, false);
                 unsafe { *(ushort*)h.Address = DirectILKernelGenerator.DoubleToHalfBits(q); }
                 return h.MarkReductionScalar();
             }

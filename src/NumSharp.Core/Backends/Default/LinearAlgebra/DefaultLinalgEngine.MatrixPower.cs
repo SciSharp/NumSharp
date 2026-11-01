@@ -87,7 +87,7 @@ namespace NumSharp.Backends
             // empty_like keeps the operand's order (a C-ordered copy of eye did not), and the assignment broadcasts the one
             // identity over the stack's leading axes. np.empty_like(a) is an uninitialised array of a's dtype in a's K
             // layout; np.copyto(result, eye) the same_kind assignment.
-            var result = new NDArray(a.dtype, Shape.NewLikeLayout(a.Shape, 'K', (long[])a.Shape.dimensions.Clone()), false);
+            var result = a.TensorEngine.NewArray(a.dtype, Shape.NewLikeLayout(a.Shape, 'K', (long[])a.Shape.dimensions.Clone()), false);
             UnmanagedStorage.Copyto(result, eye, NPY_CASTING.NPY_SAME_KIND_CASTING, null);
             return result;
         }

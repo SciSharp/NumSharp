@@ -38,6 +38,9 @@ namespace NumSharp.Backends
             // Count is the slice's capacity, as SetShapeUnsafe sets it for a strided or broadcast layout.
             r.Count = layout.bufferSize;
             r._baseStorage = baseStorage;
+            // a view of an array's buffer keeps that array's engine; over a C# buffer there is none, and the NDArray built
+            // on this storage binds TensorEngine.Default
+            r.Engine = baseStorage?.Engine;
             r.OnReshaped(); // a buffer view never owns its memory (NumPy: data passed in clears OWNDATA)
             return r;
         }

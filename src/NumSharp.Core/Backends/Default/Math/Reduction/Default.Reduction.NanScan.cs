@@ -100,7 +100,7 @@ namespace NumSharp.Backends
         ///     facade that the plan's P6 replaces with an engine select; the up-call ratchet pins it with that
         ///     reason.</remarks>
         [NDScopedCovered] // only callers: NanCumSum / NanCumProd, [NDScoped] (the isnan mask and the superseded fill are scope-reclaimed)
-        private static NDArray ReplaceNanForScan(NDArray a, int val)
+        private NDArray ReplaceNanForScan(NDArray a, int val)
         {
             switch (a.typecode)
             {
@@ -117,7 +117,7 @@ namespace NumSharp.Backends
                         && a.Shape.IsContiguous && !a.Shape.IsBroadcasted)
                         return NanReplace.ReplaceContiguousFloat(a, val);
 
-                    NDArray fill = NDArray.Scalar(val);
+                    NDArray fill = NewScalar(val);
                     if (fill.typecode != a.typecode)
                         fill = fill.astype(a.typecode);   // 0/1 -> (Half)0/1, 0+0j/1+0j — dtype-preserving
                     return NDArray.where(a.TensorEngine.IsNan(a), fill, a);

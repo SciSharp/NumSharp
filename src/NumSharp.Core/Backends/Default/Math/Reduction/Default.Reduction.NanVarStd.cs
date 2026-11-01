@@ -102,7 +102,7 @@ namespace NumSharp.Backends
         ///     statements instead — the same HALF loops, so the same bits.
         ///     </para>
         /// </remarks>
-        internal static NDArray NanVarStdNumPy(NDArray a, int? axis_, bool keepdims, int ddof, DType dtype, bool takeSqrt)
+        internal NDArray NanVarStdNumPy(NDArray a, int? axis_, bool keepdims, int ddof, DType dtype, bool takeSqrt)
         {
             // Text is not inexact, so _replace_nan leaves it alone and nanvar / nanstd ARE np.var / np.std: the delegation
             // below reaches VarStdNumPy's guard (the axis, then add.reduce's text, the same for both).
@@ -167,7 +167,7 @@ namespace NumSharp.Backends
             {
                 // NumPy's own statements: the mask, the copy with zeros, the count of ~mask.
                 mask = engine.IsNan(a);
-                arr0 = new NDArray(inT, kl, false);
+                arr0 = NewArray(inT, kl, false);
                 UnmanagedStorage.Copyto(arr0, a, NPY_CASTING.NPY_SAME_KIND_CASTING);
                 ZeroWhereMask(arr0, mask);
                 var notMask = engine.LogicalNot(mask);
@@ -185,7 +185,7 @@ namespace NumSharp.Backends
                 }
                 else
                 {
-                    arr0 = new NDArray(inT, kl, false);
+                    arr0 = NewArray(inT, kl, false);
                     engine.Evaluate(zeroed, arr0);
                     avg = engine.ReduceAdd(arr0, axis, keepdims: true, dtype: dtype, @out: null);
                 }
@@ -217,7 +217,7 @@ namespace NumSharp.Backends
             {
                 // The squared deviations in NumPy's K-order layout, then NumPy's sum over them. A real input reuses the
                 // copy's buffer (same dtype and layout); a complex one writes float64 squares.
-                var x2 = arr0 is not null && sqT == inT ? arr0 : new NDArray(sqT, kl, false);
+                var x2 = arr0 is not null && sqT == inT ? arr0 : NewArray(sqT, kl, false);
                 engine.Evaluate(SquaredNanDeviationExpr(a, avgOperand, inT), x2);
                 var = engine.ReduceAdd(x2, axis, keepdims, dtype, @out: null);
             }
@@ -228,14 +228,14 @@ namespace NumSharp.Backends
             if (!var.Shape.IsWriteable)
                 var = var.copy();
             var cntOut = keepdims ? cnt : cnt.reshape(Shape.Adopt((long[])var.Shape.dimensions.Clone()));
-            var dof = engine.Subtract(cntOut, NDArray.Scalar((long)ddof));
+            var dof = engine.Subtract(cntOut, NewScalar((long)ddof));
             DivideByCountsLikeNumPy(var, dof);
 
             // isbad = dof <= 0: NaN, inf or a negative quotient are all replaced by np.nan — the POSITIVE quiet NaN
             // (.NET's double.NaN is the negative one), cast into var's dtype.
-            var isbad = engine.LessEqual(dof, NDArray.Scalar(0L));
+            var isbad = engine.LessEqual(dof, NewScalar(0L));
             if (engine.Any(isbad))
-                UnmanagedStorage.Copyto(var, NDArray.Scalar(BitConverter.Int64BitsToDouble(0x7FF8000000000000L)), NPY_CASTING.NPY_UNSAFE_CASTING, isbad);
+                UnmanagedStorage.Copyto(var, NewScalar(BitConverter.Int64BitsToDouble(0x7FF8000000000000L)), NPY_CASTING.NPY_UNSAFE_CASTING, isbad);
 
             if (takeSqrt)
                 SqrtLikeNumPy(var, scalarResult);

@@ -88,14 +88,14 @@ namespace NumSharp.Backends
         /// <param name="nd">A non-0-d array.</param>
         /// <returns>The <c>(N, ndim)</c> transposed view of the stacked <c>(ndim, N)</c> coordinate array.</returns>
         /// <exception cref="NotSupportedException">The IL kernels cannot be emitted for the dtype.</exception>
-        private static unsafe NDArray ArgwhereContiguousOrMaterialize(NDArray nd)
+        private unsafe NDArray ArgwhereContiguousOrMaterialize(NDArray nd)
         {
             int ndim = nd.ndim;
             long size = nd.size;
 
             // Empty input → shape (0, ndim), the transpose of an empty (ndim, 0) stack. Includes shape (0,3), (2,0,4), …
             if (size == 0)
-                return ArgwhereTransposedView(new NDArray(NPTypeCode.Int64, new Shape(ndim, 0), false), 0, ndim);
+                return ArgwhereTransposedView(NewArray(NPTypeCode.Int64, new Shape(ndim, 0), false), 0, ndim);
 
             // Materialize non-contig to C-contig. For contig inputs we read from `nd`
             // directly (no copy); the local `materialized` is only set on the non-contig
@@ -124,7 +124,7 @@ namespace NumSharp.Backends
 
                 // NumPy's transpose(nonzero(a)): asarray stacks the ndim index arrays into a fresh (ndim, count) C-order
                 // array — row d holds coordinate d of every non-zero element — and the result is its transpose.
-                var stacked = new NDArray(NPTypeCode.Int64, new Shape(ndim, count), false);
+                var stacked = NewArray(NPTypeCode.Int64, new Shape(ndim, count), false);
                 if (count == 0)
                     return ArgwhereTransposedView(stacked, 0, ndim);
 

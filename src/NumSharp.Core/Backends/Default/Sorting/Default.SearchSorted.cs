@@ -20,14 +20,14 @@ namespace NumSharp.Backends
             // searches Python objects (a str against an int raises its TypeError; an empty haystack compares nothing).
             if (Strings.NDStringUfuncs.IsVString(a))
             {
-                using var key = NDArray.Scalar(v);
+                using var key = NewScalar(v);
                 using var answer = SearchSortedVStringAnswer(a, key, side, sorter);
                 return answer.GetInt64();
             }
             // Text: NumPy's checks run first, and an empty haystack answers without a comparison.
             if (Strings.NDStringUfuncs.IsString(a))
             {
-                using var key = NDArray.Scalar(v);
+                using var key = NewScalar(v);
                 using var answer = SearchSortedTextAnswer(a, key, side, sorter);
                 return answer.GetInt64();
             }
@@ -50,14 +50,14 @@ namespace NumSharp.Backends
             // StringDType: a Python float has no common descriptor with it — NumPy searches Python objects.
             if (Strings.NDStringUfuncs.IsVString(a))
             {
-                using var key = NDArray.Scalar(v);
+                using var key = NewScalar(v);
                 using var answer = SearchSortedVStringAnswer(a, key, side, sorter);
                 return answer.GetInt64();
             }
             // Text: NumPy's checks run first, and an empty haystack answers without a comparison.
             if (Strings.NDStringUfuncs.IsString(a))
             {
-                using var key = NDArray.Scalar(v);
+                using var key = NewScalar(v);
                 using var answer = SearchSortedTextAnswer(a, key, side, sorter);
                 return answer.GetInt64();
             }
@@ -103,18 +103,18 @@ namespace NumSharp.Backends
             {
                 object scalar = Converts.ChangeType(v.Storage.GetAtIndex(0), common);
                 long idx = SearchSortedScalar(aP, scalar, leftSide, sorter);
-                return NDArray.Scalar(idx);
+                return NewScalar(idx);
             }
 
             Shape outShape = Shape.Adopt(v.Shape.dimensions);
 
             if (v.size == 0)
-                return new NDArray(NPTypeCode.Int64, outShape, false);
+                return NewArray(NPTypeCode.Int64, outShape, false);
 
             // Promote v to the common dtype and force contiguous (NumPy: PyArray_CARRAY_RO).
             NDArray vTyped = EnsureContiguousOfType(v, common);
             NDArray sorterTyped = (sorter is null) ? null : EnsureContiguousInt64(sorter);
-            NDArray output = new NDArray(NPTypeCode.Int64, outShape, false);
+            NDArray output = NewArray(NPTypeCode.Int64, outShape, false);
 
             int elemSize = DirectILKernelGenerator.GetTypeSize(common);
             unsafe
@@ -350,7 +350,7 @@ namespace NumSharp.Backends
         /// <exception cref="ValueError">A sorter index outside the haystack that the search reaches (<c>Sorter index out of
         ///     range.</c>).</exception>
         [NDScoped]
-        private static NDArray SearchSortedTextAnswer(NDArray a, NDArray v, string side, NDArray sorter)
+        private NDArray SearchSortedTextAnswer(NDArray a, NDArray v, string side, NDArray sorter)
         {
             ValidateSearchSide(side);
             var common = DTypePromotion.PromoteTypes(v.dtype, a.dtype);
@@ -369,7 +369,7 @@ namespace NumSharp.Backends
 
             // Nothing compared: an empty result, or every key's insertion point 0 in an empty haystack.
             if (v.size == 0 || a.size == 0)
-                return new NDArray(NPTypeCode.Int64, v.ndim == 0 ? Shape.NewScalar() : Shape.Adopt((long[])v.Shape.dimensions.Clone()), true);
+                return NewArray(NPTypeCode.Int64, v.ndim == 0 ? Shape.NewScalar() : Shape.Adopt((long[])v.Shape.dimensions.Clone()), true);
 
             NDArray sorterTyped = sorter is null ? null : EnsureContiguousInt64(sorter);
             return Sorting.TextSearch.SearchSorted(haystack, keys, side == "left", sorterTyped);

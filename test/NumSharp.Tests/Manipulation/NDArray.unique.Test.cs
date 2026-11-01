@@ -416,9 +416,10 @@ namespace NumSharp.Tests.Manipulation
         //  Allocating an array with > 2.1B elements requires >17 GB of RAM, so
         //  we can't actually trigger the path naturally. Instead we use reflection
         //  to invoke the long-indexed methods directly on small data and confirm
-        //  they produce the same output as the fast managed path. They are static
+        //  they produce the same output as the fast managed path. They are instance
         //  members of DefaultEngine (Default.Unique.Kwargs.cs; the internal class UniqueEngine until the
-        //  np-layer dtype plan's phase PE), the operand first.
+        //  np-layer dtype plan's phase PE, static members until P9 made the engine allocate through itself),
+        //  the operand first, invoked on the built-in engine.
         // ============================================================
 
         [TestMethod]
@@ -426,10 +427,10 @@ namespace NumSharp.Tests.Manipulation
         {
             var arr = np.array(new int[] { 5, 2, 9, 2, 5, 1, 8 });
             var method = typeof(DefaultEngine)
-                .GetMethods(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)
+                .GetMethods(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
                 .First(m => m.Name == "uniqueFlatSortedLong" && m.IsGenericMethodDefinition)
                 .MakeGenericMethod(typeof(int));
-            var r = (NDArray[])method.Invoke(null, new object[] { arr, (long)arr.size, true, true, true, (long)-1 });
+            var r = (NDArray[])method.Invoke(BackendFactory.GetEngine<DefaultEngine>(), new object[] { arr, (long)arr.size, true, true, true, (long)-1 });
 
             r[0].Should().BeShaped(5).And.BeOfValues(1, 2, 5, 8, 9);
             r[1].GetInt64(0).Should().Be(5);
@@ -449,11 +450,11 @@ namespace NumSharp.Tests.Manipulation
         {
             var arr = np.array(new double[] { double.NaN, 1.0, double.NaN, 2.0, 1.0 });
             var method = typeof(DefaultEngine)
-                .GetMethods(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)
+                .GetMethods(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
                 .First(m => m.Name == "uniqueFlatSortedLongFloat" && m.IsGenericMethodDefinition)
                 .MakeGenericMethod(typeof(double));
             // signature: (NDArray a, long n, bool equal_nan, bool return_index, bool return_inverse, bool return_counts)
-            var r = (NDArray[])method.Invoke(null, new object[] { arr, (long)arr.size, true, true, true, true });
+            var r = (NDArray[])method.Invoke(BackendFactory.GetEngine<DefaultEngine>(), new object[] { arr, (long)arr.size, true, true, true, true });
 
             r[0].Should().BeShaped(3);
             r[0].GetDouble(0).Should().Be(1.0);
@@ -472,10 +473,10 @@ namespace NumSharp.Tests.Manipulation
         {
             var arr = np.array(new double[] { double.NaN, 1.0, double.NaN, 2.0, 1.0 });
             var method = typeof(DefaultEngine)
-                .GetMethods(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)
+                .GetMethods(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
                 .First(m => m.Name == "uniqueFlatSortedLongFloat" && m.IsGenericMethodDefinition)
                 .MakeGenericMethod(typeof(double));
-            var r = (NDArray[])method.Invoke(null, new object[] { arr, (long)arr.size, false, true, true, true });
+            var r = (NDArray[])method.Invoke(BackendFactory.GetEngine<DefaultEngine>(), new object[] { arr, (long)arr.size, false, true, true, true });
 
             r[0].Should().BeShaped(4);
             r[0].GetDouble(0).Should().Be(1.0);
@@ -497,10 +498,10 @@ namespace NumSharp.Tests.Manipulation
             };
             var arr = np.array(data);
             var method = typeof(DefaultEngine)
-                .GetMethods(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)
+                .GetMethods(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
                 .First(m => m.Name == "uniqueFlatSortedLongComplex");
             // signature: (NDArray a, long n, bool equal_nan, bool return_index, bool return_inverse, bool return_counts)
-            var r = (NDArray[])method.Invoke(null, new object[] { arr, (long)arr.size, true, true, true, true });
+            var r = (NDArray[])method.Invoke(BackendFactory.GetEngine<DefaultEngine>(), new object[] { arr, (long)arr.size, true, true, true, true });
 
             r[0].Should().BeShaped(3);
             r[3].GetInt64(0).Should().Be(2); // 1+0i appears twice

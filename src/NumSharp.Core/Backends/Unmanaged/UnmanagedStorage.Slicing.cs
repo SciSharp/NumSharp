@@ -143,6 +143,8 @@ namespace NumSharp.Backends
                 var emptyStorage = new UnmanagedStorage();
                 emptyStorage._Allocate(slicedShape, emptySlice);
                 emptyStorage._baseStorage = _baseStorage ?? this;
+                // a view keeps its source's engine (Alias does too): the operations on it compute where the source's do
+                emptyStorage.Engine = Engine;
                 // A lane-sharing descriptor (longdouble, Windows' intc) is not on the buffer: the empty view carries it.
                 emptyStorage.AdoptLaneSharingDescr(_descr);
                 emptyStorage.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
@@ -165,6 +167,8 @@ namespace NumSharp.Backends
                     freshShape = freshShape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
                 var view = new UnmanagedStorage(InternalArray.Slice(slicedShape.offset, slicedShape.size), freshShape);
                 view._baseStorage = _baseStorage ?? this;
+                // a view keeps its source's engine (Alias does too): the operations on it compute where the source's do
+                view.Engine = Engine;
                 // A lane-sharing descriptor (longdouble, Windows' intc) is not on the buffer: the new view carries it.
                 view.AdoptLaneSharingDescr(_descr);
                 view.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)

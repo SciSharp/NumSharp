@@ -53,7 +53,7 @@ namespace NumSharp.Backends
 
             // pack's output axis is ceil(inputAxis/8), so an empty input always yields an empty output
             // (no zero-fill needed). The main path overwrites every output byte, so fillZeros: false.
-            var cOut = new NDArray(NPTypeCode.Byte, Shape.Adopt(outDims, 'C'), false);
+            var cOut = NewArray(NPTypeCode.Byte, Shape.Adopt(outDims, 'C'), false);
             if (nw.size == 0 || cOut.size == 0)
                 return isFortran ? NDArray.asarray(cOut, null, 'F', null) : cOut;
 
@@ -122,12 +122,12 @@ namespace NumSharp.Backends
             // divergence, and the more correct behaviour. Truly-empty outputs need no fill.
             if (nw.size == 0 || outSize == 0)
             {
-                var z = new NDArray(NPTypeCode.Byte, Shape.Adopt(outDims, 'C'), fillZeros: outSize != 0);
+                var z = NewArray(NPTypeCode.Byte, Shape.Adopt(outDims, 'C'), fillZeros: outSize != 0);
                 return isFortran ? NDArray.asarray(z, null, 'F', null) : z;
             }
 
             // Main path overwrites every output byte (full bytes + partial + explicit pad), so fillZeros: false.
-            var cOut = new NDArray(NPTypeCode.Byte, Shape.Adopt(outDims, 'C'), false);
+            var cOut = NewArray(NPTypeCode.Byte, Shape.Adopt(outDims, 'C'), false);
 
             NDArray srcC = nw.Shape.IsContiguous ? nw : NDArray.ascontiguousarray(nw, null);
             srcC.Shape.SplitAtAxis(unpackAxis, out long nOuter, out long nel);

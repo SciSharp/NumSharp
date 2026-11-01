@@ -235,7 +235,7 @@ namespace NumSharp.Backends
                 ? Shape.Adopt((long[])cleanShape.dimensions.Clone(), 'F')
                 : cleanShape;
 
-            var result = new NDArray(resultType, resultShape, false);
+            var result = NewArray(resultType, resultShape, false);
             if (result.size == 0)
                 return result;
 
@@ -316,7 +316,7 @@ namespace NumSharp.Backends
             Shape resultShape = allStrictFContig
                 ? Shape.Adopt((long[])cleanShape.dimensions.Clone(), 'F')
                 : cleanShape;
-            return new NDArray(resultType, resultShape, fillZeros: true);
+            return NewArray(resultType, resultShape, fillZeros: true);
         }
 
         /// <summary>
@@ -379,7 +379,7 @@ namespace NumSharp.Backends
             // never an alias of value, so disposing value here is safe.
             bool valueIsTemp = !ReferenceEquals(value, lhs);
 
-            var result = new NDArray(resultType, Shape.Adopt((long[])value.Shape.dimensions.Clone()), false);
+            var result = NewArray(resultType, Shape.Adopt((long[])value.Shape.dimensions.Clone()), false);
             if (result.size == 0)
             {
                 if (valueIsTemp) value.Dispose();

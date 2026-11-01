@@ -52,7 +52,7 @@ namespace NumSharp.Backends
         /// <remarks>Scoped: the flattened copy, the permutation, the gathered strings and the masks are reclaimed at exit;
         ///     only the returned outputs (and the buffers their views hold) survive.</remarks>
         [NDScoped]
-        private static NDArray[] UniqueText(NDArray a, bool return_index, bool return_inverse, bool return_counts, int? axis)
+        private NDArray[] UniqueText(NDArray a, bool return_index, bool return_inverse, bool return_counts, int? axis)
         {
             // NumPy: `if axis is None or ar.ndim == 1` takes the flat path (a 1-D input's axis was normalized, and checked,
             // by the caller); any other axis takes the row path.
@@ -111,7 +111,7 @@ namespace NumSharp.Backends
         ///     gives no row at all.
         ///     </para>
         /// </remarks>
-        private static NDArray[] UniqueTextRows(NDArray a, int axis, bool return_index, bool return_inverse, bool return_counts)
+        private NDArray[] UniqueTextRows(NDArray a, int axis, bool return_index, bool return_inverse, bool return_counts)
         {
             // `ar = np.moveaxis(ar, axis, 0)`, then `ar.reshape(n, prod(rest))` made C-contiguous: one row per index.
             NDArray moved = a.TensorEngine.MoveAxis(a, new[] { axis }, new[] { 0 });
@@ -142,7 +142,7 @@ namespace NumSharp.Backends
 
             NDArray aux = UnmanagedStorage.TakeFrom(rows, perm, 0, null, ClipModes.ClipModeRaise);   // np.take(rows, perm, 0)
             // mask[0] = True; mask[1:] = any(aux[1:] != aux[:-1], axis=1): a row starts a run when any column differs.
-            var mask = new NDArray(NPTypeCode.Boolean, Shape.Vector(n), true);
+            var mask = NewArray(NPTypeCode.Boolean, Shape.Vector(n), true);
             if (n > 0)
             {
                 unsafe { *(bool*)mask.Address = true; }
@@ -174,10 +174,10 @@ namespace NumSharp.Backends
         /// <param name="strip">True to compare neighbours as a chararray does (trailing ASCII whitespace and NULs stripped
         ///     first: <c>compare_chararrays(..., '!=', rstrip=True)</c>).</param>
         /// <returns>A fresh bool array of <paramref name="sorted"/>'s length.</returns>
-        private static NDArray RunStarts(NDArray sorted, bool strip = false)
+        private NDArray RunStarts(NDArray sorted, bool strip = false)
         {
             long n = sorted.size;
-            var mask = new NDArray(NPTypeCode.Boolean, Shape.Vector(n), false);
+            var mask = NewArray(NPTypeCode.Boolean, Shape.Vector(n), false);
             if (n > 0)
             {
                 unsafe { *(bool*)mask.Address = true; }
@@ -211,7 +211,7 @@ namespace NumSharp.Backends
         /// <param name="return_inverse">Whether the reconstruction indices are returned.</param>
         /// <param name="return_counts">Whether the counts are returned.</param>
         /// <returns>[values, index?, inverse?, counts?]; the inverse is 1-D.</returns>
-        private static NDArray[] UniqueOutputs(NDArray values, NDArray perm, NDArray mask, bool return_index,
+        private NDArray[] UniqueOutputs(NDArray values, NDArray perm, NDArray mask, bool return_index,
             bool return_inverse, bool return_counts)
         {
             int count = 1 + (return_index ? 1 : 0) + (return_inverse ? 1 : 0) + (return_counts ? 1 : 0);
@@ -224,7 +224,7 @@ namespace NumSharp.Backends
             {
                 // imask = np.cumsum(mask) - 1; inv_idx = np.empty(n, intp); inv_idx[perm] = imask
                 NDArray imask = mask.TensorEngine.ReduceCumAdd(mask, null, null, null) - 1L;   // np.cumsum(mask) - 1
-                var inverse = new NDArray(NPTypeCode.Int64, Shape.Vector(mask.size), false);
+                var inverse = NewArray(NPTypeCode.Int64, Shape.Vector(mask.size), false);
                 inverse[perm] = imask;
                 outputs[at++] = inverse;
             }
@@ -233,7 +233,7 @@ namespace NumSharp.Backends
                 // idx = np.concatenate(np.nonzero(mask) + ([mask.size],)); np.diff(idx)
                 NDArray starts = mask.TensorEngine.NonZero(mask)[0];
                 NDArray idx = NDArray.concatenate(
-                    new[] { starts, new NDArray(Unmanaged.ArraySlice.FromArray(new[] { mask.size }, true), Shape.Vector(1)) },
+                    new[] { starts, new NDArray(Unmanaged.ArraySlice.FromArray(new[] { mask.size }, true), Shape.Vector(1)) { TensorEngine = this } },
                     0, null, null, "same_kind");
                 outputs[at] = idx.TensorEngine.Diff(idx, 1, -1, null, null);
             }

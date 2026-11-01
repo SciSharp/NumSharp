@@ -117,7 +117,7 @@ namespace NumSharp.Backends
 
             var (s1, s2) = Broadcast(x1.Shape, x2.Shape);
             var resultShape = s1.Clean();
-            var result = new NDArray(resultType, resultShape, false);
+            var result = NewArray(resultType, resultShape, false);
 
             ExecutionPath path;
             fixed (long* aStrides = s1.strides)
@@ -263,7 +263,7 @@ namespace NumSharp.Backends
         }
 
         /// <summary>Fold two 0-d operands at the loop dtype (scalar-if-both-scalar, NumPy parity).</summary>
-        private static NDArray ExecuteFloatTierScalarScalar(NDArray x1, NDArray x2, BinaryOp op,
+        private NDArray ExecuteFloatTierScalarScalar(NDArray x1, NDArray x2, BinaryOp op,
             NPTypeCode t1, NPTypeCode t2, NPTypeCode resultType)
         {
             if (resultType == NPTypeCode.Decimal)
@@ -278,7 +278,7 @@ namespace NumSharp.Backends
                     BinaryOp.Heaviside => NDHeavisideMath.HeavisideDecimal(a, b),
                     _ => NDLogAddExpMath.CopySignDecimal(a, b),
                 };
-                return NDArray.Scalar(r);
+                return NewScalar(r);
             }
 
             double xd = ConvertToDouble(x1, t1), yd = ConvertToDouble(x2, t2);
@@ -299,7 +299,7 @@ namespace NumSharp.Backends
                         BinaryOp.Heaviside => NDHeavisideMath.HeavisideHalf((Half)xf, (Half)yf),
                         _ => NDLogAddExpMath.CopySignHalf((Half)xf, (Half)yf),
                     };
-                    return NDArray.Scalar(r);
+                    return NewScalar(r);
                 }
                 case NPTypeCode.Single:
                 {
@@ -313,7 +313,7 @@ namespace NumSharp.Backends
                         BinaryOp.Heaviside => NDHeavisideMath.HeavisideF(xf, yf),
                         _ => NDLogAddExpMath.CopySignF(xf, yf),
                     };
-                    return NDArray.Scalar(r);
+                    return NewScalar(r);
                 }
                 default:
                 {
@@ -326,7 +326,7 @@ namespace NumSharp.Backends
                         BinaryOp.Heaviside => NDHeavisideMath.Heaviside(xd, yd),
                         _ => NDLogAddExpMath.CopySign(xd, yd),
                     };
-                    return NDArray.Scalar(r);
+                    return NewScalar(r);
                 }
             }
         }

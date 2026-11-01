@@ -88,7 +88,7 @@ namespace NumSharp.Backends
 
                 childNdim = lnd;
                 NDExpr.StreamingReductions++;
-                return NDArray.Scalar(isMax ? (long)ArgMax(leaf) : (long)ArgMin(leaf));
+                return NewScalar(isMax ? (long)ArgMax(leaf) : (long)ArgMin(leaf));
             }
 
             // A computed child streams over all-C-contiguous operands only: there, flat memory index k IS logical C
@@ -161,12 +161,12 @@ namespace NumSharp.Backends
                 // Flat: one row, one index — the materialize route wraps np.argmax's scalar the same way.
                 long index;
                 StreamArgDispatch(child.ResultType, isMax, ref stream, 1, rowLen, 1, &index, scratch, best);
-                return NDArray.Scalar(index);
+                return NewScalar(index);
             }
 
             // Every output is written by the fold (rows write each output, slabs seed each lane), so the result is
             // allocated uninitialized; disposed on an exception so a failing child kernel does not strand its buffer.
-            var result = new NDArray(NPTypeCode.Int64, resultShape, false);
+            var result = NewArray(NPTypeCode.Int64, resultShape, false);
             try
             {
                 StreamArgDispatch(child.ResultType, isMax, ref stream, outer, rowLen, inner, (long*)result.Address, scratch, best);

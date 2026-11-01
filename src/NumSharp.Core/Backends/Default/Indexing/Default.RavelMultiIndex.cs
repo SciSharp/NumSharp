@@ -46,7 +46,7 @@ namespace NumSharp.Backends
             // whose sum of no products is 0, returned as np.int64(0).
             if (ndim == 0)
             {
-                var zero = new NDArray<long>(Shape.NewScalar(), true);
+                var zero = NewArray<long>(Shape.NewScalar(), true);
                 zero.MarkReductionScalar();
                 return zero;
             }
@@ -67,7 +67,7 @@ namespace NumSharp.Backends
             if (count != 0)
                 ThrowIfZeroDimension(dims);
 
-            var result = new NDArray<long>(layout, false);
+            var result = NewArray<long>(layout, false);
             if (count == 0)
                 return result;
 
@@ -91,7 +91,7 @@ namespace NumSharp.Backends
                     }
                     else
                     {
-                        var copy = NDArray.ForOverwrite(NPTypeCode.Int64, layout);
+                        var copy = NDArray.ForOverwrite(NPTypeCode.Int64, layout, this);
                         copies[d] = copy;
                         NDIter.Copy(copy, src);
                         coordPtrs[d] = (nint)copy.Storage.Address;

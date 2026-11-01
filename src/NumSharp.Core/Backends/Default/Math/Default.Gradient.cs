@@ -258,7 +258,7 @@ namespace NumSharp.Backends
                 // into), where a fresh C-ordered array of the dimensions was allocated. empty_like reads only the input's
                 // dimensions and axis order, never its offset or a stride-0 axis, and the slice stores below write through
                 // any layout.
-                NDArray outp = new NDArray(otype, Shape.NewLikeLayout(work.Shape, 'K', (long[])work.Shape.dimensions.Clone()), false);
+                NDArray outp = NewArray(otype, Shape.NewLikeLayout(work.Shape, 'K', (long[])work.Shape.dimensions.Clone()), false);
 
                 // ---- interior: 2nd-order central differences over [1 : M-1] ----
                 //   uniform     : out[1:-1] = (f[2:] - f[:-2]) / (2*dx)

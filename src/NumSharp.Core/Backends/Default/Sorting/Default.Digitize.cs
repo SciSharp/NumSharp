@@ -31,7 +31,7 @@ namespace NumSharp.Backends
             {
                 string objectSide = right ? "left" : "right";
                 if (mono == -1)
-                    return NDArray.Scalar((long)bins.Shape.dimensions[0]) - SearchSorted(bins["::-1"], x, objectSide);
+                    return NewScalar((long)bins.Shape.dimensions[0]) - SearchSorted(bins["::-1"], x, objectSide);
                 return SearchSorted(bins, x, objectSide);
             }
 
@@ -43,10 +43,10 @@ namespace NumSharp.Backends
             if (Backends.Strings.NDStringUfuncs.IsString(x))
             {
                 if (x.size == 0 || bins.size == 0)
-                    return new NDArray(NPTypeCode.Int64, Shape.Adopt((long[])x.Shape.dimensions.Clone()), true);
+                    return NewArray(NPTypeCode.Int64, Shape.Adopt((long[])x.Shape.dimensions.Clone()), true);
                 string textSide = right ? "left" : "right";
                 if (mono == -1)
-                    return NDArray.Scalar((long)bins.Shape.dimensions[0]) - SearchSorted(bins["::-1"], x, textSide);
+                    return NewScalar((long)bins.Shape.dimensions[0]) - SearchSorted(bins["::-1"], x, textSide);
                 return SearchSorted(bins, x, textSide);
             }
 
@@ -66,7 +66,7 @@ namespace NumSharp.Backends
                 //   result = len(bins) - searchsorted(bins[::-1], x, side)
                 NDArray rev = binsC["::-1"].copy();
                 NDArray ss = SearchSorted(rev, x, side);
-                return NDArray.Scalar((long)bins.Shape.dimensions[0]) - ss;
+                return NewScalar((long)bins.Shape.dimensions[0]) - ss;
             }
 
             return SearchSorted(binsC, x, side);

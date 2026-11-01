@@ -109,7 +109,7 @@ namespace NumSharp.Backends
                 // NumPy's PyArray_Nonzero of the 1-D ravel fills ONE (count, 1) multi-index buffer and np.flatnonzero
                 // returns its column. Direct write into that buffer — no temp, no expand step: the flat indices into the
                 // C-contig source ARE the flat indices into the raveled input (that's the definition of C-order ravel).
-                var multiIndex = new NDArray(NPTypeCode.Int64, new Shape(count, 1), false);
+                var multiIndex = NewArray(NPTypeCode.Int64, new Shape(count, 1), false);
                 flatKernel(basePtr, size, (long*)multiIndex.Storage.Address);
                 var column = MakeNonZeroColumnViews(multiIndex, count, 1)[0];
                 // The column view holds its own counted reference on the buffer; release the buffer's own handle.

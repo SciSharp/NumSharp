@@ -54,7 +54,7 @@ namespace NumSharp.Backends
             // The identity is a STRONG 0-d operand of the loop dtype, so the add runs in the loop dtype (no promotion);
             // it is the LEFT operand, as in NumPy's `io1 = identity; io1 += x` (the order cannot change an IEEE sum when
             // only one operand may be NaN, but it keeps the call honest).
-            using var identity = NDArray.Scalar(loopType.GetDefaultValue(), loopType);
+            using var identity = NewScalar(loopType.GetDefaultValue(), loopType);
             if (src.GetTypeCode == loopType)
             {
                 ExecuteBinaryOp(identity, src, BinaryOp.Add, @out: result);
@@ -87,7 +87,7 @@ namespace NumSharp.Backends
             var ones = new long[arr.ndim];
             for (int d = 0; d < ones.Length; d++)
                 ones[d] = 1;
-            var result = new NDArray(loopType, ones.Length == 0 ? Shape.Scalar : Shape.Adopt(ones), false);
+            var result = NewArray(loopType, ones.Length == 0 ? Shape.Scalar : Shape.Adopt(ones), false);
             try
             {
                 WriteIdentityPlus(arr, result, loopType);
@@ -361,7 +361,7 @@ namespace NumSharp.Backends
                 return false;
 
             // The block sums, in the loop dtype; summed at the end by the same (order-free) reduction.
-            var parts = new NDArray(loopType, new Shape(blocks), false);
+            var parts = NewArray(loopType, new Shape(blocks), false);
             try
             {
                 var slices = new Slice[shape.NDim];

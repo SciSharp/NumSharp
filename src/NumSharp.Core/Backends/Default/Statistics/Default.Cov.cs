@@ -81,7 +81,7 @@ namespace NumSharp.Backends
         /// <exception cref="UnicodeDecodeError">An S → U conversion of non-ASCII bytes.</exception>
         /// <exception cref="InvalidOperationException">Not reached (see <see cref="CovOfText"/>).</exception>
         [NDScopedCovered] // only callers: the [NDScoped] Cov override and CovOfText's parsed-text call, which runs under it
-        internal static NDArray CovFunction(NDArray m, NDArray y, bool rowvar, bool bias, int? ddof, NDArray fweights,
+        internal NDArray CovFunction(NDArray m, NDArray y, bool rowvar, bool bias, int? ddof, NDArray fweights,
             NDArray aweights, DType dtype)
         {
             // --- Check inputs. NumPy's "ddof must be integer" ValueError is enforced by the int? type. ---
@@ -193,7 +193,7 @@ namespace NumSharp.Backends
             }
 
             // scale = true_divide(1, fact). NumPy replaces fact <= 0 with 0.0 (so 1/0 => +inf).
-            NDArray scale = NDArray.Scalar(fact <= 0.0 ? double.PositiveInfinity : 1.0 / fact);
+            NDArray scale = NewScalar(fact <= 0.0 ? double.PositiveInfinity : 1.0 / fact);
 
             NPTypeCode cType = c.typecode;
             c = c * scale;
@@ -266,8 +266,8 @@ namespace NumSharp.Backends
         /// </summary>
         /// <returns>The empty covariance (it keeps its base's buffer alive; disposing the base inside an
         ///     <c>[NDScoped]</c> caller is safe).</returns>
-        private static NDArray EmptyCovariance()
-            => new NDArray(Unmanaged.ArraySlice.FromArray(Array.Empty<double>(), true), Shape.Vector(0)).reshape(0, 0);
+        private NDArray EmptyCovariance()
+            => new NDArray(Unmanaged.ArraySlice.FromArray(Array.Empty<double>(), true), Shape.Vector(0)) { TensorEngine = this }.reshape(0, 0);
 
         /// <summary>
         ///     <c>np.cov</c> over text (a string operand, or a text <c>dtype=</c> request: <c>S</c>, <c>U</c> or
@@ -316,7 +316,7 @@ namespace NumSharp.Backends
         /// <exception cref="InvalidOperationException">Not reached: np.average refuses every text array, as NumPy's mean
         ///     does.</exception>
         [NDScopedCovered] // only caller: CovFunction, under the [NDScoped] Cov override (temporaries are reclaimed)
-        private static NDArray CovOfText(NDArray m, NDArray y, bool rowvar, bool bias, int? ddof, NDArray fweights,
+        private NDArray CovOfText(NDArray m, NDArray y, bool rowvar, bool bias, int? ddof, NDArray fweights,
             NDArray aweights, DType dtype)
         {
             DType xd, yd;
@@ -436,7 +436,7 @@ namespace NumSharp.Backends
         ///     <c>(Xc*w).T</c>; the result is still symmetric, so only the upper triangle is
         ///     computed and mirrored — bit-identical to NumPy's independent per-entry dots.
         /// </summary>
-        private static unsafe NDArray TryGramCov(NDArray Xc, NDArray w)
+        private unsafe NDArray TryGramCov(NDArray Xc, NDArray w)
         {
             NPTypeCode dt = Xc.typecode;
             if (dt != NPTypeCode.Double && dt != NPTypeCode.Single) return null;
@@ -460,7 +460,7 @@ namespace NumSharp.Backends
                 if (!b.Shape.IsContiguous || b.Shape.dimensions[0] != m || b.Shape.dimensions[1] != k) return null;
             }
 
-            var g = new NDArray(Xc.dtype, new Shape(m, m), false);
+            var g = NewArray(Xc.dtype, new Shape(m, m), false);
             int es = Xc.dtypesize;
             byte* ap = (byte*)Xc.Address + Xc.Shape.offset * es;
             byte* bp = (byte*)b.Address + b.Shape.offset * es;

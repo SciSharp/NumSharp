@@ -44,7 +44,7 @@ namespace NumSharp.Backends
                 // For empty arrays, return empty array with correct output dtype
                 // typeCode specifies the output type (e.g., Boolean for predicate ops)
                 var emptyOutputType = typeCode ?? nd.GetTypeCode;
-                return new NDArray(emptyOutputType, nd.Shape.Clean(), false);
+                return NewArray(emptyOutputType, nd.Shape.Clean(), false);
             }
 
             var inputType = nd.GetTypeCode;
@@ -158,7 +158,7 @@ namespace NumSharp.Backends
             bool isContiguous = nd.Shape.IsContiguous;
 
             // Allocate result (always contiguous)
-            var result = new NDArray(outputType, nd.Shape.Clean(), false);
+            var result = NewArray(outputType, nd.Shape.Clean(), false);
 
             // Get kernel key
             var key = new UnaryKernelKey(inputType, outputType, op, isContiguous);
@@ -241,7 +241,7 @@ namespace NumSharp.Backends
             // rather than cloning dims + recomputing strides/flags. isF implies a strictly
             // column-major input (ndim > 1).
             Shape resultShape = CanonicalResultShape(s, isF);
-            var result = new NDArray(outputType, resultShape, false);
+            var result = NewArray(outputType, resultShape, false);
             if (result.size == 0)
                 return result;
 
@@ -300,7 +300,7 @@ namespace NumSharp.Backends
                 return null;
 
             long n = s.size;
-            var result = new NDArray(outputType, new Shape(n), false);
+            var result = NewArray(outputType, new Shape(n), false);
             if (n == 0)
                 return result;
 
@@ -338,7 +338,7 @@ namespace NumSharp.Backends
                 return null;
 
             long n = s.size;
-            var result = new NDArray(outputType, new Shape(n), false);
+            var result = NewArray(outputType, new Shape(n), false);
             if (n == 0)
                 return result;
 
@@ -398,7 +398,7 @@ namespace NumSharp.Backends
             }
 
             long n = s.size;
-            var result = new NDArray(outputType, new Shape(n), false);
+            var result = NewArray(outputType, new Shape(n), false);
             if (n == 0)
                 return result;
 
@@ -532,7 +532,7 @@ namespace NumSharp.Backends
             Shape resultShape = inputStrictF
                 ? Shape.Adopt((long[])cleanShape.dimensions.Clone(), 'F')
                 : cleanShape;
-            var result = new NDArray(outputType, resultShape, false);
+            var result = NewArray(outputType, resultShape, false);
 
             var order = inputStrictF
                 ? NPY_ORDER.NPY_FORTRANORDER
@@ -689,26 +689,26 @@ namespace NumSharp.Backends
         /// Invoke a unary scalar delegate and create the result NDArray.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-        private static NDArray InvokeUnaryScalar<TInput>(Delegate func, TInput input, NPTypeCode outputType)
+        private NDArray InvokeUnaryScalar<TInput>(Delegate func, TInput input, NPTypeCode outputType)
         {
             // Dispatch based on output type to avoid boxing on result
             return outputType switch
             {
-                NPTypeCode.Boolean => NDArray.Scalar(((Func<TInput, bool>)func)(input)),
-                NPTypeCode.Byte => NDArray.Scalar(((Func<TInput, byte>)func)(input)),
-                NPTypeCode.SByte => NDArray.Scalar(((Func<TInput, sbyte>)func)(input)),
-                NPTypeCode.Int16 => NDArray.Scalar(((Func<TInput, short>)func)(input)),
-                NPTypeCode.UInt16 => NDArray.Scalar(((Func<TInput, ushort>)func)(input)),
-                NPTypeCode.Int32 => NDArray.Scalar(((Func<TInput, int>)func)(input)),
-                NPTypeCode.UInt32 => NDArray.Scalar(((Func<TInput, uint>)func)(input)),
-                NPTypeCode.Int64 => NDArray.Scalar(((Func<TInput, long>)func)(input)),
-                NPTypeCode.UInt64 => NDArray.Scalar(((Func<TInput, ulong>)func)(input)),
-                NPTypeCode.Char => NDArray.Scalar(((Func<TInput, char>)func)(input)),
-                NPTypeCode.Half => NDArray.Scalar(((Func<TInput, Half>)func)(input)),
-                NPTypeCode.Single => NDArray.Scalar(((Func<TInput, float>)func)(input)),
-                NPTypeCode.Double => NDArray.Scalar(((Func<TInput, double>)func)(input)),
-                NPTypeCode.Decimal => NDArray.Scalar(((Func<TInput, decimal>)func)(input)),
-                NPTypeCode.Complex => NDArray.Scalar(((Func<TInput, System.Numerics.Complex>)func)(input)),
+                NPTypeCode.Boolean => NewScalar(((Func<TInput, bool>)func)(input)),
+                NPTypeCode.Byte => NewScalar(((Func<TInput, byte>)func)(input)),
+                NPTypeCode.SByte => NewScalar(((Func<TInput, sbyte>)func)(input)),
+                NPTypeCode.Int16 => NewScalar(((Func<TInput, short>)func)(input)),
+                NPTypeCode.UInt16 => NewScalar(((Func<TInput, ushort>)func)(input)),
+                NPTypeCode.Int32 => NewScalar(((Func<TInput, int>)func)(input)),
+                NPTypeCode.UInt32 => NewScalar(((Func<TInput, uint>)func)(input)),
+                NPTypeCode.Int64 => NewScalar(((Func<TInput, long>)func)(input)),
+                NPTypeCode.UInt64 => NewScalar(((Func<TInput, ulong>)func)(input)),
+                NPTypeCode.Char => NewScalar(((Func<TInput, char>)func)(input)),
+                NPTypeCode.Half => NewScalar(((Func<TInput, Half>)func)(input)),
+                NPTypeCode.Single => NewScalar(((Func<TInput, float>)func)(input)),
+                NPTypeCode.Double => NewScalar(((Func<TInput, double>)func)(input)),
+                NPTypeCode.Decimal => NewScalar(((Func<TInput, decimal>)func)(input)),
+                NPTypeCode.Complex => NewScalar(((Func<TInput, System.Numerics.Complex>)func)(input)),
                 _ => throw new NotSupportedException($"Output type {outputType} not supported")
             };
         }

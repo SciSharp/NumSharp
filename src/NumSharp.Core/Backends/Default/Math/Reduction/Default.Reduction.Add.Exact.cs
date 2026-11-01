@@ -888,7 +888,7 @@ namespace NumSharp.Backends
                     dims[o++] = 1;
             }
 
-            var r = dims.Length == 0 ? new NDArray(loopType, Shape.NewScalar(), false) : new NDArray(loopType, Shape.Adopt(dims), false); // dims is built above
+            var r = dims.Length == 0 ? NewArray(loopType, Shape.NewScalar(), false) : NewArray(loopType, Shape.Adopt(dims), false); // dims is built above
             int size = loopType.SizeOf();
             Buffer.MemoryCopy(slot, (byte*)r.Address, size, size);
             return dims.Length == 0 ? r.MarkReductionScalar() : r;
@@ -990,13 +990,13 @@ namespace NumSharp.Backends
         /// <param name="ndim">The reduced operand's rank.</param>
         /// <param name="keepdims">Keep the reduced axes with length 1.</param>
         /// <returns>The array; the caller writes its one element.</returns>
-        private static NDArray NewFlatReductionResult(NPTypeCode type, int ndim, bool keepdims)
+        private NDArray NewFlatReductionResult(NPTypeCode type, int ndim, bool keepdims)
         {
             if (!keepdims || ndim == 0)
-                return new NDArray(type, Shape.Scalar, false);
+                return NewArray(type, Shape.Scalar, false);
             var ones = new long[ndim];
             Array.Fill(ones, 1L);
-            return new NDArray(type, Shape.Adopt(ones), false);
+            return NewArray(type, Shape.Adopt(ones), false);
         }
 
         /// <summary>The loop-dtype value in <paramref name="slot"/>, boxed as the loop dtype's own CLR type (for an

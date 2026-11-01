@@ -241,6 +241,8 @@ namespace NumSharp.Backends
                     adjustedShape = adjustedShape.WithFlags(flagsToSet: ArrayFlags.WRITEABLE);
                 var view = UnmanagedStorage.CreateBroadcastedUnsafe(SliceForSubview(offset, sliceSize), adjustedShape);
                 view._baseStorage = _baseStorage ?? this;
+                // a sub-array keeps its source's engine (Alias does too): the operations on it compute where the source's do
+                view.Engine = Engine;
                 // A lane-sharing descriptor (longdouble, Windows' intc) is not on the buffer: the new view carries it.
                 view.AdoptLaneSharingDescr(_descr);
                 view.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
@@ -264,6 +266,8 @@ namespace NumSharp.Backends
                     shape = shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
                 var view = new UnmanagedStorage(SliceForSubview(offset, shape.Size), shape);
                 view._baseStorage = _baseStorage ?? this;
+                // a sub-array keeps its source's engine (Alias does too): the operations on it compute where the source's do
+                view.Engine = Engine;
                 // A lane-sharing descriptor (longdouble, Windows' intc) is not on the buffer: the new view carries it.
                 view.AdoptLaneSharingDescr(_descr);
                 view.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
@@ -315,6 +319,8 @@ namespace NumSharp.Backends
                     adjustedShape = adjustedShape.WithFlags(flagsToSet: ArrayFlags.WRITEABLE);
                 var view = UnmanagedStorage.CreateBroadcastedUnsafe(SliceForSubview(offset, sliceSize), adjustedShape);
                 view._baseStorage = _baseStorage ?? this;
+                // a sub-array keeps its source's engine (Alias does too): the operations on it compute where the source's do
+                view.Engine = Engine;
                 // A lane-sharing descriptor (longdouble, Windows' intc) is not on the buffer: the new view carries it.
                 view.AdoptLaneSharingDescr(_descr);
                 view.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
@@ -338,6 +344,8 @@ namespace NumSharp.Backends
                     shape = shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
                 var view = new UnmanagedStorage(SliceForSubview(offset, shape.Size), shape);
                 view._baseStorage = _baseStorage ?? this;
+                // a sub-array keeps its source's engine (Alias does too): the operations on it compute where the source's do
+                view.Engine = Engine;
                 // A lane-sharing descriptor (longdouble, Windows' intc) is not on the buffer: the new view carries it.
                 view.AdoptLaneSharingDescr(_descr);
                 view.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
@@ -414,6 +422,8 @@ namespace NumSharp.Backends
                     adjustedShape = adjustedShape.WithFlags(flagsToSet: ArrayFlags.WRITEABLE);
                 var view = UnmanagedStorage.CreateBroadcastedUnsafe(SliceForSubview(offset, sliceSize), adjustedShape);
                 view._baseStorage = _baseStorage ?? this;
+                // a sub-array keeps its source's engine (Alias does too): the operations on it compute where the source's do
+                view.Engine = Engine;
                 // A lane-sharing descriptor (longdouble, Windows' intc) is not on the buffer: the new view carries it.
                 view.AdoptLaneSharingDescr(_descr);
                 view.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
@@ -441,6 +451,8 @@ namespace NumSharp.Backends
                     shape = shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
                 var view = new UnmanagedStorage(SliceForSubview(offset, shape.Size), shape);
                 view._baseStorage = _baseStorage ?? this;
+                // a sub-array keeps its source's engine (Alias does too): the operations on it compute where the source's do
+                view.Engine = Engine;
                 // A lane-sharing descriptor (longdouble, Windows' intc) is not on the buffer: the new view carries it.
                 view.AdoptLaneSharingDescr(_descr);
                 view.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
@@ -489,6 +501,8 @@ namespace NumSharp.Backends
                     adjustedShape = adjustedShape.WithFlags(flagsToSet: ArrayFlags.WRITEABLE);
                 var view = UnmanagedStorage.CreateBroadcastedUnsafe(SliceForSubview(offset, sliceSize), adjustedShape);
                 view._baseStorage = _baseStorage ?? this;
+                // a sub-array keeps its source's engine (Alias does too): the operations on it compute where the source's do
+                view.Engine = Engine;
                 // A lane-sharing descriptor (longdouble, Windows' intc) is not on the buffer: the new view carries it.
                 view.AdoptLaneSharingDescr(_descr);
                 view.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
@@ -516,6 +530,8 @@ namespace NumSharp.Backends
                     shape = shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
                 var view = new UnmanagedStorage(SliceForSubview(offset, shape.Size), shape);
                 view._baseStorage = _baseStorage ?? this;
+                // a sub-array keeps its source's engine (Alias does too): the operations on it compute where the source's do
+                view.Engine = Engine;
                 // A lane-sharing descriptor (longdouble, Windows' intc) is not on the buffer: the new view carries it.
                 view.AdoptLaneSharingDescr(_descr);
                 view.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)

@@ -171,6 +171,16 @@ namespace NumSharp.Generic
         public NDArray(Shape shape, bool fillZeros) : base(InfoOf<TDType>.NPTypeCode, shape, fillZeros) { }
 
         /// <summary>
+        ///     The allocation constructor behind <see cref="NumSharp.TensorEngine.NewArray{T}(Shape, bool)"/>: a new typed
+        ///     array bound to <paramref name="engine"/> instead of <see cref="NumSharp.TensorEngine.Default"/>.
+        /// </summary>
+        /// <param name="shape">The dimensions (a view's layout is laid out again in C order, as for every allocation).</param>
+        /// <param name="fillZeros">Zero the buffer; false leaves pool noise the caller must overwrite completely.</param>
+        /// <param name="engine">The engine the array binds (the engine computing the result it will hold); not null.</param>
+        /// <exception cref="ValueError">A dimension is negative, or the byte count overflows.</exception>
+        internal NDArray(Shape shape, bool fillZeros, TensorEngine engine) : base(InfoOf<TDType>.NPTypeCode, shape, fillZeros, engine) { }
+
+        /// <summary>
         /// Clone the array while preserving the typed NDArray wrapper.
         /// </summary>
         public override NDArray Clone() => new NDArray<TDType>(Storage.Clone()) { TensorEngine = TensorEngine };

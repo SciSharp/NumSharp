@@ -48,7 +48,7 @@ namespace NumSharp.Backends
             aux = Sort(aux, -1, null, null, null);
 
             // flag = concatenate(([True], aux[1:] != aux[:-1], [True]))
-            NDArray trueOne = new NDArray(Unmanaged.ArraySlice.FromArray(new[] { true }, true), Shape.Vector(1));   // np.array([True])
+            NDArray trueOne = new NDArray(Unmanaged.ArraySlice.FromArray(new[] { true }, true), Shape.Vector(1)) { TensorEngine = this };   // np.array([True])
             NDArray neq = aux["1:"] != aux[":-1"];
             NDArray flag = NDArray.concatenate(new[] { trueOne, neq, trueOne }, 0, null, null, "same_kind");
 
@@ -106,7 +106,7 @@ namespace NumSharp.Backends
         /// <returns><paramref name="result"/> itself when it is not float32 / float64, empty or free of NaN; otherwise a
         ///     new array with every NaN lane NumPy's canonical positive quiet NaN.</returns>
         [NDScopedCovered] // only reached from the [NDScoped] Union1d / Setxor1d / Setdiff1d members; the canon scalar + mask ride their scope
-        private static NDArray CanonicalizeSetOpNaN(NDArray result)
+        private NDArray CanonicalizeSetOpNaN(NDArray result)
         {
             // Only float32/float64 are canonicalised by NumPy's sort; f16/complex preserve, ints have no NaN.
             if (result.typecode != NPTypeCode.Single && result.typecode != NPTypeCode.Double)
@@ -120,8 +120,8 @@ namespace NumSharp.Backends
 
             // The exact bits NumPy's float sort produces: 0x7FF8000000000000 (f64) / 0x7FC00000 (f32).
             NDArray canon = result.typecode == NPTypeCode.Double
-                ? NDArray.Scalar(BitConverter.UInt64BitsToDouble(0x7FF8000000000000UL))
-                : NDArray.Scalar(BitConverter.UInt32BitsToSingle(0x7FC00000U));
+                ? NewScalar(BitConverter.UInt64BitsToDouble(0x7FF8000000000000UL))
+                : NewScalar(BitConverter.UInt32BitsToSingle(0x7FC00000U));
             return NDArray.where(mask, canon, result);
         }
     }

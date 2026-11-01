@@ -59,7 +59,7 @@ namespace NumSharp.Backends
                 emptyDims[nd - 1] = m0;
                 // np.zeros(shape, a.dtype)'s own allocation (a zero-filled owner of the operand's dtype, text included),
                 // without the call up into np.*.
-                return new NDArray(a.dtype, Shape.Adopt(emptyDims), true);
+                return a.TensorEngine.NewArray(a.dtype, Shape.Adopt(emptyDims), true);
             }
 
             // NumPy's `a = a.conjugate()` is next: ndarray.conjugate refuses a non-numeric dtype before svd
@@ -92,7 +92,7 @@ namespace NumSharp.Backends
             var large = s.TensorEngine.Greater(s, cutoff);
             var reciprocals = s.TensorEngine.Reciprocal(s);
             // np.zeros_like(s)'s own allocation: order 'K' keeps s's axis permutation, zero-filled, s's dtype.
-            var zeros = new NDArray(s.dtype, Shape.NewLikeLayout(s.Shape, 'K', (long[])s.Shape.dimensions.Clone()), true);
+            var zeros = s.TensorEngine.NewArray(s.dtype, Shape.NewLikeLayout(s.Shape, 'K', (long[])s.Shape.dimensions.Clone()), true);
             var sInv = NDArray.where(large, reciprocals, zeros);
             // `res = matmul(transpose(vt), multiply(s[..., newaxis], transpose(u)))`, the operands in that order.
             var vtT = vt.TensorEngine.SwapAxes(vt, -1, -2);

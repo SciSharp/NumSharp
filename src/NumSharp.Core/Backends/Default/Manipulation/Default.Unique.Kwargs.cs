@@ -46,7 +46,7 @@ namespace NumSharp.Backends
         ///     (<see cref="UniqueCompute"/>) reshapes it to the input's shape in every case, as NumPy does.</returns>
         /// <exception cref="NotSupportedException">A dtype outside the 15 numeric ones (a text array reaching this route is a
         ///     bug in the caller, which routes text first).</exception>
-        private static NDArray[] uniqueFlatKwargs(NDArray a, bool return_index, bool return_inverse, bool return_counts, bool equal_nan)
+        private NDArray[] uniqueFlatKwargs(NDArray a, bool return_index, bool return_inverse, bool return_counts, bool equal_nan)
         {
             switch (a.typecode)
             {
@@ -89,7 +89,7 @@ namespace NumSharp.Backends
         ///     re-enters np.unique's flat path, which would come back here. Above <see cref="Array.MaxLength"/> elements
         ///     the long-indexed fallback runs (managed arrays cannot hold the keys).
         /// </remarks>
-        private static unsafe NDArray[] uniqueFlatSorted<T>(NDArray a, bool return_index, bool return_inverse, bool return_counts)
+        private unsafe NDArray[] uniqueFlatSorted<T>(NDArray a, bool return_index, bool return_inverse, bool return_counts)
             where T : unmanaged, IComparable<T>, IEquatable<T>
         {
             long n = a.size;
@@ -133,7 +133,7 @@ namespace NumSharp.Backends
         /// <param name="a">The operand (any layout; only read).</param>
         /// <param name="n">Its element count (positive).</param>
         /// <returns>The sorted distinct values, a fresh 1-D array of <paramref name="a"/>'s dtype.</returns>
-        private static unsafe NDArray uniqueValuesOnly<T>(NDArray a, long n)
+        private unsafe NDArray uniqueValuesOnly<T>(NDArray a, long n)
             where T : unmanaged, IComparable<T>, IEquatable<T>
         {
             // Integer-family values-only: the open-addressing hash path (Default.Unique.Hash.cs)
@@ -187,7 +187,7 @@ namespace NumSharp.Backends
         ///     way and may keep <c>+0.0</c>. With an index or an inverse the values keep the zero NumPy's stable mergesort
         ///     keeps, the first in input order (NumPy's quicksort argsort, an inverse without an index, may keep the other).
         /// </remarks>
-        private static unsafe NDArray[] uniqueFlatSortedDouble(NDArray a, bool return_index, bool return_inverse, bool return_counts, bool equal_nan)
+        private unsafe NDArray[] uniqueFlatSortedDouble(NDArray a, bool return_index, bool return_inverse, bool return_counts, bool equal_nan)
         {
             long n = a.size;
             if (n == 0) return BuildEmptyResults<double>(return_index, return_inverse, return_counts);
@@ -225,7 +225,7 @@ namespace NumSharp.Backends
         /// <param name="equal_nan">True keeps one NaN, false every NaN.</param>
         /// <returns>The sorted distinct values (NaNs last), a fresh 1-D float64 array. With two or more elements every NaN
         ///     is NumPy's sort NaN <c>0x7FF8000000000000</c> (NumPy sorts the array in place first).</returns>
-        private static unsafe NDArray uniqueValuesOnlyDouble(NDArray a, long n, bool equal_nan)
+        private unsafe NDArray uniqueValuesOnlyDouble(NDArray a, long n, bool equal_nan)
         {
             if (!IsManagedSortableLength(n))
             {
@@ -250,7 +250,7 @@ namespace NumSharp.Backends
         /// <param name="return_counts">Also return the counts.</param>
         /// <param name="equal_nan">True: every NaN is one value; false: each NaN is a value of its own.</param>
         /// <returns>[values, index?, inverse?, counts?] (see <see cref="uniqueFlatKwargs"/>).</returns>
-        private static unsafe NDArray[] uniqueFlatSortedFloat(NDArray a, bool return_index, bool return_inverse, bool return_counts, bool equal_nan)
+        private unsafe NDArray[] uniqueFlatSortedFloat(NDArray a, bool return_index, bool return_inverse, bool return_counts, bool equal_nan)
         {
             long n = a.size;
             if (n == 0) return BuildEmptyResults<float>(return_index, return_inverse, return_counts);
@@ -284,7 +284,7 @@ namespace NumSharp.Backends
         /// <param name="equal_nan">True keeps one NaN, false every NaN.</param>
         /// <returns>The sorted distinct values (NaNs last), a fresh 1-D float32 array. With two or more elements every NaN
         ///     is NumPy's sort NaN <c>0x7FC00000</c> (NumPy sorts the array in place first).</returns>
-        private static unsafe NDArray uniqueValuesOnlyFloat(NDArray a, long n, bool equal_nan)
+        private unsafe NDArray uniqueValuesOnlyFloat(NDArray a, long n, bool equal_nan)
         {
             if (!IsManagedSortableLength(n))
                 return uniqueFlatSortedLongFloat<float>(a, n, equal_nan, false, false, false)[0];
@@ -308,7 +308,7 @@ namespace NumSharp.Backends
         /// <param name="return_counts">Also return the counts.</param>
         /// <param name="equal_nan">True: every NaN is one value; false: each NaN is a value of its own.</param>
         /// <returns>[values, index?, inverse?, counts?] (see <see cref="uniqueFlatKwargs"/>).</returns>
-        private static unsafe NDArray[] uniqueFlatSortedHalf(NDArray a, bool return_index, bool return_inverse, bool return_counts, bool equal_nan)
+        private unsafe NDArray[] uniqueFlatSortedHalf(NDArray a, bool return_index, bool return_inverse, bool return_counts, bool equal_nan)
         {
             long n = a.size;
             if (n == 0) return BuildEmptyResults<Half>(return_index, return_inverse, return_counts);
@@ -336,7 +336,7 @@ namespace NumSharp.Backends
         /// <param name="n">Its element count (positive).</param>
         /// <param name="equal_nan">True keeps one NaN, false every NaN.</param>
         /// <returns>The sorted distinct values (NaNs last), a fresh 1-D float16 array.</returns>
-        private static unsafe NDArray uniqueValuesOnlyHalf(NDArray a, long n, bool equal_nan)
+        private unsafe NDArray uniqueValuesOnlyHalf(NDArray a, long n, bool equal_nan)
         {
             if (!IsManagedSortableLength(n))
                 return uniqueFlatSortedLongFloat<Half>(a, n, equal_nan, false, false, false)[0];
@@ -357,7 +357,7 @@ namespace NumSharp.Backends
         /// <param name="return_counts">Also return the counts.</param>
         /// <param name="equal_nan">True: every value with a NaN part is one value; false: each is a value of its own.</param>
         /// <returns>[values, index?, inverse?, counts?] (see <see cref="uniqueFlatKwargs"/>).</returns>
-        private static unsafe NDArray[] uniqueFlatSortedComplex(NDArray a, bool return_index, bool return_inverse, bool return_counts, bool equal_nan)
+        private unsafe NDArray[] uniqueFlatSortedComplex(NDArray a, bool return_index, bool return_inverse, bool return_counts, bool equal_nan)
         {
             long n = a.size;
             if (n == 0) return BuildEmptyResults<Complex>(return_index, return_inverse, return_counts);
@@ -394,7 +394,7 @@ namespace NumSharp.Backends
         /// <param name="n">Its element count (positive).</param>
         /// <param name="equal_nan">True keeps one value with a NaN part, false every one.</param>
         /// <returns>The sorted distinct values (those with a NaN part last), a fresh 1-D complex128 array.</returns>
-        private static unsafe NDArray uniqueValuesOnlyComplex(NDArray a, long n, bool equal_nan)
+        private unsafe NDArray uniqueValuesOnlyComplex(NDArray a, long n, bool equal_nan)
         {
             if (!IsManagedSortableLength(n))
                 return uniqueFlatSortedLongComplex(a, n, equal_nan, false, false, false)[0];
@@ -474,7 +474,7 @@ namespace NumSharp.Backends
         ///     out in partition order.
         ///     </para>
         /// </remarks>
-        private static unsafe NDArray[] uniqueFlatArgsorted<T>(NDArray a, long n, bool return_index, bool return_inverse,
+        private unsafe NDArray[] uniqueFlatArgsorted<T>(NDArray a, long n, bool return_index, bool return_inverse,
             bool return_counts, bool equal_nan, T[] values = null) where T : unmanaged
         {
             // ar = np.asanyarray(ar).flatten(): the elements in C order, bits kept.
@@ -711,7 +711,7 @@ namespace NumSharp.Backends
         /// <param name="keys">The sorted keys.</param>
         /// <param name="n">The number of keys; must be positive (the first key is always kept).</param>
         /// <returns>The first key of each run of equal keys, a fresh 1-D array.</returns>
-        private static unsafe NDArray EmitValuesOnly<T>(T[] keys, long n) where T : unmanaged, IEquatable<T>
+        private unsafe NDArray EmitValuesOnly<T>(T[] keys, long n) where T : unmanaged, IEquatable<T>
         {
             // First pass: count uniques.
             long uniqueCount = 1;
@@ -727,7 +727,7 @@ namespace NumSharp.Backends
             for (long i = 1; i < n; i++)
                 if (!keys[i].Equals(keys[i - 1])) vDst[vIdx++] = keys[i];
 
-            return new NDArray(valuesSlice, Shape.Vector(uniqueCount));
+            return new NDArray(valuesSlice, Shape.Vector(uniqueCount)) { TensorEngine = this };
         }
 
         /// <summary>
@@ -740,7 +740,7 @@ namespace NumSharp.Backends
         /// <param name="firstNaN">The index where the NaN tail starts (<paramref name="n"/> without NaN).</param>
         /// <param name="equal_nan">True keeps the tail's first NaN (its bits as they are), false every NaN.</param>
         /// <returns>The distinct values, NaNs last, a fresh 1-D array.</returns>
-        private static unsafe NDArray EmitValuesOnlyFloat<T>(T[] keys, long n, long firstNaN, bool equal_nan)
+        private unsafe NDArray EmitValuesOnlyFloat<T>(T[] keys, long n, long firstNaN, bool equal_nan)
             where T : unmanaged, IEquatable<T>
         {
             // Count uniques in non-NaN prefix.
@@ -777,7 +777,7 @@ namespace NumSharp.Backends
                 }
             }
 
-            return new NDArray(valuesSlice, Shape.Vector(uniqueCount));
+            return new NDArray(valuesSlice, Shape.Vector(uniqueCount)) { TensorEngine = this };
         }
 
         /// <summary>
@@ -794,7 +794,7 @@ namespace NumSharp.Backends
         /// <param name="firstNaN">The index where the NaN tail starts (<paramref name="n"/> without NaN).</param>
         /// <param name="equal_nan">True: one NaN value counted as the whole tail; false: each NaN counted once.</param>
         /// <returns>[values, counts]: fresh 1-D arrays, the counts int64.</returns>
-        private static unsafe NDArray[] EmitValuesAndCountsFloat<T>(T[] keys, long n, long firstNaN, bool equal_nan)
+        private unsafe NDArray[] EmitValuesAndCountsFloat<T>(T[] keys, long n, long firstNaN, bool equal_nan)
             where T : unmanaged, IEquatable<T>
         {
             long uniqueCount = firstNaN > 0 ? 1 : 0;
@@ -839,8 +839,8 @@ namespace NumSharp.Backends
 
             return new[]
             {
-                new NDArray(new ArraySlice<T>(vblock), Shape.Vector(uniqueCount)),
-                new NDArray(new ArraySlice<long>(cblock), Shape.Vector(uniqueCount)),
+                new NDArray(new ArraySlice<T>(vblock), Shape.Vector(uniqueCount)) { TensorEngine = this },
+                new NDArray(new ArraySlice<long>(cblock), Shape.Vector(uniqueCount)) { TensorEngine = this },
             };
         }
 
@@ -863,7 +863,7 @@ namespace NumSharp.Backends
         /// <param name="firstNaN">Unused (always -1 here: these types hold no NaN); kept so the call sites read like the
         ///     float paths'.</param>
         /// <returns>[values, index?, inverse?, counts?] (see <see cref="EmitOutputs{T}"/>).</returns>
-        private static unsafe NDArray[] BuildSortedResults<T>(
+        private unsafe NDArray[] BuildSortedResults<T>(
             NDArray a, T[] keys, long[] perm, long n,
             bool return_index, bool return_inverse, bool return_counts,
             long firstNaN) where T : unmanaged, IEquatable<T>
@@ -903,7 +903,7 @@ namespace NumSharp.Backends
         ///     different NaN values, and NumPy's index is the first of them in sorted order). False (the routes whose sort
         ///     is unstable): the smallest permutation entry of each run, the first occurrence.</param>
         /// <returns>[values, index?, inverse?, counts?]: fresh arrays, the index outputs int64.</returns>
-        private static unsafe NDArray[] EmitOutputs<T>(
+        private unsafe NDArray[] EmitOutputs<T>(
             NDArray a, T[] keys, long[] perm, bool[] mask, long n, long uniqueCount,
             bool return_index, bool return_inverse, bool return_counts, bool indexAtRunStart = false) where T : unmanaged
         {
@@ -917,7 +917,7 @@ namespace NumSharp.Backends
             long vIdx = 0;
             for (long i = 0; i < n; i++)
                 if (mask[i]) vDst[vIdx++] = keys[i];
-            results[0] = new NDArray(valuesSlice, Shape.Vector(uniqueCount));
+            results[0] = new NDArray(valuesSlice, Shape.Vector(uniqueCount)) { TensorEngine = this };
             int outPos = 1;
 
             // index — perm[mask] (NumPy's statement, for NumPy's argsort), else min(perm) within each run of equal keys
@@ -929,7 +929,7 @@ namespace NumSharp.Backends
                 long oIdx = 0;
                 for (long i = 0; i < n; i++)
                     if (mask[i]) iDst[oIdx++] = perm[i];
-                results[outPos++] = new NDArray(new ArraySlice<long>(idxBlock), Shape.Vector(uniqueCount));
+                results[outPos++] = new NDArray(new ArraySlice<long>(idxBlock), Shape.Vector(uniqueCount)) { TensorEngine = this };
             }
             else if (return_index)
             {
@@ -951,7 +951,7 @@ namespace NumSharp.Backends
                     }
                 }
                 iDst[oIdx++] = currentMin;
-                results[outPos++] = new NDArray(idxSlice, Shape.Vector(uniqueCount));
+                results[outPos++] = new NDArray(idxSlice, Shape.Vector(uniqueCount)) { TensorEngine = this };
             }
 
             // inverse — inv[perm[i]] = cumsum(mask)[i] - 1; reshape to input shape when ndim > 1
@@ -967,7 +967,7 @@ namespace NumSharp.Backends
                     invDst[perm[i]] = rank;
                 }
                 var invShape = a.ndim <= 1 ? Shape.Vector(n) : Shape.Adopt(a.Storage.Shape.dimensions);
-                results[outPos++] = new NDArray(invSlice, invShape);
+                results[outPos++] = new NDArray(invSlice, invShape) { TensorEngine = this };
             }
 
             // counts — distance between consecutive mask=true positions
@@ -987,7 +987,7 @@ namespace NumSharp.Backends
                     }
                 }
                 cDst[cIdx++] = n - prevPos;
-                results[outPos++] = new NDArray(cntSlice, Shape.Vector(uniqueCount));
+                results[outPos++] = new NDArray(cntSlice, Shape.Vector(uniqueCount)) { TensorEngine = this };
             }
 
             return results;
@@ -1003,18 +1003,18 @@ namespace NumSharp.Backends
         ///     input's shape, e.g. <c>(0, 3)</c>).</param>
         /// <param name="return_counts">Also return empty counts.</param>
         /// <returns>[values, index?, inverse?, counts?], every array of shape <c>(0,)</c>.</returns>
-        private static NDArray[] BuildEmptyResults<T>(bool return_index, bool return_inverse, bool return_counts) where T : unmanaged
+        private NDArray[] BuildEmptyResults<T>(bool return_index, bool return_inverse, bool return_counts) where T : unmanaged
         {
             int outCount = 1 + (return_index ? 1 : 0) + (return_inverse ? 1 : 0) + (return_counts ? 1 : 0);
             var results = new NDArray[outCount];
-            results[0] = new NDArray(new ArraySlice<T>(new UnmanagedMemoryBlock<T>(0)), Shape.Vector(0));
+            results[0] = new NDArray(new ArraySlice<T>(new UnmanagedMemoryBlock<T>(0)), Shape.Vector(0)) { TensorEngine = this };
             int pos = 1;
             if (return_index)
-                results[pos++] = new NDArray(new ArraySlice<long>(new UnmanagedMemoryBlock<long>(0)), Shape.Vector(0));
+                results[pos++] = new NDArray(new ArraySlice<long>(new UnmanagedMemoryBlock<long>(0)), Shape.Vector(0)) { TensorEngine = this };
             if (return_inverse)
-                results[pos++] = new NDArray(new ArraySlice<long>(new UnmanagedMemoryBlock<long>(0)), Shape.Vector(0));
+                results[pos++] = new NDArray(new ArraySlice<long>(new UnmanagedMemoryBlock<long>(0)), Shape.Vector(0)) { TensorEngine = this };
             if (return_counts)
-                results[pos++] = new NDArray(new ArraySlice<long>(new UnmanagedMemoryBlock<long>(0)), Shape.Vector(0));
+                results[pos++] = new NDArray(new ArraySlice<long>(new UnmanagedMemoryBlock<long>(0)), Shape.Vector(0)) { TensorEngine = this };
             return results;
         }
 
@@ -1052,7 +1052,7 @@ namespace NumSharp.Backends
         ///     offset.
         ///     </para>
         /// </remarks>
-        private static NDArray[] uniqueAxisKwargs(NDArray a, int axis, bool return_index, bool return_inverse, bool return_counts, bool equal_nan)
+        private NDArray[] uniqueAxisKwargs(NDArray a, int axis, bool return_index, bool return_inverse, bool return_counts, bool equal_nan)
         {
             // equal_nan has NO EFFECT on the axis path — NumPy consolidates each slab into a
             // structured scalar whose dtype.kind is 'V', so _unique1d's equal_nan branch (guarded by
@@ -1128,7 +1128,7 @@ namespace NumSharp.Backends
                     for (int i = 0; i < outN; i++)
                         p[i] = sortedFirstOrig[i];
                 }
-                results.Add(new NDArray(idxSlice, Shape.Vector(outN)));
+                results.Add(new NDArray(idxSlice, Shape.Vector(outN)) { TensorEngine = this });
             }
 
             if (return_inverse)
@@ -1149,7 +1149,7 @@ namespace NumSharp.Backends
                         prevSorted = cur;
                     }
                 }
-                results.Add(new NDArray(invSlice, Shape.Vector(n)));
+                results.Add(new NDArray(invSlice, Shape.Vector(n)) { TensorEngine = this });
             }
 
             if (return_counts)
@@ -1162,7 +1162,7 @@ namespace NumSharp.Backends
                     for (int i = 0; i < outN; i++)
                         p[i] = sortedCounts[i];
                 }
-                results.Add(new NDArray(cntSlice, Shape.Vector(outN)));
+                results.Add(new NDArray(cntSlice, Shape.Vector(outN)) { TensorEngine = this });
             }
 
             return results.ToArray();
@@ -1432,7 +1432,7 @@ namespace NumSharp.Backends
         /// <param name="outShape">The result's shape (<c>indices.Length</c> rows of the source's other dimensions).</param>
         /// <returns>A fresh C-contiguous array of <paramref name="src"/>'s dtype.</returns>
         /// <exception cref="NotSupportedException">A dtype outside the 15 numeric ones.</exception>
-        private static unsafe NDArray GatherSlabs(NDArray src, int[] indices, long slabSize, Shape outShape)
+        private unsafe NDArray GatherSlabs(NDArray src, int[] indices, long slabSize, Shape outShape)
         {
             switch (src.typecode)
             {
@@ -1464,7 +1464,7 @@ namespace NumSharp.Backends
         /// <param name="slabSize">The elements per row.</param>
         /// <param name="outShape">The result's shape.</param>
         /// <returns>A fresh array that owns its buffer.</returns>
-        private static unsafe NDArray GatherSlabsT<T>(NDArray src, int[] indices, long slabSize, Shape outShape)
+        private unsafe NDArray GatherSlabsT<T>(NDArray src, int[] indices, long slabSize, Shape outShape)
             where T : unmanaged
         {
             long outN = indices.Length;
@@ -1479,7 +1479,7 @@ namespace NumSharp.Backends
                 for (long k = 0; k < slabSize; k++)
                     dst[dstBase + k] = srcPtr[srcBase + k];
             }
-            return new NDArray(slice, outShape);
+            return new NDArray(slice, outShape) { TensorEngine = this };
         }
 
         // ============================================================
@@ -1534,7 +1534,7 @@ namespace NumSharp.Backends
         /// <returns>[values, index?, inverse?, counts?] (see <see cref="EmitOutputsLong{T}"/>).</returns>
         /// <remarks>Reached only above <see cref="Array.MaxLength"/> elements (and by reflection from the tests). The
         ///     record block is not disposed: its buffer returns through the block's finalizer.</remarks>
-        private static unsafe NDArray[] uniqueFlatSortedLong<T>(NDArray a, long n,
+        private unsafe NDArray[] uniqueFlatSortedLong<T>(NDArray a, long n,
             bool return_index, bool return_inverse, bool return_counts,
             long firstNaN) where T : unmanaged, IComparable<T>, IEquatable<T>
         {
@@ -1573,7 +1573,7 @@ namespace NumSharp.Backends
         /// <param name="return_counts">Also return the counts.</param>
         /// <returns>[values, index?, inverse?, counts?] (see <see cref="EmitOutputsLong{T}"/>).</returns>
         /// <remarks>Reached only above <see cref="Array.MaxLength"/> elements (and by reflection from the tests).</remarks>
-        private static unsafe NDArray[] uniqueFlatSortedLongFloat<T>(NDArray a, long n, bool equal_nan,
+        private unsafe NDArray[] uniqueFlatSortedLongFloat<T>(NDArray a, long n, bool equal_nan,
             bool return_index, bool return_inverse, bool return_counts)
             where T : unmanaged, IComparable<T>, IEquatable<T>
         {
@@ -1644,7 +1644,7 @@ namespace NumSharp.Backends
         ///     NaNs of a collapsed run. Reached only above <see cref="Array.MaxLength"/> elements (and by reflection from the
         ///     tests); the record block is not disposed, its buffer returns through the block's finalizer.
         /// </remarks>
-        private static unsafe NDArray[] uniqueFlatArgsortedLong<T>(NDArray a, long n, bool equal_nan,
+        private unsafe NDArray[] uniqueFlatArgsortedLong<T>(NDArray a, long n, bool equal_nan,
             bool return_index, bool return_inverse, bool return_counts)
             where T : unmanaged, IComparable<T>, IEquatable<T>
         {
@@ -1689,7 +1689,7 @@ namespace NumSharp.Backends
         /// <returns>[values, index?, inverse?, counts?] (see <see cref="BuildMaskAndEmitLongComplex"/>).</returns>
         /// <remarks>Reached only above <see cref="Array.MaxLength"/> elements (and by reflection from the tests); the record
         ///     block is not disposed, its buffer returns through the block's finalizer.</remarks>
-        private static unsafe NDArray[] uniqueFlatArgsortedLongComplex(NDArray a, long n, bool equal_nan,
+        private unsafe NDArray[] uniqueFlatArgsortedLongComplex(NDArray a, long n, bool equal_nan,
             bool return_index, bool return_inverse, bool return_counts)
         {
             var block = new UnmanagedMemoryBlock<ComplexKeyPerm>(n);
@@ -1729,7 +1729,7 @@ namespace NumSharp.Backends
         /// <param name="return_counts">Also return the counts.</param>
         /// <returns>[values, index?, inverse?, counts?] (see <see cref="BuildMaskAndEmitLongComplex"/>).</returns>
         /// <remarks>Reached only above <see cref="Array.MaxLength"/> elements (and by reflection from the tests).</remarks>
-        private static unsafe NDArray[] uniqueFlatSortedLongComplex(NDArray a, long n, bool equal_nan,
+        private unsafe NDArray[] uniqueFlatSortedLongComplex(NDArray a, long n, bool equal_nan,
             bool return_index, bool return_inverse, bool return_counts)
         {
             // An index, an inverse or counts: the statements the managed route runs (uniqueFlatArgsorted).
@@ -1771,7 +1771,7 @@ namespace NumSharp.Backends
         ///     of values with a NaN part, which holds different values, is represented by the first of them in that
         ///     order.</returns>
         /// <remarks>The mask block is not disposed: its buffer returns through the block's finalizer.</remarks>
-        private static unsafe NDArray[] BuildMaskAndEmitLongComplex(
+        private unsafe NDArray[] BuildMaskAndEmitLongComplex(
             NDArray a, ComplexKeyPerm* kp, long n, long firstNaN, bool equal_nan,
             bool return_index, bool return_inverse, bool return_counts)
         {
@@ -1811,7 +1811,7 @@ namespace NumSharp.Backends
             Complex* vDst = valuesBlock.Address;
             long vIdx = 0;
             for (long i = 0; i < n; i++) if (mask[i] != 0) vDst[vIdx++] = kp[i].Key;
-            results[0] = new NDArray(valuesSlice, Shape.Vector(uniqueCount));
+            results[0] = new NDArray(valuesSlice, Shape.Vector(uniqueCount)) { TensorEngine = this };
             int outPos = 1;
 
             if (return_index)
@@ -1822,7 +1822,7 @@ namespace NumSharp.Backends
                 long oIdx = 0;
                 for (long i = 0; i < n; i++)
                     if (mask[i] != 0) iDst[oIdx++] = kp[i].Perm;
-                results[outPos++] = new NDArray(new ArraySlice<long>(idxBlock), Shape.Vector(uniqueCount));
+                results[outPos++] = new NDArray(new ArraySlice<long>(idxBlock), Shape.Vector(uniqueCount)) { TensorEngine = this };
             }
 
             if (return_inverse)
@@ -1837,7 +1837,7 @@ namespace NumSharp.Backends
                     invDst[kp[i].Perm] = rank;
                 }
                 var invShape = a.ndim <= 1 ? Shape.Vector(n) : Shape.Adopt(a.Storage.Shape.dimensions);
-                results[outPos++] = new NDArray(invSlice, invShape);
+                results[outPos++] = new NDArray(invSlice, invShape) { TensorEngine = this };
             }
 
             if (return_counts)
@@ -1851,7 +1851,7 @@ namespace NumSharp.Backends
                     if (mask[i] != 0) { cDst[cIdx++] = i - prevPos; prevPos = i; }
                 }
                 cDst[cIdx++] = n - prevPos;
-                results[outPos++] = new NDArray(cntSlice, Shape.Vector(uniqueCount));
+                results[outPos++] = new NDArray(cntSlice, Shape.Vector(uniqueCount)) { TensorEngine = this };
             }
 
             return results;
@@ -1961,7 +1961,7 @@ namespace NumSharp.Backends
         /// <param name="return_counts">Also return the counts.</param>
         /// <returns>[values, index?, inverse?, counts?] (see <see cref="EmitOutputsLong{T}"/>).</returns>
         /// <remarks>The mask block is not disposed: its buffer returns through the block's finalizer.</remarks>
-        private static unsafe NDArray[] BuildMaskAndEmitLong<T>(
+        private unsafe NDArray[] BuildMaskAndEmitLong<T>(
             NDArray a, KeyPerm<T>* kp, long n, long firstNaN, bool equal_nan,
             bool return_index, bool return_inverse, bool return_counts)
             where T : unmanaged, IComparable<T>, IEquatable<T>
@@ -2012,7 +2012,7 @@ namespace NumSharp.Backends
         /// <param name="return_inverse">Also return the reconstruction indices.</param>
         /// <param name="return_counts">Also return the counts.</param>
         /// <returns>[values, index?, inverse?, counts?]: fresh arrays, the index outputs int64.</returns>
-        private static unsafe NDArray[] EmitOutputsLong<T>(
+        private unsafe NDArray[] EmitOutputsLong<T>(
             NDArray a, KeyPerm<T>* kp, byte* mask, long n, long uniqueCount,
             bool return_index, bool return_inverse, bool return_counts)
             where T : unmanaged, IComparable<T>
@@ -2027,7 +2027,7 @@ namespace NumSharp.Backends
             long vIdx = 0;
             for (long i = 0; i < n; i++)
                 if (mask[i] != 0) vDst[vIdx++] = kp[i].Key;
-            results[0] = new NDArray(valuesSlice, Shape.Vector(uniqueCount));
+            results[0] = new NDArray(valuesSlice, Shape.Vector(uniqueCount)) { TensorEngine = this };
             int outPos = 1;
 
             // index — min(perm) within each run of equal keys
@@ -2051,7 +2051,7 @@ namespace NumSharp.Backends
                     }
                 }
                 iDst[oIdx++] = currentMin;
-                results[outPos++] = new NDArray(idxSlice, Shape.Vector(uniqueCount));
+                results[outPos++] = new NDArray(idxSlice, Shape.Vector(uniqueCount)) { TensorEngine = this };
             }
 
             // inverse — inv[perm[i]] = cumsum(mask)[i] - 1
@@ -2067,7 +2067,7 @@ namespace NumSharp.Backends
                     invDst[kp[i].Perm] = rank;
                 }
                 var invShape = a.ndim <= 1 ? Shape.Vector(n) : Shape.Adopt(a.Storage.Shape.dimensions);
-                results[outPos++] = new NDArray(invSlice, invShape);
+                results[outPos++] = new NDArray(invSlice, invShape) { TensorEngine = this };
             }
 
             // counts
@@ -2087,7 +2087,7 @@ namespace NumSharp.Backends
                     }
                 }
                 cDst[cIdx++] = n - prevPos;
-                results[outPos++] = new NDArray(cntSlice, Shape.Vector(uniqueCount));
+                results[outPos++] = new NDArray(cntSlice, Shape.Vector(uniqueCount)) { TensorEngine = this };
             }
 
             return results;

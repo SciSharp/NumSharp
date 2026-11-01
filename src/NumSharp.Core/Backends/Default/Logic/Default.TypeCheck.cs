@@ -116,7 +116,7 @@ namespace NumSharp.Backends
         }
 
         // ---- Composition path (array-valued fills, or non-contiguous in-place targets) ----
-        private static void RunNanToNumComposition(NDArray work, NPTypeCode tc, NPTypeCode realTc,
+        private void RunNanToNumComposition(NDArray work, NPTypeCode tc, NPTypeCode realTc,
             object nan, object posinf, object neginf)
         {
             var (maxf, minf) = NanToNumFiniteRange(realTc);
@@ -162,19 +162,19 @@ namespace NumSharp.Backends
         ///     (NumPy's str), a complex128 0-d array for a complex number, the array itself for a complex or text
         ///     array.</returns>
         /// <exception cref="InvalidCastException">A scalar fill of a type that does not convert to a number.</exception>
-        private static NDArray NanToNumFillArray(object fill, double def, NPTypeCode realTc)
+        private NDArray NanToNumFillArray(object fill, double def, NPTypeCode realTc)
         {
             NDArray arr;
-            if (fill is null) arr = NDArray.Scalar(def);
+            if (fill is null) arr = NewScalar(def);
             else if (fill is NDArray nd) arr = nd;
             // NumPy's str fill is a U array whose same_kind cast into a float array copyto refuses ("Cannot cast scalar
             // from dtype('<U1') to dtype('float64') according to the rule 'same_kind'"): the text is never parsed.
             else if (fill is string s) return (NDArray)s;
             // A complex fill: copyto refuses complex -> float the same way (NumPy names complex64 for a float32 / float16
             // destination; NumSharp has one complex width).
-            else if (fill is System.Numerics.Complex c) return NDArray.Scalar(c);
+            else if (fill is System.Numerics.Complex c) return NewScalar(c);
             else if (fill is Array a) arr = NDArray.array(a, null, 0, true, 'C');
-            else arr = NDArray.Scalar(FillToDouble(fill));
+            else arr = NewScalar(FillToDouble(fill));
             // A complex or text array keeps its dtype too, for the same refusal; a real fill is cast to the destination
             // dtype up front (NumPy's copyto casts fill -> d.dtype).
             if (arr.typecode == NPTypeCode.Complex || Backends.Strings.NDStringUfuncs.IsText(arr))
@@ -197,14 +197,14 @@ namespace NumSharp.Backends
             // Text: imag(x) is the empty string, and `'' == 0` has no comparison loop, so NumPy's == answers False
             // everywhere (_failed_comparison_workaround) — a string array is never "real" (probed 2.4.2).
             if (a.GetTypeCode == NPTypeCode.String)
-                return new NDArray(NPTypeCode.Boolean, Shape.Adopt(a.Shape.dimensions), true);
+                return NewArray(NPTypeCode.Boolean, Shape.Adopt(a.Shape.dimensions), true);
 
             if (a.GetTypeCode != NPTypeCode.Complex)
                 return NDArray.ones(Shape.Adopt(a.Shape.dimensions), NPTypeCode.Boolean);
 
             // Complex: the imaginary lane (a strided float64 view via np.imag) compared to zero.
             // IEEE `==` gives NumPy's semantics exactly: -0.0 == 0 (real), NaN/Inf != 0 (not real).
-            return Compare(NDArray.imag_(a), NDArray.Scalar(0d));
+            return Compare(NDArray.imag_(a), NewScalar(0d));
         }
 
         /// <inheritdoc />
@@ -222,7 +222,7 @@ namespace NumSharp.Backends
             {
                 // NumPy returns `res[()]` of `res = zeros(shape, bool)`: for an array that is a VIEW of the fresh buffer
                 // (flags.owndata false), for a 0-d input the scalar; the view takes its own reference on the buffer.
-                var res = new NDArray(NPTypeCode.Boolean, Shape.Adopt((long[])a.Shape.dimensions.Clone()), true);
+                var res = NewArray(NPTypeCode.Boolean, Shape.Adopt((long[])a.Shape.dimensions.Clone()), true);
                 if (res.ndim == 0)
                     return res;
                 var view = new NDArray(res.Storage.Alias(res.Shape));
@@ -232,7 +232,7 @@ namespace NumSharp.Backends
 
             // Complex: the imaginary lane (a strided float64 view via np.imag) compared to zero.
             // IEEE `!=` gives NumPy's semantics exactly: -0.0 != 0 is False, NaN/Inf != 0 is True.
-            return NotEqual(NDArray.imag_(a), NDArray.Scalar(0d));
+            return NotEqual(NDArray.imag_(a), NewScalar(0d));
         }
 
         /// <summary>

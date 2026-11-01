@@ -219,13 +219,13 @@ namespace NumSharp.Backends.Sorting
             if (axis == null)
             {
                 var flat = a.Shape.IsContiguous ? a.reshape(a.size) : a.ravel().copy('C');
-                var outFlat = new NDArray(NPTypeCode.Int64, Shape.Vector(a.size), false);
+                var outFlat = a.TensorEngine.NewArray(NPTypeCode.Int64, Shape.Vector(a.size), false);
                 ArgSortInto(flat, outFlat, 0);
                 return outFlat;
             }
             int ax = NormalizeAxis(axis.Value, a.ndim);
             var src = a.Shape.IsContiguous ? a : a.copy('C');
-            var ret = new NDArray(NPTypeCode.Int64, Shape.Adopt((long[])a.Shape.dimensions.Clone()), false);
+            var ret = a.TensorEngine.NewArray(NPTypeCode.Int64, Shape.Adopt((long[])a.Shape.dimensions.Clone()), false);
             ArgSortInto(src, ret, ax);
             return ret;
         }
@@ -248,12 +248,12 @@ namespace NumSharp.Backends.Sorting
             {
                 // ravel is a view of a C-contiguous input and a C-order copy of any other; the sort only reads it.
                 var line = a.ravel();
-                var flat = new NDArray(a.dtype, Shape.Vector(a.size), false);
+                var flat = a.TensorEngine.NewArray(a.dtype, Shape.Vector(a.size), false);
                 TextSort.SortLinesInto(line, flat, 0);
                 return flat;
             }
             int ax = NormalizeAxis(axis.Value, a.ndim);
-            var res = new NDArray(a.dtype, a.Shape.KeepOrder(), false);
+            var res = a.TensorEngine.NewArray(a.dtype, a.Shape.KeepOrder(), false);
             TextSort.SortLinesInto(a, res, ax);
             return res;
         }
@@ -275,12 +275,12 @@ namespace NumSharp.Backends.Sorting
             if (axis == null)
             {
                 var line = a.ravel();
-                var outFlat = new NDArray(NPTypeCode.Int64, Shape.Vector(a.size), false);
+                var outFlat = a.TensorEngine.NewArray(NPTypeCode.Int64, Shape.Vector(a.size), false);
                 TextSort.ArgSortLines(line, outFlat, 0, stable);
                 return outFlat;
             }
             int ax = NormalizeAxis(axis.Value, a.ndim);
-            var ret = new NDArray(NPTypeCode.Int64, Shape.Adopt((long[])a.Shape.dimensions.Clone()), false);
+            var ret = a.TensorEngine.NewArray(NPTypeCode.Int64, Shape.Adopt((long[])a.Shape.dimensions.Clone()), false);
             TextSort.ArgSortLines(a, ret, ax, stable);
             return ret;
         }
@@ -332,12 +332,12 @@ namespace NumSharp.Backends.Sorting
             {
                 // ravel is a view of a C-contiguous input and a C-order copy of any other; the sort only reads it.
                 var line = a.ravel();
-                var outFlat = new NDArray(NPTypeCode.Int64, Shape.Vector(a.size), false);
+                var outFlat = a.TensorEngine.NewArray(NPTypeCode.Int64, Shape.Vector(a.size), false);
                 VStringSort.ArgSortLines(line, outFlat, 0, stable);
                 return outFlat;
             }
             int ax = NormalizeAxis(axis.Value, a.ndim);
-            var ret = new NDArray(NPTypeCode.Int64, Shape.Adopt((long[])a.Shape.dimensions.Clone()), false);
+            var ret = a.TensorEngine.NewArray(NPTypeCode.Int64, Shape.Adopt((long[])a.Shape.dimensions.Clone()), false);
             VStringSort.ArgSortLines(a, ret, ax, stable);
             return ret;
         }

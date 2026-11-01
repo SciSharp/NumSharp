@@ -179,7 +179,7 @@ namespace NumSharp.Backends
                 else if (!TryClassifyTrivialOperand(targetShape, outItemSize, ref sharedOrder, out byteStrides[nIn]))
                     return null;
 
-                target = new NDArray(targetType, targetShape, false);
+                target = NewArray(targetType, targetShape, false);
             }
 
             // The call is served by the trivial loop from here on; counted before the empty return so the

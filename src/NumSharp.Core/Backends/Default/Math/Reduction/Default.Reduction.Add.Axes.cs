@@ -59,7 +59,7 @@ namespace NumSharp.Backends
         ///     (<c>(0, 1)</c> and <c>(1, 0)</c> are one set). An empty operand gives the identity in every output (the
         ///     iterator makes no call), so a mean over an empty set of elements divides 0 by 0.
         /// </remarks>
-        internal static NDArray ReduceAddOverAxes(NDArray arr, int[] axes, bool keepdims, NPTypeCode loop)
+        internal NDArray ReduceAddOverAxes(NDArray arr, int[] axes, bool keepdims, NPTypeCode loop)
         {
             // One axis and every axis are add.reduce's forms np.sum already has, with NumPy's schedules (np.sum along an
             // axis, the flat sum); a 0-d operand's only tuple, (), is every axis too.
@@ -91,7 +91,7 @@ namespace NumSharp.Backends
         /// <exception cref="NotSupportedException">A text operand (np.average answers text before it reaches here), or a
         ///     set of two axes or more in a loop <see cref="ReduceAddOverAxes"/> has no add loop for.</exception>
         /// <exception cref="OverflowException">A decimal sum leaves decimal's range.</exception>
-        internal static NDArray MeanOverAxes(NDArray arr, int[] axes, bool keepdims)
+        internal NDArray MeanOverAxes(NDArray arr, int[] axes, bool keepdims)
         {
             // _mean's loop: dtype is None, so float64 for an integer or bool operand and float32 for float16
             // (is_float16_result); every other dtype sums in its own loop.
@@ -123,7 +123,7 @@ namespace NumSharp.Backends
         /// <param name="keepdims">Keep the reduced axes with length 1.</param>
         /// <returns>A fresh float64 array of NaN, C-ordered; a read-only 0-d scalar when every axis is reduced without
         ///     keepdims.</returns>
-        private static unsafe NDArray DecimalMeanOfNoElement(NDArray arr, int[] axes, bool keepdims)
+        private unsafe NDArray DecimalMeanOfNoElement(NDArray arr, int[] axes, bool keepdims)
         {
             var dims = new long[keepdims ? arr.ndim : arr.ndim - axes.Length];
             for (int d = 0, k = 0; d < arr.ndim; d++)
@@ -135,7 +135,7 @@ namespace NumSharp.Backends
                     dims[k++] = 1;
             }
 
-            var nan = new NDArray(NPTypeCode.Double, dims.Length == 0 ? Shape.Scalar : Shape.Adopt(dims), false);
+            var nan = NewArray(NPTypeCode.Double, dims.Length == 0 ? Shape.Scalar : Shape.Adopt(dims), false);
             // The allocation is uninitialized: every element is written here, the buffer is dense (a fresh C array).
             double* p = (double*)nan.Address;
             for (long i = 0; i < nan.size; i++)
@@ -157,7 +157,7 @@ namespace NumSharp.Backends
         ///     without keepdims.</returns>
         /// <exception cref="NotSupportedException"><paramref name="loop"/> is not one of the five loops.</exception>
         /// <exception cref="OverflowException">A decimal sum leaves decimal's range.</exception>
-        private static unsafe NDArray ReduceAddThroughIterator(NDArray arr, bool[] flags, bool keepdims, NPTypeCode loop)
+        private unsafe NDArray ReduceAddThroughIterator(NDArray arr, bool[] flags, bool keepdims, NPTypeCode loop)
         {
             // The loop must exist before anything is allocated: the caller never sees a half-built result.
             if (loop != NPTypeCode.Double && loop != NPTypeCode.Single && loop != NPTypeCode.Half
@@ -172,7 +172,7 @@ namespace NumSharp.Backends
             // npyiter_new_temp_array's layout, zero-filled: PyUFunc_ReduceWrapper assigns the identity (+0.0 for an inexact
             // loop, 0 for decimal) to the result before the first call, so every output, an empty reduction's included,
             // starts at it.
-            var result = new NDArray(loop, it.ResultDims.Length == 0 ? Shape.Scalar : Shape.Adopt(it.ResultDims, it.ResultStrides), true);
+            var result = NewArray(loop, it.ResultDims.Length == 0 ? Shape.Scalar : Shape.Adopt(it.ResultDims, it.ResultStrides), true);
             try
             {
                 byte* o = (byte*)result.Address + result.Shape.offset * result.dtypesize;

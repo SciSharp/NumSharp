@@ -74,7 +74,7 @@ namespace NumSharp
             // TensorEngine.Quantile's: the facade holds only the class rules above.
             int[] axes = axis.HasValue ? new[] { axis.Value } : null;
             return chararray
-                ? DefaultEngine.QuantileFunction("quantile", a, new QuantileArgument(q), axes, @out,
+                ? DefaultEngine.Of(a).QuantileFunction("quantile", a, new QuantileArgument(q), axes, @out,
                     overwrite_input, method, keepdims, weights, chararray: true)
                 : a.TensorEngine.Quantile(a, q, axes, @out, overwrite_input, method, keepdims, weights);
         }
@@ -143,7 +143,7 @@ namespace NumSharp
             // NumPy's np.quantile body is TensorEngine.Quantile's (a null q is reported there, after the complex check).
             int[] axes = axis.HasValue ? new[] { axis.Value } : null;
             return chararray
-                ? DefaultEngine.QuantileFunction("quantile", a, new QuantileArgument(q), axes, @out,
+                ? DefaultEngine.Of(a).QuantileFunction("quantile", a, new QuantileArgument(q), axes, @out,
                     overwrite_input, method, keepdims, weights, chararray: true)
                 : a.TensorEngine.Quantile(a, q, axes, @out, overwrite_input, method, keepdims, weights);
         }
@@ -219,7 +219,7 @@ namespace NumSharp
                     static s => quantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
             // NumPy's np.quantile body is TensorEngine.Quantile's.
             return chararray
-                ? DefaultEngine.QuantileFunction("quantile", a, new QuantileArgument(q), axis, @out,
+                ? DefaultEngine.Of(a).QuantileFunction("quantile", a, new QuantileArgument(q), axis, @out,
                     overwrite_input, method, keepdims, weights, chararray: true)
                 : a.TensorEngine.Quantile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
         }
@@ -296,7 +296,7 @@ namespace NumSharp
                     static s => quantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
             // NumPy's np.quantile body is TensorEngine.Quantile's (a null q is reported there, after the complex check).
             return chararray
-                ? DefaultEngine.QuantileFunction("quantile", a, new QuantileArgument(q), axis, @out,
+                ? DefaultEngine.Of(a).QuantileFunction("quantile", a, new QuantileArgument(q), axis, @out,
                     overwrite_input, method, keepdims, weights, chararray: true)
                 : a.TensorEngine.Quantile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
         }
@@ -368,7 +368,7 @@ namespace NumSharp
             // integer q's index taken instead of interpolated, a weak C# literal, q's rank, all in NumPy's order.
             int[] axes = axis.HasValue ? new[] { axis.Value } : null;
             return chararray
-                ? DefaultEngine.QuantileFunction("quantile", a, new QuantileArgument(q), axes, @out,
+                ? DefaultEngine.Of(a).QuantileFunction("quantile", a, new QuantileArgument(q), axes, @out,
                     overwrite_input, method, keepdims, weights, chararray: true)
                 : a.TensorEngine.Quantile(a, q, axes, @out, overwrite_input, method, keepdims, weights);
         }
@@ -443,7 +443,7 @@ namespace NumSharp
                     static s => quantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
             // NumPy's np.quantile body is TensorEngine.Quantile's (see the one-axis overload).
             return chararray
-                ? DefaultEngine.QuantileFunction("quantile", a, new QuantileArgument(q), axis, @out,
+                ? DefaultEngine.Of(a).QuantileFunction("quantile", a, new QuantileArgument(q), axis, @out,
                     overwrite_input, method, keepdims, weights, chararray: true)
                 : a.TensorEngine.Quantile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
         }
