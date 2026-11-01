@@ -908,10 +908,12 @@ namespace NumSharp
         /// <param name="dtype">
         ///     The dtype to cast this array to — one descriptor parameter, like NumPy's <c>dtype</c>: a C# <see cref="Type"/>
         ///     (<c>typeof(float)</c>), an <see cref="NPTypeCode"/>, a NumPy dtype string (<c>"f4"</c>, <c>"float32"</c>) or a
-        ///     <see cref="DType"/> (<c>np.float32</c>, <c>other.dtype</c>) all convert implicitly.
+        ///     <see cref="DType"/> (<c>np.float32</c>, <c>other.dtype</c>) all convert implicitly. Null is NumPy's
+        ///     <c>astype(None)</c>: the default dtype, float64.
         /// </param>
         /// <param name="copy">By default, astype always returns a newly allocated array. If this is set to false and the dtype requirement is already satisfied, the input array itself is returned instead of a copy; when a conversion is needed a new array is still allocated and the input is never modified (NumPy semantics).</param>
         /// <returns>An <see cref="NDArray"/> of given <paramref name="dtype"/>.</returns>
+        /// <exception cref="NotSupportedException">The descriptor's class has no storage lane yet.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.astype.html</remarks>
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
         public NDArray astype(DType dtype, bool copy = true) => astype(dtype, copy, 'K');
@@ -921,7 +923,9 @@ namespace NumSharp
         /// </summary>
         /// <param name="dtype">
         ///     The dtype to cast this array to — one descriptor parameter, like NumPy's <c>dtype</c>: a C# <see cref="Type"/>,
-        ///     an <see cref="NPTypeCode"/>, a NumPy dtype string or a <see cref="DType"/> all convert implicitly.
+        ///     an <see cref="NPTypeCode"/>, a NumPy dtype string or a <see cref="DType"/> all convert implicitly. Null is
+        ///     NumPy's <c>astype(None)</c>: the default dtype, float64 (a float64 array with <paramref name="copy"/> false
+        ///     comes back itself).
         /// </param>
         /// <param name="copy">By default, astype always returns a newly allocated array. If this is set to false and the dtype requirement is already satisfied, the input array itself is returned instead of a copy; when a conversion is needed a new array is still allocated and the input is never modified (NumPy semantics).</param>
         /// <param name="order">
@@ -936,7 +940,6 @@ namespace NumSharp
         ///     when the source dtype cannot cast to <paramref name="dtype"/> under that rule.
         /// </param>
         /// <returns>An <see cref="NDArray"/> of given <paramref name="dtype"/> with the requested layout.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
         /// <exception cref="NotSupportedException">The descriptor's class has no storage lane yet (a datetime64/timedelta64
         ///     descriptor before Stage C), or <paramref name="casting"/> is 'same_value' for a numeric cast between two storage
         ///     types (NumSharp has no value-checking cast loop yet; a cast within one storage type changes no value and runs).</exception>
@@ -948,8 +951,9 @@ namespace NumSharp
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
         public NDArray astype(DType dtype, bool copy, char order, string casting = "unsafe")
         {
-            if (dtype is null)
-                throw new ArgumentNullException(nameof(dtype));
+            // NumPy's astype(None): PyArray_DescrConverter reads None as the default descriptor, float64 (the same rule
+            // np.dtype(None) follows), so a null dtype is a cast to float64, not an error.
+            dtype ??= np.DefaultTypeDescr;
             // A fixed-width string carries its width on the DESCRIPTOR (<U5), which the type-code cast below cannot
             // express: a string array or a string target takes NumPy's array_astype over descriptors (adapt an unsized
             // 'U' / 'S' to the array, the copy=False view shortcut, the casting rule, then the string copy route).

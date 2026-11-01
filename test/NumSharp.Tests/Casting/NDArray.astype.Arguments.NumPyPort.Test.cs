@@ -116,5 +116,30 @@ namespace NumSharp.Tests.Casting
             new Action(() => a.astype(np.int32, true, 'K', "same_value"))
                 .Should().Throw<NotSupportedException>().WithMessage("*same_value*float64*int32*");
         }
+
+        /// <summary>
+        ///     A null dtype is NumPy's <c>astype(None)</c>, the default float64 (the plan's D14; it raised
+        ///     <see cref="ArgumentNullException"/>): <c>np.arange(3).astype(None)</c> is <c>[0., 1., 2.]</c>,
+        ///     <c>np.array(['1', '2']).astype(None)</c> parses the text into <c>[1., 2.]</c>, and a float64 array with
+        ///     <c>copy=False</c> comes back itself (<c>b.astype(None, copy=False) is b</c>), all probed on NumPy 2.4.2.
+        /// </summary>
+        [TestMethod]
+        public void NullDtypeIsTheDefaultFloat64()
+        {
+            var ints = np.arange(3);
+            var asFloat = ints.astype(null);
+            asFloat.dtype.Should().Be(np.float64);
+            asFloat.ToArray<double>().Should().Equal(0.0, 1.0, 2.0);
+
+            var text = np.array(new[] { "1", "2" });
+            var parsed = text.astype(null);
+            parsed.dtype.Should().Be(np.float64);
+            parsed.ToArray<double>().Should().Equal(1.0, 2.0);
+
+            var doubles = np.arange(3.0);
+            doubles.astype(null, copy: false).Should().BeSameAs(doubles);
+            doubles.astype(null).Should().NotBeSameAs(doubles);
+            doubles.astype(null, true, 'C', "same_kind").dtype.Should().Be(np.float64);
+        }
     }
 }
