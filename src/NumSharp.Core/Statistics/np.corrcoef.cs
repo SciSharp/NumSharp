@@ -24,6 +24,14 @@ namespace NumSharp
         /// </param>
         /// <param name="dtype">Data-type of the result. By default the result has at least float64 precision.</param>
         /// <returns>The correlation coefficient matrix of the variables.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
+        /// <exception cref="ValueError">More than 2 dimensions, and the other refusals of <see cref="cov"/> that its
+        ///     <c>m</c> / <c>y</c> / <c>rowvar</c> / <c>dtype</c> can reach (<see cref="TensorEngine.Corrcoef"/> lists
+        ///     them).</exception>
+        /// <exception cref="IncorrectShapeException">Numeric variables with different observation counts.</exception>
+        /// <exception cref="TypeError">Text that cov's mean refuses.</exception>
+        /// <exception cref="DTypePromotionError"><c>StringDType</c> variables without <paramref name="dtype"/>.</exception>
+        /// <exception cref="ArgumentException">An integer or bool <paramref name="dtype"/>.</exception>
         /// <remarks>
         ///     Port of NumPy 2.4.2's <c>numpy/lib/_function_base_impl.corrcoef</c> — a thin wrapper
         ///     over <see cref="cov"/>. Like NumPy 2.x this exposes ONLY <c>x</c>/<c>y</c>/<c>rowvar</c>/
@@ -34,64 +42,14 @@ namespace NumSharp
         ///     profile as <see cref="cov"/> itself. Due to floating-point rounding the diagonal may not
         ///     be exactly 1 and off-diagonal magnitudes may nudge past 1; the real (and, for complex
         ///     input, imaginary) parts are therefore clipped to <c>[-1, 1]</c>, exactly as NumPy does.
+        ///     The statements are <see cref="TensorEngine.Corrcoef"/>, on <paramref name="x"/>'s engine.
         ///     https://numpy.org/doc/stable/reference/generated/numpy.corrcoef.html
         /// </remarks>
-        [NDScoped]
         public static NDArray corrcoef(NDArray x, NDArray y = null, bool rowvar = true, DType dtype = null)
         {
             using var plain = NDMatrixBoundary.PlainFor(x, y);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (x is null) throw new ArgumentNullException(nameof(x));
-
-            // c = cov(x, y, rowvar, dtype=dtype). Delegating here also inherits cov's validation and
-            // its verbatim error taxonomy (e.g. ValueError "m has more than 2 dimensions") — text included: cov
-            // follows NumPy's statements over text up to its first reduction, which refuses it (or returns the empty
-            // float64 (0, 0) result for no variables, which corrcoef then divides like NumPy).
-            NDArray c = np.cov(x, y, rowvar, dtype: dtype);
-
-            // d = diag(c). cov returns a 0-d SCALAR for a single variable, and np.diag raises on a 0-d
-            // input (NumPy's ValueError, NumSharp's ArgumentException) — NumPy's "scalar covariance"
-            // branch, `return c / c`: 1 for a good value, nan for a nan/inf/0 covariance.
-            NDArray d;
-            try
-            {
-                d = np.diag(c);
-            }
-            catch (ArgumentException)
-            {
-                return c / c;
-            }
-
-            // stddev = sqrt(d.real). The diagonal holds the variances, which are real even for complex
-            // input, so `.real` (a no-op for a real array) keeps stddev real.
-            NDArray stddev = np.sqrt(np.real(d));
-
-            // c /= stddev[:, None]; c /= stddev[None, :] — NumPy performs BOTH divisions in
-            // place, so preserve that ufunc/out structure. The underlying complex division is now
-            // bit-exact vs NumPy (ComplexDivideNumPy ports CDOUBLE_divide), so any residual complex
-            // corrcoef divergence comes from cov's managed complex GEMM (np.dot), not this division.
-            np.divide(c, stddev.reshape(stddev.size, 1), @out: c);
-            np.divide(c, stddev.reshape(1, stddev.size), @out: c);
-
-            // Clip real (and, for complex, imaginary) lanes to [-1, 1] IN PLACE, exactly as NumPy does:
-            // np.real(c) is c itself for a real array and a write-through float64 lane view for a
-            // complex array, so the clipped values land back in c either way.
-            ClipToUnit(np.real(c));
-            if (np.iscomplexobj(c))
-                ClipToUnit(np.imag(c));
-
-            return c;
-
-            // Clip a float lane to [-1, 1] in place. The bounds are cast to the lane's dtype so clipping
-            // stays in that precision: a C# `-1`/`1` literal is a STRONG int32 scalar, which under NEP50
-            // would promote a float32 lane to float64 and then fail clip's same_kind out-cast. NumPy's
-            // Python `-1`/`1` are WEAK ints that adopt the operand dtype — which this reproduces, and
-            // ±1 is exactly representable in every float type, so the values are unchanged.
-            static void ClipToUnit(NDArray lane)
-            {
-                NDArray lo = NDArray.Scalar(-1).astype(lane.typecode);
-                NDArray hi = NDArray.Scalar(1).astype(lane.typecode);
-                np.clip(lane, lo, hi, @out: lane);
-            }
+            return x.TensorEngine.Corrcoef(x, y, rowvar, dtype);
         }
     }
 }

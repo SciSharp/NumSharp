@@ -235,6 +235,44 @@ namespace NumSharp
             NDArray fweights = null, NDArray aweights = null, DType dtype = null);
 
         /// <summary>
+        ///     NumPy's <c>np.corrcoef(x, y=None, rowvar=True, *, dtype=None)</c>: the Pearson correlation coefficients
+        ///     <c>R_ij = C_ij / sqrt(C_ii * C_jj)</c> of <c>C = cov(x, y, rowvar, dtype=dtype)</c>, the two divisions made in
+        ///     place, then the result clipped to [-1, 1] in place (the real and the imaginary lanes of a complex result), which
+        ///     rounding can push a coefficient past.
+        /// </summary>
+        /// <param name="x">The variables, a plain array (not null): 1-D or 2-D, a variable per row unless
+        ///     <paramref name="rowvar"/> is false.</param>
+        /// <param name="y">An additional set of variables, or null.</param>
+        /// <param name="rowvar">Whether rows are variables (columns observations).</param>
+        /// <param name="dtype">The result dtype, or null for <see cref="Cov"/>'s <c>result_type(x, y, float64)</c>.</param>
+        /// <returns>
+        ///     The correlation matrix, a fresh array the caller owns (cov's own matrix, divided and clipped in place). For one
+        ///     variable cov's result is 0-d, which has no diagonal: NumPy's <c>c / c</c> then, 1 or NaN (a NaN, infinite or
+        ///     zero variance). No variables give cov's empty <c>(0, 0)</c> float64 array.
+        /// </returns>
+        /// <exception cref="ValueError">More than 2 dimensions; text variables whose <paramref name="x"/> and
+        ///     <paramref name="y"/> have different observation counts; text that does not parse into a numeric
+        ///     <paramref name="dtype"/>; a <c>StringDType</c> request over no observations (<see cref="Cov"/>'s).</exception>
+        /// <exception cref="IncorrectShapeException">Numeric variables with different observation counts (cov's
+        ///     concatenate).</exception>
+        /// <exception cref="TypeError">Text that cov's mean refuses.</exception>
+        /// <exception cref="DTypePromotionError"><c>StringDType</c> variables without <paramref name="dtype"/>.</exception>
+        /// <exception cref="ArgumentException">An integer or bool <paramref name="dtype"/> (cov's in-place centring refuses
+        ///     the cast).</exception>
+        /// <exception cref="OverflowException">An integer text outside an integer <paramref name="dtype"/>, or decimal
+        ///     arithmetic out of range.</exception>
+        /// <exception cref="UnicodeEncodeError">A U → S conversion of non-ASCII text.</exception>
+        /// <exception cref="UnicodeDecodeError">An S → U conversion of non-ASCII bytes.</exception>
+        /// <remarks>
+        ///     NumPy writes corrcoef in Python over cov (NumPy 2.x dropped its <c>bias</c> / <c>ddof</c>); DefaultEngine runs
+        ///     its statements over the operand engine's <see cref="Cov"/>, <see cref="Sqrt"/>, <see cref="Divide"/> and
+        ///     <see cref="ClipNDArray"/> and the array object's diagonal and real / imaginary lanes. <c>np.corrcoef</c> calls
+        ///     it after the matrix boundary's plain region and the null check; an override replaces it for every array whose
+        ///     engine it is.
+        /// </remarks>
+        public abstract NDArray Corrcoef(NDArray x, NDArray y = null, bool rowvar = true, DType dtype = null);
+
+        /// <summary>
         ///     NumPy's <c>np.gradient(f, *varargs, axis=None, edge_order=1)</c>: one fresh array per requested axis, with
         ///     second-order central differences inside and first- or second-order one-sided differences at both ends; each
         ///     component has <paramref name="f"/>'s shape.
