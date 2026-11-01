@@ -474,7 +474,9 @@ The package implements NumSharp's `IBlasBackend` and assigns it to the engine's 
 `TensorEngine.Blas` property from its module initializer. The engine is **not** replaced or
 subclassed - deliberately: an `NDArray` binds its engine at construction and `np.dot(a, b)`
 dispatches on `a.TensorEngine`, so swapping the engine would only reach arrays created afterwards,
-while a property on the cached singleton takes effect for arrays that already exist.
+while a property on the engine takes effect for arrays that already exist. The package installs on
+`TensorEngine.Default` as it is when the package loads; an engine you assign to `TensorEngine.Default`
+later has its own `Blas`, so copy it over (`engine.Blas = TensorEngine.Default.Blas;`) first.
 
 ```csharp
 // The entire Core-side surface:

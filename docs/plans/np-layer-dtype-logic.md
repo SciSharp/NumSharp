@@ -149,7 +149,7 @@ Three items were tried first (2026-10-30):
 
 Order of the work left (decided 2026-10-31 in the step round, D22): the merge (done); P6b (done 2026-11-01); P8 (done
 2026-11-01: the rename `838fccfd`, the 12 functions that compute `c046d2ca` .. `d0c7a582`, the array object's functions
-`690948f3` .. `75788048`); P9; P10; PA3; PA2. Later: PA5, PA6 and the fixes of the pinned divergences
+`690948f3` .. `75788048`); P9 (done 2026-11-01: `72415a24`, `55a277e5`); P10; PA3; PA2. Later: PA5, PA6 and the fixes of the pinned divergences
 (`OpenBugs.NpLayer.cs`, NL1 to NL11).
 
 Progress goes into the [§9 state log](#9-state-log), newest entry first.
@@ -1489,16 +1489,31 @@ Decided 2026-10-31 (D9). The probe that decided it: an engine set on `a` decides
 `np.sum(a)` and `a["1:4"]` bind the fixed default, because the engine allocates its results with
 `new NDArray(dtype, shape, ...)` (326 such constructions under `Backends/Default`, 4 that pass the engine); only `a.T`
 and `a.copy()` keep it.
-- [ ] `TensorEngine.Default`, a settable static property: the engine an array binds when nothing else decides
+- [x] `TensorEngine.Default`, a settable static property: the engine an array binds when nothing else decides
       (np.zeros, a function with no operand). Set it, and arrays created afterwards bind the new engine; older arrays
-      keep theirs. `BackendFactory.GetEngine()` (shipped) forwards to it.
-- [ ] `NDArray.TensorEngine` resolves an unset engine to `TensorEngine.Default`. Call sites name `a.TensorEngine` (an
+      keep theirs. `BackendFactory.GetEngine()` (shipped) forwards to it. Done (`72415a24`): null restores the built-in
+      engine (`BackendFactory.BuiltIn`, the cached `DefaultEngine`), as `Linalg` / `Fft` do; the documented footgun is
+      that `Blas` / `Linalg` / `Fft` belong to each engine instance (NumSharp.Interop.OpenBLAS installs on the engine
+      that is the default when it loads).
+- [x] `NDArray.TensorEngine` resolves an unset engine to `TensorEngine.Default`. Call sites name `a.TensorEngine` (an
       operand decides) or `TensorEngine.Default` (none does), with no fallback logic per call; `np.EngineOf` (154
-      calls) goes. A facade whose operand may be null checks it at its entry (C#'s convention).
-- [ ] Results and views bind the engine that made them: the engine allocates through one member that passes itself
-      (`NewArray(dtype, shape, fillZeros)`), and a view keeps its source's engine.
+      calls) goes. A facade whose operand may be null checks it at its entry (C#'s convention). Done (`72415a24`): 155
+      calls converted by a Roslyn rewriter, 143 entry checks; the sequence facades (np.ravel_multi_index, np.lexsort,
+      np.linalg.multi_dot, np.histogramdd, np.einsum, np.einsum_path, np.evaluate) take the first operand's engine, else
+      `TensorEngine.Default`, so an empty, null or null-led list (a null entry is NumPy's None there) still meets
+      NumPy's error. `a.TensorEngine = null` binds the default.
+- [x] Results and views bind the engine that made them: the engine allocates through one member that passes itself
+      (`NewArray(dtype, shape, fillZeros)`), and a view keeps its source's engine. Done (`55a277e5`): `NewArray` /
+      `NewArray<T>` and, for 0-d values, `NewScalar` (`NDArray.Scalar`'s four overloads) on `TensorEngine`; every
+      static `DefaultEngine` method that allocated became an instance method (175, two Roslyn passes) but three pinned
+      input conversions and stores; the sub-engines (linalg, FFT) and the engine's helper classes (AxisSort, ManagedLu,
+      SlidingDot) allocate on their operand's engine; `NDArray.ForOverwrite` takes the engine; the slice paths of
+      `GetViewInternal` / `GetData` and buffer views (`OverBuffer`) keep the source's engine. The array object's
+      functions (np.concatenate, np.where, fancy indexing, np.take, the `*_like` family, ...) create their arrays on
+      `TensorEngine.Default`: no engine made them. A view, a copy or a cast of an operand keeps its engine.
 - Gate: a `DefaultEngine` subclass that counts its calls through chained operations, views, reductions and np.zeros
-  after setting `TensorEngine.Default`.
+  after setting `TensorEngine.Default`. Done: `test/NumSharp.Tests/Backends/TensorEngineDefaultTests.cs` (that gate,
+  plus the per-array engine through 33 operations and a chain, and the array-object rule).
 
 ### P10. Decided API changes
 
@@ -1573,6 +1588,29 @@ breaks a subclass or a direct caller for a layering reason alone.
 ---
 
 ## 9. State log
+
+- **2026-11-01, P9: `TensorEngine.Default`, and an engine's results bind that engine - P9 is done.** Two commits on
+  `strings` (not pushed).
+  - `72415a24`: `TensorEngine.Default`, settable, null restoring the built-in engine (`BackendFactory.BuiltIn`);
+    `BackendFactory.GetEngine()` returns it; the NDArray constructors and the `TensorEngine` getter resolve it, and
+    `a.TensorEngine = null` binds it. np.EngineOf removed: a Roslyn rewriter turned its 155 calls into
+    `TensorEngine.Default` (12) and `x.TensorEngine` with an entry null check (143, with 103 doc lines); the sequence
+    facades take the first operand's engine, else the default, so NumPy's errors for an empty or None-led list stay.
+    A null operand used to throw NullReferenceException from 68 of those facades.
+  - `55a277e5`: `TensorEngine.NewArray` / `NewArray<T>` / `NewScalar`; 175 static DefaultEngine methods became instance
+    methods (two Roslyn passes; three input conversions and stores, and two helpers numpy.ma and NDListArray call, stay
+    static), 226 allocations, 52 buffer wraps and 165 scalars allocate on the computing engine; the sub-engines and
+    AxisSort / ManagedLu / SlidingDot / PocketFFTDriver allocate on their operand's engine; the slice, sub-array and
+    buffer views keep the source's engine. `DefaultEngine.Of(a)` serves the facades that call DefaultEngine's statements
+    directly (the chararray quantile route, np.median's chararray error).
+  - The per-array sweep (an engine set on one array, 106 operations): 93 results keep it, every one an engine computed;
+    the 13 that bind the default are the array object's functions (np.concatenate, np.stack, np.repeat, np.roll,
+    np.where, fancy indexing, np.take, np.triu, np.diag, np.pad, the *_like family), the rule now documented on
+    `TensorEngine.Default`. The NDArray analyzer reports the same 336 sites before and after.
+  - Gates (Release, CI's filter, at `55a277e5`): NumSharp.Tests 21,024 / 21,023 passed (12 skipped) on net10.0 / net8.0,
+    the oracle 414 passed and 2 skipped on both. `TensorEngineDefaultTests` holds the plan's gate and the per-array
+    sweep's 33 operations.
+  - Next: P10's items 1 to 5 (the owner's request of 2026-11-01; item 6, the three NDArray homes, is not in it).
 
 - **2026-11-01, P8's array-object functions: each one is an `NDArray` member - P8 is done.** Fourteen commits on
   `strings` after the computing functions' (not pushed): six tool commits, seven family commits and one pin.

@@ -42,8 +42,9 @@ public abstract partial class TensorEngine
   method, before its first statement, in every JIT mode, so an in-process opt-out must be set by code that names no
   package type and inlines no method that does.
 - The engine is not subclassed or replaced: an `NDArray` binds its engine at construction and `np.dot(a, b)` dispatches
-  on `a.TensorEngine`, so only a property on the cached singleton reaches arrays that already exist (every
-  construction, operation and IO path reaches the one `EngineCache<DefaultEngine>` instance).
+  on `a.TensorEngine`, so only a property on the engine reaches arrays that already exist. The package installs on
+  `TensorEngine.Default` as it is when the package loads (the built-in `DefaultEngine` unless a program assigned another
+  first); an engine assigned to `TensorEngine.Default` later has its own `Blas` (null until set), so copy it over.
 - Read `Blas` into a local before calling it: test-then-call on a settable property races a concurrent `Disable()`.
 - A failed `OpenBlasEngine.Enable` is a no-op: the library already loaded stays loaded.
 - A backend needs no `InternalsVisibleTo`: read operands as `(T*)a.GetData().Address + a.Shape.Offset` with

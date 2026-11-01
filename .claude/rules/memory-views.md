@@ -56,6 +56,9 @@ and method that takes a caller's `long[]` copies it (NumPy's `PyArray_IntpConver
 ## Views
 
 Slicing returns a view that shares memory: `original["2:5"][0] = 999` writes `original[2]`; `.copy()` makes a copy.
+A view keeps its source's engine (`UnmanagedStorage.Engine`: `Alias`, the new-storage slice paths of `GetViewInternal` /
+`GetData`, broadcast and buffer views set it), and an engine binds what it computes to itself (`TensorEngine.NewArray` /
+`NewScalar`), so a new view creator copies `Engine` too.
 
 - `Slice` (`View/Slice.cs`) parses Python notation (`"1:5:2"`) into `Start` / `Stop` / `Step`; `SliceDef` holds the
   absolute indices, and `SliceDef.Merge()` composes a slice of a slice. Special instances: `Slice.All` (`:`),
