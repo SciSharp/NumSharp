@@ -138,32 +138,15 @@ namespace NumSharp
         /// <summary>
         ///     Returns true incase of a number, bool or string. If null, returns false.
         /// </summary>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.isscalar.html</remarks>
-        public static bool isscalar(object obj)
-        {
-            switch (obj)
-            {
-                case null:
-                    return false;
-                case NDArray nd:
-                    return nd.ndim == 0 && nd.size == 1;
-                case Type _:
-                    break;
-                case Complex _:
-                case string _:
-                case bool _:
-                    return true;
-            }
-
-            var type = obj as Type ?? obj.GetType();
-            if (type.IsArray)
-            {
-                return false;
-            }
-
-            //type.IsPrimitive checks for: Boolean, Byte, SByte, Int16, UInt16, Int32, UInt32, Int64, UInt64, IntPtr, UIntPtr, Char, Double, and Single.
-            return type.IsPrimitive || obj is decimal;
-        }
+        /// <param name="obj">Any object, null included.</param>
+        /// <returns>True for a C# number (a primitive, a decimal, a <see cref="Complex"/>), a bool, a string and a 0-d
+        ///     one-element NDArray (NumSharp's stand-in for a NumPy scalar); false for null, any other NDArray, a C# array
+        ///     and any other object.</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.isscalar.html
+        ///     <para>NumPy's statement is the array object's (<c>NDArray.isscalar</c>, whose remarks list the answers that
+        ///     differ from NumPy's: a <see cref="Type"/>, a <see cref="Half"/>, a <see cref="System.Numerics.BigInteger"/>).
+        ///     The object has no array class to decide, so no class rule applies.</para></remarks>
+        public static bool isscalar(object obj) => NDArray.isscalar(obj);
 
         /// <summary>
         ///     Check whether or not an object can be iterated over. Returns <c>true</c> if

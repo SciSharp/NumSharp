@@ -13,12 +13,15 @@ namespace NumSharp
     // and np.ones, which are `a = empty(...); multiarray.copyto(a, fill_value, casting='unsafe')` in NumPy. By fill value
     // and result dtype: a fill value with dimensions broadcasts through np.copyto, the text classes take their own fill
     // routes, and a scalar is stored into every element of the dtype's storage lane by UnmanagedStorage's FullCore /
-    // OnesCore (UnmanagedStorage.Ctors.cs). np.indices' dense and sparse grids live here too (indices, indices_sparse).
-    // They are the array object's own members (the np-layer dtype plan's D1: functions that create arrays), and the np.*
-    // functions are facades over them.
+    // OnesCore (UnmanagedStorage.Ctors.cs). np.indices' dense and sparse grids live here too (indices, indices_sparse), and
+    // numeric.py's other array-object functions: zeros_like / ones_like (empty_like's checks and layout, then the fill),
+    // isfortran (a flags read), roll (empty_like plus two slice copies) and isscalar (a type test over C# values). They are
+    // the array object's own members (the np-layer dtype plan's D1: functions that create arrays), and the np.* functions
+    // are facades over them.
     //
     // The plan's phase P6 made its np.* calls (np.asanyarray, np.copyto) the members their facades dispatch to and moved
-    // the file from beside its facades (Creation/) to Backends/, beside the array object's class (plan C3).
+    // the file from beside its facades (Creation/) to Backends/, beside the array object's class (plan C3); P8 moved the
+    // functions without dtype logic here with their calls converted the same way (np.zeros / np.ones / np.empty_like).
     // ---------------------------------------------------------------------------------------------------------------------
     public partial class NDArray
     {
@@ -294,6 +297,157 @@ namespace NumSharp
             return fresh;
         }
 
+        // ---------------------------- np.zeros_like / np.ones_like ----------------------------
+
+        /// <summary>
+        ///     NumPy's <c>np.zeros_like</c> (<c>numeric.py</c>: <c>res = empty_like(a, dtype, order, subok, shape, device);
+        ///     multiarray.copyto(res, 0, casting='unsafe')</c>), the body of
+        ///     <see cref="np.zeros_like(NDArray, DType, char, string)"/> after its class rules: empty_like's argument checks in
+        ///     its order (the order's letter, then the device), the result laid out like <paramref name="a"/>, zero-filled.
+        /// </summary>
+        /// <param name="a">The prototype (not null): its dimensions, its dtype unless <paramref name="dtype"/> is given, and,
+        ///     for <c>'K'</c>, its axis permutation.</param>
+        /// <param name="dtype">The result dtype, or null for <paramref name="a"/>'s.</param>
+        /// <param name="order"><c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c> in either case (<c>'K'</c> keeps
+        ///     <paramref name="a"/>'s axis order: a transposed operand gives a transposed result, a broadcast one an F
+        ///     result).</param>
+        /// <param name="device">Null or <c>"cpu"</c>.</param>
+        /// <returns>A new, owned, writeable array of zeros (a text dtype's empty strings).</returns>
+        /// <exception cref="ValueError"><paramref name="order"/> is not one of C, F, A, K (<c>order must be one of 'C', 'F',
+        ///     'A', or 'K' (got 'Z')</c>), checked before the device; <paramref name="device"/> is neither null nor
+        ///     <c>"cpu"</c>; a byte count past the limit.</exception>
+        /// <remarks>No class boundary runs here: the facade applies its rules (a matrix result wrapped, a chararray operand's
+        ///     string-data check and kept class) before it calls this.</remarks>
+        internal static NDArray zeros_like(NDArray a, DType dtype, char order, string device)
+        {
+            // NumPy's empty_like converts its arguments in order (npy_parse_arguments): the order's letter before the device,
+            // so an unknown order is reported first (np.zeros_like(a, order='Z', device='cuda') raises the order's ValueError,
+            // probed 2.4.2). The layout itself is resolved after the device, as before.
+            OrderResolver.Convert(order);
+            DeviceArguments.ValidateDevice(device);
+            // PyArray_NewLikeArray's layout: order='K' keeps a's axis permutation (a transposed a gives a transposed
+            // result, a broadcast one an F result), not merely C-or-F.
+            var resolvedShape = Shape.NewLikeLayout(a.Shape, order, (long[])a.Shape.dimensions.Clone());
+            // np.zeros(shape, dtype)'s statement: a zero-filled allocation, which keeps the dense layout just resolved.
+            return new NDArray(dtype ?? a.dtype, resolvedShape, true);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>np.ones_like</c> (<c>numeric.py</c>: <c>res = empty_like(a, dtype, order, subok, shape, device);
+        ///     multiarray.copyto(res, 1, casting='unsafe')</c>), the body of
+        ///     <see cref="np.ones_like(NDArray, DType, char, string)"/> after its class rules: empty_like's argument checks in
+        ///     its order, the result laid out like <paramref name="a"/>, filled with the Python int 1 as the dtype converts it
+        ///     (the text <c>'1'</c> for a string dtype).
+        /// </summary>
+        /// <param name="a">The prototype (not null): its dimensions, its dtype unless <paramref name="dtype"/> is given, and,
+        ///     for <c>'K'</c>, its axis permutation.</param>
+        /// <param name="dtype">The result dtype, or null for <paramref name="a"/>'s.</param>
+        /// <param name="order"><c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c> in either case.</param>
+        /// <param name="device">Null or <c>"cpu"</c>.</param>
+        /// <returns>A new, owned, writeable array of ones, labelled with a requested lane-sharing C-type class.</returns>
+        /// <exception cref="ValueError"><paramref name="order"/> is not one of C, F, A, K, checked before the device;
+        ///     <paramref name="device"/> is neither null nor <c>"cpu"</c>; a byte count past the limit.</exception>
+        /// <remarks>No class boundary runs here: the facade applies its rules before it calls this.</remarks>
+        internal static NDArray ones_like(NDArray a, DType dtype, char order, string device)
+        {
+            // A string array (or dtype) is NumPy's empty_like + copyto(res, 1, casting='unsafe'): the text '1' in every
+            // element, through ones' string route.
+            // NumPy's empty_like converts its arguments in order (npy_parse_arguments): the order's letter before the device,
+            // so an unknown order is reported first (np.zeros_like(a, order='Z', device='cuda') raises the order's ValueError,
+            // probed 2.4.2). The layout itself is resolved after the device, as before.
+            OrderResolver.Convert(order);
+            DeviceArguments.ValidateDevice(device);
+            // PyArray_NewLikeArray's layout: order='K' keeps a's axis permutation, not merely C-or-F.
+            var resolvedShape = Shape.NewLikeLayout(a.Shape, order, (long[])a.Shape.dimensions.Clone());
+            // np.ones(shape, dtype)'s statement: the array object's ones (np.ones' device check is the null device's).
+            return ones(resolvedShape, dtype ?? a.dtype);
+        }
+
+        // ---------------------------- np.isfortran ----------------------------
+
+        /// <summary>
+        ///     NumPy's <c>np.isfortran</c> (<c>numeric.py</c>: <c>return a.flags.fnc</c>): whether <paramref name="a"/> is
+        ///     F-contiguous and NOT C-contiguous, a read of the cached flags.
+        /// </summary>
+        /// <param name="a">The array (not null).</param>
+        /// <returns>True for column-major memory order only: a 1-d, 0-d or empty array is both C- and F-contiguous, so it
+        ///     answers False (use <c>flags.f_contiguous</c> for F-contiguity alone).</returns>
+        internal static bool isfortran(NDArray a) => a.Shape.IsFContiguous && !a.Shape.IsContiguous;
+
+        // ---------------------------- np.roll ----------------------------
+
+        /// <summary>
+        ///     NumPy's <c>np.roll</c> (<c>numeric.py</c>) after the facade's class rules: with no axis the raveled array is
+        ///     rolled and reshaped back; along an axis, NumPy's <c>empty_like</c> plus the two slice copies (the body shifted
+        ///     forward, the tail wrapped to the front).
+        /// </summary>
+        /// <param name="a">The array (not null).</param>
+        /// <param name="shift">The places to shift; any value, reduced Python-style modulo the axis length (a negative shift
+        ///     rolls backwards; the type's extremes do not overflow).</param>
+        /// <param name="axis">The axis, or null to roll the flattened array.</param>
+        /// <returns>A new array of <paramref name="a"/>'s shape and dtype: <paramref name="a"/>'s memory order (empty_like's
+        ///     <c>'K'</c>) along an axis, also for a zero shift (a <c>copy('K')</c>); C order with no axis (the reshape of the
+        ///     raveled roll).</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range for <paramref name="a"/>'s rank (the axis as
+        ///     given).</exception>
+        /// <remarks>Scoped by <c>[NDScoped]</c>: the ravel, the inner roll, and the slice views of the two copies are released;
+        ///     the result is yielded. No class boundary runs here: the facades apply their rules before they call this.</remarks>
+        [NDScoped /* the ravel and the inner roll of the flat case, and the four slice views of the copies, are released; the result is yielded */]
+        internal static NDArray roll(NDArray a, long shift, int? axis)
+        {
+            if (axis == null)
+                return roll(a.ravel(), shift, 0).reshape(Shape.Adopt(a.Shape.dimensions));
+
+            // normalize_axis_tuple(axis, a.ndim, allow_duplicate=True): NumPy's AxisError, the axis as given.
+            int ax = Shape.check_and_adjust_axis(a.ndim, axis.Value);
+
+            long n = a.Shape.dimensions[ax];
+
+            // Python-style modulo: always non-negative when n > 0.
+            // If n == 0 (empty axis), offset stays 0 — nothing to roll.
+            long offset = n == 0 ? 0 : ((shift % n) + n) % n;
+
+            // NumPy still runs empty_like + the slice copies for a zero shift, so the result keeps a's memory order
+            // (order='K': a transposed / broadcast input stays transposed / F), which copy('K') reproduces.
+            if (offset == 0)
+                return a.copy('K');
+
+            // np.empty_like(a)'s statements: an uninitialised array of a's dtype in a's K layout (every element is written
+            // by the two copies below).
+            var result = new NDArray(a.dtype, Shape.NewLikeLayout(a.Shape, 'K', (long[])a.Shape.dimensions.Clone()), false);
+
+            // Build Slice arrays for each dimension.
+            // For the rolled axis we split into body + tail:
+            //   result[..., offset:, ...] = a[..., :-offset, ...]   (body shifts)
+            //   result[..., :offset, ...] = a[..., -offset:, ...]   (tail wraps)
+            // All other axes use Slice.All (":").
+
+            var srcBody = new Slice[a.ndim];
+            var dstBody = new Slice[a.ndim];
+            var srcTail = new Slice[a.ndim];
+            var dstTail = new Slice[a.ndim];
+
+            for (int i = 0; i < a.ndim; i++)
+            {
+                if (i == ax)
+                {
+                    srcBody[i] = new Slice(null, -offset);   // :-offset
+                    dstBody[i] = new Slice(offset, null);    // offset:
+                    srcTail[i] = new Slice(-offset, null);   // -offset:
+                    dstTail[i] = new Slice(null, offset);    // :offset
+                }
+                else
+                {
+                    srcBody[i] = dstBody[i] = srcTail[i] = dstTail[i] = Slice.All;
+                }
+            }
+
+            result[dstBody] = a[srcBody];
+            result[dstTail] = a[srcTail];
+
+            return result;
+        }
+
         /// <summary>
         ///     NumPy's <c>np.indices</c> (<c>numeric.py</c>) with <c>sparse=False</c>, the body of
         ///     <see cref="np.indices(long[], DType)"/> once the dimensions were checked for null: a single dense array of
@@ -442,6 +596,48 @@ namespace NumSharp
             {
                 kernel(resPtr, dsPtr, dPtr, ndim, prod);
             }
+        }
+
+        // ---------------------------- np.isscalar ----------------------------
+
+        /// <summary>
+        ///     NumPy's <c>np.isscalar</c> (<c>numeric.py</c>: <c>isinstance(element, generic) or type(element) in ScalarType
+        ///     or isinstance(element, numbers.Number)</c>) over C# values: a 0-d one-element NDArray (NumSharp's stand-in for
+        ///     a NumPy scalar), a <see cref="System.Numerics.Complex"/>, a string, a bool, a primitive or a decimal.
+        /// </summary>
+        /// <param name="obj">Any object, null included.</param>
+        /// <returns>True for the scalars above; false for null, any other NDArray, a C# array and any other object.</returns>
+        /// <remarks>
+        ///     A <see cref="Type"/> is read as the type it names: <c>isscalar(typeof(int))</c> answers for an int, where NumPy's
+        ///     <c>isscalar(int)</c> is False. A <see cref="Half"/> (NumPy's float16 scalar) and a <see cref="BigInteger"/> (a
+        ///     Python int) answer False, where NumPy's answer True. These three divergences are pinned as open bugs (D21). A
+        ///     0-d NDArray answers True where NumPy's 0-d array does not: NumSharp has no scalar objects, so a 0-d array is
+        ///     what a NumPy scalar becomes.
+        /// </remarks>
+        internal static bool isscalar(object obj)
+        {
+            switch (obj)
+            {
+                case null:
+                    return false;
+                case NDArray nd:
+                    return nd.ndim == 0 && nd.size == 1;
+                case Type _:
+                    break;
+                case Complex _:
+                case string _:
+                case bool _:
+                    return true;
+            }
+
+            var type = obj as Type ?? obj.GetType();
+            if (type.IsArray)
+            {
+                return false;
+            }
+
+            //type.IsPrimitive checks for: Boolean, Byte, SByte, Int16, UInt16, Int32, UInt32, Int64, UInt64, IntPtr, UIntPtr, Char, Double, and Single.
+            return type.IsPrimitive || obj is decimal;
         }
     }
 }

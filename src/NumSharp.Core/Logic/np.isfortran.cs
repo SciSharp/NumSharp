@@ -15,12 +15,16 @@ namespace NumSharp
         ///     <c>isfortran</c> is False for it — this reports column-major MEMORY ORDER, not mere
         ///     F-contiguity (use <c>a.flags.f_contiguous</c> for that).
         /// </returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.isfortran.html</remarks>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.isfortran.html
+        ///     <para>It reads the operand's layout only, so no class rule applies (a numpy.matrix answers for its own
+        ///     layout).</para></remarks>
         public static bool isfortran(NDArray a)
         {
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
-            return a.Shape.IsFContiguous && !a.Shape.IsContiguous;
+            // NumPy's `return a.flags.fnc` is the array object's.
+            return NDArray.isfortran(a);
         }
     }
 }

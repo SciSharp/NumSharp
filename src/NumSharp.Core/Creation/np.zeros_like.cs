@@ -9,9 +9,14 @@ namespace NumSharp
         ///  </summary>
         /// <param name="a">The shape and data-type of a define these same attributes of the returned array.</param>
         ///  <param name="dtype">Overrides the data type of the result.</param>
-        ///  <returns>Array of zeros with the same shape and type as `nd`.</returns>
+        /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
+        ///  <returns>Array of zeros with the same shape and type as <paramref name="a"/>, in <paramref name="a"/>'s memory
+        ///     order (<c>order='K'</c>). A <c>numpy.char.chararray</c> operand gives a chararray.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.zeros_like.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="ValueError"><paramref name="device"/> is neither null nor <c>"cpu"</c>; a chararray operand with a
+        ///     dtype that is not string data (<c>Can only create a chararray from string data.</c>).</exception>
+        /// <exception cref="NullReferenceException"><paramref name="a"/> is null (its layout is read after the order and device checks).</exception>
         public static NDArray zeros_like(NDArray a, DType dtype = null, string device = null) => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((a, dtype, device), static s => zeros_like(s.a, s.dtype, s.device))
             : zeros_like(a, dtype, 'K', device);
@@ -36,6 +41,7 @@ namespace NumSharp
         ///     arguments in order.</exception>
         /// <exception cref="ValueError"><paramref name="device"/> is neither null nor <c>"cpu"</c> (NumPy's <c>Device not
         ///     understood. Only "cpu" is allowed, but received: ...</c>).</exception>
+        /// <exception cref="NullReferenceException"><paramref name="a"/> is null (its layout is read after the order and device checks).</exception>
         public static NDArray zeros_like(NDArray a, DType dtype, char order, string device = null)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
@@ -50,15 +56,8 @@ namespace NumSharp
                 NDCharArrayBoundary.RequireStringResult(dtype ?? a.dtype);
                 return NDCharArrayBoundary.Kept((a, dtype, order, device), static s => zeros_like(s.a, s.dtype, s.order, s.device));
             }
-            // NumPy's empty_like converts its arguments in order (npy_parse_arguments): the order's letter before the device,
-            // so an unknown order is reported first (np.zeros_like(a, order='Z', device='cuda') raises the order's ValueError,
-            // probed 2.4.2). The layout itself is resolved after the device, as before.
-            OrderResolver.Convert(order);
-            DeviceArguments.ValidateDevice(device);
-            // PyArray_NewLikeArray's layout: order='K' keeps a's axis permutation (a transposed a gives a transposed
-            // result, a broadcast one an F result), not merely C-or-F.
-            var resolvedShape = Shape.NewLikeLayout(a.Shape, order, (long[])a.Shape.dimensions.Clone());
-            return np.zeros(resolvedShape, dtype ?? a.dtype);
+            // NumPy's statements (empty_like's argument checks and layout, then the fill with 0) are the array object's.
+            return NDArray.zeros_like(a, dtype, order, device);
         }
     }
 }
