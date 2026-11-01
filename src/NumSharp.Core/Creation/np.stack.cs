@@ -39,26 +39,9 @@ namespace NumSharp
             if (arrays == null)
                 throw new ArgumentNullException(nameof(arrays));
 
-            // `if not arrays: raise ValueError('need at least one array to stack')`.
-            if (arrays.Length == 0)
-                throw new ValueError("need at least one array to stack");
-
-            // `shapes = {arr.shape for arr in arrays}; if len(shapes) != 1: raise` — every shape, before the axis.
-            var first = arrays[0];
-            for (int i = 1; i < arrays.Length; i++)
-                if (!arrays[i].Shape.dimensions.AsSpan().SequenceEqual(first.Shape.dimensions))
-                    throw new ValueError("all input arrays must have the same shape");
-
-            // `axis = normalize_axis_index(axis, result_ndim)` — NumPy's AxisError against the RESULT's rank, raised once
-            // here (the expansion below then sees an axis in range).
-            axis = Shape.check_and_adjust_axis(first.ndim + 1, axis);
-
-            // `expanded_arrays = [arr[sl] for arr in arrays]` — the new axis at `axis` of the (ndim + 1)-D result.
-            var expanded = new NDArray[arrays.Length];
-            for (int i = 0; i < arrays.Length; i++)
-                expanded[i] = np.expand_dims(arrays[i], axis);
-
-            return np.concatenate(expanded, axis);
+            // NumPy's statements (the empty and shape checks, the axis against the result's rank, the expanded arrays
+            // concatenated) are the array object's.
+            return NDArray.stack(arrays, axis);
         }
     }
 }

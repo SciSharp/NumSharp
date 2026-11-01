@@ -61,48 +61,9 @@ namespace NumSharp
             if (x is null)
                 throw new ArgumentNullException(nameof(x));
 
-            // NumPy: ValueError("Input array must be at least 1-d.")
-            int ndim = x.ndim;
-            if (ndim == 0)
-                throw new ValueError("Input array must be at least 1-d.");
-
-            // NumPy's unstack is `tuple(moveaxis(x, axis, 0))`, so a bad axis is moveaxis' "source: axis … is out of
-            // bounds" AxisError.
-            axis = Shape.check_and_adjust_axis(ndim, axis, "source");
-
-            var shape = x.Shape;
-            var result = new NDArray[checked((int)shape.dimensions[axis])];
-            if (result.Length == 0)
-                return result;
-
-            // Every child shares the same dims/strides — x's with `axis` removed.
-            // Shape treats the arrays as immutable, so ONE pair serves all views.
-            var subDims = new long[ndim - 1];
-            var subStrides = new long[ndim - 1];
-            for (int j = 0, k = 0; j < ndim; j++)
-            {
-                if (j == axis) continue;
-                subDims[k] = shape.dimensions[j];
-                subStrides[k] = shape.strides[j];
-                k++;
-            }
-
-            // An EMPTY x (another axis is zero-length; a zero `axis` returned above) is unstacked into views too: NumPy's
-            // iteration of moveaxis(x, axis, 0) yields views (OWNDATA False) whatever their size. An empty view's offset
-            // need not address an element (it may point past the buffer); nothing reads through it.
-            long axisStride = shape.strides[axis];
-            long baseOffset = shape.offset;
-            var storage = x.Storage;
-            var engine = x.TensorEngine;
-            for (int i = 0; i < result.Length; i++)
-            {
-                // Alias() inherits writeability, so unstacking a read-only array
-                // (broadcast view / 'r' memmap) yields read-only views.
-                var sub = new Shape(subDims, subStrides, baseOffset + i * axisStride, shape.bufferSize);
-                result[i] = new NDArray(storage.Alias(sub), engine, skipEngineResolve: true);
-            }
-
-            return result;
+            // NumPy's statements (the rank check, moveaxis' axis check, one view per index along the axis) are the
+            // array object's.
+            return NDArray.unstack(x, axis);
         }
     }
 }

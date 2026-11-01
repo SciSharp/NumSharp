@@ -38,7 +38,8 @@ namespace NumSharp
         ///     subclass), owning its data exactly when the plain result would.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atleast_3d.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
-        [NDScoped] // reclaims the inner expand_dims alias of the 1-D arm; the ndim>=3 passthrough is an untracked input
+        /// <exception cref="ArgumentNullException"><paramref name="arr"/> is null.</exception>
+        /// <param name="arr">The array.</param>
         public static NDArray atleast_3d(NDArray arr)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
@@ -50,17 +51,8 @@ namespace NumSharp
             if (arr is null)
                 throw new ArgumentNullException(nameof(arr));
 
-            switch (arr.ndim)
-            {
-                case 0:
-                    return arr.reshape(1, 1, 1);
-                case 1:
-                    return np.expand_dims(np.expand_dims(arr, 1), 0);
-                case 2:
-                    return np.expand_dims(arr, 2);
-                default:
-                    return arr;
-            }
+            // NumPy's statements for one array are the array object's (its inner expand_dims alias is reclaimed there).
+            return NDArray.atleast_3d(arr);
         }
 
         /// <summary>
@@ -114,7 +106,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atleast_3d.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         /// <exception cref="ArgumentNullException"><paramref name="arys"/> is null.</exception>
-        [NDScoped] // per-element inner expand_dims aliases are reclaimed; input passthroughs stay untracked
+        /// <exception cref="NullReferenceException">A null entry.</exception>
         public static NDArray[] atleast_3d(params NDArray[] arys)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
@@ -130,26 +122,11 @@ namespace NumSharp
             if (arys.Length == 0)
                 return Array.Empty<NDArray>();
 
+            // NumPy's loop over the arrays, each one's statements the array object's (their inner expand_dims aliases are
+            // reclaimed there; an array of three dimensions or more passes through).
             var ret = new NDArray[arys.Length];
             for (var i = 0; i < arys.Length; i++)
-            {
-                var arr = arys[i];
-                switch (arr.ndim)
-                {
-                    case 0:
-                        ret[i] = arr.reshape(1, 1, 1);
-                        continue;
-                    case 1:
-                        ret[i] = np.expand_dims(np.expand_dims(arr, 1), 0);
-                        continue;
-                    case 2:
-                        ret[i] = np.expand_dims(arr, 2);
-                        continue;
-                    default:
-                        ret[i] = arr;
-                        continue;
-                }
-            }
+                ret[i] = NDArray.atleast_3d(arys[i]);
 
             return ret;
         }

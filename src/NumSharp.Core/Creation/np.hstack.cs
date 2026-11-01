@@ -30,16 +30,9 @@ namespace NumSharp
             if (tup == null)
                 throw new ArgumentNullException(nameof(tup));
 
-            // NumPy's atleast_1d(*tup) of no arrays is the empty tuple, and concatenating it is np.concatenate's ValueError —
-            // the text NumPy's hstack([]) raises.
-            if (tup.Length == 0)
-                throw new ValueError("need at least one array to concatenate");
-
-            tup = np.atleast_1d(tup); //handle scalars
-            if (tup[0].Shape.dimensions.Length == 1)
-                return np.concatenate(tup, 0);
-            else
-                return np.concatenate(tup, 1);
+            // NumPy's statements (atleast_1d(*tup), then concatenate along axis 0 for 1-d arrays, axis 1 otherwise) are the
+            // array object's.
+            return NDArray.hstack_(tup);
         }
     }
 }

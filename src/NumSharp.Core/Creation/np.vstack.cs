@@ -28,13 +28,8 @@ namespace NumSharp
             if (tup == null)
                 throw new ArgumentNullException(nameof(tup));
 
-            // NumPy's atleast_2d(*tup) of no arrays is the empty tuple, and concatenating it is np.concatenate's ValueError —
-            // the text NumPy's vstack([]) raises.
-            if (tup.Length == 0)
-                throw new ValueError("need at least one array to concatenate");
-
-            tup = np.atleast_2d(tup);
-            return np.concatenate(tup, 0);
+            // NumPy's statements (atleast_2d(*tup), then concatenate along axis 0) are the array object's.
+            return NDArray.vstack_(tup);
         }
     }
 }
