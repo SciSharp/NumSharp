@@ -6,12 +6,14 @@ using System.Runtime.CompilerServices;
 using NumSharp.Backends;
 using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
+using NumSharp.Generic;
 
 namespace NumSharp
 {
     // ============================== lib/_index_tricks_impl.py ==============================
-    // NumPy's index tricks as members of the array object (P3's batch 7): np.ix_ (ix_), np.fill_diagonal
-    // (fill_diagonal, with the diagonal scatter np.diag shares) and the statements of np.r_ / np.c_'s indexer
+    // NumPy's index tricks as members of the array object (P3's batch 7): np.ix_ (ix_), np.diag_indices /
+    // np.diag_indices_from (P8: diag_indices, diag_indices_from, with the equal-dimensions guard fill_diagonal shares),
+    // np.fill_diagonal (fill_diagonal, with the diagonal scatter np.diag shares) and the statements of np.r_ / np.c_'s indexer
     // (AxisConcatenate, NumPy's AxisConcatenator.__getitem__) with their helpers, and np.mgrid / np.ogrid's (mgrid,
     // ogrid: NumPy's nd_grid.__getitem__). The facades keep their numpy.matrix rules and null checks, and
     // np.AxisConcatenator keeps the C# spelling of a slice (SliceSpec, ParseSliceToken), which np.ogrid / np.mgrid
@@ -103,6 +105,77 @@ namespace NumSharp
             return @out;
         }
 
+        // ---------------------------- np.diag_indices / np.diag_indices_from ----------------------------
+
+        /// <summary>
+        ///     NumPy's <c>numpy.diag_indices</c> (<c>idx = np.arange(n); return (idx,) * ndim</c>): the index arrays of the
+        ///     main diagonal of an <c>(n,) * ndim</c> array - ONE array, repeated in every slot, as NumPy's tuple repeats the
+        ///     same object.
+        /// </summary>
+        /// <param name="n">The size along each dimension; a negative size gives empty index arrays.</param>
+        /// <param name="ndim">The number of dimensions; zero or negative gives no arrays (Python's <c>(idx,) * 0</c>).</param>
+        /// <returns><paramref name="ndim"/> references to one new owning int64 array <c>0 .. n-1</c>: writing through one
+        ///     slot is visible through all of them (NumPy's aliasing, probed).</returns>
+        /// <remarks>Scoped by <c>[NDScoped]</c>: the untyped handle of the arange is released at exit, leaving the buffer to
+        ///     the yielded typed array (the typed wrapper holds its own counted reference, OWNDATA kept).</remarks>
+        [NDScoped /* the untyped arange handle is released; the typed index array is yielded */]
+        internal static NDArray<long>[] diag_indices(int n, int ndim)
+        {
+            if (ndim <= 0)
+                return System.Array.Empty<NDArray<long>>();
+
+            // AsGeneric wraps the fresh arange's own storage (OWNDATA kept, its own counted reference), so the scope's
+            // release of the untyped handle at exit leaves the buffer to the yielded typed one. np.arange(n)'s statement:
+            // the int64 ramp of the array object.
+            var idx = UnmanagedStorage.ArangeObj(0L, n < 0 ? 0 : n, 1L, null).AsGeneric<long>();
+
+            var result = new NDArray<long>[ndim];
+            for (int d = 0; d < ndim; d++)
+                result[d] = idx; // same instance, as NumPy's `(idx,) * ndim`
+
+            return result;
+        }
+
+        /// <summary>
+        ///     NumPy's <c>numpy.diag_indices_from</c> after the facade's null check: the array must be at least 2-d with every
+        ///     dimension equal, then <see cref="diag_indices"/> of its first dimension and rank.
+        /// </summary>
+        /// <param name="arr">The array (not null); only its shape is read.</param>
+        /// <returns>The index arrays of <paramref name="arr"/>'s main diagonal (one array repeated, see
+        ///     <see cref="diag_indices"/>).</returns>
+        /// <exception cref="ArgumentException"><paramref name="arr"/> has fewer than two dimensions (<c>input array must be
+        ///     at least 2-d</c>) or unequal ones (<c>All dimensions of input must be of equal length</c>): NumPy's ValueError
+        ///     texts.</exception>
+        /// <exception cref="OverflowException">The dimension exceeds <see cref="int.MaxValue"/>.</exception>
+        internal static NDArray<long>[] diag_indices_from(NDArray arr)
+        {
+            if (arr.ndim < 2)
+                throw new ArgumentException("input array must be at least 2-d");
+
+            // For more than d=2 the strided formula is only valid when every dimension
+            // matches, so NumPy checks it up front regardless of ndim.
+            RequireEqualDimensions(arr);
+
+            return diag_indices(checked((int)arr.Shape.dimensions[0]), arr.ndim);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>if not np.all(diff(a.shape) == 0)</c> guard, shared by
+        ///     <see cref="diag_indices_from"/> and <see cref="fill_diagonal"/>.
+        /// </summary>
+        /// <param name="a">The array (not null); only its dimensions are read.</param>
+        /// <exception cref="ArgumentException">A dimension differs from the first (<c>All dimensions of input must be of
+        ///     equal length</c>).</exception>
+        internal static void RequireEqualDimensions(NDArray a)
+        {
+            var shape = a.Shape.dimensions;
+            for (int d = 1; d < shape.Length; d++)
+            {
+                if (shape[d] != shape[0])
+                    throw new ArgumentException("All dimensions of input must be of equal length");
+            }
+        }
+
         // ---------------------------- np.fill_diagonal ----------------------------
 
         /// <summary>
@@ -147,7 +220,7 @@ namespace NumSharp
             else
             {
                 // For d > 2 the strided formula is only valid when all dimensions are equal.
-                np.RequireEqualDimensions(a);
+                RequireEqualDimensions(a);
 
                 step = 1;
                 long cum = 1;
