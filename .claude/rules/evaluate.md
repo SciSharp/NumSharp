@@ -8,9 +8,12 @@ paths:
 
 # `np.evaluate`: fused expressions (NumSharp extension)
 
-`np.evaluate(expr[, operands][, out])` compiles an `NDExpr` tree to one NDIter pass: every elementwise node runs inside a
-single inner-loop kernel, so chained expressions allocate no intermediates and read each operand once (numexpr's
-`evaluate` role). Benchmarks: the `benchmark/fusion` subsystem of `benchmark/run_benchmark.py`.
+`np.evaluate(expr, operands = null, out = null, where = null, dtype = null, casting = null, order = 'K')` compiles an
+`NDExpr` tree to one NDIter pass: every elementwise node runs inside a single inner-loop kernel, so chained expressions
+allocate no intermediates and read each operand once (numexpr's `evaluate` role). One overload: the second position is
+the positional operand list, so `out=` is passed by name. The whole call is `TensorEngine.Evaluate` with the same raw
+keywords (`DefaultEngine` checks them in this order: a read-only `out=`, a text operand, then the keyword bundle,
+`DefaultEngine.BuildEvaluateOptions`). Benchmarks: the `benchmark/fusion` subsystem of `benchmark/run_benchmark.py`.
 
 ```csharp
 NDArray r = np.evaluate((NDExpr)a * b + 2);                          // fused a*b+2

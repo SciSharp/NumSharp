@@ -1522,11 +1522,17 @@ NumPy's structure; a function NumPy does not have keeps one overload.
 - [ ] np.sum / np.prod / np.mean / np.var / np.std: one overload each with NumPy's whole signature (D10), after a
       caller census (a scratch solution of every project, as A4d did; no `[Obsolete]` step, D19). The engine members gain
       `where=` / `initial=` (var / std: `mean=`, `correction=`), as `ReduceAMax` / `ReduceAMin` did in E5.
-- [ ] np.vecdot / np.matvec / np.vecmat gain `casting=` / `order=` (D10).
-- [ ] np.evaluate: one overload with default optional parameters, and `TensorEngine.Evaluate` takes the raw keywords
-      (D11); R1 loses np.evaluate.cs.
-- [ ] `ndarray.astype(null)` is float64 (D14; `np.DefaultTypeDescr` once `journey4`'s `9e75f362` is on `strings`).
-- [ ] np.squeeze with nothing to remove returns `a.view()` (D15).
+- [x] np.vecdot / np.matvec / np.vecmat gain `casting=` / `order=` (D10). Done (`96411eec`): after `dtype=`, as
+      np.matmul takes them; casting checks every input's cast to the loop and the result's cast into `out=` under the
+      caller's rule, order lays out an allocated result (the loop-order vote only for `'K'` without `out=`).
+- [x] np.evaluate: one overload with default optional parameters, and `TensorEngine.Evaluate` takes the raw keywords
+      (D11); R1 loses np.evaluate.cs. Done (`a5fd6535`): `evaluate(expr, operands = null, out = null, where = null,
+      dtype = null, casting = null, order = 'K')`; the one virtual engine member runs the writeable check, the text
+      refusal and the keyword checks in that order; `NDEvaluateOptions` is internal; nine positional `out=` calls name it.
+- [x] `ndarray.astype(null)` is float64 (D14; `np.DefaultTypeDescr` once `journey4`'s `9e75f362` is on `strings`).
+      Done (`614b1a8a`): `dtype ??= np.DefaultTypeDescr` after the order and casting names are parsed.
+- [x] np.squeeze with nothing to remove returns `a.view()` (D15). Done (`4e7fca46`): both places (no length-one axis;
+      axis 0 / -1 of a 0-d array).
 - [ ] The three `NDArray` homes P6 left beside their facades (`NDArray.Multiarray.cs`, `NDArray.FunctionBase.cs`,
       `NDArray.IndexTricks.cs`): decide how their calls that rely on a facade's class rule keep the class
       ([§9](#9-state-log), 2026-10-30), then convert their calls and move them under `Backends/` as P6 moved the other
@@ -1588,6 +1594,23 @@ breaks a subclass or a direct caller for a layering reason alone.
 ---
 
 ## 9. State log
+
+- **2026-11-02, P10 items 2 to 5: the decided signature changes but np.sum's family.** Four commits on `strings` (not
+  pushed).
+  - `614b1a8a` (item 4, D14): `ndarray.astype(null)` casts to float64 as NumPy's `astype(None)` does (it raised
+    `ArgumentNullException`); text parses, and `copy=false` of a float64 array returns the array itself.
+  - `4e7fca46` (item 5, D15): np.squeeze returns `a.view()` where NumPy returns the array itself; the answers did not
+    change (the same alias, now through the array object's `view()`).
+  - `96411eec` (item 2, D10): np.vecdot / np.matvec / np.vecmat take `casting=` / `order=` after `dtype=`; the engine's
+    abstract members take them too (unreleased, new in P2). Probed on NumPy 2.4.2: `casting='no'` refuses an int32 input
+    to a float64 loop, `'unsafe'` stores a float64 answer into an int32 `out=`, and `order=` lays out an allocated
+    result (`'F'` of C operands gives F strides).
+  - `a5fd6535` (item 3, D11): np.evaluate keeps one overload whose second position is the operand list; the engine member
+    takes the raw keywords and runs np.evaluate's checks in their order; R1's np.evaluate.cs row is gone. A Roslyn census
+    of Core, the unit tests and the oracle found nine calls passing `out=` positionally: they name it now.
+  - Gates (Release, CI's filter, the four in one tree): NumSharp.Tests 21,029 / 21,028 passed (12 skipped) on net10.0 /
+    net8.0, the oracle 414 passed and 2 skipped on both.
+  - Next: item 1, np.sum / np.prod / np.mean / np.var / np.std with NumPy's whole signature.
 
 - **2026-11-01, P9: `TensorEngine.Default`, and an engine's results bind that engine - P9 is done.** Two commits on
   `strings` (not pushed).
