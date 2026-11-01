@@ -253,6 +253,32 @@ namespace NumSharp.Tests.Backends
             Convert.ToInt64(sq.GetAtIndex(1)).Should().Be(99, "squeeze shares storage with the source");
         }
 
+        /// <summary>
+        ///     With no length-one axis to remove (and for axis 0 / -1 of a 0-d array, which selects none), np.squeeze returns
+        ///     <c>a.view()</c> (the plan's D15): a fresh view object over the same memory, never the operand itself (NumPy
+        ///     returns <c>a</c> there), so disposing the result leaves the input alive; the view keeps the input's engine.
+        /// </summary>
+        [TestMethod]
+        public void Squeeze_NothingToRemove_ReturnsAFreshView()
+        {
+            var a = np.arange(6).reshape(2, 3);
+            var r = np.squeeze(a);
+            r.Should().NotBeSameAs(a);
+            r.Should().BeShaped(2, 3);
+            r.Storage.IsView.Should().BeTrue("a view of a, not a copy");
+            r.TensorEngine.Should().BeSameAs(a.TensorEngine);
+            r[0, 1] = (NDArray)42L;
+            Convert.ToInt64(a.GetAtIndex(1)).Should().Be(42, "the view writes through");
+            r.Dispose();
+            Convert.ToInt64(a.GetAtIndex(5)).Should().Be(5, "disposing the view leaves the input alive");
+
+            var zeroD = NDArray.Scalar(7L);
+            var z = np.squeeze(zeroD, 0);
+            z.Should().NotBeSameAs(zeroD);
+            z.ndim.Should().Be(0);
+            Convert.ToInt64(z.GetAtIndex(0)).Should().Be(7);
+        }
+
         // ---------------- take ----------------
 
         [TestMethod]
