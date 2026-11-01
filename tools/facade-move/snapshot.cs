@@ -162,7 +162,10 @@
 // degree deg, its weights w (the general weights variants) and its cov flag (null, both bools, 'unscaled', other strings),
 // np.einsum_path's subscripts, operand list and optimize (np.einsum's roles) and its variadic overload's whole argument
 // list (EinsumPathArgsLabels: the string-first spelling, the sublist spelling, the lists NumPy refuses), and np.tensordot's
-// (int, int) axes pair (AxesTupleLabels);
+// (int, int) axes pair (AxesTupleLabels), and the stacking family's array lists (np.hstack / np.vstack / np.dstack /
+// np.column_stack / np.stack and the atleast_Nd array overloads: StackArraysLabels - copies, another dtype, text, a
+// transpose, a row, a 0-d, an empty array, a null entry, none) and np.block's nested lists (BlockArraysLabels: a row, a
+// bare leaf, a column, a grid, mixed dtypes, scalars, the depth mismatches, empty lists, a tuple, null);
 // an overload
 // with a required parameter of another
 // kind is reported once as SKIP. An int
@@ -578,6 +581,14 @@ static class Snapshot
         EinsumPathArgs,
         // np.tensordot's (int, int) axes pair (AxesTupleLabels): one axis of each operand.
         AxesTuple,
+        // The stacking family's array list (np.hstack / np.vstack / np.dstack / np.column_stack's tup, np.stack's arrays,
+        // the atleast_Nd array overloads' arys): built from the operand (StackArraysLabels, MakeStackArrays) - the operand
+        // with copies of itself, another dtype, text, its transpose, a row, a 0-d, an empty array, a null entry, none.
+        StackArrays,
+        // np.block's nested list (an object): built from the operand (BlockArraysLabels, MakeBlockArrays) - a bare leaf,
+        // one and two levels of nesting, mixed dtypes and scalars, the depth mismatches and empty lists NumPy refuses, a
+        // tuple and null.
+        BlockArrays,
         Default, Unsupported,
     }
 
@@ -2548,6 +2559,105 @@ static class Snapshot
     ///     and an axis out of range on either side (NumPy's IndexError).
     /// </summary>
     private static readonly string[] AxesTupleLabels = { "(0,0)", "(1,1)", "(-1,-1)", "(-1,0)", "(0,-2)", "(5,0)", "(0,5)" };
+
+    /// <summary>
+    ///     Whether an overload belongs to the stacking family, whose array-list parameter takes
+    ///     <see cref="Role.StackArrays"/>: np.hstack, np.vstack, np.dstack, np.column_stack, np.stack and the atleast_Nd array
+    ///     overloads (before the general <c>arrays</c> rule, which gives np.linalg.multi_dot its own lists).
+    /// </summary>
+    /// <param name="m">The overload.</param>
+    /// <returns>True for a public static overload of one of those names on np.</returns>
+    private static bool IsStacking(MethodInfo m) =>
+        m.DeclaringType == typeof(np)
+        && m.Name is "hstack" or "vstack" or "dstack" or "column_stack" or "stack" or "atleast_1d" or "atleast_2d" or "atleast_3d";
+
+    /// <summary>The stacking family's array-list variants (see <see cref="MakeStackArrays"/>); the first, the operand and a
+    ///     copy of it, is the base.</summary>
+    private static readonly string[] StackArraysLabels =
+        { "same", "one", "triple", "int32", "text", "transposed", "row", "zero_d", "empty", "nullentry", "none" };
+
+    /// <summary>
+    ///     Builds the stacking family's array list for an operand: the operand with a copy of itself (equal shapes: every
+    ///     stacking function joins them), the operand alone and three times, with an int32 ramp of its shape (another dtype:
+    ///     the join promotes) and with U5 text of its shape (a text join, or NumPy's refusal), with its transpose (the shapes
+    ///     differ unless it is square or 1-D), with a row of its last axis and with a 0-d array (the rank rules), with an
+    ///     empty 1-D array, with a null entry, and no array at all.
+    /// </summary>
+    /// <param name="label">The variant (<see cref="StackArraysLabels"/>).</param>
+    /// <param name="operand">The pool operand.</param>
+    /// <returns>A fresh array of arrays (its first entry is the operand itself).</returns>
+    /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
+    private static NDArray[] MakeStackArrays(string label, NDArray operand)
+    {
+        long[] dims = operand.Shape.Dimensions;
+        long size = 1;
+        foreach (long d in dims) size *= d;
+        switch (label)
+        {
+            case "same": return new[] { operand, operand.copy() };
+            case "one": return new[] { operand };
+            case "triple": return new[] { operand, operand.copy(), operand.copy() };
+            case "int32": return new[] { operand, np.arange(size).astype(np.dtype("int32")).reshape(new Shape(dims)) };
+            case "text":
+            {
+                var words = new string[size];
+                for (long i = 0; i < size; i++)
+                    words[i] = (i % 3).ToString(CultureInfo.InvariantCulture);
+                return new[] { operand, np.array(words).astype(np.dtype("U5")).reshape(new Shape(dims)) };
+            }
+            case "transposed": return new[] { operand, operand.T };
+            case "row": return new[] { operand, np.ones(new Shape(dims.Length == 0 ? 1 : dims[dims.Length - 1]), np.dtype("float64")) };
+            case "zero_d": return new[] { operand, np.array(2.0) };
+            case "empty": return new[] { operand, np.empty(new Shape(0), np.dtype("float64")) };
+            case "nullentry": return new[] { operand, null };
+            case "none": return Array.Empty<NDArray>();
+            default: throw new ArgumentException("unknown stacking array-list variant " + label);
+        }
+    }
+
+    /// <summary>Whether an overload is np.block, whose nested list is its operand (<see cref="Role.BlockArrays"/>).</summary>
+    /// <param name="m">The overload.</param>
+    /// <returns>True for a public static np.block overload.</returns>
+    private static bool IsBlock(MethodInfo m) => m.DeclaringType == typeof(np) && m.Name == "block";
+
+    /// <summary>np.block's nested-list variants (see <see cref="MakeBlockArrays"/>); the first, a row of two operands, is the
+    ///     base.</summary>
+    private static readonly string[] BlockArraysLabels =
+        { "row", "leaf", "list1", "col", "grid", "mixed", "scalars", "depthmismatch", "emptylist", "emptyinner", "tuple", "null" };
+
+    /// <summary>
+    ///     Builds np.block's argument from an operand: a list of the operand and a copy (a row: the last axis joins), the bare
+    ///     operand (depth 0: np.block copies it), a list of one, a column (two one-element lists: the second-to-last axis
+    ///     joins) and a 2 x 2 grid, the operand beside an int32 ramp of its shape (promotion), a list of C# scalars (Python
+    ///     numbers as leaves), and the arguments NumPy refuses: lists of mismatched depth, an empty list, an empty inner list,
+    ///     a tuple (NumPy's TypeError: tuples are not lists here), null.
+    /// </summary>
+    /// <param name="label">The variant (<see cref="BlockArraysLabels"/>).</param>
+    /// <param name="operand">The pool operand.</param>
+    /// <returns>The argument (a fresh object[] tree whose leaves are the operand, copies of it and C# scalars).</returns>
+    /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
+    private static object MakeBlockArrays(string label, NDArray operand)
+    {
+        long[] dims = operand.Shape.Dimensions;
+        long size = 1;
+        foreach (long d in dims) size *= d;
+        return label switch
+        {
+            "row" => new object[] { operand, operand.copy() },
+            "leaf" => operand,
+            "list1" => new object[] { operand },
+            "col" => new object[] { new object[] { operand }, new object[] { operand.copy() } },
+            "grid" => new object[] { new object[] { operand, operand.copy() }, new object[] { operand.copy(), operand.copy() } },
+            "mixed" => new object[] { operand, np.arange(size).astype(np.dtype("int32")).reshape(new Shape(dims)) },
+            "scalars" => new object[] { 1, 2.5 },
+            "depthmismatch" => new object[] { operand, new object[] { operand.copy() } },
+            "emptylist" => Array.Empty<object>(),
+            "emptyinner" => new object[] { Array.Empty<object>() },
+            "tuple" => (object)(operand, operand.copy()),
+            "null" => null,
+            _ => throw new ArgumentException("unknown np.block argument variant " + label),
+        };
+    }
 
     /// <summary>
     ///     The (start, stop) pairs of the real spacing overloads: increasing, decreasing and equal pairs, zero at either end
@@ -4638,6 +4748,11 @@ static class Snapshot
                 // Built from the operand (MakeLinalgArrays); the factory here is never called.
                 Add(LinalgArraysVariantLabels[0], () => null);
                 break;
+            case Role.StackArrays:
+            case Role.BlockArrays:
+                // Built from the operand (MakeStackArrays / MakeBlockArrays); the factory here is never called.
+                Add(role == Role.StackArrays ? StackArraysLabels[0] : BlockArraysLabels[0], () => null);
+                break;
             case Role.Ord:
                 // No order first (NumPy's None: the Frobenius / 2-norm default, cond's 2-norm), then the orders NumPy's norms
                 // and cond know (Python ints, the infinities as floats, a fraction, the names) and the ones they refuse.
@@ -5100,6 +5215,21 @@ static class Snapshot
                 sawArray = true;
                 continue;
             }
+            // The stacking family's array list carries the operand (MakeStackArrays), before the multi_dot rule below would
+            // read np.stack's `arrays` as multi_dot's list.
+            if (!sawArray && ps[i].ParameterType == typeof(NDArray[]) && IsStacking(m) && ps[i].Name is "tup" or "arrays" or "arys")
+            {
+                roles[i] = Role.StackArrays;
+                sawArray = true;
+                continue;
+            }
+            // np.block's nested list is its operand (MakeBlockArrays).
+            if (!sawArray && ps[i].ParameterType == typeof(object) && IsBlock(m) && ps[i].Name == "arrays")
+            {
+                roles[i] = Role.BlockArrays;
+                sawArray = true;
+                continue;
+            }
             // np.linalg.multi_dot's array list likewise carries the operand (MakeLinalgArrays), so its out= after it is an
             // out= and not the operand.
             if (!sawArray && ps[i].ParameterType == typeof(NDArray[]) && ps[i].Name == "arrays")
@@ -5245,6 +5375,8 @@ static class Snapshot
             Role.GradAxisSpacing => GradAxisSpacingVariantLabels.Length - 1,
             Role.GradVarargs => GradVarargsVariantLabels.Length - 1,
             Role.LinalgArrays => LinalgArraysVariantLabels.Length - 1,
+            Role.StackArrays => StackArraysLabels.Length - 1,
+            Role.BlockArrays => BlockArraysLabels.Length - 1,
             Role.NditerOps => NditerOpsVariantLabels.Length - 1,
             Role.NditerOpAxes => NditerOpAxesVariantLabels.Length - 1,
             Role.NditerItershape => NditerItershapeVariantLabels.Length - 1,
@@ -6219,6 +6351,8 @@ static class Snapshot
             Role.GradAxisSpacing => GradAxisSpacingVariantLabels[v],
             Role.GradVarargs => GradVarargsVariantLabels[v],
             Role.LinalgArrays => LinalgArraysVariantLabels[v],
+            Role.StackArrays => StackArraysLabels[v],
+            Role.BlockArrays => BlockArraysLabels[v],
             Role.NditerOps => NditerOpsVariantLabels[v],
             Role.NditerOpAxes => NditerOpAxesVariantLabels[v],
             Role.NditerItershape => NditerItershapeVariantLabels[v],
@@ -6311,6 +6445,8 @@ static class Snapshot
                     : roles[i] == Role.SlidingKernel ? MakeSlidingKernel(SlidingKernelVariantLabels[0], operand)
                     : roles[i] == Role.IsinTest ? MakeIsinTest(IsinTestVariantLabels[0], operand)
                     : roles[i] == Role.LinalgArrays ? MakeLinalgArrays(LinalgArraysVariantLabels[0], operand)
+                    : roles[i] == Role.StackArrays ? MakeStackArrays(StackArraysLabels[0], operand)
+                    : roles[i] == Role.BlockArrays ? MakeBlockArrays(BlockArraysLabels[0], operand)
                     : roles[i] == Role.NditerOps ? MakeNditerOps(NditerOpsVariantLabels[0], operand)
                     : roles[i] == Role.EinsumSubscripts ? MakeEinsumSubscripts(EinsumSubscriptsVariantLabels[0], operand)
                     : roles[i] == Role.EinsumOps ? MakeEinsumOps(EinsumOpsVariantLabels[0], operand)
@@ -6387,6 +6523,12 @@ static class Snapshot
                         break;
                     case Role.LinalgArrays:
                         argv[p] = MakeLinalgArrays(LinalgArraysVariantLabels[v], operand);
+                        break;
+                    case Role.StackArrays:
+                        argv[p] = MakeStackArrays(StackArraysLabels[v], operand);
+                        break;
+                    case Role.BlockArrays:
+                        argv[p] = MakeBlockArrays(BlockArraysLabels[v], operand);
                         break;
                     case Role.NditerOps:
                         argv[p] = MakeNditerOps(NditerOpsVariantLabels[v], operand);
