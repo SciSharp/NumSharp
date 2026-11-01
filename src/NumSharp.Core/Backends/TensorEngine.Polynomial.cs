@@ -62,6 +62,78 @@ namespace NumSharp
         public abstract NDArray Polyint(NDArray p, int m = 1, NDArray k = null);
 
         /// <summary>
+        ///     NumPy's <c>np.polyder(p, m=1)</c>: the <paramref name="m"/>-th derivative, each order
+        ///     <c>p[:-1] * arange(n, 0, -1)</c> with <c>n = len(p) - 1</c>.
+        /// </summary>
+        /// <param name="p">The coefficients, highest degree first (null is NumPy's None: <c>asarray(None)</c>'s refusal).
+        ///     Each order slices the FIRST axis and multiplies by an int64 ramp of the array's size, so an N-D p meets
+        ///     the multiply's broadcast error, as in NumPy.</param>
+        /// <param name="m">The order of differentiation: 0 returns <c>asarray(p)</c> itself.</param>
+        /// <returns>The derivative's coefficients (int32 coefficients become int64 through the int64 ramp); for
+        ///     <paramref name="m"/> past the degree, an empty array.</returns>
+        /// <exception cref="ValueError">A negative <paramref name="m"/> (<c>Order of derivative must be positive (see
+        ///     polyint)</c>), checked before <paramref name="p"/> is read.</exception>
+        /// <exception cref="System.NotSupportedException"><paramref name="p"/> is null (NumPy's object array of None).</exception>
+        /// <exception cref="IncorrectShapeException">An N-D p whose rows do not broadcast with the ramp (the multiply's
+        ///     <c>operands could not be broadcast together</c>, NumPy's ValueError).</exception>
+        /// <exception cref="IndexError">A 0-d p sliced with <c>[:-1]</c> (<c>too many indices for array</c>).</exception>
+        /// <exception cref="TypeError">Text coefficients, which the multiply has no loop for.</exception>
+        /// <remarks>
+        ///     NumPy writes polyder in Python (<c>numpy/lib/_polynomial_impl.py</c>, which also handles a poly1d - NumSharp's
+        ///     poly1d calls its own derivative); DefaultEngine runs its loop over the array object's slice and multiply.
+        ///     <c>np.polyder</c> calls it inside the matrix boundary's plain region, on <paramref name="p"/>'s engine (the
+        ///     default one for null); an override replaces it for every array whose engine it is.
+        /// </remarks>
+        public abstract NDArray Polyder(NDArray p, int m = 1);
+
+        /// <summary>
+        ///     NumPy's <c>np.polyfit(x, y, deg, rcond=None, full=False, w=None, cov=False)</c>: the least-squares polynomial
+        ///     of degree <paramref name="deg"/> through the points, from the Vandermonde matrix of <paramref name="x"/> with
+        ///     its columns scaled to unit norm, one <c>np.linalg.lstsq</c> solve, and the scale taken back out of the
+        ///     coefficients.
+        /// </summary>
+        /// <param name="x">The sample points, 1-D (null is NumPy's None: <c>asarray(None)</c>'s refusal); <c>x + 0.0</c>
+        ///     makes them float (float32 stays float32).</param>
+        /// <param name="y">The sample values: 1-D, or 2-D with one data set per column, as long as
+        ///     <paramref name="x"/>.</param>
+        /// <param name="deg">The degree of the polynomial.</param>
+        /// <param name="rcond">The relative condition number of the fit, or null for <c>len(x) * eps</c> of x's float
+        ///     dtype.</param>
+        /// <param name="full">Also return lstsq's residuals, rank and singular values (NumPy's five-tuple).</param>
+        /// <param name="w">Weights applied to the unsquared residuals, one per sample point, or null.</param>
+        /// <param name="cov">NumPy's <c>cov=</c>: null / <c>false</c> (no covariance), <c>true</c> (scaled by the residuals),
+        ///     <c>"unscaled"</c>, or any other object, read as Python's truth value (the empty string is false). Ignored with
+        ///     <paramref name="full"/>.</param>
+        /// <returns>
+        ///     The <see cref="PolyfitResult"/> carrying exactly the arrays NumPy returns: the coefficients (highest degree
+        ///     first, one column per data set); with <paramref name="full"/>, the residuals, rank and singular values; with a
+        ///     truthy <paramref name="cov"/>, the covariance. Every other slot is null.
+        /// </returns>
+        /// <exception cref="ValueError">A negative <paramref name="deg"/> (<c>expected deg &gt;= 0</c>); a scaled covariance
+        ///     with no more points than coefficients (<c>the number of data points must exceed order to scale the covariance
+        ///     matrix</c>).</exception>
+        /// <exception cref="TypeError">NumPy's shape refusals in its order (<c>expected 1D vector for x</c>, <c>expected
+        ///     non-empty vector for x</c>, <c>expected 1D or 2D array for y</c>, <c>expected x and y to have same length</c>,
+        ///     <c>expected a 1-d array for weights</c>, <c>expected w and y to have the same length</c>); text the float
+        ///     conversion <c>+ 0.0</c> has no loop for; a float16 or decimal x that numpy.linalg refuses (<c>array type float16
+        ///     is unsupported in linalg</c>).</exception>
+        /// <exception cref="System.NotSupportedException"><paramref name="x"/> or <paramref name="y"/> is null (NumPy's object array
+        ///     of None).</exception>
+        /// <exception cref="OpenBlasMissingBackendException">No LAPACK backend is installed: lstsq needs one.</exception>
+        /// <exception cref="LinAlgError">lstsq's SVD does not converge (a NaN or an infinity in the data), or the covariance's
+        ///     inverse meets a singular matrix.</exception>
+        /// <exception cref="IncorrectShapeException">Weights that do not broadcast against a 2-D y's columns.</exception>
+        /// <remarks>
+        ///     NumPy writes polyfit in Python; DefaultEngine runs its statements over the operand engines' <see cref="Vander"/>,
+        ///     <see cref="Sum(NDArray, int?, DType, bool)"/>, <see cref="Sqrt"/>, <see cref="Dot"/>, <see cref="Outer"/> and the
+        ///     <see cref="Linalg"/> sub-engine's lstsq and inv. NumPy's RankWarning for a rank-deficient fit is not modelled.
+        ///     <c>np.polyfit</c> calls it inside the matrix boundary's plain region, on <paramref name="x"/>'s engine (the
+        ///     default one for null); an override replaces it for every array whose engine it is.
+        /// </remarks>
+        public abstract PolyfitResult Polyfit(NDArray x, NDArray y, int deg, double? rcond = null, bool full = false,
+            NDArray w = null, object cov = null);
+
+        /// <summary>
         ///     NumPy's <c>np.polyadd(a1, a2)</c>: the shorter coefficient array (by <c>len()</c>, the first axis)
         ///     zero-extended on the high-degree side with zeros of its own dtype, then added.
         /// </summary>

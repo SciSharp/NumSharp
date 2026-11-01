@@ -192,6 +192,122 @@ namespace NumSharp.Backends
         }
 
         /// <inheritdoc />
+        [NDScoped /* asarray's result and each order's slice, ramp and product are this call's own; the last is yielded */]
+        public override NDArray Polyder(NDArray p, int m = 1)
+        {
+            if (m < 0)
+                throw new ValueError("Order of derivative must be positive (see polyint)");
+
+            p = NDArray.asarray(p, null, 'K', null);   // np.asarray(p)
+
+            // Each order differentiates once: y = p[:-1] * arange(n, 0, -1). The int64 arange is what lifts int32
+            // coefficients to int64 (matching NumPy). n is p.size - 1, where NumPy's statement is len(p) - 1: the same for a
+            // 1-D p, but an N-D p meets the multiply's broadcast error and a 0-d one the slice's IndexError, where NumPy
+            // differentiates along the first axis or raises len()'s TypeError (pinned as an open bug, not changed by a move).
+            for (int iteration = 0; iteration < m; iteration++)
+            {
+                long n = p.size - 1;
+                NDArray head = p[":-1"];
+                NDArray factors = UnmanagedStorage.ArangeObj(n, 0L, -1L, null);   // np.arange(n, 0, -1): an int64 ramp
+                p = head * factors;
+            }
+
+            return p;
+        }
+
+        /// <inheritdoc />
+        [NDScoped /* PolyfitResult is an INDArrayCarrier: the outputs it carries are yielded, every float-cast / vander / scale / cov temporary is reclaimed */]
+        public override PolyfitResult Polyfit(NDArray x, NDArray y, int deg, double? rcond = null, bool full = false,
+            NDArray w = null, object cov = null)
+        {
+            int order = deg + 1;
+            // np.asarray(x) + 0.0: to floating (float32 stays float32; int / bool -> float64). NumPy converts both operands
+            // before its first check, so a text operand's no-loop refusal wins over every shape error.
+            x = NDArray.asarray(x, null, 'K', null) + 0.0;
+            y = NDArray.asarray(y, null, 'K', null) + 0.0;
+
+            if (deg < 0)
+                throw new ValueError("expected deg >= 0");
+            if (x.ndim != 1)
+                throw new TypeError("expected 1D vector for x");
+            if (x.size == 0)
+                throw new TypeError("expected non-empty vector for x");
+            if (y.ndim < 1 || y.ndim > 2)
+                throw new TypeError("expected 1D or 2D array for y");
+            if (x.Shape.dimensions[0] != y.Shape.dimensions[0])
+                throw new TypeError("expected x and y to have same length");
+
+            // rcond defaults to len(x) * eps of x's float dtype (np.finfo(x.dtype).eps: the finfo class, np.finfo's body).
+            double rc = rcond ?? (x.size * new finfo(x.dtype).eps);
+
+            // The least-squares system for the powers of x: the Vandermonde matrix (np.vander's member).
+            NDArray lhs = Vander(x, order, false);
+            NDArray rhs = y;
+
+            if (w is not null)
+            {
+                w = NDArray.asarray(w, null, 'K', null) + 0.0;
+                if (w.ndim != 1)
+                    throw new TypeError("expected a 1-d array for weights");
+                if (w.Shape.dimensions[0] != y.Shape.dimensions[0])
+                    throw new TypeError("expected w and y to have the same length");
+                NDArray wcol = NDArray.expand_dims(w, -1);   // w[:, NX.newaxis]
+                lhs = lhs * wcol;
+                rhs = rhs.ndim == 2 ? rhs * wcol : rhs * w;
+            }
+
+            // Scale the columns to improve the condition number (np.sqrt(np.sum(lhs * lhs, 0)): this engine's Sum and Sqrt),
+            // then solve (np.linalg.lstsq: the linalg sub-engine's member) and take the scale back out.
+            NDArray scale = Sqrt(Sum(lhs * lhs, 0, null, false), null, null, null);
+            lhs = lhs / scale;
+            var (c, resids, rank, s) = Linalg.Lstsq(lhs, rhs, rc);
+            c = (c.T / scale).T;                  // broadcast the scale back into the coefficients
+
+            // NumPy warns (RankWarning) when the fit is rank-deficient and !full: the warning is not modelled.
+
+            if (full)
+                return new PolyfitResult(c, resids, rank, s, rc, null);
+
+            // Not `full`: NumPy returns only the coefficients (plus the covariance below), so the diagnostics are left OUT of
+            // the result, and this call's scope reclaims them with every other temporary.
+
+            if (CovTruthy(cov))
+            {
+                // np.linalg.inv(np.dot(lhs.T, lhs)) / np.outer(scale, scale): this engine's Dot and Outer, the linalg
+                // sub-engine's Inv.
+                NDArray lhsT = lhs.T;
+                NDArray vbase = Linalg.Inv(Dot(lhsT, lhs, null));
+                vbase = vbase / Outer(scale, scale, null);
+
+                bool unscaled = cov is string cs && cs == "unscaled";
+                if (!unscaled && x.size <= order)
+                    throw new ValueError("the number of data points must exceed order "
+                                         + "to scale the covariance matrix");
+
+                NDArray fac = unscaled ? NDArray.Scalar(1.0) : resids / (double)(x.size - order);
+                NDArray v = y.ndim == 1 ? vbase * fac : NDArray.expand_dims(vbase, -1) * fac;
+                return new PolyfitResult(c, null, null, null, rc, v);
+            }
+
+            return new PolyfitResult(c, null, null, null, rc, null);
+        }
+
+        /// <summary>NumPy's <c>elif cov:</c> truthiness for polyfit's <c>cov=</c>: false for null, a bool's own value, a
+        ///     string's non-emptiness, and true for any other object (Python's default truth).</summary>
+        /// <param name="cov">The <c>cov=</c> argument.</param>
+        /// <returns>Whether the covariance is requested.</returns>
+        private static bool CovTruthy(object cov)
+        {
+            switch (cov)
+            {
+                case null: return false;
+                case bool b: return b;
+                case string s: return s.Length != 0;
+                default: return true;
+            }
+        }
+
+        /// <inheritdoc />
         public override NDArray Polyadd(NDArray a1, NDArray a2) => PolyAddSub(a1, a2, subtract: false);
 
         /// <inheritdoc />

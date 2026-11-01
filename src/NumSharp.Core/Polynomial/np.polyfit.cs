@@ -25,6 +25,16 @@ namespace NumSharp
         ///     <paramref name="full"/> is true, the covariance only when <paramref name="cov"/> is truthy — every
         ///     other slot is <c>null</c>.
         /// </returns>
+        /// <exception cref="ValueError">A negative <paramref name="deg"/>, or a scaled covariance with no more points than
+        ///     coefficients.</exception>
+        /// <exception cref="TypeError">NumPy's shape refusals (x not 1-D or empty, y not 1-D / 2-D, lengths that differ, w
+        ///     not 1-D or of another length), text the float conversion refuses, or a float16 / decimal x numpy.linalg
+        ///     refuses.</exception>
+        /// <exception cref="NotSupportedException"><paramref name="x"/> or <paramref name="y"/> is null.</exception>
+        /// <exception cref="OpenBlasMissingBackendException">No LAPACK backend is installed (lstsq needs one).</exception>
+        /// <exception cref="LinAlgError">lstsq's SVD does not converge, or the covariance's inverse meets a singular
+        ///     matrix.</exception>
+        /// <exception cref="IncorrectShapeException">Weights that do not broadcast against a 2-D y's columns.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.polyfit.html
         ///     <para>
@@ -33,87 +43,14 @@ namespace NumSharp
         ///     ordinary spelling <c>NDArray c = np.polyfit(x, y, deg)</c> — which keeps only the coefficients —
         ///     stranded the residual and singular-value buffers (2 pooled arrays per call) until a GC.
         ///     </para>
+        ///     <para>The statements are <see cref="TensorEngine.Polyfit"/>, on <paramref name="x"/>'s engine (the default one
+        ///     for null), inside the matrix boundary's plain region.</para>
         /// </remarks>
-        [NDScoped] // PolyfitResult is an INDArrayCarrier: the outputs it carries are yielded, every float-cast/vander/scale/cov temp is reclaimed
         public static PolyfitResult polyfit(NDArray x, NDArray y, int deg, double? rcond = null,
             bool full = false, NDArray w = null, object cov = null)
         {
             using var plain = NDMatrixBoundary.PlainFor(x, y, w);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            int order = deg + 1;
-            x = np.asarray(x) + 0.0;   // to floating (float32 stays float32; int/bool -> float64)
-            y = np.asarray(y) + 0.0;
-
-            if (deg < 0)
-                throw new ValueError("expected deg >= 0");
-            if (x.ndim != 1)
-                throw new TypeError("expected 1D vector for x");
-            if (x.size == 0)
-                throw new TypeError("expected non-empty vector for x");
-            if (y.ndim < 1 || y.ndim > 2)
-                throw new TypeError("expected 1D or 2D array for y");
-            if (x.Shape.dimensions[0] != y.Shape.dimensions[0])
-                throw new TypeError("expected x and y to have same length");
-
-            double rc = rcond ?? (x.size * np.finfo(x.dtype).eps);
-
-            // Least-squares system for powers of x — the Vandermonde matrix.
-            NDArray lhs = np.vander(x, order);
-            NDArray rhs = y;
-
-            if (w is not null)
-            {
-                w = np.asarray(w) + 0.0;
-                if (w.ndim != 1)
-                    throw new TypeError("expected a 1-d array for weights");
-                if (w.Shape.dimensions[0] != y.Shape.dimensions[0])
-                    throw new TypeError("expected w and y to have the same length");
-                NDArray wcol = np.expand_dims(w, -1);
-                lhs = lhs * wcol;
-                rhs = rhs.ndim == 2 ? rhs * wcol : rhs * w;
-            }
-
-            // Scale the columns to improve the condition number, then solve and unscale.
-            NDArray scale = np.sqrt(np.sum(lhs * lhs, 0));
-            lhs = lhs / scale;
-            var (c, resids, rank, s) = np.linalg.lstsq(lhs, rhs, rc);
-            c = (c.T / scale).T;                  // broadcast the scale back into the coefficients
-
-            // NumPy warns (RankWarning) when the fit is rank-deficient and !full — NumSharp omits the warning.
-
-            if (full)
-                return new PolyfitResult(c, resids, rank, s, rc, null);
-
-            // Not `full`: NumPy returns only the coefficients (plus the covariance below), so the diagnostics are
-            // left OUT of the result — the scope then reclaims them with every other temporary of this call.
-
-            if (CovTruthy(cov))
-            {
-                NDArray vbase = np.linalg.inv(np.dot(lhs.T, lhs));
-                vbase = vbase / np.outer(scale, scale);
-
-                bool unscaled = cov is string cs && cs == "unscaled";
-                if (!unscaled && x.size <= order)
-                    throw new ValueError("the number of data points must exceed order "
-                                         + "to scale the covariance matrix");
-
-                NDArray fac = unscaled ? NDArray.Scalar(1.0) : resids / (double)(x.size - order);
-                NDArray v = y.ndim == 1 ? vbase * fac : np.expand_dims(vbase, -1) * fac;
-                return new PolyfitResult(c, null, null, null, rc, v);
-            }
-
-            return new PolyfitResult(c, null, null, null, rc, null);
-        }
-
-        /// <summary>NumPy's <c>elif cov:</c> truthiness — true, or a non-empty string other than nothing.</summary>
-        private static bool CovTruthy(object cov)
-        {
-            switch (cov)
-            {
-                case null: return false;
-                case bool b: return b;
-                case string s: return s.Length != 0;
-                default: return true;
-            }
+            return np.EngineOf(x).Polyfit(x, y, deg, rcond, full, w, cov);
         }
     }
 
