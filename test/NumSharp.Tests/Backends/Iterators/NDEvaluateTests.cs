@@ -3109,5 +3109,43 @@ namespace NumSharp.Tests.Backends.Iterators
                 default: throw new NotSupportedException();
             }
         }
+
+        /// <summary>
+        ///     One np.evaluate overload with defaulted optionals (the np-layer dtype plan's D11): the second position is the
+        ///     positional operand list (null for a tree that embeds its arrays), every keyword is reachable by name, and the
+        ///     engine member takes the keywords as given, checking them in np.evaluate's order - a read-only out=, then a text
+        ///     operand, then the keyword bundle (dtype= with out=, the order letter, the casting name).
+        /// </summary>
+        [TestMethod]
+        public void OneOverload_TheEngineMemberChecksTheRawKeywordsInOrder()
+        {
+            var a = np.arange(4.0);
+            var b = np.arange(4.0) * 2.0;
+            // embedded leaves (operands defaulted) and positional leaves through the same overload
+            np.evaluate((NDExpr)a + b).ToArray<double>().Should().Equal(0.0, 3.0, 6.0, 9.0);
+            np.evaluate(NDExpr.Input(0) + NDExpr.Input(1), new[] { a, b }).ToArray<double>().Should().Equal(0.0, 3.0, 6.0, 9.0);
+            var into = np.zeros(new Shape(4));
+            np.evaluate((NDExpr)a + b, @out: into).Should().BeSameAs(into);
+            np.evaluate(NDExpr.Input(0) * 2.0, new[] { a }, @out: into, where: a > 1.0);
+            into.ToArray<double>().Should().Equal(0.0, 3.0, 4.0, 6.0);   // masked-off slots keep the previous result
+            // the engine member is the whole call: raw keywords, the same answers
+            TensorEngine.Default.Evaluate((NDExpr)a + b, order: 'C', casting: "same_kind").ToArray<double>()
+                .Should().Equal(0.0, 3.0, 6.0, 9.0);
+
+            // the order of the checks: a read-only out before a text operand before a bad keyword
+            var readOnly = np.zeros(new Shape(2));
+            readOnly.setflags(write: false);
+            var text = np.array(new[] { "x", "y" });
+            new Action(() => np.evaluate(NDExpr.Input(0) + 1, new[] { text }, @out: readOnly, casting: "bogus"))
+                .Should().Throw<ValueError>().WithMessage("output array is read-only");
+            new Action(() => np.evaluate(NDExpr.Input(0) + 1, new[] { text }, casting: "bogus"))
+                .Should().Throw<StringComputationNotSupportedException>();
+            new Action(() => np.evaluate((NDExpr)a + 1, casting: "bogus"))
+                .Should().Throw<ValueError>().WithMessage("casting must be one of*");
+            new Action(() => np.evaluate((NDExpr)a + 1, order: 'Q'))
+                .Should().Throw<ValueError>().WithMessage("order must be one of 'C', 'F', 'A', or 'K' (got 'Q')");
+            new Action(() => np.evaluate((NDExpr)a + 1, @out: into, dtype: np.float32))
+                .Should().Throw<ArgumentException>().WithMessage("*either dtype= or out=*");
+        }
     }
 }

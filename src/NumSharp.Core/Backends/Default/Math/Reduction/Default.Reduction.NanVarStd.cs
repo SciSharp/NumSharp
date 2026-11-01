@@ -186,7 +186,7 @@ namespace NumSharp.Backends
                 else
                 {
                     arr0 = NewArray(inT, kl, false);
-                    engine.Evaluate(zeroed, arr0);
+                    engine.Evaluate(zeroed, @out: arr0);
                     avg = engine.ReduceAdd(arr0, axis, keepdims: true, dtype: dtype, @out: null);
                 }
             }
@@ -218,7 +218,7 @@ namespace NumSharp.Backends
                 // The squared deviations in NumPy's K-order layout, then NumPy's sum over them. A real input reuses the
                 // copy's buffer (same dtype and layout); a complex one writes float64 squares.
                 var x2 = arr0 is not null && sqT == inT ? arr0 : NewArray(sqT, kl, false);
-                engine.Evaluate(SquaredNanDeviationExpr(a, avgOperand, inT), x2);
+                engine.Evaluate(SquaredNanDeviationExpr(a, avgOperand, inT), @out: x2);
                 var = engine.ReduceAdd(x2, axis, keepdims, dtype, @out: null);
             }
 

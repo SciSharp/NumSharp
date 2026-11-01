@@ -308,7 +308,7 @@ namespace NumSharp.Tests.Math
             Run(x => np.positive(x[":-1"], x["1:"], m)).ToArray<double>().Should().Equal(0, 5, 5, 0, 0, 0, 5, 5, 5, 0, 0, 0);
             Run(x => np.sqrt(x[":-1"], x["1:"], m)).ToArray<double>()
                 .Should().Equal(0, 5, System.Math.Sqrt(5), 0, 0, 0, System.Math.Sqrt(5), 5, System.Math.Sqrt(5), 0, 0, 0);
-            Run(x => np.evaluate((NDExpr)x[":-1"] + 1, x["1:"], m)).ToArray<double>().Should().Equal(0, 5, 6, 1, 0, 1, 6, 5, 6, 1, 0, 1);
+            Run(x => np.evaluate((NDExpr)x[":-1"] + 1, @out: x["1:"], where: m)).ToArray<double>().Should().Equal(0, 5, 6, 1, 0, 1, 6, 5, 6, 1, 0, 1);
         }
 
         /// <summary>

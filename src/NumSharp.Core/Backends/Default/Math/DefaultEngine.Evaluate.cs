@@ -97,12 +97,95 @@ namespace NumSharp.Backends
                 return flags;
             });
 
+        /// <inheritdoc/>
+        /// <exception cref="ValueError">A read-only <paramref name="out"/> (<c>output array is read-only</c>); a
+        ///     <paramref name="casting"/> name that is not a rule; an <paramref name="order"/> that is not 'C' / 'F' / 'A' /
+        ///     'K'.</exception>
+        /// <exception cref="StringComputationNotSupportedException">A text operand among <paramref name="operands"/> (a fused expression computes on
+        ///     numbers).</exception>
+        /// <exception cref="ArgumentException">Both <paramref name="dtype"/> and <paramref name="out"/>; an empty
+        ///     <paramref name="operands"/> list; an <paramref name="out"/> not reachable from the result dtype under
+        ///     <paramref name="casting"/>; a <paramref name="where"/> that is not boolean.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="expr"/> is null, or an entry of
+        ///     <paramref name="operands"/> is.</exception>
+        /// <exception cref="NotSupportedException"><paramref name="dtype"/>, a non-'K' <paramref name="order"/> or a
+        ///     <paramref name="where"/> mask for a reduction tree.</exception>
+        /// <remarks>
+        ///     The checks run in the order np.evaluate ran them before they moved here (D11): the writeable check, the text
+        ///     refusal of positional operands, then the keyword bundle (<see cref="BuildEvaluateOptions"/>); the tree's
+        ///     own checks follow in <see cref="EvaluateTree"/> / <see cref="EvaluateOperands"/>.
+        /// </remarks>
+        public override NDArray Evaluate(NDExpr expr, NDArray[] operands = null, NDArray @out = null, NDArray where = null,
+            DType dtype = null, string casting = null, char order = 'K')
+        {
+            // The fused inner loop writes @out through the iterator, bypassing the guarded setters (the same class of
+            // gap as the ufunc out= path), so a non-writeable target is refused up front, as the ufuncs this fuses do.
+            if (@out is not null)
+                NumSharpException.ThrowIfNotWriteable(@out.Shape, "output array");
+            // Positional operands are refused like embedded leaves (decision D20 of the strings plan): a fused expression
+            // computes on numbers. IsText covers S, U and StringDType and never throws, so every text kind gets the one
+            // refusal before anything is bound.
+            if (operands != null)
+                foreach (var operand in operands)
+                    if (Strings.NDStringUfuncs.IsText(operand))
+                        throw Strings.NDStringUfuncs.EvaluateTextOperand(operand);
+            var options = BuildEvaluateOptions(dtype, casting, order, @out is not null, where);
+            // null operands: the tree embeds its arrays; a list (even an empty one, which EvaluateOperands refuses) names
+            // the positional leaves
+            return operands is null ? EvaluateTree(expr, @out, options) : EvaluateOperands(expr, operands, @out, options);
+        }
+
+        /// <summary>
+        ///     Validates and RESOLVES the <c>np.evaluate</c> keyword bundle (plan P4.5), so the internal paths only ever see
+        ///     a legal, resolved <see cref="NDEvaluateOptions"/>: a bad casting string or order char raises here, before any
+        ///     work and independent of the tree's shape, and the <c>dtype</c> / <c>out</c> conflict is caught before either
+        ///     is used. Moved from np.evaluate's facade with the keywords (D11).
+        /// </summary>
+        /// <param name="dtype">The requested result dtype (an implicit root cast), or null for the natural type.</param>
+        /// <param name="casting">The out= cast rule string, or null for <c>same_kind</c>.</param>
+        /// <param name="order">The fresh-result order char ('C'/'F'/'A'/'K', case-insensitive).</param>
+        /// <param name="hasOut">Whether a caller <c>out=</c> was supplied (which fixes the result dtype, conflicting with
+        ///     <paramref name="dtype"/>).</param>
+        /// <param name="where">The optional boolean write mask (validated for boolean-ness by the evaluation, alongside the
+        ///     reduction-tree rejection), or null for an unmasked pass.</param>
+        /// <returns>The resolved keyword bundle.</returns>
+        /// <exception cref="ArgumentException">Both <paramref name="dtype"/> and an <c>out=</c> were given.</exception>
+        /// <exception cref="ValueError"><paramref name="casting"/> is not a legal rule, or <paramref name="order"/> is not one
+        ///     of 'C'/'F'/'A'/'K'.</exception>
+        internal static NDEvaluateOptions BuildEvaluateOptions(DType dtype, string casting, char order, bool hasOut, NDArray where = null)
+        {
+            // out= already pins the result dtype, so a second pin via dtype= is contradictory: reject the pair rather than
+            // silently double-casting (NumPy's ufunc lets both differ because dtype= is a COMPUTE dtype there; evaluate's
+            // dtype= is a RESULT cast, so it collapses onto out=).
+            if (dtype is not null && hasOut)
+                throw new ArgumentException(
+                    "np.evaluate: specify either dtype= or out=, not both — out= already fixes the result dtype.");
+
+            // The order char is validated even for a reduction tree (a bad order= is a bad argument regardless of what the
+            // tree is); the evaluation then applies it only to a fresh elementwise result.
+            char o = char.ToUpperInvariant(order);
+            if (o != 'C' && o != 'F' && o != 'A' && o != 'K')
+                throw new ValueError($"order must be one of 'C', 'F', 'A', or 'K' (got '{order}')");
+
+            // ParseCasting raises NumPy's verbatim "casting must be one of …" for a bad string; null keeps the same_kind
+            // default the struct supplies. The where= mask's boolean-ness (and its rejection on a reduction tree) is checked
+            // by the evaluation, next to the identical dtype= / order= guards, so the whole reduction-tree keyword contract
+            // lives in one place.
+            NPY_CASTING? c = casting is null ? (NPY_CASTING?)null : DTypeCasting.ParseCasting(casting);
+            return new NDEvaluateOptions(dtype?.typecode, c, order, where);
+        }
+
         /// <summary>
         /// Evaluate a tree whose array leaves are embedded NDArrays
         /// (<see cref="NDExpr.Arr"/> / implicit conversion).
         /// </summary>
+        /// <param name="expr">The tree.</param>
+        /// <param name="out">The caller's result array, or null.</param>
+        /// <param name="options">The resolved keywords.</param>
+        /// <returns>The evaluated array, or <paramref name="out"/> holding it.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="expr"/> is null.</exception>
         [NDScoped] // engine boundary: any leaf wrappers BindArrays mints are reclaimed; the fused result (or @out) is yielded
-        public override unsafe NDArray Evaluate(NDExpr expr, NDArray @out = null, in NDEvaluateOptions options = default)
+        private unsafe NDArray EvaluateTree(NDExpr expr, NDArray @out, in NDEvaluateOptions options)
         {
             if (expr is null) throw new ArgumentNullException(nameof(expr));
 
@@ -116,7 +199,14 @@ namespace NumSharp.Backends
         /// Evaluate a tree built over positional <see cref="NDExpr.Input"/>
         /// leaves against an explicit operand list.
         /// </summary>
-        public override unsafe NDArray Evaluate(NDExpr expr, NDArray[] operands, NDArray @out = null, in NDEvaluateOptions options = default)
+        /// <param name="expr">The tree.</param>
+        /// <param name="operands">The positional operands (not null: the caller chose this path for a list).</param>
+        /// <param name="out">The caller's result array, or null.</param>
+        /// <param name="options">The resolved keywords.</param>
+        /// <returns>The evaluated array, or <paramref name="out"/> holding it.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="expr"/> is null, or an operand is.</exception>
+        /// <exception cref="ArgumentException"><paramref name="operands"/> is empty.</exception>
+        private unsafe NDArray EvaluateOperands(NDExpr expr, NDArray[] operands, NDArray @out, in NDEvaluateOptions options)
         {
             if (expr is null) throw new ArgumentNullException(nameof(expr));
             if (operands is null) throw new ArgumentNullException(nameof(operands));

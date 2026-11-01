@@ -2,7 +2,6 @@
 # Counts may only go down. A rise is new dtype logic in the facade: move it down a layer, or pin it here by hand
 # with a reason in a fourth column. After a drop, rerun the test with NUMSHARP_WRITE_LAYERING_ALLOWLIST=1 and commit.
 # path<TAB>text<TAB>numeric[<TAB># reason]
-APIs/np.evaluate.cs	2	0	# P2: np.evaluate's text refusal waits for the owner's decision (its engine member is declared)
 APIs/np.finfo.cs	1	11	# stays (D): finfo describes a dtype - each float class's parameters
 APIs/np.flatiter.cs	1	1	# stays (D): the flat setter's same-type scalar store and its S / U element store
 APIs/np.iinfo.cs	1	21	# stays (D): iinfo describes a dtype - each integer class's range

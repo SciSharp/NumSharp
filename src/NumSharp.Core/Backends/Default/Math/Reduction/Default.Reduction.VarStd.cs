@@ -757,11 +757,11 @@ namespace NumSharp.Backends
             if (square == DeviationSquare.Real && arr.GetTypeCode != xT && xT is NPTypeCode.Single or NPTypeCode.Double)
             {
                 UnmanagedStorage.Copyto(x2, arr, NPY_CASTING.NPY_UNSAFE_CASTING);
-                x2.TensorEngine.Evaluate(NDExpr.Square(NDExpr.Arr(x2) - NDExpr.Arr(mean)), x2);
+                x2.TensorEngine.Evaluate(NDExpr.Square(NDExpr.Arr(x2) - NDExpr.Arr(mean)), @out: x2);
                 return;
             }
 
-            arr.TensorEngine.Evaluate(SquaredDeviationExpr(arr, mean, square), x2);
+            arr.TensorEngine.Evaluate(SquaredDeviationExpr(arr, mean, square), @out: x2);
         }
 
         /// <summary>

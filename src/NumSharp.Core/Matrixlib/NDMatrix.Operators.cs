@@ -209,7 +209,7 @@ namespace NumSharp
                     NPTypeCode.Double => NDArray.Scalar(0d),
                     _ => NDArray.Scalar(Complex.Zero),
                 };
-                np.evaluate((NDExpr)array * (NDExpr)scalar + (NDExpr)zero, result);
+                np.evaluate((NDExpr)array * (NDExpr)scalar + (NDExpr)zero, @out: result);
             }
             else
             {

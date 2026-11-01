@@ -326,7 +326,7 @@ namespace NumSharp.Backends
                         // coordinates) into a real component is NumPy's setitem, which keeps the real part, where the fused
                         // pass's out= refuses the cast: it is evaluated into a temporary and stored.
                         if (StoresInPlace(PolyTyping.Promote(a.typecode, work.typecode), otype))
-                            Evaluate(expr, ov);
+                            Evaluate(expr, @out: ov);
                         else
                             StoreComponent(ov, Evaluate(expr));
                         ov.Dispose();

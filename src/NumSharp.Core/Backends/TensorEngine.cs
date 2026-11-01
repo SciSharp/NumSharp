@@ -232,27 +232,36 @@ namespace NumSharp
         private FftEngine _fft;
 
         /// <summary>
-        ///     Fused evaluation of an <see cref="NDExpr"/> tree in one iterator
-        ///     pass (np.evaluate, roadmap Wave 6.1). Virtual with a
-        ///     NotSupported default so alternative engines opt in explicitly.
+        ///     Fused evaluation of an <see cref="NDExpr"/> tree in one iterator pass: <c>np.evaluate</c>'s whole call, its
+        ///     keywords as the caller passed them (the np-layer dtype plan's D11). Virtual with a
+        ///     <see cref="NotSupportedException"/> default, so an alternative engine opts in explicitly.
         /// </summary>
-        /// <param name="options">Resolved <c>dtype=</c>/<c>casting=</c>/<c>order=</c> keywords (plan P4.5); <c>default</c> = no override.</param>
-        public virtual NDArray Evaluate(NDExpr expr, NDArray @out = null, in NDEvaluateOptions options = default)
-            => throw new NotSupportedException($"{GetType().Name} does not support fused expression evaluation.");
-
-        /// <summary>
-        ///     Fused evaluation against an explicit operand list
-        ///     (<see cref="NDExpr.Input"/> leaves reference operands by position).
-        /// </summary>
-        /// <param name="options">Resolved <c>dtype=</c>/<c>casting=</c>/<c>order=</c> keywords (plan P4.5); <c>default</c> = no override.</param>
-        public virtual NDArray Evaluate(NDExpr expr, NDArray[] operands, NDArray @out = null, in NDEvaluateOptions options = default)
+        /// <param name="expr">The tree; its array leaves are embedded NDArrays, or <see cref="NDExpr.Input"/> leaves
+        ///     naming <paramref name="operands"/> by position.</param>
+        /// <param name="operands">The positional operands for a tree of <see cref="NDExpr.Input"/> leaves, or null for a
+        ///     tree whose leaves embed their arrays.</param>
+        /// <param name="out">A pre-allocated result (ufunc <c>out=</c> rules), or null.</param>
+        /// <param name="where">A boolean write mask (ufunc <c>where=</c>), or null.</param>
+        /// <param name="dtype">The result dtype (a root cast), or null for the tree's own.</param>
+        /// <param name="casting">The <c>out=</c> cast rule name, or null for <c>same_kind</c>.</param>
+        /// <param name="order">The layout of a fresh result: <c>'K'</c>, <c>'C'</c>, <c>'F'</c> or <c>'A'</c> (either
+        ///     case).</param>
+        /// <returns>The evaluated array, or <paramref name="out"/> holding it.</returns>
+        /// <exception cref="NotSupportedException">This engine has no fused evaluation (the default).</exception>
+        /// <remarks>
+        ///     An implementation checks the arguments in <c>np.evaluate</c>'s order: a read-only <paramref name="out"/>,
+        ///     a text operand among <paramref name="operands"/>, then the keywords (<paramref name="dtype"/> with
+        ///     <paramref name="out"/>, the order letter, the casting name) - <see cref="Backends.DefaultEngine"/>'s does.
+        /// </remarks>
+        public virtual NDArray Evaluate(NDExpr expr, NDArray[] operands = null, NDArray @out = null, NDArray where = null,
+            DType dtype = null, string casting = null, char order = 'K')
             => throw new NotSupportedException($"{GetType().Name} does not support fused expression evaluation.");
 
         /// <summary>
         ///     Fused evaluation of an already-compiled program (<see cref="CompiledExpression"/>):
-        ///     the per-call work only — iteration shape, result allocation, iterator. The two
-        ///     <c>Evaluate(NDExpr, …)</c> members above resolve the program from the tree's cache and
-        ///     land here.
+        ///     the per-call work only — iteration shape, result allocation, iterator. The public
+        ///     <c>Evaluate(NDExpr, …)</c> member above resolves the program from the tree's cache and
+        ///     lands here.
         /// </summary>
         /// <param name="options">Resolved <c>dtype=</c>/<c>casting=</c>/<c>order=</c> keywords (plan P4.5); <c>default</c> = no override.</param>
         internal virtual NDArray Evaluate(NDExprProgram program, NDArray[] operands, NDArray @out, in NDEvaluateOptions options = default)

@@ -125,7 +125,7 @@ namespace NumSharp.Backends
                 else
                 {
                     var arr0 = NewArray(inT, shape.KeepOrder(), false);
-                    engine.Evaluate(zeroed, arr0);
+                    engine.Evaluate(zeroed, @out: arr0);
                     tot = engine.ReduceAdd(arr0, axis, keepdims, dtype, @out: null);
                 }
             }

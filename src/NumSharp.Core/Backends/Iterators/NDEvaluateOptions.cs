@@ -2,9 +2,10 @@ namespace NumSharp.Backends.Iteration
 {
     /// <summary>
     ///     The resolved <c>np.evaluate</c> keyword bundle (<c>where=</c> / <c>dtype=</c> / <c>casting=</c> /
-    ///     <c>order=</c>) threaded from the <see cref="np.evaluate(NDExpr, NDArray, NDArray, DType, string, char)"/>
-    ///     API boundary down to the engine, so the (already growing) <c>Evaluate</c> overloads gain ONE
-    ///     parameter instead of four and every future keyword rides the same struct.
+    ///     <c>order=</c>) that <see cref="Backends.DefaultEngine"/>'s <c>Evaluate</c> builds from the raw keywords
+    ///     (<see cref="TensorEngine.Evaluate(NDExpr, NDArray[], NDArray, NDArray, DType, string, char)"/>, the np-layer
+    ///     dtype plan's D11) and threads down its internal paths, so they gain ONE parameter instead of four and every
+    ///     future keyword rides the same struct. Internal since D11: no public member takes it.
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -17,11 +18,11 @@ namespace NumSharp.Backends.Iteration
     ///         user override.
     ///     </para>
     ///     <para>
-    ///         The API validates and RESOLVES each keyword before constructing this (a bad casting string or
-    ///         order char raises at the boundary), so the engine only ever sees a legal, resolved bundle.
+    ///         The engine member validates and RESOLVES each keyword before constructing this (a bad casting
+    ///         string or order char raises first), so the internal paths only ever see a legal, resolved bundle.
     ///     </para>
     /// </remarks>
-    public readonly struct NDEvaluateOptions
+    internal readonly struct NDEvaluateOptions
     {
         /// <summary>
         ///     The requested result dtype (an implicit root cast of the whole expression), or <c>null</c>
