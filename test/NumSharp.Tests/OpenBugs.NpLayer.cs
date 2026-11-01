@@ -44,6 +44,10 @@ namespace NumSharp.Tests
     //   NL10 np.einsum_path with an ellipsis and too few operands fails indexing the operand list with .NET's
     //        IndexOutOfRangeException where NumPy's _parse_einsum_input raises IndexError("list index out of range").
     //        Found by P8's move of einsum_path onto TensorEngine (d0c7a582), which kept the behaviour.
+    //   NL11 np.isscalar answers False for a Half (NumPy's float16 scalar) and a BigInteger (a Python int past int64),
+    //        where NumPy answers True, and True for a Type object of a primitive (typeof(int)), where NumPy's isscalar(int)
+    //        is False. Found by P8's snapshot tool, whose object operand (18835e6b) first ran np.isscalar over them; the
+    //        move onto the array object (4cea01d6) kept the behaviour.
     //
     // Every expected value below is NumPy 2.4.2's answer for the same call (probed on win-amd64). EXPECTED (when fixed):
     // each test passes; remove its [OpenBugs], move it next to its API's tests, and drop the oracle excuse named in its
@@ -618,6 +622,51 @@ namespace NumSharp.Tests
 
             none.Should().Throw<IndexError>().WithMessage("list index out of range");
             tooFew.Should().Throw<IndexError>().WithMessage("list index out of range");
+        }
+
+        // ------------------------------------------------------------------
+        // NL11 — np.isscalar: Half, BigInteger and Type objects
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's isscalar is <c>isinstance(element, generic) or type(element) in ScalarType or isinstance(element,
+        ///     numbers.Number)</c>: a float16 scalar is a <c>generic</c>, so <c>np.isscalar(np.float16(1.5))</c> is True
+        ///     (probed). <see cref="Half"/> is NumSharp's float16 scalar, but it is no CLR primitive, so NumSharp's
+        ///     <c>type.IsPrimitive || obj is decimal</c> answers False.
+        /// </summary>
+        /// <remarks>Root cause: <c>NDArray.isscalar</c> (src/NumSharp.Core/Backends/NDArray.Numeric.cs) has no Half
+        ///     case.</remarks>
+        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL11")]
+        public void NpLayer_Isscalar_Half_ShouldBeAScalar()
+        {
+            np.isscalar((Half)1.5).Should().BeTrue("np.isscalar(np.float16(1.5)) is True");
+        }
+
+        /// <summary>
+        ///     A Python int of any size is a <c>numbers.Number</c>, so <c>np.isscalar(2**70)</c> is True (probed).
+        ///     <see cref="BigInteger"/> is how a C# caller spells a Python int past int64 (the house map), but it is no CLR
+        ///     primitive, so NumSharp answers False.
+        /// </summary>
+        /// <remarks>Root cause: <c>NDArray.isscalar</c> has no BigInteger case.</remarks>
+        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL11")]
+        public void NpLayer_Isscalar_BigInteger_ShouldBeAScalar()
+        {
+            np.isscalar(BigInteger.Pow(2, 70)).Should().BeTrue("np.isscalar(2**70) is True");
+        }
+
+        /// <summary>
+        ///     A type is not a scalar: <c>np.isscalar(int)</c> and <c>np.isscalar(np.float64)</c> are False (probed; a class
+        ///     object is neither a <c>generic</c> nor a <c>numbers.Number</c>). NumSharp reads a <see cref="Type"/> argument
+        ///     as the type it names (<c>obj as Type ?? obj.GetType()</c>), so <c>np.isscalar(typeof(int))</c> answers for an
+        ///     int: True.
+        /// </summary>
+        /// <remarks>Root cause: <c>NDArray.isscalar</c>'s <c>case Type _: break;</c>, which sends a Type object to the
+        ///     primitive test of the type it names.</remarks>
+        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL11")]
+        public void NpLayer_Isscalar_TypeObject_ShouldNotBeAScalar()
+        {
+            np.isscalar(typeof(int)).Should().BeFalse("np.isscalar(int) is False");
+            np.isscalar(typeof(double)).Should().BeFalse("np.isscalar(float) is False");
         }
     }
 }
