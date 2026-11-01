@@ -9,17 +9,18 @@ paths:
 
 # Linear algebra and `np.einsum`
 
-Sources: the facades `LinearAlgebra/np.{inner,vdot,vecdot,matvec,vecmat,tensordot,cross,kron}.cs` and
+Sources: the facades `LinearAlgebra/np.{inner,vdot,vecdot,matvec,vecmat,outer,tensordot,cross,kron}.cs` and
 `LinearAlgebra/linalg/np.linalg.{solve,inv,det,eig,svd,qr,cholesky,lstsq,norm,multi_dot,matrix_power,arrayapi}.cs`; the
-product members of `Backends/TensorEngine.LinearAlgebra.cs`; the gufuncs
+product members of `Backends/TensorEngine.LinearAlgebra.cs`; np.outer's and np.tensordot's statements as
+`TensorEngine.Outer` and the two `TensorEngine.Tensordot` forms (`Backends/TensorEngine.Numeric.cs`, run by
+`Backends/Default/LinearAlgebra/Default.{Outer,Tensordot}.cs`); the gufuncs
 `Backends/Default/LinearAlgebra/Default.Gufuncs.cs` with `GufuncGuard.cs` / `GufuncSignature.cs`; the `np.linalg` bodies
 on the `TensorEngine.Linalg` sub-engine (`Backends/LinalgEngine.cs`, implemented by
 `Backends/Default/LinearAlgebra/DefaultLinalgEngine.*.cs`, whose `DefaultLinalgEngine.cs` holds the `_assert_*` /
 `_commonType` ports and the `CoreMatmul` / `CoreDot` calls of the main-namespace products); `Exceptions/LinAlgError.cs`.
 The sub-engine's statements call members, never an np.* facade: a nested numpy.linalg function is its own virtual member
-(`Inv`, `Solve`, `Svdvals`, `Norm`, ...), a main-namespace function the member its facade dispatches to. The three
-exceptions are `np.outer` and `np.tensordot`, whose statements are still their facades' own: those calls are pinned in
-ratchet R2's allowlist until the np-layer dtype plan's P8 gives them `TensorEngine` members.
+(`Inv`, `Solve`, `Svdvals`, `Norm`, ...), a main-namespace function the member its facade dispatches to (the Array-API
+`outer` and `tensordot` forms call `TensorEngine.Outer` / `Tensordot` of their first operand's engine).
 
 ## What computes with and without a backend
 
@@ -166,7 +167,9 @@ parser).
   "operands could not be broadcast together with remapped shapes …".
 - Pass the keywords by name (`np.einsum("ij->i", ops, @out: dst)`): they are keyword-only in NumPy, and a fully positional
   7-argument call matches both the `params` overload and the full one (scalars convert to `NDArray` implicitly).
-- `np.einsum_path` (`LinearAlgebra/{np.einsum_path,EinsumPathPlanner,EinsumPath}.cs`), a route-for-route port of NumPy
+- `np.einsum_path` (the statements: `TensorEngine.EinsumPath`, `Backends/Default/LinearAlgebra/Default.EinsumPath.cs`,
+  on the first operand's engine; the facades, the planner and the path type:
+  `LinearAlgebra/{np.einsum_path,EinsumPathPlanner,EinsumPath}.cs`), a route-for-route port of NumPy
   2.4.2's `einsumfunc.py`: `_parse_einsum_input`, the `_greedy_path`/`_optimal_path` searches with the `_flop_count` cost
   model, and the info-string builder. `np.einsum_path(subscripts, operands, optimize)` returns `(EinsumPath path, string
   repr)`; `EinsumPath` is a `readonly struct` (Deconstruct, indexer, `Steps`/`Count`, `ToList()` for NumPy's raw list,

@@ -117,8 +117,10 @@ their calls rely on a facade's class rule. The five defects its snapshots, readi
 enumeration raises np.fromiter's error, `f48b5677`; a bad `device=` raises NumPy's ValueError, `85167352`;
 np.nansum / np.nanprod along an axis with an empty result, `eeaac035`; np.average with numpy.matrix weights,
 `e169b25d`). P6b is done (2026-11-01): the linalg and FFT sub-engines call the members their facades dispatch to (a
-nested numpy.linalg / numpy.fft call is the sub-engine's own virtual member) and sit under `Backends/Default/`; R2 pins
-their three calls of np.outer / np.tensordot, which get engine members in P8. An audit of the element code the plan's
+nested numpy.linalg / numpy.fft call is the sub-engine's own virtual member) and sit under `Backends/Default/`. P8's
+rename and its 12 functions that compute are done (2026-11-01): every one of them is a `TensorEngine` member, the
+linalg engine's last three np.* calls (np.outer, np.tensordot) are those members, and R2 counts no computation call in
+an engine file but the text API's own `NDStringMethods.cs`. An audit of the element code the plan's
 own commits added (2026-10-30) found four places and a few small ones that re-implement a kernel, the iterator or a
 BCL primitive the library already had. [§7 PA](#pa-reuse-what-the-library-already-has-the-2026-10-30-audit) plans their alignment. Its
 probe found exact models of NumPy's dot functions, so the dot item also fixes np.dot where it differs from NumPy today.
@@ -144,8 +146,9 @@ Three items were tried first (2026-10-30):
   pinned as `[OpenBugs]` tests and their fixes deferred (D21).
 
 Order of the work left (decided 2026-10-31 in the step round, D22): the merge (done); P6b (done 2026-11-01); P8, its
-rename commit first (the rename done 2026-11-01, `838fccfd`); P9; P10; PA3; PA2. Later: PA5, PA6 and the fixes of the
-pinned divergences (`OpenBugs.NpLayer.cs`, NL1 to NL8).
+rename commit first (the rename done 2026-11-01, `838fccfd`; the 12 functions that compute done the same day,
+`c046d2ca` .. `d0c7a582`; left: the array object's functions); P9; P10; PA3; PA2. Later: PA5, PA6 and the fixes of the
+pinned divergences (`OpenBugs.NpLayer.cs`, NL1 to NL10).
 
 Progress goes into the [§9 state log](#9-state-log), newest entry first.
 
@@ -587,7 +590,7 @@ The owner's answers (2026-10-24; D1 again twice on 2026-10-28), and what they me
 | D18 | 2026-10-31, step 3 (P8): "Ask again, as I have a problem with the casing of NDArray.* as it doesn't match NumPy's"; asked again: NumPy's names on NDArray | P8: the array object's internal statics take the NumPy function's name, case for case (`NDArray.vstack`, `NDArray.where`, `NDArray.take_along_axis`). A name that clashes with an ndarray property takes NumPy's own clash convention, a trailing underscore (`NDArray.real_`, `NDArray.imag_`). The ~45 existing PascalCase members are renamed with their callers in one commit before P8. `TensorEngine`, `UnmanagedStorage` and `Shape` keep C# casing (`TensorEngine`'s members shipped public in 0.70.0). |
 | D19 | 2026-10-31, step 7 (P10): "No obsolete, just remove, maintain NumPy's overload's structure and if its a custom NumSharp function then we should have one overload" | P10: an overload the change replaces is removed, not tagged `[Obsolete]`; the overloads keep NumPy's structure; a function NumPy does not have keeps one overload. |
 | D20 | 2026-10-31, step 9 (PA5): "We can't support that as we need long index support which span doesn't do."; asked again without the `Span` items: "Drop PA5", "Note that for later (defer)" | PA5 waits (Later). Its `Span<T>` items are rejected for good: a `Span`'s length is an `int`, and NumSharp indexes with `long`. The items whose replacement takes long counts (np.eye's `DiagWrite`, np.unique's take-kernel gathers, the int64 ramp kernel, the allocation's NaN fill) wait with it. |
-| D21 | 2026-10-31, step 12 (the divergences found on the way): "Create an open bug reproducing the problem/s and defer to tackle them later" | Each is an `[OpenBugs]` reproduction in `test/NumSharp.Tests/OpenBugs.NpLayer.cs`, every expected value NumPy 2.4.2's: NL1 to NL6 (`f2eee1d1`) and B3 as NL7 (`efc50d14`, once P7 was dropped); NL8 (`2cad8823`), found by the merge's Debug gate. Their fixes are deferred; each will be a D4 commit. |
+| D21 | 2026-10-31, step 12 (the divergences found on the way): "Create an open bug reproducing the problem/s and defer to tackle them later" | Each is an `[OpenBugs]` reproduction in `test/NumSharp.Tests/OpenBugs.NpLayer.cs`, every expected value NumPy 2.4.2's: NL1 to NL6 (`f2eee1d1`) and B3 as NL7 (`efc50d14`, once P7 was dropped); NL8 (`2cad8823`), found by the merge's Debug gate; NL9 and NL10 (`401703b5`), found by P8's moves. Their fixes are deferred; each will be a D4 commit. |
 | D22 | 2026-10-31, the step round: the rebase, P6b, P8, P9, P10 and P7b-d "Accept and start" (P7b-d dropped later, D7); P7a "Skip"; PA3 "Defer until after P7"; PA2 "Defer until after PA3"; PA6 "Defer until after PA5" | The order of the work: the rebase; P6b; P8; P9; P10; PA3 (where P7 stood); PA2. PA5 and PA6 later (D20). |
 
 The recommendations as written before the answers:
@@ -1463,9 +1466,11 @@ P7 was dropped). The array object's internal members take NumPy's names (D18).
       `AtLeast1d` -> `atleast_1d`, `RealPart` -> `real_`, ...). A member that is not one NumPy function (a helper of
       several) keeps its C# name. Done 2026-11-01 (`838fccfd`, see the state log): 40 names onto 38 (`pad` and `array`
       take two old names each), by Roslyn's semantic rename, the IL's call targets identical before and after.
-- [ ] The 12 that compute become `TensorEngine` members: bartlett, blackman, hamming, hanning, kaiser and corrcoef
+- [x] The 12 that compute become `TensorEngine` members: bartlett, blackman, hamming, hanning, kaiser and corrcoef
       (`FunctionBase`), outer and tensordot (`Numeric`), polyder and polyfit (`Polynomial`), fix (`UfuncLike`),
-      einsum_path (`EinsumFunc`). The five windows have no operand: they run on `TensorEngine.Default` (P9).
+      einsum_path (`EinsumFunc`). The five windows have no operand: they run on `TensorEngine.Default` (P9). Done
+      2026-11-01 in five family commits (`c046d2ca` .. `d0c7a582`, see the state log), each byte-identical in the
+      snapshot tool; the windows call `np.EngineOf(null)` until P9, as np.linspace does.
 - [ ] The 47 of the array object move into their `NDArray` / `Shape` partials (Appendix D). 11 have their member
       already, from P6: flip / fliplr / flipud (`NDArray.FlipAxes`), expand_dims, broadcast_to / broadcast_arrays /
       broadcast_shapes, atleast_1d / atleast_2d, diagflat, identity (`NDArray.Eye`). About 36 are left (vstack ->
@@ -1534,6 +1539,11 @@ commit of its own, with its oracle excuse narrowed where it has one:
 - NL8: np.sum's add.reduce step (`AccumulateDouble` / `AccumulateSingle`, `*acc = *acc + s`) leaves the NaN of
   NaN + NaN to the JIT: a Debug build keeps the pairwise sum's NaN where NumPy keeps the accumulator's (a Release build
   happens to agree with NumPy). The fix chooses the accumulator's NaN explicitly.
+- NL9: np.polyder counts `p.size - 1` terms per order where NumPy's `n = len(p) - 1` takes the first axis, and computes m
+  products where NumPy's recursion computes m + 1 (the last, at m == 0, discarded): a 2-D p, a 0-d p (len()'s TypeError
+  at every order) and an N-D p whose extra product does not broadcast. The fix ports the recursion.
+- NL10: np.einsum_path with an ellipsis and too few operands lets .NET's `IndexOutOfRangeException` escape where
+  NumPy's `_parse_einsum_input` raises `IndexError: list index out of range`.
 
 The ten array-object members `TensorEngine` shipped in 0.70.0 (E7) stay (decided 2026-10-31, D13): removing them
 breaks a subclass or a direct caller for a layering reason alone.
@@ -1554,6 +1564,43 @@ breaks a subclass or a direct caller for a layering reason alone.
 ---
 
 ## 9. State log
+
+- **2026-11-01, P8's 12 functions that compute: each one is a `TensorEngine` member.** Seven commits on `strings` after
+  the rename's (not pushed).
+  - The tool commit `f2fc2b20`: the snapshot tool drives what it skipped - the five windows (their point count M is
+    the operand: `WindowMLabels`, with kaiser's beta varied), np.polyder's order, np.polyfit's degree, weights and cov flag
+    on 1-D pools (its `PolyfitResult` rendered field by field), np.einsum_path's three overloads (the variadic one's
+    argument lists) and np.tensordot's `(int, int)` pair.
+  - The families, one commit each, every body moved with its np.* calls converted to the members their facades dispatch
+    to (no R2 row needed):
+    - `c046d2ca`, the windows: `Bartlett`, `Blackman`, `Hamming`, `Hanning` and `Kaiser` (`TensorEngine.FunctionBase.cs`,
+      `Backends/Default/Math/Default.Windows.cs`). The facades call `np.EngineOf(null)` until P9, as np.linspace does.
+      kaiser's `i0(beta)` is the engine's own `I0` (NumPy's statement `i0(float(beta))`, no longer the np.BesselI0 call R2
+      would count), and its per-element kernel is np.i0's `_i0Double` (the duplicate `_besselI0` delegate is gone).
+    - `9da7097f`: `Corrcoef` (`Backends/Default/Statistics/Default.Corrcoef.cs`).
+    - `b0bf8605`: `Outer` and the two `Tensordot` forms, a count and a pair of axis lists (`TensorEngine.Numeric.cs`,
+      `Backends/Default/LinearAlgebra/Default.{Outer,Tensordot}.cs`). `DefaultLinalgEngine.ArrayApi.cs`' three pinned
+      calls became those members and R2's allowlist lost the file's row: no engine file outside the text API
+      (`NDStringMethods.cs`) makes a computation call into np.* now.
+    - `434cc8d4`: `Polyder` and `Polyfit` (`TensorEngine.Polynomial.cs`, `Backends/Default/Polynomial/Default.Polynomial.cs`).
+    - `d0c7a582`: `Fix` (`TensorEngine.UfuncLike.cs`, `Backends/Default/Math/Default.Fix.cs`) and `EinsumPath`
+      (`TensorEngine.EinsumFunc.cs`, `Backends/Default/LinearAlgebra/Default.EinsumPath.cs`; its `optimize` is required,
+      because a C# object parameter cannot default to a string, so NumPy's `'greedy'` stays the facades').
+  - Proof, the snapshot tool against `f2fc2b20` in a clean worktree: identical for the windows (180 cases), corrcoef
+    (3,684), np.outer / np.tensordot (11,532) and np.linalg.outer / np.linalg.tensordot (7,408) managed, the four with the
+    OpenBLAS backend at one thread (18,940), np.polyder / np.polyfit managed (18,390) and np.polyfit with OpenBLAS (17,796,
+    5,337 of them complete fits), np.fix / np.einsum_path (14,478).
+  - Found on the way and pinned (D21), `401703b5`: NL9, np.polyder takes `p.size - 1` terms per order where NumPy's
+    `n = len(p) - 1` takes the first axis, and computes m products where NumPy's recursion computes m + 1 (a 2-D p is
+    differentiated along its rows in NumPy, a 0-d p raises len()'s TypeError at every order, an N-D p whose extra product
+    does not broadcast raises, also at m == 0); NL10, np.einsum_path with an ellipsis and too few operands lets .NET's
+    `IndexOutOfRangeException` escape where NumPy raises `IndexError: list index out of range`.
+  - Docs: the rules `fft-windows`, `linalg-einsum`, `ufuncs` (np.fix of complex raises trunc's TypeError, not the
+    NotSupportedException the rule said) and `reductions` (np.corrcoef); the 0.71.0 release notes' Breaking Changes line
+    for the twelve members and the snapshot tool's Testing & Tooling line.
+  - Gates (Release, CI's filter, on the final tree): NumSharp.Tests 21,016 / 21,015 passed (12 skipped) on net10.0 /
+    net8.0, the oracle 414 passed and 2 skipped (the soaks) on both, the layering ratchets included.
+  - Next: P8's array-object functions (Appendix D's 47, about 36 of them without a member yet), then P9.
 
 - **2026-11-01, P8's rename (D18): the array object's internal statics take NumPy's names.** One commit on `strings`,
   `838fccfd` (not pushed).

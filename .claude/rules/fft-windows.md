@@ -13,9 +13,11 @@ paths:
 
 ## Window functions
 
-`bartlett`, `blackman`, `hamming`, `hanning`, `kaiser` (`numpy/lib/_function_base_impl.py`; `Math/np.windows.cs`, with
-the cephes `BesselI0` port behind kaiser). Each takes a point count `M` (kaiser also `beta`) and returns a 1-D float64
-taper (NumPy forces at least float64 through `np.array([0.0, M])`).
+`bartlett`, `blackman`, `hamming`, `hanning`, `kaiser` (`numpy/lib/_function_base_impl.py`). The statements are
+`TensorEngine.Bartlett` / `Blackman` / `Hamming` / `Hanning` / `Kaiser` (`Backends/TensorEngine.FunctionBase.cs`, run by
+`Backends/Default/Math/Default.Windows.cs`); the facades `Math/np.windows.cs` call the default engine's member (a window
+has no operand to choose another) and keep the cephes `BesselI0` port behind kaiser and `np.i0`. Each takes a point count
+`M` (kaiser also `beta`) and returns a 1-D float64 taper (NumPy forces at least float64 through `np.array([0.0, M])`).
 - `M` is `double`, NumPy's own stub type `_FloatLike_co`: an int caller binds through the implicit conversion, and a
   non-integer `M` behaves as NumPy's float M (the length is `len(arange(1-M, M, 2))`, so `np.hanning(5.7)` has 6 samples,
   and kaiser can carry a trailing NaN once `|(n-α)/α| > 1`).
@@ -27,7 +29,8 @@ taper (NumPy forces at least float64 through `np.array([0.0, M])`).
   `0.42+0.5·cos(πn/(M-1))+0.08·cos(2πn/(M-1))`; kaiser `i0(β·√(1-((n-α)/α)²))/i0(β)` with `α = (M-1)/2` and `i0` the cephes
   Chebyshev routine (`_i0_1`/`_i0_2`/`_chbevl`, the internal `np.BesselI0` scalar helper), which the public `np.i0` runs
   too (`TensorEngine.I0`, `Backends/Default/Math/Default.I0.cs`, one cephes kernel per float width; facade
-  `Math/np.i0.cs`).
+  `Math/np.i0.cs`). kaiser's member applies np.i0's float64 kernel delegate (`np._i0Double`) per element in its fused pass
+  and takes `i0(beta)` from the engine's own `I0` (NumPy's statement `i0(float(beta))`).
 - Bit-identical to NumPy 2.4.2: the transform is one `np.evaluate` fused expression in NumPy's exact operation order (so
   `(π·n)/(M-1)` rounds the same two steps), float64 add/sub/mul/div are IEEE-exact, and float64 `cos` is the `ucrtbase`
   `Math.Cos` NumPy also calls (`i0` rides `Math.Exp`/`Math.Sqrt`). Because those are host libm, the `windows` tier is

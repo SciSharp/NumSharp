@@ -318,7 +318,13 @@ index (`DONT_NEGATE_STRIDES`: a reversed run is visited from its high address do
 
 `cov(m, y=None, rowvar=True, bias=False, ddof=None, fweights=None, aweights=None, dtype=None)` is a pure composition over
 `average`/`dot`/`concatenate`/`atleast_2d`/`conjugate`/`squeeze`, a line-for-line port of NumPy's
-`numpy/lib/_function_base_impl.cov` (`Statistics/np.cov.cs`).
+`numpy/lib/_function_base_impl.cov` (`TensorEngine.Cov`, run by `Backends/Default/Statistics/Default.Cov.cs`; the facade
+`Statistics/np.cov.cs`).
+- `np.corrcoef(x, y=None, rowvar=True, dtype=None)` is NumPy 2.x's thin wrapper over cov (`TensorEngine.Corrcoef`,
+  `Backends/Default/Statistics/Default.Corrcoef.cs`): `c` divided in place by `sqrt(diag(c).real)` along the rows and then
+  the columns, then its real lane (and the imaginary one of a complex result) clipped to [-1, 1] in place with bounds in
+  the lane's dtype; one variable (cov's 0-d result, which has no diagonal) gives NumPy's `c / c`. No `bias` / `ddof`
+  (removed in NumPy 2.x).
 - `m`/`y` are 1-D or 2-D (more → `ValueError`); `rowvar=False` transposes the variable/observation relationship; `ddof`
   overrides `bias` (defaults: `bias` → N, else N-1). The result dtype is `result_type(m[, y], float64)` (int/bool →
   float64, complex128 stays complex) unless `dtype` is given, and it is not force-cast at the end, so `dtype=float32`

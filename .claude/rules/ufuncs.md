@@ -77,9 +77,11 @@ Supported on the binary ufuncs `add`/`subtract`/`multiply`/`divide`/`true_divide
 ## `np.fix`, `np.fabs`
 
 - `fix(x, out=None)` is a verbatim delegation to `trunc(x, out=out)` (NumPy's `_ufunclike_impl.py`): dtype preservation
-  (int/bool identity, floats truncated), NaN/±inf pass-through, the sign of `-0.0`, and trunc's error surface. No
-  `where`/`dtype` parameter. `fix(complex)` raises `NotSupportedException` where NumPy raises `TypeError` (trunc's
-  divergence). Gated by the `unary` tier's `trunc` corpus through the `fix → trunc` alias and `Math/np.fix.Test.cs`.
+  (int/bool identity, floats truncated), NaN/±inf pass-through, the sign of `-0.0`, and trunc's error surface (complex
+  and text raise trunc's `TypeError` texts, which name `trunc`, as NumPy's fix leaks them). No `where`/`dtype` parameter.
+  The statement is `TensorEngine.Fix` (`Backends/TensorEngine.UfuncLike.cs`; `Backends/Default/Math/Default.Fix.cs` calls
+  the operand engine's `Truncate`); the facade `Math/np.fix.cs` keeps the matrix rule. Gated by the `unary` tier's `trunc`
+  corpus through the `fix → trunc` alias and `Math/np.fix.Test.cs`.
 - `fabs` is the float-only absolute value (NumPy's `TD(flts, f='fabs', astype={'e':'f'})`): it promotes bool/int to
   float (NEP 50: bool/int8/uint8 → float16, int16/uint16/char → float32, int32/uint32/int64/uint64 → float64;
   float16/float32/float64/decimal kept) and has no complex loop. The operation is `abs` on the float loops (clear the
