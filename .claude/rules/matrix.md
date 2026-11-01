@@ -30,12 +30,16 @@ to `NumSharp.NDMatrix` (all members but `ctypes` / `dump` / `dumps`, which ndarr
     `np.concatenate`, `np.dot`, `np.linalg.inv`: a 1-d result becomes a 1 × N row, more than two long axes raise
     `shape too large to be a matrix.`, so `np.stack((m, m))` raises). `Reduced` is the matrix METHOD NumPy calls
     (`np.sum(m, 0)` is a 1 × N matrix, a scalar without an axis, and `keepdims: true` raises `TypeError: matrix.sum() got
-    an unexpected keyword argument 'keepdims'`). `Plain` is `asarray` inside (`np.cross`, `np.einsum`, the whole
-    `np.fft`, `np.linalg.norm`). `WrappedAll` / `WrappedPair` / `WrappedTriple` / `WrappedFirstTwoOfFour` are the
-    functions with several results (`np.split`, `np.divmod`, `np.linalg.qr`: Q and R; `eig` / `eigh`: plain eigenvalues,
-    matrix eigenvectors; `svd`: U and Vh; `lstsq`: x and the residuals). `WrappedIf` is `np.block`, whose class follows
-    NumPy's route (repeated concatenation returns a matrix, the single-allocation route past 2*512*512 elements a new
-    ndarray).
+    an unexpected keyword argument 'keepdims'`). `np.sum` / `np.prod` / `np.mean` / `np.var` / `np.std` hand the method
+    `axis`, `dtype`, `out` (and `ddof`, after `correction=` folded into it), so each other keyword passed (`keepdims`,
+    `initial`, `where`, `mean`) is its TypeError, the first in the function's signature order; `ReducedInto` is their
+    `out=`: a matrix out gets the method's answer, a plain out receives the values and then raises
+    `AttributeError: 'numpy.ndarray' object has no attribute '_collapse'`. `Plain` is `asarray` inside (`np.cross`,
+    `np.einsum`, the whole `np.fft`, `np.linalg.norm`). `WrappedAll` / `WrappedPair` / `WrappedTriple` /
+    `WrappedFirstTwoOfFour` are the functions with several results (`np.split`, `np.divmod`, `np.linalg.qr`: Q and R;
+    `eig` / `eigh`: plain eigenvalues, matrix eigenvectors; `svd`: U and Vh; `lstsq`: x and the residuals). `WrappedIf` is
+    `np.block`, whose class follows NumPy's route (repeated concatenation returns a matrix, the single-allocation route
+    past 2*512*512 elements a new ndarray).
   - Per-function facts from NumPy's source: `np.linalg.solve` and `lstsq` take their class from `b`; `np.clip` from the
     array or a bound; `np.iscomplex` is a matrix for a complex matrix and a plain array otherwise; `np.r_` / `np.c_` /
     `np.block` cannot give a matrix entry a third axis (`np.block([[[m]]])` raises "axis -3 is out of bounds for array of
@@ -62,7 +66,9 @@ to `NumSharp.NDMatrix` (all members but `ctypes` / `dump` / `dumps`, which ndarr
     `flags.owndata` parity for the functions NumPy allocates as the subclass). Where matrix semantics leak into NumPy's
     own Python code, NumSharp does not reproduce it: gaps MO02 to MO05, `np.linalg.vector_norm(m)` (an array of `|x|` in
     NumPy), `np.average(m, axis=1, weights=ndarray)` (an N × N matrix in NumPy), `np.apply_along_axis` when `func1d`
-    depends on the slice's rank (NumPy hands it a 1 × N matrix).
+    depends on the slice's rank (NumPy hands it a 1 × N matrix). Open (`OpenBugs.NpLayer.cs`, NL13): the max / min
+    family with a matrix operand computes `initial=` / `where=` and refuses a matrix `out=`, where NumPy calls the
+    method (its keyword TypeError; the method's answer in the out).
   - Cost: plain arrays pay one type test per call; a matrix operand pays the rule (the scope that reclaims the hidden
     plain result, the second call, the matrix view), about 300 ns, the same as the `NDMatrix` operators.
 
@@ -137,7 +143,8 @@ to `NumSharp.NDMatrix` (all members but `ctypes` / `dump` / `dumps`, which ndarr
   twice, and `m.std(dtype: np.int64)` raises the sqrt cast error where `np.std` of the plain array truncates. With `out=`
   the loop is `promote_types(out.dtype, operand dtype)` without the small-integer widening
   (`reducelike_promote_and_resolve`), stored with an unsafe cast: an int8 sum into a bool out is the truth value of the
-  int8 sum. `var` / `std` hand `out` to their last sum only (`DefaultEngine.VarStdNumPy(outDtype:, sumOnly:)`).
+  int8 sum. `var` / `std` hand `out` to their last sum only (`TensorEngine.ReduceVar` / `ReduceStd` with `out=`:
+  `DefaultEngine.VarStdNumPy`'s `out`).
 - Constructor (`NDMatrix.Construction.cs`): the four branches of `matrix.__new__` in NumPy's order. A matrix literal
   (`"1 2; 3 4"`, `"[1.5, 2; 3 4j]"`) is `_convert_from_string` plus a port of `ast.literal_eval` for one token (four
   number bases, `_`, floats, imaginary numbers, signs, parentheses, `True` / `False`; `SyntaxError` and `malformed node`

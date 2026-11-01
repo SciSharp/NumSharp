@@ -20,8 +20,39 @@ read-only"), then a non-bool `where=` ("Cannot cast array data|scalar from dtype
 rule 'safe'"), the axis, a repeated axis, `out=`'s rank, then the reduction iterator's shape checks over
 `[out, input, where]`: the input is never stretched by the mask, the mask may not have more axes than the input, a kept
 reduced axis of `out=` must be 1 long, and an `out=` axis of length 1 cannot broadcast. `np.all`/`np.any` (when `out=`
-or `where=` is given) and the max/min family run it. Gates: the `reduce_kwargs` tier (zero excuses) and
-`Logic/np.all_any.tuple_out_where.Test.cs`.
+or `where=` is given), the max/min family and the sum family's keyword paths run it. Gates: the `reduce_kwargs` tier
+(zero excuses) and `Logic/np.all_any.tuple_out_where.Test.cs`.
+
+## `np.sum` / `np.prod` / `np.mean` / `np.var` / `np.std`: one signature, NumPy's keywords
+
+One overload each, NumPy's whole signature, and the `ndarray` methods likewise (`var` / `std` without `correction`,
+which NumPy's methods refuse). A positional third argument is `dtype` and a fourth `out`; `ddof` is an `int` (0).
+- Without the keywords below, each engine member keeps its own routes (the sections that follow, `out=` included).
+- `initial=` / `where=` (sum, prod): `DefaultEngine.AddMulNumPy` (`Default.Reduction.AddMul.Keywords.cs`) runs
+  `PyUFunc_ReduceWrapper`'s order: the parsed arguments, the axis, the text loop (a `StringDType` sum concatenates from
+  `initial=` over the selected elements, `NDVStringReduction.SumNumPyKeywords`; StringDType's add has no identity, so a
+  mask needs `initial=`), the loop (`dtype=`, else `promote_types(out, a)`, else NEP 50's accumulator), the shape checks,
+  `initial=` packed by `ReductionInitial` or the identity, the result SET to it (an `out=`'s old values are gone), then
+  `NumPyReduceIterator` with NumPy's loops: `NumPyAddLoops` (inexact), `NumPyIntegerAddMulLoops` (modular, any order),
+  bool's logical OR / AND, `NumPyMultiplyLoops` (float: the SEQUENTIAL reduce form keeping the running value's NaN, the
+  elementwise form the second operand's; float16 in float32, narrowed per call; complex128: MSVC's contracted
+  `loop_scalar` for the reduce form, `simd_cmul` elementwise). Any 0-d true mask is no mask (add and multiply have
+  identities). The add reduce form keeps the RUN's NaN over the out's (`AddRunSum`), as NumPy's compiled loop does.
+- `where=` (mean): `MeanWhereNumPy` (`Default.Reduction.MeanVarStd.Keywords.cs`): `_count_reduce_items` =
+  `umr_sum(broadcast_to(where), axis, intp, keepdims)` FIRST (broadcast_to's error, then ufunc.reduce's axis rule: a 0-d
+  input takes axis 0), the masked sum, the per-output division, float16's result rule. Only the C# `true` literal
+  (`WasPythonBool`) is NumPy's `where=True`; an explicit 0-d true array is a mask, as `np.True_` is.
+- `where=` / `mean=` / `correction=` (var, std): `DdofWithCorrection` first (fromnumeric's rule), then
+  `VarStdKeywordsNumPy`: the counts, `mean=` AS GIVEN (no division, no cast: the deviations take `a - mean`'s dtype, an
+  int32 array with a weak integer mean wraps in int32) or the masked mean, `x` in NumPy's ufunc layout, the square in
+  NumPy's three forms (a complex `x` squared into its `real` view, which the last sum reads at stride 2), the masked last
+  sum into `out`, `max(count - ddof, 0)` per output (`CountsMinusDdof`), `_std`'s sqrt.
+- A numpy.matrix operand takes the matrix method's rules (`matrix.md`).
+- Open: NL12 (a mask that does not broadcast gets np.broadcast_to's NumSharp texts), NL3's axis products in the plain
+  route (`OpenBugs.NpLayer.cs`); NumPy's `initial=None` (copy each output's first element) has no C# spelling.
+- Gates: `Math/ReductionKeywords.NumPyPort.Test.cs` and the `reduce_kwargs` tier's sum / prod / mean / var / std cells
+  (sections A–E with I `initial=`, D `dtype=`, M `mean=` / `ddof` / `correction=`; NL12 and np.prod's plain inexact
+  cells are not generated).
 
 ## `np.sum` / `np.mean`: the add identity and NumPy's add.reduce
 

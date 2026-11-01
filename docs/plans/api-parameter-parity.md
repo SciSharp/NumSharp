@@ -603,13 +603,17 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 
 ### Phase B: reductions
 
-- [ ] B1 `np.sum`, `ndarray.sum`: `out=`, `initial=`, `where=`; NumPy's order `(a, axis, dtype, out, keepdims, …)`.
-- [ ] B2 `np.prod`, `ndarray.prod`: `out=`, `initial=`, `where=`.
-- [ ] B3 `np.mean`, `ndarray.mean`: `out=`, `where=`; and `dtype=` without an axis (no overload takes it: `np.mean(a,
+- [x] B1 `np.sum`, `ndarray.sum`: `out=`, `initial=`, `where=`; NumPy's order `(a, axis, dtype, out, keepdims, …)`.
+  Done 2026-11-02 (`38bcad09`, the np-layer dtype plan's P10 item 1: one overload each, NumPy's reduction iterator and
+  loops for the keywords, the `reduce_kwargs` tier).
+- [x] B2 `np.prod`, `ndarray.prod`: `out=`, `initial=`, `where=`. Done 2026-11-02 (`38bcad09`, with B1).
+- [x] B3 `np.mean`, `ndarray.mean`: `out=`, `where=`; and `dtype=` without an axis (no overload takes it: `np.mean(a,
   dtype=np.float32)` does not compile; the axis forms do). The `dtype=` loops themselves are NumPy's since X9 (the
-  engine's np.mean takes every axis form).
-- [ ] B4 `np.std`, `np.var`, `ndarray.std`, `ndarray.var`: `out=`, `where=`, `mean=`, `correction=`; NumPy's order
-  `(a, axis, dtype, out, ddof, keepdims)`.
+  engine's np.mean takes every axis form). Done 2026-11-02 (`38bcad09`, with B1: the one overload takes `dtype=` by
+  name or third).
+- [x] B4 `np.std`, `np.var`, `ndarray.std`, `ndarray.var`: `out=`, `where=`, `mean=`, `correction=`; NumPy's order
+  `(a, axis, dtype, out, ddof, keepdims)`. Done 2026-11-02 (`38bcad09`, with B1; the methods have no `correction=`,
+  as NumPy's do not).
 - [ ] B5 `np.nansum`, `np.nanprod`: `dtype=`, `out=`, `initial=`, `where=`.
 - [ ] B6 `np.nanmean`: `dtype=`, `out=`, `where=`. (`dtype=` landed with A7.)
 - [ ] B7 `np.nanstd`, `np.nanvar`: `out=`, `where=`, `mean=`, `correction=`; NumPy's order. (`dtype=` landed with A3.)
@@ -1744,7 +1748,8 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
    X12 and X14): the reduction iterator's port adds a reversed axis in its logical order; the pin, the registry branch
    and the carve are gone.
 6. **`ddof` is an `int?` in NumSharp; NumPy accepts a float** (`np.var(x, ddof=1.5)` divides by `n - 1.5`). Belongs
-   with B4 / B7 (`correction=` is NumPy's float alias of `ddof`).
+   with B4 / B7 (`correction=` is NumPy's float alias of `ddof`). B4 (`38bcad09`) made `ddof` an `int` (0) and added
+   `correction=` as an `int?`: a fractional `ddof` / `correction` is still open.
 7. **Removing an excuse is not enough; every branch that can catch the op must be checked** (A2). With V1 gone,
    np.var / np.std divergences were still excused by four generic branches: the dtype blanket for every reduction
    but sum / prod, the UNBOUNDED "summation/two-pass precision" blanket, the "axis SIMD min/max skips NaN" branch

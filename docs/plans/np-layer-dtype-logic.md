@@ -149,8 +149,9 @@ Three items were tried first (2026-10-30):
 
 Order of the work left (decided 2026-10-31 in the step round, D22): the merge (done); P6b (done 2026-11-01); P8 (done
 2026-11-01: the rename `838fccfd`, the 12 functions that compute `c046d2ca` .. `d0c7a582`, the array object's functions
-`690948f3` .. `75788048`); P9 (done 2026-11-01: `72415a24`, `55a277e5`); P10; PA3; PA2. Later: PA5, PA6 and the fixes of the pinned divergences
-(`OpenBugs.NpLayer.cs`, NL1 to NL11).
+`690948f3` .. `75788048`); P9 (done 2026-11-01: `72415a24`, `55a277e5`); P10 (items 1 to 5 done 2026-11-02:
+`38bcad09`, `96411eec`, `a5fd6535`, `614b1a8a`, `4e7fca46`; item 6, the three `NDArray` homes, open); PA3; PA2. Later:
+PA5, PA6 and the fixes of the pinned divergences (`OpenBugs.NpLayer.cs`, NL1 to NL13).
 
 Progress goes into the [§9 state log](#9-state-log), newest entry first.
 
@@ -1519,9 +1520,13 @@ and `a.copy()` keep it.
 
 Every item follows D19: an overload the change replaces is removed, not tagged `[Obsolete]`; the overloads keep
 NumPy's structure; a function NumPy does not have keeps one overload.
-- [ ] np.sum / np.prod / np.mean / np.var / np.std: one overload each with NumPy's whole signature (D10), after a
+- [x] np.sum / np.prod / np.mean / np.var / np.std: one overload each with NumPy's whole signature (D10), after a
       caller census (a scratch solution of every project, as A4d did; no `[Obsolete]` step, D19). The engine members gain
-      `where=` / `initial=` (var / std: `mean=`, `correction=`), as `ReduceAMax` / `ReduceAMin` did in E5.
+      `where=` / `initial=` (var / std: `mean=`, `correction=`), as `ReduceAMax` / `ReduceAMin` did in E5. Done (see the
+      state log, 2026-11-02): the ndarray methods too (api-parameter-parity B1-B4); `ReduceAdd` / `ReduceProduct` take
+      `initial=` / `where=` through NumPy's reduction iterator, `ReduceMean` `where=`, `ReduceVar` / `ReduceStd`
+      `where=` / `mean=` / `correction=` (NumPy's `_methods` statements); a numpy.matrix operand takes the matrix
+      method's rules; 129 calls named by the census; the `reduce_kwargs` tier covers the five (16,444 cases).
 - [x] np.vecdot / np.matvec / np.vecmat gain `casting=` / `order=` (D10). Done (`96411eec`): after `dtype=`, as
       np.matmul takes them; casting checks every input's cast to the loop and the result's cast into `out=` under the
       caller's rule, order lays out an allocated result (the loop-order vote only for `'K'` without `out=`).
@@ -1574,6 +1579,16 @@ commit of its own, with its oracle excuse narrowed where it has one:
 - NL11: np.isscalar answers False for a `Half` (NumPy's float16 scalar) and a `BigInteger` (a Python int), where NumPy
   answers True, and True for a `Type` object of a primitive (`typeof(int)`), where NumPy's `isscalar(int)` is False. A
   0-d NDArray answering True is NumSharp's convention (a 0-d array is what a NumPy scalar becomes), not part of it.
+- NL12: np.broadcast_to's refusals are not NumPy's texts (a 1-tuple without its comma, one space before "and requested
+  shape" where NumPy has two, and the shape text where NumPy says "input operand has more dimensions than allowed by the
+  axis remapping"); np.mean / np.var / np.std with a `where=` mask that does not broadcast reach it. The `reduce_kwargs`
+  tier does not generate those cells for the three (`REDUCE_KWARGS_NL12`).
+- NL13: the max / min family with a numpy.matrix operand applies the plain reduction where NumPy calls the matrix method:
+  `initial=` / `where=` compute where NumPy raises the method's TypeError, and a matrix `out=` meets the plain rank check
+  where NumPy returns `out[0, 0]`. np.sum's family applies the method's rules since P10 item 1.
+- NL3 covers the axis products too (a row multiplied in SIMD lane order; the `out=` route computes the same plain
+  product); np.prod with `initial=` or a mask runs NumPy's sequential loop. The `reduce_kwargs` tier skips np.prod's
+  plain inexact cells.
 
 The ten array-object members `TensorEngine` shipped in 0.70.0 (E7) stay (decided 2026-10-31, D13): removing them
 breaks a subclass or a direct caller for a layering reason alone.
@@ -1594,6 +1609,28 @@ breaks a subclass or a direct caller for a layering reason alone.
 ---
 
 ## 9. State log
+
+- **2026-11-02, P10 item 1: np.sum's family with NumPy's whole signature - P10's items 1 to 5 are done.** One commit on
+  `strings` (not pushed).
+  - `38bcad09` (D10, D19): np.sum / np.prod / np.mean / np.var / np.std and their `ndarray` methods keep one overload
+    each, NumPy's signature (the `var` / `std` methods without `correction=`, which NumPy's methods refuse); `ddof` is
+    an `int`, so a positional third argument is `dtype` and a fourth `out`. The engine members take the keywords,
+    appended after their existing parameters: `ReduceAdd` / `ReduceProduct` `initial` / `where`, `ReduceMean` `where`,
+    `ReduceVar` / `ReduceStd` `where` / `mean` / `correction`; np.sum / np.mean call `ReduceAdd` / `ReduceMean`, and the
+    shipped `Sum` / `Mean` stay as forwarders (D13).
+  - The keywords run NumPy's statements: `PyUFunc_ReduceWrapper`'s order through `NumPyReduceIterator` with NumPy's add
+    and multiply loops (`AddMulNumPy`), `_mean`'s count and division (`MeanWhereNumPy`), `_var` / `_std`'s
+    (`VarStdKeywordsNumPy`), fromnumeric's `correction=` rule; a StringDType sum concatenates from `initial=`. A
+    numpy.matrix operand follows the matrix method (`NDMatrixBoundary.KeywordError`, `ReducedInto`).
+  - A Roslyn census of every project found 1,836 calls: 129 bound an argument whose position moves and name it now, 16
+    passed a null or `int?` ddof, 5 crefs named removed overloads.
+  - Pinned (D21): NL12 (np.broadcast_to's texts, reached by a mask that does not broadcast), NL13 (the max / min
+    family's matrix operand) and NL3's axis products.
+  - Gates (Release, CI's filter): NumSharp.Tests 21,047 / 21,046 passed (12 skipped) on net10.0 / net8.0, the oracle 414
+    passed and 2 skipped on both; the `reduce_kwargs` tier holds 16,444 cases (zero excuses; its 4,752 np.all / np.any
+    cases unchanged byte for byte); the new test class and the reduce tiers ran clean under
+    `NUMSHARP_DEBUG_GUARD_PAGES=1`.
+  - Next: PA3, then PA2 (D22). Item 6, the three `NDArray` homes, is not in the owner's request of 2026-11-01.
 
 - **2026-11-02, P10 items 2 to 5: the decided signature changes but np.sum's family.** Four commits on `strings` (not
   pushed).
