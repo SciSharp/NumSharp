@@ -1,53 +1,29 @@
 using System;
-using NumSharp.Backends.Iteration;
 
 namespace NumSharp
 {
     public static partial class np
     {
         // =====================================================================
-        // Window functions — port of NumPy 2.4.2 numpy/lib/_function_base_impl.py
+        // Window functions — NumPy 2.4.2 numpy/lib/_function_base_impl.py
         // (bartlett / blackman / hamming / hanning / kaiser).
         //
-        // Every window is a 1-D float64 taper of length M. NumPy forces the
-        // output to at least float64 by threading M through np.array([0.0, M]);
+        // The facades: each window's statements are the TensorEngine member of
+        // its name (TensorEngine.FunctionBase.cs), which DefaultEngine runs as one
+        // fused pass (Backends/Default/Math/Default.Windows.cs, whose header holds
+        // the fusion and edge-case notes). A window takes no array, so no operand
+        // can choose the engine: every facade calls the default engine's member.
+        //
         // NumPy's OWN type stub declares `M: _FloatLike_co` (not int), so the
-        // public NumSharp surface takes `double M` — an int caller (`np.hanning(5)`)
-        // binds via the implicit int→double conversion and gets the identical
-        // result, while a non-integer M reproduces NumPy's exact (quirky) float-M
-        // behavior: the window length is `len(arange(1-M, M, 2))`, which can be a
-        // fractional count, and kaiser can produce a trailing NaN once |(n-α)/α| > 1.
+        // public surface takes `double M`: an int caller (`np.hanning(5)`) binds
+        // through the implicit int→double conversion and gets the identical
+        // result, while a non-integer M reproduces NumPy's float-M behaviour (the
+        // window length is `len(arange(1-M, M, 2))`).
         //
-        // Shared edge cases (cosine windows bartlett/blackman/hamming/hanning):
-        //   • M < 1  → empty (0,) float64 array.
-        //   • M == 1 → ones(1,) float64 array.
-        // kaiser differs (see below): it has NO M < 1 guard, so 0 < M < 1 is a
-        // one-element array, not empty.
-        //
-        // Implementation strategy — FUSION:
-        //   NumPy builds each window as a chain of ufuncs over
-        //   n = arange(1 - M, M, 2) (or arange(0, M) for kaiser), materializing
-        //   ~6 intermediate arrays. NumSharp materializes only `n` and fuses the
-        //   whole elementwise transform into ONE np.evaluate pass, so the buffer
-        //   is read and written once. The fused expression tree is built in
-        //   NumPy's exact operation order, which makes the result BIT-IDENTICAL
-        //   to NumPy's unfused ufunc chain (verified across 152 (M, beta) cases
-        //   and the differential-fuzz oracle): float64 add/sub/mul/div are IEEE
-        //   exact, and float64 cos is the same scalar Math.Cos the CRT and NumPy
-        //   both call. Measured NPY/NS ≈ 1.8×–9× at 100K/10M; at 1K the window
-        //   sits at NumSharp's per-op NDIter-setup floor (window generation is a
-        //   compute-once, amortized operation).
-        //
-        // The M-dependent values (M-1, alpha, beta, i0(beta)) ride as 0-d float64
-        // OPERANDS, never as literals: a literal is baked into the fused kernel's
-        // IL (and its cache key), so every distinct M — the one parameter a window
-        // is called with — would JIT its own kernel (~1 ms) and hold its own
-        // program-cache entry. The parameter form serves every M with ONE kernel
-        // per window kind; the arithmetic is the same float64 arithmetic on a
-        // value loaded from memory instead of an IL constant, so the result is
-        // bit-identical (a 0-d float64 operand promotes exactly like a weak float
-        // literal meeting a float64 array). The fixed cost of a stride-0 operand
-        // (~0.25 µs, NDIter-level) is the price; the JIT it replaces is 4000× it.
+        // This file also keeps the cephes I_0 routine (BesselI0, Chbevl and the
+        // coefficient tables below): np.i0's per-precision kernels build on them,
+        // and np.kaiser's engine member applies the float64 one per element
+        // through np.i0's delegate np._i0Double.
         // =====================================================================
 
         /// <summary>
@@ -58,73 +34,58 @@ namespace NumSharp
         ///     The triangular window, maximum normalized to one (the value one appears only when
         ///     <paramref name="M"/> is odd), first and last samples equal to zero.
         /// </returns>
+        /// <exception cref="ValueError"><paramref name="M"/> is NaN (<c>arange: cannot compute length</c>), +infinity or too
+        ///     large for arange to size (<c>Maximum allowed size exceeded</c>).</exception>
+        /// <exception cref="OutOfMemoryException">A finite count whose window does not fit in memory.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.bartlett.html
-        ///     <para>NumPy: <c>where(n &lt;= 0, 1 + n/(M-1), 1 - n/(M-1))</c> with <c>n = arange(1-M, M, 2)</c>.</para>
+        ///     <para>NumPy: <c>where(n &lt;= 0, 1 + n/(M-1), 1 - n/(M-1))</c> with <c>n = arange(1-M, M, 2)</c>; the
+        ///     statements are <see cref="TensorEngine.Bartlett"/>, called on the default engine (a window has no operand to
+        ///     choose another).</para>
         /// </remarks>
-        [NDScoped] // the arange intermediate `n` is reclaimed; the fused result is yielded
-        public static NDArray bartlett(double M)
-        {
-            if (M < 1) return WindowEmpty();
-            if (M == 1) return WindowOnes();
-
-            var n = arange(1.0 - M, (double)M, 2.0, float64);
-            var e = (NDExpr)n;
-            // M-1 as a 0-d operand (see the header): one kernel for every M. The same instance on both
-            // branches dedups to one iterator stream.
-            var m1 = (NDExpr)NDArray.Scalar(M - 1);
-            return evaluate(NDExpr.Where(NDExpr.LessEqual(e, 0.0),
-                                         1.0 + e / m1,
-                                         1.0 - e / m1));
-        }
+        public static NDArray bartlett(double M) => np.EngineOf(null).Bartlett(M);
 
         /// <summary>
         ///     Return the Blackman window — a taper formed by the first three terms of a summation of cosines.
         /// </summary>
         /// <param name="M">Number of points in the output window. If zero or less, an empty array is returned.</param>
         /// <returns>The window, maximum normalized to one (the value one appears only when <paramref name="M"/> is odd).</returns>
+        /// <exception cref="ValueError"><paramref name="M"/> is NaN, +infinity or too large for arange to size.</exception>
+        /// <exception cref="OutOfMemoryException">A finite count whose window does not fit in memory.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.blackman.html
-        ///     <para>NumPy: <c>0.42 + 0.5*cos(pi*n/(M-1)) + 0.08*cos(2.0*pi*n/(M-1))</c> with <c>n = arange(1-M, M, 2)</c>.</para>
+        ///     <para>NumPy: <c>0.42 + 0.5*cos(pi*n/(M-1)) + 0.08*cos(2.0*pi*n/(M-1))</c> with <c>n = arange(1-M, M, 2)</c>; the
+        ///     statements are <see cref="TensorEngine.Blackman"/>, called on the default engine.</para>
         /// </remarks>
-        [NDScoped]
-        public static NDArray blackman(double M)
-        {
-            if (M < 1) return WindowEmpty();
-            if (M == 1) return WindowOnes();
-
-            var n = arange(1.0 - M, (double)M, 2.0, float64);
-            // Operation order preserved verbatim from NumPy for bit-parity:
-            //   pi * n / (M - 1)   ≡ (pi * n) / (M - 1)      (left-to-right)
-            //   2.0 * pi * n / (M-1) ≡ ((2.0 * pi) * n) / (M-1)
-            // M-1 as a 0-d operand (see the header): one kernel for every M.
-            var m1 = (NDExpr)NDArray.Scalar(M - 1);
-            var arg = pi * (NDExpr)n / m1;
-            var arg2 = 2.0 * pi * (NDExpr)n / m1;
-            return evaluate(0.42 + 0.5 * NDExpr.Cos(arg) + 0.08 * NDExpr.Cos(arg2));
-        }
+        public static NDArray blackman(double M) => np.EngineOf(null).Blackman(M);
 
         /// <summary>
         ///     Return the Hamming window — a taper formed by a weighted cosine (raised-cosine, 0.54/0.46).
         /// </summary>
         /// <param name="M">Number of points in the output window. If zero or less, an empty array is returned.</param>
         /// <returns>The window, maximum normalized to one (the value one appears only when <paramref name="M"/> is odd).</returns>
+        /// <exception cref="ValueError"><paramref name="M"/> is NaN, +infinity or too large for arange to size.</exception>
+        /// <exception cref="OutOfMemoryException">A finite count whose window does not fit in memory.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.hamming.html
-        ///     <para>NumPy: <c>0.54 + 0.46*cos(pi*n/(M-1))</c> with <c>n = arange(1-M, M, 2)</c>.</para>
+        ///     <para>NumPy: <c>0.54 + 0.46*cos(pi*n/(M-1))</c> with <c>n = arange(1-M, M, 2)</c>; the statements are
+        ///     <see cref="TensorEngine.Hamming"/>, called on the default engine.</para>
         /// </remarks>
-        public static NDArray hamming(double M) => CosineWindow(M, 0.54, 0.46);
+        public static NDArray hamming(double M) => np.EngineOf(null).Hamming(M);
 
         /// <summary>
         ///     Return the Hanning window — a taper formed by a weighted cosine (raised-cosine, 0.5/0.5).
         /// </summary>
         /// <param name="M">Number of points in the output window. If zero or less, an empty array is returned.</param>
         /// <returns>The window, maximum normalized to one (the value one appears only when <paramref name="M"/> is odd).</returns>
+        /// <exception cref="ValueError"><paramref name="M"/> is NaN, +infinity or too large for arange to size.</exception>
+        /// <exception cref="OutOfMemoryException">A finite count whose window does not fit in memory.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.hanning.html
-        ///     <para>NumPy: <c>0.5 + 0.5*cos(pi*n/(M-1))</c> with <c>n = arange(1-M, M, 2)</c>.</para>
+        ///     <para>NumPy: <c>0.5 + 0.5*cos(pi*n/(M-1))</c> with <c>n = arange(1-M, M, 2)</c>; the statements are
+        ///     <see cref="TensorEngine.Hanning"/>, called on the default engine.</para>
         /// </remarks>
-        public static NDArray hanning(double M) => CosineWindow(M, 0.5, 0.5);
+        public static NDArray hanning(double M) => np.EngineOf(null).Hanning(M);
 
         /// <summary>
         ///     Return the Kaiser window — a taper formed by a Bessel function.
@@ -136,71 +97,30 @@ namespace NumSharp
         ///     8.6 (~Blackman).
         /// </param>
         /// <returns>The window, maximum normalized to one (the value one appears only when <paramref name="M"/> is odd).</returns>
+        /// <exception cref="ValueError"><paramref name="M"/> is NaN, or an infinity or too large for arange to size.</exception>
+        /// <exception cref="OutOfMemoryException">A finite count whose window does not fit in memory.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.kaiser.html
         ///     <para>NumPy: <c>i0(beta * sqrt(1 - ((n-alpha)/alpha)**2)) / i0(beta)</c> with
-        ///     <c>n = arange(0, M)</c> and <c>alpha = (M-1)/2</c>. The modified Bessel function
-        ///     <see cref="BesselI0"/> is the cephes Chebyshev evaluation NumPy's <c>np.i0</c> uses,
-        ///     applied per element in the fused pass (bit-identical to NumPy's piecewise result).</para>
+        ///     <c>n = arange(0, M)</c> and <c>alpha = (M-1)/2</c>; the statements are <see cref="TensorEngine.Kaiser"/>, called
+        ///     on the default engine. The modified Bessel function <see cref="BesselI0"/> is the cephes Chebyshev evaluation
+        ///     NumPy's <c>np.i0</c> uses, applied per element in the fused pass (bit-identical to NumPy's piecewise
+        ///     result).</para>
         /// </remarks>
-        [NDScoped]
-        public static NDArray kaiser(double M, double beta)
-        {
-            // NumPy has NO `M < 1` guard here (unlike the cosine windows): kaiser uses
-            // n = arange(0, M), which is EMPTY for M <= 0 (→ empty result) but ONE element
-            // for 0 < M < 1 (→ a computed, non-empty window). Only M == 1 is special-cased,
-            // to avoid the alpha == 0 division. Reproduced verbatim from NumPy 2.4.2.
-            if (M == 1) return WindowOnes();
-
-            var n = arange(0.0, M, 1.0, float64);
-            // alpha, beta and i0(beta) as 0-d operands (see the header): one kernel for every (M, beta)
-            // pair instead of one JIT per pair. `alpha` appears twice and dedups to one stream.
-            var alpha = (NDExpr)NDArray.Scalar((M - 1) / 2.0);
-            var betaOp = (NDExpr)NDArray.Scalar(beta);
-            var denom = (NDExpr)NDArray.Scalar(BesselI0(beta));
-            var inner = ((NDExpr)n - alpha) / alpha;
-            // beta * sqrt(1 - ((n-alpha)/alpha)**2), then i0(.) / i0(beta) — per element.
-            var arg = betaOp * NDExpr.Sqrt(1.0 - NDExpr.Power(inner, 2.0));
-            return evaluate(NDExpr.Call(_besselI0, arg) / denom);
-        }
-
-        // ------------------------------------------------------------------
-        // Shared helpers
-        // ------------------------------------------------------------------
-
-        /// <summary>hanning / hamming share the raised-cosine form <c>a0 + a1*cos(pi*n/(M-1))</c>.</summary>
-        [NDScoped]
-        private static NDArray CosineWindow(double M, double a0, double a1)
-        {
-            if (M < 1) return WindowEmpty();
-            if (M == 1) return WindowOnes();
-
-            var n = arange(1.0 - M, (double)M, 2.0, float64);
-            // M-1 as a 0-d operand (see the header): one kernel per (a0, a1) pair — i.e. one for hanning
-            // and one for hamming — for every M.
-            var m1 = (NDExpr)NDArray.Scalar(M - 1);
-            return evaluate(a0 + a1 * NDExpr.Cos(pi * (NDExpr)n / m1));
-        }
-
-        /// <summary>NumPy's <c>array([], dtype=float64)</c> — the M &lt; 1 result.</summary>
-        private static NDArray WindowEmpty() => zeros(new int[] { 0 }, float64);
-
-        /// <summary>NumPy's <c>ones(1, dtype=float64)</c> — the M == 1 result.</summary>
-        private static NDArray WindowOnes() => ones(new int[] { 1 }, float64);
+        public static NDArray kaiser(double M, double beta) => np.EngineOf(null).Kaiser(M, beta);
 
         // ------------------------------------------------------------------
         // Modified Bessel function of the first kind, order 0 (I_0).
         //
         // Port of the cephes routine NumPy's np.i0 uses (numpy/lib
         // _function_base_impl.py: _i0_1 / _i0_2 / _chbevl). The domain [0, inf)
-        // is split at 8.0 with a Chebyshev expansion on each side. Kaiser only
-        // needs the scalar float64 form, applied per element in the fused pass;
-        // it is bit-identical to NumPy's vectorized piecewise result because the
+        // is split at 8.0 with a Chebyshev expansion on each side. np.i0's
+        // float64 kernel is this scalar form (np._i0Double), and np.kaiser's
+        // engine member applies it per element in its fused pass; it is
+        // bit-identical to NumPy's vectorized piecewise result because the
         // per-element arithmetic (exp / sqrt / the Horner recurrence) is the same
         // sequence of IEEE float64 operations.
         // ------------------------------------------------------------------
-
-        private static readonly Func<double, double> _besselI0 = BesselI0;
 
         // Chebyshev coefficients for exp(-x) I0(x) on the interval [0, 8].
         private static readonly double[] _i0A =
@@ -231,7 +151,11 @@ namespace NumSharp
              8.04490411014108831608E-1
         };
 
-        /// <summary>Clenshaw evaluation of a Chebyshev series (cephes <c>chbevl</c>).</summary>
+        /// <summary>Clenshaw evaluation of a Chebyshev series (cephes <c>chbevl</c>), each step one float64 operation in
+        ///     NumPy's order, so the sum rounds as NumPy's <c>_chbevl</c> does.</summary>
+        /// <param name="x">The recentred evaluation point (<c>x/2 - 2</c> on [0, 8], <c>32/x - 2</c> above).</param>
+        /// <param name="vals">The Chebyshev coefficients, highest order first (<see cref="_i0A"/> or <see cref="_i0B"/>).</param>
+        /// <returns>The series value.</returns>
         private static double Chbevl(double x, double[] vals)
         {
             double b0 = vals[0], b1 = 0.0, b2 = 0.0;
@@ -246,8 +170,12 @@ namespace NumSharp
 
         /// <summary>
         ///     Modified Bessel function of the first kind, order 0 — scalar float64,
-        ///     matching NumPy's <c>np.i0</c> element-for-element.
+        ///     matching NumPy's <c>np.i0</c> element-for-element. It is np.i0's float64 kernel
+        ///     (<see cref="_i0Double"/>), the one np.kaiser's engine member applies per element.
         /// </summary>
+        /// <param name="x">The argument; I₀ is even, so its magnitude is used.</param>
+        /// <returns>I₀(<paramref name="x"/>): +infinity once the series' <c>exp</c> overflows (|x| past about 709.78), NaN
+        ///     for NaN.</returns>
         internal static double BesselI0(double x)
         {
             x = Math.Abs(x);

@@ -332,6 +332,96 @@ namespace NumSharp
         public abstract NDArray I0(NDArray x);
 
         /// <summary>
+        ///     NumPy's <c>np.bartlett(M)</c>: the triangular window of <paramref name="M"/> points,
+        ///     <c>where(n &lt;= 0, 1 + n/(M-1), 1 - n/(M-1))</c> over <c>n = arange(1-M, M, 2)</c> - zero at both ends, one at
+        ///     the centre only when the count is odd.
+        /// </summary>
+        /// <param name="M">
+        ///     The number of points, NumPy's <c>_FloatLike_co</c>: a fractional count gives NumPy's length
+        ///     <c>len(arange(1 - M, M, 2))</c>; below one gives an empty array, exactly one gives <c>ones(1)</c>.
+        /// </param>
+        /// <returns>A new 1-D float64 array.</returns>
+        /// <exception cref="ValueError"><paramref name="M"/> is NaN (arange's <c>arange: cannot compute length</c>), +infinity or
+        ///     too large for arange to size (<c>Maximum allowed size exceeded</c>).</exception>
+        /// <exception cref="OutOfMemoryException">A finite count whose window does not fit in memory.</exception>
+        /// <remarks>
+        ///     NumPy writes the window in Python; DefaultEngine fuses its ufunc chain into one <c>np.evaluate</c> pass in
+        ///     NumPy's operation order, so the values are NumPy's bit for bit (float64 add, subtract and divide are
+        ///     IEEE-exact). The window has no operand to choose an engine by: <c>np.bartlett</c> calls the default engine's
+        ///     member, so an override is reached through that engine (or called directly).
+        /// </remarks>
+        public abstract NDArray Bartlett(double M);
+
+        /// <summary>
+        ///     NumPy's <c>np.blackman(M)</c>: the Blackman window of <paramref name="M"/> points, the first three terms of a
+        ///     cosine sum, <c>0.42 + 0.5*cos(pi*n/(M-1)) + 0.08*cos(2.0*pi*n/(M-1))</c> over <c>n = arange(1-M, M, 2)</c>.
+        /// </summary>
+        /// <param name="M">The number of points, NumPy's <c>_FloatLike_co</c> (the length and the guards of
+        ///     <see cref="Bartlett"/>).</param>
+        /// <returns>A new 1-D float64 array (its end points are a tiny negative number, -1.3877787807814457e-17, as in
+        ///     NumPy).</returns>
+        /// <exception cref="ValueError"><paramref name="M"/> is NaN, +infinity or too large for arange to size.</exception>
+        /// <exception cref="OutOfMemoryException">A finite count whose window does not fit in memory.</exception>
+        /// <remarks>
+        ///     DefaultEngine's fused pass keeps NumPy's evaluation order (<c>(pi * n) / (M - 1)</c> and
+        ///     <c>((2.0 * pi) * n) / (M - 1)</c> round in two steps each), and float64 <c>cos</c> is the host CRT's, NumPy's
+        ///     own on win-amd64; elsewhere a libm can differ in the last bit. <c>np.blackman</c> calls the default engine's
+        ///     member.
+        /// </remarks>
+        public abstract NDArray Blackman(double M);
+
+        /// <summary>
+        ///     NumPy's <c>np.hamming(M)</c>: the Hamming window of <paramref name="M"/> points, the raised cosine
+        ///     <c>0.54 + 0.46*cos(pi*n/(M-1))</c> over <c>n = arange(1-M, M, 2)</c> - its ends stay at 0.08, not zero.
+        /// </summary>
+        /// <param name="M">The number of points, NumPy's <c>_FloatLike_co</c> (the length and the guards of
+        ///     <see cref="Bartlett"/>).</param>
+        /// <returns>A new 1-D float64 array.</returns>
+        /// <exception cref="ValueError"><paramref name="M"/> is NaN, +infinity or too large for arange to size.</exception>
+        /// <exception cref="OutOfMemoryException">A finite count whose window does not fit in memory.</exception>
+        /// <remarks>DefaultEngine's fused pass keeps NumPy's evaluation order; <c>np.hamming</c> calls the default engine's
+        ///     member.</remarks>
+        public abstract NDArray Hamming(double M);
+
+        /// <summary>
+        ///     NumPy's <c>np.hanning(M)</c>: the Hann window of <paramref name="M"/> points, the raised cosine
+        ///     <c>0.5 + 0.5*cos(pi*n/(M-1))</c> over <c>n = arange(1-M, M, 2)</c> - zero at both ends.
+        /// </summary>
+        /// <param name="M">The number of points, NumPy's <c>_FloatLike_co</c> (the length and the guards of
+        ///     <see cref="Bartlett"/>).</param>
+        /// <returns>A new 1-D float64 array.</returns>
+        /// <exception cref="ValueError"><paramref name="M"/> is NaN, +infinity or too large for arange to size.</exception>
+        /// <exception cref="OutOfMemoryException">A finite count whose window does not fit in memory.</exception>
+        /// <remarks>DefaultEngine's fused pass keeps NumPy's evaluation order; <c>np.hanning</c> calls the default engine's
+        ///     member.</remarks>
+        public abstract NDArray Hanning(double M);
+
+        /// <summary>
+        ///     NumPy's <c>np.kaiser(M, beta)</c>: the Kaiser window of <paramref name="M"/> points,
+        ///     <c>i0(beta * sqrt(1 - ((n - alpha)/alpha)**2)) / i0(beta)</c> over <c>n = arange(0, M)</c> with
+        ///     <c>alpha = (M - 1)/2</c>.
+        /// </summary>
+        /// <param name="M">
+        ///     The number of points, NumPy's <c>_FloatLike_co</c>. Unlike the cosine windows kaiser has no <c>M &lt; 1</c>
+        ///     guard: <c>arange(0, M)</c> is empty for <c>M &lt;= 0</c> but one point for <c>0 &lt; M &lt; 1</c>, and only
+        ///     <c>M == 1</c> is special-cased (<c>ones(1)</c>, which avoids <c>alpha == 0</c>). A fractional count past a
+        ///     whole one leaves a trailing NaN where <c>|(n - alpha)/alpha| &gt; 1</c>, as in NumPy.
+        /// </param>
+        /// <param name="beta">The shape parameter: 0 is a rectangular window and a larger value a narrower one (5 is close to
+        ///     a Hamming window, 6 to a Hann window, 8.6 to a Blackman window). Any double is taken; past about 709.78, where
+        ///     the series' <c>exp</c> overflows, <c>i0(beta)</c> is infinite, so the window is NaN where its numerator
+        ///     overflows too (<c>inf / inf</c>) and zero elsewhere.</param>
+        /// <returns>A new 1-D float64 array.</returns>
+        /// <exception cref="ValueError"><paramref name="M"/> is NaN, or an infinity or too large for arange to size.</exception>
+        /// <exception cref="OutOfMemoryException">A finite count whose window does not fit in memory.</exception>
+        /// <remarks>
+        ///     DefaultEngine runs the cephes i0 series NumPy's <c>np.i0</c> runs once per element of a fused pass, and takes
+        ///     <c>i0(beta)</c> from its own <see cref="I0"/> (NumPy's <c>i0(float(beta))</c>), so the values are NumPy's bit for
+        ///     bit where the host's <c>exp</c> and <c>sqrt</c> are. <c>np.kaiser</c> calls the default engine's member.
+        /// </remarks>
+        public abstract NDArray Kaiser(double M, double beta);
+
+        /// <summary>
         ///     NumPy's <c>np.diff(a, n=1, axis=-1, prepend=&lt;no value&gt;, append=&lt;no value&gt;)</c>: the n-th
         ///     discrete difference along an axis, <c>a = op(a[1:], a[:-1])</c> repeated n times after concatenating
         ///     prepend / append along the axis, where op is <c>!=</c> for bool and <c>-</c> otherwise.

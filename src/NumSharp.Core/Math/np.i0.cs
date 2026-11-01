@@ -68,8 +68,9 @@ namespace NumSharp
         // ufunc — use scipy". Correctness (bit-exact parity) is the gate and is met.
         //
         // Cephes coefficients (_i0A / _i0B) and the double scalar helper BesselI0 /
-        // Chbevl live in np.windows.cs (np.kaiser is their other consumer); this file
-        // adds the float32 / float16 / decimal precision variants.
+        // Chbevl live in np.windows.cs (np.kaiser's engine member is their other
+        // consumer: it applies _i0Double per element); this file adds the
+        // float32 / float16 / decimal precision variants.
         // =====================================================================
 
         /// <summary>
