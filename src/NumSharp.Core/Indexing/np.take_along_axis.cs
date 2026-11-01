@@ -48,7 +48,7 @@ namespace NumSharp
             if (indices is null) throw new ArgumentNullException(nameof(indices));
 
             // NumPy's numpy.take_along_axis: the statements are the array object's (NDArray.ShapeBase.cs)
-            return NDArray.TakeAlongAxis(arr, indices, axis);
+            return NDArray.take_along_axis(arr, indices, axis);
         }
     }
 }

@@ -22,7 +22,7 @@ namespace NumSharp
         ///     buffer, keeps it alive, and writes through.</returns>
         /// <remarks>No class boundary runs here: an engine caller sits inside its public function's boundary, and the
         ///     facade applies its rules before it calls this.</remarks>
-        internal static NDArray AtLeast1d(NDArray a)
+        internal static NDArray atleast_1d(NDArray a)
         {
             switch (a.ndim)
             {
@@ -46,15 +46,15 @@ namespace NumSharp
         ///     axes added: it shares the buffer, keeps it alive, and writes through.</returns>
         /// <remarks>No class boundary runs here: an engine caller sits inside its public function's boundary, and the
         ///     facade applies its rules before it calls this. The 1-d case is np.expand_dims(a, 0)'s statement
-        ///     (<see cref="ExpandDims(NDArray, int)"/>) without that facade's chararray rule.</remarks>
-        internal static NDArray AtLeast2d(NDArray a)
+        ///     (<see cref="expand_dims(NDArray, int)"/>) without that facade's chararray rule.</remarks>
+        internal static NDArray atleast_2d(NDArray a)
         {
             switch (a.ndim)
             {
                 case 0:
                     return a.reshape(1, 1);
                 case 1:
-                    return ExpandDims(a, 0);
+                    return expand_dims(a, 0);
                 default:
                     return a;
             }

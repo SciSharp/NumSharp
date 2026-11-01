@@ -350,7 +350,7 @@ namespace NumSharp.Backends
                     ? bad.reshape(badDims[(badDims.Length - dst.ndim)..])
                     : bad.view();
                 // A selected destination slot whose (broadcast) source element is bad means NumPy converts that element.
-                using var badView = NDArray.BroadcastTo(badRanked, dst.Shape);
+                using var badView = NDArray.broadcast_to(badRanked, dst.Shape);
                 using var selectedBad = badView.TensorEngine.LogicalAnd(badView, @where, null, null, null);
                 if (selectedBad.TensorEngine.Any(selectedBad))
                     throw new SystemError(NDStringTruth.InvalidCodePointMessage);

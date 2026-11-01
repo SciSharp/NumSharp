@@ -233,7 +233,7 @@ namespace NumSharp.Backends
                 reshaped[mask.ndim + i] = 1;
             // np.broadcast_to's body for an array source (the read-only stride-0 view; no numpy.matrix region is needed
             // around it: the view is built from the storage and calls no np.* function).
-            return NDArray.BroadcastTo(mask.reshape(Shape.Adopt(reshaped)), arr.Shape);
+            return NDArray.broadcast_to(mask.reshape(Shape.Adopt(reshaped)), arr.Shape);
         }
 
         /// <summary>
@@ -243,7 +243,7 @@ namespace NumSharp.Backends
         /// </summary>
         private static NDArray MaterializeMaskValue(NDArray value, Shape target, NDArray arr)
         {
-            var flat = NDArray.BroadcastTo(value, target).flatten(); // np.broadcast_to's view, then a contiguous C-order copy
+            var flat = NDArray.broadcast_to(value, target).flatten(); // np.broadcast_to's view, then a contiguous C-order copy
             if (flat.typecode != arr.typecode)
                 flat = flat.astype(arr.typecode);
             return flat;

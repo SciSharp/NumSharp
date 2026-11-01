@@ -5,7 +5,7 @@ namespace NumSharp.Tests.Logic
 {
     /// <summary>
     ///     np.where(condition, x, y) as NumPy's <c>PyArray_Where</c> computes it, found when the np-layer dtype plan's P3
-    ///     batch 7 moved its body to <c>NDArray.Where</c> and replayed the snapshot against NumPy 2.4.2: the result dtype is
+    ///     batch 7 moved its body to <c>NDArray.where</c> and replayed the snapshot against NumPy 2.4.2: the result dtype is
     ///     <c>PyArray_ResultType</c> under NEP 50 (a C# number literal is a weak Python scalar, every array - a 0-d one
     ///     included - and a NumPy scalar are strong), that dtype is resolved before the operands are broadcast, and a
     ///     broadcast failure carries the text of NumPy's iterator. Every expectation is NumPy 2.4.2's output.

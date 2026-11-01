@@ -53,7 +53,7 @@ namespace NumSharp
         ///     The <c>axis=None</c> ravels are disposed here, exceptions included; a result this call allocated is returned or,
         ///     on a string input's error, disposed by the string route.
         /// </remarks>
-        internal static NDArray ConcatenateInto(NDArray[] arrays, int? axis, NDArray @out, DType dtype, string casting)
+        internal static NDArray concatenate(NDArray[] arrays, int? axis, NDArray @out, DType dtype, string casting)
         {
             // PyArray_ConcatenateInto: "need at least one array to concatenate", NumPy's ValueError.
             if (arrays.Length == 0)
@@ -294,7 +294,7 @@ namespace NumSharp
         ///     all F-contiguous), perform a direct <see cref="Buffer.MemoryCopy(void*, void*, long, long)"/>
         ///     per outer block. Skips the <c>dst[axis_range]</c> slice which
         ///     would produce a non-contig view for F-contig dst (see the
-        ///     justification block in <see cref="ConcatenateInto"/>).
+        ///     justification block in <see cref="concatenate"/>).
         /// </summary>
         /// <returns>True if the fast path applied and the copy was performed.</returns>
         private static unsafe bool TryDirectMemcpyConcat(
@@ -781,7 +781,7 @@ namespace NumSharp
         /// <exception cref="TypeError">A complex literal into a real dtype, or None into an integer (or decimal) one.</exception>
         /// <remarks>An explicit 0-d array (<see cref="NDArray.IsExplicitZeroDimArray"/>) stays one through the copy, the cast
         ///     and the view: the mark is per object, so every new object receives it.</remarks>
-        internal static NDArray ArrayFromObject(NDArray a, DType dtype, char order, bool? copy)
+        internal static NDArray asarray(NDArray a, DType dtype, char order, bool? copy)
         {
             // Python's None: a Python object, so np.asarray(None, dtype) builds a NEW 0-d array of its setitem value (NaN,
             // nan+nanj, False, 'None', a StringDType NA object; int(None)'s TypeError) — which copy=false refuses before
@@ -869,14 +869,14 @@ namespace NumSharp
         ///     <paramref name="a"/> (<c>ReferenceEquals</c>), and a view keeps <paramref name="a"/>'s buffer
         ///     alive.</returns>
         /// <exception cref="OverflowException">A C# literal's 0-d array out of an integer <paramref name="dtype"/>'s
-        ///     range (<see cref="ArrayFromObject"/>'s Python-scalar packing).</exception>
+        ///     range (<see cref="asarray"/>'s Python-scalar packing).</exception>
         /// <exception cref="ValueError">A NaN literal into an integer dtype.</exception>
         /// <exception cref="TypeError">A complex literal into a real dtype.</exception>
         /// <remarks>No class boundary runs here: an engine caller sits inside its public function's boundary, and the
         ///     facade applies its numpy.matrix and numpy.char.chararray rules before it calls this.</remarks>
-        internal static NDArray AsContiguousArray(NDArray a, DType dtype)
+        internal static NDArray ascontiguousarray(NDArray a, DType dtype)
         {
-            var result = ArrayFromObject(a, dtype, 'C', null);
+            var result = asarray(a, dtype, 'C', null);
             // NumPy guarantees ndim >= 1: a 0-D input becomes a length-one VIEW sharing the
             // scalar's storage (shape (1,), owndata=false), even when no dtype/layout copy is needed.
             return result.ndim == 0 ? result.reshape(1) : result;
@@ -908,7 +908,7 @@ namespace NumSharp
         /// <exception cref="NotSupportedException">An element type NumSharp has no dtype for, or None (or a Python int past
         ///     64 bits) in an object list without a dtype: NumPy's object array.</exception>
         /// <exception cref="InvalidCastException">An element that does not convert to <paramref name="dtype"/>.</exception>
-        internal static NDArray ArrayFromManaged(Array array, DType dtype, int ndmin, bool copy, char order)
+        internal static NDArray array(Array array, DType dtype, int ndmin, bool copy, char order)
         {
             // PyArray_OrderConverter runs while NumPy parses the arguments: an invalid order raises before any element is
             // converted (a value the dtype refuses would otherwise be reported first).
@@ -1068,7 +1068,7 @@ namespace NumSharp
         /// <exception cref="TypeError">None into an integer (or decimal) dtype, or a list item the requested dtype cannot
         ///     convert.</exception>
         /// <exception cref="OverflowException">A Python int in a list outside the requested integer dtype.</exception>
-        internal static NDArray AnyArrayFromObject(object a, DType dtype, char order)
+        internal static NDArray asanyarray(object a, DType dtype, char order)
         {
             // PyArray_OrderConverter runs while NumPy parses the arguments: an invalid order raises before the operand is
             // converted (a value the dtype refuses, None without a dtype, would otherwise be reported first).
@@ -1194,7 +1194,7 @@ namespace NumSharp
         /// <exception cref="NotSupportedException"><paramref name="dtype"/> has no cast from <typeparamref name="T"/>'s
         ///     dtype.</exception>
         /// <remarks>The array built from <paramref name="data"/> is left to the garbage collector when it is cast.</remarks>
-        internal static NDArray ArrayFromTyped<T>(T[] data, DType dtype) where T : unmanaged
+        internal static NDArray array<T>(T[] data, DType dtype) where T : unmanaged
         {
             var arr = new NDArray(ArraySlice.FromArray(data, true), Shape.Vector(data.Length));
             if (dtype != null && dtype.GetTypeCode() != InfoOf<T>.NPTypeCode)
@@ -1204,7 +1204,7 @@ namespace NumSharp
 
         /// <summary>
         ///     <see cref="np.array{T}(T[,], DType)"/>'s body: a new 2-D array holding a copy of <paramref name="data"/>, then
-        ///     the dtype request of <see cref="ArrayFromTyped{T}(T[], DType)"/>.
+        ///     the dtype request of <see cref="array{T}(T[], DType)"/>.
         /// </summary>
         /// <typeparam name="T">The element type, one of NumSharp's dtypes.</typeparam>
         /// <param name="data">The values; not null.</param>
@@ -1213,7 +1213,7 @@ namespace NumSharp
         /// <exception cref="NotSupportedException"><paramref name="dtype"/> has no cast from <typeparamref name="T"/>'s
         ///     dtype.</exception>
         /// <remarks>The array built from <paramref name="data"/> is left to the garbage collector when it is cast.</remarks>
-        internal static NDArray ArrayFromTyped<T>(T[,] data, DType dtype) where T : unmanaged
+        internal static NDArray array<T>(T[,] data, DType dtype) where T : unmanaged
         {
             var arr = new NDArray(ArraySlice.FromArray(data, true), new Shape(data.GetLength(0), data.GetLength(1)));
             if (dtype != null && dtype.GetTypeCode() != InfoOf<T>.NPTypeCode)
@@ -1296,7 +1296,7 @@ namespace NumSharp
         ///     The scope reclaims the broadcast views, the bool and dtype conversions and the scalar promotions; only the
         ///     result is yielded.</remarks>
         [NDScoped]
-        internal static NDArray Where(NDArray condition, NDArray x, NDArray y)
+        internal static NDArray where(NDArray condition, NDArray x, NDArray y)
         {
             // Boundary scope: reclaims the broadcast_arrays wrappers, the bool/dtype astype
             // conversions and the scalar-promotion temps at exit; only `result` is yielded.
@@ -1436,7 +1436,7 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     The broadcast shape of <see cref="Where"/>'s three operands, refused with the text of NumPy's iterator
+        ///     The broadcast shape of <see cref="where"/>'s three operands, refused with the text of NumPy's iterator
         ///     (<c>PyArray_Where</c> broadcasts condition, x and y in one <c>NpyIter_MultiNew</c>, whose error names every
         ///     operand's shape, a trailing space included), where np.broadcast_arrays' own text would name none.
         /// </summary>
@@ -1461,7 +1461,7 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     The general route of <see cref="Where"/>: a four-operand NDIter (condition, x, y, result) driving the per-chunk
+        ///     The general route of <see cref="where"/>: a four-operand NDIter (condition, x, y, result) driving the per-chunk
         ///     where kernel, for broadcast or non-contiguous operands.
         /// </summary>
         /// <param name="cond">The bool condition, broadcast to the result's shape.</param>
@@ -1499,7 +1499,7 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     The layout NumPy's iterator gives <see cref="Where"/>'s result: F when every full-size operand that has a
+        ///     The layout NumPy's iterator gives <see cref="where"/>'s result: F when every full-size operand that has a
         ///     preference is F-contiguous only, C when any is C-contiguous only or neither; scalars, 1-D and broadcast
         ///     operands do not vote.
         /// </summary>
@@ -1570,7 +1570,7 @@ namespace NumSharp
         // and invokes the appropriate IL kernel. Returns true on success; false if no IL
         // kernel was available (caller falls back to the NDIter path).
 
-        /// <summary>The scalar-x route of <see cref="Where"/>: x hoisted once into the IL kernel, or broadcast for the NDIter
+        /// <summary>The scalar-x route of <see cref="where"/>: x hoisted once into the IL kernel, or broadcast for the NDIter
         ///     route when the dtype has no kernel.</summary>
         /// <param name="cond">The contiguous bool condition.</param>
         /// <param name="xScalar">x's one element, in the result's dtype.</param>
@@ -1590,7 +1590,7 @@ namespace NumSharp
             WhereImpl(cond, xBroadcast, y, result);
         }
 
-        /// <summary>The scalar-y route of <see cref="Where"/> (see <see cref="WhereScalarXDispatch"/>).</summary>
+        /// <summary>The scalar-y route of <see cref="where"/> (see <see cref="WhereScalarXDispatch"/>).</summary>
         /// <param name="cond">The contiguous bool condition.</param>
         /// <param name="x">The contiguous true values.</param>
         /// <param name="yScalar">y's one element, in the result's dtype.</param>
@@ -1606,7 +1606,7 @@ namespace NumSharp
             WhereImpl(cond, x, yBroadcast, result);
         }
 
-        /// <summary>The two-scalar route of <see cref="Where"/> (see <see cref="WhereScalarXDispatch"/>).</summary>
+        /// <summary>The two-scalar route of <see cref="where"/> (see <see cref="WhereScalarXDispatch"/>).</summary>
         /// <param name="cond">The contiguous bool condition.</param>
         /// <param name="xScalar">x's one element, in the result's dtype.</param>
         /// <param name="yScalar">y's one element, in the result's dtype.</param>
@@ -1700,7 +1700,7 @@ namespace NumSharp
         /// <exception cref="ValueError"><paramref name="out"/> is read-only or its shape does not take the result.</exception>
         /// <remarks>The caller (the <c>conjugate</c> member) opens the numpy.matrix region; the returned
         ///     <paramref name="self"/> is the caller's own array, never a copy to dispose.</remarks>
-        internal static NDArray Conjugate(NDArray self, NDArray @out)
+        internal static NDArray conjugate(NDArray self, NDArray @out)
         {
             if (self.typecode == NPTypeCode.Complex)
                 return np.conjugate(self, @out);

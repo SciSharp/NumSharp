@@ -38,8 +38,8 @@ namespace NumSharp.Backends
             // as a column (append 1: [k] -> [k,1]). The inserted dim is squeezed back out at the end.
             bool lhsWas1D = lhs.ndim == 1;
             bool rhsWas1D = rhs.ndim == 1;
-            if (lhsWas1D) lhs = NDArray.ExpandDims(lhs, 0);
-            if (rhsWas1D) rhs = NDArray.ExpandDims(rhs, 1);
+            if (lhsWas1D) lhs = NDArray.expand_dims(lhs, 0);
+            if (rhsWas1D) rhs = NDArray.expand_dims(rhs, 1);
 
             long K = lhs.Shape.dimensions[lhs.ndim - 1];
             long Kr = rhs.Shape.dimensions[rhs.ndim - 2];
@@ -99,8 +99,8 @@ namespace NumSharp.Backends
             // Broadcast each operand's stack dims up to the common batch, keeping its matrix dims.
             var lhsFull = Shape.Adopt(batch.Concat(new[] { n, k }).ToArray());
             var rhsFull = Shape.Adopt(batch.Concat(new[] { k, m }).ToArray());
-            var lhsB = NDArray.BroadcastTo(lhs, lhsFull);
-            var rhsB = NDArray.BroadcastTo(rhs, rhsFull);
+            var lhsB = NDArray.broadcast_to(lhs, lhsFull);
+            var rhsB = NDArray.broadcast_to(rhs, rhsFull);
 
             var resultType = np._FindCommonArrayType(lhs.GetTypeCode, rhs.GetTypeCode);
             var resultShape = Shape.Adopt(batch.Concat(new[] { n, m }).ToArray());

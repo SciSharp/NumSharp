@@ -8,19 +8,19 @@ namespace NumSharp
 {
     // ============================== np.pad (lib/_arraypad_impl.py) ==============================
     // NumPy's np.pad statements as members of the array object (P3's batch 7): the np.pad facades keep their
-    // numpy.matrix regions and call Pad / PadCallable. The helpers keep their NumPy names (_AsPairs, _PadSimple,
-    // _SliceAtAxis, _ViewRoi, _SetPadArea, _GetEdges, _GetStats, _SetReflectBoth, _SetWrapBoth): the
-    // corner-propagation logic that turns per-axis padding into N-D padding tracks the upstream structure. The
-    // statements call the members the np.* functions dispatch to (the plan's phase P6), and the file sits under
-    // Backends/, beside the array object's class (plan C3).
+    // numpy.matrix regions and call pad (the named-mode overload or the callable one). The helpers keep their NumPy
+    // names (_AsPairs, _PadSimple, _SliceAtAxis, _ViewRoi, _SetPadArea, _GetEdges, _GetStats, _SetReflectBoth,
+    // _SetWrapBoth): the corner-propagation logic that turns per-axis padding into N-D padding tracks the upstream
+    // structure. The statements call the members the np.* functions dispatch to (the plan's phase P6), and the file
+    // sits under Backends/, beside the array object's class (plan C3).
     public partial class NDArray
     {
         // ---------------------------- top-level dispatcher ----------------------------
 
         // Scoped here (not per-overload): every value-mode pad overload funnels through this
-        // dispatcher (Pad), so one ambient scope reclaims the whole mode-body call tree (the
+        // dispatcher (the named-mode pad), so one ambient scope reclaims the whole mode-body call tree (the
         // `2 * edge` temps in _SetReflectBoth, BuildLinearRamp's reshape, …) for all of them.
-        // PadCallable is deliberately NOT scoped: its tree disposes everything it creates,
+        // The callable pad overload is deliberately NOT scoped: its tree disposes everything it creates,
         // and an ambient scope there would reach into the user's np.PadFunc callback and dispose
         // arrays the callback creates for its own use.
         /// <summary>
@@ -59,7 +59,7 @@ namespace NumSharp
         ///     </para>
         /// </remarks>
         [NDScoped]
-        internal static NDArray Pad(NDArray array, object pad_width, string mode,
+        internal static NDArray pad(NDArray array, object pad_width, string mode,
             object constant_values, object end_values, object stat_length, string reflect_type)
         {
             if (array is null) throw new ArgumentNullException(nameof(array));
@@ -152,7 +152,7 @@ namespace NumSharp
         ///     0-d input has no axis: its result is the value itself (<c>_pad_simple</c> copies it over the zero fill).
         ///     </para>
         /// </remarks>
-        internal static NDArray PadCallable(NDArray array, object pad_width, np.PadFunc func, object kwargs)
+        internal static NDArray pad(NDArray array, object pad_width, np.PadFunc func, object kwargs)
         {
             if (array is null) throw new ArgumentNullException(nameof(array));
             // The dict branch first, as in Pad (NumPy's pad runs it before it looks at the mode).
@@ -1693,7 +1693,7 @@ namespace NumSharp
             NDArray arr = x as NDArray;
             bool owned = arr is null;
             if (owned)
-                arr = AnyArrayFromObject(x, null, 'K');
+                arr = asanyarray(x, null, 'K');
             try
             {
                 if (arr.ndim < 3)

@@ -264,7 +264,7 @@ namespace NumSharp.Backends.Strings
             if (axis is null || work.ndim == 1)
             {
                 // `part = a.ravel()`; `_nanmedian1d(part)`, assigned into out when one is given.
-                r = NanMedian1D(work.ndim == 1 ? work : NDArray.Ravel(work, 'C'));
+                r = NanMedian1D(work.ndim == 1 ? work : NDArray.ravel(work, 'C'));
                 if (target is not null)
                 {
                     PyAssign(target, r);
@@ -281,7 +281,7 @@ namespace NumSharp.Backends.Strings
             }
             else
             {
-                r = NDArray.ApplyAlongAxis(row => AsAnyArray(NanMedian1D(row)), axis.Value, work);
+                r = NDArray.apply_along_axis(row => AsAnyArray(NanMedian1D(row)), axis.Value, work);
                 if (target is not null)
                 {
                     UnmanagedStorage.Copyto(target, r, NPY_CASTING.NPY_UNSAFE_CASTING);
@@ -397,7 +397,7 @@ namespace NumSharp.Backends.Strings
             NDArray r;
             if (axis is null || work.ndim == 1)
             {
-                r = NanQuantile1D(quantileOp, work.ndim == 1 ? work : NDArray.Ravel(work, 'C'), q, qShape, qIsInteger,
+                r = NanQuantile1D(quantileOp, work.ndim == 1 ? work : NDArray.ravel(work, 'C'), q, qShape, qIsInteger,
                     method, qType);
                 // `if out is not None: out[...] = result`.
                 if (target is not null)
@@ -406,7 +406,7 @@ namespace NumSharp.Backends.Strings
             else
             {
                 int ax = axis.Value;
-                r = NDArray.ApplyAlongAxis(row => AsAnyArray(NanQuantile1D(quantileOp, row, q, qShape, qIsInteger, method, qType)), ax, work);
+                r = NDArray.apply_along_axis(row => AsAnyArray(NanQuantile1D(quantileOp, row, q, qShape, qIsInteger, method, qType)), ax, work);
                 // `from_ax = [axis + i for i in range(q.ndim)]; np.moveaxis(result, from_ax, list(range(q.ndim)))` with the
                 // axis _ureduce handed the function (prologue.NumPyAxis): the reduced axis, or the UNnormalized -1 for merged
                 // axes, which for a q of two or more dimensions moves q's last axis and the first kept axes to the front
@@ -921,12 +921,12 @@ namespace NumSharp.Backends.Strings
         /// <param name="result">The row's result: a 0-d <c>StringDType</c> array is NumPy's Python object.</param>
         /// <returns>The array the buffer receives. A 0-d array this method makes is marked as an explicit ARRAY
         ///     (<see cref="NDArray.IsExplicitZeroDimArray"/>): it is <c>np.asanyarray</c>'s ndarray, not a NumPy scalar, so
-        ///     <see cref="NDArray.ApplyAlongAxis"/>'s own <c>asanyarray</c> of the first result keeps it as it is.</returns>
+        ///     <see cref="NDArray.apply_along_axis"/>'s own <c>asanyarray</c> of the first result keeps it as it is.</returns>
         /// <exception cref="NotSupportedException">An object NumPy would wrap in an OBJECT array (<c>None</c>, an integer
         ///     past int64, another object): NumSharp has no object dtype.</exception>
         /// <remarks>
         ///     The mark is what keeps the width: an unmarked 0-d <c>U</c> array stands for an <c>np.str_</c>, which
-        ///     <see cref="NDArray.ApplyAlongAxis"/> re-discovers from the value it reads back, and reading a <c>U</c> element
+        ///     <see cref="NDArray.apply_along_axis"/> re-discovers from the value it reads back, and reading a <c>U</c> element
         ///     drops its trailing NULs - so a first result <c>'ab\0'</c> would make a <c>&lt;U2</c> buffer where NumPy's is
         ///     <c>&lt;U3</c> (NumPy applies <c>asanyarray</c> once, to the Python str).
         /// </remarks>

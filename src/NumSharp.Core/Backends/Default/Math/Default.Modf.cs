@@ -109,7 +109,7 @@ namespace NumSharp.Backends
                 ? iterShape
                 : Shape.Adopt((long[])iterShape.dimensions.Clone());
 
-            NDArray broadcastView = SameDims(nd.Shape, iterShape) ? null : NDArray.BroadcastTo(nd, ccShape);
+            NDArray broadcastView = SameDims(nd.Shape, iterShape) ? null : NDArray.broadcast_to(nd, ccShape);
             NDArray readFrom = broadcastView ?? nd;
 
             // A C-contiguous input (including a 0-d scalar and any C-contiguous slice) is already in logical
@@ -127,7 +127,7 @@ namespace NumSharp.Backends
             }
             else
             {
-                source = NDArray.AsContiguousArray(readFrom, loopType);
+                source = NDArray.ascontiguousarray(readFrom, loopType);
                 sourceIsFreshCopy = true;   // a non-contiguous input is always copied by ascontiguousarray
             }
 

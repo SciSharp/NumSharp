@@ -368,7 +368,7 @@ namespace NumSharp
         /// <summary>
         ///     np.broadcast_to's layout: <paramref name="from"/> stretched to <paramref name="against"/>'s dimensions, after
         ///     np.broadcast_to's check that only the source's length-1 axes stretch. It is the whole answer of the shape forms
-        ///     of np.broadcast_to, and the view's layout of <see cref="NDArray.BroadcastTo(UnmanagedStorage, Shape)"/>; the
+        ///     of np.broadcast_to, and the view's layout of <see cref="NDArray.broadcast_to(UnmanagedStorage, Shape)"/>; the
         ///     engine calls it where it validates or lays out a copy's broadcast source (NDIter, the text copies).
         /// </summary>
         /// <param name="from">The source's shape: its dimensions are checked, its strides and offset become the result's.</param>

@@ -8,7 +8,7 @@ namespace NumSharp
         // ============================== np.insert ==============================
         // Insert values along the given axis before the given indices.
         //
-        // The body is NDArray.Insert (Manipulation/NDArray.FunctionBase.cs, beside this facade), which describes
+        // The body is NDArray.insert (Manipulation/NDArray.FunctionBase.cs, beside this facade), which describes
         // the two branches; the facades keep their signatures, documentation, class boundaries and null checks.
 
         /// <summary>
@@ -48,7 +48,7 @@ namespace NumSharp
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             // A null `values` is Python's None, converted where NumPy converts the values: after the index checks
             // (NDArray.FunctionBase.cs's CoerceValuesForSingleIndex / CoerceValuesForMultiIndex).
-            return NDArray.Insert(arr, obj, values, axis);
+            return NDArray.insert(arr, obj, values, axis);
         }
 
         /// <summary>
@@ -127,7 +127,7 @@ namespace NumSharp
             if (obj is null) throw new ArgumentNullException(nameof(obj));
             // A null `values` is Python's None, converted where NumPy converts the values: after the index checks
             // (NDArray.FunctionBase.cs's CoerceValuesForSingleIndex / CoerceValuesForMultiIndex).
-            return NDArray.Insert(arr, obj, values, axis);
+            return NDArray.insert(arr, obj, values, axis);
         }
 
         /// <summary>
@@ -201,7 +201,7 @@ namespace NumSharp
             if (obj is null) throw new ArgumentNullException(nameof(obj));
             // A null `values` is Python's None, converted where NumPy converts the values: after the index checks
             // (NDArray.FunctionBase.cs's CoerceValuesForSingleIndex / CoerceValuesForMultiIndex).
-            return NDArray.Insert(arr, obj, values, axis);
+            return NDArray.insert(arr, obj, values, axis);
         }
 
         /// <summary>
@@ -269,7 +269,7 @@ namespace NumSharp
             if (obj is null) throw new ArgumentNullException(nameof(obj));
             // A null `values` is Python's None, converted where NumPy converts the values: after the index checks
             // (NDArray.FunctionBase.cs's CoerceValuesForSingleIndex / CoerceValuesForMultiIndex).
-            return NDArray.Insert(arr, obj, values, axis);
+            return NDArray.insert(arr, obj, values, axis);
         }
 
         /// <summary>
@@ -395,7 +395,7 @@ namespace NumSharp
             if (obj is null) throw new ArgumentNullException(nameof(obj));
             // A null `values` is Python's None, converted where NumPy converts the values: after the index checks
             // (NDArray.FunctionBase.cs's CoerceValuesForSingleIndex / CoerceValuesForMultiIndex).
-            return NDArray.Insert(arr, obj, values, axis);
+            return NDArray.insert(arr, obj, values, axis);
         }
     }
 }

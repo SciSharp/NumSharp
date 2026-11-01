@@ -93,10 +93,10 @@ namespace NumSharp.Backends
             var reciprocals = s.TensorEngine.Reciprocal(s);
             // np.zeros_like(s)'s own allocation: order 'K' keeps s's axis permutation, zero-filled, s's dtype.
             var zeros = new NDArray(s.dtype, Shape.NewLikeLayout(s.Shape, 'K', (long[])s.Shape.dimensions.Clone()), true);
-            var sInv = NDArray.Where(large, reciprocals, zeros);
+            var sInv = NDArray.where(large, reciprocals, zeros);
             // `res = matmul(transpose(vt), multiply(s[..., newaxis], transpose(u)))`, the operands in that order.
             var vtT = vt.TensorEngine.SwapAxes(vt, -1, -2);
-            var column = NDArray.ExpandDims(sInv, -1);
+            var column = NDArray.expand_dims(sInv, -1);
             var uT = u.TensorEngine.SwapAxes(u, -1, -2);
             return CoreMatmul(vtT, column.TensorEngine.Multiply(column, uT));
         }

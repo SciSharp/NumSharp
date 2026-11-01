@@ -38,7 +38,7 @@ taper (NumPy forces at least float64 through `np.array([0.0, M])`).
 
 `fft`, `ifft`, `fft2`, `ifft2`, `fftn`, `ifftn`, `rfft`, `irfft`, `rfft2`, `irfft2`, `rfftn`, `irfftn`, `hfft`, `ihfft`,
 `fftfreq`, `rfftfreq`, `fftshift`, `ifftshift`, plus the complex accessors `conjugate`/`conj`, `real`, `imag`, `angle`
-(np.real / np.imag's statements are `NDArray.RealPart` / `ImagPart` in `Backends/NDArray.TypeCheck.cs`).
+(np.real / np.imag's statements are `NDArray.real_` / `imag_` in `Backends/NDArray.TypeCheck.cs`).
 - A pure-managed C# port of pocketfft, NumPy's own FFT engine (`src/NumSharp.Core/Fourier/`, no native dependency). The
   double/complex128 path is bit-for-bit identical to NumPy 2.4.2: the port is a faithful scalar transcription, NumPy's
   win-amd64 wheel is itself scalar (`POCKETFFT_NO_VECTORS` under MSVC), and the twiddles come from the same CRT

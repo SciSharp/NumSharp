@@ -307,7 +307,7 @@ namespace NumSharp.Backends
                     NDArray sa = tmpA[sortIdx];
                     NDArray sw = w[slice][sortIdx];
                     // cw = np.concatenate((zero, sw.cumsum())); cum_n += cw[bin_index]
-                    NDArray cw = NDArray.ConcatenateInto(new[] { zero, sw.TensorEngine.ReduceCumAdd(sw, null, null, null) }, 0,
+                    NDArray cw = NDArray.concatenate(new[] { zero, sw.TensorEngine.ReduceCumAdd(sw, null, null, null) }, 0,
                         null, null, "same_kind");
                     NDArray binIndex = SearchSortedInclusive(sa, binEdges);
                     cumN.TensorEngine.Add(cumN, UnmanagedStorage.TakeFrom(cw, binIndex, null, null, ClipModes.ClipModeRaise),
@@ -382,8 +382,8 @@ namespace NumSharp.Backends
             // The float64-accumulate-per-block-then-cast AND the 65536 block boundary are both load-bearing
             // for bit-exactness (a single-pass sum diverges in the last ULP; verified against NumPy 2.4.2).
             bool complexWeights = ntype == NPTypeCode.Complex;
-            NDArray wReal = EnsureContiguousDtype(complexWeights ? NDArray.RealPart(w) : w, NPTypeCode.Double);
-            NDArray wImag = complexWeights ? EnsureContiguousDtype(NDArray.ImagPart(w), NPTypeCode.Double) : null;
+            NDArray wReal = EnsureContiguousDtype(complexWeights ? NDArray.real_(w) : w, NPTypeCode.Double);
+            NDArray wImag = complexWeights ? EnsureContiguousDtype(NDArray.imag_(w), NPTypeCode.Double) : null;
 
             var wkernel = rangeQuotient
                 ? DirectILKernelGenerator.GetHistogramRangeWeightedKernel(be.BinDtype)
@@ -461,7 +461,7 @@ namespace NumSharp.Backends
                 if (raveled.typecode != NPTypeCode.Decimal && ZeroBinsBlockHasNaNIndex(raveled, keep, be))
                     throw new IndexError("index -9223372036854775808 is out of bounds for axis 0 with size 1");
                 // indices = f_indices.astype(np.intp) is 0 (a product with n_equal_bins = 0), then -1; np.bincount refuses.
-                using NDArray indices = NDArray.Full(Shape.Vector(kept), -1L, np.int64);
+                using NDArray indices = NDArray.full(Shape.Vector(kept), -1L, np.int64);
                 using NDArray weights = w?[keep];
                 indices.TensorEngine.Bincount(indices, weights, 0);
                 throw new InvalidOperationException("np.histogram: np.bincount accepted negative indices.");
@@ -607,7 +607,7 @@ namespace NumSharp.Backends
                     NDArray sa = tmpA[sortIdx];
                     NDArray sw = tmpW[sortIdx];
                     // cw = [0, cumsum(sorted weights)]; cum_n += cw[bin_index].
-                    NDArray cw = NDArray.ConcatenateInto(new[] { zero, sw.TensorEngine.ReduceCumAdd(sw, null, null, null) }, 0,
+                    NDArray cw = NDArray.concatenate(new[] { zero, sw.TensorEngine.ReduceCumAdd(sw, null, null, null) }, 0,
                         null, null, "same_kind");
                     NDArray binIndex = SearchSortedInclusive(sa, binEdges);
                     // In place, as NumPy's `+=`: the total keeps the weights' dtype (ntype), so narrow integer weights
@@ -635,7 +635,7 @@ namespace NumSharp.Backends
             long m = v.size;
             NDArray left = a.TensorEngine.SearchSorted(a, v[$"0:{m - 1}"], "left", null);
             NDArray right = a.TensorEngine.SearchSorted(a, v[$"{m - 1}:{m}"], "right", null);
-            return NDArray.ConcatenateInto(new[] { left, right }, 0, null, null, "same_kind");
+            return NDArray.concatenate(new[] { left, right }, 0, null, null, "same_kind");
         }
 
         // ---------------------------------------------------------------------
@@ -1401,9 +1401,9 @@ namespace NumSharp.Backends
             {
                 if (!ShapeEquals(weights, a))
                     throw new ValueError("weights should have the same shape as a.");
-                w = NDArray.Ravel(weights, 'C');
+                w = NDArray.ravel(weights, 'C');
             }
-            return (NDArray.Ravel(arr, 'C'), w);
+            return (NDArray.ravel(arr, 'C'), w);
         }
 
         /// <summary>True when two arrays have identical shapes (dimension-by-dimension).</summary>

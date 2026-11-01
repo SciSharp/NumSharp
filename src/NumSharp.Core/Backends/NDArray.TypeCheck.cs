@@ -29,7 +29,7 @@ namespace NumSharp
         ///     byte-reinterpreting alias forwards its ARC to the owner), so a caller that drops it should dispose it or
         ///     create it inside a scope.
         /// </remarks>
-        internal static NDArray RealPart(NDArray val)
+        internal static NDArray real_(NDArray val)
         {
             // Complex: a strided float64 view onto the real lane (writes through, shares memory) — the
             // same strided complex->real lane read the FFT driver relies on, exposed as a view.
@@ -56,7 +56,7 @@ namespace NumSharp
         ///     No numpy.matrix rule here: np.imag's facade applies it. The zeros are allocated from the DESCRIPTOR, so a
         ///     text array's imaginary part is its own dtype (<c>np.imag(U3)</c> is <c>&lt;U3</c> of <c>''</c>).
         /// </remarks>
-        internal static NDArray ImagPart(NDArray val)
+        internal static NDArray imag_(NDArray val)
         {
             // Complex: a strided float64 view onto the imaginary lane (writes through, shares memory).
             if (val.typecode == NPTypeCode.Complex)
@@ -99,7 +99,7 @@ namespace NumSharp
         {
             if (self.typecode != NPTypeCode.Complex)
                 throw new TypeError("array does not have imaginary part to set");
-            UnmanagedStorage.Copyto(ImagPart(self), value, NPY_CASTING.NPY_UNSAFE_CASTING, null);
+            UnmanagedStorage.Copyto(imag_(self), value, NPY_CASTING.NPY_UNSAFE_CASTING, null);
         }
     }
 }

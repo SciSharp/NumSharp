@@ -13,7 +13,7 @@ namespace NumSharp
     // and np.ones, which are `a = empty(...); multiarray.copyto(a, fill_value, casting='unsafe')` in NumPy. By fill value
     // and result dtype: a fill value with dimensions broadcasts through np.copyto, the text classes take their own fill
     // routes, and a scalar is stored into every element of the dtype's storage lane by UnmanagedStorage's FullCore /
-    // OnesCore (UnmanagedStorage.Ctors.cs). np.indices' dense and sparse grids live here too (Indices, IndicesSparse).
+    // OnesCore (UnmanagedStorage.Ctors.cs). np.indices' dense and sparse grids live here too (indices, indices_sparse).
     // They are the array object's own members (the np-layer dtype plan's D1: functions that create arrays), and the np.*
     // functions are facades over them.
     //
@@ -54,7 +54,7 @@ namespace NumSharp
         ///     Python scalar is packed first).</exception>
         /// <remarks>Without a dtype, a scalar's C# type picks the storage lane (a C# <c>int</c> fills an int32 array), not
         ///     NumPy's discovery of the Python scalar it stands for.</remarks>
-        internal static NDArray Full(Shape shape, object fill_value, DType dtype)
+        internal static NDArray full(Shape shape, object fill_value, DType dtype)
         {
             // A fill value with dimensions (an NDArray of rank >= 1, a C# array): NumPy's own statements, which broadcast it
             // into the result (FullFromArrayFill). Without dtype= the result takes the fill value's dtype.
@@ -127,7 +127,7 @@ namespace NumSharp
         internal static NDArray FullFromArrayFill(Shape shape, object fill_value, DType resultDescr)
         {
             // asarray(fill_value): an NDArray as it is, a C# array converted (np.asanyarray's dtype discovery).
-            NDArray converted = fill_value is NDArray ? null : AnyArrayFromObject(fill_value, null, 'K');
+            NDArray converted = fill_value is NDArray ? null : asanyarray(fill_value, null, 'K');
             NDArray fill = converted ?? (NDArray)fill_value;
             try
             {
@@ -184,7 +184,7 @@ namespace NumSharp
         ///     limit.</exception>
         /// <exception cref="OverflowException">A Python int outside the result's integer range
         ///     (<c>np.full_like(int8_array, 1000)</c>).</exception>
-        internal static NDArray FullLike(NDArray a, object fill_value, DType dtype, char order)
+        internal static NDArray full_like(NDArray a, object fill_value, DType dtype, char order)
         {
             // NumPy's *_like contract preserves a.dtype unless dtype= is explicitly supplied.
             // fill_value is CAST into that dtype; its CLR type never selects the result dtype.
@@ -233,7 +233,7 @@ namespace NumSharp
         ///     is one.</returns>
         /// <exception cref="ValueError">A negative dimension, or a byte count past the limit
         ///     (<see cref="AllocationGuard"/>).</exception>
-        internal static NDArray Ones(Shape shape, DType dtype)
+        internal static NDArray ones(Shape shape, DType dtype)
         {
             // Text has no lane fill: a fixed-width string class, and a class whose items hold references (StringDType),
             // take the text routes; every other class converts the Python int 1 through its setitem (OnesCore).
@@ -245,7 +245,7 @@ namespace NumSharp
         /// <summary>
         ///     NumPy's <c>np.ones</c> with an <c>order</c>, the body of <see cref="np.ones(Shape, char, DType)"/>: the order
         ///     resolved (<c>'A'</c> and <c>'K'</c> mean C without a source), the dimensions laid out in it, then the fill of
-        ///     <see cref="Ones(Shape, DType)"/>.
+        ///     <see cref="ones(Shape, DType)"/>.
         /// </summary>
         /// <param name="shape">The dimensions (only they are read: the layout comes from <paramref name="order"/>).</param>
         /// <param name="order"><c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c>.</param>
@@ -254,7 +254,7 @@ namespace NumSharp
         ///     differ).</returns>
         /// <exception cref="ValueError">An order other than C, F, A or K; a negative dimension, or a byte count past the
         ///     limit.</exception>
-        internal static NDArray Ones(Shape shape, char order, DType dtype)
+        internal static NDArray ones(Shape shape, char order, DType dtype)
         {
             char physical = OrderResolver.Resolve(order);
             var orderedShape = Shape.Adopt(shape.dimensions, physical);
@@ -321,7 +321,7 @@ namespace NumSharp
         ///     each position rounded once).
         /// </remarks>
         [NDScoped]
-        internal static unsafe NDArray Indices(long[] dimensions, DType dtype)
+        internal static unsafe NDArray indices(long[] dimensions, DType dtype)
         {
             DType descr = dtype ?? DType.Int64;
             int ndim = dimensions.Length;
@@ -386,7 +386,7 @@ namespace NumSharp
         ///     <c>(1, 0)</c> array).
         /// </remarks>
         [NDScoped]
-        internal static NDArray[] IndicesSparse(long[] dimensions, DType dtype)
+        internal static NDArray[] indices_sparse(long[] dimensions, DType dtype)
         {
             DType descr = dtype ?? DType.Int64;
             int ndim = dimensions.Length;

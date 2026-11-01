@@ -62,7 +62,7 @@ namespace NumSharp
                 throw new ArgumentNullException(nameof(arr));
 
             // NumPy's numpy.apply_along_axis: the statements are the array object's (NDArray.ShapeBase.cs)
-            return NDArray.ApplyAlongAxis(func1d, axis, arr);
+            return NDArray.apply_along_axis(func1d, axis, arr);
         }
 
         /// <summary>

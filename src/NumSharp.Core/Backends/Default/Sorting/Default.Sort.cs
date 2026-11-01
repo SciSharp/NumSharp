@@ -144,7 +144,7 @@ namespace NumSharp.Backends
                     return KthForm.IndexArray;
                 default:
                     // np.asanyarray(kth)'s statement (an NDArray kth is the arm above, so no class boundary applies).
-                    index = converted = NDArray.AnyArrayFromObject(kth, null, 'K');
+                    index = converted = NDArray.asanyarray(kth, null, 'K');
                     return KthForm.IndexArray;
             }
         }

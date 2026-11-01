@@ -62,7 +62,7 @@ namespace NumSharp
                 if (NDCharArrayBoundary.Sees(nd))
                     return NDCharArrayBoundary.Kept((nd, dtype, order), static s => asarray(s.nd, s.dtype, s.order));
             }
-            return NDArray.AnyArrayFromObject(a, dtype, order);
+            return NDArray.asanyarray(a, dtype, order);
         }
 
         /// <summary>

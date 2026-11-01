@@ -70,7 +70,7 @@ namespace NumSharp.Backends.Sorting
             if (m == 0)
                 return result;
             // NumPy's keys are a C-contiguous array: they are read in C order.
-            using NDArray k = keys.Shape.IsContiguous ? null : NDArray.AsContiguousArray(keys, null);
+            using NDArray k = keys.Shape.IsContiguous ? null : NDArray.ascontiguousarray(keys, null);
             NDArray kc = k ?? keys;
             const int cell = VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
             var rule = NDVStringCells.RuleOf(common);
@@ -345,7 +345,7 @@ namespace NumSharp.Backends.Sorting
             {
                 var p = a.dtype.VString;
                 PyObj na = PyObj.From(p.HasNAObject ? p.na_object : string.Empty);
-                using NDArray c = a.Shape.IsContiguous ? null : NDArray.AsContiguousArray(a, null);
+                using NDArray c = a.Shape.IsContiguous ? null : NDArray.ascontiguousarray(a, null);
                 NDArray src = c ?? a;
                 const int cell = VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
                 var allocator = src.Storage.VStringSlice.Allocator;
@@ -372,7 +372,7 @@ namespace NumSharp.Backends.Sorting
             // element as its uint16 number (see the remarks).
             using NDArray flat = a.Shape.IsContiguous && a.Shape.offset == 0
                 ? null
-                : NDArray.AsContiguousArray(a, null);
+                : NDArray.ascontiguousarray(a, null);
             NDArray s = flat ?? a;
             bool charElements = s.typecode == NPTypeCode.Char;
             for (long i = 0; i < n; i++)

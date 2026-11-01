@@ -110,7 +110,7 @@ namespace NumSharp.Backends
             int mNdim = m.ndim;
 
             // X = array(m, ndmin=2, dtype=dtype): a fresh 2-D array in the result dtype.
-            NDArray X = NDArray.AtLeast2d(m).astype(resultType);
+            NDArray X = NDArray.atleast_2d(m).astype(resultType);
             if (!rowvar && mNdim != 1)
                 X = X.T;
 
@@ -120,10 +120,10 @@ namespace NumSharp.Backends
 
             if (y is not null)
             {
-                NDArray Y = NDArray.AtLeast2d(y).astype(resultType);
+                NDArray Y = NDArray.atleast_2d(y).astype(resultType);
                 if (!rowvar && Y.Shape.dimensions[0] != 1)
                     Y = Y.T;
-                X = NDArray.ConcatenateInto(new[] { X, Y }, 0, null, null, "same_kind");
+                X = NDArray.concatenate(new[] { X, Y }, 0, null, null, "same_kind");
             }
 
             int ddofValue = ddof ?? (bias ? 0 : 1);
@@ -363,7 +363,7 @@ namespace NumSharp.Backends
             // X = array(m, ndmin=2, dtype=dtype): numbers are formatted and text converted (np.array with a dtype casts
             // unsafely); only a text-to-text conversion can fail, and only on its content (U -> S encodes ASCII, S -> U
             // decodes it).
-            NDArray X = NDArray.AtLeast2d(m).astype(xd, true, 'K', "unsafe");
+            NDArray X = NDArray.atleast_2d(m).astype(xd, true, 'K', "unsafe");
             if (!rowvar && m.ndim != 1)
                 X = X.T;
             if (X.Shape.dimensions[0] == 0)
@@ -374,14 +374,14 @@ namespace NumSharp.Backends
                 // y = array(y, copy=None, ndmin=2, dtype=dtype), then X = np.concatenate((X, y), axis=0): the observation
                 // counts must agree. NumPy's concatenate raises a ValueError there; NumSharp's raises its house
                 // IncorrectShapeException with the same text, so the check is made here with NumPy's type.
-                NDArray Y = NDArray.AtLeast2d(y).astype(yd, true, 'K', "unsafe");
+                NDArray Y = NDArray.atleast_2d(y).astype(yd, true, 'K', "unsafe");
                 if (!rowvar && Y.Shape.dimensions[0] != 1)
                     Y = Y.T;
                 if (Y.Shape.dimensions[1] != X.Shape.dimensions[1])
                     throw new ValueError(
                         "all the input array dimensions except for the concatenation axis must match exactly, but along " +
                         $"dimension 1, the array at index 0 has size {X.Shape.dimensions[1]} and the array at index 1 has size {Y.Shape.dimensions[1]}");
-                X = NDArray.ConcatenateInto(new[] { X, Y }, 0, null, null, "same_kind");
+                X = NDArray.concatenate(new[] { X, Y }, 0, null, null, "same_kind");
             }
 
             NDArray w = CovWeights(fweights, aweights, X.Shape.dimensions[1], out _);

@@ -79,8 +79,8 @@ namespace NumSharp.Backends
         [NDScoped]
         private static NDArray IsinVStringFlat(NDArray element, NDArray test_elements, bool invert)
         {
-            NDArray ar1 = NDArray.Ravel(element, 'C');
-            NDArray ar2 = NDArray.Ravel(test_elements, 'C');
+            NDArray ar1 = NDArray.ravel(element, 'C');
+            NDArray ar2 = NDArray.ravel(test_elements, 'C');
             using var set = new IsinObjects();
             set.Collect(ar2);
             long n1 = ar1.size;

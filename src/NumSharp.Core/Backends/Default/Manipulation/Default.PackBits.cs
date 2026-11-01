@@ -13,7 +13,7 @@
 // =====================================================================================
 //
 //  DefaultEngine's Packbits / Unpackbits. Their layout statements are the array object's: np.ascontiguousarray's
-//  NDArray.AsContiguousArray, and np.asfortranarray's F-order conversion (NDArray.ArrayFromObject with order 'F'; its
+//  NDArray.ascontiguousarray, and np.asfortranarray's F-order conversion (NDArray.asarray with order 'F'; its
 //  last statement, a reshape of a 0-d result to (1,), cannot fire: a result is converted only when it has two or more
 //  dimensions).
 // =====================================================================================
@@ -55,10 +55,10 @@ namespace NumSharp.Backends
             // (no zero-fill needed). The main path overwrites every output byte, so fillZeros: false.
             var cOut = new NDArray(NPTypeCode.Byte, Shape.Adopt(outDims, 'C'), false);
             if (nw.size == 0 || cOut.size == 0)
-                return isFortran ? NDArray.ArrayFromObject(cOut, null, 'F', null) : cOut;
+                return isFortran ? NDArray.asarray(cOut, null, 'F', null) : cOut;
 
             // Normalise to C-contiguous so (n_outer, axisLen, nel) is a plain block walk.
-            NDArray srcC = nw.Shape.IsContiguous ? nw : NDArray.AsContiguousArray(nw, null);
+            NDArray srcC = nw.Shape.IsContiguous ? nw : NDArray.ascontiguousarray(nw, null);
             srcC.Shape.SplitAtAxis(packAxis, out long nOuter, out long nel);
 
             // Logical element 0 = base Address + Shape.offset elements: a contiguous slice keeps a
@@ -69,7 +69,7 @@ namespace NumSharp.Backends
                 srcPtr, (byte*)cOut.Address,
                 nOuter, axisLen, nel, srcC.dtypesize, big);
 
-            return isFortran ? NDArray.ArrayFromObject(cOut, null, 'F', null) : cOut;
+            return isFortran ? NDArray.asarray(cOut, null, 'F', null) : cOut;
         }
 
         /// <inheritdoc />
@@ -123,13 +123,13 @@ namespace NumSharp.Backends
             if (nw.size == 0 || outSize == 0)
             {
                 var z = new NDArray(NPTypeCode.Byte, Shape.Adopt(outDims, 'C'), fillZeros: outSize != 0);
-                return isFortran ? NDArray.ArrayFromObject(z, null, 'F', null) : z;
+                return isFortran ? NDArray.asarray(z, null, 'F', null) : z;
             }
 
             // Main path overwrites every output byte (full bytes + partial + explicit pad), so fillZeros: false.
             var cOut = new NDArray(NPTypeCode.Byte, Shape.Adopt(outDims, 'C'), false);
 
-            NDArray srcC = nw.Shape.IsContiguous ? nw : NDArray.AsContiguousArray(nw, null);
+            NDArray srcC = nw.Shape.IsContiguous ? nw : NDArray.ascontiguousarray(nw, null);
             srcC.Shape.SplitAtAxis(unpackAxis, out long nOuter, out long nel);
 
             // Logical element 0 = base Address + Shape.offset (uint8, so offset is in bytes). The fresh
@@ -139,7 +139,7 @@ namespace NumSharp.Backends
                 srcPtr, (byte*)cOut.Address,
                 nOuter, axisLen, nel, outLen, big);
 
-            return isFortran ? NDArray.ArrayFromObject(cOut, null, 'F', null) : cOut;
+            return isFortran ? NDArray.asarray(cOut, null, 'F', null) : cOut;
         }
 
         /// <summary>

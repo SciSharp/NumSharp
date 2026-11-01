@@ -1,7 +1,7 @@
 // NumPy's numpy/lib/_polynomial_impl.py (the legacy np.poly* functions and np.roots) as DefaultEngine's members: each
 // function's statements as its np.* facade held them, each np.* call the member its function dispatches to (this
-// engine's ufuncs, Sort, Convolve, NonZero, AllClose and Linalg.Eigvals; the array object's allocations, AtLeast1d,
-// Ravel, Diag, RealPart, conversions and concatenations; the dtype layer's ResultType).
+// engine's ufuncs, Sort, Convolve, NonZero, AllClose and Linalg.Eigvals; the array object's allocations, atleast_1d,
+// ravel, diag, real_, conversions and concatenations; the dtype layer's ResultType).
 
 using System;
 
@@ -13,7 +13,7 @@ namespace NumSharp.Backends
         [NDScoped] // the working copies, casts and intermediates of NumPy's statements are this call's own
         public override NDArray Poly(NDArray seq_of_zeros)
         {
-            seq_of_zeros = NDArray.AtLeast1d(seq_of_zeros);
+            seq_of_zeros = NDArray.atleast_1d(seq_of_zeros);
             bool text = Backends.Strings.NDStringUfuncs.IsText(seq_of_zeros);
             int nd = seq_of_zeros.ndim;
 
@@ -40,7 +40,7 @@ namespace NumSharp.Backends
                 return NDArray.Scalar(1.0);
 
             NPTypeCode dt = seq.typecode;
-            NDArray onesScalar = NDArray.Ones(new Shape(1), dt);
+            NDArray onesScalar = NDArray.ones(new Shape(1), dt);
             // np.negative's statement: Negate (its copy into F order needs two or more dimensions; seq is 1-D).
             NDArray negSeq = Negate(seq);
 
@@ -48,7 +48,7 @@ namespace NumSharp.Backends
             NDArray a = onesScalar;
             for (long i = 0; i < seq.size; i++)
             {
-                NDArray factor = NDArray.ConcatenateInto(new[] { onesScalar, negSeq[$"{i}:{i + 1}"] }, 0, null, null, "same_kind");
+                NDArray factor = NDArray.concatenate(new[] { onesScalar, negSeq[$"{i}:{i + 1}"] }, 0, null, null, "same_kind");
                 a = Convolve(a, factor, "full");
             }
 
@@ -60,7 +60,7 @@ namespace NumSharp.Backends
                 // Conjugate with np's defaults.
                 if (All(Compare(Sort(rootsC, -1, null, null, null),
                         Sort(Conjugate(rootsC, null, null, null), -1, null, null, null), null, null, null)))
-                    a = NDArray.RealPart(a).copy();
+                    a = NDArray.real_(a).copy();
             }
 
             return a;
@@ -70,10 +70,10 @@ namespace NumSharp.Backends
         [NDScoped] // the working copies, casts and intermediates of NumPy's statements are this call's own
         public override NDArray Polyval(NDArray p, NDArray x)
         {
-            p = NDArray.ArrayFromObject(p, null, 'K', null);   // np.asarray(p)
+            p = NDArray.asarray(p, null, 'K', null);   // np.asarray(p)
 
             // A poly1d `x` composes the two polynomials — handled by the poly1d overload below.
-            x = NDArray.AnyArrayFromObject(x, null, 'K');   // np.asanyarray(x)
+            x = NDArray.asanyarray(x, null, 'K');   // np.asanyarray(x)
 
             // NumPy's `for pv in p` cannot iterate a 0-d coefficient array (a scalar is not a
             // length-1 polynomial — that would be `[c]`). A 1-D length-1 array is a valid constant.
@@ -152,15 +152,15 @@ namespace NumSharp.Backends
             }
             else
             {
-                kk = NDArray.AtLeast1d(k);
+                kk = NDArray.atleast_1d(k);
                 // NumPy measures k with len(): its first axis (an N-D k's rows are its constants).
                 if (kk.Shape.dimensions[0] == 1 && m > 1)
-                    kk = kk["0"] * NDArray.Ones(new Shape(m), NPTypeCode.Double);
+                    kk = kk["0"] * NDArray.ones(new Shape(m), NPTypeCode.Double);
                 if (kk.Shape.dimensions[0] < m)
                     throw new ValueError("k must be a scalar or a rank-1 array of length 1 or >m.");
             }
 
-            p = NDArray.ArrayFromObject(p, null, 'K', null);   // np.asarray(p)
+            p = NDArray.asarray(p, null, 'K', null);   // np.asarray(p)
 
             if (m == 0)
                 return p;
@@ -185,7 +185,7 @@ namespace NumSharp.Backends
                 // np.true_divide(result, np.arange(len, 0, -1)): this engine's Divide over the array object's arange.
                 NDArray divided = Divide(result, UnmanagedStorage.ArangeObj(len, 0L, -1L, null), null, null, null);
                 NDArray kElem = kk[$"{i}:{i + 1}"];
-                result = NDArray.ConcatenateInto(new[] { divided, kElem }, 0, null, null, "same_kind");
+                result = NDArray.concatenate(new[] { divided, kElem }, 0, null, null, "same_kind");
             }
 
             return result;
@@ -209,16 +209,16 @@ namespace NumSharp.Backends
         [NDScoped]
         private static NDArray PolyAddSub(NDArray a1, NDArray a2, bool subtract)
         {
-            a1 = NDArray.AtLeast1d(a1);
-            a2 = NDArray.AtLeast1d(a2);
+            a1 = NDArray.atleast_1d(a1);
+            a2 = NDArray.atleast_1d(a2);
             // NumPy's diff = len(a2) - len(a1): the first axes. The 1-D zeros it pads with meet an N-D operand in
             // np.concatenate's rank error; equal first axes go straight to the operator's broadcast.
             long diff = a2.Shape.dimensions[0] - a1.Shape.dimensions[0];
 
             if (diff > 0)
-                a1 = NDArray.ConcatenateInto(new[] { new NDArray(a1.dtype, new Shape(diff), true), a1 }, 0, null, null, "same_kind");
+                a1 = NDArray.concatenate(new[] { new NDArray(a1.dtype, new Shape(diff), true), a1 }, 0, null, null, "same_kind");
             else if (diff < 0)
-                a2 = NDArray.ConcatenateInto(new[] { new NDArray(a2.dtype, new Shape(-diff), true), a2 }, 0, null, null, "same_kind");
+                a2 = NDArray.concatenate(new[] { new NDArray(a2.dtype, new Shape(-diff), true), a2 }, 0, null, null, "same_kind");
 
             return subtract ? a1 - a2 : a1 + a2;
         }
@@ -241,7 +241,7 @@ namespace NumSharp.Backends
             }
             if (Backends.Strings.NDStringUfuncs.IsString(a1) || Backends.Strings.NDStringUfuncs.IsString(a2))
             {
-                if (NDArray.AtLeast1d(a1).ndim > 1 || NDArray.AtLeast1d(a2).ndim > 1)
+                if (NDArray.atleast_1d(a1).ndim > 1 || NDArray.atleast_1d(a2).ndim > 1)
                     throw new ValueError("Polynomial must be 1d only.");
                 throw Backends.Strings.NDStringUfuncs.NoItemsize();
             }
@@ -259,8 +259,8 @@ namespace NumSharp.Backends
         [NDScoped]
         public override (NDArray q, NDArray r) Polydiv(NDArray u, NDArray v)
         {
-            u = NDArray.AtLeast1d(u) + 0.0;   // floated, exactly like NumPy's `+ 0.0`
-            v = NDArray.AtLeast1d(v) + 0.0;
+            u = NDArray.atleast_1d(u) + 0.0;   // floated, exactly like NumPy's `+ 0.0`
+            v = NDArray.atleast_1d(v) + 0.0;
 
             // w = u[0] + v[0]: NumPy forms the sum and keeps its dtype, the common type of two NumPy values, both strong
             // (np.result_type reads them so; NumSharp's operator would take a 0-d operand as a weak scalar). Forming the
@@ -295,7 +295,7 @@ namespace NumSharp.Backends
                         ? new TypeError("only 0-dimensional arrays can be converted to Python scalars")
                         : new ValueError("setting an array element with a sequence.");
                 NDArray d = w == NPTypeCode.Complex ? NaiveComplexScalarMultiply(scale, rk) : scale * rk;
-                q[$"{k}:{k + 1}"] = NDArray.AtLeast1d(d);
+                q[$"{k}:{k + 1}"] = NDArray.atleast_1d(d);
                 // r[k : k+n+1] -= d * v   (an in-place, length-(n+1) vector update)
                 NDArray seg = r[$"{k}:{k + n + 1}"];
                 Subtract(seg, d * v, null, seg, null);
@@ -357,13 +357,13 @@ namespace NumSharp.Backends
         [NDScoped] // reclaims the ravel/nonzero/strip/astype chain and the companion-matrix + eigvals intermediates
         public override NDArray Roots(NDArray p)
         {
-            p = NDArray.AtLeast1d(p);
+            p = NDArray.atleast_1d(p);
             if (p.ndim != 1)
                 throw new ValueError("Input must be a rank-1 array.");
             // Text coefficients: the non-zero ones are the non-empty strings (their truth), and the stripped run is parsed
             // by `p.astype(float)` below, as in NumPy.
             // Indices of the non-zero coefficients (over the flattened array).
-            NDArray nonZero = NonZero(NDArray.Ravel(p, 'C'))[0];   // np.nonzero(np.ravel(p))[0]
+            NDArray nonZero = NonZero(NDArray.ravel(p, 'C'))[0];   // np.nonzero(np.ravel(p))[0]
             if (nonZero.size == 0)
                 return new NDArray(Unmanaged.ArraySlice.FromArray(new double[0], true), Shape.Vector(0));   // all zeros -> no roots (empty float64)
 
@@ -383,7 +383,7 @@ namespace NumSharp.Backends
             if (n > 1)
             {
                 // Companion matrix: ones on the sub-diagonal, first row = -p[1:] / p[0].
-                NDArray a = NDArray.Diag(NDArray.Ones(new Shape(n - 2), p.typecode), -1);   // np.diag(np.ones(n - 2), -1)
+                NDArray a = NDArray.diag(NDArray.ones(new Shape(n - 2), p.typecode), -1);   // np.diag(np.ones(n - 2), -1)
                 a["0, :"] = Negate(p["1:"]) / p["0"];   // np.negative of a 1-D slice: Negate
                 rootsArr = Linalg.Eigvals(a);
             }
@@ -395,8 +395,8 @@ namespace NumSharp.Backends
             // Tack the zero-roots onto the back.
             // np.hstack(rootsArr, np.zeros(trailing))'s statement: atleast_1d of each, then the concatenation along the
             // first axis when the first array is 1-D (else the second).
-            var parts = new[] { NDArray.AtLeast1d(rootsArr), NDArray.AtLeast1d(new NDArray(rootsArr.typecode, new Shape(trailing), true)) };
-            return NDArray.ConcatenateInto(parts, parts[0].Shape.dimensions.Length == 1 ? 0 : 1, null, null, "same_kind");
+            var parts = new[] { NDArray.atleast_1d(rootsArr), NDArray.atleast_1d(new NDArray(rootsArr.typecode, new Shape(trailing), true)) };
+            return NDArray.concatenate(parts, parts[0].Shape.dimensions.Length == 1 ? 0 : 1, null, null, "same_kind");
         }
 
         /// <summary>NumPy's <c>issubclass(dtype.type, (floating, complexfloating))</c>.</summary>

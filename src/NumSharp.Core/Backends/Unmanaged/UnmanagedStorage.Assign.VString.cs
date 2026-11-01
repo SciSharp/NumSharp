@@ -189,9 +189,9 @@ namespace NumSharp.Backends
             if (positions.size == 0)
                 return;
             // Gather the selected texts (destination C order) and convert only them.
-            using var flatMarks = NDArray.Ravel(marks, 'C');
+            using var flatMarks = NDArray.ravel(marks, 'C');
             using var sourceNumbers = TakeFrom(flatMarks, positions, null, null, ClipModes.ClipModeRaise);
-            using var flatSource = NDArray.Ravel(src, 'C');
+            using var flatSource = NDArray.ravel(src, 'C');
             using var picked = TakeFrom(flatSource, sourceNumbers, null, null, ClipModes.ClipModeRaise);
             using var values = picked.astype(to, true, 'K', "unsafe");
             // The values at their destination positions (a C-ordered staging array), written back under the same selection.

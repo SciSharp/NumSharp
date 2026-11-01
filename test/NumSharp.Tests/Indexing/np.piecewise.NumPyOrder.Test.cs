@@ -5,7 +5,7 @@ namespace NumSharp.Tests.Indexing;
 
 /// <summary>
 ///     np.piecewise's constants as NumPy stores them, found when the np-layer dtype plan's P3 batch 7 moved its body to
-///     <c>NDArray.Piecewise</c> and replayed the snapshot against NumPy 2.4.2: a constant "function" is
+///     <c>NDArray.piecewise</c> and replayed the snapshot against NumPy 2.4.2: a constant "function" is
 ///     <c>y[cond] = func</c>, so the boolean index is checked before the value, and the value is converted by
 ///     <c>PyArray_FromAny(func, y.dtype, FORCECAST)</c> - Python's <c>int()</c> / <c>float()</c> texts for a complex,
 ///     a complex's truth into bool and its <c>str()</c> into text, None's setitem value, a NumPy scalar cast. Every

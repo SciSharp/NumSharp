@@ -42,7 +42,7 @@ namespace NumSharp
         ///     engine member <c>TensorEngine.Diagonal</c> (the np-layer dtype plan's P1b) until phase PE's E7 returned it to
         ///     the array object before 0.71.0 shipped: building a view computes no value, so an engine has nothing to
         ///     override.</remarks>
-        internal static NDArray Diagonal(NDArray a, int offset = 0, int axis1 = 0, int axis2 = 1)
+        internal static NDArray diagonal(NDArray a, int offset = 0, int axis1 = 0, int axis2 = 1)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
 

@@ -716,7 +716,7 @@ namespace NumSharp.Backends
                 if (nonNumeric.IsObject)
                     throw nonNumeric.Refusal;
             }
-            return NDArray.AnyArrayFromObject(v, null, 'K');   // np.asanyarray(v): v is no NDArray here
+            return NDArray.asanyarray(v, null, 'K');   // np.asanyarray(v): v is no NDArray here
         }
 
         // The scalar steps and the coordinate differences are read as NumPy values (PolyNumber: SpacingOf, and

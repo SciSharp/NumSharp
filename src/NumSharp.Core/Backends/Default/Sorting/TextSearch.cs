@@ -112,7 +112,7 @@ namespace NumSharp.Backends.Sorting
             int keyUnits = keys.dtype.itemsize / unit;
             long n = haystack.size;
             // NumPy's keys are a C-contiguous array (PyArray_CheckFromAny with NPY_ARRAY_CARRAY_RO): read them in C order.
-            NDArray k = keys.Shape.IsContiguous ? keys : NDArray.AsContiguousArray(keys, null);
+            NDArray k = keys.Shape.IsContiguous ? keys : NDArray.ascontiguousarray(keys, null);
             long m = k.size;
             var result = new NDArray(NPTypeCode.Int64,
                 keys.ndim == 0 ? Shape.NewScalar() : Shape.Adopt((long[])keys.Shape.dimensions.Clone()), false);

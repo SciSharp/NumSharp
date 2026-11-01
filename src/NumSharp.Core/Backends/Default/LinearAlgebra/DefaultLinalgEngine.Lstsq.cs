@@ -20,7 +20,7 @@ namespace NumSharp.Backends
             // solution is squeezed back at the end. _assert_2d then rejects any higher rank. np.expand_dims' member:
             // np.linalg.lstsq's plain region (or its matrix rule's) already kept the facade's class rules from firing.
             bool is1d = b.ndim == 1;
-            var b2 = is1d ? NDArray.ExpandDims(b, -1) : b;
+            var b2 = is1d ? NDArray.expand_dims(b, -1) : b;
 
             Assert2d(a, b2);
 

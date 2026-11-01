@@ -96,7 +96,7 @@ namespace NumSharp
             if (funclist is null) throw new ArgumentNullException(nameof(funclist));
 
             // NumPy's numpy.piecewise after the null checks: the statements are the array object's (NDArray.FunctionBase.cs)
-            return NDArray.Piecewise(x, condlist, funclist, args);
+            return NDArray.piecewise(x, condlist, funclist, args);
         }
 
         /// <summary>
@@ -118,7 +118,7 @@ namespace NumSharp
             if (funclist is null) throw new ArgumentNullException(nameof(funclist));
 
             // NumPy's numpy.piecewise after the null checks: the statements are the array object's (NDArray.FunctionBase.cs)
-            return NDArray.Piecewise(x, condlist, funclist, args);
+            return NDArray.piecewise(x, condlist, funclist, args);
         }
 
         /// <summary>
@@ -137,7 +137,7 @@ namespace NumSharp
             if (funclist is null) throw new ArgumentNullException(nameof(funclist));
 
             // NumPy's numpy.piecewise after the null checks: the statements are the array object's (NDArray.FunctionBase.cs)
-            return NDArray.Piecewise(x, condlist, funclist, args);
+            return NDArray.piecewise(x, condlist, funclist, args);
         }
     }
 }

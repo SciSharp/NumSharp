@@ -225,13 +225,14 @@ namespace NumSharp.Backends
 
         // ---------------------------------------------------------------------------------------------
         // The allocations behind np.full, np.full_like and np.ones (ctors.c; np-layer dtype plan, Appendix D's
-        // UnmanagedStorage.Ctors.cs): a new array of a storage lane with one element stored into every slot. NumPy writes
-        // it as `a = empty(...); copyto(a, value, casting='unsafe')`; the array object's NDArray.Full / FullLike / Ones
-        // (Backends/NDArray.Numeric.cs) decide the dtype and the route and call these for the storage lanes.
+        // UnmanagedStorage.Ctors.cs): a new array of a storage lane with one element stored into every slot. NumPy
+        // writes it as `a = empty(...); copyto(a, value, casting='unsafe')`; the array object's NDArray.full /
+        // full_like / ones (Backends/NDArray.Numeric.cs) decide the dtype and the route and call these for the storage
+        // lanes.
         // ---------------------------------------------------------------------------------------------
 
         /// <summary>
-        ///     The storage-lane core behind <see cref="NDArray.Full"/> and so <see cref="np.full(Shape,object,DType,string)"/>:
+        ///     The storage-lane core behind <see cref="NDArray.full"/> and so <see cref="np.full(Shape,object,DType,string)"/>:
         ///     a new array of <paramref name="shape"/>'s dimensions in <paramref name="typeCode"/>'s lane, with the fill
         ///     value's element (<see cref="FullFillElement"/>) in every slot. For storage lanes only: the text classes take
         ///     their own fill routes, and a lane-sharing C-type class is the caller's to label afterwards.

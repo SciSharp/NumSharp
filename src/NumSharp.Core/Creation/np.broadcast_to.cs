@@ -32,7 +32,7 @@ namespace NumSharp
         ///     from the target's.</exception>
         public static NDArray broadcast_to(UnmanagedStorage from, Shape against)
         {
-            return NDArray.BroadcastTo(from, against);
+            return NDArray.broadcast_to(from, against);
         }
 
         /// <summary>
@@ -48,7 +48,7 @@ namespace NumSharp
         public static NDArray broadcast_to(NDArray from, Shape against)
         {
             using var plain = NDMatrixBoundary.PlainFor(from);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return NDArray.BroadcastTo(from, against);
+            return NDArray.broadcast_to(from, against);
         }
 
         /// <summary>
@@ -80,7 +80,7 @@ namespace NumSharp
         public static NDArray broadcast_to(UnmanagedStorage from, NDArray against)
         {
             using var plain = NDMatrixBoundary.PlainFor(against);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return NDArray.BroadcastTo(from, against.Shape);
+            return NDArray.broadcast_to(from, against.Shape);
         }
 
         /// <summary>
@@ -96,7 +96,7 @@ namespace NumSharp
         public static NDArray broadcast_to(NDArray from, NDArray against)
         {
             using var plain = NDMatrixBoundary.PlainFor(from, against);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return NDArray.BroadcastTo(from, against.Shape);
+            return NDArray.broadcast_to(from, against.Shape);
         }
 
 
@@ -127,7 +127,7 @@ namespace NumSharp
         ///     from the target's.</exception>
         public static NDArray broadcast_to(UnmanagedStorage from, UnmanagedStorage against)
         {
-            return NDArray.BroadcastTo(from, against.Shape);
+            return NDArray.broadcast_to(from, against.Shape);
         }
 
         /// <summary>
@@ -143,7 +143,7 @@ namespace NumSharp
         public static NDArray broadcast_to(NDArray from, UnmanagedStorage against)
         {
             using var plain = NDMatrixBoundary.PlainFor(from);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return NDArray.BroadcastTo(from, against.Shape);
+            return NDArray.broadcast_to(from, against.Shape);
         }
     }
 }

@@ -448,10 +448,10 @@ namespace NumSharp.Backends
             // returns — reclaim them here eagerly rather than holding them to the entry scope's
             // close (the [NDScoped] interp entries would sweep them anyway; Dispose is idempotent).
             using NDArray xpLow = xpLast - period, xpHigh = xpFirst + period;
-            xpd = NDArray.ConcatenateInto(new[] { xpLow, xpd, xpHigh }, 0, null, null, "same_kind");   // np.concatenate's statement
+            xpd = NDArray.concatenate(new[] { xpLow, xpd, xpHigh }, 0, null, null, "same_kind");   // np.concatenate's statement
             var fpFirst = fpd["0:1"];
             var fpLast = fpd[(fpd.size - 1).ToString() + ":"];
-            fpd = NDArray.ConcatenateInto(new[] { fpLast, fpd, fpFirst }, 0, null, null, "same_kind");
+            fpd = NDArray.concatenate(new[] { fpLast, fpd, fpFirst }, 0, null, null, "same_kind");
 
             return (xd, xpd, fpd);
         }

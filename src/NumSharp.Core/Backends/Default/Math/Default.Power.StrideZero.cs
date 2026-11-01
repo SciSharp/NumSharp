@@ -97,7 +97,7 @@ namespace NumSharp.Backends
                     if (typeCode.HasValue && typeCode.Value != np._FindCommonType(lhs, rhs))
                         ValidateBinaryInputCasts(lhs.GetTypeCode, rhs.GetTypeCode, typeCode.Value, UfuncName(BinaryOp.Power));
                     return fastOp == PowerStrideZeroOp.One
-                        ? NDArray.Ones(PowerPlainResultShape(lhs, rhs, lhs.Shape.Clean()), loop)
+                        ? NDArray.ones(PowerPlainResultShape(lhs, rhs, lhs.Shape.Clean()), loop)
                         : ExecuteUnaryOp(lhs, StrideZeroUnaryOp(fastOp), loop);
                 }
             }
@@ -212,7 +212,7 @@ namespace NumSharp.Backends
             {
                 // A plain call: NumPy writes 1.0 for exponent 0 without reading the bases.
                 if (fastOp == PowerStrideZeroOp.One)
-                    return NDArray.Ones(PowerPlainResultShape(lhs, rhs, iterShape), loop);
+                    return NDArray.ones(PowerPlainResultShape(lhs, rhs, iterShape), loop);
                 // The result has the bases' shape: the unary op's own allocation (C, or F for a strictly F base — the
                 // binary route's choice for a one-element exponent) is the result.
                 if (SameDims(lhs.Shape, iterShape))

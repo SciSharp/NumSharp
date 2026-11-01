@@ -36,6 +36,6 @@ namespace NumSharp
         [NDScoped]
         public static NDArray[] ix_(params object[] args)
             // NumPy's numpy.ix_: the statements are the array object's (NDArray.IndexTricks.cs)
-            => NDArray.Ix(args);
+            => NDArray.ix_(args);
     }
 }

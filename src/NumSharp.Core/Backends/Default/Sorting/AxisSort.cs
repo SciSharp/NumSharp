@@ -577,7 +577,7 @@ namespace NumSharp.Backends.Sorting
             if (ndim == 1)
             {
                 var promoted = new NDArray[ops.Length];
-                for (int i = 0; i < ops.Length; i++) promoted[i] = NDArray.ExpandDims(ops[i], 0);
+                for (int i = 0; i < ops.Length; i++) promoted[i] = NDArray.expand_dims(ops[i], 0);
                 ops = promoted;
                 axis = 1;
                 ndim = 2;

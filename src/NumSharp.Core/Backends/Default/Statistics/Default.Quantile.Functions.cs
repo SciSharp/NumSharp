@@ -255,7 +255,7 @@ namespace NumSharp.Backends
                 default:
                 {
                     // Any other array_like (a list, a typed array, text): np.asanyarray(q), a strong array.
-                    var made = NDArray.AnyArrayFromObject(q, null, 'K');
+                    var made = NDArray.asanyarray(q, null, 'K');
                     argument = new QuantileArgument(made);
                     return made;
                 }

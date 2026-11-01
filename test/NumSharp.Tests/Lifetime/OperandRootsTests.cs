@@ -93,7 +93,7 @@ namespace NumSharp.Tests.Lifetime
         [DataRow("LT04", "UnmanagedStorage", "PutMaskCore", "NDArray,NDArray,Object")]
         [DataRow("LT05", "np", "take_along_axis", "NDArray,NDArray,Nullable`1")]
         [DataRow("LT06", "np", "put_along_axis", "NDArray,NDArray,NDArray,Nullable`1")]
-        [DataRow("LT07", "NDArray", "Where", "NDArray,NDArray,NDArray")]
+        [DataRow("LT07", "NDArray", "where", "NDArray,NDArray,NDArray")]
         [DataRow("LT08", "np", "copyto", "NDArray,NDArray,String,NDArray")]
         [DataRow("LT09", "NDIter", "Copy", "NDArray,NDArray")]
         [DataRow("LT09", "NDIter", "CopyAs", "DType,NDArray,Char,TensorEngine")]

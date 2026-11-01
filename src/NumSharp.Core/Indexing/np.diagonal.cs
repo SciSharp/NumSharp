@@ -54,8 +54,8 @@ namespace NumSharp
             if (a is null) throw new ArgumentNullException(nameof(a));
 
             // NumPy's diagonal IS PyArray_Diagonal, a read-only view built from the strides: the array object's
-            // (NDArray.Diagonal over Shape.Diagonal's layout; a view computes no value, so it is no engine member).
-            return NDArray.Diagonal(a, offset, axis1, axis2);
+            // (NDArray.diagonal over Shape.Diagonal's layout; a view computes no value, so it is no engine member).
+            return NDArray.diagonal(a, offset, axis1, axis2);
         }
     }
 }

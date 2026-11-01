@@ -35,7 +35,7 @@ namespace NumSharp
         ///     refuses the Python int 1 (a <c>StringDType(coerce=False)</c>), raised after the zeros are allocated and before
         ///     any diagonal element is written.</exception>
         /// <remarks>An F-order result is the C result copied (<c>m.copy('F')</c>), so it costs a second allocation.</remarks>
-        internal static unsafe NDArray Eye(int N, int? M, int k, DType dtype, char order)
+        internal static unsafe NDArray eye(int N, int? M, int k, DType dtype, char order)
         {
             int cols = M ?? N;
             // np.zeros' own order of checks once np.eye checked the order's letter and the device: A and K are refused
@@ -103,7 +103,7 @@ namespace NumSharp
         /// <exception cref="ArgumentException">The operand is not 1- or 2-dimensional (<c>Input must be 1- or 2-d.</c>, NumPy's
         ///     ValueError), or the matrix of the 1-D branch would have more than <see cref="int.MaxValue"/> rows.</exception>
         [NDScoped]
-        internal static NDArray Diag(NDArray v, int k)
+        internal static NDArray diag(NDArray v, int k)
         {
             switch (v.ndim)
             {
@@ -111,7 +111,7 @@ namespace NumSharp
                     return DiagonalEmbed(v, k);
                 case 2:
                     // np.diagonal(v, k)'s statement: np.diag's facade has applied the class rules already.
-                    return Diagonal(v, k, 0, 1);
+                    return diagonal(v, k, 0, 1);
                 default:
                     // NumPy: raise ValueError("Input must be 1- or 2-d.")
                     throw new ArgumentException("Input must be 1- or 2-d.");
@@ -128,7 +128,7 @@ namespace NumSharp
         /// <returns>A new <c>(n, n)</c> array, <c>n = v.size + |k|</c>.</returns>
         /// <exception cref="ArgumentException">The matrix would have more than <see cref="int.MaxValue"/> rows.</exception>
         [NDScoped]
-        internal static NDArray DiagFlat(NDArray v, int k) => DiagonalEmbed(v.ravel(), k);
+        internal static NDArray diagflat(NDArray v, int k) => DiagonalEmbed(v.ravel(), k);
 
         /// <summary>
         ///     Shared back-end of <see cref="np.diag"/>'s 1-D branch and <see cref="np.diagflat"/>:
@@ -144,7 +144,7 @@ namespace NumSharp
         ///     never escapes — it is a write target, not a result — which is why it does not carry
         ///     <see cref="np.diagonal(NDArray, int, int, int)"/>'s read-only contract.
         /// </remarks>
-        [NDScopedCovered] // only callers: [NDScoped] Diag / DiagFlat (the AOT-fallback alias view is scope-reclaimed)
+        [NDScopedCovered] // only callers: [NDScoped] diag / diagflat (the AOT-fallback alias view is scope-reclaimed)
         private static NDArray DiagonalEmbed(NDArray v1d, int k)
         {
             long s = v1d.size;

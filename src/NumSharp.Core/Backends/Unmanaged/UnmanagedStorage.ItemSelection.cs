@@ -167,7 +167,7 @@ namespace NumSharp.Backends
                 if (result.size != 0)
                 {
                     // Materialise a non-contiguous source to C order so the kernel can walk it linearly.
-                    NDArray source = a.Shape.IsContiguous ? a : NDArray.AsContiguousArray(a, null);
+                    NDArray source = a.Shape.IsContiguous ? a : NDArray.ascontiguousarray(a, null);
                     ExecuteTakeKernel(source, idx64, result,
                         outerSize: outerSize, indicesCount: indicesCount,
                         maxItem: maxItem, innerSize: innerCount * a.dtypesize, mode: mode, idx32: idx32,
@@ -385,7 +385,7 @@ namespace NumSharp.Backends
 
             if (tc == NPTypeCode.Int64)
             {
-                var c = NDArray.AsContiguousArray(indices, null);
+                var c = NDArray.ascontiguousarray(indices, null);
                 owned = !ReferenceEquals(c, indices);
                 return c;
             }
@@ -495,7 +495,7 @@ namespace NumSharp.Backends
                 // A contiguous target is copied with copy() (ascontiguousarray would hand back the target itself); the
                 // scratch is released by the caller's scope. A throw from the kernel skips the write-back: NumPy's
                 // PyArray_DiscardWritebackIfCopy, so nothing reaches `a`.
-                var scratch = a.Shape.IsContiguous ? a.copy() : NDArray.AsContiguousArray(a, null);
+                var scratch = a.Shape.IsContiguous ? a.copy() : NDArray.ascontiguousarray(a, null);
                 PutKernel(scratch, idx64, idx32, ni, vals, modeInt);
                 Copyto(a, scratch, NPY_CASTING.NPY_UNSAFE_CASTING, null);
                 return;
@@ -543,7 +543,7 @@ namespace NumSharp.Backends
             // Same element type (for strings: same class AND width) reads the values as they are; anything else is
             // converted to a's dtype first (NumPy's FORCECAST: a string is truncated / NUL-padded, S <-> U checked).
             if (v.HasSameElementType(a))
-                return v.Shape.IsContiguous ? v : NDArray.AsContiguousArray(v, null);
+                return v.Shape.IsContiguous ? v : NDArray.ascontiguousarray(v, null);
             return v.astype(a.dtype, copy: true, order: 'C');
         }
 
@@ -690,7 +690,7 @@ namespace NumSharp.Backends
                 // any non-contiguous layout → ascontiguousarray makes the C-order copy.
                 // The recursive call opens its own nested scope; the scratch itself is released by this one. It re-runs
                 // the checks on the already converted values (the same element type: nothing left to fail but the mask's).
-                var scratch = a.Shape.IsContiguous ? a.copy() : NDArray.AsContiguousArray(a, null);
+                var scratch = a.Shape.IsContiguous ? a.copy() : NDArray.ascontiguousarray(a, null);
                 PutMaskCore(scratch, mask, source);
                 Copyto(a, scratch, NPY_CASTING.NPY_UNSAFE_CASTING, null);
                 return;
@@ -710,12 +710,12 @@ namespace NumSharp.Backends
                 // default 'K' keeps an F-order mask F-ordered (an int8 F-order [[1, 1], [0, 0]] selected positions 0 and
                 // 2 where NumPy selects 0 and 1).
                 maskCast = mask.GetTypeCode == NPTypeCode.Boolean
-                    ? NDArray.AsContiguousArray(mask, null)
+                    ? NDArray.ascontiguousarray(mask, null)
                     : mask.astype(NPTypeCode.Boolean, copy: true, order: 'C');
             }
 
             // The values in a's element type, C-contiguous (the conversion above already is).
-            NDArray valsCast = source.Shape.IsContiguous ? source : NDArray.AsContiguousArray(source, null);
+            NDArray valsCast = source.Shape.IsContiguous ? source : NDArray.ascontiguousarray(source, null);
             // PyArray_PutMask's PyDataType_REFCHK(PyArray_DESCR(self)): a reference-holding target (StringDType) receives
             // its items through the dtype's copy, never as raw bytes.
             if (a.dtype.Meta.HasReferences)
@@ -812,7 +812,7 @@ namespace NumSharp.Backends
             {
                 // The recursive call opens its own nested scope; the scratch itself is released by this one. It re-runs
                 // the checks on the already converted values (the same dtype: nothing left to fail but the mask's).
-                var scratch = NDArray.AsContiguousArray(arr, null);
+                var scratch = NDArray.ascontiguousarray(arr, null);
                 PlaceCore(scratch, mask, converted ?? valsArray);
                 Copyto(arr, scratch, NPY_CASTING.NPY_UNSAFE_CASTING, null);
                 return;
@@ -831,7 +831,7 @@ namespace NumSharp.Backends
                 // default 'K' keeps an F-order mask F-ordered (an int8 F-order [[1, 1], [0, 0]] selected positions 0 and
                 // 2 where NumPy selects 0 and 1).
                 maskCast = mask.GetTypeCode == NPTypeCode.Boolean
-                    ? NDArray.AsContiguousArray(mask, null)
+                    ? NDArray.ascontiguousarray(mask, null)
                     : mask.astype(NPTypeCode.Boolean, copy: true, order: 'C');
             }
 
@@ -841,7 +841,7 @@ namespace NumSharp.Backends
             if (valsArray.size == 0)
                 return;   // mask all-false and empty vals — NumPy treats as no-op
 
-            NDArray valsCast = converted ?? (valsArray.Shape.IsContiguous ? valsArray : NDArray.AsContiguousArray(valsArray, null));
+            NDArray valsCast = converted ?? (valsArray.Shape.IsContiguous ? valsArray : NDArray.ascontiguousarray(valsArray, null));
             // The reference-holding route PyArray_PutMask takes (PyDataType_REFCHK of the target's descriptor). NumPy's
             // arr_place has none: it copies each item with the dtype's ArrFuncs copyswap, which StringDType lacks.
             if (arr.dtype.Meta.HasReferences)
@@ -953,10 +953,10 @@ namespace NumSharp.Backends
                 long i = 0;
                 foreach (object item in list)
                     items[i++] = item;
-                return NDArray.AnyArrayFromObject(items, descr, 'C');
+                return NDArray.asanyarray(items, descr, 'C');
             }
             // An array of references (object[], string[], a jagged array, object[,]) is the Python list itself.
-            return NDArray.AnyArrayFromObject(list, descr, 'C');
+            return NDArray.asanyarray(list, descr, 'C');
         }
 
         /// <summary>
@@ -1365,7 +1365,7 @@ namespace NumSharp.Backends
 
             // NumPy's PyArray_CheckAxis(... CARRAY) makes the operand C-contig — the
             // chunked memcpy reads a logically-rectangular slab of inner dims.
-            NDArray src = a.Shape.IsContiguous ? a : NDArray.AsContiguousArray(a, null);
+            NDArray src = a.Shape.IsContiguous ? a : NDArray.ascontiguousarray(a, null);
 
             long[] inDims = src.Shape.dimensions;
             long n = inDims[normalizedAxis];
@@ -1406,7 +1406,7 @@ namespace NumSharp.Backends
 
             int normalizedAxis = NormalizeAxis(axis, ndim);
 
-            NDArray src = a.Shape.IsContiguous ? a : NDArray.AsContiguousArray(a, null);
+            NDArray src = a.Shape.IsContiguous ? a : NDArray.ascontiguousarray(a, null);
             NDArray repFlat = repeats.ravel();
 
             long[] inDims = src.Shape.dimensions;
@@ -1616,25 +1616,25 @@ namespace NumSharp.Backends
                     // binary floats and Complex. They adopt the other choices' dtype rather than forcing
                     // promotion by their own width (int8 choice + 1000 stays int8, wrapping 1000 → -24).
                     case sbyte or byte or short or ushort or int or uint or long or ulong:
-                        mat = NDArray.AnyArrayFromObject(item, null, 'K');
+                        mat = NDArray.asanyarray(item, null, 'K');
                         weakRank = Math.Max(weakRank, 1);
                         if (item is ulong u && u > long.MaxValue) anyBeyondInt64 = true;
                         break;
 
                     case float or double:
-                        mat = NDArray.AnyArrayFromObject(item, null, 'K');
+                        mat = NDArray.asanyarray(item, null, 'K');
                         weakRank = Math.Max(weakRank, 2);
                         break;
 
                     case Complex:
-                        mat = NDArray.AnyArrayFromObject(item, null, 'K');
+                        mat = NDArray.asanyarray(item, null, 'K');
                         weakRank = Math.Max(weakRank, 3);
                         break;
 
                     default:
                         // Strong by NumPy's rule `type(x) in (int,float,complex) else asarray(x)`:
                         // bool, char, Half, decimal, C# arrays and collections take the asarray branch.
-                        mat = NDArray.AnyArrayFromObject(item, null, 'K');
+                        mat = NDArray.asanyarray(item, null, 'K');
                         if (mat.typecode == NPTypeCode.String)
                             anyString = true;
                         else if (!anyString)
@@ -1761,11 +1761,11 @@ namespace NumSharp.Backends
             bool allContig = true;
             for (int i = 0; i < n; i++)
             {
-                var v = NDArray.BroadcastTo(castChoices[i], common);
+                var v = NDArray.broadcast_to(castChoices[i], common);
                 chViews[i] = v;
                 if (!v.Shape.IsContiguous) allContig = false;
             }
-            var idxView = NDArray.BroadcastTo(idx64, common);
+            var idxView = NDArray.broadcast_to(idx64, common);
             if (!idxView.Shape.IsContiguous) allContig = false;
 
             // ── 8) run the IL kernel (flat when every operand is C-contiguous, else strided) ─
@@ -2189,7 +2189,7 @@ namespace NumSharp.Backends
             // Flatten to a 1-D C-order read-out. ravel returns a view when a is already
             // contiguous, else a fresh contiguous copy — either way a dense run of `a.size`
             // elements starting at flat.Shape.offset. Disposed after the tiling copy.
-            using var flat = NDArray.Ravel(a, 'C');
+            using var flat = NDArray.ravel(a, 'C');
             long srcSize = flat.size;
 
             // First case must zero-fill (empty source has nothing to repeat); the second

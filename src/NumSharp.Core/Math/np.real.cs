@@ -21,11 +21,11 @@ namespace NumSharp
         public static NDArray real(NDArray val)
         {
             // a numpy.matrix operand: NumPy's val.real is a matrix over the real lane for a complex matrix, and a real
-            // matrix itself (NDArray.RealPart hands the matrix object back, which Wrapped returns unchanged)
+            // matrix itself (NDArray.real_ hands the matrix object back, which Wrapped returns unchanged)
             if (NDMatrixBoundary.Sees(val))
-                return NDMatrixBoundary.Wrapped(val, static s => NDArray.RealPart(s));
+                return NDMatrixBoundary.Wrapped(val, static s => NDArray.real_(s));
             // NumPy's `val.real`: the statements are the array object's (NDArray.TypeCheck.cs)
-            return NDArray.RealPart(val);
+            return NDArray.real_(val);
         }
     }
 }

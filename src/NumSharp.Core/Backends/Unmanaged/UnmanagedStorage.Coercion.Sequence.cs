@@ -71,7 +71,7 @@ namespace NumSharp.Backends
 {
     // NumPy's array coercion of a Python sequence (np.array(seq)), and the house test that decides which C# values ARE
     // Python sequences (see the file header). The plan's phase P6 made its np.* calls the array object's conversion
-    // (NDArray.AnyArrayFromObject) and the engine's reductions, and moved it from beside the facades to
+    // (NDArray.asanyarray) and the engine's reductions, and moved it from beside the facades to
     // Backends/Unmanaged/.
     public unsafe partial class UnmanagedStorage
     {
@@ -595,7 +595,7 @@ namespace NumSharp.Backends
                             d.Ragged = true;
                         continue;
                     }
-                    var a = NDArray.AnyArrayFromObject(o, null, 'K');   // np.asanyarray(o): o is no NDArray here
+                    var a = NDArray.asanyarray(o, null, 'K');   // np.asanyarray(o): o is no NDArray here
                     (d.Owned ??= new List<NDArray>()).Add(a);
                     ArrayLeaf(d, node, i, a, curr + 1);
                 }
@@ -1013,7 +1013,7 @@ namespace NumSharp.Backends
         /// <returns>A new (n,) array; the caller owns it.</returns>
         private static NDArray CollectionArray(Array values)
         {
-            var a = NDArray.AnyArrayFromObject(values, null, 'K');   // np.asanyarray: an ndarray of T (a copy into NumSharp memory)
+            var a = NDArray.asanyarray(values, null, 'K');   // np.asanyarray: an ndarray of T (a copy into NumSharp memory)
             NPTypeCode t = a.typecode switch
             {
                 NPTypeCode.SByte or NPTypeCode.Byte or NPTypeCode.Int16 or NPTypeCode.UInt16 or NPTypeCode.Int32

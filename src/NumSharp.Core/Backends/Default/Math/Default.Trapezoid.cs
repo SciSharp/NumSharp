@@ -2,8 +2,8 @@ using System;
 using NumSharp.Backends;
 using NumSharp.Backends.Iteration;
 // NumPy's statements call np.diff, np.sum, np.evaluate, np.ascontiguousarray and np.add; here they are the engine's
-// members (this engine, or the operand's engine in a static helper) and the array object's AsContiguousArray, and the
-// axis check is DefaultEngine.DiffAxis, which np.diff's member shares.
+// members (this engine, or the operand's engine in a static helper) and the array object's NDArray.ascontiguousarray,
+// and the axis check is DefaultEngine.DiffAxis, which np.diff's member shares.
 
 namespace NumSharp.Backends
 {
@@ -649,7 +649,7 @@ namespace NumSharp.Backends
                 return half;
             try
             {
-                return NDArray.AsContiguousArray(half, null);
+                return NDArray.ascontiguousarray(half, null);
             }
             finally
             {

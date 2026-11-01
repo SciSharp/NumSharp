@@ -5,7 +5,7 @@ namespace NumSharp.Backends
     public partial class DefaultFftEngine
     {
         // The sample-frequency helpers of numpy/fft/_helper.py — NumPy's statements over the array object's own
-        // routines (np.arange's PyArray_ArangeObj, np.concatenate's ConcatenateInto) and the operand engine's
+        // routines (np.arange's PyArray_ArangeObj, np.concatenate's NDArray.concatenate) and the operand engine's
         // arithmetic; they compute FULLY (no kernel) and call no np.* facade, so the engine layer never re-enters the
         // facade's class boundary. fftshift and ifftshift are not members: they roll the array object (np.fft's facades
         // over np.roll).
@@ -33,12 +33,12 @@ namespace NumSharp.Backends
             double val = 1.0 / nd;
             long N = (n - 1) / 2 + 1;                     // n>=1 here, so int division == floor division.
             // np.arange(start, stop) is UnmanagedStorage.ArangeObj with step 1 and no dtype (int64 for Python ints), and
-            // np.concatenate of the two plain halves is the array object's ConcatenateInto along axis 0 with
+            // np.concatenate of the two plain halves is the array object's NDArray.concatenate along axis 0 with
             // np.concatenate's default 'same_kind' casting: the facades' own bodies, without their class-boundary test
             // (both halves are plain arrays the engine just made).
             var p1 = UnmanagedStorage.ArangeObj(0L, N, 1L, null);          // [0 .. N-1]
             var p2 = UnmanagedStorage.ArangeObj(-(n / 2), 0L, 1L, null);   // [-(n/2) .. -1]
-            var results = NDArray.ConcatenateInto(new[] { p1, p2 }, 0, null, null, "same_kind");   // length n
+            var results = NDArray.concatenate(new[] { p1, p2 }, 0, null, null, "same_kind");   // length n
             return results * val;                         // -> float64
         }
 

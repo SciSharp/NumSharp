@@ -70,7 +70,7 @@ namespace NumSharp
         public static NDArray indices(long[] dimensions, DType dtype = null)
         {
             if (dimensions == null) throw new ArgumentNullException(nameof(dimensions));
-            return NDArray.Indices(dimensions, dtype);
+            return NDArray.indices(dimensions, dtype);
         }
 
         /// <summary>
@@ -160,7 +160,7 @@ namespace NumSharp
         public static NDArray[] indices_sparse(long[] dimensions, DType dtype = null)
         {
             if (dimensions == null) throw new ArgumentNullException(nameof(dimensions));
-            return NDArray.IndicesSparse(dimensions, dtype);
+            return NDArray.indices_sparse(dimensions, dtype);
         }
 
         /// <summary>

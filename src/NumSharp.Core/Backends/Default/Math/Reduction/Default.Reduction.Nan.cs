@@ -893,7 +893,7 @@ namespace NumSharp.Backends
             var tc = arr.GetTypeCode;
             using var isNaN = IsNan(arr);
             using var fill = NDArray.Scalar(op == ReductionOp.NanProd ? tc.GetOneValue() : tc.GetDefaultValue(), tc);
-            using var replaced = NDArray.Where(isNaN, fill, arr);
+            using var replaced = NDArray.where(isNaN, fill, arr);
             return op == ReductionOp.NanProd
                 ? ReduceProduct(replaced, axis, keepdims: keepdims)
                 : ReduceAdd(replaced, axis, keepdims);

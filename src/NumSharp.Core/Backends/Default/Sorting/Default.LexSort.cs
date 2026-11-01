@@ -74,8 +74,8 @@ namespace NumSharp.Backends
                     VStringSort.LexPass(keys[j], perm, ax);
                     continue;
                 }
-                var g = ArgSort(NDArray.TakeAlongAxis(keys[j], perm, ax), ax, kind: "stable");
-                perm = NDArray.TakeAlongAxis(perm, g, ax);
+                var g = ArgSort(NDArray.take_along_axis(keys[j], perm, ax), ax, kind: "stable");
+                perm = NDArray.take_along_axis(perm, g, ax);
             }
             return perm;
         }
@@ -95,7 +95,7 @@ namespace NumSharp.Backends
                 lineShape[d] = d == axis ? dims[d] : 1;
             // arange along the axis, broadcast over the other axes and materialized (the pass rewrites it in place).
             using var line = UnmanagedStorage.ArangeObj(0L, dims[axis], 1L, null).reshape(Shape.Adopt(lineShape));
-            using var broadcast = NDArray.BroadcastTo(line, Shape.Adopt((long[])dims.Clone()));
+            using var broadcast = NDArray.broadcast_to(line, Shape.Adopt((long[])dims.Clone()));
             return broadcast.copy();
         }
     }

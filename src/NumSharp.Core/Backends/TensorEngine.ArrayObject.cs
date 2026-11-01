@@ -1,7 +1,7 @@
 // The array-object members TensorEngine shipped in 0.70.0: the storage factory, CreateNDArray, the transposing
 // views, the cast and the boolean-mask indexers. They stay for compatibility. The array object's operations belong to
 // NDArray, UnmanagedStorage and Shape, and no new member of this kind is added (docs/plans/np-layer-dtype-logic.md,
-// E7): Diagonal, added during 0.71.0's development, became NDArray.Diagonal over Shape.Diagonal before it shipped.
+// E7): Diagonal, added during 0.71.0's development, became NDArray.diagonal over Shape.Diagonal before it shipped.
 
 using System;
 using NumSharp.Backends;

@@ -221,13 +221,13 @@ namespace NumSharp.Backends
             var shape = Stacked(a, k, k);
             if (shape.size == 0)
                 return new NDArray(tc, shape, true);
-            var eye = NDArray.Eye(checked((int)k), null, 0, tc, 'C');
+            var eye = NDArray.eye(checked((int)k), null, 0, tc, 'C');
             if (a.ndim == 2)
                 return eye;
             // One identity broadcast over the batch and materialized in C order: the copy owns its buffer, the
             // read-only broadcast view and the single identity are released right after.
             using (eye)
-            using (var view = NDArray.BroadcastTo(eye, shape))
+            using (var view = NDArray.broadcast_to(eye, shape))
                 return view.copy();
         }
 

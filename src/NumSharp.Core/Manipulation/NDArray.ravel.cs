@@ -10,7 +10,7 @@ namespace NumSharp
         public NDArray ravel()
         {
             using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
-            return Ravel(this, 'C');
+            return ravel(this, 'C');
         }
 
         /// <summary>
@@ -26,7 +26,7 @@ namespace NumSharp
         public NDArray ravel(char order)
         {
             using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
-            return Ravel(this, order);
+            return ravel(this, order);
         }
 
         /// <summary>
@@ -44,7 +44,7 @@ namespace NumSharp
         /// <remarks>No class boundary runs here: np.ravel applies its numpy.char.chararray rule and ndarray.ravel its
         ///     matrix region before they call this, and an engine caller sits inside its public function's
         ///     boundary.</remarks>
-        internal static NDArray Ravel(NDArray a, char order)
+        internal static NDArray ravel(NDArray a, char order)
         {
             var s = a.Shape;
             // PyArray_Ravel's order resolution: 'K' is C / F for a C- / F-contiguous array (0-d and size<=1 included);

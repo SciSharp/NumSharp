@@ -346,8 +346,8 @@ namespace NumSharp.Backends
                 if (complexWeights)
                 {
                     // n.real += bincount(..., weights=tmp_w.real); n.imag += bincount(..., weights=tmp_w.imag): componentwise.
-                    NDArray re = indices.TensorEngine.Bincount(indices, NDArray.RealPart(tmpW), nbins);
-                    NDArray im = indices.TensorEngine.Bincount(indices, NDArray.ImagPart(tmpW), nbins);
+                    NDArray re = indices.TensorEngine.Bincount(indices, NDArray.real_(tmpW), nbins);
+                    NDArray im = indices.TensorEngine.Bincount(indices, NDArray.imag_(tmpW), nbins);
                     n = n + MakeComplex(re, im);
                 }
                 else

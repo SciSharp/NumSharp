@@ -24,7 +24,7 @@ namespace NumSharp
             if (NDCharArrayBoundary.Sees(a))
                 return NDCharArrayBoundary.Kept((a, axis), static s => expand_dims(s.a, s.axis));
             using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return NDArray.ExpandDims(a, axis);
+            return NDArray.expand_dims(a, axis);
         }
 
         /// <summary>

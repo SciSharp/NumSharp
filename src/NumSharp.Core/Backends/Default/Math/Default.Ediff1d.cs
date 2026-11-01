@@ -16,7 +16,7 @@ namespace NumSharp.Backends
 
             // ravel() always returns a fresh wrapper (it may share the caller's storage);
             // it is released by this method's scope, which never frees the caller's buffer.
-            var flat = NDArray.Ravel(ary, 'C');
+            var flat = NDArray.ravel(ary, 'C');
             NPTypeCode dt = flat.GetTypeCode;
 
             NDArray begin = null, end = null, middle = null;
@@ -70,7 +70,7 @@ namespace NumSharp.Backends
             if (begin is not null) parts.Add(begin);
             parts.Add(middle);
             if (end is not null) parts.Add(end);
-            return NDArray.ConcatenateInto(parts.ToArray(), 0, null, null, "same_kind");
+            return NDArray.concatenate(parts.ToArray(), 0, null, null, "same_kind");
         }
 
         /// <summary>
@@ -97,7 +97,7 @@ namespace NumSharp.Backends
         {
             if (value is null) return null;
 
-            NDArray src = value is NDArray nd ? nd : NDArray.AnyArrayFromObject(value, null, 'K');
+            NDArray src = value is NDArray nd ? nd : NDArray.asanyarray(value, null, 'K');
 
             // NumPy's np.can_cast(to_begin, dtype_req, casting="same_kind") on the two DESCRIPTORS: a string operand or
             // a string input is judged by its class and width (float64 -> <U2 is same_kind, <U2 -> float64 is not).
@@ -110,7 +110,7 @@ namespace NumSharp.Backends
             if (dt.Meta is StringDTypeMeta)
                 return null;
 
-            var flat = NDArray.Ravel(src, 'C');
+            var flat = NDArray.ravel(src, 'C');
             return flat.astype(dt, copy: true);
         }
     }

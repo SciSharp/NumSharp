@@ -63,7 +63,7 @@ namespace NumSharp.Backends.Strings
 
             // raw_array_assign_scalar: the loop's identity (0 for add, 1 for multiply, in the loop dtype) cast into every out
             // element — for a text out, the identity's str() — before a single element is read.
-            NDArray identity = ufunc == "add" ? new NDArray(loop, Shape.Scalar, true) : NDArray.Ones(Shape.Scalar, loop);
+            NDArray identity = ufunc == "add" ? new NDArray(loop, Shape.Scalar, true) : NDArray.ones(Shape.Scalar, loop);
             UnmanagedStorage.Copyto(@out, identity, NPY_CASTING.NPY_UNSAFE_CASTING);
             if (input.size == 0 || @out.size == 0)
                 return @out;
@@ -106,7 +106,7 @@ namespace NumSharp.Backends.Strings
             if (axis is not { } given || a.ndim == 0)
             {
                 // np.cumsum / np.cumprod ravel in C order (a copy for a non-contiguous input) and accumulate along axis 0.
-                input = (a.Shape.IsContiguous ? a : NDArray.AsContiguousArray(a, null)).reshape(a.size);
+                input = (a.Shape.IsContiguous ? a : NDArray.ascontiguousarray(a, null)).reshape(a.size);
                 ax = 0;
             }
             else
@@ -127,7 +127,7 @@ namespace NumSharp.Backends.Strings
             NDArray target = outView.Shape.dimensions[ax] == count ? outView : NDVStringReduction.AxisPrefixView(outView, ax, count);
             NDArray src = input;
             if (!SameDims(target, input))
-                src = NDArray.BroadcastTo(input, new Shape((long[])target.Shape.dimensions.Clone()));
+                src = NDArray.broadcast_to(input, new Shape((long[])target.Shape.dimensions.Clone()));
 
             // UPDATEIFCOPY: the out's cells are converted into the loop dtype BEFORE the input (NpyIter allocates its
             // operands in order) — '' does not parse, so NumPy's zeros-initialized text outs refuse here. The converted

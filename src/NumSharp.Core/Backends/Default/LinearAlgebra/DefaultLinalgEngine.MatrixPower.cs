@@ -67,7 +67,7 @@ namespace NumSharp.Backends
         ///     <para>The identity is built IN the operand's dtype, as NumPy's <c>eye(..., dtype=a.dtype)</c> is: for a text
         ///     dtype the diagonal stores the Python int 1 as its <c>str()</c> (<c>'1'</c>) and the rest stays empty, where
         ///     a float64 identity cast to text would read <c>'1.0'</c> / <c>'0.0'</c>.</para>
-        ///     <para>The three statements are the members their facades dispatch to: np.eye's <see cref="NDArray.Eye"/>,
+        ///     <para>The three statements are the members their facades dispatch to: np.eye's <see cref="NDArray.eye"/>,
         ///     np.empty_like's allocation (a new plain array over <see cref="Shape.NewLikeLayout"/>'s K layout) and
         ///     np.copyto's <c>UnmanagedStorage.Copyto</c> with its default <c>same_kind</c> rule. None of them has a class
         ///     rule, so a numpy.char.chararray operand (the np.linalg.matrix_power facade has no chararray rule) gets the
@@ -83,7 +83,7 @@ namespace NumSharp.Backends
 
             // np.eye(side, dtype=a.dtype): the facade's default order 'C' (its order and device checks pass for the
             // defaults), then the array object's identity.
-            var eye = NDArray.Eye((int)side, null, 0, a.dtype, 'C');
+            var eye = NDArray.eye((int)side, null, 0, a.dtype, 'C');
             // empty_like keeps the operand's order (a C-ordered copy of eye did not), and the assignment broadcasts the one
             // identity over the stack's leading axes. np.empty_like(a) is an uninitialised array of a's dtype in a's K
             // layout; np.copyto(result, eye) the same_kind assignment.

@@ -433,10 +433,10 @@ namespace NumSharp.Backends.Strings
 
                 using var xc = CellArray(xt);
                 using var yc = CellArray(yt);
-                using var raw = NDArray.Where(cond, xc, yc);
+                using var raw = NDArray.where(cond, xc, yc);
                 using var zero = NDArray.Scalar(0L);
                 using var one = NDArray.Scalar(1L);
-                using var which = NDArray.Where(cond, zero, one);
+                using var which = NDArray.where(cond, zero, one);
                 // The result takes NumPy's layout for (condition, x, y) — the condition votes too (np.tril's mask over an F
                 // operand gives the strides NumPy's iterator chooses, not the operand's F order).
                 return RehomeMulti(raw, which, new[] { xt.Storage.VStringSlice, yt.Storage.VStringSlice }, descr, layout);
@@ -579,9 +579,9 @@ namespace NumSharp.Backends.Strings
                     // An object[] or a jagged array (Python's nested lists): np.array's discovery with the requested
                     // descriptor stores every leaf by setitem and raises NumPy's ragged-shape error (np.array(Array,
                     // dtype)'s statement after its null check, the array object's coercion member).
-                    return NDArray.ArrayFromManaged(objects, descr, 0, true, 'C');
+                    return NDArray.array(objects, descr, 0, true, 'C');
                 case System.Collections.IEnumerable sequence:
-                    return NDArray.ArrayFromManaged(
+                    return NDArray.array(
                         System.Linq.Enumerable.ToArray(System.Linq.Enumerable.Cast<object>(sequence)), descr, 0, true, 'C');
                 default:
                     // A boxed number, bool or any other single object: one setitem.
@@ -674,7 +674,7 @@ namespace NumSharp.Backends.Strings
                 // a chararray) never apply here.
                 using var value = fillValue is string || fillValue is byte[] || fillValue is char
                     ? Backends.UnmanagedStorage.FromAnyScalar(fillValue, null)
-                    : NDArray.AnyArrayFromObject(fillValue, null, 'K');
+                    : NDArray.asanyarray(fillValue, null, 'K');
                 UnmanagedStorage.Copyto(result, value, NPY_CASTING.NPY_UNSAFE_CASTING);
                 return result;
             }
@@ -730,7 +730,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="dst">The destination (only its shape is read).</param>
         /// <returns>The marks the caller disposes.</returns>
         internal static NDArray NewMarks(NDArray dst)
-            => NDArray.Full(new Shape((long[])dst.Shape.dimensions.Clone()), -1L, NPTypeCode.Int64);
+            => NDArray.full(new Shape((long[])dst.Shape.dimensions.Clone()), -1L, NPTypeCode.Int64);
 
         /// <summary>
         ///     Applies a scatter decided on MARKS: for every element of <paramref name="dst"/> whose mark is not -1, the old string

@@ -73,8 +73,8 @@ namespace NumSharp
                 return NDCharArrayBoundary.Wrapped((arr, obj, axis), static s => delete(s.arr, s.obj, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
 
-            // NumPy's statements after the class boundaries and the null checks: NDArray.Delete (NDArray.FunctionBase.cs).
-            return NDArray.Delete(arr, obj, axis);
+            // NumPy's statements after the class boundaries and the null checks: NDArray.delete (NDArray.FunctionBase.cs).
+            return NDArray.delete(arr, obj, axis);
         }
 
         /// <summary>
@@ -98,8 +98,8 @@ namespace NumSharp
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
 
-            // NumPy's statements after the class boundaries and the null checks: NDArray.Delete (NDArray.FunctionBase.cs).
-            return NDArray.Delete(arr, obj, axis);
+            // NumPy's statements after the class boundaries and the null checks: NDArray.delete (NDArray.FunctionBase.cs).
+            return NDArray.delete(arr, obj, axis);
         }
 
         /// <summary>
@@ -123,8 +123,8 @@ namespace NumSharp
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
 
-            // NumPy's statements after the class boundaries and the null checks: NDArray.Delete (NDArray.FunctionBase.cs).
-            return NDArray.Delete(arr, obj, axis);
+            // NumPy's statements after the class boundaries and the null checks: NDArray.delete (NDArray.FunctionBase.cs).
+            return NDArray.delete(arr, obj, axis);
         }
 
         /// <summary>
@@ -147,8 +147,8 @@ namespace NumSharp
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
 
-            // NumPy's statements after the class boundaries and the null checks: NDArray.Delete (NDArray.FunctionBase.cs).
-            return NDArray.Delete(arr, obj, axis);
+            // NumPy's statements after the class boundaries and the null checks: NDArray.delete (NDArray.FunctionBase.cs).
+            return NDArray.delete(arr, obj, axis);
         }
 
         /// <summary>
@@ -179,8 +179,8 @@ namespace NumSharp
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
 
-            // NumPy's statements after the class boundaries and the null checks: NDArray.Delete (NDArray.FunctionBase.cs).
-            return NDArray.Delete(arr, obj, axis);
+            // NumPy's statements after the class boundaries and the null checks: NDArray.delete (NDArray.FunctionBase.cs).
+            return NDArray.delete(arr, obj, axis);
         }
 
         /// <summary>
@@ -221,8 +221,8 @@ namespace NumSharp
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
 
-            // NumPy's statements after the class boundaries and the null checks: NDArray.Delete (NDArray.FunctionBase.cs).
-            return NDArray.Delete(arr, obj, axis);
+            // NumPy's statements after the class boundaries and the null checks: NDArray.delete (NDArray.FunctionBase.cs).
+            return NDArray.delete(arr, obj, axis);
         }
     }
 }

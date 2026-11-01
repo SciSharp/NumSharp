@@ -68,7 +68,7 @@ namespace NumSharp
             if (a is null) throw new ArgumentNullException(nameof(a));
 
             // NumPy's numpy.fill_diagonal: the statements are the array object's (NDArray.IndexTricks.cs)
-            NDArray.FillDiagonal(a, val, wrap);
+            NDArray.fill_diagonal(a, val, wrap);
         }
     }
 }

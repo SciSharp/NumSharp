@@ -90,7 +90,7 @@ namespace NumSharp
             if (array == null)
                 throw new ArgumentNullException(nameof(array));
 
-            return NDArray.ArrayFromManaged(array, dtype, ndmin, copy, order);
+            return NDArray.array(array, dtype, ndmin, copy, order);
         }
 
         /// <summary>
@@ -116,7 +116,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
         public static NDArray array<T>(T[] data, DType dtype) where T : unmanaged
         {
-            return NDArray.ArrayFromTyped(data, dtype);
+            return NDArray.array(data, dtype);
         }
 
         /// <summary>
@@ -537,7 +537,7 @@ namespace NumSharp
             if (data == null)
                 throw new ArgumentNullException(nameof(data));
 
-            return NDArray.ArrayFromTyped(data, dtype);
+            return NDArray.array(data, dtype);
         }
 
         /// <summary>

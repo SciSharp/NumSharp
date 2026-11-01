@@ -13,7 +13,7 @@ namespace NumSharp.Backends
         public override NDArray Vander(NDArray x, int? N = null, bool increasing = false)
         {
             // np.asarray(x)'s statement for a plain array (np.vander's facade turns a matrix or chararray plain first).
-            x = NDArray.ArrayFromObject(x, null, 'K', null);
+            x = NDArray.asarray(x, null, 'K', null);
             if (x.ndim != 1)
                 throw new ValueError("x must be a one-dimensional array or sequence.");
 
@@ -41,7 +41,7 @@ namespace NumSharp.Backends
                 // `if N > 0: tmp[:, 0] = 1` writes the number one as its str() — the text '1' — into every row of the single
                 // column (np.ones' string route).
                 if (n == 1)
-                    return NDArray.Ones(new Shape(m, n), text);
+                    return NDArray.ones(new Shape(m, n), text);
                 // `empty((len(x), N), dtype)`: no column to write — the allocation is the matrix, and a negative N is its
                 // own error. A U matrix is zero-filled, as NumPy's NEEDS_INIT allocation is.
                 return new NDArray(text, new Shape(m, n), false);
@@ -52,7 +52,7 @@ namespace NumSharp.Backends
             if (n <= 0)
                 return new NDArray(dt, new Shape(m, n), false);
 
-            NDArray onesCol = NDArray.Ones(new Shape(m, 1), dt);
+            NDArray onesCol = NDArray.ones(new Shape(m, 1), dt);
             NDArray incr;
             if (n == 1)
             {
@@ -62,10 +62,10 @@ namespace NumSharp.Backends
             {
                 // Each of the trailing N-1 columns starts as x, then a cumulative product along the
                 // columns turns column k into x^(k+1) — bit-identical to NumPy's `multiply.accumulate`.
-                var xcol = NDArray.ExpandDims(x.astype(dt), -1);                     // (M, 1)
-                var repeated = NDArray.BroadcastTo(xcol, new Shape(m, n - 1));       // (M, N-1), each column = x
+                var xcol = NDArray.expand_dims(x.astype(dt), -1);                     // (M, 1)
+                var repeated = NDArray.broadcast_to(xcol, new Shape(m, n - 1));       // (M, N-1), each column = x
                 var powered = ReduceCumMul(repeated, 1, dt, null);                   // (M, N-1), column k = x^(k+1)
-                incr = NDArray.ConcatenateInto(new[] { onesCol, powered }, 1, null, null, "same_kind"); // (M, N), increasing powers
+                incr = NDArray.concatenate(new[] { onesCol, powered }, 1, null, null, "same_kind"); // (M, N), increasing powers
             }
 
             if (increasing)

@@ -38,7 +38,7 @@ namespace NumSharp.Backends
             {
                 // `x = x.ravel(order='K')`: memory order, so an F-ordered or transposed operand is summed in the order
                 // NumPy's dot reads it (a view where the memory is one run, as NumPy's). np.ravel's member.
-                var flat = NDArray.Ravel(a, 'K');
+                var flat = NDArray.ravel(a, 'K');
                 NDArray squared;
                 if (a.typecode == NPTypeCode.Complex)
                 {
@@ -48,8 +48,8 @@ namespace NumSharp.Backends
                     // which keeps the FIRST operand's NaN where the array ufunc keeps the second's: PolyNumber's
                     // scalar add, not np.add of two 0-d arrays. The parts are np.real / np.imag's members, each dot
                     // np.dot's (CoreDot), the real part's first.
-                    var re = NDArray.RealPart(flat);
-                    var im = NDArray.ImagPart(flat);
+                    var re = NDArray.real_(flat);
+                    var im = NDArray.imag_(flat);
                     squared = PolyNumber.Binary(Backends.Kernels.BinaryOp.Add, PolyNumber.ScalarOf(CoreDot(re, re, null)),
                         PolyNumber.ScalarOf(CoreDot(im, im, null))).ToNDArray();
                 }
@@ -126,7 +126,7 @@ namespace NumSharp.Backends
 
             // Flatten first, then reduce — and restore the rank afterwards when keepdims asks,
             // because the ravel has already erased it. np.ravel's member (order 'C'), then this engine's Norm.
-            var flattened = Norm(NDArray.Ravel(ToFloating(x), 'C'), order, new[] {0}, false);
+            var flattened = Norm(NDArray.ravel(ToFloating(x), 'C'), order, new[] {0}, false);
             return keepdims ? ReshapeLikeNumPy(flattened, Ones(x.ndim)) : flattened;
         }
 
@@ -509,7 +509,7 @@ namespace NumSharp.Backends
             // AbsSquared allocates a fresh C-ordered result over a C-ordered operand; should a kernel ever hand back
             // another layout, a C copy keeps the walk below a C-order walk (the values do not depend on the layout).
             if (!squared.Shape.IsContiguous)
-                squared = NDArray.AsContiguousArray(squared, null);
+                squared = NDArray.ascontiguousarray(squared, null);
 
             var sums = SumAxisPairOfCOrderSquares(squared, Math.Min(pr, pc), Math.Max(pr, pc));
             var root = sums.TensorEngine.Sqrt(sums);
@@ -612,7 +612,7 @@ namespace NumSharp.Backends
             else
             {
                 // np.ascontiguousarray(np.moveaxis(...)): np.moveaxis' member, then the array object's contiguous copy.
-                var front = NDArray.AsContiguousArray(y.TensorEngine.MoveAxis(y, new[] {qLo, qHi}, new[] {0, 1}), null);
+                var front = NDArray.ascontiguousarray(y.TensorEngine.MoveAxis(y, new[] {qLo, qHi}, new[] {0, 1}), null);
                 var chain = new long[big - 1];
                 chain[0] = squeezed[qLo] * squeezed[qHi];
                 for (int i = 0, j = 1; i < big; i++)

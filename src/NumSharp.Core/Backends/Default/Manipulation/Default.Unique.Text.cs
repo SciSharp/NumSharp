@@ -120,7 +120,7 @@ namespace NumSharp.Backends
             long width = 1;
             for (int d = 1; d < movedDims.Length; d++)
                 width *= movedDims[d];
-            NDArray rows = NDArray.AsContiguousArray(moved.reshape(n, width), null);
+            NDArray rows = NDArray.ascontiguousarray(moved.reshape(n, width), null);
 
             // The lexicographic order of the rows: np.lexsort's LAST key is its primary one, so the columns are passed from
             // the last to the first. Rows that cannot differ (no column) or cannot be reordered (at most one row) keep their
@@ -232,7 +232,7 @@ namespace NumSharp.Backends
             {
                 // idx = np.concatenate(np.nonzero(mask) + ([mask.size],)); np.diff(idx)
                 NDArray starts = mask.TensorEngine.NonZero(mask)[0];
-                NDArray idx = NDArray.ConcatenateInto(
+                NDArray idx = NDArray.concatenate(
                     new[] { starts, new NDArray(Unmanaged.ArraySlice.FromArray(new[] { mask.size }, true), Shape.Vector(1)) },
                     0, null, null, "same_kind");
                 outputs[at] = idx.TensorEngine.Diff(idx, 1, -1, null, null);

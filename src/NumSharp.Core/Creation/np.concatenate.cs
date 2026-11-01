@@ -63,7 +63,7 @@ namespace NumSharp
                 return NDMatrixBoundary.Wrapped((arrays, axis, @out, dtype, casting), static s => concatenate(s.arrays, s.axis, s.@out, s.dtype, s.casting), @out);
             if (arrays == null)
                 throw new ArgumentNullException(nameof(arrays));
-            return NDArray.ConcatenateInto(arrays, axis, @out, dtype, casting);
+            return NDArray.concatenate(arrays, axis, @out, dtype, casting);
         }
 
         // ---------------- Tuple-arity convenience overloads ----------------

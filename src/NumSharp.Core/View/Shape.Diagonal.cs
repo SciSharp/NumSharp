@@ -8,7 +8,7 @@ namespace NumSharp
         /// <summary>
         ///     The layout of the diagonal view NumPy's <c>np.diagonal</c> returns for an array of this shape: the shape
         ///     without <paramref name="axis1"/> and <paramref name="axis2"/>, the diagonal appended as the last axis, over
-        ///     the SAME buffer. Use it to build that view (<see cref="NDArray.Diagonal(NDArray, int, int, int)"/> installs
+        ///     the SAME buffer. Use it to build that view (<see cref="NDArray.diagonal(NDArray, int, int, int)"/> installs
         ///     it over the array's storage); it reads and copies no element.
         /// </summary>
         /// <param name="offset">The diagonal's offset from the main one: positive above it (the start moves along

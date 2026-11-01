@@ -85,8 +85,8 @@ namespace NumSharp
         ///     Port of NumPy 2.x <c>numpy.mgrid</c> (the <c>sparse=False</c> instance of
         ///     <c>numpy.lib.index_tricks.nd_grid</c>). It is the DENSE twin of <see cref="ogrid"/> and shares
         ///     its whole grammar and dtype/edge-case behaviour (see <see cref="OGridClass"/>; both run
-        ///     NumPy's <c>nd_grid.__getitem__</c> statements, <see cref="NDArray.MGrid"/> and
-        ///     <see cref="NDArray.OGrid"/>): slices are written as strings
+        ///     NumPy's <c>nd_grid.__getitem__</c> statements, <see cref="NDArray.mgrid"/> and
+        ///     <see cref="NDArray.ogrid"/>): slices are written as strings
         ///     (<c>np.mgrid["0:5", "0:3"]</c> ≙ <c>np.mgrid[0:5, 0:3]</c>); one string may carry comma-separated
         ///     slices; <see cref="Slice"/> objects work; there are NO directives. A field written as digits is a
         ///     Python int (exact at any size), anything else a Python float. The mesh shares ONE dtype (int64
@@ -140,7 +140,7 @@ namespace NumSharp
             ///     Slice-expression strings (a colon-bearing <c>"start:stop[:step]"</c>, or several such
             ///     comma-separated), and/or <see cref="Slice"/> objects.
             /// </param>
-            public MGridResult this[params object[] key] => new MGridResult(NDArray.MGrid(key));
+            public MGridResult this[params object[] key] => new MGridResult(NDArray.mgrid(key));
         }
 
         /// <summary>

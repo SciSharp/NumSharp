@@ -201,7 +201,7 @@ namespace NumSharp.Backends
                 //handle broadcasting
                 if (broadcastRequired)
                 {
-                    indices = NDArray.BroadcastArrays(indices);
+                    indices = NDArray.broadcast_arrays(indices);
                     indicesSize = indices[0].size;
                     idxs = indices[0];
                 }
@@ -216,7 +216,7 @@ namespace NumSharp.Backends
                         // implied shape, no spurious leading size-1 axis: a[np.array(0), np.array(1)]
                         // -> scalar, matching NumPy.
                         indicesImpliedShape = nd.Shape.dimensions;
-                        indices[i] = nd = NDArray.AtLeast1d(nd).flat;
+                        indices[i] = nd = NDArray.atleast_1d(nd).flat;
                     }
                 }
             }
@@ -660,7 +660,7 @@ namespace NumSharp.Backends
                 return;
             }
             using (var proxy = new NDArray(NPTypeCode.Byte, new Shape((long[])src.Shape.dimensions.Clone()), true))
-            using (var valueProxy = NDArray.Ones(new Shape((long[])values.Shape.dimensions.Clone()), NPTypeCode.Byte))
+            using (var valueProxy = NDArray.ones(new Shape((long[])values.Shape.dimensions.Clone()), NPTypeCode.Byte))
             {
                 MapIterSet(proxy, (NDArray[])indices.Clone(), valueProxy);
                 if (!proxy.TensorEngine.Any(proxy))
@@ -882,7 +882,7 @@ namespace NumSharp.Backends
                 //handle broadcasting
                 if (broadcastRequired)
                 {
-                    indices = NDArray.BroadcastArrays(indices);
+                    indices = NDArray.broadcast_arrays(indices);
                     indicesSize = indices[0].size;
                     idxs = indices[0];
                 }
@@ -1039,7 +1039,7 @@ namespace NumSharp.Backends
                     string Tup(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
                     try
                     {
-                        valuesTyped = NDArray.BroadcastTo(valuesTyped, Shape.Adopt(retShape)).copy().MakeGeneric<T>();
+                        valuesTyped = NDArray.broadcast_to(valuesTyped, Shape.Adopt(retShape)).copy().MakeGeneric<T>();
                     }
                     catch (IncorrectShapeException ex)
                     {
@@ -1067,7 +1067,7 @@ namespace NumSharp.Backends
                 {
                     try
                     {
-                        typedValues = NDArray.BroadcastTo(typedValues, Shape.Adopt(retShape)).copy().MakeGeneric<T>();
+                        typedValues = NDArray.broadcast_to(typedValues, Shape.Adopt(retShape)).copy().MakeGeneric<T>();
                     }
                     catch (IncorrectShapeException ex)
                     {
@@ -1150,7 +1150,7 @@ namespace NumSharp.Backends
                 // exactly retShape (the same ValueError texts as the general route, per branch).
                 try
                 {
-                    typed = NDArray.BroadcastTo(typed, Shape.Adopt(retShape)).copy().MakeGeneric<T>();
+                    typed = NDArray.broadcast_to(typed, Shape.Adopt(retShape)).copy().MakeGeneric<T>();
                 }
                 catch (IncorrectShapeException ex)
                 {

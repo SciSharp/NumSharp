@@ -108,7 +108,7 @@ namespace NumSharp
         /// <remarks>
         ///     Port of NumPy 2.x <c>numpy.ogrid</c> (the <c>sparse=True</c> instance of
         ///     <c>numpy.lib.index_tricks.nd_grid</c>; its <c>__getitem__</c>'s statements are
-        ///     <see cref="NDArray.OGrid"/>). It shares the
+        ///     <see cref="NDArray.ogrid"/>). It shares the
         ///     slice-expression grammar of <see cref="r_"/>: C# has no <c>a[1:5:2]</c> literal, so a slice is written
         ///     as a string — <c>np.ogrid["0:5"]</c> ≙ <c>np.ogrid[0:5]</c> — and one string may carry several
         ///     comma-separated slices (<c>np.ogrid["0:3, 0:5"]</c>). <see cref="Slice"/> objects work as
@@ -168,7 +168,7 @@ namespace NumSharp
             ///     Slice-expression strings (a colon-bearing <c>"start:stop[:step]"</c>, or several such
             ///     comma-separated), and/or <see cref="Slice"/> objects.
             /// </param>
-            public OGridResult this[params object[] key] => new OGridResult(NDArray.OGrid(key, "ogrid"));
+            public OGridResult this[params object[] key] => new OGridResult(NDArray.ogrid(key, "ogrid"));
         }
 
         /// <summary>

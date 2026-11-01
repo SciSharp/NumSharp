@@ -220,7 +220,7 @@ namespace NumSharp.Backends
             if (prologue.Reduced is null)
             {
                 // `partition(a, kth, axis=None)` ravels the data; the mean then reduces axis 0 of the partition.
-                data = NDArray.Ravel(a, 'C');
+                data = NDArray.ravel(a, 'C');
                 axis = 0;
             }
             else
@@ -319,7 +319,7 @@ namespace NumSharp.Backends
             // elements at the middle POSITIONS (nothing was moved) into the out before its division refuses.
             if (MedianSumsIntoText(a, @out))
             {
-                using var part = NDArray.Ravel(a, 'C');
+                using var part = NDArray.ravel(a, 'C');
                 long half = n / 2;
                 using var middle = n % 2 == 1 ? part[new Slice(half, half + 1)] : part[new Slice(half - 1, half + 1)];
                 // keepdims without an axis: `out[(Ellipsis,) + (0,) * nd]` (as indexed above).

@@ -1,6 +1,6 @@
 // NumPy's np.kron (numpy/lib/_shape_base_impl.py) as DefaultEngine's member: the rank padding, the interleaved
 // broadcast multiply and its tile fast path (np.multiply's statement, this engine's Multiply; np.broadcast_to's, the
-// array object's BroadcastTo).
+// array object's NDArray.broadcast_to).
 
 using System;
 
@@ -87,8 +87,8 @@ namespace NumSharp.Backends
                 // SimdFull multiply. The final reshape to (rt*st) is a view over the contiguous product.
                 // Both operands (and the reshape/broadcast views they came from) are released by this
                 // method's scope as soon as it returns — the same moment a `using` would release them.
-                var aRep = NDArray.BroadcastTo(a.reshape(Shape.Adopt(aInter)), bcShape).copy();
-                var bTiled = NDArray.BroadcastTo(b.reshape(Shape.Adopt(bInter)), bcShape).copy();
+                var aRep = NDArray.broadcast_to(a.reshape(Shape.Adopt(aInter)), bcShape).copy();
+                var bTiled = NDArray.broadcast_to(b.reshape(Shape.Adopt(bInter)), bcShape).copy();
                 return Multiply(aRep, bTiled).reshape(Shape.Adopt(outShape));
             }
 

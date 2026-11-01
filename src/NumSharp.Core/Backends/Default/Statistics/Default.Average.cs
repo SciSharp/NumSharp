@@ -118,7 +118,7 @@ namespace NumSharp.Backends
                 double count = (double)a.size / avg.size;
                 NDArray scl = NDArray.Scalar(count).astype(avg.typecode).MarkReductionScalar();
                 if (!scl.Shape.dimensions.SequenceEqual(avg.Shape.dimensions))
-                    scl = NDArray.BroadcastTo(scl, avg.Shape).copy();
+                    scl = NDArray.broadcast_to(scl, avg.Shape).copy();
                 return (scope.Returns(avg), scope.Returns(scl));
             }
 
@@ -154,7 +154,7 @@ namespace NumSharp.Backends
             if (!returned) return (scope.Returns(average), null);
             // if scl.shape != avg_as_array.shape: scl = np.broadcast_to(scl, avg_as_array.shape).copy()
             if (!weightSum.Shape.dimensions.SequenceEqual(average.Shape.dimensions))
-                weightSum = NDArray.BroadcastTo(weightSum, average.Shape).copy();
+                weightSum = NDArray.broadcast_to(weightSum, average.Shape).copy();
             return (scope.Returns(average), scope.Returns(weightSum));
         }
 

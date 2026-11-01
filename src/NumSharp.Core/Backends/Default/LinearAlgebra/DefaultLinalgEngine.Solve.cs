@@ -107,7 +107,7 @@ namespace NumSharp.Backends
             }
 
             var square = work.reshape(new[] {prod, prod});   // np.reshape's member
-            var rhs = NDArray.Ravel(b, 'C');                  // b.ravel(): np.ravel's member, order 'C'
+            var rhs = NDArray.ravel(b, 'C');                  // b.ravel(): np.ravel's member, order 'C'
 
             // `res = wrap(solve(a, b)); res.shape = oldshape`: solve's fresh solution relabelled IN PLACE (it keeps owning
             // its data), not a reshaped view of it.

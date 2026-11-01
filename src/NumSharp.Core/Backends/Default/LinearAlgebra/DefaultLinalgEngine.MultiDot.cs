@@ -26,7 +26,7 @@ namespace NumSharp.Backends
         ///     </para>
         ///     <para>
         ///     <b>Members, not facades.</b> Every dot is np.dot's member (<see cref="CoreDot"/>), the promotions and the
-        ///     ravel the array object's (<see cref="NDArray.AtLeast2d"/>, <see cref="NDArray.Ravel"/>). The
+        ///     ravel the array object's (<see cref="NDArray.atleast_2d"/>, <see cref="NDArray.ravel"/>). The
         ///     np.linalg.multi_dot facade has a matrix rule only, so a numpy.char.chararray vector end used to stay a
         ///     chararray through np.atleast_2d; it is a plain view now, which changes no result: every chain of three or
         ///     more ends in a dot, whose result is plain either way, and a text chain is refused by the dot.
@@ -49,9 +49,9 @@ namespace NumSharp.Backends
             // column (np.dot never reads an extent-1 axis's stride, so the views' strides there are immaterial).
             int ndimFirst = work[0].ndim, ndimLast = work[n - 1].ndim;
             if (ndimFirst == 1)
-                work[0] = NDArray.AtLeast2d(work[0]);
+                work[0] = NDArray.atleast_2d(work[0]);
             if (ndimLast == 1)
-                work[n - 1] = NDArray.AtLeast2d(work[n - 1]).T;
+                work[n - 1] = NDArray.atleast_2d(work[n - 1]).T;
 
             // NumPy runs `_assert_2d(*arrays)` over the PROMOTED operands, so every array other
             // than a vector endpoint (already lifted to 2-D just above) must be exactly
@@ -68,7 +68,7 @@ namespace NumSharp.Backends
             if (ndimFirst == 1 && ndimLast == 1)
                 return result[0, 0].copy().MarkReductionScalar();   // NumPy's result[0, 0]: a scalar, not a view
             if (ndimFirst == 1 || ndimLast == 1)
-                return NDArray.Ravel(result, 'C');                   // result.ravel(): np.ravel's member, order 'C'
+                return NDArray.ravel(result, 'C');                   // result.ravel(): np.ravel's member, order 'C'
             return result;
         }
 

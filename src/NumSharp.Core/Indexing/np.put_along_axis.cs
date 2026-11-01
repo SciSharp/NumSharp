@@ -66,7 +66,7 @@ namespace NumSharp
             // A null `values` is Python's None, converted where NumPy's fancy assignment converts values (NDArray.PutAlongAxisCore).
 
             // NumPy's numpy.put_along_axis: the statements are the array object's (NDArray.ShapeBase.cs)
-            NDArray.PutAlongAxis(arr, indices, values, axis);
+            NDArray.put_along_axis(arr, indices, values, axis);
         }
     }
 }

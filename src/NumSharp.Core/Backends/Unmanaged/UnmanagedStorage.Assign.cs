@@ -123,8 +123,9 @@ namespace NumSharp.Backends
                     throw new InvalidCastException(
                         $"Cannot cast scalar from dtype('O') to {dst.dtype.ToString(true)} according to the rule " +
                         $"'{DTypeCasting.CastingToString(casting)}'");
-                // np.array([str(value)]): the C# array overload's text route (the array object's ArrayFromManaged).
-                using var digits = NDArray.ArrayFromManaged(new[] { value.ToString() }, null, 0, true, 'C').reshape(Shape.NewScalar());
+                // np.array([str(value)]): the C# array overload's text route (the array object's NDArray.array over a
+                // C# array).
+                using var digits = NDArray.array(new[] { value.ToString() }, null, 0, true, 'C').reshape(Shape.NewScalar());
                 CopytoAssignArray(dst, digits, @where, NPY_CASTING.NPY_UNSAFE_CASTING);
                 return;
             }

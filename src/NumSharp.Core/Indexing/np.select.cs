@@ -65,7 +65,7 @@ namespace NumSharp
             if (choicelist is null) throw new ArgumentNullException(nameof(choicelist));
 
             // NumPy's numpy.select after the null checks: the statements are the array object's (NDArray.FunctionBase.cs)
-            return NDArray.Select(condlist, choicelist, @default);
+            return NDArray.select(condlist, choicelist, @default);
         }
     }
 }

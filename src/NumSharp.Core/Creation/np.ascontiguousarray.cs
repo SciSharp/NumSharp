@@ -23,7 +23,7 @@ namespace NumSharp
                 return NDCharArrayBoundary.Plain((a, dtype), static s => ascontiguousarray(s.a, s.dtype));
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
-            return NDArray.AsContiguousArray(a, dtype);
+            return NDArray.ascontiguousarray(a, dtype);
         }
 
         /// <summary>

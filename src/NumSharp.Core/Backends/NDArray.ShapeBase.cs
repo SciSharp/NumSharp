@@ -8,8 +8,8 @@ namespace NumSharp
 {
     // ============================== lib/_shape_base_impl.py ==============================
     // NumPy's take_along_axis, put_along_axis and apply_along_axis as members of the array object (P3's batch 7):
-    // TakeAlongAxis, PutAlongAxis with its scatter core, and ApplyAlongAxis. The facades keep their numpy.matrix /
-    // numpy.char rules and their null checks; np.apply_along_axis's *args overload wraps its delegate and calls the
+    // take_along_axis, put_along_axis with its scatter core, and apply_along_axis. The facades keep their numpy.matrix
+    // / numpy.char rules and their null checks; np.apply_along_axis's *args overload wraps its delegate and calls the
     // one-argument facade. The statements call the members the np.* functions dispatch to (the plan's phase P6), but
     // for the ndindex iterator apply_along_axis walks (np.NDIndex, NumPy's ndindex: a public type nested in np, which
     // ratchet R2 pins), and the file sits under Backends/, beside the array object's class (plan C3).
@@ -32,7 +32,7 @@ namespace NumSharp
         ///     <c>axis 5 is out of bounds for array of dimension 2</c>, naming the axis as given).</exception>
         /// <remarks>No class boundary runs here: an engine caller sits inside its public function's boundary, and the
         ///     facade applies its rules before it calls this.</remarks>
-        internal static NDArray ExpandDims(NDArray a, int axis)
+        internal static NDArray expand_dims(NDArray a, int axis)
         {
             // Only the uninitialized-shape sentinel is passed through. A genuine empty array
             // (size == 0 but with real dimensions, e.g. (0, 3)) MUST still gain the new axis —
@@ -85,13 +85,13 @@ namespace NumSharp
         /// <remarks>Scoped: the <c>axis=None</c> re-lay, its reshape view and the int64 index cast are temporaries of this
         ///     call.</remarks>
         [NDScoped]
-        internal static unsafe NDArray TakeAlongAxis(NDArray arr, NDArray indices, int? axis)
+        internal static unsafe NDArray take_along_axis(NDArray arr, NDArray indices, int? axis)
         {
             // A StringDType source: the same gather runs on its cell view (NumPy's checks, this array's shapes) and the cells
             // are duplicated (NDVStringMove) — never the raw byte kernel below. The descriptor answers which sources those
             // are: the ones whose elements hold references (NumPy's PyDataType_REFCHK).
             if (arr.dtype.Meta.HasReferences)
-                return Backends.Strings.NDVStringMove.Gather(arr, cells => TakeAlongAxis(cells, indices, axis));
+                return Backends.Strings.NDVStringMove.Gather(arr, cells => take_along_axis(cells, indices, axis));
 
             // Boundary scope: reclaims the axis=None contiguous re-lay + its reshape view and the
             // int64 index cast at exit. The scope's tracked list also strong-roots those temps
@@ -107,7 +107,7 @@ namespace NumSharp
                 // arr = np.array(arr.flat): a C-order 1-D image of the source. A non-C-contiguous
                 // view must be re-laid to C-logical order first (ravel semantics), then reshaped
                 // to 1-D; a 0-d source flattens to shape (1,).
-                var flatSource = arr.Shape.IsContiguous ? arr : AsContiguousArray(arr, null);
+                var flatSource = arr.Shape.IsContiguous ? arr : ascontiguousarray(arr, null);
                 arr = flatSource.reshape(flatSource.size);
                 ax = 0;
             }
@@ -280,7 +280,7 @@ namespace NumSharp
         /// <remarks>Scoped: the <c>axis=None</c> reshape view, the index cast and the value cast or overlap snapshot are
         ///     temporaries of this call.</remarks>
         [NDScoped]
-        internal static unsafe void PutAlongAxis(NDArray arr, NDArray indices, NDArray values, int? axis)
+        internal static unsafe void put_along_axis(NDArray arr, NDArray indices, NDArray values, int? axis)
         {
             // Boundary scope: reclaims the axis=null contiguous reshape view, the int64 index cast,
             // the values astype/overlap-snapshot, and the stride arrays at exit — and strong-roots the
@@ -333,7 +333,7 @@ namespace NumSharp
 
         /// <summary>
         ///     The shared scatter core: validate, resolve the iteration/value broadcast, then run the
-        ///     atomic (validate-all-then-write) IL scatter. Called by <see cref="PutAlongAxis"/>
+        ///     atomic (validate-all-then-write) IL scatter. Called by <see cref="put_along_axis"/>
         ///     with <paramref name="arr"/> already normalized to the working axis (the flat 1-D view
         ///     under <c>axis=null</c>). All validation ordering here mirrors NumPy 2.4.2's
         ///     <c>arr[_make_along_axis_idx(...)] = values</c> (probed): dtype -> ndim -> writeable ->
@@ -560,7 +560,7 @@ namespace NumSharp
         /// <exception cref="ValueError">An iteration dimension is 0, or <paramref name="func1d"/> returned null.</exception>
         /// <remarks>Not scoped: every array <paramref name="func1d"/> returns, and every slice handed to it, stays the
         ///     caller's; the buffer's wrapper and the transposed input are released here by hand.</remarks>
-        internal static NDArray ApplyAlongAxis(Func<NDArray, NDArray> func1d, int axis, NDArray arr)
+        internal static NDArray apply_along_axis(Func<NDArray, NDArray> func1d, int axis, NDArray arr)
         {
             int nd = arr.ndim;
 
@@ -713,7 +713,7 @@ namespace NumSharp
         /// <param name="res">A func1d result (not null).</param>
         /// <returns><paramref name="res"/> itself, or a NEW 0-d <c>U</c> / <c>S</c> array the caller disposes.</returns>
         /// <remarks>
-        ///     This decides the buffer's dtype in <see cref="ApplyAlongAxis"/>: NumPy allocates <c>zeros_like(res)</c>, so a
+        ///     This decides the buffer's dtype in <see cref="apply_along_axis"/>: NumPy allocates <c>zeros_like(res)</c>, so a
         ///     <c>&lt;U5</c> source whose first element is one character gives a <c>&lt;U1</c> result, and later, longer
         ///     results are truncated to it (probed 2.4.2). A StringDType NA element is no str (NumPy's <c>na_object</c>): it
         ///     keeps its array, as no NumSharp dtype holds NumPy's object scalar.

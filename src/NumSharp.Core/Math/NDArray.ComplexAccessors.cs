@@ -98,7 +98,7 @@ namespace NumSharp
         {
             using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
             // NumPy's PyArray_Conjugate: the statements are the array object's (NDArray.Multiarray.cs)
-            return Conjugate(this, @out);
+            return conjugate(this, @out);
         }
 
         /// <summary>

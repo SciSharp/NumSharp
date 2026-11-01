@@ -67,12 +67,12 @@ namespace NumSharp.Backends
             var sgn = w.TensorEngine.Sign(w);
             var s = w.TensorEngine.Abs(w);
             var sidx = ReverseLastAxis(s.TensorEngine.ArgSort(s, -1, null, null, null));
-            sgn = NDArray.TakeAlongAxis(sgn, sidx, -1);
-            s = NDArray.TakeAlongAxis(s, sidx, -1);
+            sgn = NDArray.take_along_axis(sgn, sidx, -1);
+            s = NDArray.take_along_axis(s, sidx, -1);
             // sidx[..., None, :] and sgn[..., None, :]: one index / sign row broadcast over the rows of each matrix.
-            var u = NDArray.TakeAlongAxis(v, NDArray.ExpandDims(sidx, -2), -1);
+            var u = NDArray.take_along_axis(v, NDArray.expand_dims(sidx, -2), -1);
             // transpose(u * sgn[..., None, :]): the product, then the swap of its last two axes.
-            var scaled = u.TensorEngine.Multiply(u, NDArray.ExpandDims(sgn, -2));
+            var scaled = u.TensorEngine.Multiply(u, NDArray.expand_dims(sgn, -2));
             var vt = scaled.TensorEngine.SwapAxes(scaled, -1, -2);
             // transpose(...).conjugate(): the conjugate ufunc for a complex product; a real one is returned itself, so Vh
             // stays the transposed view (the scope's release of the product leaves the view's own reference).
@@ -385,7 +385,7 @@ namespace NumSharp.Backends
                     ? NDArray.Scalar(double.PositiveInfinity).astype(r.typecode).MarkReductionScalar()
                     : r;
 
-            return NDArray.Where(apply, NDArray.Scalar(double.PositiveInfinity).astype(r.typecode), r);
+            return NDArray.where(apply, NDArray.Scalar(double.PositiveInfinity).astype(r.typecode), r);
         }
     }
 }

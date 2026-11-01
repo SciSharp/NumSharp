@@ -120,11 +120,11 @@ namespace NumSharp.Backends
 
             // np.concatenate / np.expand_dims / np.moveaxis's statements: the array object's concatenation (its default
             // casting) and axis insertion, and the stack's engine MoveAxis.
-            var stacked = NDArray.ConcatenateInto(new[]
+            var stacked = NDArray.concatenate(new[]
             {
-                NDArray.ExpandDims(cp0, -1),
-                NDArray.ExpandDims(cp1, -1),
-                NDArray.ExpandDims(cp2, -1)
+                NDArray.expand_dims(cp0, -1),
+                NDArray.expand_dims(cp1, -1),
+                NDArray.expand_dims(cp2, -1)
             }, -1, null, null, "same_kind");
             return stacked.TensorEngine.MoveAxis(stacked, new[] { -1 }, new[] { normC });
         }

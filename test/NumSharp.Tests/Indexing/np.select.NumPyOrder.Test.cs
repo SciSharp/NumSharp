@@ -4,7 +4,7 @@ namespace NumSharp.Tests.Indexing;
 
 /// <summary>
 ///     np.select as NumPy's statements run it, found when the np-layer dtype plan's P3 batch 7 moved its body to
-///     <c>NDArray.Select</c> and replayed the snapshot against NumPy 2.4.2: the three broadcasts are
+///     <c>NDArray.select</c> and replayed the snapshot against NumPy 2.4.2: the three broadcasts are
 ///     <c>np.broadcast_arrays</c> calls, whose mismatch text names the two operands that disagree, and a C# number literal
 ///     reaches np.copyto as the array <c>np.broadcast_arrays</c> makes of the Python scalar (int64 / float64 / complex128,
 ///     of the choice group's shape). Every expectation is NumPy 2.4.2's output.

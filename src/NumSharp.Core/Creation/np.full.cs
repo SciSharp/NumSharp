@@ -79,7 +79,7 @@ namespace NumSharp
         public static NDArray full(Shape shape, object fill_value, DType dtype = null, string device = null)
         {
             DeviceArguments.ValidateDevice(device);
-            return NDArray.Full(shape, fill_value, dtype);
+            return NDArray.full(shape, fill_value, dtype);
         }
     }
 }

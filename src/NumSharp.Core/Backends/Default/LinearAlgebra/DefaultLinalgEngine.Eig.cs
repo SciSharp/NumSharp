@@ -50,7 +50,7 @@ namespace NumSharp.Backends
         /// <returns>The eigenvalues and eigenvectors (null when <paramref name="v"/> is) in NumPy's result dtype.</returns>
         /// <remarks>
         ///     The accessors and the reduction are the members np.imag, np.real and np.any dispatch to
-        ///     (<see cref="NDArray.ImagPart"/>, <see cref="NDArray.RealPart"/>, <see cref="TensorEngine.Any(NDArray)"/>):
+        ///     (<see cref="NDArray.imag_"/>, <see cref="NDArray.real_"/>, <see cref="TensorEngine.Any(NDArray)"/>):
         ///     <paramref name="w"/> and <paramref name="v"/> are the kernel's plain results, so the facades' class rules
         ///     have nothing to see.
         /// </remarks>
@@ -64,11 +64,11 @@ namespace NumSharp.Backends
             // reduction over the strided imaginary view instead of `equal` (which allocates a bool
             // array) followed by `all`. The view is taken only for a real operand (the && short-circuits first), and
             // np.any's member runs on the view's own engine, as the facade's `a.TensorEngine.Any(a)` did.
-            if (common != NPTypeCode.Complex && NDArray.ImagPart(w) is var imag && !imag.TensorEngine.Any(imag))
+            if (common != NPTypeCode.Complex && NDArray.imag_(w) is var imag && !imag.TensorEngine.Any(imag))
             {
                 // Every eigenvalue is real — drop the (zero) imaginary part and take the real dtype.
-                w = NDArray.RealPart(w);
-                v = v is null ? null : NDArray.RealPart(v);
+                w = NDArray.real_(w);
+                v = v is null ? null : NDArray.real_(v);
                 resultType = common == NPTypeCode.Single ? NPTypeCode.Single : NPTypeCode.Double;
             }
             else
@@ -111,7 +111,7 @@ namespace NumSharp.Backends
         ///     real and the imaginary lane separately, strided float64 views of the same buffer.
         ///     <para>Each copy back is np.copyto's member, <c>UnmanagedStorage.Copyto</c> with np.copyto's default
         ///     <c>same_kind</c> rule (a float32 into float64 is a safe cast), and the lanes are np.real / np.imag's
-        ///     members (<see cref="NDArray.RealPart"/>, <see cref="NDArray.ImagPart"/>): no np.* facade runs.</para>
+        ///     members (<see cref="NDArray.real_"/>, <see cref="NDArray.imag_"/>): no np.* facade runs.</para>
         /// </remarks>
         private static void RoundComponentsToSingle(NDArray z)
         {
@@ -121,9 +121,9 @@ namespace NumSharp.Backends
                 UnmanagedStorage.Copyto(parts, parts.astype(NPTypeCode.Single), NPY_CASTING.NPY_SAME_KIND_CASTING, null);
                 return;
             }
-            var re = NDArray.RealPart(z);
+            var re = NDArray.real_(z);
             UnmanagedStorage.Copyto(re, re.astype(NPTypeCode.Single), NPY_CASTING.NPY_SAME_KIND_CASTING, null);
-            var im = NDArray.ImagPart(z);
+            var im = NDArray.imag_(z);
             UnmanagedStorage.Copyto(im, im.astype(NPTypeCode.Single), NPY_CASTING.NPY_SAME_KIND_CASTING, null);
         }
 

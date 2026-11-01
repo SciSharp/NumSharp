@@ -250,7 +250,7 @@ namespace NumSharp.Backends
                     break;
 
                 char label = term[p1];
-                arr = NDArray.Diagonal(arr, 0, p1, p2);
+                arr = NDArray.diagonal(arr, 0, p1, p2);
                 term.RemoveAt(p2);
                 term.RemoveAt(p1);
                 term.Add(label);
@@ -588,14 +588,14 @@ namespace NumSharp.Backends
             if (result.ndim == 0)
                 return result;
 
-            // np.ascontiguousarray's statement is NDArray.AsContiguousArray; np.asfortranarray's is the conversion in F
+            // np.ascontiguousarray's statement is NDArray.ascontiguousarray; np.asfortranarray's is the conversion in F
             // order, then a reshape to (1,) of a 0-d result, which cannot fire here (a 0-d result returned above).
             switch (order)
             {
                 case 'C':
-                    return NDArray.AsContiguousArray(result, null);
+                    return NDArray.ascontiguousarray(result, null);
                 case 'F':
-                    return NDArray.ArrayFromObject(result, null, 'F', null);
+                    return NDArray.asarray(result, null, 'F', null);
                 default:                 // 'A' and 'K'
                     bool allF = true;
                     foreach (var o in operands)
@@ -607,8 +607,8 @@ namespace NumSharp.Backends
                     }
 
                     if (allF)
-                        return NDArray.ArrayFromObject(result, null, 'F', null);
-                    return order == 'A' ? NDArray.AsContiguousArray(result, null) : result;
+                        return NDArray.asarray(result, null, 'F', null);
+                    return order == 'A' ? NDArray.ascontiguousarray(result, null) : result;
             }
         }
 

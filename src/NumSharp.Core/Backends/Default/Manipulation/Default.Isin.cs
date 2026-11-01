@@ -83,8 +83,8 @@ namespace NumSharp.Backends
             // C-contiguous shape) — reusing element.Shape would carry a view's strides and scramble the
             // contiguous membership buffer on reshape (transposed/strided/negative-stride element).
             Shape outShape = Shape.Adopt(element.Shape.dimensions);
-            NDArray ar1 = NDArray.Ravel(element, 'C');        // C-order flatten (NumPy: np.asarray(element).ravel())
-            NDArray ar2 = NDArray.Ravel(test_elements, 'C');  // test values are always flattened
+            NDArray ar1 = NDArray.ravel(element, 'C');        // C-order flatten (NumPy: np.asarray(element).ravel())
+            NDArray ar2 = NDArray.ravel(test_elements, 'C');  // test values are always flattened
 
             // kind='table' is only defined for boolean/integer arrays (NumPy's dtype.kind in ("u", "i", "b"): a char array,
             // NumPy's uint16, is one), and can overflow for wide signed ranges.
@@ -113,7 +113,7 @@ namespace NumSharp.Backends
 
             // Empty test set -> nothing is a member (all invert); a view of the 1-D answer, as above.
             if (ar2.size == 0)
-                return NDArray.Full(new Shape(ar1.size), invert, NPTypeCode.Boolean).reshape(outShape);
+                return NDArray.full(new Shape(ar1.size), invert, NPTypeCode.Boolean).reshape(outShape);
 
             // NumPy's _isin answers on one of three paths (the table method, the loop path, the sort path; NumPyPath), and
             // each gives the exact membership, except NumPy's SORT path in two cases: its np.concatenate casts both unique
@@ -214,8 +214,8 @@ namespace NumSharp.Backends
         [NDScoped]
         private static NDArray IsinTextFlat(NDArray element, NDArray test_elements, bool assume_unique, bool invert)
         {
-            NDArray ar1 = NDArray.Ravel(element, 'C');
-            NDArray ar2 = NDArray.Ravel(test_elements, 'C');
+            NDArray ar1 = NDArray.ravel(element, 'C');
+            NDArray ar2 = NDArray.ravel(test_elements, 'C');
             long n1 = ar1.size, n2 = ar2.size;
 
             // Python evaluates 10 * len(ar1) ** 0.145 in double precision, as Math.Pow does.
@@ -224,7 +224,7 @@ namespace NumSharp.Backends
                 // The loop path: one comparison of ar1 with each value of ar2, OR-ed (AND-ed under invert) into the mask.
                 // A pair the comparison has no loop for answers all-False (all-True for !=), which leaves the mask as it
                 // is, so only a pair that compares text runs the kernel.
-                NDArray mask = NDArray.Full(Shape.Vector(n1), invert, NPTypeCode.Boolean);
+                NDArray mask = NDArray.full(Shape.Vector(n1), invert, NPTypeCode.Boolean);
                 if (n1 == 0 || !Backends.Strings.NDStringUfuncs.ComparesText(ar1.dtype, ar2.dtype))
                     return mask;
                 for (long i = 0; i < n2; i++)
@@ -279,13 +279,13 @@ namespace NumSharp.Backends
             // ar = concatenate((ar1, ar2)) casts both to their common dtype: it formats numbers into text and decodes bytes
             // beside str, and makes float64 of a 64-bit integer beside a float or (uint64 beside a signed integer) beside
             // the other sign (NumPy's promotion).
-            NDArray ar = NDArray.ConcatenateInto(new[] { ar1, ar2 }, 0, null, null, "same_kind");   // np.concatenate((ar1, ar2))
+            NDArray ar = NDArray.concatenate(new[] { ar1, ar2 }, 0, null, null, "same_kind");   // np.concatenate((ar1, ar2))
             // "We need this to be a stable sort, so always use 'mergesort'": ar1's values come before ar2's equal ones.
             NDArray order = ar.TensorEngine.ArgSort(ar, -1, "mergesort", null, null);
             NDArray sar = ar[order];
             NDArray boolAr = invert ? sar["1:"] != sar[":-1"] : sar["1:"] == sar[":-1"];
             // np.array([invert]) is np.array's statement for a C# array of one bool: a one-element array over a copy.
-            NDArray flag = NDArray.ConcatenateInto(
+            NDArray flag = NDArray.concatenate(
                 new[] { boolAr, new NDArray(Unmanaged.ArraySlice.FromArray(new[] { invert }, true), Shape.Vector(1)) },
                 0, null, null, "same_kind");
             var ret = new NDArray(NPTypeCode.Boolean, Shape.Vector(ar.size), false);
@@ -397,7 +397,7 @@ namespace NumSharp.Backends
             // NumPy's table: np.zeros with the set marked 1, or under invert np.ones with the set marked 0, so the probe reads
             // the flag itself. The table is scratch, released here: the using also keeps it reachable while its raw pointer
             // is read.
-            using NDArray table = NDArray.Full(new Shape(range + 1), invert, NPTypeCode.Boolean);
+            using NDArray table = NDArray.full(new Shape(range + 1), invert, NPTypeCode.Boolean);
             bool* tb = (bool*)table.Address + table.Shape.offset;
             switch (ar2.typecode)
             {
@@ -478,7 +478,7 @@ namespace NumSharp.Backends
             };
             long hi = lo + size - 1;
             // Scratch, released here: the using also keeps it reachable while its raw pointer is read.
-            using NDArray domain = NDArray.Full(new Shape(size), invert, NPTypeCode.Boolean);
+            using NDArray domain = NDArray.full(new Shape(size), invert, NPTypeCode.Boolean);
             bool* table = (bool*)domain.Address + domain.Shape.offset;
             switch (setType)
             {
@@ -847,7 +847,7 @@ namespace NumSharp.Backends
         ///     (np.ravel's results are, a view at an offset included), else a C-ordered copy.</summary>
         /// <param name="a">A flattened operand.</param>
         /// <returns>A C-contiguous array with the same values.</returns>
-        private static NDArray ContiguousRun(NDArray a) => a.Shape.IsContiguous ? a : NDArray.AsContiguousArray(a, null);
+        private static NDArray ContiguousRun(NDArray a) => a.Shape.IsContiguous ? a : NDArray.ascontiguousarray(a, null);
 
         /// <summary>
         ///     NumPy's <c>ar2_range &lt;= np.iinfo(ar2.dtype).max</c>, the table method's overflow constraint (bool read as

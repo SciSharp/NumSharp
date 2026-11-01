@@ -64,8 +64,8 @@ in the `manip` tier. Sources `Creation/np.{r_,c_}.cs`, `Indexing/np.{ix_,s_}.cs`
   a sub-1e-15 slice step reports `np.arange`'s "step can't be 0". No `bmat` branch: NumPy routes a lone bare string key
   into `matrixlib.bmat`, which resolves words against the caller's Python frame (and raises `NameError` for every
   literal), so a lone string is read like any other entry.
-- `np.mgrid` / `np.ogrid` are NumPy's `nd_grid.__getitem__` statements, the array object's `NDArray.MGrid` /
-  `NDArray.OGrid` (`Indexing/NDArray.IndexTricks.cs`, beside np.r_'s): a key of one slice is the except branch
+- `np.mgrid` / `np.ogrid` are NumPy's `nd_grid.__getitem__` statements, the array object's `NDArray.mgrid` /
+  `NDArray.ogrid` (`Indexing/NDArray.IndexTricks.cs`, beside np.r_'s): a key of one slice is the except branch
   (`GridSingleSlice`: arange, or for an imaginary step `arange(0, n) * step + start`, a fresh array), a key of several
   the try branch: every size first, in key order (`GridAxisSize`: `int(abs(step))` / `math.ceil((stop - start) / step)`
   in Python's arithmetic over the slice's Python numbers), `typ = result_type(*num_list)` (`GridMeshDtype`, through
@@ -90,12 +90,13 @@ in the `manip` tier. Sources `Creation/np.{r_,c_}.cs`, `Indexing/np.{ix_,s_}.cs`
   `"negative dimensions are not allowed"` where `ogrid[5:0, 0:3]` gives an empty axis. `MGridResult` converts to
   `NDArray`, deconstructs (`var (x, y) = np.mgrid["0:5", "0:3"];`) and indexes the per-axis grids. Gate:
   `Creation/np.mgrid.Test.cs`.
-- `np.indices(dimensions, dtype, sparse)` is `NDArray.Indices` / `IndicesSparse` (`Backends/NDArray.Numeric.cs`), NumPy's
-  `res = empty((N,) + dimensions, dtype)` then one `arange(dim, dtype)` per axis assigned with broadcasting: the
+- `np.indices(dimensions, dtype, sparse)` is `NDArray.indices` / `indices_sparse` (`Backends/NDArray.Numeric.cs`),
+  NumPy's `res = empty((N,) + dimensions, dtype)` then one `arange(dim, dtype)` per axis assigned with broadcasting: the
   allocation's ValueError comes first (a negative dimension), an arange's TypeError next (a text dtype at any length,
   bool past two elements, even in an empty grid), a text dtype's empty tuple is an empty text array, and an int64-lane
-  grid keeps the IL fill kernel. The sparse grid is views of its aranges (`flags.owndata` False), and a negative dimension
-  there is an empty axis (the reshape's unknown dimension), as NumPy's. Gate `Indexing/np.indices.NumPyPort.Test.cs`.
+  grid keeps the IL fill kernel. The sparse grid is views of its aranges (`flags.owndata` False), and a negative
+  dimension there is an empty axis (the reshape's unknown dimension), as NumPy's. Gate
+  `Indexing/np.indices.NumPyPort.Test.cs`.
 - `np.meshgrid(x1, x2[, x3], string indexing="xy", bool sparse=false, bool copy=true)` plus `meshgrid(NDArray[] xi, …)`
   (`Creation/np.meshgrid.cs`): `"xy"` swaps the first two axes ((N, M) for 2-D) against `"ij"` ((M, N)); `sparse` keeps
   the open-mesh `(1,…,Ni,…,1)` shapes; `copy=false` returns broadcast views. Each grid keeps its input's dtype. A bad

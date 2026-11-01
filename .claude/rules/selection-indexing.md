@@ -216,7 +216,7 @@ Every store entry point packs a C# literal as NumPy's `PyArray_Pack` of a Python
 ## `take_along_axis` / `put_along_axis` / `select`
 
 - `np.take_along_axis(arr, indices, axis=-1)` (`numpy/lib/_shape_base_impl.py`; its statements are
-  `NDArray.TakeAlongAxis` in `Backends/NDArray.ShapeBase.cs`) is the per-slice gather that inverts
+  `NDArray.take_along_axis` in `Backends/NDArray.ShapeBase.cs`) is the per-slice gather that inverts
   `argsort`/`argmax(keepdims=True)` (`take_along_axis(a, a.argsort(axis), axis)` ≡ `sort(a, axis)`). One whole-array
   strided-odometer IL gather (`DirectILKernelGenerator.TakeAlongAxis.cs`: an outer odometer around a tight loop over the
   innermost axis, dtype-agnostic through a byte-width-keyed copy). `indices` must be an INTEGER array
@@ -233,7 +233,7 @@ Every store entry point packs a C# literal as NumPy's `PyArray_Pack` of a Python
   differs; the type, axis and size match, and `argsort`/`argmax` output is always exact). There is no SIMD gather: a
   hardware `VPGATHERQD/QQ` gather is barely faster than the scalar loop on AVX2 before the bounds validation a raise-mode
   gather still needs. Gates: `Indexing/TakeAlongAxisTests.cs` and the `groupa` tier.
-- `np.put_along_axis(arr, indices, values, axis)` is the setter twin (`NDArray.PutAlongAxis`), in place (returns
+- `np.put_along_axis(arr, indices, values, axis)` is the setter twin (`NDArray.put_along_axis`), in place (returns
   `void`); `axis` is required.
   A whole-array strided odometer (`DirectILKernelGenerator.PutAlongAxis.cs`) sharing take's iteration shape and
   non-axis broadcast, plus three setter rules: (1) `values` is BROADCAST, not cycled, to the indexing result shape
@@ -262,7 +262,7 @@ Every store entry point packs a C# literal as NumPy's `PyArray_Pack` of a Python
   separate groups (NumPy's `np.broadcast_arrays`, `Shape.BroadcastShape`: a mismatch names the two operands of its
   group); a non-bool condition is `TypeError("invalid entry {i} in condlist: should be boolean ndarray")`; a length
   mismatch and an empty condlist are `ValueError`. `Indexing/np.select.cs` is the facade, NumPy's statements are
-  `NDArray.Select` (`Manipulation/NDArray.FunctionBase.cs`). Contiguous, no-cast, full-size array choices run one fused
+  `NDArray.select` (`Manipulation/NDArray.FunctionBase.cs`). Contiguous, no-cast, full-size array choices run one fused
   IL kernel (`DirectILKernelGenerator.Select.cs`:
   a reverse `Vector.ConditionalSelect` chain seeded with the default, choices overlaid n-1 → 0 so the first true
   condition wins, 4× unrolled with four accumulators, the scalar default hoisted with `CreateBroadcast`, `np.where`'s
@@ -304,8 +304,8 @@ tiers `manip`/`matmul`; sources `Creation/np.tri.cs`, `Indexing/np.{diag,tril,di
   route when dynamic codegen is unavailable, as under AOT). A 2-D input EXTRACTS through `diagonal(v, k)`: a read-only
   view sharing storage. Anything else raises `ValueError("Input must be 1- or 2-d.")`.
 - `diagflat(v, k=0)` is `diag`'s 1-D branch for any rank: the input is raveled in logical C order first; 0-d → `(1,1)`.
-  The statements of both and their diagonal scatter are `NDArray.Diag` / `DiagFlat` (`Backends/NDArray.TwoDimBase.cs`,
-  beside `NDArray.Eye`); the `StringDType` route asks `HasReferences`.
+  The statements of both and their diagonal scatter are `NDArray.diag` / `diagflat` (`Backends/NDArray.TwoDimBase.cs`,
+  beside `NDArray.eye`); the `StringDType` route asks `HasReferences`.
 - `tri(N, M=None, k=0, dtype=float)`: ones at and below the k-th diagonal, written as a prefix of one pre-built ones row
   per row; negative `N`/`M` give an empty axis.
 - `tril(m, k=0)` / `triu(m, k=0)`: always a fresh writeable C-contiguous copy, the dtype kept, applied to the last two

@@ -100,7 +100,7 @@ namespace NumSharp
             // no array-subclass dispatch, so the value is accepted but never read.
             _ = like;
 
-            return NDArray.ArrayFromObject(a, dtype, order, copy);
+            return NDArray.asarray(a, dtype, order, copy);
         }
 
         /// <summary>

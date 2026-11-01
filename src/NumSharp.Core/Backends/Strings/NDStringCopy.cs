@@ -153,7 +153,7 @@ namespace NumSharp.Backends.Strings
 
             var dstShape = dst.Shape;
             int nd = dstShape.NDim;
-            using var spread = NDArray.BroadcastTo(bad, new Shape((long[])dstShape.dimensions.Clone()));
+            using var spread = NDArray.broadcast_to(bad, new Shape((long[])dstShape.dimensions.Clone()));
             using var hit = where is null ? spread.view() : spread.TensorEngine.LogicalAnd(spread, where);
 
             // NumPy's visiting order: axes by |dst stride| descending (stable: ties keep ascending axis), negative strides

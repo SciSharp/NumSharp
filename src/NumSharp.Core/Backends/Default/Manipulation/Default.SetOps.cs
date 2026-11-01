@@ -2,7 +2,7 @@
 // members, with the NaN pass that makes their float32 / float64 results NumPy's bits. NumPy's statements call np.unique,
 // np.concatenate, np.ravel, np.sort, np.isin, np.isnan, np.any and np.where; here they are this engine's or the
 // operand's engine members (np.unique's Unique with its defaults, values only) and the array object's (the ravel, the
-// concatenation, the one-element flag, NDArray.Where).
+// concatenation, the one-element flag, NDArray.where).
 
 using System;
 
@@ -21,7 +21,7 @@ namespace NumSharp.Backends
             // NumPy: unique(concatenate((ar1, ar2), axis=None)) — axis=None flattens both operands.
             // NumPy's unique-sort canonicalises a surviving float32/float64 NaN; match it (see CanonicalizeSetOpNaN).
             return CanonicalizeSetOpNaN(Unique(
-                NDArray.ConcatenateInto(new[] { NDArray.Ravel(ar1, 'C'), NDArray.Ravel(ar2, 'C') }, 0, null, null, "same_kind"),
+                NDArray.concatenate(new[] { NDArray.ravel(ar1, 'C'), NDArray.ravel(ar2, 'C') }, 0, null, null, "same_kind"),
                 false, false, false, null, true, true)[0]);
         }
 
@@ -41,7 +41,7 @@ namespace NumSharp.Backends
             }
 
             // concatenate((ar1, ar2), axis=None) — flattens both.
-            NDArray aux = NDArray.ConcatenateInto(new[] { NDArray.Ravel(ar1, 'C'), NDArray.Ravel(ar2, 'C') }, 0, null, null, "same_kind");
+            NDArray aux = NDArray.concatenate(new[] { NDArray.ravel(ar1, 'C'), NDArray.ravel(ar2, 'C') }, 0, null, null, "same_kind");
             if (aux.size == 0)
                 return aux;
 
@@ -50,7 +50,7 @@ namespace NumSharp.Backends
             // flag = concatenate(([True], aux[1:] != aux[:-1], [True]))
             NDArray trueOne = new NDArray(Unmanaged.ArraySlice.FromArray(new[] { true }, true), Shape.Vector(1));   // np.array([True])
             NDArray neq = aux["1:"] != aux[":-1"];
-            NDArray flag = NDArray.ConcatenateInto(new[] { trueOne, neq, trueOne }, 0, null, null, "same_kind");
+            NDArray flag = NDArray.concatenate(new[] { trueOne, neq, trueOne }, 0, null, null, "same_kind");
 
             // return aux[flag[1:] & flag[:-1]]  — values appearing exactly once survive
             NDArray sel = flag["1:"] & flag[":-1"];
@@ -68,7 +68,7 @@ namespace NumSharp.Backends
 
             if (assume_unique)
             {
-                ar1 = NDArray.Ravel(ar1, 'C');
+                ar1 = NDArray.ravel(ar1, 'C');
             }
             else
             {
@@ -122,7 +122,7 @@ namespace NumSharp.Backends
             NDArray canon = result.typecode == NPTypeCode.Double
                 ? NDArray.Scalar(BitConverter.UInt64BitsToDouble(0x7FF8000000000000UL))
                 : NDArray.Scalar(BitConverter.UInt32BitsToSingle(0x7FC00000U));
-            return NDArray.Where(mask, canon, result);
+            return NDArray.where(mask, canon, result);
         }
     }
 }

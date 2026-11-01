@@ -65,7 +65,7 @@ namespace NumSharp
             // probed 2.4.2). The layout itself is resolved after the device, as before.
             OrderResolver.Convert(order);
             DeviceArguments.ValidateDevice(device);
-            return NDArray.FullLike(a, fill_value, dtype, order);
+            return NDArray.full_like(a, fill_value, dtype, order);
         }
     }
 }

@@ -952,7 +952,7 @@ namespace NumSharp.Backends
             // UndisposedIntermediateTests once the instance oracle tier replayed a.sum() over
             // those layouts, 2026-09-18; the leak predated that tier).
             using var plain = NDMatrixBoundary.PlainFor(arr);   // an engine method computes plain: np.ascontiguousarray below must not apply its matrix rule
-            var c = NDArray.AsContiguousArray(arr, null);
+            var c = NDArray.ascontiguousarray(arr, null);
             try
             {
                 ushort* cp = (ushort*)((byte*)c.Address + c.Shape.offset * 2);

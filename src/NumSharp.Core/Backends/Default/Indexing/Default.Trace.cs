@@ -10,7 +10,7 @@ namespace NumSharp.Backends
         ///     NumPy's <c>PyArray_Trace</c>: <c>add.reduce(diagonal(a, offset, axis1, axis2), axis=-1, dtype=dtype,
         ///     out=out)</c>. A 2-D or 3-D operand without <paramref name="dtype"/> or <paramref name="out"/> takes the fused
         ///     kernel (<see cref="TryTraceFast"/>, one strided walk of the diagonal accumulating in the promoted dtype); every
-        ///     other call reads the diagonal view (<see cref="NDArray.Diagonal(NDArray, int, int, int)"/>, the array
+        ///     other call reads the diagonal view (<see cref="NDArray.diagonal(NDArray, int, int, int)"/>, the array
         ///     object's: a view is not an engine member) and runs the text routes; then an
         ///     <paramref name="out"/> takes the add reduction with an out operand (<see cref="ReduceAdd"/>: the reduce
         ///     prologue's checks and the loop <c>dtype ?? promote_types(out, diagonal)</c>), and a call without one sums a
@@ -37,7 +37,7 @@ namespace NumSharp.Backends
 
             // The diagonal validates ndim, axis values, and axis1!=axis2 and emits
             // a 1-D-extended view (the diagonal axis is the last dim of the result).
-            var diag = NDArray.Diagonal(a, offset, axis1, axis2);
+            var diag = NDArray.diagonal(a, offset, axis1, axis2);
             // A StringDType input: the diagonal's add.reduce along its LAST axis (PyArray_Trace), out= included — the
             // StringDType loop concatenates (a dtype= request has no loop, an empty diagonal has no identity).
             if (Strings.NDStringUfuncs.VStringReduces("trace", diag, diag.ndim - 1, dtype, @out, loopOnly: true))
@@ -78,7 +78,7 @@ namespace NumSharp.Backends
             // than the contig path. Materialise the diagonal to a contig copy
             // before summing — the extra memcpy is dwarfed by the SIMD win
             // (4.4μs vs 22μs for 100×100, 5.8μs vs 198μs for 1000×1000).
-            var diagContig = NDArray.AsContiguousArray(diag, null);
+            var diagContig = NDArray.ascontiguousarray(diag, null);
             try
             {
                 // Pick the axis arg that hits NumSharp's fastest reduction path:

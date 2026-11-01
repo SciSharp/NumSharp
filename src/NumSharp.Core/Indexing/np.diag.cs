@@ -44,7 +44,7 @@ namespace NumSharp
                 return NDCharArrayBoundary.Kept((v, k), static s => diag(s.v, s.k));
             using var plain = NDMatrixBoundary.PlainFor(v);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (v is null) throw new ArgumentNullException(nameof(v));
-            return NDArray.Diag(v, k);
+            return NDArray.diag(v, k);
         }
 
         /// <summary>
@@ -82,7 +82,7 @@ namespace NumSharp
             if (NDCharArrayBoundary.Sees(v))
                 return NDCharArrayBoundary.Wrapped((v, k), static s => diagflat(s.v, s.k));
             if (v is null) throw new ArgumentNullException(nameof(v));
-            return NDArray.DiagFlat(v, k);
+            return NDArray.diagflat(v, k);
         }
     }
 }

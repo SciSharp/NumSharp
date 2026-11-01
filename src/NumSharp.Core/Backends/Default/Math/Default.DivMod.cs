@@ -117,13 +117,13 @@ namespace NumSharp.Backends
         /// </summary>
         private NDArray MaterializeContiguous(NDArray x, Shape shape, NPTypeCode rt)
         {
-            var v = x.Shape.Equals(shape) && !x.Shape.IsBroadcasted ? x : NDArray.BroadcastTo(x, shape);
+            var v = x.Shape.Equals(shape) && !x.Shape.IsBroadcasted ? x : NDArray.broadcast_to(x, shape);
             if (v.GetTypeCode == rt && v.Shape.IsContiguous && v.Shape.offset == 0 && !v.Shape.IsBroadcasted)
                 return v;
             // asarray(order='C') materializes a C-contiguous resultType copy through any layout,
             // preserving the (ndim>=1) shape — unlike ascontiguousarray it does not reshape 0-d,
             // but this path only runs for ndim>=1 (0-d routes to the compose fallback above).
-            return NDArray.AsContiguousArray(v, rt);
+            return NDArray.ascontiguousarray(v, rt);
         }
     }
 }

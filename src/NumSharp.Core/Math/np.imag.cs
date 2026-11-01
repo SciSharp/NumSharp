@@ -22,9 +22,9 @@ namespace NumSharp
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(val))
-                return NDMatrixBoundary.Wrapped(val, static s => NDArray.ImagPart(s));
+                return NDMatrixBoundary.Wrapped(val, static s => NDArray.imag_(s));
             // NumPy's `val.imag`: the statements are the array object's (NDArray.TypeCheck.cs)
-            return NDArray.ImagPart(val);
+            return NDArray.imag_(val);
         }
     }
 }

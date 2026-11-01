@@ -441,7 +441,7 @@ namespace NumSharp.Backends.Strings
                 else
                     typed = leaves.Select(x => (bool)x).ToArray();
                 // np.array(typed)'s statement after its null check: the managed array's own dtype, copied, C order.
-                var flat = NDArray.ArrayFromManaged(typed, null, 0, true, 'C');
+                var flat = NDArray.array(typed, null, 0, true, 'C');
                 if (dims.Count == 1)
                 {
                     array = flat;

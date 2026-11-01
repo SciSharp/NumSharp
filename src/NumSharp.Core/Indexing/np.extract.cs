@@ -58,7 +58,7 @@ namespace NumSharp
             if (arr is null) throw new ArgumentNullException(nameof(arr));
 
             // NumPy's numpy.extract: the statements are the array object's (NDArray.FunctionBase.cs)
-            return NDArray.Extract(condition, arr);
+            return NDArray.extract(condition, arr);
         }
     }
 }

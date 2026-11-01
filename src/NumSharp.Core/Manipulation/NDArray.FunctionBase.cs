@@ -165,7 +165,7 @@ namespace NumSharp
         /// <remarks>Covered by <c>[NDScopedCovered]</c>: its only callers are the <c>[NDScoped]</c> np.insert overloads,
         ///     whose scope releases the ravel work array, the converted values and the intermediates.</remarks>
         [NDScopedCovered]
-        internal static NDArray Insert(NDArray arr, long obj, NDArray values, int? axis)
+        internal static NDArray insert(NDArray arr, long obj, NDArray values, int? axis)
         {
             var ctx = PrepareAxisContext(arr, axis);
             return WithSourceOrder(arr, InsertSingleIndex(ctx.work, obj, values, ctx.axis, scalarObj: true, obj));
@@ -189,9 +189,9 @@ namespace NumSharp
         ///     mismatch: value array of shape ... could not be broadcast to indexing result of shape ...</c>); the array
         ///     does not fill the slots left when two positions name one slot (<see cref="InsertMultiIndex"/>); text values
         ///     that do not parse as a numeric array's number type.</exception>
-        /// <remarks>Covered by <c>[NDScopedCovered]</c>, as <see cref="Insert(NDArray, long, NDArray, int?)"/>.</remarks>
+        /// <remarks>Covered by <c>[NDScopedCovered]</c>, as <see cref="insert(NDArray, long, NDArray, int?)"/>.</remarks>
         [NDScopedCovered]
-        internal static NDArray Insert(NDArray arr, Slice obj, NDArray values, int? axis)
+        internal static NDArray insert(NDArray arr, Slice obj, NDArray values, int? axis)
         {
             var ctx = PrepareAxisContext(arr, axis);
             long N = ctx.work.Shape.dimensions[ctx.axis];
@@ -226,9 +226,9 @@ namespace NumSharp
         ///     mismatch: value array of shape ... could not be broadcast to indexing result of shape ...</c>); the array
         ///     does not fill the slots left when two positions name one slot (<see cref="InsertMultiIndex"/>); text values
         ///     that do not parse as a numeric array's number type.</exception>
-        /// <remarks>Covered by <c>[NDScopedCovered]</c>, as <see cref="Insert(NDArray, long, NDArray, int?)"/>.</remarks>
+        /// <remarks>Covered by <c>[NDScopedCovered]</c>, as <see cref="insert(NDArray, long, NDArray, int?)"/>.</remarks>
         [NDScopedCovered]
-        internal static NDArray Insert(NDArray arr, int[] obj, NDArray values, int? axis)
+        internal static NDArray insert(NDArray arr, int[] obj, NDArray values, int? axis)
         {
             var longs = new long[obj.Length];
             for (int i = 0; i < obj.Length; i++) longs[i] = obj[i];
@@ -260,9 +260,9 @@ namespace NumSharp
         ///     mismatch: value array of shape ... could not be broadcast to indexing result of shape ...</c>); the array
         ///     does not fill the slots left when two positions name one slot (<see cref="InsertMultiIndex"/>); text values
         ///     that do not parse as a numeric array's number type.</exception>
-        /// <remarks>Covered by <c>[NDScopedCovered]</c>, as <see cref="Insert(NDArray, long, NDArray, int?)"/>.</remarks>
+        /// <remarks>Covered by <c>[NDScopedCovered]</c>, as <see cref="insert(NDArray, long, NDArray, int?)"/>.</remarks>
         [NDScopedCovered]
-        internal static NDArray Insert(NDArray arr, long[] obj, NDArray values, int? axis)
+        internal static NDArray insert(NDArray arr, long[] obj, NDArray values, int? axis)
         {
             var ctx = PrepareAxisContext(arr, axis);
             // One position: the single-index branch, whose IndexError prints the sequence as a Python list (index [13]).
@@ -304,10 +304,10 @@ namespace NumSharp
         /// <exception cref="ArgumentException">Several positions in an UNSIGNED index array: NumPy's in-place shift cannot cast
         ///     its int64 result back (<c>Cannot cast ufunc 'add' output from dtype('int64') to dtype('uint8') with casting
         ///     rule 'same_kind'</c>, NumSharp's ufunc output-cast refusal); an empty one too.</exception>
-        /// <remarks>Covered by <c>[NDScopedCovered]</c>, as <see cref="Insert(NDArray, long, NDArray, int?)"/>; the
+        /// <remarks>Covered by <c>[NDScopedCovered]</c>, as <see cref="insert(NDArray, long, NDArray, int?)"/>; the
         ///     boolean mask's flatnonzero temp is released by the same scope.</remarks>
         [NDScopedCovered]
-        internal static NDArray Insert(NDArray arr, NDArray obj, NDArray values, int? axis)
+        internal static NDArray insert(NDArray arr, NDArray obj, NDArray values, int? axis)
         {
             var ctx = PrepareAxisContext(arr, axis);
 
@@ -662,7 +662,7 @@ namespace NumSharp
         ///     — NumPy's step before its slice error.</exception>
         /// <exception cref="UnicodeError">Thrown (not returned) when the values do not convert between the string classes.</exception>
         /// <remarks>Covered by <c>[NDScopedCovered]</c>: its only caller is the covered
-        ///     <see cref="Insert(NDArray, NDArray, NDArray, int?)"/>, under the <c>[NDScoped]</c> np.insert overloads, so the
+        ///     <see cref="insert(NDArray, NDArray, NDArray, int?)"/>, under the <c>[NDScoped]</c> np.insert overloads, so the
         ///     values converted for NumPy's step before the slice error are released by that scope.</remarks>
         [NDScopedCovered]
         private static Exception InsertNonIntegerObj(NDArray arr, NDArray obj, NDArray values, int axis)
@@ -1102,7 +1102,7 @@ namespace NumSharp
         /// <remarks>Covered by <c>[NDScopedCovered]</c>: its only callers are the <c>[NDScoped]</c> np.delete overloads,
         ///     whose scope releases the ravel work array and the concatenated chunks.</remarks>
         [NDScopedCovered]
-        internal static NDArray Delete(NDArray arr, long obj, int? axis)
+        internal static NDArray delete(NDArray arr, long obj, int? axis)
         {
             var ctx = PrepareAxisContext(arr, axis);
             return WithSourceOrder(arr, DeleteSingleIndex(ctx.work, obj, ctx.axis));
@@ -1120,7 +1120,7 @@ namespace NumSharp
         /// <exception cref="ArgumentException">A slice step of zero.</exception>
         /// <remarks>Covered by <c>[NDScopedCovered]</c> (see the number overload).</remarks>
         [NDScopedCovered]
-        internal static NDArray Delete(NDArray arr, Slice obj, int? axis)
+        internal static NDArray delete(NDArray arr, Slice obj, int? axis)
         {
             var ctx = PrepareAxisContext(arr, axis);
             return WithSourceOrder(arr, DeleteSlice(ctx.work, obj, ctx.axis));
@@ -1140,7 +1140,7 @@ namespace NumSharp
         ///     deletion axis for a one-element list and the keep mask's axis 0 for a longer one.</exception>
         /// <remarks>Covered by <c>[NDScopedCovered]</c> (see the number overload).</remarks>
         [NDScopedCovered]
-        internal static NDArray Delete(NDArray arr, int[] obj, int? axis)
+        internal static NDArray delete(NDArray arr, int[] obj, int? axis)
         {
             var ctx = PrepareAxisContext(arr, axis);
             // NumPy's np.asarray(obj) of one integer is its single-value path (`obj.size == 1 and obj.dtype.kind in "ui"`):
@@ -1166,7 +1166,7 @@ namespace NumSharp
         ///     deletion axis for a one-element list and the keep mask's axis 0 for a longer one.</exception>
         /// <remarks>Covered by <c>[NDScopedCovered]</c> (see the number overload).</remarks>
         [NDScopedCovered]
-        internal static NDArray Delete(NDArray arr, long[] obj, int? axis)
+        internal static NDArray delete(NDArray arr, long[] obj, int? axis)
         {
             var ctx = PrepareAxisContext(arr, axis);
             // One integer is NumPy's single-value path (see the int[] overload).
@@ -1189,7 +1189,7 @@ namespace NumSharp
         /// <remarks>Covered by <c>[NDScopedCovered]</c>: the keep mask is released by the caller's scope, exceptions
         ///     included.</remarks>
         [NDScopedCovered]
-        internal static NDArray Delete(NDArray arr, bool[] obj, int? axis)
+        internal static NDArray delete(NDArray arr, bool[] obj, int? axis)
         {
             var ctx = PrepareAxisContext(arr, axis);
             long N = ctx.work.Shape.dimensions[ctx.axis];
@@ -1226,7 +1226,7 @@ namespace NumSharp
         /// <remarks>Covered by <c>[NDScopedCovered]</c>: the ravel of a multi-dimensional index array and the keep mask
         ///     are released by the caller's scope.</remarks>
         [NDScopedCovered]
-        internal static NDArray Delete(NDArray arr, NDArray obj, int? axis)
+        internal static NDArray delete(NDArray arr, NDArray obj, int? axis)
         {
             var ctx = PrepareAxisContext(arr, axis);
 
@@ -1517,7 +1517,7 @@ namespace NumSharp
         ///     (<see cref="TryExtractFast"/>), NumPy's own chain (flatnonzero, then take) for everything else.
         /// </remarks>
         [NDScoped] // reclaims the ravel view/copy handed to take (and the flatnonzero indices on the throw path)
-        internal static NDArray Extract(NDArray condition, NDArray arr)
+        internal static NDArray extract(NDArray condition, NDArray arr)
         {
             // Fast path: bool cond + contig source/cond + cond.size <= arr.size.
             // The kernel walks the mask and gathers from src in one pass with no
@@ -1637,7 +1637,7 @@ namespace NumSharp
         ///     <c>typecodes['AllFloat']</c> (<see cref="IsFloatFamily"/>): integers, bool, char and decimal cannot hold a
         ///     non-finite value. np.asarray's own errors (a dtype it cannot cast to, an order letter) come first.
         /// </remarks>
-        internal static NDArray AsarrayChkfinite(NDArray a, DType dtype, char order)
+        internal static NDArray asarray_chkfinite(NDArray a, DType dtype, char order)
         {
             var arr = np.asarray(a, dtype, order);
 
@@ -1680,7 +1680,7 @@ namespace NumSharp
             bool wantF = arr.Shape.IsFContiguous && !arr.Shape.IsContiguous;
             if (wantF)
                 return result.Shape.IsFContiguous ? result : asfortranarray(result);
-            return result.Shape.IsContiguous ? result : ascontiguousarray(result);
+            return result.Shape.IsContiguous ? result : np.ascontiguousarray(result);
         }
 
         /// <summary>
@@ -1915,7 +1915,7 @@ namespace NumSharp
         ///     the way out.
         /// </remarks>
         [NDScoped]
-        internal static NDArray Select(NDArray[] condlist, object[] choicelist, object @default)
+        internal static NDArray select(NDArray[] condlist, object[] choicelist, object @default)
         {
             // NumPy's order: the length check precedes the empty check, so select([], [x])
             // is a length error while select([], []) is the empty-condition error.
@@ -2078,7 +2078,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="value">A boxed C# integer primitive, <c>float</c>, <c>double</c> or
         ///     <see cref="System.Numerics.Complex"/> (the values the select loop classifies as weak).</param>
-        /// <returns>A new 0-d array; created inside <see cref="Select"/>'s scope, which releases it.</returns>
+        /// <returns>A new 0-d array; created inside <see cref="select"/>'s scope, which releases it.</returns>
         /// <exception cref="ArgumentException"><paramref name="value"/> is none of those (a caller defect).</exception>
         private static NDArray SelectPythonScalarArray(object value) => value switch
         {
@@ -2141,7 +2141,7 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     The fused single-pass fast path for <see cref="select"/>. Fires only when every
+        ///     The fused single-pass fast path for <see cref="np.select"/>. Fires only when every
         ///     condition and choice is C-contiguous at the full result shape and the result dtype
         ///     (no broadcast, no cast) — the case NumPy's copyto composition leaves memory-bound.
         ///     Delegates the whole select to one IL kernel
@@ -2302,7 +2302,7 @@ namespace NumSharp
         ///     <c>int()</c> / <c>float()</c> texts), a None constant into an integer one.</exception>
         /// <exception cref="ValueError">A float NaN or a text that is not a number into a number dtype.</exception>
         /// <exception cref="IndexError">An empty condition list ("list index out of range").</exception>
-        internal static NDArray Piecewise(NDArray x, NDArray[] condlist, object[] funclist, object[] args)
+        internal static NDArray piecewise(NDArray x, NDArray[] condlist, object[] funclist, object[] args)
         {
             // NumPy's promotion inspects condlist[0]; an empty list raises there, before the
             // function-count check ever runs.
@@ -2333,7 +2333,7 @@ namespace NumSharp
         ///     of bounds for axis 0 with size 0").</exception>
         /// <remarks>The row views the promotion indexes out of the caller's array are this call's own and are disposed on
         ///     the way out; the caller's array is not.</remarks>
-        internal static NDArray Piecewise(NDArray x, NDArray condlist, object[] funclist, object[] args)
+        internal static NDArray piecewise(NDArray x, NDArray condlist, object[] funclist, object[] args)
         {
             NDArray[] promoted = PromoteBareCondlist(x, condlist);
             try
@@ -2368,7 +2368,7 @@ namespace NumSharp
         /// <exception cref="TypeError">A complex constant into an integer or float <paramref name="x"/> (Python's
         ///     <c>int()</c> / <c>float()</c> texts), a None constant into an integer one.</exception>
         /// <exception cref="ValueError">A float NaN or a text that is not a number into a number dtype.</exception>
-        internal static NDArray Piecewise(NDArray x, bool condlist, object[] funclist, object[] args)
+        internal static NDArray piecewise(NDArray x, bool condlist, object[] funclist, object[] args)
         {
             // isscalar(condlist) => condlist = [condlist] => a single 0-d bool condition (all / nothing).
             // The 0-d wrapper is this call's own temporary (the result never refers to it), so release it

@@ -72,7 +72,7 @@ paths:
   the check) holds an inf or NaN. The check is a fused single-pass NaN-poison SIMD reduction
   (`Backends/Kernels/FiniteScan.cs`: `acc += v - v` adds +0 for a finite value and an absorbing NaN otherwise; AVX2
   gather and a reversed-contiguous fast path for strided and negative-stride views). Its statements are
-  `NDArray.AsarrayChkfinite` (`Manipulation/NDArray.FunctionBase.cs`).
+  `NDArray.asarray_chkfinite` (`Manipulation/NDArray.FunctionBase.cs`).
 - `require(a, dtype=None, requirements=None)` parses the C/F/A/W/O/E flags and their aliases (a single string iterates
   by character like NumPy, so `"F_CONTIGUOUS"` as one string raises), resolves an order, and copies only when a remaining
   ALIGNED/WRITEABLE/OWNDATA flag is unsatisfied (ALIGNED fails after `setflags(align=False)` or over a caller's buffer at
@@ -83,7 +83,7 @@ paths:
 
 ## `np.array` / `np.asanyarray` of a C# object list
 
-They are NumPy's coercion of a Python list (`NDArray.AnyArrayFromObject` in `Creation/NDArray.Multiarray.cs`, over
+They are NumPy's coercion of a Python list (`NDArray.asanyarray` in `Creation/NDArray.Multiarray.cs`, over
 `Backends/Unmanaged/UnmanagedStorage.Coercion{,.Sequence,.Text}.cs`).
 - An `object[]`, a jagged `object[][]`, an `object[,]` grid (a list of rows), a tuple and a `List<object>` / `ArrayList`
   read as Python values: a C# integer is a Python int, a `float` / `double` a Python float, `null` None, a typed C# array
@@ -103,9 +103,9 @@ They are NumPy's coercion of a Python list (`NDArray.AnyArrayFromObject` in `Cre
 
 ## `np.full` / `np.full_like` / `np.ones` / `np.eye`
 
-They are the array object's: `NDArray.Full` / `FullLike` / `Ones` (`Backends/NDArray.Numeric.cs`, numeric.py's
-`a = empty(...); copyto(a, fill_value, casting='unsafe')`) and `NDArray.Eye` (`Backends/NDArray.TwoDimBase.cs`), over the
-storage-lane fills `UnmanagedStorage.FullCore` / `FullFillElement` / `OnesCore` (`UnmanagedStorage.Ctors.cs`).
+They are the array object's: `NDArray.full` / `full_like` / `ones` (`Backends/NDArray.Numeric.cs`, numeric.py's
+`a = empty(...); copyto(a, fill_value, casting='unsafe')`) and `NDArray.eye` (`Backends/NDArray.TwoDimBase.cs`), over
+the storage-lane fills `UnmanagedStorage.FullCore` / `FullFillElement` / `OnesCore` (`UnmanagedStorage.Ctors.cs`).
 - The fill value is read as NumPy's `asarray(fill_value)` without a dtype: a 0-d array keeps its dtype, a `BigInteger` is
   a Python int (int64, uint64, or the object-array refusal), except that a C# number keeps its C# type, as `np.asarray(7)`
   does (`np.full(3, 7)` is int32 where NumPy's is int64).
@@ -286,7 +286,7 @@ Ported from NumPy's C (gates `Backends/AllocationGuardTests.cs`, `Manipulation/R
   NumPy's order (`(-1, 2^62)` is `negative dimensions are not allowed`, `(2^62, -1)` is `array is too big; ...`). There
   are two wrap points, the byte count (`(2^31, 2^31)`) and the element count itself (`(2^62, 2^62)`), so the guard keys
   off the dimensions, never `shape.size`. The fills behind `np.full` / `np.full_like` / `np.ones` allocate from
-  `shape.size` directly and carry the call explicitly (`UnmanagedStorage.FullCore` / `OnesCore`, `NDArray.FullLike`);
+  `shape.size` directly and carry the call explicitly (`UnmanagedStorage.FullCore` / `OnesCore`, `NDArray.full_like`);
   `UnmanagedMemoryBlock<T>`'s two allocating constructors hold a byte-count backstop.
 - `ndarray.resize` follows `PyArray_Resize_int`, which differs on three points: it breaks at the first zero dim
   (`a.resize((0,-1))` is legal and gives shape `(0,-1)`), its text omits "are" (`negative dimensions not allowed`), and

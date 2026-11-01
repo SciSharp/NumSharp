@@ -181,7 +181,7 @@ namespace NumSharp.Backends
                 // dtype the fast path would be wrong — bail out and use the slow path.
                 var resultType = ResolvePowerResultType(lhs, rhs);
                 if (resultType == lhsTc)
-                    return NDArray.Ones(Shape.NewLikeLayout(lhs.Shape, 'K', (long[])lhs.Shape.dimensions.Clone()), lhs.dtype);
+                    return NDArray.ones(Shape.NewLikeLayout(lhs.Shape, 'K', (long[])lhs.Shape.dimensions.Clone()), lhs.dtype);
                 return null;
             }
 

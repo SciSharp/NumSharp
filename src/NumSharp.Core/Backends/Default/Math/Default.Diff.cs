@@ -62,7 +62,7 @@ namespace NumSharp.Backends
                 if (append is not null)
                     parts.Add(DiffPrepareEnd(append, a, ax, toDispose));
 
-                work = NDArray.ConcatenateInto(parts.ToArray(), ax, null, null, "same_kind");
+                work = NDArray.concatenate(parts.ToArray(), ax, null, null, "same_kind");
                 workOwned = true;
 
                 // Dispose intermediates view-before-owner (reverse insertion).
@@ -171,7 +171,7 @@ namespace NumSharp.Backends
                 v = nd;                       // caller-owned; do not dispose
             else
             {
-                v = NDArray.AnyArrayFromObject(value, null, 'K');   // np.asanyarray's statement (an NDArray is the branch above)
+                v = NDArray.asanyarray(value, null, 'K');   // np.asanyarray's statement (an NDArray is the branch above)
                 toDispose.Add(v);
             }
 
@@ -180,7 +180,7 @@ namespace NumSharp.Backends
                 long[] dims = new long[a.ndim];
                 for (int i = 0; i < a.ndim; i++) dims[i] = a.Shape.dimensions[i];
                 dims[axis] = 1;
-                var bcast = NDArray.BroadcastTo(v, Shape.Adopt(dims));
+                var bcast = NDArray.broadcast_to(v, Shape.Adopt(dims));
                 toDispose.Add(bcast);
                 return bcast;
             }

@@ -441,7 +441,7 @@ namespace NumSharp.Backends
             var parts = new NDArray[cast.Length];
             for (int i = 0; i < cast.Length; i++)
                 parts[i] = cast[i].reshape(1);
-            return NDArray.ConcatenateInto(parts, 0, null, null, "same_kind");
+            return NDArray.concatenate(parts, 0, null, null, "same_kind");
         }
 
         /// <summary>

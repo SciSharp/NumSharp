@@ -60,7 +60,7 @@ namespace NumSharp
             // array has no comparison with.
             // np.asanyarray's body (the array object's coercion; a numpy.matrix or chararray value is used as it is, which
             // the comparison below reads as the plain array either way).
-            var scalar = value is string text && typecode == NPTypeCode.Char ? NDArray.FromString(text) : AnyArrayFromObject(value, null, 'K');
+            var scalar = value is string text && typecode == NPTypeCode.Char ? NDArray.FromString(text) : asanyarray(value, null, 'K');
 
             // `comparison` IS using-bound: operator== always allocates a fresh bool
             // NDArray sized broadcast(this, scalar); after the engine's Any reads it, the buffer
@@ -388,12 +388,12 @@ namespace NumSharp
                 // and the list is bounded by the result's rank and must broadcast to its shape with AssignArray's text.
                 long[] resultDims = MapIterResultDims(Shape, prepared);
                 Backends.UnmanagedStorage.ThrowIfSequenceExceedsDims(value, resultDims.Length);
-                var filled = AnyArrayFromObject(value, Storage.Descr, 'K');
+                var filled = asanyarray(value, Storage.Descr, 'K');
                 ThrowIfCannotAssignInto(filled, resultDims);
                 this[key] = filled;
                 return;
             }
-            this[key] = AnyArrayFromObject(value, Storage.Descr, 'K');
+            this[key] = asanyarray(value, Storage.Descr, 'K');
         }
 
         /// <summary>

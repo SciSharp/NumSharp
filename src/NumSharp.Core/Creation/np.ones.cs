@@ -79,7 +79,7 @@ namespace NumSharp
         public static NDArray ones(Shape shape, DType dtype, string device = null)
         {
             DeviceArguments.ValidateDevice(device);
-            return NDArray.Ones(shape, dtype);
+            return NDArray.ones(shape, dtype);
         }
 
         /// <summary>
@@ -104,7 +104,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ones.html</remarks>
         public static NDArray ones(Shape shape, char order, DType dtype = null)
         {
-            return NDArray.Ones(shape, order, dtype);
+            return NDArray.ones(shape, order, dtype);
         }
     }
 }

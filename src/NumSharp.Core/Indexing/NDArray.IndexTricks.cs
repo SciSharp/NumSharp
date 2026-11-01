@@ -10,11 +10,12 @@ using NumSharp.Backends.Kernels;
 namespace NumSharp
 {
     // ============================== lib/_index_tricks_impl.py ==============================
-    // NumPy's index tricks as members of the array object (P3's batch 7): np.ix_ (Ix), np.fill_diagonal (FillDiagonal,
-    // with the diagonal scatter np.diag shares) and the statements of np.r_ / np.c_'s indexer (AxisConcatenate, NumPy's
-    // AxisConcatenator.__getitem__) with their helpers, and np.mgrid / np.ogrid's (MGrid, OGrid: NumPy's
-    // nd_grid.__getitem__). The facades keep their numpy.matrix rules and null checks, and np.AxisConcatenator keeps
-    // the C# spelling of a slice (SliceSpec, ParseSliceToken), which np.ogrid / np.mgrid share.
+    // NumPy's index tricks as members of the array object (P3's batch 7): np.ix_ (ix_), np.fill_diagonal
+    // (fill_diagonal, with the diagonal scatter np.diag shares) and the statements of np.r_ / np.c_'s indexer
+    // (AxisConcatenate, NumPy's AxisConcatenator.__getitem__) with their helpers, and np.mgrid / np.ogrid's (mgrid,
+    // ogrid: NumPy's nd_grid.__getitem__). The facades keep their numpy.matrix rules and null checks, and
+    // np.AxisConcatenator keeps the C# spelling of a slice (SliceSpec, ParseSliceToken), which np.ogrid / np.mgrid
+    // share.
     public partial class NDArray
     {
         // ---------------------------- np.ix_ ----------------------------
@@ -34,7 +35,7 @@ namespace NumSharp
         /// <remarks>Scoped: the conversions of the sequences and the masks' index arrays are temporaries of this call (the
         ///     facade keeps its own scope).</remarks>
         [NDScoped]
-        internal static NDArray[] Ix(object[] args)
+        internal static NDArray[] ix_(object[] args)
         {
             if (args is null || args.Length == 0)
                 return System.Array.Empty<NDArray>();
@@ -126,7 +127,7 @@ namespace NumSharp
         /// <exception cref="NotSupportedException">A value of no NumPy type.</exception>
         /// <remarks>Scoped: the packed value, its broadcast and the tiled values are temporaries of this call.</remarks>
         [NDScoped]
-        internal static void FillDiagonal(NDArray a, object val, bool wrap)
+        internal static void fill_diagonal(NDArray a, object val, bool wrap)
         {
 
             int ndim = a.ndim;
@@ -321,7 +322,7 @@ namespace NumSharp
         ///     buffer (the sequence fill) both feed it without materialising a slice. When the
         ///     kernel is unavailable the code falls back to the original alias + <c>SetData</c>.
         /// </remarks>
-        [NDScopedCovered] // only reached from [NDScoped] FillDiagonal (the AOT-fallback alias + value slice are scope-reclaimed)
+        [NDScopedCovered] // only reached from [NDScoped] fill_diagonal (the AOT-fallback alias + value slice are scope-reclaimed)
         private static void WriteDiagonalBlock(
             NDArray a, NDArray values, long valueStart, long len, long offset, long stride, long bufferSize)
         {
@@ -896,7 +897,7 @@ namespace NumSharp
         /// <exception cref="OverflowException">An infinite size; a Python int NumPy cannot convert (see
         ///     <see cref="GridFillLine"/>).</exception>
         [NDScoped] // reclaims each rescale pass's line/reshape/broadcast temps and the grid[k] layer views
-        internal static NDArray MGrid(object[] key)
+        internal static NDArray mgrid(object[] key)
         {
             // Shared nd_grid parsing (same grammar/errors as ogrid).
             var specs = ParseGridSpecs(key, "mgrid");
@@ -1432,7 +1433,7 @@ namespace NumSharp
         // reference on the line's buffer. Without the scope every line's wrapper stranded one pooled buffer per slice
         // (measured: 2 for a 2-slice ogrid). The weaver yields every element of the returned array.
         [NDScoped]
-        internal static NDArray[] OGrid(object[] key, string caller)
+        internal static NDArray[] ogrid(object[] key, string caller)
         {
             var specs = ParseGridSpecs(key, caller);
 

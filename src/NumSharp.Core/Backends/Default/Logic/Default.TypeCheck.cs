@@ -127,8 +127,8 @@ namespace NumSharp.Backends
             if (tc == NPTypeCode.Complex)
             {
                 // NumPy: dest = (x.real, x.imag) — writeable strided float64 views, both fed the same fills.
-                NanToNumReplaceInto(NDArray.RealPart(work), nanArr, posArr, negArr);
-                NanToNumReplaceInto(NDArray.ImagPart(work), nanArr, posArr, negArr);
+                NanToNumReplaceInto(NDArray.real_(work), nanArr, posArr, negArr);
+                NanToNumReplaceInto(NDArray.imag_(work), nanArr, posArr, negArr);
             }
             else
             {
@@ -173,7 +173,7 @@ namespace NumSharp.Backends
             // A complex fill: copyto refuses complex -> float the same way (NumPy names complex64 for a float32 / float16
             // destination; NumSharp has one complex width).
             else if (fill is System.Numerics.Complex c) return NDArray.Scalar(c);
-            else if (fill is Array a) arr = NDArray.ArrayFromManaged(a, null, 0, true, 'C');
+            else if (fill is Array a) arr = NDArray.array(a, null, 0, true, 'C');
             else arr = NDArray.Scalar(FillToDouble(fill));
             // A complex or text array keeps its dtype too, for the same refusal; a real fill is cast to the destination
             // dtype up front (NumPy's copyto casts fill -> d.dtype).
@@ -200,11 +200,11 @@ namespace NumSharp.Backends
                 return new NDArray(NPTypeCode.Boolean, Shape.Adopt(a.Shape.dimensions), true);
 
             if (a.GetTypeCode != NPTypeCode.Complex)
-                return NDArray.Ones(Shape.Adopt(a.Shape.dimensions), NPTypeCode.Boolean);
+                return NDArray.ones(Shape.Adopt(a.Shape.dimensions), NPTypeCode.Boolean);
 
             // Complex: the imaginary lane (a strided float64 view via np.imag) compared to zero.
             // IEEE `==` gives NumPy's semantics exactly: -0.0 == 0 (real), NaN/Inf != 0 (not real).
-            return Compare(NDArray.ImagPart(a), NDArray.Scalar(0d));
+            return Compare(NDArray.imag_(a), NDArray.Scalar(0d));
         }
 
         /// <inheritdoc />
@@ -232,7 +232,7 @@ namespace NumSharp.Backends
 
             // Complex: the imaginary lane (a strided float64 view via np.imag) compared to zero.
             // IEEE `!=` gives NumPy's semantics exactly: -0.0 != 0 is False, NaN/Inf != 0 is True.
-            return NotEqual(NDArray.ImagPart(a), NDArray.Scalar(0d));
+            return NotEqual(NDArray.imag_(a), NDArray.Scalar(0d));
         }
 
         /// <summary>
@@ -261,7 +261,7 @@ namespace NumSharp.Backends
             // returns true for an empty array (vacuous all -> empty complex collapses) and false the moment
             // it sees a magnitude >= tol, a NaN, or an infinity.
             if (ImagCloseScan.AllImagWithinTol(a, tol))
-                return NDArray.RealPart(a); // float64 view onto the real lane (shares memory), == NumPy's a.real
+                return NDArray.real_(a); // float64 view onto the real lane (shares memory), == NumPy's a.real
 
             // Some imaginary part is out of band (or NaN/inf): the array stays complex, unchanged.
             return a;

@@ -18,7 +18,7 @@ namespace NumSharp
         ///     the same choice. So do the other places where NumPy's answer depends on scalar against 0-d ndarray: the
         ///     scalar-type isinstance rule (<see cref="NDScalarType"/>: an explicit 0-d array is no NumPy scalar),
         ///     numpy.polynomial's operand protocol (an unmarked 0-d array is a NumPy scalar there) and
-        ///     <see cref="ApplyAlongAxis"/>'s <c>asanyarray</c> of its first result (an unmarked 0-d text array is an
+        ///     <see cref="apply_along_axis"/>'s <c>asanyarray</c> of its first result (an unmarked 0-d text array is an
         ///     <c>np.str_</c> / <c>np.bytes_</c>, re-discovered at its value's width).
         ///     </para>
         ///     <para>

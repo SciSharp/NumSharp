@@ -34,7 +34,7 @@ namespace NumSharp
                 throw new ArgumentNullException(nameof(a));
 
             // NumPy's numpy.asarray_chkfinite: the statements are the array object's (NDArray.FunctionBase.cs)
-            return NDArray.AsarrayChkfinite(a, dtype, order);
+            return NDArray.asarray_chkfinite(a, dtype, order);
         }
     }
 }

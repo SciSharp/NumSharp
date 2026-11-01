@@ -30,7 +30,7 @@ namespace NumSharp
             if (strArray == null)
                 throw new ArgumentNullException(nameof(strArray));
             // NumPy's np.array of a list of str: the C# array overload's text route.
-            return NDArray.ArrayFromManaged(strArray, null, 0, true, 'C');
+            return NDArray.array(strArray, null, 0, true, 'C');
         }
     }
 }

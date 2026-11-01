@@ -193,7 +193,7 @@ namespace NumSharp
             if (arr is null)
                 throw new ArgumentNullException(nameof(arr));
 
-            return NDArray.AtLeast2d(arr);
+            return NDArray.atleast_2d(arr);
         }
 
         /// <summary>
@@ -286,7 +286,7 @@ namespace NumSharp
             if (arys == null)
                 throw new ArgumentNullException(nameof(arys));
 
-            return NDArray.AtLeast1d(asanyarray(arys, null));
+            return NDArray.atleast_1d(asanyarray(arys, null));
         }        
         
         /// <summary>
@@ -305,7 +305,7 @@ namespace NumSharp
             if (arr is null)
                 throw new ArgumentNullException(nameof(arr));
 
-            return NDArray.AtLeast1d(arr);
+            return NDArray.atleast_1d(arr);
         }
 
         /// <summary>

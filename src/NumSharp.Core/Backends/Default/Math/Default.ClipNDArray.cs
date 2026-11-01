@@ -568,7 +568,7 @@ namespace NumSharp.Backends
                 // RunClipKernel reads the value through .Address, which is only correct at offset 0.
                 return ScalarBoundReady(bound, outType) ? bound : bound.astype(outType);
             if (bound.ndim == 0)
-                return NDArray.Full(Shape.Adopt(runDims), bound.astype(outType).GetAtIndex(0), outType);
+                return NDArray.full(Shape.Adopt(runDims), bound.astype(outType).GetAtIndex(0), outType);
             return PrepareBound(bound, Shape.Adopt(runDims), outType);
         }
 
@@ -932,7 +932,7 @@ namespace NumSharp.Backends
             }
             // Broadcast to the target shape and convert dtype. On the flat route the bound already has the
             // target dims and is C-contiguous, so this is a plain dtype conversion (astype keeps C order).
-            return NDArray.BroadcastTo(bound, targetShape).astype(outType);
+            return NDArray.broadcast_to(bound, targetShape).astype(outType);
         }
 
         // True when a scalar (0-d) bound is already a value of outType at buffer offset 0,
