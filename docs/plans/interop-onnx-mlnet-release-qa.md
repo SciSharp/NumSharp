@@ -300,6 +300,12 @@ each with its tests and docs, never merged here (the **Branch** line of each ent
   - Recommended: (a) now, plus a CI leg on the newest ML.NET preview (`-p:MLNetVersion=6.0.0-preview.26513.4` runs
     green today), then the GA as P10's current leg. Edit: `src/NumSharp.Interop.MLNet/NumSharp.Interop.MLNet.csproj:85`,
     the comment above it, the "Depends" lines (docs page, README, release notes, rule).
+  - **Branch** `qa/p16-mlnet-range` `d1d10236` (option a): `[2.0.0,7.0.0)` with a comment that says why the bound sits
+    one major past the newest passing ML.NET and what a lower cap does (the old comment's reason, "keeps a future
+    ML.NET 6.x from being resolved automatically", never applied: NuGet picks the lowest applicable version, and a
+    newer DataView arrives only with the consumer's own Microsoft.ML); an advisory CI step "ML.NET: Test next preview
+    (net10.0, advisory)" (`continue-on-error`) on `6.0.0-preview.26513.4`; the rule and the notes. The packed nuspec
+    reads `[2.0.0, 7.0.0)` for both TFMs. ML.NET 6.0.0-preview net10.0 211 / 211, 2.0.1 net10.0 211 / 211.
 
 ## 6. Examples
 
@@ -339,13 +345,15 @@ The proposals (section 5) are separate, each the owner's to accept or drop:
 | `qa/p11-disposed-guard` (P11) | `1ab5c9fc` | `a57a6101` | ORT: new `OrtDisposalProbe.cs`, the Run forms, the import verbs' guard, new `DisposedOrtObjectTests` |
 | `qa/p7-runasync-symbols` (P7) | `5f6175ec` | `7d68a494` | ORT `InferenceSessionExtensions.Async.cs`, `SessionRunAsyncTests`, the ORT page |
 | `qa/p1-multi-array-view` (P1) | `a6baabb2` | `7d68a494` | ML.NET `NDArrayDataView.cs`, `NDArrayMLNetInterop.Export.cs`, new `TableViewTests`, the ML.NET page, README, notes, rule |
-| `qa/proposals-all` | `1d5638da` | `7d68a494` | the four merged in that order (`--no-ff`, up to `4851fd0f`), then `qa/interop-release` at `8438ee3e` (F49) merged on top |
+| `qa/p16-mlnet-range` (P16) | `d1d10236` | `e271d366` | ML.NET csproj range + comment, CI's advisory "next preview" step, the rule, the notes |
+| `qa/proposals-all` | `f2612d90` | `7d68a494` | the four merged in that order (`--no-ff`, up to `4851fd0f`), then `qa/interop-release` at `8438ee3e` (F49, `1d5638da`), then P16 (which brings `qa/interop-release` up to `e271d366`) |
 
 - Conflicts, all in XML docs, none in code: P12 + P11 in `Run(dict)`'s `<exception>` entries (keep P12's
   `NotSupportedException` text and P11's `ObjectDisposedException` text), P12 + P7 in `RunAsync`'s
   `ArgumentException` entry (keep both clauses: the missing required input and the symbol bound twice). P11 + P7 and
   P1 + anything merge cleanly. The merged code keeps one order in every Run form: the disposed-session check, the
   casting rule, the mode, then the feed check (P12), then RunAsync's symbol binding (P7).
+- P16 merges cleanly into the combined branch (`f2612d90`): ML.NET 6.0.0-preview net10.0 216 / 216 there.
 - `qa/proposals-all` is green: ORT 1.31.1 net10.0 319 / 319 (312 + 3 + 3 + 1), ORT 1.16.0 net8.0 298 passed + 21
   Inconclusive (the async tests; 292 + 3 + 3, 20 + 1), ML.NET 2.0.1 net10.0 215 / 215 (at `4851fd0f`); with F49
   merged (`1d5638da`) ML.NET 5.0.1 net10.0 and net8.0 and 4.0.2 net10.0 216 / 216 (210 + 5 P1 + 1 F49). The F49 merge
@@ -385,3 +393,4 @@ The proposals (section 5) are separate, each the owner's to accept or drop:
 | 00:53 | Correction: P1's and `qa/proposals-all`'s "5.0.1 net10.0" were 2.0.1 runs (the default). `qa/proposals-all` merged `qa/interop-release` (`1d5638da`, F49 included) and ran the current versions: ML.NET 5.0.1 net10.0 and net8.0, 4.0.2 net10.0, 216 / 216 each. |
 | 01:00 | A32 (F50: ML.NET's API surface over a view works, bit-exact text / binary round trips, AutoML) and A33 (F51: ML.NET -> ONNX -> ORT bridge scores agree; the exported label input fails inside ORT when left out - P12's strongest case; the ORT page now says to feed it as zeros, snippet run verbatim). A35 added (ML.NET 6 previews). |
 | 01:08 | A35 (F52, high): ML.NET 6.0.0 previews pass the whole suite on net8.0 / net10.0, but the bridge's `[2.0.0, 6.0.0)` turns `Microsoft.ML` 6.0.0 - due with .NET in November - into NU1107 (reproduced with a stand-in package one major lower); P16 asks the owner to widen the range before the tag. |
+| 01:17 | P16 prepared as `qa/p16-mlnet-range` (`d1d10236`): `[2.0.0, 7.0.0)`, the reasoning in the csproj comment, an advisory CI step on the newest ML.NET preview; packed nuspec checked; 211 / 211 on the preview and the floor; merged into `qa/proposals-all` (`f2612d90`, 216 / 216 on the preview). |
