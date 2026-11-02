@@ -1009,5 +1009,39 @@ namespace NumSharp.Tests
             moreAxes.Should().Throw<Exception>().Which.Message.Should().Be(
                 "input operand has more dimensions than allowed by the axis remapping");
         }
+
+        // ------------------------------------------------------------------
+        // QA-31 — out= of the wrong shape: np.cumsum (axis), np.ptp, np.median, np.nanmedian refuse with texts NumPy has not
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's refusals of an <c>out=</c> whose shape does not fit come from the iterator its statements run:
+        ///     <c>np.cumsum(a, 0, out=(4, 3))</c> (accumulate over an axis) and <c>np.ptp(a, 0, out=(3,))</c>
+        ///     (<c>maximum.reduce</c>) and <c>np.median(a, 0, out=(3,))</c> (<c>np.mean</c> of the partition) raise
+        ///     <c>operands could not be broadcast together with remapped shapes [original-&gt;remapped]: …</c>; np.nanmedian
+        ///     raises <c>could not broadcast input array from shape (4,) into shape (3,)</c>. Only the FLAT cumsum keeps
+        ///     <c>provided out is the wrong size for the accumulation.</c>. NumSharp uses that flat text for the axis cumsum
+        ///     too, its own <c>out has wrong shape; expected=[4] got=[3]</c> for ptp (<c>PtpOut</c>), and np.quantile's
+        ///     <c>Wrong shape of argument 'out', shape=4 is required; got shape=3.</c> (right for quantile / percentile) for
+        ///     median and nanmedian (<c>p70</c>). Everything else in the 26-call out= sweep matches.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA31")]
+        public void ParityQa_OutShapeRefusals_CumsumAxisPtpMedian_ShouldUseNumPysTexts()
+        {
+            using var a = np.arange(12.0).reshape(3, 4);
+            using var wrong43 = np.zeros(new Shape(4, 3));
+            using var wrong3 = np.zeros(new Shape(3));
+
+            Action cumsum = () => np.cumsum(a, 0, @out: wrong43);
+            Action ptp = () => np.ptp(a, 0, @out: wrong3);
+            Action median = () => np.median(a, 0, @out: wrong3);
+
+            cumsum.Should().Throw<Exception>().Which.Message.Should().Be(
+                "operands could not be broadcast together with remapped shapes [original->remapped]: (4,3)->(4,3) (3,4)->(3,4) ");
+            ptp.Should().Throw<Exception>().Which.Message.Should().Be(
+                "operands could not be broadcast together with remapped shapes [original->remapped]: (3,)->(3) (3,4) ");
+            median.Should().Throw<Exception>().Which.Message.Should().Be(
+                "operands could not be broadcast together with remapped shapes [original->remapped]: (3,)->(3) (1,4) ");
+        }
     }
 }
