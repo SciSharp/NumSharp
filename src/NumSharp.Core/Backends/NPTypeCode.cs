@@ -208,14 +208,14 @@ namespace NumSharp
         // ///     the String lane as two DType classes and adds StringDType to it (decision D4 of
         // ///     docs/plans/strings-phase1-completion.md).
         // /// </summary>
-        // Bytes = String,
+        // SString = String,
 
         // /// <summary>
-        // ///     NumPy's <c>StringDType</c> (<c>NPY_VSTRING</c> = 2056, character <c>'T'</c>, NEP 55): variable-width UTF-8
+        // ///     NumPy's <c>VString</c> (<c>NPY_VSTRING</c> = 2056, character <c>'T'</c>, NEP 55): variable-width UTF-8
         // ///     text, one 16-byte cell per element that holds a short text inline and otherwise refers to text stored
         // ///     elsewhere (the array's arena or the heap).
         // /// </summary>
-        // StringDType = String,
+        // VString = String,
 
         // NumPy's C integer classes. On each platform two of the three signed C ints are int32 and int64 themselves and
         // the third is a class of its own over one of those widths: intc on Windows (where C long is 32-bit), longlong on
