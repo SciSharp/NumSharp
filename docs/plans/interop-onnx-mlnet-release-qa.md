@@ -132,7 +132,10 @@ Severity: **blocker** (cannot ship), **high** (a real user hits it), **medium**,
 
 ## 5. For the owner (deferred, with what was proven)
 
-Each entry: the finding, what was proven, the options, and a recommendation. Nothing here was changed.
+Each entry: the finding, what was proven, the options, and a recommendation. Nothing here was changed on this branch.
+The recommendation of five entries (P1, P2, P7, P11, P12) is prepared as a proposal branch off this one, one commit
+each with its tests and docs, never merged here (the **Branch** line of each entry; P2 rides in P12's commit), and
+`qa/proposals-all` merges the four branches with their two conflicts resolved (section 8).
 
 - **P1 (F01) ML.NET views of several arrays - training, and scoring with the standard recipe. Decide for 0.80.0.**
   - Proven: `X.AsDataView("Features")` + a separate `y` cannot train (`Could not find label column 'Label'`); the only
@@ -147,6 +150,18 @@ Each entry: the finding, what was proven, the options, and a recommendation. Not
     (refused up front otherwise). The change is local to `NDArrayDataView`: each plan gets its own array, pin, base
     address and itemsize; each pin is released with the view; the cursor is unchanged per column. Additive, no
     breaking change. Option B: document the hstack route only (the example already shows it).
+  - **Branch** `qa/p1-multi-array-view` `a6baabb2` (Option A): `columns.AsDataView()` / `columns.ToDataView()` over
+    `IReadOnlyDictionary<string, NDArray>`; `NDArrayDataView` holds one `Source` per array (fed array, pin, ownership,
+    base address, itemsize) and each `ColumnPlan` names its source; a cursor pins every source or none; two passes
+    (every refusal from names / shapes / dtypes before a buffer is read, then feed + pin, giving back every pin and
+    temporary on a failure). The single-array views are one-source tables, unchanged. Docs as the completed feature
+    (the page's "Labels" leads with a bool label trained directly; the hstack route stays for single-array views).
+    New `TableViewTests` (5): bool label + float32 features train L-BFGS and the model scores a label-less
+    `x.AsDataView("Features")` identically; the multiclass recipe trains and scores; a transposed float64, a stepped
+    int32 and a reversed float16 column in one view; the refusals; a released second array giving back the first
+    array's pin; pins outliving the disposed sources and the view. ML.NET 5.0.1 net10.0 215 / 215; 2.0.1 net8.0
+    215 / 215. `examples/NumSharpMLNetExample` keeps the hstack route until a published package has the dictionary
+    form (it builds against nuget.org).
 - **P2 (F09, F33) Non-tensor outputs and unknown output names in `Run`.**
   - Proven: `session.Run(dict)` with the default fetch runs a scikit-learn classifier, converts `output_label`, then
     throws "ToNDArray needs a dense tensor OrtValue ... ToNDArrays()" - naming a verb the caller never called, not the
@@ -159,6 +174,8 @@ Each entry: the finding, what was proven, the options, and a recommendation. Not
     with ORT's own Run and read it with ToMaps / ToMap / ToNDArrays". `SessionRunEdgeTests`' four message pins move
     with it; `optional(tensor)` outputs need a rule (treat them as tensors and keep the post-run refusal for an empty
     one). Option B: the owner's C2a (non-tensor outputs through `Run`, a disposable typed result) supersedes A later.
+  - **Branch**: Option A is in P12's commit (`qa/p12-feed-checks`), as `RequireTensorOutputs`; an `optional(...)`
+    output passes it (only the run tells), and the collectors still refuse an empty one after the run.
 - **P3 (F11) `TryToTensorElementType(StringDType)` answers `String`.** Recommended: keep the answer (`String` is the
   element type such data has) and say in the remarks that the crossing verbs refuse a StringDType array; switch to
   `false` only if the maps are meant to answer "crosses today". (Doc-only either way; not done here because the
@@ -186,6 +203,11 @@ Each entry: the finding, what was proven, the options, and a recommendation. Not
   inputs' shapes before allocating (a symbol bound twice to different extents is refused up front); unnamed dims
   (skl2onnx's) stay refused with today's advice. ORT's managed `RunAsync` needs pre-allocated outputs, so there is no
   "let ORT allocate" route.
+  - **Branch** `qa/p7-runasync-symbols` `5f6175ec`: `BindSymbols` reads each fed input's shape (no buffer) and binds
+    every symbolic dimension its declaration names; `AllocatableOutput` / `DeclaredShape` allocate with the bound
+    extents; a name given two extents is refused from the call; an unnamed dimension or a name only the outputs carry
+    (`topk_f32`'s `k`) is refused as before. ResNet50 v2, MobileNetV2, SqueezeNet and MiniLM run through `RunAsync`,
+    each equal to `Run` (`probes/p7_real_models.cs`). ORT 1.31.1 net10.0 313 / 313; 1.16.0 292 + 21 Inconclusive.
 - **P8 (F20) `ToOrtValue` results and memory pressure.** The docs now say to dispose it, with the measured peak.
   Reporting pressure for ORT-allocated values would need a finalizable token per value (it cannot see `Dispose`, so it
   would over-report until a collection, and F19 measured the gen2 collections that pressure induces in small heaps).
@@ -204,11 +226,26 @@ Each entry: the finding, what was proven, the options, and a recommendation. Not
   `ObjectDisposedException`; a missing field disables the check, never the call; (b) report upstream (ORT should throw
   `ObjectDisposedException`); (c) document. Recommended: (b) now, (a) for the session at least - a disposed singleton
   session in a service is a crash today.
+  - **Branch** `qa/p11-disposed-guard` `1ab5c9fc` (option a, both types): `OrtDisposalProbe` compiles one getter per
+    private `_disposed` field (absent field = the check is off, never a refusal of a live object); every `Run` form
+    calls `ThrowIfDisposed` first and `EnsureNotOfADisposedHandle` (every import verb) also reads the value's own flag.
+    Not covered, and said so in its remarks: a session disposed by another thread between the check and the native
+    call. New `DisposedOrtObjectTests` (Inconclusive where the field is missing, because a regression would END the
+    host). ORT 1.16.0 net10.0 295 + 20 Inconclusive; 1.31.1 315 / 315; the new class on net8.0 3 / 3. Option (b), the
+    upstream report, is still the owner's to file.
 - **P12 (F32, F33) Up-front checks of the feed.** Recommended: port Python onnxruntime's `_validate_input` - every input
   whose type is not optional must be fed - with Python's text ("Required inputs ([token_type_ids]) are missing from
   input feed ([input_ids, attention_mask])."); it refuses, as Python does, a model whose graph ignores a declared input,
   which runs today. Fold in P2's output-name check, and give complex -> real its own advice (`np.real` / `np.imag`, as
   the dtype maps already say) instead of "relax the rule".
+  - **Branch** `qa/p12-feed-checks` `baafbaf1` (P2 + P12; the complex -> real advice is NOT in it):
+    `RequireEveryInput` (every input whose type is not `optional` must be fed; a fed name the model lacks is reported
+    first, with the existing "its inputs are [...]" text; overridable initializers are exempt) and
+    `RequireTensorOutputs` (Run only: an unknown output name with the output list; a declared sequence / map / sparse
+    output refused before the run, naming ORT's own Run and `ToNDArrays` / `ToMap` / `ToMaps`). Every Run form checks
+    the feed first. Two behavior changes, both Python's: a model whose graph never reads a declared input is refused
+    without it, and the default fetch of a model with a ZipMap output fails before the run. ORT 1.16.0 net10.0 295 +
+    20 Inconclusive; 1.31.1 315 / 315.
 - **P13 (F37) Zero-width arrays through ML.NET.** ML.NET reads a vector size of 0 as "variable length", so a `(R, 0)`
   array exposes a variable-length column every fixed-size consumer refuses with ML.NET's own confusing text. The
   round trip `(4, 0)` -> `(4, 0)` is pinned by the owner (`BoundaryTests.DegenerateShapes_ImportWithTheirShape`), so a
@@ -250,6 +287,26 @@ commits):
 | `576d2779` | release-notes wording (char in place, StringDType refusal) | the notes there are a different sweep (612 cited commits): apply the two `Dtypes` sentences by hand; that branch has the same wording problem (its lines 41 and 48) |
 | the `docs(plan)` commits | this file | clean (a new file) |
 
+The proposals (section 5) are separate, each the owner's to accept or drop:
+
+| Branch | Commit | Base | Touches |
+|---|---|---|---|
+| `qa/p12-feed-checks` (P2 + P12) | `baafbaf1` | `a57a6101` | ORT `InferenceSessionExtensions{,.Async}.cs`, `SessionRunEdgeTests`, the ORT page and README |
+| `qa/p11-disposed-guard` (P11) | `1ab5c9fc` | `a57a6101` | ORT: new `OrtDisposalProbe.cs`, the Run forms, the import verbs' guard, new `DisposedOrtObjectTests` |
+| `qa/p7-runasync-symbols` (P7) | `5f6175ec` | `7d68a494` | ORT `InferenceSessionExtensions.Async.cs`, `SessionRunAsyncTests`, the ORT page |
+| `qa/p1-multi-array-view` (P1) | `a6baabb2` | `7d68a494` | ML.NET `NDArrayDataView.cs`, `NDArrayMLNetInterop.Export.cs`, new `TableViewTests`, the ML.NET page, README, notes, rule |
+| `qa/proposals-all` | `4851fd0f` | `7d68a494` | the four merged in that order (`--no-ff`) |
+
+- Conflicts, all in XML docs, none in code: P12 + P11 in `Run(dict)`'s `<exception>` entries (keep P12's
+  `NotSupportedException` text and P11's `ObjectDisposedException` text), P12 + P7 in `RunAsync`'s
+  `ArgumentException` entry (keep both clauses: the missing required input and the symbol bound twice). P11 + P7 and
+  P1 + anything merge cleanly. The merged code keeps one order in every Run form: the disposed-session check, the
+  casting rule, the mode, then the feed check (P12), then RunAsync's symbol binding (P7).
+- `qa/proposals-all` is green: ORT 1.31.1 net10.0 319 / 319 (312 + 3 + 3 + 1), ORT 1.16.0 net8.0 298 passed + 21
+  Inconclusive (the async tests; 292 + 3 + 3, 20 + 1), ML.NET 5.0.1 net10.0 215 / 215.
+- To take only some: cherry-pick each accepted commit in the order P12, P11, P7, P1 and resolve the doc conflicts as
+  above (rerere recorded both resolutions in this clone).
+
 ## 7. Log
 
 | Time (+0200) | Entry |
@@ -270,3 +327,9 @@ commits):
 | 23:36 | The ML.NET page gains a "Labels" paragraph (the working training / scoring pattern for F01 while P1 is open), run as written from the repacked feed (`consumers/docs_labels.cs`: bool predictions, 9 / 10 right; the multiclass recipe scored with the chain after its label step). Section 8 lists what to cherry-pick onto `release-0.80.0-beta1`. |
 | 23:37 | The ML.NET page says how key columns read back (uint32 keys, 1-based, first-seen order; `MapKeyToValue` for the values; key - 1 indexes `Score`), each claim checked (`consumers/ml_keys.cs`). |
 | 23:49 | Final suite state on Windows (code at `6dab3c38`; later commits are docs): ORT 1.16.0 292 passed + 20 Inconclusive on net8.0 / net10.0, 1.31.0 312 / 312 on both, 1.31.1 312 / 312; ML.NET 2.0.1 210 / 210 on both, 4.0.2 210 / 210, 5.0.1 210 / 210 on both (`probes/win_suites.sh`). Next: the owner proposals with a clear recommendation are prepared as their own branches off this one (not merged). |
+| 23:57 | Proposal P2 + P12 on `qa/p12-feed-checks` (`baafbaf1`): Python's required-input rule and the output checks in every Run form. |
+| 00:02 | Proposal P11 on `qa/p11-disposed-guard` (`1ab5c9fc`): ORT's private `_disposed` read by compiled getters; the two process crashes become `ObjectDisposedException`. |
+| 00:03 | P13 as documentation instead of a branch (`7d68a494`): a refusal of width 0 would undo the owner's pinned `(4, 0)` round trip. |
+| 00:08 | Proposal P7 on `qa/p7-runasync-symbols` (`5f6175ec`): RunAsync binds named run-time dimensions; four real models run through it, each equal to Run. |
+| 00:21 | Proposal P1 on `qa/p1-multi-array-view` (`a6baabb2`): the dictionary form, one column per array; ML.NET 215 / 215 on 5.0.1 net10.0 and 2.0.1 net8.0. |
+| 00:29 | `qa/proposals-all` (`4851fd0f`) merges the four; two doc-only conflicts resolved; ORT 1.31.1 319 / 319, 1.16.0 298 + 21 Inconclusive, ML.NET 215 / 215 (section 8). Next: new angles (section 3 gets them). |
