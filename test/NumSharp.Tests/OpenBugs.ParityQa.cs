@@ -481,5 +481,42 @@ namespace NumSharp.Tests
 
             act.Should().Throw<TypeError>().WithMessage("only 0-dimensional arrays can be converted to Python scalars");
         }
+
+        // ------------------------------------------------------------------
+        // QA-15 — np.nansum is not np.sum of the NaN-replaced array
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's <c>nansum</c> is <c>a, mask = _replace_nan(a, 0); return np.sum(a, ...)</c>, so its bits are np.sum's.
+        ///     NumSharp's np.sum matches NumPy bit for bit on these inputs, but np.nansum runs its own NaN-skipping kernels in
+        ///     another order: float16 along an axis drifts by several ULP (column 0 of the (10, 10) case below is
+        ///     <c>168.25</c>, NumPy <c>168.375</c>; a (1000, 10) column is <c>-3396</c> against <c>-3410</c>), float32 / float64
+        ///     by one to three ULP flat and per axis, and np.nanprod likewise. The oracle excuses the whole cell as a known bug
+        ///     (MisalignedRegistry "(W4-B) nansum/nanmean/nanprod … summation-order divergence [known bug]"; nanmean has
+        ///     since left it), with no unit pin until this one. Inputs come from <c>RandomState(n).random_sample(n) * 200 -
+        ///     100</c> with every 17th element NaN, which NumSharp reproduces bit for bit.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA15")]
+        public void ParityQa_Nansum_ShouldBeSumOfTheNaNReplacedArray()
+        {
+            var nan = BitConverter.Int64BitsToDouble(0x7FF8000000000000);
+            var rs100 = np.random.RandomState(100);
+            using var x100 = rs100.random_sample(100L) * 200.0 - 100.0;
+            x100["::17"] = nan;
+            using var f16 = x100.astype(np.float16).reshape(10, 10);
+
+            using var columns = np.nansum(f16, axis: 0);
+
+            columns.ToArray<Half>().Select(h => (double)h).Should().Equal(
+                168.375, -122.75, -216.75, -59.21875, -158.5, 190.25, 162.0, -149.875, -184.875, -48.21875);
+
+            var rs1000 = np.random.RandomState(1000);
+            using var x1000 = rs1000.random_sample(1000L) * 200.0 - 100.0;
+            x1000["::17"] = nan;
+
+            using var flat = np.nansum(x1000);
+
+            BitConverter.DoubleToInt64Bits((double)flat).Should().Be(BitConverter.DoubleToInt64Bits(-2291.4343639665312));
+        }
     }
 }
