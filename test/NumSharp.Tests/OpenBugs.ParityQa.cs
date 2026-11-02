@@ -518,5 +518,32 @@ namespace NumSharp.Tests
 
             BitConverter.DoubleToInt64Bits((double)flat).Should().Be(BitConverter.DoubleToInt64Bits(-2291.4343639665312));
         }
+
+        // ------------------------------------------------------------------
+        // QA-16 — the flat float16 np.prod accumulates wider than NumPy's HALF loop
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's float16 <c>multiply.reduce</c> (<c>HALF_multiply</c>'s reduce form) keeps a FLOAT32 accumulator, so
+        ///     <c>np.prod(float16 [200] * 20 + [0])</c> overflows to inf at the 17th factor and the zero makes it NaN. NumSharp's
+        ///     flat float16 product (plain float16 input, and <c>dtype=float16</c> over an integer input) accumulates wider,
+        ///     never overflows, and returns 0. The axis forms and <c>np.cumprod</c> give NumPy's NaN, as do the float32 forms.
+        ///     The same accumulator difference turns a product whose float32 partial overflows and later shrinks back into a
+        ///     finite float16 where NumPy keeps inf.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA16")]
+        public void ParityQa_ProdFlatFloat16_ShouldAccumulateInFloat32LikeNumPy()
+        {
+            var values = Enumerable.Repeat(200.0, 20).Concat(new[] { 0.0 }).ToArray();
+            using var f64 = np.array(values);
+            using var f16 = f64.astype(np.float16);
+            using var u8 = f64.astype(np.uint8);
+
+            using var plain = np.prod(f16);
+            using var cast = np.prod(u8, dtype: np.float16);
+
+            Half.IsNaN((Half)plain.GetValue()).Should().BeTrue();
+            Half.IsNaN((Half)cast.GetValue()).Should().BeTrue();
+        }
     }
 }
