@@ -62,17 +62,17 @@ Status: `todo`, `doing`, `done`, `dropped` (with the reason).
 | A14 | ML.NET real use cases: train + predict on NumSharp data, OnnxTransformer, TextLoader to NumSharp, clustering, normalization | The ML.NET bridge's reason to exist | done (F01, F07) |
 | A15 | ML.NET training needs Label + Features in ONE `IDataView`: can the bridge build a multi-array view? | Training scenarios, not just scoring | doing (F01: proposal for section 5) |
 | A16 | Both bridges in one project: `Postprocess` and extension-method name clashes | A real app uses ORT and ML.NET together | done (F16) |
-| A17 | CI coverage of the two packages as released (interop-test job, the packs, consumer steps) | The tag's gate | todo |
+| A17 | CI coverage of the two packages as released (interop-test job, the packs, consumer steps) | The tag's gate | done (F26, F27: the last CI run of journey4, 2026-10-15, had `interop-test` green on all three OSes and `test` red on ubuntu / macOS, the known Core blockers) |
 | A18 | Metadata and release text: descriptions, tags, project URLs, notes section 7A accuracy | First impression on nuget.org | done (F23, F24) |
-| A19 | Dependency floors: the 1.16.0 / 2.0.0 floors against what consumers really install | The ranges are the contract | todo |
+| A19 | Dependency floors: the 1.16.0 / 2.0.0 floors against what consumers really install | The ranges are the contract | done (F22 floors, F26 newest) |
 | A20 | Robustness: malformed models, huge or negative dims, odd strings (NUL, invalid UTF-8), unusual map keys | Inference services meet bad input | todo |
 | A21 | `StringDType` (T) arrays through the ORT bridge | strings landed T; the bridge's TODO is due; another session saw an InvalidCastException | done (F03 fixed, F10, F11) |
 | A22 | ML.NET text columns (`ReadOnlyMemory<char>`) against NumSharp's text dtypes | String labels and FeaturizeText are everyday ML.NET | todo (F02 fixed the refusal; the design is for section 5) |
-| A23 | Examples: an ORT example and an ML.NET example in the regular NuGet form, proven from a local feed | The brief asks for examples | todo |
+| A23 | Examples: an ORT example and an ML.NET example in the regular NuGet form, proven from a local feed | The brief asks for examples | done (section 6; F28) |
 | A24 | NumSharp array classes as inputs: `NDMatrix`, `NDCharArray`, `NDMaskedArray`, views, F-order, broadcast, float16, int8 | A masked array's mask could be silently ignored | done (F14) |
 | A25 | Error-message quality: wrong name / dtype / shape / disposed / null | Users debug through messages | todo |
 | A26 | Thread safety: concurrent `Run` on one session with NumSharp inputs; concurrent `AsDataView` cursors | ORT sessions are shared across requests | todo |
-| A27 | Linux (WSL) run of both suites | CI's ubuntu leg; macOS cannot run here | todo |
+| A27 | Linux (WSL) run of both suites | CI's ubuntu leg; macOS cannot run here | done (F27) |
 | A28 | Public API review: XML docs on every public member, naming consistency between the two bridges | The owner's documentation rule; a first release freezes names in users' code | todo |
 
 ## 4. Findings
@@ -106,6 +106,9 @@ Severity: **blocker** (cannot ship), **high** (a real user hits it), **medium**,
 | F23 | info | both | Packages as packed: ids free on nuget.org (the flat-container index of all three new ids is `BlobNotFound`); nuspec metadata complete (license file, icon, tags, repository + commit, description; no embedded README by policy); `lib/net8.0` + `lib/net10.0` with the XML docs (236 KB ORT, 75 KB ML.NET) and portable PDBs; every assembly strong-named with token `cc7b13ffcd2ddd51`, version 0.80.0.0, informational `0.80.0-beta1+<sha>`. The `PackageProjectUrl`s (`.../docs/interop/onnxruntime.html`, `.../mlnet.html`) 404 today and follow the live pattern (`system-numerics-tensors.html` is 200): `docs.yml` publishes them on the push to master, which the tag needs anyway. | scratch `nupkg_x/`, `pkgs/`; curl of the site and the nuget.org flat container | closed (release checklist: publish the site before or with the tag) |
 | F24 | low | release notes | The notes said "`char` exports as uint16 and `decimal` as float64 through a copy the handle owns" (ORT) and "`char` one way as uint16, float16 as float32 and `decimal` as float64 through a copy the view owns" (ML.NET): both read as if `char` were copied, but it crosses in place (`MaterializeForExport` copies only for Decimal or a non-contiguous layout; the ML.NET view reads char memory as uint16). The ORT section also did not say a `StringDType` array is refused (F03). | `NDArrayOnnxInterop.Export.cs:153-167`; the docs' dtype table ("Char / UInt16 / zero-copy") | fixed (this commit) |
 | F25 | info | release (CI) | The release job pushes every `.nupkg` in a `for` loop under `bash -e` with `--skip-duplicate`: a push that fails stops the loop with the packages before it already public. This release pushes three ids nuget.org has never seen; an API key whose glob or scope does not cover new `NumSharp.Interop.*` ids would publish `NumSharp` and stop at the first new id. 0.70.0 pushed a new id (`NumSharp.Interop.OpenBLAS`, its only version is 0.70.0), so the key could then. | `.github/workflows/build-and-release.yml:1141-1149`; nuget.org flat container | deferred (P9: check the key's scope before tagging) |
+| F26 | medium | both (CI) | nuget.org now has versions inside both dependency ranges that CI does not verify: **Microsoft.ML 5.0.0 / 5.0.1** (a new major; the range is `Microsoft.ML.DataView [2.0.0, 6.0.0)`, CI's "current" leg is 4.0.2) and ONNX Runtime 1.31.1 (CI: 1.31.0). `dotnet add package Microsoft.ML` writes 5.0.1 today, so a new user gets the untested major, and the ML.NET bridge reflects a PRIVATE field of `VBuffer<T>` (`_values`) for the zero-copy import. Run here: the ML.NET suite against 5.0.1 passes 209 / 209 on net10.0 and on net8.0; the ORT suite against 1.31.1 passes 312 / 312 on net10.0 (the async tests included). The docs, READMEs and notes say "Verified on ML.NET 2.0.1 and 4.0.2" / "1.16.0 and 1.31.0". | `dotnet test -p:MLNetVersion=5.0.1` / `-p:OnnxRuntimeVersion=1.31.1` (Release, this worktree) | deferred (P10: move or add the current legs) |
+| F27 | info | both | Linux x64 (WSL Ubuntu, .NET 10.0.103, kernel 5.15) at this branch's tip `576d2779`, CI's exact legs: ORT floor 1.16.0 292 passed + 20 skipped (the async tests, Inconclusive below 1.30) on net8.0 and net10.0; ORT 1.31.0 312 / 312 on both; ML.NET 2.0.1 209 / 209 on both; ML.NET 4.0.2 209 / 209. | scratch `probes/wsl_interop.sh`, `probes/wsl_out/summary.txt` | closed (green) |
+| F28 | info | examples | ImageSharp, the decoder of ONNX Runtime's own C# tutorial, no longer fits an example: 3.1.12 restores with NU1902 / NU1903 (4 high- and 2 moderate-severity advisories) and 3.2.0 / 4.x fail the build without a Six Labors license key ("No Six Labors license found"). The ORT example decodes with SkiaSharp 4.154.0 (MIT) instead: no warning of any kind. | the example's restore output, three versions | closed (the example uses SkiaSharp) |
 | F15 | info | OnnxRuntime | Real models, bit-exact parity: ImageNet SqueezeNet 1.1 / MobileNetV2 / ResNet50 v2 (preprocessing bytes == NumPy; logits bytes == Python onnxruntime 1.29.0; top-5 equal); all-MiniLM-L6-v2 sentence embeddings (three int64 inputs; `last_hidden_state` bytes == Python; NumSharp mean pooling + L2 norm bytes == NumPy; cosine-similarity matrix max diff 2.98e-7, from the managed matmul's summation order); scikit-learn LogisticRegression / RandomForest (string labels) / GradientBoosting (labels, probabilities, regression bytes == Python; ZipMaps through ORT's `Run` + `ToMaps`). | scratch `consumers/ort_vision.cs`, `ort_text.cs`, `ort_sklearn.cs` + `realdata/make_*_ref.py` | closed (works) |
 
 ## 5. For the owner (deferred, with what was proven)
@@ -121,8 +124,19 @@ Each entry: the finding, what was proven, the options, and a recommendation. Not
 - **P7 (F18) `RunAsync` and run-time dimensions.** Proposal pending.
 - **P8 (F20) Memory pressure for `ToOrtValue` results.** Proposal pending.
 - **P9 (F25) The nuget.org API key and the three new ids.** Proposal pending.
+- **P10 (F26) CI's "current" legs and the newest dependency versions.** Proposal pending.
 
 ## 6. Examples
+
+Both are in the regular form (what `dotnet new console` + `dotnet add package` write: plain `PackageReference`s, no
+custom property), reference `0.80.0-beta1`, and so restore only once the beta is on nuget.org. Until then they were
+proven against the local feed of this run's packs (`-p:RestoreAdditionalProjectSources=<scratch pkgs>`, an isolated
+`NUGET_PACKAGES`), run from a scratch working directory.
+
+| Example | What it shows | Proven |
+|---|---|---|
+| `examples/NumSharpOnnxRuntimeExample` | ImageNet classification with MobileNetV2 (downloaded on the first run with its labels and a sample photo): SkiaSharp decodes, crops and resizes; NumSharp drops alpha, scales, normalizes by broadcasting and transposes to NCHW; `np.stack` batches N photos; `session.Run(batch)` reads the batch in place; `Postprocess.Softmax` + `TopK`; `RunInto` into an array allocated once. NDW012-clean (every array in a `using`). | Windows: Samoyed 86.7%, then a batch of three photos (two Samoyeds, a golden retriever 44.0%), `RunInto wrote the same scores: True`; no warning at all. Linux (WSL, copied out of the repository, so no `Directory.Build.props`): the same output, no warning. |
+| `examples/NumSharpMLNetExample` | Two Gaussian clouds made with `RandomState` (shuffled with `permutation` + fancy indexing); a binary classifier trained from a `(rows, 5)` array as five scalar columns (the label converted OUTSIDE the model, so the model scores a features-only view: the F01 route written as a pattern); `PredictedLabel` / `Probability` read back and scored with NumSharp; ML.NET's own evaluation agreeing; k-means on one vector column, cluster ids back as uint32. Microsoft.ML 5.0.1. | Windows, three runs identical: accuracy 93.5% (NumSharp) = 93.5% (ML.NET), AUC 0.982, k-means 93.8%, live views 0. (SDCA made the accuracy vary run to run, 93.0-93.5%, being multi-threaded; the example uses L-BFGS.) Linux (WSL, copied out of the repository): the same four lines. |
 
 ## 7. Log
 
@@ -133,4 +147,5 @@ Each entry: the finding, what was proven, the options, and a recommendation. Not
 | 22:20 | F02, F03, F10 fixed with tests (ML.NET `ErrorTests`, ORT `TextTests`: 23 + 16 green on net10.0 at the floors). F09 deferred, not fixed (pinned post-run design, C2a). Committed `8e607929`. |
 | 22:28 | A16 (F16: `Postprocess` CS0104 with both namespaces) and A13 page snippets (all run as written given float32 constants and a features-only model; F17 fixed in the page; F18 `RunAsync` vs run-time dims; F01 extended to scoring with the MapValueToKey recipe). Committed `a4a4b03b`. |
 | 22:36 | A10 + A11: overhead ~3 us / call, `RunInto` = raw ORT, the copy route beats typical raw code; no leak in any route (phased plateau); F20 `ToOrtValue` forgotten -> +4.4 GB peak (ORT's value, no pressure): documented on the page. Committed `d997250c`. |
-| 22:45 | A3 (net8.0 / C# 12 / floors: F22 works), A2 (F23 packages, F25 the push loop and new ids), A18 (F24 notes wording fixed). |
+| 22:45 | A3 (net8.0 / C# 12 / floors: F22 works), A2 (F23 packages, F25 the push loop and new ids), A18 (F24 notes wording fixed). Committed `576d2779`. |
+| 23:20 | A17 + A27 (Linux all legs green, F27), A19 (Microsoft.ML 5.0.1 and ORT 1.31.1 green locally but outside CI, F26), A23: the two examples written and proven on Windows and Linux (F28: SkiaSharp, not ImageSharp); both docs pages link them. |

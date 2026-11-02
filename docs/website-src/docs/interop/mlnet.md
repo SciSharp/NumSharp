@@ -227,3 +227,12 @@ leaves the native runtime to the consumer.
   ML.NET row filter) - so a column of more than `Array.MaxLength` elements in total imports; it used to stage
   through a managed `T[]` and fail there. A sparse `VBuffer` densifies at any size (the clear used to count
   bytes in an `int` and threw at 2 GB).
+
+## See also
+
+- [An example project](https://github.com/SciSharp/NumSharp/tree/master/examples/NumSharpMLNetExample) - a
+  console app to copy: a binary classifier trained from a NumSharp array exposed as named scalar columns
+  (the label converted outside the model, so the model scores features alone), its predictions read back
+  and scored with NumSharp next to ML.NET's own evaluation, and k-means on one vector column
+- [Interoperability overview](index.md) - the contract every bridge builds on
+- [ONNX Runtime](onnxruntime.md) - the sibling bridge for ONNX models

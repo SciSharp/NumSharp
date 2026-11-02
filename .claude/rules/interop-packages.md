@@ -100,6 +100,9 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   runs the async tests: never set it below 1.30.0), with no Python. Mutation runs restore a file from memory only: copy
   untracked files out of the tree before one.
 - Docs: `docs/website-src/docs/interop/onnxruntime.md` (excluded from the site).
+- Example: `examples/NumSharpOnnxRuntimeExample` (regular csproj form over the published 0.80.0-beta1; no workflow runs
+  it): MobileNetV2 downloaded on the first run, SkiaSharp decoding (ImageSharp 3.1.x restores with security advisories
+  and 3.2+ needs a license key to build), NumSharp preprocessing into one NCHW batch, `Postprocess`, `RunInto`.
 
 ### `NumSharp.Interop.MLNet` (unreleased)
 
@@ -136,6 +139,10 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   boundary, API approval) and `LifetimeGcTests` (a getter keeps its cursor reachable until its row is committed). The
   `interop-test` CI job runs it against ML.NET 2.0.1 and 4.0.2, with no Python.
 - Docs: `docs/website-src/docs/interop/mlnet.md` (excluded from the site).
+- Example: `examples/NumSharpMLNetExample` (regular csproj form over the published 0.80.0-beta1 and Microsoft.ML 5.0.1;
+  no workflow runs it): a binary classifier trained from a `(rows, 5)` array as five scalar columns with the label
+  converted OUTSIDE the model (so the model scores a features-only view), L-BFGS for run-to-run identical output (SDCA
+  is multi-threaded and varied), k-means on one vector column.
 
 ### `NumSharp.Interop.System.Numerics.Tensors` (released)
 
