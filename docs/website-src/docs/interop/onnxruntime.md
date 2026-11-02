@@ -41,7 +41,13 @@ using Microsoft.ML.OnnxRuntime;
 
 using var session = new InferenceSession("resnet50-v2-7.onnx");
 
+// ImageNet's normalization, as float32: a float64 mean would make the input float64, which the
+// model's float32 input refuses under the default casting="safe" (Python's onnxruntime refuses it too)
+NDArray mean = np.array(new[] { 0.485f, 0.456f, 0.406f });
+NDArray std  = np.array(new[] { 0.229f, 0.224f, 0.225f });
+
 // preprocessing as array ops: (H,W,3) uint8 -> (1,3,224,224) float32, normalized
+// (pixels: the decoded image's 224*224*3 RGB bytes, row by row)
 NDArray rgb   = np.frombuffer(pixels, NPTypeCode.Byte).reshape(224, 224, 3);
 NDArray chw   = np.transpose(rgb, [2, 0, 1]).astype(NPTypeCode.Single) / 255f;
 NDArray input = ((chw - mean.reshape(3, 1, 1)) / std.reshape(3, 1, 1)).reshape(1, 3, 224, 224);
