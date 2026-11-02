@@ -126,6 +126,13 @@ A model whose chain maps the label itself - ML.NET's multiclass recipe,
 (`Could not find input column 'Label'`). Score such a model with the chain after its label step:
 `new TransformerChain<ITransformer>(((IEnumerable<ITransformer>)model).Skip(1).ToArray()).Transform(view)`.
 
+**Large tables and multi-pass trainers.** `Concatenate` builds each row's feature vector from its scalar
+columns again on every pass over the data, and a trainer such as SDCA or L-BFGS makes many passes. Put
+ML.NET's cache between them, `ml.Transforms.Concatenate(...).AppendCacheCheckpoint(ml).Append(trainer)`:
+on 2,000,000 x 32 float32 rows SDCA (3 iterations) trained in 5.7-5.9 s instead of 9.2-10.8 s - the speed
+of a POCO list (5.1-5.3 s) - with the cache holding one more copy of the columns (peak 1.44 GB instead of
+1.11 GB; the POCO list: 1.47 GB).
+
 ---
 
 ## Lifetime: who frees what
