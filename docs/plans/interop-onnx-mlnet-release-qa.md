@@ -231,6 +231,24 @@ proven against the local feed of this run's packs (`-p:RestoreAdditionalProjectS
 | `examples/NumSharpOnnxRuntimeExample` | ImageNet classification with MobileNetV2 (downloaded on the first run with its labels and a sample photo): SkiaSharp decodes, crops and resizes; NumSharp drops alpha, scales, normalizes by broadcasting and transposes to NCHW; `np.stack` batches N photos; `session.Run(batch)` reads the batch in place; `Postprocess.Softmax` + `TopK`; `RunInto` into an array allocated once. NDW012-clean (every array in a `using`). | Windows: Samoyed 86.7%, then a batch of three photos (two Samoyeds, a golden retriever 44.0%), `RunInto wrote the same scores: True`; no warning at all. Linux (WSL, copied out of the repository, so no `Directory.Build.props`): the same output, no warning. |
 | `examples/NumSharpMLNetExample` | Two Gaussian clouds made with `RandomState` (shuffled with `permutation` + fancy indexing); a binary classifier trained from a `(rows, 5)` array as five scalar columns (the label converted OUTSIDE the model, so the model scores a features-only view: the F01 route written as a pattern); `PredictedLabel` / `Probability` read back and scored with NumSharp; ML.NET's own evaluation agreeing; k-means on one vector column, cluster ids back as uint32. Microsoft.ML 5.0.1. | Windows, three runs identical: accuracy 93.5% (NumSharp) = 93.5% (ML.NET), AUC 0.982, k-means 93.8%, live views 0. (SDCA made the accuracy vary run to run, 93.0-93.5%, being multi-threaded; the example uses L-BFGS.) Linux (WSL, copied out of the repository): the same four lines. |
 
+## 8. Carrying the results to the release
+
+This branch, `qa/interop-release`, starts at `strings` `23ce02ea` plus this run's own release-prep commit `1c001253`.
+A separate branch holds the release itself: `release-0.80.0-beta1` (worktree `.claude/worktrees/release-080`, made by
+another session: journey4 + `strings` through `860447b3`, its own release commits, among them `e343aba8` which releases
+the two bridges). Nothing here was merged there. To ship the results in the beta, cherry-pick onto
+`release-0.80.0-beta1` everything after `1c001253` EXCEPT `1c001253` itself (that branch has its own release
+commits):
+
+| Commit | What | Cherry-pick note |
+|---|---|---|
+| `8e607929` | fix: StringDType refused by the ORT bridge, text refused by the ML.NET bridge, the sized-`U` remedy in docs | `.claude/rules/interop-packages.md` was also edited by `e343aba8`: expect a conflict in the "Dtypes" bullet; keep both texts |
+| `a781f683` | fix: ML.NET dtype maps answer for datetime64 / timedelta64; nine members' docs | clean |
+| `a4a4b03b`, `d997250c`, `6116a53c`, `6dab3c38` | docs page / README fixes (float32 constants, `ToOrtValue` disposal, float32 features, the System32 trap) | clean unless `e343aba8` touched the same paragraphs |
+| `c51b9d39` | the two example projects + See-also links | the rule file again: keep both texts |
+| `576d2779` | release-notes wording (char in place, StringDType refusal) | the notes there are a different sweep (612 cited commits): apply the two `Dtypes` sentences by hand; that branch has the same wording problem (its lines 41 and 48) |
+| the `docs(plan)` commits | this file | clean (a new file) |
+
 ## 7. Log
 
 | Time (+0200) | Entry |
@@ -248,3 +266,4 @@ proven against the local feed of this run's packs (`-p:RestoreAdditionalProjectS
 | 23:23 | F39 Postprocess = SciPy byte for byte (integers better than SciPy), F40 ML.NET views as fast as POCO sources, F41 SSD detection byte-identical to Python, F42 DirectML GPU works through every output form. |
 | 23:26 | Repacked both bridges with the fixes (scratch `pkgs2/`); from a consumer the StringDType and text refusals now carry the bridges' messages. F43: CI has no nupkg-consumer gate for ORT / ML.NET (P14). |
 | 23:28 | F44: without a native ORT package the bridge silently runs on Windows' own System32 onnxruntime.dll (1.17): documented on the page and in the README. F45: single-file publish of both examples works. |
+| 23:36 | The ML.NET page gains a "Labels" paragraph (the working training / scoring pattern for F01 while P1 is open), run as written from the repacked feed (`consumers/docs_labels.cs`: bool predictions, 9 / 10 right; the multiclass recipe scored with the chain after its label step). Section 8 lists what to cherry-pick onto `release-0.80.0-beta1`. |

@@ -104,6 +104,28 @@ Reading a column back mirrors the two shapes: a scalar `"Score"` column of `R` r
 column (rows disagree on length) is refused - NumSharp arrays are rectangular; pad the column to a fixed
 size in the pipeline first.
 
+**Labels.** One view exposes one array, so all of its columns have that array's dtype: the label travels
+as one more column of the feature dtype (`np.hstack(x, y)`), and a trainer that wants another label type
+gets it from a conversion step. Fit that step on its own, outside the model, so the trained model reads
+the feature columns only and scores new data without a label column:
+
+```csharp
+using NDArray table = np.hstack(x, y.astype(np.float32).reshape(-1, 1));   // (R, 4) float32 features + the label
+using var trainView = table.AsDataView(["f0", "f1", "f2", "f3", "Label"]);
+var toBool = ml.Transforms.Conversion.ConvertType("Label", outputKind: DataKind.Boolean);
+IDataView labelled = toBool.Fit(trainView).Transform(trainView);
+ITransformer model = ml.Transforms.Concatenate("Features", "f0", "f1", "f2", "f3")
+    .Append(ml.BinaryClassification.Trainers.LbfgsLogisticRegression())
+    .Fit(labelled);
+using var newRows = xNew.AsDataView(["f0", "f1", "f2", "f3"]);                         // no label needed
+using NDArray predicted = model.Transform(newRows).ToNDArray("PredictedLabel");
+```
+
+A model whose chain maps the label itself - ML.NET's multiclass recipe,
+`MapValueToKey("Label").Append(...)` - asks for a `Label` column when it scores too
+(`Could not find input column 'Label'`). Score such a model with the chain after its label step:
+`new TransformerChain<ITransformer>(((IEnumerable<ITransformer>)model).Skip(1).ToArray()).Transform(view)`.
+
 ---
 
 ## Lifetime: who frees what
