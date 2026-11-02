@@ -545,5 +545,25 @@ namespace NumSharp.Tests
             Half.IsNaN((Half)plain.GetValue()).Should().BeTrue();
             Half.IsNaN((Half)cast.GetValue()).Should().BeTrue();
         }
+
+        /// <summary>
+        ///     The other direction along a reduced axis: <c>np.prod(float16 [[300, 300, 0.001]], axis=1)</c> is
+        ///     <c>[90.0625]</c> in NumPy (the reduce inner loop multiplies in float32: 90000 fits, then × 0.001); NumSharp
+        ///     rounds each partial product to float16, so 90000 overflows to inf and the result is <c>[inf]</c>. And the flat
+        ///     form's wider accumulator keeps <c>[60000] * 9 + [1e-4] * 10</c> finite (1009.5) where NumPy's float32
+        ///     accumulator is already inf.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA16")]
+        public void ParityQa_ProdFloat16_AxisAndFlat_ShouldUseNumPysFloat32Accumulator()
+        {
+            using var row = np.array(new[,] { { 300.0, 300.0, 0.001 } }).astype(np.float16);
+            using var big = np.array(Enumerable.Repeat(60000.0, 9).Concat(Enumerable.Repeat(1e-4, 10)).ToArray()).astype(np.float16);
+
+            using var axis = np.prod(row, axis: 1);
+            using var flat = np.prod(big);
+
+            ((double)(Half)axis.GetValue(0)).Should().Be(90.0625);
+            Half.IsPositiveInfinity((Half)flat.GetValue()).Should().BeTrue();
+        }
     }
 }
