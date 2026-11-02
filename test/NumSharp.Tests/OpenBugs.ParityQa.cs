@@ -768,5 +768,41 @@ namespace NumSharp.Tests
             double.IsNegative((double)log1p.GetValue(2)).Should().BeTrue();
             ((float)expm1f.GetValue(0)).Should().Be((float)5.99999978589949e-08);
         }
+
+        // ------------------------------------------------------------------
+        // QA-23 — a leading boolean mask over a strided view whose trailing extents are all 1 raises
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     <c>a[mask, 0:1]</c> (a mask on axis 0, then a slice that keeps ONE column) is NumPy's <c>(k, 1)</c> selection:
+        ///     <c>np.arange(6).reshape(2, 3)[[False, True], 0:1]</c> is <c>[[3]]</c>, and so are <c>a[mask, -1:]</c>,
+        ///     <c>b3[mask, 2:3, 3:4]</c> and a 2-D mask followed by a one-element slice. NumSharp raises
+        ///     <c>ValueError: non-broadcastable operand with shape (2,1) doesn't match the broadcast shape (2,2)</c> (the 2-D
+        ///     mask form: <c>IncorrectShapeException</c>). The getter slices first (<c>this[basic]</c>, a strided
+        ///     <c>(2, 1)</c> view) and hands the leading mask to <c>DefaultEngine.BooleanMask</c>, which uses the mask as a
+        ///     FULL element mask whenever the trailing block size is 1 (<c>gatherMask = blockSize == 1 ? mask : …</c>,
+        ///     Default.BooleanMask.cs); off the contiguous SIMD route, its NDIter gather then right-aligns the <c>(2,)</c>
+        ///     mask against the <c>(2, 1)</c> operand. The same happens for a plain strided <c>(n, 1)</c> view masked by an
+        ///     <c>(n,)</c> mask. A trailing extent above 1, a contiguous operand and the setter are fine.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA23")]
+        public void ParityQa_LeadingMask_StridedViewWithUnitTrailingExtents_ShouldSelectRows()
+        {
+            using var a = np.arange(6L).reshape(new Shape(2, 3));
+            using var mask = np.array(new[] { false, true });
+
+            using var oneColumn = a[mask, "0:1"];
+            using var lastColumn = a[mask, "-1:"];
+
+            oneColumn.shape.Should().Equal(new long[] { 1, 1 });
+            oneColumn.GetInt64(0, 0).Should().Be(3);
+            lastColumn.GetInt64(0, 0).Should().Be(5);
+
+            using var column = np.arange(6L).reshape(new Shape(3, 2))[":, :1"];
+            using var rows = column[np.array(new[] { true, false, true })];
+
+            rows.shape.Should().Equal(new long[] { 2, 1 });
+            rows.GetInt64(1, 0).Should().Be(4);
+        }
     }
 }
