@@ -266,6 +266,12 @@ leaves the native runtime to the consumer.
   refuses a longer length. So a vector column wider than that (`AsDataView` / `ToDataView`) and a
   `ToVBuffer` longer than that are refused at export, before anything is allocated; use more rows, or
   expose a long 1-D array as one scalar column.
+- **The view does not shuffle.** `NDArrayDataView.CanShuffle` is `false` (as is a view `LoadFromEnumerable`
+  makes), so a trainer that shuffles - SDCA - falls back to ML.NET's pool shuffle, which cannot mix rows
+  stored in class order. On 20,000 rows of two classes stacked one after the other (`np.vstack` of two
+  class blocks) SDCA scored 0.50 accuracy, from this view and from a POCO list alike; the same rows permuted
+  first scored 0.72 (L-BFGS, which does not shuffle: 0.74 either way). Permute ordered training rows before
+  the view - `table[np.random.RandomState(0).permutation(n)]`, a copy.
 - **No `Complex` column.** ML.NET has no complex type (see [Dtypes](#dtypes)).
 - **`ToNDArray` rectangularizes.** A variable-length vector column cannot become a rectangular NDArray and
   is refused with a message naming the cause.
