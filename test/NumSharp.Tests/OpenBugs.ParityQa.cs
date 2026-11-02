@@ -417,5 +417,26 @@ namespace NumSharp.Tests
             typed.Should().Be(2.0);
 #endif
         }
+
+        // ------------------------------------------------------------------
+        // QA-13 — np.broadcast_to accepts a negative target dimension
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     <c>np.broadcast_to(np.arange(3), (-1, 3))</c> is NumPy's <c>ValueError: all elements of broadcast shape must be
+        ///     non-negative</c>. NumSharp returns an array of shape <c>(-1, 3)</c> and size -3: <c>np.sum</c> of it answers 0,
+        ///     its <c>ToString()</c> throws an IndexError ("index -2 is out of bounds for axis 0 with size -1"), its copy throws
+        ///     "negative dimensions are not allowed", and <c>np.broadcast_arrays</c> hands the negative shape on to its other
+        ///     operand. <c>Shape</c>'s constructor does not validate (only allocation does), and broadcast_to builds a view.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA13")]
+        public void ParityQa_BroadcastTo_NegativeDimension_ShouldRaiseValueError()
+        {
+            using var a = np.arange(3);
+
+            Action act = () => np.broadcast_to(a, new Shape(-1, 3)).Dispose();
+
+            act.Should().Throw<ValueError>().WithMessage("all elements of broadcast shape must be non-negative");
+        }
     }
 }
