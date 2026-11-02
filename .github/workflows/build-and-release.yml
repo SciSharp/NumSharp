@@ -728,6 +728,27 @@ jobs:
       shell: bash
       run: bash src/NumSharp.Interop.OpenBLAS/tools/verify_build_override.sh
 
+    # The nupkg-CONSUMER gates of the two conversion bridges. Their suites above consume them by
+    # ProjectReference, so nothing else restores what build-nuget packs: a dependency range, a TFM
+    # folder, an XML doc file or the NumSharp dependency's version could regress unseen. Each script
+    # packs Core + its bridge into a local feed, checks the nupkg's shape and dependency groups,
+    # restores a scratch consumer by PackageReference and runs it on net8.0 and net10.0 against the
+    # floor and the current ONNX Runtime / ML.NET (the ML.NET one also proves the packaged assembly
+    # still reaches VBuffer<T>'s private array: its import must stay write-through). No Python.
+    # Same placement rules as the OpenBLAS steps: last, `!cancelled()`, each packs from its own
+    # Release rebuild and deletes this version from the global packages folder. ~1.5-2 min each.
+    - name: "Package consumer: ONNX Runtime bridge (net8.0 / net10.0, floor and current ORT)"
+      if: ${{ !cancelled() }}
+      timeout-minutes: 15
+      shell: bash
+      run: bash src/NumSharp.Interop.OnnxRuntime/tools/verify_package_consumer.sh
+
+    - name: "Package consumer: ML.NET bridge (net8.0 / net10.0, floor and current ML.NET)"
+      if: ${{ !cancelled() }}
+      timeout-minutes: 15
+      shell: bash
+      run: bash src/NumSharp.Interop.MLNet/tools/verify_package_consumer.sh
+
     - name: Upload Test Results
       uses: actions/upload-artifact@v7
       if: always()
