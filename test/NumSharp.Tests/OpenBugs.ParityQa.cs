@@ -979,5 +979,35 @@ namespace NumSharp.Tests
             zeros.Should().Throw<ValueError>().WithMessage("maximum supported dimension for an ndarray is currently 64, found 65");
             expand.Should().Throw<ValueError>().WithMessage("maximum supported dimension for an ndarray is currently 64, found 65");
         }
+
+        // ------------------------------------------------------------------
+        // QA-30 — np.broadcast_to's refusal texts are not NumPy's
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's broadcast_to refuses through NpyIter, whose texts carry two quirks: the remapped-shapes list ends with a
+        ///     space before " and requested shape " (two spaces) and a one-element shape prints as a Python tuple,
+        ///     <c>operands could not be broadcast together with remapped shapes [original-&gt;remapped]: (3,)  and requested
+        ///     shape (4,)</c>; a source with more axes than the target is a different message, <c>input operand has more
+        ///     dimensions than allowed by the axis remapping</c>. <c>Shape.ValidateBroadcastTo</c> (View/Shape.Broadcasting.cs)
+        ///     formats its own text with <c>string.Join</c>: one space, <c>(3)</c> / <c>(4)</c>, and the remapped-shapes
+        ///     text for the more-axes case too. np.nditer and the gufunc guard already reproduce NumPy's formatter
+        ///     (<c>np.nditer.cs</c>, <c>GufuncGuard.cs</c>). The exception type is the house <c>IncorrectShapeException</c>
+        ///     for broadcast refusals, so only the texts are pinned.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA30")]
+        public void ParityQa_BroadcastTo_RefusalTexts_ShouldBeNumPys()
+        {
+            using var row = np.zeros(new Shape(3));
+            using var grid = np.zeros(new Shape(2, 3));
+
+            Action lengthMismatch = () => np.broadcast_to(row, new Shape(4)).Dispose();
+            Action moreAxes = () => np.broadcast_to(grid, new Shape(3)).Dispose();
+
+            lengthMismatch.Should().Throw<Exception>().Which.Message.Should().Be(
+                "operands could not be broadcast together with remapped shapes [original->remapped]: (3,)  and requested shape (4,)");
+            moreAxes.Should().Throw<Exception>().Which.Message.Should().Be(
+                "input operand has more dimensions than allowed by the axis remapping");
+        }
     }
 }
