@@ -329,6 +329,37 @@ namespace NumSharp.Interop.OnnxRuntime
             }
         }
 
+        /// <summary>
+        ///     The refusal text for a model INPUT declared with an element type NumSharp has no dtype for: what the
+        ///     caller can feed instead, which is not what <see cref="UnsupportedImportMessage"/> tells a reader of an
+        ///     output.
+        /// </summary>
+        /// <remarks>
+        ///     The input path used to reuse the import text, whose BFloat16 route - "read the raw 16-bit patterns with
+        ///     GetTensorDataAsSpan&lt;BFloat16&gt;()" - is a way to READ a value, useless to someone who has to FEED one.
+        ///     The feed route goes through ONNX Runtime's own value factory with <c>new BFloat16(bits)</c>, the
+        ///     constructor every supported ORT version has (1.16.0 included), and ORT's own <c>Run</c>; the float outputs
+        ///     of such a model still read back through the bridge.
+        /// </remarks>
+        /// <param name="type">The declared element type of the input, one <see cref="TryFromTensorElementType"/> refuses.</param>
+        /// <returns>The message, to follow "input 'name' is declared {type}: ".</returns>
+        internal static string UnsupportedInputMessage(TensorElementType type)
+        {
+            switch (type)
+            {
+                case TensorElementType.BFloat16:
+                    return "ORT BFloat16 has no NumSharp dtype (NumSharp has no bfloat16), so the bridge cannot feed it. Build this input " +
+                           "with ONNX Runtime's own API - OrtValue.CreateTensorValueFromMemory over a BFloat16[] (new BFloat16(bits), the " +
+                           "high 16 bits of each float32's bit pattern) - and run with session.Run(runOptions, inputNames, inputValues, " +
+                           "outputNames), or give the model a float32 / float16 input and cast inside the graph.";
+                case TensorElementType.Complex64:
+                case TensorElementType.Complex128:
+                    return $"ORT {type} tensors are not supported by ONNX Runtime itself (no kernel takes them); nothing can be fed.";
+                default:
+                    return $"ONNX tensor element type {type} has no NumSharp dtype, so the bridge cannot feed it.";
+            }
+        }
+
         // ===================================  shared plumbing  ===================================
 
         internal const string NotCContiguousMessage =

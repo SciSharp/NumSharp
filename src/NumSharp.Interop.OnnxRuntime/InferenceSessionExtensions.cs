@@ -612,7 +612,8 @@ namespace NumSharp.Interop.OnnxRuntime
             if (!meta.IsTensor)
                 throw new NotSupportedException($"input '{name}' is {meta.OnnxValueType}, not a tensor; feed it with the OrtValue API (OrtValue.CreateSequence / CreateMap).");
             if (!NDArrayOnnxInterop.TryFromTensorElementType(meta.ElementDataType, out DType wantDtype))
-                throw new NotSupportedException($"input '{name}' is declared {meta.ElementDataType}: {NDArrayOnnxInterop.UnsupportedImportMessage(meta.ElementDataType)}");
+                // The INPUT text (what to feed instead), not the import text (how to read an output back).
+                throw new NotSupportedException($"input '{name}' is declared {meta.ElementDataType}: {NDArrayOnnxInterop.UnsupportedInputMessage(meta.ElementDataType)}");
             NPTypeCode want = wantDtype.GetTypeCode();
             NPTypeCode have = array.typecode;
 

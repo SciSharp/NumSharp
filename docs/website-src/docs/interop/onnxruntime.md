@@ -335,7 +335,11 @@ their behaviour report Inconclusive and the test of their refusal runs.
 
 ## Limits
 
-- Complex tensors (ORT has none), BFloat16 / float8 / 4-bit (NumSharp has none).
+- Complex tensors (ORT has none), BFloat16 / float8 / 4-bit (NumSharp has none). A BFloat16 input is fed
+  through ORT's own API - `OrtValue.CreateTensorValueFromMemory` over `new BFloat16(bits)` values and ORT's
+  `session.Run` - and the refusal says so. A model that declares a float8 or 4-bit input or output does not
+  load in ONNX Runtime's C# API itself (1.31.1: `Unregistered TensorElementType value of: 19`), so it never
+  reaches the bridge.
 - Sparse tensors: ORT's C# API cannot create or read one. A model input declared sparse passes the checks
   of `Run` and fails inside ORT.
 - `Run` returns tensors only. Fetch a sequence or a map with ORT's own `session.Run` and read it with the

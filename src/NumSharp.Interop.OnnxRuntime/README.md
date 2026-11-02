@@ -279,7 +279,9 @@ The one copy left — `stack` + `astype`/divide producing the planar normalized 
 
 ## Limits (stated up front)
 
-- **Complex** (ORT has no complex tensors), **BFloat16** / float8 / 4-bit (no NumSharp dtype).
+- **Complex** (ORT has no complex tensors), **BFloat16** / float8 / 4-bit (no NumSharp dtype). A BFloat16
+  input goes through ORT's own `OrtValue.CreateTensorValueFromMemory` (`new BFloat16(bits)`) and `session.Run`;
+  a float8 or 4-bit model does not load in ORT's C# API itself (`Unregistered TensorElementType value`).
 - **Sparse tensors.** ORT's C# API cannot create or read one. A model input declared sparse passes the checks
   of `Run` and fails inside ORT.
 - **Non-tensor outputs through `Run`.** `Run` returns tensors only (text included). Fetch a sequence or a map
