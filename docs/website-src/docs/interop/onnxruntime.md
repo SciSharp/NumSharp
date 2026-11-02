@@ -144,6 +144,13 @@ What each call does for you, from the session's metadata:
 - **Names default** when the model has one input and one output; otherwise name them. A name is looked up
   among the model's inputs, then among its overridable initializers. An `optional(tensor)` input takes a
   plain array.
+- **The feed and the fetch are checked before the run.** Every input that is not `optional` must be fed
+  (Python onnxruntime's rule and message: `required inputs ([token_type_ids]) are missing from the input
+  feed ([input_ids, attention_mask])`); ONNX Runtime's C# API would run the graph and fail at the first node
+  that reads the missing input. An output name the model lacks is refused with the list of its outputs, and
+  an output `Run` cannot return - a sequence, a map, a sparse tensor - is refused with the readers that take
+  it (`ToNDArrays`, `ToMap`, `ToMaps` over ORT's own `Run`), so a scikit-learn classifier's default fetch
+  fails before the model runs, not after.
 - **Dtype coercion, NumPy's way.** An input whose dtype differs from the model's declaration is cast to it
   when `casting` (default `"safe"`) allows - int32 → int64 (the BERT `input_ids` case), float32 → float64,
   bool → anything. A lossy cast (float64 → float16) is refused with the exact rule to relax:

@@ -96,9 +96,10 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <exception cref="ArgumentNullException"><paramref name="session"/>, <paramref name="inputs"/> or <paramref name="outputs"/> is null, or a name or array in them is null.</exception>
         /// <exception cref="NotSupportedException">The loaded ONNX Runtime is older than 1.30.0; an input or an output is not a tensor of a dtype NumSharp has; or an input is a <c>StringDType</c> array (cast it to a sized <c>U</c> first).</exception>
         /// <exception cref="ArgumentException">
-        ///     <paramref name="outputs"/> is empty; the model has no input or output of a given name; a shape contradicts
-        ///     the declared one; two outputs overlap in memory; or the array for an output that is a fed input does not
-        ///     have that input's shape.
+        ///     <paramref name="outputs"/> is empty; the model has no input or output of a given name; a required input is
+        ///     missing from <paramref name="inputs"/> (checked before anything is read); a shape contradicts the declared
+        ///     one; two outputs overlap in memory; or the array for an output that is a fed input does not have that
+        ///     input's shape.
         /// </exception>
         /// <exception cref="ValueError"><paramref name="casting"/> is not one of the five rule names.</exception>
         /// <exception cref="TypeError"><paramref name="casting"/> is null, Python's None: NumPy's <c>casting must be str, not NoneType</c>.</exception>
@@ -124,6 +125,8 @@ namespace NumSharp.Interop.OnnxRuntime
             NDArrayOnnxInterop.EnsureDefined(mode);
             if (outputs.Count == 0)
                 throw new ArgumentException("no output was given: a run needs at least one output to write.", nameof(outputs));
+            // A required input the feed leaves out is refused before anything is read (it used to fail inside the graph).
+            RequireEveryInput(session, inputs.Keys);
 
             var run = new PendingRun(session, runOptions, inputs.Count, outputs.Count, allocated: null);
             try
@@ -189,7 +192,7 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     remarks); an input is not a tensor of a dtype NumSharp has; or an input is a <c>StringDType</c> array (cast it
         ///     to a sized <c>U</c> first).
         /// </exception>
-        /// <exception cref="ArgumentException"><paramref name="outputNames"/> is empty; the model has no input or output of a given name; or an input's shape contradicts the declared one.</exception>
+        /// <exception cref="ArgumentException"><paramref name="outputNames"/> is empty; the model has no input or output of a given name; a required input is missing from <paramref name="inputs"/> (checked before anything is read); or an input's shape contradicts the declared one.</exception>
         /// <exception cref="ValueError"><paramref name="casting"/> is not one of the five rule names.</exception>
         /// <exception cref="TypeError"><paramref name="casting"/> is null, Python's None: NumPy's <c>casting must be str, not NoneType</c>.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a member of <see cref="OnnxCodecMode"/>.</exception>
@@ -210,6 +213,9 @@ namespace NumSharp.Interop.OnnxRuntime
 
             // Everything the model's declarations decide is decided here, before an input is read: an output that
             // cannot be allocated costs no cast and no copy.
+            // The feed first, as in every form: a required input the feed leaves out is refused before the outputs are
+            // judged and before anything is read (it used to fail inside the graph).
+            RequireEveryInput(session, inputs.Keys);
             string[] names = DistinctOutputNames(outputNames ?? session.OutputNames);
             var declared = new NodeMetadata[names.Length];
             for (int j = 0; j < names.Length; j++)

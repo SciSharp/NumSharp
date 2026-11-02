@@ -115,28 +115,30 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
         }
 
         /// <summary>
-        ///     A model whose SECOND output is not a tensor: <c>Run</c> converts the first output (a tensor), then
-        ///     refuses the second (a sequence). What it made for the first must not leak: the copy goes back to the
-        ///     pool, and in the zero-copy form the view's lease on ONNX Runtime's buffer is released. Fetching only the
-        ///     tensor output works.
+        ///     A model whose SECOND output is not a tensor: the default fetch of <c>Run</c> (every output) is refused
+        ///     BEFORE the run, naming the output, its kind and the readers that take it - the default fetch of every
+        ///     scikit-learn classifier with a ZipMap. It used to run the model, convert the first output and fail on the
+        ///     second with "ToNDArray needs a dense tensor OrtValue", a verb the caller never called; now nothing is
+        ///     converted, run or leased. Fetching only the tensor output works.
         /// </summary>
         [TestMethod]
-        public void Run_WithANonTensorOutputAfterATensorOutput_ReleasesWhatItMadeForTheFirst()
+        public void Run_WithANonTensorOutputAfterATensorOutput_IsRefusedBeforeTheRun()
         {
             using InferenceSession session = OpenSession("tensor_then_seq");
             using NDArray x = Arange(NPTypeCode.Single, 3);
             var inputs = new Dictionary<string, NDArray> { { "X", x } };
 
-            new Action(() => session.Run(inputs)).Should().Throw<NotSupportedException>().WithMessage("*dense tensor OrtValue*SEQUENCE*ToNDArrays*");
+            new Action(() => session.Run(inputs)).Should().Throw<NotSupportedException>()
+                .WithMessage("output 'S' is ONNX_TYPE_SEQUENCE, not a tensor: Run returns tensors only*ToNDArrays*ToMaps*");
             Pool.Balance(() =>
             {
                 try { session.Run(inputs); }
                 catch (NotSupportedException) { }
-            }).Should().Be(0, "the copy made for Y before S was refused is disposed");
+            }).Should().Be(0, "nothing is made for Y: the fetch is refused before the run");
 
-            new Action(() => session.Run(inputs, zeroCopyOutputs: true)).Should().Throw<NotSupportedException>().WithMessage("*SEQUENCE*");
-            NDArrayOnnxInterop.LiveImports.Should().Be(0, "the view made for Y is disposed, and its lease with it");
-            NDArrayOnnxInterop.LiveExports.Should().Be(0);
+            new Action(() => session.Run(inputs, zeroCopyOutputs: true)).Should().Throw<NotSupportedException>().WithMessage("*'S'*SEQUENCE*");
+            NDArrayOnnxInterop.LiveImports.Should().Be(0, "nothing is leased");
+            NDArrayOnnxInterop.LiveExports.Should().Be(0, "no input was exported");
 
             // the tensor output alone is fetched by both forms
             IReadOnlyDictionary<string, NDArray> onlyY = session.Run(inputs, new[] { "Y" });
@@ -145,6 +147,97 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             IReadOnlyDictionary<string, NDArray> viewY = session.Run(inputs, new[] { "Y" }, zeroCopyOutputs: true);
             using (NDArray y = viewY["Y"])
                 y.ToArray<float>().Should().Equal(0f, 1f, 2f);
+        }
+
+        /// <summary>
+        ///     The output collectors' own cleanup, which <c>Run</c> no longer reaches for a declared sequence (it refuses
+        ///     the fetch first) but still needs for an output only the run can tell apart (an empty <c>optional</c>): the
+        ///     values of a real run of the same model, a tensor then a sequence, handed to both collectors. The copy made
+        ///     for the tensor goes back to the pool, and the view made for it releases its lease.
+        /// </summary>
+        [TestMethod]
+        public void OutputCollectors_ANonTensorAfterATensor_ReleaseWhatTheyMadeForTheFirst()
+        {
+            using InferenceSession session = OpenSession("tensor_then_seq");
+            using NDArray x = Arange(NPTypeCode.Single, 3);
+            using OrtTensor handle = x.AsOrtValue();
+            using var options = new RunOptions();
+            string[] inNames = { "X" };
+            string[] outNames = { "Y", "S" };
+            OrtTensor[] inHandles = { handle };
+            OrtValue[] inValues = { handle.Value };
+
+            Pool.Balance(() =>
+            {
+                IDisposableReadOnlyCollection<OrtValue> outputs = session.Run(options, inNames, inValues, outNames);
+                new Action(() => InferenceSessionExtensions.CopyOutputs(outputs, outNames, inNames, inHandles))
+                    .Should().Throw<NotSupportedException>().WithMessage("*dense tensor OrtValue*SEQUENCE*ToNDArrays*");
+            }).Should().Be(0, "the copy made for Y before S was refused is disposed");
+
+            IDisposableReadOnlyCollection<OrtValue> viewed = session.Run(options, inNames, inValues, outNames);
+            new Action(() => InferenceSessionExtensions.ViewOutputs(viewed, outNames, inNames, inHandles))
+                .Should().Throw<NotSupportedException>().WithMessage("*SEQUENCE*");
+            NDArrayOnnxInterop.LiveImports.Should().Be(0, "the view made for Y is disposed, and its lease with it");
+        }
+
+        /// <summary>
+        ///     A feed that leaves out a required input is refused before anything is read or run, by every form, with
+        ///     Python onnxruntime's message (its <c>_validate_input</c>); the input preparation and the model never start, so
+        ///     nothing is exported. A name the model does not have is still reported first (the more specific mistake),
+        ///     an <c>optional</c> input may be left out, and an overridable initializer keeps its default when it is not fed.
+        /// </summary>
+        [TestMethod]
+        public void Feed_MissingRequiredInput_IsRefusedBeforeTheRun_UnknownNamesFirst_OptionalAndInitializersExempt()
+        {
+            using InferenceSession add = OpenSession("add_f32");                // inputs A, B -> C
+            using NDArray a = Arange(NPTypeCode.Single, 3);
+            var onlyA = new Dictionary<string, NDArray> { { "A", a } };
+
+            new Action(() => add.Run(onlyA)).Should().Throw<ArgumentException>()
+                .WithMessage("required inputs ([B]) are missing from the input feed ([A]).*");
+            new Action(() => add.Run("A", a, "C")).Should().Throw<ArgumentException>().WithMessage("required inputs ([B])*");
+            using (NDArray c = np.zeros(new Shape(3), NPTypeCode.Single))
+            {
+                new Action(() => add.RunInto(onlyA, new Dictionary<string, NDArray> { { "C", c } })).Should().Throw<ArgumentException>()
+                    .WithMessage("required inputs ([B])*");
+                if (InferenceSessionExtensions.IsRunAsyncSupported)
+                {
+                    // usage errors throw from the call itself, before a task exists (the async forms' contract)
+                    new Action(() => add.RunIntoAsync(onlyA, new Dictionary<string, NDArray> { { "C", c } })).Should().Throw<ArgumentException>()
+                        .WithMessage("required inputs ([B])*");
+                    new Action(() => add.RunAsync(onlyA)).Should().Throw<ArgumentException>().WithMessage("required inputs ([B])*");
+                }
+            }
+            NDArrayOnnxInterop.LiveExports.Should().Be(0, "no input was prepared");
+
+            new Action(() => add.Run(new Dictionary<string, NDArray> { { "Q", a } })).Should().Throw<ArgumentException>()
+                .WithMessage("the model has no input named 'Q'; its inputs are [A, B].*");
+
+            // optional(tensor) input left out: ORT runs the graph with no value for it
+            using InferenceSession optional = OpenSession("optional_input");    // input X: optional(tensor) -> Y
+            optional.InputMetadata["X"].OnnxValueType.Should().Be(OnnxValueType.ONNX_TYPE_OPTIONAL);
+            new Action(() => InferenceSessionExtensions.RequireEveryInput(optional, Array.Empty<string>())).Should().NotThrow();
+
+            // an overridable initializer is not a required input: feeding only x runs with w's default
+            using InferenceSession init = OpenSession("overridable_init");      // input x, overridable initializer w -> y
+            using NDArray xi = Arange(NPTypeCode.Single, 3);
+            using (NDArray y = init.Run(new Dictionary<string, NDArray> { { "x", xi } })["y"])
+                y.size.Should().Be(3);
+        }
+
+        /// <summary>
+        ///     An output name the model does not have is refused before the run with the list of the outputs, the
+        ///     message an unknown input gets (it reached ONNX Runtime: "Output name: 'Z' is not in the metadata").
+        /// </summary>
+        [TestMethod]
+        public void Run_UnknownOutputName_IsRefusedBeforeTheRun_WithTheListOfOutputs()
+        {
+            using InferenceSession session = OpenSession("two_outputs_f32");   // X -> Y1, Y2
+            using NDArray x = Arange(NPTypeCode.Single, 3);
+            new Action(() => session.Run(new Dictionary<string, NDArray> { { "X", x } }, new[] { "Z" })).Should().Throw<ArgumentException>()
+                .WithMessage("the model has no output named 'Z'; its outputs are [Y1, Y2].*");
+            new Action(() => session.Run("X", x, "Z")).Should().Throw<ArgumentException>().WithMessage("*no output named 'Z'*");
+            NDArrayOnnxInterop.LiveExports.Should().Be(0);
         }
 
         /// <summary>

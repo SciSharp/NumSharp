@@ -111,6 +111,10 @@ await session.RunIntoAsync(inputs, outputs);                  // the same, witho
   must be 4, not 5`); symbolic dims (`'batch'`, `'seq'`) are free.
 - **Names.** An input name is looked up among the model's inputs, then among its overridable initializers. An
   input declared `optional(tensor)` takes a plain array.
+- **The feed and the fetch are checked before the run.** Every input that is not `optional` must be fed
+  (Python onnxruntime's rule and message); an unknown output name is refused with the list of outputs; and an
+  output `Run` cannot return (a sequence, a map, a sparse tensor) is refused with the readers that take it, before
+  the model runs.
 - **Outputs are copied** into owning arrays by default and every ORT value is released before the call
   returns. `zeroCopyOutputs: true` returns views that **own** their `OrtValue` — ORT's memory is freed when the
   array (and every slice derived from it) dies — for large outputs you consume in place.

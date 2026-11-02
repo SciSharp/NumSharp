@@ -73,7 +73,10 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <param name="mode">How the input is fed; see <see cref="OnnxCodecMode"/>.</param>
         /// <returns>A new owning C-contiguous array holding the named output.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="session"/>, <paramref name="inputName"/>, <paramref name="input"/> or <paramref name="outputName"/> is null.</exception>
-        /// <exception cref="ArgumentException">The model has no such input, or the input's shape contradicts the declared one.</exception>
+        /// <exception cref="ArgumentException">
+        ///     The model has no such input or output, it has another required input (one input is fed: Python
+        ///     onnxruntime's rule, checked before the run), or the input's shape contradicts the declared one.
+        /// </exception>
         /// <exception cref="ValueError"><paramref name="casting"/> is not one of the five rule names.</exception>
         /// <exception cref="TypeError"><paramref name="casting"/> is null, Python's None: NumPy's <c>casting must be str, not NoneType</c>.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a member of <see cref="OnnxCodecMode"/>.</exception>
@@ -119,14 +122,23 @@ namespace NumSharp.Interop.OnnxRuntime
         /// </param>
         /// <param name="mode">How the INPUTS are fed (view, copy, or view-when-possible); see <see cref="OnnxCodecMode"/>. It does not affect the outputs, which <paramref name="zeroCopyOutputs"/> decides.</param>
         /// <returns>The fetched outputs by name; the caller disposes each array.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="session"/> or <paramref name="inputs"/> is null, or an input name or array in it is null.</exception>
-        /// <exception cref="ArgumentException">The model has no input of a given name, or an input's shape contradicts the declared one.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="session"/> or <paramref name="inputs"/> is null, or an input name or array in it, or an output name, is null.</exception>
+        /// <exception cref="ArgumentException">
+        ///     The model has no input or no output of a given name; a required input (any input whose type is not
+        ///     <c>optional</c>) is missing from <paramref name="inputs"/>, Python onnxruntime's check; or an input's shape
+        ///     contradicts the declared one. The names are checked before any input is read or the model runs.
+        /// </exception>
         /// <exception cref="ValueError"><paramref name="casting"/> is not one of the five rule names.</exception>
         /// <exception cref="TypeError"><paramref name="casting"/> is null, Python's None: NumPy's <c>casting must be str, not NoneType</c>.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a member of <see cref="OnnxCodecMode"/>.</exception>
         /// <exception cref="InvalidCastException">An input's dtype does not cast to the declared one under <paramref name="casting"/>.</exception>
         /// <exception cref="InvalidOperationException"><paramref name="mode"/> is <see cref="OnnxCodecMode.View"/> and an input needs a copy; or an output lives in device memory.</exception>
-        /// <exception cref="NotSupportedException">An input or an output is not a tensor of a dtype NumSharp has, or an input is a <c>StringDType</c> array (cast it to a sized <c>U</c> first).</exception>
+        /// <exception cref="NotSupportedException">
+        ///     A fetched output is declared a sequence, a map or a sparse tensor (refused before the run: fetch it with
+        ///     ONNX Runtime's own <c>Run</c> and read it with <c>ToNDArrays</c> / <c>ToMap</c> / <c>ToMaps</c>); an input or
+        ///     an output is not a tensor of a dtype NumSharp has; or an input is a <c>StringDType</c> array (cast it to a sized
+        ///     <c>U</c> first).
+        /// </exception>
         /// <exception cref="ObjectDisposedException">An input's buffer has already been released.</exception>
         public static IReadOnlyDictionary<string, NDArray> Run(this InferenceSession session, IReadOnlyDictionary<string, NDArray> inputs,
             IReadOnlyCollection<string> outputNames = null, RunOptions runOptions = null, string casting = "safe", bool zeroCopyOutputs = false,
@@ -142,6 +154,11 @@ namespace NumSharp.Interop.OnnxRuntime
             NPY_CASTING rule = DTypeCasting.ParseCasting(casting);
             NDArrayOnnxInterop.EnsureDefined(mode);
             outputNames ??= session.OutputNames;
+            // What the declarations decide is refused before an input is read or the model runs: a required input the
+            // feed leaves out, then an output Run cannot return (both used to fail only inside or after the run). The
+            // feed is checked first in every form, synchronous and asynchronous.
+            RequireEveryInput(session, inputs.Keys);
+            RequireTensorOutputs(session, outputNames);
 
             var names = new string[inputs.Count];
             var handles = new OrtTensor[inputs.Count];
@@ -202,8 +219,9 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <param name="mode">How the INPUTS are fed; see <see cref="OnnxCodecMode"/>. The outputs are always shared.</param>
         /// <exception cref="ArgumentNullException"><paramref name="session"/>, <paramref name="inputs"/> or <paramref name="outputs"/> is null, or a name or array in them is null.</exception>
         /// <exception cref="ArgumentException">
-        ///     The model has no input or output of a given name; a shape contradicts the declared one; two outputs overlap
-        ///     in memory; or the array for an output that is a fed input does not have that input's shape.
+        ///     The model has no input or output of a given name; a required input is missing from
+        ///     <paramref name="inputs"/> (checked before anything is read); a shape contradicts the declared one; two
+        ///     outputs overlap in memory; or the array for an output that is a fed input does not have that input's shape.
         /// </exception>
         /// <exception cref="ValueError"><paramref name="casting"/> is not one of the five rule names.</exception>
         /// <exception cref="TypeError"><paramref name="casting"/> is null, Python's None: NumPy's <c>casting must be str, not NoneType</c>.</exception>
@@ -226,6 +244,8 @@ namespace NumSharp.Interop.OnnxRuntime
                 throw new ArgumentNullException(nameof(outputs));
             NPY_CASTING rule = DTypeCasting.ParseCasting(casting);
             NDArrayOnnxInterop.EnsureDefined(mode);
+            // A required input the feed leaves out is refused before anything is read (it used to fail inside the graph).
+            RequireEveryInput(session, inputs.Keys);
 
             var inNames = new string[inputs.Count];
             var inHandles = new OrtTensor[inputs.Count];
@@ -816,6 +836,89 @@ namespace NumSharp.Interop.OnnxRuntime
                     sb.Append('\'').Append(symbolic is not null && i < symbolic.Length && !string.IsNullOrEmpty(symbolic[i]) ? symbolic[i] : "?").Append('\'');
             }
             return sb.Append(')').ToString();
+        }
+
+        // ---- the feed and the fetch, checked before anything is converted or run -----------------------
+
+        /// <summary>
+        ///     Refuse a feed that leaves out a REQUIRED model input, before any input is converted or the model runs:
+        ///     Python onnxruntime's own check (<c>InferenceSession._validate_input</c>), with its rule - every declared
+        ///     input whose type is not <c>optional(...)</c> must be fed - and its message.
+        /// </summary>
+        /// <remarks>
+        ///     <para>ONNX Runtime's C# API does not check this. A model run without one of its inputs fails INSIDE the
+        ///     graph, at the first node that reads it, after every node before it ran: MiniLM fed only <c>input_ids</c>
+        ///     and <c>attention_mask</c> stopped in a Gather node with "Missing Input: token_type_ids", and ORT printed
+        ///     an error line of its own on stderr.</para>
+        ///     <para>An overridable initializer is not an input here: it has a default value, so leaving it out keeps the
+        ///     default. A model whose graph never reads a declared input used to run without it; it is refused now, as
+        ///     Python refuses it.</para>
+        /// </remarks>
+        /// <param name="session">The session whose metadata declares the inputs.</param>
+        /// <param name="fed">The names the caller feeds, in the caller's order.</param>
+        /// <exception cref="ArgumentException">
+        ///     A fed name is neither an input nor an overridable initializer of the model (reported first, with the list
+        ///     of the inputs), or a required input is missing (the message lists the missing names and the fed ones).
+        /// </exception>
+        internal static void RequireEveryInput(InferenceSession session, IEnumerable<string> fed)
+        {
+            var given = new List<string>(fed);
+            // A name the model does not have is the more specific mistake - a misspelled input also leaves the real one
+            // missing - so it is reported first, with the message every other name lookup of this tier gives. A null
+            // name is left to the preparation of the inputs, which refuses it with ArgumentNullException.
+            foreach (string name in given)
+            {
+                if (name is not null)
+                    InputDeclaration(session, name);
+            }
+
+            List<string> missing = null;
+            // InputNames is the model's own order, so the message lists the missing inputs as the model declares them.
+            foreach (string name in session.InputNames)
+            {
+                if (session.InputMetadata[name].OnnxValueType == OnnxValueType.ONNX_TYPE_OPTIONAL)
+                    continue;   // optional(...): ONNX Runtime runs the graph with no value for it
+                if (!given.Contains(name))
+                    (missing ??= new List<string>()).Add(name);
+            }
+            if (missing is not null)
+                throw new ArgumentException(
+                    $"required inputs ([{string.Join(", ", missing)}]) are missing from the input feed ([{string.Join(", ", given)}]).", "inputs");
+        }
+
+        /// <summary>
+        ///     Refuse, before the run, every output the synchronous <c>Run</c> cannot return: a name the model does not
+        ///     have, and a declared sequence, map or sparse tensor.
+        /// </summary>
+        /// <remarks>
+        ///     <para>Both used to fail late. An unknown name reached ONNX Runtime ("Output name: 'logits' is not in the
+        ///     metadata", with no list of the outputs), where an unknown input name gets this package's list. A non-tensor
+        ///     output failed AFTER the model ran and the tensor outputs before it were converted, with "ToNDArray needs a
+        ///     dense tensor OrtValue ...": a verb the caller never called, no output name, and readers for a value the
+        ///     caller never holds. That is the default fetch of every scikit-learn classifier with a ZipMap.
+        ///     <see cref="RunInto"/> and the asynchronous forms refused both up front already.</para>
+        ///     <para>An <c>optional(...)</c> output passes: whether it holds a tensor is decided by the run, and an empty
+        ///     one is refused after the run, as before.</para>
+        /// </remarks>
+        /// <param name="session">The session whose metadata declares the outputs.</param>
+        /// <param name="outputNames">The names the caller fetches.</param>
+        /// <exception cref="ArgumentNullException">A name is null.</exception>
+        /// <exception cref="ArgumentException">The model has no output of a given name; the message lists its outputs.</exception>
+        /// <exception cref="NotSupportedException">A fetched output is declared a sequence, a map or a sparse tensor.</exception>
+        internal static void RequireTensorOutputs(InferenceSession session, IReadOnlyCollection<string> outputNames)
+        {
+            foreach (string name in outputNames)
+            {
+                if (name is null)
+                    throw new ArgumentNullException(nameof(outputNames), "an output name is null.");
+                if (!session.OutputMetadata.TryGetValue(name, out NodeMetadata meta))
+                    throw new ArgumentException($"the model has no output named '{name}'; its outputs are [{string.Join(", ", session.OutputNames)}].", nameof(outputNames));
+                if (meta.OnnxValueType != OnnxValueType.ONNX_TYPE_TENSOR && meta.OnnxValueType != OnnxValueType.ONNX_TYPE_OPTIONAL)
+                    throw new NotSupportedException(
+                        $"output '{name}' is {meta.OnnxValueType}, not a tensor: Run returns tensors only. Leave it out of outputNames, or fetch it " +
+                        "with ONNX Runtime's own session.Run (an OrtValue) and read it with ToNDArrays (a sequence of tensors), ToMap (a map) or " +
+                        "ToMaps (a sequence of maps, the scikit-learn ZipMap).");
+            }
         }
 
         /// <summary>The model's only input or output name, for the single-array overload.</summary>
