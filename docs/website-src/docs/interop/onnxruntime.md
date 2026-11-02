@@ -220,6 +220,12 @@ bytes)` on `slice.Address + Shape.Offset × itemsize`; the import takes the poin
   Disposing the handle disposes the `OrtValue`, drops the reference and disposes the temporary copy when the
   handle holds one. While exported, `ndarray.resize(refcheck: true)` refuses - NumPy's rule for a referenced
   buffer - and works again once the handle is gone.
+- **`ToOrtValue` returns ORT's own value: dispose it.** Its copy lives in memory ORT allocated, which the
+  garbage collector does not see (ORT reports no memory pressure), so a forgotten one is freed only when a
+  collection happens to run for other reasons: a loop that dropped 20,000 copies of a 602 KB array peaked at
+  4.4 GB more private memory before the finalizers caught up. The arrays and handles of this package do not
+  have this problem (the same loop over `Run` outputs, owning views or `AsOrtValue` handles stayed within
+  60 MB), but `using` is still the rule.
 - **Reachable means valid.** The handle and what it hands out keep each other alive: holding only
   `handle.Value`, or only `Tensor` / `Memory`, keeps the handle and its reference, so a collection never
   disposes an `OrtValue` or disables a tensor you still hold, and never lets `resize` reallocate under it. A
