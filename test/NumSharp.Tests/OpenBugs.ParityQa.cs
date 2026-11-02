@@ -953,5 +953,31 @@ namespace NumSharp.Tests
             grid.dtype.Should().Be(np.int64);
             contiguous.GetDouble(2).Should().Be(3.0);
         }
+
+        // ------------------------------------------------------------------
+        // QA-29 — arrays of more than 64 dimensions are built where NumPy refuses them
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy caps an array's rank at <c>NPY_MAXDIMS</c> = 64: <c>np.zeros((1,) * 65)</c>,
+        ///     <c>np.expand_dims(a64, 0)</c> and a broadcast to 65 dimensions raise
+        ///     <c>ValueError: maximum supported dimension for an ndarray is currently 64, found 65</c>, and <c>a64[np.newaxis]</c>
+        ///     raises <c>IndexError: number of dimensions must be within [0, 64], indexing result would have 65</c>. NumSharp
+        ///     has no such check (its only 64 is <c>np.nditer</c>'s op_axes emulation and a few fast paths that decline past
+        ///     it), so every one of those calls returns a 65-dimensional array (<c>p68</c>) - which NumPy itself cannot
+        ///     receive through the pythonnet bridge.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA29")]
+        public void ParityQa_MoreThan64Dimensions_ShouldRaiseNumPysValueError()
+        {
+            var rank65 = Enumerable.Repeat(1L, 65).ToArray();
+            using var rank64 = np.zeros(new Shape(Enumerable.Repeat(1L, 64).ToArray()));
+
+            Action zeros = () => np.zeros(new Shape(rank65)).Dispose();
+            Action expand = () => np.expand_dims(rank64, 0).Dispose();
+
+            zeros.Should().Throw<ValueError>().WithMessage("maximum supported dimension for an ndarray is currently 64, found 65");
+            expand.Should().Throw<ValueError>().WithMessage("maximum supported dimension for an ndarray is currently 64, found 65");
+        }
     }
 }
