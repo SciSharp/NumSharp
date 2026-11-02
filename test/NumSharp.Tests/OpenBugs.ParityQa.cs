@@ -565,5 +565,35 @@ namespace NumSharp.Tests
             ((double)(Half)axis.GetValue(0)).Should().Be(90.0625);
             Half.IsPositiveInfinity((Half)flat.GetValue()).Should().BeTrue();
         }
+
+        // ------------------------------------------------------------------
+        // QA-17 — the float-tier binary ufuncs promote Char beside float16 / float32 to float64
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     Char is documented as bit-identical to uint16 (its promotion was made "the uint16 masquerade" in 22589ad6), and
+        ///     <c>np.result_type(char, float32)</c>, add / multiply / power / divide / fmod / maximum / fmax / float_power all give
+        ///     uint16's answer, float32. The float-tier binary ufuncs give float64 instead, for float16 and float32 alike:
+        ///     <c>np.hypot</c>, <c>np.arctan2</c>, <c>np.copysign</c>, <c>np.heaviside</c>, <c>np.logaddexp</c>,
+        ///     <c>np.logaddexp2</c> and <c>np.nextafter</c> (DefaultEngine's float-tier dispatch ranks Char apart from uint16).
+        ///     NumPy (uint16 + float32) is float32.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA17")]
+        public void ParityQa_FloatTierUfuncs_CharBesideFloat32_ShouldPromoteLikeUInt16()
+        {
+            using var ch = np.array(new[] { 'a', 'b', 'c' });
+            using var f32 = np.array(new[] { 1.5f, -2.0f, 0.25f });
+            using var f16 = f32.astype(np.float16);
+
+            using var hypot = np.hypot(ch, f32);
+            using var arctan2 = np.arctan2(ch, f16);
+            using var copysign = np.copysign(ch, f32);
+            using var nextafter = np.nextafter(ch, f32);
+
+            hypot.dtype.Should().Be(np.float32);
+            arctan2.dtype.Should().Be(np.float32);
+            copysign.dtype.Should().Be(np.float32);
+            nextafter.dtype.Should().Be(np.float32);
+        }
     }
 }
