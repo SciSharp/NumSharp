@@ -627,27 +627,26 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
         /// <summary>
         ///     An output whose array cannot be allocated before the run is refused from the call, with what to do
         ///     instead, and before an input is read (the refusal takes no buffer from the pool, and a released input is
-        ///     not even looked at): a dimension fixed only at run time, a declaration without dimensions, a string
-        ///     tensor, a sequence.
+        ///     not even looked at): a dimension fixed only at run time that no input names, a declaration without
+        ///     dimensions, a string tensor, a sequence.
         /// </summary>
         [TestMethod]
         [Timeout(120_000)]
         public void RunAsync_RefusesAnOutputItCannotAllocate_BeforeItReadsAnInput()
         {
             RequireAsyncRuns();
-            using (InferenceSession session = OpenAsyncSession("matmul_f32"))
-            using (NDArray a = SmallWholes(2, 3, 1))
-            using (NDArray b = SmallWholes(3, 4, 2))
+            using (InferenceSession session = OpenAsyncSession("anon_dim"))   // X ('?', 3) -> Y ('?', 3): an UNNAMED run-time dimension
+            using (NDArray x = SmallWholes(2, 3, 1))
             {
-                var inputs = new Dictionary<string, NDArray> { { "A", a }, { "B", b } };
+                var inputs = new Dictionary<string, NDArray> { { "X", x } };
                 new Action(() => session.RunAsync(inputs)).Should().Throw<NotSupportedException>()
-                    .WithMessage("RunAsync: output 'C'*('M', 'N')*fixes only at run time*RunIntoAsync*");
+                    .WithMessage("RunAsync: output 'Y'*('?', 3)*fixes only at run time and no input names*RunIntoAsync*");
                 Pool.Takes(() => { try { session.RunAsync(inputs); } catch (NotSupportedException) { } })
                     .Should().Be(0, "the refusal is decided from the model's declarations alone");
 
                 NDArray released = SmallWholes(2, 3, 1);
                 released.Dispose();
-                new Action(() => session.RunAsync(new Dictionary<string, NDArray> { { "A", released }, { "B", b } }))
+                new Action(() => session.RunAsync(new Dictionary<string, NDArray> { { "X", released } }))
                     .Should().Throw<NotSupportedException>("the output is refused before the released input is read");
             }
 
@@ -667,6 +666,73 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
                     .WithMessage("RunAsync: output 'seq'*not a tensor*");
 
             NDArrayOnnxInterop.LiveExports.Should().Be(0);
+        }
+
+        /// <summary>
+        ///     A run-time dimension an input NAMES is bound from the fed array, so <c>RunAsync</c> allocates outputs whose
+        ///     declarations use it: matmul's <c>('M', 'N')</c> from A's M and B's N, two_dtypes' <c>('N',)</c>,
+        ///     postprocess's <c>('N', 'C')</c> and <c>('N',)</c>; each result equals the synchronous run's. A name the
+        ///     fed arrays give two extents is refused from the call (ORT would fail the run), and a dimension named only on
+        ///     an output (topk's <c>'k'</c>, the value of an input, not a dimension of one) is still refused.
+        /// </summary>
+        [TestMethod]
+        [Timeout(120_000)]
+        public void RunAsync_BindsNamedRunTimeDimensionsFromTheFedArrays()
+        {
+            RequireAsyncRuns();
+            using (InferenceSession session = OpenAsyncSession("matmul_f32"))
+            using (NDArray a = SmallWholes(2, 3, 1))
+            using (NDArray b = SmallWholes(3, 4, 2))
+            {
+                var inputs = new Dictionary<string, NDArray> { { "A", a }, { "B", b } };
+                IReadOnlyDictionary<string, NDArray> got = session.RunAsync(inputs).GetAwaiter().GetResult();
+                using NDArray c = got["C"];
+                using NDArray expected = session.Run(inputs)["C"];
+                c.shape.Should().Equal(2, 4);
+                BytesOf(c).Should().Equal(BytesOf(expected));
+
+                using NDArray wrongK = SmallWholes(4, 5, 3);
+                new Action(() => session.RunAsync(new Dictionary<string, NDArray> { { "A", a }, { "B", wrongK } })).Should().Throw<ArgumentException>()
+                    .WithMessage("RunAsync: the dimension 'K' is 3 in input 'A' but 4 in input 'B'*");
+                Pool.Takes(() => { try { session.RunAsync(new Dictionary<string, NDArray> { { "A", a }, { "B", wrongK } }); } catch (ArgumentException) { } })
+                    .Should().Be(0, "the conflict is decided from the shapes before anything is allocated");
+            }
+
+            using (InferenceSession session = OpenAsyncSession("two_dtypes"))
+            using (NDArray x = Arange(NPTypeCode.Single, 5))
+            {
+                var inputs = new Dictionary<string, NDArray> { { "X", x } };
+                IReadOnlyDictionary<string, NDArray> got = session.RunAsync(inputs).GetAwaiter().GetResult();
+                IReadOnlyDictionary<string, NDArray> expected = session.Run(inputs);
+                foreach (string name in new[] { "Yf", "Yi" })
+                    using (NDArray g = got[name])
+                    using (NDArray e = expected[name])
+                    {
+                        g.shape.Should().Equal(5);
+                        BytesOf(g).Should().Equal(BytesOf(e), name);
+                    }
+            }
+
+            using (InferenceSession session = OpenAsyncSession("postprocess_f32"))
+            using (NDArray x = SmallWholes(3, 4, 4))
+            {
+                var inputs = new Dictionary<string, NDArray> { { "X", x } };
+                IReadOnlyDictionary<string, NDArray> got = session.RunAsync(inputs).GetAwaiter().GetResult();
+                IReadOnlyDictionary<string, NDArray> expected = session.Run(inputs);
+                foreach (string name in new[] { "probs", "argmax" })
+                    using (NDArray g = got[name])
+                    using (NDArray e = expected[name])
+                        BytesOf(g).Should().Equal(BytesOf(e), name);
+            }
+
+            using (InferenceSession session = OpenAsyncSession("topk_f32"))
+            using (NDArray x = SmallWholes(2, 5, 5))
+            using (NDArray k = np.array(new long[] { 2 }))
+                new Action(() => session.RunAsync(new Dictionary<string, NDArray> { { "X", x }, { "K", k } })).Should().Throw<NotSupportedException>()
+                    .WithMessage("RunAsync: output 'Values'*('N', 'k')*no input names*");
+
+            NDArrayOnnxInterop.LiveExports.Should().Be(0);
+            NDArrayOnnxInterop.LiveImports.Should().Be(0);
         }
 
         /// <summary>

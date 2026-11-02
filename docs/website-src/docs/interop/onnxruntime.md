@@ -228,7 +228,10 @@ and the task completes from a native callback.
 - **2 or more intra-op threads** (`SessionOptions.IntraOpNumThreads` is not 1). With one, ORT refuses and
   the task is faulted.
 - **`RunAsync` allocates its outputs before the run**, so it needs their shape then: a numeric tensor with
-  a fixed declared shape, or an output that is a fed input. A dimension fixed only at run time, a
+  a fixed declared shape, an output that is a fed input, or a run-time dimension an input NAMES - the
+  `'N'` / `'batch_size'` / `'sequence_length'` of the zoo's and Hugging Face's exports takes the fed
+  array's extent, as ONNX gives one symbolic name one extent (ResNet50 v2, MobileNetV2 and MiniLM run this
+  way, each equal to `Run`). An unnamed run-time dimension (scikit-learn's exports) or one no input names, a
   declaration without dimensions (a scalar or an unknown rank: ORT's metadata does not tell which), a string
   tensor and a non-tensor output are refused with what to do instead. `RunIntoAsync` works for every model
   whose outputs you can allocate.
