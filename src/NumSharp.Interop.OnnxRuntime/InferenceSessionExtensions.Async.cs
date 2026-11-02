@@ -109,7 +109,7 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     An output array is read-only, not C-contiguous, not of the declared dtype or text; or <paramref name="mode"/>
         ///     is <see cref="OnnxCodecMode.View"/> and an input needs a copy (a cast, a layout, or an overlap with an output).
         /// </exception>
-        /// <exception cref="ObjectDisposedException">An input's or an output's buffer has already been released.</exception>
+        /// <exception cref="ObjectDisposedException">An input's or an output's buffer has already been released, or the session has been disposed.</exception>
         public static Task RunIntoAsync(this InferenceSession session, IReadOnlyDictionary<string, NDArray> inputs,
             IReadOnlyDictionary<string, NDArray> outputs, RunOptions runOptions = null, string casting = "safe",
             OnnxCodecMode mode = OnnxCodecMode.Auto)
@@ -121,6 +121,7 @@ namespace NumSharp.Interop.OnnxRuntime
             if (outputs is null)
                 throw new ArgumentNullException(nameof(outputs));
             EnsureRunAsyncSupported(nameof(RunIntoAsync), nameof(RunInto));
+            OrtDisposalProbe.ThrowIfDisposed(session, nameof(RunIntoAsync));   // see Run: a disposed session would end the process
             NPY_CASTING rule = DTypeCasting.ParseCasting(casting);
             NDArrayOnnxInterop.EnsureDefined(mode);
             if (outputs.Count == 0)
@@ -198,7 +199,7 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a member of <see cref="OnnxCodecMode"/>.</exception>
         /// <exception cref="InvalidCastException">An input's dtype does not cast to the declared one under <paramref name="casting"/>.</exception>
         /// <exception cref="InvalidOperationException"><paramref name="mode"/> is <see cref="OnnxCodecMode.View"/> and an input needs a copy.</exception>
-        /// <exception cref="ObjectDisposedException">An input's buffer has already been released.</exception>
+        /// <exception cref="ObjectDisposedException">An input's buffer has already been released, or the session has been disposed.</exception>
         public static Task<IReadOnlyDictionary<string, NDArray>> RunAsync(this InferenceSession session, IReadOnlyDictionary<string, NDArray> inputs,
             IReadOnlyCollection<string> outputNames = null, RunOptions runOptions = null, string casting = "safe",
             OnnxCodecMode mode = OnnxCodecMode.Auto)
@@ -208,6 +209,7 @@ namespace NumSharp.Interop.OnnxRuntime
             if (inputs is null)
                 throw new ArgumentNullException(nameof(inputs));
             EnsureRunAsyncSupported(nameof(RunAsync), nameof(Run));
+            OrtDisposalProbe.ThrowIfDisposed(session, nameof(RunAsync));   // see Run: a disposed session would end the process
             NPY_CASTING rule = DTypeCasting.ParseCasting(casting);
             NDArrayOnnxInterop.EnsureDefined(mode);
 

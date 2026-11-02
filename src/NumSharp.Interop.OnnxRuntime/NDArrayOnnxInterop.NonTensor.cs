@@ -31,6 +31,7 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <param name="sequence">A sequence OrtValue whose elements are dense tensors.</param>
         /// <returns>One array per element, in sequence order; dispose each one to free ORT's copy of its element.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="sequence"/> is null.</exception>
+        /// <exception cref="ObjectDisposedException">The value has been disposed, or belongs to a disposed <see cref="OrtTensor"/> handle: refused before any native call (ONNX Runtime does not check it, and reading a released value ends the process).</exception>
         /// <exception cref="NotSupportedException">
         ///     Not a sequence, or an element is not a dense tensor (a sequence of MAPs — the ZipMap shape — is
         ///     read with <see cref="ToMaps"/> instead), or an element's element type has no NumSharp dtype.
@@ -93,6 +94,7 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <param name="map">A map OrtValue.</param>
         /// <returns>The keys and the values, each a 1-D array; dispose both.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="map"/> is null.</exception>
+        /// <exception cref="ObjectDisposedException">The value has been disposed, or belongs to a disposed <see cref="OrtTensor"/> handle: refused before any native call (ONNX Runtime does not check it, and reading a released value ends the process).</exception>
         /// <exception cref="NotSupportedException">Not a map, or its keys or its values are of a type NumSharp lacks (BFloat16).</exception>
         /// <remarks>
         ///     A failure converting the values disposes the keys array already made, so a refused map leaves no array
@@ -149,6 +151,7 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <param name="sequenceOfMaps">A sequence OrtValue whose elements are maps.</param>
         /// <returns>One (keys, values) pair per element, in sequence order.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="sequenceOfMaps"/> is null.</exception>
+        /// <exception cref="ObjectDisposedException">The value has been disposed, or belongs to a disposed <see cref="OrtTensor"/> handle: refused before any native call (ONNX Runtime does not check it, and reading a released value ends the process).</exception>
         /// <exception cref="NotSupportedException">Not a sequence, an element is not a map, or a map is refused by <see cref="ToMap"/>.</exception>
         /// <remarks>All or nothing, like <see cref="ToNDArrays"/>: a failing element disposes the pairs already read.</remarks>
         public static (NDArray keys, NDArray values)[] ToMaps(this OrtValue sequenceOfMaps)
@@ -194,6 +197,7 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <param name="map">A map OrtValue.</param>
         /// <returns>ORT's copy of the keys tensor; the caller disposes it.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="map"/> is null.</exception>
+        /// <exception cref="ObjectDisposedException">The value has been disposed, or belongs to a disposed <see cref="OrtTensor"/> handle: refused before any native call (ONNX Runtime does not check it, and reading a released value ends the process).</exception>
         /// <exception cref="NotSupportedException">Not a map.</exception>
         public static OrtValue GetMapKeys(this OrtValue map)
         {
@@ -214,6 +218,7 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <param name="tensor">A string tensor.</param>
         /// <returns>The strings in row-major order.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="tensor"/> is null.</exception>
+        /// <exception cref="ObjectDisposedException">The value has been disposed, or belongs to a disposed <see cref="OrtTensor"/> handle: refused before any native call (ONNX Runtime does not check it, and reading a released value ends the process).</exception>
         /// <exception cref="NotSupportedException">Not a tensor, or not a string tensor (a numeric tensor reads with <see cref="ToNDArray(OrtValue)"/>).</exception>
         public static string[] ReadStringTensor(this OrtValue tensor)
         {

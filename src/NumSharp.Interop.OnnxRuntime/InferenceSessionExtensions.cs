@@ -52,7 +52,7 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <exception cref="InvalidCastException">The input's dtype does not cast to the declared one under <paramref name="casting"/>.</exception>
         /// <exception cref="ArgumentException">The input's shape contradicts the declared one.</exception>
         /// <exception cref="NotSupportedException">The input or the output is not a tensor of a dtype NumSharp has, or the input is a <c>StringDType</c> array (cast it to a sized <c>U</c> first).</exception>
-        /// <exception cref="ObjectDisposedException">The input's buffer has already been released.</exception>
+        /// <exception cref="ObjectDisposedException">The input's buffer has already been released, or the session has been disposed.</exception>
         public static NDArray Run(this InferenceSession session, NDArray input, RunOptions runOptions = null, string casting = "safe",
             OnnxCodecMode mode = OnnxCodecMode.Auto)
         {
@@ -83,7 +83,7 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <exception cref="InvalidCastException">The input's dtype does not cast to the declared one under <paramref name="casting"/>.</exception>
         /// <exception cref="InvalidOperationException"><paramref name="mode"/> is <see cref="OnnxCodecMode.View"/> and the input needs a copy.</exception>
         /// <exception cref="NotSupportedException">The input or the output is not a tensor of a dtype NumSharp has, or the input is a <c>StringDType</c> array (cast it to a sized <c>U</c> first).</exception>
-        /// <exception cref="ObjectDisposedException">The input's buffer has already been released.</exception>
+        /// <exception cref="ObjectDisposedException">The input's buffer has already been released, or the session has been disposed.</exception>
         public static NDArray Run(this InferenceSession session, string inputName, NDArray input, string outputName, RunOptions runOptions = null,
             string casting = "safe", OnnxCodecMode mode = OnnxCodecMode.Auto)
         {
@@ -139,7 +139,7 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     an output is not a tensor of a dtype NumSharp has; or an input is a <c>StringDType</c> array (cast it to a sized
         ///     <c>U</c> first).
         /// </exception>
-        /// <exception cref="ObjectDisposedException">An input's buffer has already been released.</exception>
+        /// <exception cref="ObjectDisposedException">An input's buffer has already been released, or the session has been disposed (refused before any native call: ONNX Runtime's own Run on a disposed session ends the process).</exception>
         public static IReadOnlyDictionary<string, NDArray> Run(this InferenceSession session, IReadOnlyDictionary<string, NDArray> inputs,
             IReadOnlyCollection<string> outputNames = null, RunOptions runOptions = null, string casting = "safe", bool zeroCopyOutputs = false,
             OnnxCodecMode mode = OnnxCodecMode.Auto)
@@ -151,6 +151,9 @@ namespace NumSharp.Interop.OnnxRuntime
             // The two arguments that do not depend on the inputs are validated before any input is touched, and on
             // EVERY call: the rule name used to be checked only when some input needed a cast, so a misspelled rule
             // went unnoticed until the first input of another dtype.
+            // A disposed session is refused before anything reaches native code: ONNX Runtime's own Run on one ends the
+            // process with an access violation (OrtDisposalProbe).
+            OrtDisposalProbe.ThrowIfDisposed(session, nameof(Run));
             NPY_CASTING rule = DTypeCasting.ParseCasting(casting);
             NDArrayOnnxInterop.EnsureDefined(mode);
             outputNames ??= session.OutputNames;
@@ -232,7 +235,7 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     <see cref="OnnxCodecMode.View"/> and an input needs a copy (a cast, a layout, or an overlap with an output).
         /// </exception>
         /// <exception cref="NotSupportedException">An input or an output is not a tensor of a dtype NumSharp has, or an input is a <c>StringDType</c> array (cast it to a sized <c>U</c> first).</exception>
-        /// <exception cref="ObjectDisposedException">An input's or an output's buffer has already been released.</exception>
+        /// <exception cref="ObjectDisposedException">An input's or an output's buffer has already been released, or the session has been disposed.</exception>
         public static void RunInto(this InferenceSession session, IReadOnlyDictionary<string, NDArray> inputs, IReadOnlyDictionary<string, NDArray> outputs,
             RunOptions runOptions = null, string casting = "safe", OnnxCodecMode mode = OnnxCodecMode.Auto)
         {
@@ -242,6 +245,7 @@ namespace NumSharp.Interop.OnnxRuntime
                 throw new ArgumentNullException(nameof(inputs));
             if (outputs is null)
                 throw new ArgumentNullException(nameof(outputs));
+            OrtDisposalProbe.ThrowIfDisposed(session, nameof(RunInto));   // see Run: a disposed session would end the process
             NPY_CASTING rule = DTypeCasting.ParseCasting(casting);
             NDArrayOnnxInterop.EnsureDefined(mode);
             // A required input the feed leaves out is refused before anything is read (it used to fail inside the graph).

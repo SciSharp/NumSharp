@@ -40,7 +40,7 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <exception cref="NotSupportedException">Not a dense tensor; a BFloat16 element type; or a tensor of more than 2 GB.</exception>
         /// <exception cref="ArgumentException">The tensor's shape has a negative (symbolic) dimension.</exception>
         /// <exception cref="InvalidOperationException">The tensor lives in device memory the CPU cannot address, or ORT reports a byte count its shape contradicts.</exception>
-        /// <exception cref="ObjectDisposedException">The value is one this package made and its handle has been disposed (before the call, or while the value was read).</exception>
+        /// <exception cref="ObjectDisposedException">The value is one this package made and its handle has been disposed (before the call, or while the value was read), or the value itself has been disposed.</exception>
         public static unsafe NDArray ToNDArray(this OrtValue value)
         {
             if (value is null)
@@ -147,7 +147,7 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <exception cref="NotSupportedException">Not a dense tensor; a BFloat16 element type; or a tensor of more than 2 GB that ORT owns.</exception>
         /// <exception cref="ArgumentException">The tensor's shape has a negative (symbolic) dimension.</exception>
         /// <exception cref="InvalidOperationException">The tensor lives in device memory the CPU cannot address; or it is a string tensor and <paramref name="mode"/> is <see cref="OnnxCodecMode.View"/>.</exception>
-        /// <exception cref="ObjectDisposedException">The value is one this package made and its handle has been disposed (before the call, or while the view was built).</exception>
+        /// <exception cref="ObjectDisposedException">The value is one this package made and its handle has been disposed (before the call, or while the view was built), or the value itself has been disposed.</exception>
         public static unsafe NDArray AsNDArray(this OrtValue value, bool ownsValue = false, OnnxCodecMode mode = OnnxCodecMode.Auto)
         {
             if (value is null)

@@ -311,7 +311,11 @@ bytes)` on `slice.Address + Shape.Offset × itemsize`; the import takes the poin
   reference back (never frees eagerly), so an alias of the buffer you still hold stays valid.
 - **A value of a disposed handle is refused.** After `handle.Dispose()`, ONNX Runtime has released
   `handle.Value`, and ORT does not guard a released value: a native call on one ends the process. Every verb
-  that takes an `OrtValue` throws `ObjectDisposedException` for such a value instead.
+  that takes an `OrtValue` throws `ObjectDisposedException` for such a value instead. The same holds for a
+  value you disposed yourself (a `ToOrtValue` result, a value of ORT's own `Run`) and for a disposed
+  `InferenceSession`, where every `Run` form throws `ObjectDisposedException` instead of ending the process:
+  the bridge reads ONNX Runtime's own disposal flag. A session disposed by another thread DURING a run is
+  not covered - ORT itself does not survive that.
 - **Pins outlive the handle.** Whoever pins an `AsDenseTensor<T>` handle's `Memory<T>` - ORT's
   `CreateTensorValueFromMemory`, any `Memory<T>.Pin()` - takes its own reference on the NumSharp buffer,
   given back exactly once: when the pin is disposed (two copies of one `MemoryHandle` count once), or when

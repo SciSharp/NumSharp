@@ -251,8 +251,9 @@ The one copy left — `stack` + `astype`/divide producing the planar normalized 
   never disposes the `OrtValue` or a `Source` conversion you can still reach.
 - **A value of a disposed handle is refused, not passed to ORT.** After `handle.Dispose()`, ONNX Runtime has
   released `handle.Value`, and ORT does not guard a released value (a native call on one ends the process).
-  Every verb that takes an `OrtValue` throws `ObjectDisposedException` for such a value. A value of ORT's own
-  that you disposed yourself cannot be recognized.
+  Every verb that takes an `OrtValue` throws `ObjectDisposedException` for such a value. So does a value you
+  disposed yourself, and every `Run` form on a disposed `InferenceSession` (both were access violations): the
+  bridge reads ONNX Runtime's own private disposal flag, and skips the check on a version without it.
 - **Pins of an `AsDenseTensor<T>` handle's `Memory<T>` outlive the handle.** Whoever pins that memory —
   ORT's `CreateTensorValueFromMemory`, any `Memory<T>.Pin()` — takes a reference of its own on the NumSharp
   buffer, given back exactly once: when the pin is disposed (two copies of one `MemoryHandle` count once) or
