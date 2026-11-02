@@ -840,5 +840,29 @@ namespace NumSharp.Tests
             Bits(log1p).Should().Be(0x1DFE);
             Bits(expm1).Should().Be(0xB7C2);
         }
+
+        // ------------------------------------------------------------------
+        // QA-25 — complex np.log1p near the origin: the real part is up to 4.4e12 ULP from NumPy's
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's <c>nc_log1p</c> is <c>real = log(hypot(x + 1, y))</c>, <c>imag = atan2(y, x + 1)</c>, and on win-amd64
+        ///     <c>npy_hypot</c> is the UCRT's faithful <c>hypot</c>. NumSharp ports the same statements
+        ///     (<c>NDComplexMath.Log1p</c>) but its <c>Hypot</c> is the correctly rounded one (the oracle documents the
+        ///     float64 hypot's 1-ULP difference). Near the origin with <c>|y| ≫ |x|</c> the magnitude is <c>1 + ~4e-13</c>,
+        ///     so a 1-ULP magnitude difference (2.2e-16) becomes a relative difference of 5e-4 after the log:
+        ///     <c>np.log1p(complex(-1.3339345080004047e-16, 9.344550712680563e-07)).real</c> is <c>4.365396932825163e-13</c> in
+        ///     NumPy and <c>4.3631764867759135e-13</c> in NumSharp (4.4e12 ULP apart). A dense 1M-value complex sample
+        ///     (<c>p54</c>) finds 104 such real parts beyond the complex-unary family's documented ≤ 3-ULP envelope.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA25")]
+        public void ParityQa_ComplexLog1p_NearOrigin_ShouldMatchNumPysHypotRounding()
+        {
+            using var z = np.array(new[] { new Complex(-1.3339345080004047e-16, 9.344550712680563e-07) });
+
+            using var r = np.log1p(z);
+
+            ((Complex)r.GetValue(0)).Real.Should().Be(4.365396932825163e-13);
+        }
     }
 }
