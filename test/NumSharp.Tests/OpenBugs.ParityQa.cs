@@ -595,5 +595,109 @@ namespace NumSharp.Tests
             copysign.dtype.Should().Be(np.float32);
             nextafter.dtype.Should().Be(np.float32);
         }
+
+        // ------------------------------------------------------------------
+        // QA-18 — complex np.maximum / np.fmax keep the second operand on a tie
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's <c>CDOUBLE_maximum</c> / <c>CDOUBLE_fmax</c> (loops.c.src) keep <c>in1</c> when <c>CGE(in1, in2)</c>
+        ///     holds, and <c>CGE</c> is non-strict (<c>xr == yr &amp;&amp; xi &gt;= yi</c>), so two operands that compare equal
+        ///     return the FIRST one's bits: <c>np.maximum(0j, complex(-0.0, -0.0))</c> is <c>0j</c>. NumSharp's elementwise
+        ///     kernel calls the clip helpers <c>ComplexMaxNaN</c> / <c>ComplexMaxNum</c>
+        ///     (<c>DirectILKernelGenerator.Clip.cs</c>), whose last step <c>a.Imaginary &gt; b.Imaginary ? a : b</c> is strict,
+        ///     and returns the SECOND operand: a silent sign-of-zero difference whenever the operands are equal but differ in
+        ///     a zero's sign. np.minimum / np.fmin (non-strict on the other side) and the np.max / np.min reductions match.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA18")]
+        public void ParityQa_ComplexMaximumFmax_Tie_ShouldKeepTheFirstOperand()
+        {
+            using var a = np.array(new[] { new Complex(0.0, 0.0), new Complex(0.0, -0.0) });
+            using var b = np.array(new[] { new Complex(-0.0, -0.0), new Complex(-0.0, 0.0) });
+
+            using var maximum = np.maximum(a, b);
+            using var fmax = np.fmax(a, b);
+
+            foreach (var result in new[] { maximum, fmax })
+            {
+                var first = (Complex)result.GetValue(0);
+                var second = (Complex)result.GetValue(1);
+
+                // NumPy returns a's bits: (+0, +0) and (+0, -0).
+                double.IsNegative(first.Real).Should().BeFalse();
+                double.IsNegative(first.Imaginary).Should().BeFalse();
+                double.IsNegative(second.Real).Should().BeFalse();
+                double.IsNegative(second.Imaginary).Should().BeTrue();
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // QA-19 — complex np.clip propagates a bound's NaN imaginary part and keeps x on an upper-bound tie
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's complex clip (clip.cpp) is <c>MIN(MAX(x, lo), hi)</c> with <c>MAX(a, b) = isnan(a) || CGT(a, b) ? a : b</c>
+        ///     and <c>CGT(p, q) = p.re == q.re ? p.im &gt; q.im : p.re &gt; q.re</c> (<c>MIN</c> the mirror with <c>CLT</c>). The
+        ///     bound's NaN is never tested on its own: a bound whose IMAGINARY part is NaN only wins where the real parts tie,
+        ///     so <c>np.clip([5+0j, 20+0j], complex(1, nan), 10+0j)</c> is <c>[5+0j, 10+0j]</c>. NumSharp's
+        ///     <c>ComplexMaxNaN</c> / <c>ComplexMinNaN</c> return any NaN-bearing bound first and give
+        ///     <c>[1+nanj, 1+nanj]</c>; an upper bound <c>10+nanj</c> likewise replaces every element. The tie rule differs too:
+        ///     NumPy's <c>MIN</c> takes the bound on a tie (strict <c>CLT</c>), NumSharp keeps x, so
+        ///     <c>np.clip(complex(0.0, -0.0), -5-5j, complex(-0.0, 0.0))</c> keeps x's zero signs where NumPy returns the
+        ///     bound's.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA19")]
+        public void ParityQa_ComplexClip_ShouldUseNumPysCgtCltSelection()
+        {
+            using var x = np.array(new[] { new Complex(5, 0), new Complex(20, 0) });
+            using var nanLower = np.clip(x, new Complex(1, double.NaN), new Complex(10, 0));
+            using var nanUpper = np.clip(x, new Complex(1, 0), new Complex(10, double.NaN));
+
+            ((Complex)nanLower.GetValue(0)).Should().Be(new Complex(5, 0));
+            ((Complex)nanLower.GetValue(1)).Should().Be(new Complex(10, 0));
+            ((Complex)nanUpper.GetValue(0)).Should().Be(new Complex(5, 0));
+
+            using var t = np.array(new[] { new Complex(0.0, -0.0) });
+            using var lo = np.array(new[] { new Complex(-5, -5) });
+            using var hi = np.array(new[] { new Complex(-0.0, 0.0) });
+            using var tie = np.clip(t, lo, hi);
+
+            // NumPy: CLT(x, hi) is false on the tie, so MIN returns hi = (-0, +0).
+            var z = (Complex)tie.GetValue(0);
+            double.IsNegative(z.Real).Should().BeTrue();
+            double.IsNegative(z.Imaginary).Should().BeFalse();
+        }
+
+        // ------------------------------------------------------------------
+        // QA-20 — float32 / float64 np.fmax / np.fmin signed-zero ties at NumPy's scalar positions
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's float <c>fmax</c> / <c>fmin</c> run the SIMD body (<c>npyv_maxp</c> / <c>npyv_minp</c>: the second
+        ///     operand on a ±0 tie) only over whole vectors; every element outside them (an array shorter than one vector,
+        ///     4 float64 / 8 float32 lanes on AVX2, and the tail after the last vector) calls the C library's
+        ///     <c>fmax</c> / <c>fmin</c>, which on win-amd64 return <c>+0.0</c> / <c>-0.0</c> whatever the order. So
+        ///     <c>np.fmax([0.0], [-0.0])</c> is <c>[0.0]</c> and <c>np.fmin([-0.0], [0.0])</c> is <c>[-0.0]</c>, and a 7-element
+        ///     float32 fmax of +0 and -0 is +0 everywhere. NumSharp applies the second-operand rule at every position and
+        ///     returns <c>-0.0</c> / <c>0.0</c>. np.maximum / np.minimum (second operand everywhere in NumPy too) and every
+        ///     float16 form match. Partly known: the oracle ledger's S2 row excuses the float32 case on a reversed view.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA20")]
+        public void ParityQa_FmaxFmin_SignedZeroTie_ShouldFollowNumPysScalarPositions()
+        {
+            using var pz = np.array(new[] { 0.0 });
+            using var nz = np.array(new[] { -0.0 });
+            using var pz32 = np.zeros(new Shape(7), np.float32);
+            using var nz32 = np.negative(np.zeros(new Shape(7), np.float32));
+
+            using var fmax = np.fmax(pz, nz);
+            using var fmin = np.fmin(nz, pz);
+            using var fmax32 = np.fmax(pz32, nz32);
+
+            double.IsNegative((double)fmax.GetValue(0)).Should().BeFalse();
+            double.IsNegative((double)fmin.GetValue(0)).Should().BeTrue();
+            for (int i = 0; i < 7; i++)
+                float.IsNegative((float)fmax32.GetValue(i)).Should().BeFalse();
+        }
     }
 }
