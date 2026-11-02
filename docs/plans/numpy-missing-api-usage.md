@@ -32,6 +32,15 @@ measures stay here and in the CSV for reference. See "Generator 1.14.0" at the e
   `np.intc` / `np.uintc` and Linux's `np.longlong` / `np.ulonglong` (the C-type classes that share a storage format,
   strings `19725778`). `np.str_` and `np.bytes_` are the strings branch's string classes. Still missing:
   `Complex64DType` (one complex width).
+- **2026-10-07 to 2026-10-19 (strings): the string dtypes, `numpy.strings`, `numpy.char` and `chararray`** - NumPy's
+  `S` / `U` / `StringDType` arrays (storage, casts, printing, `.npy`, text I/O, the pythonnet bridge) and every
+  computation NumPy runs on them, oracle-gated against NumPy 2.4.2. Rows: `numpy.char` 161 (53 measures, 21,584 files
+  summed: `np.char.add` 55th, `np.char.lower` 75th, `np.char.decode` 79th, `np.char.find` 80th, ...; the 52 functions,
+  then `chararray`, measured once at class level, whose string methods and operators `NDCharArray` has: its Python
+  protocols and `ctypes` / `dump` / `dumps`, which no NumSharp array has, stay missing), `numpy.strings` 46 (46
+  measures, 4,155 files summed) and `np.dtypes.StringDType` (98th, 892) / `StrDType` (92) / `BytesDType` (36). Still
+  missing from the family: the text ufuncs' ufunc-object methods (`np.char.add.reduce`, `np.strings.isalpha.outer`,
+  ...: 168 rows, 88 files summed), part of the library-wide gap under "ufunc objects" below.
 
 ## How the numbers were made
 
