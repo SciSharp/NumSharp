@@ -342,5 +342,50 @@ namespace NumSharp.Tests
 
             r.shape.Should().Equal(0L, 2L);
         }
+
+        // ------------------------------------------------------------------
+        // QA-12 — NDArray.SetValue<T> / itemset<T> with another T write raw bytes at T-scaled offsets (Release)
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     <c>a.SetValue(2.5, 0)</c> on a float32 array binds <c>SetValue&lt;double&gt;(T, params long[])</c> (C# prefers the
+        ///     generic exact match over the converting <c>SetValue(object, ...)</c>), whose doc promises "value will be
+        ///     converted"; the body is <c>*((T*)Address + offset) = value</c> behind a <c>Debug.Assert</c> only
+        ///     (UnmanagedStorage.Setters.cs). In Release the double's 8 bytes land at element offset × 8: index 0 leaves
+        ///     <c>[0, 2.0625, 3, 4]</c>, index 1 overwrites elements 2 and 3, an int into a uint8 array writes 4 bytes at
+        ///     byte 4 × index, and the last element's write runs past the buffer. <c>itemset&lt;T&gt;</c> is the same body
+        ///     (its own "//TODO! if T != dtype, we need to cast!"). The documented trap <c>SetAtIndex&lt;T&gt;</c>
+        ///     (OpenBugs.Surface.cs) has the same cause; these two public members were not listed with it. EXPECTED (when
+        ///     fixed): the value is cast into the addressed element (NumPy's <c>a[0] = 2.5</c>), or the call refuses, and no
+        ///     neighbour changes.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA12")]
+        public void ParityQa_SetValueGeneric_OtherElementType_ShouldCastNotWriteRawBytes()
+        {
+#if DEBUG
+            // The Debug.Assert fires in a Debug build (and may end the test host): the defect is the Release behaviour.
+            Assert.Inconclusive("Release-only defect: in Debug the type mismatch trips SetValue<T>'s Debug.Assert.");
+#else
+            using var a = np.array(new[] { 1f, 2f, 3f, 4f });
+            using var b = np.array(new[] { 1f, 2f, 3f, 4f });
+            try
+            {
+                a.SetValue(2.5, 0);
+                b.itemset(new[] { 1 }, 2.5);
+            }
+            catch (Exception)
+            {
+                // A refusal is an acceptable fix; the neighbours must still be untouched (checked below).
+            }
+
+            var va = a.ToArray<float>();
+            var vb = b.ToArray<float>();
+            va[1].Should().Be(2f);
+            va[0].Should().BeOneOf(1f, 2.5f);
+            vb[2].Should().Be(3f);
+            vb[3].Should().Be(4f);
+            vb[1].Should().BeOneOf(2f, 2.5f);
+#endif
+        }
     }
 }
