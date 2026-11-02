@@ -167,8 +167,10 @@ each with its tests and docs, never merged here (the **Branch** line of each ent
     New `TableViewTests` (5): bool label + float32 features train L-BFGS and the model scores a label-less
     `x.AsDataView("Features")` identically; the multiclass recipe trains and scores; a transposed float64, a stepped
     int32 and a reversed float16 column in one view; the refusals; a released second array giving back the first
-    array's pin; pins outliving the disposed sources and the view. ML.NET 5.0.1 net10.0 215 / 215; 2.0.1 net8.0
-    215 / 215. `examples/NumSharpMLNetExample` keeps the hstack route until a published package has the dictionary
+    array's pin; pins outliving the disposed sources and the view. ML.NET 2.0.1 on net10.0 and net8.0 215 / 215 (the
+    commit message says "5.0.1 net10.0" for the first: that run had no `-p:MLNetVersion`, and the test project's
+    default is 2.0.1); the current versions ran on `qa/proposals-all` with F49 merged (`1d5638da`): 5.0.1 net10.0 and
+    net8.0, 4.0.2 net10.0, 216 / 216 each. `examples/NumSharpMLNetExample` keeps the hstack route until a published package has the dictionary
     form (it builds against nuget.org).
 - **P2 (F09, F33) Non-tensor outputs and unknown output names in `Run`.**
   - Proven: `session.Run(dict)` with the default fetch runs a scikit-learn classifier, converts `output_label`, then
@@ -314,7 +316,7 @@ The proposals (section 5) are separate, each the owner's to accept or drop:
 | `qa/p11-disposed-guard` (P11) | `1ab5c9fc` | `a57a6101` | ORT: new `OrtDisposalProbe.cs`, the Run forms, the import verbs' guard, new `DisposedOrtObjectTests` |
 | `qa/p7-runasync-symbols` (P7) | `5f6175ec` | `7d68a494` | ORT `InferenceSessionExtensions.Async.cs`, `SessionRunAsyncTests`, the ORT page |
 | `qa/p1-multi-array-view` (P1) | `a6baabb2` | `7d68a494` | ML.NET `NDArrayDataView.cs`, `NDArrayMLNetInterop.Export.cs`, new `TableViewTests`, the ML.NET page, README, notes, rule |
-| `qa/proposals-all` | `4851fd0f` | `7d68a494` | the four merged in that order (`--no-ff`) |
+| `qa/proposals-all` | `1d5638da` | `7d68a494` | the four merged in that order (`--no-ff`, up to `4851fd0f`), then `qa/interop-release` at `8438ee3e` (F49) merged on top |
 
 - Conflicts, all in XML docs, none in code: P12 + P11 in `Run(dict)`'s `<exception>` entries (keep P12's
   `NotSupportedException` text and P11's `ObjectDisposedException` text), P12 + P7 in `RunAsync`'s
@@ -322,7 +324,9 @@ The proposals (section 5) are separate, each the owner's to accept or drop:
   P1 + anything merge cleanly. The merged code keeps one order in every Run form: the disposed-session check, the
   casting rule, the mode, then the feed check (P12), then RunAsync's symbol binding (P7).
 - `qa/proposals-all` is green: ORT 1.31.1 net10.0 319 / 319 (312 + 3 + 3 + 1), ORT 1.16.0 net8.0 298 passed + 21
-  Inconclusive (the async tests; 292 + 3 + 3, 20 + 1), ML.NET 5.0.1 net10.0 215 / 215.
+  Inconclusive (the async tests; 292 + 3 + 3, 20 + 1), ML.NET 2.0.1 net10.0 215 / 215 (at `4851fd0f`); with F49
+  merged (`1d5638da`) ML.NET 5.0.1 net10.0 and net8.0 and 4.0.2 net10.0 216 / 216 (210 + 5 P1 + 1 F49). The F49 merge
+  auto-merged the ML.NET page and README, which P1 edits too.
 - To take only some: cherry-pick each accepted commit in the order P12, P11, P7, P1 and resolve the doc conflicts as
   above (rerere recorded both resolutions in this clone).
 
@@ -350,8 +354,9 @@ The proposals (section 5) are separate, each the owner's to accept or drop:
 | 00:02 | Proposal P11 on `qa/p11-disposed-guard` (`1ab5c9fc`): ORT's private `_disposed` read by compiled getters; the two process crashes become `ObjectDisposedException`. |
 | 00:03 | P13 as documentation instead of a branch (`7d68a494`): a refusal of width 0 would undo the owner's pinned `(4, 0)` round trip. |
 | 00:08 | Proposal P7 on `qa/p7-runasync-symbols` (`5f6175ec`): RunAsync binds named run-time dimensions; four real models run through it, each equal to Run. |
-| 00:21 | Proposal P1 on `qa/p1-multi-array-view` (`a6baabb2`): the dictionary form, one column per array; ML.NET 215 / 215 on 5.0.1 net10.0 and 2.0.1 net8.0. |
-| 00:29 | `qa/proposals-all` (`4851fd0f`) merges the four; two doc-only conflicts resolved; ORT 1.31.1 319 / 319, 1.16.0 298 + 21 Inconclusive, ML.NET 215 / 215 (section 8). Next: new angles (section 3 gets them). |
+| 00:21 | Proposal P1 on `qa/p1-multi-array-view` (`a6baabb2`): the dictionary form, one column per array; ML.NET 215 / 215 on 2.0.1 net10.0 and net8.0 (corrected at 01:12: the commit message calls the first leg 5.0.1). |
+| 00:29 | `qa/proposals-all` (`4851fd0f`) merges the four; two doc-only conflicts resolved; ORT 1.31.1 319 / 319, 1.16.0 298 + 21 Inconclusive, ML.NET 215 / 215 on 2.0.1 (section 8). Next: new angles (section 3 gets them). |
 | 00:33 | New angles A29-A34 added to section 3. |
 | 00:41 | A29 (F48): a real float16 model, byte-identical to Python onnxruntime through every route, float16 softmax = SciPy's. |
 | 00:58 | A31 (F49 fixed): string labels read back - the page's MapKeyToValue advice led to the text refusal, whose cursor route was wrong for vector-of-text columns; the message names ML.NET's one-line `GetColumn<string>` / `GetColumn<string[]>` with the column's name; P15 written. ML.NET 211 / 211 on 2.0.1 (net10.0 and net8.0), 4.0.2 and 5.0.1 (net10.0). (The test project's DEFAULT ML.NET is 2.0.1: a run without `-p:MLNetVersion` is the floor, whatever the TFM.) |
+| 01:12 | Correction: P1's and `qa/proposals-all`'s "5.0.1 net10.0" were 2.0.1 runs (the default). `qa/proposals-all` merged `qa/interop-release` (`1d5638da`, F49 included) and ran the current versions: ML.NET 5.0.1 net10.0 and net8.0, 4.0.2 net10.0, 216 / 216 each. |
