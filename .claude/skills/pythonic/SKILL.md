@@ -201,8 +201,11 @@ with a `PyBUF.WRITABLE` lock, a non-contiguous numpy array is viewed through `__
 non-contiguous non-numpy exporter through `PyBUF.STRIDED` — full stride fidelity, read-only sources → non-
 writeable views. **Lifetime is handled:** exports take an ARC ref released by a `weakref.finalize` on the
 numpy base (survives C# `NDArray` GC; `resize(refcheck=True)` refuses while exported); imports lease the
-buffer until the last NumSharp view dies. Only irreducible cases fall back to a copy, and **loudly** —
-complex64 widens, UCS-4 text narrows to Char, big-endian is **refused** (never silently byte-swapped).
+buffer until the last NumSharp view dies. Only irreducible cases fall back to a copy — complex64 widens to
+complex128, big-endian data is byte-swapped, a `StringDType` array copies through NumPy's `NpyString` API, an
+object array of `str` copies to `StringDType()` — and the explicit `View` mode **declines** each of them instead of
+copying silently.
+Fixed-width text is not such a case: `S<n>` / `U<n>` arrays are views both ways (numpy `<U1` is NumSharp's `U1`).
 
 ---
 

@@ -12,10 +12,10 @@ namespace NumSharp.Interop.OnnxRuntime
         // ##################################################################################################################
         // # TODO (variable-width strings) - READ THIS BEFORE CHANGING ANYTHING HERE.                                        #
         // #                                                                                                                #
-        // # ONNX Runtime strings are VARIABLE-width. NumSharp has only NumPy's FIXED-width string dtypes today ('U',       #
-        // # UCS-4 code points, and 'S', bytes). NumPy's variable-width StringDType (NEP 55, np.dtypes.StringDType, kind    #
-        // # 'T') is phase 3 of docs/plans/strings-phase2.md and does not exist in NumSharp yet. Until it does, a string   #
-        // # tensor is read into a 'U' array whose width is the tensor's LONGEST string, which costs three things:          #
+        // # ONNX Runtime strings are VARIABLE-width. This bridge maps them to NumPy's FIXED-width string dtypes only ('U', #
+        // # UCS-4 code points, and 'S', bytes), although NumSharp also has NumPy's variable-width StringDType (NEP 55,     #
+        // # np.dtypes.StringDType, kind 'T'). A string tensor is read into a 'U' array whose width is the tensor's LONGEST #
+        // # string, which costs three things:                                                                              #
         // #                                                                                                                #
         // #   1. A string that ENDS in NUL characters loses them: fixed-width storage pads with NUL and strips the         #
         // #      padding on read, so "ab\0" comes back as "ab". (A NUL inside a string survives.)                          #
@@ -23,12 +23,16 @@ namespace NumSharp.Interop.OnnxRuntime
         // #   3. Nothing is shared: every crossing, in either direction, is a copy. ORT keeps each string as a separate    #
         // #      native object, so even with StringDType only the import could ever avoid a copy.                          #
         // #                                                                                                                #
-        // # When StringDType lands: map TensorElementType.String <-> StringDType in TryFromTensorElementType /             #
+        // # A StringDType array is not a supported input of these verbs either: TextToOrtValue reads 'U' elements as text  #
+        // # and every other text array as 'S' bytes, so a 'T' array must be cast to 'U' first (nd.astype(np.dtype("U"))).  #
+        // #                                                                                                                #
+        // # To map StringDType: map TensorElementType.String <-> StringDType in TryFromTensorElementType /                 #
         // # TryToTensorElementType, read into it in TextArray, and write from it in TextToOrtValue. Keep the fixed-width   #
         // # paths: a caller's 'U' / 'S' array must still cross.                                                            #
         // #                                                                                                                #
-        // # Also open: NumSharp cannot convert numbers to text or text to numbers yet (astype between a string dtype and  #
-        // # a numeric one throws), so the Run tier feeds a string model input from a TEXT array only.                      #
+        // # Also open: the Run tier does not cast between text and numbers (NumSharp's astype does: number -> text is the  #
+        // # scalar's str(), text -> number Python's int() / float()), so a string model input takes a TEXT array only and  #
+        // # a text array feeds a string input only; the caller converts with astype first.                                 #
         // ##################################################################################################################
 
         /// <summary>

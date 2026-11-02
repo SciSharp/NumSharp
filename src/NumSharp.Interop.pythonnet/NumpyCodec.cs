@@ -329,8 +329,9 @@ namespace NumSharp.Interop.PythonNet
         ///     The buffer-less Python builtins that <c>numpy.asarray</c> materializes into a numeric
         ///     ndarray — accepted for decode only when <see cref="NumpyCodecOptions.DecodeArrayLike"/> is
         ///     set. Keyed off the bare tp_name (<c>list</c>/<c>tuple</c>/<c>int</c>/<c>float</c>/<c>bool</c>/
-        ///     <c>complex</c>). Deliberately excludes <c>str</c> (a char sequence → an unsupported string
-        ///     dtype), <c>dict</c>, and <c>range</c>.
+        ///     <c>complex</c>). Deliberately excludes <c>str</c> (text, not a numeric container: this fallback
+        ///     does not turn a Python <c>str</c> into a 0-d <c>U</c> array, while a NumPy text array crosses through
+        ///     <c>ToNDArray</c> / <c>AsNDArray</c> like any other array), <c>dict</c>, and <c>range</c>.
         /// </summary>
         private static bool IsArrayLikeBuiltin(string name)
             => name == "list" || name == "tuple" || name == "int" || name == "float" || name == "bool" || name == "complex";

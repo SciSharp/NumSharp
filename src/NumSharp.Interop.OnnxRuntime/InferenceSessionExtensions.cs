@@ -616,10 +616,11 @@ namespace NumSharp.Interop.OnnxRuntime
             NPTypeCode want = wantDtype.GetTypeCode();
             NPTypeCode have = array.typecode;
 
-            // Text is decided before the numeric rule: NumSharp cannot convert between text and numbers yet (astype
-            // throws for those pairs although np.can_cast admits some of them), and NPTypeCode.String does not convert to
-            // the DType np.can_cast takes. So a string input takes a text array (U or S, under every casting rule: it is
-            // the same text in another encoding) and nothing else, and a text array goes into a string input only.
+            // Text is decided before the numeric rule: this tier does not cast between text and numbers (NumSharp's
+            // astype does, and np.can_cast admits some of those pairs, but the bridge leaves that conversion to the
+            // caller), and NPTypeCode.String does not convert to the DType np.can_cast takes. So a string input takes a
+            // text array (U or S, under every casting rule: it is the same text in another encoding) and nothing else,
+            // and a text array goes into a string input only.
             if (have == NPTypeCode.String || want == NPTypeCode.String)
                 return PrepareTextInput(name, array, meta, have, want, mode);
 
@@ -690,7 +691,7 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <param name="want">The declared storage type code.</param>
         /// <param name="mode">The input mode; <see cref="OnnxCodecMode.View"/> refuses text.</param>
         /// <returns>A handle owning the string tensor.</returns>
-        /// <exception cref="InvalidCastException">One side is text and the other is not: NumSharp does not convert between text and numbers yet.</exception>
+        /// <exception cref="InvalidCastException">One side is text and the other is not: the bridge does not cast between text and numbers (convert with <c>astype</c> first).</exception>
         /// <exception cref="ArgumentException">The array's shape contradicts the declared one.</exception>
         /// <exception cref="InvalidOperationException"><paramref name="mode"/> is <see cref="OnnxCodecMode.View"/>: text is always a copy.</exception>
         /// <exception cref="NotSupportedException">The array holds more strings than ORT's string tensor API can index.</exception>
@@ -700,10 +701,12 @@ namespace NumSharp.Interop.OnnxRuntime
             if (have != want)
                 throw new InvalidCastException(
                     want == NPTypeCode.String
-                        ? $"input '{name}' is declared a string tensor but the array holds {have}. NumSharp does not convert numbers to text yet: " +
-                          "feed a text array, for example np.array(new[] { \"a\", \"b\" })."
-                        : $"input '{name}' is declared {want} ({meta.ElementDataType}) but the array holds text ({array.dtype}). NumSharp does not convert " +
-                          "text to numbers yet: parse the values and feed a numeric array.");
+                        ? $"input '{name}' is declared a string tensor but the array holds {have}. The bridge does not cast numbers to text: " +
+                          "feed a text array, for example np.array(new[] { \"a\", \"b\" }), or convert the numbers first with " +
+                          "nd.astype(np.dtype(\"U\")) (each number as its str())."
+                        : $"input '{name}' is declared {want} ({meta.ElementDataType}) but the array holds text ({array.dtype}). The bridge does not " +
+                          $"cast text to numbers: parse the values first with nd.astype(NPTypeCode.{want}) (NumPy's text-to-number cast) " +
+                          "and feed the numeric array.");
             ValidateShape(name, "input", meta, array.Shape);
             if (mode == OnnxCodecMode.View)
                 throw new InvalidOperationException(

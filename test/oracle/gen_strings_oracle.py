@@ -25,11 +25,11 @@ Each case records what NumPy 2.4.2 returns for one call:
   request) and ``"values"`` (the base's elements, ``{"na": true}`` for an NA cell, told apart by the cell's MISSING flag)
   instead of ``"buffer"``; an array expectation has ``"values"`` instead of ``"buffer"``; an in-place call's base is
   ``"basevalues"``; a ``tobytes()`` result is ``{"kind": "tcells"}`` with the heap pointers masked (``_mask_heap``).
-* ``phase`` -- 1 for the calls NumSharp's string support covers now (storage, element access, conversion, copying,
-  string-to-string casts, text <-> number conversion, indexing, printing, and every refusal NumPy itself raises); 2 for
-  the calls NumPy answers by COMPUTING on text (sorting, searching and the rest of phase 2). A phase-2 case passes while
-  NumSharp throws ``StringComputationNotSupportedException`` (counted as deferred) and is compared strictly as soon as
-  NumSharp computes it.
+* ``phase`` -- the stage of NumSharp's string support that first answered the call: 1 for storage, element access,
+  conversion, copying, string-to-string casts, text <-> number conversion, indexing, printing, and every refusal NumPy
+  itself raises; 2 for the calls NumPy answers by COMPUTING on text (sorting, searching, the np.strings functions and the
+  rest of phase 2). The field no longer changes the verdict: the replay holds every case to NumPy's answer (strings phase
+  2, P2.7, retired the deferred outcome).
 
 Deterministic: no randomness; regenerate with ``python test/oracle/gen_strings_oracle.py`` (needs numpy==2.4.2).
 """
@@ -1441,7 +1441,7 @@ def gen_text_precedence():
         add("strprec", "divmod_out", params={"readonly": which}, operands=[u, u, o1, o2], layout=f"ro{which}",
             phase="compute", call=lambda x, y, q, r: np.divmod(x, y, out=(q, r)))
 
-    # The reductions of text: every axis rule, before the refusal or the next phase.
+    # The reductions of text: every axis rule, before the refusal or the computation.
     a1, a0, a2 = plain(np.array(["ab", "c", "de"])), plain(np.array("ab")), plain(np.array([["ab", "c"], ["d", "e"]]))
     s1 = plain(np.array([b"ab", b"c", b"de"]))
     e1, e2 = plain(np.array([], "<U2")), plain(np.empty((0, 2), "<U2"))
@@ -2027,7 +2027,7 @@ def gen_validation_order():
 # M. The rest of the text surface: np.linalg, the products, random seeding and bounds, the histogram family, quantile q,
 #    reductions and arg-reductions with out=, polynomials, emath, index conversions, dtype predicates, ediff1d, where=
 #    masks, 0-d conversions to C# scalars and fill with a sequence. Every call is recorded with phase "compute": NumPy's
-#    own refusals and early answers are final, a computation on the text is the next phase. A few numeric calls ride
+#    own refusals and early answers are phase 1, a computation on the text is phase 2. A few numeric calls ride
 #    along where the text work found a general divergence (histogramdd's bin specs, norm of an empty matrix).
 # ----------------------------------------------------------------------------------------------------------------------
 
@@ -2502,7 +2502,7 @@ def _where_call(name, x, y, mask):
 def _bins_phase(spec):
     """The phase of a histogram call whose bins are ``spec``: 2 when a bins array is TEXT of two or more elements —
     NumPy's monotonicity check compares those elements, so which error (or answer) follows depends on the text; else
-    "compute" (NumPy's error is final, its answer the next phase)."""
+    "compute" (NumPy's error is phase 1, its answer phase 2)."""
     items = spec if isinstance(spec, list) else [spec]
     for item in items:
         if isinstance(item, np.ndarray) and item.dtype.kind in "SU" and item.ndim == 1 and item.size >= 2:
@@ -2908,8 +2908,8 @@ def _ma_str_disabled(x):
 # reaches a StringDType loop (an error the same call raises over benign texts is a setup error: dtype- or shape-decided,
 # no computation) and every text-reading method (sort, argsort, partition, searchsorted, nonzero, argmax / argmin, truth).
 # A case NumPy answers without computing on text is phase 1 — movement, printing, fills, masks, casts and the refusals
-# NumPy raises before it reads a string — and NumSharp must answer it now; a case that computed is phase 2 (a deferral
-# while NumSharp throws StringComputationNotSupportedException).
+# NumPy raises before it reads a string; a case that computed is phase 2. NumSharp answers both kinds (the replay is
+# strict).
 
 _TMA_TRACE_MISMATCH = []
 

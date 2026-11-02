@@ -1,7 +1,7 @@
 # NEP 55 - UTF-8 Variable-Width String DType
 
 **Status:** Final
-**NumSharp Impact:** MEDIUM - New string handling in NumPy 2.0
+**NumSharp Impact:** Implemented - `np.dtypes.StringDType` / `np.dtype("T")`, byte for byte with NumPy 2.4.2
 
 ## Summary
 
@@ -75,51 +75,35 @@ arr * 2        # Repetition
 arr == "test"  # Comparison
 ```
 
-## NumSharp Implications
+## NumSharp Implementation
 
-### Current String Support
+NumSharp implements `StringDType` as NumPy does, alongside the fixed-width `S` and `U` dtypes:
 
-NumSharp's string handling is limited. Check current status:
-- `NPTypeCode.Char` - single characters only
-- No `NPTypeCode.String` or variable-length string dtype
-
-### Implementation Options
-
-**Option 1: Object Array Pattern**
 ```csharp
-// Store strings as object references
-var arr = np.array(new string[] { "hello", "world" }, dtype: NPTypeCode.Object);
+var dt = np.dtypes.StringDType(na_object: double.NaN);
+var arr = np.array(new object[] { "hello", double.NaN, "world" }, dt);
+np.isnan(arr);              // [False  True False]
+np.strings.add(arr, "!");   // ['hello!' nan 'world!']: a NaN-like NA propagates
+np.array(new[] { "a", "bb" }, np.dtype("T"));   // the character code
+np.dtypes.StringDType(coerce: false);           // refuses non-str values with NumPy's ValueError
 ```
 
-**Option 2: New StringDType**
-```csharp
-// Add new NPTypeCode
-enum NPTypeCode {
-    // ... existing ...
-    String,  // Variable-length UTF-8
-}
+- **The descriptor.** `np.dtypes.StringDType(na_object, coerce)` and `np.dtype("T")` build NumPy's descriptor
+  (kind and char `'T'`, a 16-byte cell); `dtype.na_object` / `dtype.coerce` read its settings. Every
+  `StringDType` descriptor is a fresh instance, and equality follows NumPy's `na_object` comparison.
+- **Storage, byte for byte.** The text lane `NPTypeCode.String` holds `S`, `U` and `T` arrays; a `T` array holds
+  NumPy's 16-byte cells: short strings inside the cell, medium and long ones in a per-buffer arena, and strings
+  rewritten longer on the heap (a port of NumPy's `static_string.c`).
+- **Computation.** Comparisons, concatenation and repetition, `maximum` / `minimum`, the reductions (`np.sum`
+  concatenates), sorting, searching, unique values, set routines and order statistics, and all 46 `np.strings`
+  functions compute with NumPy's missing-value rules: a NaN-like NA propagates and sorts last, a string NA is its
+  text, a `None`-like NA raises where NumPy raises.
+- **Files and Python.** `np.save` / `np.load(allow_pickle: true)` write and read NumPy's pickle of a `StringDType`
+  array; `np.loadtxt` / `np.savetxt` take `StringDType` columns; the pythonnet bridge copies a `StringDType` array
+  to and from NumPy through NumPy's own `NpyString` API.
 
-// Or dedicated class
-class StringDType : DType {
-    public NullObject NaObject { get; }
-    public bool Coerce { get; }
-}
-```
-
-### Storage Considerations
-
-NumPy's StringDType uses:
-- **Small string optimization:** ≤15 bytes stored inline
-- **Arena allocation:** Longer strings in heap arena
-- **Thread-safe allocator:** Mutex-protected access
-
-For NumSharp, consider:
-- Using `string[]` for simplicity
-- Or `Span<byte>` with UTF-8 encoding for performance
-
-### Priority
-
-**MEDIUM** - String handling is important but not as critical as numeric operations. Current workaround: use object arrays with strings.
+The user guide is [Strings, bytes and chararrays](../../website-src/docs/fundamentals/strings-and-bytes.md); the
+capability matrix is [`STRING_COMPAT_MATRIX.md`](../STRING_COMPAT_MATRIX.md).
 
 ## References
 

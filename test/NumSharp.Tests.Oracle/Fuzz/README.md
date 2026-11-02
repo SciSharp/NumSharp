@@ -1571,7 +1571,8 @@ strings), complex, bool, str, bytes, f16 (`Half`, NumPy's float16 scalar), `np:<
 array in C#), `arr1:<dtype>` (the deprecated non-scalar fill), none.
 
 **Bit-exact, 0 excused, STRICT types** (valueclass `mafill`, as for `maput`). Not cases: text DATA (a number into text
-formats, bytes into a number parses: the string oracle's phase-2 work; and `describe()` serializes no text dtype), a
+formats, bytes into a number parses: the string oracle's `strma` / `tma` sections gate them; and `describe()` serializes
+no text dtype), a
 `filled()` NumPy can only answer with its OBJECT-array fallback (unit-pinned: NumSharp raises NotSupportedException), and
 argpartition's repr (introselect's arrangement between pivots is no NumPy contract; its fill is observed).
 

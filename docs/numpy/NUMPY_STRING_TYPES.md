@@ -1,7 +1,8 @@
 # NumPy String Types - Complete Reference
 
 > **Source**: NumPy v2.4.2 (`refs/numpy/`)
-> **Purpose**: Reference for implementing string support in NumSharp
+> **Purpose**: Reference for NumPy's three string types, whose behavior NumSharp's `S`, `U` and `StringDType`
+> arrays, `np.strings`, `np.@char` and `NDCharArray` reproduce (see [`STRING_COMPAT_MATRIX.md`](./STRING_COMPAT_MATRIX.md))
 
 ---
 

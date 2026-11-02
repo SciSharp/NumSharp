@@ -490,16 +490,23 @@ public static NDArray sum(NDArray a, int? axis = null, NPTypeCode? dtype = null,
 
 ## Supported Types Reference
 
-All operations must handle these 12 types:
+All numeric operations must handle these 15 types, or document a type as unsupported:
 
 | NPTypeCode | C# Type | NPTypeCode | C# Type |
 |------------|---------|------------|---------|
-| Boolean | bool | Int64 | long |
-| Byte | byte | UInt64 | ulong |
-| Int16 | short | Char | char |
-| UInt16 | ushort | Single | float |
-| Int32 | int | Double | double |
-| UInt32 | uint | Decimal | decimal |
+| Boolean | bool | UInt64 | ulong |
+| Byte | byte | Char | char |
+| SByte | sbyte | Half | System.Half |
+| Int16 | short | Single | float |
+| UInt16 | ushort | Double | double |
+| Int32 | int | Decimal | decimal |
+| UInt32 | uint | Complex | System.Numerics.Complex |
+| Int64 | long | | |
+
+Text has one more lane, `NPTypeCode.String`, shared by NumPy's `bytes_` (`S`), `str_` (`U`) and
+`StringDType` (`T`). The lane alone names no dtype: a text route reads the array's full descriptor
+(`a.dtype`), and where NumPy computes on text NumSharp computes, where NumPy refuses it raises NumPy's
+error. See [Strings, bytes and chararrays](docs/website-src/docs/fundamentals/strings-and-bytes.md).
 
 Use `InfoOf<T>` for type information without reflection:
 ```csharp

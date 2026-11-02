@@ -16,8 +16,9 @@ namespace NumSharp.Backends
         /// <remarks>
         ///     A route that branches on this property and then treats the elements as fixed-width units reaches
         ///     <see cref="StringSlice"/>, which refuses a <c>StringDType</c> storage with a clear
-        ///     <see cref="NotSupportedException"/> — the loud refusal of every text route not ported to <c>T</c> yet, instead of
-        ///     a raw copy of cells that are meaningless without their own allocator.
+        ///     <see cref="NotSupportedException"/>: every text operation has its own <c>StringDType</c> route (tested with
+        ///     <see cref="IsVString"/> first), so a <c>T</c> storage that gets here is a route that skipped that test, and it
+        ///     fails loudly instead of copying cells that are meaningless without their own allocator.
         /// </remarks>
         public bool IsString => _typecode == NPTypeCode.String;
 
@@ -32,8 +33,8 @@ namespace NumSharp.Backends
         ///     element width they are read with.
         /// </summary>
         /// <exception cref="NotSupportedException">This storage holds <c>StringDType</c> text: every caller of this property is a
-        ///     fixed-width route (unit views, the byte codec, width arithmetic) that has no <c>T</c> form yet, so it refuses here
-        ///     rather than reading the 16-byte cells as fixed-width text.</exception>
+        ///     fixed-width route (unit views, the byte codec, width arithmetic), and <c>StringDType</c> text takes its own routes
+        ///     (<see cref="VStringSlice"/>), so it refuses here rather than reading the 16-byte cells as fixed-width text.</exception>
         internal StringArraySlice StringSlice
             => InternalArray as StringArraySlice ?? (InternalArray is VStringArraySlice v ? throw VStringNotSupported(v.Descr) : null);
 

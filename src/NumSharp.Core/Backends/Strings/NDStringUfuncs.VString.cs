@@ -5,9 +5,9 @@ using NumSharp.Backends.Iteration;
 namespace NumSharp.Backends.Strings
 {
     /// <summary>
-    ///     NumPy 2.4.2's ufunc layer for NEP 55 <c>StringDType</c> operands (strings phase 1, P1.7d): which calls COMPUTE on
-    ///     the text (strings phase 2: their own routes, which these guards hand back to once NumPy's checks passed) and the
-    ///     exact refusal of every other call, raised in NumPy's order. Every guard of this class (<see cref="ThrowIfUnary"/>,
+    ///     NumPy 2.4.2's ufunc layer for NEP 55 <c>StringDType</c> operands: which calls COMPUTE on the text (their own
+    ///     routes, which these guards hand back to once NumPy's checks passed) and the exact refusal of every other call,
+    ///     raised in NumPy's order. Every guard of this class (<see cref="ThrowIfUnary"/>,
     ///     <see cref="ThrowIfBinary"/>, <see cref="BinaryGuard"/>, the reduction guards) tests <see cref="IsVString"/> FIRST,
     ///     because the fixed-width answers behind them read the text as fixed-width units.
     /// </summary>
@@ -227,8 +227,8 @@ namespace NumSharp.Backends.Strings
 
         /// <summary>
         ///     NumPy's answer for a unary ufunc over a <c>StringDType</c> operand, in NumPy's order: the <c>out=</c> /
-        ///     <c>where=</c> parse, then the loop resolution — <c>isnan</c> computes (the NA test, phase 2), every other
-        ///     ufunc is the dispatcher's refusal.
+        ///     <c>where=</c> parse, then the loop resolution — <c>isnan</c> computes (the NA test), every other ufunc is the
+        ///     dispatcher's refusal.
         /// </summary>
         /// <param name="ufunc">NumPy's ufunc name.</param>
         /// <param name="x">The <c>StringDType</c> operand.</param>
@@ -297,7 +297,7 @@ namespace NumSharp.Backends.Strings
         ///     NumPy's answer for a binary ufunc with a <c>StringDType</c> operand, in NumPy's order: the <c>out=</c> /
         ///     <c>where=</c> parse, the loop resolution (a numeric <c>dtype=</c> keeps only a bool loop under
         ///     <c>dtype=bool</c>), then for a loop that exists the output cast into <c>out=</c> and the broadcast before the
-        ///     computation (phase 2).
+        ///     computation.
         /// </summary>
         /// <param name="ufunc">NumPy's ufunc name.</param>
         /// <param name="x1">The first operand.</param>

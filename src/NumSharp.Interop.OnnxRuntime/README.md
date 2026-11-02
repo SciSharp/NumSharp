@@ -152,10 +152,14 @@ directions and through every route (`ToOrtValue`, `AsOrtValue`, `ToNDArray`, `As
   do the same; `View` throws.
 - A `U` element crosses as its text (ORT stores UTF-8). An `S` element crosses as its bytes, unchecked, as
   Python's `onnxruntime` does. A string tensor reads back as a `U` array as wide as its longest string.
-- **The fixed width costs two things**, until NumSharp has the variable-width `StringDType`: a string that
-  ENDS in NUL characters loses them (`ReadStringTensor` keeps them), and one long string widens every element.
-- Text and numbers do not convert into each other yet: a numeric array for a string input, or a text array
-  for a numeric input, is refused under every casting rule.
+- **The fixed width costs two things**, because the bridge reads string tensors as `U`, not as NumSharp's
+  variable-width `StringDType`: a string that ENDS in NUL characters loses them (`ReadStringTensor` keeps
+  them), and one long string widens every element. A `StringDType` array is not a bridge input: cast it to
+  `U` first (`nd.astype(np.dtype("U"))`).
+- The bridge does not cast between text and numbers: a numeric array for a string input, or a text array
+  for a numeric input, is refused under every casting rule. Convert first with NumSharp's own casts,
+  `nd.astype(np.dtype("U"))` (each number as its `str()`) or `nd.astype(np.float32)` (NumPy's text-to-number
+  parse).
 - `RunInto` and `RunAsync` cannot take a string output (ORT cannot write its strings into NumSharp memory);
   the synchronous `Run` returns it.
 

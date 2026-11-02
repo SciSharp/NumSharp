@@ -7,10 +7,10 @@ namespace NumSharp.Tests.Creation
     ///     Exhaustive NumPy 2.x parity tests for <see cref="np.dtype(string, bool, bool, System.Collections.Generic.IReadOnlyDictionary{string, object})"/> string parsing.
     ///
     ///     Every expectation here is verified against NumPy's actual output via
-    ///     <c>python -c "import numpy as np; np.dtype(...)"</c>. NumPy types NumSharp doesn't
-    ///     implement (bytestring, unicode, datetime, timedelta, object, void) throw
-    ///     <see cref="NotSupportedException"/>; NumPy's complex64 widens to
-    ///     NumSharp's complex128 (System.Numerics.Complex) since the 64-bit form isn't supported.
+    ///     <c>python -c "import numpy as np; np.dtype(...)"</c>. The text codes parse to NumPy's descriptors
+    ///     (<c>S</c> / <c>S10</c> / <c>a</c> / <c>a5</c> to bytestrings, <c>U</c> / <c>U32</c> to unicode), and the
+    ///     datetime / timedelta codes to descriptors that have no storage yet; the NumPy types NumSharp doesn't
+    ///     implement (complex64, object, void) throw <see cref="NotSupportedException"/>.
     ///
     ///     Platform note: 'l'/'L' and 'int'/'uint' follow the <b>Windows</b> NumPy convention
     ///     (C long = 32-bit). On 64-bit Linux NumPy these would be 64-bit; NumSharp is fixed

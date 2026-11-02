@@ -56,7 +56,7 @@ await rg.ReadAsync<double>(field, nd.AsMemory<double>());
 
 ## Nulls
 
-NumSharp has no native NA. The default policy is **`Fill`** — nulls become the option's `NullFill`, or
+NumSharp's numeric dtypes have no native NA. The default policy is **`Fill`** — nulls become the option's `NullFill`, or
 `default(T)` (0 / false) when none is given:
 
 ```csharp
@@ -71,9 +71,10 @@ The twelve Parquet.Net CLR column types that map 1:1 onto a NumSharp dtype:
 `bool, byte, sbyte, short, ushort, int, uint, long, ulong, float, double, decimal`.
 
 Rejected with a clear message (no NumSharp dtype, or not rectangular): `DateTime` / `DateOnly` /
-`TimeOnly`, `BigDecimal`, `BigInteger`, `Interval`, `Guid`, `string` / `byte[]`, and any nested (struct /
-map) or repeated (list / array) field. `Half`, `Char` and `Complex` have no Parquet.Net source on the read
-path.
+`TimeOnly`, `BigDecimal`, `BigInteger`, `Interval`, `Guid`, and any nested (struct / map) or repeated (list /
+array) field. `string` / `byte[]` columns are rejected too: NumSharp has text dtypes (`U`, `S`,
+`StringDType`), but this bridge does not read Parquet text into them. `Half`, `Char` and `Complex` have no
+Parquet.Net source on the read path.
 
 ## Notes
 

@@ -111,7 +111,8 @@ namespace NumSharp.Interop.MLNet
         ///     <see cref="KeyDataViewType"/> comes back as its unsigned storage integer.
         /// </summary>
         /// <exception cref="NotSupportedException">
-        ///     A text column (NumSharp has no string dtype) or any raw type with no NumSharp dtype.
+        ///     A text column (this bridge maps ML.NET's numeric, boolean and key columns only; it does not convert a
+        ///     <see cref="TextDataViewType"/> column into a NumSharp text array) or any raw type with no NumSharp dtype.
         /// </exception>
         public static NPTypeCode FromDataViewType(DataViewType type)
         {
@@ -226,8 +227,9 @@ namespace NumSharp.Interop.MLNet
             if (type is null)
                 return "the column type is null.";
             if (type is TextDataViewType || (type is VectorDataViewType v && v.ItemType is TextDataViewType))
-                return "ML.NET text columns have no NumSharp dtype (NumSharp has no string / object arrays). Read them with the ML.NET " +
-                       "cursor's ValueGetter<ReadOnlyMemory<char>> instead.";
+                return "ML.NET text columns are not converted by this bridge (it maps numeric, boolean and key columns). Read them with " +
+                       "the ML.NET cursor's ValueGetter<ReadOnlyMemory<char>>, then build a NumSharp text array from the strings, for example " +
+                       "np.array(strings) (fixed-width U) or np.array(strings, np.dtypes.StringDType()).";
             Type raw = type is VectorDataViewType vec ? vec.ItemType.RawType : type.RawType;
             return $"ML.NET column type {type} (raw type {raw.Name}) has no NumSharp dtype: NumSharp carries bool, the eight integer types, " +
                    "float and double.";

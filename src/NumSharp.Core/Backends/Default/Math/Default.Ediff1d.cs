@@ -85,7 +85,7 @@ namespace NumSharp.Backends
         /// <param name="name">The parameter name quoted in the casting error.</param>
         /// <returns>A fresh 1-D array of dtype <paramref name="dt"/>; <c>null</c> when <paramref name="value"/> is
         ///     <c>null</c> or <paramref name="dt"/> is a string dtype (the caller refuses text before it would use the
-        ///     operand, so converting it would only cost a number-to-text conversion NumSharp does not do yet).</returns>
+        ///     operand — NumPy's subtract has no string loop — so a number-to-text conversion here would be wasted work).</returns>
         /// <exception cref="ArgumentException"><paramref name="value"/>'s dtype cannot be cast to
         ///     <paramref name="dt"/> under <c>same_kind</c> (NumPy's TypeError text; the house type for this check).</exception>
         /// <remarks>Covered by <c>[NDScopedCovered]</c>: its only caller is the <c>[NDScoped]</c>

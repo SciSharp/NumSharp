@@ -39,8 +39,9 @@ sequence_out.onnx       X float32 -> SequenceConstruct -> seq (a sequence<tensor
 zipmap_int64.onnx       X [N,3] float32 -> ZipMap(ai.onnx.ml, classlabels_int64s) -> Z, a
                         sequence(map(int64, float)) -- the scikit-learn classifier output. Oracle for
                         the ToMap / ToMaps map readers.
-string_io.onnx          X string -> Identity -> Y string. The ReadStringTensor reader (string OUTPUT)
-                        and the refusal of a string model INPUT.
+string_io.onnx          X string -> Identity -> Y string. Text both ways: a text array feeds the string
+                        INPUT, the string OUTPUT reads back as a text array or through ReadStringTensor,
+                        and a numeric array for the string input is refused.
 sequence_input.onnx     seq sequence<tensor(float)> -> SequenceLength -> len int64. A NON-tensor model
                         INPUT: Tier-2 Run must refuse feeding it an NDArray.
 optional_input.onnx     X optional(tensor(float)) -> OptionalGetElement -> Y float32. An input declared
@@ -201,8 +202,9 @@ def build_all():
         [_tensor("X", TensorProto.FLOAT, ["N", 3])], [zipmap_out], check=False,
         opset_imports=[helper.make_opsetid("", OPSET), helper.make_opsetid("ai.onnx.ml", 1)])
 
-    # String Identity: a string tensor in AND out. The interop reads string OUTPUTS with a dedicated
-    # helper (NumSharp has no string dtype) and refuses a string model INPUT with a clear message.
+    # String Identity: a string tensor in AND out. The interop feeds the string INPUT from a NumSharp text
+    # array, reads the string OUTPUT back as a text array (or exactly, through ReadStringTensor), and refuses
+    # a numeric array for the string input with a clear message.
     models["string_io"] = _model(
         "string_io",
         [helper.make_node("Identity", ["X"], ["Y"])],

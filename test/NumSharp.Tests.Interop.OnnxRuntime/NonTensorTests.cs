@@ -196,9 +196,9 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
         }
 
         /// <summary>
-        ///     A string model input takes a text array and refuses a numeric one: NumSharp does not convert numbers to
-        ///     text yet, so no casting rule admits the pair. (Every array used to be refused here, because NumSharp had no
-        ///     text dtype.)
+        ///     A string model input takes a text array and refuses a numeric one: the bridge does not cast numbers to text
+        ///     (the caller converts with <c>astype</c>), so no casting rule admits the pair. (Every array used to be refused
+        ///     here, because NumSharp had no text dtype.)
         /// </summary>
         [TestMethod]
         public void StringTypedModelInput_RefusesANumericArray_UnderEveryCastingRule()

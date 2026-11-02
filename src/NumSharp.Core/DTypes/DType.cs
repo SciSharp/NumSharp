@@ -686,10 +686,11 @@ namespace NumSharp
         /// <returns>The lane's descriptor.</returns>
         /// <exception cref="ArgumentException"><paramref name="typecode"/> is <see cref="NPTypeCode.Empty"/>.</exception>
         /// <exception cref="NotSupportedException"><paramref name="typecode"/> is <see cref="NPTypeCode.String"/>: the
-        ///     fixed-width string lane names no dtype (it holds <c>S</c> and <c>U</c> arrays of every width), so code that
-        ///     allocates "an array like <c>a</c>" by <c>a.typecode</c> would silently get a one-character <c>&lt;U1</c> and
-        ///     write <c>a</c>'s wider elements past its end. Refusing here turns every such allocation — an operation that
-        ///     does not support strings yet — into an error; a string-aware operation passes <c>a.dtype</c>.</exception>
+        ///     text lane names no dtype (it holds <c>S</c> and <c>U</c> arrays of every width and <c>StringDType</c> arrays of
+        ///     every missing-value policy), so code that allocates "an array like <c>a</c>" by <c>a.typecode</c> would silently
+        ///     get a one-character <c>&lt;U1</c> and write <c>a</c>'s wider elements past its end. Refusing here turns such an
+        ///     allocation — a route that took the lane where it needed the descriptor — into an error; a text route passes
+        ///     <c>a.dtype</c>, the full descriptor.</exception>
         public static DType From(NPTypeCode typecode)
         {
             if (typecode == NPTypeCode.String)

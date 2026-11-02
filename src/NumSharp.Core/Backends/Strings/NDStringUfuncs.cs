@@ -87,8 +87,9 @@ namespace NumSharp.Backends.Strings
         /// <returns>True for an <c>S</c> or <c>U</c> array.</returns>
         /// <exception cref="NotSupportedException"><paramref name="a"/> holds NEP 55 <c>StringDType</c> text. This predicate
         ///     gates the fixed-width answers of the computing routes (their NumPy refusals, shape-decided answers and text
-        ///     loops), none of which has a <c>StringDType</c> form yet, so a <c>T</c> operand stops here loudly instead of being
-        ///     read as fixed-width text. A route that does support <c>T</c> tests it before calling this.</exception>
+        ///     loops); <c>StringDType</c> takes its own routes (<see cref="NDStringUfuncs"/>' <c>StringDType</c> guards and the
+        ///     <c>NDVString*</c> loops), which test it first, so a <c>T</c> operand that reaches this predicate stops here loudly
+        ///     instead of being read as fixed-width text.</exception>
         internal static bool IsString(NDArray a)
         {
             if (a is null || a.typecode != NPTypeCode.String)

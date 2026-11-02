@@ -32,7 +32,7 @@ namespace Parquet
         /// <param name="ct">Token to cancel the read.</param>
         /// <returns>
         /// A dictionary mapping each loadable column's name to its <see cref="NDArray"/>. Columns that are not
-        /// loadable (repeated/list fields, or CLR types with no NumSharp dtype) are silently skipped rather than
+        /// loadable (repeated/list fields, or CLR types this bridge does not map, text included) are silently skipped rather than
         /// thrown on; request a specific unloadable column by name to get the explanatory exception instead.
         /// </returns>
         /// <exception cref="ArgumentNullException"><paramref name="stream"/> is null.</exception>
@@ -55,7 +55,7 @@ namespace Parquet
             foreach (DataField field in reader.Schema.GetDataFields())
             {
                 if (!ParquetConvert.IsLoadable(field))
-                    continue;   // repeated/list field, or a CLR type with no NumSharp dtype — not representable
+                    continue;   // repeated/list field, or a CLR type this bridge does not map — not loadable here
                 if (projection != null && !projection.Contains(field.Name))
                     continue;   // caller asked for a subset and this column is not in it
                 result[field.Name] = await ParquetConvert.ReadColumnAsync(reader, field, options, ct).ConfigureAwait(false);
@@ -75,7 +75,7 @@ namespace Parquet
         /// <exception cref="ArgumentNullException"><paramref name="reader"/> is null.</exception>
         /// <exception cref="ArgumentException">No column named <paramref name="columnName"/> exists in the schema.</exception>
         /// <exception cref="NotSupportedException">
-        /// The named column is a repeated/list field, or its CLR type has no NumSharp dtype (surfaced when the
+        /// The named column is a repeated/list field, or its CLR type is not one this bridge maps (surfaced when the
         /// returned task is awaited).
         /// </exception>
         public static ValueTask<NDArray> ReadColumnAsNDArrayAsync(
@@ -100,7 +100,7 @@ namespace Parquet
         /// <returns>An <see cref="NDArray"/> holding the whole column, backed by raw unmanaged memory.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="reader"/> or <paramref name="field"/> is null.</exception>
         /// <exception cref="NotSupportedException">
-        /// The column is a repeated/list field, or its CLR type has no NumSharp dtype (surfaced when awaited).
+        /// The column is a repeated/list field, or its CLR type is not one this bridge maps (surfaced when awaited).
         /// </exception>
         public static ValueTask<NDArray> ReadColumnAsNDArrayAsync(
             this ParquetReader reader, DataField field, ParquetLoadOptions options = null, CancellationToken ct = default)
@@ -121,7 +121,7 @@ namespace Parquet
         /// <returns>An <see cref="NDArray"/> of this row group's row count, backed by raw unmanaged memory.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="rowGroup"/> or <paramref name="field"/> is null.</exception>
         /// <exception cref="NotSupportedException">
-        /// The column is a repeated/list field, or its CLR type has no NumSharp dtype (surfaced when awaited).
+        /// The column is a repeated/list field, or its CLR type is not one this bridge maps (surfaced when awaited).
         /// </exception>
         public static ValueTask<NDArray> ReadAsNDArrayAsync(
             this ParquetRowGroupReader rowGroup, DataField field, ParquetLoadOptions options = null, CancellationToken ct = default)

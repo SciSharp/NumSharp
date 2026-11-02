@@ -66,8 +66,14 @@ namespace NumSharp.Interop.ParquetNet
                     $"Parquet column '{field.Path}' is a repeated/list field; it cannot be loaded into a rectangular NDArray.");
             if (!MapOrNull(field.ClrType).HasValue)
                 throw new NotSupportedException(
-                    $"Parquet column '{field.Path}' has type {field.ClrType}, which has no NumSharp dtype. " +
-                    "Supported: bool, byte, sbyte, short, ushort, int, uint, long, ulong, float, double, decimal.");
+                    // A text column has NumSharp dtypes to go to (U / S / StringDType); only this bridge lacks the route,
+                    // so its message says that instead of the "no NumSharp dtype" every other refused type gets.
+                    field.ClrType == typeof(string) || field.ClrType == typeof(byte[])
+                        ? $"Parquet column '{field.Path}' has type {field.ClrType}, which this bridge does not read: it maps numeric " +
+                          "and boolean columns, not text into NumSharp's text dtypes (U, S, StringDType). " +
+                          "Supported: bool, byte, sbyte, short, ushort, int, uint, long, ulong, float, double, decimal."
+                        : $"Parquet column '{field.Path}' has type {field.ClrType}, which has no NumSharp dtype. " +
+                          "Supported: bool, byte, sbyte, short, ushort, int, uint, long, ulong, float, double, decimal.");
         }
 
         // -------------------------------------------------------------- whole-column read (all row groups)
@@ -78,7 +84,7 @@ namespace NumSharp.Interop.ParquetNet
         /// <param name="options">Resolved (non-null) load options.</param>
         /// <param name="ct">Cancellation token.</param>
         /// <returns>The whole column as an <see cref="NDArray"/>.</returns>
-        /// <exception cref="NotSupportedException">The field is repeated/list or its CLR type has no NumSharp dtype.</exception>
+        /// <exception cref="NotSupportedException">The field is repeated/list or its CLR type is not one this bridge maps.</exception>
         internal static ValueTask<NDArray> ReadColumnAsync(ParquetReader reader, DataField field, ParquetLoadOptions options, CancellationToken ct)
         {
             RejectIfUnloadable(field);
@@ -150,7 +156,7 @@ namespace NumSharp.Interop.ParquetNet
         /// <param name="options">Resolved (non-null) load options.</param>
         /// <param name="ct">Cancellation token.</param>
         /// <returns>This row group's slice of the column as an <see cref="NDArray"/>.</returns>
-        /// <exception cref="NotSupportedException">The field is repeated/list or its CLR type has no NumSharp dtype.</exception>
+        /// <exception cref="NotSupportedException">The field is repeated/list or its CLR type is not one this bridge maps.</exception>
         internal static ValueTask<NDArray> ReadRowGroupColumnAsync(ParquetRowGroupReader rg, DataField field, ParquetLoadOptions options, CancellationToken ct)
         {
             RejectIfUnloadable(field);

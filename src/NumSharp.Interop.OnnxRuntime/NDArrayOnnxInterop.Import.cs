@@ -21,7 +21,8 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     <para>The dtype follows <see cref="FromTensorElementType"/> (Float16 → Half; UInt16 → UInt16, never
         ///     Char), the shape is the tensor's row-major shape (0-d and empty tensors included). A STRING tensor
         ///     comes back as a text array: fixed-width Unicode (<c>U</c>), as wide as its longest string, so a string
-        ///     that ends in NUL characters loses them (NumSharp has no variable-width string dtype yet). The tensor
+        ///     that ends in NUL characters loses them (this bridge does not read string tensors into NumSharp's
+        ///     variable-width <c>StringDType</c>; <c>ReadStringTensor</c> returns the strings exactly). The tensor
         ///     must be a dense tensor in CPU-addressable memory: sequences / maps / sparse tensors and
         ///     device-resident (CUDA / DirectML) outputs are refused with a message naming the alternative.</para>
         /// </summary>

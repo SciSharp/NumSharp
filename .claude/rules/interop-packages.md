@@ -69,8 +69,9 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   mutually exclusive, so the consumer picks one.
 - Dtypes: 12 zero-copy, including a Half↔Float16 bit reinterpretation; Char→UInt16; Decimal→Double through a temp the
   handle owns (Auto / Copy; `Run` needs `casting: "same_kind"`); text: fixed-width `U` / `S` ↔ ORT string tensors, always
-  a copy (a trailing NUL is lost; text ↔ number casts do not exist); Complex and BFloat16 refused; sparse tensors,
-  non-tensor `Run` inputs and non-`NDArray` inputs are not served.
+  a copy (a trailing NUL is lost; the bridge maps no `StringDType` array and casts no text ↔ number pair: the caller's
+  `astype` does); Complex and BFloat16 refused; sparse tensors, non-tensor `Run` inputs and non-`NDArray` inputs are not
+  served.
 - Non-tensor outputs read as NumSharp pieces: `ortValue.ToNDArrays()` (a sequence of tensors), `ToMap()` / `ToMaps()`
   (a map, or a ZipMap sequence of maps → (keys, values) NDArrays), `GetMapKeys`, `ReadStringTensor()` → `string[]`; each
   numeric array is a view that OWNS ORT's copy of its element.

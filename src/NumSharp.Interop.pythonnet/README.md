@@ -89,8 +89,12 @@ that two independent official projections overlap before the existing bridge lea
 NumPy-backed frames, numeric Series/Indexes, and some extension arrays share; mixed numeric blocks,
 nullable arrays with missing values, categorical, and sparse arrays copy through Auto/Copy. Pandas 3
 usually exposes shared projections read-only, so direct view callers pass `allowReadonly:true` and
-receive a non-writeable `NDArray`. Object/string/datetime/timedelta outputs remain unsupported because
-NumSharp has no corresponding dtype. Axis labels are metadata and do not enter the value array.
+receive a non-writeable `NDArray`. A text column of `str` (an object projection) copies as a NumSharp
+`StringDType()` array, and fixed-width `S` / `U` projections cross like any NumPy text array; a text
+projection holding a missing value (`None`, `NaN`, `pd.NA`) is refused until it is converted to a NumPy
+`StringDType` with a representable NA object. Mixed object, datetime and timedelta outputs remain
+unsupported because NumSharp has no corresponding dtype. Axis labels are metadata and do not enter the value
+array.
 
 NumSharp → Pandas is the existing NumPy encoder; request Pandas `copy:false` when sharing is intended:
 

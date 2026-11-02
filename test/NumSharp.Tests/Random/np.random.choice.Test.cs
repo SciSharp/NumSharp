@@ -97,24 +97,24 @@
             Assert.IsTrue(got.SetEquals(new long[] { 0, 2, 3 }), "Expected exactly the three non-zero-probability members");
         }
 
+        /// <summary>
+        ///     NumPy's docstring example over a text array: <c>np.random.seed(42); np.random.choice(aa_milne_arr, 5,
+        ///     p=[0.5, 0.1, 0.1, 0.3])</c> draws <c>['pooh', 'Christopher', 'Christopher', 'rabbit', 'pooh']</c> as a
+        ///     <c>&lt;U11</c> array in NumPy 2.4.2. The legacy stream is NumPy's, and the elements are taken from the
+        ///     <c>U</c> array itself, so the dtype is the source's. A private <c>RandomState(42)</c> gives the seeded stream
+        ///     without touching the global <c>np.random</c>, which parallel tests share.
+        /// </summary>
         [TestMethod]
-        [Ignore("Choice with string arrays not implemented yet")]
         public void StringArraySample1()
         {
-            //int nrSamples = 5;
+            NDArray aa_milne_arr = np.array(new[] { "pooh", "rabbit", "piglet", "Christopher" });
+            double[] probabilities = new double[] { 0.5, 0.1, 0.1, 0.3 };
 
-            //NDArray aa_milne_arr = new string[] { "pooh", "rabbit", "piglet", "Christopher" };
-            //double[] probabilities = new double[] { 0.5, 0.1, 0.0, 0.3 };
+            NumPyRandom rando = np.random.RandomState(42);
+            NDArray actual = rando.choice(aa_milne_arr, (Shape)5, p: probabilities);
 
-            //NDArray actual = np.random.choice(aa_milne_arr, nrSamples, p: probabilities);
-
-            //Assert.AreEqual(actual.len, nrSamples, "Unexpected number of elements");
-
-            //// Verify that all elements in output are within the possibilities
-            //for (int i = 0; i < actual.len; i++)
-            //{
-            //    Assert.IsTrue((string)actual[i] != (string)aa_milne_arr[2], "Sampled zero-probability element");
-            //}
+            actual.dtype.str.Should().Be("<U11");
+            NDArray.AsStringArray(actual).Should().Equal("pooh", "Christopher", "Christopher", "rabbit", "pooh");
         }
 
         [TestMethod]
