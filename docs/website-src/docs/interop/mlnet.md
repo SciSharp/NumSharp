@@ -184,7 +184,14 @@ Eleven dtypes map directly to an ML.NET column type:
 ML.NET has no half, decimal or complex column type, so the view-producing verbs **convert**:
 `Half` → `Single` (lossless - every `Half` is an exact `Single`) and `Decimal` → `Double` (lossy beyond
 ~16 significant digits), in a temporary the view owns. `Complex` is refused - split it into real and
-imaginary planes with `np.real` / `np.imag` and feed those.
+imaginary planes with `np.real` / `np.imag` and feed those. Text arrays (`U`, `S`, `StringDType`) are
+refused too: the bridge maps no ML.NET text column.
+
+**ML.NET's trainers read `Single` features.** A `Double` column crosses as `Double`, but the trainers
+and most transforms take `Vector<Single>` only, and NumSharp's default float dtype is float64, as NumPy's
+(`np.random.rand`, `np.array(new[] { 1.5, 2.5 })`, `np.loadtxt`). Convert before the view -
+`x.astype(np.float32).AsDataView("Features")` - or the pipeline stops with ML.NET's
+`Schema mismatch for feature column 'Features': expected Vector<Single>, got Vector<Double>`.
 
 ---
 
