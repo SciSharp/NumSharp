@@ -387,5 +387,35 @@ namespace NumSharp.Tests
             vb[1].Should().BeOneOf(2f, 2.5f);
 #endif
         }
+
+        /// <summary>
+        ///     The getters share the raw access: <c>a.GetValue&lt;double&gt;(1)</c>, <c>a.GetAtIndex&lt;double&gt;(1)</c> and
+        ///     <c>a.GetDouble(1)</c> on float32 <c>[1, 2, 3, 4]</c> return <c>512.0001225471497</c> (elements 2 and 3 read as one
+        ///     double) in Release, and the last element's read runs past the buffer. <c>GetDouble</c>'s doc says it throws
+        ///     <c>NullReferenceException</c> for another dtype; <c>a.item&lt;double&gt;(1)</c> converts correctly (2). EXPECTED
+        ///     (when fixed): the element converted (2.0) or a refusal.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA12")]
+        public void ParityQa_GetValueGeneric_OtherElementType_ShouldCastNotReadRawBytes()
+        {
+#if DEBUG
+            Assert.Inconclusive("Release-only defect: in Debug the type mismatch trips GetValue<T>'s Debug.Assert.");
+#else
+            using var a = np.array(new[] { 1f, 2f, 3f, 4f });
+            double generic = double.NaN, typed = double.NaN;
+            try
+            {
+                generic = a.GetValue<double>(1);
+                typed = a.GetDouble(1);
+            }
+            catch (Exception)
+            {
+                return; // a refusal is an acceptable fix
+            }
+
+            generic.Should().Be(2.0);
+            typed.Should().Be(2.0);
+#endif
+        }
     }
 }
