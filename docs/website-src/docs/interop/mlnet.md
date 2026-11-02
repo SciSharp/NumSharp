@@ -209,6 +209,12 @@ ML.NET has no half, decimal or complex column type, so the view-producing verbs 
 imaginary planes with `np.real` / `np.imag` and feed those. Text arrays (`U`, `S`, `StringDType`) are
 refused too: the bridge maps no ML.NET text column.
 
+**Key columns read back as their keys.** `PredictedLabel` of a multiclass model or of k-means is a key
+column: `ToNDArray` returns its `uint32` keys, 1-based indices into the model's key space (0 is a missing
+value), not the label values - `MapValueToKey` numbers the labels in the order it first sees them, by
+default. Append `MapKeyToValue("PredictedLabel")` to the pipeline to read the label values back, or
+subtract 1 for a 0-based index into the model's classes (the columns of its `Score`).
+
 **ML.NET's trainers read `Single` features.** A `Double` column crosses as `Double`, but the trainers
 and most transforms take `Vector<Single>` only, and NumSharp's default float dtype is float64, as NumPy's
 (`np.random.rand`, `np.array(new[] { 1.5, 2.5 })`, `np.loadtxt`). Convert before the view -
