@@ -474,6 +474,49 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             NDArrayOnnxInterop.LiveExports.Should().Be(0);
         }
 
+        /// <summary>
+        ///     A <c>StringDType</c> array (NumSharp's variable-width text, kind <c>'T'</c>) is refused by every verb that
+        ///     writes text into ORT - <c>ToOrtValue</c>, <c>AsOrtValue</c> under every mode and <c>Run</c> - with a
+        ///     <see cref="NotSupportedException"/> that names the conversion that works, as Python's onnxruntime refuses
+        ///     such an array. It shares the text storage lane, so the fixed-width path took it: the <c>S</c> loop's
+        ///     <c>(byte[])</c> cast of a managed string threw <see cref="InvalidCastException"/>. The named remedy is a
+        ///     SIZED <c>U</c> cast, because NumPy and NumSharp both refuse an unsized one with <c>TypeError</c>; the sized
+        ///     cast then runs the string model, and a missing value crosses as the text of its <c>na_object</c>.
+        /// </summary>
+        [TestMethod]
+        public void StringDTypeArray_IsRefusedByEveryTextExport_AndTheSizedUCastItNamesRuns()
+        {
+            using InferenceSession session = OpenSession("string_io");
+            using NDArray t = np.array(Sample, np.dtypes.StringDType());
+            using NDArray withNa = np.array(new object[] { "a", null, "c" }, np.dtypes.StringDType(na_object: null));
+
+            foreach (NDArray text in new[] { t, withNa })
+            {
+                string dtype = text.dtype.ToString();
+                new Action(() => text.ToOrtValue()).Should().Throw<NotSupportedException>(dtype)
+                    .WithMessage("ToOrtValue: the array is a StringDType array*sized 'U'*np.dtype(\"U16\")*");
+                foreach (OnnxCodecMode mode in new[] { OnnxCodecMode.Auto, OnnxCodecMode.Copy, OnnxCodecMode.View })
+                    new Action(() => text.AsOrtValue(mode)).Should().Throw<NotSupportedException>($"{dtype}, {mode}: refused before the View refusal")
+                        .WithMessage("AsOrtValue: the array is a StringDType array*");
+                new Action(() => session.Run(text)).Should().Throw<NotSupportedException>(dtype)
+                    .WithMessage("input 'X' is a StringDType array*sized 'U'*");
+                new Action(() => session.Run(new Dictionary<string, NDArray> { { "X", text } })).Should().Throw<NotSupportedException>(dtype)
+                    .WithMessage("input 'X' is a StringDType array*");
+            }
+
+            NDArrayOnnxInterop.LiveExports.Should().Be(0, "nothing was exported for a refused array");
+
+            // The message's claims: an unsized 'U' target is a TypeError (as in NumPy) ...
+            new Action(() => t.astype(np.dtype("U"))).Should().Throw<TypeError>();
+            // ... and the sized cast it names crosses, a missing value as str(None).
+            using (NDArray sized = t.astype(np.dtype("U16")))
+            using (NDArray echo = session.Run(sized))
+                NDArray.AsStringArray(echo).Should().Equal(Sample);
+            using (NDArray sized = withNa.astype(np.dtype("U16")))
+            using (NDArray echo = session.Run(sized))
+                NDArray.AsStringArray(echo).Should().Equal("a", "None", "c");
+        }
+
         /// <summary>Builds an ORT string tensor of a shape from its strings in row-major order (ORT's own factory and setter).</summary>
         /// <param name="dims">The shape.</param>
         /// <param name="items">The strings; their count is the shape's element count.</param>

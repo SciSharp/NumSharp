@@ -71,8 +71,9 @@ namespace NumSharp.Interop.MLNet
         /// </summary>
         /// <exception cref="NotSupportedException">
         ///     <see cref="NPTypeCode.Half"/> / <see cref="NPTypeCode.Decimal"/> (no ML.NET column type — convert to
-        ///     Single / Double first; the view-producing verbs do so automatically) or <see cref="NPTypeCode.Complex"/>
-        ///     (ML.NET has no complex column type).
+        ///     Single / Double first; the view-producing verbs do so automatically), <see cref="NPTypeCode.Complex"/>
+        ///     (ML.NET has no complex column type) or a text dtype (<c>U</c>, <c>S</c>, <c>StringDType</c>: this bridge
+        ///     maps no ML.NET text column).
         /// </exception>
         public static PrimitiveDataViewType ToDataViewType(DType dtype)
         {
@@ -82,7 +83,7 @@ namespace NumSharp.Interop.MLNet
             return type;
         }
 
-        /// <summary><see cref="ToDataViewType"/> without the throw; <c>false</c> for Half / Decimal / Complex.</summary>
+        /// <summary><see cref="ToDataViewType"/> without the throw; <c>false</c> for Half / Decimal / Complex and the text dtypes.</summary>
         public static bool TryToDataViewType(DType dtype, out PrimitiveDataViewType type)
         {
             switch (dtype?.GetTypeCode())
@@ -159,7 +160,7 @@ namespace NumSharp.Interop.MLNet
 
         /// <summary>
         ///     The C# element type ML.NET stores a NumSharp dtype's column values in — <see cref="char"/> becomes
-        ///     <see cref="ushort"/>; <c>null</c> for Half / Decimal / Complex (no ML.NET column type). This is the
+        ///     <see cref="ushort"/>; <c>null</c> for Half / Decimal / Complex and the text dtypes (no ML.NET column type). This is the
         ///     <typeparamref name="T"/> a <see cref="VBuffer{T}"/> / <see cref="ValueGetter{T}"/> for the column uses.
         /// </summary>
         public static Type ToDataViewClrType(DType dtype)
@@ -202,10 +203,28 @@ namespace NumSharp.Interop.MLNet
             throw new NotSupportedException($"VBuffer<{typeof(T).Name}> has no NumSharp dtype: ML.NET vectors carry bool, the eight integer types, float and double (System.Half / decimal / complex have no ML.NET column type).");
         }
 
+        /// <summary>
+        ///     The refusal text for a NumSharp dtype that has no ML.NET column type, naming the conversion or the
+        ///     workaround that does work. Every export refusal goes through it, so the dtype maps and the verbs say the same.
+        /// </summary>
+        /// <remarks>
+        ///     <see cref="NPTypeCode.String"/> is the storage lane of all three text classes (<c>U</c>, <c>S</c> and
+        ///     <c>StringDType</c>), so its text names them together. Without that case a text array reached the verbs'
+        ///     implicit <see cref="NPTypeCode"/> → <see cref="DType"/> conversion, and the caller read NumSharp's own "asked
+        ///     for a dtype by storage lane" error, which tells them to pass a dtype they never asked for.
+        /// </remarks>
+        /// <param name="code">The dtype that does not cross (Half, Decimal, Complex, String, or any other code).</param>
+        /// <returns>The message.</returns>
         internal static string UnsupportedExportMessage(NPTypeCode code)
         {
             switch (code)
             {
+                case NPTypeCode.String:
+                    return "NumSharp text arrays (fixed-width U / S and StringDType) are not converted by this bridge: it maps numeric and " +
+                           "boolean arrays to ML.NET's number and boolean columns, and ML.NET's text column (TextDataViewType, " +
+                           "ReadOnlyMemory<char>) is not one of them. Build the text column with ML.NET from the strings instead, for " +
+                           "example mlContext.Data.LoadFromEnumerable over rows holding NDArray.AsStringArray(nd)'s values (a U or " +
+                           "StringDType array; decode an S array to U first), or encode the text as numbers before exporting it.";
                 case NPTypeCode.Half:
                     return "ML.NET has no half-precision column type (NumberDataViewType has Single and Double, not Half). The view-producing " +
                            "verbs (AsDataView / ToDataView / ToVBuffer) convert a Half array to Single for you (lossless — every Half value is an " +
@@ -302,14 +321,22 @@ namespace NumSharp.Interop.MLNet
         ///     <see cref="ResolveFeedArray"/> converts by): Half → Single, Decimal → Double, every other dtype as itself.
         ///     Lets a verb make its dtype, shape and size refusals before it converts, copies or reads anything.
         /// </summary>
+        /// <remarks>
+        ///     Text is refused here, the first thing every export verb asks: <see cref="NPTypeCode.String"/> is a storage
+        ///     lane that does not convert to a <see cref="DType"/>, so returning it let the verbs' next step (the dtype map,
+        ///     called with an implicit <see cref="NPTypeCode"/> → <see cref="DType"/> conversion) fail with NumSharp's own
+        ///     storage-lane error instead of this bridge's refusal.
+        /// </remarks>
         /// <param name="code">The source array's dtype.</param>
         /// <returns>The dtype the array crosses as.</returns>
+        /// <exception cref="NotSupportedException"><paramref name="code"/> is <see cref="NPTypeCode.String"/>: a text array (U, S or StringDType) has no ML.NET number column.</exception>
         internal static NPTypeCode FeedTypeCode(NPTypeCode code)
         {
             switch (code)
             {
                 case NPTypeCode.Half: return NPTypeCode.Single;
                 case NPTypeCode.Decimal: return NPTypeCode.Double;
+                case NPTypeCode.String: throw new NotSupportedException(UnsupportedExportMessage(code));
                 default: return code;
             }
         }

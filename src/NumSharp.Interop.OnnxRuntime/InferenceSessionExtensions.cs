@@ -51,7 +51,7 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a member of <see cref="OnnxCodecMode"/>.</exception>
         /// <exception cref="InvalidCastException">The input's dtype does not cast to the declared one under <paramref name="casting"/>.</exception>
         /// <exception cref="ArgumentException">The input's shape contradicts the declared one.</exception>
-        /// <exception cref="NotSupportedException">The input or the output is not a tensor of a dtype NumSharp has.</exception>
+        /// <exception cref="NotSupportedException">The input or the output is not a tensor of a dtype NumSharp has, or the input is a <c>StringDType</c> array (cast it to a sized <c>U</c> first).</exception>
         /// <exception cref="ObjectDisposedException">The input's buffer has already been released.</exception>
         public static NDArray Run(this InferenceSession session, NDArray input, RunOptions runOptions = null, string casting = "safe",
             OnnxCodecMode mode = OnnxCodecMode.Auto)
@@ -79,7 +79,7 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a member of <see cref="OnnxCodecMode"/>.</exception>
         /// <exception cref="InvalidCastException">The input's dtype does not cast to the declared one under <paramref name="casting"/>.</exception>
         /// <exception cref="InvalidOperationException"><paramref name="mode"/> is <see cref="OnnxCodecMode.View"/> and the input needs a copy.</exception>
-        /// <exception cref="NotSupportedException">The input or the output is not a tensor of a dtype NumSharp has.</exception>
+        /// <exception cref="NotSupportedException">The input or the output is not a tensor of a dtype NumSharp has, or the input is a <c>StringDType</c> array (cast it to a sized <c>U</c> first).</exception>
         /// <exception cref="ObjectDisposedException">The input's buffer has already been released.</exception>
         public static NDArray Run(this InferenceSession session, string inputName, NDArray input, string outputName, RunOptions runOptions = null,
             string casting = "safe", OnnxCodecMode mode = OnnxCodecMode.Auto)
@@ -126,7 +126,7 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a member of <see cref="OnnxCodecMode"/>.</exception>
         /// <exception cref="InvalidCastException">An input's dtype does not cast to the declared one under <paramref name="casting"/>.</exception>
         /// <exception cref="InvalidOperationException"><paramref name="mode"/> is <see cref="OnnxCodecMode.View"/> and an input needs a copy; or an output lives in device memory.</exception>
-        /// <exception cref="NotSupportedException">An input or an output is not a tensor of a dtype NumSharp has.</exception>
+        /// <exception cref="NotSupportedException">An input or an output is not a tensor of a dtype NumSharp has, or an input is a <c>StringDType</c> array (cast it to a sized <c>U</c> first).</exception>
         /// <exception cref="ObjectDisposedException">An input's buffer has already been released.</exception>
         public static IReadOnlyDictionary<string, NDArray> Run(this InferenceSession session, IReadOnlyDictionary<string, NDArray> inputs,
             IReadOnlyCollection<string> outputNames = null, RunOptions runOptions = null, string casting = "safe", bool zeroCopyOutputs = false,
@@ -213,7 +213,7 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     An output array is read-only, not C-contiguous or not of the declared dtype; or <paramref name="mode"/> is
         ///     <see cref="OnnxCodecMode.View"/> and an input needs a copy (a cast, a layout, or an overlap with an output).
         /// </exception>
-        /// <exception cref="NotSupportedException">An input or an output is not a tensor of a dtype NumSharp has.</exception>
+        /// <exception cref="NotSupportedException">An input or an output is not a tensor of a dtype NumSharp has, or an input is a <c>StringDType</c> array (cast it to a sized <c>U</c> first).</exception>
         /// <exception cref="ObjectDisposedException">An input's or an output's buffer has already been released.</exception>
         public static void RunInto(this InferenceSession session, IReadOnlyDictionary<string, NDArray> inputs, IReadOnlyDictionary<string, NDArray> outputs,
             RunOptions runOptions = null, string casting = "safe", OnnxCodecMode mode = OnnxCodecMode.Auto)
@@ -598,7 +598,7 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <returns>A handle over the memory ORT reads; it owns any temporary it was given.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="name"/> or <paramref name="array"/> is null.</exception>
         /// <exception cref="ArgumentException">The model has no input named <paramref name="name"/>, or the array's shape contradicts the declared one.</exception>
-        /// <exception cref="NotSupportedException">The input is not a tensor, or its declared element type has no NumSharp dtype.</exception>
+        /// <exception cref="NotSupportedException">The input is not a tensor, its declared element type has no NumSharp dtype, or a <c>StringDType</c> array is fed to a string input.</exception>
         /// <exception cref="InvalidCastException">The array's dtype does not cast to the declared one under <paramref name="rule"/>, or one of the two is text and the other is not.</exception>
         /// <exception cref="InvalidOperationException"><paramref name="mode"/> is <see cref="OnnxCodecMode.View"/> and the array needs a conversion or a C-order copy, or is text.</exception>
         /// <exception cref="ObjectDisposedException">The array's buffer has already been released.</exception>
@@ -694,7 +694,7 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <exception cref="InvalidCastException">One side is text and the other is not: the bridge does not cast between text and numbers (convert with <c>astype</c> first).</exception>
         /// <exception cref="ArgumentException">The array's shape contradicts the declared one.</exception>
         /// <exception cref="InvalidOperationException"><paramref name="mode"/> is <see cref="OnnxCodecMode.View"/>: text is always a copy.</exception>
-        /// <exception cref="NotSupportedException">The array holds more strings than ORT's string tensor API can index.</exception>
+        /// <exception cref="NotSupportedException">The array is a <c>StringDType</c> array fed to a string input, or it holds more strings than ORT's string tensor API can index.</exception>
         /// <exception cref="ObjectDisposedException">The array's buffer has already been released.</exception>
         private static OrtTensor PrepareTextInput(string name, NDArray array, NodeMetadata meta, NPTypeCode have, NPTypeCode want, OnnxCodecMode mode)
         {
@@ -707,6 +707,9 @@ namespace NumSharp.Interop.OnnxRuntime
                         : $"input '{name}' is declared {want} ({meta.ElementDataType}) but the array holds text ({array.dtype}). The bridge does not " +
                           $"cast text to numbers: parse the values first with nd.astype(NPTypeCode.{want}) (NumPy's text-to-number cast) " +
                           "and feed the numeric array.");
+            // A StringDType array into a string input: refused here, naming the input, before the shape check and the
+            // conversion (the export verb would refuse it too, but as "AsOrtValue", which a Run caller never called).
+            NDArrayOnnxInterop.RefuseStringDType(array, $"input '{name}'");
             ValidateShape(name, "input", meta, array.Shape);
             if (mode == OnnxCodecMode.View)
                 throw new InvalidOperationException(

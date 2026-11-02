@@ -23,8 +23,10 @@ namespace NumSharp.Interop.OnnxRuntime
         // #   3. Nothing is shared: every crossing, in either direction, is a copy. ORT keeps each string as a separate    #
         // #      native object, so even with StringDType only the import could ever avoid a copy.                          #
         // #                                                                                                                #
-        // # A StringDType array is not a supported input of these verbs either: TextToOrtValue reads 'U' elements as text  #
-        // # and every other text array as 'S' bytes, so a 'T' array must be cast to 'U' first (nd.astype(np.dtype("U"))).  #
+        // # A StringDType array is not a supported input of these verbs either: it shares the text storage lane, so IsText #
+        // # answers true for it, and RefuseStringDType turns it away with StringDTypeMessage before anything is read. The  #
+        // # caller casts it to a SIZED 'U' first (nd.astype(np.dtype("U16"))): NumPy and NumSharp both refuse an unsized   #
+        // # 'U' target for a StringDType array with TypeError.                                                             #
         // #                                                                                                                #
         // # To map StringDType: map TensorElementType.String <-> StringDType in TryFromTensorElementType /                 #
         // # TryToTensorElementType, read into it in TextArray, and write from it in TextToOrtValue. Keep the fixed-width   #
@@ -44,14 +46,53 @@ namespace NumSharp.Interop.OnnxRuntime
         internal static readonly DType TextDType = np.dtype("U");
 
         /// <summary>
-        ///     Is <paramref name="array"/> a text array (NumSharp's fixed-width <c>U</c> or <c>S</c> dtype)? Every verb asks
-        ///     this BEFORE it touches the dtype maps with the array's type code: <see cref="NPTypeCode.String"/> does not
-        ///     convert to a <see cref="DType"/>, so the numeric path would fail on its first line with NumSharp's own
-        ///     "asked for a dtype by storage lane" error.
+        ///     Is <paramref name="array"/> a text array (NumSharp's fixed-width <c>U</c> or <c>S</c> dtype, or its
+        ///     variable-width <c>StringDType</c>)? Every verb asks this BEFORE it touches the dtype maps with the array's type
+        ///     code: <see cref="NPTypeCode.String"/> does not convert to a <see cref="DType"/>, so the numeric path would fail
+        ///     on its first line with NumSharp's own "asked for a dtype by storage lane" error.
         /// </summary>
+        /// <remarks>
+        ///     The answer comes from the storage lane, which the three text classes share, so a <c>StringDType</c> array
+        ///     answers <c>true</c> as well. The text verbs then refuse it (<see cref="RefuseStringDType"/>): only the two
+        ///     fixed-width classes cross.
+        /// </remarks>
         /// <param name="array">Any array.</param>
-        /// <returns><c>true</c> for a <c>U</c> or <c>S</c> array.</returns>
+        /// <returns><c>true</c> for a <c>U</c>, <c>S</c> or <c>StringDType</c> array.</returns>
         internal static bool IsText(NDArray array) => array.typecode == NPTypeCode.String;
+
+        /// <summary>
+        ///     Refuse a <c>StringDType</c> array (kind <c>'T'</c>) at a verb that writes text into an ORT string tensor,
+        ///     before anything is read. The fixed-width loops of <see cref="TextToOrtValue"/> cannot read its elements: a
+        ///     <c>StringDType</c> element is a managed string (or its missing value), so the <c>S</c> loop's
+        ///     <c>(byte[])</c> cast threw <see cref="InvalidCastException"/> on the first element.
+        /// </summary>
+        /// <remarks>
+        ///     Python's <c>onnxruntime</c> refuses a <c>StringDType</c> array as well ("Numpy_type 2056 can't be converted
+        ///     to MLDataType"), so the refusal is the NumPy ecosystem's answer, not a NumSharp gap; mapping the class is the
+        ///     TODO at the top of this file.
+        /// </remarks>
+        /// <param name="source">The text array about to cross.</param>
+        /// <param name="subject">Who refuses and what, as the start of the message (<c>"ToOrtValue: the array"</c>, <c>"input 'text'"</c>).</param>
+        /// <exception cref="NotSupportedException"><paramref name="source"/> is a <c>StringDType</c> array.</exception>
+        internal static void RefuseStringDType(NDArray source, string subject)
+        {
+            if (source.dtype.kind == 'T')
+                throw new NotSupportedException(StringDTypeMessage(subject));
+        }
+
+        /// <summary>
+        ///     The refusal of a <c>StringDType</c> array, naming the conversion that works. The width matters: NumPy and
+        ///     NumSharp both refuse an unsized <c>'U'</c> target for a <c>StringDType</c> array (<c>TypeError</c>), and a
+        ///     sized one cuts every longer string to the width.
+        /// </summary>
+        /// <param name="subject">Who refuses and what, as the start of the message.</param>
+        /// <returns>The message.</returns>
+        internal static string StringDTypeMessage(string subject) =>
+            $"{subject} is a StringDType array (np.dtypes.StringDType, kind 'T'), which does not cross to ONNX Runtime: this bridge writes " +
+            "ORT string tensors from NumPy's fixed-width text dtypes ('U' / 'S') only, and Python's onnxruntime refuses StringDType arrays too. " +
+            "Convert it to a sized 'U' array first, for example nd.astype(np.dtype(\"U16\")) with a width that holds the longest string " +
+            "(an unsized 'U' target is refused for StringDType, as in NumPy; a longer string is cut to the width, and a missing value " +
+            "becomes the text of its na_object).";
 
         /// <summary>
         ///     Copy a text array into a new ORT string tensor of the same shape, in logical (C) order. A <c>U</c> element
@@ -67,10 +108,15 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <param name="source">A <c>U</c> or <c>S</c> array of any shape and layout.</param>
         /// <param name="verb">The public verb, named in the refusal.</param>
         /// <returns>A new string tensor ONNX Runtime owns; the caller disposes it.</returns>
-        /// <exception cref="NotSupportedException">The array holds more strings than ORT's string tensor API can index (<see cref="int.MaxValue"/>).</exception>
+        /// <exception cref="NotSupportedException">
+        ///     The array is a <c>StringDType</c> array (cast it to a sized <c>U</c> first), or it holds more strings than
+        ///     ORT's string tensor API can index (<see cref="int.MaxValue"/>).
+        /// </exception>
         /// <exception cref="ObjectDisposedException">The array's buffer has already been released.</exception>
         internal static OrtValue TextToOrtValue(NDArray source, string verb)
         {
+            // Before the element loops: neither can read a StringDType element (see RefuseStringDType).
+            RefuseStringDType(source, $"{verb}: the array");
             Shape shape = source.Shape;
             long count = shape.Size;
             if (count > int.MaxValue)
@@ -132,10 +178,13 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <param name="mode">The requested mode (already validated); <see cref="OnnxCodecMode.View"/> is refused.</param>
         /// <returns>A handle owning the string tensor.</returns>
         /// <exception cref="InvalidOperationException"><paramref name="mode"/> is <see cref="OnnxCodecMode.View"/>: text cannot be shared.</exception>
-        /// <exception cref="NotSupportedException">The array holds more strings than ORT's string tensor API can index.</exception>
+        /// <exception cref="NotSupportedException">The array is a <c>StringDType</c> array, or it holds more strings than ORT's string tensor API can index.</exception>
         /// <exception cref="ObjectDisposedException">The array's buffer has already been released.</exception>
         internal static OrtTensor TextAsOrtValue(NDArray source, bool ownsSource, OnnxCodecMode mode)
         {
+            // The StringDType refusal comes before the View one: under every mode the array cannot cross, so the caller
+            // should not be told to retry with Auto first.
+            RefuseStringDType(source, $"{nameof(AsOrtValue)}: the array");
             if (mode == OnnxCodecMode.View)
                 throw new InvalidOperationException(TextViewMessage(nameof(AsOrtValue)));
             long[] dims = LongDims(source.Shape);

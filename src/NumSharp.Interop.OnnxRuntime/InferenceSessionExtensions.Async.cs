@@ -94,7 +94,7 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     intra-op thread).
         /// </returns>
         /// <exception cref="ArgumentNullException"><paramref name="session"/>, <paramref name="inputs"/> or <paramref name="outputs"/> is null, or a name or array in them is null.</exception>
-        /// <exception cref="NotSupportedException">The loaded ONNX Runtime is older than 1.30.0; or an input or an output is not a tensor of a dtype NumSharp has.</exception>
+        /// <exception cref="NotSupportedException">The loaded ONNX Runtime is older than 1.30.0; an input or an output is not a tensor of a dtype NumSharp has; or an input is a <c>StringDType</c> array (cast it to a sized <c>U</c> first).</exception>
         /// <exception cref="ArgumentException">
         ///     <paramref name="outputs"/> is empty; the model has no input or output of a given name; a shape contradicts
         ///     the declared one; two outputs overlap in memory; or the array for an output that is a fed input does not
@@ -186,7 +186,8 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <exception cref="ArgumentNullException"><paramref name="session"/> or <paramref name="inputs"/> is null, or a name or array is null.</exception>
         /// <exception cref="NotSupportedException">
         ///     The loaded ONNX Runtime is older than 1.30.0; an output cannot be allocated before the run (see the
-        ///     remarks); or an input is not a tensor of a dtype NumSharp has.
+        ///     remarks); an input is not a tensor of a dtype NumSharp has; or an input is a <c>StringDType</c> array (cast it
+        ///     to a sized <c>U</c> first).
         /// </exception>
         /// <exception cref="ArgumentException"><paramref name="outputNames"/> is empty; the model has no input or output of a given name; or an input's shape contradicts the declared one.</exception>
         /// <exception cref="ValueError"><paramref name="casting"/> is not one of the five rule names.</exception>
@@ -422,7 +423,7 @@ namespace NumSharp.Interop.OnnxRuntime
             /// <param name="mode">The input mode.</param>
             /// <exception cref="ArgumentNullException">A name or an array is null.</exception>
             /// <exception cref="ArgumentException">The model has no input of a given name, or a shape contradicts the declared one.</exception>
-            /// <exception cref="NotSupportedException">An input is not a tensor of a dtype NumSharp has.</exception>
+            /// <exception cref="NotSupportedException">An input is not a tensor of a dtype NumSharp has, or is a <c>StringDType</c> array.</exception>
             /// <exception cref="InvalidCastException">A dtype does not cast under the rule.</exception>
             /// <exception cref="InvalidOperationException">The mode is <see cref="OnnxCodecMode.View"/> and an input needs a copy.</exception>
             /// <exception cref="ObjectDisposedException">An input's buffer has already been released.</exception>

@@ -183,7 +183,8 @@ both directions: `ToOrtValue`, `AsOrtValue`, `ToNDArray`, `AsNDArray`, the reade
 - **The fixed width has a cost**, because the bridge reads string tensors as `U`, not as NumSharp's
   variable-width `StringDType`: a string that ends in NUL characters loses them (`ReadStringTensor` returns
   the strings exactly), and one long string widens every element. A `StringDType` array is not a bridge
-  input: cast it to `U` first (`nd.astype(np.dtype("U"))`).
+  input (Python's `onnxruntime` refuses it too): cast it to a sized `U` first, wide enough for its longest
+  string (`nd.astype(np.dtype("U16"))`; an unsized `"U"` target is refused for `StringDType`, as in NumPy).
 - The bridge does not cast between text and numbers, under any casting rule. Convert first with NumSharp's
   own casts: `nd.astype(np.dtype("U"))` writes each number as its `str()`, and `nd.astype(np.float32)` parses
   each text as NumPy does.

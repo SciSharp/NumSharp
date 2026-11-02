@@ -69,9 +69,11 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   mutually exclusive, so the consumer picks one.
 - Dtypes: 12 zero-copy, including a Half↔Float16 bit reinterpretation; Char→UInt16; Decimal→Double through a temp the
   handle owns (Auto / Copy; `Run` needs `casting: "same_kind"`); text: fixed-width `U` / `S` ↔ ORT string tensors, always
-  a copy (a trailing NUL is lost; the bridge maps no `StringDType` array and casts no text ↔ number pair: the caller's
-  `astype` does); Complex and BFloat16 refused; sparse tensors, non-tensor `Run` inputs and non-`NDArray` inputs are not
-  served.
+  a copy (a trailing NUL is lost; the bridge casts no text ↔ number pair: the caller's `astype` does); a `StringDType`
+  array shares the text lane, so `IsText` is true for it and `RefuseStringDType` throws `NotSupportedException` in
+  every export verb and `Run` (Python's onnxruntime refuses it too); the remedy is a SIZED `U` cast, because NumPy and
+  NumSharp both raise `TypeError` for `astype(np.dtype("U"))` from `StringDType`; Complex and BFloat16 refused; sparse
+  tensors, non-tensor `Run` inputs and non-`NDArray` inputs are not served.
 - Non-tensor outputs read as NumSharp pieces: `ortValue.ToNDArrays()` (a sequence of tensors), `ToMap()` / `ToMaps()`
   (a map, or a ZipMap sequence of maps → (keys, values) NDArrays), `GetMapKeys`, `ReadStringTensor()` → `string[]`; each
   numeric array is a view that OWNS ORT's copy of its element.
