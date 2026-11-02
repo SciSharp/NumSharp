@@ -267,5 +267,57 @@ namespace NumSharp.Tests
             toEnd.Should().Throw<TypeError>()
                 .WithMessage("dtype of `to_end` must be compatible with input `ary` under the `same_kind` rule.");
         }
+
+        // ------------------------------------------------------------------
+        // QA-09 — np.cumprod along a length-1 axis keeps a narrow integer dtype
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     <c>np.cumprod(int32 array of shape (2, 1, 3), axis=1)</c> is int64 in NumPy (multiply.accumulate's NEP 50
+        ///     accumulator: signed integers narrower than int64 → int64, unsigned → uint64), whatever the axis length.
+        ///     NumSharp's length-1-axis shortcut returns the input dtype (int8 / uint8 / int16 / int32 / uint32 stay), through
+        ///     <c>np.cumprod</c>, <c>ndarray.cumprod</c> and <c>np.nancumprod</c>; any longer axis promotes. np.cumsum had the
+        ///     same shortcut and was fixed ("promoted to the accumulator dtype + copied", Default.Reduction.CumAdd.cs);
+        ///     cumprod's twin was not.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA09")]
+        public void ParityQa_CumprodLengthOneAxis_ShouldPromoteNarrowIntegers()
+        {
+            using var i32 = np.arange(6).astype(np.int32).reshape(2, 1, 3);
+            using var u8 = np.arange(6).astype(np.uint8).reshape(2, 1, 3);
+
+            using var signedResult = np.cumprod(i32, axis: 1);
+            using var unsignedResult = np.nancumprod(u8, axis: 1);
+
+            signedResult.dtype.Should().Be(np.int64);
+            unsignedResult.dtype.Should().Be(np.uint64);
+        }
+
+        // ------------------------------------------------------------------
+        // QA-10 — complex np.prod / np.cumprod multiply with the SIMD form, not NumPy's reduce / accumulate form
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's complex <c>multiply.reduce</c> (<c>np.prod</c>) and <c>multiply.accumulate</c> (<c>np.cumprod</c>) run
+        ///     <c>CDOUBLE_multiply</c>'s <c>loop_scalar</c> (the output stride is 0, or the output overlaps the input), which
+        ///     MSVC contracts to <c>im = fma(a.im, b.re, round(a.re * b.im))</c>; the elementwise form is <c>simd_cmul</c>,
+        ///     <c>im = fma(a.re, b.im, round(a.im * b.re))</c>. NumSharp's plain <c>np.prod</c> and every <c>np.cumprod</c> use
+        ///     the elementwise form, so imaginary parts differ by an ULP often (several of 64 random values in the journal's
+        ///     probe; <c>np.prod</c> with <c>initial=</c> / <c>where=</c> already takes the reduce form,
+        ///     Default.Reduction.AddMul.Keywords.cs). For <c>x = -3+1e10j</c>, <c>x**4</c>'s imaginary part is NumPy's
+        ///     <c>1.2e+31</c> and NumSharp's <c>1.2000000000000001e+31</c>.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA10")]
+        public void ParityQa_ComplexProdAndCumprod_ShouldUseNumPysReduceMultiplyForm()
+        {
+            var x = new Complex(-3, 1e10);
+            using var c = np.array(new[] { x, x, x, x });
+
+            using var prod = np.prod(c);
+            using var cumprod = np.cumprod(c);
+
+            ((Complex)prod.GetValue()).Imaginary.Should().Be(1.2e31);
+            ((Complex)cumprod.GetValue(3)).Imaginary.Should().Be(1.2e31);
+        }
     }
 }
