@@ -113,7 +113,10 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   getter for the private `VBuffer<T>._values`), `ImportLease.cs` (the GCHandle pin that the last view releases),
   `Postprocess.cs`.
 - Export: `nd.AsDataView(colName)` (a vector column: a lazy `IDataView` that reads the NumSharp buffer through its
-  strides, any layout, ARC-pinned; `NDArrayDataView` is `IDisposable`), `nd.AsDataView(string[])` (one scalar column per
+  strides, any layout, ARC-pinned; `NDArrayDataView` is `IDisposable`), `columns.AsDataView()` over an
+  `IReadOnlyDictionary<string, NDArray>` (one column per array, each its own dtype and strides, equal rows, every pin
+  taken or none; `NDArrayDataView` holds an array of `Source`s and each `ColumnPlan` names its source),
+  `nd.AsDataView(string[])` (one scalar column per
   feature), `nd.ToDataView(…)` (a snapshot), `nd.ToVBuffer<T>()` (a copy).
 - Import: `view.ToNDArray("col")` (a scalar column → `(R,)`, a fixed-size vector column → `(R,C)`),
   `vbuffer.AsNDArray<T>()` (zero-copy over a dense `VBuffer`'s private `T[]` through the compiled-expression accessor

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Microsoft.ML;
 using Microsoft.ML.Data;
 using NumSharp.Backends.Unmanaged;
@@ -168,6 +169,164 @@ namespace NumSharp.Interop.MLNet
             catch
             {
                 snapshot.Dispose();
+                throw;
+            }
+        }
+
+        /// <summary>
+        ///     Expose SEVERAL NumSharp arrays to ML.NET as ONE <see cref="IDataView"/>, one column per array - what
+        ///     training needs: a <c>"Features"</c> vector and a <c>"Label"</c> of its own dtype in the same rows, as pandas'
+        ///     <c>DataFrame({"Features": X, "Label": y})</c>. Each array is read lazily through its own strides (any
+        ///     layout, no copy) and ARC-pinned for the view's lifetime, as <see cref="AsDataView(NDArray, string)"/> reads
+        ///     one.
+        /// </summary>
+        /// <remarks>
+        ///     <para><b>Axis 0 is always the rows.</b> A 1-D <c>(R,)</c> array is a SCALAR column of <c>R</c> rows (the
+        ///     label shape) and a 2-D <c>(R, C)</c> array a VECTOR column of width <c>C</c> (the features shape); every
+        ///     array must have the same <c>R</c>. (The single-array <see cref="AsDataView(NDArray, string)"/> reads a 1-D
+        ///     array as ONE row: a sample, not a column.)</para>
+        ///     <para><b>Dtypes</b> per array, as the single-array verbs map them: each column keeps its own (a bool label
+        ///     next to float32 features needs no conversion step); Half and Decimal are converted to Single / Double into a
+        ///     temporary the view owns; Complex and text arrays are refused.</para>
+        ///     <para>Every refusal the shapes, dtypes and names decide comes before anything is converted or pinned. The
+        ///     view holds one pin per array; disposing it releases them all, and each cursor takes its own.</para>
+        /// </remarks>
+        /// <param name="columns">Column name → array, in schema order; at least one entry, every name non-empty, every array 1-D or 2-D with the same number of rows.</param>
+        /// <returns>A disposable data view reading the arrays lazily; it holds their pins (and any conversion) until disposed.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="columns"/> is null, or an array in it is null.</exception>
+        /// <exception cref="ArgumentException">No column, an empty name, an array that is not 1-D or 2-D, or arrays with different numbers of rows.</exception>
+        /// <exception cref="NotSupportedException">An array's dtype has no ML.NET column type (Complex, or text), or a vector column is wider than ML.NET's buffers hold.</exception>
+        /// <exception cref="ObjectDisposedException">An array's buffer has already been released.</exception>
+        public static NDArrayDataView AsDataView(this IReadOnlyDictionary<string, NDArray> columns) => BuildTableView(columns, snapshot: false);
+
+        /// <summary>
+        ///     <see cref="AsDataView(IReadOnlyDictionary{string, NDArray})"/> over independent SNAPSHOTS: each array is
+        ///     copied first, so the view has no lifetime coupling to them - mutate or dispose them freely afterwards.
+        /// </summary>
+        /// <param name="columns">Column name → array, as for <see cref="AsDataView(IReadOnlyDictionary{string, NDArray})"/>.</param>
+        /// <returns>A disposable data view over private copies of the arrays.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="columns"/> is null, or an array in it is null.</exception>
+        /// <exception cref="ArgumentException">No column, an empty name, an array that is not 1-D or 2-D, or arrays with different numbers of rows.</exception>
+        /// <exception cref="NotSupportedException">An array's dtype has no ML.NET column type (Complex, or text), or a vector column is wider than ML.NET's buffers hold.</exception>
+        /// <exception cref="ObjectDisposedException">An array's buffer has already been released.</exception>
+        public static NDArrayDataView ToDataView(this IReadOnlyDictionary<string, NDArray> columns) => BuildTableView(columns, snapshot: true);
+
+        /// <summary>
+        ///     The dictionary form of both verbs: validate every array from its shape, dtype and name, then feed each one
+        ///     (as it is, converted, or snapshotted), pin it, and describe its column.
+        /// </summary>
+        /// <remarks>
+        ///     Two passes on purpose: the first decides every refusal without reading a buffer, so a mistake in the third
+        ///     array costs no conversion or copy of the first two; the second takes the pins, and a failure there (a
+        ///     released buffer) gives back every pin and every temporary already made.
+        /// </remarks>
+        /// <param name="columns">Column name → array.</param>
+        /// <param name="snapshot"><c>true</c> to copy every array first (<c>ToDataView</c>), <c>false</c> to read them in place (<c>AsDataView</c>).</param>
+        /// <returns>The view, owning the pins and the temporaries.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="columns"/> is null, or an array in it is null.</exception>
+        /// <exception cref="ArgumentException">No column, an empty name, an array that is not 1-D or 2-D, or arrays with different numbers of rows.</exception>
+        /// <exception cref="NotSupportedException">An array's dtype has no ML.NET column type, or a vector column is too wide.</exception>
+        /// <exception cref="ObjectDisposedException">An array's buffer has already been released.</exception>
+        private static NDArrayDataView BuildTableView(IReadOnlyDictionary<string, NDArray> columns, bool snapshot)
+        {
+            if (columns is null)
+                throw new ArgumentNullException(nameof(columns));
+            if (columns.Count == 0)
+                throw new ArgumentException("at least one column is required.", nameof(columns));
+
+            // ---- pass 1: every refusal the names, shapes and dtypes decide, before a buffer is read
+            var names = new string[columns.Count];
+            var arrays = new NDArray[columns.Count];
+            var itemTypes = new PrimitiveDataViewType[columns.Count];
+            long rows = -1;
+            string rowsFrom = null;
+            int c = 0;
+            foreach (KeyValuePair<string, NDArray> column in columns)
+            {
+                if (string.IsNullOrEmpty(column.Key))
+                    throw new ArgumentException("a column name is null or empty.", nameof(columns));
+                NDArray array = column.Value ?? throw new ArgumentNullException(nameof(columns), $"the array of column '{column.Key}' is null.");
+                Shape shape = array.Shape;
+                if (shape.NDim != 1 && shape.NDim != 2)
+                    throw new ArgumentException(
+                        $"AsDataView (columns): column '{column.Key}' is {shape.NDim}-D (shape {shape}); a column is a 1-D (rows,) array (a scalar column) " +
+                        "or a 2-D (rows, width) array (a vector column).", nameof(columns));
+                // A 2-D array is a vector column, checked like the single-array view's (dtype, width); a 1-D one a scalar column.
+                itemTypes[c] = shape.NDim == 2
+                    ? ValidateVectorColumn(shape, FeedTypeCode(array.typecode))
+                    : ToDataViewType(FeedTypeCode(array.typecode));
+                long r = shape.Dimensions[0];
+                if (rows < 0)
+                {
+                    rows = r;
+                    rowsFrom = column.Key;
+                }
+                else if (r != rows)
+                {
+                    throw new ArgumentException(
+                        $"AsDataView (columns): column '{column.Key}' has {r} rows but column '{rowsFrom}' has {rows}; every array must have the same " +
+                        "length along axis 0 (the rows).", nameof(columns));
+                }
+
+                names[c] = column.Key;
+                arrays[c] = array;
+                c++;
+            }
+
+            // ---- pass 2: feed (in place, converted or snapshotted), pin, describe
+            var sources = new NDArrayDataView.Source[arrays.Length];
+            var plans = new NDArrayDataView.ColumnPlan[arrays.Length];
+            var builder = new DataViewSchema.Builder();
+            int made = 0;
+            try
+            {
+                for (int s = 0; s < arrays.Length; s++)
+                {
+                    NDArray converted = null;
+                    NDArray fed = snapshot ? Snapshot(arrays[s]) : ResolveFeedArray(arrays[s], out converted);
+                    bool owns = snapshot || converted is not null;
+                    IArraySlice pin;
+                    try
+                    {
+                        pin = Pin(fed);
+                    }
+                    catch
+                    {
+                        if (owns)
+                            fed.Dispose();   // the temporary of this array: nothing else will ever dispose it
+                        throw;
+                    }
+
+                    sources[s] = new NDArrayDataView.Source(fed, pin, owns);
+                    made = s + 1;
+
+                    long[] strides = fed.Shape.Strides;
+                    long offset = fed.Shape.Offset;
+                    if (fed.ndim == 1)
+                    {
+                        plans[s] = new NDArrayDataView.ColumnPlan(names[s], fed.typecode, isVector: false, vectorWidth: 0, offset, strides[0], innerStride: 0, source: s);
+                        builder.AddColumn(names[s], itemTypes[s]);
+                    }
+                    else
+                    {
+                        // width <= MaxBufferLength (< int.MaxValue) was checked by ValidateVectorColumn, so the cast is exact.
+                        int width = (int)fed.Shape.Dimensions[1];
+                        plans[s] = new NDArrayDataView.ColumnPlan(names[s], fed.typecode, isVector: true, width, offset, strides[0], strides[1], source: s);
+                        builder.AddColumn(names[s], new VectorDataViewType(itemTypes[s], width));
+                    }
+                }
+
+                return new NDArrayDataView(sources, plans, builder.ToSchema(), rows);
+            }
+            catch
+            {
+                // Give back what pass 2 made before the failure: every pin, and every temporary only the view would own.
+                for (int s = 0; s < made; s++)
+                {
+                    sources[s].Slice.Release();
+                    if (sources[s].OwnsFed)
+                        sources[s].Fed.Dispose();
+                }
                 throw;
             }
         }

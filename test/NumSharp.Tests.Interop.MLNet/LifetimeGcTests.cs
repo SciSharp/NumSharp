@@ -265,11 +265,11 @@ namespace NumSharp.Tests.Interop.MLNet
         private static object[] Finalizable(Scenario s) =>
             s.Participants.Where(p => p is not null && LifetimeHarness.HasFinalizer(p.GetType())).ToArray();
 
-        /// <summary>The array a view reads (its private <c>_fed</c>: the source, a conversion or a snapshot).</summary>
+        /// <summary>The array a single-array view reads (its first source's <c>Fed</c>: the source, a conversion or a snapshot).</summary>
         /// <param name="view">The view.</param>
         /// <returns>The array.</returns>
         private static NDArray FedOf(NDArrayDataView view) =>
-            (NDArray)typeof(NDArrayDataView).GetField("_fed", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(view);
+            ((NDArrayDataView.Source[])typeof(NDArrayDataView).GetField("_sources", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(view))[0].Fed;
 
         /// <summary>
         ///     A getter whose cursor nothing else references: the source array and the view are disposed, so the cursor's own

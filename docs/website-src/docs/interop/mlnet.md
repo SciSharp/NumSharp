@@ -9,7 +9,7 @@ whole "shape my data into an `IDataView` / read the scores out of one" boilerpla
 hand-writes with a POCO class and a `PredictionEngine` becomes two verbs.
 
 **On this page:** [From zero to a prediction](#from-zero-to-a-prediction) · [The verbs](#the-verbs) ·
-[The two shapes: vector column vs scalar columns](#the-two-shapes) · [Lifetime](#lifetime-who-frees-what) ·
+[The shapes: a vector column, scalar columns, a column per array](#the-shapes) · [Lifetime](#lifetime-who-frees-what) ·
 [Post-processing](#post-processing) · [Dtypes](#dtypes) · [Why only `Microsoft.ML.DataView`](#dependency) ·
 [Limits](#limits)
 
@@ -62,7 +62,8 @@ runner and no POCO class.
 |------|-----------|--------------|
 | `nd.AsDataView("Features")` | NumSharp → ML.NET | An `IDataView` with **one vector column** - the feature-matrix shape a model consumes. Reads the array lazily through its strides (any layout), ARC-pinned. |
 | `nd.AsDataView(["a","b",…])` | NumSharp → ML.NET | An `IDataView` with **one scalar column per feature** - the tabular / training-data shape. |
-| `nd.ToDataView(…)` | NumSharp → ML.NET | Same, over an independent snapshot (mutate/dispose the source freely afterward). |
+| `columns.AsDataView()` | NumSharp → ML.NET | An `IDataView` with **one column per array** of an `IReadOnlyDictionary<string, NDArray>` - a 2-D array is a vector column, a 1-D array a scalar column, each in its own dtype and layout (a `Features` matrix and a `Label` vector in one view). |
+| `nd.ToDataView(…)`, `columns.ToDataView()` | NumSharp → ML.NET | Same, over an independent snapshot (mutate/dispose the source freely afterward). |
 | `nd.ToVBuffer<T>()` | NumSharp → ML.NET | A dense `VBuffer<T>` (a copy - export can't be zero-copy, see [Limits](#limits)). |
 | `view.ToNDArray("col")` | ML.NET → NumSharp | Materialize a column across all rows: a scalar column → 1-D `(R,)`; a fixed-size vector column → 2-D `(R, C)`. |
 | `vbuffer.AsNDArray<T>()` | ML.NET → NumSharp | A **zero-copy** 1-D view over a dense `VBuffer<T>`'s backing array (write-through, pinned); sparse/empty fall back to a copy. |
@@ -84,9 +85,10 @@ The other way, `nd.AsDataView(names).ToDataFrame(-1)` builds a DataFrame from an
 
 ---
 
-## The two shapes
+## The shapes
 
-ML.NET has two idioms for "a table of numbers", and the two `AsDataView` overloads produce each:
+ML.NET has two idioms for "a table of numbers", and the two `AsDataView` overloads of an array produce each; a
+dictionary of arrays makes a table whose columns are different arrays:
 
 **One vector column** (`AsDataView("Features")`) - the shape a trained pipeline consumes. A 2-D `(R, C)`
 array becomes `R` rows, each a length-`C` `VBuffer`; a 1-D `(C,)` array becomes a single row (one sample).
@@ -107,31 +109,42 @@ var pipeline = ml.Transforms.Concatenate("Features", "SepalLength", "SepalWidth"
 var model = pipeline.Fit(t);
 ```
 
-Reading a column back mirrors the two shapes: a scalar `"Score"` column of `R` rows comes back as a 1-D
+**One column per array** (`columns.AsDataView()` over an `IReadOnlyDictionary<string, NDArray>`) - the shape
+for training data whose columns are separate arrays of different dtypes: a `Features` matrix and a `Label`
+vector. A 2-D `(R, C)` array becomes a length-`C` vector column and a 1-D `(R,)` array a scalar column; each
+array keeps its own dtype and is read through its own strides, and every array must have the same `R` rows.
+The columns follow the dictionary's enumeration order (ML.NET finds them by name). `columns.ToDataView()` is
+the snapshot form.
+
+```csharp
+using var train = new Dictionary<string, NDArray> { ["Features"] = x, ["Label"] = y }.AsDataView();   // (R, 4) float32 + (R,) bool
+```
+
+Reading a column back mirrors the shapes: a scalar `"Score"` column of `R` rows comes back as a 1-D
 `(R,)` array; a fixed-size vector column of width `C` comes back as `(R, C)`. A variable-length vector
 column (rows disagree on length) is refused - NumSharp arrays are rectangular; pad the column to a fixed
 size in the pipeline first.
 
-**Labels.** One view exposes one array, so all of its columns have that array's dtype: the label travels
-as one more column of the feature dtype (`np.hstack(x, y)`), and a trainer that wants another label type
-gets it from a conversion step. Fit that step on its own, outside the model, so the trained model reads
-the feature columns only and scores new data without a label column:
+**Labels.** The label is one more array of a dictionary view, in the type its trainer reads (`bool` for a
+binary classifier, `float32` for a regression and for the `MapValueToKey` of the multiclass recipe). A
+trainer reads the label when it fits only, so the trained model scores new rows without a label column:
 
 ```csharp
-using NDArray table = np.hstack(x, y.astype(np.float32).reshape(-1, 1));   // (R, 4) float32 features + the label
-using var trainView = table.AsDataView(["f0", "f1", "f2", "f3", "Label"]);
-var toBool = ml.Transforms.Conversion.ConvertType("Label", outputKind: DataKind.Boolean);
-IDataView labelled = toBool.Fit(trainView).Transform(trainView);
-ITransformer model = ml.Transforms.Concatenate("Features", "f0", "f1", "f2", "f3")
-    .Append(ml.BinaryClassification.Trainers.LbfgsLogisticRegression())
-    .Fit(labelled);
-using var newRows = xNew.AsDataView(["f0", "f1", "f2", "f3"]);                         // no label needed
+using var train = new Dictionary<string, NDArray> { ["Features"] = x, ["Label"] = y }.AsDataView();   // y: (R,) bool
+ITransformer model = ml.BinaryClassification.Trainers.LbfgsLogisticRegression().Fit(train);
+using var newRows = xNew.AsDataView("Features");                                         // no label needed
 using NDArray predicted = model.Transform(newRows).ToNDArray("PredictedLabel");
 ```
 
+A single-array view carries a label as one more column of the feature dtype (`np.hstack(x, y)` with
+`AsDataView(string[])`); a trainer that wants another label type then gets it from a conversion step
+(`ml.Transforms.Conversion.ConvertType("Label", outputKind: DataKind.Boolean)`) fitted on its own, outside the
+model, so that the model reads the feature columns only.
+
 A model whose chain maps the label itself - ML.NET's multiclass recipe,
 `MapValueToKey("Label").Append(...)` - asks for a `Label` column when it scores too
-(`Could not find input column 'Label'`). Score such a model with the chain after its label step:
+(`Could not find input column 'Label'`). Score a dictionary view that carries the label, or score label-less
+rows with the chain after its label step:
 `new TransformerChain<ITransformer>(((IEnumerable<ITransformer>)model).Skip(1).ToArray()).Transform(view)`.
 
 **Large tables and multi-pass trainers.** `Concatenate` builds each row's feature vector from its scalar
@@ -147,7 +160,7 @@ of a POCO list (5.1-5.3 s) - with the cache holding one more copy of the columns
 
 `AsDataView` returns an `NDArrayDataView`. Unlike a bare `IDataView`, it **is** `IDisposable`: dispose it
 (a `using`, or wire it into your `MLContext`'s lifetime) to release the pin it holds on the NumSharp
-buffer. The pin takes its own atomic reference, so:
+buffer (a dictionary view holds one per array, taken all or none). The pin takes its own atomic reference, so:
 
 - The array stays valid for the view even if you dispose or drop the source array while the pipeline still
   reads it - the opposite of a raw ML.NET data source over a managed array, which would read freed data.
