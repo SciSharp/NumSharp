@@ -438,5 +438,48 @@ namespace NumSharp.Tests
 
             act.Should().Throw<ValueError>().WithMessage("all elements of broadcast shape must be non-negative");
         }
+
+        // ------------------------------------------------------------------
+        // QA-14 — the explicit (bool) conversion applies float()'s 0-d rule instead of NumPy's truth test
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's <c>bool(arr)</c> is <c>array_nonzero</c>: any one-element array has a truth value
+        ///     (<c>bool(np.array([5.0]))</c> is True, <c>bool(np.array([[0.0]]))</c> False), and only a larger or an empty array
+        ///     is refused, with <c>ValueError: The truth value of an array with more than one element is ambiguous. Use a.any()
+        ///     or a.all()</c>. NumSharp's explicit conversions all share <c>EnsureCastableToScalar</c>
+        ///     (Casting/Implicit/NDArray.Implicit.ValueTypes.cs), the 0-d rule of NumPy 2.x's <c>float()</c> / <c>int()</c>,
+        ///     so <c>(bool)</c> of a one-element 1-D or 2-D array throws <see cref="IncorrectShapeException"/> "only 0-d arrays
+        ///     can be converted to scalar", and a larger array gets that text instead of NumPy's ValueError.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA14")]
+        public void ParityQa_BoolConversion_ShouldFollowNumPysTruthTest()
+        {
+            using var one = np.array(new[] { 5.0 });
+            using var oneZero = np.array(new[,] { { 0.0 } });
+            using var two = np.array(new[] { 1.0, 2.0 });
+
+            ((bool)one).Should().BeTrue();
+            ((bool)oneZero).Should().BeFalse();
+            Action ambiguous = () => _ = (bool)two;
+            ambiguous.Should().Throw<ValueError>()
+                .WithMessage("The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()");
+        }
+
+        /// <summary>
+        ///     NumPy 2.4.2's <c>float(np.array([5.5]))</c> raises <c>TypeError: only 0-dimensional arrays can be converted to
+        ///     Python scalars</c>. NumSharp refuses the same calls (the explicit <c>(double)</c> / <c>(int)</c> / ... operators)
+        ///     but with <see cref="IncorrectShapeException"/> and the text "only 0-d arrays can be converted to scalar", so a
+        ///     caller catching NumPy's <see cref="TypeError"/> misses it.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA14")]
+        public void ParityQa_ScalarConversion_NonZeroDim_ShouldRaiseNumPysTypeError()
+        {
+            using var one = np.array(new[] { 5.5 });
+
+            Action act = () => _ = (double)one;
+
+            act.Should().Throw<TypeError>().WithMessage("only 0-dimensional arrays can be converted to Python scalars");
+        }
     }
 }
