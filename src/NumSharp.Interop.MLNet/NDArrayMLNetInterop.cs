@@ -69,24 +69,43 @@ namespace NumSharp.Interop.MLNet
         ///     dtypes; <see cref="NPTypeCode.Char"/> → <see cref="NumberDataViewType.UInt16"/> (UTF-16 code units, the
         ///     rule the pythonnet / ONNX bridges also use).
         /// </summary>
+        /// <remarks>
+        ///     The map reads the descriptor's STORAGE class (<c>dtype.Meta.TypeCode</c>), as the ONNX Runtime bridge's
+        ///     does: a descriptor whose class has no storage in NumSharp yet (datetime64 / timedelta64) has no column type
+        ///     either, and is refused with this package's own message. <c>GetTypeCode()</c> threw NumSharp's "has no
+        ///     NumSharp storage yet" error for it, from <see cref="TryToDataViewType"/> too, which must never throw.
+        /// </remarks>
+        /// <param name="dtype">The NumSharp dtype (a <see cref="DType"/>, or anything that converts to one: an <see cref="NPTypeCode"/>, a <see cref="Type"/>, a dtype string).</param>
+        /// <returns>The ML.NET column item type an array of the dtype crosses as.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
         /// <exception cref="NotSupportedException">
         ///     <see cref="NPTypeCode.Half"/> / <see cref="NPTypeCode.Decimal"/> (no ML.NET column type — convert to
         ///     Single / Double first; the view-producing verbs do so automatically), <see cref="NPTypeCode.Complex"/>
-        ///     (ML.NET has no complex column type) or a text dtype (<c>U</c>, <c>S</c>, <c>StringDType</c>: this bridge
-        ///     maps no ML.NET text column).
+        ///     (ML.NET has no complex column type), a text dtype (<c>U</c>, <c>S</c>, <c>StringDType</c>: this bridge
+        ///     maps no ML.NET text column) or a datetime64 / timedelta64 descriptor (NumSharp has no arrays of it yet).
         /// </exception>
         public static PrimitiveDataViewType ToDataViewType(DType dtype)
         {
-            NPTypeCode code = (dtype ?? throw new ArgumentNullException(nameof(dtype))).GetTypeCode();
+            if (dtype is null)
+                throw new ArgumentNullException(nameof(dtype));
             if (!TryToDataViewType(dtype, out PrimitiveDataViewType type))
-                throw new NotSupportedException(UnsupportedExportMessage(code));
+                throw new NotSupportedException(dtype.Meta.TypeCode == NPTypeCode.Empty ? NoStorageDtypeMessage(dtype) : UnsupportedExportMessage(dtype.Meta.TypeCode));
             return type;
         }
 
-        /// <summary><see cref="ToDataViewType"/> without the throw; <c>false</c> for Half / Decimal / Complex and the text dtypes.</summary>
+        /// <summary>
+        ///     <see cref="ToDataViewType"/> without the throw: <c>false</c> for Half / Decimal / Complex, the text dtypes,
+        ///     a datetime64 / timedelta64 descriptor and <c>null</c>.
+        /// </summary>
+        /// <param name="dtype">The NumSharp dtype, or null.</param>
+        /// <param name="type">The ML.NET column item type when the result is <c>true</c>; <c>null</c> otherwise.</param>
+        /// <returns><c>true</c> when an array of the dtype crosses to ML.NET as itself (Half / Decimal arrays cross only through the view verbs' conversion).</returns>
         public static bool TryToDataViewType(DType dtype, out PrimitiveDataViewType type)
         {
-            switch (dtype?.GetTypeCode())
+            // Meta.TypeCode, not GetTypeCode(): the latter THROWS for a descriptor whose class has no storage yet
+            // (datetime64 / timedelta64), and a Try method must answer false for those. It is NPTypeCode.Empty there,
+            // which the default case refuses.
+            switch (dtype?.Meta.TypeCode)
             {
                 case NPTypeCode.Boolean: type = BooleanDataViewType.Instance; return true;
                 case NPTypeCode.Byte: type = NumberDataViewType.Byte; return true;
@@ -100,9 +119,16 @@ namespace NumSharp.Interop.MLNet
                 case NPTypeCode.Char: type = NumberDataViewType.UInt16; return true;    // UTF-16 code units
                 case NPTypeCode.Single: type = NumberDataViewType.Single; return true;
                 case NPTypeCode.Double: type = NumberDataViewType.Double; return true;
-                default: type = null; return false;                                     // Half, Decimal, Complex
+                default: type = null; return false;                                     // Half, Decimal, Complex, text, no storage
             }
         }
+
+        /// <summary>The refusal for a descriptor whose class has no NumSharp storage (datetime64, timedelta64).</summary>
+        /// <param name="dtype">The descriptor.</param>
+        /// <returns>The message: what the dtype is, why it cannot cross, and what to feed instead.</returns>
+        internal static string NoStorageDtypeMessage(DType dtype) =>
+            $"NumSharp dtype {dtype.name} has no ML.NET column type in this bridge: NumSharp has no arrays of this dtype yet, so there is " +
+            "nothing to expose. Feed the values as an integer count, for example int64.";
 
         /// <summary>
         ///     The NumSharp dtype an ML.NET column type reads back as, unwrapping a <see cref="VectorDataViewType"/> to
@@ -113,8 +139,11 @@ namespace NumSharp.Interop.MLNet
         /// </summary>
         /// <exception cref="NotSupportedException">
         ///     A text column (this bridge maps ML.NET's numeric, boolean and key columns only; it does not convert a
-        ///     <see cref="TextDataViewType"/> column into a NumSharp text array) or any raw type with no NumSharp dtype.
+        ///     <see cref="TextDataViewType"/> column into a NumSharp text array), any raw type with no NumSharp dtype, or
+        ///     <c>null</c> ("the column type is null").
         /// </exception>
+        /// <param name="type">The ML.NET column type, scalar or vector.</param>
+        /// <returns>The storage type code of the NumSharp array the column reads back as.</returns>
         public static NPTypeCode FromDataViewType(DataViewType type)
         {
             if (!TryFromDataViewType(type, out DType dtype))
@@ -123,6 +152,13 @@ namespace NumSharp.Interop.MLNet
         }
 
         /// <summary><see cref="FromDataViewType"/> without the throw.</summary>
+        /// <remarks>
+        ///     Unlike <see cref="FromDataViewType"/>, which returns the storage type code, this form gives the full
+        ///     <see cref="DType"/> (the descriptor <see cref="ToNDArray(IDataView, string)"/> gives the array it reads).
+        /// </remarks>
+        /// <param name="type">The ML.NET column type, scalar or vector, or null.</param>
+        /// <param name="dtype">The NumSharp dtype when the result is <c>true</c>; <c>null</c> otherwise.</param>
+        /// <returns><c>true</c> when the column reads back into a NumSharp array (numeric, boolean and key columns).</returns>
         public static bool TryFromDataViewType(DataViewType type, out DType dtype)
         {
             if (type is null)
@@ -163,9 +199,14 @@ namespace NumSharp.Interop.MLNet
         ///     <see cref="ushort"/>; <c>null</c> for Half / Decimal / Complex and the text dtypes (no ML.NET column type). This is the
         ///     <typeparamref name="T"/> a <see cref="VBuffer{T}"/> / <see cref="ValueGetter{T}"/> for the column uses.
         /// </summary>
+        /// <param name="dtype">The NumSharp dtype.</param>
+        /// <returns>The CLR element type of the dtype's ML.NET column, or <c>null</c> when it has none (a datetime64 / timedelta64 descriptor included).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
         public static Type ToDataViewClrType(DType dtype)
         {
-            NPTypeCode code = (dtype ?? throw new ArgumentNullException(nameof(dtype))).GetTypeCode();
+            // Meta.TypeCode: a descriptor without storage answers null like every other unmapped dtype (GetTypeCode()
+            // threw NumSharp's "no storage yet" error for it).
+            NPTypeCode code = (dtype ?? throw new ArgumentNullException(nameof(dtype))).Meta.TypeCode;
             switch (code)
             {
                 case NPTypeCode.Boolean: return typeof(bool);
