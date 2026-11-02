@@ -60,12 +60,12 @@ Status: `todo`, `doing`, `done`, `dropped` (with the reason).
 | A12 | Lifetime in real apps: dispose orders, `using` patterns of the docs, async + cancellation | The suites prove the contract in a harness; apps hold arrays differently | done (F34) |
 | A13 | Docs QA: every snippet of `interop/onnxruntime.md`, `interop/mlnet.md`, both READMEs compiles and runs; claims match code | The pages go live with the beta | done for the page snippets (F10, F17, F18; scratch `consumers/docs_snippets.cs`); README blocks = the page's or `DocExampleTests` |
 | A14 | ML.NET real use cases: train + predict on NumSharp data, OnnxTransformer, TextLoader to NumSharp, clustering, normalization | The ML.NET bridge's reason to exist | done (F01, F07) |
-| A15 | ML.NET training needs Label + Features in ONE `IDataView`: can the bridge build a multi-array view? | Training scenarios, not just scoring | doing (F01: proposal for section 5) |
+| A15 | ML.NET training needs Label + Features in ONE `IDataView`: can the bridge build a multi-array view? | Training scenarios, not just scoring | done (P1 written; the example shows the current route) |
 | A16 | Both bridges in one project: `Postprocess` and extension-method name clashes | A real app uses ORT and ML.NET together | done (F16) |
 | A17 | CI coverage of the two packages as released (interop-test job, the packs, consumer steps) | The tag's gate | done (F26, F27: the last CI run of journey4, 2026-10-15, had `interop-test` green on all three OSes and `test` red on ubuntu / macOS, the known Core blockers) |
 | A18 | Metadata and release text: descriptions, tags, project URLs, notes section 7A accuracy | First impression on nuget.org | done (F23, F24) |
 | A19 | Dependency floors: the 1.16.0 / 2.0.0 floors against what consumers really install | The ranges are the contract | done (F22 floors, F26 newest) |
-| A20 | Robustness: malformed models, huge or negative dims, odd strings (NUL, invalid UTF-8), unusual map keys | Inference services meet bad input | todo |
+| A20 | Robustness: malformed models, huge or negative dims, odd strings (NUL, invalid UTF-8), unusual map keys | Inference services meet bad input | done (F37, F38; NUL / invalid UTF-8 / map keys / 2 GB / empty outputs are already in the suites: `TextTests`, `NonTensorTests`, `BoundaryTests`, `SessionRunEdgeTests`) |
 | A21 | `StringDType` (T) arrays through the ORT bridge | strings landed T; the bridge's TODO is due; another session saw an InvalidCastException | done (F03 fixed, F10, F11) |
 | A22 | ML.NET text columns (`ReadOnlyMemory<char>`) against NumSharp's text dtypes | String labels and FeaturizeText are everyday ML.NET | todo (F02 fixed the refusal; the design is for section 5) |
 | A23 | Examples: an ORT example and an ML.NET example in the regular NuGet form, proven from a local feed | The brief asks for examples | done (section 6; F28) |
@@ -117,24 +117,92 @@ Severity: **blocker** (cannot ship), **high** (a real user hits it), **medium**,
 | F34 | info | both | Concurrency and async on a real model (MobileNetV2, ORT 1.31.1, source build): 8 threads x 24 runs on ONE session, mixing `Run` copies, zero-copy outputs, `RunInto` and `AsOrtValue` + ORT `Run`, every output equal to the sequential one (637 ms), live counters 0/0; 8 concurrent `RunIntoAsync` all equal; `RunOptions.Terminate` 30 ms into a 64-image run faults the task after 85 ms with ORT's "Exiting due to terminate flag being set to true" and leaves 0/0; input and output disposed while the run is in flight: the run completes and a view of the output reads the result. ML.NET: 8 threads x 40 `Transform` + `ToNDArray` over one shared view equal the single-threaded result. | scratch `probes/concurrency_async.cs` | closed (works) |
 | F35 | medium | MLNet | `NDArrayMLNetInterop.TryToDataViewType(np.dtype("M8[ns]"), out _)` THREW (`NotSupportedException: dtype dtype('<M8[ns]') has no NumSharp storage yet ...`): a Try method that throws for a dtype it does not map. `ToDataViewType` and `ToDataViewClrType` threw the same Core message (the latter is documented to answer null). The maps called `GetTypeCode()`, which throws for a descriptor without storage; the ONNX Runtime bridge had fixed exactly this in its own maps (`Meta.TypeCode`, its `DescriptorsWithoutStorage_AreUnmappedDtypes_NotErrors` test). | scratch `probes/dtype_maps_nostorage.cs` (before / after) | fixed (this commit): the ML.NET maps read `Meta.TypeCode`, `ToDataViewType` refuses with a bridge message (`NoStorageDtypeMessage`); test `DtypeMapEdgeTests.DescriptorsWithoutStorage_AreUnmappedDtypes_NotErrors` |
 | F36 | low | MLNet (docs) | 24 documentation gaps on 9 public members of the ML.NET bridge (the ORT bridge had none): `ToDataViewType`, `TryToDataViewType`, `FromDataViewType`, `TryFromDataViewType`, `ToDataViewClrType`, both `ToNDArray(IDataView, ...)`, `ToNDArray<T>(VBuffer<T>)` and `AsNDArray<T>(VBuffer<T>)` had a summary but no `<param>` / `<returns>` / `<typeparam>` (and the import verbs no `ArgumentNullException`): the IntelliSense of a first release. | scratch `probes/xmldoc_audit.cs` (reflection over the public surface against the packed XML) | fixed (this commit): 0 gaps in both bridges |
+| F37 | low | MLNet | A zero-WIDTH array - `(R, 0)`, `(0,)`, `(0, 0)` - becomes a vector column of size 0, and in ML.NET a `VectorDataViewType` of size 0 MEANS variable length (`IsKnownSize == false`). The bridge round-trips it (`ToNDArray` gives `(5, 0)` back), but every fixed-size consumer refuses it with ML.NET's own confusing text (`NormalizeMinMax`: "Wrong column type for input column. Expected: Single, Double, Vector of Single or Vector of Double. Got: Vector<Single>."). A 1-D `(0,)` array is one row of an empty vector (`ToNDArray` gives `(1, 0)`). A zero-ROW array `(0, 4)` is fine (`Vector<Single, 4>`, 0 rows, through `NormalizeMinMax`). | scratch `probes/robustness.cs` | deferred (P13) |
+| F38 | info | OnnxRuntime | Edges that behave as Python's onnxruntime does: inputs that share a symbolic dimension but disagree (MiniLM `input_ids (1, 8)` with `attention_mask (1, 7)`) reach ORT and fail inside the graph (`Attempting to broadcast an axis by a dimension other than 1. 7 by 8`; Python checks no symbol consistency either); an empty sequence `(1, 0)` runs (`last_hidden_state (1, 0, 384)`); int32 ids into int64 inputs cast under `safe` (the BERT case the docs name). | scratch `probes/robustness.cs` | closed |
 | F15 | info | OnnxRuntime | Real models, bit-exact parity: ImageNet SqueezeNet 1.1 / MobileNetV2 / ResNet50 v2 (preprocessing bytes == NumPy; logits bytes == Python onnxruntime 1.29.0; top-5 equal); all-MiniLM-L6-v2 sentence embeddings (three int64 inputs; `last_hidden_state` bytes == Python; NumSharp mean pooling + L2 norm bytes == NumPy; cosine-similarity matrix max diff 2.98e-7, from the managed matmul's summation order); scikit-learn LogisticRegression / RandomForest (string labels) / GradientBoosting (labels, probabilities, regression bytes == Python; ZipMaps through ORT's `Run` + `ToMaps`). | scratch `consumers/ort_vision.cs`, `ort_text.cs`, `ort_sklearn.cs` + `realdata/make_*_ref.py` | closed (works) |
 
 ## 5. For the owner (deferred, with what was proven)
 
 Each entry: the finding, what was proven, the options, and a recommendation. Nothing here was changed.
 
-- **P1 (F01) ML.NET training views.** Proposal pending (A15).
-- **P2 (F09) Non-tensor outputs in the default `Run` fetch.** Proposal pending.
-- **P3 (F11) The dtype map's answer for `StringDType`.** Proposal pending.
-- **P4 (F04) The NumSharp dependency range.** Proposal pending.
-- **P5 (F05, F06) First-run experience in file-based apps.** Proposal pending.
-- **P6 (F16) `Postprocess` in both bridges.** Proposal pending (decide before the tag: names freeze).
-- **P7 (F18) `RunAsync` and run-time dimensions.** Proposal pending.
-- **P8 (F20) Memory pressure for `ToOrtValue` results.** Proposal pending.
-- **P9 (F25) The nuget.org API key and the three new ids.** Proposal pending.
-- **P10 (F26) CI's "current" legs and the newest dependency versions.** Proposal pending.
-- **P11 (F29, F30) Use-after-dispose of ORT objects ends the process.** Proposal pending.
-- **P12 (F32, F33) Up-front checks of the feed: missing inputs, unknown outputs.** Proposal pending.
+- **P1 (F01) ML.NET views of several arrays - training, and scoring with the standard recipe. Decide for 0.80.0.**
+  - Proven: `X.AsDataView("Features")` + a separate `y` cannot train (`Could not find label column 'Label'`); the only
+    route is `np.hstack(X, y)` as scalar columns (a copy, the label forced into the features' dtype) +
+    `ConvertType("Label")` + `Concatenate` (`consumers/ml_train.cs`; the example writes it as a pattern). A model of
+    ML.NET's Iris recipe (`MapValueToKey("Label")` in the chain) cannot even SCORE a features-only view
+    (`Could not find input column 'Label'`); `((IEnumerable<ITransformer>)model).Last()` works around it.
+  - Root: `NDArrayDataView` holds one `_fed` / `_slice` / `_itemsize`; every `ColumnPlan` reads that one array.
+  - Option A (recommended): a dictionary form, pandas' `DataFrame({"Features": X, "Label": y})` -
+    `AsDataView(IReadOnlyDictionary<string, NDArray> columns)` and the `ToDataView` twin: a 1-D `(R,)` array is a
+    scalar column, a 2-D `(R, C)` array a vector column of width C, every array its own dtype, all with the same R
+    (refused up front otherwise). The change is local to `NDArrayDataView`: each plan gets its own array, pin, base
+    address and itemsize; each pin is released with the view; the cursor is unchanged per column. Additive, no
+    breaking change. Option B: document the hstack route only (the example already shows it).
+- **P2 (F09, F33) Non-tensor outputs and unknown output names in `Run`.**
+  - Proven: `session.Run(dict)` with the default fetch runs a scikit-learn classifier, converts `output_label`, then
+    throws "ToNDArray needs a dense tensor OrtValue ... ToNDArrays()" - naming a verb the caller never called, not the
+    output, and readers the caller has no value for. An unknown output name reaches ORT ("Output name: 'logits' is not
+    in the metadata"), where an unknown input gets the bridge's "its inputs are [data]". `RunInto` / `RunAsync`
+    already refuse a non-tensor output before the run, with its name.
+  - Option A (recommended, small): before the run, check every fetched name against `session.OutputMetadata` - an
+    unknown name gets the input-style message with the list of outputs; a declared non-tensor (`IsTensor == false`)
+    gets "output 'output_probability' is ONNX_TYPE_SEQUENCE, not a tensor: leave it out of outputNames, or fetch it
+    with ORT's own Run and read it with ToMaps / ToMap / ToNDArrays". `SessionRunEdgeTests`' four message pins move
+    with it; `optional(tensor)` outputs need a rule (treat them as tensors and keep the post-run refusal for an empty
+    one). Option B: the owner's C2a (non-tensor outputs through `Run`, a disposable typed result) supersedes A later.
+- **P3 (F11) `TryToTensorElementType(StringDType)` answers `String`.** Recommended: keep the answer (`String` is the
+  element type such data has) and say in the remarks that the crossing verbs refuse a StringDType array; switch to
+  `false` only if the maps are meant to answer "crosses today". (Doc-only either way; not done here because the
+  intended meaning of the map is the owner's.)
+- **P4 (F04) The NumSharp dependency range of packages that use Core internals.** Proven: both bridges call Core
+  internals (`ArraySlice.WrapShared`, `NDArray.Storage`) and depend on `NumSharp >= 0.80.0-beta1`, so NuGet lets a user
+  move NumSharp alone to a version whose internals differ (the 0.70.0 OpenBLAS package references 8 internals; all 8
+  still resolve in 0.80 - luck, not a contract). Options: an exact pin `[0.80.0-beta1]` (safest; the family is
+  released together anyway), a minor window `[0.80.0-beta1, 0.81.0)`, or keep. Recommended: the exact pin for every
+  package that uses internals, set once in the shared props.
+- **P5 (F05, F06) The first run in a .NET 10 file-based app.** Proven: `dotnet run app.cs` defaults to
+  `PublishAot=true`, and NumSharp's first IL kernel throws `PlatformNotSupportedException: Dynamic code generation is
+  not supported`; `#:property PublishAot=false` fixes it. Options: a build warning from `build/NumSharp.targets` when
+  `PublishAot` is true (it also catches a real NativeAOT publish), and a line in the getting-started docs. NDW012 on
+  ordinary consumer code (4 warnings of ~600 characters in a 40-line program) is a design choice; consider `info`
+  severity for package consumers.
+- **P6 (F16) Two `Postprocess` classes. Decide before the tag: names freeze.** Proven: an app importing both bridges'
+  namespaces gets CS0104 on every `Postprocess.X` call (it hit this run's own probe); the classes are the same source.
+  Options: (a) keep and document the `using` alias; (b) one class in Core (for example `NumSharp.Postprocess`, or the
+  SciPy names `softmax` / `log_softmax` / `expit` under a module), both bridges drop theirs; (c) a shared tiny
+  package. Recommended: (b), the only option without a duplicate public type.
+- **P7 (F18) `RunAsync` for models with a dynamic batch.** Proven: only 1 of 8 real models (SqueezeNet, fixed batch)
+  can use `RunAsync`; the docs' own ResNet50 is refused. Every output symbol of the zoo / Hugging Face exports here
+  also names an input dimension (`N`, `batch_size`, `sequence_length`). Recommended: bind named symbols from the fed
+  inputs' shapes before allocating (a symbol bound twice to different extents is refused up front); unnamed dims
+  (skl2onnx's) stay refused with today's advice. ORT's managed `RunAsync` needs pre-allocated outputs, so there is no
+  "let ORT allocate" route.
+- **P8 (F20) `ToOrtValue` results and memory pressure.** The docs now say to dispose it, with the measured peak.
+  Reporting pressure for ORT-allocated values would need a finalizable token per value (it cannot see `Dispose`, so it
+  would over-report until a collection, and F19 measured the gen2 collections that pressure induces in small heaps).
+  Recommended: docs only (done).
+- **P9 (F25) The release job and three new package ids.** Before tagging, check that the nuget.org API key in
+  `NUGETAPIKEY` may push NEW ids matching `NumSharp.Interop.*` ("Push new packages and package versions", glob
+  `NumSharp*`). Optionally let the push loop report every failure at the end instead of stopping at the first.
+- **P10 (F26) CI's "current" versions.** Proven locally: Microsoft.ML 5.0.1 (a new major, inside the range) 209 / 209
+  on net8.0 and net10.0; ONNX Runtime 1.31.1 312 / 312. Recommended: add an ML.NET 5.0.1 leg (keep 4.0.2), move ORT's
+  current leg to 1.31.1, and update the "Verified on" lines (docs, READMEs, notes, csproj comments).
+- **P11 (F29, F30) Use-after-dispose of ORT objects ends the process.** Proven: `Run` on a disposed session and
+  `ToNDArray` of a disposed bare `OrtValue` are access violations (raw ORT too). Both types carry a private
+  `bool _disposed` at both ends of the range (1.16.0 metadata: `InferenceSession._disposed`, `OrtValue._disposed`;
+  1.31.1: the session's by metadata, the value's in the vendored source). Options: (a) a compiled getter per field,
+  built once (the ML.NET bridge's `VBufferAccessor` is the precedent), checked before every native call ->
+  `ObjectDisposedException`; a missing field disables the check, never the call; (b) report upstream (ORT should throw
+  `ObjectDisposedException`); (c) document. Recommended: (b) now, (a) for the session at least - a disposed singleton
+  session in a service is a crash today.
+- **P12 (F32, F33) Up-front checks of the feed.** Recommended: port Python onnxruntime's `_validate_input` - every input
+  whose type is not optional must be fed - with Python's text ("Required inputs ([token_type_ids]) are missing from
+  input feed ([input_ids, attention_mask])."); it refuses, as Python does, a model whose graph ignores a declared input,
+  which runs today. Fold in P2's output-name check, and give complex -> real its own advice (`np.real` / `np.imag`, as
+  the dtype maps already say) instead of "relax the rule".
+- **P13 (F37) Zero-width arrays through ML.NET.** ML.NET reads a vector size of 0 as "variable length", so a `(R, 0)`
+  array exposes a variable-length column every fixed-size consumer refuses with ML.NET's own confusing text.
+  Recommended: refuse width 0 in `ValidateVectorColumn` with the reason (low priority: a matrix with no features).
 
 ## 6. Examples
 
@@ -161,3 +229,4 @@ proven against the local feed of this run's packs (`-p:RestoreAdditionalProjectS
 | 23:00 | A17 + A27 (Linux all legs green, F27), A19 (Microsoft.ML 5.0.1 and ORT 1.31.1 green locally but outside CI, F26), A23: the two examples written and proven on Windows and Linux (F28: SkiaSharp, not ImageSharp); both docs pages link them. Committed `c51b9d39`. |
 | 23:04 | A25: 30 mistakes probed; two use-after-dispose process crashes (F29 session, F30 bare OrtValue: ORT's own, unguarded), a missing input failing inside the graph (F32), two weak messages (F33); the ML.NET page now says trainers want float32 (F31). |
 | 23:12 | A26 + A12 (F34: concurrency, Terminate and dispose-in-flight all correct), A28 (F35 ML.NET Try map threw for datetime64 descriptors, F36 24 doc gaps): both fixed. |
+| 23:17 | A20 (F37 zero-width ML.NET views, F38 edges as Python), section 5 written: P1-P13 with evidence, options and a recommendation each. |
