@@ -319,5 +319,28 @@ namespace NumSharp.Tests
             ((Complex)prod.GetValue()).Imaginary.Should().Be(1.2e31);
             ((Complex)cumprod.GetValue(3)).Imaginary.Should().Be(1.2e31);
         }
+
+        // ------------------------------------------------------------------
+        // QA-11 — np.compress checks a too-long condition even when an earlier axis is empty
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     <c>np.compress([True, False, True], np.zeros((0, 2)), axis=1)</c> returns an empty <c>(0, 2)</c> array in NumPy:
+        ///     compress is <c>take(a, nonzero(condition), axis)</c>, and <c>PyArray_TakeFrom</c> validates each index inside a
+        ///     loop over the dimensions BEFORE the axis, which runs zero times when one of them is 0 (NumSharp's own
+        ///     <c>np.take</c> already follows that). NumSharp's compress checks the condition's tail first
+        ///     (<c>UnmanagedStorage.ItemSelection.cs</c>, "OOB-True detection") and throws
+        ///     <see cref="IndexOutOfRangeException"/> "index 2 is out of bounds for axis 1 with size 2".
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA11")]
+        public void ParityQa_Compress_EmptyLeadingAxis_LongCondition_ShouldReturnEmpty()
+        {
+            using var cond = np.array(new[] { true, false, true });
+            using var a = np.zeros(new Shape(0, 2));
+
+            using var r = np.compress(cond, a, axis: 1);
+
+            r.shape.Should().Equal(0L, 2L);
+        }
     }
 }
