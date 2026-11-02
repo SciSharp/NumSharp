@@ -804,5 +804,41 @@ namespace NumSharp.Tests
             rows.shape.Should().Equal(new long[] { 2, 1 });
             rows.GetInt64(1, 0).Should().Be(4);
         }
+
+        // ------------------------------------------------------------------
+        // QA-24 — float16 arctan2 / log1p / expm1 round a float64 result once where NumPy's HALF loops go through float32
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy computes float16 <c>arctan2</c>, <c>log1p</c> and <c>expm1</c> in float32 (<c>atan2f</c> /
+        ///     <c>npy_log1pf</c> / <c>npy_expm1f</c>) and rounds that float32 result to float16, so a float32 result on a
+        ///     float16 rounding midpoint ties to even. NumSharp computes them in float64 (<c>EmitATan2Operation</c>'s
+        ///     <c>Math.Atan2</c>; the expm1 / log1p "double bridge", whose comment calls it byte-identical to NumPy's half
+        ///     loop) and rounds once, so those inputs land on the other neighbour: over every float16 pattern (arctan2
+        ///     against a seeded permutation) 13 arctan2, 2 log1p and 2 expm1 results differ by one float16 ULP.
+        ///     <c>np.arctan2(float16 26.17, float16 -0.00011706)</c> is <c>1.57</c> (0x3E48; float32 <c>1.5708008</c> is the
+        ///     midpoint) where NumSharp gives <c>1.571</c>; <c>np.log1p(float16 0.00587)</c> is <c>0.00585</c> (0x1DFE);
+        ///     <c>np.expm1(float16 -0.663)</c> is <c>-0.4849</c> (0xB7C2). Rounding the float64 result to float32 first
+        ///     reproduces NumPy on all 65,536 inputs for arctan2 and log1p (expm1 needs NumPy's float32 routine itself).
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA24")]
+        public void ParityQa_Float16Arctan2Log1pExpm1_ShouldComputeInFloat32LikeNumPysHalfLoops()
+        {
+            static NDArray H(ushort bits) => np.array(new[] { BitConverter.UInt16BitsToHalf(bits) });
+            static ushort Bits(NDArray r) => BitConverter.HalfToUInt16Bits((Half)r.GetValue(0));
+
+            using var y = H(0x4E8B);
+            using var x = H(0x87AC);
+            using var p = H(0x1E03);
+            using var q = H(0xB94E);
+
+            using var arctan2 = np.arctan2(y, x);
+            using var log1p = np.log1p(p);
+            using var expm1 = np.expm1(q);
+
+            Bits(arctan2).Should().Be(0x3E48);
+            Bits(log1p).Should().Be(0x1DFE);
+            Bits(expm1).Should().Be(0xB7C2);
+        }
     }
 }
