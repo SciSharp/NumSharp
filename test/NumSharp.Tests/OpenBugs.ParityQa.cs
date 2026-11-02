@@ -864,5 +864,37 @@ namespace NumSharp.Tests
 
             ((Complex)r.GetValue(0)).Real.Should().Be(4.365396932825163e-13);
         }
+
+        // ------------------------------------------------------------------
+        // QA-26 — the float32 / float64 value sort puts every -0.0 before every +0.0
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's comparators treat <c>-0.0</c> and <c>+0.0</c> as equal, so a stable sort keeps their input order:
+        ///     <c>np.sort([0.0, -0.0, 1.0, -0.0, 0.0], kind='stable')</c> is <c>[0.0, -0.0, -0.0, 0.0, 1.0]</c> (timsort), and
+        ///     the default kind leaves <c>[0.0, -0.0]</c> as it is. NumSharp's float value sort (<c>AxisSort.SortLineF32</c>
+        ///     / <c>SortLineF64</c>) radix-sorts the raw-bit key <c>FKey32</c> / <c>FKey64</c>, which orders <c>-0.0</c> below
+        ///     <c>+0.0</c> (it must rebuild each value from its key), so every kind returns <c>[-0.0, -0.0, 0.0, 0.0, 1.0]</c>
+        ///     and <c>ndarray.sort()</c> does the same. The argsort was moved to a folded key for exactly this reason
+        ///     (<c>FArgKey32</c>'s remarks: <c>np.argsort([0.0, -0.0])</c> was <c>[1, 0]</c>); the value sort was not. The
+        ///     float16 and complex value sorts (comparison sorts) match.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA26")]
+        public void ParityQa_SortFloat_SignedZeros_ShouldKeepInputOrderLikeNumPysStableSort()
+        {
+            using var a = np.array(new[] { 0.0, -0.0, 1.0, -0.0, 0.0 });
+            using var pair32 = np.array(new[] { 0.0f, -0.0f });
+
+            using var stable = np.sort(a, kind: "stable");
+            using var stable32 = np.sort(pair32, kind: "stable");
+
+            // NumPy: [0.0, -0.0, -0.0, 0.0, 1.0] and [0.0, -0.0].
+            double.IsNegative((double)stable.GetValue(0)).Should().BeFalse();
+            double.IsNegative((double)stable.GetValue(1)).Should().BeTrue();
+            double.IsNegative((double)stable.GetValue(2)).Should().BeTrue();
+            double.IsNegative((double)stable.GetValue(3)).Should().BeFalse();
+            float.IsNegative((float)stable32.GetValue(0)).Should().BeFalse();
+            float.IsNegative((float)stable32.GetValue(1)).Should().BeTrue();
+        }
     }
 }
