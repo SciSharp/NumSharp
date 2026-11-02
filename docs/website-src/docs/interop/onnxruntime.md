@@ -152,6 +152,24 @@ What each call does for you, from the session's metadata:
   and the value it returns lies in the fed memory. `RunInto` writes the fed values into your array, the copy
   form copies them, and the zero-copy form returns a counted view of the fed buffer.
 
+**A model exported by ML.NET.** `mlContext.Model.ConvertToOnnx(model, data, stream)` declares every column
+of the training data as a model input - the label too, which scoring never reads - and every column as an
+output (`Score.output`, `PredictedLabel.output`, ...). Feed each declared input; a label you do not have is
+fed as zeros of its shape, and you fetch the outputs you need by name:
+
+```csharp
+var feed = new Dictionary<string, NDArray>
+{
+    ["f0"] = x[":, 0:1"], ["f1"] = x[":, 1:2"], ["f2"] = x[":, 2:3"], ["f3"] = x[":, 3:4"],   // (R, 1) each
+    ["Label"] = np.zeros(new Shape(x.shape[0], 1), np.float32),                              // declared, unread
+};
+using NDArray score = session.Run(feed, new[] { "Score.output" })["Score.output"];         // (R, 1)
+```
+
+Left out, the label is not missed until ONNX Runtime runs the graph, and its error names a node of the
+exported graph, not the input (`Non-zero status code returned while running Identity node ... Trying to get a
+TensorSeq, but got: (null)`).
+
 ## Asynchronous runs
 
 ```csharp
