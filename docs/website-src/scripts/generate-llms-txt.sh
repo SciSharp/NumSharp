@@ -84,7 +84,7 @@ parse_toc() {
 # Generate llms.txt from the published top-level and fundamentals guides, so the text guide is not omitted.
 # Arguments: none; reads SRC_DIR, OUTPUT_DIR and SITE_URL from the script configuration.
 # Returns: 0 after writing the summary. Filesystem/tool failures terminate the script under set -e.
-# The explicit fundamentals glob includes the string guide without exposing the unreleased interop pages.
+# The explicit fundamentals glob includes the string guide; the interop pages are reached through the site's toc, not listed here.
 generate_llms_txt() {
     local output="$OUTPUT_DIR/llms.txt"
 

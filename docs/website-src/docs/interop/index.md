@@ -163,6 +163,8 @@ own gates.
 | **Pandas containers** - `DataFrame` / `Series` / `Index` / extension arrays through verified `to_numpy` projections | `NumSharp.Interop.pythonnet` | ✅ when Pandas exposes stable storage; Auto copies otherwise | [Pandas](pandas.md) |
 | **Python buffer consumers** - `torch.frombuffer`, Pillow, Arrow, OpenCV, stdlib | `NumSharp.Interop.pythonnet` | ✅ `memoryview` / PEP 3118 | [Any library via np.frombuffer](np-frombuffer.md) |
 | **Numpy.NET coexistence** - drive real numpy's C# API over NumSharp buffers | + `Numpy.Bare` | ✅ `PyObject` handoff | [Numpy.NET](numpy-net.md) |
+| **ONNX Runtime inference** - `NDArray` ⇄ `OrtValue` / `DenseTensor<T>`, `session.Run(NDArray)` / `RunInto` / `RunAsync`, fixed-width text ⇄ string tensors, softmax / argmax / top-k on the outputs | `NumSharp.Interop.OnnxRuntime` | ✅ `OnnxCodecMode.Auto` feeds a C-contiguous input in place (else a copy the handle owns), outputs as owning copies or owning views; text always copies; no Python, no GIL | [ONNX Runtime](onnxruntime.md) |
+| **ML.NET pipelines** - `NDArray` ⇄ `IDataView` / `VBuffer<T>`, `transformer.Transform(nd.AsDataView(...)).ToNDArray("Score")`, softmax / argmax / top-k on the outputs | `NumSharp.Interop.MLNet` | ✅ `AsDataView` reads the buffer lazily through its strides (any layout); `vbuffer.AsNDArray<T>()` views a dense `VBuffer`; `ToVBuffer` and output columns are copies; text columns are not mapped; no Python | [ML.NET](mlnet.md) |
 | **System.Numerics.Tensors** - `NDArray` ⇄ `Tensor<T>` / `TensorSpan<T>` / `ReadOnlyTensorSpan<T>` | `NumSharp.Interop.System.Numerics.Tensors` | ✅ `AsTensorSpan` shares **any** non-negative-stride layout (strided/transposed/broadcast); `AsNDArray` views a tensor's buffer; supported dtypes cross as their CLR element type; text is not a tensor-buffer mapping; no Python or native code | [System.Numerics.Tensors](system-numerics-tensors.md) |
 | **`.npy` / `.npz` files** - `np.save` / `np.load`, byte-for-byte identical to NumPy's own writer | `NumSharp` (core) | - files, not memory | [NumPy compliance](../compliance.md#npy-and-npz-interoperability) |
 
@@ -207,6 +209,10 @@ above applies to it; it has [its own page](openblas.md).
 - [Numpy.NET](numpy-net.md) - running SciSharp's numpy binding over NumSharp memory
 - [OpenBLAS](openblas.md) - the compute-side sibling: a native BLAS binary behind
   `np.dot` / `np.matmul`, faster float32/float64 matrix products
+- [ONNX Runtime](onnxruntime.md) - feed an `NDArray` to `InferenceSession.Run` without copying, read
+  outputs back, post-process with `np.*`
+- [ML.NET](mlnet.md) - expose an `NDArray` to a `Microsoft.ML` pipeline as an `IDataView`, read a
+  transformer's output column back into an `NDArray`
 - [System.Numerics.Tensors](system-numerics-tensors.md) - view an `NDArray` as a `TensorSpan<T>` over the
   same buffer (any non-negative-stride layout), read a `Tensor<T>` back into an `NDArray`
 - [Buffering & Memory](../buffering.md) - how NumSharp's own storage, slices and reference

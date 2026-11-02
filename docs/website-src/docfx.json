@@ -26,7 +26,7 @@
     "content": [
       {
         "files": ["**/*.{md,yml}"],
-        "exclude": ["_site/**", "obj/**", "scripts/**", "filterConfig.yml", "templates/**", "api/overwrites/**", "docs/data/**", "docs/interop/onnxruntime.md", "docs/interop/mlnet.md"]
+        "exclude": ["_site/**", "obj/**", "scripts/**", "filterConfig.yml", "templates/**", "api/overwrites/**", "docs/data/**"]
       },
       {
         "src": "../../refs/data/benchmark/latest",

@@ -14,44 +14,44 @@ paths:
 
 ## Unreleased packages
 
-`NumSharp.Interop.OnnxRuntime`, `NumSharp.Interop.MLNet` and `NumSharp.Interop.ParquetNet` (Parquet columns decoded
-straight into `NDArray` buffers) are unreleased: they build, test and merge like everything else, but no NuGet package is
-created and no release or public documentation mentions them. Unreleased is exactly three things:
-1. No package. Each csproj sets `<IsPackable>false</IsPackable>`, which makes `dotnet pack` a silent no-op (exit 0, no
-   `.nupkg`, not even a compile). CI still names all three in the signing check and in `build-nuget`'s Build and Pack
-   steps, and `create-release` lists exactly the `.nupkg` files that were packed (ids read from each nuspec), so
-   packing, signing, publishing and the release text all follow that one property.
-2. No docs. `docs/website-src/docfx.json` excludes `docs/interop/{onnxruntime,mlnet}.md`, because DocFX publishes every
-   `.md` under `docs/website-src`, toc entry or not. `toc.yml`, `interop/index.md`, `advanced/index.md`,
-   `absolute-basics.md` and the System.Numerics.Tensors page do not name or link them. ParquetNet has no page (its
-   `PackageProjectUrl` points at the page to write when it ships).
-3. Gated. The `interop-test` job builds and tests all three (ONNX Runtime and ML.NET at their floor and current
-   versions, ParquetNet on both TFMs). Nothing else compiles them in CI. ParquetNet's text edge is `TextColumnTests`,
-   over a pyarrow-written fixture (`test/oracle/gen_parquet_text_fixture.py`): the loaders skip text columns, the direct
-   readers refuse them; under Parquet.Net 6 a text column's CLR type is `ReadOnlyMemory<char>`, so the bridge's text
-   refusal never fires (`[OpenBugs]`). Its numeric edge is `NumericColumnParityTests`, over pyarrow fixtures
-   (`test/oracle/gen_parquet_numeric_fixture.py`: every width at its extremes in four writer configurations, a zero-row
-   file, wide decimals, a float16 column): numpy's `to_numpy()` view bit for bit across row groups, both faces streaming
-   the same bytes, and the null policy against numpy's NaN / None widening (`default(T)`, a per-call fill never cached,
-   Raise only where a null is actually read). Two `[OpenBugs]`: `ParquetConvert.ResolveFill` converts the fill for every
-   column before any null is met (a NaN fill breaks every integer and decimal column, the required ones included), and
-   converts it with `Convert.ChangeType` (a fraction ROUNDS, `"7"` is no Boolean) where numpy's setitem and `np.full`
-   truncate. Parquet.Net 6.1.0's own limits are `[Misaligned]`: data page v2 RLE booleans throw
+`NumSharp.Interop.ParquetNet` (Parquet columns decoded straight into `NDArray` buffers) is unreleased: it builds, tests
+and merges like everything else, but no NuGet package is created and no release or public documentation mentions it.
+`NumSharp.Interop.OnnxRuntime` and `NumSharp.Interop.MLNet` were unreleased the same way from 2026-10-02 and ship from
+0.80.0-beta1 (the owner's decision of 2026-11-02). Unreleased is exactly three things:
+1. No package. The csproj sets `<IsPackable>false</IsPackable>`, which makes `dotnet pack` a silent no-op (exit 0, no
+   `.nupkg`, not even a compile). CI still names it in the signing check and in `build-nuget`'s Build and Pack steps,
+   and `create-release` lists exactly the `.nupkg` files that were packed (ids read from each nuspec), so packing,
+   signing, publishing and the release text all follow that one property.
+2. No docs. ParquetNet has no page (its `PackageProjectUrl` points at the page to write when it ships). DocFX publishes
+   every `.md` under `docs/website-src`, toc entry or not, so a hidden package's page needs a `docfx.json` exclude.
+3. Gated. The `interop-test` job builds and tests it on both TFMs; apart from `build-nuget`'s Build step on a release
+   tag (which compiles it so that releasing it needs no workflow edit), nothing else compiles it in CI. Its text edge is
+   `TextColumnTests`, over a pyarrow-written fixture (`test/oracle/gen_parquet_text_fixture.py`): the loaders skip text
+   columns, the direct readers refuse them; under Parquet.Net 6 a text column's CLR type is `ReadOnlyMemory<char>`, so
+   the bridge's text refusal never fires (`[OpenBugs]`). Its numeric edge is `NumericColumnParityTests`, over pyarrow
+   fixtures (`test/oracle/gen_parquet_numeric_fixture.py`: every width at its extremes in four writer configurations, a
+   zero-row file, wide decimals, a float16 column): numpy's `to_numpy()` view bit for bit across row groups, both faces
+   streaming the same bytes, and the null policy against numpy's NaN / None widening (`default(T)`, a per-call fill
+   never cached, Raise only where a null is actually read). Two `[OpenBugs]`: `ParquetConvert.ResolveFill` converts the
+   fill for every column before any null is met (a NaN fill breaks every integer and decimal column, the required ones
+   included), and converts it with `Convert.ChangeType` (a fraction ROUNDS, `"7"` is no Boolean) where numpy's setitem
+   and `np.full` truncate. Parquet.Net 6.1.0's own limits are `[Misaligned]`: data page v2 RLE booleans throw
    `DivideByZeroException`, DELTA_BINARY_PACKED int8 / uint8 / decimal are refused, a float16 column refuses the whole
    schema, a decimal past 28-29 digits rounds or overflows, and the decimal's trailing zeros are dropped.
 
-Keep them out of release notes (`docs/releases/RELEASE_<version>.md`; when that file is missing, GitHub generates the
-notes from merged PR titles, so PR titles stay free of them too), the website, the root README, and the shipped XML docs
+Keep it out of release notes (`docs/releases/RELEASE_<version>.md`; when that file is missing, GitHub generates the
+notes from merged PR titles, so PR titles stay free of it too), the website, the root README, and the shipped XML docs
 and README of every released package: a released package's IntelliSense must not point at a bridge nobody can install.
-To release one: set its `IsPackable` back to `true` (or delete the property), drop its page from the docfx.json exclude,
-and restore its `toc.yml` entry and its `interop/index.md` row and "See also" link from git history. CI needs no edit.
+To release it: delete its `IsPackable` property, write its page and add its `toc.yml` entry and its `interop/index.md`
+row and "See also" link (the two packages released for 0.80.0-beta1 got theirs back from git history). CI needs no
+edit.
 
 ## The conversion packages
 
 None of these computes NumSharp operations: each converts tensors between NumSharp and another library, so none has a
 `TensorEngine` seam, a `[ModuleInitializer]` or a native asset (like the pythonnet bridge).
 
-### `NumSharp.Interop.OnnxRuntime` (unreleased)
+### `NumSharp.Interop.OnnxRuntime` (released from 0.80.0-beta1)
 
 - `NDArrayOnnxInterop` verbs, `InferenceSessionExtensions`, `Postprocess`. Sources (`src/NumSharp.Interop.OnnxRuntime/`):
   `NDArrayOnnxInterop.{cs,Export.cs,Import.cs,NonTensor.cs,Text.cs}` (dtype maps, the export and import verbs,
@@ -119,12 +119,12 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   runs it against ONNX Runtime 1.16.0 (the async tests Inconclusive, the refusal tested) and 1.31.0 (the only leg that
   runs the async tests: never set it below 1.30.0), with no Python. Mutation runs restore a file from memory only: copy
   untracked files out of the tree before one.
-- Docs: `docs/website-src/docs/interop/onnxruntime.md` (excluded from the site).
+- Docs: `docs/website-src/docs/interop/onnxruntime.md` (on the site's Interoperability toc since 0.80.0-beta1).
 - Example: `examples/NumSharpOnnxRuntimeExample` (regular csproj form over the published 0.80.0-beta1; no workflow runs
   it): MobileNetV2 downloaded on the first run, SkiaSharp decoding (ImageSharp 3.1.x restores with security advisories
   and 3.2+ needs a license key to build), NumSharp preprocessing into one NCHW batch, `Postprocess`, `RunInto`.
 
-### `NumSharp.Interop.MLNet` (unreleased)
+### `NumSharp.Interop.MLNet` (released from 0.80.0-beta1)
 
 - `NDArrayMLNetInterop` verbs, `NDArrayDataView`, `Postprocess`. Sources (`src/NumSharp.Interop.MLNet/`):
   `NDArrayMLNetInterop.{cs,Export.cs,Import.cs}` (dtype maps, the export verbs, `ToNDArray` and the zero-copy
@@ -165,7 +165,7 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   `tolist()` is the route; `TokenizeIntoWords` rows are `np.char.split`'s and ragged rows refuse `np.array` with
   numpy's `ValueError`; a `TextLoader` CSV's numbers cross the bridge as `np.loadtxt` reads them, quoted text by the
   route). The `interop-test` CI job runs it against ML.NET 2.0.1 and 4.0.2, with no Python.
-- Docs: `docs/website-src/docs/interop/mlnet.md` (excluded from the site).
+- Docs: `docs/website-src/docs/interop/mlnet.md` (on the site's Interoperability toc since 0.80.0-beta1).
 - Example: `examples/NumSharpMLNetExample` (regular csproj form over the published 0.80.0-beta1 and Microsoft.ML 5.0.1;
   no workflow runs it): a binary classifier trained from a `(rows, 5)` array as five scalar columns with the label
   converted OUTSIDE the model (so the model scores a features-only view), L-BFGS for run-to-run identical output (SDCA

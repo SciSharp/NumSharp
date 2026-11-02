@@ -214,8 +214,7 @@ Tested against NumPy 2.4.2. Each line: the `np.*` names, then the rule that hold
   `nd[mask] = v`), fancy indexing (`nd[indices]`). A raw `int[]`/`long[]` as the ONLY index is fancy (`nd[new int[]{0,2}]` selects rows 0 and 2); `nd[0,2]`
   is a coordinate, and coordinate access by array is `nd.GetData(int[]/long[])` → `selection-indexing.md`.
 - Interop packages (OpenBLAS, ONNX Runtime, ML.NET, System.Numerics.Tensors, pythonnet) → `openblas.md`,
-  `interop-packages.md`. ONNX Runtime, ML.NET and ParquetNet are UNRELEASED: no package, no docs, no mention in release
-  notes.
+  `interop-packages.md`. ParquetNet is UNRELEASED: no package, no docs, no mention in release notes.
 
 ## Build and test
 
