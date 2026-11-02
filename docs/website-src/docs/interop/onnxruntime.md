@@ -34,6 +34,12 @@ The interop depends only on `Microsoft.ML.OnnxRuntime.Managed` - the C# API. ORT
 as mutually exclusive flavours, and you must reference exactly one to run any model at all, so the
 package leaves that choice to you and composes with whichever flavour you pick.
 
+On Windows, forgetting the native package does not fail at once: the loader then finds the
+`onnxruntime.dll` that Windows itself ships in `C:\Windows\System32` for Windows ML (version 1.17 on a
+current Windows 11), and the app runs on that build - a different one from the version you reference,
+whatever the machine has, and absent on Linux and macOS, where the same app throws
+`DllNotFoundException`. Reference the native package explicitly.
+
 ```csharp
 using NumSharp;
 using NumSharp.Interop.OnnxRuntime;

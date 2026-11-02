@@ -45,6 +45,11 @@ reference (say 1.31.0) carries the same `.Managed` version and NuGet unifies upw
 the only thing that sets the floor: the 1.16.0 managed assembly reports assembly version 0.0.0.0, so the
 runtime's binder refuses nothing.
 
+On Windows, forgetting the native flavour does not fail at once: the loader finds the `onnxruntime.dll`
+that Windows ships in `C:\Windows\System32` for Windows ML (1.17 on a current Windows 11), and the app runs
+on that build: another version than the one you reference, whatever the machine has, and absent on Linux
+and macOS (`DllNotFoundException`). Reference the native flavour explicitly.
+
 ## Views, copies and `OnnxCodecMode`
 
 An ORT tensor is a pointer, a row-major shape and a fixed-size element type. It has **no strides**. So ORT can
