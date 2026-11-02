@@ -249,6 +249,11 @@ leaves the native runtime to the consumer.
   instead; zero-copy is safe for a standalone VBuffer you own.
 - **Rank 1 or 2 only.** An `IDataView` is a table of rows; `AsDataView` accepts 1-D and 2-D arrays.
   Reshape higher-rank data first.
+- **A feature axis of length 0 is a variable-length column to ML.NET.** ML.NET has no fixed-size vector of
+  width 0 (a vector size of 0 means "variable length"), so the vector column of an `(R, 0)` array round-trips
+  through `ToNDArray` as `(R, 0)` but is refused by ML.NET's transforms and trainers with their own text
+  (`Wrong column type for input column ... Got: Vector<Single>`). An empty array with features, `(0, C)`, is
+  an ordinary column of no rows.
 - **ML.NET's buffers stop at 2,146,435,071 elements** (its internal `ArrayUtils.ArrayMaxSize`, a little
   below `Array.MaxLength`): `VBufferEditor.Create` - behind every cursor getter and `VBuffer.CopyTo` -
   refuses a longer length. So a vector column wider than that (`AsDataView` / `ToDataView`) and a

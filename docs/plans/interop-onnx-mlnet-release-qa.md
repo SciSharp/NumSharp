@@ -210,9 +210,10 @@ Each entry: the finding, what was proven, the options, and a recommendation. Not
   which runs today. Fold in P2's output-name check, and give complex -> real its own advice (`np.real` / `np.imag`, as
   the dtype maps already say) instead of "relax the rule".
 - **P13 (F37) Zero-width arrays through ML.NET.** ML.NET reads a vector size of 0 as "variable length", so a `(R, 0)`
-  array exposes a variable-length column every fixed-size consumer refuses with ML.NET's own confusing text.
-  Recommended: refuse width 0 in `ValidateVectorColumn` with the reason (low priority: a matrix with no features).
-
+  array exposes a variable-length column every fixed-size consumer refuses with ML.NET's own confusing text. The
+  round trip `(4, 0)` -> `(4, 0)` is pinned by the owner (`BoundaryTests.DegenerateShapes_ImportWithTheirShape`), so a
+  refusal would undo a design: the behavior is DOCUMENTED instead (the page's Limits, this run). Left to decide: keep,
+  or refuse width 0 at export with the reason.
 - **P14 (F43) A nupkg-consumer gate for the two new packages.** Recommended: a "Package consumer:" step for ORT and
   ML.NET like OpenBLAS's - pack NumSharp + the bridge, restore them by `PackageReference` into a scratch console app
   (net8.0 and net10.0), run a few lines (ORT: `session.Run` of a committed test model; ML.NET: `AsDataView` +
