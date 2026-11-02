@@ -896,5 +896,30 @@ namespace NumSharp.Tests
             float.IsNegative((float)stable32.GetValue(0)).Should().BeFalse();
             float.IsNegative((float)stable32.GetValue(1)).Should().BeTrue();
         }
+
+        // ------------------------------------------------------------------
+        // QA-27 — np.divmod of a complex operand raises NotSupportedException instead of NumPy's TypeError
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy has no complex loop for <c>divmod</c> (nor for floor_divide / remainder) and raises
+        ///     <c>TypeError: ufunc 'divmod' not supported for the input types, and the inputs could not be safely coerced to
+        ///     any supported types according to the casting rule ''safe''</c> whenever either operand is complex. NumSharp's
+        ///     np.floor_divide and np.remainder raise exactly that (their own names in it); np.divmod reaches the kernel and
+        ///     throws <c>NotSupportedException: Operation DivMod not supported for Complex</c> — 25 of the 169 dtype pairs of
+        ///     a 26-ufunc matrix (<c>p59</c>), the only refusal in it with the wrong type.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA27")]
+        public void ParityQa_DivmodComplex_ShouldRaiseNumPysTypeError()
+        {
+            using var c = np.array(new[] { new Complex(1, 2), new Complex(3, -1) });
+            using var f = np.array(new[] { 2.0, 1.0 });
+
+            Action complexByFloat = () => np.divmod(c, f);
+
+            complexByFloat.Should().Throw<TypeError>().WithMessage(
+                "ufunc 'divmod' not supported for the input types, and the inputs could not be safely coerced to any " +
+                "supported types according to the casting rule ''safe''");
+        }
     }
 }
