@@ -177,5 +177,95 @@ namespace NumSharp.Tests
             shifted.dtype.Should().Be(np.int64);
             shifted.ToArray<long>().Should().Equal(512L, -1024L, 1536L);
         }
+
+        // ------------------------------------------------------------------
+        // QA-06 — np.cumsum / np.nancumsum along an axis convert with .NET's saturating cast
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     <c>np.cumsum([-3.0, 1.0], axis=0, dtype=np.uint8)</c> is <c>[253, 254]</c> in NumPy (its float → integer cast is
+        ///     C's, which wraps on x86-64), and so is NumSharp's flat form (no <c>axis</c>) and every <c>np.sum</c> /
+        ///     <c>np.prod</c> / <c>np.cumprod</c> route. With an explicit <c>axis</c> NumSharp returns <c>[0, 1]</c>: the axis
+        ///     scan kernel (<c>ILKernelGenerator.ScanAddWiden</c> → <c>ConvIn</c>, ILKernelGenerator.Reduction.cs) converts each
+        ///     element with <c>TAccum.CreateTruncating</c>, which SATURATES a floating-point source (-3.0 → 0, 300.0 → 127 for
+        ///     int8, inf → MaxValue, NaN → 0), on net8.0 and net10.0 alike.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA06")]
+        public void ParityQa_CumsumAxis_IntegerDtype_ShouldCastLikeNumPy()
+        {
+            using var neg = np.array(new[] { -3.0, 1.0 });
+            using var big = np.array(new[,] { { 300.0, 1.0 } });
+
+            using var unsigned = np.cumsum(neg, axis: 0, typeCode: np.uint8);
+            using var signed = np.cumsum(big, axis: 1, typeCode: np.int8);
+
+            unsigned.ToArray<byte>().Should().Equal((byte)253, (byte)254);
+            signed.ToArray<sbyte>().Should().Equal((sbyte)44, (sbyte)45);
+        }
+
+        /// <summary>
+        ///     <c>np.nancumsum([[-3.0, nan, 1.0]], axis=1, dtype=np.uint8)</c> is <c>[[253, 253, 254]]</c> in NumPy; NumSharp's
+        ///     axis route reaches the same saturating <c>ConvIn</c> as <see cref="ParityQa_CumsumAxis_IntegerDtype_ShouldCastLikeNumPy"/>
+        ///     and returns <c>[[0, 0, 1]]</c>.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA06")]
+        public void ParityQa_NancumsumAxis_IntegerDtype_ShouldCastLikeNumPy()
+        {
+            var nan = BitConverter.Int64BitsToDouble(0x7FF8000000000000);
+            using var a = np.array(new[,] { { -3.0, nan, 1.0 } });
+
+            using var r = np.nancumsum(a, axis: 1, dtype: np.uint8);
+
+            r.ToArray<byte>().Should().Equal((byte)253, (byte)253, (byte)254);
+        }
+
+        // ------------------------------------------------------------------
+        // QA-07 — np.choose promotes its choices left to right instead of NumPy's order-independent result_type
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     <c>np.choose([0, 1, 2], [int16, uint16, float16])</c> is float32 in NumPy: <c>PyArray_ConvertToCommonType</c> runs
+        ///     <c>PyArray_ResultType</c> over all choices at once (NEP 50's order-independent reduction, which NumSharp's own
+        ///     <c>np.result_type</c>, <c>np.concatenate</c>, <c>np.stack</c> and <c>np.select</c> follow). NumSharp's
+        ///     <c>np.choose</c> promotes pairwise from the left, so int16 + uint16 → int32 and int32 + float16 → float64; the
+        ///     same choices in the order <c>[float16, int16, uint16]</c> give float32.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA07")]
+        public void ParityQa_Choose_ThreeDtypes_ShouldPromoteLikeResultType()
+        {
+            using var index = np.array(new long[] { 0, 1, 2 });
+            using var i16 = np.array(new short[] { 1, 2, 3 });
+            using var u16 = np.array(new ushort[] { 4, 5, 6 });
+            using var f16 = np.array(new[] { 0.5, 1.5, 2.5 }).astype(np.float16);
+
+            using var r = np.choose(index, new NDArray[] { i16, u16, f16 });
+
+            r.dtype.Should().Be(np.float32);
+            r.ToArray<float>().Should().Equal(1f, 5f, 2.5f);
+        }
+
+        // ------------------------------------------------------------------
+        // QA-08 — np.ediff1d's to_begin / to_end refusal is an ArgumentException with a parameter suffix
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's <c>np.ediff1d(int8_array, to_begin=[1.5])</c> raises <c>TypeError: dtype of `to_begin` must be compatible
+        ///     with input `ary` under the `same_kind` rule.</c> NumSharp throws <see cref="ArgumentException"/> built with a
+        ///     parameter name, so the type differs and the message gains .NET's <c> (Parameter 'to_begin')</c> suffix.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA08")]
+        public void ParityQa_Ediff1d_IncompatibleEnds_ShouldRaiseTypeErrorWithNumPysText()
+        {
+            using var a = np.array(new sbyte[] { 1, 2, 4 });
+            using var begin = np.array(new[] { 1.5 });
+
+            Action toBegin = () => np.ediff1d(a, to_begin: begin);
+            Action toEnd = () => np.ediff1d(a, to_end: 2.5);
+
+            toBegin.Should().Throw<TypeError>()
+                .WithMessage("dtype of `to_begin` must be compatible with input `ary` under the `same_kind` rule.");
+            toEnd.Should().Throw<TypeError>()
+                .WithMessage("dtype of `to_end` must be compatible with input `ary` under the `same_kind` rule.");
+        }
     }
 }
