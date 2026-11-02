@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Numerics;
+using NumSharp.Backends.Iteration;
 
 namespace NumSharp.Tests
 {
@@ -698,6 +699,40 @@ namespace NumSharp.Tests
             double.IsNegative((double)fmin.GetValue(0)).Should().BeTrue();
             for (int i = 0; i < 7; i++)
                 float.IsNegative((float)fmax32.GetValue(i)).Should().BeFalse();
+        }
+
+        // ------------------------------------------------------------------
+        // QA-21 — np.evaluate's complex Max / Min root reductions fold in memory order and keep the later Max tie
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy reduces complex max / min with the scalar <c>CDOUBLE_maximum</c> / <c>CDOUBLE_minimum</c> loop in LOGICAL
+        ///     order (a reduction never negates a stride), so the first NaN-bearing element met in logical order sticks
+        ///     (<c>np.max(cn[::-1])</c> of <c>[nan+1j, 2, nan+2j, 1]</c> is <c>nan+2j</c>) and a tie keeps the earlier
+        ///     element (<c>np.max([0j, complex(-0.0, -0.0)])</c> is <c>0j</c>). np.max / np.min match;
+        ///     <c>np.evaluate(NDExpr.Max(x))</c> / <c>NDExpr.Min(x)</c> over complex fold through the engine's clamp
+        ///     (<c>EmitScalarOperation(BinaryOp.Maximum)</c>, NDExpr.Evaluate.cs) walking MEMORY order, so a reversed view
+        ///     returns <c>nan+1j</c>, and the clamp's Max returns the later operand on a tie (QA-18's helper). The float
+        ///     forms, which run the ported <c>simd_reduce_c_max</c> schedule, match.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA21")]
+        public void ParityQa_EvaluateComplexMaxMin_ShouldFoldInLogicalOrderKeepingTheEarlierTie()
+        {
+            using var cn = np.array(new[] { new Complex(double.NaN, 1), new Complex(2, 0), new Complex(double.NaN, 2), new Complex(1, 0) });
+            using var reversed = cn["::-1"];
+
+            using var max = np.evaluate(NDExpr.Max((NDExpr)reversed));
+            using var min = np.evaluate(NDExpr.Min((NDExpr)reversed));
+
+            // NumPy: the first NaN-bearing element in logical order of the reversed view is nan+2j.
+            ((Complex)max.GetValue()).Imaginary.Should().Be(2);
+            ((Complex)min.GetValue()).Imaginary.Should().Be(2);
+
+            using var zeros = np.array(new[] { new Complex(0.0, 0.0), new Complex(-0.0, -0.0) });
+            using var tie = np.evaluate(NDExpr.Max((NDExpr)zeros));
+
+            // NumPy's CGE keeps the accumulator (the earlier 0j) on the tie.
+            double.IsNegative(((Complex)tie.GetValue()).Real).Should().BeFalse();
         }
     }
 }
