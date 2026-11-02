@@ -734,5 +734,39 @@ namespace NumSharp.Tests
             // NumPy's CGE keeps the accumulator (the earlier 0j) on the tie.
             double.IsNegative(((Complex)tie.GetValue()).Real).Should().BeFalse();
         }
+
+        // ------------------------------------------------------------------
+        // QA-22 — np.expm1 / np.log1p cancel catastrophically for small arguments (known in float-math.md, unpinned)
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's float32 / float64 <c>expm1</c> / <c>log1p</c> call the C library's <c>expm1</c> / <c>log1p</c>, which
+        ///     are accurate near zero: <c>np.expm1(1e-8)</c> is <c>1.000000005e-08</c>, <c>np.log1p(1e-300)</c> is
+        ///     <c>1e-300</c>, both keep <c>-0.0</c>, and float32 <c>np.expm1(6e-8)</c> is <c>5.9999998e-08</c>. NumSharp
+        ///     computes <c>Exp(x) - 1</c> / <c>Log(1 + x)</c> (.NET's <c>double.ExpM1</c> / <c>LogP1</c> are those
+        ///     expressions), so the leading digits cancel: <c>expm1(1e-8)</c> is <c>9.99999993922529e-09</c>,
+        ///     <c>expm1(1e-300)</c> and <c>log1p(1e-300)</c> are <c>0</c>, <c>-0.0</c> becomes <c>+0.0</c>, and the float32
+        ///     <c>expm1(6e-8)</c> is <c>1.1920929e-07</c> (twice the true value). float-math.md calls the accuracy defect "a
+        ///     separate, open bug"; the oracle excuses it (ledger S1, "≤ 2 ULP or ≤ ~ulp(1) abs"), and no pin existed.
+        ///     The float16 loops are right (they widen to float32 and call NumPy's float32 routine).
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA22")]
+        public void ParityQa_Expm1Log1p_SmallArguments_ShouldNotCancel()
+        {
+            using var x = np.array(new[] { 1e-8, 1e-300, -0.0 });
+            using var x32 = np.array(new[] { 6e-8f });
+
+            using var expm1 = np.expm1(x);
+            using var log1p = np.log1p(x);
+            using var expm1f = np.expm1(x32);
+
+            ((double)expm1.GetValue(0)).Should().Be(1.000000005e-08);
+            ((double)log1p.GetValue(0)).Should().Be(9.999999950000001e-09);
+            ((double)expm1.GetValue(1)).Should().Be(1e-300);
+            ((double)log1p.GetValue(1)).Should().Be(1e-300);
+            double.IsNegative((double)expm1.GetValue(2)).Should().BeTrue();
+            double.IsNegative((double)log1p.GetValue(2)).Should().BeTrue();
+            ((float)expm1f.GetValue(0)).Should().Be((float)5.99999978589949e-08);
+        }
     }
 }
