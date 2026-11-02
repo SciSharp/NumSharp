@@ -63,7 +63,10 @@ integers, `float` and `double` → the matching `NumberDataViewType`. `Char` cro
 column type: **`Half` is converted to Single** (lossless) and **`Decimal` to Double** by the
 view-producing verbs (in a temporary the view owns); **`Complex` is refused** (split into real /
 imaginary planes with `np.real` / `np.imag`), and so are **text arrays** (`U`, `S`, `StringDType`: the
-bridge maps no ML.NET text column).
+bridge maps no ML.NET text column). `ToNDArray` refuses a text column too (string labels after
+`MapKeyToValue("PredictedLabel")`): ML.NET's own reader does it in a line,
+`np.array(view.GetColumn<string>("PredictedLabel").ToArray())` (a `U` array; `GetColumn<string[]>` for a
+vector-of-text column).
 
 ML.NET's trainers and most transforms read `Single` features, while NumSharp's default float dtype is
 float64, as NumPy's: convert with `x.astype(np.float32)` before `AsDataView`, or a pipeline stops with

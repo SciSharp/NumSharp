@@ -282,14 +282,37 @@ namespace NumSharp.Interop.MLNet
             }
         }
 
-        internal static string UnsupportedImportMessage(DataViewType type)
+        /// <summary>
+        ///     The refusal text for an ML.NET column type that has no NumSharp dtype; for a text column, the route that
+        ///     does read it: ML.NET's own <c>GetColumn</c> (Microsoft.ML's <c>ColumnCursorExtensions</c>) into
+        ///     <c>np.array</c>.
+        /// </summary>
+        /// <remarks>
+        ///     A text column is what a string-label model answers after <c>MapKeyToValue("PredictedLabel")</c> (ML.NET's
+        ///     Iris tutorial), so the route must be right for both shapes of it. The text used to name a cursor's
+        ///     <c>ValueGetter&lt;ReadOnlyMemory&lt;char&gt;&gt;</c> for every text column, which ML.NET refuses on a
+        ///     vector-of-text column (<c>TokenizeIntoWords</c>: "Invalid TValue ... expected type
+        ///     VBuffer&lt;ReadOnlyMemory&lt;char&gt;&gt;"), so the scalar and the vector routes are spelled apart, and
+        ///     with the column's own name when the caller has one.
+        /// </remarks>
+        /// <param name="type">The column type that does not map; <c>null</c> gives the null-type text.</param>
+        /// <param name="columnName">The column's name, spelled into the text route; <c>null</c> (the dtype map, which has no column) writes a placeholder.</param>
+        /// <returns>The message.</returns>
+        internal static string UnsupportedImportMessage(DataViewType type, string columnName = null)
         {
             if (type is null)
                 return "the column type is null.";
-            if (type is TextDataViewType || (type is VectorDataViewType v && v.ItemType is TextDataViewType))
-                return "ML.NET text columns are not converted by this bridge (it maps numeric, boolean and key columns). Read them with " +
-                       "the ML.NET cursor's ValueGetter<ReadOnlyMemory<char>>, then build a NumSharp text array from the strings, for example " +
-                       "np.array(strings) (fixed-width U) or np.array(strings, np.dtypes.StringDType()).";
+            string name = columnName is null ? "<column>" : columnName;
+            if (type is TextDataViewType)
+                return "ML.NET text columns are not converted by this bridge (it maps numeric, boolean and key columns). Read the strings " +
+                       $"with ML.NET's own column reader (Microsoft.ML) and build a NumSharp text array from them: " +
+                       $"np.array(view.GetColumn<string>(\"{name}\").ToArray()) is a fixed-width U array, and " +
+                       "np.array(strings, np.dtypes.StringDType()) a StringDType one.";
+            if (type is VectorDataViewType v && v.ItemType is TextDataViewType)
+                return "ML.NET text columns are not converted by this bridge (it maps numeric, boolean and key columns). Read the rows of " +
+                       $"this vector-of-text column with ML.NET's own column reader (Microsoft.ML): " +
+                       $"np.array(view.GetColumn<string[]>(\"{name}\").ToArray()) is a (rows, width) fixed-width U array when every row " +
+                       "has the same length (a cursor reads it as VBuffer<ReadOnlyMemory<char>>, not ReadOnlyMemory<char>).";
             Type raw = type is VectorDataViewType vec ? vec.ItemType.RawType : type.RawType;
             return $"ML.NET column type {type} (raw type {raw.Name}) has no NumSharp dtype: NumSharp carries bool, the eight integer types, " +
                    "float and double.";

@@ -76,13 +76,46 @@ namespace NumSharp.Tests.Interop.MLNet
             StringAssert.Contains(ex.Message, "variable-length");
         }
 
+        /// <summary>
+        ///     A text column is refused, and the message's route - ML.NET's <c>GetColumn&lt;string&gt;</c> with this
+        ///     column's name, into <c>np.array</c> - reads it as a fixed-width <c>U</c> array, as written.
+        /// </summary>
         [TestMethod]
         public void TextColumn_Throws()
         {
-            var rows = new[] { new TextRow { T = "hello" }, new TextRow { T = "world" } };
+            var rows = new[] { new TextRow { T = "hello" }, new TextRow { T = "wörld!" } };
             IDataView dv = Ml.Data.LoadFromEnumerable(rows);
             NotSupportedException ex = Assert.ThrowsException<NotSupportedException>(() => dv.ToNDArray("T"));
             StringAssert.Contains(ex.Message, "text");
+            StringAssert.Contains(ex.Message, "np.array(view.GetColumn<string>(\"T\").ToArray())");
+
+            using NDArray read = np.array(dv.GetColumn<string>("T").ToArray());
+            Assert.AreEqual("<U6", read.dtype.str);
+            CollectionAssert.AreEqual(new[] { "hello", "wörld!" }, NDArray.AsStringArray(read));
+        }
+
+        /// <summary>
+        ///     A VECTOR-of-text column (<c>TokenizeIntoWords</c>) is refused with its own route: ML.NET reads such a
+        ///     column as <c>VBuffer&lt;ReadOnlyMemory&lt;char&gt;&gt;</c> and refuses the scalar getter the message used
+        ///     to name ("Invalid TValue"), so the message names <c>GetColumn&lt;string[]&gt;</c>, which reads it as a
+        ///     <c>(rows, width)</c> <c>U</c> array when the rows have one length.
+        /// </summary>
+        [TestMethod]
+        public void VectorOfTextColumn_Throws_AndNamesTheVectorRoute()
+        {
+            var rows = new[] { new TextRow { T = "the quick fox" }, new TextRow { T = "a lazy dog" } };
+            IDataView dv = Ml.Data.LoadFromEnumerable(rows);
+            IDataView tokens = Ml.Transforms.Text.TokenizeIntoWords("Tokens", "T").Fit(dv).Transform(dv);
+            NotSupportedException ex = Assert.ThrowsException<NotSupportedException>(() => tokens.ToNDArray("Tokens"));
+            StringAssert.Contains(ex.Message, "np.array(view.GetColumn<string[]>(\"Tokens\").ToArray())");
+
+            DataViewSchema.Column column = tokens.Schema["Tokens"];
+            using (DataViewRowCursor cursor = tokens.GetRowCursor(new[] { column }))
+                Assert.ThrowsException<InvalidOperationException>(() => cursor.GetGetter<ReadOnlyMemory<char>>(column), "ML.NET refuses the scalar getter on a vector column");
+
+            using NDArray read = np.array(tokens.GetColumn<string[]>("Tokens").ToArray());
+            CollectionAssert.AreEqual(new long[] { 2, 3 }, read.shape);
+            CollectionAssert.AreEqual(new[] { "the", "quick", "fox", "a", "lazy", "dog" }, NDArray.AsStringArray(read.flatten()));
         }
 
         // ---- key column -----------------------------------------------------------------------------

@@ -64,7 +64,11 @@ namespace NumSharp.Interop.MLNet
                 throw new ArgumentNullException(nameof(view));
             DataViewType type = column.Type;
             bool isVector = type is VectorDataViewType;
-            NPTypeCode itemCode = FromDataViewType(type);   // throws NotSupported for text / unmapped raw types
+            // FromDataViewType's map, refused here with the column's name: a text column's message spells the
+            // GetColumn route with it, so the reader can paste it.
+            if (!TryFromDataViewType(type, out DType dtype))
+                throw new NotSupportedException(UnsupportedImportMessage(type, column.Name));
+            NPTypeCode itemCode = dtype.GetTypeCode();
 
             switch (itemCode)
             {

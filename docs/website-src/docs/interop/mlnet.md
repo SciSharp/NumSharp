@@ -207,13 +207,20 @@ ML.NET has no half, decimal or complex column type, so the view-producing verbs 
 `Half` → `Single` (lossless - every `Half` is an exact `Single`) and `Decimal` → `Double` (lossy beyond
 ~16 significant digits), in a temporary the view owns. `Complex` is refused - split it into real and
 imaginary planes with `np.real` / `np.imag` and feed those. Text arrays (`U`, `S`, `StringDType`) are
-refused too: the bridge maps no ML.NET text column.
+refused too: the bridge maps no ML.NET text column. In the other direction `ToNDArray` refuses a text
+column as well; ML.NET's own column reader (in `Microsoft.ML`) reads one in a line -
+`np.array(view.GetColumn<string>("Text").ToArray())` is a fixed-width `U` array, and a vector-of-text
+column (`TokenizeIntoWords`) is `np.array(view.GetColumn<string[]>("Tokens").ToArray())`, `(rows, width)`
+when every row has the same length.
 
 **Key columns read back as their keys.** `PredictedLabel` of a multiclass model or of k-means is a key
 column: `ToNDArray` returns its `uint32` keys, 1-based indices into the model's key space (0 is a missing
 value), not the label values - `MapValueToKey` numbers the labels in the order it first sees them, by
 default. Append `MapKeyToValue("PredictedLabel")` to the pipeline to read the label values back, or
-subtract 1 for a 0-based index into the model's classes (the columns of its `Score`).
+subtract 1 for a 0-based index into the model's classes (the columns of its `Score`). The values come back
+in the labels' own type: numeric labels through `ToNDArray`; string labels (the species of ML.NET's Iris
+tutorial) make `PredictedLabel` a text column, which `ToNDArray` refuses - read it with
+`np.array(scored.GetColumn<string>("PredictedLabel").ToArray())`, a `U` array.
 
 **ML.NET's trainers read `Single` features.** A `Double` column crosses as `Double`, but the trainers
 and most transforms take `Vector<Single>` only, and NumSharp's default float dtype is float64, as NumPy's
