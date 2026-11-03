@@ -458,6 +458,8 @@ The proposals (section 5) are separate, each the owner's to accept or drop:
 - `qa/proposals-all` at `e2d03481` (every proposal + every fix through F67) on Windows: ML.NET 5.0.1 net10.0 221 / 221, ORT
   1.31.1 net10.0 319 / 319; on LINUX (WSL, a clone): ORT 1.16.0 net8.0 / net10.0 298 + 21 Inconclusive, ORT 1.31.1 net10.0 /
   net8.0 319 / 319, ML.NET 2.0.1 net8.0 / net10.0 221 / 221, ML.NET 5.0.1 net10.0 221 / 221 (scratch `probes/wsl_combined.sh`).
+- P14's two nupkg-consumer gates run ON `qa/proposals-all` (`e2d03481`) pass on Windows: ORT (floor and 1.31.1, net8.0 /
+  net10.0) and ML.NET (2.0.1 and 4.0.2) - the ML.NET package there carries P16's `[2.0.0, 7.0.0)`.
 - Onto the RELEASE (verified 02:44, read-only, scratch `probes/simulate_proposals.py`): on top of the release + QA result
   (`1cbf05dc`, section 8's check) every proposal commit applies cleanly ALONE; taken together in the order P12, P11, P7,
   P1, P16, P14, P17 the same three conflicts appear as on `qa/proposals-all` and nothing else - P11 and P7 after P12
@@ -518,3 +520,4 @@ The proposals (section 5) are separate, each the owner's to accept or drop:
 | 02:56 | A47 (F67): a GPT-2 KV-cache decode loop through the bridge is byte-identical to Python ORT on every step, zero-copy feedback included; undisposed slices of zero-copy outputs are the easy leak; RunAsync needs P7 for it. |
 | 03:11 | The examples reviewed against tonight's lessons (the ORT example's header said ImageSharp: fixed, `1da48cb5`). `qa/proposals-all` re-merged with the QA branch (`e2d03481`) and green on Windows and on Linux (WSL, all seven legs). |
 | 03:12 | A48 (F68): P1 x P17 fuzz, 84k values under guard pages, 0 failures; a planted wrong-source read is caught (after --no-cache: the first mutant run reused a cached build). A9 dropped with its reason. |
+| 03:18 | Release-branch docs check (read-only): `release-0.80.0-beta1` publishes both pages (no docfx exclude, toc entries, interop index rows), as this branch does - the PackageProjectUrls resolve once the site is published. P14's gates pass on `qa/proposals-all`. |
