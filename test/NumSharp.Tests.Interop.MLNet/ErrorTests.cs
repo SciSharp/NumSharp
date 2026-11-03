@@ -135,5 +135,34 @@ namespace NumSharp.Tests.Interop.MLNet
             StringAssert.Contains(ex.Message, "NDArray.AsStringArray", $"{verb} of {text.dtype}: the message names the route that works");
             Assert.IsFalse(ex.Message.Contains("storage lane"), $"{verb} of {text.dtype}: NumSharp's storage-lane error leaked out: {ex.Message}");
         }
+
+        /// <summary>
+        ///     ML.NET's laziness meets a <c>using</c> scope: <c>Transform</c> inside the scope reads nothing, so the output's
+        ///     read after the scope reaches the disposed view. It is refused with <see cref="ObjectDisposedException"/>
+        ///     whose text names the cause (ML.NET reads lazily) and the remedy (keep the view until the last read), since
+        ///     nothing at the throw site points back at the scope; a snapshot (<c>ToDataView</c>) is refused the same way.
+        /// </summary>
+        [TestMethod]
+        public void LazyTransformOutput_ReadAfterTheViewsScope_NamesTheLaziness()
+        {
+            using NDArray x = Arange(NPTypeCode.Single, 6, 2);
+            ITransformer model;
+            using (NDArrayDataView fit = x.AsDataView("Features"))
+                model = Ml.Transforms.NormalizeMinMax("Features").Fit(fit);
+
+            IDataView output, snapshotOutput;
+            using (NDArrayDataView view = x.AsDataView("Features"))
+                output = model.Transform(view);
+            using (NDArrayDataView snapshot = x.ToDataView("Features"))
+                snapshotOutput = model.Transform(snapshot);
+
+            foreach (IDataView lazy in new[] { output, snapshotOutput })
+            {
+                ObjectDisposedException ex = Assert.ThrowsException<ObjectDisposedException>(() => lazy.ToNDArray("Features"));
+                StringAssert.Contains(ex.Message, "ML.NET reads lazily");
+                StringAssert.Contains(ex.Message, "keep this view undisposed until the last read");
+            }
+            Assert.AreEqual(0, NDArrayMLNetInterop.LiveExports, "the disposed views hold nothing");
+        }
     }
 }

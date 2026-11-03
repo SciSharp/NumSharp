@@ -157,6 +157,11 @@ buffer. The pin takes its own atomic reference, so:
   during that getter's own call). The finalizers of the view and of its cursors only give their reference back
   (never free eagerly), so an alias of the buffer you still hold stays valid after they run, in any order.
   The full analysis: `docs/plans/interop-lifetime-gc-analysis.md`.
+- **ML.NET reads lazily, so dispose the view after the last read.** `model.Transform(view)` reads nothing:
+  it returns a view that reads yours when it is read itself. A `using` scope that ends between the two
+  (`using (var v = x.AsDataView("Features")) output = model.Transform(v);`, then `output.ToNDArray("Score")`)
+  throws `ObjectDisposedException` at the read - for a `ToDataView` snapshot too, since it is the view that
+  was disposed. Read the output inside the scope, or let the scope cover the whole pipeline.
 
 **Cursors follow ML.NET's own contract**, checked against the cursors of ML.NET's `Cache`,
 `FilterRowsByColumn`, `TakeRows` and `LoadFromEnumerable`:
