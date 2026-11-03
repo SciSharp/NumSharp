@@ -34,6 +34,7 @@ whichever version you bring (NuGet unifies the DataView dependency upward).
 ```csharp
 using NumSharp;
 using NumSharp.Interop.MLNet;
+using NumSharp.Interop.OnnxRuntime;   // Postprocess (this package references the ONNX Runtime bridge for it)
 using Microsoft.ML;
 
 // A (rows, features) matrix in NumSharp.
@@ -214,7 +215,9 @@ every case, so each test doubles as a no-leak gate.
 ## Post-processing
 
 `Postprocess` turns a score column into a prediction with `np.*` compositions instead of hand-written
-loops - the softmax / argmax / top-k every classifier re-implements over a `float[]`:
+loops - the softmax / argmax / top-k every classifier re-implements over a `float[]`. It is the ONNX Runtime
+bridge's class, which this package references, so `using NumSharp.Interop.OnnxRuntime;` brings it (one
+`Postprocess` however many bridges an app uses; calling it never loads ONNX Runtime):
 
 ```csharp
 using NDArray scores = output.ToNDArray("Score");              // (batch, classes)

@@ -54,7 +54,9 @@ NumSharp→ML.NET path — `AsDataView` — is already zero-copy on its source; 
 convenience.)
 
 `Postprocess.{Softmax, LogSoftmax, Sigmoid, Argmax, TopK}` turn a score column into a prediction with
-`np.*` compositions instead of hand-written loops.
+`np.*` compositions instead of hand-written loops. The class is `NumSharp.Interop.OnnxRuntime.Postprocess`: this
+package references the ONNX Runtime bridge for it (`using NumSharp.Interop.OnnxRuntime;`), so an app that uses both
+bridges has one `Postprocess`, and calling it never loads ONNX Runtime.
 
 ## Dtypes
 

@@ -47,12 +47,8 @@ namespace NumSharp.Tests.Interop.MLNet
             "  static PrimitiveDataViewType ToDataViewType(DType dtype)",
             "  static Type ToDataViewClrType(DType dtype)",
             "  static VBuffer<T> ToVBuffer<T>(this NDArray source)",
-            "static class NumSharp.Interop.MLNet.Postprocess",
-            "  static NDArray Argmax(NDArray scores, Int32 axis = -1, Boolean keepdims = false)",
-            "  static NDArray LogSoftmax(NDArray logits, Int32 axis = -1)",
-            "  static NDArray Sigmoid(NDArray x)",
-            "  static NDArray Softmax(NDArray logits, Int32 axis = -1)",
-            "  static ValueTuple<NDArray, NDArray> TopK(NDArray scores, Int32 k, Int32 axis = -1, Boolean largest = true, Boolean sorted = true)",
+            // No Postprocess here: the ML.NET bridge references the ONNX Runtime bridge, whose
+            // NumSharp.Interop.OnnxRuntime.Postprocess is the one public post-processing type (F16).
         };
 
         /// <summary>The public surface, as reflection sees it, equals the approved list exactly.</summary>

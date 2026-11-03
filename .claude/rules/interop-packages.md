@@ -45,8 +45,8 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   `NDArrayOnnxInterop.{cs,Export.cs,Import.cs,NonTensor.cs,Text.cs}` (dtype maps, the export and import verbs,
   non-tensor outputs, text tensors), `OnnxCodecMode.cs`, `OrtTensor.cs` (the `OrtTensor` / `OrtTensor<T>` handles and the
   `ImportLease`), `UnmanagedMemoryManager.cs` (a `Memory<T>` over the unmanaged buffer),
-  `InferenceSessionExtensions{,.Async}.cs`; `Postprocess.cs` is one source file compiled into both bridges
-  (`src/NumSharp.Interop.Shared/`). ONNX Runtime's C# sources are vendored for reference at `refs/onnxruntime/csharp/` (a
+  `InferenceSessionExtensions{,.Async}.cs`, `RunOutputs.cs` (the result dictionary, an `INDArrayCarrier`), `Postprocess.cs`
+  (the one public `Postprocess`: the ML.NET bridge references this package for it). ONNX Runtime's C# sources are vendored for reference at `refs/onnxruntime/csharp/` (a
   sparse submodule), its official samples at `refs/onnxruntime-inference-examples/c_sharp/`.
 - `OnnxCodecMode { Auto, View, Copy }` (the members of the pythonnet codec's `NumpyCodecMode`) on every entry that could
   share memory: Auto is a view when ORT can read the buffer in place (C-contiguous and a bit-exact dtype), else a copy
@@ -106,12 +106,13 @@ None of these computes NumSharp operations: each converts tensors between NumSha
 
 ### `NumSharp.Interop.MLNet` (unreleased)
 
-- `NDArrayMLNetInterop` verbs, `NDArrayDataView`, `Postprocess`. Sources (`src/NumSharp.Interop.MLNet/`):
+- `NDArrayMLNetInterop` verbs, `NDArrayDataView`; `Postprocess` is the ONNX Runtime bridge's, which this package
+  references (`NumSharp.Interop.OnnxRuntime.Postprocess`: one public type, no CS0104 in an app that uses both). Sources
+  (`src/NumSharp.Interop.MLNet/`):
   `NDArrayMLNetInterop.{cs,Export.cs,Import.cs}` (dtype maps, the export verbs, `ToNDArray` and the zero-copy
   `VBuffer.AsNDArray<T>` with `WrapExternal` / `Pin` / `LiveExports` / `LiveImports`), `NDArrayDataView.cs` (the
   NDArray-backed `IDataView`, its strided lazy cursor and ARC-pin lifetime), `VBufferAccessor.cs` (the compiled-expression
-  getter for the private `VBuffer<T>._values`), `ImportLease.cs` (the GCHandle pin that the last view releases),
-  `Postprocess.cs`.
+  getter for the private `VBuffer<T>._values`), `ImportLease.cs` (the GCHandle pin that the last view releases).
 - Export: `nd.AsDataView(colName)` (a vector column: a lazy `IDataView` that reads the NumSharp buffer through its
   strides, any layout, ARC-pinned; `NDArrayDataView` is `IDisposable`), `columns.AsDataView()` over an
   `IReadOnlyDictionary<string, NDArray>` (one column per array, each its own dtype and strides, equal rows, every pin
@@ -124,7 +125,8 @@ None of these computes NumSharp operations: each converts tensors between NumSha
 - Feeding a model: `transformer.Transform(nd.AsDataView("Features")).ToNDArray("Score")`. `IDataView` is the whole
   bridge, so there is no per-transformer runner and no `ITransformer` dependency.
 - Depends on `Microsoft.ML.DataView` 2.0.0 or later, with NO upper bound (the form `Microsoft.ML` itself declares it
-  in), and on nothing else. A cap below a consumer's `Microsoft.ML` is a restore ERROR (NU1107, cousin ranges that do
+  in), and on `NumSharp.Interop.OnnxRuntime` for `Postprocess` (bringing `Microsoft.ML.OnnxRuntime.Managed`, the C# API
+  only, about 250 KB, never loaded by `Postprocess`). A cap below a consumer's `Microsoft.ML` is a restore ERROR (NU1107, cousin ranges that do
   not overlap): the former `[2.0.0, 6.0.0)` would have failed every user's restore the day they moved to ML.NET 6. The
   bridge uses ML.NET's public data contract plus the private `VBuffer<T>._values`, whose accessor falls back to a copy,
   so a breaking ML.NET major shows at run time; CI's advisory "newest" step (floating `*-*`) sees it first. There is no
