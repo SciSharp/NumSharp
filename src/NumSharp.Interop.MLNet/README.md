@@ -98,8 +98,9 @@ or past the last one — after `Dispose`, from a buffer the cursor no longer kep
 
 **Each cursor holds its own pin** and releases it on `Dispose` — or, for a cursor nobody disposes, from a
 finalizer. ML.NET abandons cursors itself (`ShuffleRows`, used by training pipelines, never disposes the cursor
-it opens on its input), and before that net a single shuffle kept the NumSharp buffer referenced for the life of
-the process.
+it opens on its input; the time-series package's `DetectEntireAnomalyBySrCnn` leaves two per call), and before
+that net a single shuffle kept the NumSharp buffer referenced for the life of the process. Until a collection
+finalizes such a cursor its pin still holds the buffer, so the memory comes back only then.
 
 **Imports have no managed-array cap.** `view.ToNDArray(column)` stages rows straight into NumSharp memory: one
 exact allocation when the view reports its row count, growing chunks (copied together once) when it does not, so

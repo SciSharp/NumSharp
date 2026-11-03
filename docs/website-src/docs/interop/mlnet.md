@@ -147,9 +147,11 @@ buffer. The pin takes its own atomic reference, so:
   underneath it.
 - Not disposing the view leaks the pin until the finalizer reclaims it (a safety net, not a lifetime
   model). Cursors have the same net: ML.NET abandons cursors itself - `ShuffleRows`, which training
-  pipelines use, never disposes the cursor it opens on its input - and before the net one shuffle kept the
+  pipelines use, never disposes the cursor it opens on its input, and the time-series package's
+  `DetectEntireAnomalyBySrCnn` leaves two per call - and before the net one shuffle kept the
   NumSharp buffer referenced for the life of the process (the pool never got it back, and
-  `resize(refcheck)` refused).
+  `resize(refcheck)` refused). Until a collection finalizes such a cursor, its pin still holds the buffer:
+  disposing the array and the view gives the memory back only then.
 - **Reachable means valid.** Whatever can reach the view - you, a transform's output, a cursor, a getter
   delegate (its closure holds the cursor, the cursor the view) - keeps the pins and the buffer alive, and a
   getter keeps its cursor reachable until its read is done, so a collection that lands while it copies a row
