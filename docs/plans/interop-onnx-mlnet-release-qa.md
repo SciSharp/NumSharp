@@ -290,6 +290,15 @@ each with its tests and docs, never merged here (the **Branch** line of each ent
   (net8.0 and net10.0), run a few lines (ORT: `session.Run` of a committed test model; ML.NET: `AsDataView` +
   `NormalizeMinMax` + `ToNDArray`) and check the live counters. The two examples cannot serve: they download models and
   reference the published version.
+  - **Branch** `qa/p14-consumer-gates` `3d3e897a`: `src/NumSharp.Interop.{OnnxRuntime,MLNet}/tools/verify_package_consumer.sh`
+    in the OpenBLAS script's style - pack Core + the bridge into a local feed; the nupkg's shape (lib dll + XML for
+    net8.0 / net10.0, no `runtimes/`, each dependency group: NumSharp at THIS version, ORT Managed from `[1.16.0` /
+    DataView from `[2.0.0`); a scratch consumer by PackageReference run on net8.0 AND net10.0 at the floor and the
+    current ORT / ML.NET (ORT: `session.Run` of the committed `add_f32.onnx`, `AsOrtValue` + ORT `Run` + `ToNDArray`,
+    `Postprocess.Softmax`, live 0/0; ML.NET: `AsDataView` + `NormalizeMinMax` + `ToNDArray`, the VBuffer import still
+    write-through, live 0) - and two "Package consumer:" steps in `interop-test`. No Python. PASS on Windows (Git
+    Bash) and on Linux (WSL, from a clone: ORT 83 s, ML.NET 60 s, GNU tar -> the unzip fallback); a planted
+    `Microsoft.ML.DataView [3.0.0,6.0.0)` fails it ("must start at 2.0.0", exit 1).
 - **P15 (F49, A22) Text columns in the ML.NET bridge, both directions.** NumSharp has text dtypes now (`U`, `S`,
   `StringDType`), and ML.NET's text column is everyday data (string labels, `FeaturizeText` input, `MapKeyToValue`
   answers). Today both directions refuse with a route that works: import through ML.NET's
@@ -372,6 +381,7 @@ The proposals (section 5) are separate, each the owner's to accept or drop:
 | `qa/p11-disposed-guard` (P11) | `1ab5c9fc` | `a57a6101` | ORT: new `OrtDisposalProbe.cs`, the Run forms, the import verbs' guard, new `DisposedOrtObjectTests` |
 | `qa/p7-runasync-symbols` (P7) | `5f6175ec` | `7d68a494` | ORT `InferenceSessionExtensions.Async.cs`, `SessionRunAsyncTests`, the ORT page |
 | `qa/p1-multi-array-view` (P1) | `a6baabb2` | `7d68a494` | ML.NET `NDArrayDataView.cs`, `NDArrayMLNetInterop.Export.cs`, new `TableViewTests`, the ML.NET page, README, notes, rule |
+| `qa/p14-consumer-gates` (P14) | `3d3e897a` | `f4d5821c` | two new `tools/verify_package_consumer.sh` scripts, two CI steps |
 | `qa/p16-mlnet-range` (P16) | `d1d10236` | `e271d366` | ML.NET csproj range + comment, CI's advisory "next preview" step, the rule, the notes |
 | `qa/proposals-all` | `f2612d90` | `7d68a494` | the four merged in that order (`--no-ff`, up to `4851fd0f`), then `qa/interop-release` at `8438ee3e` (F49, `1d5638da`), then P16 (which brings `qa/interop-release` up to `e271d366`) |
 
@@ -428,3 +438,4 @@ The proposals (section 5) are separate, each the owner's to accept or drop:
 | 01:39 | A38 (F58): a bridge-trained model serves through PredictionEngine in a NumSharp-free process, bit-equal. A39 (F59): at 2M x 32 the released training route is 2x slower than POCOs (Concatenate of scalar columns) though lighter; P1's dictionary view matches POCO speed at 43% less peak memory. |
 | 01:42 | F59 mitigation on the released API: `AppendCacheCheckpoint` after `Concatenate` brings the route to POCO speed at POCO memory (interleaved runs: 5.8 / 5.9 s against 10.1 / 10.3 s); the ML.NET page says so. |
 | 01:43 | A40 (F60): memory-mapped arrays through both bridges - out-of-core SDCA training, zero-copy ORT input from a read-only mapping, files delete after disposal. A8 dropped (5 GB of models for no new evidence). |
+| 02:00 | P14 prepared as `qa/p14-consumer-gates` (`3d3e897a`): nupkg-consumer gates for both bridges (pack, shape, PackageReference consumer on net8.0 / net10.0 at floor and current), PASS on Windows and Linux (WSL), a planted range defect fails it. |
