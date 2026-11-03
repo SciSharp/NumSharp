@@ -284,6 +284,10 @@ leaves the native runtime to the consumer.
   class blocks) SDCA scored 0.50 accuracy, from this view and from a POCO list alike; the same rows permuted
   first scored 0.72 (L-BFGS, which does not shuffle: 0.74 either way). Permute ordered training rows before
   the view - `table[np.random.RandomState(0).permutation(n)]`, a copy.
+- **Text files lose infinities.** `np.savetxt` writes NumPy's `inf` / `-inf`, and ML.NET's `TextLoader` reads
+  those as NaN - silently, as Double and as Single (it reads `Infinity`, `-Infinity`, `∞` and overflowing
+  numbers such as `1e309` as infinities). The rest of NumPy's default `%.18e` text reads back bit for bit,
+  `-0.0` and subnormals included. Hand the array to ML.NET with `AsDataView` instead of a file.
 - **No `Complex` column.** ML.NET has no complex type (see [Dtypes](#dtypes)).
 - **`ToNDArray` rectangularizes.** A variable-length vector column cannot become a rectangular NDArray and
   is refused with a message naming the cause.
