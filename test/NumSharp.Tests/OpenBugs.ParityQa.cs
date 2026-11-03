@@ -1432,5 +1432,41 @@ namespace NumSharp.Tests
 
             seen.Should().Be("[1.23456789]", "a new thread starts with NumPy's default print options");
         }
+
+        // ------------------------------------------------------------------
+        // QA-41 — finfo's repr and the error texts follow the current culture
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's texts are culture-independent ASCII. <c>repr(np.finfo(np.float32))</c> is
+        ///     <c>finfo(resolution=1e-06, min=-3.4028235e+38, max=3.4028235e+38, dtype=float32)</c> (the dtype's own float
+        ///     repr), while NumSharp's <c>finfo.ToString()</c> (APIs/np.finfo.cs) interpolates <c>{resolution}</c> and
+        ///     <c>{min:E}</c> / <c>{max:E}</c> with the current culture: <c>finfo(resolution=1E-06, min=-3.402823E+038,
+        ///     max=3.402823E+038, dtype=float32)</c> under the invariant culture, a decimal comma under de-DE, U+2212 minus signs
+        ///     under sv-SE, U+061C marks and Arabic separators under ar-SA (<c>rp6</c>, <c>rp8</c>). Every error text that
+        ///     interpolates a negative number does the same (<c>rp7</c>, ar-SA): <c>np.arange(5.)[-6]</c> says
+        ///     <c>index ؜-6 is out of bounds for axis 0 with size 5</c>, likewise the axis, linspace, kth, take and iinfo
+        ///     texts (<c>iinfo(min=؜-128, …)</c>). Array printing, astype to text, savetxt, tofile, np.char.mod and the
+        ///     text parsers are culture-invariant already.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA41")]
+        public void ParityQa_FinfoReprAndErrorTexts_ShouldNotFollowTheCurrentCulture()
+        {
+            np.finfo(np.float32).ToString().Should().Be("finfo(resolution=1e-06, min=-3.4028235e+38, max=3.4028235e+38, dtype=float32)");
+
+            var saved = System.Threading.Thread.CurrentThread.CurrentCulture;
+            try
+            {
+                System.Threading.Thread.CurrentThread.CurrentCulture = System.Globalization.CultureInfo.GetCultureInfo("ar-SA");
+                using var a = np.arange(5.0);
+                Action outOfBounds = () => a[-6].Dispose();
+
+                outOfBounds.Should().Throw<IndexError>().WithMessage("index -6 is out of bounds for axis 0 with size 5");
+            }
+            finally
+            {
+                System.Threading.Thread.CurrentThread.CurrentCulture = saved;
+            }
+        }
     }
 }
