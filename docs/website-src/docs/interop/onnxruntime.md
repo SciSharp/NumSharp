@@ -40,6 +40,22 @@ current Windows 11), and the app runs on that build - a different one from the v
 whatever the machine has, and absent on Linux and macOS, where the same app throws
 `DllNotFoundException`. Reference the native package explicitly.
 
+F# interactive (`dotnet fsi` with `#r "nuget: Microsoft.ML.OnnxRuntime, 1.31.1"`) finds that System32 copy even
+WITH the native package referenced, and the first call fails: `The requested API version [31] is not available,
+only API versions [1, 17] are supported in this build. Current ORT Version is: 1.17.1` (a
+`TypeInitializationException` of ORT's `NativeMethods`). Load the package's own native library by its path before
+the first ORT call, and the session binds to it:
+
+```fsharp
+let packages =
+    match System.Environment.GetEnvironmentVariable "NUGET_PACKAGES" with
+    | null | "" -> System.IO.Path.Combine(System.Environment.GetFolderPath System.Environment.SpecialFolder.UserProfile, ".nuget", "packages")
+    | folder -> folder
+let nativeDll =
+    System.IO.Path.Combine(packages, "microsoft.ml.onnxruntime", "1.31.1", "runtimes", "win-x64", "native", "onnxruntime.dll")
+System.Runtime.InteropServices.NativeLibrary.Load nativeDll |> ignore
+```
+
 ```csharp
 using NumSharp;
 using NumSharp.Interop.OnnxRuntime;
