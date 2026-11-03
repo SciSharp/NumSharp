@@ -943,44 +943,6 @@ namespace NumSharp.Tests
         }
 
         // ------------------------------------------------------------------
-        // QA-34 — np.broadcast_arrays makes a read-only operand writeable
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     NumPy's <c>broadcast_arrays</c> (<c>lib/_stride_tricks_impl.py</c>) returns an operand whose shape already
-        ///     matches as the operand itself and builds every other view with <c>_broadcast_to(..., readonly=False)</c>,
-        ///     which sets <c>writeable = True</c> only <c>if array.flags._writeable_no_warn</c>: a read-only operand (one
-        ///     whose WRITEABLE flag was cleared, or a <c>np.broadcast_to</c> view) gives a read-only view, and writing
-        ///     through it raises <c>ValueError: assignment destination is read-only</c>. NumSharp's
-        ///     <c>NDArray.broadcast_arrays</c> (Backends/NDArray.StrideTricks.cs) sets WRITEABLE on every view
-        ///     unconditionally (<c>WithFlags(flagsToSet: ArrayFlags.WRITEABLE)</c>), so the view of a read-only array is
-        ///     writeable and a write through it changes the array its owner made read-only (<c>p90</c>:
-        ///     <c>b[0, 0, 0] = 99</c> turns the read-only <c>r[0, 0]</c> into 99). The params form, an operand already of
-        ///     the broadcast shape, a <c>broadcast_to</c> operand and <c>np.meshgrid(copy: false)</c> (whose grids are
-        ///     broadcast_arrays views) do the same.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA34")]
-        public void ParityQa_BroadcastArrays_ReadOnlyOperand_ShouldStayReadOnly()
-        {
-            using var r = np.arange(6.0).reshape(2, 3);
-            r.setflags(write: false);
-            using var deeper = np.zeros(new Shape(2, 2, 1));
-            using var sameShape = np.zeros(new Shape(2, 3));
-            using var b0 = np.broadcast_to(np.arange(3.0), new Shape(2, 3));
-
-            var (stretched, _) = np.broadcast_arrays(r, deeper);
-            var (unchanged, _) = np.broadcast_arrays(r, sameShape);
-            var (ofBroadcastTo, _) = np.broadcast_arrays(b0, deeper);
-            Action writeThrough = () => stretched[0, 0, 0] = (NDArray)99.0;
-
-            stretched.flags.writeable.Should().BeFalse("a view of a read-only operand stays read-only");
-            unchanged.flags.writeable.Should().BeFalse("NumPy returns the matching operand itself");
-            ofBroadcastTo.flags.writeable.Should().BeFalse("a broadcast_to view is not writeable");
-            writeThrough.Should().Throw<ValueError>().WithMessage("assignment destination is read-only");
-            r.GetDouble(0, 0).Should().Be(0.0);
-        }
-
-        // ------------------------------------------------------------------
         // QA-35 — np.array(ndarray) copies the source's read-only flag and C-orders a broadcast copy
         // ------------------------------------------------------------------
 
@@ -1049,66 +1011,6 @@ namespace NumSharp.Tests
             ((double)memoryOrder.GetValue(4)).Should().Be(-4.0, "a K-order ravel reads the result in memory order");
             hyp.flags.f_contiguous.Should().BeTrue("hypot of two F operands is F in NumPy");
             cp.flags.f_contiguous.Should().BeTrue("cumprod along an axis keeps an F operand's order");
-        }
-
-        // ------------------------------------------------------------------
-        // QA-37 — np.isclose never calls an infinite difference close, whatever the tolerance
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     NumPy's <c>isclose</c> is <c>less_equal(abs(x - y), atol + rtol * abs(y)) &amp; isfinite(y) | (x == y)</c>:
-        ///     with an infinite tolerance an infinite difference passes (<c>inf &lt;= inf</c>), so
-        ///     <c>np.isclose([1e308, inf], [-1e308, 1.0], rtol=0, atol=inf)</c> is <c>[True, True]</c> (the difference of
-        ///     the first pair overflows; the second has a finite reference). NumSharp's <c>DefaultEngine.IsClose</c>
-        ///     (Backends/Default/Logic/Default.IsClose.cs) adds a third term, <c>IsFinite(diff)</c>, "because NumSharp's &lt;=
-        ///     operator has a bug where NaN &lt;= value returns True" — the operator answers False for NaN today (<c>p94</c>),
-        ///     and the extra term turns both answers False. The same happens with <c>rtol=inf</c> and with a finite
-        ///     tolerance that overflows the computation dtype (<c>np.isclose(float32 [3e38], [-3e38], rtol=0, atol=1e300)</c>:
-        ///     the float32 difference and the float32 atol are both inf, NumPy True); np.allclose shares the engine.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA37")]
-        public void ParityQa_IsClose_InfiniteDifferenceWithInfiniteTolerance_ShouldBeClose()
-        {
-            using var x = np.array(new[] { 1e308, double.PositiveInfinity });
-            using var y = np.array(new[] { -1e308, 1.0 });
-
-            using var close = np.isclose(x, y, rtol: 0.0, atol: double.PositiveInfinity);
-
-            close.ToArray<bool>().Should().Equal(true, true);
-        }
-
-        // ------------------------------------------------------------------
-        // QA-38 — ndarray.view with a non-native numeric dtype ignores the byte order
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     <c>a.view(dtype)</c> reads the same bytes through the new descriptor, byte order included:
-        ///     <c>np.array([258], np.int32).view('&gt;i4')</c> is <c>[33619968]</c> (the little-endian bytes
-        ///     <c>02 01 00 00</c> read big-endian). NumSharp keeps no non-native storage (documented: np.frombuffer /
-        ///     np.fromfile / np.load decode a non-native descriptor into a native copy, correctly), but
-        ///     <c>NDArray.view(DType)</c> (Backends/NDArray.cs) compares only the lane (<c>dtype.GetTypeCode() ==
-        ///     Storage.TypeCode</c>) and returns a native alias: <c>[258]</c>, int32 (<c>p95</c>). The fixed-width string branch
-        ///     of the same method refuses a non-native view with <see cref="NotSupportedException"/>; the numeric branch
-        ///     silently reads native order instead. Either NumPy's values (a decoded copy, since no view can hold them) or the
-        ///     string branch's refusal would be faithful; this test accepts both and fails only on the silent native read.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA38")]
-        public void ParityQa_ViewWithNonNativeDtype_ShouldNotReadNativeOrderSilently()
-        {
-            using var a = np.array(new[] { 258 });
-
-            NDArray v;
-            try
-            {
-                v = a.view(np.dtype(">i4"));
-            }
-            catch (NotSupportedException)
-            {
-                return; // the refusal the string branch already gives is an acceptable fix
-            }
-
-            using (v)
-                Convert.ToInt64(v.GetValue(0)).Should().Be(33619968L, "NumPy reads the bytes 02 01 00 00 big-endian");
         }
 
         // ------------------------------------------------------------------
@@ -1310,32 +1212,6 @@ namespace NumSharp.Tests
             Action call = () => twoOutputs.CallMany(x);
 
             call.Should().Throw<InvalidOperationException>().WithMessage("boom");
-        }
-
-        // ------------------------------------------------------------------
-        // QA-44 — np.divmod(out=(input, r)) computes the remainder from the overwritten input
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     NumPy's divmod is ONE two-output loop: each element is read once and both results are written, so an out that
-        ///     is also an input is safe: <c>np.divmod(a, 2.0, out=(a, r))</c> for <c>a = [7.5, -7.5, 3.0]</c> leaves
-        ///     <c>a = [3, -4, 1]</c> and <c>r = [1.5, 0.5, 1.0]</c>. NumSharp's <c>out=</c> route composes the two ufuncs
-        ///     (ufuncs.md: "Its out=(q, r) / where= / dtype= path composes FloorDivide and Mod"), so the floor division
-        ///     overwrites <c>a</c> before the remainder reads it: <c>r = [1, 0, 1]</c>, the remainders of the QUOTIENTS
-        ///     (<c>rp12</c>); a quotient out that aliases the divisor (<c>out=(b, r)</c>) does the same. A remainder out that
-        ///     aliases an input, and np.modf / np.frexp with an aliased out (one loop), match NumPy.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA44")]
-        public void ParityQa_DivmodOut_QuotientAliasingAnInput_ShouldReadTheOriginalInput()
-        {
-            using var a = np.array(new[] { 7.5, -7.5, 3.0 });
-            using var r = np.zeros(new Shape(3));
-            using var two = np.array(2.0);
-
-            np.divmod(a, two, @out: (a, r));
-
-            a.ToArray<double>().Should().Equal(3.0, -4.0, 1.0);
-            r.ToArray<double>().Should().Equal(new[] { 1.5, 0.5, 1.0 }, "the remainders of the ORIGINAL dividends");
         }
 
         // ------------------------------------------------------------------

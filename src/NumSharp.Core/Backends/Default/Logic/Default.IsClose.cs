@@ -123,17 +123,16 @@ namespace NumSharp.Backends
             var xMinusY = x - y;
             var diff = Abs(xMinusY);               // |a - b|
 
-            // Core formula: |a - b| <= tolerance AND diff is finite AND y is finite, OR exact equality
-            // Note: We explicitly check diffFinite because NumSharp's <= operator has a bug where
-            // NaN <= value returns True instead of False (IEEE 754 requires False for all NaN comparisons)
-            var diffFinite = IsFinite(diff);         // diff must be finite for tolerance check
+            // NumPy's formula: |a - b| <= tolerance AND y is finite, OR exact equality. A NaN difference fails the <= on
+            // its own (every NaN comparison is False), and an infinite difference passes an infinite tolerance
+            // (inf <= inf), as in NumPy: `np.isclose([1e308, inf], [-1e308, 1.0], rtol=0, atol=inf)` is [True, True]. (A
+            // third `isfinite(diff)` term, written for a NaN <= bug that no longer exists, made both False: parity QA-37.)
             var withinTolerance = diff <= tolerance; // |a - b| <= (atol + rtol * |b|)
             var yFinite = IsFinite(y);               // Only apply tolerance to finite values
             var exactEqual = x == y;                 // Handles infinities (inf == inf is true)
 
-            // Combine: (within tolerance & diff finite & y finite) | exact equality
-            var withinAndFinite = withinTolerance & diffFinite;
-            var toleranceMet = withinAndFinite & yFinite;
+            // Combine: (within tolerance & y finite) | exact equality
+            var toleranceMet = withinTolerance & yFinite;
 
             // MakeGeneric<bool>() returns a typed alias that takes its own reference on the combined
             // array's buffer: the weaver yields the alias, and releasing the backing temp with the rest

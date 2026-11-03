@@ -446,20 +446,28 @@ namespace NumSharp.Backends
         ///     original dtype</c>).</exception>
         /// <exception cref="InvalidOperationException">A view whose byte offset or outer byte stride is not a whole number of
         ///     new elements (NumSharp keeps them in elements).</exception>
-        /// <exception cref="NotSupportedException">A non-native byte order (NumPy keeps the bytes and swaps on every read;
-        ///     NumSharp stores every dtype natively), or a descriptor without storage (<c>datetime64</c> before Stage C).</exception>
+        /// <exception cref="NotSupportedException">A non-native byte order, string or numeric (<c>'&gt;i4'</c> on a
+        ///     little-endian host: NumPy keeps the bytes and swaps on every read; NumSharp stores every dtype natively),
+        ///     raised only after NumPy's size checks passed — a view NumPy itself refuses raises NumPy's
+        ///     <see cref="ValueError"/> first; or a descriptor without storage (<c>datetime64</c> before Stage C).</exception>
+        /// <remarks>
+        ///     Footgun the non-native refusal closes: the storage LANE of <c>'&gt;i4'</c> is int32, so the same-lane early
+        ///     return below used to hand back a native alias of an int32 array viewed as <c>'&gt;i4'</c> — 258 where NumPy
+        ///     reads 33619968 (parity QA-38). A one-byte descriptor is always native (<c>'|'</c>), so <c>'&gt;i1'</c> and
+        ///     <c>'&gt;S3'</c> still view.
+        /// </remarks>
         internal unsafe UnmanagedStorage AliasAsDescr(DType descr)
         {
             if (descr is null)
                 throw new ArgumentNullException(nameof(descr));
             var meta = descr.Meta;
             bool toString = meta is StringDTypeMeta;
-            if (!descr.isnative)
-                throw new NotSupportedException(
-                    $"Viewing as {descr.ToString(true)} reads the bytes in a non-native byte order, which NumPy keeps byte-swapped " +
-                    "but NumSharp does not store (every NumSharp dtype is native).");
             var code = toString ? NPTypeCode.String : descr.GetTypeCode(); // a descriptor-only class raises "no storage yet"
-            if (toString ? descr.Equals(Descr) : code == _typecode)
+            // NumPy views in any byte order and validates only the sizes (array_descr_set), so a non-native descriptor is
+            // refused AFTER those checks: arange(3, '<i4').view('>i8') stays NumPy's ValueError, arange(4, '<i4').view('>i8')
+            // (a view NumPy builds, byte-swapped) is the refusal. The same-lane shortcut is native-only for that reason.
+            bool nonNative = !descr.isnative;
+            if (!nonNative && (toString ? descr.Equals(Descr) : code == _typecode))
                 return Alias();
 
             int oldSize = DTypeSize;
@@ -476,6 +484,13 @@ namespace NumSharp.Backends
             {
                 shape = ReinterpretShape(oldSize, newSize, out count);
             }
+
+            // NumPy's checks passed: it would now return the byte-swapped view, which no NumSharp storage can hold.
+            if (nonNative)
+                throw new NotSupportedException(
+                    $"Viewing as {descr.ToString(true)} reads the bytes in a non-native byte order, which NumPy keeps byte-swapped " +
+                    "but NumSharp does not store (every NumSharp dtype is native). Decode them into a native copy instead: " +
+                    $"np.frombuffer(a.tobytes(), '{descr.str}').");
 
             // A view inherits non-writeability (a broadcast or 'r' memmap stays read-only) and re-reports ALIGNED.
             if (!_shape.IsWriteable && shape.IsWriteable)

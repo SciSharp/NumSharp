@@ -84,6 +84,8 @@ var (a_bc, b_bc) = np.broadcast_arrays(a, b);
 // Both now (2, 3)
 ```
 
+As in NumPy, an array that already has the common shape comes back as itself (no new view), and every other result is a view that is writeable only when its array is: a read-only array, or a `np.broadcast_to` view, gives a read-only view, so a write through it raises `ValueError: assignment destination is read-only`.
+
 Also available as:
 ```csharp
 NDArray[] results = np.broadcast_arrays(arr1, arr2, arr3);

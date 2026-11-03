@@ -1,3 +1,5 @@
+using System;
+
 namespace NumSharp.Tests.Creation
 {
     /// <summary>
@@ -21,10 +23,83 @@ namespace NumSharp.Tests.Creation
     ///     </code>
     ///     So the result stays broadcasted (stride-0 aliasing) yet writeable, and a write propagates
     ///     both across the broadcast axis AND back to the source array it views.
+    ///
+    ///     <para>Writeable only when the OPERAND is (parity QA-34): NumPy builds each stretched view with
+    ///     <c>_broadcast_to(array, shape, readonly=False)</c>, which sets <c>writeable = True</c> only
+    ///     <c>if array.flags._writeable_no_warn</c>, and returns an operand already of the broadcast shape as itself
+    ///     (<c>array if array.shape == shape</c>).</para>
     /// </summary>
     [TestClass]
     public class BroadcastArraysWriteableTests : TestClass
     {
+        // =====================================================================
+        //  NumPy 2.4.2's rule: a read-only operand stays read-only, a matching operand is itself
+        // =====================================================================
+
+        /// <summary>
+        ///     The view of a read-only operand is read-only, and a write through it raises NumPy's ValueError instead of
+        ///     landing in the array its owner made read-only (NumPy 2.4.2:
+        ///     <c>np.broadcast_arrays(r, np.zeros((2, 2, 1)))[0].flags.writeable</c> is False; the QA-34 pin).
+        /// </summary>
+        [TestMethod]
+        public void ReadOnlyOperand_GivesAReadOnlyView_AndAWriteRaises()
+        {
+            using var r = np.arange(6.0).reshape(2, 3);
+            r.setflags(write: false);
+            using var deeper = np.zeros(new Shape(2, 2, 1));
+
+            var (stretched, other) = np.broadcast_arrays(r, deeper);
+            Action writeThrough = () => stretched[0, 0, 0] = (NDArray)99.0;
+
+            stretched.flags.writeable.Should().BeFalse("a view of a read-only operand stays read-only");
+            other.flags.writeable.Should().BeTrue("the view of a writeable operand stays writeable");
+            writeThrough.Should().Throw<ValueError>().WithMessage("assignment destination is read-only");
+            r.GetDouble(0, 0).Should().Be(0.0);
+            // The params form follows the same rule.
+            var views = np.broadcast_arrays(new[] { r, deeper });
+            views[0].flags.writeable.Should().BeFalse();
+        }
+
+        /// <summary>
+        ///     An operand already of the broadcast shape is returned AS ITSELF (NumPy 2.4.2:
+        ///     <c>np.broadcast_arrays(s, np.zeros((2, 2)))[0] is s</c>), its flags untouched — a read-only one stays read-only.
+        /// </summary>
+        [TestMethod]
+        public void MatchingOperand_IsReturnedAsItself()
+        {
+            using var s = np.zeros(new Shape(2, 3));
+            using var ro = np.arange(6.0).reshape(2, 3);
+            ro.setflags(write: false);
+            using var row = np.arange(3.0);
+
+            var (same, stretched) = np.broadcast_arrays(s, row);
+            var views = np.broadcast_arrays(new[] { ro, row });
+
+            ReferenceEquals(same, s).Should().BeTrue("NumPy returns `array if array.shape == shape`");
+            ReferenceEquals(stretched, row).Should().BeFalse("a stretched operand is a new view");
+            ReferenceEquals(views[0], ro).Should().BeTrue();
+            views[0].flags.writeable.Should().BeFalse("the operand itself keeps its own flags");
+        }
+
+        /// <summary>
+        ///     A <c>np.broadcast_to</c> operand is read-only, so a further stretched view of it is read-only too, and a
+        ///     matching one comes back as itself (NumPy 2.4.2: <c>bb is bt</c> and <c>writeable</c> False) — its stride-0
+        ///     elements never alias each other through a writeable view.
+        /// </summary>
+        [TestMethod]
+        public void BroadcastToOperand_StaysReadOnly()
+        {
+            using var bt = np.broadcast_to(np.arange(3.0), new Shape(2, 3));
+            using var deeper = np.zeros(new Shape(2, 2, 3));
+
+            var (same, _) = np.broadcast_arrays(bt, np.zeros(new Shape(2, 3)));
+            var (stretched, _) = np.broadcast_arrays(bt, deeper);
+
+            ReferenceEquals(same, bt).Should().BeTrue();
+            same.flags.writeable.Should().BeFalse();
+            stretched.flags.writeable.Should().BeFalse("a broadcast_to view is not writeable, so neither is its view");
+        }
+
         // =====================================================================
         //  Writeability flag parity (writeable == True for ALL results)
         // =====================================================================

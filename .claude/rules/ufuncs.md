@@ -53,7 +53,8 @@ Supported on the binary ufuncs `add`/`subtract`/`multiply`/`divide`/`true_divide
   space), and only then `out`'s no-stretch check against the joint shape (`ResolveUfuncIterationShape`,
   `BroadcastUfuncInputs`). A fresh result under `where=` takes NumPy's iterator layout, the mask voting
   (`WhereResultShape`: F operands under an F mask give an F result). The ufuncs that handle `out=` themselves (`ldexp`,
-  `divmod`, `modf`, `frexp`) keep their own texts and order.
+  `divmod`, `modf`, `frexp`) keep their own texts and order (divmod's follows NumPy's two-output call: The divmod
+  family).
 - NEP 50's weak operand is the Python scalar alone: in C# the 0-d array a number literal becomes through the implicit
   conversion (`NDArray.WasPythonLiteral`: the integer primitives, `float`, `double`, `Complex`; the `object` operator
   overloads mark a boxed number the same way, `NDArray.OperatorOperand`). It adopts the other operand's dtype, an array or
@@ -184,10 +185,22 @@ NumPy's Python int (`type(min) is int`); every other bound is strong — an elem
   bool → int8), out=/where=/dtype= and every dtype. Integer `fmod` is C# `%` with the ÷0 → 0 and int/long MIN % -1
   guards; float `fmod` is C# `a % b` (bit-identical to C `fmod`); complex is refused (NumPy's TypeError).
 - `np.divmod` returns `(floor_divide(x1, x2), remainder(x1, x2))`, byte for byte across ÷0 → (±inf, nan) / (0, 0) for
-  integers, signed MIN / -1 → (MIN, 0), ±inf, nan and -0.0. Its `out=(q, r)` / `where=` / `dtype=` path composes
-  `FloorDivide` and `Mod`; the common path is one fused IL kernel (`DirectILKernelGenerator.DivMod.cs`: a 4×-unrolled
-  scalar two-in/two-out loop over `NDDivision.Divmod*(a, b, out mod)` for contiguous, promoted operands). The integer
-  helpers use one division (`q = n / d; r = n - q * d`).
+  integers, signed MIN / -1 → (MIN, 0), ±inf, nan and -0.0. The common path is one fused IL kernel
+  (`DirectILKernelGenerator.DivMod.cs`: a 4×-unrolled scalar two-in/two-out loop over `NDDivision.Divmod*(a, b, out mod)`
+  for contiguous, promoted operands). The integer helpers use one division (`q = n / d; r = n - q * d`).
+- `out=(q, r)` (either slot null), `where=` and `dtype=` run NumPy's two-output ufunc call (`DivModInto`,
+  `Default.DivMod.cs`): ONE NDIter over `(x1, x2, out1, out2[, where])`, with np.clip's flags (COPY_IF_OVERLAP,
+  OVERLAP_ASSUME_ELEMENTWISE, outputs NO_BROADCAST, a masked caller out READWRITE, buffered casts for an input or out of
+  another dtype, a 0-d input cast up front), driving a C# two-output inner loop over the same `Divmod*` cores. Each
+  element pair is read before either result is stored, so an out that IS an input (`np.divmod(a, 2.0, out=(a, r))`)
+  still gives the remainders of the original dividends; any other overlap is COPY_IF_OVERLAP's copy. One array for
+  both outs keeps NumPy's last store: the quotient for float16/32/64 (the remainder is written inside `npy_divmod`),
+  the remainder for integers. Checks in NumPy's order, nothing written before they pass: both outs' writeability, the
+  mask, the loop (`dtype=` bool / complex: `No loop matching … for ufunc divmod`), the Python-int pack, the `dtype=`
+  input casts (`ufunc 'divmod' input 0`), the out casts numbered by operand (`output 2` / `output 3`), then the
+  iterator's broadcast (every operand listed) and the no-stretch check. A fresh result takes the iterator's layout,
+  every passed operand voting (`Shape.NpyIterOutputShape`); a text out is filled from a loop-dtype array after the loop.
+  Gate: `Math/np.divmod.OutRoute.Test.cs`.
 - float16 `mod`/`floor_divide`/`fmod` compute in float32 (NumPy's HALF loop `astype 'e'->'f'`) through the
   `NDDivision.*Single` helpers, so float16 ÷0 gives ±inf, bit-exact.
 - Gates: the `divmod_power`/`multioutput` tiers and the Math unit tests.

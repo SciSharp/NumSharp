@@ -340,6 +340,55 @@ namespace NumSharp.Tests.Casting
             BitConverter.DoubleToInt64Bits(d.GetDouble(1)).Should().Be(0x7FC00000L);
         }
 
+        // ---- non-native field descriptors (parity QA-38) -----------------------------------------
+
+        /// <summary>
+        ///     NumPy 2.4.2: <c>np.array([258, 5], np.int64).getfield('&gt;i4', 0)</c> is <c>[33619968, 83886080]</c> (each
+        ///     low word read big-endian). NumSharp has no non-native storage, so the field view is refused with
+        ///     <see cref="NotSupportedException"/>; the int32 lane route used to read it native (258, 5).
+        /// </summary>
+        [TestMethod]
+        public void GetField_NonNativeDescriptor_IsRefused()
+        {
+            using var a = np.array(new long[] { 258, 5 });
+            Action act = () => a.getfield(np.dtype(">i4"), 0).Dispose();
+            act.Should().Throw<NotSupportedException>().WithMessage("*non-native dtype*");
+        }
+
+        /// <summary>
+        ///     NumPy validates a field's size and offset whatever its byte order, so a non-native field NumPy itself refuses
+        ///     keeps NumPy's <see cref="ValueError"/> and text (<c>int32.getfield('&gt;i8')</c>: "new type is larger than
+        ///     original type"; <c>int32.getfield('&gt;i2', 3)</c>: "new type plus offset is larger than original type"); and a
+        ///     one-byte descriptor is native, so <c>int16([0x0102]).getfield('&gt;i1', 1)</c> reads <c>[1]</c>, as in NumPy.
+        /// </summary>
+        [TestMethod]
+        public void GetField_NonNative_NumPysSizeChecksFirst_OneByteFieldStillReads()
+        {
+            using var a = np.array(new int[] { 1, 2 });
+            Action wider = () => a.getfield(np.dtype(">i8"), 0).Dispose();
+            wider.Should().Throw<ValueError>().WithMessage("new type is larger than original type");
+            Action past = () => a.getfield(np.dtype(">i2"), 3).Dispose();
+            past.Should().Throw<ValueError>().WithMessage("new type plus offset is larger than original type");
+
+            using var h = np.array(new short[] { 0x0102 });
+            using var hi = h.getfield(np.dtype(">i1"), 1);
+            hi.ToArray<sbyte>().Should().Equal((sbyte)1);
+        }
+
+        /// <summary>
+        ///     NumPy 2.4.2: <c>d = np.zeros(2, np.int64); d.setfield(1, '&gt;i4', 0)</c> stores the value's bytes big-endian
+        ///     (<c>d == [16777216, 16777216]</c>). setfield builds its field through getfield, so the refusal comes before
+        ///     anything is written: <c>d</c> stays zero (it used to store a native 1 into each low word).
+        /// </summary>
+        [TestMethod]
+        public void SetField_NonNativeDescriptor_IsRefused_AndWritesNothing()
+        {
+            using var d = np.zeros(new Shape(2), NPTypeCode.Int64);
+            Action act = () => d.setfield(1, np.dtype(">i4"), 0);
+            act.Should().Throw<NotSupportedException>();
+            d.ToArray<long>().Should().Equal(0L, 0L);
+        }
+
         // ---- dtype overloads ---------------------------------------------------------------------
 
         [TestMethod]

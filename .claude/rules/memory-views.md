@@ -66,6 +66,12 @@ A view keeps its source's engine (`UnmanagedStorage.Engine`: `Alias`, the new-st
   element; the dimension is dropped).
 - Broadcasting aligns shapes from the right; each dimension pair must be equal or contain a 1, which stretches.
   `DefaultEngine.Broadcast` (`Backends/Default/ArrayManipulation/Default.Broadcasting.cs`) resolves the shapes.
+- `np.broadcast_to` views are always read-only. `np.broadcast_arrays` is NumPy 2.4.2's
+  (`NDArray.BroadcastArraysMember`, `Backends/NDArray.StrideTricks.cs`): an operand already of the broadcast shape comes
+  back as itself (a matrix / chararray operand as its plain view), every other result is a view writeable exactly when
+  its operand is (`_writeable_no_warn`), so the view of a read-only array or of a broadcast_to view stays read-only.
+  NumPy's FutureWarning on the first write through a writeable stretched view is not modelled. Gate:
+  `Creation/np.broadcast_arrays.Writeable.Test.cs`.
 - The operators live in `Operations/Elementwise/`: `NDArray.Primitive.cs` (`+ - * / %` and unary `-`, delegating to
   `TensorEngine.Add` / `Subtract` / …; a scalar operand is wrapped by `NDArray.Scalar()`) and `NDArray.Equals.cs` /
   `NDArray.Greater.cs` / `NDArray.Lower.cs` (comparisons returning `NDArray<bool>`). Indexing is

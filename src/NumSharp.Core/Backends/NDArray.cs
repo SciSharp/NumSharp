@@ -1160,8 +1160,11 @@ namespace NumSharp
         /// <exception cref="ValueError">NumPy's itemsize errors: a 0-d array changing size, a non-contiguous last axis, a
         ///     smaller dtype that does not divide the old itemsize (an unsized <c>'U'</c>/<c>'S'</c> never does), a larger one
         ///     that does not divide the last axis' byte length.</exception>
-        /// <exception cref="NotSupportedException">A fixed-width string view in a non-native byte order, or a dtype without
-        ///     storage (<c>datetime64</c> before Stage C).</exception>
+        /// <exception cref="NotSupportedException">A view in a non-native byte order (<c>'&gt;i4'</c> on a little-endian
+        ///     host, any non-native numeric or string descriptor: NumPy reads such bytes byte-swapped, NumSharp stores every
+        ///     dtype natively — decode them into a native copy with <c>np.frombuffer(a.tobytes(), '&gt;i4')</c>), raised once
+        ///     NumPy's itemsize checks pass (a view NumPy itself refuses raises its <see cref="ValueError"/>); or a dtype
+        ///     without storage (<c>datetime64</c> before Stage C).</exception>
         /// <exception cref="TypeError">A view from or to a NEP 55 <c>StringDType</c> descriptor that is not equal to this array's
         ///     (NumPy's <c>Cannot change data-type for array of references.</c>).</exception>
         /// <remarks>
@@ -1184,7 +1187,12 @@ namespace NumSharp
                     return new NDArray(Storage.Alias()) { TensorEngine = TensorEngine };
                 throw new TypeError(ViewOfReferencesText);
             }
-            if (typecode == NPTypeCode.String || dtype.Meta is StringDTypeMeta)
+            // The descriptor route also takes a NON-NATIVE numeric descriptor ('>i4' on a little-endian host): NumPy reads the
+            // bytes byte-swapped through it, and NumSharp stores every dtype natively, so AliasAsDescr runs NumPy's itemsize
+            // checks and then refuses it with NotSupportedException, as it refuses a non-native string view. Its lane alone
+            // (int32) used to give a native alias that read 258 where NumPy reads 33619968 (parity QA-38). A one-byte
+            // descriptor is always native ('|').
+            if (typecode == NPTypeCode.String || dtype.Meta is StringDTypeMeta || !dtype.isnative)
                 return new NDArray(Storage.AliasAsDescr(dtype)) { TensorEngine = TensorEngine };
             if (dtype.GetTypeCode() == Storage.TypeCode)
             {

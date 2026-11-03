@@ -41,6 +41,11 @@ namespace NumSharp
         /// <exception cref="TypeError"><c>Cannot get/set field of an object array</c>: this array or the field holds
         ///     references (a <c>StringDType</c>, whose cells point into its allocator) and the field is not the whole element
         ///     in this array's own descriptor (NumPy's <c>_getfield_is_safe</c>, checked before the size checks).</exception>
+        /// <exception cref="NotSupportedException">A non-native field descriptor (<c>'&gt;i4'</c> on a little-endian host):
+        ///     NumPy reads the field byte-swapped, NumSharp stores every dtype natively and has no such view (raised after
+        ///     NumPy's size / offset checks, so <c>getfield('&gt;i8')</c> of an int32 array is still NumPy's ValueError);
+        ///     an unsized string field; or a string-route field whose byte strides are not whole field items
+        ///     (<c>S3 → S2</c>: NumSharp keeps strides in elements).</exception>
         public NDArray getfield(DType dtype, int offset = 0)
         {
             // array_getfield reads its dtype with PyArray_DescrConverter ("O&"), which reads None as the default float64.
@@ -57,8 +62,10 @@ namespace NumSharp
 
             // A parametric class on either side (NPY_DT_PARAMETRIC: a fixed-width string): the field's width is the
             // descriptor's (not the storage lane's), and its item size need not divide the array's (S3 -> S1, int32 -> S2),
-            // so the descriptor route builds and checks the view.
-            if (this.dtype.Meta._parametric || dtype.Meta._parametric)
+            // so the descriptor route builds and checks the view. A NON-NATIVE field descriptor ('>i4') takes it too: after
+            // NumPy's three size / offset checks it refuses the byte order NumSharp cannot store (NotSupportedException),
+            // where the lane route below read the field in native order (258 for NumPy's 33619968: parity QA-38).
+            if (this.dtype.Meta._parametric || dtype.Meta._parametric || !dtype.isnative)
                 return new NDArray(Storage.GetFieldAliasDescr(dtype, offset)) { TensorEngine = TensorEngine };
 
             return new NDArray(Storage.GetFieldAlias(dtype.GetTypeCode(), offset)) { TensorEngine = TensorEngine };
@@ -118,6 +125,9 @@ namespace NumSharp
         /// </exception>
         /// <exception cref="TypeError"><c>getfield</c>'s <c>Cannot get/set field of an object array</c> (a <c>StringDType</c>
         ///     array or field other than the whole element in its own descriptor, which IS assigned).</exception>
+        /// <exception cref="NotSupportedException"><c>getfield</c>'s refusal of a non-native field descriptor
+        ///     (<c>setfield(1, '&gt;i4')</c>: NumPy stores the value's bytes big-endian, NumSharp has no non-native storage —
+        ///     nothing is written).</exception>
         [NDScoped] // void boundary: reclaims the field view (a counted reference on this array's buffer) and a value converted here
         public void setfield(object value, DType dtype, int offset = 0)
         {

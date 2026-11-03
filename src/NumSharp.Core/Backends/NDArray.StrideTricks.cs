@@ -42,20 +42,33 @@ namespace NumSharp
         internal static NDArray broadcast_to(NDArray from, Shape against) => broadcast_to(from.Storage, against);
 
         /// <summary>
-        ///     NumPy's <c>numpy.broadcast_arrays(*args)</c> for a list of arrays, after the facade: every array viewed at
-        ///     the shape they broadcast to together, the stretched and the prepended axes read with stride 0. The views are
-        ///     WRITEABLE, as NumPy 2.4.2 still returns them (with a FutureWarning that a later version will not), unlike
-        ///     <see cref="broadcast_to(NDArray, Shape)"/>'s.
+        ///     NumPy 2.4.2's <c>numpy.broadcast_arrays(*args)</c> for a list of arrays, after the facade: every array at the
+        ///     shape they broadcast to together — an array already of that shape is returned AS ITSELF, every other one is
+        ///     a view whose stretched and prepended axes read with stride 0, writeable exactly when its array is.
         /// </summary>
         /// <param name="ndArrays">The arrays (not null, no element null).</param>
-        /// <returns>One new view per array, in order, each over its array's buffer (and keeping it alive). Footgun:
-        ///     several elements of a stretched view are one memory location, so a write through one element writes every
-        ///     element that aliases it; copy first to write independently.</returns>
+        /// <returns>One array per operand, in order: the operand itself when its shape is the broadcast shape (NumPy's
+        ///     <c>array if array.shape == shape</c>), else a new view over its buffer (keeping it alive). Footgun: several
+        ///     elements of a stretched view are one memory location, so a write through one element writes every element
+        ///     that aliases it (NumPy warns on such a write); copy first to write independently. Do not dispose a result
+        ///     without checking it is not the caller's own operand.</returns>
         /// <exception cref="IncorrectShapeException">The arrays do not broadcast together
         ///     (<see cref="Shape.Broadcast(Shape[])"/>), checked before any view is built.</exception>
-        /// <remarks>No numpy.matrix rule runs here: the result is a list of plain arrays whatever the operands' classes.
-        ///     The facade opens its matrix region around this call; an engine or storage caller needs none (no public
-        ///     function runs inside).</remarks>
+        /// <remarks>
+        ///     <para>
+        ///     NumPy builds each stretched view with <c>_broadcast_to(array, shape, readonly=False)</c>, which sets
+        ///     <c>writeable = True</c> only <c>if array.flags._writeable_no_warn</c>: the view of a read-only operand (one
+        ///     whose WRITEABLE flag was cleared, a <c>np.broadcast_to</c> view) stays read-only, so a write through it raises
+        ///     NumPy's <c>ValueError: assignment destination is read-only</c>. Every view used to be forced writeable, and
+        ///     such a write landed in the memory its owner had made read-only (parity QA-34).
+        ///     </para>
+        ///     <para>
+        ///     No numpy.matrix rule runs here: a matrix or chararray operand is first viewed as a plain array, as NumPy's
+        ///     <c>np.array(_m, copy=None, subok=False)</c> does, so the results are plain arrays whatever the operands'
+        ///     classes. The facade opens its matrix region around this call; an engine or storage caller needs none (no
+        ///     public function runs inside).
+        ///     </para>
+        /// </remarks>
         internal static NDArray[] broadcast_arrays(NDArray[] ndArrays)
         {
             int len = ndArrays.Length;
@@ -67,13 +80,39 @@ namespace NumSharp
 
             var list = new NDArray[len];
             for (i = 0; i < len; i++)
-                // NumPy 2.4.2 parity: broadcast_arrays results are WRITEABLE (unlike broadcast_to),
-                // even for stretched (stride-0) dimensions. NumPy emits a FutureWarning that a future
-                // version will change this, but 2.4.2 still returns writeable=True. Force the flag on so
-                // even a broadcasted subshape (which Shape.Broadcast marks read-only) stays writeable.
-                list[i] = new NDArray(UnmanagedStorage.CreateBroadcastedUnsafe(ndArrays[i].Storage, outputShapes[i].WithFlags(flagsToSet: ArrayFlags.WRITEABLE)));
+                list[i] = BroadcastArraysMember(ndArrays[i], outputShapes[i]);
 
             return list;
+        }
+
+        /// <summary>
+        ///     One result of NumPy 2.4.2's <c>broadcast_arrays</c>: <c>array if array.shape == shape else
+        ///     _broadcast_to(array, shape, subok=False, readonly=False)</c>.
+        /// </summary>
+        /// <param name="operand">The operand as the caller passed it (not null).</param>
+        /// <param name="broadcast">The operand's layout at the broadcast shape (<see cref="Shape.Broadcast(Shape[])"/>'s entry
+        ///     for it: the operand's strides with 0 on every stretched or prepended axis).</param>
+        /// <returns>The operand itself (or its plain view, for a subclass operand) when its dimensions already are the
+        ///     broadcast shape's; else a new view over its buffer, WRITEABLE exactly when the operand is.</returns>
+        /// <remarks>
+        ///     <c>_writeable_no_warn</c> is the operand's own WRITEABLE flag (<c>flags.writeable</c>, the shape's flag here):
+        ///     a stretched view of a writeable array stays writeable, as NumPy 2.4.2 returns it (with a FutureWarning on the
+        ///     first write that NumSharp does not model), while <see cref="Shape.Broadcast(Shape[])"/> marks every stretched
+        ///     layout read-only by itself, so the flag is set or cleared explicitly either way.
+        /// </remarks>
+        internal static NDArray BroadcastArraysMember(NDArray operand, Shape broadcast)
+        {
+            // `args = [np.array(_m, copy=None, subok=False) for _m in args]`: a plain array is itself, a numpy.matrix or a
+            // numpy.char.chararray becomes a new plain view of its memory (owned by the caller like any view).
+            var plain = NDCharArrayBoundary.PlainViewOf(NDMatrixBoundary.PlainOf(operand));
+            // `array if array.shape == shape`: the operand itself, identity included (`r[0] is a` in NumPy).
+            if (SameDims(plain.Shape.dimensions, broadcast.dimensions))
+                return plain;
+            // `_broadcast_to(..., readonly=False)`: writeable only `if array.flags._writeable_no_warn`.
+            var layout = plain.Shape.IsWriteable
+                ? broadcast.WithFlags(flagsToSet: ArrayFlags.WRITEABLE)
+                : broadcast.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
+            return new NDArray(UnmanagedStorage.CreateBroadcastedUnsafe(plain.Storage, layout));
         }
     }
 }
