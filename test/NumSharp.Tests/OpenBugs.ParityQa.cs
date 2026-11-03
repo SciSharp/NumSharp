@@ -1289,5 +1289,39 @@ namespace NumSharp.Tests
 
             close.ToArray<bool>().Should().Equal(true, true);
         }
+
+        // ------------------------------------------------------------------
+        // QA-38 — ndarray.view with a non-native numeric dtype ignores the byte order
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     <c>a.view(dtype)</c> reads the same bytes through the new descriptor, byte order included:
+        ///     <c>np.array([258], np.int32).view('&gt;i4')</c> is <c>[33619968]</c> (the little-endian bytes
+        ///     <c>02 01 00 00</c> read big-endian). NumSharp keeps no non-native storage (documented: np.frombuffer /
+        ///     np.fromfile / np.load decode a non-native descriptor into a native copy, correctly), but
+        ///     <c>NDArray.view(DType)</c> (Backends/NDArray.cs) compares only the lane (<c>dtype.GetTypeCode() ==
+        ///     Storage.TypeCode</c>) and returns a native alias: <c>[258]</c>, int32 (<c>p95</c>). The fixed-width string branch
+        ///     of the same method refuses a non-native view with <see cref="NotSupportedException"/>; the numeric branch
+        ///     silently reads native order instead. Either NumPy's values (a decoded copy, since no view can hold them) or the
+        ///     string branch's refusal would be faithful; this test accepts both and fails only on the silent native read.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA38")]
+        public void ParityQa_ViewWithNonNativeDtype_ShouldNotReadNativeOrderSilently()
+        {
+            using var a = np.array(new[] { 258 });
+
+            NDArray v;
+            try
+            {
+                v = a.view(np.dtype(">i4"));
+            }
+            catch (NotSupportedException)
+            {
+                return; // the refusal the string branch already gives is an acceptable fix
+            }
+
+            using (v)
+                Convert.ToInt64(v.GetValue(0)).Should().Be(33619968L, "NumPy reads the bytes 02 01 00 00 big-endian");
+        }
     }
 }
