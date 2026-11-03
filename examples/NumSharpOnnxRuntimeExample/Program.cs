@@ -1,7 +1,7 @@
 // NumSharpOnnxRuntimeExample: image classification with ONNX Runtime, the pre- and post-processing in NumSharp.
 //
 // ONNX Runtime's C# ResNet50 tutorial fills its input tensor pixel by pixel and ranks the 1,000 scores with LINQ.
-// Here both loops are array operations: ImageSharp decodes and resizes each photo, NumSharp normalizes it and lays
+// Here both loops are array operations: SkiaSharp decodes and resizes each photo, NumSharp normalizes it and lays
 // it out channels-first, the session reads the NumSharp batch in place, and the scores come back as an NDArray.
 //
 //     dotnet run -c Release                        classifies a sample photo
