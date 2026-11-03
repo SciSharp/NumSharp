@@ -422,6 +422,12 @@ The proposals (section 5) are separate, each the owner's to accept or drop:
   auto-merged the ML.NET page and README, which P1 edits too.
 - To take only some: cherry-pick each accepted commit in the order P12, P11, P7, P1 and resolve the doc conflicts as
   above (rerere recorded both resolutions in this clone).
+- Onto the RELEASE (verified 02:44, read-only, scratch `probes/simulate_proposals.py`): on top of the release + QA result
+  (`1cbf05dc`, section 8's check) every proposal commit applies cleanly ALONE; taken together in the order P12, P11, P7,
+  P1, P16, P14, P17 the same three conflicts appear as on `qa/proposals-all` and nothing else - P11 and P7 after P12
+  (the Run forms' XML docs), P17 after P1 (the cursor's constructor). Their resolutions are the merge commits
+  `fa99e1c4`, `ddb979f8` and `1cb2deff` of `qa/proposals-all` (`git show <merge>` prints the combined diff); this
+  clone's rerere cache holds all three.
 
 ## 7. Log
 
@@ -469,3 +475,4 @@ The proposals (section 5) are separate, each the owner's to accept or drop:
 | 02:28 | A42 (F62): big-endian data is byte-swapped on load (no non-native arrays exist), misaligned buffers cross zero-copy correctly, SqueezeNet byte-identical at offsets 1-3. |
 | 02:34 | A43 (F63 fixed): a lazy transform's output read after the view's `using` scope - the refusal now names ML.NET's laziness and the remedy; the page's Lifetime section says it; a test for both view kinds. |
 | 02:43 | Section 8 verified: the 36 commits after `1c001253` cherry-pick cleanly onto `release-0.80.0-beta1` (`ac6526e2`), simulated read-only; the result builds and passes both suites at the floors and current versions. |
+| 02:44 | The proposals onto the release + QA result: each clean alone; together only the three known conflicts, resolved on `qa/proposals-all`. |
