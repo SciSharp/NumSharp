@@ -20,7 +20,10 @@ log (section 7). Every new idea becomes a work-list row before it is worked on.
   .NET 11 RC3 (F53), memory maps (F60), guard pages (F61), Linux (F27). No leak (F21).
 - **Fixed on this branch** (cherry-pick all of it, section 8 - verified clean onto `release-0.80.0-beta1`): F02 / F03
   text refusals, F35 dtype maps, F36 docs, F49 text-column route, F54 BFloat16 input message, F63 lazy-scope message,
-  and docs facts F10 / F17 / F20 / F24 / F31 / F37 / F44 / F51 / F56 / F59. Suites: ORT 312, ML.NET 212.
+  F65 RunInto output message, and docs facts F10 / F17 / F20 / F24 / F31 / F37 / F44 / F51 / F56 / F59 / F67 / F69, the
+  P3 and P5 documentation halves. End state (`1deac38c`, Windows): ORT 1.16.0 292 + 20 Inconclusive and 1.31.0 / 1.31.1
+  312 / 312, ML.NET 2.0.1 / 4.0.2 / 5.0.1 212 / 212, net8.0 and net10.0; all 55 commits apply cleanly onto the release
+  branch and pass there too. The probe scripts are on `qa/interop-probes`.
 - **Decide BEFORE the tag** (a published package cannot be changed):
   - **P16 (F52, high): the ML.NET range `[2.0.0, 6.0.0)` becomes a restore ERROR (NU1107) the day ML.NET 6.0.0 ships
     (with .NET, this month).** Branch `qa/p16-mlnet-range`: `[2.0.0, 7.0.0)`, green on the 6.0 preview.
@@ -295,7 +298,8 @@ rides in P12's commit) - and `qa/proposals-all` merges all seven with their thre
   `NUGETAPIKEY` may push NEW ids matching `NumSharp.Interop.*` ("Push new packages and package versions", glob
   `NumSharp*`). Optionally let the push loop report every failure at the end instead of stopping at the first.
 - **P10 (F26) CI's "current" versions.** Proven locally: Microsoft.ML 5.0.1 (a new major, inside the range) 209 / 209
-  on net8.0 and net10.0; ONNX Runtime 1.31.1 312 / 312. Recommended: add an ML.NET 5.0.1 leg (keep 4.0.2), move ORT's
+  on net8.0 and net10.0 then, 212 / 212 on both at the end of the run; ONNX Runtime 1.31.1 312 / 312 (and the 6.0.0
+  ML.NET preview 211 / 211, .NET 11 RC3 both suites: F52, F53). Recommended: add an ML.NET 5.0.1 leg (keep 4.0.2), move ORT's
   current leg to 1.31.1, and update the "Verified on" lines (docs, READMEs, notes, csproj comments).
 - **P11 (F29, F30) Use-after-dispose of ORT objects ends the process.** Proven: `Run` on a disposed session and
   `ToNDArray` of a disposed bare `OrtValue` are access violations (raw ORT too). Both types carry a private
@@ -422,14 +426,15 @@ the two bridges). Nothing here was merged there. To ship the results in the beta
 `release-0.80.0-beta1` everything after `1c001253` EXCEPT `1c001253` itself (that branch has its own release
 commits):
 
-**Verified (02:43):** `git cherry-pick 1c001253..qa/interop-release` - every commit after the prep commit, 36 at
-`4aa6b2f4` - applies with NO conflict onto `release-0.80.0-beta1` at `ac6526e2` (its latest merge of `strings`): each pick
-simulated read-only with `git merge-tree --write-tree --merge-base=<commit>^` and chained through unreferenced commit
-objects (scratch `probes/simulate_cherry_picks.py`; the tool flags a known conflict, P12 onto P11, so its zero is
-trustworthy). The result (simulated commit `1cbf05dc`, exported without the oracle / unit-test / docs / benchmark folders)
-builds and passes ORT 1.31.1 net10.0 312 / 312, ORT 1.16.0 net8.0 292 + 20 Inconclusive, ML.NET 5.0.1 net10.0 212 / 212 and
-ML.NET 2.0.1 net8.0 212 / 212. The "Cherry-pick note" column below was written before the check: none of its predicted
-conflicts occurs at `ac6526e2`. Re-run the simulation if the release branch moves again.
+**Verified (03:53, the end state):** `git cherry-pick 1c001253..qa/interop-release` - 55 commits at `1deac38c` (every commit
+after it is this file only) - applies with NO conflict onto `release-0.80.0-beta1` at `ac6526e2` (its latest merge of
+`strings`): each pick simulated read-only with `git merge-tree --write-tree --merge-base=<commit>^`, chained through
+unreferenced commit objects (scratch `probes/simulate_cherry_picks.py`, preserved on `qa/interop-probes`; the tool flags
+a known conflict, P12 onto P11, so its zero is trustworthy). The result (simulated commit `7a2a0d71`, exported without
+the oracle / unit-test / docs / benchmark folders) builds and passes ORT 1.31.1 net10.0 312 / 312, ORT 1.16.0 net8.0
+292 + 20 Inconclusive, ML.NET 5.0.1 net10.0 212 / 212 and ML.NET 2.0.1 net8.0 212 / 212 (the same check at 36 commits
+passed at 01:40). The "Cherry-pick note" column below was written before the check: none of its predicted conflicts
+occurs at `ac6526e2`. Re-run the simulation if the release branch moves again.
 
 | Commit | What | Cherry-pick note |
 |---|---|---|
@@ -542,3 +547,4 @@ The proposals (section 5) are separate, each the owner's to accept or drop:
 | 03:24 | The 100 probe scripts copied out of the scratchpad onto branch `qa/interop-probes` (`1bed7bc9`), with a README on running them again. |
 | 03:26 | A49 (F69): F# works with both bridges, but `dotnet fsi` loads System32's ORT 1.17 despite the referenced package - the first call fails; the ORT page now gives the message and the load-by-path workaround (run verbatim). |
 | 03:32 | P11 checked in a trimmed app: the guard works, but its GetField on an unannotated generic warned (IL2090) in every trimmed consumer; fixed on the P11 branch (`2c9b933c`, annotation), merged into `qa/proposals-all` (`2543a218`). |
+| 03:53 | End state verified: the full Windows matrix on `1deac38c` (ORT 1.16.0 / 1.31.0 / 1.31.1, ML.NET 2.0.1 / 4.0.2 / 5.0.1, net8.0 / net10.0) is green; the 55 commits after `1c001253` cherry-pick cleanly onto `release-0.80.0-beta1` (`ac6526e2`) and the result passes four legs. Sections 0, 8 and P10 refreshed. |
