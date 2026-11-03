@@ -28,7 +28,7 @@ log (section 7). Every new idea becomes a work-list row before it is worked on.
   columns as int64 ticks, ragged rows through `GetColumn<T[]>`), NDScope regression suites in both bridges (F74, each
   proven by a planted mutant), and docs facts F10 / F17 / F20 / F24 / F31 / F37 / F44 / F51 / F56 / F59 / F67 / F69 /
   F71 / F73 / F75 / F76 / F82 (golden `.npz` files from Python feed `Run` as they are) / F83 (an `NDScope` held across
-  `await session.RunAsync` frees another thread's arrays: the page warns), the P3 and P5 documentation halves. All 70 commits apply cleanly onto the release branch
+  `await session.RunAsync` frees another thread's arrays: the page warns), the P3 and P5 documentation halves. All 84 commits apply cleanly onto the release branch
   (`ac6526e2`) and the result passes there (section 8). The probe scripts are on `qa/interop-probes`.
 - **Decide BEFORE the tag** (a published package cannot be changed):
   - **P16 (F52, high): the ML.NET range `[2.0.0, 6.0.0)` becomes a restore ERROR (NU1107) the day ML.NET 6.0.0 ships
@@ -343,8 +343,11 @@ rides in P12's commit) - and `qa/proposals-all` merges all seven with their thre
   `NUGETAPIKEY` may push NEW ids matching `NumSharp.Interop.*` ("Push new packages and package versions", glob
   `NumSharp*`). Optionally let the push loop report every failure at the end instead of stopping at the first.
 - **P10 (F26) CI's "current" versions.** Proven locally: Microsoft.ML 5.0.1 (a new major, inside the range) 209 / 209
-  on net8.0 and net10.0 then, 212 / 212 on both at the end of the run; ONNX Runtime 1.31.1 312 / 312 (and the 6.0.0
-  ML.NET preview 211 / 211, .NET 11 RC3 both suites: F52, F53). Recommended: add an ML.NET 5.0.1 leg (keep 4.0.2), move ORT's
+  on net8.0 and net10.0 then, 212 / 212 on both in the 03:45 matrix (`1deac38c`, with ORT 1.31.0 and 1.31.1 312 / 312);
+  at the end, with the NDScope and time-column tests added, ML.NET 5.0.1 net10.0 216 + 1 skipped on the simulated
+  release result (`6d191cc7`) and 225 + 1 on `qa/proposals-all`, ORT 1.31.1 net10.0 324 + 2 there (the two GC-window
+  tests that are Inconclusive in any Debug build) (and the 6.0.0 ML.NET preview 211 / 211, .NET 11 RC3 both suites:
+  F52, F53). Recommended: add an ML.NET 5.0.1 leg (keep 4.0.2), move ORT's
   current leg to 1.31.1, and update the "Verified on" lines (docs, READMEs, notes, csproj comments).
 - **P11 (F29, F30) Use-after-dispose of ORT objects ends the process.** Proven: `Run` on a disposed session and
   `ToNDArray` of a disposed bare `OrtValue` are access violations (raw ORT too). Both types carry a private
@@ -517,7 +520,7 @@ the two bridges). Nothing here was merged there. To ship the results in the beta
 commits):
 
 **Verified (04:53, the end state):** `git cherry-pick 1c001253..qa/interop-release` - 70 commits at `11203d65`, then the
-closing commits (this file, one sentence of `.claude/rules/interop-packages.md`, and F82 / F83 on the ORT page): 83 in
+closing commits (this file, one sentence of `.claude/rules/interop-packages.md`, and F82 / F83 on the ORT page): 84 in
 all at the end (05:15), re-simulated clean, - applies with NO conflict onto `release-0.80.0-beta1` at `ac6526e2` (its latest
 merge of `strings`, unchanged since 02:00): each pick simulated read-only with `git merge-tree --write-tree
 --merge-base=<commit>^`, chained through unreferenced commit objects (scratch `probes/simulate_cherry_picks.py`,
@@ -674,3 +677,4 @@ The proposals (section 5) are separate, each the owner's to accept or drop:
 | 05:29 | F84 re-proven with `ReturnsTask`'s deferral honored (`CloseUnlessDeferred`): still freed memory; a plain `using` loses the deferral. 81 commits at the end. |
 | 05:27 | P21 implemented on `qa/p21-run-outputs-carrier` (`0cc27845`): RunOutputs is an INDArrayCarrier; two tests, mutant-proven; ORT 1.31.1 319 + 2, floor 298 + 23. 82 commits at the end. |
 | 05:30 | P19 cross-referenced to the parity QA's QA-36 (the same Core gap, already pinned on `strings`). 83 commits at the end. |
+| 05:32 | Re-checked at the owner's request (a queued instruction from 03:50): the final Windows matrix (`b7yvpac5r`, `1deac38c`) and the simulated release+QA tree `7a2a0d71` were already read and recorded at 03:53 (section 8); P10 now quotes the end-state counts and section 0 the final commit count (84). |
