@@ -9,7 +9,7 @@ log (section 7). Every new idea becomes a work-list row before it is worked on.
 | Started | 2026-11-02 21:52 +0200; planned end 2026-11-03 05:52 +0200 |
 | Branch | `qa/interop-release` (local), worktree `K:\source\NumSharp\.claude\worktrees\interop-qa` |
 | Base | `strings` `23ce02ea` (journey4 + strings, the beta's line); release prep commit `1c001253` on top |
-| Scratch | `C:\Users\ELI\AppData\Local\Temp\claude\K--source-NumSharp\a4c6ff8e-6ba9-48a1-8c05-d4202f4019c4\scratchpad` (wiped nightly: nothing durable lives only there); its SCRIPTS are preserved on branch `qa/interop-probes` (`1bed7bc9`, `docs/plans/interop-qa-probes/`, outside the cherry-pick range) |
+| Scratch | `C:\Users\ELI\AppData\Local\Temp\claude\K--source-NumSharp\a4c6ff8e-6ba9-48a1-8c05-d4202f4019c4\scratchpad` (wiped nightly: nothing durable lives only there); its SCRIPTS are preserved on branch `qa/interop-probes` (`a9f1a217`: 120 files, `docs/plans/interop-qa-probes/`, outside the cherry-pick range) |
 | Python | `C:\Users\ELI\.claude\python\python.exe` (3.12, numpy 2.4.2, onnx 1.22.0, onnxruntime 1.29.0, torch 2.12.1, transformers 4.45.2, scikit-learn 1.8.0, Pillow 11.3.0); scratch `venv/` adds skl2onnx (and pandas) |
 
 ## 0. The result on one screen
@@ -479,8 +479,8 @@ the two bridges). Nothing here was merged there. To ship the results in the beta
 `release-0.80.0-beta1` everything after `1c001253` EXCEPT `1c001253` itself (that branch has its own release
 commits):
 
-**Verified (04:53, the end state):** `git cherry-pick 1c001253..qa/interop-release` - 70 commits at `11203d65` (every
-commit after it is this file only) - applies with NO conflict onto `release-0.80.0-beta1` at `ac6526e2` (its latest
+**Verified (04:53, the end state):** `git cherry-pick 1c001253..qa/interop-release` - 70 commits at `11203d65`, then the
+closing docs commits (this file, and one sentence of `.claude/rules/interop-packages.md`): 72 in all, re-simulated clean, - applies with NO conflict onto `release-0.80.0-beta1` at `ac6526e2` (its latest
 merge of `strings`, unchanged since 02:00): each pick simulated read-only with `git merge-tree --write-tree
 --merge-base=<commit>^`, chained through unreferenced commit objects (scratch `probes/simulate_cherry_picks.py`,
 preserved on `qa/interop-probes`; the tool flags a known conflict, P12 onto P11, so its zero is trustworthy). The
