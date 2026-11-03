@@ -418,6 +418,9 @@ their behaviour report Inconclusive and the test of their refusal runs.
   console app to copy: photos classified with MobileNetV2 in one batch, decoded by SkiaSharp, normalized and
   laid out channels-first with NumSharp, scored with `Postprocess.Softmax` / `TopK`, and run again with
   `RunInto` into an array allocated once
+- [Train in ML.NET, serve with ONNX Runtime](https://github.com/SciSharp/NumSharp/tree/master/examples/NumSharpMLNetToOnnxRuntimeExample) -
+  a console app to copy: a model ML.NET trained on NumSharp arrays and exported with `ConvertToOnnx`, served
+  from NumSharp column slices with its unread `Label` input fed as zeros, and checked against ML.NET's scores
 - [Interoperability overview](index.md) - the contract every bridge builds on
 - [Python & numpy (pythonnet)](pythonnet-numpy.md) - the sibling bridge whose lifetime model this one mirrors
 - Package README: `src/NumSharp.Interop.OnnxRuntime/README.md` · plan: `docs/plans/onnxruntime.md` ·

@@ -34,7 +34,9 @@ log (section 7). Every new idea becomes a work-list row before it is worked on.
   P1 dictionary views (Features + Label; also the training-speed fix, F59), P2 + P12 feed checks (Python's rule; ML.NET
   exports need it, F51), P7 RunAsync for dynamic batches, P11 disposed-object guard (two process crashes, F29 / F30),
   P14 CI nupkg-consumer gates, P16, P17 a view that shuffles (SDCA on ordered rows, F56).
-- **Deferred, documented**: P3, P5, P8, P10, P13, P15 (section 5).
+- **Deferred, documented**: P3, P5, P8, P10, P13, P15, P18 (section 5).
+- **Examples** (section 6): ImageNet with ONNX Runtime, train / evaluate / k-means with ML.NET, and train in ML.NET ->
+  export -> serve with ONNX Runtime (both bridges), each proven on Windows and Linux from the local beta feed.
 
 ## 1. The brief (the owner, 2026-11-02)
 
@@ -423,6 +425,7 @@ proven against the local feed of this run's packs (`-p:RestoreAdditionalProjectS
 |---|---|---|
 | `examples/NumSharpOnnxRuntimeExample` | ImageNet classification with MobileNetV2 (downloaded on the first run with its labels and a sample photo): SkiaSharp decodes, crops and resizes; NumSharp drops alpha, scales, normalizes by broadcasting and transposes to NCHW; `np.stack` batches N photos; `session.Run(batch)` reads the batch in place; `Postprocess.Softmax` + `TopK`; `RunInto` into an array allocated once. NDW012-clean (every array in a `using`). | Windows: Samoyed 86.7%, then a batch of three photos (two Samoyeds, a golden retriever 44.0%), `RunInto wrote the same scores: True`; no warning at all. Linux (WSL, copied out of the repository, so no `Directory.Build.props`): the same output, no warning. |
 | `examples/NumSharpMLNetExample` | Two Gaussian clouds made with `RandomState` (shuffled with `permutation` + fancy indexing); a binary classifier trained from a `(rows, 5)` array as five scalar columns (the label converted OUTSIDE the model, so the model scores a features-only view: the F01 route written as a pattern); `PredictedLabel` / `Probability` read back and scored with NumSharp; ML.NET's own evaluation agreeing; k-means on one vector column, cluster ids back as uint32. Microsoft.ML 5.0.1. | Windows, three runs identical: accuracy 93.5% (NumSharp) = 93.5% (ML.NET), AUC 0.982, k-means 93.8%, live views 0. (SDCA made the accuracy vary run to run, 93.0-93.5%, being multi-threaded; the example uses L-BFGS.) Linux (WSL, copied out of the repository): the same four lines. |
+| `examples/NumSharpMLNetToOnnxRuntimeExample` | Both bridges in one app (F51's route): 2,000 houses made in NumSharp inside an `NDScope` (`Houses.cs`, the table handed back with `scope.Returns`); a regression trained by ML.NET on the table's named scalar columns (`Concatenate` + `NormalizeMinMax` + single-threaded SDCA); `ConvertToOnnx` into memory; an `InferenceSession` over the bytes fed from NumSharp column slices with the unread `Label` input as zeros; the same rows scored by ML.NET and compared in NumSharp. NDW012-clean, live counters 0. Microsoft.ML 5.0.1, OnnxConverter 0.23.1, ORT 1.31.1. | Windows (03:57): R² 0.9870, five predictions equal across the runtimes (largest difference 3.05e-05), two runs byte-identical; Linux (WSL, copied out of the repository): the same lines. Linked from both pages' See also. |
 
 ## 8. Carrying the results to the release
 
@@ -556,3 +559,4 @@ The proposals (section 5) are separate, each the owner's to accept or drop:
 | 03:32 | P11 checked in a trimmed app: the guard works, but its GetField on an unannotated generic warned (IL2090) in every trimmed consumer; fixed on the P11 branch (`2c9b933c`, annotation), merged into `qa/proposals-all` (`2543a218`). |
 | 03:53 | End state verified: the full Windows matrix on `1deac38c` (ORT 1.16.0 / 1.31.0 / 1.31.1, ML.NET 2.0.1 / 4.0.2 / 5.0.1, net8.0 / net10.0) is green; the 55 commits after `1c001253` cherry-pick cleanly onto `release-0.80.0-beta1` (`ac6526e2`) and the result passes four legs. Sections 0, 8 and P10 refreshed. |
 | 03:53 | A50 (F70): duplicate names in `AsDataView(string[])` hide a column silently (ML.NET's own semantics); P18 recommends refusing them. |
+| 03:57 | A third example: `examples/NumSharpMLNetToOnnxRuntimeExample` (train in ML.NET on NumSharp data, `ConvertToOnnx`, serve through the ORT bridge, compare), NDW012-clean, deterministic, identical on Windows and Linux; linked from both pages. |

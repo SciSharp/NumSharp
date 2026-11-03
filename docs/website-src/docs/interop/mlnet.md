@@ -299,5 +299,8 @@ leaves the native runtime to the consumer.
   console app to copy: a binary classifier trained from a NumSharp array exposed as named scalar columns
   (the label converted outside the model, so the model scores features alone), its predictions read back
   and scored with NumSharp next to ML.NET's own evaluation, and k-means on one vector column
+- [Train in ML.NET, serve with ONNX Runtime](https://github.com/SciSharp/NumSharp/tree/master/examples/NumSharpMLNetToOnnxRuntimeExample) -
+  a console app to copy: a regression trained on a NumSharp table, exported with ML.NET's `ConvertToOnnx`,
+  served from NumSharp arrays through the ONNX Runtime bridge, and checked against ML.NET's own scores
 - [Interoperability overview](index.md) - the contract every bridge builds on
 - [ONNX Runtime](onnxruntime.md) - the sibling bridge for ONNX models
