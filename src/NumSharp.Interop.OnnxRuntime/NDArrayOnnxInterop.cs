@@ -125,9 +125,15 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     <see cref="ToTensorElementType"/> without the throw: <c>false</c> for every dtype that has no ONNX tensor
         ///     element type — Decimal, Complex, a datetime64 / timedelta64 descriptor — and for <c>null</c>.
         /// </summary>
+        /// <remarks>
+        ///     The answer is the element type the data has in ONNX, which is not always a promise that an array of the dtype
+        ///     crosses: the text lane answers <see cref="TensorElementType.String"/> for all three text classes, and the
+        ///     fixed-width ones (<c>U</c>, <c>S</c>) cross as a copy, but the verbs refuse a <c>StringDType</c> (<c>T</c>)
+        ///     array - cast it to a sized <c>U</c> first (<c>nd.astype(np.dtype("U16"))</c>), as their message says.
+        /// </remarks>
         /// <param name="dtype">The NumSharp dtype, or null.</param>
         /// <param name="type">The ONNX element type when the result is <c>true</c>; <c>default</c> otherwise.</param>
-        /// <returns><c>true</c> when the dtype crosses to ONNX Runtime.</returns>
+        /// <returns><c>true</c> when the dtype has an ONNX tensor element type (a <c>StringDType</c> array, mapped to <see cref="TensorElementType.String"/>, is still refused by the verbs).</returns>
         public static bool TryToTensorElementType(DType dtype, out TensorElementType type)
         {
             // Meta.TypeCode, not GetTypeCode(): the latter THROWS for a descriptor whose class has no storage yet

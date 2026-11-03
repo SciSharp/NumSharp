@@ -244,8 +244,9 @@ each with its tests and docs, never merged here (the **Branch** line of each ent
     output passes it (only the run tells), and the collectors still refuse an empty one after the run.
 - **P3 (F11) `TryToTensorElementType(StringDType)` answers `String`.** Recommended: keep the answer (`String` is the
   element type such data has) and say in the remarks that the crossing verbs refuse a StringDType array; switch to
-  `false` only if the maps are meant to answer "crosses today". (Doc-only either way; not done here because the
-  intended meaning of the map is the owner's.)
+  `false` only if the maps are meant to answer "crosses today". (Doc-only either way.) **Done (03:21):** the false
+  `<returns>` ("true when the dtype crosses to ONNX Runtime") now says what the method answers today - the element type,
+  a StringDType array still refused by the verbs - with a remark; switching the answer to `false` stays the owner's call.
 - **P4 (F04) The NumSharp dependency range of packages that use Core internals.** Proven: both bridges call Core
   internals (`ArraySlice.WrapShared`, `NDArray.Storage`) and depend on `NumSharp >= 0.80.0-beta1`, so NuGet lets a user
   move NumSharp alone to a version whose internals differ (the 0.70.0 OpenBLAS package references 8 internals; all 8
@@ -522,3 +523,4 @@ The proposals (section 5) are separate, each the owner's to accept or drop:
 | 03:12 | A48 (F68): P1 x P17 fuzz, 84k values under guard pages, 0 failures; a planted wrong-source read is caught (after --no-cache: the first mutant run reused a cached build). A9 dropped with its reason. |
 | 03:18 | Release-branch docs check (read-only): `release-0.80.0-beta1` publishes both pages (no docfx exclude, toc entries, interop index rows), as this branch does - the PackageProjectUrls resolve once the site is published. P14's gates pass on `qa/proposals-all`. |
 | 03:19 | F46 re-checked after tonight's doc additions: `docfx build` (2.78.4) 0 errors, the same 426 unrelated warnings, none naming either page; every in-page anchor resolves in the generated HTML (ORT page 13, ML.NET page 8); the generated site removed. |
+| 03:21 | P3, the documentation half: `TryToTensorElementType`'s `<returns>` claimed "true when the dtype crosses", false for StringDType; it now says what it answers, with a remark. |
