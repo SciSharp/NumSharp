@@ -1202,12 +1202,27 @@ jobs:
           8.0.x
           10.0.x
 
+    # Every package is pushed even when one is refused, and the step fails at the END naming each refusal. A key
+    # scoped to EXISTING packages refuses a NEW id - and the ONNX Runtime, ML.NET and ParquetNet bridges are new ids
+    # the day they are released - so stopping at the first refusal (the shell's -e) left every package after it
+    # unpublished and named only the first problem. Before tagging a release that adds a package id, check the key
+    # behind NUGETAPIKEY on nuget.org (Account > API keys): scope "Push new packages and package versions", glob
+    # "NumSharp*" (F25 / P9 of the 0.80.0-beta1 bridge QA).
     - name: Push to NuGet
+      shell: bash
       run: |
+        failed=""
         for package in artifacts/*.nupkg; do
           echo "Pushing $package..."
-          dotnet nuget push "$package" \
-            --api-key ${{ secrets.NUGETAPIKEY }} \
-            --source https://api.nuget.org/v3/index.json \
-            --skip-duplicate
+          # `if !` keeps a refusal from ending the loop (an -e shell does not exit on a tested command).
+          if ! dotnet nuget push "$package" \
+              --api-key ${{ secrets.NUGETAPIKEY }} \
+              --source https://api.nuget.org/v3/index.json \
+              --skip-duplicate; then
+            failed="$failed $(basename "$package")"
+          fi
         done
+        if [ -n "$failed" ]; then
+          echo "::error::nuget.org refused:$failed - a NEW package id needs a key scoped 'Push new packages and package versions'"
+          exit 1
+        fi

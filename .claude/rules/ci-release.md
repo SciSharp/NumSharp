@@ -16,6 +16,10 @@ paths:
   tag push, creates the GitHub Release and publishes to nuget.org. The `FuzzMatrix` gate runs here (it replays the
   committed corpora; no Python). The `interop-test` job builds and tests the interop packages, the unreleased ones
   included (`interop-packages.md`), with its "Package consumer:" steps last (`openblas.md`).
+- `publish-nuget` pushes EVERY package even when nuget.org refuses one, then fails naming each refusal. A key scoped to
+  existing packages refuses a NEW id, so before tagging a release that adds a package id (an unreleased bridge made
+  packable), check the key behind `NUGETAPIKEY` on nuget.org: scope "Push new packages and package versions", glob
+  `NumSharp*`.
 - The packages embed NO README: the "No embedded package README" guard in `Directory.Build.props` fails `dotnet pack` if
   a project sets `PackageReadmeFile`, because an embedded readme would lock each version's nuget.org README tab. After a
   release publishes, the owner pastes the GitHub release markdown into every package version's README by hand

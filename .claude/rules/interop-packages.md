@@ -36,7 +36,9 @@ Keep them out of release notes (`docs/releases/RELEASE_<version>.md`; when that 
 notes from merged PR titles, so PR titles stay free of them too), the website, the root README, and the shipped XML docs
 and README of every released package: a released package's IntelliSense must not point at a bridge nobody can install.
 To release one: set its `IsPackable` back to `true` (or delete the property), drop its page from the docfx.json exclude,
-and restore its `toc.yml` entry and its `interop/index.md` row and "See also" link from git history. CI needs no edit.
+and restore its `toc.yml` entry and its `interop/index.md` row and "See also" link from git history. CI needs no edit,
+but the package is a NEW id on nuget.org: check before the tag that the key behind `NUGETAPIKEY` may push new packages
+(`ci-release.md`).
 
 ## The conversion packages
 
