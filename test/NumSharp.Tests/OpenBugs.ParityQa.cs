@@ -1583,5 +1583,30 @@ namespace NumSharp.Tests
             using var stacked = np.array(new NDArray[] { a, b });
             stacked.shape.Should().Equal(2L, 3L);
         }
+
+        // ------------------------------------------------------------------
+        // QA-46 — DType == / != a string that names no dtype throws instead of answering
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's <c>arraydescr_richcompare</c> converts the other operand and, when that fails, clears the error and
+        ///     returns <c>NotImplemented</c>, so Python falls back to identity: <c>np.dtype('int32') == 'bogus'</c> is False and
+        ///     <c>!= 'bogus'</c> True (likewise <c>''</c>, the structured spelling <c>'i4,i4'</c>, a number, a list). NumSharp's
+        ///     <c>DType</c> operators take two <c>DType</c>s, so a string operand goes through the implicit string → DType
+        ///     conversion first, which parses and throws: <c>NotSupportedException: data type 'bogus' not understood</c> (and
+        ///     NumSharp's structured-dtype refusal for <c>'i4,i4'</c>) from both <c>==</c> and <c>!=</c> (<c>rp16</c>,
+        ///     <c>rp17</c>). <c>DType.Equals("bogus")</c> already answers False, and every parseable spelling compares as NumPy's.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA46")]
+        public void ParityQa_DTypeEqualityWithAnUnparseableString_ShouldAnswerNotThrow()
+        {
+            var int32 = np.dtype("int32");
+
+            Func<bool> equal = () => int32 == "bogus";
+            Func<bool> notEqual = () => int32 != "bogus";
+
+            equal.Should().NotThrow().Which.Should().BeFalse();
+            notEqual.Should().NotThrow().Which.Should().BeTrue();
+        }
     }
 }
