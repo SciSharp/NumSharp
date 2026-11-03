@@ -841,6 +841,24 @@ namespace NumSharp.Tests
             Bits(expm1).Should().Be(0xB7C2);
         }
 
+        /// <summary>
+        ///     QA-24's float32 sibling: NumPy's float32 <c>arctan2</c> is the C library's <c>atan2f</c>; NumSharp's
+        ///     <c>EmitATan2Operation</c> widens float32 to double, calls <c>Math.Atan2</c> and rounds back, so where
+        ///     <c>atan2f</c> is not the correctly rounded value the two differ by one float32 ULP: 122 of 2,097,152 dense
+        ///     float32 pairs (<c>p75</c>). <c>np.arctan2(float32 0xF5B024C4, float32 0x7C96E3DC)</c> is <c>0xB8956C2E</c>
+        ///     (-7.125024e-05) in NumPy and <c>0xB8956C2D</c> in NumSharp. <c>MathF.Atan2</c> calls the same <c>atan2f</c>.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA24")]
+        public void ParityQa_Float32Arctan2_ShouldBeAtan2fLikeNumPy()
+        {
+            using var y = np.array(new[] { BitConverter.UInt32BitsToSingle(0xF5B024C4) });
+            using var x = np.array(new[] { BitConverter.UInt32BitsToSingle(0x7C96E3DC) });
+
+            using var r = np.arctan2(y, x);
+
+            BitConverter.SingleToUInt32Bits((float)r.GetValue(0)).Should().Be(0xB8956C2E);
+        }
+
         // ------------------------------------------------------------------
         // QA-25 — complex np.log1p near the origin: the real part is up to 4.4e12 ULP from NumPy's
         // ------------------------------------------------------------------
@@ -1042,6 +1060,41 @@ namespace NumSharp.Tests
                 "operands could not be broadcast together with remapped shapes [original->remapped]: (3,)->(3) (3,4) ");
             median.Should().Throw<Exception>().Which.Message.Should().Be(
                 "operands could not be broadcast together with remapped shapes [original->remapped]: (3,)->(3) (1,4) ");
+        }
+
+        // ------------------------------------------------------------------
+        // QA-32 — logaddexp / logaddexp2 leave their documented 2-ULP envelope where the result cancels toward zero
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's <c>npy_logaddexp(x, y)</c> is <c>y + log1p(exp(x - y))</c> (larger argument first), with the UCRT's
+        ///     <c>log1p</c>; NumSharp ports the statements over a managed fdlibm <c>log1p</c>, and the oracle registry
+        ///     excuses the pair at ≤ 2 ULP per element ("a gross error still fails"). When the result is near zero — the
+        ///     larger argument close to 0 below, the smaller one well below it — the final addition cancels, and the
+        ///     one-ULP <c>log1p</c> difference becomes many result ULPs: over 2,097,152 dense pairs (<c>p75</c>) float32
+        ///     logaddexp exceeds 2 ULP at 27 pairs (up to 64), float32 logaddexp2 at 21 (up to 32), float64 logaddexp at 35
+        ///     (up to 128) and float64 logaddexp2 at 28 (up to 16,384). <c>np.logaddexp(float32 -3.0742855, float32
+        ///     -0.048163086)</c> is <c>-0.0007993132</c> (<c>0xBA518900</c>) in NumPy, <c>-0.0007993169</c> in NumSharp;
+        ///     <c>np.logaddexp2(-1.0835713039595367, -0.9211879047455193)</c> is <c>-9.616429790881842e-05</c> in NumPy,
+        ///     <c>-9.616429790904046e-05</c> in NumSharp (closer to the truth: prefer-precise parity debt).
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA32")]
+        public void ParityQa_Logaddexp_Cancellation_ShouldStayWithinTwoUlpOfNumPy()
+        {
+            using var a32 = np.array(new[] { BitConverter.UInt32BitsToSingle(0xC044C118) });
+            using var b32 = np.array(new[] { BitConverter.UInt32BitsToSingle(0xBD4546A8) });
+            using var a64 = np.array(new[] { -1.0835713039595367 });
+            using var b64 = np.array(new[] { -0.9211879047455193 });
+
+            using var lae = np.logaddexp(a32, b32);
+            using var lae2 = np.logaddexp2(a64, b64);
+
+            // Both results are negative, so their bit patterns order like their magnitudes: the ULP distance is the
+            // difference of the raw bits.
+            long ulp32 = System.Math.Abs((long)BitConverter.SingleToUInt32Bits((float)lae.GetValue(0)) - 0xBA518900L);
+            long ulp64 = System.Math.Abs(BitConverter.DoubleToInt64Bits((double)lae2.GetValue(0)) - BitConverter.DoubleToInt64Bits(-9.616429790881842e-05));
+            ulp32.Should().BeLessThanOrEqualTo(2);
+            ulp64.Should().BeLessThanOrEqualTo(2);
         }
     }
 }
