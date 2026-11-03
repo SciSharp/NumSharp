@@ -1369,5 +1369,37 @@ namespace NumSharp.Tests
                 MappedFileCleanup.DeleteDirectory(dir);
             }
         }
+
+        /// <summary>
+        ///     QA-39 beyond memmaps: Python's <c>open()</c> shares read and write, so NumPy reads and overwrites a file that
+        ///     another handle holds open — another program's writer, or a .NET <c>FileStream</c> opened with
+        ///     <c>FileShare.ReadWrite</c>. NumSharp's readers and writers open with .NET's default share modes
+        ///     (<c>FileShare.Read</c> to read, none to write), so with such a handle open <c>np.load</c> (.npy and .npz),
+        ///     <c>np.loadtxt</c>, <c>np.save</c>, <c>np.savetxt</c> and <c>ndarray.tofile</c> raise <see cref="System.IO.IOException"/>
+        ///     "The process cannot access the file … because it is being used by another process" (<c>rp3</c>; NumPy's twin
+        ///     succeeds for all seven); only <c>np.fromfile</c> reads it.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA39"), DoNotParallelize]
+        public void ParityQa_LoadAndSave_ShouldShareAFileAnotherHandleHoldsOpen()
+        {
+            string dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ns_qa39b_" + Guid.NewGuid().ToString("N"));
+            System.IO.Directory.CreateDirectory(dir);
+            try
+            {
+                string p = System.IO.Path.Combine(dir, "a.npy");
+                using (var seed = np.arange(3.0))
+                    np.save(p, seed);
+
+                using (var other = new System.IO.FileStream(p, System.IO.FileMode.Open, System.IO.FileAccess.ReadWrite, System.IO.FileShare.ReadWrite))
+                {
+                    Action load = () => ((NDArray)np.load(p)).Dispose();
+                    load.Should().NotThrow("NumPy reads a file another handle shares");
+                }
+            }
+            finally
+            {
+                MappedFileCleanup.DeleteDirectory(dir);
+            }
+        }
     }
 }
