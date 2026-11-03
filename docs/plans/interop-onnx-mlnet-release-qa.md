@@ -374,6 +374,15 @@ the two bridges). Nothing here was merged there. To ship the results in the beta
 `release-0.80.0-beta1` everything after `1c001253` EXCEPT `1c001253` itself (that branch has its own release
 commits):
 
+**Verified (02:43):** `git cherry-pick 1c001253..qa/interop-release` - every commit after the prep commit, 36 at
+`4aa6b2f4` - applies with NO conflict onto `release-0.80.0-beta1` at `ac6526e2` (its latest merge of `strings`): each pick
+simulated read-only with `git merge-tree --write-tree --merge-base=<commit>^` and chained through unreferenced commit
+objects (scratch `probes/simulate_cherry_picks.py`; the tool flags a known conflict, P12 onto P11, so its zero is
+trustworthy). The result (simulated commit `1cbf05dc`, exported without the oracle / unit-test / docs / benchmark folders)
+builds and passes ORT 1.31.1 net10.0 312 / 312, ORT 1.16.0 net8.0 292 + 20 Inconclusive, ML.NET 5.0.1 net10.0 212 / 212 and
+ML.NET 2.0.1 net8.0 212 / 212. The "Cherry-pick note" column below was written before the check: none of its predicted
+conflicts occurs at `ac6526e2`. Re-run the simulation if the release branch moves again.
+
 | Commit | What | Cherry-pick note |
 |---|---|---|
 | `8e607929` | fix: StringDType refused by the ORT bridge, text refused by the ML.NET bridge, the sized-`U` remedy in docs | `.claude/rules/interop-packages.md` was also edited by `e343aba8`: expect a conflict in the "Dtypes" bullet; keep both texts |
@@ -459,3 +468,4 @@ The proposals (section 5) are separate, each the owner's to accept or drop:
 | 02:26 | A41 (F61): guard pages - both suites on both branches and the buffer-edge views through every cursor form and ORT's Auto copy, no over-read; the control proves the mode was live. |
 | 02:28 | A42 (F62): big-endian data is byte-swapped on load (no non-native arrays exist), misaligned buffers cross zero-copy correctly, SqueezeNet byte-identical at offsets 1-3. |
 | 02:34 | A43 (F63 fixed): a lazy transform's output read after the view's `using` scope - the refusal now names ML.NET's laziness and the remedy; the page's Lifetime section says it; a test for both view kinds. |
+| 02:43 | Section 8 verified: the 36 commits after `1c001253` cherry-pick cleanly onto `release-0.80.0-beta1` (`ac6526e2`), simulated read-only; the result builds and passes both suites at the floors and current versions. |
