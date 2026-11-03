@@ -1556,5 +1556,32 @@ namespace NumSharp.Tests
             a.ToArray<double>().Should().Equal(3.0, -4.0, 1.0);
             r.ToArray<double>().Should().Equal(new[] { 1.5, 0.5, 1.0 }, "the remainders of the ORIGINAL dividends");
         }
+
+        // ------------------------------------------------------------------
+        // QA-45 — np.array over a ragged jagged array truncates silently; over NDArray[] it refuses
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy refuses a ragged nested sequence (<c>np.array([[1], [2, 3]])</c>: <c>ValueError: setting an array element
+        ///     with a sequence. The requested array has an inhomogeneous shape after 1 dimensions. The detected shape was (2,) +
+        ///     inhomogeneous part.</c>) and stacks a list of equal-shape arrays (<c>np.array([a, b])</c> is <c>(2, 3)</c>).
+        ///     NumSharp's typed-array route reads a jagged array with its FIRST row's length (<c>p114</c>, <c>rp13</c>): a longer
+        ///     later row is truncated silently (<c>np.array(new int[][] { new[] { 1 }, new[] { 2, 3 } })</c> is
+        ///     <c>[[1], [2]]</c>), a shorter one throws <see cref="IndexOutOfRangeException"/>, and <c>np.asarray</c> of a ragged
+        ///     <c>long[][]</c> says <c>buffer is too small for requested array</c>. A typed <c>NDArray[]</c> — the C# spelling of a
+        ///     list of arrays — is refused by <c>np.array</c> / <c>np.asarray</c> with <c>NotSupportedException: Cannot interpret
+        ///     'NumSharp.NDArray' as a data type</c>, while <c>np.asanyarray</c> and <c>np.array(object[])</c> stack it.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA45")]
+        public void ParityQa_ArrayOfRaggedJaggedOrNDArrays_ShouldRefuseOrStackLikeNumPy()
+        {
+            Action ragged = () => np.array(new int[][] { new[] { 1 }, new[] { 2, 3 } }).Dispose();
+            using var a = np.arange(3.0);
+            using var b = np.arange(3.0) * 2;
+
+            ragged.Should().Throw<ValueError>().WithMessage("setting an array element with a sequence.*inhomogeneous shape after 1 dimensions*");
+            using var stacked = np.array(new NDArray[] { a, b });
+            stacked.shape.Should().Equal(2L, 3L);
+        }
     }
 }
