@@ -728,7 +728,7 @@ row is scoped in `MisalignedRegistry` branches K1–K9, so each is counted and p
 | `power(bool, negative int)` misses the integer-power guard | K6 | known bug |
 | `power(int, negative int)` trips `Debug.Fail("index < Count, Memory corruption expected")` instead of NumPy's ValueError — in Release that path has no assert | K8 | known bug (memory safety) |
 | `result_type(mixed signed/unsigned, 0-D operand)` throws instead of resolving | K9 | known bug |
-| NEP50 weak-scalar reached via the error path (int64+uint64 succeeds where NumPy refuses). Not for `clip_pyint`, `clip_ufunc` or `trapezoid`: their 0-d operands are never weak scalars (trapezoid's are `y` and `x`; with the old axis error planted back, K7 excused 12 of its 78 axis-outside-`y` cases, 2026-10-05) | K7 | intended |
+| NEP50 weak-scalar reached via the error path (int64+uint64 succeeds where NumPy refuses). Not for `clip_pyint`, `clip_ufunc` or `trapezoid`: their 0-d operands are never weak scalars (trapezoid's are `y` and `x`; with the old axis error planted back, K7 excused 12 of its 78 axis-outside-`y` cases, 2026-10-05) | K7 | **RETIRED** 2026-11-03 (parity QA-05: only a C# literal is weak, a 0-D array promotes fully, as in NumPy). It was also swallowing six `reduce_kwargs` prod cases whose 0-D operand is a `where=True` mask: those are np.prod's documented algorithm-order divergence (the plain axis product `IsTrueScalarMask` routes them to) and now have their own narrow branch |
 | ufunc `out=` on a read-only **broadcast** view (983 cases) | K10 | **FIXED** — `ThrowReadOnly` now raises NumPy's exact `ValueError("output array is read-only")` (was `NumSharpException`, same text) so these pass without an excuse; the write-through was already prevented by `ThrowIfNotWriteable` |
 | `isnan` into a **strided bool `out`**: results land on the wrong elements (contiguous out is correct) | K12 | known bug |
 | `exp(1.0f)` in a (4,5) float32 array returns `0x402df854` from `np.exp(x)`, `np.exp(x, out)` and `np.exp(x, out, where)` alike, while NumPy **and the committed `unary.jsonl` expectation for the same values/shape/dtype** say `0x402df855` — the unary tier is green, so the same op on the same data disagrees depending on how the array was built | K11 | **open question** |
@@ -873,7 +873,8 @@ widening that set is C#-oracle work tracked in its own memory topic.
 
 | Excuse class | Scope | Hits |
 |---|---|---|
-| NEP50 weak-scalar: 0-D operand promoted weakly | any multi-operand op × Dtype kind, 0-D operand present | 261 |
+| ~~NEP50 weak-scalar: 0-D operand promoted weakly~~ RETIRED 2026-11-03 (parity QA-05: a 0-D array operand promotes fully, as NumPy's; only a C# literal is weak) | any multi-operand op × Dtype kind, 0-D operand present | 0 |
+| reduce_kwargs np.prod with a 0-D `where=True` mask: the plain axis product's algorithm order (np.prod's documented divergence, reached through `IsTrueScalarMask`) | `reduce_kwargs` × `where_zerodT` × prod × float-family Value | 6 |
 | **F1** `np.fft(float32/float16)`: NumPy returns complex64/float32/float16, NumSharp complex128/float64 — a dtype-ONLY divergence (values = the correctly-rounded double result; bit-verified `fft(x32) == fft(x32.astype(f8))`). NumSharp has one complex type. The unnameable complex64 is routed to a Dtype divergence by `CompareArray`. Contractual dtypes (float64/complex128/int/bool) are bit-exact; the helpers never diverge | 14 fft transforms × {float32,float16} input × Dtype kind | 516 |
 | unary ~ULP (transcendental/magnitude algorithm difference) | single-operand × Value, every diff ≤2 ULP — **EXCEPT exp/log/sin/cos/rad2deg/deg2rad at a float32 result, which are gated bit-exact** (see below) | 563 |
 | complex unary within 3 ULP (full NumPy-algorithm port) — FINITE interior only; the NaN SIGN of these ops is now compared **raw-byte** (`ComplexNanContractOps`, `BitDiff.Compare(nanBitExact:true)`) and a pure NaN-sign / signed-zero flip HARD-FAILS via `DiffHasSignFlip` before any ULP excuse runs (NumSharp reproduces NumPy 2.4.2 win-amd64 / MSVC UCRT NaN signs bit-for-bit) | complex unary × Value, ≤3 ULP, no sign flip | 11 |
@@ -1732,8 +1733,9 @@ of another dtype, which NpyIter runs at step 0, and rows of exactly bufsize with
 setup stops the core), H (27: empties and power's errors in NumPy's order; 11 errors).
 
 **Bit-exact, 0 excused.** `MisalignedRegistry` returns null for the `power_fast` op. The generator leaves out classes
-that are other items: a 0-d float32 / float16 base with a Python-scalar exponent (NumSharp reads every 0-d operand as a
-weak scalar: the documented NEP 50 0-d divergence), complex bases with non-integer exponents (F5, `npy_cpow`), unsigned
+that are other items: a 0-d float32 / float16 base with a Python-scalar exponent (NumSharp read every 0-d operand as a
+weak scalar until 2026-11-03, parity QA-05; the generator still skips the class, which a regeneration can now add),
+complex bases with non-integer exponents (F5, `npy_cpow`), unsigned
 bases with -1 (plan X21: NumPy's OverflowError) and an out= that does not broadcast (plan X22: the text, NumPy's since
 2026-10-27, pinned by `UfuncOutWhereTests`).
 
@@ -1907,11 +1909,11 @@ outcome does not change once the moved operand is a fresh C-ordered copy (the ge
 does `layout_sensitive`: reductions over F / permuted layouts, a read-only operand an in-place op refuses), NumSharp's
 outcome on the variant must equal its own outcome on that copy. The copy comes from `FuzzCorpus.ReconstructCanonical`,
 which gathers the values by index arithmetic, so a copy kernel that shared the bug could not hide it. (2) The
-registry's two NEP50 0-d branches excuse ANY dtype or value difference of a multi-operand case with a 0-d operand;
-they hid `np.logaddexp` returning its empty int32 operand where NumPy returns float64. The relayout tiers are exempt
-from them (`MisalignedRegistry.IsRelayoutCase`); instead the generator drops every ufunc / np.where variant whose
-NumPy answer changes when its 0-d operands become Python scalars (the documented weak-promotion divergence), so a
-difference left there is real. Until 2026-10-27 it also dropped the flat np.mean of a broadcast float operand that
+registry's two NEP50 0-d branches excused ANY dtype or value difference of a multi-operand case with a 0-d operand
+(retired 2026-11-03, parity QA-05: a 0-d array promotes fully now, as NumPy's); they hid `np.logaddexp` returning its
+empty int32 operand where NumPy returns float64. The relayout tiers were exempt from them; the generator still drops
+every ufunc / np.where variant whose NumPy answer changes when its 0-d operands become Python scalars (the closed
+weak-promotion divergence), so those cells can be added by a regeneration. Until 2026-10-27 it also dropped the flat np.mean of a broadcast float operand that
 was not order-free (finding 10, owned by the mean_loops tier); that residual is fixed (plan
 `docs/plans/np-layer-dtype-logic.md` P2, D4-e) and the rule left with it.
 
@@ -3147,9 +3149,9 @@ the call, so a write outside the view or into a masked-off slot fails. Arguments
 overlap cases), or a Python scalar. NumPy's error texts end the broadcast message with a space;
 `CheckError` now trims BOTH sides before comparing (it trimmed only NumSharp's). Char rides the uint16
 proxy without sections E/F (`extras=False`, which do not vary with the dtype). `clip_ufunc` is listed in
-`ByteExactArithmeticUnaryOps` and excluded from K7 like `clip_pyint`. **Bit-exact; the two excused cases are
-the registry's NEP 50 weak-scalar rule** — a 0-d array operand NumPy promotes as an array and NumSharp as a
-Python scalar (it cannot tell the two apart; the remaining divergence the np.clip docs name).
+`ByteExactArithmeticUnaryOps` and excluded from K7 like `clip_pyint`. **Bit-exact.** The two cases the registry's
+NEP 50 weak-scalar rule once excused (a 0-d array operand NumPy promotes as an array and NumSharp read as a Python
+scalar) match since 2026-11-03 (parity QA-05: only a C# literal is weak).
 
 The tier found, and the work fixed: no broadcasting of bounds / out / where (a larger bound raised), no
 `where=` on np.clip at all, wrong answers for an out overlapping an input, the const loop's NaN-bound fill

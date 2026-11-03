@@ -107,7 +107,8 @@ test/NumSharp.Tests.Oracle/Fuzz/      C# replay harness (no Python)
   over every float base layout × 0-d / one-element / (1,1) / broadcast / Python-scalar exponents, integer / bool / complex
   bases, the trivial loop's cast copies, NpyIter's buffering threshold at `np.setbufsize(256)` and the default, varying
   exponents, `out=`/`where=` layouts and `dtype=`; bases hold values on which the fast path and pow differ. Zero excuses.
-  Not generated: a 0-d float32/float16 base with a Python-scalar exponent (the NEP 50 0-d divergence), complex bases with
+  Not generated: a 0-d float32/float16 base with a Python-scalar exponent (skipped since the NEP 50 0-d divergence,
+  closed by parity QA-05; a regeneration can add the class), complex bases with
   non-integer exponents (F5), unsigned bases with -1, an `out=` that does not broadcast (its text is NumPy's, pinned by
   `UfuncOutWhereTests`).
 - `weak_scalar.jsonl` (`gen_oracle.py weak_scalar`): NEP 50 weak Python scalars: the six comparisons and the binary ufuncs
@@ -215,8 +216,9 @@ test/NumSharp.Tests.Oracle/Fuzz/      C# replay harness (no Python)
   call reproduces byte for byte, one operand moved into the kind, NumPy's answer recomputed. `relayout.jsonl` and
   `relayout_host.jsonl` (via `RunHostLibmCorpus`). A variant inherits its source tier's excuses, so
   `RelayoutLayoutInvariance` holds, with no registry, that NumSharp's outcome equals its own outcome on a C-ordered copy
-  (`FuzzCorpus.ReconstructCanonical`) wherever NumPy's does not change; the relayout tiers are exempt from the NEP 50 0-d
-  branches (`MisalignedRegistry.IsRelayoutCase`). Carved gaps: the open ids of RL01–RL07 (`gaps/relayout_gaps.jsonl`,
+  (`FuzzCorpus.ReconstructCanonical`) wherever NumPy's does not change. The registry's NEP 50 0-d branches are retired
+  (parity QA-05: a 0-d array operand promotes fully, only a C# literal is weak); the generator still drops the variants
+  whose NumPy answer depended on that divergence. Carved gaps: the open ids of RL01–RL07 (`gaps/relayout_gaps.jsonl`,
   repros in `NumSharp.Tests/OpenBugs.Relayout.cs`). It and the matrix-operand generator skip each other's files, so their
   order does not matter. An empty operand descriptor with a buffer rebuilds as an empty VIEW over it.
 - The surface tier (`test/oracle/gen_surface_oracle.py`; README "The surface tier"): contracts for APIs the coverage
@@ -246,7 +248,7 @@ test/NumSharp.Tests.Oracle/Fuzz/      C# replay harness (no Python)
   and text). `matrix_operand.jsonl` + `matrix_operand_host.jsonl` (via `RunHostLibmCorpus`) + `gaps/matrix_operand{,_host}_gaps.jsonl`
   (MO01–MO05, carved exactly; `MatrixOperand*_KnownGaps`). The CLASS is compared without a registry call, and
   `MisalignedRegistry` returns null for a shape / threw / error-text / expected-error divergence of a `matrix@` case (the
-  source tier's value excuses stay; the NEP 50 0-d blankets are off). The registry calls the function form for operator
+  source tier's value excuses stay). The registry calls the function form for operator
   keys (`OpRegistry.MatrixOperand.cs`). NumPy 2.4.2's `np.stack` / `np.dstack` with a matrix operand raise and corrupt
   NumPy's heap, so the generator makes every matrix call in a worker process it retires after such an error.
 - `products.jsonl`: the CBLAS family, tensor products, cross/cov/corrcoef and the Array-API vector/matrix norms.

@@ -30,10 +30,10 @@ namespace NumSharp.Tests.Fuzz
     ///     a drift beyond the documented tolerance turns back into a hard failure.
     ///
     ///     Documented differences:
-    ///       1. NEP50 weak-scalar: NumSharp treats a 0-D array operand as a weak scalar (the other
-    ///          operand's dtype drives promotion). NumPy makes 0-D arrays full participants; only
-    ///          Python scalar literals are weak. NumSharp cannot distinguish the two (both are 0-D
-    ///          NDArrays), and keeping `arr + 5` ergonomic was chosen over strict NEP50 parity.
+    ///       1. (Retired 2026-11-03, parity QA-05.) NEP50 weak-scalar: NumSharp used to treat every 0-D
+    ///          array operand as a weak scalar. Only a C# literal's 0-d array (NDArray.WasPythonLiteral)
+    ///          is weak now, and a 0-D array operand promotes fully, as NumPy's does, so the two excuse
+    ///          branches that matched any dtype / error difference of a case with a 0-D operand are gone.
     ///       2. Complex arithmetic ULP envelopes vs NumPy's npy_c* algorithms (each per-op,
     ///          measured, and bounded — see the B2 branch): add/subtract within 2 ULP (FMA
     ///          contraction); power by a NON-integer/complex exponent within 512 element-magnitude
@@ -419,8 +419,7 @@ namespace NumSharp.Tests.Fuzz
             // as a numpy.matrix). The SHAPE NumPy gives the result of a matrix operand is the tier's subject (a row,
             // a column, a scalar, or the plain shape), so no branch below may excuse a shape divergence there: the
             // source tier's shape excuses describe plain operands. The class has no registry call at all. Values,
-            // and dtypes keep the source tier's rules (the variant keeps its valueclass), except the NEP50 0-d
-            // blankets, which IsMatrixOperandCase switches off where they are tested.
+            // and dtypes keep the source tier's rules (the variant keeps its valueclass).
             // An ERROR is never excused either: every source of the tier is a case NumPy answers with a value, so
             // an exception on either side comes from the matrix operand (NumPy's "shape too large to be a
             // matrix.", a matrix method without the keepdims keyword), which no rule written for plain operands
@@ -479,17 +478,11 @@ namespace NumSharp.Tests.Fuzz
                 && c.Operands.Length == 1 && c.Operands[0].Shape.Length == 1
                 && ArgsortPermutationsEquivalent(c.Operands[0], expected, actual))
                 return "argsort tie order under NumPy's unstable default introsort (equivalent permutation verified; NumSharp's radix argsort is stable)";
-            // (1) NEP50 weak-scalar promotion. Any multi-operand op with a 0-D operand: NumSharp
-            //     promotes it weakly (the array operand's dtype drives the result), where NumPy makes
-            //     0-D arrays full participants. Covers binary pp_scalar_* and np.where wh_bcast_xy.
-            //     NOT the relayout tiers: their generator drops every ufunc / np.where variant whose NumPy
-            //     answer changes when its 0-d operands are weak (gen_relayout_oracle._upstream_residual), so
-            //     a difference left in a relayout case with a 0-d operand is not this divergence. The blanket
-            //     matches ANY dtype difference of such a case, and it hid np.logaddexp returning its empty int32
-            //     operand where NumPy returns float64 (gap RL07, fixed 2026-10-24).
-            if (kind == DivergenceKind.Dtype && c.Operands.Length >= 2 && c.Operands.Any(o => o.Shape.Length == 0)
-                && !IsRelayoutCase(c) && !IsMatrixOperandCase(c))
-                return "NEP50 weak-scalar: 0-D operand promoted weakly (NumPy promotes 0-D arrays fully)";
+            // (1) NEP50 weak-scalar promotion: RETIRED 2026-11-03 (parity QA-05). A corpus 0-D operand is a NumPy 0-d
+            //     array, which NumSharp now promotes fully, as NumPy does (only a C# literal is weak), so a dtype
+            //     difference of a case with a 0-D operand is a real divergence again. The blanket used to match ANY
+            //     dtype difference of such a case (it hid np.logaddexp returning its empty int32 operand where NumPy
+            //     returns float64, gap RL07, fixed 2026-10-24).
 
             // (2) Complex true-division is now BIT-EXACT vs NumPy (no excuse). ComplexDivideNumPy is a
             //     byte-for-byte transcription of NumPy's CDOUBLE_divide (Smith's algorithm, reciprocal-
@@ -1338,36 +1331,22 @@ namespace NumSharp.Tests.Fuzz
                 return "min/max family signed-zero: the sign of a ±0 result is non-contractual "
                      + "(NumPy varies it by SIMD lane) — every diff is a pure +0/-0 flip [non-contractual]";
 
-            // (K7) NEP50 weak-scalar, reached through the ERROR path rather than the dtype one.
-            // Documented difference (1) at the top of this file: NumSharp treats a 0-D operand as a
-            // WEAK scalar, so pairings NumPy refuses outright (int64 with uint64, which have no
-            // common integer type) instead promote and succeed.
+            // (K7) NEP50 weak-scalar, reached through the ERROR path: RETIRED 2026-11-03 with branch (1) (parity
+            // QA-05). A 0-D operand promotes fully now, so int64 with a 0-d uint64 is refused where NumPy refuses it,
+            // and a value or error-text difference of a case with a 0-D operand is a real divergence again.
             //
-            // EXCLUDES the out=/where= tier: there a 0-D operand is usually the `where` MASK
-            // (scalar_true / scalar_false), which has nothing to do with promotion — without this
-            // guard the branch silently swallowed 60 mask cases it had no business classifying.
-            //
-            // EXCLUDES clip_pyint too: its 0-D operand is the CLIPPED array (the scalar_0d layouts, with
-            // an out= operand beside it) — its bounds ride as params, so there is no weak 0-D operand to
-            // promote, and a divergence there is a real clip bug. And clip_ufunc, whose 0-D operands are the
-            // clipped array (scalar_0d) and its zero-filled 0-D a: the scalar bounds ride as params there too.
-            //
-            // EXCLUDES trapezoid as well (plan api-parameter-parity A5): its 0-D operands are y, whose every axis
-            // is NumPy's leaked "list assignment index out of range" IndexError, and x, which diff refuses ("diff
-            // requires input that is at least one dimensional") — never a weak scalar a pairing could promote.
-            // With the old axis error planted back, this branch excused the 12 err_axis_outside_y cases of a 0-D y
-            // with an x, so a regression there passed; without it all 78 IndexError cases turn red.
-            //
-            // EXCLUDES the relayout tiers too, for the reason given at branch (1): their generator keeps only the
-            // 0-d variants whose NumPy outcome does not depend on weak promotion, so this branch would excuse real
-            // value and error-parity differences there, not the divergence it documents.
-            if ((kind == DivergenceKind.Value || kind == DivergenceKind.ErrorText)
-                && (c.Op == null || !c.Op.StartsWith("out_"))
-                && c.Op != "clip_pyint" && c.Op != "clip_ufunc" && c.Op != "trapezoid"
-                && c.Operands.Length >= 2 && c.Operands.Any(o => o.Shape.Length == 0)
-                && !IsRelayoutCase(c) && !IsMatrixOperandCase(c))
-                return "NEP50 weak-scalar (error path): a 0-D operand promotes weakly, so a pairing "
-                     + "NumPy refuses succeeds instead";
+            // What the K7 blanket was also swallowing: the reduce_kwargs tier's np.prod with a 0-D True `where=` mask (its
+            // where_zerodT layout; the mask is not a promotion operand at all). NumPy reads `where=True` as no mask, and so
+            // does NumSharp (DefaultEngine.IsTrueScalarMask routes the call to the plain axis product), whose
+            // multiplication order is np.prod's documented divergence (the "reduction summation/two-pass precision
+            // (algorithm order)" branch above, which keys on the bare op name and so cannot see this tier's cases): a
+            // float-family product within its last bits, a signed zero of a complex part included. Every other mask of the
+            // tier runs NumPy's reduction iterator and stays strict, and sum's identity-seeded flat / axis routes are exact.
+            if (kind == DivergenceKind.Value && truth == null && c.Op == "reduce_kwargs" && c.Layout == "where_zerodT"
+                && c.Params != null && c.Params.TryGetValue("fn", out var rkFn) && rkFn.GetString() == "prod"
+                && (tc == NPTypeCode.Half || tc == NPTypeCode.Single || tc == NPTypeCode.Double || tc == NPTypeCode.Complex))
+                return "reduce_kwargs prod with where=True: the plain axis product's algorithm order (np.prod's documented "
+                     + "divergence)";
 
             return null;
         }
@@ -1445,21 +1424,10 @@ namespace NumSharp.Tests.Fuzz
             && (d.Actual == "00000000" || d.Actual == "00000080");
 
         /// <summary>
-        ///     Whether case <paramref name="c"/> belongs to a relayout tier (<c>gen_relayout_oracle.py</c>: layout tag
-        ///     <c>relayout:&lt;kind&gt;@&lt;position&gt;</c>), whose generator already removed the variants the NEP50 0-d
-        ///     branches document, so those branches must not excuse anything there.
-        /// </summary>
-        /// <param name="c">The case.</param>
-        /// <returns>True for a relayout variant.</returns>
-        private static bool IsRelayoutCase(FuzzCorpus.Case c)
-            => c.Layout != null && c.Layout.StartsWith("relayout:", StringComparison.Ordinal);
-
-        /// <summary>
         ///     Whether case <paramref name="c"/> belongs to a matrix-operand tier
-        ///     (<c>gen_matrix_operand_oracle.py</c>: layout tag <c>matrix@&lt;position&gt;</c> or <c>matrix@all</c>).
-        ///     Its generator drops every source case with a 0-d operand next to another operand, so the NEP50 0-d
-        ///     blankets have nothing to document there; with them on, an error NumPy raises only for a matrix
-        ///     operand (<c>shape too large to be a matrix.</c>) would read as the documented weak-scalar divergence.
+        ///     (<c>gen_matrix_operand_oracle.py</c>: layout tag <c>matrix@&lt;position&gt;</c> or <c>matrix@all</c>), whose
+        ///     shape, threw, error-text and expected-error divergences no plain-operand rule may excuse (an error NumPy
+        ///     raises only for a matrix operand, <c>shape too large to be a matrix.</c>, describes no other tier's rule).
         /// </summary>
         /// <param name="c">The case.</param>
         /// <returns>True for a matrix-operand variant.</returns>
