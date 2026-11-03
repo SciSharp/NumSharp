@@ -189,6 +189,22 @@ Left out, the label is not missed until ONNX Runtime runs the graph, and its err
 exported graph, not the input (`Non-zero status code returned while running Identity node ... Trying to get a
 TensorSeq, but got: (null)`).
 
+**Golden files from Python.** A port is checked against the Python it replaces: save the inputs and Python
+onnxruntime's outputs by name (`np.savez("inputs.npz", **inputs)`, `np.savez("outputs.npz",
+**dict(zip(names, sess.run(None, inputs))))`). `np.load_npz` returns an `NpzFile`, an
+`IReadOnlyDictionary<string, NDArray>` keyed by those names, so the inputs file feeds `Run` as it is - the
+twin of `sess.run(None, dict(np.load("inputs.npz")))`:
+
+```csharp
+using NpzFile inputs = np.load_npz("inputs.npz");        // NumSharp.IO
+using NpzFile expected = np.load_npz("outputs.npz");
+foreach (var (name, y) in session.Run(inputs))
+    using (y) Console.WriteLine($"{name}: {np.array_equal(y, expected[name])}");
+```
+
+Text crosses as `U` arrays both ways, so a model with string inputs or outputs checks the same way; save
+Python's string outputs (object arrays) as `str` first, because an object array in an `.npz` needs pickle.
+
 ## Asynchronous runs
 
 ```csharp
