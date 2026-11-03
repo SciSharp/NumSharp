@@ -495,7 +495,8 @@ the two bridges). Nothing here was merged there. To ship the results in the beta
 commits):
 
 **Verified (04:53, the end state):** `git cherry-pick 1c001253..qa/interop-release` - 70 commits at `11203d65`, then the
-closing docs commits (this file, and one sentence of `.claude/rules/interop-packages.md`): 72 in all, re-simulated clean, - applies with NO conflict onto `release-0.80.0-beta1` at `ac6526e2` (its latest
+closing commits (this file, one sentence of `.claude/rules/interop-packages.md`, and F82 / F83 on the ORT page): 76 in
+all at the end (05:15), re-simulated clean, - applies with NO conflict onto `release-0.80.0-beta1` at `ac6526e2` (its latest
 merge of `strings`, unchanged since 02:00): each pick simulated read-only with `git merge-tree --write-tree
 --merge-base=<commit>^`, chained through unreferenced commit objects (scratch `probes/simulate_cherry_picks.py`,
 preserved on `qa/interop-probes`; the tool flags a known conflict, P12 onto P11, so its zero is trustworthy). The
@@ -535,7 +536,7 @@ The proposals (section 5) are separate, each the owner's to accept or drop:
 | `qa/p14-consumer-gates` (P14) | `3d3e897a` | `f4d5821c` | two new `tools/verify_package_consumer.sh` scripts, two CI steps |
 | `qa/p16-mlnet-range` (P16) | `d1d10236` | `e271d366` | ML.NET csproj range + comment, CI's advisory "next preview" step, the rule, the notes |
 | `qa/p17-shuffling-view` (P17) | `6463b1b0` | `52d523af` | ML.NET `NDArrayDataView.cs` (CanShuffle, the cursor), new `ShuffleTests`, the page's Limits entry, the rule |
-| `qa/proposals-all` | `68ab1db2` | `7d68a494` | the four merged in that order (`--no-ff`, up to `4851fd0f`), then `qa/interop-release` at `8438ee3e` (F49, `1d5638da`), then P16 (which brings `qa/interop-release` up to `e271d366`), P14 (`966e5867`, `qa/interop-release` up to `f4d5821c`) and P17 (`1cb2deff`: the cursor constructor conflict with P1 resolved as both), then `qa/interop-release` again (`e2d03481`: F63-F67), the P11 trim follow-up (`2543a218`) `qa/interop-release` at `fa80b046`, again at `06213abd` (F73-F75 and the NDScope suites; the ML.NET page's Limits list conflicts with P17's shuffle bullet: keep both bullets, P17's first) and at its end state (`68ab1db2`: F76-F81) |
+| `qa/proposals-all` | `20009979` | `7d68a494` | the four merged in that order (`--no-ff`, up to `4851fd0f`), then `qa/interop-release` at `8438ee3e` (F49, `1d5638da`), then P16 (which brings `qa/interop-release` up to `e271d366`), P14 (`966e5867`, `qa/interop-release` up to `f4d5821c`) and P17 (`1cb2deff`: the cursor constructor conflict with P1 resolved as both), then `qa/interop-release` again (`e2d03481`: F63-F67), the P11 trim follow-up (`2543a218`) `qa/interop-release` at `fa80b046`, again at `06213abd` (F73-F75 and the NDScope suites; the ML.NET page's Limits list conflicts with P17's shuffle bullet: keep both bullets, P17's first) at `68ab1db2` (F76-F81, the last code change; green on every leg) and at its end state (`20009979`: docs only - F82, F83, P20) |
 
 - Conflicts, all in XML docs, none in code: P12 + P11 in `Run(dict)`'s `<exception>` entries (keep P12's
   `NotSupportedException` text and P11's `ObjectDisposedException` text), P12 + P7 in `RunAsync`'s
@@ -642,3 +643,4 @@ The proposals (section 5) are separate, each the owner's to accept or drop:
 | 04:56 | Final refresh: section 0 rewritten (F70-F81, the two message fixes, P19); A62 (every remedy-bearing message names something that exists); section 8 re-verified - 70 commits onto `ac6526e2` clean, the result `6d191cc7` green (ORT 1.16.0 net8.0 297 + 22, ML.NET 2.0.1 net8.0 and 5.0.1 net10.0 216 + 1); `qa/proposals-all` re-merged at `68ab1db2` and green on every leg; the QA branch's own end state green (ORT 297 + 22, ML.NET 216 + 1, net8.0 and net10.0, floors); the rule's VBuffer versions updated; memory and catalog updated. |
 | 05:00 | A63 (F82): `session.Run(np.load_npz("inputs.npz"))` works as is and matches Python onnxruntime bit for bit (text as `U`); the ORT page shows the idiom. |
 | 05:14 | A64 (F83, P20): a hand-written NDScope across `await session.RunAsync` corrupts the scope state and, once the continuation thread reuses the pooled scope, frees the opening thread's arrays (7.0 -> 9.0); the ORT page warns; the Core guard is P20. |
+| 05:15 | F82 / F83 merged into `qa/proposals-all` (`20009979`, docs only, clean); the end: 76 commits after `1c001253`, simulated clean onto `ac6526e2`. |
