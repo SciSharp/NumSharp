@@ -147,6 +147,10 @@ intra-op thread pool and no .NET thread waits.
   it under a synchronization context is released (ORT's own task waits forever there).
 - Until the task completes, ORT reads the shared inputs and writes the outputs: do not write an input (pass
   `OnnxCodecMode.Copy` to feed a snapshot). Disposing an array in flight is safe; the run holds a reference.
+- An `NDScope` does not cross the `await`: a scope belongs to the thread that opened it, and the continuation
+  resumes on another. Held across `await session.RunAsync(...)`, it is disposed on the continuation's thread and
+  left behind as the opening thread's current scope, and once that thread reuses it, its close disposes the opening
+  thread's later arrays (measured: 7.0 read back as 9.0). Scope the code before the `await` and after it.
 
 ## Text
 
