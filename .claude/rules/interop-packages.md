@@ -125,8 +125,8 @@ None of these computes NumSharp operations: each converts tensors between NumSha
 - Dtypes: 11 direct, plus Char→UInt16 one way; Half→Single (lossless) and Decimal→Double converted by the view verbs
   into an owned temp; Complex refused (ML.NET has no half, decimal or complex column type). Rank 1–2 only.
 - `VBuffer` zero-copy is one-directional. Import is zero-copy through reflected compiled-expression access to the
-  private `T[] _values` (a `VBuffer` is backed by a managed `T[]` in every version 2.0.0, 3.0.0 and 4.0.2, with no
-  `ReadOnlyMemory<T>` or non-public constructor). Export can never be zero-copy, because a managed array cannot alias
+  private `T[] _values` (a `VBuffer` is backed by a managed `T[]` in every version 2.0.0, 3.0.0, 4.0.2 and 5.0.1 and in
+  the 6.0.0 previews, with no `ReadOnlyMemory<T>` or non-public constructor: the zero-copy import suites pass on each). Export can never be zero-copy, because a managed array cannot alias
   NumSharp's unmanaged buffer, so `ToVBuffer` copies; the bulk export path `AsDataView` is zero-copy anyway.
 - Gate: `test/NumSharp.Tests.Interop.MLNet`: the dtype map with every column type and CLR type, export/import
   round-trips, the zero-copy import (write-through, pooled slice, sparse fallback, lease lifetime, derived slice), every
