@@ -9,7 +9,7 @@ log (section 7). Every new idea becomes a work-list row before it is worked on.
 | Started | 2026-11-02 21:52 +0200; planned end 2026-11-03 05:52 +0200 |
 | Branch | `qa/interop-release` (local), worktree `K:\source\NumSharp\.claude\worktrees\interop-qa` |
 | Base | `strings` `23ce02ea` (journey4 + strings, the beta's line); release prep commit `1c001253` on top |
-| Scratch | `C:\Users\ELI\AppData\Local\Temp\claude\K--source-NumSharp\a4c6ff8e-6ba9-48a1-8c05-d4202f4019c4\scratchpad` (wiped nightly: nothing durable lives only there) |
+| Scratch | `C:\Users\ELI\AppData\Local\Temp\claude\K--source-NumSharp\a4c6ff8e-6ba9-48a1-8c05-d4202f4019c4\scratchpad` (wiped nightly: nothing durable lives only there); its SCRIPTS are preserved on branch `qa/interop-probes` (`1bed7bc9`, `docs/plans/interop-qa-probes/`, outside the cherry-pick range) |
 | Python | `C:\Users\ELI\.claude\python\python.exe` (3.12, numpy 2.4.2, onnx 1.22.0, onnxruntime 1.29.0, torch 2.12.1, transformers 4.45.2, scikit-learn 1.8.0, Pillow 11.3.0); scratch `venv/` adds skl2onnx (and pandas) |
 
 ## 0. The result on one screen
@@ -529,3 +529,4 @@ The proposals (section 5) are separate, each the owner's to accept or drop:
 | 03:19 | F46 re-checked after tonight's doc additions: `docfx build` (2.78.4) 0 errors, the same 426 unrelated warnings, none naming either page; every in-page anchor resolves in the generated HTML (ORT page 13, ML.NET page 8); the generated site removed. |
 | 03:21 | P3, the documentation half: `TryToTensorElementType`'s `<returns>` claimed "true when the dtype crosses", false for StringDType; it now says what it answers, with a remark. |
 | 03:22 | P5's documentation half: the getting-started page recommended a file-based app, which throws on the first array arithmetic without `#:property PublishAot=false` (re-proven); the page now says so. |
+| 03:24 | The 100 probe scripts copied out of the scratchpad onto branch `qa/interop-probes` (`1bed7bc9`), with a README on running them again. |
