@@ -33,7 +33,8 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     <see cref="NPTypeCode.Decimal"/> has no ONNX type and always crosses as a float64 copy.
         ///     A text array (the fixed-width <c>U</c> / <c>S</c> dtypes) crosses as an ORT string tensor, always a
         ///     copy that ONNX Runtime owns (so <see cref="OnnxCodecMode.View"/> refuses it, and the handle's
-        ///     <see cref="OrtTensor.Source"/> is the array itself).
+        ///     <see cref="OrtTensor.Source"/> is the array itself). A <c>StringDType</c> array throws in every mode, as
+        ///     in Python's <c>onnxruntime</c>: cast it to a sized <c>U</c> first (<c>nd.astype(np.dtype("U16"))</c>).
         ///     <see cref="NPTypeCode.Complex"/> throws in every mode: a copy cannot give it an ONNX type.</para>
         ///
         ///     <para><b>Lifetime:</b> the handle takes its own atomic reference on the buffer ORT reads, so the
@@ -57,7 +58,7 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <exception cref="ArgumentNullException"><paramref name="source"/> is null.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a member of <see cref="OnnxCodecMode"/>.</exception>
         /// <exception cref="InvalidOperationException"><paramref name="mode"/> is <see cref="OnnxCodecMode.View"/> and the array is not C-contiguous, is Decimal or is text.</exception>
-        /// <exception cref="NotSupportedException">The dtype has no ONNX tensor element type (Complex), or a text array holds more strings than ORT can index.</exception>
+        /// <exception cref="NotSupportedException">The dtype has no ONNX tensor element type (Complex), the array is a <c>StringDType</c> array, or a text array holds more strings than ORT can index.</exception>
         /// <exception cref="ObjectDisposedException">The array's buffer has already been released.</exception>
         public static OrtTensor AsOrtValue(this NDArray source, OnnxCodecMode mode = OnnxCodecMode.Auto) => AsOrtValueCore(source, ownsSource: false, mode);
 
@@ -222,7 +223,10 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <param name="source">The array to copy; any layout.</param>
         /// <returns>A new ORT-allocated tensor holding the array's values in logical (C) order; the caller disposes it.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="source"/> is null.</exception>
-        /// <exception cref="NotSupportedException">The dtype has no ONNX tensor element type, or the array exceeds the 2 GB span limit of ORT's managed API.</exception>
+        /// <exception cref="NotSupportedException">
+        ///     The dtype has no ONNX tensor element type, the array is a <c>StringDType</c> array (cast it to a sized
+        ///     <c>U</c> first), or the array exceeds the 2 GB span limit of ORT's managed API.
+        /// </exception>
         /// <exception cref="ObjectDisposedException">The array's buffer has already been released.</exception>
         public static unsafe OrtValue ToOrtValue(this NDArray source)
         {

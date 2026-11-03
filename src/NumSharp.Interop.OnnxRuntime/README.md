@@ -45,6 +45,11 @@ reference (say 1.31.0) carries the same `.Managed` version and NuGet unifies upw
 the only thing that sets the floor: the 1.16.0 managed assembly reports assembly version 0.0.0.0, so the
 runtime's binder refuses nothing.
 
+On Windows, forgetting the native flavour does not fail at once: the loader finds the `onnxruntime.dll`
+that Windows ships in `C:\Windows\System32` for Windows ML (1.17 on a current Windows 11), and the app runs
+on that build: another version than the one you reference, whatever the machine has, and absent on Linux
+and macOS (`DllNotFoundException`). Reference the native flavour explicitly.
+
 ## Views, copies and `OnnxCodecMode`
 
 An ORT tensor is a pointer, a row-major shape and a fixed-size element type. It has **no strides**. So ORT can
@@ -142,6 +147,14 @@ intra-op thread pool and no .NET thread waits.
   it under a synchronization context is released (ORT's own task waits forever there).
 - Until the task completes, ORT reads the shared inputs and writes the outputs: do not write an input (pass
   `OnnxCodecMode.Copy` to feed a snapshot). Disposing an array in flight is safe; the run holds a reference.
+- An `NDScope` does not cross the `await`: a scope belongs to the thread that opened it, and the continuation
+  resumes on another. Held across `await session.RunAsync(...)`, it is disposed on the continuation's thread and
+  left behind as the opening thread's current scope, and once that thread reuses it, its close disposes the opening
+  thread's later arrays (measured: 7.0 read back as 9.0). Scope the code before the `await` and after it.
+- Start `RunAsync` outside any `NDScope`: it allocates its outputs when the call starts, so an open scope disposes
+  them when it closes and the task returns arrays over freed memory - through `scope.ReturnsTask(task)` too, which
+  yields an `NDArray` or a tuple, not the arrays inside a dictionary. Under the synchronous `Run`, yield each output
+  you keep with `scope.Returns(outputs[name])`.
 
 ## Text
 
@@ -154,8 +167,9 @@ directions and through every route (`ToOrtValue`, `AsOrtValue`, `ToNDArray`, `As
   Python's `onnxruntime` does. A string tensor reads back as a `U` array as wide as its longest string.
 - **The fixed width costs two things**, because the bridge reads string tensors as `U`, not as NumSharp's
   variable-width `StringDType`: a string that ENDS in NUL characters loses them (`ReadStringTensor` keeps
-  them), and one long string widens every element. A `StringDType` array is not a bridge input: cast it to
-  `U` first (`nd.astype(np.dtype("U"))`).
+  them), and one long string widens every element. A `StringDType` array is not a bridge input (Python's
+  `onnxruntime` refuses it too): cast it to a sized `U` first, wide enough for its longest string
+  (`nd.astype(np.dtype("U16"))`; an unsized `"U"` target is refused for `StringDType`, as in NumPy).
 - The bridge does not cast between text and numbers: a numeric array for a string input, or a text array
   for a numeric input, is refused under every casting rule. Convert first with NumSharp's own casts,
   `nd.astype(np.dtype("U"))` (each number as its `str()`) or `nd.astype(np.float32)` (NumPy's text-to-number
@@ -273,7 +287,9 @@ The one copy left — `stack` + `astype`/divide producing the planar normalized 
 
 ## Limits (stated up front)
 
-- **Complex** (ORT has no complex tensors), **BFloat16** / float8 / 4-bit (no NumSharp dtype).
+- **Complex** (ORT has no complex tensors), **BFloat16** / float8 / 4-bit (no NumSharp dtype). A BFloat16
+  input goes through ORT's own `OrtValue.CreateTensorValueFromMemory` (`new BFloat16(bits)`) and `session.Run`;
+  a float8 or 4-bit model does not load in ORT's C# API itself (`Unregistered TensorElementType value`).
 - **Sparse tensors.** ORT's C# API cannot create or read one. A model input declared sparse passes the checks
   of `Run` and fails inside ORT.
 - **Non-tensor outputs through `Run`.** `Run` returns tensors only (text included). Fetch a sequence or a map

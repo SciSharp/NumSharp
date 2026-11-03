@@ -34,6 +34,28 @@ The interop depends only on `Microsoft.ML.OnnxRuntime.Managed` - the C# API. ORT
 as mutually exclusive flavours, and you must reference exactly one to run any model at all, so the
 package leaves that choice to you and composes with whichever flavour you pick.
 
+On Windows, forgetting the native package does not fail at once: the loader then finds the
+`onnxruntime.dll` that Windows itself ships in `C:\Windows\System32` for Windows ML (version 1.17 on a
+current Windows 11), and the app runs on that build - a different one from the version you reference,
+whatever the machine has, and absent on Linux and macOS, where the same app throws
+`DllNotFoundException`. Reference the native package explicitly.
+
+F# interactive (`dotnet fsi` with `#r "nuget: Microsoft.ML.OnnxRuntime, 1.31.1"`) finds that System32 copy even
+WITH the native package referenced, and the first call fails: `The requested API version [31] is not available,
+only API versions [1, 17] are supported in this build. Current ORT Version is: 1.17.1` (a
+`TypeInitializationException` of ORT's `NativeMethods`). Load the package's own native library by its path before
+the first ORT call, and the session binds to it:
+
+```fsharp
+let packages =
+    match System.Environment.GetEnvironmentVariable "NUGET_PACKAGES" with
+    | null | "" -> System.IO.Path.Combine(System.Environment.GetFolderPath System.Environment.SpecialFolder.UserProfile, ".nuget", "packages")
+    | folder -> folder
+let nativeDll =
+    System.IO.Path.Combine(packages, "microsoft.ml.onnxruntime", "1.31.1", "runtimes", "win-x64", "native", "onnxruntime.dll")
+System.Runtime.InteropServices.NativeLibrary.Load nativeDll |> ignore
+```
+
 ```csharp
 using NumSharp;
 using NumSharp.Interop.OnnxRuntime;
@@ -41,7 +63,13 @@ using Microsoft.ML.OnnxRuntime;
 
 using var session = new InferenceSession("resnet50-v2-7.onnx");
 
+// ImageNet's normalization, as float32: a float64 mean would make the input float64, which the
+// model's float32 input refuses under the default casting="safe" (Python's onnxruntime refuses it too)
+NDArray mean = np.array(new[] { 0.485f, 0.456f, 0.406f });
+NDArray std  = np.array(new[] { 0.229f, 0.224f, 0.225f });
+
 // preprocessing as array ops: (H,W,3) uint8 -> (1,3,224,224) float32, normalized
+// (pixels: the decoded image's 224*224*3 RGB bytes, row by row)
 NDArray rgb   = np.frombuffer(pixels, NPTypeCode.Byte).reshape(224, 224, 3);
 NDArray chw   = np.transpose(rgb, [2, 0, 1]).astype(NPTypeCode.Single) / 255f;
 NDArray input = ((chw - mean.reshape(3, 1, 1)) / std.reshape(3, 1, 1)).reshape(1, 3, 224, 224);
@@ -85,7 +113,7 @@ methods). **`As…` gives a view when it can, `To…` always copies.**
 | NumSharp → ORT | `nd.AsDenseTensor<T>(mode)` → `OrtTensor<T>` · `nd.ToDenseTensor<T>()` | the legacy `DenseTensor<T>` twins (for `NamedOnnxValue.CreateFromTensor`); always row-major, so a Fortran-ordered array is a copy under `Auto` |
 | ORT → NumSharp | `ortValue.ToNDArray()` | fresh **owning** C-contiguous **copy** - the safe default; a string tensor becomes a text array |
 | ORT → NumSharp | `ortValue.AsNDArray(ownsValue: false, mode)` | **zero-copy view** over the tensor's buffer (CPU tensors only); `ownsValue: true` → the last view disposes the `OrtValue`; `mode: Copy` → an independent copy |
-| ORT → NumSharp | `denseTensor.ToNDArray()` · `denseTensor.AsNDArray(mode)` · `namedOnnxValue.ToNDArray()` | the legacy-surface twins; column-major tensors transpose back on copy and stay Fortran-ordered as a view |
+| ORT → NumSharp | `denseTensor.ToNDArray()` · `denseTensor.AsNDArray(mode)` · `namedOnnxValue.ToNDArray()` | the legacy-surface twins; column-major tensors transpose back on copy and stay Fortran-ordered as a view. A legacy `session.Run` result reads back with `result.ToNDArray()` on the `DisposableNamedOnnxValue` itself; the `Tensor<T>` its `AsTensor<T>()` returns takes the verbs after a cast, `((DenseTensor<float>)result.AsTensor<float>()).ToNDArray()` |
 | ORT → NumSharp | `ortValue.ToNDArrays()` · `ToMap()` · `ToMaps()` · `GetMapKeys()` · `ReadStringTensor()` | non-tensor outputs: a sequence of tensors, a map, a ZipMap sequence of maps, a string tensor as `string[]`; each numeric array is a view that owns ORT's copy of its element |
 
 Plus the dtype maps (`ToTensorElementType`, `FromTensorElementType`, `Try…`, `ToTensorElementClrType`),
@@ -129,7 +157,10 @@ What each call does for you, from the session's metadata:
   temporary for any other; `View` throws for an input that would need one; `Copy` feeds a copy of every
   input. Every temporary is released with the call.
 - **Outputs**: copies by default; `zeroCopyOutputs: true` returns views that own their `OrtValue` (ORT's
-  memory is freed when the array - or its last derived slice - dies).
+  memory is freed when the array - or its last derived slice - dies). In a loop, dispose the slices too:
+  `using NDArray last = outs["logits"]["0, -1"];` - an undisposed slice keeps the WHOLE output's buffer
+  until a collection (a 12-step GPT-2 decode loop left 7 outputs alive that way). Fed back as the next
+  step's inputs (a KV cache's presents), zero-copy outputs are read in place.
 - **`RunInto`** writes into arrays you allocated (C-contiguous, writeable, declared dtype), zero-copy in both
   directions - the pattern for a denoising loop that reuses its buffers. ORT may write an output while it
   still reads an input: an output that shares memory with an input is computed from a copy of that input
@@ -139,6 +170,40 @@ What each call does for you, from the session's metadata:
   passed through, or an overridable initializer you feed. ORT does not write a pre-allocated array for it,
   and the value it returns lies in the fed memory. `RunInto` writes the fed values into your array, the copy
   form copies them, and the zero-copy form returns a counted view of the fed buffer.
+
+**A model exported by ML.NET.** `mlContext.Model.ConvertToOnnx(model, data, stream)` declares every column
+of the training data as a model input - the label too, which scoring never reads - and every column as an
+output (`Score.output`, `PredictedLabel.output`, ...). Feed each declared input; a label you do not have is
+fed as zeros of its shape, and you fetch the outputs you need by name:
+
+```csharp
+var feed = new Dictionary<string, NDArray>
+{
+    ["f0"] = x[":, 0:1"], ["f1"] = x[":, 1:2"], ["f2"] = x[":, 2:3"], ["f3"] = x[":, 3:4"],   // (R, 1) each
+    ["Label"] = np.zeros(new Shape(x.shape[0], 1), np.float32),                              // declared, unread
+};
+using NDArray score = session.Run(feed, new[] { "Score.output" })["Score.output"];         // (R, 1)
+```
+
+Left out, the label is not missed until ONNX Runtime runs the graph, and its error names a node of the
+exported graph, not the input (`Non-zero status code returned while running Identity node ... Trying to get a
+TensorSeq, but got: (null)`).
+
+**Golden files from Python.** A port is checked against the Python it replaces: save the inputs and Python
+onnxruntime's outputs by name (`np.savez("inputs.npz", **inputs)`, `np.savez("outputs.npz",
+**dict(zip(names, sess.run(None, inputs))))`). `np.load_npz` returns an `NpzFile`, an
+`IReadOnlyDictionary<string, NDArray>` keyed by those names, so the inputs file feeds `Run` as it is - the
+twin of `sess.run(None, dict(np.load("inputs.npz")))`:
+
+```csharp
+using NpzFile inputs = np.load_npz("inputs.npz");        // NumSharp.IO
+using NpzFile expected = np.load_npz("outputs.npz");
+foreach (var (name, y) in session.Run(inputs))
+    using (y) Console.WriteLine($"{name}: {np.array_equal(y, expected[name])}");
+```
+
+Text crosses as `U` arrays both ways, so a model with string inputs or outputs checks the same way; save
+Python's string outputs (object arrays) as `str` first, because an object array in an `.npz` needs pickle.
 
 ## Asynchronous runs
 
@@ -170,6 +235,17 @@ and the task completes from a native callback.
 - **In flight.** Until the task completes, ORT reads the shared inputs and writes the outputs. Do not write
   an input (pass `OnnxCodecMode.Copy` to feed a snapshot). To dispose an array in flight is safe: the run
   holds a reference on every buffer.
+- **An `NDScope` does not cross the `await`.** A scope belongs to the thread that opened it, and the run's
+  continuation resumes on another thread. A `using var scope = NDScope.Open();` held across
+  `await session.RunAsync(...)` is disposed on the continuation's thread and left behind as the opening
+  thread's current scope, so that thread's later arrays are tracked into it; when the continuation's thread
+  reuses the scope, its close disposes them (measured: an array the opening thread filled with 7.0 read 9.0,
+  another array's data). Scope the synchronous code before the `await` and after it, never across it.
+- **Start `RunAsync` outside any `NDScope`.** It allocates its outputs when the call starts, so an open scope
+  tracks them and disposes them when it closes, and once the run lets go of its own reference the task's
+  dictionary holds arrays over freed memory (measured: relu's 0.5 read back as another array's 55.5).
+  `scope.ReturnsTask(task)` does not help: it yields an `NDArray` or a tuple result, not the arrays inside a
+  dictionary. Under the synchronous `Run`, yield each output you keep with `scope.Returns(outputs[name])`.
 
 ## Text
 
@@ -183,7 +259,8 @@ both directions: `ToOrtValue`, `AsOrtValue`, `ToNDArray`, `AsNDArray`, the reade
 - **The fixed width has a cost**, because the bridge reads string tensors as `U`, not as NumSharp's
   variable-width `StringDType`: a string that ends in NUL characters loses them (`ReadStringTensor` returns
   the strings exactly), and one long string widens every element. A `StringDType` array is not a bridge
-  input: cast it to `U` first (`nd.astype(np.dtype("U"))`).
+  input (Python's `onnxruntime` refuses it too): cast it to a sized `U` first, wide enough for its longest
+  string (`nd.astype(np.dtype("U16"))`; an unsized `"U"` target is refused for `StringDType`, as in NumPy).
 - The bridge does not cast between text and numbers, under any casting rule. Convert first with NumSharp's
   own casts: `nd.astype(np.dtype("U"))` writes each number as its `str()`, and `nd.astype(np.float32)` parses
   each text as NumPy does.
@@ -213,6 +290,12 @@ bytes)` on `slice.Address + Shape.Offset × itemsize`; the import takes the poin
   Disposing the handle disposes the `OrtValue`, drops the reference and disposes the temporary copy when the
   handle holds one. While exported, `ndarray.resize(refcheck: true)` refuses - NumPy's rule for a referenced
   buffer - and works again once the handle is gone.
+- **`ToOrtValue` returns ORT's own value: dispose it.** Its copy lives in memory ORT allocated, which the
+  garbage collector does not see (ORT reports no memory pressure), so a forgotten one is freed only when a
+  collection happens to run for other reasons: a loop that dropped 20,000 copies of a 602 KB array peaked at
+  4.4 GB more private memory before the finalizers caught up. The arrays and handles of this package do not
+  have this problem (the same loop over `Run` outputs, owning views or `AsOrtValue` handles stayed within
+  60 MB), but `using` is still the rule.
 - **Reachable means valid.** The handle and what it hands out keep each other alive: holding only
   `handle.Value`, or only `Tensor` / `Memory`, keeps the handle and its reference, so a collection never
   disposes an `OrtValue` or disables a tensor you still hold, and never lets `resize` reallocate under it. A
@@ -298,7 +381,11 @@ their behaviour report Inconclusive and the test of their refusal runs.
 
 ## Limits
 
-- Complex tensors (ORT has none), BFloat16 / float8 / 4-bit (NumSharp has none).
+- Complex tensors (ORT has none), BFloat16 / float8 / 4-bit (NumSharp has none). A BFloat16 input is fed
+  through ORT's own API - `OrtValue.CreateTensorValueFromMemory` over `new BFloat16(bits)` values and ORT's
+  `session.Run` - and the refusal says so. A model that declares a float8 or 4-bit input or output does not
+  load in ONNX Runtime's C# API itself (1.31.1: `Unregistered TensorElementType value of: 19`), so it never
+  reaches the bridge.
 - Sparse tensors: ORT's C# API cannot create or read one. A model input declared sparse passes the checks
   of `Run` and fails inside ORT.
 - `Run` returns tensors only. Fetch a sequence or a map with ORT's own `session.Run` and read it with the
@@ -351,9 +438,17 @@ their behaviour report Inconclusive and the test of their refusal runs.
 | 25 | The asynchronous forms: the version rule, the completion off ORT's thread, a blocking wait under a context or a single-thread scheduler, arrays disposed in flight, errors from the call and through the task, the outputs `RunAsync` can and cannot allocate | `SessionRunAsyncTests` |
 | 26 | The value of a disposed handle is refused by every import verb instead of ending the process | `ValueOwnershipTests.ValueOfADisposedHandle_IsRefused_ByEveryImportVerb_InsteadOfCrashingInOnnxRuntime` |
 | 27 | Non-tensor readers: sequences in order with their own shapes, int64- and string-keyed maps, `GetMapKeys`, each reader's refusals | `NonTensorTests` |
+| 28 | Under an `NDScope`, which disposes the bridge's own temporaries when it closes, a handle (Decimal conversion, C-order copy, zero-copy, `AsDenseTensor`) and a `Run` output that leave the scope keep their bytes; a zero-copy import left to the scope is released when it closes | `NDScopeTests` |
 
 ## See also
 
+- [An example project](https://github.com/SciSharp/NumSharp/tree/master/examples/NumSharpOnnxRuntimeExample) - a
+  console app to copy: photos classified with MobileNetV2 in one batch, decoded by SkiaSharp, normalized and
+  laid out channels-first with NumSharp, scored with `Postprocess.Softmax` / `TopK`, and run again with
+  `RunInto` into an array allocated once
+- [Train in ML.NET, serve with ONNX Runtime](https://github.com/SciSharp/NumSharp/tree/master/examples/NumSharpMLNetToOnnxRuntimeExample) -
+  a console app to copy: a model ML.NET trained on NumSharp arrays and exported with `ConvertToOnnx`, served
+  from NumSharp column slices with its unread `Label` input fed as zeros, and checked against ML.NET's scores
 - [Interoperability overview](index.md) - the contract every bridge builds on
 - [Python & numpy (pythonnet)](pythonnet-numpy.md) - the sibling bridge whose lifetime model this one mirrors
 - Package README: `src/NumSharp.Interop.OnnxRuntime/README.md` · plan: `docs/plans/onnxruntime.md` ·

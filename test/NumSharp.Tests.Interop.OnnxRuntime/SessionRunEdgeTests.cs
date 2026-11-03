@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using AwesomeAssertions;
 using Microsoft.ML.OnnxRuntime;
+using Microsoft.ML.OnnxRuntime.Tensors;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
 using NumSharp.Interop.OnnxRuntime;
@@ -56,6 +58,12 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             NDArrayOnnxInterop.LiveExports.Should().Be(0);
         }
 
+        /// <summary>
+        ///     A pre-allocated output that is not C-contiguous is refused with the OUTPUT remedy: a C-contiguous array, or
+        ///     Run + <c>np.copyto(view, result)</c>. The shared export text suggested materializing a copy or
+        ///     <c>ToOrtValue</c> - for an output, ORT would write the copy and the caller's view would keep its old values.
+        ///     The <c>np.copyto</c> route is followed to the end.
+        /// </summary>
         [TestMethod]
         public void PreallocatedOutput_NonContiguous_IsRefused()
         {
@@ -67,8 +75,14 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
 
             new Action(() => session.RunInto(new Dictionary<string, NDArray> { { "X", x } },
                     new Dictionary<string, NDArray> { { "Y1", transposed } }))
-                .Should().Throw<InvalidOperationException>().WithMessage("*'Y1'*not C-contiguous*");
+                .Should().Throw<InvalidOperationException>().WithMessage("*'Y1'*not C-contiguous*np.copyto(view, result)*")
+                .Which.Message.Should().NotContain("ToOrtValue", "ToOrtValue is an input verb");
             NDArrayOnnxInterop.LiveExports.Should().Be(0, "the refused output pinned nothing");
+
+            // The remedy as written: Run, then np.copyto into the non-contiguous view, which lands in `big`.
+            using (NDArray y1 = session.Run("X", x, "Y1"))
+                np.copyto(transposed, y1);
+            np.array_equal(big.T, x).Should().BeTrue("Y1 = X, written through the transposed view");
         }
 
         [TestMethod]
@@ -238,9 +252,11 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
 
         /// <summary>
         ///     BFloat16, the one tensor element type of ONNX Runtime's C# API that NumSharp has no dtype for. A model
-        ///     INPUT of it is refused by name before the array is read. A model OUTPUT of it is refused by the import
-        ///     after the run (both forms release what they hold), by <c>RunInto</c> as a dtype that no array has, and by
-        ///     <c>RunAsync</c> before the run.
+        ///     INPUT of it is refused by name before the array is read, with the FEED route (ORT's own value factory over
+        ///     <c>new BFloat16(bits)</c> and ORT's own <c>Run</c>), which this test follows to the end: the float output
+        ///     reads back through the bridge. A model OUTPUT of it is refused by the import after the run (both forms
+        ///     release what they hold), by <c>RunInto</c> as a dtype that no array has, and by <c>RunAsync</c> before the
+        ///     run.
         /// </summary>
         [TestMethod]
         public void BFloat16_AsAModelInput_AndAsAModelOutput_IsRefusedByName()
@@ -250,8 +266,18 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
 
             using (InferenceSession session = OpenSession("bf16_in"))
             {
-                new Action(() => session.Run(x)).Should().Throw<NotSupportedException>().WithMessage("input 'X' is declared BFloat16*");
+                new Action(() => session.Run(x)).Should().Throw<NotSupportedException>()
+                    .WithMessage("input 'X' is declared BFloat16: *cannot feed it*OrtValue.CreateTensorValueFromMemory*new BFloat16(bits)*")
+                    .Which.Message.Should().NotContain("GetTensorDataAsSpan", "reading raw patterns is the OUTPUT route, useless for feeding");
                 Pool.Takes(() => { try { session.Run(x); } catch (NotSupportedException) { } }).Should().Be(0, "the refusal reads the declaration only");
+
+                // The route the message names, as written: 0, 1, 2 are exact in bfloat16 (the high half of their float32 bits).
+                BFloat16[] bf = x.ToArray<float>().Select(f => new BFloat16((ushort)(BitConverter.SingleToInt32Bits(f) >> 16))).ToArray();
+                using OrtValue fed = OrtValue.CreateTensorValueFromMemory(bf, new long[] { bf.Length });
+                using var runOptions = new RunOptions();
+                using IDisposableReadOnlyCollection<OrtValue> outs = session.Run(runOptions, new[] { "X" }, new[] { fed }, new[] { "Y" });
+                using NDArray y = outs[0].ToNDArray();
+                y.ToArray<float>().Should().Equal(0f, 1f, 2f);
             }
 
             using (InferenceSession session = OpenSession("bf16_out"))

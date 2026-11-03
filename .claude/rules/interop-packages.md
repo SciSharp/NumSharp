@@ -69,9 +69,11 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   mutually exclusive, so the consumer picks one.
 - Dtypes: 12 zero-copy, including a Half↔Float16 bit reinterpretation; Char→UInt16; Decimal→Double through a temp the
   handle owns (Auto / Copy; `Run` needs `casting: "same_kind"`); text: fixed-width `U` / `S` ↔ ORT string tensors, always
-  a copy (a trailing NUL is lost; the bridge maps no `StringDType` array and casts no text ↔ number pair: the caller's
-  `astype` does); Complex and BFloat16 refused; sparse tensors, non-tensor `Run` inputs and non-`NDArray` inputs are not
-  served.
+  a copy (a trailing NUL is lost; the bridge casts no text ↔ number pair: the caller's `astype` does); a `StringDType`
+  array shares the text lane, so `IsText` is true for it and `RefuseStringDType` throws `NotSupportedException` in
+  every export verb and `Run` (Python's onnxruntime refuses it too); the remedy is a SIZED `U` cast, because NumPy and
+  NumSharp both raise `TypeError` for `astype(np.dtype("U"))` from `StringDType`; Complex and BFloat16 refused; sparse
+  tensors, non-tensor `Run` inputs and non-`NDArray` inputs are not served.
 - Non-tensor outputs read as NumSharp pieces: `ortValue.ToNDArrays()` (a sequence of tensors), `ToMap()` / `ToMaps()`
   (a map, or a ZipMap sequence of maps → (keys, values) NDArrays), `GetMapKeys`, `ReadStringTensor()` → `string[]`; each
   numeric array is a view that OWNS ORT's copy of its element.
@@ -98,6 +100,9 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   runs the async tests: never set it below 1.30.0), with no Python. Mutation runs restore a file from memory only: copy
   untracked files out of the tree before one.
 - Docs: `docs/website-src/docs/interop/onnxruntime.md` (excluded from the site).
+- Example: `examples/NumSharpOnnxRuntimeExample` (regular csproj form over the published 0.80.0-beta1; no workflow runs
+  it): MobileNetV2 downloaded on the first run, SkiaSharp decoding (ImageSharp 3.1.x restores with security advisories
+  and 3.2+ needs a license key to build), NumSharp preprocessing into one NCHW batch, `Postprocess`, `RunInto`.
 
 ### `NumSharp.Interop.MLNet` (unreleased)
 
@@ -120,8 +125,8 @@ None of these computes NumSharp operations: each converts tensors between NumSha
 - Dtypes: 11 direct, plus Char→UInt16 one way; Half→Single (lossless) and Decimal→Double converted by the view verbs
   into an owned temp; Complex refused (ML.NET has no half, decimal or complex column type). Rank 1–2 only.
 - `VBuffer` zero-copy is one-directional. Import is zero-copy through reflected compiled-expression access to the
-  private `T[] _values` (a `VBuffer` is backed by a managed `T[]` in every version 2.0.0, 3.0.0 and 4.0.2, with no
-  `ReadOnlyMemory<T>` or non-public constructor). Export can never be zero-copy, because a managed array cannot alias
+  private `T[] _values` (a `VBuffer` is backed by a managed `T[]` in every version 2.0.0, 3.0.0, 4.0.2 and 5.0.1 and in
+  the 6.0.0 previews, with no `ReadOnlyMemory<T>` or non-public constructor: the zero-copy import suites pass on each). Export can never be zero-copy, because a managed array cannot alias
   NumSharp's unmanaged buffer, so `ToVBuffer` copies; the bulk export path `AsDataView` is zero-copy anyway.
 - Gate: `test/NumSharp.Tests.Interop.MLNet`: the dtype map with every column type and CLR type, export/import
   round-trips, the zero-copy import (write-through, pooled slice, sparse fallback, lease lifetime, derived slice), every
@@ -134,6 +139,10 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   boundary, API approval) and `LifetimeGcTests` (a getter keeps its cursor reachable until its row is committed). The
   `interop-test` CI job runs it against ML.NET 2.0.1 and 4.0.2, with no Python.
 - Docs: `docs/website-src/docs/interop/mlnet.md` (excluded from the site).
+- Example: `examples/NumSharpMLNetExample` (regular csproj form over the published 0.80.0-beta1 and Microsoft.ML 5.0.1;
+  no workflow runs it): a binary classifier trained from a `(rows, 5)` array as five scalar columns with the label
+  converted OUTSIDE the model (so the model scores a features-only view), L-BFGS for run-to-run identical output (SDCA
+  is multi-threaded and varied), k-means on one vector column.
 
 ### `NumSharp.Interop.System.Numerics.Tensors` (released)
 

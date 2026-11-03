@@ -62,7 +62,16 @@ integers, `float` and `double` → the matching `NumberDataViewType`. `Char` cro
 `NumberDataViewType.UInt16` (UTF-16 code units), one-way. ML.NET has no half / decimal / complex
 column type: **`Half` is converted to Single** (lossless) and **`Decimal` to Double** by the
 view-producing verbs (in a temporary the view owns); **`Complex` is refused** (split into real /
-imaginary planes with `np.real` / `np.imag`).
+imaginary planes with `np.real` / `np.imag`), and so are **text arrays** (`U`, `S`, `StringDType`: the
+bridge maps no ML.NET text column). `ToNDArray` refuses a text column too (string labels after
+`MapKeyToValue("PredictedLabel")`): ML.NET's own reader does it in a line,
+`np.array(view.GetColumn<string>("PredictedLabel").ToArray())` (a `U` array; `GetColumn<string[]>` for a
+vector-of-text column).
+
+ML.NET's trainers and most transforms read `Single` features, while NumSharp's default float dtype is
+float64, as NumPy's: convert with `x.astype(np.float32)` before `AsDataView`, or a pipeline stops with
+ML.NET's `Schema mismatch ... expected Vector<Single>, got Vector<Double>`. A key column
+(`PredictedLabel` of a multiclass model or k-means) reads back as its `uint32` keys, 1-based.
 
 ## Lifetime
 
@@ -89,8 +98,9 @@ or past the last one — after `Dispose`, from a buffer the cursor no longer kep
 
 **Each cursor holds its own pin** and releases it on `Dispose` — or, for a cursor nobody disposes, from a
 finalizer. ML.NET abandons cursors itself (`ShuffleRows`, used by training pipelines, never disposes the cursor
-it opens on its input), and before that net a single shuffle kept the NumSharp buffer referenced for the life of
-the process.
+it opens on its input; the time-series package's `DetectEntireAnomalyBySrCnn` leaves two per call), and before
+that net a single shuffle kept the NumSharp buffer referenced for the life of the process. Until a collection
+finalizes such a cursor its pin still holds the buffer, so the memory comes back only then.
 
 **Imports have no managed-array cap.** `view.ToNDArray(column)` stages rows straight into NumSharp memory: one
 exact allocation when the view reports its row count, growing chunks (copied together once) when it does not, so

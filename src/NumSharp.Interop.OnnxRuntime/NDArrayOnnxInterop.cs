@@ -125,9 +125,15 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     <see cref="ToTensorElementType"/> without the throw: <c>false</c> for every dtype that has no ONNX tensor
         ///     element type — Decimal, Complex, a datetime64 / timedelta64 descriptor — and for <c>null</c>.
         /// </summary>
+        /// <remarks>
+        ///     The answer is the element type the data has in ONNX, which is not always a promise that an array of the dtype
+        ///     crosses: the text lane answers <see cref="TensorElementType.String"/> for all three text classes, and the
+        ///     fixed-width ones (<c>U</c>, <c>S</c>) cross as a copy, but the verbs refuse a <c>StringDType</c> (<c>T</c>)
+        ///     array - cast it to a sized <c>U</c> first (<c>nd.astype(np.dtype("U16"))</c>), as their message says.
+        /// </remarks>
         /// <param name="dtype">The NumSharp dtype, or null.</param>
         /// <param name="type">The ONNX element type when the result is <c>true</c>; <c>default</c> otherwise.</param>
-        /// <returns><c>true</c> when the dtype crosses to ONNX Runtime.</returns>
+        /// <returns><c>true</c> when the dtype has an ONNX tensor element type (a <c>StringDType</c> array, mapped to <see cref="TensorElementType.String"/>, is still refused by the verbs).</returns>
         public static bool TryToTensorElementType(DType dtype, out TensorElementType type)
         {
             // Meta.TypeCode, not GetTypeCode(): the latter THROWS for a descriptor whose class has no storage yet
@@ -326,6 +332,37 @@ namespace NumSharp.Interop.OnnxRuntime
                     return $"ORT {type} tensors are not supported by ONNX Runtime itself (no kernel produces them); nothing to read.";
                 default:
                     return $"ONNX tensor element type {type} has no NumSharp dtype.";
+            }
+        }
+
+        /// <summary>
+        ///     The refusal text for a model INPUT declared with an element type NumSharp has no dtype for: what the
+        ///     caller can feed instead, which is not what <see cref="UnsupportedImportMessage"/> tells a reader of an
+        ///     output.
+        /// </summary>
+        /// <remarks>
+        ///     The input path used to reuse the import text, whose BFloat16 route - "read the raw 16-bit patterns with
+        ///     GetTensorDataAsSpan&lt;BFloat16&gt;()" - is a way to READ a value, useless to someone who has to FEED one.
+        ///     The feed route goes through ONNX Runtime's own value factory with <c>new BFloat16(bits)</c>, the
+        ///     constructor every supported ORT version has (1.16.0 included), and ORT's own <c>Run</c>; the float outputs
+        ///     of such a model still read back through the bridge.
+        /// </remarks>
+        /// <param name="type">The declared element type of the input, one <see cref="TryFromTensorElementType"/> refuses.</param>
+        /// <returns>The message, to follow "input 'name' is declared {type}: ".</returns>
+        internal static string UnsupportedInputMessage(TensorElementType type)
+        {
+            switch (type)
+            {
+                case TensorElementType.BFloat16:
+                    return "ORT BFloat16 has no NumSharp dtype (NumSharp has no bfloat16), so the bridge cannot feed it. Build this input " +
+                           "with ONNX Runtime's own API - OrtValue.CreateTensorValueFromMemory over a BFloat16[] (new BFloat16(bits), the " +
+                           "high 16 bits of each float32's bit pattern) - and run with session.Run(runOptions, inputNames, inputValues, " +
+                           "outputNames), or give the model a float32 / float16 input and cast inside the graph.";
+                case TensorElementType.Complex64:
+                case TensorElementType.Complex128:
+                    return $"ORT {type} tensors are not supported by ONNX Runtime itself (no kernel takes them); nothing can be fed.";
+                default:
+                    return $"ONNX tensor element type {type} has no NumSharp dtype, so the bridge cannot feed it.";
             }
         }
 

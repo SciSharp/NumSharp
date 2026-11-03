@@ -156,10 +156,21 @@ namespace NumSharp.Interop.MLNet
             NDArrayMLNetInterop.ExportClosed();
         }
 
+        /// <summary>Refuses every use of a disposed view (its schema, a new cursor), naming the usual way to get there.</summary>
+        /// <remarks>
+        ///     The usual way is ML.NET's laziness, not a second <c>Dispose</c>: <c>model.Transform(view)</c> returns a view
+        ///     that reads this one only when IT is read, so a <c>using</c> scope around this view that ends before the
+        ///     output's <c>ToNDArray</c> / <c>Evaluate</c> lands here, far from the scope. The message says so, with the
+        ///     remedy, because nothing at the throw site points back at the scope.
+        /// </remarks>
+        /// <exception cref="ObjectDisposedException">The view has been disposed.</exception>
         private void ThrowIfDisposed()
         {
             if (Volatile.Read(ref _disposed) != 0)
-                throw new ObjectDisposedException(nameof(NDArrayDataView), "the NDArray-backed IDataView has been disposed; its NumSharp buffer is no longer pinned.");
+                throw new ObjectDisposedException(nameof(NDArrayDataView),
+                    "the NDArray-backed IDataView has been disposed; its NumSharp buffer is no longer pinned. ML.NET reads lazily: " +
+                    "a Transform's output (and every view built on this one) reads this view only when it is read itself, so keep " +
+                    "this view undisposed until the last read of anything built on it (ToNDArray, Evaluate, Fit, a cursor).");
         }
 
         // =====================================  the cursor  =====================================

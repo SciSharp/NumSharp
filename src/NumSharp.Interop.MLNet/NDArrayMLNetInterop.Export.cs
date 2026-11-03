@@ -40,8 +40,9 @@ namespace NumSharp.Interop.MLNet
         /// <exception cref="ArgumentNullException"><paramref name="source"/> is null.</exception>
         /// <exception cref="ArgumentException"><paramref name="source"/> is not 1-D or 2-D, or <paramref name="columnName"/> is null/empty.</exception>
         /// <exception cref="NotSupportedException">
-        ///     The dtype has no ML.NET column type (Complex), or the feature axis is wider than ML.NET's buffers hold
-        ///     (2,146,435,071 elements, a little below <see cref="Array.MaxLength"/>): every row reaches ML.NET as a <see cref="VBuffer{T}"/>.
+        ///     The dtype has no ML.NET column type (Complex, or text: a U, S or StringDType array), or the feature axis is
+        ///     wider than ML.NET's buffers hold (2,146,435,071 elements, a little below <see cref="Array.MaxLength"/>): every
+        ///     row reaches ML.NET as a <see cref="VBuffer{T}"/>.
         /// </exception>
         /// <exception cref="ObjectDisposedException">The array's buffer has already been released.</exception>
         public static NDArrayDataView AsDataView(this NDArray source, string columnName = "Features")
@@ -80,7 +81,7 @@ namespace NumSharp.Interop.MLNet
         /// <returns>A disposable data view reading the array lazily; it holds the buffer pin (and any conversion) until disposed.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="source"/> is null.</exception>
         /// <exception cref="ArgumentException"><paramref name="source"/> is not 1-D or 2-D, or the name count does not match the column count, or a name is null/empty.</exception>
-        /// <exception cref="NotSupportedException">The dtype has no ML.NET column type (Complex).</exception>
+        /// <exception cref="NotSupportedException">The dtype has no ML.NET column type (Complex, or text: a U, S or StringDType array).</exception>
         /// <exception cref="ObjectDisposedException">The array's buffer has already been released.</exception>
         public static NDArrayDataView AsDataView(this NDArray source, string[] columnNames)
         {
@@ -118,7 +119,7 @@ namespace NumSharp.Interop.MLNet
         /// <returns>A disposable data view over a private copy of the array.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="source"/> is null.</exception>
         /// <exception cref="ArgumentException"><paramref name="source"/> is not 1-D or 2-D, or <paramref name="columnName"/> is null/empty.</exception>
-        /// <exception cref="NotSupportedException">The dtype has no ML.NET column type (Complex), or the feature axis is wider than ML.NET's buffers hold (2,146,435,071 elements).</exception>
+        /// <exception cref="NotSupportedException">The dtype has no ML.NET column type (Complex, or text: a U, S or StringDType array), or the feature axis is wider than ML.NET's buffers hold (2,146,435,071 elements).</exception>
         /// <exception cref="ObjectDisposedException">The array's buffer has already been released.</exception>
         public static NDArrayDataView ToDataView(this NDArray source, string columnName = "Features")
         {
@@ -148,7 +149,7 @@ namespace NumSharp.Interop.MLNet
         /// <returns>A disposable data view over a private copy of the array.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="source"/> is null.</exception>
         /// <exception cref="ArgumentException"><paramref name="source"/> is not 1-D or 2-D, or the name count does not match the column count, or a name is null/empty.</exception>
-        /// <exception cref="NotSupportedException">The dtype has no ML.NET column type (Complex).</exception>
+        /// <exception cref="NotSupportedException">The dtype has no ML.NET column type (Complex, or text: a U, S or StringDType array).</exception>
         /// <exception cref="ObjectDisposedException">The array's buffer has already been released.</exception>
         public static NDArrayDataView ToDataView(this NDArray source, string[] columnNames)
         {
@@ -385,7 +386,7 @@ namespace NumSharp.Interop.MLNet
         /// <exception cref="ArgumentNullException"><paramref name="source"/> is null.</exception>
         /// <exception cref="ArgumentException"><typeparamref name="T"/> is not the element type ML.NET uses for the array's dtype.</exception>
         /// <exception cref="NotSupportedException">
-        ///     The dtype has no ML.NET type (Complex), or the array has more elements than ML.NET's buffers hold
+        ///     The dtype has no ML.NET type (Complex, or text: a U, S or StringDType array), or the array has more elements than ML.NET's buffers hold
         ///     (2,146,435,071 elements — a little below a <c>T[]</c>'s own <see cref="Array.MaxLength"/>, see the remarks).
         /// </exception>
         /// <exception cref="ObjectDisposedException">The array's buffer has already been released.</exception>

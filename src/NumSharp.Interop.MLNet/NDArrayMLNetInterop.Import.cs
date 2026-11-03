@@ -23,7 +23,16 @@ namespace NumSharp.Interop.MLNet
         ///     reads back as <see cref="NPTypeCode.UInt16"/>, never <see cref="NPTypeCode.Char"/>). A text column, or a
         ///     variable-length vector column whose rows disagree on length, is refused with a message naming the cause.</para>
         /// </summary>
-        /// <exception cref="ArgumentException">No column of that name, or a variable-length vector column.</exception>
+        /// <remarks>
+        ///     The column is read with one cursor over every row, so a lazy pipeline (a transformer's output) computes its
+        ///     rows here, once. The result owns its memory: it stays valid after the view, its source arrays and the
+        ///     cursor are disposed.
+        /// </remarks>
+        /// <param name="view">The data view to read; a transformer's output, a loader's view or an <see cref="NDArrayDataView"/>.</param>
+        /// <param name="columnName">The name of the column to read (a hidden column of the same name is not reachable this way).</param>
+        /// <returns>A new owning C-contiguous array: <c>(rows,)</c> for a scalar column, <c>(rows, width)</c> for a vector column.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="view"/> or <paramref name="columnName"/> is null.</exception>
+        /// <exception cref="ArgumentException">No column of that name (the message lists the columns), or a variable-length vector column.</exception>
         /// <exception cref="NotSupportedException">The column's element type has no NumSharp dtype (text, key of an unmapped raw type, ...).</exception>
         public static NDArray ToNDArray(this IDataView view, string columnName)
         {
@@ -38,13 +47,28 @@ namespace NumSharp.Interop.MLNet
         }
 
         /// <summary>Materialize a specific schema <paramref name="column"/> of <paramref name="view"/> into an <see cref="NDArray"/> (see <see cref="ToNDArray(IDataView, string)"/>).</summary>
+        /// <remarks>
+        ///     The schema column form reaches a HIDDEN column too (an earlier column that a later one of the same name
+        ///     shadows, which <see cref="ToNDArray(IDataView, string)"/> cannot name). The column must belong to
+        ///     <paramref name="view"/>'s own schema.
+        /// </remarks>
+        /// <param name="view">The data view to read.</param>
+        /// <param name="column">A column of <paramref name="view"/>'s schema.</param>
+        /// <returns>A new owning C-contiguous array: <c>(rows,)</c> for a scalar column, <c>(rows, width)</c> for a vector column.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="view"/> is null.</exception>
+        /// <exception cref="ArgumentException">A variable-length vector column whose rows disagree on length.</exception>
+        /// <exception cref="NotSupportedException">The column's element type has no NumSharp dtype (text, key of an unmapped raw type, ...).</exception>
         public static NDArray ToNDArray(this IDataView view, DataViewSchema.Column column)
         {
             if (view is null)
                 throw new ArgumentNullException(nameof(view));
             DataViewType type = column.Type;
             bool isVector = type is VectorDataViewType;
-            NPTypeCode itemCode = FromDataViewType(type);   // throws NotSupported for text / unmapped raw types
+            // FromDataViewType's map, refused here with the column's name: a text column's message spells the
+            // GetColumn route with it, so the reader can paste it.
+            if (!TryFromDataViewType(type, out DType dtype))
+                throw new NotSupportedException(UnsupportedImportMessage(type, column.Name));
+            NPTypeCode itemCode = dtype.GetTypeCode();
 
             switch (itemCode)
             {
@@ -112,8 +136,11 @@ namespace NumSharp.Interop.MLNet
                 {
                     vectorGetter(ref buffer);
                     stage ??= new ColumnStage<T>(tc, buffer.Length, knownRows);
+                    // Ragged rows are refused, as NumPy refuses them ("inhomogeneous shape"). The route named is one that
+                    // exists: the message used to suggest "an ML.NET vector-size transform", which ML.NET does not have.
                     if (buffer.Length != stage.Width)
-                        throw new ArgumentException($"column '{column.Name}' is a variable-length vector (row {stage.Rows} has length {buffer.Length}, an earlier row {stage.Width}); NumSharp arrays are rectangular. Pad the column to a fixed size first (e.g. an ML.NET vector-size transform).");
+                        throw new ArgumentException($"column '{column.Name}' is a variable-length vector (row {stage.Rows} has length {buffer.Length}, an earlier row {stage.Width}); NumSharp arrays are rectangular. " +
+                                                    $"Read the rows with ML.NET's own column reader (Microsoft.ML), view.GetColumn<{typeof(T).Name}[]>(\"{column.Name}\"), and pad or trim them to one length before np.array.");
                     // VBuffer.CopyTo(Span<T>) densifies a sparse row into the full-length span.
                     buffer.CopyTo(new Span<T>(stage.NextRow(), stage.Width));
                 }
@@ -259,6 +286,15 @@ namespace NumSharp.Interop.MLNet
         ///     <see cref="VBuffer{T}.Length"/>. A sparse buffer is densified (missing entries become zero, as ML.NET
         ///     defines a sparse vector). <see cref="ushort"/> reads back as <see cref="NPTypeCode.UInt16"/>.
         /// </summary>
+        /// <remarks>
+        ///     The copy is what to take for a buffer a cursor getter filled: the getter reuses one buffer for every
+        ///     row, so a zero-copy view of it (<see cref="AsNDArray{T}(VBuffer{T})"/>) would change under the next
+        ///     <c>MoveNext</c>, and the copy does not.
+        /// </remarks>
+        /// <typeparam name="T">The element type: <see cref="bool"/>, one of the eight integer types, <see cref="char"/> (read as <see cref="NPTypeCode.Char"/>), <see cref="float"/> or <see cref="double"/>.</typeparam>
+        /// <param name="buffer">The buffer to copy, dense or sparse; it is only read.</param>
+        /// <returns>A new owning 1-D array of length <see cref="VBuffer{T}.Length"/> (empty for an empty buffer).</returns>
+        /// <exception cref="NotSupportedException"><typeparamref name="T"/> is not an element type ML.NET vectors carry (<see cref="Half"/>, <see cref="decimal"/>, <see cref="System.Numerics.Complex"/> or any other unmanaged type).</exception>
         public static unsafe NDArray ToNDArray<T>(this VBuffer<T> buffer) where T : unmanaged
         {
             NPTypeCode tc = TypeCodeOf<T>();
@@ -306,6 +342,14 @@ namespace NumSharp.Interop.MLNet
         ///     expected managed-array form falls back to <see cref="ToNDArray{T}(VBuffer{T})"/> (a copy) — never a
         ///     wrong reinterpretation. <see cref="ushort"/> reads back as <see cref="NPTypeCode.UInt16"/>.</para>
         /// </summary>
+        /// <typeparam name="T">The element type: <see cref="bool"/>, one of the eight integer types, <see cref="char"/> (read as <see cref="NPTypeCode.Char"/>), <see cref="float"/> or <see cref="double"/>.</typeparam>
+        /// <param name="buffer">The buffer to view: a dense one is shared (keep it unrefilled while the view is used), a sparse or empty one is copied.</param>
+        /// <returns>
+        ///     A 1-D array of length <see cref="VBuffer{T}.Length"/>: a non-owning view of the buffer's array that pins it
+        ///     until the last view is disposed or collected (<see cref="LiveImports"/> counts it), or an owning copy for a
+        ///     sparse or empty buffer.
+        /// </returns>
+        /// <exception cref="NotSupportedException"><typeparamref name="T"/> is not an element type ML.NET vectors carry (<see cref="Half"/>, <see cref="decimal"/>, <see cref="System.Numerics.Complex"/> or any other unmanaged type).</exception>
         public static unsafe NDArray AsNDArray<T>(this VBuffer<T> buffer) where T : unmanaged
         {
             NPTypeCode tc = TypeCodeOf<T>();
