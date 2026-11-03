@@ -1628,5 +1628,34 @@ namespace NumSharp.Tests
             BitConverter.DoubleToInt64Bits((double)trace).Should().Be(BitConverter.DoubleToInt64Bits(469.51696132236486),
                 "NumPy's trace is the diagonal's pairwise add.reduce");
         }
+
+        // ------------------------------------------------------------------
+        // QA-48 — every np.fft transform allocates its result in C order; NumPy keeps the input's memory order
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy 2.4.2's <c>_raw_fft</c> (<c>numpy/fft/_pocketfft.py</c>) allocates the result with
+        ///     <c>empty_like(a, shape=..., dtype=...)</c>, whose default <c>order='K'</c> keeps the input's memory order: an
+        ///     F-ordered input gives an F-ordered spectrum (<c>np.fft.fft(F, axis=1).strides == (16, 64)</c>), a permuted 3-D input
+        ///     a spectrum permuted the same way, and the N-D forms keep it through every 1-D pass. NumSharp's
+        ///     <c>PocketFFTDriver.Execute</c> allocates <c>TensorEngine.NewArray(outDtype, outShape, false)</c>, which is always C
+        ///     order, so all 14 non-C layouts of the <c>p131</c> sweep (fft / ifft / rfft / irfft / hfft / ihfft / fft2 / rfft2 /
+        ///     fftn, F, transposed and permuted inputs, any axis) come back C (<c>(96, 16)</c>). The values are identical; code
+        ///     that reads the flags or strides, or passes the buffer on in memory order, sees a different array.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA48")]
+        public void ParityQa_FftResult_FOrderInput_ShouldKeepTheInputsMemoryOrder()
+        {
+            using var c = np.arange(24.0).reshape(4, 6);
+            using var f = np.asfortranarray(c);
+
+            using var spectrum = np.fft.fft(f, axis: 1);
+            using var half = np.fft.rfft(f, axis: 0);
+
+            // NumPy: complex128 (4, 6) over an F input is (16, 64); rfft along axis 0 gives (3, 6) with strides (16, 48)
+            spectrum.strides.Should().Equal(new long[] { 16, 64 }, "empty_like(a, ...) keeps an F input's order");
+            spectrum.flags.f_contiguous.Should().BeTrue();
+            half.strides.Should().Equal(new long[] { 16, 48 }, "the shorter axis keeps the same K order");
+        }
     }
 }
