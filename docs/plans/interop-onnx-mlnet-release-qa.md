@@ -338,6 +338,14 @@ each with its tests and docs, never merged here (the **Branch** line of each ent
   a row), nothing for an unshuffled one. Options: (a) implement it, with tests (every row once, ids, a fixed seed
   reproduces, SDCA recovers on ordered data); (b) keep the documented advice only (done: the page's Limits).
   Recommended: (a) after the beta - additive, and it makes the bridge better than ML.NET's POCO route for training.
+  - **Branch** `qa/p17-shuffling-view` `6463b1b0` (option a): `CanShuffle => _rowCount <= Array.MaxLength`; a cursor
+    opened with a `Random` draws a Fisher-Yates permutation (before its pin, so a failed allocation leaks nothing) and
+    `CurrentRow()` maps through it after the off-row check; ids stay the source rows. New `ShuffleTests` (4): every row
+    once with its own values, a seed reproduces its order, empty / one-row views, and SDCA on 20,000 class-ordered rows
+    above 0.65 accuracy; mutations prove them (CanShuffle false -> 3 fail; the cursor ignoring the `Random` -> SDCA at
+    0.501). ML.NET 5.0.1 net10.0, 2.0.1 net10.0 and net8.0: 215 / 215. The ML.NET example run against it prints its
+    README's numbers unchanged. It conflicts with P1 in the cursor's constructor (both rewrote it; resolved on
+    `qa/proposals-all` as both).
 
 ## 6. Examples
 
@@ -383,7 +391,8 @@ The proposals (section 5) are separate, each the owner's to accept or drop:
 | `qa/p1-multi-array-view` (P1) | `a6baabb2` | `7d68a494` | ML.NET `NDArrayDataView.cs`, `NDArrayMLNetInterop.Export.cs`, new `TableViewTests`, the ML.NET page, README, notes, rule |
 | `qa/p14-consumer-gates` (P14) | `3d3e897a` | `f4d5821c` | two new `tools/verify_package_consumer.sh` scripts, two CI steps |
 | `qa/p16-mlnet-range` (P16) | `d1d10236` | `e271d366` | ML.NET csproj range + comment, CI's advisory "next preview" step, the rule, the notes |
-| `qa/proposals-all` | `f2612d90` | `7d68a494` | the four merged in that order (`--no-ff`, up to `4851fd0f`), then `qa/interop-release` at `8438ee3e` (F49, `1d5638da`), then P16 (which brings `qa/interop-release` up to `e271d366`) |
+| `qa/p17-shuffling-view` (P17) | `6463b1b0` | `52d523af` | ML.NET `NDArrayDataView.cs` (CanShuffle, the cursor), new `ShuffleTests`, the page's Limits entry, the rule |
+| `qa/proposals-all` | `1cb2deff` | `7d68a494` | the four merged in that order (`--no-ff`, up to `4851fd0f`), then `qa/interop-release` at `8438ee3e` (F49, `1d5638da`), then P16 (which brings `qa/interop-release` up to `e271d366`), P14 (`966e5867`, `qa/interop-release` up to `f4d5821c`) and P17 (`1cb2deff`: the cursor constructor conflict with P1 resolved as both) |
 
 - Conflicts, all in XML docs, none in code: P12 + P11 in `Run(dict)`'s `<exception>` entries (keep P12's
   `NotSupportedException` text and P11's `ObjectDisposedException` text), P12 + P7 in `RunAsync`'s
@@ -439,3 +448,4 @@ The proposals (section 5) are separate, each the owner's to accept or drop:
 | 01:42 | F59 mitigation on the released API: `AppendCacheCheckpoint` after `Concatenate` brings the route to POCO speed at POCO memory (interleaved runs: 5.8 / 5.9 s against 10.1 / 10.3 s); the ML.NET page says so. |
 | 01:43 | A40 (F60): memory-mapped arrays through both bridges - out-of-core SDCA training, zero-copy ORT input from a read-only mapping, files delete after disposal. A8 dropped (5 GB of models for no new evidence). |
 | 02:00 | P14 prepared as `qa/p14-consumer-gates` (`3d3e897a`): nupkg-consumer gates for both bridges (pack, shape, PackageReference consumer on net8.0 / net10.0 at floor and current), PASS on Windows and Linux (WSL), a planted range defect fails it. |
+| 02:17 | P17 prepared as `qa/p17-shuffling-view` (`6463b1b0`): the view shuffles; tests proven by two mutations; 215 / 215 on three legs; the example's numbers unchanged. Merged into `qa/proposals-all` (`1cb2deff`, P1 conflict resolved): ML.NET 220 / 220 on 5.0.1 net10.0 and 2.0.1 net8.0. |
