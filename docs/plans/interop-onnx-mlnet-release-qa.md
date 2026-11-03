@@ -312,6 +312,10 @@ rides in P12's commit) - and `qa/proposals-all` merges all seven with their thre
     call. New `DisposedOrtObjectTests` (Inconclusive where the field is missing, because a regression would END the
     host). ORT 1.16.0 net10.0 295 + 20 Inconclusive; 1.31.1 315 / 315; the new class on net8.0 3 / 3. Option (b), the
     upstream report, is still the owner's to file.
+  - **Trimmed apps (03:32):** a trimmed publish using P11 reported IL2090 at `OrtDisposalProbe.cs:71` (`GetField` on an
+    unannotated generic) - the guard worked only because ORT's own `Dispose` keeps `_disposed` alive. Follow-up commit
+    `2c9b933c` on the branch annotates `T` with `[DynamicallyAccessedMembers(NonPublicFields)]`: no bridge warning (65
+    = Core's), and the trimmed app still throws `ObjectDisposedException` for a disposed session and value; 315 / 315.
 - **P12 (F32, F33) Up-front checks of the feed.** Recommended: port Python onnxruntime's `_validate_input` - every input
   whose type is not optional must be fed - with Python's text ("Required inputs ([token_type_ids]) are missing from
   input feed ([input_ids, attention_mask])."); it refuses, as Python does, a model whose graph ignores a declared input,
@@ -446,13 +450,13 @@ The proposals (section 5) are separate, each the owner's to accept or drop:
 | Branch | Commit | Base | Touches |
 |---|---|---|---|
 | `qa/p12-feed-checks` (P2 + P12) | `baafbaf1` | `a57a6101` | ORT `InferenceSessionExtensions{,.Async}.cs`, `SessionRunEdgeTests`, the ORT page and README |
-| `qa/p11-disposed-guard` (P11) | `1ab5c9fc` | `a57a6101` | ORT: new `OrtDisposalProbe.cs`, the Run forms, the import verbs' guard, new `DisposedOrtObjectTests` |
+| `qa/p11-disposed-guard` (P11) | `1ab5c9fc` + `2c9b933c` (the trim annotation) | `a57a6101` | ORT: new `OrtDisposalProbe.cs`, the Run forms, the import verbs' guard, new `DisposedOrtObjectTests` |
 | `qa/p7-runasync-symbols` (P7) | `5f6175ec` | `7d68a494` | ORT `InferenceSessionExtensions.Async.cs`, `SessionRunAsyncTests`, the ORT page |
 | `qa/p1-multi-array-view` (P1) | `a6baabb2` | `7d68a494` | ML.NET `NDArrayDataView.cs`, `NDArrayMLNetInterop.Export.cs`, new `TableViewTests`, the ML.NET page, README, notes, rule |
 | `qa/p14-consumer-gates` (P14) | `3d3e897a` | `f4d5821c` | two new `tools/verify_package_consumer.sh` scripts, two CI steps |
 | `qa/p16-mlnet-range` (P16) | `d1d10236` | `e271d366` | ML.NET csproj range + comment, CI's advisory "next preview" step, the rule, the notes |
 | `qa/p17-shuffling-view` (P17) | `6463b1b0` | `52d523af` | ML.NET `NDArrayDataView.cs` (CanShuffle, the cursor), new `ShuffleTests`, the page's Limits entry, the rule |
-| `qa/proposals-all` | `e2d03481` | `7d68a494` | the four merged in that order (`--no-ff`, up to `4851fd0f`), then `qa/interop-release` at `8438ee3e` (F49, `1d5638da`), then P16 (which brings `qa/interop-release` up to `e271d366`), P14 (`966e5867`, `qa/interop-release` up to `f4d5821c`) and P17 (`1cb2deff`: the cursor constructor conflict with P1 resolved as both), then `qa/interop-release` again (`e2d03481`: F63-F67) |
+| `qa/proposals-all` | `2543a218` | `7d68a494` | the four merged in that order (`--no-ff`, up to `4851fd0f`), then `qa/interop-release` at `8438ee3e` (F49, `1d5638da`), then P16 (which brings `qa/interop-release` up to `e271d366`), P14 (`966e5867`, `qa/interop-release` up to `f4d5821c`) and P17 (`1cb2deff`: the cursor constructor conflict with P1 resolved as both), then `qa/interop-release` again (`e2d03481`: F63-F67) |
 
 - Conflicts, all in XML docs, none in code: P12 + P11 in `Run(dict)`'s `<exception>` entries (keep P12's
   `NotSupportedException` text and P11's `ObjectDisposedException` text), P12 + P7 in `RunAsync`'s
@@ -537,3 +541,4 @@ The proposals (section 5) are separate, each the owner's to accept or drop:
 | 03:22 | P5's documentation half: the getting-started page recommended a file-based app, which throws on the first array arithmetic without `#:property PublishAot=false` (re-proven); the page now says so. |
 | 03:24 | The 100 probe scripts copied out of the scratchpad onto branch `qa/interop-probes` (`1bed7bc9`), with a README on running them again. |
 | 03:26 | A49 (F69): F# works with both bridges, but `dotnet fsi` loads System32's ORT 1.17 despite the referenced package - the first call fails; the ORT page now gives the message and the load-by-path workaround (run verbatim). |
+| 03:32 | P11 checked in a trimmed app: the guard works, but its GetField on an unannotated generic warned (IL2090) in every trimmed consumer; fixed on the P11 branch (`2c9b933c`, annotation), merged into `qa/proposals-all` (`2543a218`). |
