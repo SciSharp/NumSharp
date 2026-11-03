@@ -464,9 +464,10 @@ rides in P12's commit) - and `qa/proposals-all` merges all seven with their thre
   log-softmax, through cancellation). Deferred: a Core layout decision across every elementwise kernel and allocation
   path (`OrderResolver`; `Shape.ForFreshAllocation` already keeps a KEEPORDER permutation for `copy(order='K')`), far
   outside the bridges, which only expose it (scratch `probes/postprocess_pinpoint.cs` prints five ops' strides against
-  NumPy's). Recommended: pin `np.exp(np.zeros((6, 5, 8)).transpose(2, 0, 1))`'s strides as an `[OpenBugs]` beside the
-  OrderSupport pins, then decide whether NumPy's stride-sort KEEPORDER (`PyArray_CreateMultiSortedStridePerm`) is
-  worth porting.
+  NumPy's). The same Core gap is QA-36 of the parallel NumPy-parity QA on `strings` ("fresh ufunc results over permuted
+  operands are C order", `docs/bugs/parity-qa-2026-11-02.md`, pinned in `OpenBugs.ParityQa.cs`): the pin exists; this
+  finding adds that it changes values in a composition. Recommended: decide whether NumPy's stride-sort KEEPORDER
+  (`PyArray_CreateMultiSortedStridePerm`) is worth porting.
 
 - **P20 (F83) Core: an `NDScope` disposed on a foreign thread.** Proven: a hand-written scope held across an `await` (the
   ORT bridge's `RunAsync` makes it the natural shape of a handler) is disposed on the continuation's thread; in a Release
@@ -516,7 +517,7 @@ the two bridges). Nothing here was merged there. To ship the results in the beta
 commits):
 
 **Verified (04:53, the end state):** `git cherry-pick 1c001253..qa/interop-release` - 70 commits at `11203d65`, then the
-closing commits (this file, one sentence of `.claude/rules/interop-packages.md`, and F82 / F83 on the ORT page): 82 in
+closing commits (this file, one sentence of `.claude/rules/interop-packages.md`, and F82 / F83 on the ORT page): 83 in
 all at the end (05:15), re-simulated clean, - applies with NO conflict onto `release-0.80.0-beta1` at `ac6526e2` (its latest
 merge of `strings`, unchanged since 02:00): each pick simulated read-only with `git merge-tree --write-tree
 --merge-base=<commit>^`, chained through unreferenced commit objects (scratch `probes/simulate_cherry_picks.py`,
@@ -672,3 +673,4 @@ The proposals (section 5) are separate, each the owner's to accept or drop:
 | 05:21 | A65 (F84, P21): RunAsync inside any NDScope returns outputs over freed memory, ReturnsTask included (NDScope cannot yield a dictionary); docs warn; P21 = the result dictionary implements INDArrayCarrier. 80 commits at the end. |
 | 05:29 | F84 re-proven with `ReturnsTask`'s deferral honored (`CloseUnlessDeferred`): still freed memory; a plain `using` loses the deferral. 81 commits at the end. |
 | 05:27 | P21 implemented on `qa/p21-run-outputs-carrier` (`0cc27845`): RunOutputs is an INDArrayCarrier; two tests, mutant-proven; ORT 1.31.1 319 + 2, floor 298 + 23. 82 commits at the end. |
+| 05:30 | P19 cross-referenced to the parity QA's QA-36 (the same Core gap, already pinned on `strings`). 83 commits at the end. |
