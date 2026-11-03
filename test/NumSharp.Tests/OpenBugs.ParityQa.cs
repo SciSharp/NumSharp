@@ -1401,5 +1401,36 @@ namespace NumSharp.Tests
                 MappedFileCleanup.DeleteDirectory(dir);
             }
         }
+
+        // ------------------------------------------------------------------
+        // QA-40 — print options flow into new threads; NumPy starts each thread at the defaults
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy 2.4.2 keeps the print options in a <c>ContextVar</c>, and a new Python thread (3.12, the oracle's) starts
+        ///     with an empty context: after <c>np.set_printoptions(precision=2)</c> — or inside <c>with np.printoptions(...)</c>
+        ///     — a worker thread prints <c>np.array([1.23456789])</c> as <c>[1.23456789]</c>, the default. NumSharp keeps them in
+        ///     an <c>AsyncLocal</c> (Backends/Printing/PrintOptions.cs), whose value .NET copies into every thread and task the
+        ///     setting thread starts, so the worker prints <c>[1.23]</c> (<c>rp5</c>: <c>new Thread</c> and <c>Task.Run</c>
+        ///     alike). A worker's own <c>set_printoptions</c> stays in the worker in both libraries, and <c>np.setbufsize</c>
+        ///     (a [ThreadStatic]) already starts each thread at its default, as NumPy does.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA40")]
+        public void ParityQa_PrintOptions_NewThread_ShouldStartAtTheDefaults()
+        {
+            string seen = null;
+            using (np.printoptions(precision: 2))
+            {
+                var worker = new System.Threading.Thread(() =>
+                {
+                    using var value = np.array(new[] { 1.23456789 });
+                    seen = value.ToString();
+                });
+                worker.Start();
+                worker.Join();
+            }
+
+            seen.Should().Be("[1.23456789]", "a new thread starts with NumPy's default print options");
+        }
     }
 }
