@@ -497,7 +497,7 @@ the two bridges). Nothing here was merged there. To ship the results in the beta
 commits):
 
 **Verified (04:53, the end state):** `git cherry-pick 1c001253..qa/interop-release` - 70 commits at `11203d65`, then the
-closing commits (this file, one sentence of `.claude/rules/interop-packages.md`, and F82 / F83 on the ORT page): 78 in
+closing commits (this file, one sentence of `.claude/rules/interop-packages.md`, and F82 / F83 on the ORT page): 79 in
 all at the end (05:15), re-simulated clean, - applies with NO conflict onto `release-0.80.0-beta1` at `ac6526e2` (its latest
 merge of `strings`, unchanged since 02:00): each pick simulated read-only with `git merge-tree --write-tree
 --merge-base=<commit>^`, chained through unreferenced commit objects (scratch `probes/simulate_cherry_picks.py`,
@@ -648,3 +648,4 @@ The proposals (section 5) are separate, each the owner's to accept or drop:
 | 05:15 | F82 / F83 merged into `qa/proposals-all` (`20009979`, docs only, clean); the end: 76 commits after `1c001253`, simulated clean onto `ac6526e2`. |
 | 05:16 | P20 names the bridge-only alternative and why the Core guard is the precise fix; 77 commits at the end. |
 | 05:18 | The ORT README's async section carries F83's warning too; 78 commits at the end. |
+| 05:20 | The ORT page's claims ledger gains row 28 (the NDScope suites); its other 27 rows checked against tonight's findings: none contradicted (row 10 compares Postprocess with ORT's operators, not SciPy, so F79 leaves it true). 79 commits at the end. |

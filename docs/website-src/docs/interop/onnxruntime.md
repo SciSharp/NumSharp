@@ -433,6 +433,7 @@ their behaviour report Inconclusive and the test of their refusal runs.
 | 25 | The asynchronous forms: the version rule, the completion off ORT's thread, a blocking wait under a context or a single-thread scheduler, arrays disposed in flight, errors from the call and through the task, the outputs `RunAsync` can and cannot allocate | `SessionRunAsyncTests` |
 | 26 | The value of a disposed handle is refused by every import verb instead of ending the process | `ValueOwnershipTests.ValueOfADisposedHandle_IsRefused_ByEveryImportVerb_InsteadOfCrashingInOnnxRuntime` |
 | 27 | Non-tensor readers: sequences in order with their own shapes, int64- and string-keyed maps, `GetMapKeys`, each reader's refusals | `NonTensorTests` |
+| 28 | Under an `NDScope`, which disposes the bridge's own temporaries when it closes, a handle (Decimal conversion, C-order copy, zero-copy, `AsDenseTensor`) and a `Run` output that leave the scope keep their bytes; a zero-copy import left to the scope is released when it closes | `NDScopeTests` |
 
 ## See also
 
