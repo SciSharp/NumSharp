@@ -21,7 +21,8 @@ log (section 7). Every new idea becomes a work-list row before it is worked on.
   F75, F76), trimmed and single-file publish (F45, F55), .NET 11 RC3 (F53), memory maps (F60), guard pages (F61), Linux
   (F27), any culture (F72), NumSharp's `NDScope` around every verb (F74). No leak (F21). Cold start: NumSharp's first use
   is the run-once user's main cost (85-160 ms, F78); the bridges' own share is small.
-- **Fixed on this branch** (cherry-pick all of it, section 8 - verified clean onto `release-0.80.0-beta1`): F02 / F03
+- **Fixed on this branch** (merged into `strings` on 2026-11-03; the release branch takes it with its next merge of
+  `strings`, section 8): F02 / F03
   text refusals, F35 dtype maps, F36 docs, F49 text-column route, F54 BFloat16 input message, F63 lazy-scope message,
   F65 RunInto output message, F77 / F81 ML.NET import refusals that named nothing real ("NumSharp carries bool, the
   eight integer types, float and double"; "an ML.NET vector-size transform") now name routes that run as written (time
@@ -512,6 +513,16 @@ proven against the local feed of this run's packs (`-p:RestoreAdditionalProjectS
 
 ## 8. Carrying the results to the release
 
+**Merged into `strings` (2026-11-03, on the owner's request).** The 84 commits after `1c001253` were replayed with
+`cherry-pick -x` onto `strings` `b154d164` (branch `qa/interop-onto-strings`) and merged into `strings` with a merge
+commit. Every file equals `qa/interop-release`'s except where `strings` has no release prep: the ORT README's
+"unreleased" sentence and the rule's two "excluded from the site" lines (exactly `1c001253` reversed), and the
+0.80.0-beta1 notes, which `strings` does not have - `576d2779` brought only its tracking-file part there. So the beta
+now gets the QA work with its next `merge strings` instead of the cherry-pick below, plus `576d2779` cherry-picked for
+its notes part. That merge meets one conflict (read-only `git merge-tree` of the release branch and the port):
+`.claude/rules/interop-packages.md`, the two Docs lines beside the new Example bullets - keep the release branch's
+"on the site" lines and the bullets. Tests on the port: ORT 1.16.0 297 + 22 Inconclusive and ML.NET 2.0.1 216 + 1 skipped on net10.0 and net8.0, ML.NET 5.0.1 net10.0 216 + 1, ORT 1.31.1 net10.0 317 + 2 (the two GC-window tests that are Inconclusive in any Debug build) - the counts of `qa/interop-release`'s end state.
+
 This branch, `qa/interop-release`, starts at `strings` `23ce02ea` plus this run's own release-prep commit `1c001253`.
 A separate branch holds the release itself: `release-0.80.0-beta1` (worktree `.claude/worktrees/release-080`, made by
 another session: journey4 + `strings` through `860447b3`, its own release commits, among them `e343aba8` which releases
@@ -678,3 +689,4 @@ The proposals (section 5) are separate, each the owner's to accept or drop:
 | 05:27 | P21 implemented on `qa/p21-run-outputs-carrier` (`0cc27845`): RunOutputs is an INDArrayCarrier; two tests, mutant-proven; ORT 1.31.1 319 + 2, floor 298 + 23. 82 commits at the end. |
 | 05:30 | P19 cross-referenced to the parity QA's QA-36 (the same Core gap, already pinned on `strings`). 83 commits at the end. |
 | 05:32 | Re-checked at the owner's request (a queued instruction from 03:50): the final Windows matrix (`b7yvpac5r`, `1deac38c`) and the simulated release+QA tree `7a2a0d71` were already read and recorded at 03:53 (section 8); P10 now quotes the end-state counts and section 0 the final commit count (84). |
+| 06:16 | Merged into `strings` on the owner's request: the 84 QA commits replayed onto `strings` (`qa/interop-onto-strings`, `cherry-pick -x`; the beta notes and the release wording left to the release branch) and merged; tests on the port green. |
