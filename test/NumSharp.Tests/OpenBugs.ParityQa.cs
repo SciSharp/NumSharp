@@ -1226,5 +1226,42 @@ namespace NumSharp.Tests
             bcastCopy.flags.f_contiguous.Should().BeTrue("order='K' keeps the stride-0 axis fastest");
             bcastCopy.flags.c_contiguous.Should().BeFalse();
         }
+
+        // ------------------------------------------------------------------
+        // QA-36 — fresh ufunc results over a permuted operand are C-ordered instead of NumPy's K order
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     A ufunc allocates its output with the iterator's K order (<c>npyiter_new_temp_array</c> over
+        ///     <c>npyiter_find_best_axis_ordering</c>): the axes sorted by the operands' strides, negative strides flipped.
+        ///     For <c>p = np.arange(24.).reshape(3, 2, 4).transpose(1, 0, 2)</c> (strides <c>(32, 64, 8)</c>)
+        ///     <c>np.negative(p)</c>, <c>p + p</c>, <c>np.where(p &gt; 3, p, 0)</c> and <c>np.cumsum(p, axis=2)</c> all keep
+        ///     strides <c>(32, 64, 8)</c>, so <c>np.ravel(np.negative(p), order='K')</c> is <c>-0., -1., -2., …</c> (the
+        ///     memory order). NumSharp's unary path keeps only a strictly F-contiguous layout
+        ///     (<c>TryExecuteUnaryOpViaNDIter</c>: "input strict-F → allocate F-contig output … Otherwise C-contig", likewise
+        ///     the binary engine's <c>bothF</c>) and returns C strides <c>(96, 32, 8)</c>, so the K-order ravel reads
+        ///     <c>-0, -1, -2, -3, -8, -9, …</c> (<c>p91</c>, <c>p92</c>: every unary and binary ufunc over a permuted or a
+        ///     flipped-F operand, cumsum / cumprod / nancumprod along an axis, diff, nan_to_num). Over a plain F operand the
+        ///     float-tier binaries (arctan2, copysign, heaviside, hypot, logaddexp, nextafter) and cumprod / nancumprod
+        ///     along an axis, diff and nan_to_num also return C where NumPy keeps F; the arithmetic ufuncs and cumsum keep F.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA36")]
+        public void ParityQa_UfuncResult_PermutedOperand_ShouldKeepItsMemoryOrder()
+        {
+            using var p = np.arange(24.0).reshape(3, 2, 4).transpose(new[] { 1, 0, 2 });
+            using var f = np.asfortranarray(np.arange(1.0, 25.0).reshape(2, 3, 4));
+
+            using var neg = np.negative(p);
+            using var sum = np.add(p, p);
+            using var memoryOrder = np.ravel(neg, 'K');
+            using var hyp = np.hypot(f, f);
+            using var cp = np.cumprod(f, axis: 0);
+
+            neg.strides.Should().Equal(32L, 64L, 8L);
+            sum.strides.Should().Equal(32L, 64L, 8L);
+            ((double)memoryOrder.GetValue(4)).Should().Be(-4.0, "a K-order ravel reads the result in memory order");
+            hyp.flags.f_contiguous.Should().BeTrue("hypot of two F operands is F in NumPy");
+            cp.flags.f_contiguous.Should().BeTrue("cumprod along an axis keeps an F operand's order");
+        }
     }
 }
