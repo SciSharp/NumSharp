@@ -9,7 +9,7 @@ log (section 7). Every new idea becomes a work-list row before it is worked on.
 | Started | 2026-11-02 21:52 +0200; planned end 2026-11-03 05:52 +0200 |
 | Branch | `qa/interop-release` (local), worktree `K:\source\NumSharp\.claude\worktrees\interop-qa` |
 | Base | `strings` `23ce02ea` (journey4 + strings, the beta's line); release prep commit `1c001253` on top |
-| Scratch | `C:\Users\ELI\AppData\Local\Temp\claude\K--source-NumSharp\a4c6ff8e-6ba9-48a1-8c05-d4202f4019c4\scratchpad` (wiped nightly: nothing durable lives only there); its SCRIPTS are preserved on branch `qa/interop-probes` (`a9f1a217`: 120 files, `docs/plans/interop-qa-probes/`, outside the cherry-pick range) |
+| Scratch | `C:\Users\ELI\AppData\Local\Temp\claude\K--source-NumSharp\a4c6ff8e-6ba9-48a1-8c05-d4202f4019c4\scratchpad` (wiped nightly: nothing durable lives only there); its SCRIPTS are preserved on branch `qa/interop-probes` (`26234e47`: 123 files, `docs/plans/interop-qa-probes/`, outside the cherry-pick range) |
 | Python | `C:\Users\ELI\.claude\python\python.exe` (3.12, numpy 2.4.2, onnx 1.22.0, onnxruntime 1.29.0, torch 2.12.1, transformers 4.45.2, scikit-learn 1.8.0, Pillow 11.3.0); scratch `venv/` adds skl2onnx (and pandas) |
 
 ## 0. The result on one screen
@@ -27,7 +27,8 @@ log (section 7). Every new idea becomes a work-list row before it is worked on.
   eight integer types, float and double"; "an ML.NET vector-size transform") now name routes that run as written (time
   columns as int64 ticks, ragged rows through `GetColumn<T[]>`), NDScope regression suites in both bridges (F74, each
   proven by a planted mutant), and docs facts F10 / F17 / F20 / F24 / F31 / F37 / F44 / F51 / F56 / F59 / F67 / F69 /
-  F71 / F73 / F75 / F76, the P3 and P5 documentation halves. All 70 commits apply cleanly onto the release branch
+  F71 / F73 / F75 / F76 / F82 (golden `.npz` files from Python feed `Run` as they are) / F83 (an `NDScope` held across
+  `await session.RunAsync` frees another thread's arrays: the page warns), the P3 and P5 documentation halves. All 70 commits apply cleanly onto the release branch
   (`ac6526e2`) and the result passes there (section 8). The probe scripts are on `qa/interop-probes`.
 - **Decide BEFORE the tag** (a published package cannot be changed):
   - **P16 (F52, high): the ML.NET range `[2.0.0, 6.0.0)` becomes a restore ERROR (NU1107) the day ML.NET 6.0.0 ships
@@ -39,9 +40,10 @@ log (section 7). Every new idea becomes a work-list row before it is worked on.
   P1 dictionary views (Features + Label; also the training-speed fix, F59), P2 + P12 feed checks (Python's rule; ML.NET
   exports need it, F51), P7 RunAsync for dynamic batches, P11 disposed-object guard (two process crashes, F29 / F30),
   P14 CI nupkg-consumer gates, P16, P17 a view that shuffles (SDCA on ordered rows, F56).
-- **Deferred, documented**: P3, P5, P8, P10, P13, P15, P18 (section 5); and P19 for Core - an elementwise result of a
-  permuted view is C-ordered where NumPy keeps the permutation, so `Postprocess.Softmax` on a transposed view differs
-  from NumPy / SciPy by 1-3 ulps (F79).
+- **Deferred, documented**: P3, P5, P8, P10, P13, P15, P18 (section 5); and two for Core - P19, an elementwise result of
+  a permuted view is C-ordered where NumPy keeps the permutation, so `Postprocess.Softmax` on a transposed view differs
+  from NumPy / SciPy by 1-3 ulps (F79); P20, an `NDScope` disposed on a foreign thread (a scope held across an `await`)
+  is silently pooled and reused there in a Release build, a cross-thread use-after-free (F83) - recommended: throw.
 - **Examples** (section 6): ImageNet with ONNX Runtime, train / evaluate / k-means with ML.NET, and train in ML.NET ->
   export -> serve with ONNX Runtime (both bridges), each proven on Windows and Linux from the local beta feed.
 
