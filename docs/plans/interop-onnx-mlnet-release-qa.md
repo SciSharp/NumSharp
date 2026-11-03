@@ -473,7 +473,7 @@ The proposals (section 5) are separate, each the owner's to accept or drop:
 | `qa/p14-consumer-gates` (P14) | `3d3e897a` | `f4d5821c` | two new `tools/verify_package_consumer.sh` scripts, two CI steps |
 | `qa/p16-mlnet-range` (P16) | `d1d10236` | `e271d366` | ML.NET csproj range + comment, CI's advisory "next preview" step, the rule, the notes |
 | `qa/p17-shuffling-view` (P17) | `6463b1b0` | `52d523af` | ML.NET `NDArrayDataView.cs` (CanShuffle, the cursor), new `ShuffleTests`, the page's Limits entry, the rule |
-| `qa/proposals-all` | `2543a218` | `7d68a494` | the four merged in that order (`--no-ff`, up to `4851fd0f`), then `qa/interop-release` at `8438ee3e` (F49, `1d5638da`), then P16 (which brings `qa/interop-release` up to `e271d366`), P14 (`966e5867`, `qa/interop-release` up to `f4d5821c`) and P17 (`1cb2deff`: the cursor constructor conflict with P1 resolved as both), then `qa/interop-release` again (`e2d03481`: F63-F67) |
+| `qa/proposals-all` | `fa80b046` | `7d68a494` | the four merged in that order (`--no-ff`, up to `4851fd0f`), then `qa/interop-release` at `8438ee3e` (F49, `1d5638da`), then P16 (which brings `qa/interop-release` up to `e271d366`), P14 (`966e5867`, `qa/interop-release` up to `f4d5821c`) and P17 (`1cb2deff`: the cursor constructor conflict with P1 resolved as both), then `qa/interop-release` again (`e2d03481`: F63-F67), the P11 trim follow-up (`2543a218`) and `qa/interop-release` at its end state (`fa80b046`) |
 
 - Conflicts, all in XML docs, none in code: P12 + P11 in `Run(dict)`'s `<exception>` entries (keep P12's
   `NotSupportedException` text and P11's `ObjectDisposedException` text), P12 + P7 in `RunAsync`'s
@@ -563,3 +563,4 @@ The proposals (section 5) are separate, each the owner's to accept or drop:
 | 03:53 | A50 (F70): duplicate names in `AsDataView(string[])` hide a column silently (ML.NET's own semantics); P18 recommends refusing them. |
 | 03:57 | A third example: `examples/NumSharpMLNetToOnnxRuntimeExample` (train in ML.NET on NumSharp data, `ConvertToOnnx`, serve through the ORT bridge, compare), NDW012-clean, deterministic, identical on Windows and Linux; linked from both pages. |
 | 03:59 | A51 (F71): the legacy DenseTensor / NamedOnnxValue tier works on SqueezeNet byte-identically through every route; the tutorial's `AsTensor<T>().ToNDArray()` needs a cast (docs say so). |
+| 04:02 | `qa/proposals-all` re-merged with the QA branch's end state (`fa80b046`): ORT 1.31.1 319 / 319, ML.NET 5.0.1 221 / 221. |
