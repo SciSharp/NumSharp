@@ -8,10 +8,13 @@
 # ProjectReference, so a packaging regression (a dependency range, a TFM folder, a missing XML
 # file, a NumSharp dependency on the wrong version) would otherwise reach nuget.org unseen.
 #
-#   1  pack NumSharp + NumSharp.Interop.OnnxRuntime into a local feed
+#   1  pack NumSharp + NumSharp.Interop.OnnxRuntime into a local feed (the bridge with
+#      -p:IsPackable=true: while it is unreleased its csproj says false, and `dotnet pack` of such a
+#      project is a silent no-op, so the gate packs what WILL ship without publishing anything)
 #   2  package shape: lib/<tfm>/ dll + xml for net8.0 and net10.0, no native asset (the consumer
 #      picks the native ORT package), the dependency groups name NumSharp at THIS version and
-#      Microsoft.ML.OnnxRuntime.Managed from 1.16.0
+#      Microsoft.ML.OnnxRuntime.Managed from 1.16.0 with NO upper bound (a cap below a consumer's
+#      ONNX Runtime is a restore error, NU1107)
 #   3  consumer by PackageReference + Microsoft.ML.OnnxRuntime 1.16.0 (the floor), net8.0 and
 #      net10.0: session.Run over a committed test model, AsOrtValue + ORT's own Run + ToNDArray,
 #      Postprocess, the live counters back to 0
@@ -54,9 +57,12 @@ run dotnet build "$REPO/src/NumSharp.Core/NumSharp.Core.csproj" -t:Rebuild -c Re
 run dotnet build "$PKG_DIR/NumSharp.Interop.OnnxRuntime.csproj" -t:Rebuild -c Release \
     -v q --nologo "-clp:NoSummary;ErrorsOnly" -p:WarningLevel=0
 run dotnet pack "$REPO/src/NumSharp.Core/NumSharp.Core.csproj" --no-build -c Release -o "$FEED" -v q --nologo "-clp:ErrorsOnly"
-run dotnet pack "$PKG_DIR/NumSharp.Interop.OnnxRuntime.csproj" --no-build -c Release -o "$FEED" -v q --nologo "-clp:ErrorsOnly"
+# -p:IsPackable=true overrides the csproj's UNRELEASED false (a global property wins over the project's own),
+# so the gate checks the package the owner's release would publish; nothing here leaves the throwaway feed.
+run dotnet pack "$PKG_DIR/NumSharp.Interop.OnnxRuntime.csproj" --no-build -c Release -o "$FEED" -v q --nologo "-clp:ErrorsOnly" \
+    -p:IsPackable=true
 NUPKG="$FEED/NumSharp.Interop.OnnxRuntime.$VERSION.nupkg"
-[ -f "$NUPKG" ] || fail "bridge nupkg missing: $NUPKG (is the project packable?)"
+[ -f "$NUPKG" ] || fail "bridge nupkg missing: $NUPKG (did the pack honour -p:IsPackable=true?)"
 echo "ok"
 
 step "2. package shape: lib per TFM, no native asset, the dependency groups"
@@ -76,8 +82,10 @@ for tfm in net8.0 net10.0; do
     GROUP="$(tr -d '\r' <<< "$NUSPEC" | tr '\n' ' ' | grep -o "<group targetFramework=\"$tfm\">.*" | sed 's#</group>.*##')"
     [ -n "$GROUP" ] || fail "no dependency group for $tfm"
     grep -q "id=\"NumSharp\" version=\"$VERSION\"" <<< "$GROUP" || fail "$tfm: the NumSharp dependency must be $VERSION: $GROUP"
-    grep -q "id=\"Microsoft.ML.OnnxRuntime.Managed\" version=\"\[1.16.0," <<< "$GROUP" \
-        || fail "$tfm: Microsoft.ML.OnnxRuntime.Managed must start at 1.16.0 (the compiled reference): $GROUP"
+    # An OPEN range packs as the bare floor (version="1.16.0"); a capped one as "[1.16.0, X)". The exact quote
+    # after the floor refuses both a moved floor and a cap coming back.
+    grep -q "id=\"Microsoft.ML.OnnxRuntime.Managed\" version=\"1.16.0\"" <<< "$GROUP" \
+        || fail "$tfm: Microsoft.ML.OnnxRuntime.Managed must be 1.16.0 (the compiled reference) or later with NO upper bound - a cap below a consumer's ONNX Runtime is a restore error (NU1107): $GROUP"
     echo "    $tfm: $(grep -o '<dependency [^>]*>' <<< "$GROUP" | sed -E 's/ exclude="[^"]*"//' | tr '\n' ' ')"
 done
 echo "ok"
