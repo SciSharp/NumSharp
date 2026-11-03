@@ -1263,5 +1263,31 @@ namespace NumSharp.Tests
             hyp.flags.f_contiguous.Should().BeTrue("hypot of two F operands is F in NumPy");
             cp.flags.f_contiguous.Should().BeTrue("cumprod along an axis keeps an F operand's order");
         }
+
+        // ------------------------------------------------------------------
+        // QA-37 — np.isclose never calls an infinite difference close, whatever the tolerance
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's <c>isclose</c> is <c>less_equal(abs(x - y), atol + rtol * abs(y)) &amp; isfinite(y) | (x == y)</c>:
+        ///     with an infinite tolerance an infinite difference passes (<c>inf &lt;= inf</c>), so
+        ///     <c>np.isclose([1e308, inf], [-1e308, 1.0], rtol=0, atol=inf)</c> is <c>[True, True]</c> (the difference of
+        ///     the first pair overflows; the second has a finite reference). NumSharp's <c>DefaultEngine.IsClose</c>
+        ///     (Backends/Default/Logic/Default.IsClose.cs) adds a third term, <c>IsFinite(diff)</c>, "because NumSharp's &lt;=
+        ///     operator has a bug where NaN &lt;= value returns True" — the operator answers False for NaN today (<c>p94</c>),
+        ///     and the extra term turns both answers False. The same happens with <c>rtol=inf</c> and with a finite
+        ///     tolerance that overflows the computation dtype (<c>np.isclose(float32 [3e38], [-3e38], rtol=0, atol=1e300)</c>:
+        ///     the float32 difference and the float32 atol are both inf, NumPy True); np.allclose shares the engine.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA37")]
+        public void ParityQa_IsClose_InfiniteDifferenceWithInfiniteTolerance_ShouldBeClose()
+        {
+            using var x = np.array(new[] { 1e308, double.PositiveInfinity });
+            using var y = np.array(new[] { -1e308, 1.0 });
+
+            using var close = np.isclose(x, y, rtol: 0.0, atol: double.PositiveInfinity);
+
+            close.ToArray<bool>().Should().Equal(true, true);
+        }
     }
 }
