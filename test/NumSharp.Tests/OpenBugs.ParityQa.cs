@@ -1657,5 +1657,34 @@ namespace NumSharp.Tests
             spectrum.flags.f_contiguous.Should().BeTrue();
             half.strides.Should().Equal(new long[] { 16, 48 }, "the shorter axis keeps the same K order");
         }
+
+        // ------------------------------------------------------------------
+        // QA-49 — np.interp with a complex fp gives NaN + NaNj for a NaN coordinate; NumPy gives NaN + 0j
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's <c>arr_interp_complex</c> (<c>numpy/_core/src/multiarray/compiled_base.c</c>, lines 855-858) answers a NaN
+        ///     coordinate before the search with <c>npy_csetreal(&amp;dres[i], x_val); npy_csetimag(&amp;dres[i], 0.0)</c>: the real part
+        ///     is the NaN itself and the imaginary part is 0. NumSharp's <c>DefaultEngine.InterpComplex</c>
+        ///     (<c>Backends/Default/Math/Default.Interp.cs</c>) writes <c>new Complex(xv, xv)</c>, so the imaginary part is NaN as
+        ///     well (<c>p139</c>: <c>np.interp([..., nan], xp, fp_complex)</c> ends in <c>(nan, nan)</c> for NumPy's <c>(nan, 0.0)</c>,
+        ///     with and without complex <c>left</c> / <c>right</c>). Code that tests the imaginary part, or takes <c>.imag</c> of the
+        ///     result, reads NaN where NumPy reads 0. The real-valued interp and every finite coordinate match.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA49")]
+        public void ParityQa_InterpComplex_NaNCoordinate_ShouldGiveNaNPlusZeroJ()
+        {
+            using var xp = np.array(new[] { 0.0, 1.0 });
+            using var fp = np.array(new[] { new Complex(1, 1), new Complex(2, -3) });
+            using var x = np.array(new[] { 0.5, double.NaN });
+
+            using var result = np.interp(x, xp, fp);
+
+            // the finite coordinate interpolates both parts; the NaN coordinate is NaN + 0j in NumPy
+            ((Complex)result.GetValue(0)).Should().Be(new Complex(1.5, -1.0));
+            var nanCase = (Complex)result.GetValue(1);
+            double.IsNaN(nanCase.Real).Should().BeTrue("the real part carries the NaN coordinate");
+            nanCase.Imaginary.Should().Be(0.0, "arr_interp_complex sets the imaginary part of a NaN coordinate to 0");
+        }
     }
 }
