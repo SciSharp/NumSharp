@@ -218,6 +218,50 @@ namespace NumSharp.Tests.Interop.MLNet
             StringAssert.Contains(ex.Message, "4");
         }
 
+        /// <summary>
+        ///     F70 / P18: a name given twice is refused, naming the name and BOTH positions. ML.NET itself would accept the
+        ///     schema and hide column 0 behind column 2 (<c>ToNDArray("age")</c> read column 2, column 0 was unreachable by
+        ///     name), so a copy-paste slip in a feature list silently dropped a feature.
+        /// </summary>
+        [TestMethod]
+        public void AsDataView_ScalarColumns_RepeatedName_Throws_NamingBothPositions()
+        {
+            using NDArray a = Arange(NPTypeCode.Single, 4, 3);
+            ArgumentException ex = Assert.ThrowsException<ArgumentException>(() => a.AsDataView(new[] { "age", "income", "age" }));
+            Assert.AreEqual("columnNames", ex.ParamName);
+            StringAssert.Contains(ex.Message, "'age' is given twice (positions 0 and 2)");
+            StringAssert.Contains(ex.Message, "hide column 0 behind column 2");
+        }
+
+        /// <summary>
+        ///     The snapshot form shares the validator, so a repeat is refused there too - before the snapshot is taken
+        ///     (<c>ArcAccountingTests</c> pins that no buffer is allocated for the refusal).
+        /// </summary>
+        [TestMethod]
+        public void ToDataView_ScalarColumns_RepeatedName_Throws_NamingBothPositions()
+        {
+            using NDArray a = Arange(NPTypeCode.Double, 2, 4);
+            ArgumentException ex = Assert.ThrowsException<ArgumentException>(() => a.ToDataView(new[] { "a", "b", "c", "b" }));
+            Assert.AreEqual("columnNames", ex.ParamName);
+            StringAssert.Contains(ex.Message, "'b' is given twice (positions 1 and 3)");
+        }
+
+        /// <summary>
+        ///     Names differing only in case are two columns, as in ML.NET (its schema lookup is ordinal): the repeat check
+        ///     must not fold case, or a legal ML.NET schema would be refused.
+        /// </summary>
+        [TestMethod]
+        public void AsDataView_ScalarColumns_NamesDifferingInCase_AreTwoColumns()
+        {
+            using NDArray a = Arange(NPTypeCode.Int32, 3, 2);   // [[0,1],[2,3],[4,5]]
+            using NDArrayDataView dv = a.AsDataView(new[] { "a", "A" });
+            Assert.AreEqual(2, dv.Schema.Count);
+            using NDArray lower = dv.ToNDArray("a");
+            using NDArray upper = dv.ToNDArray("A");
+            Assert.AreEqual(0, (int)lower[0]); Assert.AreEqual(4, (int)lower[2]);
+            Assert.AreEqual(1, (int)upper[0]); Assert.AreEqual(5, (int)upper[2]);
+        }
+
         [TestMethod]
         public void ToNDArray_UnknownColumn_Throws()
         {

@@ -31,7 +31,7 @@ trainers, transforms) you already reference — NuGet unifies the DataView depen
 | Verb | Direction | What it does |
 |------|-----------|--------------|
 | `nd.AsDataView("Features")` | NumSharp → ML.NET | An `IDataView` with **one vector column**: a 2-D `(R, C)` array becomes `R` rows of a length-`C` `VBuffer`; a 1-D `(C,)` array becomes one row (a single sample). Read lazily through the array's strides (any layout), ARC-pinned. |
-| `nd.AsDataView(new[]{"a","b",...})` | NumSharp → ML.NET | An `IDataView` with **one scalar column per feature** (the tabular / training-data shape). |
+| `nd.AsDataView(new[]{"a","b",...})` | NumSharp → ML.NET | An `IDataView` with **one scalar column per feature** (the tabular / training-data shape); every name distinct (a repeat would hide the earlier column, so it throws). |
 | `columns.AsDataView()` | NumSharp → ML.NET | An `IDataView` with **one column per array** of an `IReadOnlyDictionary<string, NDArray>`: a 2-D array is a vector column, a 1-D array a scalar column, each in its own dtype and layout, all with the same rows (a `Features` matrix and a `Label` vector in one view). |
 | `nd.ToDataView(...)`, `columns.ToDataView()` | NumSharp → ML.NET | Same, over an independent snapshot (no lifetime coupling to the source). |
 | `nd.ToVBuffer<T>()` | NumSharp → ML.NET | A dense `VBuffer<T>` (a copy — see [zero-copy note](#zero-copy-and-vbuffer)). |

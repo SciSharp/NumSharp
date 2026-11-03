@@ -78,10 +78,10 @@ namespace NumSharp.Interop.MLNet
         ///     <see cref="AsDataView(NDArray, string)"/>.
         /// </summary>
         /// <param name="source">The array to expose.</param>
-        /// <param name="columnNames">One non-empty name per column: <c>shape[1]</c> names for a 2-D array, one for a 1-D array.</param>
+        /// <param name="columnNames">One non-empty, DISTINCT name per column: <c>shape[1]</c> names for a 2-D array, one for a 1-D array. Names compare ordinally, as in ML.NET (<c>"a"</c> and <c>"A"</c> are two columns); a repeat is refused, because ML.NET would hide the earlier column behind the later one.</param>
         /// <returns>A disposable data view reading the array lazily; it holds the buffer pin (and any conversion) until disposed.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="source"/> is null.</exception>
-        /// <exception cref="ArgumentException"><paramref name="source"/> is not 1-D or 2-D, or the name count does not match the column count, or a name is null/empty.</exception>
+        /// <exception cref="ArgumentException"><paramref name="source"/> is not 1-D or 2-D, or the name count does not match the column count, or a name is null/empty, or a name is given twice (the message names both positions).</exception>
         /// <exception cref="NotSupportedException">The dtype has no ML.NET column type (Complex, or text: a U, S or StringDType array).</exception>
         /// <exception cref="ObjectDisposedException">The array's buffer has already been released.</exception>
         public static NDArrayDataView AsDataView(this NDArray source, string[] columnNames)
@@ -146,10 +146,10 @@ namespace NumSharp.Interop.MLNet
 
         /// <summary><see cref="AsDataView(NDArray, string[])"/> over an independent snapshot (see <see cref="ToDataView(NDArray, string)"/>).</summary>
         /// <param name="source">The array to snapshot.</param>
-        /// <param name="columnNames">One non-empty name per column: <c>shape[1]</c> names for a 2-D array, one for a 1-D array.</param>
+        /// <param name="columnNames">One non-empty, DISTINCT name per column: <c>shape[1]</c> names for a 2-D array, one for a 1-D array (ordinal, as in ML.NET; a repeat is refused before the snapshot is taken).</param>
         /// <returns>A disposable data view over a private copy of the array.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="source"/> is null.</exception>
-        /// <exception cref="ArgumentException"><paramref name="source"/> is not 1-D or 2-D, or the name count does not match the column count, or a name is null/empty.</exception>
+        /// <exception cref="ArgumentException"><paramref name="source"/> is not 1-D or 2-D, or the name count does not match the column count, or a name is null/empty, or a name is given twice (the message names both positions).</exception>
         /// <exception cref="NotSupportedException">The dtype has no ML.NET column type (Complex, or text: a U, S or StringDType array).</exception>
         /// <exception cref="ObjectDisposedException">The array's buffer has already been released.</exception>
         public static NDArrayDataView ToDataView(this NDArray source, string[] columnNames)
@@ -384,14 +384,23 @@ namespace NumSharp.Interop.MLNet
 
         /// <summary>
         ///     Every refusal of the scalar-columns view that the shape, the dtype and the names alone decide: the rank,
-        ///     the dtype's column type, the name count and each name. Run on the source before it is converted, copied or
-        ///     read, and again by <see cref="BuildScalarView"/> on the array it feeds.
+        ///     the dtype's column type, the name count, each name, and a name given twice. Run on the source before it is
+        ///     converted, copied or read, and again by <see cref="BuildScalarView"/> on the array it feeds.
         /// </summary>
+        /// <remarks>
+        ///     A repeated name is refused although ML.NET itself allows one (a later column HIDES an earlier one of the
+        ///     same name, which is how transforms shadow their inputs and how <c>TextLoader</c> treats a repeated column):
+        ///     here the names label the columns of one array, so a repeat can only be a slip - typically a copy-paste in a
+        ///     long feature list - and it would make the earlier feature unreachable by name without a word
+        ///     (<c>ToNDArray</c> and a <c>Concatenate</c> over the names would read the later column twice). The dictionary
+        ///     form cannot hold two equal keys, so both forms now agree. Names compare ordinally, as ML.NET's schema
+        ///     lookup does: <c>"a"</c> and <c>"A"</c> stay two columns.
+        /// </remarks>
         /// <param name="shape">The shape of the array.</param>
         /// <param name="itemCode">The dtype the array crosses as (<see cref="FeedTypeCode"/> of the source's dtype).</param>
         /// <param name="columnNames">The names, one per column.</param>
         /// <returns>The columns' item type.</returns>
-        /// <exception cref="ArgumentException">The array is not 1-D or 2-D, the name count does not match the column count, or a name is null/empty.</exception>
+        /// <exception cref="ArgumentException">The array is not 1-D or 2-D, the name count does not match the column count, a name is null/empty, or a name is given twice.</exception>
         /// <exception cref="NotSupportedException">The dtype has no ML.NET column type (Complex).</exception>
         private static PrimitiveDataViewType ValidateScalarColumns(Shape shape, NPTypeCode itemCode, string[] columnNames)
         {
@@ -403,9 +412,18 @@ namespace NumSharp.Interop.MLNet
             long colCount = ndim == 1 ? 1 : shape.Dimensions[1];
             if (columnNames.Length != colCount)
                 throw new ArgumentException($"AsDataView (scalar columns): the array has {colCount} column(s) (shape {shape}) but {columnNames.Length} name(s) were given.", nameof(columnNames));
+            // Where each name was first seen, so a repeat names BOTH positions; ordinal, as ML.NET's own schema lookup.
+            var firstAt = new Dictionary<string, int>(columnNames.Length, StringComparer.Ordinal);
             for (int c = 0; c < colCount; c++)
+            {
                 if (string.IsNullOrEmpty(columnNames[c]))
                     throw new ArgumentException($"column name {c} is null or empty.", nameof(columnNames));
+                if (firstAt.TryGetValue(columnNames[c], out int first))
+                    throw new ArgumentException(
+                        $"AsDataView (scalar columns): column name '{columnNames[c]}' is given twice (positions {first} and {c}). ML.NET would hide " +
+                        $"column {first} behind column {c}, so it could never be read by name; give every column its own name.", nameof(columnNames));
+                firstAt.Add(columnNames[c], c);
+            }
             return itemType;
         }
 

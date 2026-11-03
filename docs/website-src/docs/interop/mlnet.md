@@ -101,7 +101,10 @@ using var v = features.AsDataView("Features");   // (150, 4) -> 150 rows of a 4-
 **One scalar column per feature** (`AsDataView(string[] names)`) - the shape for building training data or
 feeding pipelines that reference named scalar columns (then `Concatenate` them into `"Features"`). A 2-D
 `(R, C)` array becomes `R` rows and `C` named scalar columns; a 1-D `(R,)` array with one name becomes `R`
-rows and one scalar column.
+rows and one scalar column. Every name must be distinct: ML.NET would let a later column hide an earlier one
+of the same name, so a repeat - say a copy-paste slip in a long feature list - throws `ArgumentException`
+naming both positions instead of making a feature unreachable. Names compare as ML.NET compares them, case
+included (`"a"` and `"A"` are two columns).
 
 ```csharp
 using var t = data.AsDataView(["SepalLength", "SepalWidth", "Label"]);   // (150, 3) table
