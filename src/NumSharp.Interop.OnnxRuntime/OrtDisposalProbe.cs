@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using System.Reflection;
 using Microsoft.ML.OnnxRuntime;
@@ -64,9 +65,15 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     Build the compiled getter of <typeparamref name="T"/>'s private <c>bool _disposed</c> field, or null when
         ///     the field is absent or of another type.
         /// </summary>
+        /// <remarks>
+        ///     <typeparamref name="T"/> carries <see cref="DynamicallyAccessedMembersAttribute"/> for its non-public
+        ///     fields, so a trimmed app keeps <c>_disposed</c> for every type this is called with and its publish shows no
+        ///     warning. Unannotated, the trimmer reported IL2090 here in every trimmed consumer (the field survived only
+        ///     because ONNX Runtime's own <c>Dispose</c> writes it - not a promise).
+        /// </remarks>
         /// <typeparam name="T">The ONNX Runtime type.</typeparam>
         /// <returns>The getter, or null.</returns>
-        private static Func<T, bool> DisposedFieldReader<T>() where T : class
+        private static Func<T, bool> DisposedFieldReader<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.NonPublicFields)] T>() where T : class
         {
             FieldInfo field = typeof(T).GetField("_disposed", BindingFlags.Instance | BindingFlags.NonPublic);
             if (field is null || field.FieldType != typeof(bool))
