@@ -10,7 +10,28 @@ log (section 7). Every new idea becomes a work-list row before it is worked on.
 | Branch | `qa/interop-release` (local), worktree `K:\source\NumSharp\.claude\worktrees\interop-qa` |
 | Base | `strings` `23ce02ea` (journey4 + strings, the beta's line); release prep commit `1c001253` on top |
 | Scratch | `C:\Users\ELI\AppData\Local\Temp\claude\K--source-NumSharp\a4c6ff8e-6ba9-48a1-8c05-d4202f4019c4\scratchpad` (wiped nightly: nothing durable lives only there) |
-| Python | `C:\Users\ELI\.claude\python\python.exe` (3.12, numpy 2.4.2, onnx 1.22.0, onnxruntime 1.29.0, torch 2.12.1, transformers 4.45.2, scikit-learn 1.8.0, Pillow 11.3.0); scratch `venv/` adds skl2onnx |
+| Python | `C:\Users\ELI\.claude\python\python.exe` (3.12, numpy 2.4.2, onnx 1.22.0, onnxruntime 1.29.0, torch 2.12.1, transformers 4.45.2, scikit-learn 1.8.0, Pillow 11.3.0); scratch `venv/` adds skl2onnx (and pandas) |
+
+## 0. The result on one screen
+
+- **The bridges work.** Real models byte-identical to Python onnxruntime (ImageNet x3, MiniLM, scikit-learn incl. string
+  inputs, SSD detection, a float16 model; F15, F41, F48, F57), DirectML GPU (F42), ML.NET training / serving /
+  AutoML / PFI / IO round trips (F07, F50, F58), ML.NET -> ONNX -> ORT (F51), trimmed and single-file publish (F45, F55),
+  .NET 11 RC3 (F53), memory maps (F60), guard pages (F61), Linux (F27). No leak (F21).
+- **Fixed on this branch** (cherry-pick all of it, section 8 - verified clean onto `release-0.80.0-beta1`): F02 / F03
+  text refusals, F35 dtype maps, F36 docs, F49 text-column route, F54 BFloat16 input message, F63 lazy-scope message,
+  and docs facts F10 / F17 / F20 / F24 / F31 / F37 / F44 / F51 / F56 / F59. Suites: ORT 312, ML.NET 212.
+- **Decide BEFORE the tag** (a published package cannot be changed):
+  - **P16 (F52, high): the ML.NET range `[2.0.0, 6.0.0)` becomes a restore ERROR (NU1107) the day ML.NET 6.0.0 ships
+    (with .NET, this month).** Branch `qa/p16-mlnet-range`: `[2.0.0, 7.0.0)`, green on the 6.0 preview.
+  - P6 (F16): two public `Postprocess` classes collide (CS0104) in an app using both bridges; names freeze now.
+  - P4 (F04): the NumSharp dependency is open-ended while the bridges use Core internals.
+  - P9 (F25): the nuget.org key must be allowed to push three NEW ids.
+- **Ready to merge if accepted** (each a branch with tests and docs; all together on `qa/proposals-all`, green):
+  P1 dictionary views (Features + Label; also the training-speed fix, F59), P2 + P12 feed checks (Python's rule; ML.NET
+  exports need it, F51), P7 RunAsync for dynamic batches, P11 disposed-object guard (two process crashes, F29 / F30),
+  P14 CI nupkg-consumer gates, P16, P17 a view that shuffles (SDCA on ordered rows, F56).
+- **Deferred, documented**: P3, P5, P8, P10, P13, P15 (section 5).
 
 ## 1. The brief (the owner, 2026-11-02)
 
