@@ -470,7 +470,9 @@ rides in P12's commit) - and `qa/proposals-all` merges all seven with their thre
   too - `Dispose` on a thread other than `_threadId` throws `InvalidOperationException` naming the await rule (one
   integer compare) and never pools the scope, and `Track` skips a disposed scope - so the misuse fails loudly at the
   `await` site instead of freeing memory later on another request. A behavior change for code that today "works", so
-  the owner's; the docs warning is on the ORT page now.
+  the owner's; the docs warning is on the ORT page now. The bridge alone could refuse `RunAsync` while a scope is
+  open on the calling thread (it sees Core's internal `NDScope.Current`), but a woven `[NDScopedAsync]` method suspends
+  its scope across the await legitimately, so that refusal would be wrong there: the Core guard is the precise fix.
 
 ## 6. Examples
 
@@ -495,7 +497,7 @@ the two bridges). Nothing here was merged there. To ship the results in the beta
 commits):
 
 **Verified (04:53, the end state):** `git cherry-pick 1c001253..qa/interop-release` - 70 commits at `11203d65`, then the
-closing commits (this file, one sentence of `.claude/rules/interop-packages.md`, and F82 / F83 on the ORT page): 76 in
+closing commits (this file, one sentence of `.claude/rules/interop-packages.md`, and F82 / F83 on the ORT page): 77 in
 all at the end (05:15), re-simulated clean, - applies with NO conflict onto `release-0.80.0-beta1` at `ac6526e2` (its latest
 merge of `strings`, unchanged since 02:00): each pick simulated read-only with `git merge-tree --write-tree
 --merge-base=<commit>^`, chained through unreferenced commit objects (scratch `probes/simulate_cherry_picks.py`,
@@ -644,3 +646,4 @@ The proposals (section 5) are separate, each the owner's to accept or drop:
 | 05:00 | A63 (F82): `session.Run(np.load_npz("inputs.npz"))` works as is and matches Python onnxruntime bit for bit (text as `U`); the ORT page shows the idiom. |
 | 05:14 | A64 (F83, P20): a hand-written NDScope across `await session.RunAsync` corrupts the scope state and, once the continuation thread reuses the pooled scope, frees the opening thread's arrays (7.0 -> 9.0); the ORT page warns; the Core guard is P20. |
 | 05:15 | F82 / F83 merged into `qa/proposals-all` (`20009979`, docs only, clean); the end: 76 commits after `1c001253`, simulated clean onto `ac6526e2`. |
+| 05:16 | P20 names the bridge-only alternative and why the Core guard is the precise fix; 77 commits at the end. |
