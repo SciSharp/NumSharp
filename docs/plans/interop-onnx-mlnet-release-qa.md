@@ -45,8 +45,8 @@ log (section 7). Every new idea becomes a work-list row before it is worked on.
   from NumPy / SciPy by 1-3 ulps (F79); P20, an `NDScope` disposed on a foreign thread (a scope held across an `await`)
   is silently pooled and reused there in a Release build, a cross-thread use-after-free (F83) - recommended: throw.
 - **Decide with the release (F84, high)**: `RunAsync` inside any `NDScope` returns outputs over freed memory, even through
-  `scope.ReturnsTask` - the docs now say to start it outside any scope; P21 is the contained bridge fix (the result
-  dictionary implements Core's public `INDArrayCarrier`).
+  `scope.ReturnsTask` - the docs now say to start it outside any scope; P21 is the contained bridge fix, ready on
+  `qa/p21-run-outputs-carrier` (the result dictionary implements Core's public `INDArrayCarrier`; tested, mutant-proven).
 - **Examples** (section 6): ImageNet with ONNX Runtime, train / evaluate / k-means with ML.NET, and train in ML.NET ->
   export -> serve with ONNX Runtime (both bridges), each proven on Windows and Linux from the local beta feed.
 
@@ -486,7 +486,12 @@ rides in P12's commit) - and `qa/proposals-all` merges all seven with their thre
   `INDArrayCarrier` (`YieldTo(scope)` yields every output), so `scope.ReturnsTask(session.RunAsync(...))` - and a woven
   `[NDScoped]` method that returns the dictionary - hand the outputs to the caller. Alternatively Core's `Returns` /
   `YieldBoxed` learn `IReadOnlyDictionary<string, NDArray>` (which would also serve the ML.NET bridge's future dictionary
-  views, P1). A test: `NDScopeTests` with `ReturnsTask(RunAsync)` reading the churned pool. Until then the docs warn.
+  views, P1). Until it lands the docs warn.
+  Branch `qa/p21-run-outputs-carrier` (`0cc27845`, on `qa/interop-release` `7a0d7109`): the internal `RunOutputs :
+  Dictionary<string, NDArray>, INDArrayCarrier` built by `Run(dict)`'s two collectors and by `RunAsync`; tests
+  `RunAsync_HandedOutWithReturnsTask_OutputsReachTheCaller` (fails on the planted plain-dictionary mutant) and
+  `RunDictionary_IsAnNDArrayCarrier_InBothOutputForms`; ORT 1.31.1 net10.0 319 + 2 / 321 (NDScopeTests 9 / 9 on both
+  TFMs), ORT 1.16.0 net8.0 298 + 23 / 321; the page and README describe `ReturnsTask` + `CloseUnlessDeferred`.
 
 ## 6. Examples
 
@@ -511,7 +516,7 @@ the two bridges). Nothing here was merged there. To ship the results in the beta
 commits):
 
 **Verified (04:53, the end state):** `git cherry-pick 1c001253..qa/interop-release` - 70 commits at `11203d65`, then the
-closing commits (this file, one sentence of `.claude/rules/interop-packages.md`, and F82 / F83 on the ORT page): 81 in
+closing commits (this file, one sentence of `.claude/rules/interop-packages.md`, and F82 / F83 on the ORT page): 82 in
 all at the end (05:15), re-simulated clean, - applies with NO conflict onto `release-0.80.0-beta1` at `ac6526e2` (its latest
 merge of `strings`, unchanged since 02:00): each pick simulated read-only with `git merge-tree --write-tree
 --merge-base=<commit>^`, chained through unreferenced commit objects (scratch `probes/simulate_cherry_picks.py`,
@@ -552,6 +557,7 @@ The proposals (section 5) are separate, each the owner's to accept or drop:
 | `qa/p14-consumer-gates` (P14) | `3d3e897a` | `f4d5821c` | two new `tools/verify_package_consumer.sh` scripts, two CI steps |
 | `qa/p16-mlnet-range` (P16) | `d1d10236` | `e271d366` | ML.NET csproj range + comment, CI's advisory "next preview" step, the rule, the notes |
 | `qa/p17-shuffling-view` (P17) | `6463b1b0` | `52d523af` | ML.NET `NDArrayDataView.cs` (CanShuffle, the cursor), new `ShuffleTests`, the page's Limits entry, the rule |
+| `qa/p21-run-outputs-carrier` (P21) | `0cc27845` | `7a0d7109` | ORT: new `RunOutputs.cs`, the three result-dictionary sites in `InferenceSessionExtensions{,.Async}.cs`, two `NDScopeTests`, the ORT page's and README's async bullets (not in `qa/proposals-all`) |
 | `qa/proposals-all` | `20009979` | `7d68a494` | the four merged in that order (`--no-ff`, up to `4851fd0f`), then `qa/interop-release` at `8438ee3e` (F49, `1d5638da`), then P16 (which brings `qa/interop-release` up to `e271d366`), P14 (`966e5867`, `qa/interop-release` up to `f4d5821c`) and P17 (`1cb2deff`: the cursor constructor conflict with P1 resolved as both), then `qa/interop-release` again (`e2d03481`: F63-F67), the P11 trim follow-up (`2543a218`) `qa/interop-release` at `fa80b046`, again at `06213abd` (F73-F75 and the NDScope suites; the ML.NET page's Limits list conflicts with P17's shuffle bullet: keep both bullets, P17's first) at `68ab1db2` (F76-F81, the last code change; green on every leg) and at its end state (`20009979`: docs only - F82, F83, P20) |
 
 - Conflicts, all in XML docs, none in code: P12 + P11 in `Run(dict)`'s `<exception>` entries (keep P12's
@@ -665,3 +671,4 @@ The proposals (section 5) are separate, each the owner's to accept or drop:
 | 05:20 | The ORT page's claims ledger gains row 28 (the NDScope suites); its other 27 rows checked against tonight's findings: none contradicted (row 10 compares Postprocess with ORT's operators, not SciPy, so F79 leaves it true). 79 commits at the end. |
 | 05:21 | A65 (F84, P21): RunAsync inside any NDScope returns outputs over freed memory, ReturnsTask included (NDScope cannot yield a dictionary); docs warn; P21 = the result dictionary implements INDArrayCarrier. 80 commits at the end. |
 | 05:29 | F84 re-proven with `ReturnsTask`'s deferral honored (`CloseUnlessDeferred`): still freed memory; a plain `using` loses the deferral. 81 commits at the end. |
+| 05:27 | P21 implemented on `qa/p21-run-outputs-carrier` (`0cc27845`): RunOutputs is an INDArrayCarrier; two tests, mutant-proven; ORT 1.31.1 319 + 2, floor 298 + 23. 82 commits at the end. |
