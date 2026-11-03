@@ -21,8 +21,9 @@
 #   4  the same consumer against the current ONNX Runtime
 #
 # Needs: the .NET SDK and network (nuget.org, for ONNX Runtime). No Python.
-# It deletes this version of NumSharp / NumSharp.Interop.OnnxRuntime from the global NuGet packages
-# folder (NUGET_PACKAGES when set) so the consumer restores the fresh pack.
+# It packs under a pre-release version unique to the run (<VersionPrefix>-gate.<epoch>.<pid>), so the
+# global NuGet packages folder (NUGET_PACKAGES when set) is never written under a PUBLISHED version, and
+# it removes that run-only version's entries from the folder at exit.
 #
 #   bash src/NumSharp.Interop.OnnxRuntime/tools/verify_package_consumer.sh
 # =============================================================================
@@ -36,7 +37,18 @@ REPO="$(cd "$PKG_DIR/../.." && pwd)"
 WORK="$(mktemp -d)"
 # On Git Bash/MSYS mktemp yields a /tmp/... path the WINDOWS dotnet/NuGet processes cannot resolve.
 command -v cygpath > /dev/null 2>&1 && WORK="$(cygpath -m "$WORK")"
-trap 'rm -rf "$WORK"' EXIT
+# Exit cleanup: the scratch tree, and this run's OWN entries in the global packages folder - the gate version
+# is unique to the run, so nothing else can be restoring it. Both variables are checked first: an unset one
+# must not widen the target (an empty VERSION would name every cached NumSharp version).
+cleanup() {
+    rm -rf "$WORK"
+    if [ -n "${NUGET_ROOT:-}" ] && [ -n "${VERSION:-}" ]; then
+        rm -rf "${NUGET_ROOT:?}/numsharp/${VERSION:?}" "${NUGET_ROOT:?}/numsharp.interop.onnxruntime/${VERSION:?}"
+        # An id folder this run created holds nothing now; rmdir removes only an EMPTY one.
+        rmdir "${NUGET_ROOT:?}/numsharp.interop.onnxruntime" 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT
 LOG="$WORK/build.log"
 run() { "$@" > "$LOG" 2>&1 || { cat "$LOG" >&2; fail "command failed: $*"; }; }
 step() { printf '\n== %s ==\n' "$*"; }
@@ -44,7 +56,13 @@ fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 
 ORT_FLOOR=1.16.0
 ORT_CURRENT="${ORT_CURRENT:-1.31.1}"
-VERSION="$(cd "$REPO" && dotnet msbuild src/NumSharp.Core/NumSharp.Core.csproj -getProperty:Version | tr -d '\r')"
+# The pack's version must be one nothing else references (F86). The plain <VersionPrefix> may be PUBLISHED
+# (0.70.0 on strings): evicting it from the shared cache and restoring the local pack there left every other
+# project on the machine that restores NumSharp <VersionPrefix> with THIS build, silently. A SemVer pre-release
+# of numeric identifiers - the run's epoch and PID - never collides; it flows through every build and pack
+# below, and the dependency checks compare against it.
+GATE_SUFFIX="gate.$(date +%s).$$"
+VERSION="$(cd "$REPO" && dotnet msbuild src/NumSharp.Core/NumSharp.Core.csproj -getProperty:Version "-p:VersionSuffix=$GATE_SUFFIX" | tr -d '\r')"
 [ -n "$VERSION" ] || fail "could not read the package version"
 FEED="$WORK/feed"; mkdir -p "$FEED"
 CONS="$WORK/consumer"; mkdir -p "$CONS"
@@ -53,14 +71,15 @@ step "1. pack NumSharp $VERSION + NumSharp.Interop.OnnxRuntime $VERSION into a l
 # -t:Rebuild first: this repo's incremental build is known to declare stale outputs up-to-date
 # after source changes, and dotnet pack defaults to Release on .NET 8+.
 run dotnet build "$REPO/src/NumSharp.Core/NumSharp.Core.csproj" -t:Rebuild -c Release \
-    -v q --nologo "-clp:NoSummary;ErrorsOnly" -p:WarningLevel=0
+    -v q --nologo "-clp:NoSummary;ErrorsOnly" -p:WarningLevel=0 "-p:VersionSuffix=$GATE_SUFFIX"
 run dotnet build "$PKG_DIR/NumSharp.Interop.OnnxRuntime.csproj" -t:Rebuild -c Release \
-    -v q --nologo "-clp:NoSummary;ErrorsOnly" -p:WarningLevel=0
-run dotnet pack "$REPO/src/NumSharp.Core/NumSharp.Core.csproj" --no-build -c Release -o "$FEED" -v q --nologo "-clp:ErrorsOnly"
+    -v q --nologo "-clp:NoSummary;ErrorsOnly" -p:WarningLevel=0 "-p:VersionSuffix=$GATE_SUFFIX"
+run dotnet pack "$REPO/src/NumSharp.Core/NumSharp.Core.csproj" --no-build -c Release -o "$FEED" -v q --nologo "-clp:ErrorsOnly" \
+    "-p:VersionSuffix=$GATE_SUFFIX"
 # -p:IsPackable=true overrides the csproj's UNRELEASED false (a global property wins over the project's own),
 # so the gate checks the package the owner's release would publish; nothing here leaves the throwaway feed.
 run dotnet pack "$PKG_DIR/NumSharp.Interop.OnnxRuntime.csproj" --no-build -c Release -o "$FEED" -v q --nologo "-clp:ErrorsOnly" \
-    -p:IsPackable=true
+    -p:IsPackable=true "-p:VersionSuffix=$GATE_SUFFIX"
 NUPKG="$FEED/NumSharp.Interop.OnnxRuntime.$VERSION.nupkg"
 [ -f "$NUPKG" ] || fail "bridge nupkg missing: $NUPKG (did the pack honour -p:IsPackable=true?)"
 echo "ok"
@@ -90,10 +109,10 @@ for tfm in net8.0 net10.0; do
 done
 echo "ok"
 
-# The scratch consumer must restore THIS pack, not a same-versioned cache entry.
+# The scratch consumer restores THIS pack: the run-unique version has no other cache entry to shadow it, so
+# nothing is evicted first. NUGET_ROOT is read here for the exit cleanup, which removes the run's own entries.
 NUGET_ROOT="$(dotnet nuget locals global-packages --list | sed 's/.*: //' | tr -d '\r')"
 command -v cygpath > /dev/null 2>&1 && NUGET_ROOT="$(cygpath -m "$NUGET_ROOT")"
-rm -rf "$NUGET_ROOT/numsharp/$VERSION" "$NUGET_ROOT/numsharp.interop.onnxruntime/$VERSION"
 cat > "$CONS/nuget.config" <<EOF
 <?xml version="1.0" encoding="utf-8"?>
 <configuration>

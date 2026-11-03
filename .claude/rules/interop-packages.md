@@ -28,8 +28,9 @@ created and no release or public documentation mentions them. Unreleased is exac
 3. Gated. The `interop-test` job builds and tests all three (ONNX Runtime and ML.NET at their floor and current
    versions, ParquetNet on both TFMs). Nothing else compiles them in CI. Its "Package consumer:" steps
    (`src/NumSharp.Interop.{OnnxRuntime,MLNet}/tools/verify_package_consumer.sh`) pack the two bridges with
-   `-p:IsPackable=true` into a throwaway local feed and run a consumer that restores them by `PackageReference`, so
-   the package that will ship is gated while nothing is published.
+   `-p:IsPackable=true` into a throwaway local feed, under a pre-release version unique to the run (`openblas.md`), and
+   run a consumer that restores them by `PackageReference`, so the package that will ship is gated while nothing is
+   published.
 
 Keep them out of release notes (`docs/releases/RELEASE_<version>.md`; when that file is missing, GitHub generates the
 notes from merged PR titles, so PR titles stay free of them too), the website, the root README, and the shipped XML docs
