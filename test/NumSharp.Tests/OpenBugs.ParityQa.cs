@@ -1530,5 +1530,31 @@ namespace NumSharp.Tests
 
             call.Should().Throw<InvalidOperationException>().WithMessage("boom");
         }
+
+        // ------------------------------------------------------------------
+        // QA-44 — np.divmod(out=(input, r)) computes the remainder from the overwritten input
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's divmod is ONE two-output loop: each element is read once and both results are written, so an out that
+        ///     is also an input is safe: <c>np.divmod(a, 2.0, out=(a, r))</c> for <c>a = [7.5, -7.5, 3.0]</c> leaves
+        ///     <c>a = [3, -4, 1]</c> and <c>r = [1.5, 0.5, 1.0]</c>. NumSharp's <c>out=</c> route composes the two ufuncs
+        ///     (ufuncs.md: "Its out=(q, r) / where= / dtype= path composes FloorDivide and Mod"), so the floor division
+        ///     overwrites <c>a</c> before the remainder reads it: <c>r = [1, 0, 1]</c>, the remainders of the QUOTIENTS
+        ///     (<c>rp12</c>); a quotient out that aliases the divisor (<c>out=(b, r)</c>) does the same. A remainder out that
+        ///     aliases an input, and np.modf / np.frexp with an aliased out (one loop), match NumPy.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA44")]
+        public void ParityQa_DivmodOut_QuotientAliasingAnInput_ShouldReadTheOriginalInput()
+        {
+            using var a = np.array(new[] { 7.5, -7.5, 3.0 });
+            using var r = np.zeros(new Shape(3));
+            using var two = np.array(2.0);
+
+            np.divmod(a, two, @out: (a, r));
+
+            a.ToArray<double>().Should().Equal(3.0, -4.0, 1.0);
+            r.ToArray<double>().Should().Equal(new[] { 1.5, 0.5, 1.0 }, "the remainders of the ORIGINAL dividends");
+        }
     }
 }
