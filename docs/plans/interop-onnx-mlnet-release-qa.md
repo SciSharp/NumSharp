@@ -196,17 +196,19 @@ Severity: **blocker** (cannot ship), **high** (a real user hits it), **medium**,
 
 ## 5. For the owner (deferred, with what was proven)
 
-Each entry: the finding, what was proven, the options, and a recommendation. Nothing here was changed on this branch.
-The recommendation of five entries (P1, P2, P7, P11, P12) is prepared as a proposal branch off this one, one commit
-each with its tests and docs, never merged here (the **Branch** line of each entry; P2 rides in P12's commit), and
-`qa/proposals-all` merges the four branches with their two conflicts resolved (section 8).
+Each entry: the finding, what was proven, the options, and a recommendation. The decisions themselves were not made on
+this branch; only two documentation halves were (P3, P5: they describe today's behavior and decide nothing). The
+recommendation of eight entries (P1, P2, P7, P11, P12, P14, P16, P17) is prepared as a proposal branch off this one -
+seven branches, one commit each with its tests and docs, never merged here (the **Branch** line of each entry; P2
+rides in P12's commit) - and `qa/proposals-all` merges all seven with their three conflicts resolved (section 8).
 
 - **P1 (F01) ML.NET views of several arrays - training, and scoring with the standard recipe. Decide for 0.80.0.**
   - Proven: `X.AsDataView("Features")` + a separate `y` cannot train (`Could not find label column 'Label'`); the only
     route is `np.hstack(X, y)` as scalar columns (a copy, the label forced into the features' dtype) +
     `ConvertType("Label")` + `Concatenate` (`consumers/ml_train.cs`; the example writes it as a pattern). A model of
     ML.NET's Iris recipe (`MapValueToKey("Label")` in the chain) cannot even SCORE a features-only view
-    (`Could not find input column 'Label'`); `((IEnumerable<ITransformer>)model).Last()` works around it.
+    (`Could not find input column 'Label'`); scoring with the chain after its label step
+    (`new TransformerChain<ITransformer>(((IEnumerable<ITransformer>)model).Skip(1).ToArray())`) works around it - the page says so.
   - Root: `NDArrayDataView` holds one `_fed` / `_slice` / `_itemsize`; every `ColumnPlan` reads that one array.
   - Option A (recommended): a dictionary form, pandas' `DataFrame({"Features": X, "Label": y})` -
     `AsDataView(IReadOnlyDictionary<string, NDArray> columns)` and the `ToDataView` twin: a 1-D `(R,)` array is a
@@ -270,6 +272,8 @@ each with its tests and docs, never merged here (the **Branch** line of each ent
   Options: (a) keep and document the `using` alias; (b) one class in Core (for example `NumSharp.Postprocess`, or the
   SciPy names `softmax` / `log_softmax` / `expit` under a module), both bridges drop theirs; (c) a shared tiny
   package. Recommended: (b), the only option without a duplicate public type.
+  From F# (F69) the clash is silent instead: with both namespaces open a plain `Postprocess` resolves to the LAST one
+  opened - harmless while both classes are one source, a trap the day they differ.
 - **P7 (F18) `RunAsync` for models with a dynamic batch.** Proven: only 1 of 8 real models (SqueezeNet, fixed batch)
   can use `RunAsync`; the docs' own ResNet50 is refused. Every output symbol of the zoo / Hugging Face exports here
   also names an input dimension (`N`, `batch_size`, `sequence_length`). Recommended: bind named symbols from the fed
