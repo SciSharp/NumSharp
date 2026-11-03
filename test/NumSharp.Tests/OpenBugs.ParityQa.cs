@@ -1026,6 +1026,12 @@ namespace NumSharp.Tests
                 "operands could not be broadcast together with remapped shapes [original->remapped]: (3,)  and requested shape (4,)");
             moreAxes.Should().Throw<Exception>().Which.Message.Should().Be(
                 "input operand has more dimensions than allowed by the axis remapping");
+
+            // np.broadcast_arrays / np.broadcast: NumPy 2.x names the two operands that clash (two spaces after the period).
+            using var four = np.zeros(new Shape(4));
+            Action arrays = () => np.broadcast_arrays(row, four);
+            arrays.Should().Throw<Exception>().Which.Message.Should().Be(
+                "shape mismatch: objects cannot be broadcast to a single shape.  Mismatch is between arg 0 with shape (3,) and arg 1 with shape (4,).");
         }
 
         // ------------------------------------------------------------------
@@ -1051,10 +1057,13 @@ namespace NumSharp.Tests
             using var wrong3 = np.zeros(new Shape(3));
 
             Action cumsum = () => np.cumsum(a, 0, @out: wrong43);
+            Action cumprod = () => np.cumprod(a, 0, @out: wrong43);
             Action ptp = () => np.ptp(a, 0, @out: wrong3);
             Action median = () => np.median(a, 0, @out: wrong3);
 
             cumsum.Should().Throw<Exception>().Which.Message.Should().Be(
+                "operands could not be broadcast together with remapped shapes [original->remapped]: (4,3)->(4,3) (3,4)->(3,4) ");
+            cumprod.Should().Throw<Exception>().Which.Message.Should().Be(
                 "operands could not be broadcast together with remapped shapes [original->remapped]: (4,3)->(4,3) (3,4)->(3,4) ");
             ptp.Should().Throw<Exception>().Which.Message.Should().Be(
                 "operands could not be broadcast together with remapped shapes [original->remapped]: (3,)->(3) (3,4) ");
