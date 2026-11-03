@@ -1135,5 +1135,24 @@ namespace NumSharp.Tests
             pastTheAxis.Should().Throw<IndexError>().WithMessage("index 5 is out of bounds for axis 1 with size 3");
             m.GetDouble(1, -1).Should().Be(5.0);
         }
+
+        /// <summary>
+        ///     QA-33 reaches the NumPy-named <c>ndarray.item</c>: with MORE than one coordinate it takes the same unchecked
+        ///     offset (only the flat one-index form checks and wraps). <c>np.arange(6.).reshape(2, 3).item(1, -2)</c> is
+        ///     <c>4.0</c> in NumPy and <c>1.0</c> in NumSharp; <c>.item(0, 4)</c> raises <c>IndexError: index 4 is out of
+        ///     bounds for axis 1 with size 3</c> in NumPy and returns <c>4.0</c>; <c>.item(-1, -1)</c> and
+        ///     <c>m.T.item(-1, 0)</c> read before the buffer (<c>p86</c>: denormal garbage in Release), the 3-D, typed
+        ///     <c>item&lt;T&gt;</c> and reversed-view forms likewise. Only in-buffer coordinates are used here.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA33")]
+        public void ParityQa_ItemWithSeveralCoordinates_ShouldCheckAndWrapEachAxis()
+        {
+            using var m = np.arange(6.0).reshape(2, 3);
+
+            Action pastTheAxis = () => m.item(0, 4);
+
+            ((double)m.item(1, -2)).Should().Be(4.0);
+            pastTheAxis.Should().Throw<IndexError>().WithMessage("index 4 is out of bounds for axis 1 with size 3");
+        }
     }
 }
