@@ -1105,5 +1105,35 @@ namespace NumSharp.Tests
             ulp32.Should().BeLessThanOrEqualTo(2);
             ulp64.Should().BeLessThanOrEqualTo(2);
         }
+
+        // ------------------------------------------------------------------
+        // QA-33 — the typed coordinate getters / setters do not check their coordinates
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's coordinate access (<c>a.item(i, j)</c>, <c>a[i, j]</c>, <c>a[i, j] = v</c>) checks every coordinate
+        ///     against its axis and wraps a negative one once: <c>np.arange(6.).reshape(2, 3).item(0, 5)</c> raises
+        ///     <c>IndexError: index 5 is out of bounds for axis 1 with size 3</c> and <c>.item(1, -1)</c> is <c>5.0</c>.
+        ///     NumSharp's indexer and <c>item</c> do the same, but <c>GetDouble</c> / <c>GetInt32</c> / … /
+        ///     <c>GetValue</c> / <c>GetAtIndex</c> and <c>SetDouble</c> / <c>SetValue</c> / <c>SetAtIndex</c> /
+        ///     <c>itemset</c> index the storage with <c>Shape.GetOffset(indices)</c> unchecked
+        ///     (<c>_slices.Double[_shape.GetOffset(indices)]</c>, UnmanagedStorage.Getters.cs): <c>m.GetDouble(0, 5)</c>
+        ///     returns the element of the NEXT row (5.0), <c>m.GetDouble(1, -1)</c> returns 2.0, and past the buffer the
+        ///     read and the write leave it (<c>p84</c>, Release: <c>a.GetDouble(10)</c> on 3 elements returns 0.0,
+        ///     <c>a.GetDouble(-1)</c> -3.85e-270, <c>a.SetDouble(9.0, 10)</c> / <c>SetValue</c> / <c>SetAtIndex</c> /
+        ///     <c>itemset(10, …)</c> return normally having written outside the array; a Debug build fails
+        ///     <c>ArraySlice</c>'s "index &lt; Count, Memory corruption expected." assertion instead). Only in-buffer
+        ///     coordinates are used here, so the test cannot corrupt the host.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA33")]
+        public void ParityQa_TypedCoordinateGetters_ShouldCheckAndWrapLikeItem()
+        {
+            using var m = np.arange(6.0).reshape(2, 3);
+
+            Action pastTheAxis = () => m.GetDouble(0, 5);
+
+            pastTheAxis.Should().Throw<IndexError>().WithMessage("index 5 is out of bounds for axis 1 with size 3");
+            m.GetDouble(1, -1).Should().Be(5.0);
+        }
     }
 }
