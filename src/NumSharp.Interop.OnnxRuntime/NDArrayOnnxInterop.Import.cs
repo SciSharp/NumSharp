@@ -421,6 +421,40 @@ namespace NumSharp.Interop.OnnxRuntime
         }
 
         /// <summary>
+        ///     Copy any ORT legacy <see cref="Tensor{T}"/> into a fresh owning C-contiguous <see cref="NDArray"/> - the type
+        ///     <c>DisposableNamedOnnxValue.AsTensor&lt;T&gt;()</c> is DECLARED to return, so ORT's tutorial lines
+        ///     <c>Tensor&lt;float&gt; output = results.First().AsTensor&lt;float&gt;(); NDArray scores = output.ToNDArray();</c>
+        ///     compile as written.
+        /// </summary>
+        /// <remarks>
+        ///     <para>Every tensor ORT itself returns is a <see cref="DenseTensor{T}"/>: it takes
+        ///     <see cref="ToNDArray{T}(DenseTensor{T})"/>'s copy unchanged, column-major included (and an expression whose
+        ///     static type is <c>DenseTensor&lt;T&gt;</c> binds to that overload directly - it is the more specific match).
+        ///     Any other <see cref="Tensor{T}"/> - ORT ships none, but the type is public and abstract, so a caller can have
+        ///     one - is densified by its own <see cref="Tensor{T}.ToDenseTensor"/> (element by element through its
+        ///     <c>GetValue</c>) and that copy is copied, so the result never aliases the tensor; the
+        ///     <see cref="ToNDArray(NamedOnnxValue)"/> dispatch reads such a tensor the same way.</para>
+        ///     <para>Without this overload the call bound to nothing and C# reported CS1929 against the <c>OrtValue</c>
+        ///     overload, which pointed readers at the wrong verb (F71 of the bridge QA).</para>
+        /// </remarks>
+        /// <typeparam name="T">The tensor's element type: bool, the eight integers, <see cref="char"/>, <see cref="Float16"/>, <see cref="Half"/>, float or double.</typeparam>
+        /// <param name="tensor">The tensor to copy; any <see cref="Tensor{T}"/>, row- or column-major.</param>
+        /// <returns>A new owning C-contiguous array holding the tensor's elements in logical (row-major) order.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="tensor"/> is null.</exception>
+        /// <exception cref="NotSupportedException"><typeparamref name="T"/> has no NumSharp dtype (BFloat16, ...); refused before a non-dense tensor is densified.</exception>
+        /// <exception cref="ObjectDisposedException">The tensor's memory is a NumSharp buffer whose <see cref="OrtTensor{T}"/> handle has been disposed.</exception>
+        public static NDArray ToNDArray<T>(this Tensor<T> tensor) where T : unmanaged
+        {
+            if (tensor is null)
+                throw new ArgumentNullException(nameof(tensor));
+            if (tensor is DenseTensor<T> dense)
+                return dense.ToNDArray();
+            // Refuse an element type with no dtype BEFORE paying for the densifying copy of a tensor that cannot cross.
+            TypeCodeOf<T>();
+            return tensor.ToDenseTensor().ToNDArray();
+        }
+
+        /// <summary>
         ///     Copies <paramref name="nbytes"/> bytes from a pinned tensor buffer into a freshly allocated array — the one
         ///     copy both layouts of <see cref="ToNDArray{T}(DenseTensor{T})"/> share, with the byte count in a
         ///     <see cref="long"/> so a tensor past 2 GB crosses.

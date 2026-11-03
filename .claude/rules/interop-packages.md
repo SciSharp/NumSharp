@@ -61,7 +61,9 @@ None of these computes NumSharp operations: each converts tensors between NumSha
 - Export: `nd.AsOrtValue(mode)` (an `OrtValue` over the NumSharp buffer, held by the ARC-rooted handle `OrtTensor`, whose
   `IsView` says view or copy), `nd.ToOrtValue()` (an ORT-allocated copy), `AsDenseTensor<T>(mode)` / `ToDenseTensor<T>`
   (ORT's legacy tier, always row-major).
-- Import: `ortValue.ToNDArray()` (an owning copy), `ortValue.AsNDArray(ownsValue, mode)` (a zero-copy lease over ORT's
+- Import: `ortValue.ToNDArray()` (an owning copy; the legacy tier's `DenseTensor<T>`, any `Tensor<T>` - what
+  `AsTensor<T>()` is declared to return, a non-dense one densified first - and `NamedOnnxValue` copy the same way),
+  `ortValue.AsNDArray(ownsValue, mode)` (a zero-copy lease over ORT's
   buffer, CPU only; a counted NumSharp alias for a value the package made). Imports of NumSharp memory (a value the
   package made, a fed input passed through) are counted aliases that inherit read-only; only an OWNING view adds GC
   memory pressure. Importing a tensor of 2 GB or more that ORT owns is refused up front: ORT exposes tensor memory only as
