@@ -141,7 +141,10 @@ What each call does for you, from the session's metadata:
   temporary for any other; `View` throws for an input that would need one; `Copy` feeds a copy of every
   input. Every temporary is released with the call.
 - **Outputs**: copies by default; `zeroCopyOutputs: true` returns views that own their `OrtValue` (ORT's
-  memory is freed when the array - or its last derived slice - dies).
+  memory is freed when the array - or its last derived slice - dies). In a loop, dispose the slices too:
+  `using NDArray last = outs["logits"]["0, -1"];` - an undisposed slice keeps the WHOLE output's buffer
+  until a collection (a 12-step GPT-2 decode loop left 7 outputs alive that way). Fed back as the next
+  step's inputs (a KV cache's presents), zero-copy outputs are read in place.
 - **`RunInto`** writes into arrays you allocated (C-contiguous, writeable, declared dtype), zero-copy in both
   directions - the pattern for a denoising loop that reuses its buffers. ORT may write an output while it
   still reads an input: an output that shares memory with an input is computed from a copy of that input
