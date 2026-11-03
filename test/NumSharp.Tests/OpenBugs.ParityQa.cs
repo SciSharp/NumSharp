@@ -1608,5 +1608,31 @@ namespace NumSharp.Tests
             equal.Should().NotThrow().Which.Should().BeFalse();
             notEqual.Should().NotThrow().Which.Should().BeTrue();
         }
+
+        // ------------------------------------------------------------------
+        // QA-47 — np.trace's fused fast path sums the diagonal sequentially, not in add.reduce's pairwise order
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's trace is <c>PyArray_Trace</c>: the diagonal's <c>add.reduce</c>, whose float loop is
+        ///     <c>pairwise_sum</c> (eight accumulators per block, combined as a tree), so <c>np.trace(m) == np.sum(np.diagonal(m))</c>
+        ///     bit for bit. NumSharp's <c>DefaultEngine.Trace</c> takes a fused 2-D / 3-D fast path for float32 / float64 (and the
+        ///     integers) when no <c>dtype=</c> / <c>out=</c> is given (<c>TryTraceFast</c>, Backends/Default/Indexing/Default.Trace.cs:
+        ///     "a single strided diagonal walk with inline accumulation"), which adds the diagonal sequentially: for
+        ///     <c>m = RandomState(7).rand(8, 8) * 1000 - 500</c> NumPy's trace is <c>469.51696132236486</c> and NumSharp's
+        ///     <c>469.5169613223648</c>, while NumSharp's own <c>np.sum(np.diagonal(m))</c> gives NumPy's value (<c>rp18</c>; a float32
+        ///     1000 x 1000 trace is about 5 ULP off; the random fuzz batch <c>fz14</c> found it on a 257 x 129 float32 matrix).
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA47")]
+        public void ParityQa_TraceFloat_ShouldSumInAddReducesPairwiseOrder()
+        {
+            var rs = np.random.RandomState(7);
+            using var m = rs.rand(8, 8) * 1000.0 - 500.0;
+
+            using var trace = np.trace(m);
+
+            BitConverter.DoubleToInt64Bits((double)trace).Should().Be(BitConverter.DoubleToInt64Bits(469.51696132236486),
+                "NumPy's trace is the diagonal's pairwise add.reduce");
+        }
     }
 }
