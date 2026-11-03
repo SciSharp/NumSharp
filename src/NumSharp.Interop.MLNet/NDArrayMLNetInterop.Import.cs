@@ -136,8 +136,11 @@ namespace NumSharp.Interop.MLNet
                 {
                     vectorGetter(ref buffer);
                     stage ??= new ColumnStage<T>(tc, buffer.Length, knownRows);
+                    // Ragged rows are refused, as NumPy refuses them ("inhomogeneous shape"). The route named is one that
+                    // exists: the message used to suggest "an ML.NET vector-size transform", which ML.NET does not have.
                     if (buffer.Length != stage.Width)
-                        throw new ArgumentException($"column '{column.Name}' is a variable-length vector (row {stage.Rows} has length {buffer.Length}, an earlier row {stage.Width}); NumSharp arrays are rectangular. Pad the column to a fixed size first (e.g. an ML.NET vector-size transform).");
+                        throw new ArgumentException($"column '{column.Name}' is a variable-length vector (row {stage.Rows} has length {buffer.Length}, an earlier row {stage.Width}); NumSharp arrays are rectangular. " +
+                                                    $"Read the rows with ML.NET's own column reader (Microsoft.ML), view.GetColumn<{typeof(T).Name}[]>(\"{column.Name}\"), and pad or trim them to one length before np.array.");
                     // VBuffer.CopyTo(Span<T>) densifies a sparse row into the full-length span.
                     buffer.CopyTo(new Span<T>(stage.NextRow(), stage.Width));
                 }

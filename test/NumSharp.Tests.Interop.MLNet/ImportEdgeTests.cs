@@ -63,6 +63,11 @@ namespace NumSharp.Tests.Interop.MLNet
             AssertShape(back, 2, 2);
         }
 
+        /// <summary>
+        ///     A vector column whose rows disagree on length is refused (NumPy refuses ragged rows too), and the message's
+        ///     route - ML.NET's <c>GetColumn</c> of the item type's array, made one length before <c>np.array</c> - reads
+        ///     it as written. The message used to suggest "an ML.NET vector-size transform", which ML.NET does not have.
+        /// </summary>
         [TestMethod]
         public void VectorColumn_ActuallyVariableLength_Throws()
         {
@@ -74,6 +79,15 @@ namespace NumSharp.Tests.Interop.MLNet
             IDataView dv = Ml.Data.LoadFromEnumerable(rows);
             ArgumentException ex = Assert.ThrowsException<ArgumentException>(() => dv.ToNDArray("F"));
             StringAssert.Contains(ex.Message, "variable-length");
+            StringAssert.Contains(ex.Message, "view.GetColumn<Single[]>(\"F\")");
+            Assert.IsFalse(ex.Message.Contains("vector-size transform"), ex.Message);
+
+            // The route: the ragged rows, padded with zeros to the longest, into one rectangular array.
+            float[][] ragged = dv.GetColumn<Single[]>("F").ToArray();
+            int width = ragged.Max(r => r.Length);
+            using NDArray padded = np.array(ragged.Select(r => r.Concat(new float[width - r.Length])).SelectMany(v => v).ToArray()).reshape(ragged.Length, width);
+            AssertShape(padded, 2, 3);
+            CollectionAssert.AreEqual(new float[] { 1, 2, 0, 1, 2, 3 }, padded.ToArray<float>());
         }
 
         /// <summary>
