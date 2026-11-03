@@ -1503,5 +1503,32 @@ namespace NumSharp.Tests
             nanToInt.Should().Throw<ValueError>().WithMessage("cannot convert float NaN to integer");
             ambiguous.Should().Throw<ValueError>().WithMessage("The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()");
         }
+
+        // ------------------------------------------------------------------
+        // QA-43 — np.vectorize's signature fallback wraps the callback's exception in TargetInvocationException
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's vectorize propagates whatever the Python function raises, unchanged. NumSharp's other callback routes
+        ///     do the same (element-wise vectorize of any arity, frompyfunc with one or two outputs, the typed one- to
+        ///     three-argument signature delegates, apply_along_axis, apply_over_axes, piecewise: <c>rp10</c>, <c>rp11</c>), but
+        ///     <c>Vectorized.BuildSignatureInvoker</c>'s fallback (APIs/np.vectorize.cs: a multi-output signature such as
+        ///     <c>"(n)->(),()"</c>, or more than three core arguments) calls the delegate through <c>DynamicInvoke</c>, so the
+        ///     caller sees <see cref="System.Reflection.TargetInvocationException"/> "Exception has been thrown by the target of
+        ///     an invocation." with the user's exception as its inner exception, and a <c>catch</c> for the user's own type
+        ///     misses it.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">Never escapes the test: the callback throws it inside
+        ///     <c>CallMany</c>, where the assertion expects to observe it unwrapped.</exception>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA43")]
+        public void ParityQa_VectorizeSignatureFallback_ShouldPropagateTheCallbacksException()
+        {
+            using var x = np.arange(4.0).reshape(2, 2);
+            var twoOutputs = np.vectorize((Func<NDArray, (NDArray, NDArray)>)(v => throw new InvalidOperationException("boom")), "(n)->(),()");
+
+            Action call = () => twoOutputs.CallMany(x);
+
+            call.Should().Throw<InvalidOperationException>().WithMessage("boom");
+        }
     }
 }
