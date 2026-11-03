@@ -1468,5 +1468,40 @@ namespace NumSharp.Tests
                 System.Threading.Thread.CurrentThread.CurrentCulture = saved;
             }
         }
+
+        // ------------------------------------------------------------------
+        // QA-42 — the explicit scalar conversions are not NumPy's bool() / int() / float()
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's <c>bool(a)</c> takes the truth of a ONE-ELEMENT array of any rank (<c>bool(np.array([0.]))</c> is False,
+        ///     <c>bool(np.array([[3]]))</c> True), a complex element by <c>!= 0</c> (<c>bool(np.array(1j))</c> is True), and
+        ///     refuses several or zero elements with ValueError (<c>The truth value of an array with more than one element is
+        ///     ambiguous. Use a.any() or a.all()</c>; <c>…empty array is ambiguous…</c>); <c>int(a)</c> of a float NaN / ±inf
+        ///     raises ValueError <c>cannot convert float NaN to integer</c> / OverflowError <c>cannot convert float infinity to
+        ///     integer</c>, and an integer is exact. NumSharp's explicit operators (Casting/Implicit/NDArray.Implicit.ValueTypes.cs:
+        ///     <c>EnsureCastableToScalar</c> + <c>Converts.ChangeType</c>) refuse every non-0-d array with
+        ///     <c>IncorrectShapeException: only 0-d arrays can be converted to scalar</c> (bool included; NumPy's int / float /
+        ///     complex text is the TypeError <c>only 0-dimensional arrays can be converted to Python scalars</c>), refuse a complex
+        ///     bool with <c>TypeError: can't convert complex to bool</c>, and convert NaN / inf / 1e300 to <c>MinValue</c> and a
+        ///     uint64 past long.MaxValue to <c>-1</c> silently (<c>p105</c>; their own text path raises OverflowException for an
+        ///     out-of-range literal).
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA42")]
+        public void ParityQa_ExplicitScalarConversions_ShouldFollowNumPysBoolIntFloat()
+        {
+            using var oneElement = np.array(new[] { 0.0 });
+            using var imaginary = np.array(new Complex(0, 1));
+            using var nan = np.array(double.NaN);
+            using var pair = np.array(new[] { 1, 2 });
+
+            Action nanToInt = () => { int _ = (int)nan; };
+            Action ambiguous = () => { bool _ = (bool)pair; };
+
+            ((bool)oneElement).Should().BeFalse("bool() of a one-element array is its element's truth");
+            ((bool)imaginary).Should().BeTrue("bool(1j) is True");
+            nanToInt.Should().Throw<ValueError>().WithMessage("cannot convert float NaN to integer");
+            ambiguous.Should().Throw<ValueError>().WithMessage("The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()");
+        }
     }
 }
