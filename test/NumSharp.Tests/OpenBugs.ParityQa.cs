@@ -1323,5 +1323,51 @@ namespace NumSharp.Tests
             using (v)
                 Convert.ToInt64(v.GetValue(0)).Should().Be(33619968L, "NumPy reads the bytes 02 01 00 00 big-endian");
         }
+
+        // ------------------------------------------------------------------
+        // QA-39 — a memory-mapped np.load locks its file against the other loads NumPy allows
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy opens a memmap's file through Python's <c>open()</c>, whose Windows share mode lets other handles read
+        ///     and write, so while <c>a = np.load(p, mmap_mode='r+')</c> lives, <c>np.load(p)</c> reads the file (and sees
+        ///     <c>a</c>'s writes: <c>[0, 99, 2, 3]</c>), and an <c>'r'</c> map and an <c>'r+'</c> map of one file coexist.
+        ///     NumSharp's <c>NpyFormat.OpenMemmap</c> (IO/NpyFormat.cs) holds the file with <c>FileShare.Read</c> and the
+        ///     plain <c>np.load</c> opens it with the default <c>FileShare.Read</c> too, so (<c>p103</c>, isolated pairs):
+        ///     while an <c>'r+'</c> map lives every other load of the file (plain, <c>'r'</c>, <c>'r+'</c>) raises
+        ///     <see cref="System.IO.IOException"/> "The process cannot access the file … because it is being used by another
+        ///     process", and while an <c>'r'</c> or <c>'c'</c> map lives an <c>'r+'</c> load raises the same. Each succeeds
+        ///     once the first array is disposed. <c>[DoNotParallelize]</c>: the cleanup may force a collection.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA39"), DoNotParallelize]
+        public void ParityQa_LoadMmap_ShouldNotLockOutOtherLoadsOfTheFile()
+        {
+            string dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ns_qa39_" + Guid.NewGuid().ToString("N"));
+            System.IO.Directory.CreateDirectory(dir);
+            try
+            {
+                string p = System.IO.Path.Combine(dir, "a.npy");
+                using (var seed = np.arange(4.0))
+                    np.save(p, seed);
+
+                using (var rw = (NDArray)np.load(p, "r+"))
+                {
+                    rw[1] = (NDArray)99.0;
+                    using var plain = (NDArray)np.load(p);
+                    plain.GetDouble(1).Should().Be(99.0, "NumPy reads the file while the r+ map lives, writes included");
+                }
+
+                using (var ro = (NDArray)np.load(p, "r"))
+                {
+                    Action readWriteToo = () => ((NDArray)np.load(p, "r+")).Dispose();
+                    readWriteToo.Should().NotThrow("an 'r' map and an 'r+' map of one file coexist in NumPy");
+                }
+            }
+            finally
+            {
+                // A map the failing assertion left open is released by the helper's collection before the delete.
+                MappedFileCleanup.DeleteDirectory(dir);
+            }
+        }
     }
 }
