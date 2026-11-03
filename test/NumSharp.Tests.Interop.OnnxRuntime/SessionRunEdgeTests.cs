@@ -58,6 +58,12 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             NDArrayOnnxInterop.LiveExports.Should().Be(0);
         }
 
+        /// <summary>
+        ///     A pre-allocated output that is not C-contiguous is refused with the OUTPUT remedy: a C-contiguous array, or
+        ///     Run + <c>np.copyto(view, result)</c>. The shared export text suggested materializing a copy or
+        ///     <c>ToOrtValue</c> - for an output, ORT would write the copy and the caller's view would keep its old values.
+        ///     The <c>np.copyto</c> route is followed to the end.
+        /// </summary>
         [TestMethod]
         public void PreallocatedOutput_NonContiguous_IsRefused()
         {
@@ -69,8 +75,14 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
 
             new Action(() => session.RunInto(new Dictionary<string, NDArray> { { "X", x } },
                     new Dictionary<string, NDArray> { { "Y1", transposed } }))
-                .Should().Throw<InvalidOperationException>().WithMessage("*'Y1'*not C-contiguous*");
+                .Should().Throw<InvalidOperationException>().WithMessage("*'Y1'*not C-contiguous*np.copyto(view, result)*")
+                .Which.Message.Should().NotContain("ToOrtValue", "ToOrtValue is an input verb");
             NDArrayOnnxInterop.LiveExports.Should().Be(0, "the refused output pinned nothing");
+
+            // The remedy as written: Run, then np.copyto into the non-contiguous view, which lands in `big`.
+            using (NDArray y1 = session.Run("X", x, "Y1"))
+                np.copyto(transposed, y1);
+            np.array_equal(big.T, x).Should().BeTrue("Y1 = X, written through the transposed view");
         }
 
         [TestMethod]

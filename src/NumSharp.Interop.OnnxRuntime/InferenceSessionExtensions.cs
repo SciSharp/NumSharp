@@ -757,8 +757,14 @@ namespace NumSharp.Interop.OnnxRuntime
                     "and cannot be cast — allocate the array with the model's dtype.");
             if (!array.Shape.IsWriteable)
                 throw new InvalidOperationException($"output '{name}': the pre-allocated array is read-only (a broadcast or read-only view); ORT must be able to write it.");
+            // The OUTPUT text, not the shared export one: that one's remedies (materialize a copy, or ToOrtValue) are an
+            // input's - for an output, ORT would write the copy and the caller's view would silently keep its old values.
             if (!array.Shape.IsContiguous)
-                throw new InvalidOperationException($"output '{name}': {NDArrayOnnxInterop.NotCContiguousMessage}");
+                throw new InvalidOperationException(
+                    $"output '{name}': the pre-allocated array is not C-contiguous, and ONNX Runtime writes an output in place as dense " +
+                    "row-major memory with no strides. A C-contiguous copy (np.ascontiguousarray / nd.copy()) would receive the result " +
+                    "instead of this array, so pass a C-contiguous array (np.empty of the output's shape and dtype), or call Run and " +
+                    "copy its result into this view with np.copyto(view, result).");
             ValidateShape(name, "output", meta, array.Shape);
             // View, never Auto: ORT must write the caller's own memory, and a copy would absorb the result silently.
             return NDArrayOnnxInterop.AsOrtValueCore(array, ownsSource: false, OnnxCodecMode.View);
