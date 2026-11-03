@@ -309,12 +309,13 @@ ML.NET 2.0.1, on the current release and on the newest preview.
   refuses a longer length. So a vector column wider than that (`AsDataView` / `ToDataView`) and a
   `ToVBuffer` longer than that are refused at export, before anything is allocated; use more rows, or
   expose a long 1-D array as one scalar column.
-- **The view does not shuffle.** `NDArrayDataView.CanShuffle` is `false` (as is a view `LoadFromEnumerable`
-  makes), so a trainer that shuffles - SDCA - falls back to ML.NET's pool shuffle, which cannot mix rows
-  stored in class order. On 20,000 rows of two classes stacked one after the other (`np.vstack` of two
-  class blocks) SDCA scored 0.50 accuracy, from this view and from a POCO list alike; the same rows permuted
-  first scored 0.72 (L-BFGS, which does not shuffle: 0.74 either way). Permute ordered training rows before
-  the view - `table[np.random.RandomState(0).permutation(n)]`, a copy.
+- **The view shuffles itself.** `NDArrayDataView.CanShuffle` is `true`: an array reads any row at the same
+  cost, so a cursor ML.NET opens with a `Random` walks every row once in a random permutation drawn from it
+  (row ids stay the source rows; a seeded context gives the same order every run). A trainer that shuffles -
+  SDCA - uses it. That matters for rows stored in class order (`np.vstack` of class blocks): ML.NET's
+  fallback for a source that cannot shuffle (a `LoadFromEnumerable` list, for one) is a pool shuffle that
+  cannot mix them, and SDCA on 20,000 class-sorted rows scored 0.50 accuracy through it. The permutation
+  costs 4 bytes a row per shuffled cursor; a view of more rows than a managed array holds does not shuffle.
 - **Text files lose infinities.** `np.savetxt` writes NumPy's `inf` / `-inf`, and ML.NET's `TextLoader` reads
   those as NaN - silently, as Double and as Single (it reads `Infinity`, `-Infinity`, `∞` and overflowing
   numbers such as `1e309` as infinities). The rest of NumPy's default `%.18e` text reads back bit for bit,

@@ -111,7 +111,8 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   (`src/NumSharp.Interop.MLNet/`):
   `NDArrayMLNetInterop.{cs,Export.cs,Import.cs}` (dtype maps, the export verbs, `ToNDArray` and the zero-copy
   `VBuffer.AsNDArray<T>` with `WrapExternal` / `Pin` / `LiveExports` / `LiveImports`), `NDArrayDataView.cs` (the
-  NDArray-backed `IDataView`, its strided lazy cursor and ARC-pin lifetime), `VBufferAccessor.cs` (the compiled-expression
+  NDArray-backed `IDataView`, its strided lazy cursor - shuffled through a per-cursor permutation when ML.NET passes a
+  `Random`, `CanShuffle` true - and ARC-pin lifetime), `VBufferAccessor.cs` (the compiled-expression
   getter for the private `VBuffer<T>._values`), `ImportLease.cs` (the GCHandle pin that the last view releases).
 - Export: `nd.AsDataView(colName)` (a vector column: a lazy `IDataView` that reads the NumSharp buffer through its
   strides, any layout, ARC-pinned; `NDArrayDataView` is `IDisposable`), `columns.AsDataView()` over an
