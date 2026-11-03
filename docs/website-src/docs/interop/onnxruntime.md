@@ -113,7 +113,7 @@ methods). **`As…` gives a view when it can, `To…` always copies.**
 | NumSharp → ORT | `nd.AsDenseTensor<T>(mode)` → `OrtTensor<T>` · `nd.ToDenseTensor<T>()` | the legacy `DenseTensor<T>` twins (for `NamedOnnxValue.CreateFromTensor`); always row-major, so a Fortran-ordered array is a copy under `Auto` |
 | ORT → NumSharp | `ortValue.ToNDArray()` | fresh **owning** C-contiguous **copy** - the safe default; a string tensor becomes a text array |
 | ORT → NumSharp | `ortValue.AsNDArray(ownsValue: false, mode)` | **zero-copy view** over the tensor's buffer (CPU tensors only); `ownsValue: true` → the last view disposes the `OrtValue`; `mode: Copy` → an independent copy |
-| ORT → NumSharp | `denseTensor.ToNDArray()` · `denseTensor.AsNDArray(mode)` · `namedOnnxValue.ToNDArray()` | the legacy-surface twins; column-major tensors transpose back on copy and stay Fortran-ordered as a view |
+| ORT → NumSharp | `denseTensor.ToNDArray()` · `denseTensor.AsNDArray(mode)` · `namedOnnxValue.ToNDArray()` | the legacy-surface twins; column-major tensors transpose back on copy and stay Fortran-ordered as a view. A legacy `session.Run` result reads back with `result.ToNDArray()` on the `DisposableNamedOnnxValue` itself; the `Tensor<T>` its `AsTensor<T>()` returns takes the verbs after a cast, `((DenseTensor<float>)result.AsTensor<float>()).ToNDArray()` |
 | ORT → NumSharp | `ortValue.ToNDArrays()` · `ToMap()` · `ToMaps()` · `GetMapKeys()` · `ReadStringTensor()` | non-tensor outputs: a sequence of tensors, a map, a ZipMap sequence of maps, a string tensor as `string[]`; each numeric array is a view that owns ORT's copy of its element |
 
 Plus the dtype maps (`ToTensorElementType`, `FromTensorElementType`, `Try…`, `ToTensorElementClrType`),
