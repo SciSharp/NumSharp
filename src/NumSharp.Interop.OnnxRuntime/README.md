@@ -153,9 +153,10 @@ intra-op thread pool and no .NET thread waits.
 - Until the task completes, ORT reads the shared inputs and writes the outputs: do not write an input (pass
   `OnnxCodecMode.Copy` to feed a snapshot). Disposing an array in flight is safe; the run holds a reference.
 - An `NDScope` does not cross the `await`: a scope belongs to the thread that opened it, and the continuation
-  resumes on another. Held across `await session.RunAsync(...)`, it is disposed on the continuation's thread and
-  left behind as the opening thread's current scope, and once that thread reuses it, its close disposes the opening
-  thread's later arrays (measured: 7.0 read back as 9.0). Scope the code before the `await` and after it.
+  resumes on another. Held across `await session.RunAsync(...)`, it reaches its end on the continuation's thread,
+  where `Dispose` throws `InvalidOperationException` and leaves the scope's arrays to the finalizer: closing it there
+  would free the opening thread's later arrays (one filled with 7.0 would read another array's 9.0). Scope the code
+  before the `await` and after it, or mark the async method `[NDScopedAsync]`.
 - `RunAsync` allocates its outputs when the call starts, so a scope open then tracks them: hand the task out with
   `scope.ReturnsTask(task)` and close the scope with `NDScope.CloseUnlessDeferred(scope)` (the form `[NDScopedAsync]`
   emits); the result dictionary carries its outputs, so the scope yields them to you when the task completes. A plain

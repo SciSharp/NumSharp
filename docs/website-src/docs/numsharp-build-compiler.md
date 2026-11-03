@@ -437,7 +437,8 @@ Two properties are load-bearing:
   base whose *view* was yielded never corrupts: the yielded view keeps the buffer alive. It is the
   same safety a hand-written `Dispose` gives, with the bookkeeping automated.
 - **Scopes are `[ThreadStatic]` and nest per thread.** A scope is opened, used and disposed on **one**
-  thread - a **hand-written** scope must not span `await`; only the weaver's state-machine seam may
+  thread - a **hand-written** scope must not span `await` (its `Dispose` on the continuation's thread throws
+  `InvalidOperationException` and leaves the scope's arrays to the finalizer); only the weaver's state-machine seam may
   carry a scope across suspensions (it uninstalls the scope before each continuation is scheduled
   and re-installs it on the resuming thread). Arrays constructed on other
   threads (parallel kernel workers) see no scope and fall back to the finalizer; a parallel region

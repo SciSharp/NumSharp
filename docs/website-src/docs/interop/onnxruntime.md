@@ -247,10 +247,13 @@ and the task completes from a native callback.
   holds a reference on every buffer.
 - **An `NDScope` does not cross the `await`.** A scope belongs to the thread that opened it, and the run's
   continuation resumes on another thread. A `using var scope = NDScope.Open();` held across
-  `await session.RunAsync(...)` is disposed on the continuation's thread and left behind as the opening
-  thread's current scope, so that thread's later arrays are tracked into it; when the continuation's thread
-  reuses the scope, its close disposes them (measured: an array the opening thread filled with 7.0 read 9.0,
-  another array's data). Scope the synchronous code before the `await` and after it, never across it.
+  `await session.RunAsync(...)` reaches its end on the continuation's thread, and NumSharp refuses to close it
+  there: `Dispose` throws `InvalidOperationException`, and the scope's arrays are left to the finalizer.
+  Closing it on that thread would free arrays the opening thread still uses: the opening thread keeps the
+  scope as its current one, and the continuation's thread would reuse it for its next scope, whose close then
+  disposes the opening thread's later arrays (an array filled with 7.0 would read another array's 9.0). Scope
+  the synchronous code before the `await` and after it, never across it, or mark the async method
+  `[NDScopedAsync]`, which carries one scope across awaits.
 - **`RunAsync` and an `NDScope`.** It allocates its outputs when the call starts, so a scope open then tracks
   them. Hand the task out with `scope.ReturnsTask(task)`, closing the scope with `NDScope.CloseUnlessDeferred(scope)`
   (the form `[NDScopedAsync]` emits): the result dictionary carries its outputs, so the scope yields them to
