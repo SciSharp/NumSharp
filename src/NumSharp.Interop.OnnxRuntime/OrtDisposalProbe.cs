@@ -15,12 +15,14 @@ namespace NumSharp.Interop.OnnxRuntime
     ///     member checks for it afterwards. <c>session.Run</c> on a disposed session and
     ///     <c>GetTensorTypeAndShape()</c> on a disposed value are access violations (<c>0xC0000005</c>, exit 139):
     ///     measured with ONNX Runtime 1.31.1, raw ORT and through this package alike. Both types record the disposal in a
-    ///     private <c>bool _disposed</c> at both ends of the supported range (1.16.0 and 1.31.1), which this class
+    ///     private <c>bool _disposed</c> at the floor and at the current release (1.16.0 and 1.31.1), which this class
     ///     reads through a compiled field getter built once per type (the ML.NET bridge's <c>VBufferAccessor</c> reads a
     ///     private field the same way).</para>
     ///     <para>A version without the field gets no check (the getter is null): the guard can only remove crashes, never
-    ///     refuse a live object. It does not make a concurrent <c>Dispose</c> safe - a session disposed by another thread
-    ///     between the check and the native call still crashes, as it does in ONNX Runtime itself.</para>
+    ///     refuse a live object. That is what lets the package's ONNX Runtime dependency stay open above (no upper
+    ///     bound): a future ORT that renames the field loses this check, not the call. It does not make a concurrent
+    ///     <c>Dispose</c> safe - a session disposed by another thread between the check and the native call still
+    ///     crashes, as it does in ONNX Runtime itself.</para>
     /// </remarks>
     internal static class OrtDisposalProbe
     {

@@ -14,8 +14,11 @@
     <!-- Which ML.NET the suite runs against. The DEFAULT is the package's FLOOR (Microsoft.ML 2.0.1, which
          carries Microsoft.ML.DataView 2.0.0 — the version the package is compiled against and the version
          NuGet resolves for a consumer who adds nothing newer), so CI exercises exactly the out-of-box
-         combination; the release pipeline runs the suite a second time with `-p:MLNetVersion=<current>` so
-         the current ML.NET is covered too. Override locally the same way: dotnet test -p:MLNetVersion=4.0.2. -->
+         combination; the release pipeline runs the suite again with `-p:MLNetVersion=<current>` (5.0.1) and
+         with the previous major (4.0.2), so the ML.NET versions users actually have are covered too, and a
+         last, advisory time with the floating `-p:MLNetVersion=*-*` (the newest on nuget.org, previews
+         included), because the package's dependency has no upper bound. Override locally the same way:
+         dotnet test -p:MLNetVersion=5.0.1. -->
     <MLNetVersion Condition="'$(MLNetVersion)' == ''">2.0.1</MLNetVersion>
 
     <!-- JIT posture for this TEST HOST: tiered compilation OFF, so every method is compiled fully optimized on its

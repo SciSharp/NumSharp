@@ -82,10 +82,21 @@
              `.Managed` dependency at the same version, so NuGet unifies upward to THAT. In practice the
              consumer's ORT version wins; this floor only stops an ancient one from sneaking in.
 
-         The upper bound keeps a future ORT 2.x (free to break the API) from being resolved automatically.
-         Verified against 1.16.0 (the floor) and 1.31.0 (current) by the test project's OnnxRuntimeVersion
-         matrix. -->
-    <PackageReference Include="Microsoft.ML.OnnxRuntime.Managed" Version="[1.16.0,2.0.0)" />
+         (c) NO UPPER BOUND, on purpose (the owner's decision of 2026-11-03, after F52 opened the ML.NET
+             bridge's range the same way). A cap below the consumer's ONNX Runtime is not a guard but a restore
+             ERROR - NuGet resolves cousin ranges that do not overlap as NU1107 - and since F16 the ML.NET bridge
+             depends on this package, so the former [1.16.0, 2.0.0) would have failed the restore of ONNX
+             Runtime AND ML.NET bridge users the day they moved to an ONNX Runtime 2.0. ORT's own packages
+             declare this dependency open too (Microsoft.ML.OnnxRuntime 1.31.1 -> .Managed version="1.31.1";
+             Microsoft.ML.OnnxTransformer 5.0.1 -> .Managed version="1.23.2"). The bridge uses ORT's public C#
+             API plus the private _disposed flags OrtDisposalProbe reads (a missing field turns its check off,
+             never the call), so a breaking ORT major would show at run time, not at restore - which is why
+             CI's advisory "ONNX Runtime: Test newest (net10.0, advisory)" step runs the suite on the newest
+             ONNX Runtime on nuget.org, release candidates included, to see it first.
+
+         Verified against 1.16.0 (the floor) and 1.31.1 (current) by the test project's OnnxRuntimeVersion
+         matrix, and against the newest release by the advisory step. -->
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.Managed" Version="1.16.0" />
   </ItemGroup>
 
 </Project>

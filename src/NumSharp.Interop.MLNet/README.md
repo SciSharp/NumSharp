@@ -48,7 +48,7 @@ valid only while that array is not refilled — a VBuffer from a cursor getter r
 so use `ToNDArray()` (a copy) there; zero-copy is safe for a standalone VBuffer you own.
 
 The **reverse** direction (`NDArray → VBuffer`) cannot be zero-copy: `VBuffer<T>` is backed by a managed
-`T[]` at every ML.NET version (verified 2.0.0 / 3.0.0 / 4.0.2 — no `ReadOnlyMemory<T>`, no non-public
+`T[]` at every ML.NET version (verified 2.0.0 / 3.0.0 / 4.0.2 / 5.0.1 and the 6.0 previews — no `ReadOnlyMemory<T>`, no non-public
 constructor), and a managed array cannot alias NumSharp's unmanaged buffer. `ToVBuffer<T>` copies. (The bulk
 NumSharp→ML.NET path — `AsDataView` — is already zero-copy on its source; the VBuffer is a per-vector
 convenience.)

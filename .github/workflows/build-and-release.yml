@@ -562,7 +562,22 @@ jobs:
       run: |
         dotnet test test/NumSharp.Tests.Interop.OnnxRuntime/NumSharp.Tests.Interop.OnnxRuntime.csproj \
           --configuration Release --framework net10.0 --logger "trx;LogFileName=onnxruntime-current-net10.0.trx" \
-          -p:OnnxRuntimeVersion=1.31.0 -p:NoWarn=${{ env.DOTNET_NOWARN }}
+          -p:OnnxRuntimeVersion=1.31.1 -p:NoWarn=${{ env.DOTNET_NOWARN }}
+
+    # The NEWEST ONNX Runtime on nuget.org, whatever it is - the floating version `*-*` resolves the highest
+    # release, prereleases included. The package depends on Microsoft.ML.OnnxRuntime.Managed 1.16.0 or later
+    # with no upper bound (a cap below a consumer's ORT is a restore error, NU1107 - and the ML.NET bridge
+    # depends on this package), so a breaking ORT major would show at run time rather than at restore; this
+    # step is where it shows first. Advisory: a red step warns instead of gating.
+    - name: "ONNX Runtime: Test newest (net10.0, advisory)"
+      if: ${{ !cancelled() && steps.ort_build.outcome == 'success' }}
+      continue-on-error: true
+      timeout-minutes: 15
+      shell: bash
+      run: |
+        dotnet test test/NumSharp.Tests.Interop.OnnxRuntime/NumSharp.Tests.Interop.OnnxRuntime.csproj \
+          --configuration Release --framework net10.0 --logger "trx;LogFileName=onnxruntime-newest-net10.0.trx" \
+          "-p:OnnxRuntimeVersion=*-*" -p:NoWarn=${{ env.DOTNET_NOWARN }}
 
     # ── ML.NET interop (NumSharp.Interop.MLNet) ────────────────────────────────────────────────────
     #
@@ -602,6 +617,17 @@ jobs:
       run: |
         dotnet test test/NumSharp.Tests.Interop.MLNet/NumSharp.Tests.Interop.MLNet.csproj \
           --configuration Release --framework net10.0 --logger "trx;LogFileName=mlnet-current-net10.0.trx" \
+          -p:MLNetVersion=5.0.1 -p:NoWarn=${{ env.DOTNET_NOWARN }}
+
+    # The previous major, still widely installed (ML.NET majors ship each November with .NET): users move
+    # between majors over months, so the one before current stays gated too.
+    - name: "ML.NET: Test previous major (net10.0)"
+      if: ${{ !cancelled() && steps.mlnet_build.outcome == 'success' }}
+      timeout-minutes: 15
+      shell: bash
+      run: |
+        dotnet test test/NumSharp.Tests.Interop.MLNet/NumSharp.Tests.Interop.MLNet.csproj \
+          --configuration Release --framework net10.0 --logger "trx;LogFileName=mlnet-previous-net10.0.trx" \
           -p:MLNetVersion=4.0.2 -p:NoWarn=${{ env.DOTNET_NOWARN }}
 
     # The NEWEST ML.NET, whatever it is - the floating version `*-*` resolves the highest Microsoft.ML on

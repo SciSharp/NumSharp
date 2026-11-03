@@ -17,7 +17,7 @@ crosses zero-copy and what cannot, who frees what, dtypes and versions.
 [Post-processing](#post-processing) · [Dtypes](#dtypes) · [Versions](#versions) · [Limits](#limits) ·
 [Claims](#claims-ledger)
 
-> Verified on ONNX Runtime 1.16.0 (the floor) and 1.31.0 · net8.0/net10.0 · Windows, Linux, macOS.
+> Verified on ONNX Runtime 1.16.0 (the floor) and 1.31.1 · net8.0/net10.0 · Windows, Linux, macOS.
 > Every claim below is reproduced by a test in `NumSharp.Tests.Interop.OnnxRuntime`, over committed `.onnx`
 > models that ORT executes; no Python at test time.
 
@@ -386,13 +386,16 @@ tolerance for softmax, exactly for the indices.
 
 ## Versions
 
-The dependency is `Microsoft.ML.OnnxRuntime.Managed [1.16.0, 2.0.0)`. **1.16.0** (September 2023) is the
-floor because it is the release that made the `OrtValue` API the preferred C# path and gave `Float16` its
-full surface - every member the package uses is present there (verified against the tagged source). The
-package compiles against the floor, so any newer ORT rolls forward; your own native-flavour reference
-(say `Microsoft.ML.OnnxRuntime 1.31.0`) carries a matching `.Managed` and NuGet unifies upward to it. CI
-runs the suite at both ends of the range. The asynchronous forms need 1.30.0; on an older ORT the tests of
-their behaviour report Inconclusive and the test of their refusal runs.
+The dependency is `Microsoft.ML.OnnxRuntime.Managed` **1.16.0 or later, with no upper bound** - the form
+ONNX Runtime's own packages declare it in. **1.16.0** (September 2023) is the floor because it is the release
+that made the `OrtValue` API the preferred C# path and gave `Float16` its full surface - every member the
+package uses is present there (verified against the tagged source). The package compiles against the floor,
+so any newer ORT rolls forward; your own native-flavour reference (say `Microsoft.ML.OnnxRuntime 1.31.1`)
+carries a matching `.Managed` and NuGet unifies upward to it. There is no ceiling because a ceiling below your
+ONNX Runtime would not protect you: NuGet reports it as a restore error (NU1107), the day you upgrade. CI runs
+the suite at the floor and at the current release (1.31.1), and on the newest release on nuget.org as an
+advisory check, so a breaking ONNX Runtime major is seen there first. The asynchronous forms need 1.30.0; on
+an older ORT the tests of their behaviour report Inconclusive and the test of their refusal runs.
 
 ## Limits
 

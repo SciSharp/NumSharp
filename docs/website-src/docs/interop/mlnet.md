@@ -13,7 +13,7 @@ hand-writes with a POCO class and a `PredictionEngine` becomes two verbs.
 [Post-processing](#post-processing) · [Dtypes](#dtypes) · [Why only `Microsoft.ML.DataView`](#dependency) ·
 [Limits](#limits)
 
-> Verified on ML.NET 2.0.1 (the floor - `Microsoft.ML.DataView` 2.0.0) and 4.0.2 · net8.0/net10.0 ·
+> Verified on ML.NET 2.0.1 (the floor - `Microsoft.ML.DataView` 2.0.0), 4.0.2 and 5.0.1 · net8.0/net10.0 ·
 > Windows, Linux, macOS. Every claim below is reproduced by a test in `NumSharp.Tests.Interop.MLNet`
 > (real `Microsoft.ML` transforms and trainers; no Python at test time).
 
@@ -291,7 +291,7 @@ ML.NET 2.0.1, on the current release and on the newest preview.
 - **`VBuffer<T>` zero-copy is one-directional.** Reading a dense `VBuffer<T>` INTO NumSharp is zero-copy -
   `vbuffer.AsNDArray<T>()` reaches the buffer's private `T[]` through a compiled-expression accessor, pins
   it, and wraps it write-through. But the reverse (`NDArray → VBuffer`) cannot be: `VBuffer<T>` is backed by
-  a managed `T[]` at every ML.NET version (verified 2.0.0 / 3.0.0 / 4.0.2 - there is no `ReadOnlyMemory<T>`
+  a managed `T[]` at every ML.NET version (verified 2.0.0 / 3.0.0 / 4.0.2 / 5.0.1 and the 6.0 previews - there is no `ReadOnlyMemory<T>`
   and no non-public constructor), and a managed array cannot alias NumSharp's unmanaged buffer, so
   `ToVBuffer<T>` copies. The bulk NumSharp→ML.NET path (`AsDataView`) is already zero-copy on its source;
   the `VBuffer` is a per-vector convenience. **Aliasing caveat for `AsNDArray`:** the view shares the

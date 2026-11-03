@@ -40,8 +40,9 @@ dotnet add package Microsoft.ML.OnnxRuntime          # or .Gpu / .DirectML / .QN
 The package depends only on **`Microsoft.ML.OnnxRuntime.Managed`** (the C# API). ORT ships its native
 runtime as mutually exclusive flavours — `Microsoft.ML.OnnxRuntime` (CPU), `.Gpu`, `.DirectML`, ... — and
 two of them side by side is a documented misconfiguration, so the flavour is yours to pick: the one you
-already reference to run inference at all. The dependency range is `[1.16.0, 2.0.0)`; a consumer's own ORT
-reference (say 1.31.0) carries the same `.Managed` version and NuGet unifies upward to it. The NuGet range is
+already reference to run inference at all. The dependency is 1.16.0 or later with no upper bound (a cap
+below a consumer's ORT would be a restore error, NU1107, the day they upgrade); a consumer's own ORT
+reference (say 1.31.1) carries the same `.Managed` version and NuGet unifies upward to it. The NuGet range is
 the only thing that sets the floor: the 1.16.0 managed assembly reports assembly version 0.0.0.0, so the
 runtime's binder refuses nothing.
 

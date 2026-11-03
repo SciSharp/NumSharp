@@ -26,7 +26,10 @@ created and no release or public documentation mentions them. Unreleased is exac
    `absolute-basics.md` and the System.Numerics.Tensors page do not name or link them. ParquetNet has no page (its
    `PackageProjectUrl` points at the page to write when it ships).
 3. Gated. The `interop-test` job builds and tests all three (ONNX Runtime and ML.NET at their floor and current
-   versions, ParquetNet on both TFMs). Nothing else compiles them in CI.
+   versions, ParquetNet on both TFMs). Nothing else compiles them in CI. Its "Package consumer:" steps
+   (`src/NumSharp.Interop.{OnnxRuntime,MLNet}/tools/verify_package_consumer.sh`) pack the two bridges with
+   `-p:IsPackable=true` into a throwaway local feed and run a consumer that restores them by `PackageReference`, so
+   the package that will ship is gated while nothing is published.
 
 Keep them out of release notes (`docs/releases/RELEASE_<version>.md`; when that file is missing, GitHub generates the
 notes from merged PR titles, so PR titles stay free of them too), the website, the root README, and the shipped XML docs
@@ -44,7 +47,8 @@ None of these computes NumSharp operations: each converts tensors between NumSha
 - `NDArrayOnnxInterop` verbs, `InferenceSessionExtensions`, `Postprocess`. Sources (`src/NumSharp.Interop.OnnxRuntime/`):
   `NDArrayOnnxInterop.{cs,Export.cs,Import.cs,NonTensor.cs,Text.cs}` (dtype maps, the export and import verbs,
   non-tensor outputs, text tensors), `OnnxCodecMode.cs`, `OrtTensor.cs` (the `OrtTensor` / `OrtTensor<T>` handles and the
-  `ImportLease`), `UnmanagedMemoryManager.cs` (a `Memory<T>` over the unmanaged buffer),
+  `ImportLease`), `OrtDisposalProbe.cs` (reads ORT's private `_disposed` flags, so a disposed session or value throws
+  `ObjectDisposedException`), `UnmanagedMemoryManager.cs` (a `Memory<T>` over the unmanaged buffer),
   `InferenceSessionExtensions{,.Async}.cs`, `RunOutputs.cs` (the result dictionary, an `INDArrayCarrier`), `Postprocess.cs`
   (the one public `Postprocess`: the ML.NET bridge references this package for it). ONNX Runtime's C# sources are vendored for reference at `refs/onnxruntime/csharp/` (a
   sparse submodule), its official samples at `refs/onnxruntime-inference-examples/c_sharp/`.
@@ -65,8 +69,12 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   refused under View). `session.RunIntoAsync` / `RunAsync` + `IsRunAsyncSupported` are ORT's native async (ORT 1.30.0 or
   later, a session with two or more intra-op threads; `RunAsync` allocates only a numeric output of a fixed declared
   shape). `Postprocess.{Softmax,LogSoftmax,Sigmoid,Argmax,TopK}`.
-- Depends on `Microsoft.ML.OnnxRuntime.Managed [1.16.0, 2.0.0)` only: the native flavours (CPU, Gpu, DirectML) are
-  mutually exclusive, so the consumer picks one.
+- Depends on `Microsoft.ML.OnnxRuntime.Managed` 1.16.0 or later, with NO upper bound (the form ORT's own packages
+  declare it in), only: the native flavours (CPU, Gpu, DirectML) are mutually exclusive, so the consumer picks one. A
+  cap below a consumer's ONNX Runtime is a restore ERROR (NU1107), and the ML.NET bridge references this package, so a
+  cap would fail ML.NET users too. The bridge uses ORT's public C# API plus the private `_disposed` flags
+  `OrtDisposalProbe` reads (a missing field turns its check off), so a breaking ORT major shows at run time; CI's
+  advisory "newest" step (floating `*-*`) sees it first.
 - Dtypes: 12 zero-copy, including a Half↔Float16 bit reinterpretation; Char→UInt16; Decimal→Double through a temp the
   handle owns (Auto / Copy; `Run` needs `casting: "same_kind"`); text: fixed-width `U` / `S` ↔ ORT string tensors, always
   a copy (a trailing NUL is lost; the bridge casts no text ↔ number pair: the caller's `astype` does); a `StringDType`
@@ -96,8 +104,9 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   fuzz, concurrency stress, ARC/fault injection, boundary and API-approval suites, `LifetimeGcTests` (every finalization
   order of eight scenarios as a staged real collection), and `SessionRunModeTests`, `ImportAliasTests`, `TextTests`,
   `PassThroughOutputTests`, `SessionRunAsyncTests`, `ValueOwnershipTests`, `MemoryManagerTests`. The `interop-test` CI job
-  runs it against ONNX Runtime 1.16.0 (the async tests Inconclusive, the refusal tested) and 1.31.0 (the only leg that
-  runs the async tests: never set it below 1.30.0), with no Python. Mutation runs restore a file from memory only: copy
+  runs it against ONNX Runtime 1.16.0 (the async tests Inconclusive, the refusal tested) and 1.31.1, the current
+  release (the only gating leg that runs the async tests: never set it below 1.30.0), and (advisory) against the newest
+  `Microsoft.ML.OnnxRuntime` on nuget.org, release candidates included, with no Python. Mutation runs restore a file from memory only: copy
   untracked files out of the tree before one.
 - Docs: `docs/website-src/docs/interop/onnxruntime.md` (excluded from the site).
 - Example: `examples/NumSharpOnnxRuntimeExample` (regular csproj form over the published 0.80.0-beta1; no workflow runs
@@ -148,8 +157,8 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   a POCO-loader cross-check), the technique suites (layout matrix, property-based, metamorphic, cursor-state
   differential against ML.NET's own cursors, real-pipeline consumer, bit-pattern fuzz, concurrency, ARC/fault injection,
   boundary, API approval) and `LifetimeGcTests` (a getter keeps its cursor reachable until its row is committed). The
-  `interop-test` CI job runs it against ML.NET 2.0.1 and 4.0.2, and (advisory) against the newest `Microsoft.ML` on
-  nuget.org, previews included, with no Python.
+  `interop-test` CI job runs it against ML.NET 2.0.1 (the floor), 5.0.1 (current) and 4.0.2 (the previous major),
+  and (advisory) against the newest `Microsoft.ML` on nuget.org, previews included, with no Python.
 - Docs: `docs/website-src/docs/interop/mlnet.md` (excluded from the site).
 - Example: `examples/NumSharpMLNetExample` (regular csproj form over the published 0.80.0-beta1 and Microsoft.ML 5.0.1;
   no workflow runs it): a binary classifier trained from a `(rows, 5)` array as five scalar columns with the label
