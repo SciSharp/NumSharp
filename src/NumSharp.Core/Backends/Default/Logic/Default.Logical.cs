@@ -394,7 +394,10 @@ namespace NumSharp.Backends
                 Strings.NDStringUfuncs.ThrowIfOutWhereInvalid(@out, where);
                 ResolveUfuncIterationShape(nd.Shape.Clean(), new[] { nd }, @out, where);
             }
-            return Compare(nd, NewScalar(0), null, @out, where);
+            // The zero is a literal-marked (weak) operand, so the comparison runs in the operand's own dtype — the
+            // same-dtype kernels — as `x == 0` with a Python 0 does; an unmarked 0-d int32 is a strong NumPy scalar, which
+            // would widen every float16 / float32 element first (the answers are the same, the pass is not).
+            return Compare(nd, NDArray.PythonLiteral(0), null, @out, where);
         }
     }
 }

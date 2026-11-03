@@ -1157,25 +1157,52 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Resolves to which type should the output be.
+        ///     The loop dtype of a binary ufunc over two operands, by NEP 50: a WEAK operand — the 0-d array a C# number
+        ///     literal became (<see cref="NDArray.WasPythonLiteral"/>, NumPy's Python <c>int</c> / <c>float</c> /
+        ///     <c>complex</c>) — adopts the other operand's dtype through the array-scalar table; every other operand, a
+        ///     0-d one included, is STRONG and promotes by its dtype like any array.
         /// </summary>
-        /// <remarks>This function relys on <see cref="NPTypeCode"/> being ordered numerically by size.</remarks>
+        /// <param name="firstNDArray">The left operand.</param>
+        /// <param name="secondNDArray">The right operand.</param>
+        /// <returns>The promoted storage code (before any op-specific rule, such as true division's float64).</returns>
+        /// <exception cref="NotSupportedException">A pair the promotion tables refuse (a text operand reaching the numeric
+        ///     tables).</exception>
+        /// <remarks>
+        ///     <para>
+        ///     Strong 0-d operands are every NumPy scalar and 0-d array NumPy would see: an element read <c>a[i]</c>, a
+        ///     reduction result <c>a.sum()</c>, <c>np.array(x)</c>, <see cref="NDArray.Scalar{T}(T)"/>, a <see cref="Half"/>
+        ///     / <c>char</c> value (NumPy scalars in the boundary map). So <c>uint8 + a_int64[1]</c> is int64, as in NumPy,
+        ///     where it used to stay uint8 and wrap (parity QA-05); <c>uint8 + 100</c> (a literal) stays uint8.
+        ///     </para>
+        ///     <para>
+        ///     Library code that means a Python number must pass a literal-marked operand (a C# number through the implicit
+        ///     conversion, or <see cref="NDArray.PythonLiteral{T}(T)"/>), never <see cref="NDArray.Scalar{T}(T)"/>, which is
+        ///     a strong NumPy scalar. Two C# literals promote between their own C# dtypes (NumSharp's reading: NumPy would
+        ///     give its default int64 / float64 / complex128 for two Python scalars).
+        ///     </para>
+        /// </remarks>
         [MethodImpl(Optimize)]
         internal static NPTypeCode _FindCommonType(NDArray firstNDArray, NDArray secondNDArray)
         {
             var lscalar = firstNDArray.Shape.IsScalar;
             var rscalar = secondNDArray.Shape.IsScalar;
-            if (!lscalar && !rscalar)
-                return _FindCommonArrayType(firstNDArray.GetTypeCode, secondNDArray.GetTypeCode);
+            // NEP 50: only a Python scalar is weak. The literal mark is set on 0-d arrays only, by the implicit conversions
+            // of the C# number types; any other 0-d array is a NumPy scalar or 0-d array, which NumPy 2 promotes strongly.
+            var lweak = lscalar && firstNDArray.WasPythonLiteral;
+            var rweak = rscalar && secondNDArray.WasPythonLiteral;
 
-            if (lscalar && rscalar)
-                return _FindCommonScalarType(firstNDArray.GetTypeCode, secondNDArray.GetTypeCode);
-
-            if (lscalar)
-                return _FindCommonArrayScalarType(secondNDArray.GetTypeCode, firstNDArray.GetTypeCode);
-
-            //rscalar is true
-            return _FindCommonArrayScalarType(firstNDArray.GetTypeCode, secondNDArray.GetTypeCode);
+            NPTypeCode result;
+            if (lweak != rweak)
+                // One weak literal: it adopts the strong side's dtype (an array or a strong 0-d array alike).
+                result = lweak
+                    ? _FindCommonArrayScalarType(secondNDArray.GetTypeCode, firstNDArray.GetTypeCode)
+                    : _FindCommonArrayScalarType(firstNDArray.GetTypeCode, secondNDArray.GetTypeCode);
+            else if (lscalar && rscalar)
+                // Two strong 0-d arrays, or two C# literals: the strong table with the 0-d key order it always used.
+                result = _FindCommonScalarType(firstNDArray.GetTypeCode, secondNDArray.GetTypeCode);
+            else
+                result = _FindCommonArrayType(firstNDArray.GetTypeCode, secondNDArray.GetTypeCode);
+            return result;
         }
 
         #region Private of find_common_type

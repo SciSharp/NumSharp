@@ -41,12 +41,24 @@ namespace NumSharp.Backends
         /// given tolerance.If both `a` and `b` are scalars, returns a single
         /// boolean value.
         ///</returns>
+        /// <exception cref="DTypePromotionError"><paramref name="b"/> holds strings (NumPy's promotion refusal of text with
+        ///     a Python float).</exception>
+        /// <exception cref="TypeError">Only <paramref name="a"/> holds strings (subtract's no-loop text).</exception>
         /// <remarks>
+        ///     <para>
         ///     Scoped by <c>[NDScoped]</c>: the formula builds a dozen transient arrays (and up to two
         ///     dtype-promoted copies of the operands), and the woven scope releases every one of them on return,
         ///     exceptions included, so a tight isclose/allclose loop does not pile them up for the finalizer. The
         ///     returned typed array survives: the weaver yields it, and it holds its own reference on the buffer it
         ///     shares with the last temporary.
+        ///     </para>
+        ///     <para>
+        ///     A C# number literal operand (<see cref="NDArray.WasPythonLiteral"/>) is NumPy's Python scalar and stays weak
+        ///     through the formula — <c>isclose(float32_array, 0.1)</c> compares in float32, with the tolerance
+        ///     <c>atol + rtol * abs(0.1)</c> computed as Python arithmetic. Any other 0-d operand is a NumPy scalar or 0-d
+        ///     array, which NEP 50 promotes (<c>isclose(float32_array, np.float64(0.1))</c> computes in float64, as NumPy
+        ///     does).
+        ///     </para>
         /// </remarks>
         [NDScoped]
         public override NDArray<bool> IsClose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8, bool equal_nan = false)
@@ -78,15 +90,38 @@ namespace NumSharp.Backends
             // never tracks and so never disposes (no ReferenceEquals guard needed). Every other local
             // is a fresh allocation (each elementwise operator/ufunc returns a new array), released
             // on return the same way.
-            var x = a.astype(InexactPromote(a.typecode), copy: false);
-            var y = b.astype(InexactPromote(b.typecode), copy: false);
+            //
+            // A Python scalar operand stays a Python scalar in NumPy (`a if isinstance(a, (int, float, complex)) else
+            // asanyarray(a)`; an int y becomes float(y)): a C# literal (WasPythonLiteral) is that WEAK operand and is kept
+            // as one, so a float32 array compares with `0.1` in float32. Converting it with astype would make it a strong
+            // 0-d float64 array, which NEP 50 promotes (a NumPy scalar y — np.float64(0.1) — IS computed in float64 by
+            // NumPy, and a strong 0-d b here is too).
+            var x = a.WasPythonLiteral ? a : a.astype(InexactPromote(a.typecode), copy: false);
+            NDArray y, tolerance;
+            if (b.WasPythonLiteral)
+            {
+                // `atol + rtol * abs(y)` of a Python y is Python arithmetic: a Python float, weak against x like y itself.
+                object value = b.Storage.GetAtIndex(0);
+                double magnitude = value is System.Numerics.Complex z
+                    ? System.Numerics.Complex.Abs(z)
+                    : System.Math.Abs(Utilities.Converts.ToDouble(value));
+                // float(y) for an int literal; a float / complex literal is its own Python scalar already.
+                y = value is System.Numerics.Complex || b.typecode is NPTypeCode.Double or NPTypeCode.Single
+                    ? b
+                    : NDArray.PythonLiteral(Utilities.Converts.ToDouble(value));
+                tolerance = NDArray.PythonLiteral(atol + rtol * magnitude);
+            }
+            else
+            {
+                y = b.astype(InexactPromote(b.typecode), copy: false);
+                var absY = Abs(y);
+                var rtolAbsY = rtol * absY;
+                tolerance = atol + rtolAbsY;       // atol + rtol * |b|
+            }
 
             // Vectorized computation using existing np operations
             var xMinusY = x - y;
             var diff = Abs(xMinusY);               // |a - b|
-            var absY = Abs(y);
-            var rtolAbsY = rtol * absY;
-            var tolerance = atol + rtolAbsY;       // atol + rtol * |b|
 
             // Core formula: |a - b| <= tolerance AND diff is finite AND y is finite, OR exact equality
             // Note: We explicitly check diffFinite because NumSharp's <= operator has a bug where

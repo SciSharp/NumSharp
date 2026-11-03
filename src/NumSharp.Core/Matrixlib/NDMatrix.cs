@@ -306,11 +306,13 @@ namespace NumSharp
 
         #region Scalars (the 0-d stand-in)
 
-        /// <summary>A 0-d matrix holding <paramref name="value"/>: the scalar stand-in a C# number becomes.</summary>
+        /// <summary>A 0-d matrix holding <paramref name="value"/>: the scalar stand-in a C# number becomes, marked as the
+        ///     C# literal it is (<see cref="NDArray.MarkAsCSharpLiteral{TArray}(TArray)"/>: a number is NumPy's weak Python
+        ///     scalar, so <c>int8_matrix + 1</c> stays int8 as in NumPy; a <see cref="Half"/> / <c>char</c> a NumPy scalar).</summary>
         /// <typeparam name="T">The element type, one of the 15 NumSharp dtypes.</typeparam>
         /// <param name="value">The value.</param>
         /// <returns>A new 0-d matrix that owns its one element.</returns>
-        private static NDMatrix ScalarOf<T>(T value) where T : unmanaged => new NDMatrix(UnmanagedStorage.Scalar(value));
+        private static NDMatrix ScalarOf<T>(T value) where T : unmanaged => MarkAsCSharpLiteral(new NDMatrix(UnmanagedStorage.Scalar(value)));
 
         /// <summary>A C# <see cref="bool"/> as a 0-d matrix scalar (NumPy's Python <c>bool</c> operand of a matrix
         ///     expression). It is NOT <c>np.matrix(value)</c>, which is <c>(1, 1)</c>.</summary>

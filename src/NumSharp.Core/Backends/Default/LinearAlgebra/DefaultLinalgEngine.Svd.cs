@@ -170,10 +170,16 @@ namespace NumSharp.Backends
                 // Default: max(M,N) * eps(S.dtype) * largest singular value (MATLAB's rule). The eps is
                 // the singular values' own — float32's for a float32 operand, float64's otherwise.
                 double eps = s.typecode == NPTypeCode.Single ? 1.1920928955078125e-07 : 2.220446049250313e-16;
-                double rtolVal = rtol ?? (Math.Max(m, n) * eps);
+                // NumPy's default `max(A.shape[-2:]) * finfo(S.dtype).eps` is a Python int times a NumPy scalar of S's
+                // dtype: a STRONG scalar of that dtype (the int scales eps by a power of two's multiple, exactly, in either
+                // width), so the product below stays in S's dtype (float32 for a float32 operand). A given rtol is
+                // `asarray(rtol)[..., newaxis]`, a strong float64 array, which promotes a float32 S to float64.
+                NDArray rtolArr = rtol.HasValue
+                    ? NDArray.Scalar(rtol.Value)
+                    : NDArray.Scalar(Math.Max(m, n) * eps).astype(s.typecode);
                 // amax(S, axis=-1, keepdims=True) * rtol: np.amax's member, then np.multiply's.
                 var largest = s.TensorEngine.ReduceAMax(s, -1, true, null, null, null, null);
-                tolArr = largest.TensorEngine.Multiply(largest, NDArray.Scalar(rtolVal));
+                tolArr = largest.TensorEngine.Multiply(largest, rtolArr);
             }
             else
             {

@@ -25,7 +25,7 @@ namespace NumSharp
         /// <summary>
         /// Element-wise less-than comparison with scalar (&lt;).
         /// </summary>
-        // Scope: reclaims the np.asanyarray temp and the null-branch MakeGeneric strand while
+        // Scope: reclaims the OperatorOperand temp and the null-branch MakeGeneric strand while
         // yielding the typed result (see NDArray.Equals.cs). The NDArray×NDArray operator above
         // owns no temp and stays unscoped on its hot path.
         [NDScoped]
@@ -34,7 +34,7 @@ namespace NumSharp
             if (lhs is null)
                 return Scalar<bool>(false).MakeGeneric<bool>();
 
-            return lhs < np.asanyarray(rhs);
+            return lhs < OperatorOperand(rhs);
         }
 
         /// <summary>
@@ -46,7 +46,7 @@ namespace NumSharp
             if (rhs is null)
                 return Scalar<bool>(false).MakeGeneric<bool>();
 
-            return np.asanyarray(lhs) < rhs;
+            return OperatorOperand(lhs) < rhs;
         }
 
         /// <summary>
@@ -76,7 +76,7 @@ namespace NumSharp
             if (lhs is null)
                 return Scalar<bool>(false).MakeGeneric<bool>();
 
-            return lhs <= np.asanyarray(rhs);
+            return lhs <= OperatorOperand(rhs);
         }
 
         /// <summary>
@@ -88,7 +88,7 @@ namespace NumSharp
             if (rhs is null)
                 return Scalar<bool>(false).MakeGeneric<bool>();
 
-            return np.asanyarray(lhs) <= rhs;
+            return OperatorOperand(lhs) <= rhs;
         }
     }
 }

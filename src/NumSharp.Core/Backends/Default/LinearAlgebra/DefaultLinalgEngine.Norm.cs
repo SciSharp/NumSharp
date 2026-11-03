@@ -261,10 +261,10 @@ namespace NumSharp.Backends
             {
                 // NumPy counts non-zeros in `x.real.dtype`, NOT `x.dtype` — so a COMPLEX operand's
                 // zero-"norm" is float64, not complex. For every real dtype the real component's
-                // dtype is the dtype itself, so only Complex needs the substitution. np.not_equal's member, then
-                // np.sum's.
+                // dtype is the dtype itself, so only Complex needs the substitution. np.not_equal's member against
+                // NumPy's Python 0 (a literal-marked operand, so the comparison stays in a's dtype), then np.sum's.
                 var countType = a.typecode == NPTypeCode.Complex ? NPTypeCode.Double : a.typecode;
-                var counted = a.TensorEngine.NotEqual(a, NDArray.Scalar(0)).astype(countType);
+                var counted = a.TensorEngine.NotEqual(a, NDArray.PythonLiteral(0)).astype(countType);
                 return counted.TensorEngine.Sum(counted, axis, null, keepdims);
             }
             if (order == 1d)
@@ -274,13 +274,14 @@ namespace NumSharp.Backends
             }
 
             // decimal has no NumPy dtype, so no NumPy statement to follow: it keeps NumSharp's own three steps, each the
-            // member np.abs / np.power / np.sum dispatch to.
+            // member np.abs / np.power / np.sum dispatch to, the exponents passed as the C# numbers a caller would write
+            // (literal-marked, weak).
             if (a.typecode == NPTypeCode.Decimal)
             {
                 var magnitudes = a.TensorEngine.Abs(a);
-                var raised = magnitudes.TensorEngine.Power(magnitudes, NDArray.Scalar(order));
+                var raised = magnitudes.TensorEngine.Power(magnitudes, NDArray.PythonLiteral(order));
                 var reduced = raised.TensorEngine.Sum(raised, axis, null, keepdims);
-                return reduced.TensorEngine.Power(reduced, NDArray.Scalar(1d / order));
+                return reduced.TensorEngine.Power(reduced, NDArray.PythonLiteral(1d / order));
             }
 
             // NumPy's general order, statement for statement:
@@ -289,10 +290,12 @@ namespace NumSharp.Backends
             //     ret **= reciprocal(ord, dtype=ret.dtype)
             // `absx **= ord` is the ufunc in place with a Python scalar, which NEP 50 keeps weak: the loop is absx's own
             // float dtype (float16 / float32 stay), and np.power's zero-exponent-step fast path decides the orders 0.5
-            // (sqrt) and -1 (the reciprocal) where NumPy's does. Each statement is its function's member: np.abs',
-            // np.power's with out= (the facade's (x1, x2, dtype, out, where) call), np.sum's.
+            // (sqrt) and -1 (the reciprocal) where NumPy's does. The exponent is therefore a literal-marked 0-d operand
+            // (NDArray.PythonLiteral): a plain NDArray.Scalar is a strong NumPy scalar, which would promote the loop to
+            // float64. Each statement is its function's member: np.abs', np.power's with out= (the facade's (x1, x2,
+            // dtype, out, where) call), np.sum's.
             var absx = a.TensorEngine.Abs(a);
-            absx.TensorEngine.Power(absx, NDArray.Scalar(order), null, absx, null);
+            absx.TensorEngine.Power(absx, NDArray.PythonLiteral(order), null, absx, null);
             var ret = absx.TensorEngine.Sum(absx, axis, null, keepdims);
             // `reciprocal(ord, dtype=ret.dtype)`: ord converted to ret's dtype, then 1 / ord IN that dtype - float32's
             // 1 / 1.1 is one ULP from the float64 quotient rounded to float32, which the last power then carries.

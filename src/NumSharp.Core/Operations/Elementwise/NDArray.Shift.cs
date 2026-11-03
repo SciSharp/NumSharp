@@ -30,14 +30,14 @@ namespace NumSharp
 
         /// <summary>
         /// Element-wise left shift with any scalar or array-like on RHS.
-        /// Converts RHS via <see cref="np.asanyarray(object)"/> (matches NumPy's PyArray_FromAny).
+        /// Converts RHS via <see cref="OperatorOperand"/>: a boxed C# number is the weak Python scalar NumPy's operator hands the ufunc, anything else np.asanyarray(rhs).
         /// </summary>
-        // Scope: np.asanyarray(rhs) mints a temp for a scalar/array-like operand; [NDScoped]
+        // Scope: OperatorOperand(rhs) mints a temp for a scalar/array-like operand; [NDScoped]
         // reclaims it while leaving an NDArray-input passthrough untouched (see NDArray.AND.cs).
         [NDScoped]
         public static NDArray operator <<(NDArray lhs, object rhs)
         {
-            return lhs << np.asanyarray(rhs);
+            return lhs << OperatorOperand(rhs);
         }
 
         /// <summary>
@@ -53,14 +53,14 @@ namespace NumSharp
 
         /// <summary>
         /// Element-wise right shift with any scalar or array-like on RHS.
-        /// Converts RHS via <see cref="np.asanyarray(object)"/> (matches NumPy's PyArray_FromAny).
+        /// Converts RHS via <see cref="OperatorOperand"/>: a boxed C# number is the weak Python scalar NumPy's operator hands the ufunc, anything else np.asanyarray(rhs).
         /// </summary>
-        // Scope: np.asanyarray(rhs) mints a temp for a scalar/array-like operand; [NDScoped]
+        // Scope: OperatorOperand(rhs) mints a temp for a scalar/array-like operand; [NDScoped]
         // reclaims it while leaving an NDArray-input passthrough untouched (see NDArray.AND.cs).
         [NDScoped]
         public static NDArray operator >>(NDArray lhs, object rhs)
         {
-            return lhs >> np.asanyarray(rhs);
+            return lhs >> OperatorOperand(rhs);
         }
     }
 }

@@ -54,11 +54,21 @@ Supported on the binary ufuncs `add`/`subtract`/`multiply`/`divide`/`true_divide
   `BroadcastUfuncInputs`). A fresh result under `where=` takes NumPy's iterator layout, the mask voting
   (`WhereResultShape`: F operands under an F mask give an F result). The ufuncs that handle `out=` themselves (`ldexp`,
   `divmod`, `modf`, `frexp`) keep their own texts and order.
-- A weak Python int (a 0-d C# integer literal) is range-checked against the FINAL loop dtype before any kernel runs
-  (`ExecuteBinaryOp` → `CheckWeakPyIntOperand`: `np.maximum(int8, 1000)` is NumPy's `OverflowError: Python integer 1000
-  out of bounds for int8`; a bool array meets the int in the int64 loop; np.power checks it before its negative-power
-  error), and an int past 2^53 is re-packed into a float16 / float32 loop (`RepackWeakIntForFloatLoop`). The comparisons
-  pack every weak scalar the same way (`comparison.md`).
+- NEP 50's weak operand is the Python scalar alone: in C# the 0-d array a number literal becomes through the implicit
+  conversion (`NDArray.WasPythonLiteral`: the integer primitives, `float`, `double`, `Complex`; the `object` operator
+  overloads mark a boxed number the same way, `NDArray.OperatorOperand`). It adopts the other operand's dtype, an array or
+  a strong 0-d array alike (`np._FindCommonType(NDArray, NDArray)`: `uint8 + 100` is uint8, `np.uint8(10) + 5` uint8).
+  Every other 0-d operand is a NumPy scalar or 0-d array and promotes STRONGLY, as in NumPy 2: an element read
+  (`uint8 + i64[1]` is int64), a reduction result (`f16 * f32.mean()` is float32), `np.array(x)`, `NDArray.Scalar(x)`,
+  a `Half` / `char` / `decimal` value. Two literals promote between their own C# dtypes (NumPy would give its default
+  int64 / float64 / complex128). Library code that means a Python number passes a literal-marked operand
+  (`NDArray.PythonLiteral(x)`, `NDArray.FromPythonOperand(value)`), never `NDArray.Scalar`.
+- A weak Python int (a C# integer literal) is range-checked against the FINAL loop dtype before any kernel runs
+  (`ExecuteBinaryOp` → `CheckWeakPyIntOperand`: `np.maximum(int8, 1000)` and `np.int8(1) + 1000` are NumPy's
+  `OverflowError: Python integer 1000 out of bounds for int8`; a bool array meets the int in the int64 loop; np.power
+  checks it before its negative-power error), and an int past 2^53 is re-packed into a float16 / float32 loop
+  (`RepackWeakIntForFloatLoop`). A strong 0-d integer is cast into the loop like any array (`int8 * np.array(1000)` is
+  int64). The comparisons pack every weak scalar the same way (`comparison.md`).
 - A passed-in masked out is flagged READWRITE (NumPy's masked ufunc rule), so an out that overlaps an input keeps its
   masked-off positions instead of receiving buffer contents.
 - Trivial loop: a binary call whose operands are all trivially iterable (one dtype, out C- or F-contiguous, array inputs
@@ -98,8 +108,10 @@ Supported on the binary ufuncs `add`/`subtract`/`multiply`/`divide`/`true_divide
 
 A port of `numpy/_core/_methods.py::_clip` (behind `np.clip` and `ndarray.clip`), of `fromnumeric.clip`'s keyword rule
 and of the ufunc call it routes to. Signature `clip(a, a_min=null, a_max=null, out=null, dtype=null, min=null, max=null,
-where=null)`; `ndarray.clip(min, max, out, dtype, where)`. A 0-d integer bound (any C# integer literal, or a char) is
-NumPy's Python int.
+where=null)`; `ndarray.clip(min, max, out, dtype, where)`. A C# integer literal bound (`NDArray.WasPythonLiteral`) is
+NumPy's Python int (`type(min) is int`); every other bound is strong — an element read, a reduction result,
+`np.array(5)`, and a `char` (NumPy's uint16 scalar in the boundary map): neither dropped nor packed, it promotes
+(`np.clip(int8, i64[0], i64[1])` is int64). `np.ma.clip` hands a bare C# number through as the literal.
 - Keyword rule (raised before any ufunc error, a read-only out included): `min=`/`max=` alone are the bounds; both
   positionals plus a keyword → ValueError "Passing `min` or `max` keyword argument when `a_min` and `a_max` are provided
   is forbidden."; one positional plus a keyword → TypeError "clip() missing 1 required positional argument: 'a_min'" (or
@@ -134,8 +146,9 @@ NumPy's Python int.
   `where=` the out is READWRITE, so masked-off positions come back intact.
 - Error order: keyword rule → read-only out → where= dtype → packing → dtype= input casts → out cast → broadcast / out
   shape.
-- Promotion: 0-d bounds use the ufunc array-scalar table (`np._FindCommonArrayScalarType`), so a Char array with a float
-  bound promotes to float64 instead of truncating the bound into char.
+- Promotion: literal bounds use the ufunc array-scalar table (`np._FindCommonArrayScalarType`), so a Char array with a
+  float bound promotes to float64 instead of truncating the bound into char; every other bound promotes strongly
+  (`DTypePromotion.PromoteTypes`).
 - The float loop: NumPy's clip loop runs its CONST fast path (`_npy_clip_const_minmax_`: `x < lo ? lo : x; x > hi ? hi :
   x`; a tie keeps the element, so `np.clip(-0.0, 0, 1)` is -0.0; a NaN bound fills the call with that NaN's bits)
   whenever both bound strides of an inner-loop call are 0, else the general `MIN(MAX())` (a tie takes the bound). Which
@@ -153,8 +166,7 @@ NumPy's Python int.
   a Tier-3B clip kernel (`DirectILKernelGenerator.Clip.InnerLoop.cs`) through the broadcast-pattern stages
   (`kernels.md`). The flat route reads scalar bounds in place or converts them into stack slots (no 0-d astype per call);
   kernel bodies and op-flag arrays are cached per key.
-- Divergences: a strong 0-d NDArray bound (NumPy's `np.int64(5)` / `np.array(5)`) cannot be told from a
-  literal, so it is treated as a Python int; the keyword rule's null-as-omitted reading; `where=` with an overlapping out
+- Divergences: the keyword rule's null-as-omitted reading; `where=` with an overlapping out
   of ANOTHER dtype (NumPy round-trips the masked-off values through the loop dtype, NumSharp keeps them exactly); the
   `where=` mask's error TYPE; `np.broadcast_to` / `np.broadcast_arrays` keep an extent-1 axis's original stride where
   NumPy writes 0 (only a one-element bound built by broadcast_to can change clip's const-loop decision through it);

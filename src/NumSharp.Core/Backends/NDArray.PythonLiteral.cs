@@ -21,14 +21,16 @@ namespace NumSharp
         ///     array, so this mark is the only way to tell them apart.
         ///     </para>
         ///     <para>
-        ///     Only the store paths read the mark (<see cref="PackForStore"/>): the indexer setters, <c>np.put</c>,
+        ///     The store paths read the mark (<see cref="PackForStore"/>): the indexer setters, <c>np.put</c>,
         ///     <c>np.putmask</c>, <c>np.place</c>, <c>np.put_along_axis</c>, <c>np.asarray</c> with a dtype, and every
-        ///     <c>object</c>-typed value parameter through <see cref="ReductionInitial.TryPack"/>. The ufuncs and the
-        ///     comparisons keep their own rule, which reads EVERY 0-d operand as a Python scalar (np.clip's rule,
-        ///     <c>[Misaligned]</c>): library code builds its scalar operands with <see cref="Scalar{T}(T)"/> and relies on
-        ///     that rule, so switching them to the mark would change their result dtypes. Two readers besides the stores:
-        ///     <see cref="Nep50Operand"/> (a function that promotes by NumPy's <c>result_type</c>), and the reduce prologue
-        ///     through <see cref="WasScalarArgument"/>, which refuses a C# literal given as <c>out=</c>.
+        ///     <c>object</c>-typed value parameter through <see cref="ReductionInitial.TryPack"/>. So does NEP 50 promotion:
+        ///     the binary ufuncs (<see cref="np._FindCommonType(NDArray, NDArray)"/>, the weak-int range check and float-loop
+        ///     re-pack), the comparisons' weak-scalar step, np.clip's Python-int bounds, and <see cref="Nep50Operand"/> (a
+        ///     function that promotes by NumPy's <c>result_type</c>): only a marked operand is weak, every other 0-d array is
+        ///     a strong NumPy scalar (parity QA-05). Library code that means a Python number therefore builds its operand with
+        ///     <see cref="PythonLiteral{T}(T)"/> (or <see cref="FromPythonOperand"/>), never <see cref="Scalar{T}(T)"/>. One
+        ///     more reader: the reduce prologue through <see cref="WasScalarArgument"/>, which refuses a C# literal given as
+        ///     <c>out=</c>.
         ///     </para>
         ///     <para>
         ///     The mark belongs to this one object, never to its storage: a view, a copy, a reshape or an operation result
@@ -187,6 +189,28 @@ namespace NumSharp
         };
 
         /// <summary>
+        ///     The operand an operator overload taking <c>object</c> (<c>x + (object)2.5</c>, <c>x &gt; (object)0.1</c>,
+        ///     <c>x &amp; (object)1</c>) stands for: the same array its NDArray overload would receive for that value — a boxed
+        ///     C# number is the WEAK Python scalar of <see cref="FromPythonOperand"/> (marked
+        ///     <see cref="WasPythonLiteral"/>), not the strong 0-d array <c>np.asanyarray</c> makes of it.
+        /// </summary>
+        /// <param name="value">The operand; null is Python's <c>None</c>.</param>
+        /// <returns>The array (a new one, except an <see cref="NDArray"/> operand, which is returned as it is: the caller's
+        ///     <c>[NDScoped]</c> scope then reclaims only an array made here).</returns>
+        /// <exception cref="NotSupportedException"><paramref name="value"/> is null (NumPy would build an object array from
+        ///     None, a dtype NumSharp lacks), or has no NumSharp array form.</exception>
+        /// <remarks>
+        ///     NEP 50 makes a Python <c>int</c> / <c>float</c> / <c>complex</c> operand weak and every array strong, and NumPy's
+        ///     operators hand the Python object to the ufunc as is: <c>float32_array &gt; 0.1</c> compares in float32 whether
+        ///     the C# value arrives typed or boxed. The <c>object</c> overloads used to convert through <c>np.asanyarray</c>,
+        ///     which is NumPy's <c>np.asanyarray(0.1)</c>: a strong 0-d float64 array, compared in float64.
+        /// </remarks>
+        internal static NDArray OperatorOperand(object value)
+            // None keeps np.asanyarray's refusal (NoneWithoutDtype), the error these operators always raised for it: the
+            // array object's own asanyarray body, which the facade calls (no up-call from this layer to np).
+            => value is null ? asanyarray(value, null, 'K') : FromPythonOperand(value);
+
+        /// <summary>
         ///     Creates the 0-d bool array of a C# <c>bool</c> literal, marked <see cref="WasPythonBool"/>. The implicit
         ///     <c>bool → NDArray</c> conversion calls it.
         /// </summary>
@@ -243,14 +267,50 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     Marks the 0-d array a C# value became through a SUBCLASS's implicit conversion (<see cref="NDMatrix"/>'s
+        ///     <c>m + 1</c>, <c>m &gt; 0.75</c>) exactly as NDArray's own conversions mark theirs, chosen by the value's dtype:
+        ///     an integer primitive, <c>float</c>, <c>double</c> or <see cref="System.Numerics.Complex"/> is
+        ///     <see cref="WasPythonLiteral"/> (a weak Python scalar), a <c>bool</c> <see cref="WasPythonBool"/>, a
+        ///     <see cref="Half"/> / <c>char</c> <see cref="WasNumPyScalar"/>, and a <c>decimal</c> stays unmarked.
+        /// </summary>
+        /// <typeparam name="TArray">The array's class (<see cref="NDArray"/> or a subclass).</typeparam>
+        /// <param name="nd">A fresh 0-d array holding the converted value (not shared: the mark is the object's).</param>
+        /// <returns><paramref name="nd"/> itself, marked.</returns>
+        /// <remarks>The marks have private setters, so a subclass's conversion cannot set them itself; without them a matrix
+        ///     literal would be a strong NumPy scalar under NEP 50 (<c>int8_matrix + 1</c> would be int32, NumPy keeps
+        ///     int8).</remarks>
+        internal static TArray MarkAsCSharpLiteral<TArray>(TArray nd) where TArray : NDArray
+        {
+            switch (nd.typecode)
+            {
+                case NPTypeCode.Boolean:
+                    nd.WasPythonBool = true;
+                    break;
+                case NPTypeCode.Half:
+                case NPTypeCode.Char:
+                    nd.WasNumPyScalar = true;
+                    break;
+                case NPTypeCode.Decimal:
+                    // No NumPy analog: unmarked, as NDArray's own decimal conversion (a strong 0-d array).
+                    break;
+                default:
+                    nd.WasPythonLiteral = true;
+                    break;
+            }
+            return nd;
+        }
+
+        /// <summary>
         ///     Creates the 0-d array of a C# number literal that stands for a Python <c>int</c>, <c>float</c> or
         ///     <c>complex</c>, marked <see cref="WasPythonLiteral"/>. The implicit conversion operators call it.
         /// </summary>
         /// <typeparam name="T">An integer primitive, <c>float</c>, <c>double</c> or <see cref="System.Numerics.Complex"/>.</typeparam>
         /// <param name="value">The literal.</param>
         /// <returns>A new 0-d array of <typeparamref name="T"/>'s dtype holding <paramref name="value"/>.</returns>
-        /// <remarks>Use <see cref="Scalar{T}(T)"/> (or <c>np.array(value)</c>) for a 0-d array that must store like an
-        ///     ndarray (cast, never range-checked).</remarks>
+        /// <remarks>Library code calls it for an operand NumPy's own code writes as a Python number (<c>x ** ord</c>,
+        ///     <c>x != 0</c>, <c>s / 2.</c>): a WEAK operand that keeps the other operand's dtype. Use
+        ///     <see cref="Scalar{T}(T)"/> (or <c>np.array(value)</c>) for a 0-d array that must store like an ndarray (cast,
+        ///     never range-checked) or promote like a NumPy scalar (strong).</remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static NDArray PythonLiteral<T>(T value) where T : unmanaged
         {

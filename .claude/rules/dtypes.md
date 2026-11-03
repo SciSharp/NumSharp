@@ -98,7 +98,8 @@ lane and reports its own type number, character, scalar type and class (`np.dtyp
   `bool`/`char`/`Half`/`decimal` is STRONG; C# integer / `float` / `double` / `Complex` literals are WEAK
   (`result_type(int8_dtype, 300)` → int8, `+ 1.5` → float64; a lone literal → int64/float64/complex128).
 - The storage builtins' kernel promotion is the frozen `np._nptypemap_arr_arr` table (deferring to the larger type
-  number, as NumPy does). `np._FindCommonType(NDArray, NDArray)` (binary-operator promotion),
+  number, as NumPy does). `np._FindCommonType(NDArray, NDArray)` (binary-operator promotion: only a literal-marked 0-d
+  operand, `NDArray.WasPythonLiteral`, takes the array-scalar table; every other operand, 0-d included, is strong),
   `NDExprTypeRules.PromoteStrong` and `NDIterCasting.PromoteTypes` are separate engines over it. The internal list
   helpers (`np._FindCommonType_Array`: NDIter's `COMMON_DTYPE` and its allocated operand) run NumPy 2's
   `PyArray_PromoteDTypeSequence` (`PromoteTypeSequence`: `int8, uint8, float16` is float16 in every order, where a

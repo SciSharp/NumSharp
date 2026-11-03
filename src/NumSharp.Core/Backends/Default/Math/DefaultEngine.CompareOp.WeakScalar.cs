@@ -19,16 +19,15 @@ namespace NumSharp.Backends
     ///     gives <c>[True, True]</c>, because <c>(double)0.1f</c> is 0.10000000149… and that is greater than 0.1.
     ///     </para>
     ///     <para>
-    ///     NumSharp cannot tell a C# literal from an explicit 0-d array, so a 0-d operand against an array operand (ndim
-    ///     &gt;= 1) is read as the Python scalar its C# type stands for. This is the rule NumSharp's arithmetic already
-    ///     uses (<see cref="np._FindCommonArrayScalarType(NPTypeCode, NPTypeCode)"/>) and the house boundary map of
-    ///     <c>np.clip</c> and <c>initial=</c> (<see cref="ReductionInitial"/>): <c>bool</c>, the integer primitives,
-    ///     <c>float</c>, <c>double</c> and <see cref="Complex"/> are Python scalars; <see cref="Half"/>, <c>char</c> and
-    ///     <c>decimal</c> are NumPy scalars (strong). The consequence: an explicit 0-d float64 array, which NumPy treats as
-    ///     strong, compares like the Python float (<c>np.greater(f32, np.array(0.1))</c> is <c>[False, True]</c> here and
-    ///     <c>[True, True]</c> in NumPy). Two 0-d operands keep the strong promotion, as in NumSharp's arithmetic.
-    ///     numpy.ma keeps its own strong rule: <c>getdata</c> makes every operand an array, so its comparison wrappers
-    ///     widen both operands before they call the ufunc.
+    ///     The Python scalar is the 0-d array a C# number literal became (<see cref="NDArray.WasPythonLiteral"/>: the integer
+    ///     primitives, <c>float</c>, <c>double</c> and <see cref="Complex"/>), the rule NumSharp's arithmetic uses
+    ///     (<see cref="np._FindCommonType(NDArray, NDArray)"/>). Every other 0-d operand is a NumPy scalar or 0-d array and
+    ///     compares STRONG, as in NumPy 2: an element read, a reduction result, <c>np.array(0.1)</c>
+    ///     (<c>np.greater(f32, np.array(0.1))</c> compares in float64 and is <c>[True, True]</c>), <see cref="Half"/>,
+    ///     <c>char</c> and <c>decimal</c> values. A literal against a strong 0-d operand is weak too
+    ///     (<c>np.float32(0.1) &gt; 0.1</c> is False); two literals keep the strong promotion between their C# dtypes, as in
+    ///     NumSharp's arithmetic. numpy.ma keeps its own rule: <c>getdata</c> makes every operand an array, so its
+    ///     comparison wrappers widen both operands before they call the ufunc.
     ///     </para>
     ///     <para>
     ///     Only float16 and float32 arrays change values. For every other array dtype the comparison NumSharp already runs
@@ -60,36 +59,52 @@ namespace NumSharp.Backends
     public partial class DefaultEngine
     {
         /// <summary>
-        ///     Converts the 0-d operand of a comparison into the precision NumPy compares it at, when that precision is not
-        ///     the one the operands' own dtypes promote to — see the type remarks.
+        ///     Converts the weak operand of a comparison (a C# literal) into the precision NumPy compares it at, when that
+        ///     precision is not the one the operands' own dtypes promote to — see the type remarks.
         /// </summary>
         /// <param name="lhs">The left operand.</param>
         /// <param name="rhs">The right operand.</param>
         /// <param name="scalarIsLhs">True when the returned array replaces <paramref name="lhs"/>, false when it replaces
         ///     <paramref name="rhs"/>; unspecified when the method returns null.</param>
         /// <returns>A new 0-d array that holds the scalar in the comparison's loop dtype (float16, float32, or complex128
-        ///     with float32-rounded parts), or in an integer array's own dtype when a Python int fits it; null when the
-        ///     operands stand as given. The caller owns the array and disposes it after the comparison.</returns>
-        /// <exception cref="OverflowException">A bool array against a Python int at or past 2^63: NumPy's int64 pack fails
-        ///     ("Python int too large to convert to C long", the LP64 text).</exception>
+        ///     with float32-rounded parts), or in an integer array's own dtype when an integer 0-d operand fits it; null
+        ///     when the operands stand as given. The caller owns the array and disposes it after the comparison.</returns>
+        /// <exception cref="OverflowException">A bool operand against a Python int at or past 2^63: NumPy's int64 pack
+        ///     fails ("Python int too large to convert to C long", the LP64 text).</exception>
         /// <remarks>
+        ///     <para>
+        ///     The weak operand is a literal-marked 0-d array (<see cref="NDArray.WasPythonLiteral"/>) against a strong one
+        ///     (an array, or a strong 0-d array). Without exactly one, only the exact integer re-pack below runs, for a
+        ///     strong 0-d integer against an integer array: NumPy compares such a pair in the promoted dtype, exactly, which
+        ///     the re-packed same-dtype compare reproduces value for value.
+        ///     </para>
+        ///     <para>
         ///     The replacement is a same-dtype operand for the array, so the comparison also takes the faster same-dtype
         ///     kernels (no per-element conversion of the array; the scalar-broadcast kernels then compare a whole vector at
         ///     a time). The integer re-pack changes no value: an in-range int compares the same in the array's dtype as in
         ///     the promoted one. The scalar is read once, through a boxed read of its single element; the conversion is per
         ///     call, not per element.
+        ///     </para>
         /// </remarks>
         internal NDArray AdoptWeakComparisonScalar(NDArray lhs, NDArray rhs, out bool scalarIsLhs)
         {
             scalarIsLhs = false;
-            bool lhsScalar = lhs.ndim == 0, rhsScalar = rhs.ndim == 0;
-            // Exactly one 0-d operand: two 0-d operands keep the strong promotion (NumSharp's arithmetic rule), and two
-            // arrays are both strong in NumPy too.
-            if (lhsScalar == rhsScalar)
-                return null;
+            bool lhsWeak = lhs.WasPythonLiteral, rhsWeak = rhs.WasPythonLiteral;
+            if (lhsWeak == rhsWeak)
+            {
+                // No weak operand, or two C# literals (strong between their C# dtypes, NumSharp's arithmetic rule): the
+                // promoted compare stands, except the exact re-pack of a strong 0-d integer against an integer array.
+                bool lhsScalar = lhs.ndim == 0, rhsScalar = rhs.ndim == 0;
+                if (lhsWeak || lhsScalar == rhsScalar)
+                    return null;
+                var fitted = RepackFittingIntScalar((lhsScalar ? rhs : lhs).GetTypeCode, lhsScalar ? lhs : rhs);
+                scalarIsLhs = lhsScalar;
+                return fitted;
+            }
 
-            var array = lhsScalar ? rhs : lhs;
-            var scalar = lhsScalar ? lhs : rhs;
+            // Exactly one weak operand: the literal; the other (an array, or a strong 0-d array) sets the precision.
+            var array = lhsWeak ? rhs : lhs;
+            var scalar = lhsWeak ? lhs : rhs;
             var arrayType = array.GetTypeCode;
             var scalarType = scalar.GetTypeCode;
             // A bool array has no exact Python-int comparison (only integer arrays do): NumPy compares it in the int64
@@ -103,13 +118,8 @@ namespace NumSharp.Backends
             // at a time). An int outside the range keeps the exact promoted compare, which gives NumPy's constant result.
             if (IsPythonIntType(arrayType) && IsPythonIntType(scalarType) && scalarType != arrayType)
             {
-                object boxed = scalar.Storage.GetAtIndex(0);
-                var (min, max) = NDExprTypeRules.IntBounds(arrayType);
-                Int128 v = boxed is ulong u ? (Int128)u : (Int128)Convert.ToInt64(boxed, System.Globalization.CultureInfo.InvariantCulture);
-                if (v < min || v > max)
-                    return null;
-                scalarIsLhs = lhsScalar;
-                return NewScalar(boxed, arrayType);
+                scalarIsLhs = lhsWeak;
+                return RepackFittingIntScalar(arrayType, scalar);
             }
             // Only a float16 / float32 array compares narrower than the promotion (see the remarks); a scalar of the
             // array's own dtype is already the loop dtype.
@@ -118,8 +128,30 @@ namespace NumSharp.Backends
             if (!IsPythonScalarType(scalarType))
                 return null;
 
-            scalarIsLhs = lhsScalar;
+            scalarIsLhs = lhsWeak;
             return PackPythonScalarForFloatLoop(scalar.Storage.GetAtIndex(0), arrayType);
+        }
+
+        /// <summary>
+        ///     A 0-d integer operand re-packed into an integer array's own dtype when its value fits that dtype: the exact
+        ///     promoted comparison's answers, through the same-dtype kernels.
+        /// </summary>
+        /// <param name="arrayType">The other operand's dtype (the re-pack applies only to the eight integer dtypes).</param>
+        /// <param name="scalar">The 0-d operand.</param>
+        /// <returns>A new 0-d array of <paramref name="arrayType"/> the caller owns, or null when either dtype is not an
+        ///     integer, they are equal, or the value is out of <paramref name="arrayType"/>'s range (the promoted compare
+        ///     then gives NumPy's constant answer).</returns>
+        private NDArray RepackFittingIntScalar(NPTypeCode arrayType, NDArray scalar)
+        {
+            var scalarType = scalar.GetTypeCode;
+            if (!IsPythonIntType(arrayType) || !IsPythonIntType(scalarType) || scalarType == arrayType)
+                return null;
+            object boxed = scalar.Storage.GetAtIndex(0);
+            var (min, max) = NDExprTypeRules.IntBounds(arrayType);
+            Int128 v = boxed is ulong u ? (Int128)u : (Int128)Convert.ToInt64(boxed, System.Globalization.CultureInfo.InvariantCulture);
+            if (v < min || v > max)
+                return null;
+            return NewScalar(boxed, arrayType);
         }
 
         /// <summary>
@@ -178,7 +210,8 @@ namespace NumSharp.Backends
         ///     (<c>npy_update_operand_for_scalar</c>, then <c>PyArray_Pack</c>), or null when the cast the kernels apply gives
         ///     the same value.
         /// </summary>
-        /// <param name="operand">A ufunc operand (any shape; only a 0-d one is a weak scalar), or null.</param>
+        /// <param name="operand">A ufunc operand (any shape; only a literal-marked 0-d one,
+        ///     <see cref="NDArray.WasPythonLiteral"/>, is a weak Python int), or null.</param>
         /// <param name="loop">The ufunc's final loop dtype.</param>
         /// <returns>A new 0-d array of <paramref name="loop"/> that the caller owns and disposes, or null.</returns>
         /// <remarks>
@@ -187,11 +220,14 @@ namespace NumSharp.Backends
         ///     cast, <c>np.array([2**60 + 2**36 + 1]).astype(np.float32)</c>) gives 2^60 + 2^37. Every integer of at most 53
         ///     bits converts exactly into a double, so only an int64 / uint64 operand past 2^53 in magnitude can differ, and
         ///     the common path allocates nothing. A float operand needs no repack: the cast from a double rounds once, like
-        ///     the pack.
+        ///     the pack. A strong 0-d integer (a NumPy scalar) is CAST into the loop like any array, so it is left alone.
         /// </remarks>
         internal NDArray RepackWeakIntForFloatLoop(NDArray operand, NPTypeCode loop)
         {
             if ((loop != NPTypeCode.Half && loop != NPTypeCode.Single) || operand is null || operand.ndim != 0)
+                return null;
+            // A strong 0-d integer is cast into the loop like any array: only a C# literal is NumPy's Python int.
+            if (!operand.WasPythonLiteral)
                 return null;
             var type = operand.GetTypeCode;
             if (type != NPTypeCode.Int64 && type != NPTypeCode.UInt64)
@@ -218,10 +254,12 @@ namespace NumSharp.Backends
         ///     <see cref="NDExprTypeRules.CheckPyIntPacksIntoLoop"/>).</exception>
         /// <remarks>
         ///     <para>
-        ///     A 0-d operand against an array is the Python scalar its C# type stands for (the house map), and only the C#
-        ///     integer primitives are Python ints here: a bool is a Python bool (always fits), a <c>char</c> is NumPy's
-        ///     strong uint16 scalar, and a float loop rounds an int instead of checking it. The kernels used to CAST the
-        ///     operand into the loop, which wrapped silently (<c>int8 + 1000</c> gave <c>[-23, -22]</c>).
+        ///     The Python int is a literal-marked 0-d operand (<see cref="NDArray.WasPythonLiteral"/>: the C# integer
+        ///     primitives) against a strong one — an array, or a strong 0-d array (<c>np.int8(1) + 1000</c> raises in NumPy
+        ///     too). A bool literal is a Python bool (always fits), a <c>char</c> is NumPy's strong uint16 scalar, a strong
+        ///     0-d integer (an element read, a reduction result, <c>np.array(1000)</c>) promotes instead of packing, and a
+        ///     float loop rounds an int instead of checking it. The kernels used to CAST the operand into the loop, which
+        ///     wrapped silently (<c>int8 + 1000</c> gave <c>[-23, -22]</c>).
         ///     </para>
         ///     <para>
         ///     A bool array is the one case where NumPy's loop and NumSharp's table differ: NumPy promotes bool with a
@@ -231,13 +269,15 @@ namespace NumSharp.Backends
         /// </remarks>
         internal static void CheckWeakPyIntOperand(NDArray lhs, NDArray rhs, NPTypeCode loop, bool loopFromPromotion)
         {
-            bool lhsScalar = lhs.ndim == 0;
-            if (lhsScalar == (rhs.ndim == 0))
+            // Exactly one weak operand: two literals promote between their own C# dtypes (nothing to pack), and two strong
+            // operands are cast into the loop.
+            bool lhsWeak = lhs.WasPythonLiteral;
+            if (lhsWeak == rhs.WasPythonLiteral)
                 return;
-            var scalar = lhsScalar ? lhs : rhs;
+            var scalar = lhsWeak ? lhs : rhs;
             if (!IsPythonIntType(scalar.GetTypeCode))
                 return;
-            var array = lhsScalar ? rhs : lhs;
+            var array = lhsWeak ? rhs : lhs;
             var packLoop = loopFromPromotion && array.GetTypeCode == NPTypeCode.Boolean && NDExprTypeRules.IsIntegerKind(loop)
                 ? NPTypeCode.Int64
                 : loop;
@@ -265,22 +305,25 @@ namespace NumSharp.Backends
 
         /// <summary>
         ///     Replaces the weak-int operand of a binary ufunc by its re-packed form for the final float loop
-        ///     (<see cref="RepackWeakIntForFloatLoop"/>), when exactly one operand is 0-d and the pack differs from the
-        ///     cast.
+        ///     (<see cref="RepackWeakIntForFloatLoop"/>), when exactly one operand is a literal-marked 0-d array
+        ///     (<see cref="NDArray.WasPythonLiteral"/>) and the pack differs from the cast.
         /// </summary>
         /// <param name="lhs">The left operand; replaced when it is the re-packed one.</param>
         /// <param name="rhs">The right operand; replaced when it is the re-packed one.</param>
         /// <param name="loop">The ufunc's final loop dtype.</param>
         /// <returns>The replacement, which the caller disposes after the ufunc ran, or null when nothing changed.</returns>
+        /// <remarks>The other operand may be an array or a strong 0-d array (<c>np.float32(0) + (2**60 + 2**36 + 1)</c>
+        ///     packs the int as NumPy does); two literals promote between their C# dtypes and are cast.</remarks>
         internal NDArray AdoptWeakIntOperand(ref NDArray lhs, ref NDArray rhs, NPTypeCode loop)
         {
-            bool lhsScalar = lhs.ndim == 0;
-            if (lhsScalar == (rhs.ndim == 0))
+            bool lhsWeak = lhs.WasPythonLiteral;
+            // Exactly one weak operand: two literals promote between their C# dtypes and are cast, two strong ones too.
+            if (lhsWeak == rhs.WasPythonLiteral)
                 return null;
-            var packed = RepackWeakIntForFloatLoop(lhsScalar ? lhs : rhs, loop);
+            var packed = RepackWeakIntForFloatLoop(lhsWeak ? lhs : rhs, loop);
             if (packed is null)
                 return null;
-            if (lhsScalar)
+            if (lhsWeak)
                 lhs = packed;
             else
                 rhs = packed;

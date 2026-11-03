@@ -132,54 +132,6 @@ namespace NumSharp.Tests
         }
 
         // ------------------------------------------------------------------
-        // QA-05 — a computed NumPy scalar (a[i], a.sum()) is a WEAK operand in the binary ufuncs
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     NEP 50 makes every NumPy scalar and 0-d array STRONG: <c>u8 + i64[1]</c> is int64 <c>[201, 202, 450]</c> in NumPy
-        ///     2.4.2. NumSharp reads any 0-d operand beside an array as a Python literal, so the sum stays uint8 and the
-        ///     third element silently wraps to 194. The rules record the 0-d rule as a known divergence because "a strong 0-d
-        ///     NDArray cannot be told from a literal" (ufuncs.md, comparison.md), but since <c>51abf1ad</c> the implicit
-        ///     conversions mark a C# literal's 0-d array <c>NDArray.WasPythonLiteral</c>, which can tell them apart: an element
-        ///     read (<c>a[i]</c>) or a reduction result is not a literal. The owner decides whether the binary ufuncs read the
-        ///     mark (the journal lists the affected calls: maximum, add, multiply, power, left_shift, clip, floor_divide).
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA05")]
-        public void ParityQa_ComputedScalarOperand_ShouldBeStrong_NoSilentWrap()
-        {
-            using var u8 = np.array(new byte[] { 1, 2, 250 });
-            using var i64 = np.array(new long[] { 100, 200, 300 });
-            using var element = i64[1];
-
-            using var sum = u8 + element;
-
-            sum.dtype.Should().Be(np.int64);
-            sum.ToArray<long>().Should().Equal(201L, 202L, 450L);
-        }
-
-        /// <summary>
-        ///     <c>f16 * f32.mean()</c>: NumPy's float32 scalar is strong, so the product is float32. NumSharp computes it in
-        ///     float16 (the mean is read as a weak Python float), losing precision silently. The same weak reading turns
-        ///     <c>np.left_shift(int8, np.array(9L))</c> into int8 zeros where NumPy returns int64 <c>[512, -1024, 1536]</c>.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA05")]
-        public void ParityQa_ReductionResultOperand_ShouldBeStrong()
-        {
-            using var f16 = np.array(new[] { 1.0, 2.5, 3.0 }).astype(np.float16);
-            using var f32 = np.array(new[] { 1.5f, 2.0f, 0.25f });
-            using var mean = f32.mean();
-            using var i8 = np.array(new sbyte[] { 1, -2, 3 });
-            using var nine = np.array(9L);
-
-            using var product = f16 * mean;
-            using var shifted = np.left_shift(i8, nine);
-
-            product.dtype.Should().Be(np.float32);
-            shifted.dtype.Should().Be(np.int64);
-            shifted.ToArray<long>().Should().Equal(512L, -1024L, 1536L);
-        }
-
-        // ------------------------------------------------------------------
         // QA-07 — np.choose promotes its choices left to right instead of NumPy's order-independent result_type
         // ------------------------------------------------------------------
 

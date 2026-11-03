@@ -2999,13 +2999,14 @@ namespace NumSharp
             // filled(m, True): a masked array's masked slots read True (formatted as 'True' into text data, whose truth
             // values are then read).
             var b = m is NDMaskedArray masked && masked._mask is not null ? masked.filled(true) : AsData(m);
-            // NumPy converts by truth value: numbers via `!= 0` (NaN is True), text by non-emptiness through the
-            // text-to-bool cast (refused unless empty), booleans copied.
+            // NumPy converts by truth value: numbers via `!= 0` (NaN is True; the 0 a weak Python int, so the comparison
+            // stays in b's dtype), text by non-emptiness through the text-to-bool cast (refused unless empty), booleans
+            // copied.
             var mask = b.typecode switch
             {
                 NPTypeCode.Boolean => b.copy(),
                 NPTypeCode.String => b.astype(np.@bool),
-                _ => np.not_equal(b, NDArray.Scalar(0)),
+                _ => np.not_equal(b, NDArray.PythonLiteral(0)),
             };
             return (shrink && !np.any(mask)) ? nomask : mask;
         }
@@ -3304,9 +3305,10 @@ namespace NumSharp
             if (fa is NDArray || fb is NDArray)
             {
                 // `array == x` is NumPy's elementwise comparison; `if result:` then needs exactly one element. Only the
-                // 0-d wrappers made here are disposed: a stored array fill belongs to its masked array.
-                using var leftOwned = fa is NDArray ? null : NDArray.Scalar(fa);
-                using var rightOwned = fb is NDArray ? null : NDArray.Scalar(fb);
+                // 0-d wrappers made here are disposed: a stored array fill belongs to its masked array. A C# number is
+                // the Python scalar `x` (weak: a float32 fill array equals the float 1e20 it was set from).
+                using var leftOwned = fa is NDArray ? null : fa is sbyte or byte or short or ushort or int or uint or long or ulong or float or double or Complex ? NDArray.FromPythonOperand(fa) : NDArray.Scalar(fa);
+                using var rightOwned = fb is NDArray ? null : fb is sbyte or byte or short or ushort or int or uint or long or ulong or float or double or Complex ? NDArray.FromPythonOperand(fb) : NDArray.Scalar(fb);
                 using var eq = np.equal(fa as NDArray ?? leftOwned, fb as NDArray ?? rightOwned);
                 if (eq.size != 1)
                     throw new ValueError(eq.size == 0
@@ -3896,6 +3898,24 @@ namespace NumSharp
         private static NDArray AsValueOperand(object value) => value is byte[] bytes ? NDArray.Scalar(bytes) : AsData(value);
 
         /// <summary>
+        ///     An operand numpy.ma hands to a plain NumPy function AS GIVEN (Python passes the object itself, no
+        ///     <c>getdata</c>): a bare C# number is the Python scalar, a WEAK NEP 50 operand
+        ///     (<see cref="NDArray.FromPythonOperand"/> marks it), so a float16 / float32 array meets it at its own width and
+        ///     an integer array keeps its dtype; any other value is read as <see cref="AsData"/> reads it (an array, a masked
+        ///     array's data, a C# array-like, a bool or NumPy-scalar value).
+        /// </summary>
+        /// <param name="value">The operand as the caller gave it.</param>
+        /// <returns>The operand array (a new 0-d array for a scalar; an array operand itself or its plain view).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="value"/> is null.</exception>
+        /// <remarks><see cref="AsData"/>'s own 0-d of a boxed number is an unmarked, STRONG NumPy scalar — numpy.ma's
+        ///     <c>getdata</c> reading, right for the <c>_MaskedBinaryOperation</c> family and wrong for a pass-through such
+        ///     as <c>ma.clip</c>'s bounds (<c>np.clip(int8, -1, 100)</c> stays int8).</remarks>
+        private static NDArray AsPassThroughOperand(object value)
+            => value is sbyte or byte or short or ushort or int or uint or long or ulong or float or double or Complex
+                ? NDArray.FromPythonOperand(value)
+                : AsData(value);
+
+        /// <summary>
         ///     The dtype numpy.ma gives a BARE scalar operand of a binary op — its STRONG default width (python
         ///     int→int64, python float→float64, bool→bool, complex→complex128). numpy.ma wraps a scalar as
         ///     <c>np.asarray(scalar)</c> (a STRONG array) rather than a weak NEP50 scalar, which is why
@@ -4158,28 +4178,30 @@ namespace NumSharp
         // Built from greater/greater_equal/less_equal/logical_not (np.less has a 0-D-scalar
         // broadcasting quirk we route around). NaN differences between `less(x,v)` and
         // `!(x>=v)` are absorbed by the NonFiniteMask term that every domained op also ORs in.
+        // The critical values are NumPy's Python floats (WEAK under NEP 50): literal-marked operands, so a float16 /
+        // float32 operand compares at its own width (a plain NDArray.Scalar would be a strong float64 NumPy scalar).
 
         /// <summary>DomainGreaterEqual(v): masks where <c>x &lt; v</c> (used by sqrt at 0, arccosh at 1).</summary>
         /// <param name="x">Data.</param><param name="v">Critical value.</param>
         /// <returns>Boolean mask, True where <c>x &lt; v</c>.</returns>
-        private static NDArray DomainGreaterEqual(NDArray x, double v) => np.logical_not(np.greater_equal(x, NDArray.Scalar(v)));
+        private static NDArray DomainGreaterEqual(NDArray x, double v) => np.logical_not(np.greater_equal(x, NDArray.PythonLiteral(v)));
 
         /// <summary>DomainGreater(v): masks where <c>x &lt;= v</c> (used by log/log2/log10 at 0).</summary>
         /// <param name="x">Data.</param><param name="v">Critical value.</param>
         /// <returns>Boolean mask, True where <c>x &lt;= v</c>.</returns>
-        private static NDArray DomainGreater(NDArray x, double v) => np.less_equal(x, NDArray.Scalar(v));
+        private static NDArray DomainGreater(NDArray x, double v) => np.less_equal(x, NDArray.PythonLiteral(v));
 
         /// <summary>DomainCheckInterval(a,b): masks where <c>x &lt; a</c> or <c>x &gt; b</c> (arcsin/arccos/arctanh).</summary>
         /// <param name="x">Data.</param><param name="a">Lower bound.</param><param name="b">Upper bound.</param>
         /// <returns>Boolean mask, True outside <c>[a, b]</c>.</returns>
         private static NDArray DomainCheckInterval(NDArray x, double a, double b)
-            => np.logical_not(np.greater_equal(x, NDArray.Scalar(a))) | np.greater(x, NDArray.Scalar(b));
+            => np.logical_not(np.greater_equal(x, NDArray.PythonLiteral(a))) | np.greater(x, NDArray.PythonLiteral(b));
 
         /// <summary>DomainTan(eps): masks where <c>|cos(x)| &lt; eps</c> (tan's poles).</summary>
         /// <param name="x">Data.</param><param name="eps">Pole tolerance.</param>
         /// <returns>Boolean mask, True near the poles.</returns>
         private static NDArray DomainTan(NDArray x, double eps)
-            => np.logical_not(np.greater_equal(np.abs(np.cos(x)), NDArray.Scalar(eps)));
+            => np.logical_not(np.greater_equal(np.abs(np.cos(x)), NDArray.PythonLiteral(eps)));
 
         /// <summary>DomainSafeDivide: masks where <c>|a|·tiny ≥ |b|</c>, i.e. the denominator is (near) zero.</summary>
         /// <param name="a">Numerator data.</param><param name="b">Denominator data.</param>
@@ -4453,9 +4475,11 @@ namespace NumSharp
                 fa = fa.astype(strongA, copy: false);
             if (BareScalarStrongDtype(n) is null)
                 StrongZeroDimOperands(ref fa, ref fn);
-            // A StringDType value: no shift loop takes it, and NumPy's refusal names a bare C# number by NEP 50's abstract
-            // Python class (_PyLongDType / _PyFloatDType), which only the literal mark carries (AsData's 0-d is unmarked).
-            if (fa.Storage.IsVString && n is not null && n is not NDArray && n is not NDMaskedArray)
+            // A bare C# number count is the Python scalar itself, which only the literal mark carries (AsData's 0-d is an
+            // unmarked, STRONG NumPy scalar): the ufunc then keeps the value's dtype (NEP 50's weak int), and a
+            // StringDType value's refusal names the number by NEP 50's abstract Python class (_PyLongDType /
+            // _PyFloatDType). A C# array is an array-like (AsData's conversion stands).
+            if (n is not null && n is not NDArray && n is not NDMaskedArray && n is not Array)
                 fn = NDArray.FromPythonOperand(n);
             var raw = left ? np.left_shift(fa, fn) : np.right_shift(fa, fn);
             if (deferral is not null)
@@ -6563,8 +6587,10 @@ namespace NumSharp
             Exception deferral = null;
             var xnew = FilledForNumericOp(a, value, ref deferral);
             bool isFloat = xnew.typecode is NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double;
+            // `np.isclose(xnew, value, ...)` receives the Python value as is: a C# number is the weak Python scalar
+            // (FromPythonOperand marks it), so float16 / float32 data compare at their own width, as NumPy's do.
             var mask = isFloat
-                ? np.isclose(xnew, value as NDArray ?? (value as NDMaskedArray)?._data ?? NDArray.Scalar(value), rtol, atol)
+                ? np.isclose(xnew, value as NDArray ?? (value as NDMaskedArray)?._data ?? NDArray.FromPythonOperand(value), rtol, atol)
                 : CompareWithPythonValue("equal", xnew, value);
             if (deferral is not null)
                 throw deferral;
@@ -7178,8 +7204,9 @@ namespace NumSharp
             var source = a as NDMaskedArray;
             var m = source?._mask;
             // The base np.clip does the clamp on the raw data; masked data is hidden anyway, so clamping it too is
-            // harmless and matches NumPy's ma.clip.
-            var r = new NDMaskedArray(np.clip(AsData(a), a_min is null ? null : AsData(a_min), a_max is null ? null : AsData(a_max)), m?.copy());
+            // harmless and matches NumPy's ma.clip. The bounds reach np.clip as given (MaskedArray.clip forwards them to
+            // ndarray.clip): a bare C# number is a weak Python scalar there (drop rule, packing, the array's dtype kept).
+            var r = new NDMaskedArray(np.clip(AsData(a), a_min is null ? null : AsPassThroughOperand(a_min), a_max is null ? null : AsPassThroughOperand(a_max)), m?.copy());
             if (source is not null)
                 r.UpdateFrom(source);
             return Yield(scope, r);
@@ -7729,12 +7756,14 @@ namespace NumSharp
             var lowHigh = new NDMaskedArray(lhData, lhMask);
 
             // Average the two middles across `ax`. Inexact: sum then /2 (avoids the masked inf/x pitfall) plus the
-            // NaN-propagation check; integer/bool: a straight mean (which widens to float64 like NumPy).
+            // NaN-propagation check; integer/bool: a straight mean (which widens to float64 like NumPy). NumPy's
+            // `np.true_divide(s.data, 2., ...)` divides by a Python float (weak), so the 2.0 is literal-marked: a float16 /
+            // float32 sum keeps its dtype.
             NDMaskedArray s;
             if (inexact)
             {
                 s = sum(lowHigh, ax);
-                s = new NDMaskedArray(np.true_divide(s._data, NDArray.Scalar(2.0)), s._mask);
+                s = new NDMaskedArray(np.true_divide(s._data, NDArray.PythonLiteral(2.0)), s._mask);
                 s = MedianNanCheck(sdata, s, ax);
             }
             else

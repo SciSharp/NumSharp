@@ -449,9 +449,12 @@ namespace NumSharp.Backends
         private NDArray HistogramZeroBins(NDArray raveled, NDArray w, BinEdgesResult be, NPTypeCode ntype)
         {
             // keep = (tmp_a >= first_edge) & (tmp_a <= last_edge) over every block: the first block holding a kept sample
-            // raises, so whether any sample is kept decides the answer.
-            using NDArray first = NewScalar(be.First);
-            using NDArray last = NewScalar(be.Last);
+            // raises, so whether any sample is kept decides the answer. NumPy's edges are a range's Python floats (weak) or
+            // NumPy scalars of the data's dtype (its min / max, widened by a weak 0.5), so both comparisons run in the data's
+            // dtype: the double edges are literal-marked (weak) operands, which a float16 / float32 array compares in its own
+            // precision (an edge of the data's dtype converts back exactly).
+            using NDArray first = NDArray.PythonLiteral(be.First);
+            using NDArray last = NDArray.PythonLiteral(be.Last);
             using NDArray keep = (raveled >= first) & (raveled <= last);
             long kept = keep.TensorEngine.CountNonZero(keep);
             if (kept > 0)

@@ -139,27 +139,32 @@ public class ComparisonWeakScalarTests
     }
 
     /// <summary>
-    ///     NumSharp cannot tell a C# literal from an explicit 0-d array, so a 0-d operand against an array is read as the
-    ///     Python scalar its type stands for — the rule NumSharp's arithmetic uses. NumPy treats a 0-d ARRAY as strong:
-    ///     <c>np.greater(float32 [0.1, 0.5], np.array(0.1))</c> is [True, True] there.
+    ///     A 0-d ARRAY is strong, as in NumPy 2 (parity QA-05): only a C# literal is the Python scalar.
+    ///     <c>np.greater(float32 [0.1, 0.5], np.array(0.1))</c> compares in float64 and is [True, True]; an element read
+    ///     and a reduction result are NumPy scalars, strong too.
     /// </summary>
     [TestMethod]
-    [Misaligned]
-    public void ZeroDimArrayOperand_IsReadAsThePythonScalar()
+    public void ZeroDimArrayOperand_IsStrong()
     {
         var x = np.array(new[] { 0.1f, 0.5f });
-        B(np.greater(x, np.array(0.1))).Should().Equal(false, true);
+        B(np.greater(x, np.array(0.1))).Should().Equal(true, true);
+        var d = np.array(new[] { 0.1, 0.2 });
+        B(np.greater(x, d[0])).Should().Equal(true, true);
+        B(x > d.min()).Should().Equal(true, true);
+        // The literal stays weak: compared in float32.
+        B(np.greater(x, 0.1)).Should().Equal(false, true);
     }
 
     /// <summary>
-    ///     Two 0-d operands keep the strong promotion, as in NumSharp's arithmetic. NumPy's answer depends on which one is
-    ///     a Python scalar (<c>np.float32(0.1) &gt; 0.1</c> is False there, <c>np.float32(0.1) &gt; np.float64(0.1)</c> True).
+    ///     Two strong 0-d operands promote strongly, and a literal against a strong 0-d operand is weak — NumPy's
+    ///     <c>np.float32(0.1) &gt; np.float64(0.1)</c> is True, <c>np.float32(0.1) &gt; 0.1</c> False.
     /// </summary>
     [TestMethod]
-    [Misaligned]
-    public void TwoZeroDimOperands_KeepTheStrongPromotion()
+    public void ZeroDimOperands_StrongPairPromotes_LiteralAdopts()
     {
         B(np.greater(np.array(0.1f), np.array(0.1))).Should().Equal(true);
+        B(np.greater(np.array(0.1f), 0.1)).Should().Equal(false);
+        B(np.equal(np.array(0.1f), 0.1)).Should().Equal(true);
     }
 
     /// <summary>np.isclose keeps Python scalars weak in NumPy 2.x, so it now compares at the array's float32.</summary>

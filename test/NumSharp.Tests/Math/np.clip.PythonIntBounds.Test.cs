@@ -223,7 +223,11 @@ namespace NumSharp.Tests.Math
             ExpectOverflow(() => np.clip(z, 1000, null), "Python integer 1000 out of bounds for int8");
         }
 
-        /// <summary>Every C# integer literal type is a Python int, and so is a char; each takes the same drop/raise rules.</summary>
+        /// <summary>
+        ///     Every C# integer literal type is a Python int and takes the same drop/raise rules. A char is NumPy's uint16
+        ///     SCALAR in the boundary map (strong, as <c>np.uint16(233)</c>): neither dropped nor packed, it promotes
+        ///     (int8 with uint16 is int32).
+        /// </summary>
         [TestMethod]
         public void EveryCSharpIntegerLiteralType_IsAPythonInt()
         {
@@ -234,22 +238,32 @@ namespace NumSharp.Tests.Math
             np.clip(I8(), null, (ushort)60000).ToArray<sbyte>().Should().Equal(identity);
             np.clip(I8(), null, 3000000000u).ToArray<sbyte>().Should().Equal(identity);
             np.clip(I8(), long.MinValue, ulong.MaxValue).ToArray<sbyte>().Should().Equal(identity);
-            np.clip(I8(), null, 'é').ToArray<sbyte>().Should().Equal(identity);            // char 233 >= 127: dropped
+            // NumPy: np.clip(int8_arr, None, np.uint16(233)) -> int32, unchanged values; np.clip(.., np.uint16(233), None)
+            // -> int32 233 everywhere (no OverflowError: only a Python int is packed).
+            var charMax = np.clip(I8(), null, 'é');
+            charMax.dtype.Should().Be(np.int32);
+            charMax.ToArray<int>().Should().Equal(-128, -5, 0, 5, 127);
+            np.clip(I8(), 'é', null).ToArray<int>().Should().Equal(233, 233, 233, 233, 233);
 
             ExpectOverflow(() => np.clip(I8(), (byte)200, null), "Python integer 200 out of bounds for int8");
             ExpectOverflow(() => np.clip(I8(), (ushort)1000, null), "Python integer 1000 out of bounds for int8");
-            ExpectOverflow(() => np.clip(I8(), 'é', null), "Python integer 233 out of bounds for int8");
             ExpectOverflow(() => np.clip(I8(), null, (short)-1000), "Python integer -1000 out of bounds for int8");
         }
 
-        /// <summary>A 0-d VIEW bound (offset into a bigger buffer) is read at its own element.</summary>
+        /// <summary>
+        ///     A 0-d VIEW bound (offset into a bigger buffer) is read at its own element. An element read is a NumPy scalar
+        ///     (<c>np.int64(1000)</c>), strong under NEP 50: neither dropped nor packed, it promotes the clip to int64
+        ///     (NumPy: <c>np.clip(int8_arr, None, big[2])</c> is int64).
+        /// </summary>
         [TestMethod]
         public void ZeroDViewBound_ReadsItsOwnElement()
         {
             var big = np.array(new long[] { 0, 0, 1000 });
-            np.clip(I8(), null, big[2]).ToArray<sbyte>().Should().Equal(-128, -5, 0, 5, 127);
+            var upper = np.clip(I8(), null, big[2]);
+            upper.dtype.Should().Be(np.int64);
+            upper.ToArray<long>().Should().Equal(-128, -5, 0, 5, 127);
             var neg = np.array(new long[] { 0, 0, -1000 });
-            ExpectOverflow(() => np.clip(I8(), null, neg[2]), "Python integer -1000 out of bounds for int8");
+            np.clip(I8(), null, neg[2]).ToArray<long>().Should().Equal(-1000, -1000, -1000, -1000, -1000);
         }
 
         /// <summary>

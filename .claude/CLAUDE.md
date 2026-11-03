@@ -315,8 +315,8 @@ Create issues on `SciSharp/NumSharp` with `gh issue create` (`GH_TOKEN` through 
   its own size (a `double` into a float32 array overwrites two elements, past the buffer for the last one). Write each
   dtype with its own type.
 - A C# scalar literal operand (`a * 2.0`, `m > 0.75`) allocates a 0-d temporary left to the finalizer; in a hot loop hold
-  the 0-d operand (`NDArray s = 0.75`) or dispose it. Build a computed scalar with `NDArray.Scalar(x)`, never
-  `np.array(x)` (an explicit 0-d array changes `NDMatrix *`).
+  the 0-d operand (`NDArray s = 0.75`) or dispose it. Build a computed scalar with `NDArray.Scalar(x)` (strong), never
+  `np.array(x)` (an explicit 0-d array changes `NDMatrix *`); a Python number with `NDArray.PythonLiteral(x)` (weak).
 - C# overload resolution prefers an `NDArray` overload over `object` for any C# array argument (the implicit Array →
   NDArray conversion), so an `object[]` (a Python list) needs its own overload. A `?:` or switch expression with an
   `object[]` arm and an `NDArray` arm is typed `NDArray`; a switch expression takes its arms' natural type (cast arms to

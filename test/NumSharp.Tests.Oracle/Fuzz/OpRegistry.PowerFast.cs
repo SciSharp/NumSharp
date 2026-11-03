@@ -36,8 +36,8 @@ namespace NumSharp.Tests.Fuzz
             {
                 e = sc.GetProperty("kind").GetString() switch
                 {
-                    "int" => NDArray.Scalar(long.Parse(sc.GetProperty("value").GetString(), CultureInfo.InvariantCulture)),
-                    "float" => NDArray.Scalar(LittleEndianDouble(sc.GetProperty("bits").GetString())),
+                    "int" => NDArray.PythonLiteral(long.Parse(sc.GetProperty("value").GetString(), CultureInfo.InvariantCulture)),
+                    "float" => NDArray.PythonLiteral(LittleEndianDouble(sc.GetProperty("bits").GetString())),
                     var kind => throw new NotSupportedException($"power_fast: unknown exp_scalar kind {kind}"),
                 };
             }

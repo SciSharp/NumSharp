@@ -84,7 +84,7 @@ namespace NumSharp
         /// <summary>
         /// Element-wise equal comparison with scalar (==).
         /// </summary>
-        // Scope: np.asanyarray(rhs) mints a temp for a scalar/array-like operand, and the
+        // Scope: OperatorOperand(rhs) mints a temp for a scalar/array-like operand, and the
         // null/empty early returns strand an untyped Scalar/empty wrapper under MakeGeneric —
         // [NDScoped] reclaims both while yielding the typed result (an NDArray-input passthrough
         // is never tracked, rule R2). The NDArray×NDArray operator above owns no temp (the engine
@@ -104,7 +104,7 @@ namespace NumSharp
             if (lhs.Shape.IsEmpty)
                 return np.empty(lhs.Shape, NPTypeCode.Boolean).MakeGeneric<bool>();
 
-            return lhs == np.asanyarray(rhs);
+            return lhs == OperatorOperand(rhs);
         }
 
         /// <summary>
@@ -119,7 +119,7 @@ namespace NumSharp
             if (rhs is null)
                 return Scalar<bool>(false).MakeGeneric<bool>();
 
-            return np.asanyarray(lhs) == rhs;
+            return OperatorOperand(lhs) == rhs;
         }
 
         /// <summary>

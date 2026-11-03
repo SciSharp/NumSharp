@@ -205,8 +205,8 @@ reductions and `np.cov` over text (parsed first).
   `PyArray_PromoteDTypeSequence` (`dtypes.md`). A C# number literal is WEAK wherever a promotion reads the mark
   (`NDArray.Nep50Operand`; an `object` overload builds its operand with `NDArray.FromPythonOperand`), so text beside a
   literal is NumPy's `DTypePromotionError` in `np.where` / `np.choose` / `np.select` / `np.r_`, and a literal inside an
-  `NDArray[]` stays weak in their numeric routes. The ufuncs and `np.where`'s numeric route read EVERY 0-d operand as
-  weak (the house rule, `[Misaligned]`). Gates `DTypes/PromotionEngineParityTests.cs`,
+  `NDArray[]` stays weak in their numeric routes. The ufuncs and comparisons read the same mark (an unmarked 0-d operand
+  is a strong NumPy scalar, `ufuncs.md`). Gates `DTypes/PromotionEngineParityTests.cs`,
   `APIs/Nep50LiteralPromotionTests.cs`.
 - The float digits are `Backends/Printing/FloatDigits.cs` (Ryu shortest digits per precision, exact half-even `%f` /
   `%e` rounding by one 64×64 → 128-bit multiply, tables generated from `BigInteger`), which also feeds scalar str / repr

@@ -16,10 +16,12 @@ namespace NumSharp.Tests.Backends.Kernels
     /// <remarks>
     ///     <para>Every expected value comes from <see cref="Reference"/>, a per-element comparison written from NumPy's
     ///     rules and computed without NumSharp's kernels: integers exactly, floats in NumPy's comparison dtype
-    ///     (<c>result_type</c> of the pair), complex by NumPy's <c>CLT</c> / <c>CEQ</c> macros, decimal by value. A 0-d
-    ///     operand against an array is the NEP 50 weak Python scalar its C# type stands for (<see cref="Expected"/>): of
-    ///     another dtype against a float16 / float32 array it is packed into the array's precision first, and a bool
-    ///     array against a Python int at or past 2^63 raises (<see cref="RaisesOverflow"/>).</para>
+    ///     (<c>result_type</c> of the pair), complex by NumPy's <c>CLT</c> / <c>CEQ</c> macros, decimal by value. A C#
+    ///     literal operand (the 0-d array marked <c>WasPythonLiteral</c>, built here by <see cref="Literal"/>) is the NEP 50
+    ///     weak Python scalar its C# type stands for (<see cref="Expected"/>): of another dtype against a float16 / float32
+    ///     operand it is packed into that precision first, and a bool array against a Python int at or past 2^63 raises
+    ///     (<see cref="RaisesOverflow"/>). Any other 0-d operand is a strong NumPy scalar and compares in the promoted
+    ///     dtype.</para>
     ///     <para>The tests that drive <see cref="ComparisonRun.Run"/> and <see cref="ComparisonRun.RunRows"/> on raw
     ///     memory surround every buffer with sentinel bytes, so a store outside the result slots fails the test.</para>
     ///     <para>The two forms of a whole rows iteration have tests of their own: an operand whose rows are adjacent
@@ -155,26 +157,40 @@ namespace NumSharp.Tests.Backends.Kernels
         /// <summary>Which operand of a comparison NumSharp reads as a NEP 50 weak Python scalar.</summary>
         private enum WeakSide
         {
-            /// <summary>Neither: two arrays, or two 0-d operands (both keep the strong promotion).</summary>
+            /// <summary>Neither: no C# literal, or two of them (both keep the strong promotion of their C# dtypes).</summary>
             None,
 
-            /// <summary>The left operand is 0-d and the right one is an array.</summary>
+            /// <summary>The left operand is a C# literal and the right one is not.</summary>
             Left,
 
-            /// <summary>The right operand is 0-d and the left one is an array.</summary>
+            /// <summary>The right operand is a C# literal and the left one is not.</summary>
             Right,
         }
 
         /// <summary>
-        ///     The operand the comparison ufuncs read as the Python scalar its C# type stands for: a 0-d operand against an
-        ///     array operand (ndim &gt;= 1). NumSharp cannot tell a C# literal from an explicit 0-d array, so every such
-        ///     0-d operand is weak (<c>DefaultEngine.AdoptWeakComparisonScalar</c>).
+        ///     The operand the comparison ufuncs read as the Python scalar its C# type stands for: a C# literal (the 0-d array
+        ///     marked <c>WasPythonLiteral</c>) against an operand that is not one — an array or a strong 0-d array
+        ///     (<c>DefaultEngine.AdoptWeakComparisonScalar</c>). An unmarked 0-d array is a NumPy scalar, strong as in NumPy 2.
         /// </summary>
         /// <param name="a">Left operand.</param>
         /// <param name="b">Right operand.</param>
         /// <returns>The weak side, or <see cref="WeakSide.None"/>.</returns>
         private static WeakSide WeakOperand(NDArray a, NDArray b)
-            => a.ndim == 0 && b.ndim > 0 ? WeakSide.Left : b.ndim == 0 && a.ndim > 0 ? WeakSide.Right : WeakSide.None;
+            => a.WasPythonLiteral && !b.WasPythonLiteral ? WeakSide.Left : b.WasPythonLiteral && !a.WasPythonLiteral ? WeakSide.Right : WeakSide.None;
+
+        /// <summary>
+        ///     The 0-d operand a C# value of <paramref name="t"/> becomes through the implicit conversion (the boundary map):
+        ///     a bool is a Python bool, an integer, float, double or complex value the WEAK Python scalar (marked
+        ///     <c>WasPythonLiteral</c>), a Half / char value a strong NumPy scalar, a decimal a strong 0-d array.
+        /// </summary>
+        /// <param name="value">The value (converted to <paramref name="t"/> first).</param>
+        /// <param name="t">The value's dtype.</param>
+        /// <returns>A new 0-d array the caller disposes.</returns>
+        private static NDArray Literal(object value, NPTypeCode t)
+        {
+            using var typed = NDArray.Scalar(value, t);
+            return NDArray.FromPythonOperand(typed.GetAtIndex(0));
+        }
 
         /// <summary>
         ///     Whether a 0-d operand of <paramref name="t"/> stands for a Python scalar (the C# types that have a Python
@@ -473,8 +489,10 @@ namespace NumSharp.Tests.Backends.Kernels
                 using var a3 = Make(ta, tb, 3 * n, 2);
                 NDArray aStep = a2["::2"], bStep = b2["::2"], aRev = a["::-1"], bRev = b["::-1"], aThree = a3["::3"], bBack = b2["::-2"];
                 NDArray aStepEnd = a2["1::2"], bStepEnd = b2["1::2"], aThreeEnd = a3["2::3"];
-                using var value = NDArray.Scalar(PoolFor(tb, ta)[(int)(n % PoolFor(tb, ta).Length)], tb);
-                using var valueLeft = NDArray.Scalar(PoolFor(ta, tb)[(int)(n % PoolFor(ta, tb).Length)], ta);
+                using var value = Literal(PoolFor(tb, ta)[(int)(n % PoolFor(tb, ta).Length)], tb);
+                using var valueLeft = Literal(PoolFor(ta, tb)[(int)(n % PoolFor(ta, tb).Length)], ta);
+                // The same value as a strong NumPy scalar (an element read, a reduction result): the promoted comparison.
+                using var strongValue = NDArray.Scalar(PoolFor(tb, ta)[(int)(n % PoolFor(tb, ta).Length)], tb);
                 foreach (var op in Ops)
                 {
                     string tag = $"{op} {ta} x {tb} n={n}";
@@ -484,8 +502,9 @@ namespace NumSharp.Tests.Backends.Kernels
                     using (var g = Compare(op, aThree, b)) AssertCompared(tag + " step 3 / contiguous", g, aThree, ta, b, tb, op);
                     using (var g = Compare(op, a, bBack)) AssertCompared(tag + " contiguous / step -2", g, a, ta, bBack, tb, op);
                     using (var g = Compare(op, aRev, bStep)) AssertCompared(tag + " reversed / step 2", g, aRev, ta, bStep, tb, op);
-                    // A 0-d operand is a weak Python scalar: a bool array against a Python int at or past 2^63 raises.
+                    // A C# literal is a weak Python scalar: a bool array against a Python int at or past 2^63 raises.
                     CompareAndAssert(tag + " array / value", op, a, ta, value, tb);
+                    CompareAndAssert(tag + " array / strong value", op, a, ta, strongValue, tb);
                     CompareAndAssert(tag + " reversed / value", op, aRev, ta, value, tb);
                     CompareAndAssert(tag + " value / step 2", op, valueLeft, ta, bStep, tb);
                     using (var g = Compare(op, aStepEnd, bStepEnd)) AssertCompared(tag + " step 2 to the buffer end", g, aStepEnd, ta, bStepEnd, tb, op);
@@ -631,7 +650,7 @@ namespace NumSharp.Tests.Backends.Kernels
                 const long n = 6000;
                 using var aBase = Make(ta, tb, n + 8, 0);
                 using var bBase = Make(tb, ta, n + 8, 3);
-                using var value = NDArray.Scalar(PoolFor(tb, ta)[1], tb);
+                using var value = Literal(PoolFor(tb, ta)[1], tb);
                 foreach (int offset in new[] { 0, 1, 3 })
                 {
                     NDArray a = aBase[$"{offset}:{offset + n}"], b = bBase[$"{offset}:{offset + n}"], bOther = bBase[$"{(offset + 1) % 4}:{(offset + 1) % 4 + n}"];
@@ -759,7 +778,7 @@ namespace NumSharp.Tests.Backends.Kernels
             {
                 if (tv == ta)
                     continue;
-                using var s = NDArray.Scalar(value, tv);
+                using var s = Literal(value, tv);
                 if (RaisesOverflow(a, ta, s, tv))
                 {
                     foreach (var op in Ops)
@@ -927,7 +946,7 @@ namespace NumSharp.Tests.Backends.Kernels
                 using var bFlat = Make(tb, ta, 6 * 90, 3);
                 NDArray a = aFlat.reshape(6, 90), b = bFlat.reshape(6, 90);
                 using var row = Make(tb, ta, 90, 5);
-                using var value = NDArray.Scalar(PoolFor(tb, ta)[2 % PoolFor(tb, ta).Length], tb);
+                using var value = Literal(PoolFor(tb, ta)[2 % PoolFor(tb, ta).Length], tb);
                 var layouts = new (string Name, NDArray L, NDArray R)[]
                 {
                     ("contiguous", a, b), ("row", a, row), ("value", a, value), ("reversed columns", a[":, ::-1"], b[":, ::-1"]),

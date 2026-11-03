@@ -667,13 +667,15 @@ namespace NumSharp.Backends
         // ---- Policy helpers ---------------------------------------------------
 
         /// <summary>
-        /// NEP-50 promotion of the running loop dtype with one bound. A 0-d bound is a scalar and is
-        /// promoted through the array-scalar table every binary ufunc uses (<see cref="np._FindCommonArrayScalarType(NPTypeCode, NPTypeCode)"/>),
+        /// NEP-50 promotion of the running loop dtype with one bound. A weak bound — the 0-d array a C# number literal
+        /// became (<see cref="NDArray.WasPythonLiteral"/>, NumPy's Python int / float / complex) — is promoted through the
+        /// array-scalar table every binary ufunc uses (<see cref="np._FindCommonArrayScalarType(NPTypeCode, NPTypeCode)"/>),
         /// so np.clip agrees with np.minimum / np.maximum, the ufuncs NumPy's <c>_clip</c> routes one-sided
         /// clips to. A C# integer literal therefore adopts the array's dtype the way a Python int does
         /// (clip(float32, 1, 3) stays float32), and a higher-kind scalar promotes (a float bound on an int array → float64).
-        /// An array bound promotes strongly (<see cref="DTypePromotion.PromoteTypes(NPTypeCode, NPTypeCode)"/>, the engine
-        /// behind <see cref="np.result_type(NPTypeCode, NPTypeCode)"/>).
+        /// Every other bound promotes strongly (<see cref="DTypePromotion.PromoteTypes(NPTypeCode, NPTypeCode)"/>, the engine
+        /// behind <see cref="np.result_type(NPTypeCode, NPTypeCode)"/>): an array, and a 0-d NumPy scalar or array
+        /// (<c>np.clip(int8, i64[0], i64[1])</c> is int64, as in NumPy).
         /// </summary>
         /// <param name="outType">The dtype promoted so far (the array's, then after the first bound).</param>
         /// <param name="bound">The bound to fold in, or null for none.</param>
@@ -688,7 +690,7 @@ namespace NumSharp.Backends
         private static NPTypeCode PromoteClipBound(NPTypeCode outType, NDArray bound)
         {
             if (bound is null) return outType;
-            if (bound.ndim == 0)
+            if (bound.WasPythonLiteral)
                 return np._FindCommonArrayScalarType(outType, bound.typecode);
             return DTypePromotion.PromoteTypes(outType, bound.typecode);
         }
@@ -727,26 +729,26 @@ namespace NumSharp.Backends
 
         /// <summary>
         /// Reads a bound as NumPy's Python int, when it is one. np.clip takes NDArray bounds, so a C# integer literal
-        /// (<c>np.clip(a, -1, 100)</c>) arrives as a 0-d array of the literal's dtype. Every 0-d bound of an integer
-        /// dtype (the eight C# integer primitives, and char) stands for a Python int. That matches the bound's
-        /// promotion: the array-scalar table makes such a bound adopt the array's dtype, the way a weak Python int
-        /// does, so its value must be checked the way a Python int's is.
+        /// (<c>np.clip(a, -1, 100)</c>) arrives as a 0-d array of the literal's dtype, marked
+        /// <see cref="NDArray.WasPythonLiteral"/>: such a bound stands for a Python int. That matches the bound's
+        /// promotion: the array-scalar table makes it adopt the array's dtype, the way a weak Python int does, so its
+        /// value must be checked the way a Python int's is.
         /// </summary>
         /// <param name="bound">The bound to read, or null.</param>
         /// <param name="value">The bound's value when this returns true. 128 bits hold every int64 and uint64 value.</param>
-        /// <returns>True for a 0-d integer-dtype bound; false for null, an array bound, or a bool/float/complex/decimal scalar.</returns>
+        /// <returns>True for a literal-marked integer bound; false for null, an array bound, a strong 0-d bound (a NumPy
+        /// scalar or 0-d array, a <c>char</c> value), or a bool/float/complex/decimal scalar.</returns>
         /// <exception cref="InvalidOperationException">Never in practice: raised only if an integer kind the guard admits had
         /// no read below (a new integer dtype added to <see cref="NDExprTypeRules.IsIntegerKind"/> without one here).</exception>
         /// <remarks>
-        /// A strong 0-d NDArray (NumPy's np.int64(5) or np.array(5)) cannot be told apart from a literal at this boundary,
-        /// so it is treated the same. NumPy would promote with it instead: clip(int8, np.int64(-1000), np.int64(1000))
-        /// is int64 there and an unchanged int8 here. The values agree, only the dtype differs, and the old behaviour
-        /// returned wrapped garbage for the same call.
+        /// A strong 0-d bound (NumPy's np.int64(5) or np.array(5): an element read, a reduction result, an explicit 0-d
+        /// array) is not a Python int: NumPy's <c>_clip</c> tests <c>type(min) is int</c>, so such a bound is neither
+        /// dropped nor packed, and it promotes (<c>clip(int8, np.int64(-1000), np.int64(1000))</c> is int64).
         /// </remarks>
         private static bool TryGetPyInt(NDArray bound, out Int128 value)
         {
             value = default;
-            if (bound is null || bound.ndim != 0 || !NDExprTypeRules.IsIntegerKind(bound.GetTypeCode))
+            if (bound is null || !bound.WasPythonLiteral || !NDExprTypeRules.IsIntegerKind(bound.GetTypeCode))
                 return false;
 
             // The element through the view's offset (a bound taken as arr[3] reads arr[3]), read UNBOXED: the boxing
@@ -773,17 +775,18 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// The descriptor clip's no-loop message shows for an operand: a 0-d operand is the module's Python scalar (see
-        /// <see cref="TryGetPyInt"/> and <see cref="ValidateClipInputCasts"/>) and is named by NumPy's default descriptor
-        /// for it — any integer kind (a C# integer literal, NumPy's Python int) as int64, a float32 / float64 (a Python
-        /// float) as float64, a complex as complex128; every other operand by its own descriptor (an array, and the
-        /// strong 0-d bool / float16 / decimal / string).
+        /// The descriptor clip's no-loop message shows for an operand: a literal-marked operand
+        /// (<see cref="NDArray.WasPythonLiteral"/>) is the module's Python scalar (see <see cref="TryGetPyInt"/> and
+        /// <see cref="ValidateClipInputCasts"/>) and is named by NumPy's default descriptor for it — an integer literal
+        /// (NumPy's Python int) as int64, a float32 / float64 literal (a Python float) as float64, a complex as complex128;
+        /// every other operand by its own descriptor (an array, a strong 0-d NumPy scalar or array, and the 0-d bool /
+        /// float16 / char / decimal / string values).
         /// </summary>
         /// <param name="operand">The array being clipped or a kept bound.</param>
         /// <returns>The descriptor NumPy's message names.</returns>
         private static DType ClipOperandDescr(NDArray operand)
         {
-            if (operand.ndim != 0)
+            if (!operand.WasPythonLiteral)
                 return operand.dtype;
             var tc = operand.GetTypeCode;
             if (NDExprTypeRules.IsIntegerKind(tc))
@@ -797,16 +800,17 @@ namespace NumSharp.Backends
 
         /// <summary>
         /// The class clip's no-loop message names for an operand when a NEP 55 <c>StringDType</c> takes part (NumPy's
-        /// dispatcher refusal, which names DType CLASSES): a 0-d integer / float32 / float64 / complex operand is the
-        /// module's Python scalar (see <see cref="ClipOperandDescr"/>), named by NEP 50's abstract class
-        /// (<c>_PyLongDType</c> / <c>_PyFloatDType</c> / <c>_PyComplexDType</c>); every other operand by its descriptor's
-        /// class (an array, a 0-d text bound as <c>StrDType</c>, a bool as <c>BoolDType</c>).
+        /// dispatcher refusal, which names DType CLASSES): a literal-marked integer / float32 / float64 / complex operand
+        /// (<see cref="NDArray.WasPythonLiteral"/>) is the module's Python scalar (see <see cref="ClipOperandDescr"/>),
+        /// named by NEP 50's abstract class (<c>_PyLongDType</c> / <c>_PyFloatDType</c> / <c>_PyComplexDType</c>); every
+        /// other operand by its descriptor's class (an array, a strong 0-d NumPy scalar or array, a 0-d text bound as
+        /// <c>StrDType</c>, a bool as <c>BoolDType</c>).
         /// </summary>
         /// <param name="operand">The array being clipped or a kept bound.</param>
         /// <returns>NumPy's repr of the class.</returns>
         private static string ClipOperandClass(NDArray operand)
         {
-            if (operand.ndim == 0)
+            if (operand.WasPythonLiteral)
             {
                 var tc = operand.GetTypeCode;
                 if (NDExprTypeRules.IsIntegerKind(tc))
@@ -848,27 +852,29 @@ namespace NumSharp.Backends
         /// <exception cref="ArgumentException">An input cannot reach <paramref name="loop"/>:
         /// "Cannot cast ufunc 'clip' input 1 from dtype('float64') to dtype('int8') with casting rule 'same_kind'".</exception>
         /// <remarks>
-        /// A 0-d bound is a weak Python scalar and is checked as NEP 50's abstract DType, named by its default
-        /// descriptor. A Python int reaches every integer and inexact loop but not bool (named int64). A Python
-        /// float reaches only inexact loops (named float64). A Python complex reaches only complex (named complex128).
-        /// So clip(uint8, 5, 10, dtype=uint8) is legal even though int64→uint8 is not same_kind, while
-        /// clip(bool, 0, 2, dtype=bool) reports "input 1 from dtype('int64')". A 0-d bool, float16, decimal, and every
-        /// array bound are strong and use the plain same_kind table.
+        /// A literal-marked bound (<see cref="NDArray.WasPythonLiteral"/>) is a weak Python scalar and is checked as NEP
+        /// 50's abstract DType, named by its default descriptor. A Python int reaches every integer and inexact loop but
+        /// not bool (named int64). A Python float reaches only inexact loops (named float64). A Python complex reaches only
+        /// complex (named complex128). So clip(uint8, 5, 10, dtype=uint8) is legal even though int64→uint8 is not
+        /// same_kind, while clip(bool, 0, 2, dtype=bool) reports "input 1 from dtype('int64')". A strong 0-d bound (a
+        /// NumPy scalar or 0-d array), a 0-d bool, float16, char or decimal value, and every array bound use the plain
+        /// same_kind table.
         /// </remarks>
         private static void ValidateClipInputCasts(NDArray lhs, NDArray min, NDArray max, NPTypeCode loop, string ufunc)
         {
             ValidateClipInputCast(lhs.GetTypeCode, strongOnly: true, isScalar: false, 0, loop, ufunc);
             int next = 1;
             if (min is not null)
-                ValidateClipInputCast(min.GetTypeCode, strongOnly: false, min.ndim == 0, next++, loop, ufunc);
+                ValidateClipInputCast(min.GetTypeCode, strongOnly: false, min.WasPythonLiteral, next++, loop, ufunc);
             if (max is not null)
-                ValidateClipInputCast(max.GetTypeCode, strongOnly: false, max.ndim == 0, next, loop, ufunc);
+                ValidateClipInputCast(max.GetTypeCode, strongOnly: false, max.WasPythonLiteral, next, loop, ufunc);
         }
 
         /// <summary>One operand of <see cref="ValidateClipInputCasts"/>; see there for the rules.</summary>
         /// <param name="from">The operand's dtype.</param>
         /// <param name="strongOnly">True for the clipped array itself, which is never a weak scalar.</param>
-        /// <param name="isScalar">True when the operand is a 0-d bound (a weak Python scalar for int/float/complex dtypes).</param>
+        /// <param name="isScalar">True when the operand is a literal-marked bound (a weak Python scalar for int / float /
+        ///     complex dtypes).</param>
         /// <param name="index">The operand's input index in the routed ufunc.</param>
         /// <param name="loop">The requested loop dtype.</param>
         /// <param name="ufunc">The routed ufunc's name.</param>

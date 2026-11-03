@@ -20,12 +20,12 @@ namespace NumSharp
         /// <summary>
         /// Element-wise bitwise XOR with any scalar or array-like.
         /// </summary>
-        // Scope: np.asanyarray(rhs) mints a temp for a scalar/array-like operand; [NDScoped]
+        // Scope: OperatorOperand(rhs) mints a temp for a scalar/array-like operand; [NDScoped]
         // reclaims it while leaving an NDArray-input passthrough untouched (see NDArray.AND.cs).
         [NDScoped]
         public static NDArray operator ^(NDArray lhs, object rhs)
         {
-            return lhs ^ np.asanyarray(rhs);
+            return lhs ^ OperatorOperand(rhs);
         }
 
         /// <summary>
@@ -34,7 +34,7 @@ namespace NumSharp
         [NDScoped]
         public static NDArray operator ^(object lhs, NDArray rhs)
         {
-            return np.asanyarray(lhs) ^ rhs;
+            return OperatorOperand(lhs) ^ rhs;
         }
     }
 }

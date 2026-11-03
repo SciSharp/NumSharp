@@ -177,20 +177,25 @@ namespace NumSharp.Backends
         /// Order: Decimal > Double > Single > Half.
         /// </summary>
         /// <summary>
-        ///     The NEP50-aware form the ufunc entry points use: a 0-d operand is a weak scalar (a C# literal arrives as
-        ///     one — <c>np.arctan2(f32, 1)</c> is <c>f32 × int32-0-d</c>), so the common type is resolved by
+        ///     The NEP50-aware form the ufunc entry points use: a C# literal (<see cref="NDArray.WasPythonLiteral"/>) is a
+        ///     weak scalar — <c>np.arctan2(f32, 1)</c> is <c>f32 × marked int32-0-d</c> — so the common type is resolved by
         ///     <see cref="np._FindCommonType(NDArray, NDArray)"/> exactly as every other binary ufunc does and THEN
         ///     mapped to the float tier: <c>arctan2(f32, 1)</c> stays float32, <c>arctan2(i32, 1.5)</c> is float64.
-        ///     The dtype-only overload below combines two ARRAY dtypes and sent every int literal on a float32/float16
+        ///     The dtype-only overload below combines two STRONG dtypes and sent every int literal on a float32/float16
         ///     array to float64.
         /// </summary>
+        /// <param name="y">The first operand.</param>
+        /// <param name="x">The second operand.</param>
+        /// <returns>The float loop dtype (decimal for a decimal operand, NumSharp's extension).</returns>
+        /// <remarks>Two strong operands — arrays, strong 0-d arrays (an element read, <c>np.array(x)</c>), or two literals —
+        ///     take NumPy's loop-list rule: the first float loop BOTH inputs cast to safely (<c>uint8 × int8</c> is the
+        ///     <c>ee->e</c> float16 loop, where <c>result_type</c>'s int16 would give float32; the oracle's arctan2 cells
+        ///     and the relayout tier's 0-d views pin it).</remarks>
         private static NPTypeCode PromoteATan2Binary(NDArray y, NDArray x)
         {
-            // Two ARRAYS keep the loop-list rule (uint8 × int8 → float16, exactly NumPy's `ee->e` loop, which
-            // result_type's int16 → float32 would get wrong — the oracle's arctan2/uint8,int8 cells pin it).
-            // Only a lone 0-d operand is the weak scalar that adopts the array's dtype-kind.
-            bool ys = y.ndim == 0, xs = x.ndim == 0;
-            if (ys == xs)
+            // Only a lone weak literal adopts the strong operand's dtype-kind; any other pair keeps the loop-list rule.
+            bool yw = y.WasPythonLiteral, xw = x.WasPythonLiteral;
+            if (yw == xw)
                 return PromoteATan2Binary(y.GetTypeCode, x.GetTypeCode);
             return PromoteATan2Single(np._FindCommonType(y, x));
         }

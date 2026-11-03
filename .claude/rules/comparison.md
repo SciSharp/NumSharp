@@ -82,14 +82,19 @@ loop matching the specified signature and casting was found for ufunc <name>`). 
 `result_type(lhs, rhs)` inside the kernel (`greater(i8 2^53+1, f8 2^53)` → False, `equal` → True). Engine members follow
 the order `(inputs, typeCode, out, where)`.
 
-A Python scalar is WEAK in every comparison (NEP 50). `ExecuteComparison` (`DefaultEngine.CompareOp.WeakScalar.cs`)
-converts a 0-d Python-scalar operand (a C# bool / integer / float / double / `Complex`; `Half` / `char` / `decimal` are
-strong NumPy scalars) against an array into the array's precision before either route runs: `PyArray_Pack`, i.e. the
-correctly rounded double, then the float16 / float32 narrow (an int past 2^53 rounds twice, overflow is inf), complex
-parts to float32 (complex64). So `np.greater(f32 [0.1, 0.5], 0.1)` is `[False, True]` and `== 0.1` `[True, False]`, as
-NumPy's. A 0-d against a 0-d stays strong; a 0-d NDArray against an array is read as the literal (`[Misaligned]`,
-np.clip's rule). An integer array against an in-range Python int of another width is re-packed into the array's dtype
-(NumPy's `special_integer_comparisons` in-range branch: values unchanged, the same-dtype kernel runs). numpy.ma stays
+A Python scalar is WEAK in every comparison (NEP 50), and in C# the Python scalar is the 0-d array a number literal
+becomes (`NDArray.WasPythonLiteral`: a C# integer / float / double / `Complex`). `ExecuteComparison`
+(`DefaultEngine.CompareOp.WeakScalar.cs`) converts such a literal against a strong operand (an array, or a strong 0-d
+array) into that operand's precision before either route runs: `PyArray_Pack`, i.e. the correctly rounded double, then
+the float16 / float32 narrow (an int past 2^53 rounds twice, overflow is inf), complex parts to float32 (complex64). So
+`np.greater(f32 [0.1, 0.5], 0.1)` is `[False, True]` and `== 0.1` `[True, False]`, and `np.float32(0.1) > 0.1` is False,
+as NumPy's. Every other 0-d operand is a NumPy scalar or 0-d array and compares STRONG: an element read, a reduction
+result, `np.array(0.1)` (`np.greater(f32, np.array(0.1))` is `[True, True]`), `NDArray.Scalar`, a `Half` / `char` /
+`decimal` value; a bool literal is a Python bool (strong, the lowest kind, so no answer changes); two literals keep the
+strong promotion of their C# dtypes. The `object` operator overloads read a boxed C# number as the literal
+(`NDArray.OperatorOperand`: `x > (object)0.1` is `x > 0.1`). An integer array against an in-range integer 0-d operand of
+another width is re-packed into the array's dtype (NumPy's `special_integer_comparisons` in-range branch for a Python
+int, the exact promoted compare's answers for a strong one: values unchanged, the same-dtype kernel runs). numpy.ma stays
 STRONG (`PromoteMaScalar(strongOperand)`; its domains see `getdata` data). Otherwise the comparison type is the promotion
 of the two dtypes (`ComparisonKernelKey.GetComparisonType` → `np._FindCommonScalarType`; int64 against uint64 compares
 exactly). The binary ufuncs' weak Python int is checked against the loop dtype the same way (`ufuncs.md`). Gates: the
@@ -149,9 +154,11 @@ Every operand layout and dtype pair runs the vector kernels, for the operators a
     the out needs no cast. `where=` keeps its masked route.
 - Scalar adoption is exact, never a cast (`ComparisonRun.ScalarAdoption`). The weak-scalar step above runs BEFORE it, so
   an operand NEP 50 treats as weak arrives in the array's dtype already, and adoption serves the strong 0-d operands
-  (`char`, `Half`, `decimal`) and the out-of-range Python ints (`ComparisonRunTests` holds its element reference to that
-  rule: `Expected` / `PackWeak` for a Python scalar against a float16 / float32 array, `RaisesOverflow` for a bool array
-  against a Python int at or past 2^63). NumPy's comparison is
+  (element reads, reduction results, `np.array(x)`, `char`, `Half`, `decimal`) and the out-of-range Python ints
+  (`ComparisonRunTests` holds its element reference to that rule: `WeakOperand` reads the literal mark, `Literal` builds
+  the C# literals, `Expected` / `PackWeak` pack a Python scalar against a float16 / float32 array, `RaisesOverflow` a
+  bool array against a Python int at or past 2^63, and the one-dimensional matrix also compares each array with its value
+  as a strong `NDArray.Scalar`). NumPy's comparison is
   `convert(a) op convert(v)` in the promoted dtype, which has the same answer as `a op a'` for one value `a'` of the
   array's dtype, or the same answer for every element:
   - integer array, integer value: `a' = v` inside the array dtype's range; outside it, the chunk is decided;

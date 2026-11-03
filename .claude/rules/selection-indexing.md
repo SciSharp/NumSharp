@@ -108,9 +108,9 @@ Every store entry point packs a C# literal as NumPy's `PyArray_Pack` of a Python
   (`Backends/NDArray.PythonLiteral.cs`): an integer primitive / `float` / `double` / `Complex` is `WasPythonLiteral`
   (NumPy's own `NPY_ARRAY_WAS_PYTHON_LITERAL` flag), a `Half` / `char` is `WasNumPyScalar` (`np.float16` / `np.uint16`);
   `bool` and `decimal` are unmarked. The mark belongs to that one object (a view, copy, reshape or result is unmarked);
-  `NDArray.Scalar(x)` / `np.array(x)` build an unmarked, strong 0-d. ONLY the store paths read the marks; the ufuncs and
-  comparisons read every 0-d operand as weak (np.clip's rule), because library code builds its scalar operands with
-  `NDArray.Scalar`.
+  `NDArray.Scalar(x)` / `np.array(x)` build an unmarked, strong 0-d. The store paths read the marks, and so do the ufuncs
+  and the comparisons (NEP 50: only a `WasPythonLiteral` operand is weak, `ufuncs.md`); library code that means a Python
+  number builds its operand with `NDArray.PythonLiteral(x)`.
 - The pack. `NDArray.PackForStore(value, dtype, pyArrayPackRoute)` packs a marked value with `ReductionInitial.TryPack`
   (the complete `PyArray_Pack` port: a Python int range-checked with the LP64 texts, a float truncated then range-checked,
   NaN / inf / complex refused with Python's texts, an int past 2^53 rounded TWICE into float16 / float32, a bool dtype

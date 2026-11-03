@@ -68,7 +68,7 @@ namespace NumSharp.Tests.Fuzz
             {
                 "none" => null,
                 "int" => PyIntLiteral(v),
-                "float" => NDArray.Scalar(v.GetDouble()),
+                "float" => NDArray.PythonLiteral(v.GetDouble()),
                 "bool" => NDArray.Scalar(v.GetBoolean()),
                 var t => throw new NotSupportedException($"clip_ufunc: unknown scalar kind '{t}'"),
             };
