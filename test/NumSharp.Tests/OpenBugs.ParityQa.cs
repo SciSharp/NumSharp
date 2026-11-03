@@ -1154,5 +1154,77 @@ namespace NumSharp.Tests
             ((double)m.item(1, -2)).Should().Be(4.0);
             pastTheAxis.Should().Throw<IndexError>().WithMessage("index 4 is out of bounds for axis 1 with size 3");
         }
+
+        // ------------------------------------------------------------------
+        // QA-34 — np.broadcast_arrays makes a read-only operand writeable
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's <c>broadcast_arrays</c> (<c>lib/_stride_tricks_impl.py</c>) returns an operand whose shape already
+        ///     matches as the operand itself and builds every other view with <c>_broadcast_to(..., readonly=False)</c>,
+        ///     which sets <c>writeable = True</c> only <c>if array.flags._writeable_no_warn</c>: a read-only operand (one
+        ///     whose WRITEABLE flag was cleared, or a <c>np.broadcast_to</c> view) gives a read-only view, and writing
+        ///     through it raises <c>ValueError: assignment destination is read-only</c>. NumSharp's
+        ///     <c>NDArray.broadcast_arrays</c> (Backends/NDArray.StrideTricks.cs) sets WRITEABLE on every view
+        ///     unconditionally (<c>WithFlags(flagsToSet: ArrayFlags.WRITEABLE)</c>), so the view of a read-only array is
+        ///     writeable and a write through it changes the array its owner made read-only (<c>p90</c>:
+        ///     <c>b[0, 0, 0] = 99</c> turns the read-only <c>r[0, 0]</c> into 99). The params form, an operand already of
+        ///     the broadcast shape, a <c>broadcast_to</c> operand and <c>np.meshgrid(copy: false)</c> (whose grids are
+        ///     broadcast_arrays views) do the same.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA34")]
+        public void ParityQa_BroadcastArrays_ReadOnlyOperand_ShouldStayReadOnly()
+        {
+            using var r = np.arange(6.0).reshape(2, 3);
+            r.setflags(write: false);
+            using var deeper = np.zeros(new Shape(2, 2, 1));
+            using var sameShape = np.zeros(new Shape(2, 3));
+            using var b0 = np.broadcast_to(np.arange(3.0), new Shape(2, 3));
+
+            var (stretched, _) = np.broadcast_arrays(r, deeper);
+            var (unchanged, _) = np.broadcast_arrays(r, sameShape);
+            var (ofBroadcastTo, _) = np.broadcast_arrays(b0, deeper);
+            Action writeThrough = () => stretched[0, 0, 0] = (NDArray)99.0;
+
+            stretched.flags.writeable.Should().BeFalse("a view of a read-only operand stays read-only");
+            unchanged.flags.writeable.Should().BeFalse("NumPy returns the matching operand itself");
+            ofBroadcastTo.flags.writeable.Should().BeFalse("a broadcast_to view is not writeable");
+            writeThrough.Should().Throw<ValueError>().WithMessage("assignment destination is read-only");
+            r.GetDouble(0, 0).Should().Be(0.0);
+        }
+
+        // ------------------------------------------------------------------
+        // QA-35 — np.array(ndarray) copies the source's read-only flag and C-orders a broadcast copy
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     <c>np.array(a)</c> is a copy (<c>copy=True</c>, <c>order='K'</c>), and a copy NumPy allocates is always
+        ///     writeable: <c>np.array(ro)[0, 0] = 99</c> works on a read-only <c>ro</c>. NumSharp's
+        ///     <c>np.array(NDArray, bool copy)</c> (Creation/np.array.cs) returns <c>new NDArray(nd.Storage.Clone())</c>,
+        ///     and <c>UnmanagedStorage.Clone</c>'s raw-layout branch (a C- or F-contiguous source at offset 0) builds the
+        ///     clone's shape with <c>new Shape(_shape)</c>, which keeps the source's flags: a read-only C, F or 0-d source
+        ///     gives a read-only copy, and the write raises <c>ValueError: assignment destination is read-only</c>
+        ///     (<c>p90</c>; a strided source takes the other branch and comes back writeable). The other branch lays a
+        ///     broadcast source out in C order, where NumPy's K-order copy of <c>broadcast_to(arange(4.), (3, 4))</c>
+        ///     (strides <c>(0, 8)</c>) is F-contiguous (<c>p89</c>; np.copy and ndarray.copy already give NumPy's F).
+        ///     <c>NDArray.Clone()</c> (not a NumPy API) shares the same storage clone.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA35")]
+        public void ParityQa_ArrayOfNDArray_ShouldBeAWriteableKOrderCopy()
+        {
+            using var ro = np.arange(6.0).reshape(2, 3);
+            ro.setflags(write: false);
+            using var bcast = np.broadcast_to(np.arange(4.0), new Shape(3, 4));
+
+            using var copy = np.array(ro);
+            using var bcastCopy = np.array(bcast);
+            Action write = () => copy[0, 0] = (NDArray)99.0;
+
+            copy.flags.writeable.Should().BeTrue("a copy NumPy allocates is writeable");
+            write.Should().NotThrow();
+            ro.GetDouble(0, 0).Should().Be(0.0);
+            bcastCopy.flags.f_contiguous.Should().BeTrue("order='K' keeps the stride-0 axis fastest");
+            bcastCopy.flags.c_contiguous.Should().BeFalse();
+        }
     }
 }
