@@ -235,6 +235,12 @@ and the task completes from a native callback.
 - **In flight.** Until the task completes, ORT reads the shared inputs and writes the outputs. Do not write
   an input (pass `OnnxCodecMode.Copy` to feed a snapshot). To dispose an array in flight is safe: the run
   holds a reference on every buffer.
+- **An `NDScope` does not cross the `await`.** A scope belongs to the thread that opened it, and the run's
+  continuation resumes on another thread. A `using var scope = NDScope.Open();` held across
+  `await session.RunAsync(...)` is disposed on the continuation's thread and left behind as the opening
+  thread's current scope, so that thread's later arrays are tracked into it; when the continuation's thread
+  reuses the scope, its close disposes them (measured: an array the opening thread filled with 7.0 read 9.0,
+  another array's data). Scope the synchronous code before the `await` and after it, never across it.
 
 ## Text
 
