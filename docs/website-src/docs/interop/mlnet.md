@@ -122,8 +122,9 @@ using var train = new Dictionary<string, NDArray> { ["Features"] = x, ["Label"] 
 
 Reading a column back mirrors the shapes: a scalar `"Score"` column of `R` rows comes back as a 1-D
 `(R,)` array; a fixed-size vector column of width `C` comes back as `(R, C)`. A variable-length vector
-column (rows disagree on length) is refused - NumSharp arrays are rectangular; pad the column to a fixed
-size in the pipeline first.
+column whose rows disagree on length is refused - NumSharp arrays are rectangular, and NumPy refuses ragged
+rows too; read it with ML.NET's own `view.GetColumn<float[]>("col")` and pad or trim the rows to one length
+before `np.array`. (Rows that all share one length read as usual, declared size or not.)
 
 **Labels.** The label is one more array of a dictionary view, in the type its trainer reads (`bool` for a
 binary classifier, `float32` for a regression and for the `MapValueToKey` of the multiclass recipe). A
@@ -275,6 +276,10 @@ currency, feeding a transformer (`transformer.Transform(nd.AsDataView(...))`) an
 lightweight contract, and the heavy `Microsoft.ML` you already reference for training composes on top -
 the exact mirror of how `NumSharp.Interop.OnnxRuntime` depends on `Microsoft.ML.OnnxRuntime.Managed` and
 leaves the native runtime to the consumer.
+
+Any `Microsoft.ML.DataView` from 2.0.0 on is accepted, with no upper bound - the form `Microsoft.ML` itself
+declares it in - so moving your `Microsoft.ML` to a newer major never fails the restore. The suite runs on
+ML.NET 2.0.1, on the current release and on the newest preview.
 
 ---
 

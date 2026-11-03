@@ -123,8 +123,13 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   `VBufferAccessor<T>`: pinned, write-through, leased; sparse or empty → a copy), `vbuffer.ToNDArray()` (a copy).
 - Feeding a model: `transformer.Transform(nd.AsDataView("Features")).ToNDArray("Score")`. `IDataView` is the whole
   bridge, so there is no per-transformer runner and no `ITransformer` dependency.
-- Depends on `Microsoft.ML.DataView [2.0.0, 6.0.0)` only. There is no standalone `Microsoft.ML.Data` package:
-  `ITransformer`/`MLContext` are in the full `Microsoft.ML` the consumer brings, which NuGet unifies upward.
+- Depends on `Microsoft.ML.DataView` 2.0.0 or later, with NO upper bound (the form `Microsoft.ML` itself declares it
+  in), and on nothing else. A cap below a consumer's `Microsoft.ML` is a restore ERROR (NU1107, cousin ranges that do
+  not overlap): the former `[2.0.0, 6.0.0)` would have failed every user's restore the day they moved to ML.NET 6. The
+  bridge uses ML.NET's public data contract plus the private `VBuffer<T>._values`, whose accessor falls back to a copy,
+  so a breaking ML.NET major shows at run time; CI's advisory "newest" step (floating `*-*`) sees it first. There is no
+  standalone `Microsoft.ML.Data` package: `ITransformer`/`MLContext` are in the full `Microsoft.ML` the consumer
+  brings, which NuGet unifies upward.
 - Dtypes: 11 direct, plus Char→UInt16 one way; Half→Single (lossless) and Decimal→Double converted by the view verbs
   into an owned temp; Complex refused (ML.NET has no half, decimal or complex column type). Rank 1–2 only.
 - `VBuffer` zero-copy is one-directional. Import is zero-copy through reflected compiled-expression access to the
@@ -140,7 +145,8 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   a POCO-loader cross-check), the technique suites (layout matrix, property-based, metamorphic, cursor-state
   differential against ML.NET's own cursors, real-pipeline consumer, bit-pattern fuzz, concurrency, ARC/fault injection,
   boundary, API approval) and `LifetimeGcTests` (a getter keeps its cursor reachable until its row is committed). The
-  `interop-test` CI job runs it against ML.NET 2.0.1 and 4.0.2, with no Python.
+  `interop-test` CI job runs it against ML.NET 2.0.1 and 4.0.2, and (advisory) against the newest `Microsoft.ML` on
+  nuget.org, previews included, with no Python.
 - Docs: `docs/website-src/docs/interop/mlnet.md` (excluded from the site).
 - Example: `examples/NumSharpMLNetExample` (regular csproj form over the published 0.80.0-beta1 and Microsoft.ML 5.0.1;
   no workflow runs it): a binary classifier trained from a `(rows, 5)` array as five scalar columns with the label

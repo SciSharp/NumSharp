@@ -69,12 +69,13 @@
          `transformer.Transform(nd.AsDataView("Features")).ToNDArray("Score")` bridges the whole pipeline with
          two conversions and no per-transformer runner.
 
-         The range is BOTH knobs (the same lesson as the ONNX Runtime and pythonnet pins):
+         The range is OPEN - 2.0.0 or later - the form Microsoft.ML itself declares this same dependency in
+         (Microsoft.ML 5.0.1's nuspec: Microsoft.ML.DataView version="5.0.1"). Its floor is BOTH knobs:
 
-         (a) FLOOR = what we compile against. The managed assembly is strong-named and bumps its
-             AssemblyVersion every release; .NET rolls FORWARD to a newer one but a consumer whose resolved
-             version is OLDER than the one we compiled against gets a hard FileLoadException. So the compiled
-             reference IS the real minimum. 2.0.0 (Nov 2022) exposes every member used here — IDataView,
+         (a) FLOOR = the API we compile against. Binding is never the issue: Microsoft.ML.DataView keeps
+             AssemblyVersion 1.0.0.0 in every release (2.0.0, 2.0.1, 4.0.2, 4.0.3, 5.0.1 and the 6.0 previews
+             checked; only the file version moves), so any resolved version binds. The floor is about members:
+             2.0.0 (Nov 2022) exposes every member used here — IDataView,
              DataViewSchema.Builder, NumberDataViewType / BooleanDataViewType / VectorDataViewType,
              DataViewRowCursor / DataViewRow.GetGetter, VBuffer<T>(int, T[]) and VBufferEditor, DataViewRowId —
              all of which have existed since 1.0.0; 2.0.0 is a conservative, widely-deployed floor.
@@ -83,9 +84,21 @@
              version, so NuGet unifies upward to THAT. In practice the consumer's ML.NET version wins; this
              floor only stops an ancient one from sneaking in.
 
-         The upper bound keeps a future ML.NET 6.x (free to break the API) from being resolved automatically.
-         Verified against 2.0.0 (the floor) and current by the test project's MLNetVersion matrix. -->
-    <PackageReference Include="Microsoft.ML.DataView" Version="[2.0.0,6.0.0)" />
+         (c) NO UPPER BOUND, on purpose. A cap below the consumer's Microsoft.ML is not a guard but a restore
+             ERROR: NuGet resolves cousin ranges that do not overlap as NU1107, so the former [2.0.0, 6.0.0) would
+             have failed every bridge user's restore the day they moved to Microsoft.ML 6.0.0 (the 0.80.0-beta1 QA,
+             F52: a stand-in capped at [2.0.0, 4.0.0) beside Microsoft.ML 4.0.2 fails restore with NU1107; its open
+             twin restores). Nor did a cap ever keep a future ML.NET from being resolved: NuGet resolves the lowest
+             applicable version, and a consumer gets a newer Microsoft.ML.DataView only through their own
+             Microsoft.ML. The bridge uses ML.NET's public data contract plus one private field, VBuffer<T>._values
+             (the zero-copy VBuffer import), and VBufferAccessor falls back to a copy if a future ML.NET renames or
+             retypes it. So a breaking ML.NET major would show at run time, not at restore - which is why CI's
+             advisory "ML.NET: Test newest (net10.0, advisory)" step runs the suite on the newest Microsoft.ML,
+             previews included, to see it first.
+
+         Verified against 2.0.0 (the floor), the current releases and the newest preview by the test project's
+         MLNetVersion matrix. -->
+    <PackageReference Include="Microsoft.ML.DataView" Version="2.0.0" />
   </ItemGroup>
 
 </Project>
