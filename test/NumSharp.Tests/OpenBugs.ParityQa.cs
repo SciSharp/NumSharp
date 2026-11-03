@@ -180,47 +180,6 @@ namespace NumSharp.Tests
         }
 
         // ------------------------------------------------------------------
-        // QA-06 — np.cumsum / np.nancumsum along an axis convert with .NET's saturating cast
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     <c>np.cumsum([-3.0, 1.0], axis=0, dtype=np.uint8)</c> is <c>[253, 254]</c> in NumPy (its float → integer cast is
-        ///     C's, which wraps on x86-64), and so is NumSharp's flat form (no <c>axis</c>) and every <c>np.sum</c> /
-        ///     <c>np.prod</c> / <c>np.cumprod</c> route. With an explicit <c>axis</c> NumSharp returns <c>[0, 1]</c>: the axis
-        ///     scan kernel (<c>ILKernelGenerator.ScanAddWiden</c> → <c>ConvIn</c>, ILKernelGenerator.Reduction.cs) converts each
-        ///     element with <c>TAccum.CreateTruncating</c>, which SATURATES a floating-point source (-3.0 → 0, 300.0 → 127 for
-        ///     int8, inf → MaxValue, NaN → 0), on net8.0 and net10.0 alike.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA06")]
-        public void ParityQa_CumsumAxis_IntegerDtype_ShouldCastLikeNumPy()
-        {
-            using var neg = np.array(new[] { -3.0, 1.0 });
-            using var big = np.array(new[,] { { 300.0, 1.0 } });
-
-            using var unsigned = np.cumsum(neg, axis: 0, typeCode: np.uint8);
-            using var signed = np.cumsum(big, axis: 1, typeCode: np.int8);
-
-            unsigned.ToArray<byte>().Should().Equal((byte)253, (byte)254);
-            signed.ToArray<sbyte>().Should().Equal((sbyte)44, (sbyte)45);
-        }
-
-        /// <summary>
-        ///     <c>np.nancumsum([[-3.0, nan, 1.0]], axis=1, dtype=np.uint8)</c> is <c>[[253, 253, 254]]</c> in NumPy; NumSharp's
-        ///     axis route reaches the same saturating <c>ConvIn</c> as <see cref="ParityQa_CumsumAxis_IntegerDtype_ShouldCastLikeNumPy"/>
-        ///     and returns <c>[[0, 0, 1]]</c>.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA06")]
-        public void ParityQa_NancumsumAxis_IntegerDtype_ShouldCastLikeNumPy()
-        {
-            var nan = BitConverter.Int64BitsToDouble(0x7FF8000000000000);
-            using var a = np.array(new[,] { { -3.0, nan, 1.0 } });
-
-            using var r = np.nancumsum(a, axis: 1, dtype: np.uint8);
-
-            r.ToArray<byte>().Should().Equal((byte)253, (byte)253, (byte)254);
-        }
-
-        // ------------------------------------------------------------------
         // QA-07 — np.choose promotes its choices left to right instead of NumPy's order-independent result_type
         // ------------------------------------------------------------------
 
@@ -342,81 +301,6 @@ namespace NumSharp.Tests
             using var r = np.compress(cond, a, axis: 1);
 
             r.shape.Should().Equal(0L, 2L);
-        }
-
-        // ------------------------------------------------------------------
-        // QA-12 — NDArray.SetValue<T> / itemset<T> with another T write raw bytes at T-scaled offsets (Release)
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     <c>a.SetValue(2.5, 0)</c> on a float32 array binds <c>SetValue&lt;double&gt;(T, params long[])</c> (C# prefers the
-        ///     generic exact match over the converting <c>SetValue(object, ...)</c>), whose doc promises "value will be
-        ///     converted"; the body is <c>*((T*)Address + offset) = value</c> behind a <c>Debug.Assert</c> only
-        ///     (UnmanagedStorage.Setters.cs). In Release the double's 8 bytes land at element offset × 8: index 0 leaves
-        ///     <c>[0, 2.0625, 3, 4]</c>, index 1 overwrites elements 2 and 3, an int into a uint8 array writes 4 bytes at
-        ///     byte 4 × index, and the last element's write runs past the buffer. <c>itemset&lt;T&gt;</c> is the same body
-        ///     (its own "//TODO! if T != dtype, we need to cast!"). The documented trap <c>SetAtIndex&lt;T&gt;</c>
-        ///     (OpenBugs.Surface.cs) has the same cause; these two public members were not listed with it. EXPECTED (when
-        ///     fixed): the value is cast into the addressed element (NumPy's <c>a[0] = 2.5</c>), or the call refuses, and no
-        ///     neighbour changes.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA12")]
-        public void ParityQa_SetValueGeneric_OtherElementType_ShouldCastNotWriteRawBytes()
-        {
-#if DEBUG
-            // The Debug.Assert fires in a Debug build (and may end the test host): the defect is the Release behaviour.
-            Assert.Inconclusive("Release-only defect: in Debug the type mismatch trips SetValue<T>'s Debug.Assert.");
-#else
-            using var a = np.array(new[] { 1f, 2f, 3f, 4f });
-            using var b = np.array(new[] { 1f, 2f, 3f, 4f });
-            try
-            {
-                a.SetValue(2.5, 0);
-                b.itemset(new[] { 1 }, 2.5);
-            }
-            catch (Exception)
-            {
-                // A refusal is an acceptable fix; the neighbours must still be untouched (checked below).
-            }
-
-            var va = a.ToArray<float>();
-            var vb = b.ToArray<float>();
-            va[1].Should().Be(2f);
-            va[0].Should().BeOneOf(1f, 2.5f);
-            vb[2].Should().Be(3f);
-            vb[3].Should().Be(4f);
-            vb[1].Should().BeOneOf(2f, 2.5f);
-#endif
-        }
-
-        /// <summary>
-        ///     The getters share the raw access: <c>a.GetValue&lt;double&gt;(1)</c>, <c>a.GetAtIndex&lt;double&gt;(1)</c> and
-        ///     <c>a.GetDouble(1)</c> on float32 <c>[1, 2, 3, 4]</c> return <c>512.0001225471497</c> (elements 2 and 3 read as one
-        ///     double) in Release, and the last element's read runs past the buffer. <c>GetDouble</c>'s doc says it throws
-        ///     <c>NullReferenceException</c> for another dtype; <c>a.item&lt;double&gt;(1)</c> converts correctly (2). EXPECTED
-        ///     (when fixed): the element converted (2.0) or a refusal.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA12")]
-        public void ParityQa_GetValueGeneric_OtherElementType_ShouldCastNotReadRawBytes()
-        {
-#if DEBUG
-            Assert.Inconclusive("Release-only defect: in Debug the type mismatch trips GetValue<T>'s Debug.Assert.");
-#else
-            using var a = np.array(new[] { 1f, 2f, 3f, 4f });
-            double generic = double.NaN, typed = double.NaN;
-            try
-            {
-                generic = a.GetValue<double>(1);
-                typed = a.GetDouble(1);
-            }
-            catch (Exception)
-            {
-                return; // a refusal is an acceptable fix
-            }
-
-            generic.Should().Be(2.0);
-            typed.Should().Be(2.0);
-#endif
         }
 
         // ------------------------------------------------------------------
@@ -1104,55 +988,6 @@ namespace NumSharp.Tests
             long ulp64 = System.Math.Abs(BitConverter.DoubleToInt64Bits((double)lae2.GetValue(0)) - BitConverter.DoubleToInt64Bits(-9.616429790881842e-05));
             ulp32.Should().BeLessThanOrEqualTo(2);
             ulp64.Should().BeLessThanOrEqualTo(2);
-        }
-
-        // ------------------------------------------------------------------
-        // QA-33 — the typed coordinate getters / setters do not check their coordinates
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     NumPy's coordinate access (<c>a.item(i, j)</c>, <c>a[i, j]</c>, <c>a[i, j] = v</c>) checks every coordinate
-        ///     against its axis and wraps a negative one once: <c>np.arange(6.).reshape(2, 3).item(0, 5)</c> raises
-        ///     <c>IndexError: index 5 is out of bounds for axis 1 with size 3</c> and <c>.item(1, -1)</c> is <c>5.0</c>.
-        ///     NumSharp's indexer and <c>item</c> do the same, but <c>GetDouble</c> / <c>GetInt32</c> / … /
-        ///     <c>GetValue</c> / <c>GetAtIndex</c> and <c>SetDouble</c> / <c>SetValue</c> / <c>SetAtIndex</c> /
-        ///     <c>itemset</c> index the storage with <c>Shape.GetOffset(indices)</c> unchecked
-        ///     (<c>_slices.Double[_shape.GetOffset(indices)]</c>, UnmanagedStorage.Getters.cs): <c>m.GetDouble(0, 5)</c>
-        ///     returns the element of the NEXT row (5.0), <c>m.GetDouble(1, -1)</c> returns 2.0, and past the buffer the
-        ///     read and the write leave it (<c>p84</c>, Release: <c>a.GetDouble(10)</c> on 3 elements returns 0.0,
-        ///     <c>a.GetDouble(-1)</c> -3.85e-270, <c>a.SetDouble(9.0, 10)</c> / <c>SetValue</c> / <c>SetAtIndex</c> /
-        ///     <c>itemset(10, …)</c> return normally having written outside the array; a Debug build fails
-        ///     <c>ArraySlice</c>'s "index &lt; Count, Memory corruption expected." assertion instead). Only in-buffer
-        ///     coordinates are used here, so the test cannot corrupt the host.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA33")]
-        public void ParityQa_TypedCoordinateGetters_ShouldCheckAndWrapLikeItem()
-        {
-            using var m = np.arange(6.0).reshape(2, 3);
-
-            Action pastTheAxis = () => m.GetDouble(0, 5);
-
-            pastTheAxis.Should().Throw<IndexError>().WithMessage("index 5 is out of bounds for axis 1 with size 3");
-            m.GetDouble(1, -1).Should().Be(5.0);
-        }
-
-        /// <summary>
-        ///     QA-33 reaches the NumPy-named <c>ndarray.item</c>: with MORE than one coordinate it takes the same unchecked
-        ///     offset (only the flat one-index form checks and wraps). <c>np.arange(6.).reshape(2, 3).item(1, -2)</c> is
-        ///     <c>4.0</c> in NumPy and <c>1.0</c> in NumSharp; <c>.item(0, 4)</c> raises <c>IndexError: index 4 is out of
-        ///     bounds for axis 1 with size 3</c> in NumPy and returns <c>4.0</c>; <c>.item(-1, -1)</c> and
-        ///     <c>m.T.item(-1, 0)</c> read before the buffer (<c>p86</c>: denormal garbage in Release), the 3-D, typed
-        ///     <c>item&lt;T&gt;</c> and reversed-view forms likewise. Only in-buffer coordinates are used here.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA33")]
-        public void ParityQa_ItemWithSeveralCoordinates_ShouldCheckAndWrapEachAxis()
-        {
-            using var m = np.arange(6.0).reshape(2, 3);
-
-            Action pastTheAxis = () => m.item(0, 4);
-
-            ((double)m.item(1, -2)).Should().Be(4.0);
-            pastTheAxis.Should().Throw<IndexError>().WithMessage("index 4 is out of bounds for axis 1 with size 3");
         }
 
         // ------------------------------------------------------------------

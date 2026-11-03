@@ -880,7 +880,8 @@ namespace NumSharp.Tests.Backends.Unmanaged
                 // A same-size allocation would steal a wrongly-pooled buffer and
                 // overwrite it — with the abandon contract it gets fresh memory.
                 using var thief = np.full(new Shape(10), 7777L, np.int64);
-                a.GetView(":, 1:").GetView("-1, -2").GetValue<long>(0, 0).Should().Be(8L,
+                // The view is 0-d, so its element is read without coordinates (two would be "too many indices").
+                a.GetView(":, 1:").GetView("-1, -2").GetValue<long>().Should().Be(8L,
                     "iteration {0}: the alias must still read the arange data", i);
             }
         }

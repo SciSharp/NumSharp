@@ -1394,221 +1394,381 @@ namespace NumSharp
         /// </remarks>
         public NDArray GetData(long[] indices) => new NDArray(Storage.GetData(indices)) { TensorEngine = TensorEngine };
 
-        /// <summary>
-        ///     Retrieves value of type <see cref="bool"/>.
-        /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="bool"/></exception>
+        /// <summary>Reads the element at <paramref name="indices"/> as a <see cref="bool"/>: the stored value in a bool
+        ///     array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.</summary>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="bool"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         [MethodImpl(Inline)]
         public bool GetBoolean(int[] indices) => Storage.GetBoolean(indices);
 
-        /// <summary>
-        ///     Retrieves value of type <see cref="byte"/>.
-        /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="byte"/></exception>
+        /// <summary>Reads the element at <paramref name="indices"/> as a <see cref="byte"/>: the stored value in a
+        ///     uint8 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.</summary>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="byte"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         [MethodImpl(Inline)]
         public byte GetByte(int[] indices) => Storage.GetByte(indices);
 
-        /// <summary>
-        ///     Retrieves value of type <see cref="char"/>.
-        /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="char"/></exception>
+        /// <summary>Reads the element at <paramref name="indices"/> as a <see cref="char"/>: the stored value in a char
+        ///     array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.</summary>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="char"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         [MethodImpl(Inline)]
         public char GetChar(int[] indices) => Storage.GetChar(indices);
 
-        /// <summary>
-        ///     Retrieves value of type <see cref="decimal"/>.
-        /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="decimal"/></exception>
+        /// <summary>Reads the element at <paramref name="indices"/> as a <see cref="decimal"/>: the stored value in a
+        ///     decimal array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other
+        ///     dtype.</summary>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="decimal"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         [MethodImpl(Inline)]
         public decimal GetDecimal(int[] indices) => Storage.GetDecimal(indices);
 
-        /// <summary>
-        ///     Retrieves value of type <see cref="double"/>.
-        /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="double"/></exception>
+        /// <summary>Reads the element at <paramref name="indices"/> as a <see cref="double"/>: the stored value in a
+        ///     float64 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other
+        ///     dtype.</summary>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="double"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         [MethodImpl(Inline)]
         public double GetDouble(int[] indices) => Storage.GetDouble(indices);
 
-        /// <summary>
-        ///     Retrieves value of type <see cref="short"/>.
-        /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="short"/></exception>
+        /// <summary>Reads the element at <paramref name="indices"/> as a <see cref="short"/>: the stored value in a
+        ///     int16 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.</summary>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="short"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         [MethodImpl(Inline)]
         public short GetInt16(int[] indices) => Storage.GetInt16(indices);
 
-        /// <summary>
-        ///     Retrieves value of type <see cref="int"/>.
-        /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="int"/></exception>
+        /// <summary>Reads the element at <paramref name="indices"/> as a <see cref="int"/>: the stored value in a int32
+        ///     array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.</summary>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="int"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         [MethodImpl(Inline)]
         public int GetInt32(int[] indices) => Storage.GetInt32(indices);
 
-        /// <summary>
-        ///     Retrieves value of type <see cref="long"/>.
-        /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="long"/></exception>
+        /// <summary>Reads the element at <paramref name="indices"/> as a <see cref="long"/>: the stored value in a
+        ///     int64 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.</summary>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="long"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         [MethodImpl(Inline)]
         public long GetInt64(int[] indices) => Storage.GetInt64(indices);
 
-        /// <summary>
-        ///     Retrieves value of type <see cref="float"/>.
-        /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="float"/></exception>
+        /// <summary>Reads the element at <paramref name="indices"/> as a <see cref="float"/>: the stored value in a
+        ///     float32 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other
+        ///     dtype.</summary>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="float"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         [MethodImpl(Inline)]
         public float GetSingle(int[] indices) => Storage.GetSingle(indices);
 
-        /// <summary>
-        ///     Retrieves value of type <see cref="ushort"/>.
-        /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="ushort"/></exception>
+        /// <summary>Reads the element at <paramref name="indices"/> as a <see cref="ushort"/>: the stored value in a
+        ///     uint16 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.</summary>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="ushort"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         [MethodImpl(Inline)]
         public ushort GetUInt16(int[] indices) => Storage.GetUInt16(indices);
 
-        /// <summary>
-        ///     Retrieves value of type <see cref="uint"/>.
-        /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="uint"/></exception>
+        /// <summary>Reads the element at <paramref name="indices"/> as a <see cref="uint"/>: the stored value in a
+        ///     uint32 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.</summary>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="uint"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         [MethodImpl(Inline)]
         public uint GetUInt32(int[] indices) => Storage.GetUInt32(indices);
 
-        /// <summary>
-        ///     Retrieves value of type <see cref="ulong"/>.
-        /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="ulong"/></exception>
+        /// <summary>Reads the element at <paramref name="indices"/> as a <see cref="ulong"/>: the stored value in a
+        ///     uint64 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.</summary>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="ulong"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         [MethodImpl(Inline)]
         public ulong GetUInt64(int[] indices) => Storage.GetUInt64(indices);
 
+        /// <summary>Reads the element at <paramref name="indices"/> as a <see cref="sbyte"/>: the stored value in a
+        ///     int8 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.</summary>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="sbyte"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         [MethodImpl(Inline)]
         public sbyte GetSByte(int[] indices) => Storage.GetSByte(indices);
 
+        /// <summary>Reads the element at <paramref name="indices"/> as a <see cref="Half"/>: the stored value in a
+        ///     float16 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other
+        ///     dtype.</summary>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="Half"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         [MethodImpl(Inline)]
         public Half GetHalf(int[] indices) => Storage.GetHalf(indices);
 
+        /// <summary>Reads the element at <paramref name="indices"/> as a <see cref="System.Numerics.Complex"/>: the
+        ///     stored value in a complex128 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any
+        ///     other dtype.</summary>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="System.Numerics.Complex"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         [MethodImpl(Inline)]
         public System.Numerics.Complex GetComplex(int[] indices) => Storage.GetComplex(indices);
 
         #region Typed Getters (long[] overloads for int64 indexing)
 
+        /// <summary>Reads the element at <paramref name="indices"/> as a <see cref="bool"/>: the stored value in a bool
+        ///     array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.</summary>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the
+        ///     end of its axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="bool"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         [MethodImpl(Inline)]
         public bool GetBoolean(params long[] indices) => Storage.GetBoolean(indices);
 
+        /// <summary>Reads the element at <paramref name="indices"/> as a <see cref="byte"/>: the stored value in a
+        ///     uint8 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.</summary>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the
+        ///     end of its axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="byte"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         [MethodImpl(Inline)]
         public byte GetByte(params long[] indices) => Storage.GetByte(indices);
 
+        /// <summary>Reads the element at <paramref name="indices"/> as a <see cref="char"/>: the stored value in a char
+        ///     array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.</summary>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the
+        ///     end of its axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="char"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         [MethodImpl(Inline)]
         public char GetChar(params long[] indices) => Storage.GetChar(indices);
 
+        /// <summary>Reads the element at <paramref name="indices"/> as a <see cref="decimal"/>: the stored value in a
+        ///     decimal array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other
+        ///     dtype.</summary>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the
+        ///     end of its axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="decimal"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         [MethodImpl(Inline)]
         public decimal GetDecimal(params long[] indices) => Storage.GetDecimal(indices);
 
+        /// <summary>Reads the element at <paramref name="indices"/> as a <see cref="double"/>: the stored value in a
+        ///     float64 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other
+        ///     dtype.</summary>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the
+        ///     end of its axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="double"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         [MethodImpl(Inline)]
         public double GetDouble(params long[] indices) => Storage.GetDouble(indices);
 
+        /// <summary>Reads the element at <paramref name="indices"/> as a <see cref="short"/>: the stored value in a
+        ///     int16 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.</summary>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the
+        ///     end of its axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="short"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         [MethodImpl(Inline)]
         public short GetInt16(params long[] indices) => Storage.GetInt16(indices);
 
+        /// <summary>Reads the element at <paramref name="indices"/> as a <see cref="int"/>: the stored value in a int32
+        ///     array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.</summary>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the
+        ///     end of its axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="int"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         [MethodImpl(Inline)]
         public int GetInt32(params long[] indices) => Storage.GetInt32(indices);
 
+        /// <summary>Reads the element at <paramref name="indices"/> as a <see cref="long"/>: the stored value in a
+        ///     int64 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.</summary>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the
+        ///     end of its axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="long"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         [MethodImpl(Inline)]
         public long GetInt64(params long[] indices) => Storage.GetInt64(indices);
 
+        /// <summary>Reads the element at <paramref name="indices"/> as a <see cref="float"/>: the stored value in a
+        ///     float32 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other
+        ///     dtype.</summary>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the
+        ///     end of its axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="float"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         [MethodImpl(Inline)]
         public float GetSingle(params long[] indices) => Storage.GetSingle(indices);
 
+        /// <summary>Reads the element at <paramref name="indices"/> as a <see cref="ushort"/>: the stored value in a
+        ///     uint16 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.</summary>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the
+        ///     end of its axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="ushort"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         [MethodImpl(Inline)]
         public ushort GetUInt16(params long[] indices) => Storage.GetUInt16(indices);
 
+        /// <summary>Reads the element at <paramref name="indices"/> as a <see cref="uint"/>: the stored value in a
+        ///     uint32 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.</summary>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the
+        ///     end of its axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="uint"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         [MethodImpl(Inline)]
         public uint GetUInt32(params long[] indices) => Storage.GetUInt32(indices);
 
+        /// <summary>Reads the element at <paramref name="indices"/> as a <see cref="ulong"/>: the stored value in a
+        ///     uint64 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.</summary>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the
+        ///     end of its axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="ulong"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         [MethodImpl(Inline)]
         public ulong GetUInt64(params long[] indices) => Storage.GetUInt64(indices);
 
+        /// <summary>Reads the element at <paramref name="indices"/> as a <see cref="sbyte"/>: the stored value in a
+        ///     int8 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.</summary>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the
+        ///     end of its axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="sbyte"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         [MethodImpl(Inline)]
         public sbyte GetSByte(params long[] indices) => Storage.GetSByte(indices);
 
+        /// <summary>Reads the element at <paramref name="indices"/> as a <see cref="Half"/>: the stored value in a
+        ///     float16 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other
+        ///     dtype.</summary>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the
+        ///     end of its axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="Half"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         [MethodImpl(Inline)]
         public Half GetHalf(params long[] indices) => Storage.GetHalf(indices);
 
+        /// <summary>Reads the element at <paramref name="indices"/> as a <see cref="System.Numerics.Complex"/>: the
+        ///     stored value in a complex128 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any
+        ///     other dtype.</summary>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the
+        ///     end of its axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="System.Numerics.Complex"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         [MethodImpl(Inline)]
         public System.Numerics.Complex GetComplex(params long[] indices) => Storage.GetComplex(indices);
 
         #endregion
 
-        /// <summary>
-        ///     Retrieves value of unspecified type (will figure using <see cref="DType"/>).
-        /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="object"/></exception>
+        /// <summary>Reads the element at <paramref name="indices"/> boxed as the dtype's own CLR type (a text element
+        ///     as its decoded C# value), after NumPy's coordinate check.</summary>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element, boxed.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         [MethodImpl(Inline)]
         public object GetValue(int[] indices) => Storage.GetValue(indices);
 
-        /// <summary>
-        ///     Retrieves value of unspecified type (will figure using <see cref="DType"/>).
-        /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="object"/></exception>
+        /// <summary>Reads the element at <paramref name="indices"/> boxed as the dtype's own CLR type (a text element
+        ///     as its decoded C# value), after NumPy's coordinate check.</summary>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the
+        ///     end of its axis, and axes left out read their first element.</param>
+        /// <returns>The element, boxed.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         [MethodImpl(Inline)]
         public object GetValue(params long[] indices) => Storage.GetValue(indices);
 
-        /// <summary>
-        ///     Retrieves value of unspecified type (will figure using <see cref="DType"/>).
-        /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="object"/></exception>
+        /// <summary>Reads the element at <paramref name="indices"/> as <typeparamref name="T"/>: the stored value for
+        ///     the dtype's own type, NumPy's cast of it (the cast <c>astype</c> runs) for any other
+        ///     <typeparamref name="T"/>.</summary>
+        /// <typeparam name="T">The type to read the element as.</typeparam>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as <typeparamref name="T"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         [MethodImpl(Inline)]
         public T GetValue<T>(int[] indices) where T : unmanaged => Storage.GetValue<T>(indices);
 
-        /// <summary>
-        ///     Get a single value from NDArray as type T.
-        /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="object"/></exception>
+        /// <summary>Reads the element at <paramref name="indices"/> as <typeparamref name="T"/>: the stored value for
+        ///     the dtype's own type, NumPy's cast of it (the cast <c>astype</c> runs) for any other
+        ///     <typeparamref name="T"/>.</summary>
+        /// <typeparam name="T">The type to read the element as.</typeparam>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the
+        ///     end of its axis, and axes left out read their first element.</param>
+        /// <returns>The element as <typeparamref name="T"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         [MethodImpl(Inline)]
         public T GetValue<T>(params long[] indices) where T : unmanaged => Storage.GetValue<T>(indices);
 
-        /// <summary>
-        ///     Retrieves value of
-        /// </summary>
-        /// <param name="index"></param>
-        /// <returns></returns>
+        /// <summary>Reads the element at logical flat index <paramref name="index"/> boxed as the dtype's own CLR type,
+        ///     after NumPy's flat-index check (<c>a.item(i)</c>).</summary>
+        /// <param name="index">The flat index (C order); a negative one counts from the end of the array.</param>
+        /// <returns>The element, boxed.</returns>
+        /// <exception cref="IndexError"><paramref name="index"/> is outside the array (NumPy's item texts; nothing
+        ///     outside the array is read).</exception>
         [MethodImpl(Inline)]
         public object GetAtIndex(long index) => Storage.GetAtIndex(index);
 
-        /// <summary>
-        ///     Retrieves value of
-        /// </summary>
-        /// <param name="index"></param>
-        /// <returns></returns>
+        /// <summary>Reads the element at logical flat index <paramref name="index"/> as <typeparamref name="T"/>: the
+        ///     stored value for the dtype's own type, NumPy's cast of it for any other
+        ///     <typeparamref name="T"/>.</summary>
+        /// <typeparam name="T">The type to read the element as.</typeparam>
+        /// <param name="index">The flat index (C order); a negative one counts from the end of the array.</param>
+        /// <returns>The element as <typeparamref name="T"/>.</returns>
+        /// <exception cref="IndexError"><paramref name="index"/> is outside the array (NumPy's item texts; nothing
+        ///     outside the array is read).</exception>
         [MethodImpl(Inline)]
         public T GetAtIndex<T>(long index) where T : unmanaged => Storage.GetAtIndex<T>(index);
 
@@ -1686,57 +1846,65 @@ namespace NumSharp
             Storage.SetData(value, indices);
         }
 
-        /// <summary>
-        ///     Set a single value at given <see cref="indices"/>.
-        /// </summary>
-        /// <param name="value">The value to set</param>
-        /// <param name="indices">The </param>
-        /// <remarks>
-        ///     Does not change internal storage data type.<br></br>
-        ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
-        /// </remarks>
+        /// <summary>Stores one boxed element at <paramref name="indices"/>; the value must be the dtype's exact CLR
+        ///     type (an unboxing, never a conversion; the generic overload converts), <c>null</c> is Python's
+        ///     <c>None</c>.</summary>
+        /// <param name="value">The element, boxed as the dtype's exact type, or <c>null</c>.</param>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is
+        ///     read-only</c>).</exception>
+        /// <exception cref="InvalidCastException">A non-null value that is not the dtype's exact CLR type.</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         public void SetValue(object value, int[] indices)
         {
             Storage.SetValue(value, indices);
         }
 
-        /// <summary>
-        ///     Set a single value at given <see cref="indices"/>.
-        /// </summary>
-        /// <param name="value">The value to set</param>
-        /// <param name="indices">The </param>
-        /// <remarks>
-        ///     Does not change internal storage data type.<br></br>
-        ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
-        /// </remarks>
+        /// <summary>Stores <paramref name="value"/> at <paramref name="indices"/>: as it is for the dtype's own type,
+        ///     cast to the dtype with NumPy's cast (the cast <c>astype</c> runs) for any other
+        ///     <typeparamref name="T"/>.</summary>
+        /// <typeparam name="T">The value's type.</typeparam>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is
+        ///     read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         public void SetValue<T>(T value, int[] indices) where T : unmanaged
         {
             Storage.SetValue<T>(value, indices);
         }
 
-        /// <summary>
-        ///     Set a single value at given <see cref="indices"/>.
-        /// </summary>
-        /// <param name="value">The value to set</param>
-        /// <param name="indices">The coordinates (long version).</param>
-        /// <remarks>
-        ///     Does not change internal storage data type.<br></br>
-        ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
-        /// </remarks>
+        /// <summary>Stores <paramref name="value"/> at <paramref name="indices"/>: as it is for the dtype's own type,
+        ///     cast to the dtype with NumPy's cast (the cast <c>astype</c> runs) for any other
+        ///     <typeparamref name="T"/>.</summary>
+        /// <typeparam name="T">The value's type.</typeparam>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the
+        ///     end of its axis, and axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is
+        ///     read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         public void SetValue<T>(T value, params long[] indices) where T : unmanaged
         {
             Storage.SetValue<T>(value, indices);
         }
 
-        /// <summary>
-        ///     Set a single value at given <see cref="indices"/>.
-        /// </summary>
-        /// <param name="value">The value to set</param>
-        /// <param name="indices">The coordinates (long version).</param>
-        /// <remarks>
-        ///     Does not change internal storage data type.<br></br>
-        ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
-        /// </remarks>
+        /// <summary>Stores one boxed element at <paramref name="indices"/>; the value must be the dtype's exact CLR
+        ///     type (an unboxing, never a conversion; the generic overload converts), <c>null</c> is Python's
+        ///     <c>None</c>.</summary>
+        /// <param name="value">The element, boxed as the dtype's exact type, or <c>null</c>.</param>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the
+        ///     end of its axis, and axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is
+        ///     read-only</c>).</exception>
+        /// <exception cref="InvalidCastException">A non-null value that is not the dtype's exact CLR type.</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         public void SetValue(object value, params long[] indices)
         {
             Storage.SetValue(value, indices);
@@ -1873,19 +2041,27 @@ namespace NumSharp
             previous?.Release();
         }
 
-        /// <summary>
-        ///     Retrieves value at given linear (offset) <paramref name="index"/>.
-        /// </summary>
-        /// <param name="index"></param>
-        /// <returns></returns>
+        /// <summary>Stores one boxed element at logical flat index <paramref name="index"/>; the value must be the
+        ///     dtype's exact CLR type (an unboxing, never a conversion), <c>null</c> is Python's <c>None</c>.</summary>
+        /// <param name="obj">The element, boxed as the dtype's exact type, or <c>null</c>.</param>
+        /// <param name="index">The flat index (C order); a negative one counts from the end of the array.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is
+        ///     read-only</c>).</exception>
+        /// <exception cref="InvalidCastException">A non-null value that is not the dtype's exact CLR type.</exception>
+        /// <exception cref="IndexError"><paramref name="index"/> is outside the array (NumPy's item texts; nothing
+        ///     outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetAtIndex(object obj, long index) => Storage.SetAtIndex(obj, index);
 
-        /// <summary>
-        ///     Retrieves value of
-        /// </summary>
-        /// <param name="index"></param>
-        /// <returns></returns>
+        /// <summary>Stores <paramref name="value"/> at logical flat index <paramref name="index"/>: as it is for the
+        ///     dtype's own type, cast to the dtype with NumPy's cast for any other <typeparamref name="T"/>.</summary>
+        /// <typeparam name="T">The value's type.</typeparam>
+        /// <param name="value">The value to store.</param>
+        /// <param name="index">The flat index (C order); a negative one counts from the end of the array.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is
+        ///     read-only</c>).</exception>
+        /// <exception cref="IndexError"><paramref name="index"/> is outside the array (NumPy's item texts; nothing
+        ///     outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetAtIndex<T>(T value, long index) where T : unmanaged => Storage.SetAtIndex(value, index);
 
@@ -1899,215 +2075,395 @@ namespace NumSharp
         // public void Set#1(#2 value, int[] indices) => Storage.Set#1(value, indices);
 
     // %
-        /// <summary>
-        ///     Sets a bool at specific coordinates.
-        /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        /// <summary>Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a bool array, cast to
+        ///     the array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a bool
+        ///     scalar).</summary>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is
+        ///     read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetBoolean(bool value, int[] indices) => Storage.SetBoolean(value, indices);
 
-        /// <summary>
-        ///     Sets a byte at specific coordinates.
-        /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        /// <summary>Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a uint8 array, cast to
+        ///     the array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a uint8
+        ///     scalar).</summary>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is
+        ///     read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetByte(byte value, int[] indices) => Storage.SetByte(value, indices);
 
-        /// <summary>
-        ///     Sets a short at specific coordinates.
-        /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        /// <summary>Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a int16 array, cast to
+        ///     the array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a int16
+        ///     scalar).</summary>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is
+        ///     read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetInt16(short value, int[] indices) => Storage.SetInt16(value, indices);
 
-        /// <summary>
-        ///     Sets a ushort at specific coordinates.
-        /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        /// <summary>Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a uint16 array, cast to
+        ///     the array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a uint16
+        ///     scalar).</summary>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is
+        ///     read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetUInt16(ushort value, int[] indices) => Storage.SetUInt16(value, indices);
 
-        /// <summary>
-        ///     Sets a int at specific coordinates.
-        /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        /// <summary>Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a int32 array, cast to
+        ///     the array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a int32
+        ///     scalar).</summary>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is
+        ///     read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetInt32(int value, int[] indices) => Storage.SetInt32(value, indices);
 
-        /// <summary>
-        ///     Sets a int at specific coordinates.
-        /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at (long version).</param>
+        /// <summary>Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a int32 array, cast to
+        ///     the array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a int32
+        ///     scalar).</summary>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the
+        ///     end of its axis, and axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is
+        ///     read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetInt32(int value, params long[] indices) => Storage.SetInt32(value, indices);
 
-        /// <summary>
-        ///     Sets a uint at specific coordinates.
-        /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        /// <summary>Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a uint32 array, cast to
+        ///     the array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a uint32
+        ///     scalar).</summary>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is
+        ///     read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetUInt32(uint value, int[] indices) => Storage.SetUInt32(value, indices);
 
-        /// <summary>
-        ///     Sets a long at specific coordinates.
-        /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        /// <summary>Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a int64 array, cast to
+        ///     the array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a int64
+        ///     scalar).</summary>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is
+        ///     read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetInt64(long value, int[] indices) => Storage.SetInt64(value, indices);
 
-        /// <summary>
-        ///     Sets a long at specific coordinates.
-        /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at (long version).</param>
+        /// <summary>Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a int64 array, cast to
+        ///     the array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a int64
+        ///     scalar).</summary>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the
+        ///     end of its axis, and axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is
+        ///     read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetInt64(long value, params long[] indices) => Storage.SetInt64(value, indices);
 
-        /// <summary>
-        ///     Sets a ulong at specific coordinates.
-        /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        /// <summary>Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a uint64 array, cast to
+        ///     the array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a uint64
+        ///     scalar).</summary>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is
+        ///     read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetUInt64(ulong value, int[] indices) => Storage.SetUInt64(value, indices);
 
-        /// <summary>
-        ///     Sets a char at specific coordinates.
-        /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        /// <summary>Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a char array, cast to
+        ///     the array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a char
+        ///     scalar).</summary>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is
+        ///     read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetChar(char value, int[] indices) => Storage.SetChar(value, indices);
 
-        /// <summary>
-        ///     Sets a double at specific coordinates.
-        /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        /// <summary>Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a float64 array, cast to
+        ///     the array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a float64
+        ///     scalar).</summary>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is
+        ///     read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetDouble(double value, int[] indices) => Storage.SetDouble(value, indices);
 
-        /// <summary>
-        ///     Sets a double at specific coordinates.
-        /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        /// <summary>Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a float64 array, cast to
+        ///     the array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a float64
+        ///     scalar).</summary>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the
+        ///     end of its axis, and axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is
+        ///     read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetDouble(double value, params long[] indices) => Storage.SetDouble(value, indices);
 
-        /// <summary>
-        ///     Sets a float at specific coordinates.
-        /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        /// <summary>Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a float32 array, cast to
+        ///     the array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a float32
+        ///     scalar).</summary>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is
+        ///     read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetSingle(float value, int[] indices) => Storage.SetSingle(value, indices);
 
-        /// <summary>
-        ///     Sets a decimal at specific coordinates.
-        /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        /// <summary>Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a decimal array, cast to
+        ///     the array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a decimal
+        ///     scalar).</summary>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is
+        ///     read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetDecimal(decimal value, int[] indices) => Storage.SetDecimal(value, indices);
 
+        /// <summary>Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a int8 array, cast to
+        ///     the array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a int8
+        ///     scalar).</summary>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is
+        ///     read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetSByte(sbyte value, int[] indices) => Storage.SetSByte(value, indices);
 
+        /// <summary>Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a float16 array, cast to
+        ///     the array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a float16
+        ///     scalar).</summary>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is
+        ///     read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetHalf(Half value, int[] indices) => Storage.SetHalf(value, indices);
 
+        /// <summary>Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a complex128 array, cast
+        ///     to the array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a complex128
+        ///     scalar).</summary>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is
+        ///     read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetComplex(System.Numerics.Complex value, int[] indices) => Storage.SetComplex(value, indices);
 
         #region Typed Setters (long[] overloads for int64 indexing)
 
-        /// <summary>
-        ///     Sets a bool at specific coordinates.
-        /// </summary>
-        /// <param name="value">The value to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        /// <summary>Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a bool array, cast to
+        ///     the array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a bool
+        ///     scalar).</summary>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the
+        ///     end of its axis, and axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is
+        ///     read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetBoolean(bool value, params long[] indices) => Storage.SetBoolean(value, indices);
 
-        /// <summary>
-        ///     Sets a byte at specific coordinates.
-        /// </summary>
-        /// <param name="value">The value to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        /// <summary>Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a uint8 array, cast to
+        ///     the array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a uint8
+        ///     scalar).</summary>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the
+        ///     end of its axis, and axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is
+        ///     read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetByte(byte value, params long[] indices) => Storage.SetByte(value, indices);
 
-        /// <summary>
-        ///     Sets a short at specific coordinates.
-        /// </summary>
-        /// <param name="value">The value to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        /// <summary>Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a int16 array, cast to
+        ///     the array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a int16
+        ///     scalar).</summary>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the
+        ///     end of its axis, and axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is
+        ///     read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetInt16(short value, params long[] indices) => Storage.SetInt16(value, indices);
 
-        /// <summary>
-        ///     Sets a ushort at specific coordinates.
-        /// </summary>
-        /// <param name="value">The value to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        /// <summary>Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a uint16 array, cast to
+        ///     the array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a uint16
+        ///     scalar).</summary>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the
+        ///     end of its axis, and axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is
+        ///     read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetUInt16(ushort value, params long[] indices) => Storage.SetUInt16(value, indices);
 
-        /// <summary>
-        ///     Sets a uint at specific coordinates.
-        /// </summary>
-        /// <param name="value">The value to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        /// <summary>Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a uint32 array, cast to
+        ///     the array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a uint32
+        ///     scalar).</summary>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the
+        ///     end of its axis, and axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is
+        ///     read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetUInt32(uint value, params long[] indices) => Storage.SetUInt32(value, indices);
 
-        /// <summary>
-        ///     Sets a ulong at specific coordinates.
-        /// </summary>
-        /// <param name="value">The value to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        /// <summary>Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a uint64 array, cast to
+        ///     the array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a uint64
+        ///     scalar).</summary>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the
+        ///     end of its axis, and axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is
+        ///     read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetUInt64(ulong value, params long[] indices) => Storage.SetUInt64(value, indices);
 
-        /// <summary>
-        ///     Sets a char at specific coordinates.
-        /// </summary>
-        /// <param name="value">The value to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        /// <summary>Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a char array, cast to
+        ///     the array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a char
+        ///     scalar).</summary>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the
+        ///     end of its axis, and axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is
+        ///     read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetChar(char value, params long[] indices) => Storage.SetChar(value, indices);
 
-        /// <summary>
-        ///     Sets a float at specific coordinates.
-        /// </summary>
-        /// <param name="value">The value to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        /// <summary>Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a float32 array, cast to
+        ///     the array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a float32
+        ///     scalar).</summary>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the
+        ///     end of its axis, and axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is
+        ///     read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetSingle(float value, params long[] indices) => Storage.SetSingle(value, indices);
 
-        /// <summary>
-        ///     Sets a decimal at specific coordinates.
-        /// </summary>
-        /// <param name="value">The value to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        /// <summary>Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a decimal array, cast to
+        ///     the array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a decimal
+        ///     scalar).</summary>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the
+        ///     end of its axis, and axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is
+        ///     read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetDecimal(decimal value, params long[] indices) => Storage.SetDecimal(value, indices);
 
+        /// <summary>Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a int8 array, cast to
+        ///     the array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a int8
+        ///     scalar).</summary>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the
+        ///     end of its axis, and axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is
+        ///     read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetSByte(sbyte value, params long[] indices) => Storage.SetSByte(value, indices);
 
+        /// <summary>Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a float16 array, cast to
+        ///     the array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a float16
+        ///     scalar).</summary>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the
+        ///     end of its axis, and axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is
+        ///     read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetHalf(Half value, params long[] indices) => Storage.SetHalf(value, indices);
 
+        /// <summary>Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a complex128 array, cast
+        ///     to the array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a complex128
+        ///     scalar).</summary>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the
+        ///     end of its axis, and axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is
+        ///     read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetComplex(System.Numerics.Complex value, params long[] indices) => Storage.SetComplex(value, indices);
 

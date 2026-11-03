@@ -42,11 +42,25 @@ namespace NumSharp.Backends
             }
         }
 
+        /// <summary>
+        ///     Stores <paramref name="value"/> at logical flat index <paramref name="index"/> (C order): as it is for the
+        ///     dtype's own type, cast to the dtype with NumPy's cast for any other <typeparamref name="T"/>.
+        /// </summary>
+        /// <typeparam name="T">The value's type.</typeparam>
+        /// <param name="value">The value to store.</param>
+        /// <param name="index">The flat index; a negative one counts from the end of the array.</param>
+        /// <exception cref="ValueError">The storage is read-only (<c>assignment destination is read-only</c>).</exception>
+        /// <exception cref="IndexError"><paramref name="index"/> is outside the array (NumPy's item texts; nothing is
+        ///     written).</exception>
+        /// <exception cref="NotSupportedException">The storage has no element type.</exception>
+        /// <remarks>
+        ///     Before parity QA-12 / QA-33 this stored <c>sizeof(T)</c> raw bytes at an unchecked offset: a double into a
+        ///     float32 array overwrote two elements, and its last element four bytes past the buffer, in Release.
+        /// </remarks>
         public unsafe void SetAtIndex<T>(T value, long index) where T : unmanaged
         {
-            Debug.Assert(typeof(T) == _dtype, $"SetAtIndex<{typeof(T).Name}> called on {_dtype.Name} array.");
             ThrowIfNotWriteable();
-            *((T*)Address + _shape.TransformOffset(index)) = value;
+            WriteAs(value, _shape.TransformOffsetChecked(index));
         }
 
         /// <summary>
@@ -57,79 +71,88 @@ namespace NumSharp.Backends
         /// <param name="value">The element, boxed as this storage's exact type; <c>null</c> is <c>None</c> (NaN for a float
         ///     dtype, <c>nan+nanj</c> for complex, <c>False</c> for bool, <c>'None'</c> or a <c>StringDType</c> NA object for
         ///     text).</param>
-        /// <param name="index">The logical flat index (C order).</param>
+        /// <param name="index">The logical flat index (C order); a negative one counts from the end of the array.</param>
         /// <exception cref="ValueError">The storage is read-only (<c>assignment destination is read-only</c>), or <c>None</c>
         ///     into a <c>StringDType(coerce=False)</c> storage.</exception>
         /// <exception cref="TypeError"><c>None</c> into an integer or <c>decimal</c> storage (Python's <c>int(None)</c>).</exception>
         /// <exception cref="InvalidCastException">A non-null value that is not the dtype's exact CLR type.</exception>
+        /// <exception cref="IndexError"><paramref name="index"/> is outside the array (NumPy's item texts; nothing is
+        ///     written).</exception>
         public unsafe void SetAtIndex(object value, long index)
         {
             ThrowIfNotWriteable();
+            StoreBoxedAt(value, _shape.TransformOffsetChecked(index));
+        }
+
+        /// <summary>
+        ///     Stores one boxed element at a resolved storage offset: the shared tail of the boxed setters. The value must
+        ///     be the dtype's exact CLR type — an explicit unboxing, never a conversion — except <c>null</c>, which is
+        ///     Python's <c>None</c> and stores what NumPy's setitem stores for it.
+        /// </summary>
+        /// <param name="value">The element, boxed as this storage's exact type, or <c>null</c> for <c>None</c>.</param>
+        /// <param name="off">The element's offset in the buffer, already checked by the caller.</param>
+        /// <exception cref="ValueError"><c>None</c> into a <c>StringDType(coerce=False)</c> storage.</exception>
+        /// <exception cref="TypeError"><c>None</c> into an integer or <c>decimal</c> storage (Python's <c>int(None)</c>).</exception>
+        /// <exception cref="InvalidCastException">A non-null value that is not the dtype's exact CLR type.</exception>
+        /// <exception cref="NotSupportedException">The storage has no element type.</exception>
+        private unsafe void StoreBoxedAt(object value, long off)
+        {
             // None into a number: its setitem value (ReductionInitial.PackNone), boxed as the exact type the switch below
             // unboxes. A text storage stores None through its own setitem (WriteElement's str(None), StringDType's NA rules).
             if (value is null && _typecode != NPTypeCode.String)
                 value = ReductionInitial.BoxNone(_typecode);
             switch (_typecode)
             {
-                // //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
-                // %foreach supported_dtypes,supported_dtypes_lowercase%
-                // case NPTypeCode.#1:
-                    // *((#2*)Address + _shape.TransformOffset(index)) = (#2) value;
-                    // return;
-                // %
-                // default:
-                    // throw new NotSupportedException();
-
                 //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
                 case NPTypeCode.Boolean:
-                    *((bool*)Address + _shape.TransformOffset(index)) = (bool)value;
+                    *((bool*)Address + off) = (bool)value;
                     return;
                 case NPTypeCode.SByte:
-                    *((sbyte*)Address + _shape.TransformOffset(index)) = (sbyte)value;
+                    *((sbyte*)Address + off) = (sbyte)value;
                     return;
                 case NPTypeCode.Byte:
-                    *((byte*)Address + _shape.TransformOffset(index)) = (byte)value;
+                    *((byte*)Address + off) = (byte)value;
                     return;
                 case NPTypeCode.Int16:
-                    *((short*)Address + _shape.TransformOffset(index)) = (short)value;
+                    *((short*)Address + off) = (short)value;
                     return;
                 case NPTypeCode.UInt16:
-                    *((ushort*)Address + _shape.TransformOffset(index)) = (ushort)value;
+                    *((ushort*)Address + off) = (ushort)value;
                     return;
                 case NPTypeCode.Int32:
-                    *((int*)Address + _shape.TransformOffset(index)) = (int)value;
+                    *((int*)Address + off) = (int)value;
                     return;
                 case NPTypeCode.UInt32:
-                    *((uint*)Address + _shape.TransformOffset(index)) = (uint)value;
+                    *((uint*)Address + off) = (uint)value;
                     return;
                 case NPTypeCode.Int64:
-                    *((long*)Address + _shape.TransformOffset(index)) = (long)value;
+                    *((long*)Address + off) = (long)value;
                     return;
                 case NPTypeCode.UInt64:
-                    *((ulong*)Address + _shape.TransformOffset(index)) = (ulong)value;
+                    *((ulong*)Address + off) = (ulong)value;
                     return;
                 case NPTypeCode.Char:
-                    *((char*)Address + _shape.TransformOffset(index)) = (char)value;
+                    *((char*)Address + off) = (char)value;
                     return;
                 case NPTypeCode.Half:
-                    *((Half*)Address + _shape.TransformOffset(index)) = (Half)value;
+                    *((Half*)Address + off) = (Half)value;
                     return;
                 case NPTypeCode.Double:
-                    *((double*)Address + _shape.TransformOffset(index)) = (double)value;
+                    *((double*)Address + off) = (double)value;
                     return;
                 case NPTypeCode.Single:
-                    *((float*)Address + _shape.TransformOffset(index)) = (float)value;
+                    *((float*)Address + off) = (float)value;
                     return;
                 case NPTypeCode.Decimal:
-                    *((decimal*)Address + _shape.TransformOffset(index)) = (decimal)value;
+                    *((decimal*)Address + off) = (decimal)value;
                     return;
                 case NPTypeCode.Complex:
-                    *((System.Numerics.Complex*)Address + _shape.TransformOffset(index)) = (System.Numerics.Complex)value;
+                    *((System.Numerics.Complex*)Address + off) = (System.Numerics.Complex)value;
                     return;
                 case NPTypeCode.String:
                     // NumPy's STRING_setitem / UNICODE_setitem (encode, truncate to the width, NUL-pad) or stringdtype_setitem
                     // (the NA object, or the value's str() packed into the cell) — whichever layout the slice holds.
-                    InternalArray.SetIndex(_shape.TransformOffset(index), value);
+                    InternalArray.SetIndex(off, value);
                     return;
                 default:
                     throw new NotSupportedException();
@@ -137,210 +160,119 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     Set a single value at given <see cref="indices"/>.
+        ///     Stores <paramref name="value"/> at <paramref name="indices"/>: as it is for the dtype's own type, cast to the
+        ///     dtype with NumPy's cast (the cast <c>astype</c> runs) for any other <typeparamref name="T"/> — NumPy's
+        ///     setitem of a scalar of another type.
         /// </summary>
-        /// <param name="value">The value to set</param>
-        /// <param name="indices">The </param>
+        /// <typeparam name="T">The value's type.</typeparam>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its axis, and
+        ///     axes left out address their first element.</param>
+        /// <exception cref="ValueError">The storage is read-only (<c>assignment destination is read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's texts;
+        ///     nothing is written).</exception>
+        /// <exception cref="NotSupportedException">The storage has no element type.</exception>
         /// <remarks>
-        ///     Does not change internal storage data type.<br></br>
-        ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
+        ///     Does not change the storage's dtype. Before parity QA-12 / QA-33 this stored <c>sizeof(T)</c> raw bytes at an
+        ///     unchecked offset (a <c>Debug.Assert</c> was the only type test): <c>SetValue(2.5, 0)</c> on a float32 array
+        ///     gave <c>[0, 2.0625, …]</c>, the last element wrote past the buffer, and a wrong coordinate wrote into another
+        ///     row or outside the array, in Release.
         /// </remarks>
         public unsafe void SetValue<T>(T value, int[] indices) where T : unmanaged
         {
-            Debug.Assert(typeof(T) == _dtype, $"SetValue<{typeof(T).Name}> called on {_dtype.Name} array. Use matching type or non-generic SetValue for conversion.");
             ThrowIfNotWriteable();
-            *((T*)Address + _shape.GetOffset(indices)) = value;
+            WriteAs(value, _shape.GetOffsetChecked(indices));
         }
 
         /// <summary>
-        ///     Set a single value at given <see cref="indices"/>.
+        ///     Stores <paramref name="value"/> at <paramref name="indices"/>: as it is for the dtype's own type, cast to the
+        ///     dtype with NumPy's cast (the cast <c>astype</c> runs) for any other <typeparamref name="T"/> — NumPy's
+        ///     setitem of a scalar of another type.
         /// </summary>
-        /// <param name="value">The value to set</param>
-        /// <param name="indices">The coordinates (long version).</param>
-        /// <remarks>
-        ///     Does not change internal storage data type.<br></br>
-        ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
-        /// </remarks>
+        /// <typeparam name="T">The value's type.</typeparam>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the end
+        ///     of its axis, and axes left out address their first element.</param>
+        /// <exception cref="ValueError">The storage is read-only (<c>assignment destination is read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's texts;
+        ///     nothing is written).</exception>
+        /// <exception cref="NotSupportedException">The storage has no element type.</exception>
+        /// <remarks>See <see cref="SetValue{T}(T, int[])"/>.</remarks>
         public unsafe void SetValue<T>(T value, params long[] indices) where T : unmanaged
         {
-            Debug.Assert(typeof(T) == _dtype, $"SetValue<{typeof(T).Name}> called on {_dtype.Name} array. Use matching type or non-generic SetValue for conversion.");
             ThrowIfNotWriteable();
-            *((T*)Address + _shape.GetOffset(indices)) = value;
+            WriteAs(value, _shape.GetOffsetChecked(indices));
         }
 
         /// <summary>
-        ///     Set a single value at given <see cref="indices"/>.
+        ///     Stores one boxed element at <paramref name="indices"/>. The value must be the dtype's exact CLR type — an
+        ///     explicit unboxing, never a conversion — except <c>null</c>, which is Python's <c>None</c> and stores what
+        ///     NumPy's setitem stores for it.
         /// </summary>
-        /// <param name="value">The value to set</param>
-        /// <param name="indices">The </param>
-        /// <remarks>
-        ///     Does not change internal storage data type.<br></br>
-        ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
-        /// </remarks>
+        /// <param name="value">The element, boxed as this storage's exact type; <c>null</c> is <c>None</c> (NaN for a float
+        ///     dtype, <c>nan+nanj</c> for complex, <c>False</c> for bool, <c>'None'</c> or a <c>StringDType</c> NA object for
+        ///     text).</param>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its axis, and
+        ///     axes left out address their first element.</param>
+        /// <remarks>Does not change the storage's dtype. The generic <see cref="SetValue{T}(T, int[])"/> converts a value of
+        ///     another type; this boxed form does not.</remarks>
         /// <exception cref="ValueError">The storage is read-only, or <c>None</c> into a <c>StringDType(coerce=False)</c>
         ///     storage.</exception>
         /// <exception cref="TypeError"><c>None</c> (a null <paramref name="value"/>) into an integer or <c>decimal</c>
         ///     storage; a float storage stores NaN, complex <c>nan+nanj</c>, bool <c>False</c>.</exception>
         /// <exception cref="InvalidCastException">A non-null value that is not the dtype's exact CLR type.</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's texts;
+        ///     nothing is written).</exception>
         public unsafe void SetValue(object value, int[] indices)
         {
             ThrowIfNotWriteable();
-            // None into a number: its setitem value, boxed as the exact type the switch unboxes (text stores None itself).
-            if (value is null && _typecode != NPTypeCode.String)
-                value = ReductionInitial.BoxNone(_typecode);
-            switch (_typecode)
-            {
-                // //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
-                // %foreach supported_dtypes,supported_dtypes_lowercase%
-                // case NPTypeCode.#1:
-                    // *((#2*)Address + _shape.GetOffset(indices)) = (#2) value;
-                    // return;
-                // %
-                // default:
-                    // throw new NotSupportedException();
-
-                //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
-                case NPTypeCode.Boolean:
-                    *((bool*)Address + _shape.GetOffset(indices)) = (bool)value;
-                    return;
-                case NPTypeCode.SByte:
-                    *((sbyte*)Address + _shape.GetOffset(indices)) = (sbyte)value;
-                    return;
-                case NPTypeCode.Byte:
-                    *((byte*)Address + _shape.GetOffset(indices)) = (byte)value;
-                    return;
-                case NPTypeCode.Int16:
-                    *((short*)Address + _shape.GetOffset(indices)) = (short)value;
-                    return;
-                case NPTypeCode.UInt16:
-                    *((ushort*)Address + _shape.GetOffset(indices)) = (ushort)value;
-                    return;
-                case NPTypeCode.Int32:
-                    *((int*)Address + _shape.GetOffset(indices)) = (int)value;
-                    return;
-                case NPTypeCode.UInt32:
-                    *((uint*)Address + _shape.GetOffset(indices)) = (uint)value;
-                    return;
-                case NPTypeCode.Int64:
-                    *((long*)Address + _shape.GetOffset(indices)) = (long)value;
-                    return;
-                case NPTypeCode.UInt64:
-                    *((ulong*)Address + _shape.GetOffset(indices)) = (ulong)value;
-                    return;
-                case NPTypeCode.Char:
-                    *((char*)Address + _shape.GetOffset(indices)) = (char)value;
-                    return;
-                case NPTypeCode.Half:
-                    *((Half*)Address + _shape.GetOffset(indices)) = (Half)value;
-                    return;
-                case NPTypeCode.Double:
-                    *((double*)Address + _shape.GetOffset(indices)) = (double)value;
-                    return;
-                case NPTypeCode.Single:
-                    *((float*)Address + _shape.GetOffset(indices)) = (float)value;
-                    return;
-                case NPTypeCode.Decimal:
-                    *((decimal*)Address + _shape.GetOffset(indices)) = (decimal)value;
-                    return;
-                case NPTypeCode.Complex:
-                    *((System.Numerics.Complex*)Address + _shape.GetOffset(indices)) = (System.Numerics.Complex)value;
-                    return;
-                case NPTypeCode.String:
-                    InternalArray.SetIndex(_shape.GetOffset(indices), value);
-                    return;
-                default:
-                    throw new NotSupportedException();
-            }
+            StoreBoxedAt(value, _shape.GetOffsetChecked(indices));
         }
 
         /// <summary>
-        ///     Set a single value at given <see cref="indices"/>.
+        ///     Stores one boxed element at <paramref name="indices"/>. The value must be the dtype's exact CLR type — an
+        ///     explicit unboxing, never a conversion — except <c>null</c>, which is Python's <c>None</c> and stores what
+        ///     NumPy's setitem stores for it.
         /// </summary>
-        /// <param name="value">The value to set</param>
-        /// <param name="indices">The coordinates (long version).</param>
-        /// <remarks>
-        ///     Does not change internal storage data type.<br></br>
-        ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
-        /// </remarks>
+        /// <param name="value">The element, boxed as this storage's exact type; <c>null</c> is <c>None</c> (NaN for a float
+        ///     dtype, <c>nan+nanj</c> for complex, <c>False</c> for bool, <c>'None'</c> or a <c>StringDType</c> NA object for
+        ///     text).</param>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the end
+        ///     of its axis, and axes left out address their first element.</param>
+        /// <remarks>Does not change the storage's dtype. The generic <see cref="SetValue{T}(T, long[])"/> converts a value of
+        ///     another type; this boxed form does not.</remarks>
         /// <exception cref="ValueError">The storage is read-only, or <c>None</c> into a <c>StringDType(coerce=False)</c>
         ///     storage.</exception>
         /// <exception cref="TypeError"><c>None</c> (a null <paramref name="value"/>) into an integer or <c>decimal</c>
         ///     storage; a float storage stores NaN, complex <c>nan+nanj</c>, bool <c>False</c>.</exception>
         /// <exception cref="InvalidCastException">A non-null value that is not the dtype's exact CLR type.</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's texts;
+        ///     nothing is written).</exception>
         public unsafe void SetValue(object value, params long[] indices)
         {
             ThrowIfNotWriteable();
-            // None into a number: its setitem value, boxed as the exact type the switch unboxes (text stores None itself).
-            if (value is null && _typecode != NPTypeCode.String)
-                value = ReductionInitial.BoxNone(_typecode);
-            switch (_typecode)
-            {
-                case NPTypeCode.Boolean:
-                    *((bool*)Address + _shape.GetOffset(indices)) = (bool)value;
-                    return;
-                case NPTypeCode.SByte:
-                    *((sbyte*)Address + _shape.GetOffset(indices)) = (sbyte)value;
-                    return;
-                case NPTypeCode.Byte:
-                    *((byte*)Address + _shape.GetOffset(indices)) = (byte)value;
-                    return;
-                case NPTypeCode.Int16:
-                    *((short*)Address + _shape.GetOffset(indices)) = (short)value;
-                    return;
-                case NPTypeCode.UInt16:
-                    *((ushort*)Address + _shape.GetOffset(indices)) = (ushort)value;
-                    return;
-                case NPTypeCode.Int32:
-                    *((int*)Address + _shape.GetOffset(indices)) = (int)value;
-                    return;
-                case NPTypeCode.UInt32:
-                    *((uint*)Address + _shape.GetOffset(indices)) = (uint)value;
-                    return;
-                case NPTypeCode.Int64:
-                    *((long*)Address + _shape.GetOffset(indices)) = (long)value;
-                    return;
-                case NPTypeCode.UInt64:
-                    *((ulong*)Address + _shape.GetOffset(indices)) = (ulong)value;
-                    return;
-                case NPTypeCode.Char:
-                    *((char*)Address + _shape.GetOffset(indices)) = (char)value;
-                    return;
-                case NPTypeCode.Half:
-                    *((Half*)Address + _shape.GetOffset(indices)) = (Half)value;
-                    return;
-                case NPTypeCode.Double:
-                    *((double*)Address + _shape.GetOffset(indices)) = (double)value;
-                    return;
-                case NPTypeCode.Single:
-                    *((float*)Address + _shape.GetOffset(indices)) = (float)value;
-                    return;
-                case NPTypeCode.Decimal:
-                    *((decimal*)Address + _shape.GetOffset(indices)) = (decimal)value;
-                    return;
-                case NPTypeCode.Complex:
-                    *((System.Numerics.Complex*)Address + _shape.GetOffset(indices)) = (System.Numerics.Complex)value;
-                    return;
-                case NPTypeCode.String:
-                    InternalArray.SetIndex(_shape.GetOffset(indices), value);
-                    return;
-                default:
-                    throw new NotSupportedException();
-            }
+            StoreBoxedAt(value, _shape.GetOffsetChecked(indices));
         }
 
         /// <summary>
-        ///     Set a single value at given <see cref="indices"/>.
+        ///     Sets the element or sub-array at <paramref name="indices"/> from <paramref name="value"/>: an array-like
+        ///     value goes through <see cref="SetData(NDArray, int[])"/>, a boxed scalar is stored at the element the
+        ///     coordinates address.
         /// </summary>
-        /// <param name="value">The value to set</param>
-        /// <param name="indices">The </param>
+        /// <param name="value">An <see cref="NDArray"/>, an <see cref="IArraySlice"/>, a C# array, a boxed scalar of the
+        ///     dtype's exact CLR type, or <c>null</c> — Python's <c>None</c>.</param>
+        /// <param name="indices">The leading coordinates; a negative coordinate counts from the end of its axis.</param>
         /// <remarks>
-        ///     Does not change internal storage data type.<br></br>
-        ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
+        ///     Does not change the storage's dtype. A boxed scalar is unboxed as the dtype's exact type, never converted
+        ///     (see <see cref="SetValue(object, int[])"/>).
         /// </remarks>
         /// <exception cref="ValueError">The storage is read-only, or <c>None</c> into a <c>StringDType(coerce=False)</c>
         ///     storage.</exception>
         /// <exception cref="TypeError"><c>None</c> (a null <paramref name="value"/>) into an integer or <c>decimal</c>
         ///     storage, raised after the coordinates' bounds check (<see cref="SetData(NDArray, int[])"/>).</exception>
+        /// <exception cref="InvalidCastException">A boxed scalar that is not the dtype's exact CLR type.</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing is written).</exception>
         public void SetData(object value, int[] indices)
         {
             ThrowIfNotWriteable();
@@ -363,8 +295,10 @@ namespace NumSharp.Backends
                     SetData((NDArray)array, indices);
                     return;
                 default:
-                    //we assume this is a scalar.
-                    SetAtIndex(value, _shape.GetOffset(indices));
+                    // A scalar: stored at the element the coordinates address (checked like the other element members).
+                    // The storage OFFSET goes straight to the store; it used to go through SetAtIndex, which reads its
+                    // argument as a logical flat index and transformed it a second time (a wrong element for a view).
+                    StoreBoxedAt(value, _shape.GetOffsetChecked(indices));
                     break;
             }
         }
@@ -638,6 +572,9 @@ namespace NumSharp.Backends
         /// <exception cref="ValueError">The storage is read-only, or <c>None</c> into a <c>StringDType(coerce=False)</c>
         ///     storage.</exception>
         /// <exception cref="TypeError"><c>None</c> into an integer or <c>decimal</c> storage.</exception>
+        /// <exception cref="InvalidCastException">A boxed scalar that is not the dtype's exact CLR type.</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing is written).</exception>
         public void SetData(object value, params long[] indices)
         {
             ThrowIfNotWriteable();
@@ -665,8 +602,10 @@ namespace NumSharp.Backends
                     SetData((NDArray)array, indices);
                     return;
                 default:
-                    //we assume this is a scalar.
-                    SetAtIndex(value, _shape.GetOffset(indices));
+                    // A scalar: stored at the element the coordinates address (checked like the other element members).
+                    // The storage OFFSET goes straight to the store; it used to go through SetAtIndex, which reads its
+                    // argument as a logical flat index and transformed it a second time (a wrong element for a view).
+                    StoreBoxedAt(value, _shape.GetOffsetChecked(indices));
                     break;
             }
         }
@@ -742,455 +681,515 @@ namespace NumSharp.Backends
 
     // %
         /// <summary>
-        ///     Sets a bool at specific coordinates.
+        ///     Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a bool array, cast to the
+        ///     array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a bool scalar).
         /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">The element's coordinates; a negative coordinate counts from the end of its axis, and
+        ///     axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetBoolean(bool value, int[] indices)
         {
             ThrowIfNotWriteable();
-            unsafe
-            {
-                *((bool*)Address + _shape.GetOffset(indices)) = value;
-            }
+            WriteAs(value, _shape.GetOffsetChecked(indices));
         }
 
         /// <summary>
-        ///     Sets a byte at specific coordinates.
+        ///     Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a uint8 array, cast to the
+        ///     array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a uint8 scalar).
         /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">The element's coordinates; a negative coordinate counts from the end of its axis, and
+        ///     axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetByte(byte value, int[] indices)
         {
             ThrowIfNotWriteable();
-            unsafe
-            {
-                *((byte*)Address + _shape.GetOffset(indices)) = value;
-            }
+            WriteAs(value, _shape.GetOffsetChecked(indices));
         }
 
         /// <summary>
-        ///     Sets a short at specific coordinates.
+        ///     Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a int16 array, cast to the
+        ///     array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a int16 scalar).
         /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">The element's coordinates; a negative coordinate counts from the end of its axis, and
+        ///     axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetInt16(short value, int[] indices)
         {
             ThrowIfNotWriteable();
-            unsafe
-            {
-                *((short*)Address + _shape.GetOffset(indices)) = value;
-            }
+            WriteAs(value, _shape.GetOffsetChecked(indices));
         }
 
         /// <summary>
-        ///     Sets a ushort at specific coordinates.
+        ///     Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a uint16 array, cast to the
+        ///     array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a uint16 scalar).
         /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">The element's coordinates; a negative coordinate counts from the end of its axis, and
+        ///     axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetUInt16(ushort value, int[] indices)
         {
             ThrowIfNotWriteable();
-            unsafe
-            {
-                *((ushort*)Address + _shape.GetOffset(indices)) = value;
-            }
+            WriteAs(value, _shape.GetOffsetChecked(indices));
         }
 
         /// <summary>
-        ///     Sets a int at specific coordinates.
+        ///     Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a int32 array, cast to the
+        ///     array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a int32 scalar).
         /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">The element's coordinates; a negative coordinate counts from the end of its axis, and
+        ///     axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetInt32(int value, int[] indices)
         {
             ThrowIfNotWriteable();
-            unsafe
-            {
-                *((int*)Address + _shape.GetOffset(indices)) = value;
-            }
+            WriteAs(value, _shape.GetOffsetChecked(indices));
         }
 
         /// <summary>
-        ///     Sets a uint at specific coordinates.
+        ///     Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a uint32 array, cast to the
+        ///     array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a uint32 scalar).
         /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">The element's coordinates; a negative coordinate counts from the end of its axis, and
+        ///     axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetUInt32(uint value, int[] indices)
         {
             ThrowIfNotWriteable();
-            unsafe
-            {
-                *((uint*)Address + _shape.GetOffset(indices)) = value;
-            }
+            WriteAs(value, _shape.GetOffsetChecked(indices));
         }
 
         /// <summary>
-        ///     Sets a long at specific coordinates.
+        ///     Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a int64 array, cast to the
+        ///     array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a int64 scalar).
         /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">The element's coordinates; a negative coordinate counts from the end of its axis, and
+        ///     axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetInt64(long value, int[] indices)
         {
             ThrowIfNotWriteable();
-            unsafe
-            {
-                *((long*)Address + _shape.GetOffset(indices)) = value;
-            }
+            WriteAs(value, _shape.GetOffsetChecked(indices));
         }
 
         /// <summary>
-        ///     Sets a ulong at specific coordinates.
+        ///     Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a uint64 array, cast to the
+        ///     array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a uint64 scalar).
         /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">The element's coordinates; a negative coordinate counts from the end of its axis, and
+        ///     axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetUInt64(ulong value, int[] indices)
         {
             ThrowIfNotWriteable();
-            unsafe
-            {
-                *((ulong*)Address + _shape.GetOffset(indices)) = value;
-            }
+            WriteAs(value, _shape.GetOffsetChecked(indices));
         }
 
         /// <summary>
-        ///     Sets a char at specific coordinates.
+        ///     Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a char array, cast to the
+        ///     array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a char scalar).
         /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">The element's coordinates; a negative coordinate counts from the end of its axis, and
+        ///     axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetChar(char value, int[] indices)
         {
             ThrowIfNotWriteable();
-            unsafe
-            {
-                *((char*)Address + _shape.GetOffset(indices)) = value;
-            }
+            WriteAs(value, _shape.GetOffsetChecked(indices));
         }
 
         /// <summary>
-        ///     Sets a double at specific coordinates.
+        ///     Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a float64 array, cast to the
+        ///     array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a float64 scalar).
         /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">The element's coordinates; a negative coordinate counts from the end of its axis, and
+        ///     axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetDouble(double value, int[] indices)
         {
             ThrowIfNotWriteable();
-            unsafe
-            {
-                *((double*)Address + _shape.GetOffset(indices)) = value;
-            }
+            WriteAs(value, _shape.GetOffsetChecked(indices));
         }
 
         /// <summary>
-        ///     Sets a double at specific coordinates.
+        ///     Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a float64 array, cast to the
+        ///     array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a float64 scalar).
         /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">The element's coordinates; a negative coordinate counts from the end of its axis, and
+        ///     axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetDouble(double value, params long[] indices)
         {
             ThrowIfNotWriteable();
-            unsafe
-            {
-                *((double*)Address + _shape.GetOffset(indices)) = value;
-            }
+            WriteAs(value, _shape.GetOffsetChecked(indices));
         }
 
         /// <summary>
-        ///     Sets a float at specific coordinates.
+        ///     Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a float32 array, cast to the
+        ///     array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a float32 scalar).
         /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">The element's coordinates; a negative coordinate counts from the end of its axis, and
+        ///     axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetSingle(float value, int[] indices)
         {
             ThrowIfNotWriteable();
-            unsafe
-            {
-                *((float*)Address + _shape.GetOffset(indices)) = value;
-            }
+            WriteAs(value, _shape.GetOffsetChecked(indices));
         }
 
         /// <summary>
-        ///     Sets a decimal at specific coordinates.
+        ///     Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a decimal array, cast to the
+        ///     array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a decimal scalar).
         /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">The element's coordinates; a negative coordinate counts from the end of its axis, and
+        ///     axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetDecimal(decimal value, int[] indices)
         {
             ThrowIfNotWriteable();
-            unsafe
-            {
-                *((decimal*)Address + _shape.GetOffset(indices)) = value;
-            }
+            WriteAs(value, _shape.GetOffsetChecked(indices));
         }
 
         /// <summary>
-        ///     Sets a sbyte at specific coordinates.
+        ///     Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a int8 array, cast to the
+        ///     array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a int8 scalar).
         /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">The element's coordinates; a negative coordinate counts from the end of its axis, and
+        ///     axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetSByte(sbyte value, int[] indices)
         {
             ThrowIfNotWriteable();
-            unsafe
-            {
-                *((sbyte*)Address + _shape.GetOffset(indices)) = value;
-            }
+            WriteAs(value, _shape.GetOffsetChecked(indices));
         }
 
         /// <summary>
-        ///     Sets a Half at specific coordinates.
+        ///     Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a float16 array, cast to the
+        ///     array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a float16 scalar).
         /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">The element's coordinates; a negative coordinate counts from the end of its axis, and
+        ///     axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetHalf(Half value, int[] indices)
         {
             ThrowIfNotWriteable();
-            unsafe
-            {
-                *((Half*)Address + _shape.GetOffset(indices)) = value;
-            }
+            WriteAs(value, _shape.GetOffsetChecked(indices));
         }
 
         /// <summary>
-        ///     Sets a Complex at specific coordinates.
+        ///     Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a complex128 array, cast to the
+        ///     array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a complex128 scalar).
         /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">The element's coordinates; a negative coordinate counts from the end of its axis, and
+        ///     axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetComplex(System.Numerics.Complex value, int[] indices)
         {
             ThrowIfNotWriteable();
-            unsafe
-            {
-                *((System.Numerics.Complex*)Address + _shape.GetOffset(indices)) = value;
-            }
+            WriteAs(value, _shape.GetOffsetChecked(indices));
         }
 
         #region Typed Setters (long[] overloads)
 
         /// <summary>
-        ///     Sets a bool at specific coordinates.
+        ///     Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a bool array, cast to the
+        ///     array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a bool scalar).
         /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at (long version).</param>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">The element's coordinates (long version); a negative coordinate counts from the end of its axis, and
+        ///     axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetBoolean(bool value, params long[] indices)
         {
             ThrowIfNotWriteable();
-            unsafe
-            {
-                *((bool*)Address + _shape.GetOffset(indices)) = value;
-            }
+            WriteAs(value, _shape.GetOffsetChecked(indices));
         }
 
         /// <summary>
-        ///     Sets a byte at specific coordinates.
+        ///     Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a uint8 array, cast to the
+        ///     array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a uint8 scalar).
         /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at (long version).</param>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">The element's coordinates (long version); a negative coordinate counts from the end of its axis, and
+        ///     axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetByte(byte value, params long[] indices)
         {
             ThrowIfNotWriteable();
-            unsafe
-            {
-                *((byte*)Address + _shape.GetOffset(indices)) = value;
-            }
+            WriteAs(value, _shape.GetOffsetChecked(indices));
         }
 
         /// <summary>
-        ///     Sets a short at specific coordinates.
+        ///     Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a int16 array, cast to the
+        ///     array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a int16 scalar).
         /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at (long version).</param>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">The element's coordinates (long version); a negative coordinate counts from the end of its axis, and
+        ///     axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetInt16(short value, params long[] indices)
         {
             ThrowIfNotWriteable();
-            unsafe
-            {
-                *((short*)Address + _shape.GetOffset(indices)) = value;
-            }
+            WriteAs(value, _shape.GetOffsetChecked(indices));
         }
 
         /// <summary>
-        ///     Sets a ushort at specific coordinates.
+        ///     Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a uint16 array, cast to the
+        ///     array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a uint16 scalar).
         /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at (long version).</param>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">The element's coordinates (long version); a negative coordinate counts from the end of its axis, and
+        ///     axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetUInt16(ushort value, params long[] indices)
         {
             ThrowIfNotWriteable();
-            unsafe
-            {
-                *((ushort*)Address + _shape.GetOffset(indices)) = value;
-            }
+            WriteAs(value, _shape.GetOffsetChecked(indices));
         }
 
         /// <summary>
-        ///     Sets a int at specific coordinates.
+        ///     Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a int32 array, cast to the
+        ///     array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a int32 scalar).
         /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at (long version).</param>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">The element's coordinates (long version); a negative coordinate counts from the end of its axis, and
+        ///     axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetInt32(int value, params long[] indices)
         {
             ThrowIfNotWriteable();
-            unsafe
-            {
-                *((int*)Address + _shape.GetOffset(indices)) = value;
-            }
+            WriteAs(value, _shape.GetOffsetChecked(indices));
         }
 
         /// <summary>
-        ///     Sets a uint at specific coordinates.
+        ///     Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a uint32 array, cast to the
+        ///     array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a uint32 scalar).
         /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at (long version).</param>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">The element's coordinates (long version); a negative coordinate counts from the end of its axis, and
+        ///     axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetUInt32(uint value, params long[] indices)
         {
             ThrowIfNotWriteable();
-            unsafe
-            {
-                *((uint*)Address + _shape.GetOffset(indices)) = value;
-            }
+            WriteAs(value, _shape.GetOffsetChecked(indices));
         }
 
         /// <summary>
-        ///     Sets a long at specific coordinates.
+        ///     Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a int64 array, cast to the
+        ///     array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a int64 scalar).
         /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at (long version).</param>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">The element's coordinates (long version); a negative coordinate counts from the end of its axis, and
+        ///     axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetInt64(long value, params long[] indices)
         {
             ThrowIfNotWriteable();
-            unsafe
-            {
-                *((long*)Address + _shape.GetOffset(indices)) = value;
-            }
+            WriteAs(value, _shape.GetOffsetChecked(indices));
         }
 
         /// <summary>
-        ///     Sets a ulong at specific coordinates.
+        ///     Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a uint64 array, cast to the
+        ///     array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a uint64 scalar).
         /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at (long version).</param>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">The element's coordinates (long version); a negative coordinate counts from the end of its axis, and
+        ///     axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetUInt64(ulong value, params long[] indices)
         {
             ThrowIfNotWriteable();
-            unsafe
-            {
-                *((ulong*)Address + _shape.GetOffset(indices)) = value;
-            }
+            WriteAs(value, _shape.GetOffsetChecked(indices));
         }
 
         /// <summary>
-        ///     Sets a char at specific coordinates.
+        ///     Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a char array, cast to the
+        ///     array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a char scalar).
         /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at (long version).</param>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">The element's coordinates (long version); a negative coordinate counts from the end of its axis, and
+        ///     axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetChar(char value, params long[] indices)
         {
             ThrowIfNotWriteable();
-            unsafe
-            {
-                *((char*)Address + _shape.GetOffset(indices)) = value;
-            }
+            WriteAs(value, _shape.GetOffsetChecked(indices));
         }
 
         /// <summary>
-        ///     Sets a float at specific coordinates.
+        ///     Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a float32 array, cast to the
+        ///     array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a float32 scalar).
         /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at (long version).</param>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">The element's coordinates (long version); a negative coordinate counts from the end of its axis, and
+        ///     axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetSingle(float value, params long[] indices)
         {
             ThrowIfNotWriteable();
-            unsafe
-            {
-                *((float*)Address + _shape.GetOffset(indices)) = value;
-            }
+            WriteAs(value, _shape.GetOffsetChecked(indices));
         }
 
         /// <summary>
-        ///     Sets a decimal at specific coordinates.
+        ///     Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a decimal array, cast to the
+        ///     array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a decimal scalar).
         /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at (long version).</param>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">The element's coordinates (long version); a negative coordinate counts from the end of its axis, and
+        ///     axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetDecimal(decimal value, params long[] indices)
         {
             ThrowIfNotWriteable();
-            unsafe
-            {
-                *((decimal*)Address + _shape.GetOffset(indices)) = value;
-            }
+            WriteAs(value, _shape.GetOffsetChecked(indices));
         }
 
         /// <summary>
-        ///     Sets a sbyte at specific coordinates.
+        ///     Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a int8 array, cast to the
+        ///     array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a int8 scalar).
         /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at (long version).</param>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">The element's coordinates (long version); a negative coordinate counts from the end of its axis, and
+        ///     axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetSByte(sbyte value, params long[] indices)
         {
             ThrowIfNotWriteable();
-            unsafe
-            {
-                *((sbyte*)Address + _shape.GetOffset(indices)) = value;
-            }
+            WriteAs(value, _shape.GetOffsetChecked(indices));
         }
 
         /// <summary>
-        ///     Sets a Half at specific coordinates.
+        ///     Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a float16 array, cast to the
+        ///     array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a float16 scalar).
         /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at (long version).</param>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">The element's coordinates (long version); a negative coordinate counts from the end of its axis, and
+        ///     axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetHalf(Half value, params long[] indices)
         {
             ThrowIfNotWriteable();
-            unsafe
-            {
-                *((Half*)Address + _shape.GetOffset(indices)) = value;
-            }
+            WriteAs(value, _shape.GetOffsetChecked(indices));
         }
 
         /// <summary>
-        ///     Sets a Complex at specific coordinates.
+        ///     Stores <paramref name="value"/> at <paramref name="indices"/>: as it is in a complex128 array, cast to the
+        ///     array's dtype with NumPy's cast in an array of any other dtype (NumPy's setitem of a complex128 scalar).
         /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at (long version).</param>
+        /// <param name="value">The value to store.</param>
+        /// <param name="indices">The element's coordinates (long version); a negative coordinate counts from the end of its axis, and
+        ///     axes left out address their first element.</param>
+        /// <exception cref="ValueError">The array is read-only (<c>assignment destination is read-only</c>).</exception>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is written).</exception>
         [MethodImpl(Inline)]
         public void SetComplex(System.Numerics.Complex value, params long[] indices)
         {
             ThrowIfNotWriteable();
-            unsafe
-            {
-                *((System.Numerics.Complex*)Address + _shape.GetOffset(indices)) = value;
-            }
+            WriteAs(value, _shape.GetOffsetChecked(indices));
         }
 
         #endregion

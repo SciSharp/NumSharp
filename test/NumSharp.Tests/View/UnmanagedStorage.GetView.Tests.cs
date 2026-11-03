@@ -429,7 +429,8 @@ namespace NumSharp.Tests.View
             a = new UnmanagedStorage(np.arange(10).GetData(), new Shape(1, 10));
             a.GetView(":, -1").ToArray<long>().Should().BeEquivalentTo(new long[] { 9 });
             a.GetView(":, 1:").GetView("-1, -2").ToArray<long>().Should().BeEquivalentTo(new long[] { 8 });
-            a.GetView(":, 1:").GetView("-1, -2").GetValue(0,0).Should().BeEquivalentTo(8L);
+            // The view is 0-d: its one element takes no coordinate (NumPy raises "too many indices" for [0, 0]).
+            a.GetView(":, 1:").GetView("-1, -2").GetValue().Should().BeEquivalentTo(8L);
         }
 
         [TestMethod]

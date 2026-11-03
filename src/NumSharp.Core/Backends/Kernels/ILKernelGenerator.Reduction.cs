@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
 using NumSharp.Backends.Iteration;
+using NumSharp.Utilities;
 
 // =============================================================================
 // ILKernelGenerator.Reduction.cs — per-chunk axis-reduction kernels (NDIter-driven)
@@ -767,16 +768,63 @@ namespace NumSharp.Backends.Kernels
         // =====================================================================
 
         /// <summary>
-        /// Read one input element and promote to the accumulator type. When TIn==TAccum the
-        /// <c>typeof</c> test is a JIT constant and this folds to a plain reinterpret read —
-        /// avoiding a per-element CreateTruncating static-virtual call on the hot same-type
-        /// path (the difference between Half pinned-reduce at ~parity vs +30%).
+        ///     Reads one input element and converts it to the accumulator type the way NumPy's loop casts its inputs: a
+        ///     plain read when the types match, NumPy's C cast for a float / complex / decimal element into an integer
+        ///     accumulator, a widening <c>CreateTruncating</c> otherwise.
         /// </summary>
+        /// <typeparam name="TIn">The input element type.</typeparam>
+        /// <typeparam name="TAccum">The accumulator (loop) type.</typeparam>
+        /// <param name="p">The element's address.</param>
+        /// <returns>The element as <typeparamref name="TAccum"/>.</returns>
+        /// <remarks>
+        ///     <para>
+        ///     Every <c>typeof</c> test is a JIT constant per instantiation, so each (TIn, TAccum) pair compiles to one of
+        ///     the three branches: the same-type read stays a reinterpret (the difference between Half pinned-reduce at
+        ///     ~parity vs +30%), and integer widening stays <c>CreateTruncating</c>.
+        ///     </para>
+        ///     <para>
+        ///     A floating source into an integer accumulator is the cumsum / nancumsum <c>dtype=int</c> case. NumPy's
+        ///     iterator casts each element with C's conversion (truncate toward zero, then wrap; NaN / inf / out of range
+        ///     give the integer minimum truncated to the width, 0 for 8- and 16-bit), the cast <c>astype</c> runs, while
+        ///     .NET's <c>CreateTruncating</c> SATURATES: <c>np.cumsum([-3.0, 1.0], axis=0, dtype=uint8)</c> gave
+        ///     <c>[0, 1]</c> for NumPy's <c>[253, 254]</c> (parity QA-06). <see cref="Converts.ChangeType{TIn, TOut}"/> is
+        ///     that NumPy cast (typed for float32 / float64 / decimal, boxed for float16 / complex128).
+        ///     </para>
+        /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe TAccum ConvIn<TIn, TAccum>(byte* p)
             where TIn : unmanaged, INumberBase<TIn>
             where TAccum : unmanaged, INumber<TAccum>
-            => typeof(TIn) == typeof(TAccum) ? *(TAccum*)p : TAccum.CreateTruncating(*(TIn*)p);
+        {
+            if (typeof(TIn) == typeof(TAccum))
+                return *(TAccum*)p;
+            if (IsFloatingSource<TIn>() && IsIntegerAccumulator<TAccum>())
+                return Converts.ChangeType<TIn, TAccum>(*(TIn*)p);
+            return TAccum.CreateTruncating(*(TIn*)p);
+        }
+
+        /// <summary>
+        ///     Whether <typeparamref name="T"/> is an element type NumPy casts to an integer loop with C's float conversion
+        ///     (float16 / float32 / float64, NumSharp's decimal, and complex128, whose real part is cast).
+        /// </summary>
+        /// <typeparam name="T">The input element type.</typeparam>
+        /// <returns>True for the floating element types; a JIT constant per instantiation.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool IsFloatingSource<T>()
+            => typeof(T) == typeof(double) || typeof(T) == typeof(float) || typeof(T) == typeof(Half)
+               || typeof(T) == typeof(decimal) || typeof(T) == typeof(System.Numerics.Complex);
+
+        /// <summary>
+        ///     Whether <typeparamref name="T"/> is an integer accumulator (the signed and unsigned integers and char, the
+        ///     uint16 lane), whose float conversion must wrap like C rather than saturate like .NET.
+        /// </summary>
+        /// <typeparam name="T">The accumulator type.</typeparam>
+        /// <returns>True for the integer accumulators; a JIT constant per instantiation.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool IsIntegerAccumulator<T>()
+            => typeof(T) == typeof(sbyte) || typeof(T) == typeof(byte) || typeof(T) == typeof(short)
+               || typeof(T) == typeof(ushort) || typeof(T) == typeof(int) || typeof(T) == typeof(uint)
+               || typeof(T) == typeof(long) || typeof(T) == typeof(ulong) || typeof(T) == typeof(char);
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe void TypedSumKernel<TIn, TAccum>(void** dataptrs, long* strides, long count, void* auxdata)
