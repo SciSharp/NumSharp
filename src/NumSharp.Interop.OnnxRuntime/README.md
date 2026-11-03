@@ -151,6 +151,10 @@ intra-op thread pool and no .NET thread waits.
   resumes on another. Held across `await session.RunAsync(...)`, it is disposed on the continuation's thread and
   left behind as the opening thread's current scope, and once that thread reuses it, its close disposes the opening
   thread's later arrays (measured: 7.0 read back as 9.0). Scope the code before the `await` and after it.
+- Start `RunAsync` outside any `NDScope`: it allocates its outputs when the call starts, so an open scope disposes
+  them when it closes and the task returns arrays over freed memory - through `scope.ReturnsTask(task)` too, which
+  yields an `NDArray` or a tuple, not the arrays inside a dictionary. Under the synchronous `Run`, yield each output
+  you keep with `scope.Returns(outputs[name])`.
 
 ## Text
 

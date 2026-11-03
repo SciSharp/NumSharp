@@ -44,6 +44,9 @@ log (section 7). Every new idea becomes a work-list row before it is worked on.
   a permuted view is C-ordered where NumPy keeps the permutation, so `Postprocess.Softmax` on a transposed view differs
   from NumPy / SciPy by 1-3 ulps (F79); P20, an `NDScope` disposed on a foreign thread (a scope held across an `await`)
   is silently pooled and reused there in a Release build, a cross-thread use-after-free (F83) - recommended: throw.
+- **Decide with the release (F84, high)**: `RunAsync` inside any `NDScope` returns outputs over freed memory, even through
+  `scope.ReturnsTask` - the docs now say to start it outside any scope; P21 is the contained bridge fix (the result
+  dictionary implements Core's public `INDArrayCarrier`).
 - **Examples** (section 6): ImageNet with ONNX Runtime, train / evaluate / k-means with ML.NET, and train in ML.NET ->
   export -> serve with ONNX Runtime (both bridges), each proven on Windows and Linux from the local beta feed.
 
@@ -145,6 +148,7 @@ Status: `todo`, `doing`, `done`, `dropped` (with the reason).
 | A62 | Every remedy-bearing message literal of both bridges ("e.g.", use, call, pass, cast, read, instead, first, transform): does what it names exist? | F81's remedy named a thing, not an API, so F66's audit could not catch it | done (no further finding: 47 literals; every named verb, type and API exists; the em dashes are real U+2014, not replacement characters) |
 | A63 | The golden-file workflow of a port: Python's `.npz` inputs and outputs replayed through `Run`, numeric and text | How a Python model is ported and checked; `NpzFile` is a dictionary, so it should feed `Run` directly | done (F82 docs) |
 | A64 | NumSharp's `NDScope` against the ORT bridge's async API: a hand-written scope held across `await session.RunAsync` | NDScope is thread-static; the continuation resumes elsewhere; a Release package does not assert | done (F83 docs; P20 for Core) |
+| A65 | `RunAsync` started inside an `NDScope` that closes while the run is in flight, and through `scope.ReturnsTask`; and outside any scope | `RunAsync` allocates its outputs at the call; `ReturnsTask` is NDScope's own remedy for tasks | done (F84 docs; P21) |
 
 ## 4. Findings
 
@@ -235,6 +239,7 @@ Severity: **blocker** (cannot ship), **high** (a real user hits it), **medium**,
 | F81 | low | MLNet (message) | `ToNDArray` reads a variable-length vector column whose rows agree on length (a `float[]` property without `[VectorType]`), and refuses one whose rows disagree, as NumPy refuses ragged rows. The refusal's remedy, "Pad the column to a fixed size first (e.g. an ML.NET vector-size transform)", named a transform ML.NET does not have (missed by F66's audit, which checked API names only). Now it names ML.NET's own column reader with the item type - `view.GetColumn<Single[]>("F")` - and says to pad or trim the rows to one length before `np.array`; `ImportEdgeTests.VectorColumn_ActuallyVariableLength_Throws` runs that route (zero-padded to the longest row: `[[1, 2, 0], [1, 2, 3]]`). Green at ML.NET 2.0.1 and 5.0.1, net8.0 / net10.0. | `NDArrayMLNetInterop.Materialize` | fixed (this commit) |
 | F82 | info | OnnxRuntime (docs) | The golden-file workflow of a Python -> C# port: Python saves a model's inputs and onnxruntime's outputs as `.npz` by name; `np.load_npz` returns an `NpzFile`, which IS an `IReadOnlyDictionary<string, NDArray>`, so `session.Run(np.load_npz("inputs.npz"))` feeds it as it is - the twin of `sess.run(None, dict(np.load(...)))`. `matmul_f32` (5 x 7 @ 7 x 3) and `mixed_string_float` (a `<U34` text input and a float input): every output IDENTICAL to Python onnxruntime 1.29.0's - the text output comes back as `<U34`, equal value for value; `np.array_equal` against the outputs file is `True` for each. Not on the page before. | scratch `realdata/make_golden_npz.py`, `consumers/golden_npz.cs` | docs fixed (this commit: the ORT page's ergonomic tier gains "Golden files from Python", its snippet run as written) |
 | F83 | medium | OnnxRuntime (docs) + Core (P20) | A hand-written `NDScope` held across `await session.RunAsync(...)` - the natural shape of an ASP.NET handler - corrupts NumSharp's thread-static scope state, and can then free another thread's arrays. Proven against the PACKED beta (Release NumSharp, so no `Debug.Assert`): with the real `RunAsync` (`fixed_shape_f32`, 2 intra-op threads) the scope opened on thread 4 is disposed on the continuation's thread 8; thread 4's current scope stays that DISPOSED scope, and its later "unscoped" arrays are tracked into it. `Dispose` on the foreign thread pools the scope in THAT thread's slot; made deterministic with two threads, the continuation thread's next `NDScope.Open()` reuses the object, the opening thread's arrays are tracked into the other thread's live scope, and its close disposes them: an array the opening thread filled with 7.0 reads 9.0 (another array's data), `IsDisposed` True - a cross-thread use-after-free. NumSharp's XML docs forbid a hand-written scope across an `await` ("asserted in debug builds"); the bridge pages did not say it. | scratch `consumers/ndscope_await.cs` | docs fixed (the ORT page's async section, `349c5e2c`, and the README's, the next commit); the Core guard deferred (P20) |
+| F84 | high | OnnxRuntime (+ NDScope) | `RunAsync` inside ANY `NDScope` returns outputs over freed memory - even through `scope.ReturnsTask(task)`, NumSharp's documented remedy for a task leaving a scope. `RunAsync` allocates its outputs when the call starts, on the calling thread, so the open scope tracks them; the scope disposes them when it closes (at once, or at the task's completion under `ReturnsTask`), and once the run releases its own reference the task's dictionary holds disposed arrays over freed buffers. `ReturnsTask` yields a result through `YieldBoxed`, which knows `NDArray`, `NDArray[]`, `INDArrayCarrier`, `ITuple`, a slice and storage - not the `IReadOnlyDictionary<string, NDArray>` `RunAsync` returns. Measured against the PACKED beta (`fixed_shape_f32`, relu of a known input, the pool churned with 55.5 between completion and the read), 3 rounds each: scope closed while in flight -> `IsDisposed` True, 55.5 read where 0.5 was expected; `ReturnsTask` -> the same; `RunAsync` started outside any scope -> right. The synchronous `Run(dict)` has the scope contract (each output yielded with `scope.Returns(outputs[name])`, `NDScopeTests` O6). | scratch `consumers/ndscope_inflight.cs` | docs fixed (this commit: the ORT page and README say to start `RunAsync` outside any scope); the fix deferred (P21) |
 | F15 | info | OnnxRuntime | Real models, bit-exact parity: ImageNet SqueezeNet 1.1 / MobileNetV2 / ResNet50 v2 (preprocessing bytes == NumPy; logits bytes == Python onnxruntime 1.29.0; top-5 equal); all-MiniLM-L6-v2 sentence embeddings (three int64 inputs; `last_hidden_state` bytes == Python; NumSharp mean pooling + L2 norm bytes == NumPy; cosine-similarity matrix max diff 2.98e-7, from the managed matmul's summation order); scikit-learn LogisticRegression / RandomForest (string labels) / GradientBoosting (labels, probabilities, regression bytes == Python; ZipMaps through ORT's `Run` + `ToMaps`). | scratch `consumers/ort_vision.cs`, `ort_text.cs`, `ort_sklearn.cs` + `realdata/make_*_ref.py` | closed (works) |
 
 ## 5. For the owner (deferred, with what was proven)
@@ -474,6 +479,15 @@ rides in P12's commit) - and `qa/proposals-all` merges all seven with their thre
   open on the calling thread (it sees Core's internal `NDScope.Current`), but a woven `[NDScopedAsync]` method suspends
   its scope across the await legitimately, so that refusal would be wrong there: the Core guard is the precise fix.
 
+- **P21 (F84) Let a run's outputs leave an `NDScope`.** Proven: `RunAsync` inside any scope returns outputs over freed memory,
+  `scope.ReturnsTask` included, because NDScope yields an `NDArray`, an array, a tuple or an `INDArrayCarrier` result but
+  not a dictionary. Recommended, contained to the bridge and non-breaking for the declared types: return the outputs of
+  `Run(dict)` / `RunAsync` as an internal `IReadOnlyDictionary<string, NDArray>` that also implements Core's PUBLIC
+  `INDArrayCarrier` (`YieldTo(scope)` yields every output), so `scope.ReturnsTask(session.RunAsync(...))` - and a woven
+  `[NDScoped]` method that returns the dictionary - hand the outputs to the caller. Alternatively Core's `Returns` /
+  `YieldBoxed` learn `IReadOnlyDictionary<string, NDArray>` (which would also serve the ML.NET bridge's future dictionary
+  views, P1). A test: `NDScopeTests` with `ReturnsTask(RunAsync)` reading the churned pool. Until then the docs warn.
+
 ## 6. Examples
 
 Both are in the regular form (what `dotnet new console` + `dotnet add package` write: plain `PackageReference`s, no
@@ -497,7 +511,7 @@ the two bridges). Nothing here was merged there. To ship the results in the beta
 commits):
 
 **Verified (04:53, the end state):** `git cherry-pick 1c001253..qa/interop-release` - 70 commits at `11203d65`, then the
-closing commits (this file, one sentence of `.claude/rules/interop-packages.md`, and F82 / F83 on the ORT page): 79 in
+closing commits (this file, one sentence of `.claude/rules/interop-packages.md`, and F82 / F83 on the ORT page): 80 in
 all at the end (05:15), re-simulated clean, - applies with NO conflict onto `release-0.80.0-beta1` at `ac6526e2` (its latest
 merge of `strings`, unchanged since 02:00): each pick simulated read-only with `git merge-tree --write-tree
 --merge-base=<commit>^`, chained through unreferenced commit objects (scratch `probes/simulate_cherry_picks.py`,
@@ -649,3 +663,4 @@ The proposals (section 5) are separate, each the owner's to accept or drop:
 | 05:16 | P20 names the bridge-only alternative and why the Core guard is the precise fix; 77 commits at the end. |
 | 05:18 | The ORT README's async section carries F83's warning too; 78 commits at the end. |
 | 05:20 | The ORT page's claims ledger gains row 28 (the NDScope suites); its other 27 rows checked against tonight's findings: none contradicted (row 10 compares Postprocess with ORT's operators, not SciPy, so F79 leaves it true). 79 commits at the end. |
+| 05:21 | A65 (F84, P21): RunAsync inside any NDScope returns outputs over freed memory, ReturnsTask included (NDScope cannot yield a dictionary); docs warn; P21 = the result dictionary implements INDArrayCarrier. 80 commits at the end. |

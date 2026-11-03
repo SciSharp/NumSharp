@@ -241,6 +241,11 @@ and the task completes from a native callback.
   thread's current scope, so that thread's later arrays are tracked into it; when the continuation's thread
   reuses the scope, its close disposes them (measured: an array the opening thread filled with 7.0 read 9.0,
   another array's data). Scope the synchronous code before the `await` and after it, never across it.
+- **Start `RunAsync` outside any `NDScope`.** It allocates its outputs when the call starts, so an open scope
+  tracks them and disposes them when it closes, and once the run lets go of its own reference the task's
+  dictionary holds arrays over freed memory (measured: relu's 0.5 read back as another array's 55.5).
+  `scope.ReturnsTask(task)` does not help: it yields an `NDArray` or a tuple result, not the arrays inside a
+  dictionary. Under the synchronous `Run`, yield each output you keep with `scope.Returns(outputs[name])`.
 
 ## Text
 
