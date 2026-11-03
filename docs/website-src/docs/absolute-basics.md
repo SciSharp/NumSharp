@@ -56,6 +56,11 @@ a.shape;    // (2, 3) → long[] { 2, 3 }
 
 Run them in a `dotnet run` file-based app, LINQPad, a console project, or a C# notebook. The `// →`/`//` text is the output, not code.
 
+A file-based app (`dotnet run app.cs`) starts with two lines, `#:package NumSharp@<version>` and
+`#:property PublishAot=false`. Without the second, the app runs as Native AOT would, where .NET cannot run code
+generated at run time, and NumSharp's first array arithmetic (`x * 2`, `x > 0.5`, `np.sqrt(x)`) throws
+`PlatformNotSupportedException: Dynamic code generation is not supported on this platform`.
+
 ---
 
 ## Why use NumSharp?

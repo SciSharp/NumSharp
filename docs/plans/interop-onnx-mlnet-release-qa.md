@@ -259,6 +259,10 @@ each with its tests and docs, never merged here (the **Branch** line of each ent
   `PublishAot` is true (it also catches a real NativeAOT publish), and a line in the getting-started docs. NDW012 on
   ordinary consumer code (4 warnings of ~600 characters in a 40-line program) is a design choice; consider `info`
   severity for package consumers.
+  - **Documentation half done (03:22):** `absolute-basics.md` told readers to run the examples "in a `dotnet run` file-based
+    app" - re-proven against the packed beta: `IsDynamicCodeSupported` is False there and `x > 0.5`, `x * 2 + 1`, `np.sqrt(x)`
+    throw `PlatformNotSupportedException` (an int `np.sum` and `np.sort` happen to work); with `#:property PublishAot=false`
+    all run. The page now gives the two lines and the reason. The build warning stays the owner's call.
 - **P6 (F16) Two `Postprocess` classes. Decide before the tag: names freeze.** Proven: an app importing both bridges'
   namespaces gets CS0104 on every `Postprocess.X` call (it hit this run's own probe); the classes are the same source.
   Options: (a) keep and document the `using` alias; (b) one class in Core (for example `NumSharp.Postprocess`, or the
@@ -524,3 +528,4 @@ The proposals (section 5) are separate, each the owner's to accept or drop:
 | 03:18 | Release-branch docs check (read-only): `release-0.80.0-beta1` publishes both pages (no docfx exclude, toc entries, interop index rows), as this branch does - the PackageProjectUrls resolve once the site is published. P14's gates pass on `qa/proposals-all`. |
 | 03:19 | F46 re-checked after tonight's doc additions: `docfx build` (2.78.4) 0 errors, the same 426 unrelated warnings, none naming either page; every in-page anchor resolves in the generated HTML (ORT page 13, ML.NET page 8); the generated site removed. |
 | 03:21 | P3, the documentation half: `TryToTensorElementType`'s `<returns>` claimed "true when the dtype crosses", false for StringDType; it now says what it answers, with a remark. |
+| 03:22 | P5's documentation half: the getting-started page recommended a file-based app, which throws on the first array arithmetic without `#:property PublishAot=false` (re-proven); the page now says so. |
