@@ -151,6 +151,26 @@ Every store entry point packs a C# literal as NumPy's `PyArray_Pack` of a Python
   setitem of a Python `str` (`float64.fill("5.5")` is 5.5, `int32[0] = "hello"` raises `invalid literal for int() with
   base 10: 'hello'`).
 
+## Reading a scalar out: the explicit operators
+
+`(int)a`, `(double)a`, `(bool)a` … of a 0-d array are NumPy's `int(a)` / `float(a)` / `bool(a)`
+(`Casting/Implicit/NDArray.Implicit.ValueTypes.cs`; a non-0-d array raises `IncorrectShapeException`).
+- Integer targets (`char` included): CPython's `int()` of the element as an exact integer (`PythonIntOf`: a float or
+  decimal truncated toward zero, a text parsed by `int()`), then a CHECKED fit into the C# type (`ToCheckedInteger`): a
+  float NaN raises `ValueError: cannot convert float NaN to integer`, an infinity `OverflowException: cannot convert float
+  infinity to integer`, and a value the type cannot hold raises with NumPy's LP64 pack texts (`Python integer 3000000000
+  out of bounds for int32`; past the 64-bit C long, into anything but uint32 / uint64, `Python int too large to convert
+  to C long`). Python's int is unbounded, so the fixed-width C# type is where the range is enforced: nothing wraps
+  (`(byte)np.array(-1L)` raises).
+- `bool` is the element's truth: a NaN is True, `-0.0` False, a complex True when either part is nonzero, a text when
+  non-empty. Float targets are `float(a)` rounded into the C# type (a huge value into `float` is ±inf, as NumPy's float32
+  of a Python float); `decimal` (no NumPy analog) goes through the astype cast, where NaN / inf / out of range become 0.
+- A complex element refuses every integer target with CPython's `int() argument must be a string, a bytes-like object or
+  a real number, not 'complex'` and every float target with `float() argument must be a string or a real number, not
+  'complex'` (NumSharp has no ComplexWarning, so the array cast's silent imaginary drop stays an error here); a text
+  element refuses `(Complex)` (`Unable to convert dtype('<U2') to complex`).
+- Gates: `Casting/NDArrayScalarCastTests.cs`, `Casting/ComplexToRealTypeErrorTests.cs`.
+
 ## `take` / `put` / `place` / `putmask`
 
 - `np.put` / `np.take` are NumPy's `PyArray_PutTo` / `PyArray_TakeFrom`, statement for statement

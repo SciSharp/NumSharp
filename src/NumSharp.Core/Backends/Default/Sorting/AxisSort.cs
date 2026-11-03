@@ -678,7 +678,9 @@ namespace NumSharp.Backends.Sorting
         private static readonly double NumPySortNaN64 = BitConverter.UInt64BitsToDouble(0x7FF8000000000000UL);
 
         /// <summary>
-        ///     Sorts one float32 line in place: the non-NaN values by radix, then the NaN tail.
+        ///     Sorts one float32 line in place: the non-NaN values by radix, then the NaN tail. A line holding a <c>-0.0</c>
+        ///     is handed to <see cref="SortLineF32SignedZeros"/> (the zeros in input order, NumPy's stable answer); every
+        ///     other line pays one key compare for the check.
         /// </summary>
         /// <param name="line">The line's first element (byte address).</param>
         /// <param name="c">The line context: length, stride and the radix scratch buffers.</param>
@@ -694,11 +696,24 @@ namespace NumSharp.Backends.Sorting
         {
             long n = c->n; long s = c->inStride; long m = 0, q = 0;
             bool keep = c->keepNaNBits;
+            // FKey32(-0.0f): a -0.0 makes the raw key order wrong for the zero run, which the slower routine below fixes.
+            bool negativeZero = false;
             for (long i = 0; i < n; i++)
             {
                 float v = *(float*)(line + i * s);
-                if (!float.IsNaN(v)) c->k32[m++] = FKey32(v);
+                if (!float.IsNaN(v))
+                {
+                    uint key = FKey32(v);
+                    negativeZero |= key == 0x7FFFFFFFu;
+                    c->k32[m++] = key;
+                }
                 else if (keep) c->k32[n - 1 - q++] = BitConverter.SingleToUInt32Bits(v);
+            }
+            // The line is still untouched (only keys were built), so the signed-zero routine can read it again.
+            if (negativeZero)
+            {
+                SortLineF32SignedZeros(line, c);
+                return;
             }
             // The radix reads and writes slots [0, m) of k32 and t32 only, so the NaN bits above stay put.
             uint* r = RadixSort.SortU32(c->k32, c->t32, m, 4, c->count);
@@ -713,7 +728,8 @@ namespace NumSharp.Backends.Sorting
         }
 
         /// <summary>
-        ///     Sorts one float64 line in place: the non-NaN values by radix, then the NaN tail.
+        ///     Sorts one float64 line in place: the non-NaN values by radix, then the NaN tail. A line holding a <c>-0.0</c>
+        ///     is handed to <see cref="SortLineF64SignedZeros"/> (the zeros in input order, NumPy's stable answer).
         /// </summary>
         /// <param name="line">The line's first element (byte address).</param>
         /// <param name="c">The line context: length, stride and the radix scratch buffers.</param>
@@ -723,11 +739,24 @@ namespace NumSharp.Backends.Sorting
         {
             long n = c->n; long s = c->inStride; long m = 0, q = 0;
             bool keep = c->keepNaNBits;
+            // FKey64(-0.0): a -0.0 makes the raw key order wrong for the zero run, which the slower routine below fixes.
+            bool negativeZero = false;
             for (long i = 0; i < n; i++)
             {
                 double v = *(double*)(line + i * s);
-                if (!double.IsNaN(v)) c->k64[m++] = FKey64(v);
+                if (!double.IsNaN(v))
+                {
+                    ulong key = FKey64(v);
+                    negativeZero |= key == 0x7FFFFFFFFFFFFFFFUL;
+                    c->k64[m++] = key;
+                }
                 else if (keep) c->k64[n - 1 - q++] = BitConverter.DoubleToUInt64Bits(v);
+            }
+            // The line is still untouched (only keys were built), so the signed-zero routine can read it again.
+            if (negativeZero)
+            {
+                SortLineF64SignedZeros(line, c);
+                return;
             }
             ulong* r = RadixSort.SortU64(c->k64, c->t64, m, c->count);
             for (long i = 0; i < m; i++) *(double*)(line + i * s) = FVal64(r[i]);
@@ -739,6 +768,107 @@ namespace NumSharp.Backends.Sorting
             double nan = NumPySortNaN64;
             for (long i = m; i < n; i++) *(double*)(line + i * s) = nan;
         }
+
+        /// <summary>
+        ///     Sorts one float32 line that holds a <c>-0.0</c>: NumPy's comparators call <c>-0.0</c> and <c>+0.0</c> equal,
+        ///     so its stable sort keeps the zeros in INPUT order, where the raw-key radix puts every <c>-0.0</c> before every
+        ///     <c>+0.0</c> (parity QA-26: <c>np.sort([0.0, -0.0, 1.0, -0.0, 0.0])</c> is <c>[0., -0., -0., 0., 1.]</c>). Used
+        ///     for every kind: NumPy's default kind orders zeros by CPU (on an AVX2 host it is not even a permutation of the
+        ///     signs), so its stable order is the one deterministic answer.
+        /// </summary>
+        /// <param name="line">The line's first element (byte address); not yet written.</param>
+        /// <param name="c">The line context: length, stride, the radix scratch and the NaN-tail rule.</param>
+        /// <remarks>
+        ///     Equal to a stable sort on the folded key with the values gathered back: two equal NON-zero floats have the same
+        ///     bits, so the zero run is the only place the order of equal values shows. The zeros therefore stay out of the
+        ///     radix; their bits wait in the key buffer's top slots in input order, beside the NaN bits of the stable kind
+        ///     (the m nonzero keys fill slots [0, m) upward, the zeros and kept NaNs fill [n - top, n) downward, and the
+        ///     radix touches only [0, m)). The write-back is the negatives, the zeros, the positives, then the NaN tail.
+        /// </remarks>
+        private static void SortLineF32SignedZeros(byte* line, LineCtx* c)
+        {
+            long n = c->n; long s = c->inStride; long m = 0, top = 0;
+            bool keep = c->keepNaNBits;
+            for (long i = 0; i < n; i++)
+            {
+                uint bits = *(uint*)(line + i * s);
+                float v = BitConverter.UInt32BitsToSingle(bits);
+                if (float.IsNaN(v)) { if (keep) c->k32[n - 1 - top++] = bits; }
+                else if ((bits & 0x7FFFFFFFu) == 0) c->k32[n - 1 - top++] = bits;   // ±0, in input order
+                else c->k32[m++] = FKey32(v);
+            }
+            uint* r = RadixSort.SortU32(c->k32, c->t32, m, 4, c->count);
+            // The nonzero keys of negative values are below +0.0's key 0x80000000 (zeros are absent), positives above it.
+            long neg = 0;
+            while (neg < m && r[neg] < 0x80000000u) neg++;
+            long o = 0;
+            for (long i = 0; i < neg; i++) *(float*)(line + (o++) * s) = FVal32(r[i]);
+            for (long t = 0; t < top; t++)
+            {
+                uint bits = c->k32[n - 1 - t];
+                if ((bits & 0x7FFFFFFFu) == 0) *(uint*)(line + (o++) * s) = bits;
+            }
+            for (long i = neg; i < m; i++) *(float*)(line + (o++) * s) = FVal32(r[i]);
+            if (keep)
+            {
+                // The top slots' other entries are the NaNs, still in input order.
+                for (long t = 0; t < top; t++)
+                {
+                    uint bits = c->k32[n - 1 - t];
+                    if ((bits & 0x7FFFFFFFu) != 0) *(uint*)(line + (o++) * s) = bits;
+                }
+                return;
+            }
+            float nan = NumPySortNaN32;
+            for (; o < n; o++) *(float*)(line + o * s) = nan;
+        }
+
+        /// <summary>
+        ///     Sorts one float64 line that holds a <c>-0.0</c>: the zeros in input order, as NumPy's stable sort leaves them
+        ///     (see <see cref="SortLineF32SignedZeros"/>, parity QA-26).
+        /// </summary>
+        /// <param name="line">The line's first element (byte address); not yet written.</param>
+        /// <param name="c">The line context: length, stride, the radix scratch and the NaN-tail rule.</param>
+        /// <remarks>The zeros and the stable kind's NaN bits wait in the key buffer's top slots in input order while the
+        ///     radix sorts the nonzero keys in slots [0, m); see <see cref="SortLineF32SignedZeros"/>.</remarks>
+        private static void SortLineF64SignedZeros(byte* line, LineCtx* c)
+        {
+            long n = c->n; long s = c->inStride; long m = 0, top = 0;
+            bool keep = c->keepNaNBits;
+            for (long i = 0; i < n; i++)
+            {
+                ulong bits = *(ulong*)(line + i * s);
+                double v = BitConverter.UInt64BitsToDouble(bits);
+                if (double.IsNaN(v)) { if (keep) c->k64[n - 1 - top++] = bits; }
+                else if ((bits & 0x7FFFFFFFFFFFFFFFUL) == 0) c->k64[n - 1 - top++] = bits;   // ±0, in input order
+                else c->k64[m++] = FKey64(v);
+            }
+            ulong* r = RadixSort.SortU64(c->k64, c->t64, m, c->count);
+            // The nonzero keys of negative values are below +0.0's key 0x8000000000000000 (zeros are absent).
+            long neg = 0;
+            while (neg < m && r[neg] < 0x8000000000000000UL) neg++;
+            long o = 0;
+            for (long i = 0; i < neg; i++) *(double*)(line + (o++) * s) = FVal64(r[i]);
+            for (long t = 0; t < top; t++)
+            {
+                ulong bits = c->k64[n - 1 - t];
+                if ((bits & 0x7FFFFFFFFFFFFFFFUL) == 0) *(ulong*)(line + (o++) * s) = bits;
+            }
+            for (long i = neg; i < m; i++) *(double*)(line + (o++) * s) = FVal64(r[i]);
+            if (keep)
+            {
+                // The top slots' other entries are the NaNs, still in input order.
+                for (long t = 0; t < top; t++)
+                {
+                    ulong bits = c->k64[n - 1 - t];
+                    if ((bits & 0x7FFFFFFFFFFFFFFFUL) != 0) *(ulong*)(line + (o++) * s) = bits;
+                }
+                return;
+            }
+            double nan = NumPySortNaN64;
+            for (; o < n; o++) *(double*)(line + o * s) = nan;
+        }
+
         /// <summary>
         ///     Argsorts one float32 line: the non-NaN indices by a stable radix over <see cref="FArgKey32"/>, then the NaN
         ///     indices in input order.

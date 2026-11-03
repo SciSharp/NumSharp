@@ -800,21 +800,20 @@ namespace NumSharp.Tests.Polynomial
         }
 
         /// <summary>
-        ///     [Misaligned] fromroots sorts its roots first (<c>roots.sort()</c>), and where a +0.0 and a -0.0 meet the
-        ///     sort decides a zero coefficient's SIGN in the recurrence bases (their products scale arrays by NumPy
-        ///     scalars; the convolving bases normalize zeros). NumPy's float64 sort is x86-simd-sort, whose ordering of
-        ///     equal keys follows its vector network and so the CPU it dispatches to (on this AVX2 host it keeps small
-        ///     arrays' input order: <c>legfromroots([0.0, -0.0])</c> is <c>[1/3, +0.0, 2/3]</c>); NumSharp's sort puts
-        ///     -0.0 first on every host, giving <c>[1/3, -0.0, 2/3]</c>. The values are equal; only the zero's sign differs.
+        ///     fromroots sorts its roots first (<c>roots.sort()</c>), and where a +0.0 and a -0.0 meet the sort decides a zero
+        ///     coefficient's SIGN in the recurrence bases (their products scale arrays by NumPy scalars; the convolving bases
+        ///     normalize zeros). NumPy's sort calls the two zeros equal and leaves a small line's zeros in input order, so
+        ///     <c>legfromroots([0.0, -0.0])</c> is <c>[1/3, +0.0, 2/3]</c> and <c>legfromroots([-0.0, 0.0])</c> <c>[1/3, -0.0,
+        ///     2/3]</c>, byte for byte. NumSharp's value sort put every -0.0 first and gave <c>-0.0</c> for both; since parity
+        ///     QA-26 its float sort keeps the zeros in input order, so this former [Misaligned] pin is NumPy's answer.
         /// </summary>
         [TestMethod]
-        [Misaligned]
-        public void FromRoots_MixedSignedZeroRoots_SortNegativeZeroFirst()
+        public void FromRoots_MixedSignedZeroRoots_KeepTheirInputOrder()
         {
             var r = np.polynomial.legendre.legfromroots(np.array(new[] { 0.0, -0.0 }));
-            // NumPy 2.4.2 on this AVX2 host: 555555555555d53f 0000000000000000 555555555555e53f.
-            AssertBytes(r, "float64", new long[] { 3 }, "555555555555d53f0000000000000080555555555555e53f", "legfromroots([0.0, -0.0])");
-            // Input order that already has -0.0 first: both libraries agree.
+            // NumPy 2.4.2: 555555555555d53f 0000000000000000 555555555555e53f.
+            AssertBytes(r, "float64", new long[] { 3 }, "555555555555d53f0000000000000000555555555555e53f", "legfromroots([0.0, -0.0])");
+            // -0.0 first in the input: the -0.0 coefficient, in both libraries.
             AssertBytes(np.polynomial.legendre.legfromroots(np.array(new[] { -0.0, 0.0 })), "float64", new long[] { 3 },
                         "555555555555d53f0000000000000080555555555555e53f", "legfromroots([-0.0, 0.0])");
         }

@@ -8,7 +8,7 @@ APIs/np.iinfo.cs	1	21	# stays (D): iinfo describes a dtype - each integer class'
 APIs/np.memoryview.cs	2	16	# stays (D): the buffer protocol's format characters of each dtype
 APIs/np.nditer.Typed.cs	0	1	# stays (C): nditer<T>'s C# element-type check (a typed ref needs the exact type)
 APIs/np.vectorize.cs	0	2	# stays (C): the C# delegate's return type and the output's dtype
-Casting/Implicit/NDArray.Implicit.ValueTypes.cs	4	3	# stays (C): the C# conversions of a 0-d array to a C# scalar (Python's int() / float() / complex(), a text parsed)
+Casting/Implicit/NDArray.Implicit.ValueTypes.cs	4	7	# stays (C): the C# conversions of a 0-d array to a C# scalar (Python's int() / float() / bool() / complex(), a text parsed; the checked fit of int() into the C# integer type, the complex truth and CPython's int() / float() refusal texts, parity QA-42)
 Casting/NDArray.ToString.cs	0	1	# stays (C): NumSharp's char dtype prints as text (no NumPy dtype)
 Creation/np.dtype.cs	0	3	# stays (D): np.dtype is the dtype layer's own parser (PyArray_DescrConverter), its None arm included (np.dtype(None) is float64)
 DTypes/np.dtypes.cs	2	0	# stays (D): the np.dtypes module names the S and U classes

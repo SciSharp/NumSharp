@@ -35,7 +35,7 @@ bases.
   `polyalgebra.jsonl` (portable, zero excused) and the host-pinned `polyalgebra_parity.jsonl` (the BLAS-bound products,
   byte-exact with `NumSharp.Interop.OpenBLAS` at threads = 1, Inconclusive off the pinned host). Unit tests
   `Polynomial/PolynomialAlgebraTests.cs` (NumPy's `TestArithmetic`/`TestMisc` ported, dtype-quirk byte dumps, decimal and
-  char, the arena, the fused chebmulx kernel, the non-finite complex product, the ±0 divergence) and
+  char, the arena, the fused chebmulx kernel, the non-finite complex product, the ±0 roots in input order) and
   `PolynomialAlgebraArgumentKindsTests.cs`.
 - Dtypes follow NumPy's Python statement by statement, not a promotion rule:
   - a recurrence-basis product (leg/lag/herm/herme) whose SHORTER factor has one term binds the Python int `c1 = 0`,
@@ -82,10 +82,11 @@ bases.
 
   Gates: `ChebMulx_FusedKernel_VectorStage_MatchesScalarEmission`, `ChebMulx_Float16_EveryBitPattern_IsTheHalfLoop`, and
   corpus section L (special values through the vector stage, every float16 pattern below 2^-12).
-- `[Misaligned]` (unit-pinned, kept out of the corpus): fromroots sorts its roots, and where +0.0 and −0.0 meet, NumPy's
-  x86-simd-sort keeps an order that depends on the CPU; NumSharp's sort puts −0.0 first, which decides a zero
-  coefficient's sign in the recurrence bases. A NaN root is not a divergence: the sort turns it into the positive quiet
-  NaN and `-r` negates it, as in NumPy.
+- fromroots sorts its roots, and where +0.0 and −0.0 meet the sort decides a zero coefficient's sign in the recurrence
+  bases. NumSharp's float sort keeps the zeros in input order (`sorting.md`), NumPy's answer for its stable kind and for
+  the short root lines NumPy's x86-simd-sort leaves alone (`legfromroots([0.0, -0.0])` is `[1/3, +0.0, 2/3]` on both
+  sides; unit-pinned, kept out of the corpus because NumPy's order on a longer line depends on the CPU). A NaN root is not
+  a divergence: the sort turns it into the positive quiet NaN and `-r` negates it, as in NumPy.
 - Argument kinds:
   - `{p}pow(object c, object pow)` (the default limit: 16, None for polypow) and `{p}pow(object c, object pow, object
     maxpower)` (null is None), ported in `Polynomial/Package/NDPolyPowerArgument.cs` from NumPy's three statements.

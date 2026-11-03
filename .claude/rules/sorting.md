@@ -15,6 +15,18 @@ The engine members are DefaultEngine's `TensorEngine.Sort` / `SortInPlace` / `Ar
 over the AxisSort / AxisPartition kernels; `Sorting_Searching_Counting/np.*.cs` are the facades. Text (`S` / `U` /
 `StringDType`) sorts, searches and set routines: `strings-compute.md`.
 
+## The float value sort: `±0` in input order
+
+`np.sort` / `ndarray.sort` of float32 / float64 radix-sort the raw-bit keys (`AxisSort.SortLineF32` / `SortLineF64`),
+which order `-0.0` below `+0.0`. NumPy's comparators call the zeros equal, so its stable sort keeps them in input order
+(`np.sort([0.0, -0.0, 1.0, -0.0, 0.0], kind='stable')` is `[0., -0., -0., 0., 1.]`), while its default kind (x86-simd-sort)
+orders them by CPU (on an AVX2 host not even as a permutation of the signs). A line holding a `-0.0` (detected while its
+keys are built: one compare per element for every other line) goes to `SortLineF32SignedZeros` / `SortLineF64SignedZeros`
+for EVERY kind: the zeros stay out of the radix, their bits wait in the key buffer's top slots in input order beside the
+stable kind's NaN bits, and the write-back is the negatives, the zeros, the positives, then the NaN tail (canonical NaN
+for the default kind, each NaN's bits for the stable one). That equals a stable sort on the folded key, since two equal
+non-zero floats have the same bits. Gate: `Sorting/np.sort.SignedZero.Test.cs`.
+
 ## `np.argsort`: one stable radix order
 
 `np.argsort` is one stable LSD radix order for every numeric dtype but decimal (`Backends/Default/Sorting/AxisSort.cs`

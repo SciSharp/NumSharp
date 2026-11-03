@@ -265,17 +265,26 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Creates an <see cref="NDArray"/> from given <paramref name="data"/>.
+        ///     Creates an <see cref="NDArray"/> from given <paramref name="data"/> — NumPy's <c>np.array</c> of nested lists:
+        ///     every row must have the same length.
         /// </summary>
         /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
-        /// <param name="data">The array to create <see cref="NDArray"/> from. Shape is taken from the first item of each array/nested array.</param>
+        /// <param name="data">The array to create <see cref="NDArray"/> from. Its shape is NumPy's discovery
+        ///     (<see cref="NDArray.DiscoverJaggedShape"/>): every row is checked, and no rows at all gives shape <c>(0,)</c>.</param>
         /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
+        /// <exception cref="ValueError">A ragged or null row (NumPy's <c>setting an array element with a sequence. The
+        ///     requested array has an inhomogeneous shape after 1 dimensions. The detected shape was (2,) + inhomogeneous
+        ///     part.</c>): a longer row used to be cut silently and a shorter one to throw IndexOutOfRange (parity QA-45).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html <br></br>Always performs a copy.</remarks>
         [SuppressMessage("ReSharper", "SuggestVarOrType_SimpleTypes")]
         [SuppressMessage("ReSharper", "SuggestVarOrType_Elsewhere")]
         [MethodImpl(Optimize)]
         public static NDArray array<T>(T[][] data) where T : unmanaged
         {
+            // NumPy's discovery first: a ragged input raises before anything is allocated; an empty level ends the dims.
+            long[] dims = NDArray.DiscoverJaggedShape(data);
+            if (dims.Length < 2)
+                return new NDArray(InfoOf<T>.NPTypeCode, Shape.Adopt(dims));
             unsafe
             {
                 int len1 = data.Length;
@@ -303,17 +312,26 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Creates an <see cref="NDArray"/> from given <paramref name="data"/>.
+        ///     Creates an <see cref="NDArray"/> from given <paramref name="data"/> — NumPy's <c>np.array</c> of nested lists:
+        ///     every child at every level must have its level's length.
         /// </summary>
         /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
-        /// <param name="data">The array to create <see cref="NDArray"/> from. Shape is taken from the first item of each array/nested array.</param>
+        /// <param name="data">The array to create <see cref="NDArray"/> from. Its shape is NumPy's discovery
+        ///     (<see cref="NDArray.DiscoverJaggedShape"/>): every child is checked, and the dims end at the first empty level
+        ///     (<c>[[], []]</c> is <c>(2, 0)</c>).</param>
         /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
+        /// <exception cref="ValueError">A ragged or null child (NumPy's inhomogeneous-shape text, naming the depth the
+        ///     children agreed to).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html <br></br>Always performs a copy.</remarks>
         [SuppressMessage("ReSharper", "SuggestVarOrType_SimpleTypes")]
         [SuppressMessage("ReSharper", "SuggestVarOrType_Elsewhere")]
         [MethodImpl(Optimize)]
         public static NDArray array<T>(T[][][] data) where T : unmanaged
         {
+            // NumPy's discovery first: a ragged input raises before anything is allocated; an empty level ends the dims.
+            long[] dims = NDArray.DiscoverJaggedShape(data);
+            if (dims.Length < 3)
+                return new NDArray(InfoOf<T>.NPTypeCode, Shape.Adopt(dims));
             unsafe
             {
                 int len1 = data.Length;
@@ -348,17 +366,26 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Creates an <see cref="NDArray"/> from given <paramref name="data"/>.
+        ///     Creates an <see cref="NDArray"/> from given <paramref name="data"/> — NumPy's <c>np.array</c> of nested lists:
+        ///     every child at every level must have its level's length.
         /// </summary>
         /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
-        /// <param name="data">The array to create <see cref="NDArray"/> from. Shape is taken from the first item of each array/nested array.</param>
+        /// <param name="data">The array to create <see cref="NDArray"/> from. Its shape is NumPy's discovery
+        ///     (<see cref="NDArray.DiscoverJaggedShape"/>): every child is checked, and the dims end at the first empty
+        ///     level.</param>
         /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
+        /// <exception cref="ValueError">A ragged or null child (NumPy's inhomogeneous-shape text, naming the depth the
+        ///     children agreed to).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html <br></br>Always performs a copy.</remarks>
         [SuppressMessage("ReSharper", "SuggestVarOrType_SimpleTypes")]
         [SuppressMessage("ReSharper", "SuggestVarOrType_Elsewhere")]
         [MethodImpl(Optimize)]
         public static NDArray array<T>(T[][][][] data) where T : unmanaged
         {
+            // NumPy's discovery first: a ragged input raises before anything is allocated; an empty level ends the dims.
+            long[] dims = NDArray.DiscoverJaggedShape(data);
+            if (dims.Length < 4)
+                return new NDArray(InfoOf<T>.NPTypeCode, Shape.Adopt(dims));
             unsafe
             {
                 int len1 = data.Length;
@@ -400,17 +427,26 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Creates an <see cref="NDArray"/> from given <paramref name="data"/>.
+        ///     Creates an <see cref="NDArray"/> from given <paramref name="data"/> — NumPy's <c>np.array</c> of nested lists:
+        ///     every child at every level must have its level's length.
         /// </summary>
         /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
-        /// <param name="data">The array to create <see cref="NDArray"/> from. Shape is taken from the first item of each array/nested array.</param>
+        /// <param name="data">The array to create <see cref="NDArray"/> from. Its shape is NumPy's discovery
+        ///     (<see cref="NDArray.DiscoverJaggedShape"/>): every child is checked, and the dims end at the first empty
+        ///     level.</param>
         /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
+        /// <exception cref="ValueError">A ragged or null child (NumPy's inhomogeneous-shape text, naming the depth the
+        ///     children agreed to).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html <br></br>Always performs a copy.</remarks>
         [SuppressMessage("ReSharper", "SuggestVarOrType_SimpleTypes")]
         [SuppressMessage("ReSharper", "SuggestVarOrType_Elsewhere")]
         [MethodImpl(Optimize)]
         public static NDArray array<T>(T[][][][][] data) where T : unmanaged
         {
+            // NumPy's discovery first: a ragged input raises before anything is allocated; an empty level ends the dims.
+            long[] dims = NDArray.DiscoverJaggedShape(data);
+            if (dims.Length < 5)
+                return new NDArray(InfoOf<T>.NPTypeCode, Shape.Adopt(dims));
             unsafe
             {
                 int len1 = data.Length;

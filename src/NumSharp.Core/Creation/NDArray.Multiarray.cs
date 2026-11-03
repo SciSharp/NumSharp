@@ -938,6 +938,24 @@ namespace NumSharp
 
             var arrType = array.ResolveElementType();
 
+            // A jagged array is NumPy's nested lists: its shape is NumPy's discovery, every child checked (a ragged one is
+            // the inhomogeneous-shape ValueError; Shape.ExtractShape below reads only the first child at each level, which
+            // cut a longer later row and mis-sized the flattened copy: parity QA-45). The dims end at the first empty
+            // level, which describes an empty array of the element (or requested) dtype.
+            if (array.GetType().GetElementType().IsArray)
+            {
+                long[] jaggedDims = DiscoverJaggedShape(array);
+                if (jaggedDims.Length < array.ResolveRank())
+                {
+                    var empty = np.zeros(Shape.Adopt(jaggedDims), dtype ?? (DType)arrType);
+                    if (ndmin <= empty.ndim)
+                        return empty;
+                    var raisedEmpty = AtLeastNdView(empty, ndmin);
+                    empty.Dispose();
+                    return raisedEmpty;
+                }
+            }
+
             //handle dim expansion and extract shape
             Shape shape;
             var dims = array.ResolveRank();
@@ -979,16 +997,18 @@ namespace NumSharp
         ///     Whether a C# array is NumPy's Python list in the boundary map: its innermost element type is
         ///     <see cref="object"/> (an <c>object[]</c>, a jagged <c>object[][]</c>, an <c>object[,]</c> grid of rows), so its
         ///     items are Python objects - C# numbers Python scalars, nested arrays and lists sequences, an
-        ///     <see cref="NDArray"/> or a typed C# array an ndarray.
+        ///     <see cref="NDArray"/> or a typed C# array an ndarray - or <see cref="NDArray"/> (an <c>NDArray[]</c>, the C#
+        ///     spelling of NumPy's list of arrays: <c>np.array([a, b])</c> stacks them, where the typed route refused the
+        ///     element type, parity QA-45).
         /// </summary>
         /// <param name="array">The array; not null.</param>
-        /// <returns>True for an array of objects at its innermost level.</returns>
+        /// <returns>True for an array of objects or of NDArrays (any subclass) at its innermost level.</returns>
         private static bool HoldsPythonObjects(Array array)
         {
             var elementType = array.GetType().GetElementType();
             while (elementType is { IsArray: true })
                 elementType = elementType.GetElementType();
-            return elementType == typeof(object);
+            return elementType == typeof(object) || typeof(NDArray).IsAssignableFrom(elementType);
         }
 
         /// <summary>

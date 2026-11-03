@@ -191,12 +191,25 @@ namespace NumSharp.Backends
         /// <param name="array">The C# array; not null.</param>
         /// <returns>A new array holding a copy of the elements.</returns>
         /// <exception cref="NotSupportedException">The element type is not one of NumSharp's dtypes.</exception>
-        /// <exception cref="ValueError">A ragged jagged array of text (NumPy's inhomogeneous-shape text).</exception>
+        /// <exception cref="ValueError">A ragged jagged array, of text or numbers, or a ragged list of arrays (NumPy's
+        ///     inhomogeneous-shape text).</exception>
+        /// <remarks>An array of NDArrays (<c>NDArray[]</c>, a jagged <c>NDArray[][]</c>) is NumPy's list of arrays: the
+        ///     object-list coercion stacks it with NumPy's promotion (<c>np.asarray([a, b])</c> is <c>(2, 3)</c> for two
+        ///     <c>(3,)</c> arrays), as np.asanyarray already did, where the element type used to be refused (parity QA-45).
+        ///     This conversion is what every <see cref="NDArray"/> parameter applies to an <c>NDArray[]</c> argument.</remarks>
         internal static NDArray FromManagedArray(Array array)
         {
             // Text values build a fixed-width string array (the same discovery as np.array); everything else is numeric.
             if (Backends.UnmanagedStorage.IsTextInput(array, null))
                 return Backends.UnmanagedStorage.FromManagedText(array, null, 0, 'C');
+
+            // A list of arrays: the coercion of a sequence (shape discovery over the arrays, NumPy's promotion of their
+            // dtypes, an unequal shape the inhomogeneous ValueError). Array covariance makes every NDArray[] an object[].
+            var innermost = array.GetType().GetElementType();
+            while (innermost is { IsArray: true })
+                innermost = innermost.GetElementType();
+            if (typeof(NDArray).IsAssignableFrom(innermost))
+                return Backends.UnmanagedStorage.FromSequence(array, null);
 
             bool isJaggedArray = array.GetType().GetElementType().IsArray;
             var underlying = array.ResolveElementType();

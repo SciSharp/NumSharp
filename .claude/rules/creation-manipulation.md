@@ -100,6 +100,17 @@ They are NumPy's coercion of a Python list (`NDArray.asanyarray` in `Creation/ND
   reader of numpy.polynomial, numpy.char, numpy.matrix, np.histogramdd and np.gradient.
 - An ndarray item of a text dtype in a list is refused (the sequence walk has no text cast); an empty object grid keeps
   its own dims (`object[0, 3]` is `(0, 3)`); the order is checked before anything is converted.
+- An `NDArray[]` (a jagged `NDArray[][]` too) is NumPy's list of arrays on every route: `np.array` reads it as Python
+  objects (`HoldsPythonObjects`), and the implicit `Array → NDArray` conversion (`FromManagedArray`), which `np.asarray`
+  and every `NDArray` parameter apply to one, runs the sequence walk, so equal shapes stack with NumPy's promotion
+  (`np.asarray(new[] { a, b })` of two `(3,)` arrays is `(2, 3)`; int8 beside int16 is int16) and unequal shapes are the
+  inhomogeneous ValueError.
+- A TYPED jagged array (`int[][]` … `T[][][][][]`, through the typed `np.array` overloads, `np.array(jagged, dtype)` and
+  the implicit conversion) is NumPy's nested lists: `NDArray.DiscoverJaggedShape` checks every child at every level
+  (breadth first, so the reported depth is the one NumPy's walk ends at), a ragged or null row raises `setting an array
+  element with a sequence. The requested array has an inhomogeneous shape after N dimensions. The detected shape was (…)
+  + inhomogeneous part.`, and the dims end at the first empty level (`new int[0][]` is int32 `(0,)`, `[[], []]` is
+  `(2, 0)`). Gate: `Creation/np.array.JaggedAndListOfArrays.Test.cs`.
 - Gates: `Creation/np.array.PythonList.Test.cs` and the coercion family's snapshot (`tools/facade-move/snapshot.cs`).
 
 ## `np.full` / `np.full_like` / `np.ones` / `np.eye`

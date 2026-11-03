@@ -33,10 +33,12 @@ namespace NumSharp
         ///     <c>&lt;U2</c>), so <c>NDArray x = new[] { "a", "bb" }</c> and every <c>NDArray</c> parameter fed a C# string
         ///     array (C# prefers the <c>NDArray</c> overload to an <c>object</c> one) read the text as NumPy does.
         /// </summary>
-        /// <param name="array">The array to convert, or null.</param>
+        /// <param name="array">The array to convert, or null. An <c>NDArray[]</c> is NumPy's list of arrays and is stacked
+        ///     (<c>np.asarray(new[] { a, b })</c> of two <c>(3,)</c> arrays is <c>(2, 3)</c>).</param>
         /// <returns>A new array holding a copy of the elements, or null when <paramref name="array"/> is null.</returns>
         /// <exception cref="NotSupportedException">The element type is not one of NumSharp's dtypes.</exception>
-        /// <exception cref="ValueError">A ragged jagged array of text (NumPy's inhomogeneous-shape text).</exception>
+        /// <exception cref="ValueError">A ragged jagged array (text or numbers) or a list of arrays of unequal shapes
+        ///     (NumPy's inhomogeneous-shape text).</exception>
         /// <remarks>
         ///     C# runs a user-defined conversion even for a null source, so without the null pass-through an optional
         ///     <see cref="NDArray"/> parameter fed from a null <c>double[]</c> variable (a common way to spell NumPy's

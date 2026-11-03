@@ -720,38 +720,6 @@ namespace NumSharp.Tests
         }
 
         // ------------------------------------------------------------------
-        // QA-26 — the float32 / float64 value sort puts every -0.0 before every +0.0
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     NumPy's comparators treat <c>-0.0</c> and <c>+0.0</c> as equal, so a stable sort keeps their input order:
-        ///     <c>np.sort([0.0, -0.0, 1.0, -0.0, 0.0], kind='stable')</c> is <c>[0.0, -0.0, -0.0, 0.0, 1.0]</c> (timsort), and
-        ///     the default kind leaves <c>[0.0, -0.0]</c> as it is. NumSharp's float value sort (<c>AxisSort.SortLineF32</c>
-        ///     / <c>SortLineF64</c>) radix-sorts the raw-bit key <c>FKey32</c> / <c>FKey64</c>, which orders <c>-0.0</c> below
-        ///     <c>+0.0</c> (it must rebuild each value from its key), so every kind returns <c>[-0.0, -0.0, 0.0, 0.0, 1.0]</c>
-        ///     and <c>ndarray.sort()</c> does the same. The argsort was moved to a folded key for exactly this reason
-        ///     (<c>FArgKey32</c>'s remarks: <c>np.argsort([0.0, -0.0])</c> was <c>[1, 0]</c>); the value sort was not. The
-        ///     float16 and complex value sorts (comparison sorts) match.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA26")]
-        public void ParityQa_SortFloat_SignedZeros_ShouldKeepInputOrderLikeNumPysStableSort()
-        {
-            using var a = np.array(new[] { 0.0, -0.0, 1.0, -0.0, 0.0 });
-            using var pair32 = np.array(new[] { 0.0f, -0.0f });
-
-            using var stable = np.sort(a, kind: "stable");
-            using var stable32 = np.sort(pair32, kind: "stable");
-
-            // NumPy: [0.0, -0.0, -0.0, 0.0, 1.0] and [0.0, -0.0].
-            double.IsNegative((double)stable.GetValue(0)).Should().BeFalse();
-            double.IsNegative((double)stable.GetValue(1)).Should().BeTrue();
-            double.IsNegative((double)stable.GetValue(2)).Should().BeTrue();
-            double.IsNegative((double)stable.GetValue(3)).Should().BeFalse();
-            float.IsNegative((float)stable32.GetValue(0)).Should().BeFalse();
-            float.IsNegative((float)stable32.GetValue(1)).Should().BeTrue();
-        }
-
-        // ------------------------------------------------------------------
         // QA-27 — np.divmod of a complex operand raises NotSupportedException instead of NumPy's TypeError
         // ------------------------------------------------------------------
 
@@ -1159,35 +1127,6 @@ namespace NumSharp.Tests
         }
 
         // ------------------------------------------------------------------
-        // QA-42 — beyond QA-14: a complex (bool) refuses, and (int) / (long) of NaN / inf / huge / uint64 values do not raise
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     QA-14 already pins the one-element / ambiguous <c>(bool)</c> rule and the non-0-d text of the numeric conversions;
-        ///     these are the parts it does not cover. NumPy's <c>bool(np.array(1j))</c> is True (<c>!= 0</c>); <c>int(a)</c> of a
-        ///     float NaN raises ValueError <c>cannot convert float NaN to integer</c>, of ±inf OverflowError <c>cannot convert float
-        ///     infinity to integer</c>, and an integer value is exact (a C target that cannot hold it overflows). NumSharp's explicit
-        ///     operators (Casting/Implicit/NDArray.Implicit.ValueTypes.cs: <c>EnsureCastableToScalar</c> + <c>Converts.ChangeType</c>)
-        ///     refuse the complex bool with <c>TypeError: can't convert complex to bool</c>, and turn NaN / inf / 1e300 into
-        ///     <c>MinValue</c> and a uint64 past long.MaxValue into <c>-1</c> silently (<c>p105</c>; the same file's text path raises
-        ///     OverflowException for an out-of-range literal).
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA42")]
-        public void ParityQa_ExplicitScalarConversions_ShouldFollowNumPysBoolIntFloat()
-        {
-            using var imaginary = np.array(new Complex(0, 1));
-            using var nan = np.array(double.NaN);
-            using var uint64Max = np.array(ulong.MaxValue);
-
-            Action nanToInt = () => { int _ = (int)nan; };
-            Action wideToLong = () => { long _ = (long)uint64Max; };
-
-            ((bool)imaginary).Should().BeTrue("bool(1j) is True");
-            nanToInt.Should().Throw<ValueError>().WithMessage("cannot convert float NaN to integer");
-            wideToLong.Should().Throw<OverflowException>("a C# long cannot hold 2**64 - 1");
-        }
-
-        // ------------------------------------------------------------------
         // QA-43 — np.vectorize's signature fallback wraps the callback's exception in TargetInvocationException
         // ------------------------------------------------------------------
 
@@ -1212,33 +1151,6 @@ namespace NumSharp.Tests
             Action call = () => twoOutputs.CallMany(x);
 
             call.Should().Throw<InvalidOperationException>().WithMessage("boom");
-        }
-
-        // ------------------------------------------------------------------
-        // QA-45 — np.array over a ragged jagged array truncates silently; over NDArray[] it refuses
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     NumPy refuses a ragged nested sequence (<c>np.array([[1], [2, 3]])</c>: <c>ValueError: setting an array element
-        ///     with a sequence. The requested array has an inhomogeneous shape after 1 dimensions. The detected shape was (2,) +
-        ///     inhomogeneous part.</c>) and stacks a list of equal-shape arrays (<c>np.array([a, b])</c> is <c>(2, 3)</c>).
-        ///     NumSharp's typed-array route reads a jagged array with its FIRST row's length (<c>p114</c>, <c>rp13</c>): a longer
-        ///     later row is truncated silently (<c>np.array(new int[][] { new[] { 1 }, new[] { 2, 3 } })</c> is
-        ///     <c>[[1], [2]]</c>), a shorter one throws <see cref="IndexOutOfRangeException"/>, and <c>np.asarray</c> of a ragged
-        ///     <c>long[][]</c> says <c>buffer is too small for requested array</c>. A typed <c>NDArray[]</c> — the C# spelling of a
-        ///     list of arrays — is refused by <c>np.array</c> / <c>np.asarray</c> with <c>NotSupportedException: Cannot interpret
-        ///     'NumSharp.NDArray' as a data type</c>, while <c>np.asanyarray</c> and <c>np.array(object[])</c> stack it.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA45")]
-        public void ParityQa_ArrayOfRaggedJaggedOrNDArrays_ShouldRefuseOrStackLikeNumPy()
-        {
-            Action ragged = () => np.array(new int[][] { new[] { 1 }, new[] { 2, 3 } }).Dispose();
-            using var a = np.arange(3.0);
-            using var b = np.arange(3.0) * 2;
-
-            ragged.Should().Throw<ValueError>().WithMessage("setting an array element with a sequence.*inhomogeneous shape after 1 dimensions*");
-            using var stacked = np.array(new NDArray[] { a, b });
-            stacked.shape.Should().Equal(2L, 3L);
         }
 
         // ------------------------------------------------------------------
@@ -1319,35 +1231,6 @@ namespace NumSharp.Tests
             spectrum.strides.Should().Equal(new long[] { 16, 64 }, "empty_like(a, ...) keeps an F input's order");
             spectrum.flags.f_contiguous.Should().BeTrue();
             half.strides.Should().Equal(new long[] { 16, 48 }, "the shorter axis keeps the same K order");
-        }
-
-        // ------------------------------------------------------------------
-        // QA-49 — np.interp with a complex fp gives NaN + NaNj for a NaN coordinate; NumPy gives NaN + 0j
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     NumPy's <c>arr_interp_complex</c> (<c>numpy/_core/src/multiarray/compiled_base.c</c>, lines 855-858) answers a NaN
-        ///     coordinate before the search with <c>npy_csetreal(&amp;dres[i], x_val); npy_csetimag(&amp;dres[i], 0.0)</c>: the real part
-        ///     is the NaN itself and the imaginary part is 0. NumSharp's <c>DefaultEngine.InterpComplex</c>
-        ///     (<c>Backends/Default/Math/Default.Interp.cs</c>) writes <c>new Complex(xv, xv)</c>, so the imaginary part is NaN as
-        ///     well (<c>p139</c>: <c>np.interp([..., nan], xp, fp_complex)</c> ends in <c>(nan, nan)</c> for NumPy's <c>(nan, 0.0)</c>,
-        ///     with and without complex <c>left</c> / <c>right</c>). Code that tests the imaginary part, or takes <c>.imag</c> of the
-        ///     result, reads NaN where NumPy reads 0. The real-valued interp and every finite coordinate match.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA49")]
-        public void ParityQa_InterpComplex_NaNCoordinate_ShouldGiveNaNPlusZeroJ()
-        {
-            using var xp = np.array(new[] { 0.0, 1.0 });
-            using var fp = np.array(new[] { new Complex(1, 1), new Complex(2, -3) });
-            using var x = np.array(new[] { 0.5, double.NaN });
-
-            using var result = np.interp(x, xp, fp);
-
-            // the finite coordinate interpolates both parts; the NaN coordinate is NaN + 0j in NumPy
-            ((Complex)result.GetValue(0)).Should().Be(new Complex(1.5, -1.0));
-            var nanCase = (Complex)result.GetValue(1);
-            double.IsNaN(nanCase.Real).Should().BeTrue("the real part carries the NaN coordinate");
-            nanCase.Imaginary.Should().Be(0.0, "arr_interp_complex sets the imaginary part of a NaN coordinate to 0");
         }
     }
 }

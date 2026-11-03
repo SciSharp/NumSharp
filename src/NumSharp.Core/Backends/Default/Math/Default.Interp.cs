@@ -227,7 +227,10 @@ namespace NumSharp.Backends
                 for (long i = 0; i < lenx; i++)
                 {
                     double xv = dz[i];
-                    if (double.IsNaN(xv)) { dres[i] = new Complex(xv, xv); continue; }
+                    // arr_interp_complex answers a NaN coordinate before the search with npy_csetreal(x_val) and
+                    // npy_csetimag(0.0): the NaN itself (its payload kept) and a zero imaginary part, not nan+nanj (parity
+                    // QA-49).
+                    if (double.IsNaN(xv)) { dres[i] = new Complex(xv, 0.0); continue; }
 
                     j = BinarySearchWithGuess(xv, dx, lenxp, j);
                     if (j == -1) dres[i] = lval;

@@ -142,16 +142,14 @@ namespace NumSharp.Tests.Casting
         public void CrossType_Half_To_SByte() =>
             ((sbyte)NDArray.Scalar<Half>((Half)7.5)).Should().Be((sbyte)7);
 
+        /// <summary>NumPy 2.4.2: <c>float(np.array(3.5+1.7j))</c> raises CPython's <c>float()</c> TypeError; NumSharp has no
+        ///     ComplexWarning, so a scalar cast refuses rather than dropping the imaginary part (use <c>np.real(nd)</c>).</summary>
         [TestMethod]
         public void CrossType_Complex_To_Half_Throws_TypeError()
         {
-            // NumPy 2.4.2: float(complex) / int(complex) throws TypeError (Python semantics).
-            // NumSharp treats this the same way for scalar casts — NumSharp has no warning
-            // system, so we reject rather than silently discarding imaginary.
-            // Use np.real(nd) to get the real component explicitly if that's intended.
             var nd = NDArray.Scalar<Complex>(new Complex(3.5, 1.7));
             Action act = () => { var _ = (Half)nd; };
-            act.Should().Throw<TypeError>().WithMessage("*can't convert complex to*");
+            act.Should().Throw<TypeError>().WithMessage("float() argument must be a string or a real number, not 'complex'");
         }
 
         [TestMethod]
@@ -163,12 +161,14 @@ namespace NumSharp.Tests.Casting
             act.Should().Throw<TypeError>();
         }
 
+        /// <summary>NumPy 2.4.2: <c>int(np.array(3+4j))</c> raises CPython's <c>int()</c> TypeError, text for text.</summary>
         [TestMethod]
         public void CrossType_Complex_To_Int_Throws_TypeError()
         {
             var nd = NDArray.Scalar<Complex>(new Complex(3, 4));
             Action act = () => { var _ = (int)nd; };
-            act.Should().Throw<TypeError>().WithMessage("*can't convert complex to int*");
+            act.Should().Throw<TypeError>().WithMessage(
+                "int() argument must be a string, a bytes-like object or a real number, not 'complex'");
         }
 
         [TestMethod]
@@ -187,12 +187,15 @@ namespace NumSharp.Tests.Casting
             act.Should().Throw<TypeError>();
         }
 
+        /// <summary>NumPy 2.4.2: <c>bool(np.array(1+0j))</c> is True — a complex 0-d array converts to its truth (either part
+        ///     nonzero), not a TypeError (parity QA-42).</summary>
         [TestMethod]
-        public void CrossType_Complex_To_Bool_Throws_TypeError()
+        public void CrossType_Complex_To_Bool_IsTheTruth()
         {
             var nd = NDArray.Scalar<Complex>(new Complex(1, 0));
-            Action act = () => { var _ = (bool)nd; };
-            act.Should().Throw<TypeError>();
+            ((bool)nd).Should().BeTrue();
+            var zero = NDArray.Scalar<Complex>(Complex.Zero);
+            ((bool)zero).Should().BeFalse();
         }
 
         [TestMethod]
@@ -376,6 +379,111 @@ namespace NumSharp.Tests.Casting
             var sum = a + b;
             sum.typecode.Should().Be(NPTypeCode.Complex);
             ((Complex)sum).Should().Be(new Complex(4, 6));
+        }
+
+        // ================================================================
+        // Python's int(), checked (parity QA-42; NumPy 2.4.2's answers, LP64 texts)
+        // ================================================================
+
+        /// <summary>
+        ///     NumPy's <c>int(arr)</c> of a float NaN is CPython's <c>ValueError: cannot convert float NaN to integer</c> and of
+        ///     an infinity <c>OverflowError: cannot convert float infinity to integer</c>, for every float lane (float16 too);
+        ///     the integer conversions used to return <c>MinValue</c> silently.
+        /// </summary>
+        [TestMethod]
+        public void IntegerTargets_NaNAndInfinity_RaiseLikeInt()
+        {
+            using var nan = np.array(double.NaN);
+            using var inf = np.array(double.PositiveInfinity);
+            using var negInf = NDArray.Scalar(float.NegativeInfinity);
+            using var halfNaN = NDArray.Scalar(Half.NaN);
+
+            Action nanToInt = () => { int _ = (int)nan; };
+            nanToInt.Should().Throw<ValueError>().WithMessage("cannot convert float NaN to integer");
+            Action halfNaNToLong = () => { long _ = (long)halfNaN; };
+            halfNaNToLong.Should().Throw<ValueError>().WithMessage("cannot convert float NaN to integer");
+            Action infToInt = () => { int _ = (int)inf; };
+            infToInt.Should().Throw<OverflowException>().WithMessage("cannot convert float infinity to integer");
+            Action negInfToByte = () => { byte _ = (byte)negInf; };
+            negInfToByte.Should().Throw<OverflowException>().WithMessage("cannot convert float infinity to integer");
+        }
+
+        /// <summary>
+        ///     NumPy's <c>int()</c> is exact (<c>int(np.array(3e9))</c> is 3000000000, <c>int(np.array(2**64-1))</c> is
+        ///     18446744073709551615), so a value the C# type cannot hold raises with NumPy's text for packing that Python int
+        ///     into the dtype (LP64, as <c>NDExprTypeRules.CheckPyIntPacksIntoLoop</c> reports it): <c>Python integer 3000000000
+        ///     out of bounds for int32</c>; past the 64-bit C long (into any type but uint32 / uint64) <c>Python int too large
+        ///     to convert to C long</c>. They used to wrap (<c>int.MinValue</c>, <c>-1</c>, <c>long.MinValue</c>, 255).
+        /// </summary>
+        [TestMethod]
+        public void IntegerTargets_OutOfRange_RaiseInsteadOfWrapping()
+        {
+            using var threeE9 = np.array(3e9);
+            using var u64Max = np.array(ulong.MaxValue);
+            using var huge = np.array(1e300);
+            using var minusOne = np.array(-1L);
+            using var hugeForU64 = np.array(1e20);
+
+            Action toInt = () => { int _ = (int)threeE9; };
+            toInt.Should().Throw<OverflowException>().WithMessage("Python integer 3000000000 out of bounds for int32");
+            Action toLong = () => { long _ = (long)u64Max; };
+            toLong.Should().Throw<OverflowException>().WithMessage("Python int too large to convert to C long");
+            Action hugeToLong = () => { long _ = (long)huge; };
+            hugeToLong.Should().Throw<OverflowException>().WithMessage("Python int too large to convert to C long");
+            Action negativeToByte = () => { byte _ = (byte)minusOne; };
+            negativeToByte.Should().Throw<OverflowException>().WithMessage("Python integer -1 out of bounds for uint8");
+            Action negativeToULong = () => { ulong _ = (ulong)minusOne; };
+            negativeToULong.Should().Throw<OverflowException>().WithMessage("Python integer -1 out of bounds for uint64");
+            Action pastU64 = () => { ulong _ = (ulong)hugeForU64; };
+            pastU64.Should().Throw<OverflowException>().WithMessage("Python integer 100000000000000000000 out of bounds for uint64");
+        }
+
+        /// <summary>
+        ///     In range, <c>int()</c> truncates toward zero and is exact: <c>(int)np.array(-3.7)</c> is -3, <c>-0.7</c> gives 0,
+        ///     uint64 max fits <c>(ulong)</c>, 2^53 + 2 (a double) fits <c>(long)</c> exactly, a bool is 0 / 1, a float16 and a
+        ///     decimal truncate, a text is parsed by CPython's <c>int()</c> (<c>'3000000000'</c> fits a long).
+        /// </summary>
+        [TestMethod]
+        public void IntegerTargets_InRange_TruncateExactly()
+        {
+            using var a = np.array(-3.7);
+            ((int)a).Should().Be(-3);
+            using var b = np.array(-0.7);
+            ((int)b).Should().Be(0);
+            using var c = np.array(ulong.MaxValue);
+            ((ulong)c).Should().Be(ulong.MaxValue);
+            using var d = np.array(9007199254740994.0);
+            ((long)d).Should().Be(9007199254740994L);
+            using var e = np.array(true);
+            ((int)e).Should().Be(1);
+            using var f = NDArray.Scalar((Half)(-2.5));
+            ((short)f).Should().Be((short)-2);
+            using var g = NDArray.Scalar(7.9m);
+            ((byte)g).Should().Be((byte)7);
+            using var h = np.array("3000000000");
+            ((long)h).Should().Be(3000000000L);
+            using var i = np.array(65535L);
+            ((char)i).Should().Be((char)65535);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>bool(arr)</c> is the element's truth for every kind: a NaN is True, <c>-0.0</c> False, a complex True
+        ///     when either part is nonzero; and <c>float(arr)</c> of an integer is exact up to 2^53, of a huge float32 target
+        ///     ±inf (the C# float is NumPy's float32 of the Python float).
+        /// </summary>
+        [TestMethod]
+        public void BoolAndFloatTargets_KeepPythonsTruthAndFloat()
+        {
+            using var nan = np.array(double.NaN);
+            ((bool)nan).Should().BeTrue();
+            using var negZero = np.array(-0.0);
+            ((bool)negZero).Should().BeFalse();
+            using var imaginary = np.array(new Complex(0, 1));
+            ((bool)imaginary).Should().BeTrue();
+            using var big = np.array(1e300);
+            ((float)big).Should().Be(float.PositiveInfinity);
+            using var exact = np.array(9007199254740992L);
+            ((double)exact).Should().Be(9007199254740992.0);
         }
     }
 }
