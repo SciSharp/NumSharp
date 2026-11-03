@@ -74,6 +74,14 @@ computes each element's physical offset itself. (`AsOrtValue` in the ONNX bridge
 `AsDataView` does not, because ML.NET pulls values one row at a time rather than handing a dense pointer
 to a native runtime.)
 
+`view.ToNDArray` reads any `IDataView`, not only this bridge's: a model's output, a `TextLoader` file, a
+`Microsoft.Data.Analysis.DataFrame` (which is one). A DataFrame column's nulls arrive as its `IDataView`
+writes them - NaN in a float column, 0 or `false` in an integer or bool column - with no mask. Where they
+matter, mask them from the DataFrame's own null map:
+`np.ma.masked_array(df.ToNDArray("col"), np.array(df["col"].ElementwiseIsNull().Select(isNull => isNull == true).ToArray()))`.
+The other way, `nd.AsDataView(names).ToDataFrame(-1)` builds a DataFrame from an array; without the `-1`,
+`ToDataFrame` keeps the first 100 rows.
+
 ---
 
 ## The two shapes

@@ -118,6 +118,44 @@ namespace NumSharp.Tests.Interop.MLNet
             CollectionAssert.AreEqual(new[] { "the", "quick", "fox", "a", "lazy", "dog" }, NDArray.AsStringArray(read.flatten()));
         }
 
+        /// <summary>
+        ///     A scalar TIME column (a POCO's or a DataFrame's <c>DateTime</c>, ML.NET's <c>DateTimeOffset</c> /
+        ///     <c>TimeSpan</c>) is refused with its route - ML.NET's <c>GetColumn</c> of the column's raw type, keeping the
+        ///     ticks (<c>UtcTicks</c> for <c>DateTimeOffset</c>, so rows of different offsets share one clock) - and the route
+        ///     reads it as an int64 array, as written. The message also says which columns the bridge maps; it used to claim
+        ///     "NumSharp carries bool, the eight integer types, float and double", which is false of NumSharp.
+        /// </summary>
+        [TestMethod]
+        public void TimeColumns_Throw_AndNameTheTicksRoute()
+        {
+            var rows = new[]
+            {
+                new TimeRow { When = new DateTime(2026, 11, 3, 4, 30, 0), At = new DateTimeOffset(2026, 11, 3, 4, 30, 0, TimeSpan.FromHours(2)), Took = TimeSpan.FromMilliseconds(1.5) },
+                new TimeRow { When = DateTime.MinValue, At = new DateTimeOffset(2026, 11, 3, 2, 30, 0, TimeSpan.Zero), Took = TimeSpan.FromDays(-1) },
+            };
+            IDataView dv = Ml.Data.LoadFromEnumerable(rows);
+
+            NotSupportedException when = Assert.ThrowsException<NotSupportedException>(() => dv.ToNDArray("When"));
+            StringAssert.Contains(when.Message, "np.array(view.GetColumn<DateTime>(\"When\").Select(v => v.Ticks).ToArray())");
+            StringAssert.Contains(when.Message, "this bridge maps ML.NET's boolean, integer");
+            Assert.IsFalse(when.Message.Contains("NumSharp carries"), when.Message);
+            using (NDArray read = np.array(dv.GetColumn<DateTime>("When").Select(v => v.Ticks).ToArray()))
+            {
+                Assert.AreEqual(NPTypeCode.Int64, read.typecode);
+                CollectionAssert.AreEqual(rows.Select(r => r.When.Ticks).ToArray(), read.ToArray<long>());
+            }
+
+            NotSupportedException at = Assert.ThrowsException<NotSupportedException>(() => dv.ToNDArray("At"));
+            StringAssert.Contains(at.Message, "np.array(view.GetColumn<DateTimeOffset>(\"At\").Select(v => v.UtcTicks).ToArray())");
+            using (NDArray read = np.array(dv.GetColumn<DateTimeOffset>("At").Select(v => v.UtcTicks).ToArray()))
+                Assert.AreEqual(read.GetInt64(0), read.GetInt64(1), "the two rows are one instant at two offsets");
+
+            NotSupportedException took = Assert.ThrowsException<NotSupportedException>(() => dv.ToNDArray("Took"));
+            StringAssert.Contains(took.Message, "np.array(view.GetColumn<TimeSpan>(\"Took\").Select(v => v.Ticks).ToArray())");
+            using (NDArray read = np.array(dv.GetColumn<TimeSpan>("Took").Select(v => v.Ticks).ToArray()))
+                CollectionAssert.AreEqual(new[] { 15_000L, TimeSpan.FromDays(-1).Ticks }, read.ToArray<long>());
+        }
+
         // ---- key column -----------------------------------------------------------------------------
 
         [TestMethod]
@@ -205,6 +243,19 @@ namespace NumSharp.Tests.Interop.MLNet
         private class TextRow
         {
             public string T { get; set; }
+        }
+
+        /// <summary>A row with one column of each ML.NET time type, for <see cref="TimeColumns_Throw_AndNameTheTicksRoute"/>.</summary>
+        private class TimeRow
+        {
+            /// <summary>A <c>DateTime</c> column (ML.NET's <c>DateTimeDataViewType</c>).</summary>
+            public DateTime When { get; set; }
+
+            /// <summary>A <c>DateTimeOffset</c> column (ML.NET's <c>DateTimeOffsetDataViewType</c>).</summary>
+            public DateTimeOffset At { get; set; }
+
+            /// <summary>A <c>TimeSpan</c> column (ML.NET's <c>TimeSpanDataViewType</c>).</summary>
+            public TimeSpan Took { get; set; }
         }
     }
 }

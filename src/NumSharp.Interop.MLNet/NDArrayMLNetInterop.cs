@@ -294,9 +294,14 @@ namespace NumSharp.Interop.MLNet
         ///     vector-of-text column (<c>TokenizeIntoWords</c>: "Invalid TValue ... expected type
         ///     VBuffer&lt;ReadOnlyMemory&lt;char&gt;&gt;"), so the scalar and the vector routes are spelled apart, and
         ///     with the column's own name when the caller has one.
+        ///     <para>A scalar time column (<c>DateTime</c>, <c>DateTimeOffset</c>, <c>TimeSpan</c>) is the other refusal users
+        ///     meet every day: a POCO's or a <c>Microsoft.Data.Analysis.DataFrame</c>'s date column. Its route is the same
+        ///     column reader keeping the 100-nanosecond ticks, an int64 array. Every other refusal says which column types the
+        ///     bridge maps; it used to say "NumSharp carries bool, the eight integer types, float and double", which is
+        ///     false of NumSharp (it carries fifteen dtypes and text) and was meant of the bridge's ML.NET columns.</para>
         /// </remarks>
         /// <param name="type">The column type that does not map; <c>null</c> gives the null-type text.</param>
-        /// <param name="columnName">The column's name, spelled into the text route; <c>null</c> (the dtype map, which has no column) writes a placeholder.</param>
+        /// <param name="columnName">The column's name, spelled into the text and time routes; <c>null</c> (the dtype map, which has no column) writes a placeholder.</param>
         /// <returns>The message.</returns>
         internal static string UnsupportedImportMessage(DataViewType type, string columnName = null)
         {
@@ -314,8 +319,18 @@ namespace NumSharp.Interop.MLNet
                        $"np.array(view.GetColumn<string[]>(\"{name}\").ToArray()) is a (rows, width) fixed-width U array when every row " +
                        "has the same length (a cursor reads it as VBuffer<ReadOnlyMemory<char>>, not ReadOnlyMemory<char>).";
             Type raw = type is VectorDataViewType vec ? vec.ItemType.RawType : type.RawType;
-            return $"ML.NET column type {type} (raw type {raw.Name}) has no NumSharp dtype: NumSharp carries bool, the eight integer types, " +
-                   "float and double.";
+            const string mapped = "this bridge maps ML.NET's boolean, integer (the eight types), float, double and key columns.";
+            // Scalar time columns only: a vector of them would need GetColumn of an array type, and nobody builds one.
+            if (type is DateTimeDataViewType || type is DateTimeOffsetDataViewType || type is TimeSpanDataViewType)
+            {
+                // DateTimeOffset's Ticks are LOCAL to its offset, so two rows of different offsets would not compare;
+                // UtcTicks puts every row on one clock.
+                string ticks = raw == typeof(DateTimeOffset) ? "UtcTicks" : "Ticks";
+                return $"ML.NET column type {type} (raw type {raw.Name}) has no NumSharp dtype: {mapped} Read the column with ML.NET's " +
+                       $"own column reader (Microsoft.ML) and keep its ticks: np.array(view.GetColumn<{raw.Name}>(\"{name}\").Select(v => v.{ticks}).ToArray()) " +
+                       "is an int64 array of 100-nanosecond ticks (System.Linq for Select).";
+            }
+            return $"ML.NET column type {type} (raw type {raw.Name}) has no NumSharp dtype: {mapped}";
         }
 
         /// <summary>
