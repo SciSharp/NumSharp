@@ -215,7 +215,9 @@ namespace NumSharp.Interop.OnnxRuntime
             for (int j = 0; j < names.Length; j++)
                 declared[j] = AllocatableOutput(session, names[j], isFed: inputs.ContainsKey(names[j]));
 
-            var allocated = new Dictionary<string, NDArray>(names.Length);
+            // Allocated HERE, inside any scope the caller has open: a carrier, so scope.ReturnsTask can hand the outputs
+            // back when the task completes instead of disposing them under the caller (RunOutputs).
+            var allocated = new RunOutputs(names.Length);
             var run = new PendingRun(session, runOptions, inputs.Count, names.Length, allocated);
             try
             {

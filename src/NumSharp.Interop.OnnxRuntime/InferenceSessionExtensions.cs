@@ -455,7 +455,8 @@ namespace NumSharp.Interop.OnnxRuntime
         internal static IReadOnlyDictionary<string, NDArray> CopyOutputs(IDisposableReadOnlyCollection<OrtValue> outputs, IReadOnlyCollection<string> outputNames,
             string[] inNames, OrtTensor[] inHandles)
         {
-            var result = new Dictionary<string, NDArray>(outputs.Count);
+            // A carrier, so an NDScope the caller opened can hand the outputs back instead of disposing them (RunOutputs).
+            var result = new RunOutputs(outputs.Count);
             try
             {
                 using (outputs)
@@ -503,7 +504,8 @@ namespace NumSharp.Interop.OnnxRuntime
         internal static IReadOnlyDictionary<string, NDArray> ViewOutputs(IDisposableReadOnlyCollection<OrtValue> outputs, IReadOnlyCollection<string> outputNames,
             string[] inNames, OrtTensor[] inHandles)
         {
-            var result = new Dictionary<string, NDArray>(outputs.Count);
+            // A carrier, so an NDScope the caller opened can hand the outputs back instead of disposing them (RunOutputs).
+            var result = new RunOutputs(outputs.Count);
             int j = 0;
             try
             {
