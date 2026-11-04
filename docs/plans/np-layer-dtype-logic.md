@@ -1566,7 +1566,8 @@ commit of its own, with its oracle excuse narrowed where it has one:
 - NL5: np.nested_iters' converters run after its axes and operand checks (and its no-operand error is an
   `ArgumentException`); np.einsum's `out=` extent check runs after the cast check; np.einsum does not check an explicit
   path for completeness.
-- NL6: np.array of a ragged jagged C# array truncates (or throws `IndexOutOfRangeException`).
+- NL6: np.array of a ragged jagged C# array truncates (or throws `IndexOutOfRangeException`). Fixed 2026-11-03 by the
+  parity QA's QA-45 (`78b122b0`: `NDArray.DiscoverJaggedShape`); its test is untagged.
 - NL7: B3, the boundary depth reaching user callbacks (P7 dropped).
 - NL8: np.sum's add.reduce step (`AccumulateDouble` / `AccumulateSingle`, `*acc = *acc + s`) leaves the NaN of
   NaN + NaN to the JIT: a Debug build keeps the pairwise sum's NaN where NumPy keeps the accumulator's (a Release build

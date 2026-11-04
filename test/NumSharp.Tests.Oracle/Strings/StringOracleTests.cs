@@ -1116,15 +1116,15 @@ namespace NumSharp.Tests.Strings
         ///       <item><description>section strcharfn: <c>np.array</c> of a permuted or broadcast chararray (the
         ///       array-object oracle's VF12, C-ordered where NumPy copies in K order), <c>np.tile</c> of a 0-d chararray with
         ///       unit reps (VF26, an owning copy where NumPy returns a view of its <c>ndmin</c> copy), <c>np.choose</c> with a
-        ///       0-d index (VF01, a writeable 0-d array where NumPy returns a NumPy scalar), <c>np.broadcast_arrays</c> of a
-        ///       read-only broadcast chararray (VF17, a writeable result), and a function of an element stand-in (read-only,
-        ///       where NumPy's <c>str</c> becomes a fresh writeable array).</description></item>
+        ///       0-d index (VF01, a writeable 0-d array where NumPy returns a NumPy scalar), and a function of an element
+        ///       stand-in (read-only, where NumPy's <c>str</c> becomes a fresh writeable array).</description></item>
         ///       <item><description>section strcharmeth: <c>np.char.strip</c> / <c>lstrip</c> / <c>rstrip</c> of a 0-d text
         ///       (VF01: a writeable 0-d array where NumPy's ufunc returns an <c>np.str_</c> / <c>np.bytes_</c>).</description></item>
         ///     </list>
         ///     <c>np.argwhere</c> / <c>np.flatnonzero</c> (reached by an empty string array, whose index searches run the
         ///     numeric path on a bool stand-in) and <c>np.unravel_index</c> (section M's bool index array) were excused here
-        ///     until the open-bugs rundown's bug 8 made them return NumPy's views; their layout is compared now.
+        ///     until the open-bugs rundown's bug 8 made them return NumPy's views, and <c>np.broadcast_arrays</c> of a
+        ///     read-only broadcast chararray (VF17) until parity QA-34 kept its result read-only; their layout is compared now.
         /// </summary>
         /// <param name="c">The case.</param>
         /// <returns>The reason, or null when the layout must match.</returns>
@@ -1159,9 +1159,6 @@ namespace NumSharp.Tests.Strings
                 // returns a writeable 0-d array — the class VF01 records for the ufuncs and the reductions.
                 if (chfn.GetString() == "choose" && c.Layout.Contains(":z0"))
                     return "VF01: np.choose's 0-d result is a writeable 0-d array where NumPy returns a NumPy scalar";
-                // np.broadcast_arrays forces its results writeable, a read-only (broadcast) operand's too (VF17).
-                if (chfn.GetString() == "broadcast_arrays" && c.Layout.Contains(":bc"))
-                    return "VF17: np.broadcast_arrays makes a read-only broadcast operand's result writeable";
                 // Section strcharmeth: numpy.char's strips of a 0-d text (a plain 0-d array, a Python str / bytes) end in
                 // the ufunc's PyArray_Return, a NumPy scalar (np.str_ / np.bytes_); NumSharp returns a writeable 0-d
                 // array — VF01's class. The value is still compared.

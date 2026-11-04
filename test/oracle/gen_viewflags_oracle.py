@@ -1810,6 +1810,9 @@ _ARRAY_JOB_NUMPY = {
 # 2026-10-26, again (np-layer-dtype-logic P2): np.linalg.multi_dot hands out= to its final np.dot, as NumPy's does, so an
 # out np.dot refuses (F, stepped, transposed, reversed) is refused and VO01 matches NumPy; its GAPS entry and its rule
 # are dropped and its 4 cases moved back into out_flags.jsonl the same way.
+# 2026-11-04 (parity QA-34, f0a00d4a): np.broadcast_arrays returns an operand that already has the broadcast shape as
+# ITSELF and keeps a read-only operand's views read-only, as NumPy 2.4.2 does, so VF17 matches NumPy; its GAPS entry and
+# its rule are dropped and its 6 cases moved back into view_flags.jsonl the same way (no regeneration).
 GAPS = {
     "VF01": "a NumPy SCALAR result (ufuncs, clip, round, nan_to_num, conj, dot / inner / kron of 0-d or 1-D pairs) "
             "comes back as a WRITEABLE 0-d array",
@@ -1828,8 +1831,6 @@ GAPS = {
             "owner or a same-shape broadcast",
     "VF16": "ndarray.astype(same dtype, copy=False, order='C' or 'F') of a strided 1-D view returns the operand; "
             "NumPy copies to satisfy the requested order",
-    "VF17": "np.broadcast_arrays returns new views where NumPy returns the operands themselves, and a read-only "
-            "broadcast operand comes back WRITEABLE",
     "VF19": "np.dot / np.inner of a 0-d with an F 2-D array: -0.0 where NumPy's scalar daxpy gives +0.0, and an F "
             "result where NumPy's is C (known: OpenBugs.Reductions Dot_SizeOneOperand_*)",
     "VF20": "np.einsum('i,j->ij'): -0.0 where NumPy's zero-filled accumulator gives +0.0, F-ordered for a C operand "
@@ -1931,8 +1932,6 @@ def _gap_of(tier, case):
         if (fn == "ndarray.astype" and p.get("copy") is False and p.get("dtype") == "int64"
                 and p.get("order") in ("C", "F") and lay in ("view_step_1d", "view_rev_1d")):
             return "VF16"
-        if fn == "broadcast_arrays":
-            return "VF17"
         if fn in ("dot", "inner") and lay in ("own_0d+own_f_2d", "own_f_2d+own_0d"):
             return "VF19"
         if fn == "einsum" and p.get("subscripts") == "i,j->ij":

@@ -265,10 +265,11 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>np.broadcast_arrays(a, b)</c> with <c>b</c> already the read-only broadcast of the result shape: NumPy
-        ///     returns <c>b</c> itself, read-only; NumSharp returns a new WRITEABLE view of it (gap VF17).
+        ///     FIXED by parity QA-34 (f0a00d4a, 2026-11-03): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: <c>np.broadcast_arrays(a, b)</c> with <c>b</c> already the read-only broadcast of the result
+        ///     shape: NumPy returns <c>b</c> itself, read-only; NumSharp returned a new WRITEABLE view of it (gap VF17).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "viewflags-VF17")]
+        [TestMethod]
         public void ViewFlags_BroadcastArrays_OfAReadOnlyBroadcast_ShouldStayReadOnly()
         {
             using var a = np.arange(12).reshape(3, 4);

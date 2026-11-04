@@ -26,8 +26,9 @@ namespace NumSharp.Tests
     //   NL5  argument checks in another order than NumPy's: np.nested_iters' converters (and the type of its
     //        no-operand error), np.einsum's out= extent check after its cast check, np.einsum's explicit path not
     //        checked for completeness.
-    //   NL6  np.array of a ragged jagged C# array (int[][], double[][], ...) truncates or throws IndexOutOfRangeException
-    //        where NumPy raises its inhomogeneous-shape ValueError.
+    //   NL6  FIXED by parity QA-45 (78b122b0): np.array of a ragged jagged C# array (int[][], double[][], ...) truncated or
+    //        threw IndexOutOfRangeException where NumPy raises its inhomogeneous-shape ValueError; its test stays below as
+    //        the regression pin, without [OpenBugs].
     //   NL7  the plan's B3: user code that np.apply_along_axis / np.apply_over_axes call back runs with the subclass
     //        boundary's depth raised, so a numpy.matrix or chararray the callback passes to an np.* function comes back
     //        plain. P7 would have removed the depth; the owner dropped P7 the same day ("Drop because np.* uses the lhs
@@ -472,14 +473,15 @@ namespace NumSharp.Tests
         // ------------------------------------------------------------------
 
         /// <summary>
+        ///     FIXED by parity QA-45 (78b122b0, 2026-11-03): NumSharp gives NumPy's answer now, and this test pins it.
         ///     <c>np.array([[97], [99, 100]])</c> and its siblings: NumPy raises <c>ValueError: setting an array element with
         ///     a sequence. The requested array has an inhomogeneous shape after 1 dimensions. The detected shape was (2,) +
-        ///     inhomogeneous part.</c> NumSharp's typed path takes the shape from the first element of each level
-        ///     (<c>Shape.ExtractShape</c>), so a longer later row is truncated silently (<c>[[97], [99]]</c>, also for
-        ///     double[][] and int[][][]) and a shorter one throws <see cref="IndexOutOfRangeException"/>. (An object[] list
-        ///     takes the sequence walk, which raises NumPy's error already.)
+        ///     inhomogeneous part.</c> Before the fix NumSharp's typed path took the shape from the first element of each
+        ///     level (<c>Shape.ExtractShape</c>), so a longer later row was truncated silently (<c>[[97], [99]]</c>, also for
+        ///     double[][] and int[][][]) and a shorter one threw <see cref="IndexOutOfRangeException"/>; the typed overloads
+        ///     now discover the shape first (<c>NDArray.DiscoverJaggedShape</c>).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL6")]
+        [TestMethod]
         public void NpLayer_Array_RaggedJaggedArray_ShouldRaiseTheInhomogeneousShapeError()
         {
             const string afterOne = "setting an array element with a sequence. The requested array has an inhomogeneous shape after 1 dimensions. The detected shape was (2,) + inhomogeneous part.";

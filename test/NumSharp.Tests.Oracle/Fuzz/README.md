@@ -1814,6 +1814,11 @@ dropped) and narrowed VF01 (no longer `np.unravel_index` of a 0-d), VF08 (np.med
 The replay of the gap files named the matching cases (231 moved back into the gates); the redrawn carve is exact again.
 The list below is the one found at delivery.
 
+**Redrawn 2026-11-04** (29 ids and 438 carved cells since): np.broadcast_arrays returns an operand that already has the
+broadcast shape as itself and keeps a read-only operand's views read-only, as NumPy 2.4.2 does (parity QA-34,
+`f0a00d4a`), so VF17 matches NumPy. Its rule is dropped and its 6 `view_flags` cases moved back into the tier the same
+way; `OpenBugs.ViewFlags.cs`'s broadcast_arrays pin is untagged, and the strings oracle's VF17 layout excuse is gone.
+
 **Redrawn 2026-10-26, again** (30 ids and 444 carved cells since): np.linalg.multi_dot hands out= to its final
 np.dot, as NumPy's does (the np-layer-dtype-logic plan's P2), so an out np.dot refuses (F, stepped, transposed,
 reversed) is refused and VO01 matches NumPy. Its rule is dropped and its 4 `out_flags` cases moved back into the tier
