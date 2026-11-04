@@ -206,33 +206,6 @@ namespace NumSharp.Tests
         }
 
         // ------------------------------------------------------------------
-        // QA-10 — complex np.prod / np.cumprod multiply with the SIMD form, not NumPy's reduce / accumulate form
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     NumPy's complex <c>multiply.reduce</c> (<c>np.prod</c>) and <c>multiply.accumulate</c> (<c>np.cumprod</c>) run
-        ///     <c>CDOUBLE_multiply</c>'s <c>loop_scalar</c> (the output stride is 0, or the output overlaps the input), which
-        ///     MSVC contracts to <c>im = fma(a.im, b.re, round(a.re * b.im))</c>; the elementwise form is <c>simd_cmul</c>,
-        ///     <c>im = fma(a.re, b.im, round(a.im * b.re))</c>. NumSharp's plain <c>np.prod</c> and every <c>np.cumprod</c> use
-        ///     the elementwise form, so imaginary parts differ by an ULP often (several of 64 random values in the journal's
-        ///     probe; <c>np.prod</c> with <c>initial=</c> / <c>where=</c> already takes the reduce form,
-        ///     Default.Reduction.AddMul.Keywords.cs). For <c>x = -3+1e10j</c>, <c>x**4</c>'s imaginary part is NumPy's
-        ///     <c>1.2e+31</c> and NumSharp's <c>1.2000000000000001e+31</c>.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA10")]
-        public void ParityQa_ComplexProdAndCumprod_ShouldUseNumPysReduceMultiplyForm()
-        {
-            var x = new Complex(-3, 1e10);
-            using var c = np.array(new[] { x, x, x, x });
-
-            using var prod = np.prod(c);
-            using var cumprod = np.cumprod(c);
-
-            ((Complex)prod.GetValue()).Imaginary.Should().Be(1.2e31);
-            ((Complex)cumprod.GetValue(3)).Imaginary.Should().Be(1.2e31);
-        }
-
-        // ------------------------------------------------------------------
         // QA-11 — np.compress checks a too-long condition even when an earlier axis is empty
         // ------------------------------------------------------------------
 
@@ -357,53 +330,6 @@ namespace NumSharp.Tests
         }
 
         // ------------------------------------------------------------------
-        // QA-16 — the flat float16 np.prod accumulates wider than NumPy's HALF loop
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     NumPy's float16 <c>multiply.reduce</c> (<c>HALF_multiply</c>'s reduce form) keeps a FLOAT32 accumulator, so
-        ///     <c>np.prod(float16 [200] * 20 + [0])</c> overflows to inf at the 17th factor and the zero makes it NaN. NumSharp's
-        ///     flat float16 product (plain float16 input, and <c>dtype=float16</c> over an integer input) accumulates wider,
-        ///     never overflows, and returns 0. The axis forms and <c>np.cumprod</c> give NumPy's NaN, as do the float32 forms.
-        ///     The same accumulator difference turns a product whose float32 partial overflows and later shrinks back into a
-        ///     finite float16 where NumPy keeps inf.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA16")]
-        public void ParityQa_ProdFlatFloat16_ShouldAccumulateInFloat32LikeNumPy()
-        {
-            var values = Enumerable.Repeat(200.0, 20).Concat(new[] { 0.0 }).ToArray();
-            using var f64 = np.array(values);
-            using var f16 = f64.astype(np.float16);
-            using var u8 = f64.astype(np.uint8);
-
-            using var plain = np.prod(f16);
-            using var cast = np.prod(u8, dtype: np.float16);
-
-            Half.IsNaN((Half)plain.GetValue()).Should().BeTrue();
-            Half.IsNaN((Half)cast.GetValue()).Should().BeTrue();
-        }
-
-        /// <summary>
-        ///     The other direction along a reduced axis: <c>np.prod(float16 [[300, 300, 0.001]], axis=1)</c> is
-        ///     <c>[90.0625]</c> in NumPy (the reduce inner loop multiplies in float32: 90000 fits, then × 0.001); NumSharp
-        ///     rounds each partial product to float16, so 90000 overflows to inf and the result is <c>[inf]</c>. And the flat
-        ///     form's wider accumulator keeps <c>[60000] * 9 + [1e-4] * 10</c> finite (1009.5) where NumPy's float32
-        ///     accumulator is already inf.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA16")]
-        public void ParityQa_ProdFloat16_AxisAndFlat_ShouldUseNumPysFloat32Accumulator()
-        {
-            using var row = np.array(new[,] { { 300.0, 300.0, 0.001 } }).astype(np.float16);
-            using var big = np.array(Enumerable.Repeat(60000.0, 9).Concat(Enumerable.Repeat(1e-4, 10)).ToArray()).astype(np.float16);
-
-            using var axis = np.prod(row, axis: 1);
-            using var flat = np.prod(big);
-
-            ((double)(Half)axis.GetValue(0)).Should().Be(90.0625);
-            Half.IsPositiveInfinity((Half)flat.GetValue()).Should().BeTrue();
-        }
-
-        // ------------------------------------------------------------------
         // QA-17 — the float-tier binary ufuncs promote Char beside float16 / float32 to float64
         // ------------------------------------------------------------------
 
@@ -431,78 +357,6 @@ namespace NumSharp.Tests
             arctan2.dtype.Should().Be(np.float32);
             copysign.dtype.Should().Be(np.float32);
             nextafter.dtype.Should().Be(np.float32);
-        }
-
-        // ------------------------------------------------------------------
-        // QA-18 — complex np.maximum / np.fmax keep the second operand on a tie
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     NumPy's <c>CDOUBLE_maximum</c> / <c>CDOUBLE_fmax</c> (loops.c.src) keep <c>in1</c> when <c>CGE(in1, in2)</c>
-        ///     holds, and <c>CGE</c> is non-strict (<c>xr == yr &amp;&amp; xi &gt;= yi</c>), so two operands that compare equal
-        ///     return the FIRST one's bits: <c>np.maximum(0j, complex(-0.0, -0.0))</c> is <c>0j</c>. NumSharp's elementwise
-        ///     kernel calls the clip helpers <c>ComplexMaxNaN</c> / <c>ComplexMaxNum</c>
-        ///     (<c>DirectILKernelGenerator.Clip.cs</c>), whose last step <c>a.Imaginary &gt; b.Imaginary ? a : b</c> is strict,
-        ///     and returns the SECOND operand: a silent sign-of-zero difference whenever the operands are equal but differ in
-        ///     a zero's sign. np.minimum / np.fmin (non-strict on the other side) and the np.max / np.min reductions match.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA18")]
-        public void ParityQa_ComplexMaximumFmax_Tie_ShouldKeepTheFirstOperand()
-        {
-            using var a = np.array(new[] { new Complex(0.0, 0.0), new Complex(0.0, -0.0) });
-            using var b = np.array(new[] { new Complex(-0.0, -0.0), new Complex(-0.0, 0.0) });
-
-            using var maximum = np.maximum(a, b);
-            using var fmax = np.fmax(a, b);
-
-            foreach (var result in new[] { maximum, fmax })
-            {
-                var first = (Complex)result.GetValue(0);
-                var second = (Complex)result.GetValue(1);
-
-                // NumPy returns a's bits: (+0, +0) and (+0, -0).
-                double.IsNegative(first.Real).Should().BeFalse();
-                double.IsNegative(first.Imaginary).Should().BeFalse();
-                double.IsNegative(second.Real).Should().BeFalse();
-                double.IsNegative(second.Imaginary).Should().BeTrue();
-            }
-        }
-
-        // ------------------------------------------------------------------
-        // QA-19 — complex np.clip propagates a bound's NaN imaginary part and keeps x on an upper-bound tie
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     NumPy's complex clip (clip.cpp) is <c>MIN(MAX(x, lo), hi)</c> with <c>MAX(a, b) = isnan(a) || CGT(a, b) ? a : b</c>
-        ///     and <c>CGT(p, q) = p.re == q.re ? p.im &gt; q.im : p.re &gt; q.re</c> (<c>MIN</c> the mirror with <c>CLT</c>). The
-        ///     bound's NaN is never tested on its own: a bound whose IMAGINARY part is NaN only wins where the real parts tie,
-        ///     so <c>np.clip([5+0j, 20+0j], complex(1, nan), 10+0j)</c> is <c>[5+0j, 10+0j]</c>. NumSharp's
-        ///     <c>ComplexMaxNaN</c> / <c>ComplexMinNaN</c> return any NaN-bearing bound first and give
-        ///     <c>[1+nanj, 1+nanj]</c>; an upper bound <c>10+nanj</c> likewise replaces every element. The tie rule differs too:
-        ///     NumPy's <c>MIN</c> takes the bound on a tie (strict <c>CLT</c>), NumSharp keeps x, so
-        ///     <c>np.clip(complex(0.0, -0.0), -5-5j, complex(-0.0, 0.0))</c> keeps x's zero signs where NumPy returns the
-        ///     bound's.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA19")]
-        public void ParityQa_ComplexClip_ShouldUseNumPysCgtCltSelection()
-        {
-            using var x = np.array(new[] { new Complex(5, 0), new Complex(20, 0) });
-            using var nanLower = np.clip(x, new Complex(1, double.NaN), new Complex(10, 0));
-            using var nanUpper = np.clip(x, new Complex(1, 0), new Complex(10, double.NaN));
-
-            ((Complex)nanLower.GetValue(0)).Should().Be(new Complex(5, 0));
-            ((Complex)nanLower.GetValue(1)).Should().Be(new Complex(10, 0));
-            ((Complex)nanUpper.GetValue(0)).Should().Be(new Complex(5, 0));
-
-            using var t = np.array(new[] { new Complex(0.0, -0.0) });
-            using var lo = np.array(new[] { new Complex(-5, -5) });
-            using var hi = np.array(new[] { new Complex(-0.0, 0.0) });
-            using var tie = np.clip(t, lo, hi);
-
-            // NumPy: CLT(x, hi) is false on the tie, so MIN returns hi = (-0, +0).
-            var z = (Complex)tie.GetValue(0);
-            double.IsNegative(z.Real).Should().BeTrue();
-            double.IsNegative(z.Imaginary).Should().BeFalse();
         }
 
         // ------------------------------------------------------------------
@@ -538,7 +392,7 @@ namespace NumSharp.Tests
         }
 
         // ------------------------------------------------------------------
-        // QA-21 — np.evaluate's complex Max / Min root reductions fold in memory order and keep the later Max tie
+        // QA-21 — np.evaluate's complex Max / Min root reductions fold in memory order
         // ------------------------------------------------------------------
 
         /// <summary>
@@ -548,7 +402,8 @@ namespace NumSharp.Tests
         ///     element (<c>np.max([0j, complex(-0.0, -0.0)])</c> is <c>0j</c>). np.max / np.min match;
         ///     <c>np.evaluate(NDExpr.Max(x))</c> / <c>NDExpr.Min(x)</c> over complex fold through the engine's clamp
         ///     (<c>EmitScalarOperation(BinaryOp.Maximum)</c>, NDExpr.Evaluate.cs) walking MEMORY order, so a reversed view
-        ///     returns <c>nan+1j</c>, and the clamp's Max returns the later operand on a tie (QA-18's helper). The float
+        ///     returns <c>nan+1j</c>. The tie half of the finding is fixed: the clamp's Max is NumPy's <c>CGE</c> since QA-18
+        ///     (batch 4), so the last assertion already holds and guards it. The float
         ///     forms, which run the ported <c>simd_reduce_c_max</c> schedule, match.
         /// </summary>
         [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA21")]

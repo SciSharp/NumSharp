@@ -681,6 +681,9 @@ namespace NumSharp.Backends.Kernels
             // NumPy's const fast path for float32/float64 scalar bounds (see UsesConstSelect): the tail must
             // agree with the SIMD body element for element, signed zeros included.
             bool constSelect = UsesConstSelect(dtype, mode, kind);
+            // Two bounds are NumPy's um.clip loop (_NPY_MIN(_NPY_MAX(x, lo), hi)); one bound is um.maximum /
+            // um.minimum, where _clip routes it. Only complex128 selects differently between the two (EmitScalarClamp).
+            bool clipSelection = needLo && needHi;
 
             // Reusable temp for the in-flight value
             var locVal = il.DeclareLocal(clrType);
@@ -722,7 +725,7 @@ namespace NumSharp.Backends.Kernels
                 if (constSelect)
                     il.EmitCall(OpCodes.Call, GetHelper(dtype == NPTypeCode.Single ? nameof(FloatClipLowSelect) : nameof(DoubleClipLowSelect)), null);
                 else
-                    EmitScalarClamp(il, dtype, isMax: true);      // val = Max(val, lo)
+                    EmitScalarClamp(il, dtype, isMax: true, clipSelection: clipSelection);      // val = Max(val, lo)
                 il.Emit(OpCodes.Stloc, locVal);
             }
 
@@ -739,7 +742,7 @@ namespace NumSharp.Backends.Kernels
                 if (constSelect)
                     il.EmitCall(OpCodes.Call, GetHelper(dtype == NPTypeCode.Single ? nameof(FloatClipHighSelect) : nameof(DoubleClipHighSelect)), null);
                 else
-                    EmitScalarClamp(il, dtype, isMax: false);     // val = Min(val, hi)
+                    EmitScalarClamp(il, dtype, isMax: false, clipSelection: clipSelection);     // val = Min(val, hi)
                 il.Emit(OpCodes.Stloc, locVal);
             }
 
@@ -758,19 +761,42 @@ namespace NumSharp.Backends.Kernels
             il.MarkLabel(lblEnd);
         }
 
-        // Emits scalar Max/Min consuming two T values on the stack, producing
-        // one T. Uses Math.Max/Min where available (covers byte..ulong, float,
-        // double, decimal), falls back to small static helpers for Half /
-        // Complex (NaN/lex semantics) and to a branch-based emit for Char.
-        //
-        // nanIgnore selects the float/double/half/complex NaN policy:
-        //   false (default) — NaN-PROPAGATING (np.clip / np.maximum / np.minimum):
-        //                     a NaN operand wins, first-operand-NaN preferred.
-        //   true            — NaN-IGNORING (np.fmax / np.fmin): the non-NaN operand
-        //                     wins; both-NaN returns the second. Integer / decimal /
-        //                     char have no NaN domain, so the policy is irrelevant there.
-        private static void EmitScalarClamp(ILGenerator il, NPTypeCode dtype, bool isMax, bool nanIgnore = false)
+        /// <summary>
+        /// Emits one scalar maximum / minimum of the two values of <paramref name="dtype"/> on the evaluation stack
+        /// (<c>[a, b] -> [r]</c>, <c>a</c> the first operand): the per-element body every scalar maximum / minimum of the
+        /// engine shares — np.maximum / np.minimum / np.fmax / np.fmin (<see cref="EmitScalarOperation"/>), np.clip's flat
+        /// and iterator kernels, and np.evaluate's Min / Max / Clip nodes — so they agree bit for bit.
+        /// </summary>
+        /// <param name="il">The IL stream being generated; two <paramref name="dtype"/> values must be on its stack.</param>
+        /// <param name="dtype">The loop dtype of both operands and of the result.</param>
+        /// <param name="isMax">True for a maximum, false for a minimum.</param>
+        /// <param name="nanIgnore">The NaN policy of the float16 / float32 / float64 / complex128 loops: false (the default)
+        /// is NaN-PROPAGATING (np.maximum / np.minimum and np.clip: a NaN operand wins, the first one's when both are NaN);
+        /// true is NaN-IGNORING (np.fmax / np.fmin: the other operand wins; two NaNs give the first). The integer, bool,
+        /// char and decimal loops have no NaN, so it changes nothing there.</param>
+        /// <param name="clipSelection">True for one half of NumPy's TWO-bound clip loop (clip.cpp <c>_NPY_MAX</c> /
+        /// <c>_NPY_MIN</c>, applied as <c>MIN(MAX(x, lo), hi)</c>); false (the default) for the ufunc loops. Only
+        /// complex128 tells the two apart: the ufuncs compare with loops.c.src's <c>CGE</c> / <c>CLE</c> (a tie keeps the
+        /// FIRST operand, and a NaN in either part of either operand propagates), clip with the strict
+        /// <c>CGT</c> / <c>CLT</c> of clip.cpp (a tie takes the SECOND operand, the bound, and the bound's NaN counts only
+        /// through the comparisons). Every other dtype's clip halves equal its maximum / minimum loops, so the flag is
+        /// ignored for them. A ONE-bound np.clip is the ufunc (NumPy's <c>_clip</c> routes it to
+        /// <c>um.maximum</c> / <c>um.minimum</c>), so its callers leave this false.</param>
+        /// <exception cref="ArgumentException"><paramref name="nanIgnore"/> and <paramref name="clipSelection"/> are both
+        /// true: NumPy's clip has no NaN-ignoring form, so the request names no loop.</exception>
+        /// <exception cref="NotSupportedException"><paramref name="dtype"/> is not one of the 15 element dtypes
+        /// (<see cref="GetClrType"/>).</exception>
+        /// <remarks>
+        /// float32 / float64 / float16 call the NaN-aware helpers below (Math.Max would resolve a ±0 tie to +0); the other
+        /// sized numerics and decimal call <c>Math.Max</c> / <c>Math.Min</c>; char, which has no <c>Math.Max</c> overload,
+        /// gets an inline compare-and-select.
+        /// </remarks>
+        internal static void EmitScalarClamp(ILGenerator il, NPTypeCode dtype, bool isMax, bool nanIgnore = false, bool clipSelection = false)
         {
+            // Refused before anything is emitted, so a bad request cannot leave a half-written body behind.
+            if (nanIgnore && clipSelection)
+                throw new ArgumentException("np.clip has no NaN-ignoring loop: clipSelection cannot be combined with nanIgnore.", nameof(clipSelection));
+
             var clrType = GetClrType(dtype);
 
             if (dtype == NPTypeCode.Half)
@@ -783,9 +809,12 @@ namespace NumSharp.Backends.Kernels
 
             if (dtype == NPTypeCode.Complex)
             {
-                il.EmitCall(OpCodes.Call, GetHelper(nanIgnore
-                    ? (isMax ? nameof(ComplexMaxNum) : nameof(ComplexMinNum))
-                    : (isMax ? nameof(ComplexMaxNaN) : nameof(ComplexMinNaN))), null);
+                // The one dtype whose clip halves are not its ufunc loops (see clipSelection above).
+                il.EmitCall(OpCodes.Call, GetHelper(clipSelection
+                    ? (isMax ? nameof(ComplexClipMax) : nameof(ComplexClipMin))
+                    : nanIgnore
+                        ? (isMax ? nameof(ComplexMaxNum) : nameof(ComplexMinNum))
+                        : (isMax ? nameof(ComplexMaxNaN) : nameof(ComplexMinNaN))), null);
                 return;
             }
 
@@ -1003,11 +1032,37 @@ namespace NumSharp.Backends.Kernels
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         internal static double DoubleMinNum(double a, double b) => double.IsNaN(b) ? a : (double.IsNaN(a) ? b : (a < b ? a : b));
 
-        // Complex: lex ordering on (real, imag). NaN propagation: if either
-        // operand contains a NaN component, that operand wins (first-encountered
-        // for the Max-then-Min sequence — matches NumPy clip output bit-for-bit).
+        // Complex: lexicographic order on (real, imag), in two families that differ on ties and on a bound's NaN:
+        //   * the ufunc loops (loops.c.src CDOUBLE_maximum / minimum / fmax / fmin), which compare with
+        //       CGE(x, y) = (x.re > y.re && !isnan(x.im) && !isnan(y.im)) || (x.re == y.re && x.im >= y.im)
+        //     (CLE the mirror) — NON-strict, so equal operands keep the FIRST one (maximum(0j, -0-0j) is 0j);
+        //   * the two-bound clip loop (clip.cpp _NPY_MAX / _NPY_MIN), which compares with the STRICT
+        //       CGT(p, q) = p.re == q.re ? p.im > q.im : p.re > q.re
+        //     (CLT the mirror) and tests only the FIRST operand for NaN — so a tie takes the bound, and a bound's NaN
+        //     wins only where the comparison picks it.
+        // Each helper below keeps an early-out structure; the remarks state why it equals NumPy's formula.
+
+        /// <summary>Whether either part of <paramref name="z"/> is NaN — NumPy's complex NaN test (<c>npy_isnan(re) || npy_isnan(im)</c>).</summary>
+        /// <param name="z">The value to test.</param>
+        /// <returns>True when the real or the imaginary part is NaN.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static bool ComplexIsNaN(Complex z) => double.IsNaN(z.Real) || double.IsNaN(z.Imaginary);
+
+        /// <summary>
+        /// complex128 <c>np.maximum</c> of one pair, NumPy's <c>CDOUBLE_maximum</c>:
+        /// <c>isnan(a) || CGE(a, b) ? a : b</c>. A NaN in either part of either operand propagates (the first operand's
+        /// when both carry one), and operands that compare equal return the FIRST one's bits
+        /// (<c>maximum(0j, -0-0j)</c> is <c>0j</c>). Not np.clip's selection: see <see cref="ComplexClipMax"/>.
+        /// </summary>
+        /// <param name="a">The first operand (np.maximum's <c>x1</c>; a one-bound clip's element).</param>
+        /// <param name="b">The second operand (<c>x2</c>; a one-bound clip's lower bound).</param>
+        /// <returns><paramref name="a"/> when it holds a NaN or is lexicographically <c>&gt;=</c> <paramref name="b"/>; else
+        /// <paramref name="b"/>.</returns>
+        /// <remarks>
+        /// Equal to NumPy's formula: past the two NaN tests neither operand has a NaN part, so <c>CGE</c>'s NaN guards hold
+        /// and it reduces to "the larger real part, or equal real parts and <c>a.im &gt;= b.im</c>"; with <c>b</c> holding a
+        /// NaN, <c>CGE(a, b)</c> is false whatever <c>a</c> is, so <c>b</c> is returned.
+        /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         internal static Complex ComplexMaxNaN(Complex a, Complex b)
         {
@@ -1015,8 +1070,21 @@ namespace NumSharp.Backends.Kernels
             if (ComplexIsNaN(b)) return b;
             if (a.Real > b.Real) return a;
             if (a.Real < b.Real) return b;
-            return a.Imaginary > b.Imaginary ? a : b;
+            // CGE is non-strict: a tie (equal parts, ±0 included) keeps the first operand.
+            return a.Imaginary >= b.Imaginary ? a : b;
         }
+
+        /// <summary>
+        /// complex128 <c>np.minimum</c> of one pair, NumPy's <c>CDOUBLE_minimum</c>: <c>isnan(a) || CLE(a, b) ? a : b</c>.
+        /// A NaN in either part of either operand propagates (the first operand's when both carry one), and operands that
+        /// compare equal return the FIRST one's bits. Not np.clip's selection: see <see cref="ComplexClipMin"/>.
+        /// </summary>
+        /// <param name="a">The first operand (np.minimum's <c>x1</c>; a one-bound clip's element).</param>
+        /// <param name="b">The second operand (<c>x2</c>; a one-bound clip's upper bound).</param>
+        /// <returns><paramref name="a"/> when it holds a NaN or is lexicographically <c>&lt;=</c> <paramref name="b"/>; else
+        /// <paramref name="b"/>.</returns>
+        /// <remarks>The last line keeps <paramref name="a"/> unless its imaginary part is strictly greater — <c>CLE</c>'s
+        /// non-strict tie, the mirror of <see cref="ComplexMaxNaN"/>.</remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         internal static Complex ComplexMinNaN(Complex a, Complex b)
         {
@@ -1027,9 +1095,20 @@ namespace NumSharp.Backends.Kernels
             return a.Imaginary > b.Imaginary ? b : a;
         }
 
-        // Complex NaN-IGNORING max/min (np.fmax / np.fmin): the non-NaN operand wins; lex
-        // ordering on (real, imag) otherwise. Mirrors ComplexMaxNaN/ComplexMinNaN with the
-        // NaN branches returning the OTHER operand instead of the NaN one.
+        /// <summary>
+        /// complex128 <c>np.fmax</c> of one pair, NumPy's <c>CDOUBLE_fmax</c>: <c>isnan(b) || CGE(a, b) ? a : b</c>. An
+        /// operand with a NaN part is skipped in favour of the other (two such operands give the FIRST), and operands that
+        /// compare equal return the FIRST one's bits (<c>fmax(0j, -0-0j)</c> is <c>0j</c>).
+        /// </summary>
+        /// <param name="a">The first operand (np.fmax's <c>x1</c>).</param>
+        /// <param name="b">The second operand (<c>x2</c>).</param>
+        /// <returns><paramref name="a"/> when <paramref name="b"/> holds a NaN or <paramref name="a"/> is lexicographically
+        /// <c>&gt;=</c> it; else <paramref name="b"/> (also when only <paramref name="a"/> holds a NaN).</returns>
+        /// <remarks>
+        /// Equal to NumPy's formula: with <paramref name="a"/> holding a NaN (and <paramref name="b"/> none),
+        /// <c>CGE(a, b)</c> is false — a NaN real part fails both of its comparisons, a NaN imaginary part fails both the
+        /// NaN guard and <c>a.im &gt;= b.im</c> — so <paramref name="b"/> is returned, as the second test here does.
+        /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         internal static Complex ComplexMaxNum(Complex a, Complex b)
         {
@@ -1037,8 +1116,20 @@ namespace NumSharp.Backends.Kernels
             if (ComplexIsNaN(a)) return b;
             if (a.Real > b.Real) return a;
             if (a.Real < b.Real) return b;
-            return a.Imaginary > b.Imaginary ? a : b;
+            // CGE is non-strict: a tie (equal parts, ±0 included) keeps the first operand.
+            return a.Imaginary >= b.Imaginary ? a : b;
         }
+
+        /// <summary>
+        /// complex128 <c>np.fmin</c> of one pair, NumPy's <c>CDOUBLE_fmin</c>: <c>isnan(b) || CLE(a, b) ? a : b</c>. An
+        /// operand with a NaN part is skipped in favour of the other (two such operands give the FIRST), and operands that
+        /// compare equal return the FIRST one's bits.
+        /// </summary>
+        /// <param name="a">The first operand (np.fmin's <c>x1</c>).</param>
+        /// <param name="b">The second operand (<c>x2</c>).</param>
+        /// <returns><paramref name="a"/> when <paramref name="b"/> holds a NaN or <paramref name="a"/> is lexicographically
+        /// <c>&lt;=</c> it; else <paramref name="b"/> (also when only <paramref name="a"/> holds a NaN).</returns>
+        /// <remarks>The mirror of <see cref="ComplexMaxNum"/>; the last line is <c>CLE</c>'s non-strict tie.</remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         internal static Complex ComplexMinNum(Complex a, Complex b)
         {
@@ -1048,6 +1139,38 @@ namespace NumSharp.Backends.Kernels
             if (a.Real < b.Real) return a;
             return a.Imaginary > b.Imaginary ? b : a;
         }
+
+        /// <summary>
+        /// The lower half of NumPy's two-bound complex128 clip, clip.cpp's <c>_NPY_MAX(a, b)</c>:
+        /// <c>isnan(a) || CGT(a, b) ? a : b</c> with the strict <c>CGT(p, q) = p.re == q.re ? p.im &gt; q.im : p.re &gt; q.re</c>.
+        /// Only the element is tested for NaN: a lower bound whose imaginary part is NaN loses to any element with a larger
+        /// real part (<c>np.clip(5+0j, complex(1, nan), 10+0j)</c> is <c>5+0j</c>), and a tie takes the BOUND. Not
+        /// np.maximum's selection (<see cref="ComplexMaxNaN"/>), and not a one-bound clip's, which NumPy routes to
+        /// np.maximum.
+        /// </summary>
+        /// <param name="a">The element.</param>
+        /// <param name="b">The lower bound.</param>
+        /// <returns><paramref name="a"/> when it holds a NaN or is strictly greater than <paramref name="b"/>
+        /// lexicographically; else <paramref name="b"/> (a NaN real part in <paramref name="b"/> fails every comparison, so
+        /// such a bound is returned).</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        internal static Complex ComplexClipMax(Complex a, Complex b)
+            => ComplexIsNaN(a) || (a.Real == b.Real ? a.Imaginary > b.Imaginary : a.Real > b.Real) ? a : b;
+
+        /// <summary>
+        /// The upper half of NumPy's two-bound complex128 clip, clip.cpp's <c>_NPY_MIN(a, b)</c>:
+        /// <c>isnan(a) || CLT(a, b) ? a : b</c> with the strict <c>CLT(p, q) = p.re == q.re ? p.im &lt; q.im : p.re &lt; q.re</c>.
+        /// Only the running value is tested for NaN: an upper bound whose imaginary part is NaN loses to any value with a
+        /// smaller real part, and a tie takes the BOUND (<c>np.clip(complex(0, -0.0), -5-5j, complex(-0.0, 0))</c> returns
+        /// the bound's zero signs). Not np.minimum's selection (<see cref="ComplexMinNaN"/>).
+        /// </summary>
+        /// <param name="a">The running value (<see cref="ComplexClipMax"/>'s result).</param>
+        /// <param name="b">The upper bound.</param>
+        /// <returns><paramref name="a"/> when it holds a NaN or is strictly less than <paramref name="b"/>
+        /// lexicographically; else <paramref name="b"/>.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        internal static Complex ComplexClipMin(Complex a, Complex b)
+            => ComplexIsNaN(a) || (a.Real == b.Real ? a.Imaginary < b.Imaginary : a.Real < b.Real) ? a : b;
 
         #endregion
     }

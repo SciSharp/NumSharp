@@ -192,6 +192,18 @@ namespace NumSharp.Backends.Kernels
         /// sequential; we use direct pointer access for optimal memory throughput. Mirrors
         /// <see cref="CumSumHelperSameType{T}"/> with a multiplicative identity / combine.
         /// </summary>
+        /// <typeparam name="T">The element type of both buffers (the accumulator dtype).</typeparam>
+        /// <param name="input">The contiguous input, <paramref name="totalSize"/> elements of <typeparamref name="T"/>.</param>
+        /// <param name="output">The contiguous output, as long as the input (it receives the running products).</param>
+        /// <param name="totalSize">The element count.</param>
+        /// <remarks>
+        /// complex128 multiplies with <see cref="ILKernelGenerator.PolyLoopScalarComplexMultiply"/>, NumPy's contracted
+        /// <c>loop_scalar</c>: multiply.accumulate calls <c>CDOUBLE_multiply</c> with its output one element ahead of the
+        /// running value it reads (<c>out[i] = out[i-1] * in[i]</c>), an overlap that sends every call to that loop, never to
+        /// <c>simd_cmul</c> or .NET's <c>Complex</c> operator (an imaginary part one ULP apart, parity QA-10). The running
+        /// product still starts from <c>1+0j</c> where NumPy copies element 0 (pinned apart:
+        /// <c>OpenBugsReductionTests.CumProd_Complex_CopiesTheFirstElement</c>).
+        /// </remarks>
         internal static unsafe void CumProdHelperSameType<T>(void* input, void* output, long totalSize)
             where T : unmanaged, IMultiplyOperators<T, T, T>, IMultiplicativeIdentity<T, T>
         {
@@ -200,6 +212,20 @@ namespace NumSharp.Backends.Kernels
 
             T* src = (T*)input;
             T* dst = (T*)output;
+
+            // complex128: NumPy's accumulate multiply (see remarks). The JIT drops the branch for every other T.
+            if (typeof(T) == typeof(Complex))
+            {
+                Complex* cSrc = (Complex*)src;
+                Complex* cDst = (Complex*)dst;
+                Complex running = Complex.One;
+                for (long i = 0; i < totalSize; i++)
+                {
+                    running = ILKernelGenerator.PolyLoopScalarComplexMultiply(running, cSrc[i]);
+                    cDst[i] = running;
+                }
+                return;
+            }
 
             T product = T.MultiplicativeIdentity;
             for (long i = 0; i < totalSize; i++)

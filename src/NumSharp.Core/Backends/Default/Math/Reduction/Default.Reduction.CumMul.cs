@@ -224,9 +224,33 @@ namespace NumSharp.Backends
         private static void CumProdAxisDispatch<T>(UnmanagedStorage input, UnmanagedStorage output, int axis) where T : unmanaged, IMultiplyOperators<T, T, T>, IMultiplicativeIdentity<T, T>
             => NDAxisIter.ExecuteSameType<T, CumProdAxisKernel<T>>(input, output, axis);
 
+        /// <summary>
+        ///     The flat fallback's scan: replaces each element of the contiguous buffer with the running product up to it.
+        /// </summary>
+        /// <typeparam name="T">The accumulator dtype's element type.</typeparam>
+        /// <param name="addr">The contiguous buffer (already cast to the accumulator dtype; overwritten in place).</param>
+        /// <param name="size">The element count.</param>
+        /// <remarks>complex128 multiplies with NumPy's accumulate form, the contracted <c>loop_scalar</c>
+        ///     (<see cref="ILKernelGenerator.PolyLoopScalarComplexMultiply"/>; see
+        ///     <see cref="DirectILKernelGenerator.CumProdHelperSameType{T}"/>), so this route and the IL route agree.</remarks>
         private static unsafe void CumProdInPlace<T>(nint addr, long size) where T : unmanaged, IMultiplyOperators<T, T, T>, IMultiplicativeIdentity<T, T>
         {
             var p = (T*)addr;
+
+            // complex128: NumPy's multiply.accumulate runs CDOUBLE_multiply's loop_scalar (its out overlaps the running
+            // value), not .NET's Complex operator. The JIT drops the branch for every other T.
+            if (typeof(T) == typeof(Complex))
+            {
+                Complex* c = (Complex*)p;
+                Complex running = Complex.One;
+                for (long i = 0; i < size; i++)
+                {
+                    running = ILKernelGenerator.PolyLoopScalarComplexMultiply(running, c[i]);
+                    c[i] = running;
+                }
+                return;
+            }
+
             T product = T.MultiplicativeIdentity;
             for (long i = 0; i < size; i++)
             {

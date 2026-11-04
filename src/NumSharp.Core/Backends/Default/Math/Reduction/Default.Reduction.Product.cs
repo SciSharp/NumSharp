@@ -38,6 +38,13 @@ namespace NumSharp.Backends
         /// <exception cref="IncorrectShapeException"><paramref name="out"/> or <paramref name="where"/> does not broadcast
         ///     against the input.</exception>
         /// <exception cref="OverflowException">An integer <paramref name="initial"/> past the loop's range.</exception>
+        /// <remarks>
+        ///     A complex128 or float16 loop takes the keyword path's reduction iterator even without a keyword (whenever more
+        ///     than one element meets an output), because NumPy's result there depends on which inner-loop calls its iterator
+        ///     makes: the reduce form (contracted <c>loop_scalar</c> for complex, a float32 accumulator per call for float16)
+        ///     against the elementwise form (<c>simd_cmul</c>, a float16 rounding per product). The other loops keep the flat /
+        ///     axis kernels.
+        /// </remarks>
         public override NDArray ReduceProduct(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null, NDArray @out = null,
             object initial = null, NDArray @where = null)
         {
@@ -74,6 +81,24 @@ namespace NumSharp.Backends
             // as char (ReduceInCharLoop). The uninitialized shape keeps its identity answer below.
             if (typeCode == NPTypeCode.Char && !shape.IsEmpty)
                 return ReduceInCharLoop(arr, axis_, keepdims, product: true);
+
+            // A complex128 or float16 LOOP is NumPy's own multiply.reduce, run by the reduction iterator the keyword path
+            // uses (AddMulNumPy from the identity 1, the dtype= cast done in its buffer fills). Unlike the other loops these
+            // two have no order-free product: each has a REDUCE form, for a call whose out stride is 0 (a flat product, or a
+            // row whose reduced axis is innermost), and an ELEMENTWISE form (a slab: the out advances with the input), and
+            // they round differently — CDOUBLE_multiply's reduce form is MSVC's contracted loop_scalar, its elementwise form
+            // simd_cmul (an imaginary part one ULP apart: parity QA-10); HALF_multiply's reduce form multiplies one call in
+            // float32 and narrows once, its elementwise form narrows every product (inf against a finite float16: QA-16). So
+            // which calls NumPy makes, and where its buffer cuts a cast loop, is part of the answer, and the iterator ports
+            // exactly that. The size-1 shortcuts below keep their copying routes: the complex identity they skip is a
+            // separate pin (OpenBugsReductionTests.Prod_OneComplexElement_IsTheIdentityTimesTheElement), and for float16
+            // the identity is exact.
+            NPTypeCode productLoop = typeCode ?? arr.GetTypeCode.GetAccumulatingType();
+            if ((productLoop == NPTypeCode.Complex || productLoop == NPTypeCode.Half)
+                && !shape.IsEmpty && shape.size > 0
+                && !shape.IsScalar && !(shape.size == 1 && shape.NDim == 1)
+                && (axis_ is null || shape[NormalizeAxis(axis_.Value, arr.ndim)] != 1))
+                return AddMulNumPy(arr, axis_, keepdims, dtype, null, null, null, multiply: true);
 
             // A loop dtype that is neither the input's own nor its default accumulator: NumPy's buffered iterator casts every
             // element into the loop before multiply's loop reads it, so the product of the cast copy in its own dtype IS

@@ -222,11 +222,14 @@ namespace NumSharp.Backends.Iteration
         /// A min/max node delegates like a binary op — <see cref="MinMaxNode"/> IS the engine's
         /// <see cref="BinaryOp.Minimum"/>/<see cref="BinaryOp.Maximum"/> (its <c>EmitScalar</c> emits
         /// exactly that op), so both children being bound array leaves is the whole condition, and the
-        /// NaN-propagating tie semantics come from the shared kernel.
+        /// NaN-propagating tie semantics come from the shared kernel. A clip half never delegates: the engine
+        /// op is the ufunc, whose complex128 selection is not clip's.
         /// </summary>
+        /// <returns>The delegated binary op, or <c>default</c> (no delegation) when a child is not an array leaf or the
+        /// node is a clip half.</returns>
         internal override NDExprDirectOp AsDirectSingleOp()
         {
-            if (_left is not InputNode l || _right is not InputNode r)
+            if (_clipSelection || _left is not InputNode l || _right is not InputNode r)
                 return default;
             var op = _isMin ? BinaryOp.Minimum : BinaryOp.Maximum;   // both are in the plain allow-list
             return NDExpr.IsDelegatableBinary(op) ? NDExprDirectOp.Binary(op, l.Index, r.Index) : default;

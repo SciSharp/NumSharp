@@ -26,8 +26,36 @@ namespace NumSharp.Backends.Iteration
     public readonly struct CumProdAxisKernel<T> : INDAxisSameTypeKernel<T>
         where T : unmanaged, IMultiplyOperators<T, T, T>, IMultiplicativeIdentity<T, T>
     {
+        /// <summary>
+        /// Writes the running products of one line along the accumulated axis (np.cumprod's per-line step).
+        /// </summary>
+        /// <param name="src">The line's first input element.</param>
+        /// <param name="dst">The line's first output element.</param>
+        /// <param name="srcStride">The input stride along the axis, in elements.</param>
+        /// <param name="dstStride">The output stride along the axis, in elements.</param>
+        /// <param name="length">The axis length.</param>
+        /// <remarks>
+        /// complex128 multiplies with NumPy's accumulate form, the contracted <c>loop_scalar</c>
+        /// (<see cref="NumSharp.Backends.Kernels.ILKernelGenerator.PolyLoopScalarComplexMultiply"/>): NumPy's accumulate
+        /// hands each line to <c>CDOUBLE_multiply</c> with the output one element ahead of the running value it reads, an
+        /// overlap that rules out <c>simd_cmul</c> on every axis (parity QA-10).
+        /// </remarks>
         public static unsafe void Execute(T* src, T* dst, long srcStride, long dstStride, long length)
         {
+            // complex128: NumPy's accumulate multiply (see remarks). The JIT drops the branch for every other T.
+            if (typeof(T) == typeof(Complex))
+            {
+                Complex* cSrc = (Complex*)src;
+                Complex* cDst = (Complex*)dst;
+                Complex running = Complex.One;
+                for (long i = 0; i < length; i++)
+                {
+                    running = NumSharp.Backends.Kernels.ILKernelGenerator.PolyLoopScalarComplexMultiply(running, cSrc[i * srcStride]);
+                    cDst[i * dstStride] = running;
+                }
+                return;
+            }
+
             var product = T.MultiplicativeIdentity;
             for (long i = 0; i < length; i++)
             {

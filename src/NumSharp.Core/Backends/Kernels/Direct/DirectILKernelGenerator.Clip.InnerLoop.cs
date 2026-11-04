@@ -89,11 +89,13 @@ namespace NumSharp.Backends.Kernels
                     return;
                 default:
                 {
+                    // Two bounds: um.clip's own halves (clip.cpp _NPY_MAX / _NPY_MIN), which only complex128 selects
+                    // differently from the maximum / minimum ufuncs the one-bound cases above run (EmitScalarClamp).
                     var hi = il.DeclareLocal(GetClrType(dtype));
-                    il.Emit(OpCodes.Stloc, hi);                 // [x, lo]
-                    EmitScalarClamp(il, dtype, isMax: true);    // [t]  t = MAX(x, lo)
-                    il.Emit(OpCodes.Ldloc, hi);                 // [t, hi]
-                    EmitScalarClamp(il, dtype, isMax: false);   // [r]  r = MIN(t, hi)
+                    il.Emit(OpCodes.Stloc, hi);                                         // [x, lo]
+                    EmitScalarClamp(il, dtype, isMax: true, clipSelection: true);    // [t]  t = MAX(x, lo)
+                    il.Emit(OpCodes.Ldloc, hi);                                         // [t, hi]
+                    EmitScalarClamp(il, dtype, isMax: false, clipSelection: true);   // [r]  r = MIN(t, hi)
                     return;
                 }
             }

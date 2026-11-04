@@ -113,6 +113,21 @@ on the stack and one `Vector<byte>` operation combines them: the composition's b
 construction (gate `Logic/np.logical.OnePassRoute.Test.cs`, hooks `DefaultEngine.DisableLogicalRun` / `LogicalRuns`).
 Floors: the bool-bool cells and logical_not of bool (the composition's one SIMD pass) and memory-bound 10M float64 cells.
 
+## `np.maximum` / `np.minimum` / `np.fmax` / `np.fmin`
+
+One scalar body per dtype (`DirectILKernelGenerator.EmitScalarClamp`), shared by the ufunc kernels on every route,
+np.clip's kernels and np.evaluate's Min / Max / FMax nodes, so fused and unfused results agree bit for bit.
+- float32 / float64: maximum / minimum propagate a NaN (the first operand's when both hold one) and give a ±0 tie to the
+  SECOND operand, as the hardware MAXPD the SIMD body uses; fmax / fmin skip a NaN operand.
+- float16: the bit-level kernels (`kernels.md`); a tie keeps the FIRST operand (HALF_maximum's `ge`).
+- complex128: loops.c.src's `CDOUBLE_maximum` family, `maximum(a, b) = isnan(a) || CGE(a, b) ? a : b` and
+  `fmax(a, b) = isnan(b) || CGE(a, b) ? a : b`, with the non-strict
+  `CGE(x, y) = (x.re > y.re && !isnan(x.im) && !isnan(y.im)) || (x.re == y.re && x.im >= y.im)` (minimum / fmin mirror it
+  with `CLE`): operands that compare equal keep the FIRST operand's bits (`np.maximum(0j, complex(-0.0, -0.0))` is
+  `0j`), and through maximum / minimum a NaN in either part of either operand propagates. np.clip's two-bound loop
+  selects differently (strict, the bound winning a tie: `ufuncs.md`).
+- Gates: `Math/np.maximum.ComplexTie.Test.cs`, `Math/UfuncMinMaxSignbitOutWhereTests.cs`, the elementwise tiers.
+
 ## The comparison engine
 
 Every operand layout and dtype pair runs the vector kernels, for the operators and the `np.*` forms, with and without

@@ -54,6 +54,29 @@ which NumPy's methods refuse). A positional third argument is `dtype` and a four
   (sections A–E with I `initial=`, D `dtype=`, M `mean=` / `ddof` / `correction=`; NL12 and np.prod's plain inexact
   cells are not generated).
 
+## `np.prod` / `np.cumprod`: the complex128 and float16 loops
+
+NumPy's multiply loops for these two dtypes have two call forms that round differently, so which calls NumPy's iterator
+makes is part of the answer:
+- complex128 (`CDOUBLE_multiply`): a call whose out stride is 0 (a flat product, a row whose reduced axis is innermost)
+  or whose out overlaps an input other than exactly (every `multiply.accumulate` step, `out[i] = out[i-1] * in[i]`) runs
+  `loop_scalar`, which MSVC contracts (`re = fma(a.re, b.re, -(a.im*b.im))`, `im = fma(a.im, b.re, a.re*b.im)`:
+  `ILKernelGenerator.PolyLoopScalarComplexMultiply`); a slab (an outer reduced axis, the out advancing with the input)
+  runs `simd_cmul`. The imaginary parts often differ by an ULP.
+- float16 (`HALF_multiply`): the reduce form multiplies one call in float32 and narrows once (a partial past float32 stays
+  inf; one past float16 only does not); the elementwise form narrows every product.
+- `np.prod` of a complex128 or float16 LOOP (the input's dtype or `dtype=`) runs `AddMulNumPy` (the keyword path's
+  `NumPyReduceIterator`, from the identity) without any keyword too, whenever more than one element meets an output: the
+  axis sort, coalescing, buffered casts (a `dtype=float16` cast loop narrows at every `np.getbufsize()` fill) and call
+  forms are NumPy's. np.nanprod of complex rides it. The size-1 shortcuts keep copying; the complex identity they skip
+  is pinned (`OpenBugsReductionTests.Prod_OneComplexElement_IsTheIdentityTimesTheElement`).
+- complex128 `np.cumprod` multiplies with `loop_scalar` on every route (the IL same-type helper, the flat fallback, the
+  axis kernel), still from `1+0j` where NumPy copies element 0 (`OpenBugsReductionTests.CumProd_Complex_CopiesTheFirstElement`).
+  float16 cumprod narrows every step: NumPy's accumulate never makes a reduce-form call.
+- np.evaluate's complex and float16 `Prod` keep the 4-accumulator fold (`evaluate.md`).
+- Gates: `Math/np.prod.ComplexAndHalfLoops.Test.cs` (NumPy-probed bits: every call form, a cast loop whose buffer fills
+  change the last bit), the `reduce_kwargs` tier's prod cells.
+
 ## `np.sum` / `np.mean`: the add identity and NumPy's add.reduce
 
 `Backends/Default/Math/Reduction/Default.Reduction.Add{,.Exact,.Identity}.cs`.

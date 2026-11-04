@@ -157,6 +157,14 @@ NumPy's Python int (`type(min) is int`); every other bound is strong — an elem
   a (2,3) array runs const when NpyIter does not buffer it, and a one-element call off the trivial loop runs const.
   `Default.ClipNDArray.ConstLoop.cs` asks the shared port of that decision (`DefaultEngine.UfuncInnerSteps.cs`). On x86
   the const compare-selects are `MAXPD(lo, x)` / `MINPD(hi, x)` (the second operand on a tie or a NaN).
+- The complex loop: complex128 has no const path, only `_NPY_MIN(_NPY_MAX(x, lo), hi)` with clip.cpp's own selection,
+  `_NPY_MAX(a, b) = isnan(a) || CGT(a, b) ? a : b` and the STRICT `CGT(p, q) = p.re == q.re ? p.im > q.im : p.re > q.re`
+  (`_NPY_MIN` the mirror with `CLT`). Only the running value is tested for NaN, so a bound's NaN wins only where the
+  comparison picks the bound (`np.clip([5, 20], complex(1, nan), 10)` is `[5, 10]`; a NaN REAL part in a bound fails every
+  comparison, so that bound is returned), and a tie takes the bound. These are not the maximum / minimum ufuncs' helpers
+  (`CGE` / `CLE`: a tie keeps x, any NaN propagates), which a ONE-bound complex clip runs, as NumPy routes it. Two-bound
+  callers pass `clipSelection: true` to `EmitScalarClamp` (`ComplexClipMax` / `ComplexClipMin`): the flat kernel's
+  scalar loop, the iterator body and `NDExpr.Clip`'s two clip-half nodes.
 - Result layout: a fresh result takes NumPy's ufunc output layout (`Shape.NpyIterOutputShape`: the operands' memory
   order, the mask votes, C wins ties); a dense F or permuted input is clipped as a C run and relabelled
   (`NDArray.AdoptLayout`).
@@ -172,8 +180,8 @@ NumPy's Python int (`type(min) is int`); every other bound is strong — an elem
   `where=` mask's error TYPE; `np.broadcast_to` / `np.broadcast_arrays` keep an extent-1 axis's original stride where
   NumPy writes 0 (only a one-element bound built by broadcast_to can change clip's const-loop decision through it);
   `NDExpr.Clip` (np.evaluate) has no drop rule, throws on two null bounds and on an out-of-range literal, and runs the
-  general loop on ties.
-- Gates: the `clip_pyint` and `clip_ufunc` tiers, `Math/np.clip.{PythonIntBounds,Ufunc}.Test.cs`,
+  general loop on ties (its complex selection is clip's; `NDExpr.Clamp` stays the maximum / minimum composition).
+- Gates: the `clip_pyint` and `clip_ufunc` tiers, `Math/np.clip.{PythonIntBounds,Ufunc,Complex}.Test.cs`,
   `Backends/Kernels/BroadcastPatternStageTests.cs`.
 
 ## The divmod family

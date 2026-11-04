@@ -129,8 +129,11 @@ namespace NumSharp.Backends.Kernels
         /// <param name="a">Left operand (NumPy's first input).</param><param name="b">Right operand.</param>
         /// <returns>The product, as NumPy's fallback loop computes it.</returns>
         /// <remarks>
-        ///     NumPy runs this loop only when the output stride is 0, i.e. NpyIter's single-element iteration of
-        ///     two array operands that differ in ndim. Only <see cref="PolyUnitBroadcast"/> kernels call it.
+        ///     NumPy runs this loop when the output stride is 0 or the output overlaps an input other than exactly:
+        ///     NpyIter's single-element iteration of two array operands that differ in ndim (the
+        ///     <see cref="PolyUnitBroadcast"/> kernels), every reduce-form call of <c>multiply.reduce</c> (np.prod's
+        ///     flat products and innermost-axis rows, <c>Default.Reduction.AddMul.Keywords.cs</c>), and every
+        ///     <c>multiply.accumulate</c> step (np.cumprod: <c>out[i] = out[i-1] * in[i]</c>, the scan helpers).
         ///     The forms are MEASURED, not derived from the C source (which has no FMA): over 6,000 random pairs
         ///     NumPy's real part always matched <c>fma(a.re, b.re, -round(a.im*b.im))</c> and its imaginary part
         ///     always <c>fma(a.im, b.re, round(a.re*b.im))</c>, in exact rational arithmetic.

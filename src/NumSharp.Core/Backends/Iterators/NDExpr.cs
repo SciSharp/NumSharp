@@ -317,9 +317,11 @@ namespace NumSharp.Backends.Iteration
         /// Clip (limit) the values of <paramref name="x"/> to a range (np.clip). Either bound may be
         /// <c>null</c> (NumPy's <c>None</c>): a one-sided clip lowers to the NaN-propagating
         /// <see cref="Max"/>/<see cref="Min"/> (<c>np.clip(x, lo, None) ≡ np.maximum(x, lo)</c>,
-        /// <c>np.clip(x, None, hi) ≡ np.minimum(x, hi)</c>), and a two-sided clip to
-        /// <c>Min(Max(x, lo), hi)</c> (= <see cref="Clamp"/>), which is the exact general clip ufunc
-        /// (<c>_NPY_MIN(_NPY_MAX(x, lo), hi)</c>). Result dtype is <c>result_type(x, lo, hi)</c>.
+        /// <c>np.clip(x, None, hi) ≡ np.minimum(x, hi)</c>), and a two-sided clip to the exact general clip ufunc
+        /// <c>_NPY_MIN(_NPY_MAX(x, lo), hi)</c>: two min/max nodes flagged as clip halves, which equal
+        /// <see cref="Clamp"/> (<c>Min(Max(x, lo), hi)</c>) for every dtype but complex128, where clip's selection is
+        /// strict (a tie takes the bound) and tests only the running value for NaN. Result dtype is
+        /// <c>result_type(x, lo, hi)</c>.
         /// </summary>
         /// <param name="x">The values to clip.</param>
         /// <param name="lo">Lower bound, or <c>null</c> for no lower bound.</param>
@@ -342,7 +344,11 @@ namespace NumSharp.Backends.Iteration
                 throw new ArgumentException("One of max or min must be given");
             if (lo is null) return Min(x, hi);          // np.clip(x, None, hi) ≡ np.minimum(x, hi)
             if (hi is null) return Max(x, lo);          // np.clip(x, lo, None) ≡ np.maximum(x, lo)
-            return Min(Max(x, lo), hi);                 // _NPY_MIN(_NPY_MAX(x, lo), hi)
+            // _NPY_MIN(_NPY_MAX(x, lo), hi): um.clip's own halves, not the maximum / minimum ufuncs (they differ for
+            // complex128: clip.cpp's strict CGT / CLT against loops.c.src's CGE / CLE).
+            return new MinMaxNode(isMin: true,
+                new MinMaxNode(isMin: false, x, lo, clipSelection: true),
+                hi, clipSelection: true);
         }
 
         // ===================================================================
@@ -2310,6 +2316,11 @@ namespace NumSharp.Backends.Iteration
     // (returns the non-NaN operand) — NumPy's np.minimum/np.maximum return NaN,
     // so the branchy lowering matches NumPy exactly. For NumPy's np.fmin/np.fmax
     // (NaN-skipping) users can compose with IsNaN + Where.
+    //
+    // A node built by NDExpr.Clip with both bounds is one half of NumPy's clip loop
+    // instead (clip.cpp _NPY_MAX / _NPY_MIN): only complex128 selects differently
+    // there (strict CGT / CLT, a tie takes the bound), so the flag is part of the
+    // node's identity (signature, structural hash, equality).
     // =========================================================================
 
     public sealed partial class MinMaxNode : NDExpr
@@ -2318,15 +2329,56 @@ namespace NumSharp.Backends.Iteration
         private readonly NDExpr _left;
         private readonly NDExpr _right;
 
+        /// <summary>
+        /// True when this node is one half of NumPy's two-bound clip loop (built by <see cref="NDExpr.Clip"/>), false for
+        /// np.maximum / np.minimum. It changes the selection of complex128 only (<see cref="DirectILKernelGenerator.EmitScalarClamp"/>);
+        /// every other dtype's clip halves equal its maximum / minimum loops.
+        /// </summary>
+        private readonly bool _clipSelection;
+
+        /// <summary>
+        /// Builds an np.minimum / np.maximum node: NaN-propagating, and for complex128 NumPy's <c>CLE</c> / <c>CGE</c>
+        /// selection (a tie keeps <paramref name="left"/>). Prefer the <see cref="NDExpr.Min"/> / <see cref="NDExpr.Max"/>
+        /// factories; this is what they call.
+        /// </summary>
+        /// <param name="isMin">True for np.minimum, false for np.maximum.</param>
+        /// <param name="left">The first operand (<c>x1</c>).</param>
+        /// <param name="right">The second operand (<c>x2</c>).</param>
+        /// <exception cref="ArgumentNullException"><paramref name="left"/> or <paramref name="right"/> is null.</exception>
         public MinMaxNode(bool isMin, NDExpr left, NDExpr right)
+            : this(isMin, left, right, clipSelection: false)
+        {
+        }
+
+        /// <summary>
+        /// Builds a minimum / maximum node, or — with <paramref name="clipSelection"/> — one half of NumPy's two-bound clip
+        /// loop, whose complex128 selection is clip.cpp's <c>_NPY_MIN</c> / <c>_NPY_MAX</c> (strict <c>CLT</c> / <c>CGT</c>:
+        /// a tie takes <paramref name="right"/>, the bound, and only <paramref name="left"/> is tested for NaN).
+        /// </summary>
+        /// <param name="isMin">True for the minimum (clip's upper half), false for the maximum (clip's lower half).</param>
+        /// <param name="left">The first operand (the element, or for the upper half the lower half's result).</param>
+        /// <param name="right">The second operand (the bound, for a clip half).</param>
+        /// <param name="clipSelection">True only for the two nodes <see cref="NDExpr.Clip"/> builds when both bounds are
+        /// given; a one-bound clip is np.maximum / np.minimum in NumPy too.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="left"/> or <paramref name="right"/> is null.</exception>
+        internal MinMaxNode(bool isMin, NDExpr left, NDExpr right, bool clipSelection)
         {
             _isMin = isMin;
             _left = left ?? throw new ArgumentNullException(nameof(left));
             _right = right ?? throw new ArgumentNullException(nameof(right));
+            _clipSelection = clipSelection;
         }
 
         public override bool SupportsSimd => false;
 
+        /// <summary>
+        /// Emits the per-element body: both children converted to this node's dtype, then the engine's own scalar clamp
+        /// (<see cref="DirectILKernelGenerator.EmitScalarClamp"/>), the body its maximum / minimum ufuncs and np.clip's
+        /// kernels run, so fused and unfused results agree bit for bit.
+        /// </summary>
+        /// <param name="il">The kernel's IL stream; one value of this node's dtype is left on its stack.</param>
+        /// <param name="ctx">The compile context holding the per-node dtypes.</param>
+        /// <exception cref="NotSupportedException">The node's dtype is not one of the 15 element dtypes.</exception>
         public override void EmitScalar(ILGenerator il, NDExprCompileContext ctx)
         {
             var my = ctx.TypeOf(this);
@@ -2335,10 +2387,19 @@ namespace NumSharp.Backends.Iteration
             _right.EmitScalar(il, ctx);
             DirectILKernelGenerator.EmitConvertTo(il, ctx.TypeOf(_right), my);
 
+            // A clip half: um.clip's selection, which differs from the ufuncs' for complex128 only (a strict
+            // compare, the bound winning a tie, the bound's NaN counted only through the compare).
+            if (_clipSelection)
+            {
+                DirectILKernelGenerator.EmitScalarClamp(il, my, isMax: !_isMin, clipSelection: true);
+                return;
+            }
+
             // np.maximum / np.minimum: the engine's own scalar clamp, the body its ufunc kernels
-            // run — NaN-propagating with the SECOND operand winning a ±0 / equal tie (Math.Max
-            // resolves a -0/+0 tie to +0 and diverged from np.maximum), the lexicographic
-            // (real, imag) order with NaN-sticks for complex, Half / char / decimal / bool covered.
+            // run — NaN-propagating; a float32 / float64 ±0 tie goes to the SECOND operand (Math.Max
+            // resolves a -0/+0 tie to +0 and diverged from np.maximum), a float16 or complex128 tie to
+            // the FIRST (NumPy's HALF_maximum ge / CDOUBLE_maximum CGE); complex compares
+            // lexicographically on (real, imag); char / decimal / bool covered.
             // One body for all 15 dtypes, so fused and unfused agree bit-for-bit.
             DirectILKernelGenerator.EmitScalarOperation(il, _isMin ? BinaryOp.Minimum : BinaryOp.Maximum, my);
         }
@@ -2368,9 +2429,15 @@ namespace NumSharp.Backends.Iteration
             DirectILKernelGenerator.EmitVectorMinOrMax(il, isMax: !_isMin, my, propagateNaN: true);
         }
 
+        /// <summary>
+        /// Appends this node's structural signature, the kernel-cache key component: <c>Min(..)</c> / <c>Max(..)</c>, or
+        /// <c>ClipMin(..)</c> / <c>ClipMax(..)</c> for a clip half, so a complex <see cref="NDExpr.Clip"/> and the
+        /// equivalent-looking <c>Min(Max(x, lo), hi)</c> never share a compiled kernel.
+        /// </summary>
+        /// <param name="sb">The builder the signature is appended to.</param>
         public override void AppendSignature(StringBuilder sb)
         {
-            sb.Append(_isMin ? "Min(" : "Max(");
+            sb.Append(_clipSelection ? (_isMin ? "ClipMin(" : "ClipMax(") : (_isMin ? "Min(" : "Max("));
             _left.AppendSignature(sb);
             sb.Append(',');
             _right.AppendSignature(sb);

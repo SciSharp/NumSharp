@@ -776,13 +776,19 @@ namespace NumSharp.Backends.Iteration
 
     public sealed partial class MinMaxNode
     {
+        /// <summary>
+        /// Binds the array leaves below this node, rebuilding the node only when a child changed; the rebuilt node keeps
+        /// the min/max kind and the clip-half flag (dropping the flag would turn a complex clip into np.maximum's selection).
+        /// </summary>
+        /// <param name="ctx">The binding context that deduplicates array operands.</param>
+        /// <returns>This node, or a copy over the bound children.</returns>
         internal override NDExpr BindArrays(NDExprBindContext ctx)
         {
             var l = _left.BindArrays(ctx);
             var r = _right.BindArrays(ctx);
             return ReferenceEquals(l, _left) && ReferenceEquals(r, _right)
                 ? this
-                : new MinMaxNode(_isMin, l, r);
+                : new MinMaxNode(_isMin, l, r, _clipSelection);
         }
 
         internal override bool ContainsReduce => _left.ContainsReduce || _right.ContainsReduce;
@@ -1616,9 +1622,10 @@ namespace NumSharp.Backends.Iteration
 
             // [acc, val] → np.minimum/np.maximum(acc, val): the ufunc's own scalar clamp, the body
             // np.minimum.reduce / np.maximum.reduce fold with — NaN-propagating with the FIRST NaN
-            // sticking (acc is the first operand), the second operand on a ±0 / equal tie, the
-            // lexicographic (real, imag) order for complex, Half / char / decimal covered. One body
-            // for every dtype, shared with the elementwise kernels.
+            // sticking (acc is the first operand); a float32 / float64 ±0 tie goes to the second operand
+            // (val), a float16 or complex128 tie to the first (acc: HALF_maximum's ge, CDOUBLE_maximum's
+            // CGE), the lexicographic (real, imag) order for complex, Half / char / decimal covered. One
+            // body for every dtype, shared with the elementwise kernels.
             DirectILKernelGenerator.EmitScalarOperation(il, isMin ? BinaryOp.Minimum : BinaryOp.Maximum, acc);
         }
     }
