@@ -73,7 +73,7 @@ using (var h = nd.AsTensorSpan<float>())
 // Read a tensor produced elsewhere back as an NDArray, no copy.
 var output = Tensor.Create(new[] { 0.1f, 0.7f, 0.2f }, new nint[] { 3 });
 using NDArray probs = output.AsNDArray();
-long best = np.argmax(probs).GetInt64(0);      // 1
+long best = np.argmax(probs);                  // 1 (the flat argmax is a long)
 ```
 
 ## Frameworks

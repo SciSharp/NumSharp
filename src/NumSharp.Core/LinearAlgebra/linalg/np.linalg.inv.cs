@@ -17,10 +17,13 @@ namespace NumSharp
             ///     <c>LinAlgError("Singular matrix")</c> from the factorisation rather than from a
             ///     determinant test.
             ///     </para>
+            ///     <para>
+            ///     No matrix backend is needed: without one, NumSharp's managed LU computes the inverse (allclose to
+            ///     NumPy's LAPACK result, bit for bit for small matrices); an installed backend is used first.
+            ///     </para>
             /// </remarks>
             /// <param name="a">The square matrix, or a stack of them.</param>
             /// <returns>The inverse, a fresh array (float64 for bool / integer operands).</returns>
-            /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
             /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
             /// <exception cref="LinAlgError">Fewer than two axes, a non-square operand, or a singular matrix.</exception>
             /// <exception cref="TypeError">A float16, decimal or char operand.</exception>

@@ -113,7 +113,7 @@ NDArray r = np.evaluate((NDExpr)a * b + c);
 NDArray s = np.evaluate(NDExpr.Sum((NDExpr)a * b));
 
 // call your own scalar function per element inside the fused loop:
-NDArray t = np.evaluate(NDExpr.Call(a, x => MyScalarFn(x)));
+NDArray t = np.evaluate(NDExpr.Call((double x) => MyScalarFn(x), a));   // the function first, then its operands
 ```
 
 `np.evaluate` compiles **once per (tree structure, input dtype signature)** and caches, so building the tree inside a loop is cheap. Per-node dtypes follow the same NEP 50 rules as the built-in ufuncs. This is NumSharp's equivalent of `numexpr` and the closest thing to authoring a ufunc - see the fused-expressions section of [Universal functions](../fundamentals/ufuncs.md).
@@ -180,7 +180,7 @@ Use this for large, embarrassingly-parallel workloads; leave it off for latency-
 
 ```csharp
 // Preferred: fused, no temporaries, cached kernel
-var y = np.evaluate(NDExpr.Call((NDExpr)x * 2.0, v => Math.Tanh(v)));
+var y = np.evaluate(NDExpr.Call(Math.Tanh, (NDExpr)x * 2.0));   // a method group binds without a cast
 
 // Or: unboxed loop when the logic doesn't fit an expression
 foreach (ref double v in np.nditer<double>(x, writeable: true))

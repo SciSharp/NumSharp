@@ -102,8 +102,8 @@ scipy's LP64 build (`scipy_cblas_*`), stock LP64 (`cblas_*`) - so MKL, Accelerat
 symbols are required (`gemm`, `gemv`, `syrk`, `dot`, `axpy`, each in s/d); OpenBLAS' thread,
 core-name and build-info entry points are used when present, and a provider without them works fine.
 
-Two maintainer details worth knowing: the binaries are **not in git** - `tools/openblas-manifest.json`
-is the checked-in pin and `fetch_openblas.py` stages them, verifying **two** SHA-256 hashes per RID
+Two maintainer details worth knowing: the binaries are **not in git** - `src/NumSharp.Interop.OpenBLAS/tools/openblas-manifest.json`
+is the checked-in pin and `fetch_openblas.py` beside it stages them, verifying **two** SHA-256 hashes per RID
 (the wheel's from PyPI, then the extracted library's own) so a re-pointed URL or mutated artifact
 fails loudly. And the license expression is compound (`Apache-2.0 AND BSD-3-Clause-Attribution AND
 BSD-2-Clause AND (GPL-3.0-or-later WITH GCC-exception-3.1)`, full text in
@@ -576,7 +576,8 @@ by a test. The fifteen cover the rest of what NumPy routes through this same bin
 | Group | Members | When no backend answers |
 |---|---|---|
 | Products (CBLAS) | `TryInner`, `TryVdot`, `TryVecdot`, `TryMatvec`, `TryVecmat` | **managed kernels compute it** - the invariant holds |
-| Factorisations (LAPACK) | `TryCholesky`, `TryDet`, `TrySlogdet`, `TryEig`, `TryEigh`, `TryInv`, `TryLstsq`, `TryQr`, `TrySolve`, `TrySvd` | **`NotSupportedException`** - Core ships no managed LU/QR/SVD/eigensolver, so there is nothing to fall back to; the message names the NumPy API, the LAPACK routine and the `Try*` member to implement |
+| Factorisations, LU family | `TryDet`, `TrySlogdet`, `TrySolve`, `TryInv` | **Core's managed LU computes it** - `np.linalg.det` / `slogdet` / `solve` / `inv` answer without a backend |
+| Factorisations (LAPACK) | `TryCholesky`, `TryEig`, `TryEigh`, `TryLstsq`, `TryQr`, `TrySvd` | **`OpenBlasMissingBackendException`** (a `NotSupportedException`) - Core ships no managed QR/SVD/eigensolver, so there is nothing to fall back to; the message names the NumPy API, the package to reference and the `Try*` member that serves it |
 
 LAPACK sits on the *same* property because it lives inside the very binary already bundled:
 scipy-openblas ships `gesv` / `getrf` / `potrf` / `geev` / `syevd` / `heevd` / `gesdd` / `geqrf` /

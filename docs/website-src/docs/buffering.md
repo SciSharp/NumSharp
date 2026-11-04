@@ -492,8 +492,9 @@ var outputImage = result.reshape(height, width, 3);
 // Create data on CPU
 var cpuData = np.random.rand(1000, 1000).astype(np.float32);
 
-// Get pointer for GPU transfer
-IntPtr dataPtr = cpuData.data;
+// Get pointer for GPU transfer (unsafe code; keep cpuData alive while the pointer is in use)
+IntPtr dataPtr;
+unsafe { dataPtr = (IntPtr)cpuData.Unsafe.Pointer<float>(); }
 
 // Transfer to GPU (CUDA example)
 cudaMemcpy(devicePtr, dataPtr,

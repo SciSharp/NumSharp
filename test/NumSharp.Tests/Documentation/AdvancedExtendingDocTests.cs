@@ -40,6 +40,26 @@ namespace NumSharp.Tests.Documentation
             ((double)np.evaluate(NDExpr.Sum((NDExpr)a * b))).Should().Be(300.0);
         }
 
+        /// <summary>
+        ///     The page's <c>NDExpr.Call</c> lines (the per-element scalar function, and the "custom elementwise transform"
+        ///     pattern): the function comes first and its operands after it, a typed lambda or a method group binds without
+        ///     a cast, and the fused kernel computes the C# function per element.
+        /// </summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from the page.</exception>
+        [TestMethod]
+        public void FusedExpressions_CallAScalarFunction()
+        {
+            var a = np.array(new[] { 1.0, 4.0 });
+            NDArray t = np.evaluate(NDExpr.Call((double x) => x * 10 + 1, a));
+            t.ToArray<double>().Should().Equal(11.0, 41.0);
+
+            var x = np.array(new[] { 0.0, 0.5, 1.0 });
+            var y = np.evaluate(NDExpr.Call(System.Math.Tanh, (NDExpr)x * 2.0)).ToArray<double>();
+            y[0].Should().Be(0.0);
+            y[1].Should().Be(System.Math.Tanh(1.0));
+            y[2].Should().Be(System.Math.Tanh(2.0));
+        }
+
         [TestMethod]
         [DoNotParallelize] // flips the process-wide np.multithreading switch
         public void Multithreading_Toggle()

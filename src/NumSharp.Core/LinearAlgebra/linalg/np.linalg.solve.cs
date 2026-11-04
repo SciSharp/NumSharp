@@ -19,8 +19,11 @@ namespace NumSharp
             ///     so the two gufuncs — <c>(m,m),(m)->(m)</c> and <c>(m,m),(m,n)->(m,n)</c> — are
             ///     selected by rank alone and report their own core-dimension errors.
             ///     </para>
+            ///     <para>
+            ///     No matrix backend is needed: without one, NumSharp's managed LU computes the solution (allclose to
+            ///     NumPy's LAPACK result, bit for bit for small matrices); an installed backend is used first.
+            ///     </para>
             /// </remarks>
-            /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
             /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>);
             ///     a core dimension of <paramref name="b"/> that does not match <paramref name="a"/>.</exception>
             /// <returns>The solution, a fresh array (float64 for bool / integer operands).</returns>

@@ -157,7 +157,7 @@ public static Bitmap ToBitmap(
 **Basic conversion:**
 
 ```csharp
-var nd = np.zeros(1, 100, 200, 3).astype(NPTypeCode.Byte);
+var nd = np.zeros((1, 100, 200, 3), np.uint8);
 var bitmap = nd.ToBitmap();
 // Infers: 200x100 image, 24bpp RGB
 ```
@@ -165,7 +165,7 @@ var bitmap = nd.ToBitmap();
 **Explicit format:**
 
 ```csharp
-var nd = np.zeros(1, 100, 200, 4).astype(NPTypeCode.Byte);
+var nd = np.zeros((1, 100, 200, 4), np.uint8);
 var bitmap = nd.ToBitmap(200, 100, PixelFormat.Format32bppArgb);
 ```
 

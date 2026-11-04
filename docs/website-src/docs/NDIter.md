@@ -189,7 +189,7 @@ NDIterState (unmanaged struct)                ← unmanaged state + dynamic bloc
     ├── Op arrays (size = NOp):   DataPtrs*, ResetDataPtrs*, BufStrides*,
     │                              InnerStrides*, BaseOffsets*, OpDTypes*, ...
     └── Reduction arrays:         ReduceOuterStrides*, ReduceOuterPtrs*,
-                                  ArrayWritebackPtrs*, CoreSize, CorePos, ...
+                                  ArrayWritebackPtrs*, CoreSize, CoreOffset, ...
 ```
 
 The handle is cheap to pass, but construction performs unmanaged allocation: one state object, one dimension-dependent block when `ndim > 0`, and one per-operand block. Buffering may add one aligned block per operand. `Dispose`/`FreeState` must release the matching ownership path.
@@ -314,7 +314,7 @@ When buffering is active, an operand's `DataPtrs[op]` points into `Buffers[op]`,
 ```csharp
 public int  OuterDim;           // which internal axis is the reduce axis
 public long CoreSize;           // elements per output slot (inner-loop length)
-public long CorePos;            // position within core, 0..CoreSize
+public long CoreOffset;         // NumPy's coreoffset: iterindex % CoreSize at the last reposition
 public long ReduceOuterSize;    // number of output slots in current buffer
 public long ReducePos;          // position within outer loop
 
@@ -622,7 +622,7 @@ The bridge's `BufferedReduce` method drives this explicitly.
 
 ### IsFirstVisit
 
-Reduction kernels must initialize the output before accumulating. `iter.IsFirstVisit(op)` returns `true` only when every reduction-axis coordinate is zero *and* `CorePos == 0` in buffered mode. Kernels check this once at each output slot to emit identity-write semantics:
+Reduction kernels must initialize the output before accumulating. `iter.IsFirstVisit(op)` returns `true` only when every reduction-axis coordinate is zero *and*, in buffered mode, the reduce double loop is at its first outer step for an operand whose core repeats (`ReducePos == 0` when the operand's outer stride is 0). Kernels check this once at each output slot to emit identity-write semantics:
 
 ```csharp
 if (iter.IsFirstVisit(reduceOp)) *(double*)ptrs[reduceOp] = 0.0;

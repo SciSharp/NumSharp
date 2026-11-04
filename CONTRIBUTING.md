@@ -174,6 +174,7 @@ For operations that need type-specific code, switch over `typecode` and dispatch
     {
         case NPTypeCode.Boolean: return Process<bool>(arr);
         case NPTypeCode.Byte: return Process<byte>(arr);
+        case NPTypeCode.SByte: return Process<sbyte>(arr);
         case NPTypeCode.Int16: return Process<short>(arr);
         case NPTypeCode.UInt16: return Process<ushort>(arr);
         case NPTypeCode.Int32: return Process<int>(arr);
@@ -181,9 +182,11 @@ For operations that need type-specific code, switch over `typecode` and dispatch
         case NPTypeCode.Int64: return Process<long>(arr);
         case NPTypeCode.UInt64: return Process<ulong>(arr);
         case NPTypeCode.Char: return Process<char>(arr);
-        case NPTypeCode.Double: return Process<double>(arr);
+        case NPTypeCode.Half: return Process<Half>(arr);
         case NPTypeCode.Single: return Process<float>(arr);
+        case NPTypeCode.Double: return Process<double>(arr);
         case NPTypeCode.Decimal: return Process<decimal>(arr);
+        case NPTypeCode.Complex: return Process<Complex>(arr);
         default:
             throw new NotSupportedException();
     }
@@ -204,7 +207,7 @@ var b = new NDArray(new double[] { 1, 2, 3, 4 });
 var c = new NDArray(new double[,] { { 1, 2 }, { 3, 4 } });
 
 // Using np.* functions
-var d = np.zeros(3, 4);
+var d = np.zeros((3, 4));            // a tuple is the shape; a second argument is the dtype
 var e = np.arange(10);
 var f = np.array(new[] { 1.0, 2.0, 3.0 });
 ```
@@ -224,11 +227,10 @@ unsafe
 ArraySlice<double> slice = nd.Storage.GetData<double>();
 Span<double> span = slice.AsSpan();
 
-// Via iterator (handles sliced arrays correctly)
-using var iter = new NDIterator<double>(nd);
-while (iter.HasNext())
+// Via the typed iterator (any layout, sliced and strided views included; T is the dtype's own type)
+foreach (ref double val in np.nditer<double>(nd))
 {
-    double val = iter.MoveNext();
+    // read val; with np.nditer<double>(nd, writeable: true) an assignment writes the array
 }
 ```
 
@@ -242,9 +244,9 @@ Shape vector = new Shape(10);
 
 // Properties
 int ndim = shape.NDim;           // 3
-int size = shape.size;           // 60
-int[] dims = shape.Dimensions;   // [3, 4, 5]
-int[] strides = shape.Strides;   // [20, 5, 1]
+long size = shape.size;          // 60 (int64 element counts)
+long[] dims = shape.Dimensions;  // [3, 4, 5] - shared with the shape: never write into it
+long[] strides = shape.Strides;  // [20, 5, 1] (in elements)
 
 // Checks
 bool isScalar = shape.IsScalar;
@@ -252,8 +254,8 @@ bool isContiguous = shape.IsContiguous;
 bool isSliced = shape.IsSliced;
 
 // Coordinate ↔ Offset
-int offset = shape.GetOffset(1, 2, 3);  // Linear index
-int[] coords = shape.GetCoordinates(offset);
+long offset = shape.GetOffset(1, 2, 3);  // Linear index
+long[] coords = shape.GetCoordinates(offset);
 ```
 
 ### Working with Slices
@@ -426,14 +428,16 @@ copy[0] = 999;  // original unchanged
 ### 2. Type Assumptions
 
 ```csharp
-// WRONG: assumes type
-double val = nd.GetDouble();  // Throws if not double
+// WRONG: assumes the dtype - the typed getters apply NumPy's cast, so on a float64 array
+// GetInt32 silently truncates 2.9 to 2
+int val = nd.GetInt32(0);
 
-// RIGHT: check or convert
-if (nd.dtype == typeof(double))
-    double val = nd.GetDouble();
-// OR
-var converted = nd.astype(np.float64);
+// RIGHT: check the dtype, or convert once where the cast is visible
+if (nd.typecode == NPTypeCode.Int32)
+{
+    int exact = nd.GetInt32(0);
+}
+var converted = nd.astype(np.int32);
 ```
 
 ### 3. Axis Handling
@@ -442,16 +446,15 @@ var converted = nd.astype(np.float64);
 // WRONG: forgetting negative axis
 if (axis >= nd.ndim) throw new ArgumentOutOfRangeException();
 
-// RIGHT: normalize negative axis first
-if (axis < 0) axis = nd.ndim + axis;
-if (axis < 0 || axis >= nd.ndim) throw new ArgumentOutOfRangeException();
+// RIGHT: NumPy's normalize_axis_index - wraps a negative axis, raises NumPy's AxisError text otherwise
+axis = Shape.check_and_adjust_axis(nd.ndim, axis);
 ```
 
 ### 4. Empty Array Edge Cases
 
 ```csharp
 // WRONG: crashes on empty
-var result = arr[0];  // IndexOutOfRange if arr.size == 0
+var result = arr[0];  // IndexError (index 0 is out of bounds for axis 0 with size 0) if arr.size == 0
 
 // RIGHT: check first
 if (arr.size == 0)
@@ -473,12 +476,20 @@ if (arr.size == 0)
 /// The default, axis=None, will sum all of the elements of the input array.</param>
 /// <param name="dtype">The type of the returned array and of the accumulator
 /// in which the elements are summed.</param>
+/// <param name="out">An array to store the result in; it must have the result's shape.</param>
 /// <param name="keepdims">If this is set to True, the axes which are reduced
 /// are left in the result as dimensions with size one.</param>
-/// <returns>An array with the same shape as a, with the specified axis removed.</returns>
+/// <param name="initial">The starting value for the sum.</param>
+/// <param name="where">Elements to include in the sum.</param>
+/// <returns>An array with the same shape as a, with the specified axis removed; out itself when given.</returns>
+/// <exception cref="AxisError">axis is out of bounds for the array.</exception>
 /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.sum.html</remarks>
-public static NDArray sum(NDArray a, int? axis = null, NPTypeCode? dtype = null, bool keepdims = false)
+public static NDArray sum(NDArray a, int? axis = null, DType dtype = null, NDArray @out = null, bool keepdims = false,
+    object initial = null, NDArray @where = null);
 ```
+
+The signature is NumPy's, parameter for parameter (`numpy.sum(a, axis=None, dtype=None, out=None, keepdims=<no value>,
+initial=<no value>, where=<no value>)`), and every parameter, the result and every exception get their tag.
 
 ### Always Include NumPy Reference Link
 

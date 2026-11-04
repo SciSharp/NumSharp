@@ -16,8 +16,11 @@ namespace NumSharp
             ///     large or ill-conditioned matrix the product of the pivots can overflow or
             ///     underflow where <see cref="slogdet"/> stays finite.
             ///     </para>
+            ///     <para>
+            ///     No matrix backend is needed: without one, NumSharp's managed LU computes it (allclose to
+            ///     NumPy's LAPACK result, bit for bit for small matrices); an installed backend is used first.
+            ///     </para>
             /// </remarks>
-            /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
             /// <param name="a">The square matrix, or a stack of them.</param>
             /// <returns>The determinant: a 0-d array for one matrix, one value per matrix of a stack.</returns>
             /// <exception cref="LinAlgError">Fewer than two axes, or a non-square operand.</exception>
@@ -42,8 +45,13 @@ namespace NumSharp
             ///     determinant. A singular matrix gives <c>(0, -inf)</c>; for a complex operand the
             ///     sign is a unit-modulus complex number rather than ±1.
             /// </returns>
-            /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.slogdet.html</remarks>
-            /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+            /// <remarks>
+            ///     https://numpy.org/doc/stable/reference/generated/numpy.linalg.slogdet.html
+            ///     <para>
+            ///     No matrix backend is needed: without one, NumSharp's managed LU computes it (allclose to
+            ///     NumPy's LAPACK result, bit for bit for small matrices); an installed backend is used first.
+            ///     </para>
+            /// </remarks>
             /// <param name="a">The square matrix, or a stack of them.</param>
             /// <exception cref="LinAlgError">Fewer than two axes, or a non-square operand.</exception>
             /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
