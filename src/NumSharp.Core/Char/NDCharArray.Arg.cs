@@ -153,7 +153,7 @@ namespace NumSharp
         /// <returns>A chararray containing the three parts of each element on its last axis, at the widest part's width, laid
         ///     out as NumPy's <c>np.stack</c> lays it out: a VIEW of the stacked parts for bytes, a COPY for str (NumPy's
         ///     <c>np.char.asarray</c> compares a str array's width in characters with its itemsize in bytes and copies).</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="sep"/> is null.</exception>
+        /// <exception cref="System.ArgumentNullException"><paramref name="sep"/> is null.</exception>
         /// <exception cref="ValueError">An empty separator (<c>empty separator</c>); an empty array (<c>zero-size array to
         ///     reduction operation maximum which has no identity</c>, NumPy's sizing).</exception>
         /// <exception cref="TypeError">No <c>find</c> loop for the classes (a <c>str</c> separator beside a bytes chararray is
@@ -182,7 +182,7 @@ namespace NumSharp
         /// <returns>A chararray holding the three parts of each element on its last axis, at the widest part's width: a VIEW
         ///     of the stacked parts for bytes, a COPY for str (NumPy's <c>np.char.asarray</c> compares a str array's width
         ///     in characters with its itemsize in bytes and copies).</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="sep"/> is null.</exception>
+        /// <exception cref="System.ArgumentNullException"><paramref name="sep"/> is null.</exception>
         /// <exception cref="ValueError">An empty separator (<c>empty separator</c>); an empty array (<c>zero-size array to
         ///     reduction operation maximum which has no identity</c>, NumPy's sizing).</exception>
         /// <exception cref="TypeError">No loop for the classes.</exception>

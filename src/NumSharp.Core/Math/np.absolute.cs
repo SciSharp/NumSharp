@@ -46,7 +46,7 @@ namespace NumSharp
             : a.TensorEngine.Abs(a);
 
         /// <summary>
-        ///     Calculate the absolute value element-wise (alias of <see cref="absolute(NDArray, NDArray, NDArray, NPTypeCode?)"/>).
+        ///     Calculate the absolute value element-wise (alias of <see cref="absolute(NDArray, NDArray, NDArray, DType)"/>).
         ///     Mirrors NumPy's ufunc signature: <c>absolute(x, /, out=None, *, where=True, dtype=None)</c>.
         /// </summary>
         /// <param name="a">Input value.</param>

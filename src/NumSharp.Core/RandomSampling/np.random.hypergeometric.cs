@@ -113,7 +113,7 @@ namespace NumSharp
         ///     or a size dimension is negative.</exception>
         /// <remarks>
         ///     Exists for overload resolution, not behaviour: with the array-parameter
-        ///     <see cref="hypergeometric(NDArray, NDArray, NDArray, Shape)"/> beside the <see cref="Nullable{T}"/> form, a call
+        ///     <see cref="hypergeometric(NDArray, NDArray, NDArray, Shape)"/> beside the <see cref="System.Nullable{T}"/> form, a call
         ///     passing integers and a <see cref="Shape"/> was better than each candidate in one argument (the integers bind
         ///     the scalar form, the <see cref="Shape"/> binds the array form without the nullable wrap) — an ambiguity error.
         ///     This exact match wins every such call and forwards to the scalar sampler unchanged.

@@ -812,10 +812,10 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>
-        /// Reduce a single operand to a scalar of type <typeparamref name="TResult"/>.
-        /// If the iterator has BUFFER + REDUCE set, the double-loop reduction
-        /// schedule is used via <see cref="BufferedReduce{TResult}"/>. Otherwise
-        /// we let the IL kernel iterate the array directly.
+        /// Reduce a single operand to a scalar of type <typeparamref name="TResult"/>: one typed element-reduction IL
+        /// kernel walks the whole operand by its strides (the iterator's buffering flags are not consulted). For NumPy's
+        /// double-loop reduction schedule over a BUFFER + REDUCE iterator, call
+        /// <see cref="BufferedReduce{TKernel, TAccum}(TKernel)"/> instead.
         /// </summary>
         /// <typeparam name="TResult">The CLR type of the result — the accumulator's own type.</typeparam>
         /// <param name="op">The reduction.</param>

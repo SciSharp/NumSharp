@@ -33,7 +33,7 @@ namespace NumSharp.Backends
         /// resolution).</exception>
         /// <exception cref="ValueError"><paramref name="out"/> is read-only or does not have the result's shape (the reduce
         /// prologue's texts); a nonzero <paramref name="ddof"/> together with <paramref name="correction"/>.</exception>
-        /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array (NumPy's TypeError text).</exception>
+        /// <exception cref="System.ArgumentException"><paramref name="where"/> is not a bool array (NumPy's TypeError text).</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="out"/>, <paramref name="where"/> or
         /// <paramref name="mean"/> does not broadcast against the input.</exception>
         /// <remarks>

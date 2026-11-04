@@ -5,7 +5,7 @@
         /// <summary>
         ///     The size of a single item stored in <see cref="Address"/>.
         /// </summary>
-        /// <remarks>Equivalent to <see cref="NPTypeCode.SizeOf"/> extension.</remarks>
+        /// <remarks>Equivalent to <see cref="NPTypeCodeExtensions.SizeOf(NPTypeCode)"/> extension.</remarks>
         int ItemLength { get; }
 
         /// <summary>

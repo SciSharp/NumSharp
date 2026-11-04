@@ -304,7 +304,7 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     Set a <see cref="NDArray"/> at given <see cref="indices"/>.
+        ///     Set a <see cref="NDArray"/> at given <paramref name="indices"/>.
         /// </summary>
         /// <param name="value">The value to set</param>
         /// <param name="indices">The </param>
@@ -530,7 +530,7 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     Set a <see cref="IArraySlice"/> at given <see cref="indices"/>.
+        ///     Set a <see cref="IArraySlice"/> at given <paramref name="indices"/>.
         /// </summary>
         /// <param name="value">The value to set</param>
         /// <param name="indices">The </param>
@@ -564,7 +564,7 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     Set a value at given <see cref="indices"/> (long version).
+        ///     Set a value at given <paramref name="indices"/> (long version).
         /// </summary>
         /// <param name="value">An <see cref="NDArray"/>, an <see cref="IArraySlice"/>, a C# array, a boxed scalar, or
         ///     <c>null</c> — Python's <c>None</c> (see <see cref="SetData(NDArray, int[])"/>).</param>
@@ -611,7 +611,7 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     Set a <see cref="NDArray"/> at given <see cref="indices"/> (long version).
+        ///     Set a <see cref="NDArray"/> at given <paramref name="indices"/> (long version).
         /// </summary>
         /// <param name="value">The value; null is Python's <c>None</c>: a float storage stores NaN, complex <c>nan+nanj</c>,
         ///     bool <c>False</c>, a NEP 55 <c>StringDType</c> storage its NA object or <c>'None'</c>, a fixed-width one
@@ -636,7 +636,7 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     Set a <see cref="IArraySlice"/> at given <see cref="indices"/> (long version).
+        ///     Set a <see cref="IArraySlice"/> at given <paramref name="indices"/> (long version).
         /// </summary>
         public void SetData(IArraySlice value, params long[] indices)
         {
@@ -1197,7 +1197,7 @@ namespace NumSharp.Backends
         #endregion
 
         /// <summary>
-        ///     Sets <see cref="values"/> as the internal data source and changes the internal storage data type to <see cref="values"/> type.
+        ///     Sets <paramref name="values"/> as the internal data source and changes the internal storage data type to <paramref name="values"/> type.
         /// </summary>
         /// <param name="values"></param>
         /// <remarks>Copies values only if <paramref name="values"/> type does not match <see cref="DType"/> and doesn't change shape.</remarks>
@@ -1217,7 +1217,7 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     Sets <see cref="values"/> as the internal data source and changes the internal storage data type to <see cref="values"/> type.
+        ///     Sets <paramref name="values"/> as the internal data source and changes the internal storage data type to <paramref name="values"/> type.
         /// </summary>
         /// <param name="values"></param>
         /// <remarks>Does not copy values and doesn't change shape.</remarks>
@@ -1233,7 +1233,7 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     Sets <see cref="values"/> as the internal data source and changes the internal storage data type to <see cref="values"/> type.
+        ///     Sets <paramref name="values"/> as the internal data source and changes the internal storage data type to <paramref name="values"/> type.
         /// </summary>
         /// <param name="values"></param>
         /// <param name="dtype"></param>
@@ -1299,7 +1299,7 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     Sets <see cref="nd"/> as the internal data storage and changes the internal storage data type to <see cref="nd"/> type.
+        ///     Sets <paramref name="nd"/> as the internal data storage and changes the internal storage data type to <paramref name="nd"/> type.
         /// </summary>
         /// <param name="nd"></param>
         /// <remarks>Does not copy values and does change shape and dtype.</remarks>
@@ -1323,7 +1323,7 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     Sets <see cref="values"/> as the internal data source and changes the internal storage data type to <see cref="values"/> type.
+        ///     Sets <paramref name="values"/> as the internal data source and changes the internal storage data type to <paramref name="values"/> type.
         /// </summary>
         /// <param name="values"></param>
         /// <param name="shape">The shape to set in this storage. (without checking if shape matches storage)</param>
@@ -1340,7 +1340,7 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     Sets <see cref="values"/> as the internal data source and changes the internal storage data type to <see cref="values"/> type.
+        ///     Sets <paramref name="values"/> as the internal data source and changes the internal storage data type to <paramref name="values"/> type.
         /// </summary>
         /// <param name="values"></param>
         /// <param name="shape">The shape to set in this storage. (without checking if shape matches storage)</param>
@@ -1353,7 +1353,7 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     Sets <see cref="values"/> as the internal data source and changes the internal storage data type to <see cref="values"/> type.
+        ///     Sets <paramref name="values"/> as the internal data source and changes the internal storage data type to <paramref name="values"/> type.
         /// </summary>
         /// <param name="values"></param>
         /// <param name="dtype"></param>
@@ -1422,7 +1422,7 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     Sets <see cref="nd"/> as the internal data storage and changes the internal storage data type to <see cref="nd"/> type.
+        ///     Sets <paramref name="nd"/> as the internal data storage and changes the internal storage data type to <paramref name="nd"/> type.
         /// </summary>
         /// <param name="nd"></param>
         /// <param name="shape">The shape to set in this storage. (without checking if shape matches storage)</param>

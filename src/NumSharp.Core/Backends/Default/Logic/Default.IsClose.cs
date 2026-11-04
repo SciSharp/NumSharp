@@ -14,7 +14,7 @@ namespace NumSharp.Backends
         /// Warning: The default `atol` is not appropriate for comparing numbers
         /// that are much smaller than one(see Notes).
         ///
-        /// See also <seealso cref="allclose"/>
+        /// See also <seealso cref="np.allclose(NDArray, NDArray, double, double, bool)"/>
         ///
         ///Notes:
         /// For finite values, isclose uses the following equation to test whether

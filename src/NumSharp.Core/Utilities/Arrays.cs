@@ -102,7 +102,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="source">The array to insert copy and insert value to.</param>
         /// <param name="index">The index to insert to.</param>
-        /// <returns>a copy of <see cref="source"/> with the appended value.</returns>
+        /// <returns>a copy of <paramref name="source"/> with the appended value.</returns>
         public static T[] AppendAt<T>(T[] source, int index, T value)
         {
             var ret = (T[])source.Clone();
@@ -115,7 +115,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="source">The array to remove <paramref name="index"/> from.</param>
         /// <param name="index">The index to remove.</param>
-        /// <returns>A copy of <see cref="source"/> without given <paramref name="index"/></returns>
+        /// <returns>A copy of <paramref name="source"/> without given <paramref name="index"/></returns>
         [MethodImpl(OptimizeAndInline)]
         public static T[] RemoveAt<T>(this T[] source, int index)
         {
@@ -131,7 +131,7 @@ namespace NumSharp.Utilities
         /// <param name="index">The index to ignore.</param>
         /// <param name="destinition">The copying destinition</param>
         /// <param name="destOffset">The <paramref name="destinition"/>'s offset</param>
-        /// <returns>A copy of <see cref="source"/> without given <paramref name="index"/></returns>
+        /// <returns>A copy of <paramref name="source"/> without given <paramref name="index"/></returns>
         [MethodImpl(OptimizeAndInline)]
         public static void CopyToExceptAt<T>(this T[] source, int index, T[] destinition, int destOffset = 0)
         {
@@ -150,7 +150,7 @@ namespace NumSharp.Utilities
         /// <param name="index">The index to ignore.</param>
         /// <param name="destinition">The copying destinition</param>
         /// <param name="destOffset">The <paramref name="destinition"/>'s offset</param>
-        /// <returns>A copy of <see cref="source"/> without given <paramref name="index"/></returns>
+        /// <returns>A copy of <paramref name="source"/> without given <paramref name="index"/></returns>
         [MethodImpl(OptimizeAndInline)]
         public static void CopyToExceptAt<T>(this T[] source, int sourceOffset, int index, T[] destinition, int destOffset = 0)
         {

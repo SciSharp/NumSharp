@@ -140,10 +140,14 @@ namespace NumSharp
         ///     'latin1')</c>): every byte is one character. NumPy decodes each line on its own as it reads it
         ///     (<c>bytes.decode</c>: a BOM codec reads a BOM per line, native little-endian without one), so an unknown
         ///     name raises <see cref="LookupError"/> at the first line, and a stream without lines never meets it.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="stream"/> is null.</exception>
         /// <exception cref="LookupError">An unknown or non-text <paramref name="encoding"/>, once the stream has a line.</exception>
         /// <exception cref="NotSupportedException">A Python codec NumSharp does not implement, once the stream has a
         ///     line.</exception>
-        /// <inheritdoc cref="loadtxt(string,DType,object,string,object,int,int[],bool,int,string,int?,string)"/>
+        /// <inheritdoc cref="loadtxt(string,DType,object,string,object,int,int[],bool,int,string,int?,string)" path="/param[@name!='fname' and @name!='encoding']"/>
+        /// <inheritdoc cref="loadtxt(string,DType,object,string,object,int,int[],bool,int,string,int?,string)" path="/returns"/>
+        /// <inheritdoc cref="loadtxt(string,DType,object,string,object,int,int[],bool,int,string,int?,string)" path="/exception[contains(@cref,'ValueError') or contains(@cref,'TypeError') or contains(@cref,'IndexError') or contains(@cref,'UnicodeDecodeError')]"/>
+        /// <inheritdoc cref="loadtxt(string,DType,object,string,object,int,int[],bool,int,string,int?,string)" path="/remarks"/>
         public static NDArray loadtxt(Stream stream, [Optional, DefaultParameterValue(null)] DType dtype, [Optional, DefaultParameterValue("#")] object comments,
             string delimiter = null, object converters = null, int skiprows = 0, int[] usecols = null,
             bool unpack = false, int ndmin = 0, string encoding = null, int? max_rows = null, string quotechar = null)
@@ -178,7 +182,11 @@ namespace NumSharp
         ///     is the field's Latin-1 form (a field holding a character past <c>U+00FF</c> fails its conversion with
         ///     NumPy's <see cref="UnicodeEncodeError"/> as the cause). Any other name is accepted and ignored, as NumPy
         ///     ignores it for a text stream.</param>
-        /// <inheritdoc cref="loadtxt(string,DType,object,string,object,int,int[],bool,int,string,int?,string)"/>
+        /// <exception cref="ArgumentNullException"><paramref name="reader"/> is null.</exception>
+        /// <inheritdoc cref="loadtxt(string,DType,object,string,object,int,int[],bool,int,string,int?,string)" path="/param[@name!='fname' and @name!='encoding']"/>
+        /// <inheritdoc cref="loadtxt(string,DType,object,string,object,int,int[],bool,int,string,int?,string)" path="/returns"/>
+        /// <inheritdoc cref="loadtxt(string,DType,object,string,object,int,int[],bool,int,string,int?,string)" path="/exception[contains(@cref,'ValueError') or contains(@cref,'TypeError') or contains(@cref,'IndexError')]"/>
+        /// <inheritdoc cref="loadtxt(string,DType,object,string,object,int,int[],bool,int,string,int?,string)" path="/remarks"/>
         public static NDArray loadtxt(TextReader reader, [Optional, DefaultParameterValue(null)] DType dtype, [Optional, DefaultParameterValue("#")] object comments,
             string delimiter = null, object converters = null, int skiprows = 0, int[] usecols = null,
             bool unpack = false, int ndmin = 0, string encoding = null, int? max_rows = null, string quotechar = null)
@@ -197,7 +205,11 @@ namespace NumSharp
         ///     and a quoted field may continue into the next element.</param>
         /// <param name="encoding">As for a <see cref="TextReader"/>: only <c>"bytes"</c> has an effect (a converter's
         ///     input is the field's Latin-1 form).</param>
-        /// <inheritdoc cref="loadtxt(string,DType,object,string,object,int,int[],bool,int,string,int?,string)"/>
+        /// <exception cref="ArgumentNullException"><paramref name="lines"/> is null.</exception>
+        /// <inheritdoc cref="loadtxt(string,DType,object,string,object,int,int[],bool,int,string,int?,string)" path="/param[@name!='fname' and @name!='encoding']"/>
+        /// <inheritdoc cref="loadtxt(string,DType,object,string,object,int,int[],bool,int,string,int?,string)" path="/returns"/>
+        /// <inheritdoc cref="loadtxt(string,DType,object,string,object,int,int[],bool,int,string,int?,string)" path="/exception[contains(@cref,'ValueError') or contains(@cref,'TypeError') or contains(@cref,'IndexError')]"/>
+        /// <inheritdoc cref="loadtxt(string,DType,object,string,object,int,int[],bool,int,string,int?,string)" path="/remarks"/>
         /// <exception cref="TypeError">A null element (<c>non-string returned while reading data</c>).</exception>
         /// <exception cref="AttributeError">A null element when multiple or multi-character comments are stripped from each
         ///     line first (NumPy's <c>_preprocess_comments</c> meets it: <c>'NoneType' object has no attribute

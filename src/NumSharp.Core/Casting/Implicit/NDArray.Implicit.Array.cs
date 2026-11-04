@@ -66,10 +66,11 @@ namespace NumSharp
         /// <returns>The 0-d text array.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="str"/> is null.</exception>
         /// <remarks>
-        ///     Until 2026-10-12 a text shaped like <c>"[1, 2, 3]"</c> or <c>"[1 2; 3 4]"</c> was parsed into a float64 vector or
-        ///     matrix here (a legacy NumSharp shorthand). NumPy never reads a str as numbers in <c>np.array</c>
-        ///     (<c>np.array('[1, 2, 3]')</c> is the 0-d <c>&lt;U9</c> text), and the owner decided (strings plan D6) to drop
-        ///     the shorthand; <see cref="np.matrix(string, DType, bool)"/> keeps its own literal grammar (<c>"1 2; 3 4"</c>).
+        ///     A text shaped like <c>"[1, 2, 3]"</c> or <c>"[1 2; 3 4]"</c> stays text, because NumPy never reads a str as
+        ///     numbers in <c>np.array</c> (<c>np.array('[1, 2, 3]')</c> is the 0-d <c>&lt;U9</c> text). Breaking change: older
+        ///     NumSharp parsed such a text into a float64 vector or matrix here. Parse delimited numbers with
+        ///     <c>np.fromstring</c>; <see cref="np.matrix(string, DType, bool)"/> keeps its own literal grammar
+        ///     (<c>"1 2; 3 4"</c>).
         /// </remarks>
         public static implicit operator NDArray(string str)
         {

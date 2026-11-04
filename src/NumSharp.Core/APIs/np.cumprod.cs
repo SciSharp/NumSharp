@@ -16,7 +16,7 @@ namespace NumSharp
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range for the input (a 0-d input counts as 1-D).</exception>
         /// <exception cref="TypeError">Text, or a string <paramref name="typeCode"/>: NumPy's refusal (its verbatim text; no multiply loop accumulates text).</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not have the result's shape (<c>provided out is the wrong size for the accumulation.</c>).</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.cumprod.html. The facade holds only the matrix boundary; NumPy's whole call is <see cref="Backends.TensorEngine.ReduceCumMul"/>.</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.cumprod.html. The facade holds only the matrix boundary; NumPy's whole call is <see cref="TensorEngine.ReduceCumMul"/>.</remarks>
         [NDScoped]
         public static NDArray cumprod(NDArray arr, int? axis = null, DType typeCode = null, NDArray @out = null)
         {

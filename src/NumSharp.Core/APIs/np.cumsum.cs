@@ -16,7 +16,7 @@ namespace NumSharp
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range for the input (a 0-d input counts as 1-D).</exception>
         /// <exception cref="TypeError">Fixed-width text, or a string <paramref name="typeCode"/>, where NumPy's loop resolution refuses (its verbatim text); a <c>StringDType</c> input concatenates.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not have the result's shape (<c>provided out is the wrong size for the accumulation.</c>).</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.cumsum.html. The facade holds only the matrix boundary; NumPy's whole call is <see cref="Backends.TensorEngine.ReduceCumAdd"/>.</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.cumsum.html. The facade holds only the matrix boundary; NumPy's whole call is <see cref="TensorEngine.ReduceCumAdd"/>.</remarks>
         [NDScoped]
         public static NDArray cumsum(NDArray arr, int? axis = null, DType typeCode = null, NDArray @out = null)
         {

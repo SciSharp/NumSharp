@@ -125,8 +125,8 @@ namespace NumSharp
             ///     <c>ValueError: StringDType only allows string data when string coercion is disabled.</c></param>
             /// <returns>A fresh descriptor: <c>StringDType()</c> or <c>StringDType(coerce=False)</c>.</returns>
             /// <remarks>
-            ///     The overload without <c>na_object</c> keeps NumPy's "not given" apart from <c>na_object=None</c>
-            ///     (decision D5): <c>StringDType()</c> has no missing-data object at all, while
+            ///     The overload without <c>na_object</c> keeps NumPy's "not given" apart from <c>na_object=None</c>:
+            ///     <c>StringDType()</c> has no missing-data object at all, while
             ///     <c>StringDType(na_object: null)</c> has <c>None</c> as its sentinel.
             /// </remarks>
             public static DType StringDType(bool coerce = true) => DTypeRegistry.VString.Descr(false, null, coerce);
@@ -135,7 +135,7 @@ namespace NumSharp
             ///     <c>np.dtypes.StringDType(na_object=…, coerce=True)</c>: a NEW variable-width string descriptor with a
             ///     missing-data sentinel.
             /// </summary>
-            /// <param name="na_object">The sentinel (decision D5): <see langword="null"/> is Python's <c>None</c>; a
+            /// <param name="na_object">The sentinel: <see langword="null"/> is Python's <c>None</c>; a
             ///     <see cref="double"/> / <see cref="float"/> NaN is <c>nan</c> (NaN-like: <c>StringDType(na_object=nan)</c>
             ///     equals <c>StringDType(na_object=np.nan)</c>); a <see cref="string"/> (or a <see cref="char"/>) is a string
             ///     sentinel, which missing values read as in string operations; any other value is an "other" sentinel compared

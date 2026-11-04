@@ -20,7 +20,7 @@ namespace NumSharp.Utilities
         #region Cloning
 
         /// <summary>
-        ///     Creates a clone of given <see cref="sourceArray"/>.
+        ///     Creates a clone of given <paramref name="sourceArray"/>.
         /// </summary>
         /// <param name="sourceArray">The array to clone</param>
         /// <remarks>If possible, for performance reasons use generic version of this method.</remarks>
@@ -55,7 +55,7 @@ namespace NumSharp.Utilities
         }
 
         /// <summary>
-        ///     Creates a clone of given <see cref="sourceArray"/>.
+        ///     Creates a clone of given <paramref name="sourceArray"/>.
         /// </summary>
         /// <param name="sourceArray">The array to clone</param>
         public static T[] Clone<T>(T[] sourceArray)
@@ -72,7 +72,7 @@ namespace NumSharp.Utilities
         }
 
         /// <summary>
-        ///     Creates a clone of given <see cref="sourceArray"/> using <see cref="Array.CopyTo(System.Array,int)"/>.
+        ///     Creates a clone of given <paramref name="sourceArray"/> using <see cref="Array.CopyTo(System.Array,int)"/>.
         /// </summary>
         /// <param name="sourceArray">The array to clone</param>
         public static T[,] Clone<T>(T[,] sourceArray)
@@ -89,7 +89,7 @@ namespace NumSharp.Utilities
         }
 
         /// <summary>
-        ///     Creates a clone of given <see cref="sourceArray"/> using <see cref="Array.CopyTo(System.Array,int)"/>.
+        ///     Creates a clone of given <paramref name="sourceArray"/> using <see cref="Array.CopyTo(System.Array,int)"/>.
         /// </summary>
         /// <param name="sourceArray">The array to clone</param>
         public static T[,,] Clone<T>(T[,,] sourceArray)
@@ -106,7 +106,7 @@ namespace NumSharp.Utilities
         }
 
         /// <summary>
-        ///     Creates a clone of given <see cref="sourceArray"/> using <see cref="Array.CopyTo(System.Array,int)"/>.
+        ///     Creates a clone of given <paramref name="sourceArray"/> using <see cref="Array.CopyTo(System.Array,int)"/>.
         /// </summary>
         /// <param name="sourceArray">The array to clone</param>
         public static T[,,,] Clone<T>(T[,,,] sourceArray)
@@ -127,12 +127,12 @@ namespace NumSharp.Utilities
         #region NonGeneric To Type
 
         /// <summary>
-        ///     Converts <see cref="sourceArray"/> to an array of type <see cref="returnType"/>.
+        ///     Converts <paramref name="sourceArray"/> to an array of type <paramref name="returnType"/>.
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <param name="returnType">The type to convert the data to</param>
         /// <returns></returns>
-        /// <remarks>If <see cref="sourceArray"/>'s element type equals to <see cref="returnType"/> then a copy is returned</remarks>
+        /// <remarks>If <paramref name="sourceArray"/>'s element type equals to <paramref name="returnType"/> then a copy is returned</remarks>
         public static Array To(Array sourceArray, Type returnType)
         {
             if (sourceArray == null)
@@ -176,12 +176,12 @@ namespace NumSharp.Utilities
         }
 
         /// <summary>
-        ///     Converts <see cref="sourceArray"/> to an array of type <see cref="typeCode"/>.
+        ///     Converts <paramref name="sourceArray"/> to an array of type <paramref name="typeCode"/>.
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <param name="typeCode">The type to convert the data to</param>
         /// <returns></returns>
-        /// <remarks>If <see cref="sourceArray"/>'s element type equals to <see cref="typeCode"/> then a copy is returned</remarks>
+        /// <remarks>If <paramref name="sourceArray"/>'s element type equals to <paramref name="typeCode"/> then a copy is returned</remarks>
         public static Array To(Array sourceArray, NPTypeCode typeCode)
         {
             switch (typeCode)
@@ -211,12 +211,12 @@ namespace NumSharp.Utilities
         }
 
         /// <summary>
-        ///     Converts <see cref="sourceArray"/> to an array of type <see cref="returnType"/>.
+        ///     Converts <paramref name="sourceArray"/> to an array of type <paramref name="returnType"/>.
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <param name="returnType">The type to convert the data to</param>
         /// <returns></returns>
-        /// <remarks>If <see cref="sourceArray"/>'s element type equals to <see cref="returnType"/> then a copy is returned</remarks>
+        /// <remarks>If <paramref name="sourceArray"/>'s element type equals to <paramref name="returnType"/> then a copy is returned</remarks>
         public static T[] To<T>(Array sourceArray)
         {
             return (T[])To(sourceArray, typeof(T)); // no need for direct cast.

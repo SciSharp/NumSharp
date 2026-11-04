@@ -23,7 +23,7 @@ namespace NumSharp
             : x.TensorEngine.ATanh(x, dtype, @out, where);
 
         /// <summary>
-        ///     Inverse hyperbolic tangent, element-wise (Array-API alias of <see cref="arctanh(NDArray, NDArray, NDArray, NPTypeCode?)"/>, added in NumPy 2.0).
+        ///     Inverse hyperbolic tangent, element-wise (Array-API alias of <see cref="arctanh(NDArray, NDArray, NDArray, DType)"/>, added in NumPy 2.0).
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atanh.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>

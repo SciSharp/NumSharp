@@ -213,7 +213,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Phase angle in radians (np.angle, radians only — no <c>deg=</c> in the fused primitive).
         /// complex128 → float64 as <c>atan2(imag, real)</c>; a REAL input is <c>atan2(0, x)</c> (0 for
-        /// x ≥ 0, pi for x &lt; 0, NaN → NaN) at NumPy's per-dtype float tier (<see cref="np.AngleRealTier"/>:
+        /// x ≥ 0, pi for x &lt; 0, NaN → NaN) at NumPy's per-dtype float tier (<c>DefaultEngine.AngleRealTier</c>:
         /// bool/int32+/f64 → f64, int8/uint8/f16 → f16, int16/uint16/char/f32 → f32). NOT a ufunc / no
         /// engine kernel — the fused expression engine handles it in <c>UnaryNode.EmitScalar</c>
         /// (<see cref="NumSharp.Utilities.NDComplexMath.Angle"/> for a complex child, <c>Math.Atan2(0, x)</c>

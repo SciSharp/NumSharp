@@ -137,7 +137,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <summary>Total cell bytes (<see cref="Count"/> × 16; the text in the allocator is not counted, as NumPy's <c>nbytes</c>).</summary>
         public long BytesLength => Count * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
 
-        /// <summary>Always <see cref="NPTypeCode.String"/>: the lane shared with <c>S</c> / <c>U</c> (decision D4; the descriptor's
+        /// <summary>Always <see cref="NPTypeCode.String"/>: the lane shared with <c>S</c> / <c>U</c> (the descriptor's
         ///     class tells the layouts apart).</summary>
         public NPTypeCode TypeCode => NPTypeCode.String;
 

@@ -10,7 +10,7 @@ namespace NumSharp
 
         /// <summary>
         ///     Join a sequence of arrays along an existing axis.
-        ///     Alias of <see cref="concatenate(NDArray[], int?, NDArray, NPTypeCode?, string)"/>
+        ///     Alias of <see cref="concatenate(NDArray[], int?, NDArray, DType, string)"/>
         ///     introduced in NumPy 2.0 for Array API compatibility.
         /// </summary>
         /// <param name="arrays">

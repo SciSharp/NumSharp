@@ -45,7 +45,7 @@ namespace NumSharp
         /// </para>
         ///
         /// <para>The body is NumPy's C function <c>multiarray.correlate2</c>, the engine member
-        /// <see cref="Backends.TensorEngine.Correlate2"/>. A <c>numpy.matrix</c> operand is two-dimensional, so it is
+        /// <see cref="TensorEngine.Correlate2"/>. A <c>numpy.matrix</c> operand is two-dimensional, so it is
         /// refused as too deep, as in NumPy.</para>
         /// </remarks>
         /// <exception cref="ValueError">First an unknown <paramref name="mode"/> (<c>Use one of 'valid', 'same', or 'full' for
@@ -59,7 +59,7 @@ namespace NumSharp
         /// <exception cref="TypeError">A null <paramref name="mode"/> (NumPy's <c>None</c>): <c>convolve/correlate mode not
         ///     understood</c>, before any operand check. A <c>StringDType</c> operand: NumPy's legacy-only descriptor
         ///     refusal, or Python's error from the first product of the OBJECT fallback.</exception>
-        /// <exception cref="NotSupportedException">A <c>StringDType</c> operand whose OBJECT product NumPy computes (an
+        /// <exception cref="System.NotSupportedException">A <c>StringDType</c> operand whose OBJECT product NumPy computes (an
         ///     object array, which NumSharp does not have).</exception>
         public static NDArray correlate(NDArray a, NDArray v, string mode = "valid")
         {

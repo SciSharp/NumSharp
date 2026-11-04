@@ -139,7 +139,7 @@ np.vander(np.array([1, 2, 3, 4]), 3);
 ```csharp
 np.zeros((2, 3));                      // 2×3 of 0.0  (float64)
 np.ones((2, 3, 2));                    // 2×3×2 of 1.0
-np.empty((100,), np.int32);            // uninitialized int32
+np.empty(100, np.int32);               // uninitialized int32 (a 1-D shape is an int; C# has no (100,) tuple)
 np.full((2, 2), 7.5);                  // filled with 7.5
 np.zeros((2, 3), np.int32);            // dtype override
 ```

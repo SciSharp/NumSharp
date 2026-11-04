@@ -5,7 +5,7 @@ namespace NumSharp
     public static partial class np
     {
         /// <summary>
-        ///     Compute <c>x1 * 2^x2</c> element-wise — the inverse of <see cref="frexp(NDArray)"/>. Given a
+        ///     Compute <c>x1 * 2^x2</c> element-wise — the inverse of <see cref="frexp(NDArray, NDArray, NDArray, NDArray)"/>. Given a
         ///     mantissa and an integer power of two it reconstructs the value (<c>ldexp(*frexp(x)) == x</c>).
         ///     Mirrors NumPy's ufunc <c>ldexp(x1, x2)</c>.
         /// </summary>

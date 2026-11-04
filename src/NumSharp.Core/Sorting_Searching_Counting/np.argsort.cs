@@ -34,7 +34,7 @@ namespace NumSharp
         /// <exception cref="ValueError">A <c>StringDType</c> line of two or more elements that holds an NA of a descriptor
         ///     whose NA object is neither a string nor NaN-like (NumPy's <c>Cannot compare null that is not a nan-like
         ///     value</c>, raised after the lines before it were sorted).</exception>
-        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
+        /// <exception cref="System.OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         public static NDArray argsort(NDArray a, int? axis = -1, string kind = null, object order = null, bool? stable = null)
             => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((a, axis, kind, order, stable), static s => argsort(s.a, s.axis, s.kind, s.order, s.stable))

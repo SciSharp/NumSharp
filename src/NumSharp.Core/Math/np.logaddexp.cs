@@ -27,7 +27,7 @@ namespace NumSharp
         /// <summary>
         ///     Logarithm of the sum of exponentiations of the inputs in base-2. <br></br>
         ///     Calculates <c>log2(2**x1 + 2**x2)</c>, element-wise — the base-2 analogue of
-        ///     <see cref="logaddexp(NDArray,NDArray,NDArray,NDArray,NPTypeCode?)"/>, useful in machine
+        ///     <see cref="logaddexp(NDArray, NDArray, NDArray, NDArray, DType)"/>, useful in machine
         ///     learning when the calculated probabilities are expressed in base-2.
         ///     Mirrors NumPy's ufunc signature: <c>logaddexp2(x1, x2, /, out=None, *, where=True, dtype=None)</c>.
         /// </summary>

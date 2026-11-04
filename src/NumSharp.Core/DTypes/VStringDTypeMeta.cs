@@ -26,11 +26,11 @@ namespace NumSharp
     ///     <see cref="np.dtypes.StringDType(object, bool)"/> or <c>np.dtype("T")</c>.
     ///     </para>
     ///     <para>
-    ///     <b>One storage lane with <c>S</c> / <c>U</c> (decision D4).</b> Arrays of this class use the
-    ///     <see cref="NPTypeCode.String"/> lane, which therefore no longer says how an element is laid out: the descriptor's
+    ///     <b>One storage lane with <c>S</c> / <c>U</c>.</b> Arrays of this class use the
+    ///     <see cref="NPTypeCode.String"/> lane, which therefore does not say how an element is laid out: the descriptor's
     ///     class does. Every route that moves elements as opaque fixed-width blobs is gated on <see cref="StringDTypeMeta"/>,
-    ///     never on the type code, and a <c>StringDType</c> array takes its own, reference-aware paths (P1.3 / P1.4 of
-    ///     <c>docs/plans/strings-phase1-completion.md</c>). The class owns neither the lane nor the C# <see cref="string"/>
+    ///     never on the type code, and a <c>StringDType</c> array takes its own, reference-aware paths (each element is a
+    ///     16-byte cell whose text an allocator owns). The class owns neither the lane nor the C# <see cref="string"/>
     ///     type in the registry: <c>(DType)NPTypeCode.String</c> and <c>np.dtype(typeof(string))</c> stay <c>&lt;U</c>.
     ///     </para>
     ///     <para>
@@ -256,7 +256,7 @@ namespace NumSharp
         /// <inheritdoc/>
         /// <remarks>
         ///     A cell points into its buffer's allocator, so it has no byte order and no meaning outside its buffer. With no
-        ///     source (in place) the swap is the identity - the owner's decision D14 for <c>ndarray.byteswap</c>, where
+        ///     source (in place) the swap is the identity, as <c>ndarray.byteswap</c> answers, where
         ///     NumPy 2.4.2 crashes the process: swapping a cell's bytes would corrupt its offset or pointer. A source is
         ///     refused: cells cannot be copied as raw bytes (NumPy refuses a buffer for a dtype that holds references, and
         ///     a copy of the array duplicates its strings through the allocator instead).

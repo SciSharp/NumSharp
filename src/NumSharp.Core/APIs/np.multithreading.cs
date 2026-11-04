@@ -16,7 +16,7 @@ namespace NumSharp
         ///     Multithreading is disabled by default, so the default behavior — and the exact
         ///     summation order — is unchanged unless you opt in.
         ///     <para>
-        ///     Currently this controls the fused 1-D dot product (<see cref="dot(NDArray,NDArray)"/>
+        ///     Currently this controls the fused 1-D dot product (<see cref="dot(NDArray, NDArray, NDArray)"/>
         ///     for vector·vector) on contiguous <c>float</c> / <c>double</c> inputs. Only large
         ///     vectors are parallelized; small and medium ones stay single-threaded because thread
         ///     fan-out would cost more than it saves. With multithreading on, the inner product is

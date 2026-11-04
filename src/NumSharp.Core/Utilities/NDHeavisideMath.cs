@@ -40,7 +40,8 @@ namespace NumSharp.Utilities
     /// carries only the <c>== 0</c> / <c>&lt; 0</c> / else split.</para>
     ///
     /// <para>The whole function is comparison-and-select with no transcendental, which is why the SIMD
-    /// driver (<see cref="NDHeavisideMath.Simd"/> in the sibling partial) can vectorize it branchlessly
+    /// driver (the <c>Heaviside*F64</c> / <c>Heaviside*F32</c> kernels of the sibling partial <c>NDHeavisideMath.Simd.cs</c>,
+    /// gated by <see cref="SimdAvailable"/>) can vectorize it branchlessly
     /// and stay bit-identical to these scalars lane-for-lane — unlike NumPy, whose <c>heaviside</c> is a
     /// scalar <c>BINARY_LOOP</c> with no SIMD on any platform.</para>
     /// </summary>

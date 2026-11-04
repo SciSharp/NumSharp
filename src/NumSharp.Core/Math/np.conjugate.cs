@@ -29,7 +29,7 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Alias of <see cref="conjugate(NDArray, NDArray, NDArray, NPTypeCode?)"/> — return the
+        ///     Alias of <see cref="conjugate(NDArray, NDArray, NDArray, DType)"/> — return the
         ///     complex conjugate, element-wise (NumPy: <c>np.conj is np.conjugate</c>).
         /// </summary>
         /// <param name="x">Input array.</param>

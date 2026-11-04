@@ -619,7 +619,7 @@ np.@char.rsplit(words, maxsplit: 1);            // ['a b', 'c'], ['  lead', 'tra
 np.@char.splitlines(np.array(new[] { "a\nb\r\nc" }), true);   // [list(['a\n', 'b\r\n', 'c'])]
 w.item(0);                                      // a List<object>: "a", "b", "c"
 w.tolist();                                     // the nested lists, every piece exact
-w[0];                                           // a new 1-D U array of the pieces of element 0
+w[0];                                           // the list of element 0: a 0-d list array, printed ['a', 'b', 'c']
 w["1:"];                                        // an NDListArray view of the last two elements
 w.ToString(true);                               // array([list(['a', 'b', 'c']), ...], dtype=object)
 ```
@@ -666,7 +666,10 @@ w.mean(dtype: np.@bool, where: np.array(new[] { true, false, true }));   // True
 
 A `dtype=` whose NumPy result is not a list raises `NotSupportedException`: `w.sum(dtype: np.@bool)` is NumPy's `np.True_`, which `np.sum(w.astype(np.@bool), np.@bool)` computes.
 
-Differences from NumPy: `w[i, j]` returns a new array of the pieces, where NumPy returns the Python list (`w.item(i, j)` returns the list).
+Differences from NumPy:
+
+- An element access (`w[0]`, `w[i, j]`) returns a 0-d list array that stands for the list, where NumPy returns the Python list itself. `w.item(i, j)` returns the list as a `List<object>`.
+- Iterating a 1-D list array (`foreach (NDArray pieces in w)`) yields the pieces of each element as a new `U` or `S` array, where NumPy yields the lists.
 
 Measured against NumPy 2.4.2 (pinned to two cores, 1,000 to 1,000,000 strings): 4.6 to 48 times as fast, 12.6 times on average.
 

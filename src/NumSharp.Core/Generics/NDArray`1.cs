@@ -79,7 +79,7 @@ namespace NumSharp.Generic
         /// </summary>
         /// <param name="size">The size as a single dimension shape</param>
         /// <param name="fillZeros">Should set the values of the new allocation to default(dtype)? otherwise - old memory noise</param>
-        /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+        /// <remarks>This constructor calls <see cref="NumSharp.Backends.UnmanagedStorage.Allocate(NumSharp.Shape, NumSharp.DType, bool)"/></remarks>
         public NDArray(int size, bool fillZeros) : base(InfoOf<TDType>.NPTypeCode, size, fillZeros)
         { }
 
@@ -88,7 +88,7 @@ namespace NumSharp.Generic
         /// </summary>
         /// <param name="size">The size as a single dimension shape</param>
         /// <param name="fillZeros">Should set the values of the new allocation to default(dtype)? otherwise - old memory noise</param>
-        /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+        /// <remarks>This constructor calls <see cref="NumSharp.Backends.UnmanagedStorage.Allocate(NumSharp.Shape, NumSharp.DType, bool)"/></remarks>
         public NDArray(long size, bool fillZeros) : base(InfoOf<TDType>.NPTypeCode, size, fillZeros)
         { }
 
@@ -143,21 +143,21 @@ namespace NumSharp.Generic
         /// type and shape are given.
         /// </summary>
         /// <param name="shape">Shape of NDArray</param>
-        /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+        /// <remarks>This constructor calls <see cref="NumSharp.Backends.UnmanagedStorage.Allocate(NumSharp.Shape, NumSharp.DType, bool)"/></remarks>
         public NDArray(Shape shape) : base(InfoOf<TDType>.NPTypeCode, shape) { }
 
         /// <summary>
         ///     Constructor which initialize elements with length of <paramref name="size"/>
         /// </summary>
         /// <param name="size">The size as a single dimension shape</param>
-        /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+        /// <remarks>This constructor calls <see cref="NumSharp.Backends.UnmanagedStorage.Allocate(NumSharp.Shape, NumSharp.DType, bool)"/></remarks>
         public NDArray(int size) : base(InfoOf<TDType>.NPTypeCode, size) { }
 
         /// <summary>
         ///     Constructor which initialize elements with length of <paramref name="size"/>
         /// </summary>
         /// <param name="size">The size as a single dimension shape</param>
-        /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+        /// <remarks>This constructor calls <see cref="NumSharp.Backends.UnmanagedStorage.Allocate(NumSharp.Shape, NumSharp.DType, bool)"/></remarks>
         public NDArray(long size) : base(InfoOf<TDType>.NPTypeCode, size) { }
 
         /// <summary>
@@ -167,7 +167,7 @@ namespace NumSharp.Generic
         /// <param name="dtype">internal data type</param>
         /// <param name="shape">Shape of NDArray</param>
         /// <param name="fillZeros">Should set the values of the new allocation to default(dtype)? otherwise - old memory noise</param>
-        /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+        /// <remarks>This constructor calls <see cref="NumSharp.Backends.UnmanagedStorage.Allocate(NumSharp.Shape, NumSharp.DType, bool)"/></remarks>
         public NDArray(Shape shape, bool fillZeros) : base(InfoOf<TDType>.NPTypeCode, shape, fillZeros) { }
 
         /// <summary>

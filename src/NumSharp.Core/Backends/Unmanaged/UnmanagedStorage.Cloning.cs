@@ -630,7 +630,7 @@ namespace NumSharp.Backends
         ///     A freshly-allocated <see cref="IArraySlice"/> whose
         ///     <c>Count == _shape.size</c>. For contiguous shapes the
         ///     elements come from <c>InternalArray[_shape.offset.._shape.offset + _shape.size)</c>
-        ///     via <see cref="IArraySlice.Slice(int, int)"/> + Clone; for strided /
+        ///     via <see cref="IArraySlice.Slice(long, long)"/> + Clone; for strided /
         ///     broadcast / transposed shapes they are materialised via <see cref="NDIter.Copy"/>.
         /// </returns>
         /// <remarks>

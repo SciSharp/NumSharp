@@ -60,7 +60,7 @@ namespace NumSharp
     ///     A reusable vectorized wrapper around a C# delegate — the object <see cref="np.vectorize(Delegate, DType[])"/>
     ///     and <see cref="np.frompyfunc(Delegate, int, int)"/> return, mirroring NumPy's <c>vectorize</c> class.
     ///     Build it once and call it many times: an element-wise instance re-uses one compiled fused kernel across
-    ///     calls (the delegate identity is stable, so <see cref="np.evaluate(NDExpr, NDArray)"/>'s structural cache
+    ///     calls (the delegate identity is stable, so <see cref="np.evaluate(NDExpr, NDArray[], NDArray, NDArray, DType, string, char)"/>'s structural cache
     ///     reuses it), so repeated invocation is cheap.
     /// </summary>
     /// <remarks>

@@ -48,7 +48,7 @@ namespace NumSharp
 
         /// <summary>
         ///     Save an array to a <c>.npy</c> file, converting <paramref name="arr"/> with
-        ///     <see cref="np.asanyarray(in object, Type)"/> first.
+        ///     <see cref="np.asanyarray(in object, DType, string)"/> first.
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.save.html</remarks>
         public static void save(string file, Array arr, bool allow_pickle = true)

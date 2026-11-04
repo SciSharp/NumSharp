@@ -5,7 +5,7 @@ namespace NumSharp
     /// <summary>
     ///     Raised when an operation needs a pluggable compute backend — an
     ///     <see cref="NumSharp.Backends.IBlasBackend"/> assigned to
-    ///     <see cref="NumSharp.Backends.TensorEngine.Blas"/> — and none is installed, or the installed
+    ///     <see cref="NumSharp.TensorEngine.Blas"/> — and none is installed, or the installed
     ///     one declined these operands.
     /// </summary>
     /// <remarks>

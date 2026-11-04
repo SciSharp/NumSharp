@@ -25,7 +25,7 @@
         /// <exception cref="TypeError"><paramref name="x"/> is a bool array (positive has no bool loop: NumPy's
         ///     <c>ufunc 'positive' did not contain a loop with signature matching types &lt;class
         ///     'numpy.dtypes.BoolDType'&gt; -&gt; None</c>), or holds text (no string loop: the class-named text).</exception>
-        /// <remarks>The whole call is the engine's <see cref="Backends.TensorEngine.Positive"/>, as for <c>np.positive</c>
+        /// <remarks>The whole call is the engine's <see cref="TensorEngine.Positive"/>, as for <c>np.positive</c>
         ///     (the np-layer dtype plan, P1c). The operator used to check text itself and return <c>x.copy()</c>: a bool
         ///     operand was copied where NumPy raises, and an F-ordered one came back C-ordered.</remarks>
         public static NDArray operator +(NDArray x) => x.TensorEngine.Positive(x);

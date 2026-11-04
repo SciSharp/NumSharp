@@ -20,7 +20,7 @@ namespace NumSharp
         ///     <c>np.array(a)</c> which always copies (NumPy 2.x: <c>copy=True</c> by default).
         /// </summary>
         /// <param name="nd">Source array.</param>
-        /// <param name="copy">When <c>true</c> (default) the source storage is cloned; when <c>false</c> the storage is shared (alias). For "copy only if needed" semantics use <see cref="asarray(NDArray, Type, char, bool?, NDArray, string)"/>.</param>
+        /// <param name="copy">When <c>true</c> (default) the source storage is cloned; when <c>false</c> the storage is shared (alias). For "copy only if needed" semantics use <see cref="asarray(NDArray, DType, char, bool?, NDArray, string)"/>.</param>
         /// <returns>A new array object. A 0-d source that was built as an explicit 0-d ARRAY
         ///     (<see cref="NDArray.IsExplicitZeroDimArray"/>) gives an explicit 0-d array again, as NumPy's
         ///     <c>np.array(np.array(2))</c> is a 0-d array.</returns>

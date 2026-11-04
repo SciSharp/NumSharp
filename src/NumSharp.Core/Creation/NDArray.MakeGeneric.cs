@@ -11,7 +11,7 @@ namespace NumSharp
         /// </summary>
         /// <remarks>
         ///     The returned <see cref="NDArray{T}"/> shares the same underlying memory block but carries
-        ///     its <b>own</b> shape metadata (via <see cref="UnmanagedStorage.Alias()"/>), so reshaping,
+        ///     its <b>own</b> shape metadata (via <see cref="Backends.UnmanagedStorage.Alias()"/>), so reshaping,
         ///     expanding or otherwise mutating its shape does NOT propagate back to this array — matching
         ///     NumPy's <c>ndarray.view()</c> semantics. Element writes still affect the shared data.
         ///     A fresh header is produced on every call, exactly like NumPy's <c>view()</c>.
@@ -47,7 +47,7 @@ namespace NumSharp
         /// <summary>
         ///     When the dtype already matches, returns an independent typed view (alias) sharing this
         ///     array's data; otherwise converts the storage to <typeparamref name="T"/> via the
-        ///     NDIter-backed <see cref="UnmanagedStorage.Cast{T}"/> (a fresh, owned copy). Never throws
+        ///     NDIter-backed <see cref="Backends.UnmanagedStorage.Cast{T}"/> (a fresh, owned copy). Never throws
         ///     on dtype mismatch.
         /// </summary>
         /// <remarks>

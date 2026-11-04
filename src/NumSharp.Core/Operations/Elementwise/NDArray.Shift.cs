@@ -4,8 +4,8 @@ namespace NumSharp
     ///     Bitwise shift operators for NDArray.
     ///
     ///     NumPy alignment: mirrors <c>__lshift__</c> / <c>__rshift__</c> on <c>ndarray</c>.
-    ///     Wires straight into <see cref="Backends.TensorEngine.LeftShift"/> and
-    ///     <see cref="Backends.TensorEngine.RightShift"/>, which validate integer dtype.
+    ///     Wires straight into <see cref="TensorEngine.LeftShift"/> and
+    ///     <see cref="TensorEngine.RightShift"/>, which validate integer dtype.
     ///
     ///     C# shift operator constraints:
     ///     <list type="bullet">

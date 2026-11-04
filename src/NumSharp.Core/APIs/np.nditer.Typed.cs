@@ -8,7 +8,7 @@ namespace NumSharp
     {
         /// <summary>
         ///     Typed, allocation-free element iteration — the unboxed counterpart of
-        ///     <see cref="nditer(NDArray, string[], string[], NPTypeCode[], char, string, int[][], long[], long)"/>.
+        ///     <see cref="nditer(NDArray, string[], string[], DType[], char, string, int[][], long[], long)"/>.
         ///     Yields <c>ref T</c> straight into the operand's memory, so reading costs a
         ///     dereference and writing goes through to the array.
         ///

@@ -101,18 +101,17 @@ long   v2 = a.item<long>(6);            // flat index 6 → row 1, col 2
 double d2 = a.item<double>(6);          // reads the int64 as a double (converts)
 object bx = a.item(6);                  // untyped → boxed long
 
-// 3. GetValue<T> - N-D coordinates, EXACT dtype (T must equal the dtype)
+// 3. GetValue<T> - N-D coordinates; another T than the dtype's own type is NumPy's cast to T
 long v3 = a.GetValue<long>(1, 2);
 
-// 4. GetAtIndex<T> - flat index, EXACT dtype, no Shape math (fastest)
+// 4. GetAtIndex<T> - flat index, the same conversion rule, no Shape math (fastest)
 long v4 = a.GetAtIndex<long>(6);
 
 // 5. Typed named accessors - GetDouble / GetInt32 / GetSingle / GetBoolean / GetDecimal / GetComplex
-//    EXACT dtype: they read the matching typed slice directly and do NOT convert.
+//    N-D coordinates; the stored value when the dtype matches, NumPy's astype cast of it otherwise.
 var f = np.zeros(4);                    // float64
-double x = f.GetDouble(0);              // OK - array IS double
-// a.GetDouble(0);  // on an int64 array this REINTERPRETS the raw bytes as a double - a silent,
-//                  // wrong value (no throw, no conversion). Use a.item<double>(0) to convert.
+double x = f.GetDouble(0);              // the stored double
+double y = a.GetDouble(1, 2);           // 6.0: the int64 element, converted as astype converts it
 ```
 
 **Which to use:**
@@ -121,9 +120,11 @@ double x = f.GetDouble(0);              // OK - array IS double
 |----------|---------|-----------|----------|
 | `a[i, j]` (indexer) | N-D | yes (cast the 0-d out) | NumPy-like ergonomics; you don't mind the 0-d detour |
 | `a.item<T>(i)` / `a.item(i)` | flat | **yes** | porting NumPy code; reading across dtypes |
-| `a.GetValue<T>(...)` | N-D | no (exact) | coordinate access in typed code |
-| `a.GetAtIndex<T>(i)` | flat | no (exact) | hot loops - fastest, no Shape math |
-| `a.GetDouble(...)` etc. | N-D | no - dtype **must** match | you already know the dtype and want a non-generic call (reinterprets raw bytes if it doesn't) |
+| `a.GetValue<T>(...)` | N-D | yes (NumPy's cast to `T`) | coordinate access in typed code |
+| `a.GetAtIndex<T>(i)` | flat | yes (NumPy's cast to `T`) | hot loops - fastest, no Shape math |
+| `a.GetDouble(...)` etc. | N-D | yes (NumPy's cast) | a non-generic call for a known result type |
+
+The typed reads are fastest when `T` is the dtype's own type (`long` for int64): the element is then read as stored, with no conversion.
 
 > `.item()` with **no arguments** unwraps any size-1 array (0-d, 1-element 1-D, 1×1 2-D) to a scalar, and throws `IncorrectSizeException` otherwise - the NumPy 2.x replacement for the removed `np.asscalar()`.
 
@@ -133,10 +134,12 @@ double x = f.GetDouble(0);              // OK - array IS double
 foreach (var x in a.flat) { }          // boxed elements, C-order (a.flat is a raveled view)
 long s = (long)a.flatiter[5];          // flat C-order element (getter returns object → unbox; see below)
 
-// Fast, unboxed - by reference:
-double total = 0;
-foreach (ref double e in np.nditer<double>(a)) total += e;
+// Fast, unboxed - by reference (T is the dtype's own type: long for this int64 array):
+long total = 0;
+foreach (ref long e in np.nditer<long>(a)) total += e;
 ```
+
+A `ref T` points into the array's memory, so `np.nditer<T>` cannot convert: `np.nditer<double>` over this int64 array throws `ArgumentException`. Iterate `a.astype(np.float64)` for doubles.
 
 For high-throughput reads use `np.nditer<T>` (unboxed, by reference) or `np.nditer_chunks<T>` (a `Span<T>` per inner loop). See [NDArray → Fast element iteration](NDArray.md#fast-element-iteration---npnditert-unboxed) and [NDIter](NDIter.md).
 
@@ -149,14 +152,15 @@ For high-throughput reads use `np.nditer<T>` (unboxed, by reference) or `np.ndit
 ```csharp
 var a = np.arange(12).reshape(3, 4);   // int64
 
-a[1, 2] = 99;                          // indexer - CONVERTS the value to the array dtype
-a.SetValue(99L, 1, 2);                 // N-D coordinates - EXACT dtype (value must be long here)
-a.SetAtIndex(99L, 6);                  // flat index - EXACT dtype
+a[1, 2] = 99;                          // indexer - converts the value to the array dtype
+a.SetValue(99L, 1, 2);                 // N-D coordinates
+a.SetAtIndex(99L, 6);                  // flat index
+a.SetValue(2.5, 1, 3);                 // another type is cast to int64 with NumPy's cast: stores 2
 var f = np.zeros((3, 4));              // float64
-f.SetDouble(3.5, 1, 2);                // typed setter - EXACT dtype (writes raw double bytes)
+f.SetDouble(3.5, 1, 2);                // typed setter
 ```
 
-The indexer converts; `SetValue<T>` / `SetAtIndex<T>` / `SetDouble` (and the other typed setters) write the value's bytes directly and require the value to match the dtype. Mirror of the getter table above.
+Every setter converts the value to the array's dtype with NumPy's cast, as the indexer does; a value of the dtype's own type is stored as it is, the fastest route. Mirror of the getter table above.
 
 ### 2. Slices - scalar fill and broadcast assignment
 
@@ -269,7 +273,7 @@ When a scalar is written to an array (`fill`, `flatiter` set, scalar indexer ass
 - **A C# primitive is a *weak* scalar** (NumSharp's analog of a Python literal).
   - Into an **integer** dtype it is **range-checked**: an out-of-range value **raises** `OverflowException` (`"Python integer 300 out of bounds for int8"`) rather than wrapping. A float source truncates toward zero first, then the truncated value is checked; `NaN` raises `ValueError`, `±inf` raises `OverflowException`, a complex source raises `TypeError`.
   - Into a **float/complex** dtype it casts, saturating to `±inf` on overflow (`float32.fill(1e300)` → `inf`).
-- **A 0-d `NDArray` is a *strong* scalar** - it **wraps** on cast, matching an `np.int64` scalar. Use `NDArray.Scalar<T>(v)` when you need the strong behavior.
+- **A 0-d `NDArray` is a *strong* scalar** - it **wraps** on cast, as NumPy's 0-d array does (`a.fill(np.array(300, np.int32))` stores 44). Use `NDArray.Scalar<T>(v)` when you need the wrapping cast. NumPy 2.4.2 range-checks its scalar objects (`np.int32(300)`) like Python ints here; NumSharp has no scalar objects, and its C# primitive takes that role.
 - A **higher-rank array** assigned as a scalar is a sequence → `ValueError("setting an array element with a sequence.")`.
 
 ```csharp
@@ -329,11 +333,11 @@ Reading has the mirror set - the indexer (`a[i,j]`), `a.item<T>(i)`, `a.GetValue
 ### "My array changed when I modified a slice!"
 Slices are views. `a["1:3"]` shares memory with `a`. Force a copy: `a["1:3"].copy()`.
 
-### "NumSharpException: assignment destination is read-only"
+### "ValueError: assignment destination is read-only"
 You're writing into a broadcasted view (a stride-0 dimension), which is read-only to prevent cross-row corruption. Copy first: `var w = b.copy(); w["..."] = value;`. See [Broadcasting → Memory Behavior](broadcasting.md#memory-behavior).
 
-### "`GetDouble` returned a nonsense number (or `SetDouble` corrupted the array)"
-The typed named accessors (`GetDouble`/`SetDouble`/`GetInt32`/…) require the array to actually be that dtype - they read/write the raw bytes directly and do **not** convert. On a mismatched dtype they silently **reinterpret** the bytes (e.g. `int64` value `6` read via `GetDouble` comes back as `2.96e-323`), and `SetDouble` into a narrower dtype writes 8 bytes at the wrong stride and **corrupts memory**. Use `a.item<double>(i)` to read as double, or the indexer / `astype` to convert.
+### "`GetInt32` / `SetDouble` changed my value"
+The typed accessors (`GetDouble`/`SetDouble`/`GetInt32`/…, `GetValue<T>`, `GetAtIndex<T>`, `SetAtIndex<T>`) convert with NumPy's cast when `T` is not the array's own type: `GetInt32` of a float64 `2.9` is `2`, and `SetDouble(3.5, …)` into an int64 array stores `3`. Read and write with the dtype's own type (`a.dtype.type`) to keep values exact.
 
 ### "`OverflowException: Python integer … out of bounds`"
 A weak C# scalar didn't fit the target integer dtype. That's NumPy 2.x behavior - weak scalars range-check instead of wrapping. Pass a strong scalar to wrap: `a.fill(NDArray.Scalar<int>(v))`, or widen the dtype.
@@ -355,9 +359,9 @@ NumSharp's legacy `itemset` takes **coordinates** (`itemset(coords, value)`), no
 | `a[i, j]` / `a["1:3"]` / `a[mask]` / `a[idx]` | mixed | - | `NDArray` (0-d for one element) |
 | `a.item(i)` / `a.item<T>(i)` | flat | yes | `object` / `T` |
 | `a.item()` / `a.item<T>()` | - | yes | size-1 array → scalar |
-| `a.GetValue<T>(...)` / `a.GetValue(...)` | N-D | no / boxed | `T` / `object` |
-| `a.GetAtIndex<T>(i)` / `a.GetAtIndex(i)` | flat | no / boxed | `T` / `object` |
-| `a.GetDouble/GetInt32/GetSingle/GetBoolean/GetDecimal/GetComplex(...)` | N-D | no - dtype **must** match | the named scalar type (reinterprets on mismatch) |
+| `a.GetValue<T>(...)` / `a.GetValue(...)` | N-D | yes (NumPy's cast to `T`) / boxed | `T` / `object` |
+| `a.GetAtIndex<T>(i)` / `a.GetAtIndex(i)` | flat | yes (NumPy's cast to `T`) / boxed | `T` / `object` |
+| `a.GetDouble/GetInt32/GetSingle/GetBoolean/GetDecimal/GetComplex(...)` | N-D | yes (NumPy's cast) | the named scalar type |
 | `a.flatiter[i]` / `["1:3"]` / `[idx]` | flat | yes (set) | scalar / `NDArray` |
 | `a.flat` | - | - | raveled `NDArray` view |
 
@@ -369,9 +373,9 @@ NumSharp's legacy `itemset` takes **coordinates** (`itemset(coords, value)`), no
 | `a["1:3"] = v` / `a[0] = row` | slice / row | broadcasts RHS; writes through the view |
 | `a[mask] = v` | masked | writes through to the parent |
 | `a[idx] = v` | fancy | last-write-wins on duplicates |
-| `a.SetValue<T>(v, ...)` / `a.SetValue(v, ...)` | element (N-D) | exact dtype |
-| `a.SetAtIndex<T>(v, i)` | element (flat) | exact dtype |
-| `a.SetDouble(v, ...)` | element (N-D) | exact dtype (double array) |
+| `a.SetValue<T>(v, ...)` / `a.SetValue(v, ...)` | element (N-D) | NumPy's cast to the dtype; fastest when `T` is the dtype's own type |
+| `a.SetAtIndex<T>(v, i)` | element (flat) | NumPy's cast to the dtype; no Shape math |
+| `a.SetDouble(v, ...)` | element (N-D) | NumPy's cast of the double to the dtype |
 | `a.fill(v)` | whole array | in place, any layout, NEP50 coercion |
 | `a.put(indices, values, mode)` / `np.put(...)` | flat scatter | `mode`: `"raise"`/`"wrap"`/`"clip"` |
 | `np.place(arr, mask, vals)` | masked | cyclic fill of the True positions |

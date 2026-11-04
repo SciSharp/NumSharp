@@ -136,7 +136,7 @@ namespace NumSharp
         /// <summary>
         ///     Convert a <see cref="MemoryView"/> to an ndarray, taking a NumPy-style dtype string
         ///     (e.g. <c>"float32"</c>, <c>"&lt;i4"</c>). See
-        ///     <see cref="asarray(MemoryView, Type, char, bool?, NDArray, string)"/>.
+        ///     <see cref="asarray(MemoryView, DType, char, bool?, NDArray, string)"/>.
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asarray.html</remarks>
         public static NDArray asarray(

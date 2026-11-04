@@ -724,7 +724,7 @@ namespace NumSharp.Backends.Iteration
         /// size multiplication happens internally via <see cref="InfoOf.GetSize"/>.
         ///
         /// The per-element conversion runs through an IL-emitted inner-loop kernel
-        /// (<see cref="DirectILKernelGenerator.TryGetInnerCastKernel"/>) that issues a
+        /// (<see cref="NumSharp.Backends.Kernels.DirectILKernelGenerator.TryGetInnerCastKernel(NPTypeCode, NPTypeCode)"/>) that issues a
         /// DIRECT <c>call Converts.To{Dst}</c> — the JIT inlines it, so it runs at
         /// hand-written direct-call speed (probed: ~1.1-4.8× faster than the Func
         /// delegate it replaces, the lighter the conversion the bigger the win). The

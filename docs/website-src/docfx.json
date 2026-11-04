@@ -16,7 +16,10 @@
       "namespaceLayout": "flattened",
       "memberLayout": "samePage",
       "enumSortOrder": "declaringOrder",
-      "allowCompilationErrors": false
+      "allowCompilationErrors": false,
+      "properties": {
+        "ReferenceNDArrayAnalyzer": "false"
+      }
     }
   ],
   "build": {

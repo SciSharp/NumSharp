@@ -176,9 +176,9 @@ np.int32 == np.dtype("int32");     // true
 np.str_ == np.dtype("U");         // true
 np.dtype("U3") == np.dtype("U5"); // false: width matters
 // These are always true on every platform:
-ReferenceEquals(np.int32, np.dtype("int32"))
-ReferenceEquals(np.@long, np.dtype("long"))
-ReferenceEquals(np.float16, np.dtype("float16"))
+ReferenceEquals(np.int32, np.dtype("int32"));
+ReferenceEquals(np.@long, np.dtype("long"));
+ReferenceEquals(np.float16, np.dtype("float16"));
 ```
 
 Use `.type` or an explicit `(Type)` cast only when a .NET API needs the CLR element type. It is not a replacement for a text descriptor.
@@ -192,7 +192,7 @@ NumSharp uses `System.Numerics.Complex`, which is two 64-bit floats-equivalent t
 ```csharp
 // These all resolve to Complex (complex128):
 np.complex128;
-np.complex_;
+np.complex_;          // NumPy 1.x's name, removed in NumPy 2.0: kept so ported code compiles (np.dtype("complex_") throws)
 np.cdouble;           // NumPy alias for complex128
 np.clongdouble;       // NumPy's long-double complex: its own class, stored as complex128 (equal to it)
 np.dtype("complex");  // NumPy 2.x default complex is complex128
@@ -212,7 +212,7 @@ np.dtype("c8");
 
 Why throw instead of silently widening to complex128? Because quietly upgrading a user's `complex64` request to `complex128` doubles their memory use without telling them. If you need complex arrays in NumSharp, use `complex128` explicitly-the throw is there to prevent surprise.
 
-**Converting from complex arrays to real arrays:** `(int)complexScalar` and `(float)complexScalar` throw `TypeError` ("can't convert complex to int"), matching Python's built-in behavior. NumPy 2.x emits a `ComplexWarning` and drops the imaginary part; NumSharp has no warning system, so we treat this as a hard error. If you want the real part, use `np.real(arr)` first.
+**Converting from complex arrays to real arrays:** `(int)complexScalar` and `(float)complexScalar` throw `TypeError` with Python's text (`int() argument must be a string, a bytes-like object or a real number, not 'complex'`), matching Python's built-in behavior. NumPy 2.x emits a `ComplexWarning` and drops the imaginary part; NumSharp has no warning system, so we treat this as a hard error. If you want the real part, use `np.real(arr)` first.
 
 ```csharp
 var c = NDArray.Scalar<Complex>(new Complex(3, 4));
@@ -430,7 +430,7 @@ var d = NDArray.Scalar<double>(double.PositiveInfinity);
 double.IsPositiveInfinity((double)d);  // true
 ```
 
-`Decimal` and `Complex` have no NaN/Inf equivalents (Complex's real/imag components individually can be `double.NaN`, but there's no single `Complex.NaN`).
+`Decimal` has no NaN or infinity. A `Complex` value is NaN or infinite through its parts, as in NumPy's complex128: .NET's `Complex.NaN` and `Complex.Infinity` are such values, `np.isnan` is true when either part is NaN, and `np.isinf` when either part is infinite.
 
 ### Boundary values
 
@@ -706,13 +706,16 @@ var sameShapeAndType = np.ones_like(template);
 ### Force-cast vs safe-cast
 
 ```csharp
-// Force: silently wraps/truncates - fastest
+// Force: the default casting "unsafe" converts every value, so 300.0 wraps
 var forced = np.array([300.0]).astype(NPTypeCode.Byte);
 // forced[0] == 44 (300 wrapped modulo 256)
 
-// Safe: raise on overflow (if NumSharp had this; currently matches NumPy's behavior
-// which wraps by default and requires explicit casting='safe' for stricter modes).
+// Safe: casting "safe" checks the dtype pair, not the values: float64 never casts safely to uint8
+np.array([300.0]).astype(np.uint8, true, 'K', "safe");
+// InvalidCastException (NumPy's TypeError): Cannot cast array data from dtype('float64') to dtype('uint8') according to the rule 'safe'
 ```
+
+Neither rule checks a value against the target's range: use `np.can_cast` to test a dtype pair, and compare against `np.iinfo` before a cast that must not wrap.
 
 ---
 

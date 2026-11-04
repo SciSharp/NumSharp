@@ -58,7 +58,7 @@ namespace NumSharp
         ///     path), or a <c>("greedy"|"optimal", maxIntermediateSize)</c> tuple that caps the largest
         ///     intermediate. Anything else is rejected exactly as NumPy rejects it.
         /// </param>
-        /// <inheritdoc cref="einsum_path(string, NDArray[])"/>
+        /// <inheritdoc cref="einsum_path(string, NDArray[])" path="/*[not(self::summary) and not(self::param)]"/>
         public static (EinsumPath path, string repr) einsum_path(string subscripts, NDArray[] operands, object optimize)
             => EinsumPathOnEngine(subscripts, operands, optimize);
 

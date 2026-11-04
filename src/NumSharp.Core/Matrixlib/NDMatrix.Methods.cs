@@ -282,8 +282,8 @@ namespace NumSharp
         [NDScoped]
         public new NDMatrix reshape(Shape newShape) => From(base.reshape(newShape), this);
 
-        /// <inheritdoc cref="reshape(Shape)"/>
-        /// <param name="newShape">The requested dimensions.</param>
+        /// <inheritdoc cref="reshape(Shape)" path="/*[not(self::param[@name='newShape'])]"/>
+        /// <param name="newShape">The requested dimensions; one may be -1 (inferred).</param>
         /// <param name="order"><c>'C'</c>, <c>'F'</c> or <c>'A'</c>: the index order the elements are read and
         ///     placed in.</param>
         [NDScoped]

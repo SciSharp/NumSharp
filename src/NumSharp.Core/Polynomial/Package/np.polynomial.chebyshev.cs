@@ -801,7 +801,7 @@ namespace NumSharp
         /// <exception cref="System.OutOfMemoryException">A degree whose matrix the machine cannot hold (NumPy's MemoryError).</exception>
         /// <remarks>
         ///     <para><b>Ownership.</b> The points handed to <paramref name="func"/> and every array it creates are intermediates
-        ///     of this call and are reclaimed when it returns (<see cref="NDScoped"/>): to keep one, call
+        ///     of this call and are reclaimed when it returns (<see cref="NDScopedAttribute"/>): to keep one, call
         ///     <see cref="NDScope.Detach(NDArray)"/> on it inside <paramref name="func"/>. An array func returns that was created
         ///     before the call stays the caller's.</para>
         ///     <para>Exceptions <paramref name="func"/> throws propagate unchanged.</para>

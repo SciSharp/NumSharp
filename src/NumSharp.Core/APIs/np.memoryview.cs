@@ -29,7 +29,7 @@ namespace NumSharp
         ///
         ///     <para>
         ///     Surface (probed against NumPy 2.4.2's <c>memoryview</c>): <see cref="obj"/>,
-        ///     <see cref="nbytes"/>, <see cref="itemsize"/>, <see cref="ndim"/>, <see cref="readonly"/>
+        ///     <see cref="nbytes"/>, <see cref="itemsize"/>, <see cref="ndim"/>, <see cref="@readonly"/>
         ///     (true for broadcast / non-writeable views), <see cref="shape"/>, <see cref="strides"/>
         ///     (in BYTES like NumPy's — NumSharp's own strides are in elements), <see cref="format"/>
         ///     (the struct-module type code), <see cref="c_contiguous"/> / <see cref="f_contiguous"/> /
@@ -160,7 +160,7 @@ namespace NumSharp
             ///     Raw pointer to the LOGICAL first byte of the array's data
             ///     (<c>Storage.Address + offset·itemsize</c>) — the C-level analog of NumPy's
             ///     <c>a.data</c> pointer / <c>PyArray_DATA(self)</c>. Reads and writes through it hit the
-            ///     underlying buffer directly (subject to <see cref="readonly"/>).
+            ///     underlying buffer directly (subject to <see cref="@readonly"/>).
             /// </summary>
             public void* Pointer => (byte*)_arr.Storage.Address + _arr.Shape.Offset * _arr.dtypesize;
 
@@ -191,7 +191,7 @@ namespace NumSharp
             /// <param name="indices">One index per dimension (length must equal <see cref="ndim"/>).</param>
             /// <exception cref="ArgumentException">If <paramref name="indices"/>'s length does not equal <see cref="ndim"/>.</exception>
             /// <exception cref="IndexOutOfRangeException">If any (normalized) index is out of bounds.</exception>
-            /// <exception cref="InvalidOperationException">On set, if this view is <see cref="readonly"/>.</exception>
+            /// <exception cref="InvalidOperationException">On set, if this view is <see cref="@readonly"/>.</exception>
             public object this[params long[] indices]
             {
                 get => _arr.GetValue(ResolveCoords(indices));
@@ -286,7 +286,7 @@ namespace NumSharp
 
             /// <summary>
             ///     The array's bytes as a lower-case hex string (NumPy's <c>memoryview.hex()</c>), in
-            ///     logical C-order. Equivalent to hex-encoding <see cref="tobytes()"/>.
+            ///     logical C-order. Equivalent to hex-encoding <see cref="tobytes(string)"/>.
             /// </summary>
             public string hex() => Convert.ToHexString(tobytes("C")).ToLowerInvariant();
 

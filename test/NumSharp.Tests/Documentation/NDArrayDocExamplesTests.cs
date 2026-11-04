@@ -804,5 +804,29 @@ namespace NumSharp.Tests.Documentation
             d.typecode.Should().Be(NPTypeCode.Double);
             ((double)d[0]).Should().Be(2.5);
         }
+
+        // ── Text is array data ──────────────────────────────────────────────────────────────────────
+
+        /// <summary>
+        ///     The "Text is array data" snippet (every value probed against NumPy 2.4.2): the three text families are plain
+        ///     <c>NDArray</c>s that share <see cref="NPTypeCode.String"/>, so only the full descriptor tells them apart; a
+        ///     <c>StringDType</c> element grows past the <c>U4</c> width it came from; a comparison with a C# string is
+        ///     NumPy's <c>str</c> comparison.
+        /// </summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from NumPy.</exception>
+        [TestMethod]
+        public void TextIsArrayData()
+        {
+            var names = np.array(new[] { "cat", "dog", "bird" });
+            names.dtype.str.Should().Be("<U4", "the longest text sets the width");
+            var bytes = names.astype("S4");
+            bytes.ToString(true).Should().Be("array([b'cat', b'dog', b'bird'], dtype='|S4')");
+            var growing = names.astype(np.dtypes.StringDType());
+            growing[0] = "a longer label";
+            growing.ToString(true).Should().Be("array(['a longer label', 'dog', 'bird'], dtype=StringDType())");
+            (names == "cat").ToArray<bool>().Should().Equal(true, false, false);
+            foreach (var family in new[] { names, bytes, growing })
+                family.typecode.Should().Be(NPTypeCode.String, "the shared type code does not name the family");
+        }
     }
 }

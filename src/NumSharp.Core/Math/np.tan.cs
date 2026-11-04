@@ -54,8 +54,10 @@ namespace NumSharp
         ///     Compute Element-wise arc tangent of x1/x2 choosing the quadrant correctly. <br></br>
         ///     By IEEE convention, this function is defined for x2 = +/-0 and for either or both of x1 and x2 = +/-inf
         /// </summary>
-        /// <param name="x">Input array y-coordinates.</param>
-        /// <param name="x">x-coordinates. If x1.shape != x2.shape, they must be broadcastable to a common shape (which becomes the shape of the output).</param>
+        /// <param name="y">The y-coordinates (NumPy's <c>x1</c>).</param>
+        /// <param name="x">The x-coordinates (NumPy's <c>x2</c>). If <c>y.shape != x.shape</c>, they must be broadcastable to a common shape (which becomes the shape of the output).</param>
+        /// <param name="out">A location into which the result is stored (NumPy ufunc out=); <c>null</c> allocates the result.</param>
+        /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
         /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>The Array of angles in radians, in the range [-pi, pi]. This is a scalar if both x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.arctan2.html</remarks>

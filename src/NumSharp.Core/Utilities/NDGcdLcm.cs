@@ -27,7 +27,7 @@ namespace NumSharp.Utilities
     /// silently — e.g. <c>lcm(int16 21000, 14000) == -23536</c>, <c>lcm(uint32.MaxValue, MaxValue-1) == 2</c>.
     /// The <c>|MIN|</c> magnitude is obtained by the C idiom <c>(U)(unchecked(-x))</c>: negating the signed
     /// minimum wraps back to itself, and its bit pattern reinterpreted as unsigned IS <c>2^(width-1)</c>
-    /// (the true magnitude) — which is why every negate/cast below is <see cref="unchecked"/>.</para>
+    /// (the true magnitude) — which is why every negate/cast below is <see langword="unchecked"/>.</para>
     ///
     /// <para><b>Why the 8/16-bit helpers may compute in their own width rather than promoting to int32</b>
     /// (as NumPy's <c>BYTE_gcd</c> does via C integer promotion): for gcd, all Euclidean intermediates are

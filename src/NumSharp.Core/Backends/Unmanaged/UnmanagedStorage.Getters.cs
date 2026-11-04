@@ -456,7 +456,7 @@ namespace NumSharp.Backends
         /// <param name="dims">Pointer to an array of long dimension indices.</param>
         /// <param name="ndims">The number of indices in the array.</param>
         /// <returns>A new <see cref="UnmanagedStorage"/> representing the sub-array.</returns>
-        /// <seealso cref="GetData(int*)"/>
+        /// <seealso cref="GetData(int*, int)"/>
         [MethodImpl(OptimizeAndInline)]
         public unsafe UnmanagedStorage GetData(long* dims, int ndims)
         {

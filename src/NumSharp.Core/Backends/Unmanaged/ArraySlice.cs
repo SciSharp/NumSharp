@@ -12,7 +12,7 @@ namespace NumSharp.Backends.Unmanaged
         private static readonly StackedMemoryPool _buffer = ScalarMemoryPool.Instance;
 
         /// <summary>
-        ///     Wrap a <see cref="val"/> inside <see cref="ArraySlice{T}"/>.
+        ///     Wrap a <paramref name="val"/> inside <see cref="ArraySlice{T}"/>.
         /// </summary>
         /// <param name="val">The value to wrap into an arrayslice.</param>
         /// <returns></returns>
@@ -48,7 +48,7 @@ namespace NumSharp.Backends.Unmanaged
         }
 
         /// <summary>
-        ///     Wrap a <see cref="T"/> inside <see cref="ArraySlice{T}"/>.
+        ///     Wrap a <typeparamref name="T"/> inside <see cref="ArraySlice{T}"/>.
         /// </summary>
         /// <param name="val">The value to wrap into an arrayslice.</param>
         /// <param name="typeCode">The type expected to be returned</param>
@@ -85,7 +85,7 @@ namespace NumSharp.Backends.Unmanaged
         }
 
         /// <summary>
-        ///     Wrap a <see cref="T"/> inside <see cref="ArraySlice{T}"/>.
+        ///     Wrap a <typeparamref name="T"/> inside <see cref="ArraySlice{T}"/>.
         /// </summary>
         /// <param name="val"></param>
         /// <returns></returns>

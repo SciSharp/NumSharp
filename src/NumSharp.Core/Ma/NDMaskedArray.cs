@@ -861,7 +861,7 @@ namespace NumSharp
         //    the getter materializes and returns the stored 0-d array's element; the setter converts the value and writes
         //    it into the stored array (so every array sharing that fill sees it), it does NOT return a new array. ──
         /// <summary>
-        ///     The value <see cref="filled()"/> substitutes for masked elements (NumPy's settable
+        ///     The value <see cref="filled(object)"/> substitutes for masked elements (NumPy's settable
         ///     <c>MaskedArray.fill_value</c>): the element of the stored fill array, NumPy's <c>self._fill_value[()]</c> — a
         ///     boxed scalar of the STORED array's dtype (NumPy's NumPy scalar: an <see cref="sbyte"/> for an int8 fill, a
         ///     <see cref="long"/> for the int64 default), or the array itself for NumPy's deprecated non-scalar fill. Never
@@ -1707,7 +1707,7 @@ namespace NumSharp
         /// false (the default) after <see cref="soften_mask()"/>. See <see cref="_hardmask"/> for the honored
         /// assignment paths and the propagation-scope limits.</summary>
         /// <remarks>NumPy's <c>sharedmask</c> flag is deliberately NOT offered: NumSharp cannot track whether a
-        /// mask is shared (a view/<see cref="real"/>/<see cref="imag"/>/<see cref="view(DType)"/> aliases it), and
+        /// mask is shared (a view/<see cref="real"/>/<see cref="imag"/>/<see cref="view(DType, object)"/> aliases it), and
         /// no fixed value is faithful — NumPy reports True right after <c>array(data, mask=…)</c> yet False after
         /// an op or <see cref="unshare_mask()"/>. Since a bogus False would invite mutating a shared mask, just
         /// call <see cref="unshare_mask()"/> before an in-place mask write on a possibly-aliased array.</remarks>
@@ -1725,7 +1725,7 @@ namespace NumSharp
         /// <summary>
         ///     Ensures the mask is not shared with any other array (NumPy's <c>unshare_mask</c>) by COPYING it,
         ///     then returns this array. Reach for it before a mutating write when the mask may be aliased — the
-        ///     view-returning members (<see cref="real"/>/<see cref="imag"/>/<see cref="view(DType)"/> and a
+        ///     view-returning members (<see cref="real"/>/<see cref="imag"/>/<see cref="view(DType, object)"/> and a
         ///     basic-slice index) share the mask reference, so an in-place mask write would otherwise reach the
         ///     source. A no-op for a <c>nomask</c> array.
         /// </summary>

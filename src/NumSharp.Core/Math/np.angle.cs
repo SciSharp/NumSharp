@@ -16,7 +16,7 @@ namespace NumSharp
         /// <param name="deg">Return the angle in degrees if <c>true</c>, radians (default) if <c>false</c>.</param>
         /// <returns>
         ///     The phase angle, computed as <c>arctan2(imag, real)</c> element-wise (so it follows the
-        ///     <see cref="arctan2(NDArray, NDArray, NDArray, NDArray, System.Nullable{NPTypeCode})"/> IEEE
+        ///     <see cref="arctan2(NDArray, NDArray, NDArray, NDArray, DType)"/> IEEE
         ///     conventions at magnitude zero and at the infinities). complex128 -&gt; float64. A REAL input
         ///     yields <c>0</c> for a positive value and <c>pi</c> for a negative one (<c>arctan2(0, z)</c>),
         ///     with NumPy's per-dtype float tier: bool/int32+/float64/complex -&gt; float64, int8/uint8/float16

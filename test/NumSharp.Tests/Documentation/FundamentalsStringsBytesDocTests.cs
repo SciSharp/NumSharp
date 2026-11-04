@@ -327,6 +327,44 @@ namespace NumSharp.Tests.Documentation
         }
 
         /// <summary>
+        ///     The "Unicode properties and case conversion" snippets (every value probed against NumPy 2.4.2): the three
+        ///     numeric predicates split <c>'12'</c>, <c>'²'</c> and <c>'½'</c> as CPython's Unicode database does, and a case
+        ///     mapping that expands (<c>'ß'</c> to <c>'SS'</c>) is cut to a fixed-width input's width but kept whole by
+        ///     <c>StringDType</c>.
+        /// </summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from NumPy.</exception>
+        [TestMethod]
+        public void Computing_UnicodePropertiesAndCaseConversion()
+        {
+            var numbers = np.array(new[] { "12", "²", "½" });
+            np.strings.isdecimal(numbers).ToArray<bool>().Should().Equal(true, false, false);
+            np.strings.isdigit(numbers).ToArray<bool>().Should().Equal(true, true, false);
+            np.strings.isnumeric(numbers).ToArray<bool>().Should().Equal(true, true, true);
+
+            // The expansion is cut: the result keeps the input's <U2, so 'SSA' loses its last character.
+            np.strings.upper(np.array(new[] { "ßa" })).ToString(true).Should().Be("array(['SS'], dtype='<U2')");
+            np.strings.upper(np.array(new[] { "ßa" }, np.dtype("T"))).ToString(true)
+              .Should().Be("array(['SSA'], dtype=StringDType())");
+        }
+
+        /// <summary>
+        ///     The "Formatting, encoding and decoding" snippet (every value probed against NumPy 2.4.2): <c>mod</c> broadcasts
+        ///     the values against the format and sizes its result to the longest text, <c>encode</c> writes UTF-8 into an
+        ///     <c>S</c> array as wide as the longest encoding, and <c>decode</c> restores the text.
+        /// </summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from NumPy.</exception>
+        [TestMethod]
+        public void Computing_FormattingEncodingDecoding()
+        {
+            np.strings.mod("item-%02d", np.array(new long[] { 1, 12 })).ToString(true)
+              .Should().Be("array(['item-01', 'item-12'], dtype='<U7')");
+            var encoded = np.strings.encode(np.array(new[] { "café" }), "utf-8");
+            encoded.dtype.str.Should().Be("|S5", "'é' takes two UTF-8 bytes");
+            encoded.tobytes().Should().Equal(0x63, 0x61, 0x66, 0xC3, 0xA9);
+            np.strings.decode(encoded, "utf-8").ToString(true).Should().Be("array(['café'], dtype='<U4')");
+        }
+
+        /// <summary>
         ///     The "Sorting" snippets (strings phase 2, P2.2; every value probed against NumPy 2.4.2): code-point order, the
         ///     in-place sort, NumPy's introsort order of equal strings for the default kind and the input order for the
         ///     stable kind (20 single letters, past the 16 elements NumPy insertion-sorts), the partitions as full sorts,
@@ -469,6 +507,161 @@ namespace NumSharp.Tests.Documentation
         }
 
         /// <summary>
+        ///     The "Operators and functions with a chararray" operator snippet (every value probed against NumPy 2.4.2): the
+        ///     comparisons strip trailing whitespace on both sides, also with the plain array on the left; <c>+</c> returns a
+        ///     chararray VIEW of the ufunc result and <c>*</c> a chararray copy, both storing the unstripped text; a
+        ///     non-integer count is NumPy's <c>ValueError</c>.
+        /// </summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from NumPy.</exception>
+        [TestMethod]
+        public void Computing_CharArrayOperators()
+        {
+            var c = np.@char.array(new[] { "ab  ", "b", "ab", "a " });
+            var u = np.array(new[] { "ab", "b", "ab  ", "a" });
+            (c == "ab").ToArray<bool>().Should().Equal(true, false, true, false);
+            (u == c).ToArray<bool>().Should().Equal(true, true, true, true);
+
+            var plus = c + "x";
+            plus.GetType().Should().Be(typeof(NDCharArray));
+            plus.@base.Should().NotBeNull("the + result is a chararray view of the ufunc's array");
+            plus.dtype.str.Should().Be("<U5");
+            // view(typeof(NDArray)) reads the stored text: a chararray's own elements strip on access.
+            NDArray.AsStringArray(plus.view(typeof(NDArray))).Should().Equal("ab  x", "bx", "abx", "a x");
+
+            var twice = c * 2;
+            twice.GetType().Should().Be(typeof(NDCharArray));
+            twice.@base.Should().BeNull("the * result is a copy");
+            twice.dtype.str.Should().Be("<U8");
+            NDArray.AsStringArray(twice.view(typeof(NDArray))).Should().Equal("ab  ab  ", "bb", "abab", "a a ");
+
+            Action fraction = () => _ = c * 2.5;
+            fraction.Should().Throw<ValueError>().WithMessage("Can only multiply by integers");
+        }
+
+        /// <summary>
+        ///     The "Operators and functions with a chararray" function snippet (every value probed against NumPy 2.4.2):
+        ///     <c>np.sort</c> keeps the class, <c>np.concatenate</c> drops it, <c>np.argmax</c> raises the finalize
+        ///     <c>ValueError</c>, and <c>np.unique</c> merges values that differ only in trailing whitespace only when a
+        ///     <c>return_*</c> flag sends it through the chararray comparison.
+        /// </summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from NumPy.</exception>
+        [TestMethod]
+        public void Computing_CharArrayWithNpFunctions()
+        {
+            var c = np.@char.array(new[] { "ab  ", "b", "ab", "a " });
+            var sorted = np.sort(c);
+            sorted.GetType().Should().Be(typeof(NDCharArray));
+            sorted.ToString(true).Should().Be("chararray(['a', 'ab', 'ab', 'b'], dtype='<U4')");
+            np.concatenate(new NDArray[] { c, c }).GetType().Should().Be(typeof(NDArray));
+            Action argmax = () => np.argmax(c);
+            argmax.Should().Throw<ValueError>().Where(e => e.Message == "Can only create a chararray from string data.");
+
+            var (values, counts) = np.unique(c, return_counts: true);
+            values.GetType().Should().Be(typeof(NDCharArray));
+            NDArray.AsStringArray(values.view(typeof(NDArray))).Should().Equal("a ", "ab", "b");
+            counts.ToArray<long>().Should().Equal(1L, 2L, 1L);
+            NDArray plain = np.unique(c);
+            NDArray.AsStringArray(plain.view(typeof(NDArray))).Should().Equal("a ", "ab", "ab  ", "b");
+        }
+
+        /// <summary>
+        ///     The "Splitting and joining" snippets (every value probed against NumPy 2.4.2): the list array of pieces and
+        ///     its repr, a separator that leaves empty pieces, <c>rsplit</c>'s <c>maxsplit</c> from the end,
+        ///     <c>splitlines</c> keeping the ends, element access as the list's 0-d stand-in, and <c>join</c> over the
+        ///     characters of each string — with NumPy 2.4.2's <c>TypeError</c> for joining split's lists.
+        /// </summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from NumPy.</exception>
+        [TestMethod]
+        public void Computing_SplitJoinAndListArrays()
+        {
+            var words = np.array(new[] { "a b  c", "  lead trail  ", "" });
+            using NDListArray w = np.@char.split(words);
+            w.ToString(true).Should().Be("array([list(['a', 'b', 'c']), list(['lead', 'trail']), list([])],\n      dtype=object)");
+            using (NDListArray spaced = np.@char.split(words, " "))
+            {
+                spaced.item(0).Should().Equal("a", "b", "", "c");
+                spaced.item(1).Should().Equal("", "", "lead", "trail", "", "");
+                spaced.item(2).Should().Equal("");
+            }
+            using (NDListArray last = np.@char.rsplit(words, maxsplit: 1))
+            {
+                last.item(0).Should().Equal("a b", "c");
+                last.item(1).Should().Equal("  lead", "trail");
+                last.item(2).Should().BeEmpty();
+            }
+            using (NDListArray lines = np.@char.splitlines(np.array(new[] { "a\nb\r\nc" }), true))
+                lines.item(0).Should().Equal("a\n", "b\r\n", "c");
+
+            w.item(0).Should().Equal("a", "b", "c");
+            var nested = (System.Collections.Generic.List<object>)w.tolist();
+            nested.Should().HaveCount(3);
+            ((System.Collections.Generic.List<object>)nested[1]).Should().Equal("lead", "trail");
+            // Element access is NumPy's: the list itself, here the 0-d list array that stands for it.
+            using (NDListArray first = w[0])
+            {
+                first.ndim.Should().Be(0);
+                first.ToString().Should().Be("['a', 'b', 'c']");
+                first.item().Should().Equal("a", "b", "c");
+            }
+            using (NDListArray tail = w["1:"])
+                tail.ToString(true).Should().Be("array([list(['lead', 'trail']), list([])], dtype=object)");
+
+            np.@char.join("-", "osd").ToString(true).Should().Be("array('o-s-d', dtype='<U5')");
+            np.@char.join(new[] { "-", "." }, new[] { "ghc", "osd" }).ToString(true).Should().Be("array(['g-h-c', 'o.s.d'], dtype='<U5')");
+            Action joinLists = () => np.@char.join("-", w);
+            joinLists.Should().Throw<TypeError>()
+                     .WithMessage("currently only the no-argument instantiation is supported; use `np.dtype` instead.");
+        }
+
+        /// <summary>
+        ///     The split error snippet (every text probed against NumPy 2.4.2): an empty separator, a float
+        ///     <c>maxsplit</c>, a bytes separator of <c>U</c> text and a non-string array, each with NumPy's type and text.
+        /// </summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from NumPy.</exception>
+        [TestMethod]
+        public void Computing_SplitErrors()
+        {
+            var words = np.array(new[] { "a b  c", "  lead trail  ", "" });
+            Action empty = () => np.@char.split(words, "");
+            empty.Should().Throw<ValueError>().WithMessage("empty separator");
+            Action fraction = () => np.@char.split(words, " ", 1.5);
+            fraction.Should().Throw<TypeError>().WithMessage("'numpy.float64' object cannot be interpreted as an integer");
+            Action bytes = () => np.@char.split(words, new byte[] { 32 });
+            bytes.Should().Throw<TypeError>().WithMessage("must be str or None, not numpy.bytes_");
+            Action numbers = () => np.@char.split(np.array(new long[] { 1 }));
+            numbers.Should().Throw<TypeError>().WithMessage("string operation on non-string array");
+        }
+
+        /// <summary>
+        ///     The list-array member snippet (every value probed against NumPy 2.4.2): <c>sum</c> concatenates the lists,
+        ///     <c>cumsum</c> writes the running lists into a list-array <c>out=</c>, <c>reshape(copy: false)</c> returns a
+        ///     view, the masked <c>mean</c> under a bool dtype is the truths over the count, and a <c>dtype=</c> whose NumPy
+        ///     result is not a list raises <see cref="NotSupportedException"/>.
+        /// </summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from NumPy.</exception>
+        [TestMethod]
+        public void Computing_ListArrayMembers()
+        {
+            using NDListArray w = np.@char.split(np.array(new[] { "a b  c", "  lead trail  ", "" }));
+            using (NDListArray total = w.sum())
+                total.item().Should().Equal("a", "b", "c", "lead", "trail");
+            using (NDListArray running = np.@char.split(np.array(new[] { "x", "y", "z" })))
+            {
+                w.cumsum(@out: running);
+                running.item(1).Should().Equal("a", "b", "c", "lead", "trail");
+                running.item(2).Should().Equal("a", "b", "c", "lead", "trail");
+            }
+            using (NDListArray row = w.reshape(new Shape(1, 3), 'C', copy: false))
+            {
+                row.ndim.Should().Be(2);
+                row.item(0, 1).Should().Equal("lead", "trail");
+            }
+            w.mean(dtype: np.@bool, where: np.array(new[] { true, false, true })).ToString(true).Should().Be("array(True)");
+            Action boolSum = () => w.sum(dtype: np.@bool);
+            boolSum.Should().Throw<NotSupportedException>();
+        }
+
+        /// <summary>
         ///     The "Operations that do not accept text" examples: the comparison and the unique values of <c>StringDType</c>
         ///     text compute, as the same calls over <c>U</c> text do; a string <c>dtype=</c> request of <c>np.add</c> over
         ///     numbers computes (the numbers written as text, then concatenated); <c>np.evaluate</c>, NumSharp's numerical
@@ -534,6 +727,40 @@ namespace NumSharp.Tests.Documentation
             Action noLoop = () => np.sqrt(np.array(new[] { 1.5 }), dtype: "U");
             noLoop.Should().Throw<IncorrectTypeException>()
                   .WithMessage("No loop matching the specified signature and casting was found for ufunc sqrt");
+        }
+
+        /// <summary>
+        ///     The "When the shape decides the answer" snippet (every value probed against NumPy 2.4.2): an empty text array's
+        ///     truth test, an arg-reduction over lines of one element, and the never-equal pairs of text and numbers answer
+        ///     without reading a character.
+        /// </summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from NumPy.</exception>
+        [TestMethod]
+        public void Computing_ShapeDecidesTheAnswer()
+        {
+            var names = Names();
+            np.any(np.zeros(new Shape(0L, 3L), "U2")).Should().BeFalse();
+            np.argmax(np.array(new[,] { { "b" }, { "a" } }), 1).ToArray<long>().Should().Equal(0L, 0L);
+            np.isin(names, np.array(new[] { 1.5, 2.0 })).ToArray<bool>().Should().Equal(false, false, false);
+            np.array_equal(names, np.zeros(new Shape(3L))).Should().BeFalse();
+        }
+
+        /// <summary>
+        ///     The <c>np.place</c> value-form snippet (probed against NumPy 2.4.2): a C# array is a Python list, converted
+        ///     straight into the target's dtype (and repeated over the mask); an NDArray must cast under <c>'safe'</c>, so
+        ///     float64 values into an int32 target raise NumPy's TypeError text, as <see cref="InvalidCastException"/>.
+        /// </summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from NumPy.</exception>
+        [TestMethod]
+        public void Computing_PlaceValueForms()
+        {
+            var a = np.arange(5).astype(np.int32);
+            var mask = np.ones(new Shape(5L), np.@bool);
+            np.place(a, mask, new[] { 1.9, 2.9 });
+            a.ToArray<int>().Should().Equal(1, 2, 1, 2, 1);
+            Action array = () => np.place(a, mask, np.array(new[] { 1.9, 2.9 }));
+            array.Should().Throw<InvalidCastException>()
+                 .WithMessage("Cannot cast array data from dtype('float64') to dtype('int32') according to the rule 'safe'");
         }
 
         // ── .npy files ────────────────────────────────────────────────────────────────────────────

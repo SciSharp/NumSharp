@@ -334,7 +334,7 @@ Creating an iterator looks like this:
 ```csharp
 using var iter = NDIterRef.MultiNew(
     nop: 3,
-    op: new[] { a, b, out },
+    op: new[] { a, b, @out },
     flags: NDIterGlobalFlags.EXTERNAL_LOOP | NDIterGlobalFlags.BUFFERED,
     order: NPY_ORDER.NPY_KEEPORDER,
     casting: NPY_CASTING.NPY_SAFE_CASTING,
@@ -873,8 +873,8 @@ This section describes the bridge's **whole-array helper family**. It is useful,
 ```csharp
 public void ExecuteBinary(BinaryOp op);       // [in0, in1, out]
 public void ExecuteUnary(UnaryOp op);          // [in, out]
-public void ExecuteComparison(ComparisonOp);   // [in0, in1, bool out]
-public TResult ExecuteReduction<TResult>(ReductionOp op);  // [in] → T
+public void ExecuteComparison(ComparisonOp op); // [in0, in1, bool out]
+public TResult ExecuteReduction<TResult>(ReductionOp op, NPTypeCode? accumType = null);  // [in] → T
 public void ExecuteScan(ReductionOp op);       // [in, out]
 public void ExecuteCopy();                     // [src, dst]
 public void BufferedReduce<K, T>(K kernel);    // explicit BUFFER+REDUCE double-loop
@@ -1528,7 +1528,7 @@ Is the loop shape non-rectangular (gather/scatter, cross-element deps)?
 
 `DetectExecutionPath()` serves the whole-array mixed-type/comparison helper family. It looks at the iterator *after* coalescing and negative-stride flipping, and picks:
 
-```csharp
+```text
 if (CONTIGUOUS flag set)                                return SimdFull;
 if (NDim == 0)                                          return SimdFull;
 if (op1 is scalar AND op0 is contiguous)                return SimdScalarRight;

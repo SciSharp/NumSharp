@@ -15,7 +15,7 @@ namespace NumSharp
         /// NumPy Reference: https://numpy.org/doc/stable/reference/generated/numpy.correlate.html
         ///
         /// Port of NumPy's <c>PyArray_Correlate2</c> (numpy/_core/src/multiarray/multiarraymodule.c), the engine member
-        /// <see cref="Backends.TensorEngine.Correlate2"/>: the second argument is complex-conjugated first (real inputs
+        /// <see cref="TensorEngine.Correlate2"/>: the second argument is complex-conjugated first (real inputs
         /// unchanged); the operands are then swapped when <c>len(a) &lt; len(v)</c> — correlate is NOT commutative — and the
         /// output is reversed in that case (<c>_pyarray_revert</c>). The kernel is read forward. Float bit-parity notes are
         /// in <c>np.correlate.cs</c>.

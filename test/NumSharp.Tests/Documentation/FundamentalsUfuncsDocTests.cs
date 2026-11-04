@@ -132,5 +132,37 @@ namespace NumSharp.Tests.Documentation
             outer.shape.Should().Equal(new long[] { 4, 3 });
             ((long)outer[2, 1]).Should().Be(3L);
         }
+
+        // ── Text ufuncs ─────────────────────────────────────────────────────────────────────────────
+
+        /// <summary>
+        ///     The "Text ufuncs" snippet (every value probed against NumPy 2.4.2): <c>np.add</c> concatenates; fixed-width
+        ///     repetition goes through <c>np.strings.multiply</c>, because the bare ufunc needs a sized <c>out=</c>; a
+        ///     <c>StringDType</c> operand allocates its own result; and <c>sum</c> / <c>max</c> refuse <c>U</c> text, which has
+        ///     no such loop, while their <c>T</c> forms compute.
+        /// </summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from NumPy.</exception>
+        [TestMethod]
+        public void TextUfuncs_ConcatenateRepeatAndReduce()
+        {
+            var names = np.array(new[] { "cat", "dog" });
+            np.add(names, "!").ToString(true).Should().Be("array(['cat!', 'dog!'], dtype='<U4')");
+            np.strings.multiply(names, 2).ToString(true).Should().Be("array(['catcat', 'dogdog'], dtype='<U6')");
+            Action bare = () => np.multiply(names, 2);
+            bare.Should().Throw<TypeError>().WithMessage("The 'out' kwarg is necessary when using the string multiply ufunc directly.*");
+            np.multiply(names, 2, np.empty(new Shape(2), "U6")).ToString(true).Should().Be("array(['catcat', 'dogdog'], dtype='<U6')");
+
+            var text = names.astype(np.dtypes.StringDType());
+            ((string)np.sum(text).item()).Should().Be("catdog", "concatenation, not numeric addition");
+            (text * 2).ToString(true).Should().Be("array(['catcat', 'dogdog'], dtype=StringDType())");
+            ((string)np.max(text).item()).Should().Be("dog");
+
+            Action sum = () => np.sum(names);
+            sum.Should().Throw<TypeError>().WithMessage("the resolved dtypes are not compatible with add.reduce.*");
+            Action max = () => np.max(names);
+            max.Should().Throw<TypeError>().WithMessage("ufunc 'maximum' did not contain a loop with signature matching types*");
+            Action sqrt = () => np.sqrt(names);
+            sqrt.Should().Throw<TypeError>().WithMessage("ufunc 'sqrt' not supported for the input types, *");
+        }
     }
 }

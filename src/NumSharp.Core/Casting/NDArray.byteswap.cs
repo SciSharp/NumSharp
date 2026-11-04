@@ -25,7 +25,7 @@ namespace NumSharp
         ///     returns this instance with its strings untouched (a read-only array still raises NumPy's
         ///     <see cref="ValueError"/>), and the default returns a copy in NumPy's <c>ANYORDER</c> layout (F only for an
         ///     F-contiguous-and-not-C source), each string duplicated into the copy's own allocator. NumPy 2.4.2
-        ///     crashes the process on this call (owner's decision D14, <c>docs/plans/strings-phase1-completion.md</c>).
+        ///     crashes the process on this call (a segmentation fault); NumSharp returns the identity swap instead.
         ///     </para>
         ///     <para>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.byteswap.html</para>
         /// </remarks>

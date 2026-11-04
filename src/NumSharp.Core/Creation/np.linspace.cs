@@ -45,7 +45,15 @@ namespace NumSharp
         /// <param name="endpoint">If True, stop is the last sample. Otherwise, it is not included. Default is True.</param>
         /// <param name="dtype">The type of the output array. If dtype is not given, infer the data type from the other input arguments.</param>
         /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
+        /// <returns>A new 1-D array of <paramref name="num"/> samples, exactly as the
+        ///     <see cref="linspace(double, double, long, bool, DType, string)"/> overload returns it.</returns>
+        /// <exception cref="ValueError">A negative <paramref name="num"/>, or a <paramref name="device"/> other than
+        ///     <c>"cpu"</c>.</exception>
+        /// <exception cref="NotSupportedException">A <paramref name="dtype"/> without a storage lane (a datetime
+        ///     descriptor).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linspace.html
+        ///     <para>The <see cref="int"/> count only widens to <see cref="long"/>; it exists so an <c>int</c> literal binds
+        ///     without a cast.</para></remarks>
         public static NDArray linspace(double start, double stop, int num, bool endpoint = true, DType dtype = null, string device = null)
             => linspace(start, stop, (long)num, endpoint, dtype, device);
 
@@ -59,7 +67,14 @@ namespace NumSharp
         /// <param name="num">Number of samples to generate. Default is 50. Must be non-negative.</param>
         /// <param name="endpoint">If True, stop is the last sample. Otherwise, it is not included. Default is True.</param>
         /// <param name="dtype">The type of the output array. If dtype is not given, infer the data type from the other input arguments.</param>
+        /// <returns>A new 1-D array of <paramref name="num"/> samples: float64 unless <paramref name="dtype"/> names another,
+        ///     even though the bounds are float32 (NumPy's default).</returns>
+        /// <exception cref="ValueError">A negative <paramref name="num"/>.</exception>
+        /// <exception cref="NotSupportedException">A <paramref name="dtype"/> without a storage lane (a datetime
+        ///     descriptor).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linspace.html
+        ///     <para>The float32 bounds widen to float64 before the samples are computed, so pass
+        ///     <c>dtype: np.float32</c> for a float32 result.</para></remarks>
         public static NDArray linspace(float start, float stop, long num, bool endpoint = true, DType dtype = null)
         {
             // NumPy: linspace always returns float64 by default, regardless of input types
@@ -76,7 +91,14 @@ namespace NumSharp
         /// <param name="num">Number of samples to generate. Default is 50. Must be non-negative.</param>
         /// <param name="endpoint">If True, stop is the last sample. Otherwise, it is not included. Default is True.</param>
         /// <param name="dtype">The type of the output array. If dtype is not given, infer the data type from the other input arguments.</param>
+        /// <returns>A new 1-D array of <paramref name="num"/> samples: float64 unless <paramref name="dtype"/> names another,
+        ///     even though the bounds are float32 (NumPy's default).</returns>
+        /// <exception cref="ValueError">A negative <paramref name="num"/>.</exception>
+        /// <exception cref="NotSupportedException">A <paramref name="dtype"/> without a storage lane (a datetime
+        ///     descriptor).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linspace.html
+        ///     <para>The float32 bounds widen to float64 and the <see cref="int"/> count to <see cref="long"/>, so pass
+        ///     <c>dtype: np.float32</c> for a float32 result.</para></remarks>
         public static NDArray linspace(float start, float stop, int num, bool endpoint = true, DType dtype = null)
             => linspace(start, stop, (long)num, endpoint, dtype);
     }

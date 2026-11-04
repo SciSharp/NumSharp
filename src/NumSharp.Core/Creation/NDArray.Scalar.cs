@@ -19,10 +19,11 @@ namespace NumSharp
         /// <returns>A new 0-d array the caller owns.</returns>
         /// <remarks>
         ///     <para>
-        ///     In case when <paramref name="value"/> is not <paramref name="dtype"/>, <see cref="Converts.ChangeType(object,System.Type)"/>
-        ///     will be called. A NEP 55 <c>StringDType</c> <paramref name="dtype"/> stores the value by NumPy's
-        ///     <c>stringdtype_setitem</c> (<c>np.array(5, dtype='T')</c> is <c>'5'</c>; the NA object, or null for
-        ///     <c>None</c>, packs an NA element).
+        ///     A numeric <paramref name="dtype"/> converts <paramref name="value"/> with <see cref="Converts"/> (C#'s
+        ///     conversions). A text <paramref name="dtype"/> stores it as NumPy's setitem does: a fixed-width <c>S</c> /
+        ///     <c>U</c> dtype writes its text (a number's <c>str()</c>, cut to the width), and a NEP 55 <c>StringDType</c>
+        ///     stores it by <c>stringdtype_setitem</c> (<c>np.array(5, dtype='T')</c> is <c>'5'</c>; the NA object, or
+        ///     null for <c>None</c>, packs an NA element).
         ///     </para>
         ///     <para>
         ///     The result promotes like an array in every ufunc: <c>float32_array * NDArray.Scalar(2.0)</c> is float64, as
@@ -33,7 +34,8 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
         /// <exception cref="ValueError">A non-text value into a <c>coerce=False</c> <c>StringDType</c>.</exception>
         /// <exception cref="UnicodeDecodeError"><c>bytes</c> that are not UTF-8 into a <c>StringDType</c>.</exception>
-        /// <exception cref="UnicodeEncodeError">A text with a lone surrogate into a <c>StringDType</c>.</exception>
+        /// <exception cref="UnicodeEncodeError">A text with a lone surrogate into a <c>StringDType</c>, or non-ASCII text
+        ///     into <c>S</c>.</exception>
         /// <exception cref="InvalidCastException">A value <see cref="Converts"/> cannot convert to the dtype.</exception>
         [MethodImpl(Inline)]
         public static NDArray Scalar(object value, DType dtype)

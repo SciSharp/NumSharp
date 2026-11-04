@@ -200,5 +200,30 @@ namespace NumSharp.Tests.Documentation
             xx.shape.Should().Equal(new long[] { 4, 3 });
             yy.shape.Should().Equal(new long[] { 4, 3 });
         }
+
+        // ── Text and character inputs ───────────────────────────────────────────────────────────────
+
+        /// <summary>
+        ///     The "Text and character inputs" snippet and the text line of "N-D constructors" (every value probed against
+        ///     NumPy 2.4.2): a string array infers its <c>U</c> width, a descriptor picks <c>S</c> or <c>StringDType</c>, a C#
+        ///     <c>char</c> array is the Char dtype, a C# string is a 0-d <c>U</c> array, and the constructors store their fill
+        ///     as text.
+        /// </summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from NumPy.</exception>
+        [TestMethod]
+        public void TextAndCharacterInputs()
+        {
+            np.array(new[] { "cat", "bird" }).ToString(true).Should().Be("array(['cat', 'bird'], dtype='<U4')");
+            np.array(new[] { "cat", "bird" }, "S8").ToString(true).Should().Be("array([b'cat', b'bird'], dtype='|S8')");
+            np.array(new[] { "cat", "bird" }, np.dtype("T")).ToString(true).Should().Be("array(['cat', 'bird'], dtype=StringDType())");
+            np.array(new[] { 'a', 'b' }).typecode.Should().Be(NPTypeCode.Char, "a C# char is a UTF-16 code unit, not U1");
+            NDArray textScalar = "cat";
+            textScalar.ToString(true).Should().Be("array('cat', dtype='<U3')");
+
+            np.zeros(new Shape(2), "U8").ToString(true).Should().Be("array(['', ''], dtype='<U8')");
+            np.zeros(new Shape(2), "T").ToString(true).Should().Be("array(['', ''], dtype=StringDType())");
+            np.ones(new Shape(2), "U8").ToString(true).Should().Be("array(['1', '1'], dtype='<U8')");
+            np.full(new Shape(2), "ab").ToString(true).Should().Be("array(['ab', 'ab'], dtype='<U2')");
+        }
     }
 }

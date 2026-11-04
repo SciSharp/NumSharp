@@ -33,7 +33,7 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Gets the shape based on given <see cref="indicies"/> and the index offset (C-Contiguous) inside the current storage.
+        ///     Gets the shape based on given <paramref name="indicies"/> and the index offset (C-Contiguous) inside the current storage.
         /// </summary>
         /// <param name="indicies">The selection of indexes 0 based.</param>
         /// <returns></returns>

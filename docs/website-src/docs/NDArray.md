@@ -401,15 +401,15 @@ long v = (long)elem;                    // explicit cast to scalar (converts)
 long v2 = a.item<long>(6);              // flat index 6 → row 1, col 2
 object box = a.item(6);                 // untyped form returns object (boxed long)
 
-// 3. GetValue<T> - N-D coordinates, typed. T must match the dtype exactly.
+// 3. GetValue<T> - N-D coordinates, typed; another T than the dtype's own type is NumPy's cast to T.
 long v3 = a.GetValue<long>(1, 2);
 
-// 4. GetAtIndex<T> - flat index, typed, no Shape math (fastest). T must match the dtype.
+// 4. GetAtIndex<T> - flat index, typed, no Shape math (fastest with the dtype's own type).
 long v4 = a.GetAtIndex<long>(6);
 
-// Writes mirror the reads:
+// Writes mirror the reads, casting the value to the array's dtype:
 a[1, 2] = 99;                           // indexer assignment (converts to the array dtype)
-a.SetValue(99L, 1, 2);                  // N-D coordinates (value must match the dtype)
+a.SetValue(99L, 1, 2);                  // N-D coordinates
 a.SetAtIndex(99L, 6);                   // flat index
 ```
 

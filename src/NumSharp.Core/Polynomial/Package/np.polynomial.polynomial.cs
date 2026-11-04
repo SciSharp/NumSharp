@@ -233,7 +233,7 @@ namespace NumSharp
         /// <exception cref="ValueError">An array scale with several elements or none (NumPy's truth-value errors), or
         ///     entries of different shapes (<c>setting an array element with a sequence…</c>).</exception>
         /// <exception cref="TypeError">NumPy's boolean negative / subtract.</exception>
-        /// <exception cref="OverflowException">A Python int out of a NumPy integer dtype's range, or CPython's int/float overflow.</exception>
+        /// <exception cref="System.OverflowException">A Python int out of a NumPy integer dtype's range, or CPython's int/float overflow.</exception>
         /// <exception cref="System.NotSupportedException">An entry NumPy would store in an object array: a Python int beyond
         ///     uint64, null, a string.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.polyline.html</remarks>
@@ -287,7 +287,7 @@ namespace NumSharp
         /// <returns>The trimmed copy (<c>c[:1]*0</c> when nothing exceeds the tolerance).</returns>
         /// <exception cref="ValueError"><c>tol must be non-negative</c>, an empty or non-1-d series, or no common type.</exception>
         /// <exception cref="TypeError">A complex or null tolerance.</exception>
-        /// <exception cref="OverflowException">A Python int tolerance too large to convert.</exception>
+        /// <exception cref="System.OverflowException">A Python int tolerance too large to convert.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.polytrim.html</remarks>
         [NDScoped]
         public NDArray polytrim(object c, object tol) => NDPolySeries.TrimCoef(c, PolyUtilsModule.Tolerance(tol));

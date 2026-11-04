@@ -357,5 +357,24 @@ namespace NumSharp.Tests.Documentation
             values.Length.Should().Be(13);
             values[0].Should().Be(2.0);
         }
+
+        // ── Arrays of text ──────────────────────────────────────────────────────────────────────────
+
+        /// <summary>
+        ///     The "Arrays of text" snippet (every value probed against NumPy 2.4.2): a fixed-width <c>U5</c> array sorts,
+        ///     counts its unique values and returns a C# string for one element.
+        /// </summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from NumPy.</exception>
+        [TestMethod]
+        public void ArraysOfText()
+        {
+            var labels = np.array(new[] { "pear", "fig", "apple", "fig" });
+            labels.dtype.str.Should().Be("<U5");
+            np.sort(labels).ToString(true).Should().Be("array(['apple', 'fig', 'fig', 'pear'], dtype='<U5')");
+            var (values, counts) = np.unique(labels, return_counts: true);
+            values.ToString(true).Should().Be("array(['apple', 'fig', 'pear'], dtype='<U5')");
+            counts.ToArray<long>().Should().Equal(1L, 2L, 1L);
+            labels.item(0).Should().Be("pear");
+        }
     }
 }

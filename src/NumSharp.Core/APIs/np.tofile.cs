@@ -11,7 +11,7 @@ namespace NumSharp
         ///     <para>
         ///     Data is always written in C (row-major) order, independent of the array's own layout —
         ///     a sliced / strided / transposed / broadcast view writes its logical elements, NOT the raw
-        ///     underlying buffer. The data produced can be recovered with <see cref="np.fromfile(string,System.Type)"/>.
+        ///     underlying buffer. The data produced can be recovered with <see cref="np.fromfile(string, DType, long, string, long, NDArray)"/>.
         ///     </para>
         /// </summary>
         /// <param name="fid">A filename. The file is created (truncated if it exists).</param>

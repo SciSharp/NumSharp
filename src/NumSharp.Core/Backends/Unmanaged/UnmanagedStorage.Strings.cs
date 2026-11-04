@@ -9,7 +9,7 @@ namespace NumSharp.Backends
         /// <summary>
         ///     True when this storage holds TEXT — the <see cref="NPTypeCode.String"/> lane, shared by the fixed-width strings
         ///     (<c>S</c>, <c>U</c>: a <see cref="StringArraySlice"/>) and NEP 55 <c>StringDType</c> (<c>T</c>: a
-        ///     <see cref="VStringArraySlice"/>; decision D4 of <c>docs/plans/strings-phase1-completion.md</c>). The two layouts
+        ///     <see cref="VStringArraySlice"/>). The two layouts
         ///     have nothing in common below the lane: test <see cref="IsFixedString"/> / <see cref="IsVString"/> (or the
         ///     descriptor's class) before reading elements as bytes.
         /// </summary>
@@ -44,7 +44,7 @@ namespace NumSharp.Backends
         /// <summary>
         ///     The loud refusal of a raw or fixed-width route reached by a <c>StringDType</c> operand: a
         ///     <see cref="NotSupportedException"/> naming the descriptor, thrown before any byte of the 16-byte cells is read
-        ///     as fixed-width text (rule 2 of <c>docs/plans/strings-phase1-completion.md</c> §3). Every <c>np.*</c> function
+        ///     as fixed-width text. Every <c>np.*</c> function
         ///     answers a <c>StringDType</c> operand through its own route first (computing as NumPy does, or raising NumPy's
         ///     refusal), so reaching this is a NumSharp wiring gap, never NumPy's answer.
         /// </summary>

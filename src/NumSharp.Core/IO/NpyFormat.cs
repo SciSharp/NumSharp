@@ -48,9 +48,9 @@ namespace NumSharp.IO
     ///       <item><c>Decimal</c> has no NumPy dtype and cannot be written.</item>
     ///       <item>A NEP 55 <c>StringDType</c> array is written as NumPy writes it: the header says <c>'|O'</c>
     ///             and the data is NumPy's protocol-4 pickle of the array, byte for byte; such a file (and NumPy's)
-    ///             loads with <c>allow_pickle=True</c> (<see cref="NpyPickle"/>, decision D3).</item>
+    ///             loads with <c>allow_pickle=True</c> (<see cref="NpyPickle"/>).</item>
     ///       <item>Other object arrays, structured dtypes, datetime64/timedelta64 and void are parsed but rejected
-    ///             with a precise message (see the issue's "What We're Not Doing").</item>
+    ///             with a precise message.</item>
     ///     </list>
     /// </remarks>
     public static class NpyFormat

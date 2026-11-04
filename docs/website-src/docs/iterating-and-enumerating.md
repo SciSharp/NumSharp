@@ -119,7 +119,7 @@ Unlike the aliasing views, these **materialize or copy** into caller-owned .NET 
 ```csharp
 double[] all      = a.ToArray<double>();                  // C-order copy (any layout) - already on NDArray
 double   mean     = a.AsEnumerable<double>().Average();   // LINQ / IEnumerable<T>, unboxed, any layout
-var      evens    = a.AsEnumerable<int>().Where(x => x % 2 == 0).ToList();
+var      evens    = a.AsEnumerable<double>().Where(x => x % 2 == 0).ToList();   // T is the dtype's own type (double here)
 
 double[] fromIter = np.flat<double>(a).ToArray();         // materialize any iterator (C-order here)
 int      copied   = np.nditer<double>(a).CopyTo(dest);    // pour an iterator into your own Span<T>/array

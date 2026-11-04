@@ -888,10 +888,9 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Get: Gets internal storage array by calling <see cref="IStorage.GetData"/><br></br>
-        ///     Set: Replace internal storage by calling <see cref="IStorage.ReplaceData(System.Array)"/>
+        ///     The storage's internal array (<see cref="Backends.UnmanagedStorage.InternalArray"/>): the slice that holds
+        ///     this array's elements, read through <see cref="Shape"/> (a view shares its owner's slice).
         /// </summary>
-        /// <remarks>Setting does not replace internal storage array.</remarks>
         protected internal IArraySlice Array
         {
             [MethodImpl(Inline)]

@@ -84,11 +84,14 @@ namespace NumSharp
         ///     <paramref name="op"/> is an output slot to be ALLOCATED by the iterator (NumPy's
         ///     <c>None</c>), which then defaults to <c>writeonly, allocate</c>.
         /// </summary>
+        /// <param name="op">The operands to iterate over together (they broadcast against each other); a null entry is an
+        ///     output the iterator allocates.</param>
         /// <param name="op_flags">
         ///     One flag list per operand. A SINGLE inner list is broadcast to every operand —
         ///     NumPy's "flat list of strings applies to all operands" convenience.
         /// </param>
-        /// <inheritdoc cref="nditer(NDArray, string[], string[], DType[], char, string, int[][], long[], long)"/>
+        /// <inheritdoc cref="nditer(NDArray, string[], string[], DType[], char, string, int[][], long[], long)"
+        ///     path="/*[not(self::summary) and not(self::param[@name='op' or @name='op_flags'])]"/>
         public static NDIterator nditer(
             NDArray[] op,
             string[] flags = null,

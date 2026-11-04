@@ -9,7 +9,7 @@ namespace NumSharp
         ///     Iterates over matching 1-D slices oriented along <paramref name="axis"/> in the
         ///     index and data arrays, using the former to look up values in the latter. These
         ///     slices can be different lengths. Functions returning an index along an axis, like
-        ///     <see cref="argsort(NDArray,int?,string)"/> and <c>argmax</c>/<c>argmin</c> with
+        ///     <see cref="argsort(NDArray, int?, string, object, bool?)"/> and <c>argmax</c>/<c>argmin</c> with
         ///     <c>keepdims</c>, produce suitable indices.
         /// </summary>
         /// <param name="arr">Source array <c>(Ni..., M, Nk...)</c>.</param>

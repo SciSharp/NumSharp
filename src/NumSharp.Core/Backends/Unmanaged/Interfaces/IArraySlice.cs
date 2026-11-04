@@ -102,7 +102,7 @@ namespace NumSharp.Backends.Unmanaged
         ///     Performs dispose on the internal unmanaged memory block.<br></br>
         /// </summary>
         /// <remarks>
-        ///     Dangerous because this <see cref="ArraySlice"/> might be a <see cref="IsSlice"/> therefore there might be other slices that point to current <see cref="MemoryBlock"/>.<br></br>
+        ///     Dangerous because this <see cref="ArraySlice"/> might be a slice of a larger block, so other slices might point to the current <see cref="MemoryBlock"/>.<br></br>
         ///     So releasing the <see cref="MemoryBlock"/> might cause memory corruption elsewhere.<br></br>
         ///     It is best to leave MemoryBlock to GC.
         /// </remarks>

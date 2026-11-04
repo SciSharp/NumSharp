@@ -90,6 +90,21 @@ namespace NumSharp.Tests.Documentation
             back.ToArray<double>().Should().Equal(1.0, 2.0, 3.0, 4.0);
         }
 
+        /// <summary>
+        ///     The "Text columns and mixed tables" example (probed against NumPy 2.4.2): one line list read twice, its text
+        ///     column whole as <c>StringDType</c> and its number column as int32, because one array holds one dtype.
+        /// </summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from NumPy.</exception>
+        [TestMethod]
+        public void TextColumns_TextAndNumbersInSeparateArrays()
+        {
+            var lines = new[] { "Rex,9", "Fido,3" };
+            var labels = np.loadtxt(lines, dtype: np.dtypes.StringDType(), delimiter: ",", usecols: new[] { 0 });
+            var ages = np.loadtxt(lines, dtype: np.int32, delimiter: ",", usecols: new[] { 1 });
+            labels.ToString(true).Should().Be("array(['Rex', 'Fido'], dtype=StringDType())");
+            ages.ToString(true).Should().Be("array([9, 3], dtype=int32)");
+        }
+
         /// <summary>The "Text encodings" example: a UTF-16 file (one BOM), a cp1252 byte stream, CPython's charmap error.</summary>
         [TestMethod]
         public void TextEncodings_Utf16AndCodePages()

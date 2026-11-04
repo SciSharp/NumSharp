@@ -21,7 +21,7 @@ namespace NumSharp
         ///     Port of NumPy 2.x <c>numpy.bmat</c> ≙ <c>matrix(concatenate([concatenate(row, axis=-1) for
         ///     row in obj], axis=0))</c>. It is <b>pure block assembly (concatenation) — it performs NO
         ///     matrix multiplication</b>, so no BLAS/OpenBLAS path is involved; the numerics come entirely
-        ///     from <see cref="concatenate(NDArray[], int?, NDArray, NPTypeCode?, string)"/> and the 2-D
+        ///     from <see cref="concatenate(NDArray[], int?, NDArray, DType, string)"/> and the 2-D
         ///     coercion from <see cref="Shape.AsMatrix"/>. The result is an <see cref="NDMatrix"/>, as in
         ///     NumPy: <c>*</c> is the matrix product on it and it has <c>.T</c>, <c>.H</c>, <c>.I</c>; seen
         ///     through an <see cref="NDArray"/> reference it is a plain 2-D array. The result dtype follows NumPy's two-stage
@@ -116,7 +116,7 @@ namespace NumSharp
         ///     Port of NumPy 2.x <c>numpy.bmat</c>'s <c>isinstance(obj, (tuple, list))</c> branch. Mixed
         ///     forms work too — <c>([A, B], [C, D])</c> (a tuple of lists) — since a row may be a tuple, an
         ///     <c>NDArray[]</c>, or any <see cref="IEnumerable"/> of blocks; a non-<see cref="NDArray"/>
-        ///     entry is passed through <see cref="asanyarray(in object, Type)"/> exactly as NumPy runs
+        ///     entry is passed through <see cref="asanyarray(in object, DType, string)"/> exactly as NumPy runs
         ///     <c>asarray</c> over the entries. Still pure concatenation (no matrix products).
         ///     <para>
         ///     <b>Error parity.</b> The errors reproduce <c>numpy.concatenate</c>'s contract as
@@ -233,7 +233,7 @@ namespace NumSharp
         ///     block reports "zero-dimensional…" while a *later* rank mismatch reports "same number of
         ///     dimensions…"; a <c>null</c> block is treated as a 0-D array (NumPy's <c>asarray(None)</c>).
         ///     Well-ranked blocks with mismatched extents fall through to
-        ///     <see cref="concatenate(NDArray[], int?, NDArray, NPTypeCode?, string)"/>, whose
+        ///     <see cref="concatenate(NDArray[], int?, NDArray, DType, string)"/>, whose
         ///     <see cref="IncorrectShapeException"/> carries the same verbatim NumPy text.
         /// </summary>
         private static NDArray BmatConcat(NDArray[] blocks, int axis)
@@ -299,7 +299,7 @@ namespace NumSharp
         /// <summary>
         ///     Converts a tuple entry to a block: an <see cref="NDArray"/> passes through, <c>null</c> stays
         ///     <c>null</c> (a 0-D array to <see cref="BmatConcat"/>, matching NumPy's <c>None</c>), and any
-        ///     other value goes through <see cref="asanyarray(in object, Type)"/> — as NumPy runs
+        ///     other value goes through <see cref="asanyarray(in object, DType, string)"/> — as NumPy runs
         ///     <c>asarray</c> over the entries (a scalar so produced is 0-D and rejected identically).
         /// </summary>
         private static NDArray BmatElementToBlock(object e)

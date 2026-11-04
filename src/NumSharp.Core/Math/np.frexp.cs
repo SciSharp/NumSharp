@@ -8,7 +8,7 @@ namespace NumSharp
         ///     Decompose each element of <paramref name="x"/> into a normalized fraction and an integer power
         ///     of two, element-wise: returns <c>(mantissa, exponent)</c> such that
         ///     <c>x == mantissa * 2^exponent</c>, with the mantissa in the half-open interval [0.5, 1). This is
-        ///     the two-output inverse of <see cref="ldexp(NDArray, NDArray)"/>.
+        ///     the two-output inverse of <see cref="ldexp(NDArray, NDArray, NDArray, NDArray)"/>.
         ///     Mirrors NumPy's ufunc <c>frexp(x) -&gt; (mantissa, exponent)</c>.
         /// </summary>
         /// <param name="x">Input array. Integer/bool inputs promote to a float per NumPy's width rule

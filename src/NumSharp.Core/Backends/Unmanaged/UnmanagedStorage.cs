@@ -284,7 +284,7 @@ namespace NumSharp.Backends
         public Type DType => _dtype;
 
         /// <summary>
-        ///     The <see cref="NPTypeCode"/> of <see cref="IStorage.DType"/>.
+        ///     The <see cref="NPTypeCode"/> of <see cref="UnmanagedStorage.DType"/>.
         /// </summary>
         public NPTypeCode TypeCode => _typecode;
 
@@ -452,7 +452,7 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     The engine that was used to create this <see cref="IStorage"/>.
+        ///     The engine that was used to create this <see cref="UnmanagedStorage"/>.
         /// </summary>
         public TensorEngine Engine { get; protected internal set; }
 
@@ -1324,7 +1324,7 @@ namespace NumSharp.Backends
         /// <param name="sourceArray">The array to change his type</param>
         /// <param name="to_dtype">The type to change to.</param>
         /// <remarks>If the return type is equal to source type, this method does not return a copy.</remarks>
-        /// <returns>Returns <see cref="sourceArray"/> or new array with changed type to <see cref="to_dtype"/></returns>
+        /// <returns>Returns <paramref name="sourceArray"/> or new array with changed type to <paramref name="to_dtype"/></returns>
         [SuppressMessage("ReSharper", "AssignNullToNotNullAttribute")]
         protected static Array _ChangeTypeOfArray(Array sourceArray, Type to_dtype)
         {
@@ -1337,7 +1337,7 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="sourceArray">The array to change his type</param>
         /// <remarks>If the return type is equal to source type, this method does not return a copy.</remarks>
-        /// <returns>Returns <see cref="sourceArray"/> or new array with changed type to <see cref="to_dtype"/></returns>
+        /// <returns>Returns <paramref name="sourceArray"/> or new array with changed type to <paramref name="to_dtype"/></returns>
         [SuppressMessage("ReSharper", "AssignNullToNotNullAttribute")]
         protected static ArraySlice<TOut> _ChangeTypeOfArray<TOut>(IArraySlice sourceArray) where TOut : unmanaged
         {
@@ -1564,7 +1564,7 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     Assign this <see cref="ArraySlice{T}"/> as the internal array storage and assign <see cref="shape"/> to it.
+        ///     Assign this <see cref="ArraySlice{T}"/> as the internal array storage and assign <paramref name="shape"/> to it.
         /// </summary>
         /// <param name="values">The array to set as internal data storage</param>
         /// <param name="shape">The shape of the array.</param>

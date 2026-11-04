@@ -167,7 +167,9 @@ engine; text transformations use the string functions directly.
   array storage is not implemented.
 - Object, structured, subarray, and void dtypes are not implemented. `NDListArray` and the restricted
   StringDType pickle reader do not introduce a general object dtype.
-- `float128`/`longdouble` and `complex256`/`clongdouble` have no corresponding .NET storage type.
+- The extended long double of NumPy's Linux and macOS builds (`float128`, `complex256`) has no .NET storage
+  type. `np.longdouble` and `np.clongdouble` are their own classes stored like float64 and complex128, as on
+  NumPy's Windows build (see [C-type classes](dtypes.md#c-type-classes)).
 
 See [Dtypes](dtypes.md) for scalar conversion, promotion, special-value, and casting details.
 

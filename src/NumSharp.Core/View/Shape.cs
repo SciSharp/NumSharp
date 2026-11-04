@@ -334,7 +334,7 @@ namespace NumSharp
 
         /// <summary>
         ///     Is this a simple sliced shape that uses the fast GetOffsetSimple path?
-        ///     True when: IsSliced && !IsBroadcasted
+        ///     True when: <c>IsSliced &amp;&amp; !IsBroadcasted</c>
         ///     For simple slices, element access is: offset + sum(indices * strides)
         /// </summary>
         public readonly bool IsSimpleSlice
@@ -436,7 +436,7 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Is this shape a scalar? (<see cref="NDim"/>==0 && <see cref="size"/> == 1)
+        ///     Is this shape a scalar? (<see cref="NDim"/> == 0 &amp;&amp; <see cref="size"/> == 1)
         /// </summary>
         public readonly bool IsScalar;
 
@@ -1165,7 +1165,7 @@ namespace NumSharp
 
 
         /// <summary>
-        ///     Gets the shape based on given <see cref="indicies"/> and the index offset (C-Contiguous) inside the current storage.
+        ///     Gets the shape based on given <paramref name="indicies"/> and the index offset (C-Contiguous) inside the current storage.
         /// </summary>
         /// <param name="indicies">The selection of indexes 0 based.</param>
         /// <returns></returns>

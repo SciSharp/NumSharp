@@ -7,7 +7,7 @@ namespace NumSharp.Backends.Unmanaged
     public static class UnmanagedHelper
     {
         /// <summary>
-        ///     Copies the entire contents of this storage to given address (using <see cref="Count"/>).
+        ///     Copies the entire contents of this storage to given address (<see cref="IMemoryBlock.Count"/> elements).
         /// </summary>
         /// <param name="dst">The block to copy to.</param>
         public static unsafe void CopyTo(this IMemoryBlock src, IMemoryBlock dst)
@@ -23,7 +23,7 @@ namespace NumSharp.Backends.Unmanaged
         }
         
         /// <summary>
-        ///     Copies the entire contents of this storage to given address (using <see cref="Count"/>).
+        ///     Copies the entire contents of this storage to given address (<see cref="IMemoryBlock.Count"/> elements).
         /// </summary>
         /// <param name="dst">The block to copy to.</param>
         public static unsafe void CopyTo<T>(this UnmanagedMemoryBlock<T> src, UnmanagedMemoryBlock<T> dst) where T : unmanaged
@@ -36,7 +36,7 @@ namespace NumSharp.Backends.Unmanaged
         }
 
         /// <summary>
-        ///     Copies the entire contents of this storage to given address (using <see cref="Count"/>).
+        ///     Copies the entire contents of this storage to given address (<see cref="IMemoryBlock.Count"/> elements).
         /// </summary>
         /// <param name="dst">The block to copy to.</param>
         /// <param name="countOffsetDestination">The element offset in the destination where copying begins.</param>
@@ -53,7 +53,7 @@ namespace NumSharp.Backends.Unmanaged
         }
 
         /// <summary>
-        ///     Copies the entire contents of this storage to given address (using <see cref="Count"/>).
+        ///     Copies the entire contents of this storage to given address (<see cref="IMemoryBlock.Count"/> elements).
         /// </summary>
         /// <param name="dstAddress">The address to copy to.</param>
         /// <param name="countOffsetDestination">The element offset in the destination where copying begins.</param>

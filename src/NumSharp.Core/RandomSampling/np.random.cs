@@ -735,11 +735,11 @@ namespace NumSharp
         ///     'gauss': float}</c>; here the bit generator's part is its typed <see cref="BitGeneratorState"/> (whose own members
         ///     already flatten <c>'state'</c> and the generator-specific keys), and <see cref="has_gauss"/>/<see cref="gauss"/>
         ///     are the two keys RandomState adds. The object is plain mutable data: edit it and pass it to
-        ///     <see cref="set_state(State)"/>.
+        ///     <see cref="NumPyRandom.set_state(NumPyRandom.State)"/>.
         /// </remarks>
         public sealed class State
         {
-            /// <summary>Creates an empty state (set <see cref="state"/> before passing it to <see cref="set_state(State)"/>).</summary>
+            /// <summary>Creates an empty state (set <see cref="state"/> before passing it to <see cref="NumPyRandom.set_state(NumPyRandom.State)"/>).</summary>
             public State() { }
 
             /// <summary>Creates a state from its parts.</summary>
