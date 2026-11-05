@@ -653,7 +653,8 @@ namespace NumSharp.Backends
             Action<ILGenerator> scalarBody;
             if (sameDtype)
             {
-                scalarBody = il => DirectILKernelGenerator.EmitScalarOperation(il, op, resultType, NaNOperandOrder.NumPyUfunc);
+                // The one definition every caller of this kernel key shares (DefaultEngine.SameDtypeBinaryScalarBody).
+                scalarBody = SameDtypeBinaryScalarBody(op, resultType);
             }
             else
             {
@@ -670,7 +671,7 @@ namespace NumSharp.Backends
             bool shiftSimd = sameDtype && (op == BinaryOp.LeftShift || op == BinaryOp.RightShift)
                              && DirectILKernelGenerator.ShiftVariableSupported(resultType, op == BinaryOp.LeftShift);
             Action<ILGenerator>? vectorBody = simdViable
-                ? il => DirectILKernelGenerator.EmitVectorOperation(il, op, resultType, NaNOperandOrder.NumPyUfunc)
+                ? SameDtypeBinaryVectorBody(op, resultType)
                 : shiftSimd
                     ? il => DirectILKernelGenerator.EmitShiftVectorBody(il, resultType, op == BinaryOp.LeftShift)
                     : null;

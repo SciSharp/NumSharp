@@ -309,6 +309,77 @@ namespace NumSharp.Tests.Math
         }
 
         /// <summary>
+        ///     With the generator's optional kernels switched off (<see cref="DirectILKernelGenerator.Enabled"/>, the
+        ///     debugging switch NDIter's 2-D route obeys too), the several-rows form runs one add inner-loop call per row
+        ///     instead of one call of the 2-D kernel's stationary-out variant: the same bytes for reversed rows, reversed
+        ///     columns, both, and a broadcast row — over row blocks of every size the variant forms (8 to 300 columns, up to
+        ///     600 rows) with NaN payloads in every row (each column ends on another row's NaN) — and for np.average over an
+        ///     axis pair, float64 and float32. <see cref="Sum_RowsForm_ReversedAndBroadcastRows_AreNumPysPerRowCalls"/> pins
+        ///     the switched-on bytes to NumPy's.
+        /// </summary>
+        /// <remarks>The switch is process-wide, so the test is <c>[DoNotParallelize]</c> and restores it in a finally.</remarks>
+        [TestMethod]
+        [DoNotParallelize]
+        public void RowsForm_WithTheOptionalKernelsOff_GivesTheSameBytes()
+        {
+            var cases = new List<(string Name, Func<NDArray> Call)>();
+            foreach (var t in new[] { NPTypeCode.Double, NPTypeCode.Single })
+            foreach (var (r, c) in new (int, int)[] { (600, 8), (100, 100), (40, 300), (3, 5) })
+            {
+                // NaN payloads (i·1000 + j + 1: distinct, within float32's 22 payload bits) at every third column of each
+                // row, shifted by the row, so each column meets NaNs from several rows.
+                NDArray a;
+                if (t == NPTypeCode.Double)
+                {
+                    var g = Grid(r, c, F64Pool);
+                    for (int i = 0; i < r; i++)
+                        for (int j = i % 3; j < c; j += 3)
+                            g[i, j] = Nan(i * 1000 + j + 1);
+                    a = np.array(g);
+                }
+                else
+                {
+                    var g = Grid(r, c, F32Pool);
+                    for (int i = 0; i < r; i++)
+                        for (int j = i % 3; j < c; j += 3)
+                            g[i, j] = NanF(i * 1000 + j + 1);
+                    a = np.array(g);
+                }
+                var row = a["0"].copy();
+                // The rows split over two reduced axes (an odd count over a length-1 one): np.average over (0, 1) keeps
+                // the c columns, the rows form's call over all r rows.
+                var a3 = r % 2 == 0 ? a.reshape(2, r / 2, c) : a.reshape(r, 1, c);
+                string tag = $"{t} ({r}, {c})";
+                cases.Add(($"{tag} a[::-1] axis0", () => np.sum(a["::-1"], 0)));
+                cases.Add(($"{tag} a[:, ::-1] axis0", () => np.sum(a[":, ::-1"], 0)));
+                cases.Add(($"{tag} a[::-1, ::-1] axis0", () => np.sum(a["::-1, ::-1"], 0)));
+                cases.Add(($"{tag} broadcast row axis0", () => np.sum(np.broadcast_to(row, new Shape(r, c)), 0)));
+                cases.Add(($"{tag} average (0, 1)", () => np.average(a3, new[] { 0, 1 })));
+            }
+
+            var on = new List<string>();
+            foreach (var (_, call) in cases)
+                on.Add(Describe(call(), rawNaN: true));
+            var off = new List<string>();
+            DirectILKernelGenerator.Enabled = false;
+            try
+            {
+                foreach (var (_, call) in cases)
+                    off.Add(Describe(call(), rawNaN: true));
+            }
+            finally
+            {
+                DirectILKernelGenerator.Enabled = true;
+            }
+
+            var fails = new List<string>();
+            for (int k = 0; k < cases.Count; k++)
+                if (off[k] != on[k])
+                    fails.Add($"{cases[k].Name}: kernels on [{on[k]}] but off [{off[k]}]");
+            AssertNoMismatch(fails, "the per-row inner-loop calls and the stationary-out 2-D kernel give the same bytes");
+        }
+
+        /// <summary>
         ///     float16 sums through the reduction iterator's elementwise form, which runs the house SIMD widen-compute-narrow
         ///     kernel in place on the out row (<c>DirectILKernelGenerator.HalfArithRun</c>): reversed rows (both operands
         ///     contiguous: two 8-lane vectors and a scalar tail), reversed columns and a stepped view (the input gathered

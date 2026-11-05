@@ -617,7 +617,8 @@ namespace NumSharp.Backends
             Action<ILGenerator> scalarBody;
             if (sameDtype)
             {
-                scalarBody = il => DirectILKernelGenerator.EmitScalarOperation(il, op, resultType, NaNOperandOrder.NumPyUfunc);
+                // The one definition every caller of this kernel key shares (the reduction's add forms too).
+                scalarBody = SameDtypeBinaryScalarBody(op, resultType);
             }
             else
             {
@@ -626,9 +627,7 @@ namespace NumSharp.Backends
                 scalarBody = il => EmitMixedScalarBody(il, capLhs, capRhs, capRes, capOp);
             }
 
-            Action<ILGenerator>? vectorBody = simdViable
-                ? il => DirectILKernelGenerator.EmitVectorOperation(il, op, resultType, NaNOperandOrder.NumPyUfunc)
-                : null;
+            Action<ILGenerator>? vectorBody = simdViable ? SameDtypeBinaryVectorBody(op, resultType) : null;
 
             // Cache key MUST encode all three dtypes; mixed-dtype kernels
             // are distinct from same-dtype ones for the same op. Packed key
@@ -1236,6 +1235,93 @@ namespace NumSharp.Backends
             if (masked)
                 return default;                                   // buffered chunks crossed with mask runs: not modeled
             return BroadcastNaNRule.PerCall(NDIterBufferManager.CurrentBufferSize);
+        }
+
+        /// <summary>
+        ///     The per-element body of a same-dtype binary ufunc's inner loop: the op at <paramref name="t"/> with NumPy's
+        ///     elementwise NaN operand order (a float add / multiply keeps the SECOND operand's NaN when both are NaN).
+        /// </summary>
+        /// <param name="op">The binary op.</param>
+        /// <param name="t">The dtype of both inputs and the output.</param>
+        /// <returns>The IL body (stack <c>[a, b]</c> to <c>[a op b]</c>).</returns>
+        /// <remarks>
+        ///     ONE definition for every caller that compiles a kernel under <see cref="InnerLoopKernelKey.Binary"/>: the ufunc
+        ///     routes (plain and <c>out=</c>) and the reduction iterator's elementwise add forms (<see cref="NumPyAddLoops"/>)
+        ///     share that cache key, and whichever caller compiles a key first decides the kernel for all of them - two
+        ///     copies of the body would let the call order pick the NaN rule.
+        /// </remarks>
+        internal static Action<ILGenerator> SameDtypeBinaryScalarBody(BinaryOp op, NPTypeCode t)
+            => il => DirectILKernelGenerator.EmitScalarOperation(il, op, t, NaNOperandOrder.NumPyUfunc);
+
+        /// <summary>
+        ///     The per-vector body of a same-dtype binary ufunc's inner loop (see <see cref="SameDtypeBinaryScalarBody"/>), or
+        ///     null when the op has no vector form at <paramref name="t"/> (<see cref="DirectILKernelGenerator.CanUseSimdBinary"/>).
+        /// </summary>
+        /// <param name="op">The binary op.</param>
+        /// <param name="t">The dtype of both inputs and the output.</param>
+        /// <returns>The IL body, or null.</returns>
+        internal static Action<ILGenerator>? SameDtypeBinaryVectorBody(BinaryOp op, NPTypeCode t)
+            => DirectILKernelGenerator.CanUseSimdBinary(op, t)
+                ? il => DirectILKernelGenerator.EmitVectorOperation(il, op, t, NaNOperandOrder.NumPyUfunc)
+                : null;
+
+        /// <summary>
+        ///     The binary ufunc's inner loop for <paramref name="op"/> over three <paramref name="t"/> operands (NumPy's
+        ///     <c>PyUFuncGenericFunction</c>: <c>(dataptrs, byte strides, count, auxdata)</c>) - the kernel the ufunc routes
+        ///     run, compiled once under <see cref="InnerLoopKernelKey.Binary"/> and shared with them.
+        /// </summary>
+        /// <param name="op">The binary op.</param>
+        /// <param name="t">The dtype of both inputs and the output.</param>
+        /// <returns>The cached kernel.</returns>
+        /// <exception cref="NotSupportedException">The op has no loop at <paramref name="t"/> (from the emitters).</exception>
+        /// <remarks>
+        ///     For a caller that drives NumPy's inner-loop calls itself, as the reduction iterator does: each call is one of
+        ///     NumPy's, so a float add or multiply with a stride-0 input takes NumPy's broadcast NaN rule from the
+        ///     <see cref="BroadcastNaNRule"/> the caller passes as <c>auxdata</c> (<see cref="NumPyBroadcastNaNRule"/>).
+        /// </remarks>
+        internal static NDInnerLoopFunc SameDtypeBinaryInnerLoop(BinaryOp op, NPTypeCode t)
+        {
+            var key = InnerLoopKernelKey.Binary(op, t, t, t);
+            if (DirectILKernelGenerator.TryGetInnerLoop(key, out var kernel))
+                return kernel;
+            return DirectILKernelGenerator.CompileInnerLoop(new[] { t, t, t },
+                SameDtypeBinaryScalarBody(op, t), SameDtypeBinaryVectorBody(op, t), key);
+        }
+
+        /// <summary>
+        ///     <see cref="SameDtypeBinaryInnerLoop"/>'s reversed-run variant (DirectILKernelGenerator.InnerLoop.Reversed.cs):
+        ///     the same kernel plus the stages that load a reversed operand (byte stride −elemSize) with one contiguous load
+        ///     and a lane reversal - the kernel to call when an operand of the call is reversed.
+        /// </summary>
+        /// <param name="op">The binary op.</param>
+        /// <param name="t">The dtype of both inputs and the output.</param>
+        /// <returns>The cached variant (a complete kernel: any stride pattern runs correctly through it).</returns>
+        /// <exception cref="NotSupportedException">The op has no loop at <paramref name="t"/> (from the emitters).</exception>
+        internal static NDInnerLoopFunc SameDtypeBinaryReversedInnerLoop(BinaryOp op, NPTypeCode t)
+        {
+            var key = InnerLoopKernelKey.Binary(op, t, t, t);
+            if (DirectILKernelGenerator.TryGetReversedRunInnerLoop(key, out var kernel))
+                return kernel;
+            return DirectILKernelGenerator.CompileReversedRunInnerLoop(new[] { t, t, t },
+                SameDtypeBinaryScalarBody(op, t), SameDtypeBinaryVectorBody(op, t), key);
+        }
+
+        /// <summary>
+        ///     The binary ufunc's 2-D block kernel in its stationary-out variant (DirectILKernelGenerator.InnerLoop2D.Stationary.cs):
+        ///     a call <c>{o, x, o}</c> whose out is operand 0 at outer stride 0, with operand 1's rows contiguous, broadcast
+        ///     or reversed, holds the out row in registers across the rows - the reduction iterator's several-rows form.
+        /// </summary>
+        /// <param name="op">The binary op.</param>
+        /// <param name="t">The dtype of both inputs and the output.</param>
+        /// <returns>The cached variant (a complete 2-D kernel: any other call runs its ordinary dispatch).</returns>
+        /// <exception cref="NotSupportedException">The op has no loop at <paramref name="t"/> (from the emitters).</exception>
+        internal static ND2DElementwiseKernel SameDtypeBinaryStationary2DKernel(BinaryOp op, NPTypeCode t)
+        {
+            var key = InnerLoopKernelKey.Binary(op, t, t, t);
+            if (DirectILKernelGenerator.TryGet2DStationaryOutKernel(key, out var kernel))
+                return kernel;
+            return DirectILKernelGenerator.Compile2DStationaryOutKernel(new[] { t, t, t },
+                SameDtypeBinaryScalarBody(op, t), SameDtypeBinaryVectorBody(op, t), key);
         }
 
         /// <summary>

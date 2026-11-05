@@ -3,6 +3,7 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
+using System.Threading;
 using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 
@@ -27,7 +28,8 @@ using NumSharp.Backends.Kernels;
 //
 // NumPyReduceIterator is the port of that iterator (np.max's keyword path runs it); this file hands it NumPy's add
 // loops: DOUBLE / FLOAT add (the reduce form through the exact pairwise folds the flat engine uses, the elementwise form
-// with NumPy's NaN operand order, a vector at a time over a contiguous call), HALF add (float32 arithmetic, the running
+// a call of the binary ufunc's own add kernel - one inner-loop call each, the 2-D kernel's stationary-out variant for
+// several rows - so NumPy's NaN operand order has one copy, the kernel's), HALF add (float32 arithmetic, the running
 // result narrowed back after each call), CDOUBLE add (the complex pairwise fold, per part), and decimal (NumSharp's own:
 // a sequential decimal sum). np.sum runs the same iterator for an operand with a reversed or a broadcast axis (ReduceAdd),
 // whose order the axis kernels and the flat engine do not reproduce.
@@ -208,9 +210,13 @@ namespace NumSharp.Backends
     /// </summary>
     /// <remarks>
     ///     The reduce forms are the flat add.reduce engine's statements (<c>NumPyAddReduce</c>'s accumulate steps) through
-    ///     the same exact pairwise folds; the elementwise forms carry NumPy's NaN operand order for array add on win-amd64
-    ///     (the SECOND operand's NaN when both are NaN, <c>DirectILKernelGenerator.NaNOperandOrder.cs</c>), written out
-    ///     because RyuJIT may swap a commutative add's operands.
+    ///     the same exact pairwise folds. The float64, float32 and decimal elementwise forms are calls of the binary
+    ///     ufunc's own add kernels, as NumPy's reduction calls DOUBLE_add's inner loop: one Tier-3B inner-loop call per
+    ///     elementwise call (<c>{o, x, o}</c>, with NumPy's broadcast NaN rule), one call of the 2-D kernel's stationary-out
+    ///     variant for several rows - so NumPy's NaN operand order for array add on win-amd64 (the SECOND operand's NaN
+    ///     when both are NaN, <c>DirectILKernelGenerator.NaNOperandOrder.cs</c>) has one copy, the kernels'. The float16
+    ///     form stays the house float16 kernel (<c>HalfArithRun</c>) and the complex form its per-part statement (the shared
+    ///     complex add chooses the NaN of a part differently).
     /// </remarks>
     internal static unsafe class NumPyAddLoops
     {
@@ -324,132 +330,24 @@ namespace NumSharp.Backends
             return PairwiseOfCopies(v, n2) + PairwiseOfCopies(v, n - n2);
         }
 
-        /// <summary>DOUBLE_add's elementwise form: <c>o[i] = o[i] + x[i]</c>, with NumPy's NaN operand rules.</summary>
-        /// <param name="o">The out run.</param>
+        /// <summary>
+        ///     DOUBLE_add's elementwise form, <c>o[i] = o[i] + x[i]</c>: ONE call of the binary ufunc's own float64 add inner
+        ///     loop with the operands <c>{o, x, o}</c> - NumPy's structure (its reduction calls DOUBLE_add's inner loop), and
+        ///     the one copy of NumPy's NaN operand order (the kernel's bodies, <c>DirectILKernelGenerator.NaNOperandOrder.cs</c>).
+        /// </summary>
+        /// <param name="o">The out run (NumPy's first operand and its output; always a fresh, positive-strided result here).</param>
         /// <param name="os">The out stride in elements.</param>
         /// <param name="x">The input run.</param>
-        /// <param name="xs">The input stride in elements.</param>
+        /// <param name="xs">The input stride in elements (0: one broadcast value; −1: a reversed run).</param>
         /// <param name="n">The element count.</param>
         /// <remarks>
-        ///     The out (NumPy's first operand and its output) is always a fresh, positive-strided result here. A contiguous
-        ///     out runs a vector loop for a contiguous, a broadcast (stride 0) or a reversed (stride -1) input; any other
-        ///     input takes the scalar statement. The NaN of a lane where both operands are NaN is NumPy's: the SECOND
-        ///     operand's (the input's) in every call of two arrays and in every short call, and in the vector body of a long
-        ///     call over a broadcast input the BROADCAST operand's, in its tail the ARRAY operand's (NumPy's scalar-broadcast
-        ///     loop; <c>DirectILKernelGenerator.NaNOperandOrder.cs</c>). Every non-NaN result is the plain sum either way.
+        ///     The call carries the broadcast NaN rule NumPy's call has (<see cref="SharedAdd"/>): a stride-0 input in a long
+        ///     call over a contiguous out keeps the BROADCAST operand's NaN in the vector body and the out's in the tail,
+        ///     every other call the second operand's (the input's). A reversed input runs the kernel's reversed-run variant
+        ///     (one contiguous load and a lane reversal per vector).
         /// </remarks>
         private static void DoubleBinary(double* o, long os, double* x, long xs, long n)
-        {
-            if (os == 1 && Vector256.IsHardwareAccelerated)
-            {
-                if (xs == 1)
-                {
-                    DoubleBinaryContiguous(o, x, n);
-                    return;
-                }
-                if (xs == 0)
-                {
-                    DoubleBinaryBroadcast(o, *x, n);
-                    return;
-                }
-                if (xs == -1 && Avx2.IsSupported)
-                {
-                    DoubleBinaryReversed(o, x, n);
-                    return;
-                }
-            }
-            for (long i = 0; i < n; i++)
-            {
-                double a = o[i * os], b = x[i * xs];
-                double r = a + b;
-                // NumPy's add loop keeps the SECOND operand's NaN: when both are NaN return b's, quieted.
-                if (double.IsNaN(r) && double.IsNaN(b))
-                    r = b + b;
-                o[i * os] = r;
-            }
-        }
-
-        /// <summary><see cref="DoubleBinary"/> for a contiguous out and input: two vectors a step, the second operand's NaN
-        ///     written as <c>(a where b is a number, else +0) + b</c>, which leaves no NaN choice to the instruction.</summary>
-        /// <param name="o">The out run.</param>
-        /// <param name="x">The input run.</param>
-        /// <param name="n">The element count.</param>
-        private static void DoubleBinaryContiguous(double* o, double* x, long n)
-        {
-            long i = 0;
-            for (; i + 8 <= n; i += 8)
-            {
-                var b0 = Vector256.Load(x + i);
-                var b1 = Vector256.Load(x + i + 4);
-                var a0 = Vector256.Load(o + i);
-                var a1 = Vector256.Load(o + i + 4);
-                Vector256.Store((a0 & Vector256.Equals(b0, b0)) + b0, o + i);
-                Vector256.Store((a1 & Vector256.Equals(b1, b1)) + b1, o + i + 4);
-            }
-            for (; i + 4 <= n; i += 4)
-            {
-                var b = Vector256.Load(x + i);
-                Vector256.Store((Vector256.Load(o + i) & Vector256.Equals(b, b)) + b, o + i);
-            }
-            for (; i < n; i++)
-            {
-                double a = o[i], b = x[i];
-                o[i] = double.IsNaN(b) ? b + b : a + b;
-            }
-        }
-
-        /// <summary><see cref="DoubleBinary"/> for a contiguous out and one broadcast value: NumPy's scalar-broadcast loop
-        ///     for a call longer than two vectors (its body keeps the broadcast value's NaN, its tail the out's), the plain
-        ///     loop for a shorter one (the second operand's NaN).</summary>
-        /// <param name="o">The out run.</param>
-        /// <param name="v">The broadcast input value.</param>
-        /// <param name="n">The element count.</param>
-        private static void DoubleBinaryBroadcast(double* o, double v, long n)
-        {
-            long i = 0;
-            if (n > 8)
-            {
-                // The body [0, n - n % 8): the broadcast value's NaN wherever it is NaN (then every lane takes it).
-                long body = n - n % 8;
-                var vb = Vector256.Create(v);
-                var keep = Vector256.Equals(vb, vb);
-                for (; i < body; i += 4)
-                    Vector256.Store((Vector256.Load(o + i) & keep) + vb, o + i);
-                // The tail: the out's (the array operand's) NaN when both are NaN.
-                for (; i < n; i++)
-                {
-                    double a = o[i];
-                    o[i] = double.IsNaN(a) ? a + a : a + v;
-                }
-                return;
-            }
-            for (; i < n; i++)
-            {
-                double a = o[i];
-                o[i] = double.IsNaN(v) ? v + v : a + v;
-            }
-        }
-
-        /// <summary><see cref="DoubleBinary"/> for a contiguous out and a reversed input (stride -1): four input elements
-        ///     loaded from below and reversed in the register, the second operand's NaN as in the contiguous loop.</summary>
-        /// <param name="o">The out run.</param>
-        /// <param name="x">The input's first element (the highest address of the run).</param>
-        /// <param name="n">The element count.</param>
-        private static void DoubleBinaryReversed(double* o, double* x, long n)
-        {
-            long i = 0;
-            for (; i + 4 <= n; i += 4)
-            {
-                // x[-i - 3] .. x[-i] in memory order, then reversed: the logical elements i .. i + 3.
-                var b = Avx2.Permute4x64(Vector256.Load(x - i - 3), 0b00_01_10_11);
-                Vector256.Store((Vector256.Load(o + i) & Vector256.Equals(b, b)) + b, o + i);
-            }
-            for (; i < n; i++)
-            {
-                double a = o[i], b = x[-i];
-                o[i] = double.IsNaN(b) ? b + b : a + b;
-            }
-        }
+            => SharedAdd(ref s_addDouble, ref s_addDoubleReversed, NPTypeCode.Double, o, os, x, xs, n, sizeof(double));
 
         /// <summary>
         ///     DOUBLE_add's elementwise form over several consecutive calls into one out row (the reduce double loop's rows
@@ -458,70 +356,25 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="o">The out row.</param>
         /// <param name="os">The out stride in elements.</param>
-        /// <param name="x">The first input row.</param>
+        /// <param name="x">The first input row (its logical first element: a reversed row's highest address).</param>
         /// <param name="xs">The input stride within a row, in elements.</param>
         /// <param name="xRowStride">The distance from one input row to the next, in elements (0: a broadcast row).</param>
         /// <param name="rows">The row count.</param>
         /// <param name="n">The elements per row.</param>
         /// <remarks>
-        ///     Contiguous rows keep sixteen lanes of the out in four registers across the rows, so one row's additions do
-        ///     not wait on each other and the out is loaded and stored once per block instead of once per row; each lane is
-        ///     still the rows' additions in order with the second operand's NaN, so the bits are the per-row calls'. A
-        ///     broadcast ROW (<paramref name="xRowStride"/> 0, every row the same memory) is contiguous and takes the same
-        ///     loop. An input that is not contiguous WITHIN its row — one broadcast value (<paramref name="xs"/> 0, whose
-        ///     NaN rule depends on the call's length), a reversed or a stepped row — is one <see cref="DoubleBinary"/>
-        ///     call per row.
+        ///     A contiguous out over contiguous, broadcast or reversed rows is ONE call of the add's 2-D kernel in its
+        ///     stationary-out variant (<see cref="SharedAddRows"/>): the out row held in registers across the rows, every lane
+        ///     the rows' additions in order with the second operand's NaN - the bits of one call per row. Any other input
+        ///     (one broadcast value per row, whose NaN rule depends on the call's length; a stepped row) is one
+        ///     <see cref="DoubleBinary"/> call per row, and so is every call while the generator's optional kernels are
+        ///     switched off (<see cref="DirectILKernelGenerator.Enabled"/>, the debugging switch NDIter's 2-D route obeys
+        ///     too): the per-row inner-loop calls are the baseline route, the same bytes.
         /// </remarks>
         private static void DoubleBinaryRows(double* o, long os, double* x, long xs, long xRowStride, long rows, long n)
         {
-            if (os == 1 && xs == 1 && Vector256.IsHardwareAccelerated)
+            if (os == 1 && (xs == 1 || xs == -1) && DirectILKernelGenerator.Enabled)
             {
-                long i = 0;
-                for (; i + 16 <= n; i += 16)
-                {
-                    var a0 = Vector256.Load(o + i);
-                    var a1 = Vector256.Load(o + i + 4);
-                    var a2 = Vector256.Load(o + i + 8);
-                    var a3 = Vector256.Load(o + i + 12);
-                    double* xr = x + i;
-                    for (long r = 0; r < rows; r++, xr += xRowStride)
-                    {
-                        var b0 = Vector256.Load(xr);
-                        var b1 = Vector256.Load(xr + 4);
-                        var b2 = Vector256.Load(xr + 8);
-                        var b3 = Vector256.Load(xr + 12);
-                        a0 = (a0 & Vector256.Equals(b0, b0)) + b0;
-                        a1 = (a1 & Vector256.Equals(b1, b1)) + b1;
-                        a2 = (a2 & Vector256.Equals(b2, b2)) + b2;
-                        a3 = (a3 & Vector256.Equals(b3, b3)) + b3;
-                    }
-                    Vector256.Store(a0, o + i);
-                    Vector256.Store(a1, o + i + 4);
-                    Vector256.Store(a2, o + i + 8);
-                    Vector256.Store(a3, o + i + 12);
-                }
-                for (; i + 4 <= n; i += 4)
-                {
-                    var a = Vector256.Load(o + i);
-                    double* xr = x + i;
-                    for (long r = 0; r < rows; r++, xr += xRowStride)
-                    {
-                        var b = Vector256.Load(xr);
-                        a = (a & Vector256.Equals(b, b)) + b;
-                    }
-                    Vector256.Store(a, o + i);
-                }
-                for (; i < n; i++)
-                {
-                    double a = o[i];
-                    double* xr = x + i;
-                    for (long r = 0; r < rows; r++, xr += xRowStride)
-                    {
-                        double b = *xr;
-                        a = double.IsNaN(b) ? b + b : a + b;
-                    }
-                    o[i] = a;
-                }
+                SharedAddRows(ref s_addRowsDouble, NPTypeCode.Double, o, x, xs, xRowStride, rows, n, sizeof(double));
                 return;
             }
             for (long r = 0; r < rows; r++)
@@ -575,180 +428,31 @@ namespace NumSharp.Backends
             return PairwiseOfCopies(v, n2) + PairwiseOfCopies(v, n - n2);
         }
 
-        /// <summary>FLOAT_add's elementwise form (float32), with NumPy's NaN operand rules (see
-        ///     <see cref="DoubleBinary"/>: the same specializations, eight lanes a vector).</summary>
+        /// <summary>FLOAT_add's elementwise form (float32): one call of the binary ufunc's own float32 add inner loop over
+        ///     <c>{o, x, o}</c> (see <see cref="DoubleBinary"/>).</summary>
         /// <param name="o">The out run.</param>
         /// <param name="os">The out stride in elements.</param>
         /// <param name="x">The input run.</param>
-        /// <param name="xs">The input stride in elements.</param>
+        /// <param name="xs">The input stride in elements (0: one broadcast value; −1: a reversed run).</param>
         /// <param name="n">The element count.</param>
         private static void SingleBinary(float* o, long os, float* x, long xs, long n)
-        {
-            if (os == 1 && Vector256.IsHardwareAccelerated)
-            {
-                if (xs == 1)
-                {
-                    SingleBinaryContiguous(o, x, n);
-                    return;
-                }
-                if (xs == 0)
-                {
-                    SingleBinaryBroadcast(o, *x, n);
-                    return;
-                }
-                if (xs == -1 && Avx2.IsSupported)
-                {
-                    SingleBinaryReversed(o, x, n);
-                    return;
-                }
-            }
-            for (long i = 0; i < n; i++)
-            {
-                float a = o[i * os], b = x[i * xs];
-                float r = a + b;
-                if (float.IsNaN(r) && float.IsNaN(b))
-                    r = b + b;
-                o[i * os] = r;
-            }
-        }
-
-        /// <summary><see cref="SingleBinary"/> for a contiguous out and input (see <see cref="DoubleBinaryContiguous"/>).</summary>
-        /// <param name="o">The out run.</param>
-        /// <param name="x">The input run.</param>
-        /// <param name="n">The element count.</param>
-        private static void SingleBinaryContiguous(float* o, float* x, long n)
-        {
-            long i = 0;
-            for (; i + 16 <= n; i += 16)
-            {
-                var b0 = Vector256.Load(x + i);
-                var b1 = Vector256.Load(x + i + 8);
-                var a0 = Vector256.Load(o + i);
-                var a1 = Vector256.Load(o + i + 8);
-                Vector256.Store((a0 & Vector256.Equals(b0, b0)) + b0, o + i);
-                Vector256.Store((a1 & Vector256.Equals(b1, b1)) + b1, o + i + 8);
-            }
-            for (; i + 8 <= n; i += 8)
-            {
-                var b = Vector256.Load(x + i);
-                Vector256.Store((Vector256.Load(o + i) & Vector256.Equals(b, b)) + b, o + i);
-            }
-            for (; i < n; i++)
-            {
-                float a = o[i], b = x[i];
-                o[i] = float.IsNaN(b) ? b + b : a + b;
-            }
-        }
-
-        /// <summary><see cref="SingleBinary"/> for a contiguous out and one broadcast value: NumPy's scalar-broadcast loop
-        ///     past two vectors (16 lanes), the plain loop for a shorter call (see <see cref="DoubleBinaryBroadcast"/>).</summary>
-        /// <param name="o">The out run.</param>
-        /// <param name="v">The broadcast input value.</param>
-        /// <param name="n">The element count.</param>
-        private static void SingleBinaryBroadcast(float* o, float v, long n)
-        {
-            long i = 0;
-            if (n > 16)
-            {
-                long body = n - n % 16;
-                var vb = Vector256.Create(v);
-                var keep = Vector256.Equals(vb, vb);
-                for (; i < body; i += 8)
-                    Vector256.Store((Vector256.Load(o + i) & keep) + vb, o + i);
-                for (; i < n; i++)
-                {
-                    float a = o[i];
-                    o[i] = float.IsNaN(a) ? a + a : a + v;
-                }
-                return;
-            }
-            for (; i < n; i++)
-            {
-                float a = o[i];
-                o[i] = float.IsNaN(v) ? v + v : a + v;
-            }
-        }
-
-        /// <summary><see cref="SingleBinary"/> for a contiguous out and a reversed input (see
-        ///     <see cref="DoubleBinaryReversed"/>; eight lanes reversed by one permute).</summary>
-        /// <param name="o">The out run.</param>
-        /// <param name="x">The input's first element (the highest address of the run).</param>
-        /// <param name="n">The element count.</param>
-        private static void SingleBinaryReversed(float* o, float* x, long n)
-        {
-            long i = 0;
-            var reverse = Vector256.Create(7, 6, 5, 4, 3, 2, 1, 0);
-            for (; i + 8 <= n; i += 8)
-            {
-                var b = Avx2.PermuteVar8x32(Vector256.Load(x - i - 7), reverse);
-                Vector256.Store((Vector256.Load(o + i) & Vector256.Equals(b, b)) + b, o + i);
-            }
-            for (; i < n; i++)
-            {
-                float a = o[i], b = x[-i];
-                o[i] = float.IsNaN(b) ? b + b : a + b;
-            }
-        }
+            => SharedAdd(ref s_addSingle, ref s_addSingleReversed, NPTypeCode.Single, o, os, x, xs, n, sizeof(float));
 
         /// <summary>FLOAT_add's elementwise form over several consecutive calls into one out row (see
-        ///     <see cref="DoubleBinaryRows"/>: the same blocking, eight lanes a register, thirty-two a step).</summary>
+        ///     <see cref="DoubleBinaryRows"/>: one stationary-out 2-D call for contiguous, broadcast or reversed rows while the
+        ///     generator's optional kernels are on, one <see cref="SingleBinary"/> call per row otherwise).</summary>
         /// <param name="o">The out row.</param>
         /// <param name="os">The out stride in elements.</param>
-        /// <param name="x">The first input row.</param>
+        /// <param name="x">The first input row (its logical first element: a reversed row's highest address).</param>
         /// <param name="xs">The input stride within a row, in elements.</param>
         /// <param name="xRowStride">The distance from one input row to the next, in elements (0: a broadcast row).</param>
         /// <param name="rows">The row count.</param>
         /// <param name="n">The elements per row.</param>
         private static void SingleBinaryRows(float* o, long os, float* x, long xs, long xRowStride, long rows, long n)
         {
-            if (os == 1 && xs == 1 && Vector256.IsHardwareAccelerated)
+            if (os == 1 && (xs == 1 || xs == -1) && DirectILKernelGenerator.Enabled)
             {
-                long i = 0;
-                for (; i + 32 <= n; i += 32)
-                {
-                    var a0 = Vector256.Load(o + i);
-                    var a1 = Vector256.Load(o + i + 8);
-                    var a2 = Vector256.Load(o + i + 16);
-                    var a3 = Vector256.Load(o + i + 24);
-                    float* xr = x + i;
-                    for (long r = 0; r < rows; r++, xr += xRowStride)
-                    {
-                        var b0 = Vector256.Load(xr);
-                        var b1 = Vector256.Load(xr + 8);
-                        var b2 = Vector256.Load(xr + 16);
-                        var b3 = Vector256.Load(xr + 24);
-                        a0 = (a0 & Vector256.Equals(b0, b0)) + b0;
-                        a1 = (a1 & Vector256.Equals(b1, b1)) + b1;
-                        a2 = (a2 & Vector256.Equals(b2, b2)) + b2;
-                        a3 = (a3 & Vector256.Equals(b3, b3)) + b3;
-                    }
-                    Vector256.Store(a0, o + i);
-                    Vector256.Store(a1, o + i + 8);
-                    Vector256.Store(a2, o + i + 16);
-                    Vector256.Store(a3, o + i + 24);
-                }
-                for (; i + 8 <= n; i += 8)
-                {
-                    var a = Vector256.Load(o + i);
-                    float* xr = x + i;
-                    for (long r = 0; r < rows; r++, xr += xRowStride)
-                    {
-                        var b = Vector256.Load(xr);
-                        a = (a & Vector256.Equals(b, b)) + b;
-                    }
-                    Vector256.Store(a, o + i);
-                }
-                for (; i < n; i++)
-                {
-                    float a = o[i];
-                    float* xr = x + i;
-                    for (long r = 0; r < rows; r++, xr += xRowStride)
-                    {
-                        float b = *xr;
-                        a = float.IsNaN(b) ? b + b : a + b;
-                    }
-                    o[i] = a;
-                }
+                SharedAddRows(ref s_addRowsSingle, NPTypeCode.Single, o, x, xs, xRowStride, rows, n, sizeof(float));
                 return;
             }
             for (long r = 0; r < rows; r++)
@@ -864,7 +568,8 @@ namespace NumSharp.Backends
             return acc;
         }
 
-        /// <summary>The decimal elementwise form: <c>o[i] = o[i] + x[i]</c>.</summary>
+        /// <summary>The decimal elementwise form, <c>o[i] = o[i] + x[i]</c>: one call of the binary ufunc's own decimal add
+        ///     inner loop over <c>{o, x, o}</c> (its scalar body, decimal's checked addition).</summary>
         /// <param name="o">The out run.</param>
         /// <param name="os">The out stride in elements.</param>
         /// <param name="x">The input run.</param>
@@ -872,9 +577,102 @@ namespace NumSharp.Backends
         /// <param name="n">The element count.</param>
         /// <exception cref="OverflowException">A sum leaves decimal's range.</exception>
         private static void DecimalBinary(decimal* o, long os, decimal* x, long xs, long n)
+            => SharedAdd(ref s_addDecimal, ref s_addDecimal, NPTypeCode.Decimal, o, os, x, xs, n, sizeof(decimal));
+
+        /// <summary>The cached add inner loops the elementwise forms call (filled on first use; see <see cref="SharedAdd"/>):
+        ///     per dtype the plain kernel and, for the SIMD dtypes, its reversed-run variant.</summary>
+        private static NDInnerLoopFunc? s_addDouble, s_addDoubleReversed, s_addSingle, s_addSingleReversed, s_addDecimal;
+
+        /// <summary>The cached stationary-out 2-D add kernels the several-rows forms call (see <see cref="SharedAddRows"/>).</summary>
+        private static ND2DElementwiseKernel? s_addRowsDouble, s_addRowsSingle;
+
+        /// <summary>
+        ///     One call of the binary ufunc's add inner loop over <c>{o, x, o}</c> (NumPy's reduction calling DOUBLE_add's
+        ///     inner loop): the out is operand 0 and the output, the input operand 1, with the broadcast NaN rule NumPy's call
+        ///     has as <c>auxdata</c>.
+        /// </summary>
+        /// <param name="plainSlot">This dtype's cached plain kernel (filled on the first call).</param>
+        /// <param name="reversedSlot">This dtype's cached reversed-run variant (filled on the first reversed call).</param>
+        /// <param name="t">The loop dtype.</param>
+        /// <param name="o">The out run.</param>
+        /// <param name="os">The out stride in elements.</param>
+        /// <param name="x">The input run.</param>
+        /// <param name="xs">The input stride in elements.</param>
+        /// <param name="n">The element count.</param>
+        /// <param name="itemSize">The element size in bytes.</param>
+        /// <exception cref="NotSupportedException">The add has no loop at <paramref name="t"/> (never for these dtypes).</exception>
+        /// <exception cref="OverflowException">A decimal sum leaves decimal's range (the kernel's scalar body).</exception>
+        /// <remarks>
+        ///     The kernel is the one the ufunc routes run (<see cref="DefaultEngine.SameDtypeBinaryInnerLoop"/>, the same
+        ///     bodies), or for a reversed input on a host that reverses lanes its reversed-run variant
+        ///     (<see cref="DefaultEngine.SameDtypeBinaryReversedInnerLoop"/>). It is cached in a static slot, so a call costs
+        ///     no cache lookup; the delegate stays valid when the kernel caches are cleared. The NaN rule is
+        ///     <see cref="DefaultEngine.NumPyBroadcastNaNRule"/> of a one-axis call of two inputs, the input broadcast exactly
+        ///     when its stride is 0 (NumPy's scalar-broadcast loop for a contiguous out: the body keeps the broadcast operand's
+        ///     NaN, the tail the out's; any other call the second operand's).
+        /// </remarks>
+        [SkipLocalsInit]
+        private static void SharedAdd(ref NDInnerLoopFunc? plainSlot, ref NDInnerLoopFunc? reversedSlot, NPTypeCode t,
+            void* o, long os, void* x, long xs, long n, int itemSize)
         {
-            for (long i = 0; i < n; i++)
-                o[i * os] += x[i * xs];
+            NDInnerLoopFunc? kernel;
+            if (xs == -1 && DirectILKernelGenerator.CanReverseLanes(t))
+            {
+                kernel = Volatile.Read(ref reversedSlot);
+                if (kernel is null)
+                    Volatile.Write(ref reversedSlot, kernel = DefaultEngine.SameDtypeBinaryReversedInnerLoop(BinaryOp.Add, t));
+            }
+            else
+            {
+                kernel = Volatile.Read(ref plainSlot);
+                if (kernel is null)
+                    Volatile.Write(ref plainSlot, kernel = DefaultEngine.SameDtypeBinaryInnerLoop(BinaryOp.Add, t));
+            }
+
+            void** ptrs = stackalloc void*[3];
+            long* strides = stackalloc long[3];
+            long* elementStrides = stackalloc long[3];
+            ptrs[0] = o; ptrs[1] = x; ptrs[2] = o;
+            elementStrides[0] = os; elementStrides[1] = xs; elementStrides[2] = os;
+            strides[0] = os * itemSize; strides[1] = xs * itemSize; strides[2] = os * itemSize;
+            BroadcastNaNRule rule = DefaultEngine.NumPyBroadcastNaNRule(BinaryOp.Add, t, t, t, t,
+                lhsSize: n, rhsSize: xs == 0 ? 1 : n, masked: false, iterNDim: 1, negPerm: false, elementStrides);
+            kernel(ptrs, strides, n, &rule);
+        }
+
+        /// <summary>
+        ///     One call of the add's 2-D kernel in its stationary-out variant over <c>{o, x, o}</c>: the out row (operand 0
+        ///     and the output, at outer stride 0) held in registers across <paramref name="rows"/> input rows.
+        /// </summary>
+        /// <param name="slot">This dtype's cached kernel (filled on the first call).</param>
+        /// <param name="t">The loop dtype.</param>
+        /// <param name="o">The contiguous out row.</param>
+        /// <param name="x">The first input row's logical first element (a reversed row's highest address).</param>
+        /// <param name="xs">The input stride within a row: 1 or −1.</param>
+        /// <param name="xRowStride">The distance from one input row to the next, in elements (0: a broadcast row).</param>
+        /// <param name="rows">The row count.</param>
+        /// <param name="n">The elements per row.</param>
+        /// <param name="itemSize">The element size in bytes.</param>
+        /// <exception cref="NotSupportedException">The add has no loop at <paramref name="t"/> (never for these dtypes).</exception>
+        /// <remarks>
+        ///     No input is broadcast along the row, so no call of the rows has a NaN rule of its own: every lane keeps the
+        ///     second operand's NaN, as the kernel's bodies give it (the 2-D kernel takes no <c>auxdata</c>).
+        /// </remarks>
+        [SkipLocalsInit]
+        private static void SharedAddRows(ref ND2DElementwiseKernel? slot, NPTypeCode t, void* o, void* x, long xs,
+            long xRowStride, long rows, long n, int itemSize)
+        {
+            var kernel = Volatile.Read(ref slot);
+            if (kernel is null)
+                Volatile.Write(ref slot, kernel = DefaultEngine.SameDtypeBinaryStationary2DKernel(BinaryOp.Add, t));
+
+            void** ptrs = stackalloc void*[3];
+            long* inner = stackalloc long[3];
+            long* outer = stackalloc long[3];
+            ptrs[0] = o; ptrs[1] = x; ptrs[2] = o;
+            inner[0] = itemSize; inner[1] = xs * itemSize; inner[2] = itemSize;
+            outer[0] = 0; outer[1] = xRowStride * itemSize; outer[2] = 0;
+            kernel(ptrs, inner, n, outer, rows);
         }
     }
 }

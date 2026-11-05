@@ -195,10 +195,16 @@ scalar and vector emit bodies, so results are byte-identical.
   `_innerLoop2DStationaryCache`): a reduction's rows `{o, x, o}` (operand 0 IS the output, both contiguous along the row
   at outer stride 0; operand 1 a contiguous, broadcast or reversed row) hold the out row in registers across the rows:
   strips of 8, 4 and 1 vectors, then the leftover columns as one masked vector (AVX2, 32/64-bit lanes) or scalar strips
-  of 4 and 1 columns. Each lane is its rows in order through the op's bodies, with the plain block's vector / masked /
-  scalar choice per element: the plain block's bytes. No element-wise route produces such a call (a ufunc's out is never
-  broadcast), so the plain kernel keeps its IL and a reduction asks for the variant (which carries the reversed-run
-  stages too). Gate: `Backends/Kernels/StationaryOutKernelTests.cs` against the plain kernel, byte for byte.
+  of 4 and 1 columns, all over blocks of rows (at least 32 rows, about 16 KB of x; a strip pass over the whole operand
+  re-reads lines the hardware prefetcher already fetched and lost). On x86 every pass of a compact block (32 KB at most)
+  prefetches (T0) its columns of the next full block: without it the passes after a block's first left the memory idle
+  and the mode lost to the plain block's one sequential walk on short rows streamed from memory (0.84-0.91x on
+  10,000-100,000 rows of 50-200 float64 / float32); a block of long rows leaves the prefetch to the hardware (one stream
+  per row: prefetching a 2.5 MB block ahead measured 0.75x). Each lane is its rows in order through the op's bodies,
+  with the plain block's vector / masked / scalar choice per element: the plain block's bytes. No element-wise route
+  produces such a call (a ufunc's out is never broadcast), so the plain kernel keeps its IL and a reduction asks for the
+  variant (which carries the reversed-run stages too). Gate: `Backends/Kernels/StationaryOutKernelTests.cs` against the
+  plain kernel, byte for byte.
 
 ## Three or more inputs with a broadcast input: pattern stages
 

@@ -143,10 +143,14 @@ makes is part of the answer:
   NumPy's reduction NpyIter (`NumPyReduceIterator`: `DONT_NEGATE_STRIDES`, the axis sort with a stride-0 operand
   abstaining, coalescing, a cast operand buffered in `np.getbufsize()` fills, the reduce double loop) with NumPy's add
   loops (`NumPyAddLoops`, `Default.Reduction.Add.Axes.cs`). So a reversed axis is added in its logical order and a
-  broadcast operand is one add-loop call per broadcast row. The loops: the elementwise form vectorized for a contiguous
-  input (`(a & (b == b)) + b`, the second operand's NaN), a broadcast value (NumPy's region rule: the broadcast value's NaN
-  in the body of a call longer than two vectors, the array operand's in its tail) and a reversed one (loaded from below,
-  reversed in the register); the several-rows form `BinaryRows`; `PairwiseOfCopies` (NumPy's pairwise sum of n copies of
+  broadcast operand is one add-loop call per broadcast row. The loops: the float64 / float32 / decimal elementwise form is
+  one call of the binary ufunc's own add kernel over `{o, x, o}` (`DefaultEngine.SameDtypeBinaryInnerLoop`, its
+  reversed-run variant for a reversed input), as NumPy's reduction calls DOUBLE_add's inner loop, with NumPy's broadcast
+  NaN rule (`NumPyBroadcastNaNRule`: a broadcast value's NaN in the body of a call longer than two vectors, the array
+  operand's in its tail, the second operand's otherwise); the several-rows form `BinaryRows` is one call of the 2-D
+  kernel's stationary-out variant (`SameDtypeBinaryStationary2DKernel`) for contiguous, broadcast or reversed rows. So
+  NumPy's NaN operand order has one copy, the kernels' (a mutant of it fails this gate too). The complex form stays its
+  per-part statement (the shared complex add picks a part's NaN differently); `PairwiseOfCopies` (NumPy's pairwise sum of n copies of
   one value, a stride-0 run); HALF_add through `DirectILKernelGenerator.HalfArithRun` in place; a stride-0 buffer fill
   converts one element and replicates it. A decimal input and a cast without dynamic code keep their routes; integer /
   bool loops keep their kernels (exact in any order). Floor: float64 reversed rows along axis 0, memory-bound on both

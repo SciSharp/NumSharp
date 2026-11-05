@@ -14,11 +14,12 @@ namespace NumSharp.Tests.Backends.Kernels
     ///     wrong row, mis-reversed a reversed row, used the wrong tail mask or mixed the vector and scalar bodies fails.
     /// </summary>
     /// <remarks>
-    ///     The kernel has no production caller until the reduction moves onto it (plan PA2c), so the tests call the
-    ///     kernels directly: every SIMD dtype, the binary ops whose bodies the kernels compose (add with NumPy's NaN
-    ///     operand order, subtract, multiply, xor), row widths around every vector group (the 8-, 4- and 1-vector strips,
-    ///     the masked and the scalar tails, the 4- and 1-column scalar strips), contiguous, reversed and broadcast rows,
-    ///     NaN payloads, buffers against inaccessible pages, and the calls the mode does not take.
+    ///     The reduction's rows form reaches the variant only for float64 / float32 add (<c>NumPyAddLoops</c>), so the
+    ///     tests call the kernels directly: every SIMD dtype, the binary ops whose bodies the kernels compose (add with
+    ///     NumPy's NaN operand order, subtract, multiply, xor), row widths around every vector group (the 8-, 4- and
+    ///     1-vector strips, the masked and the scalar tails, the 4- and 1-column scalar strips), contiguous, reversed and
+    ///     broadcast rows, rows running downward in memory, reductions over several row blocks (the partial last block, the
+    ///     next-block prefetch), NaN payloads, buffers against inaccessible pages, and the calls the mode does not take.
     /// </remarks>
     [TestClass]
     public unsafe class StationaryOutKernelTests
@@ -112,16 +113,18 @@ namespace NumSharp.Tests.Backends.Kernels
 
         /// <summary>
         ///     One reduction call <c>{o, x, o}</c> over <paramref name="rows"/> rows of <paramref name="n"/>: operand 1 a
-        ///     contiguous row of a matrix ("C"), a reversed one ("R": each row read from its last element down) or one row
-        ///     broadcast down the rows ("BR").
+        ///     contiguous row of a matrix ("C"), a reversed one ("R": each row read from its last element down), one row
+        ///     broadcast down the rows ("BR"), or the matrix's rows taken from the last one up — <c>x[::-1, :]</c> ("RO": a
+        ///     negative row stride, as <c>np.sum(m[::-1], axis=0)</c> hands the reduction) and <c>x[::-1, ::-1]</c> ("RR").
         /// </summary>
         /// <param name="k">The kernel.</param>
         /// <param name="o">The out row (also operand 0).</param>
-        /// <param name="x">The matrix's first element (or the broadcast row).</param>
+        /// <param name="x">The matrix's first element in memory (or the broadcast row).</param>
         /// <param name="e">The element size.</param>
         /// <param name="rows">The row count.</param>
         /// <param name="n">The row width.</param>
-        /// <param name="mode">"C", "R" or "BR".</param>
+        /// <param name="mode">"C", "R", "BR", "RO" or "RR".</param>
+        /// <exception cref="ArgumentException">An unknown <paramref name="mode"/>.</exception>
         private static void Reduce(ND2DElementwiseKernel k, byte* o, byte* x, int e, long rows, long n, string mode)
         {
             void** ptrs = stackalloc void*[3];
@@ -130,20 +133,48 @@ namespace NumSharp.Tests.Backends.Kernels
             ptrs[0] = o; ptrs[2] = o;
             inner[0] = e; inner[2] = e;
             outer[0] = 0; outer[2] = 0;
-            if (mode == "R")
+            switch (mode)
             {
-                ptrs[1] = x + (n - 1) * e;
-                inner[1] = -e;
-                outer[1] = n * e;
-            }
-            else
-            {
-                ptrs[1] = x;
-                inner[1] = e;
-                outer[1] = mode == "BR" ? 0 : n * e;
+                case "C":
+                case "BR":
+                    ptrs[1] = x;
+                    inner[1] = e;
+                    outer[1] = mode == "BR" ? 0 : n * e;
+                    break;
+                case "R":
+                    ptrs[1] = x + (n - 1) * e;
+                    inner[1] = -e;
+                    outer[1] = n * e;
+                    break;
+                case "RO":
+                    // The last row first: its first element, then each earlier row (the row stride negative).
+                    ptrs[1] = x + (rows - 1) * n * e;
+                    inner[1] = e;
+                    outer[1] = -n * e;
+                    break;
+                case "RR":
+                    // The matrix's last element first: every row read from its end down, the rows from the last up.
+                    ptrs[1] = x + (rows * n - 1) * e;
+                    inner[1] = -e;
+                    outer[1] = -n * e;
+                    break;
+                default:
+                    throw new ArgumentException($"Unknown row mode '{mode}'.", nameof(mode));
             }
             k(ptrs, inner, n, outer, rows);
         }
+
+        /// <summary>
+        ///     The rows one block of the stationary-out loops holds for rows of <paramref name="n"/> elements of
+        ///     <paramref name="e"/> bytes (the generator's own rule), so a test can run two full blocks and a partial one
+        ///     whatever the tuning.
+        /// </summary>
+        /// <param name="n">The row width.</param>
+        /// <param name="e">The element size.</param>
+        /// <returns>The block's row count.</returns>
+        private static long BlockRows(long n, int e)
+            => System.Math.Max(DirectILKernelGenerator.StationaryBlockMinRows,
+                        DirectILKernelGenerator.StationaryBlockBytes / System.Math.Max(1, n * e));
 
         /// <summary>
         ///     Runs one reduction through the plain route (the plain kernel, or the reversed-run variant for reversed rows)
@@ -155,7 +186,7 @@ namespace NumSharp.Tests.Backends.Kernels
         /// <param name="x">Operand 1's data.</param>
         /// <param name="rows">The row count.</param>
         /// <param name="n">The row width.</param>
-        /// <param name="mode">"C", "R" or "BR".</param>
+        /// <param name="mode">"C", "R", "BR", "RO" or "RR" (see <see cref="Reduce"/>).</param>
         /// <param name="o1">Scratch for the plain route's out (n elements).</param>
         /// <param name="o2">Scratch for the stationary route's out (n elements).</param>
         /// <param name="what">The case a failure names.</param>
@@ -166,7 +197,7 @@ namespace NumSharp.Tests.Backends.Kernels
             var (plain, reversed, stationary) = Kernels(op, t);
             Buffer.MemoryCopy(o0, o1, n * e, n * e);
             Buffer.MemoryCopy(o0, o2, n * e, n * e);
-            Reduce(mode == "R" ? reversed : plain, o1, x, e, rows, n, mode);
+            Reduce(mode is "R" or "RR" ? reversed : plain, o1, x, e, rows, n, mode);
             Reduce(stationary, o2, x, e, rows, n, mode);
             var a = new ReadOnlySpan<byte>(o1, (int)(n * e));
             var b = new ReadOnlySpan<byte>(o2, (int)(n * e));
@@ -278,6 +309,84 @@ namespace NumSharp.Tests.Backends.Kernels
                     Fill(rnd, o0, t, n, 0, 2);
                     foreach (var mode in new[] { "C", "R", "BR" })
                         AssertSameAsPlain(BinaryOp.Add, t, o0, x, rows, n, mode, o1, o2, $"Add {t} {mode} ({rows}, {n}) fenced atEnd={atEnd}");
+                }
+                finally
+                {
+                    NativeMemory.Free(o0); NativeMemory.Free(o1);
+                }
+            }
+        }
+
+        /// <summary>
+        ///     Reductions over two full row blocks and a partial one, at each dtype's block size for the width: the blocks
+        ///     in row order (each lane still its rows in order), the out strip carried from block to block, the partial
+        ///     last block, the next-block prefetch of compact blocks (x86; it changes no byte, so this proves the loops
+        ///     around it), and rows running downward in memory (<c>x[::-1, :]</c>, <c>x[::-1, ::-1]</c>), with NaN payloads
+        ///     in the float rows and the out, against the plain kernel.
+        /// </summary>
+        [TestMethod]
+        public void SeveralRowBlocks_MatchThePlainKernel()
+        {
+            var rnd = new System.Random(43);
+            foreach (var t in SimdTypes)
+            foreach (long n in new long[] { 1, 8, 33, 100, 129 })
+            {
+                int e = Size(t);
+                bool isFloat = t == NPTypeCode.Single || t == NPTypeCode.Double;
+                long rows = 2 * BlockRows(n, e) + 7;
+                byte* x = (byte*)NativeMemory.Alloc((nuint)(rows * n * e));
+                byte* o0 = (byte*)NativeMemory.Alloc((nuint)(n * e));
+                byte* o1 = (byte*)NativeMemory.Alloc((nuint)(n * e));
+                byte* o2 = (byte*)NativeMemory.Alloc((nuint)(n * e));
+                try
+                {
+                    Fill(rnd, x, t, rows * n, isFloat ? 7 : 0, 1);
+                    Fill(rnd, o0, t, n, isFloat ? 3 : 0, 2);
+                    foreach (var op in new[] { BinaryOp.Add, BinaryOp.Multiply })
+                    foreach (var mode in new[] { "C", "R", "BR", "RO", "RR" })
+                        AssertSameAsPlain(op, t, o0, x, rows, n, mode, o1, o2, $"{op} {t} {mode} ({rows}, {n}) several blocks");
+                }
+                finally
+                {
+                    NativeMemory.Free(x); NativeMemory.Free(o0); NativeMemory.Free(o1); NativeMemory.Free(o2);
+                }
+            }
+        }
+
+        /// <summary>
+        ///     <see cref="SeveralRowBlocks_MatchThePlainKernel"/>'s reductions with the matrix against inaccessible pages
+        ///     — starting at the low fence and ending at the high one — and the out at either fence: no block, partial last
+        ///     block, strip or tail reads or writes outside the operands, whichever way the rows run. A violation ends the
+        ///     test host.
+        /// </summary>
+        [TestMethod]
+        public void SeveralRowBlocks_FencedBuffers_ReadAndWriteNothingOutsideTheOperands()
+        {
+            if (!FencedMemory.IsSupported)
+                Assert.Inconclusive("Fenced memory needs VirtualAlloc (Windows).");
+
+            // The largest matrix below: 2 · 32 + 7 rows of 129 eight-byte elements (73,272 bytes), or 2 · 16384 + 7 rows
+            // of one byte; 24 pages hold either.
+            using var fenceX = new FencedMemory(pages: 24);
+            using var fenceO = new FencedMemory(pages: 2);
+            var rnd = new System.Random(47);
+            foreach (var t in SimdTypes)
+            foreach (long n in new long[] { 1, 9, 100, 129 })
+            foreach (bool atEnd in new[] { false, true })
+            {
+                int e = Size(t);
+                long rows = 2 * BlockRows(n, e) + 7;
+                byte* x = fenceX.Place(rows * n * e, atEnd);
+                byte* o2 = fenceO.Place(n * e, !atEnd);
+                byte* o0 = (byte*)NativeMemory.Alloc((nuint)(n * e));
+                byte* o1 = (byte*)NativeMemory.Alloc((nuint)(n * e));
+                try
+                {
+                    Fill(rnd, x, t, rows * n, 0, 1);
+                    Fill(rnd, o0, t, n, 0, 2);
+                    foreach (var mode in new[] { "C", "R", "BR", "RO", "RR" })
+                        AssertSameAsPlain(BinaryOp.Add, t, o0, x, rows, n, mode, o1, o2,
+                            $"Add {t} {mode} ({rows}, {n}) several blocks fenced atEnd={atEnd}");
                 }
                 finally
                 {
