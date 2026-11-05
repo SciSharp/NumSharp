@@ -3,6 +3,7 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
+using NumSharp.Utilities;
 
 namespace NumSharp.Backends
 {
@@ -44,6 +45,11 @@ namespace NumSharp.Backends
         ///     0.08-0.4x of the former multiply); and a 0-d scalar beside a matrix whose rows are not contiguous keeps the
         ///     multiply route, which returns an F-ordered result and keeps a -0.0 product where NumPy's C-ordered result
         ///     holds +0.0 (its transposing read measured 0.23-0.75x).</para>
+        ///     <para>NaN: every output is NumPy's NaN too. With a scalar that is not NaN, each output's NaN can come only from
+        ///     its element or an invalid product, and the vector forms keep NumPy's choice by construction (each fused
+        ///     multiply-add has one multiplicand that can be NaN, and the multiplicands' NaNs come before the addend's;
+        ///     <c>vaddsubpd</c> cannot be reordered); a NaN scalar, the plain product and the complex C loop's scalar tail
+        ///     choose explicitly (<see cref="NDDot.ZaxpyNaN"/>, <see cref="NDDot.ScalarProductNaN(double, double)"/>).</para>
         ///     <para>The OpenBLAS backend, when installed, answered before this (its own port of the same branch).</para>
         /// </remarks>
         private bool TryDotScalarBranch(NDArray left, NDArray right, out NDArray result)
@@ -245,6 +251,16 @@ namespace NumSharp.Backends
                 return;
             }
 
+            if (TM.IsZero(alpha))
+            {
+                // OpenBLAS's cblas_?axpy returns before any arithmetic when alpha is 0 (interface/axpy.c; zaxpy.c: both
+                // parts), so every output keeps the memset's +0.0 whatever x holds - a NaN or inf element included
+                // (np.dot(0.0, [nan, inf]) is [0., 0.]). Every call of a matrix's per-line loop returns the same way.
+                long outputs = isMatrix ? a1.Shape.dimensions[0] * a1.Shape.dimensions[1] : l;
+                System.Runtime.InteropServices.NativeMemory.Clear(o, (nuint)(outputs * sizeof(T)));
+                return;
+            }
+
             if (!isMatrix)
             {
                 // One ?axpy over l terms into a contiguous result: the kernel takes its block only at a unit x stride.
@@ -299,20 +315,29 @@ namespace NumSharp.Backends
             /// <summary>The kernel's block: it takes the first <c>n &amp; -KernelBlock</c> terms of a unit-stride call.</summary>
             static abstract long KernelBlock { get; }
 
-            /// <summary>One output, <c>a * x</c> (NumPy's <c>l == 1</c> statement; no +0, so -0.0 survives).</summary>
+            /// <summary>Whether the scalar is OpenBLAS's <c>alpha == ZERO</c> (either sign; both parts for complex), on
+            ///     which cblas_?axpy returns without touching y.</summary>
             /// <param name="a">The scalar.</param>
-            /// <param name="x">The other operand's element.</param>
+            /// <returns>True for a zero scalar.</returns>
+            static abstract bool IsZero(T a);
+
+            /// <summary>One output, <c>a * x</c> (NumPy's <c>l == 1</c> statement; no +0, so -0.0 survives), with the NaN
+            ///     NumPy's compiled product keeps when both factors hold one.</summary>
+            /// <param name="a">The scalar (<c>*ap2</c>).</param>
+            /// <param name="x">The other operand's element (<c>*ap1</c>).</param>
             /// <returns>The plain product.</returns>
             static abstract T Product(T a, T x);
 
-            /// <summary>The kernel's form over <paramref name="n"/> contiguous terms.</summary>
+            /// <summary>The kernel's form over <paramref name="n"/> contiguous terms (a NaN scalar: NumPy's NaN per
+            ///     output, chosen explicitly).</summary>
             /// <param name="n">The terms (a multiple of the block, or 0).</param>
             /// <param name="a">The scalar.</param>
             /// <param name="x">The first term, contiguous.</param>
             /// <param name="y">The first output, contiguous.</param>
             static abstract void Fused(long n, T a, T* x, T* y);
 
-            /// <summary>The C loop's form over <paramref name="n"/> terms into contiguous outputs.</summary>
+            /// <summary>The C loop's form over <paramref name="n"/> terms into contiguous outputs (a NaN scalar: NumPy's NaN
+            ///     per output, chosen explicitly).</summary>
             /// <param name="n">The terms.</param>
             /// <param name="a">The scalar.</param>
             /// <param name="x">The first term.</param>
@@ -329,13 +354,30 @@ namespace NumSharp.Backends
             public static long KernelBlock => 32;
 
             /// <inheritdoc/>
+            public static bool IsZero(float a) => a == 0f;
+
+            /// <inheritdoc/>
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            public static float Product(float a, float x) => a * x;
+            public static float Product(float a, float x)
+            {
+                float p = a * x;
+                // Two NaN factors: MSVC's float32 product keeps ap1's (x's) NaN; RyuJIT's operand order is its own.
+                return float.IsNaN(p) ? NDDot.ScalarProductNaN(a, x) : p;
+            }
 
             /// <inheritdoc/>
             [MethodImpl(MethodImplOptions.AggressiveOptimization)]
             public static void Fused(long n, float a, float* x, float* y)
             {
+                if (float.IsNaN(a))
+                {
+                    // The kernel's fma(a, x, 0) returns its first multiplicand's NaN whatever x holds.
+                    float q = NDDot.AxpyNaNScalar(a);
+                    for (long k = 0; k < n; k++)
+                        y[k] = q;
+                    return;
+                }
+
                 long i = 0;
                 if (Fma.IsSupported && Avx.IsSupported)
                 {
@@ -352,6 +394,15 @@ namespace NumSharp.Backends
             [MethodImpl(MethodImplOptions.AggressiveOptimization)]
             public static void Plain(long n, float a, float* x, long incx, float* y)
             {
+                if (float.IsNaN(a))
+                {
+                    // The C loop's `da * x[i]` keeps da's NaN first (GCC's order), whatever x holds.
+                    float q = NDDot.AxpyNaNScalar(a);
+                    for (long k = 0; k < n; k++)
+                        y[k] = q;
+                    return;
+                }
+
                 long i = 0;
                 if (incx == 1 && Vector256.IsHardwareAccelerated)
                 {
@@ -377,13 +428,30 @@ namespace NumSharp.Backends
             public static long KernelBlock => 16;
 
             /// <inheritdoc/>
+            public static bool IsZero(double a) => a == 0.0;
+
+            /// <inheritdoc/>
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            public static double Product(double a, double x) => a * x;
+            public static double Product(double a, double x)
+            {
+                double p = a * x;
+                // Two NaN factors: MSVC's float64 product keeps ap2's (a's) NaN; RyuJIT's operand order is its own.
+                return double.IsNaN(p) ? NDDot.ScalarProductNaN(a, x) : p;
+            }
 
             /// <inheritdoc/>
             [MethodImpl(MethodImplOptions.AggressiveOptimization)]
             public static void Fused(long n, double a, double* x, double* y)
             {
+                if (double.IsNaN(a))
+                {
+                    // The kernel's fma(a, x, 0) returns its first multiplicand's NaN whatever x holds.
+                    double q = NDDot.AxpyNaNScalar(a);
+                    for (long k = 0; k < n; k++)
+                        y[k] = q;
+                    return;
+                }
+
                 long i = 0;
                 if (Fma.IsSupported && Avx.IsSupported)
                 {
@@ -400,6 +468,15 @@ namespace NumSharp.Backends
             [MethodImpl(MethodImplOptions.AggressiveOptimization)]
             public static void Plain(long n, double a, double* x, long incx, double* y)
             {
+                if (double.IsNaN(a))
+                {
+                    // The C loop's `da * x[i]` keeps da's NaN first (GCC's order), whatever x holds.
+                    double q = NDDot.AxpyNaNScalar(a);
+                    for (long k = 0; k < n; k++)
+                        y[k] = q;
+                    return;
+                }
+
                 long i = 0;
                 if (incx == 1 && Vector256.IsHardwareAccelerated)
                 {
@@ -428,15 +505,30 @@ namespace NumSharp.Backends
             public static long KernelBlock => 16;
 
             /// <inheritdoc/>
+            public static bool IsZero(Complex a) => a.Real == 0.0 && a.Imaginary == 0.0;
+
+            /// <inheritdoc/>
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public static Complex Product(Complex a, Complex x)
+            {
                 // npy_creal(*ptr1) * npy_creal(*ptr2) - npy_cimag(*ptr1) * npy_cimag(*ptr2), and the imaginary part
-                => new Complex(a.Real * x.Real - a.Imaginary * x.Imaginary, a.Real * x.Imaginary + a.Imaginary * x.Real);
+                var p = new Complex(a.Real * x.Real - a.Imaginary * x.Imaginary, a.Real * x.Imaginary + a.Imaginary * x.Real);
+                // A NaN part: MSVC's operand order (the last product ptr2 first) decides which NaN, not RyuJIT's.
+                return NDDot.HasNaN(p) ? NDDot.ScalarProductNaN(a, x) : p;
+            }
 
             /// <inheritdoc/>
             [MethodImpl(MethodImplOptions.AggressiveOptimization)]
             public static void Fused(long n, Complex a, Complex* x, Complex* y)
             {
+                if (NDDot.HasNaN(a))
+                {
+                    // A NaN scalar part meets the elements' NaNs in every lane: the kernel's operand order, explicitly.
+                    for (long k = 0; k < n; k++)
+                        y[k] = NDDot.ZaxpyNaN(a, x[k], kernel: true);
+                    return;
+                }
+
                 double ar = a.Real, ai = a.Imaginary;
                 double* xp = (double*)x, yp = (double*)y;
                 long i = 0;
@@ -464,6 +556,14 @@ namespace NumSharp.Backends
             [MethodImpl(MethodImplOptions.AggressiveOptimization)]
             public static void Plain(long n, Complex a, Complex* x, long incx, Complex* y)
             {
+                if (NDDot.HasNaN(a))
+                {
+                    // A NaN scalar part meets the elements' NaNs in every product: the C loop's order, explicitly.
+                    for (long k = 0; k < n; k++)
+                        y[k] = NDDot.ZaxpyNaN(a, x[k * incx], kernel: false);
+                    return;
+                }
+
                 double ar = a.Real, ai = a.Imaginary;
                 double* xp = (double*)x, yp = (double*)y;
                 long i = 0;
@@ -487,6 +587,13 @@ namespace NumSharp.Backends
                     double re = 0.0, im = 0.0;
                     re += ar * xr - ai * xi;
                     im += ar * xi + ai * xr;
+                    if (double.IsNaN(re) || double.IsNaN(im))
+                    {
+                        // The imaginary add commutes for RyuJIT: two NaN products need NumPy's `ar*xi` first.
+                        var r = NDDot.ZaxpyNaN(a, new Complex(xr, xi), kernel: false);
+                        re = r.Real;
+                        im = r.Imaginary;
+                    }
                     yp[2 * i] = re;
                     yp[2 * i + 1] = im;
                 }

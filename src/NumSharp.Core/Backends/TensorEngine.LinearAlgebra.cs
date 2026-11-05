@@ -111,14 +111,40 @@ namespace NumSharp
                 flatStride = flatStrides[0];
             }
 
-            var left = !view || (flatStride != 1 && !VdotReadsFirstInPlace(a.typecode, flatStride, a.size))
+            bool engineCopy = view && flatStride != 1 && !VdotReadsFirstInPlace(a.typecode, flatStride, a.size);
+            var left = !view || engineCopy
                 ? NDArray.ravel(a, 'C')
                 : a.reshape(new long[] {-1});
             var right = b.reshape(new long[] {left.size});
             // array_vdot then calls the dtype's dot function itself - CDOUBLE_vdot for complex, which conjugates inside
             // its sums - not np.dot's 1-D route, whose cblas_matrixproduct takes a length-1 pair as a plain product and
             // copies a reversed operand.
-            return VdotFunction1D(left, right);
+            var result = VdotFunction1D(left, right);
+            // The engine's copy sums in another order than NumPy's in-place read: within rounding for a number, but a NaN
+            // result is whichever NaN that order kept. Only the in-place read gives NumPy's NaN, so a NaN result (rare:
+            // one compare per call otherwise) is computed again there; the first result is the scope's to reclaim.
+            if (engineCopy && HasNaNScalar(result))
+                return VdotFunction1D(a.reshape(new long[] {-1}), right);
+            return result;
+        }
+
+        /// <summary>Whether a 0-d result of np.vdot holds a NaN (either part of a complex one).</summary>
+        /// <param name="r">The 0-d result.</param>
+        /// <returns>True for a NaN float32 / float64 value or a complex128 value with a NaN part; false for every other
+        ///     dtype, which has no NaN.</returns>
+        private static bool HasNaNScalar(NDArray r)
+        {
+            switch (r.typecode)
+            {
+                case NPTypeCode.Single:
+                    return float.IsNaN(r.GetAtIndex<float>(0));
+                case NPTypeCode.Double:
+                    return double.IsNaN(r.GetAtIndex<double>(0));
+                case NPTypeCode.Complex:
+                    return NumSharp.Utilities.NDDot.HasNaN(r.GetAtIndex<System.Numerics.Complex>(0));
+                default:
+                    return false;
+            }
         }
 
         /// <summary>

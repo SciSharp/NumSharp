@@ -17,9 +17,9 @@ namespace NumSharp.Tests.LinearAlgebra
     ///     Each row: the operands' dtypes, the stride class, the contracted length K, the rhs's last dimension M (3 makes
     ///     one call per output; 5 a row of four plus one, the row walk), the generator seed, whether NaN / inf / -inf /
     ///     -0.0 are planted, whether the rhs is 3-D, NumPy's result dtype, and the expectation: <c>sha:</c> and the first
-    ///     32 hex digits of SHA-256 over the result's bytes, or <c>hex:</c> and every byte (special rows, where a NaN slot
-    ///     compares as NaN for NaN: which NaN survives when several meet follows RyuJIT's operand order, see
-    ///     <see cref="NDDot"/>). Generator: the PA3a scratch script gen_nddot_tests.py of the np-layer dtype plan.
+    ///     32 hex digits of SHA-256 over the result's bytes, or <c>hex:</c> and every byte (special rows; a NaN slot
+    ///     compares byte for byte too: NDDot gives NumPy's NaN where several meet, see <see cref="NDDot"/>). Generator:
+    ///     the PA3a scratch script gen_nddot_tests.py of the np-layer dtype plan.
     /// </remarks>
     [TestClass]
     public class NDDotTests : TestClass
@@ -39,6 +39,10 @@ namespace NumSharp.Tests.LinearAlgebra
             /// <summary>Advances the state one step (Knuth's MMIX constants).</summary>
             /// <returns>The new state.</returns>
             private ulong Step() => _s = unchecked(_s * 6364136223846793005UL + 1442695040888963407UL);
+
+            /// <summary>One raw draw (the next state), for <see cref="PlantNaNs"/>'s stream.</summary>
+            /// <returns>The new state.</returns>
+            public ulong Next() => Step();
 
             /// <summary>One double: sign from the first draw's top bit, exponent from its bits 52..56 (mod 21) minus 10,
             ///     mantissa the second draw's top 52 bits.</summary>
@@ -2132,9 +2136,573 @@ namespace NumSharp.Tests.LinearAlgebra
         }
 
         /// <summary>
+        ///     NumPy 2.4.2's bits where several NaNs meet, every dot route: operands whose slots are, one in six, a quiet
+        ///     NaN of its own payload and a drawn sign (and some infinities and signed zeros, whose invalid products give
+        ///     x86's default NaN), so a result's NaN bits say which NaN NumPy's order of operations kept - NDDot's NaN
+        ///     models (NDDot.NaN.cs) behind np.dot's N-D and 1-D routes, np.vdot and np.vecdot, the one-term vecdot walker,
+        ///     np.dot's scalar branch (its <c>alpha == 0</c> early return included: <c>np.dot(0.0, [nan, inf])</c> is
+        ///     <c>[0., 0.]</c>) and np.correlate / np.convolve's complex engine.
+        /// </summary>
+        /// <param name="route">nd, d1, vdot, vecdot, sb, corr or conv (the layouts: <see cref="NaNOperands"/>).</param>
+        /// <param name="dtypeA">The first operand's dtype.</param>
+        /// <param name="dtypeB">The second operand's dtype.</param>
+        /// <param name="kind">The route's layout (corr / conv: the mode).</param>
+        /// <param name="n">The contracted length (corr / conv: the data holds n + 7 elements).</param>
+        /// <param name="m">nd: the rhs's last dimension; corr / conv: the kernel's length; otherwise 0.</param>
+        /// <param name="seed">The generator seed (the first operand's planting stream; seed + 1 the second's).</param>
+        /// <param name="resultDtype">NumPy's result dtype.</param>
+        /// <param name="expected">sha: and the first 32 hex digits of SHA-256 over NumPy's result bytes.</param>
+        [DataTestMethod]
+        [DataRow("nd", "float32", "float32", "unit", 5, 5, 41007UL, "float32", "sha:b7c004ba69bc032856e042ed1a8c1e2c")]
+        [DataRow("nd", "float32", "float32", "unit", 17, 5, 41014UL, "float32", "sha:51e6f8a7e3b2e8d3a3d2f2b618eff80f")]
+        [DataRow("nd", "float32", "float32", "unit", 40, 5, 41021UL, "float32", "sha:d2f6b5139349c805614d1faebd1442d5")]
+        [DataRow("nd", "float32", "float32", "strided", 5, 5, 41028UL, "float32", "sha:b906091b2ebde64db785302f10130702")]
+        [DataRow("nd", "float32", "float32", "strided", 17, 5, 41035UL, "float32", "sha:403d616878f1a8c934ba474dc2322f48")]
+        [DataRow("nd", "float32", "float32", "strided", 40, 5, 41042UL, "float32", "sha:8e4e7bc8462143c76fc5efe2075d45e1")]
+        [DataRow("nd", "float32", "float32", "own", 5, 5, 41049UL, "float32", "sha:cc9a684f08a0d67b9aa598d36c22986d")]
+        [DataRow("nd", "float32", "float32", "own", 17, 5, 41056UL, "float32", "sha:48c35c3de6f16289be9682e7a6f789c7")]
+        [DataRow("nd", "float32", "float32", "own", 40, 5, 41063UL, "float32", "sha:fbd2b417fa7984e4768b4228b948b79b")]
+        [DataRow("nd", "float32", "float32", "own2", 5, 5, 41070UL, "float32", "sha:a355e2397ec1d8e438ca30d98b6930e9")]
+        [DataRow("nd", "float32", "float32", "own2", 17, 5, 41077UL, "float32", "sha:6c8dd851e7c97a596e2e3881e6f595f9")]
+        [DataRow("nd", "float32", "float32", "own2", 40, 5, 41084UL, "float32", "sha:a772a95ee0ea5833fa84123c15a2ac66")]
+        [DataRow("d1", "float32", "float32", "unit", 2, 0, 41091UL, "float32", "sha:d9265d7acb11b75517ee713afcd92826")]
+        [DataRow("d1", "float32", "float32", "unit", 17, 0, 41098UL, "float32", "sha:6b5c6cf3e7cfc1df9cd3245f14ee98e5")]
+        [DataRow("d1", "float32", "float32", "unit", 40, 0, 41105UL, "float32", "sha:4d20190b3ea3310b9ab37b52508c345f")]
+        [DataRow("d1", "float32", "float32", "rev", 2, 0, 41112UL, "float32", "sha:d5d558e473f1e42269913e3e66c62280")]
+        [DataRow("d1", "float32", "float32", "rev", 17, 0, 41119UL, "float32", "sha:6242137f79d80fa33e71ddde61cd3804")]
+        [DataRow("d1", "float32", "float32", "rev", 40, 0, 41126UL, "float32", "sha:0f0cbcbf33dcdabeed632c67cbc0c31c")]
+        [DataRow("d1", "float32", "float32", "revrev", 2, 0, 41133UL, "float32", "sha:f796106731ddd163b8a4888b56a283be")]
+        [DataRow("d1", "float32", "float32", "revrev", 17, 0, 41140UL, "float32", "sha:1a256d9474d1f62e48f64dbe875192c2")]
+        [DataRow("d1", "float32", "float32", "revrev", 40, 0, 41147UL, "float32", "sha:15c056ec92df088ad6581831c605c687")]
+        [DataRow("d1", "float32", "float32", "bcast", 2, 0, 41154UL, "float32", "sha:89cc361108d826aeee7225c7b8fcac5e")]
+        [DataRow("d1", "float32", "float32", "bcast", 17, 0, 41161UL, "float32", "sha:d68e3dca745350e4e31f1f69c370b2fb")]
+        [DataRow("d1", "float32", "float32", "bcast", 40, 0, 41168UL, "float32", "sha:5877abc2f583a51caac6cd88e194c2cb")]
+        [DataRow("d1", "float32", "float32", "step", 2, 0, 41175UL, "float32", "sha:d5d558e473f1e42269913e3e66c62280")]
+        [DataRow("d1", "float32", "float32", "step", 17, 0, 41182UL, "float32", "sha:75f0c5e21fa9ef1a42f997d4af35d35b")]
+        [DataRow("d1", "float32", "float32", "step", 40, 0, 41189UL, "float32", "sha:8405014b3d8052e909b05a3862a9397c")]
+        [DataRow("vdot", "float32", "float32", "unit", 1, 0, 41196UL, "float32", "sha:10d7064f48b4d64aefd6a6a5bd29c45a")]
+        [DataRow("vdot", "float32", "float32", "unit", 9, 0, 41203UL, "float32", "sha:75c05efd2473fbdfe7bb39152a2b7811")]
+        [DataRow("vdot", "float32", "float32", "unit", 40, 0, 41210UL, "float32", "sha:50a87ee53f0c9f7210736f0d8eec8fad")]
+        [DataRow("vdot", "float32", "float32", "rev", 1, 0, 41217UL, "float32", "sha:bf2b967ea16e9308a79ded35e0aad424")]
+        [DataRow("vdot", "float32", "float32", "rev", 9, 0, 41224UL, "float32", "sha:0f0cbcbf33dcdabeed632c67cbc0c31c")]
+        [DataRow("vdot", "float32", "float32", "rev", 40, 0, 41231UL, "float32", "sha:2c68d4d8eb003ce752b5930e231bd113")]
+        [DataRow("vdot", "float32", "float32", "step", 1, 0, 41238UL, "float32", "sha:289b83d4b463a0171ecacc60c8ba69ba")]
+        [DataRow("vdot", "float32", "float32", "step", 9, 0, 41245UL, "float32", "sha:6d50a9bc6368ffb0909ceb67caa17e19")]
+        [DataRow("vdot", "float32", "float32", "step", 40, 0, 41252UL, "float32", "sha:c7a608bcb78485852573f3a2d062ef93")]
+        [DataRow("vecdot", "float32", "float32", "unit", 1, 0, 41259UL, "float32", "sha:c7fa5e1655587b9446744314f19ad7b0")]
+        [DataRow("vecdot", "float32", "float32", "unit", 9, 0, 41266UL, "float32", "sha:e857c3a3ba09dc859d7f3b05db165500")]
+        [DataRow("vecdot", "float32", "float32", "unit", 40, 0, 41273UL, "float32", "sha:afd7f2b7a86c805a3abec8f8e1f27d34")]
+        [DataRow("vecdot", "float32", "float32", "rev", 1, 0, 41280UL, "float32", "sha:42b7055b5f53957788ed3f6d62de55a4")]
+        [DataRow("vecdot", "float32", "float32", "rev", 9, 0, 41287UL, "float32", "sha:6e797c214fd963771afdec1b6a95e498")]
+        [DataRow("vecdot", "float32", "float32", "rev", 40, 0, 41294UL, "float32", "sha:c96d7ff16b3fc904ac0d577c43c0e98e")]
+        [DataRow("vecdot", "float32", "float32", "bcast", 1, 0, 41301UL, "float32", "sha:04820cdb4dc47b851f4a52cf1e14ae15")]
+        [DataRow("vecdot", "float32", "float32", "bcast", 9, 0, 41308UL, "float32", "sha:e1c67263af05a53e3be2cb95e85c1e60")]
+        [DataRow("vecdot", "float32", "float32", "bcast", 40, 0, 41315UL, "float32", "sha:ab142e55db3f2a6df79558cb0c4bd089")]
+        [DataRow("vecdot", "float32", "float32", "step", 1, 0, 41322UL, "float32", "sha:19e82d02924491c3de82f778584ed3fd")]
+        [DataRow("vecdot", "float32", "float32", "step", 9, 0, 41329UL, "float32", "sha:e5f7aead9e87652180095ca9ddd84603")]
+        [DataRow("vecdot", "float32", "float32", "step", 40, 0, 41336UL, "float32", "sha:e220f8a7bbe812359ff1f273df11cabe")]
+        [DataRow("sb", "float32", "float32", "s0.v", 2, 0, 41343UL, "float32", "sha:dc57b7d774b939c74ff6d3b574da1d42")]
+        [DataRow("sb", "float32", "float32", "s0.v", 17, 0, 41350UL, "float32", "sha:bb5526898305c2886472931e466287c3")]
+        [DataRow("sb", "float32", "float32", "s0.v", 40, 0, 41357UL, "float32", "sha:350c4fad945a02ee7d53eab440e772fd")]
+        [DataRow("sb", "float32", "float32", "v.s0", 2, 0, 41364UL, "float32", "sha:0a91019a5729ee2149b6a2b4334a4324")]
+        [DataRow("sb", "float32", "float32", "v.s0", 17, 0, 41371UL, "float32", "sha:c33bc93095633e15427248202dc47292")]
+        [DataRow("sb", "float32", "float32", "v.s0", 40, 0, 41378UL, "float32", "sha:9079fe7f47d614bb398e35114b07ed6c")]
+        [DataRow("sb", "float32", "float32", "s0.vrev", 2, 0, 41385UL, "float32", "sha:ca5540914cbbfc550d5d3daa66cfbefc")]
+        [DataRow("sb", "float32", "float32", "s0.vrev", 17, 0, 41392UL, "float32", "sha:eafc4dc5528f018a173b6f3e6f3a08c2")]
+        [DataRow("sb", "float32", "float32", "s0.vrev", 40, 0, 41399UL, "float32", "sha:558dab1159875b5aa58f98620d3b7244")]
+        [DataRow("sb", "float32", "float32", "s11.row", 2, 0, 41406UL, "float32", "sha:9ad35bc129751760ec4e2cc0749f1c71")]
+        [DataRow("sb", "float32", "float32", "s11.row", 17, 0, 41413UL, "float32", "sha:cfd59b9eeb43097b69ba921f9ea40a95")]
+        [DataRow("sb", "float32", "float32", "s11.row", 40, 0, 41420UL, "float32", "sha:b393978842a0fa3d3e1470196f098f47")]
+        [DataRow("sb", "float32", "float32", "col.v1", 2, 0, 41427UL, "float32", "sha:05f7b2af18a69633703a05466488802b")]
+        [DataRow("sb", "float32", "float32", "col.v1", 17, 0, 41434UL, "float32", "sha:3915af544c85806b5a60b2462ed3689c")]
+        [DataRow("sb", "float32", "float32", "col.v1", 40, 0, 41441UL, "float32", "sha:a61e570ffee22a43804a2233f1b042ec")]
+        [DataRow("sb", "float32", "float32", "s0.mC", 2, 0, 41448UL, "float32", "sha:a56a6c0b27b0c172475aab717126aefd")]
+        [DataRow("sb", "float32", "float32", "s0.mC", 17, 0, 41455UL, "float32", "sha:42dd2aea680dae3d71f155932bf08dc3")]
+        [DataRow("sb", "float32", "float32", "s0.mC", 40, 0, 41462UL, "float32", "sha:62dcf28c2cae6a1f20eb283c0fd9186f")]
+        [DataRow("sb", "float32", "float32", "s0.cs", 2, 0, 41469UL, "float32", "sha:c8cd63c09151145936050a8c35dd9ebd")]
+        [DataRow("sb", "float32", "float32", "s0.cs", 17, 0, 41476UL, "float32", "sha:42dd2aea680dae3d71f155932bf08dc3")]
+        [DataRow("sb", "float32", "float32", "s0.cs", 40, 0, 41483UL, "float32", "sha:bd5c5cf0542efdee8d6be1cfbee87f9a")]
+        [DataRow("sb", "float32", "float32", "v1.v1", 2, 0, 41490UL, "float32", "sha:89cc361108d826aeee7225c7b8fcac5e")]
+        [DataRow("sb", "float32", "float32", "v1.v1", 17, 0, 41497UL, "float32", "sha:3154739852b931a9afaa3b5ebe6a2162")]
+        [DataRow("sb", "float32", "float32", "v1.v1", 40, 0, 41504UL, "float32", "sha:eb102d795135b9e15c138aeb670a476e")]
+        [DataRow("sb", "float32", "float32", "s0.s0", 2, 0, 41511UL, "float32", "sha:d9265d7acb11b75517ee713afcd92826")]
+        [DataRow("sb", "float32", "float32", "s0.s0", 17, 0, 41518UL, "float32", "sha:8d23d00efdf6e35d4593bce343237253")]
+        [DataRow("sb", "float32", "float32", "s0.s0", 40, 0, 41525UL, "float32", "sha:a3e0cccef96a4e164de2de9b83d9016c")]
+        [DataRow("sb", "float32", "float32", "s11.s11", 2, 0, 41532UL, "float32", "sha:89cc361108d826aeee7225c7b8fcac5e")]
+        [DataRow("sb", "float32", "float32", "s11.s11", 17, 0, 41539UL, "float32", "sha:df3f619804a92fdb4057192dc43dd748")]
+        [DataRow("sb", "float32", "float32", "s11.s11", 40, 0, 41546UL, "float32", "sha:a56106b155ef05be572b6d2d66b3d5f0")]
+        [DataRow("sb", "float32", "float32", "zp:s0.v", 2, 0, 41553UL, "float32", "sha:af5570f5a1810b7af78caf4bc70a660f")]
+        [DataRow("sb", "float32", "float32", "zp:s0.v", 17, 0, 41560UL, "float32", "sha:1751ac12e70e15b4f76c16775cd329ae")]
+        [DataRow("sb", "float32", "float32", "zp:s0.v", 40, 0, 41567UL, "float32", "sha:b393978842a0fa3d3e1470196f098f47")]
+        [DataRow("sb", "float32", "float32", "zn:s0.mC", 2, 0, 41574UL, "float32", "sha:9d908ecfb6b256def8b49a7c504e6c88")]
+        [DataRow("sb", "float32", "float32", "zn:s0.mC", 17, 0, 41581UL, "float32", "sha:c0c74543cc9dcc7f0ddc24eaced85c27")]
+        [DataRow("sb", "float32", "float32", "zn:s0.mC", 40, 0, 41588UL, "float32", "sha:4b48f21a4b7a02bfbec19ef880a967a0")]
+        [DataRow("sb", "float32", "float32", "zp:s0.v1", 2, 0, 41595UL, "float32", "sha:6d58692645c9d1cfaf13541cbd258f86")]
+        [DataRow("sb", "float32", "float32", "zp:s0.v1", 17, 0, 41602UL, "float32", "sha:6d58692645c9d1cfaf13541cbd258f86")]
+        [DataRow("sb", "float32", "float32", "zp:s0.v1", 40, 0, 41609UL, "float32", "sha:220f6486a64647048e47148fa01e7c8c")]
+        [DataRow("nd", "float64", "float64", "unit", 5, 5, 41616UL, "float64", "sha:1d4590702c6281235cce8d86181b28fc")]
+        [DataRow("nd", "float64", "float64", "unit", 17, 5, 41623UL, "float64", "sha:5a8ccac55593a064cc81bfa389fceb22")]
+        [DataRow("nd", "float64", "float64", "unit", 40, 5, 41630UL, "float64", "sha:4a3460d230e93812f1e7468d26bdbe9e")]
+        [DataRow("nd", "float64", "float64", "strided", 5, 5, 41637UL, "float64", "sha:39100a4d7f3c591a54fe21b1b334f830")]
+        [DataRow("nd", "float64", "float64", "strided", 17, 5, 41644UL, "float64", "sha:86fa95d9d75c61fcb748a0691e852251")]
+        [DataRow("nd", "float64", "float64", "strided", 40, 5, 41651UL, "float64", "sha:49fa25515355bae7d5e5a7621a637f5b")]
+        [DataRow("nd", "float64", "float64", "own", 5, 5, 41658UL, "float64", "sha:928a94f6a24116fc86e190ce04d859af")]
+        [DataRow("nd", "float64", "float64", "own", 17, 5, 41665UL, "float64", "sha:d628cf7d637fe1e96e7f0f19669773fc")]
+        [DataRow("nd", "float64", "float64", "own", 40, 5, 41672UL, "float64", "sha:f316a28969da5d149678e09143b0a185")]
+        [DataRow("nd", "float64", "float64", "own2", 5, 5, 41679UL, "float64", "sha:6f2835909b65fc3c8d7a6c7b9e6365d8")]
+        [DataRow("nd", "float64", "float64", "own2", 17, 5, 41686UL, "float64", "sha:35e07d2f74ea1d4414612baab467c5c2")]
+        [DataRow("nd", "float64", "float64", "own2", 40, 5, 41693UL, "float64", "sha:41edc9b6f5e3a1a6e02518f918d86e0d")]
+        [DataRow("d1", "float64", "float64", "unit", 2, 0, 41700UL, "float64", "sha:fbe5a2ddf969fe14ff680099eb64d04d")]
+        [DataRow("d1", "float64", "float64", "unit", 17, 0, 41707UL, "float64", "sha:63d35008272b96d65f19d4dc8e42b734")]
+        [DataRow("d1", "float64", "float64", "unit", 40, 0, 41714UL, "float64", "sha:ff477c84c9c3f7929f8a9368e3192ccc")]
+        [DataRow("d1", "float64", "float64", "rev", 2, 0, 41721UL, "float64", "sha:98bf6914fb47bcaf1ef5c0f34822e95b")]
+        [DataRow("d1", "float64", "float64", "rev", 17, 0, 41728UL, "float64", "sha:f84f274cc955a02401b8afec437fceb7")]
+        [DataRow("d1", "float64", "float64", "rev", 40, 0, 41735UL, "float64", "sha:44cbb2e5bb31698762116f05aba468a8")]
+        [DataRow("d1", "float64", "float64", "revrev", 2, 0, 41742UL, "float64", "sha:98bf6914fb47bcaf1ef5c0f34822e95b")]
+        [DataRow("d1", "float64", "float64", "revrev", 17, 0, 41749UL, "float64", "sha:9c069baa90453b132173d4ee9292ae46")]
+        [DataRow("d1", "float64", "float64", "revrev", 40, 0, 41756UL, "float64", "sha:121ef74bc637f5f27c15f0dd76ebc8dd")]
+        [DataRow("d1", "float64", "float64", "bcast", 2, 0, 41763UL, "float64", "sha:e692596e46cfeef5cba073b8bda481b4")]
+        [DataRow("d1", "float64", "float64", "bcast", 17, 0, 41770UL, "float64", "sha:e692596e46cfeef5cba073b8bda481b4")]
+        [DataRow("d1", "float64", "float64", "bcast", 40, 0, 41777UL, "float64", "sha:d7e72ad834706f1a8ab24bc8c4834a83")]
+        [DataRow("d1", "float64", "float64", "step", 2, 0, 41784UL, "float64", "sha:82515fcfbaad7d28f3b9503c8b5e77a7")]
+        [DataRow("d1", "float64", "float64", "step", 17, 0, 41791UL, "float64", "sha:2399fcd7f479a73c8d0600bb9ff95d8c")]
+        [DataRow("d1", "float64", "float64", "step", 40, 0, 41798UL, "float64", "sha:09cba17556c42a9605514e1cf38c6523")]
+        [DataRow("vdot", "float64", "float64", "unit", 1, 0, 41805UL, "float64", "sha:c54de1f436274ca2c43ef548ec317e3e")]
+        [DataRow("vdot", "float64", "float64", "unit", 9, 0, 41812UL, "float64", "sha:efc32d52cb831c3722e51767d0378292")]
+        [DataRow("vdot", "float64", "float64", "unit", 40, 0, 41819UL, "float64", "sha:5c30e9676065e30c86a363aa7dfffa52")]
+        [DataRow("vdot", "float64", "float64", "rev", 1, 0, 41826UL, "float64", "sha:af5570f5a1810b7af78caf4bc70a660f")]
+        [DataRow("vdot", "float64", "float64", "rev", 9, 0, 41833UL, "float64", "sha:ff477c84c9c3f7929f8a9368e3192ccc")]
+        [DataRow("vdot", "float64", "float64", "rev", 40, 0, 41840UL, "float64", "sha:5f952c8e9741af21ce4ff11d2b6792af")]
+        [DataRow("vdot", "float64", "float64", "step", 1, 0, 41847UL, "float64", "sha:fbe5a2ddf969fe14ff680099eb64d04d")]
+        [DataRow("vdot", "float64", "float64", "step", 9, 0, 41854UL, "float64", "sha:48541639d42cdb2d546c8708cb62cc15")]
+        [DataRow("vdot", "float64", "float64", "step", 40, 0, 41861UL, "float64", "sha:13dc03adabb8c5ada6a3c1544a856373")]
+        [DataRow("vecdot", "float64", "float64", "unit", 1, 0, 41868UL, "float64", "sha:a289b05e0866dd7e756c3163c77a35ff")]
+        [DataRow("vecdot", "float64", "float64", "unit", 9, 0, 41875UL, "float64", "sha:1d4396b8903b1a622c600f0474de46ba")]
+        [DataRow("vecdot", "float64", "float64", "unit", 40, 0, 41882UL, "float64", "sha:97347781ea41bf16b20dab1e37c81abf")]
+        [DataRow("vecdot", "float64", "float64", "rev", 1, 0, 41889UL, "float64", "sha:48fce14cff61829f343c5219953bde7f")]
+        [DataRow("vecdot", "float64", "float64", "rev", 9, 0, 41896UL, "float64", "sha:52e2b99b131f931953545c1e9633bf61")]
+        [DataRow("vecdot", "float64", "float64", "rev", 40, 0, 41903UL, "float64", "sha:ba8a9bc98b825d2b077796a783e94a52")]
+        [DataRow("vecdot", "float64", "float64", "bcast", 1, 0, 41910UL, "float64", "sha:17b0761f87b081d5cf10757ccc89f12b")]
+        [DataRow("vecdot", "float64", "float64", "bcast", 9, 0, 41917UL, "float64", "sha:36fedef376ef865635a7b6de7303aa4d")]
+        [DataRow("vecdot", "float64", "float64", "bcast", 40, 0, 41924UL, "float64", "sha:5509d25229d54d3b8a4298f407c23928")]
+        [DataRow("vecdot", "float64", "float64", "step", 1, 0, 41931UL, "float64", "sha:a2eb7419deebb8dd1b95639132d65c90")]
+        [DataRow("vecdot", "float64", "float64", "step", 9, 0, 41938UL, "float64", "sha:3d60096239820842724a917fc01218fd")]
+        [DataRow("vecdot", "float64", "float64", "step", 40, 0, 41945UL, "float64", "sha:608106a5ead1466f5f2abf63e3e96ee2")]
+        [DataRow("sb", "float64", "float64", "s0.v", 2, 0, 41952UL, "float64", "sha:8649cfcbbfbca2e1f179391fdd2324ce")]
+        [DataRow("sb", "float64", "float64", "s0.v", 17, 0, 41959UL, "float64", "sha:3dabf8e1c2da6815e44dedaedc9b1444")]
+        [DataRow("sb", "float64", "float64", "s0.v", 40, 0, 41966UL, "float64", "sha:7e4e5e2c979dee6684800811ab54b5a9")]
+        [DataRow("sb", "float64", "float64", "v.s0", 2, 0, 41973UL, "float64", "sha:bf3e081f9f0486168e1eedce4dc912f7")]
+        [DataRow("sb", "float64", "float64", "v.s0", 17, 0, 41980UL, "float64", "sha:0b4a9ab143e4d0461095fca9eaa843a3")]
+        [DataRow("sb", "float64", "float64", "v.s0", 40, 0, 41987UL, "float64", "sha:33ff975b26b33e8d6c8fd01f85f57424")]
+        [DataRow("sb", "float64", "float64", "s0.vrev", 2, 0, 41994UL, "float64", "sha:8649cfcbbfbca2e1f179391fdd2324ce")]
+        [DataRow("sb", "float64", "float64", "s0.vrev", 17, 0, 42001UL, "float64", "sha:f62254a32fc3207899d5cacc1e54858f")]
+        [DataRow("sb", "float64", "float64", "s0.vrev", 40, 0, 42008UL, "float64", "sha:faa8ef3a816c8f45c8822460480783da")]
+        [DataRow("sb", "float64", "float64", "s11.row", 2, 0, 42015UL, "float64", "sha:3b68eb5ec8006c0de66f84bbb453b757")]
+        [DataRow("sb", "float64", "float64", "s11.row", 17, 0, 42022UL, "float64", "sha:30c94e642e269455a48771ac529fe375")]
+        [DataRow("sb", "float64", "float64", "s11.row", 40, 0, 42029UL, "float64", "sha:1635cbc41d4deb5101e81f8f2dbd095a")]
+        [DataRow("sb", "float64", "float64", "col.v1", 2, 0, 42036UL, "float64", "sha:e28b77045029f15dc09fb9745a7ea439")]
+        [DataRow("sb", "float64", "float64", "col.v1", 17, 0, 42043UL, "float64", "sha:a4fc23d8e0703a5f0304a04ef1bd7856")]
+        [DataRow("sb", "float64", "float64", "col.v1", 40, 0, 42050UL, "float64", "sha:ac31c3c27d0369199de03cd3fe96395c")]
+        [DataRow("sb", "float64", "float64", "s0.mC", 2, 0, 42057UL, "float64", "sha:17b0761f87b081d5cf10757ccc89f12b")]
+        [DataRow("sb", "float64", "float64", "s0.mC", 17, 0, 42064UL, "float64", "sha:5732c39ffb13e9769e0e134850f7b27a")]
+        [DataRow("sb", "float64", "float64", "s0.mC", 40, 0, 42071UL, "float64", "sha:545183e8ad4371bc02be1fa8068817d7")]
+        [DataRow("sb", "float64", "float64", "s0.cs", 2, 0, 42078UL, "float64", "sha:75ba9e518401f86c47aa16bd66b8c28d")]
+        [DataRow("sb", "float64", "float64", "s0.cs", 17, 0, 42085UL, "float64", "sha:dc7342db62e5bcb08d54244295ca0cd3")]
+        [DataRow("sb", "float64", "float64", "s0.cs", 40, 0, 42092UL, "float64", "sha:f903b19b0213a1e763e2ef781a931a29")]
+        [DataRow("sb", "float64", "float64", "v1.v1", 2, 0, 42099UL, "float64", "sha:9977b62244799f49ec9c9961987a994e")]
+        [DataRow("sb", "float64", "float64", "v1.v1", 17, 0, 42106UL, "float64", "sha:fbe5a2ddf969fe14ff680099eb64d04d")]
+        [DataRow("sb", "float64", "float64", "v1.v1", 40, 0, 42113UL, "float64", "sha:af5570f5a1810b7af78caf4bc70a660f")]
+        [DataRow("sb", "float64", "float64", "s0.s0", 2, 0, 42120UL, "float64", "sha:c3aaa757405a5e5ac1cc401b6c8ef3d8")]
+        [DataRow("sb", "float64", "float64", "s0.s0", 17, 0, 42127UL, "float64", "sha:fbe5a2ddf969fe14ff680099eb64d04d")]
+        [DataRow("sb", "float64", "float64", "s0.s0", 40, 0, 42134UL, "float64", "sha:d7e72ad834706f1a8ab24bc8c4834a83")]
+        [DataRow("sb", "float64", "float64", "s11.s11", 2, 0, 42141UL, "float64", "sha:05b97fb56cb2d1ff13d9968428d65fb7")]
+        [DataRow("sb", "float64", "float64", "s11.s11", 17, 0, 42148UL, "float64", "sha:ade0ea987aa58a36ab5cc188559cd5f1")]
+        [DataRow("sb", "float64", "float64", "s11.s11", 40, 0, 42155UL, "float64", "sha:af5570f5a1810b7af78caf4bc70a660f")]
+        [DataRow("sb", "float64", "float64", "zp:s0.v", 2, 0, 42162UL, "float64", "sha:374708fff7719dd5979ec875d56cd228")]
+        [DataRow("sb", "float64", "float64", "zp:s0.v", 17, 0, 42169UL, "float64", "sha:b707241545a346265aab1ffb32ff64b5")]
+        [DataRow("sb", "float64", "float64", "zp:s0.v", 40, 0, 42176UL, "float64", "sha:7b6436b0c98f62380866d9432c2af0ee")]
+        [DataRow("sb", "float64", "float64", "zn:s0.mC", 2, 0, 42183UL, "float64", "sha:17b0761f87b081d5cf10757ccc89f12b")]
+        [DataRow("sb", "float64", "float64", "zn:s0.mC", 17, 0, 42190UL, "float64", "sha:c76903cde8580d1c809ac5352aab33af")]
+        [DataRow("sb", "float64", "float64", "zn:s0.mC", 40, 0, 42197UL, "float64", "sha:3dc463a76fc170607c07b104c3cb5313")]
+        [DataRow("sb", "float64", "float64", "zp:s0.v1", 2, 0, 42204UL, "float64", "sha:e6ad6c9a3a3b7658c35bacf6553fcb8f")]
+        [DataRow("sb", "float64", "float64", "zp:s0.v1", 17, 0, 42211UL, "float64", "sha:e692596e46cfeef5cba073b8bda481b4")]
+        [DataRow("sb", "float64", "float64", "zp:s0.v1", 40, 0, 42218UL, "float64", "sha:2399fcd7f479a73c8d0600bb9ff95d8c")]
+        [DataRow("nd", "complex128", "complex128", "unit", 5, 5, 42225UL, "complex128", "sha:c87e2440044267924293d47bf87195f9")]
+        [DataRow("nd", "complex128", "complex128", "unit", 17, 5, 42232UL, "complex128", "sha:d1c6007dd041904269c28d84a231cb64")]
+        [DataRow("nd", "complex128", "complex128", "unit", 40, 5, 42239UL, "complex128", "sha:6a4de07efa851c7a725af5bcb3870394")]
+        [DataRow("nd", "complex128", "complex128", "strided", 5, 5, 42246UL, "complex128", "sha:2620fc113454b4b2951c5f1bb16eaf31")]
+        [DataRow("nd", "complex128", "complex128", "strided", 17, 5, 42253UL, "complex128", "sha:0b8b439512007db6077878c6723d2f86")]
+        [DataRow("nd", "complex128", "complex128", "strided", 40, 5, 42260UL, "complex128", "sha:4da60c5ab4f8cadbca95f726682328ef")]
+        [DataRow("nd", "complex128", "complex128", "own", 5, 5, 42267UL, "complex128", "sha:d5ce514f9a833012c07946b310d30c8b")]
+        [DataRow("nd", "complex128", "complex128", "own", 17, 5, 42274UL, "complex128", "sha:9a258d5831574275df7c9b6ca4f3ca73")]
+        [DataRow("nd", "complex128", "complex128", "own", 40, 5, 42281UL, "complex128", "sha:41fb927c33b7f158f21388e2640b218a")]
+        [DataRow("nd", "complex128", "complex128", "own2", 5, 5, 42288UL, "complex128", "sha:19e0aa8894171098c967954e608f3d12")]
+        [DataRow("nd", "complex128", "complex128", "own2", 17, 5, 42295UL, "complex128", "sha:42a7bcf46d67365144e0daa2c3f96507")]
+        [DataRow("nd", "complex128", "complex128", "own2", 40, 5, 42302UL, "complex128", "sha:6f6ddccf3f763fa3626ac4b4928cf3ce")]
+        [DataRow("d1", "complex128", "complex128", "unit", 2, 0, 42309UL, "complex128", "sha:3df528d2c05249a26039b659fea0ec2a")]
+        [DataRow("d1", "complex128", "complex128", "unit", 17, 0, 42316UL, "complex128", "sha:00b18402ff9c945ee5664080c924c579")]
+        [DataRow("d1", "complex128", "complex128", "unit", 40, 0, 42323UL, "complex128", "sha:80d1da544dbd865d7deb45ac9698a32b")]
+        [DataRow("d1", "complex128", "complex128", "rev", 2, 0, 42330UL, "complex128", "sha:9cf25bb4ac9cc42ca013141a900a3528")]
+        [DataRow("d1", "complex128", "complex128", "rev", 17, 0, 42337UL, "complex128", "sha:49aade79966f7ce360dfdb6e5dafc618")]
+        [DataRow("d1", "complex128", "complex128", "rev", 40, 0, 42344UL, "complex128", "sha:af086c116ecd4d45f68bc9ff4ca3f94a")]
+        [DataRow("d1", "complex128", "complex128", "revrev", 2, 0, 42351UL, "complex128", "sha:e95a282754c810e0e5a17ca878ebb19b")]
+        [DataRow("d1", "complex128", "complex128", "revrev", 17, 0, 42358UL, "complex128", "sha:e94de3895c66d25438279492b5c61167")]
+        [DataRow("d1", "complex128", "complex128", "revrev", 40, 0, 42365UL, "complex128", "sha:e8eb45da386041b9dd5963eac117b7da")]
+        [DataRow("d1", "complex128", "complex128", "bcast", 2, 0, 42372UL, "complex128", "sha:89e4aea2fec41aba9dfda1ea9b1358e7")]
+        [DataRow("d1", "complex128", "complex128", "bcast", 17, 0, 42379UL, "complex128", "sha:82d5d01ef5d397738ca49f03c1d0e40e")]
+        [DataRow("d1", "complex128", "complex128", "bcast", 40, 0, 42386UL, "complex128", "sha:22b47812ec67676f93cf34130c543d22")]
+        [DataRow("d1", "complex128", "complex128", "step", 2, 0, 42393UL, "complex128", "sha:8649cfcbbfbca2e1f179391fdd2324ce")]
+        [DataRow("d1", "complex128", "complex128", "step", 17, 0, 42400UL, "complex128", "sha:17d1ca17cf4ff6c49e046a573b4d8334")]
+        [DataRow("d1", "complex128", "complex128", "step", 40, 0, 42407UL, "complex128", "sha:32feaa848df340568770237fe5f98fcb")]
+        [DataRow("vdot", "complex128", "complex128", "unit", 1, 0, 42414UL, "complex128", "sha:8649cfcbbfbca2e1f179391fdd2324ce")]
+        [DataRow("vdot", "complex128", "complex128", "unit", 9, 0, 42421UL, "complex128", "sha:637364029b4030e586e537e507871189")]
+        [DataRow("vdot", "complex128", "complex128", "unit", 40, 0, 42428UL, "complex128", "sha:47e624340ab5db2a82aca24eb01e4b05")]
+        [DataRow("vdot", "complex128", "complex128", "rev", 1, 0, 42435UL, "complex128", "sha:fa154d8082cd299b4731baae9c72d6f0")]
+        [DataRow("vdot", "complex128", "complex128", "rev", 9, 0, 42442UL, "complex128", "sha:7c3be7b590852eae7ebfba2c1b91a7ff")]
+        [DataRow("vdot", "complex128", "complex128", "rev", 40, 0, 42449UL, "complex128", "sha:15853ccf9ddbb22422a21243814e1be8")]
+        [DataRow("vdot", "complex128", "complex128", "step", 1, 0, 42456UL, "complex128", "sha:046b07e50a5e1dd00e44434138a02efc")]
+        [DataRow("vdot", "complex128", "complex128", "step", 9, 0, 42463UL, "complex128", "sha:29c1b5eee74edf920fd5e819484d99a8")]
+        [DataRow("vdot", "complex128", "complex128", "step", 40, 0, 42470UL, "complex128", "sha:25f0774e5410e3b41384a2c8ff9a2376")]
+        [DataRow("vecdot", "complex128", "complex128", "unit", 9, 0, 42477UL, "complex128", "sha:f4c635e038615088ebe0f00d02d307d0")]
+        [DataRow("vecdot", "complex128", "complex128", "unit", 40, 0, 42484UL, "complex128", "sha:60b9e62a857fbea40888b7d03087fcc3")]
+        [DataRow("vecdot", "complex128", "complex128", "rev", 9, 0, 42491UL, "complex128", "sha:e7e8acca0d0b1ce510243a256ab3e1ec")]
+        [DataRow("vecdot", "complex128", "complex128", "rev", 40, 0, 42498UL, "complex128", "sha:648bf2a86d0e96e8ded6a1b0c1273299")]
+        [DataRow("vecdot", "complex128", "complex128", "bcast", 9, 0, 42505UL, "complex128", "sha:fce2b7f39d6586d4dde6f83fe9eefd3a")]
+        [DataRow("vecdot", "complex128", "complex128", "bcast", 40, 0, 42512UL, "complex128", "sha:75bf09d9f3b6ccd5a9c48c6233d6231b")]
+        [DataRow("vecdot", "complex128", "complex128", "step", 9, 0, 42519UL, "complex128", "sha:b462163a5fe7304d63b7d72c44dac4d1")]
+        [DataRow("vecdot", "complex128", "complex128", "step", 40, 0, 42526UL, "complex128", "sha:f38c571a189c78f54db22ef7714a51a4")]
+        [DataRow("sb", "complex128", "complex128", "s0.v", 2, 0, 42533UL, "complex128", "sha:8c1eef94c31c21326d567f8bb79224a3")]
+        [DataRow("sb", "complex128", "complex128", "s0.v", 17, 0, 42540UL, "complex128", "sha:4b52f2a84559c6765e3ad2ea37a34185")]
+        [DataRow("sb", "complex128", "complex128", "s0.v", 40, 0, 42547UL, "complex128", "sha:1c67d5239252ae2e16d2e50305498146")]
+        [DataRow("sb", "complex128", "complex128", "v.s0", 2, 0, 42554UL, "complex128", "sha:c7fffca19f7b45725372aa9a1aefd23e")]
+        [DataRow("sb", "complex128", "complex128", "v.s0", 17, 0, 42561UL, "complex128", "sha:1d28499c4274b27e011692b47aa2cf12")]
+        [DataRow("sb", "complex128", "complex128", "v.s0", 40, 0, 42568UL, "complex128", "sha:78f879127b062df1efea55b3a72247c7")]
+        [DataRow("sb", "complex128", "complex128", "s0.vrev", 2, 0, 42575UL, "complex128", "sha:0585169720a01078f538589449607a4d")]
+        [DataRow("sb", "complex128", "complex128", "s0.vrev", 17, 0, 42582UL, "complex128", "sha:0fef0040d49f5a7c5a9b53e445c9929a")]
+        [DataRow("sb", "complex128", "complex128", "s0.vrev", 40, 0, 42589UL, "complex128", "sha:1a4998fc80e344fd5ea213ab93b45e06")]
+        [DataRow("sb", "complex128", "complex128", "s11.row", 2, 0, 42596UL, "complex128", "sha:8964e591b39c2277ec1c401626613289")]
+        [DataRow("sb", "complex128", "complex128", "s11.row", 17, 0, 42603UL, "complex128", "sha:80ca391be97b981ce3750af942d0e22c")]
+        [DataRow("sb", "complex128", "complex128", "s11.row", 40, 0, 42610UL, "complex128", "sha:9e132485d5107211de325a45e7917cbe")]
+        [DataRow("sb", "complex128", "complex128", "col.v1", 2, 0, 42617UL, "complex128", "sha:699638c57e27095eaec0f9d73c546ec2")]
+        [DataRow("sb", "complex128", "complex128", "col.v1", 17, 0, 42624UL, "complex128", "sha:b13b2faaa4ab97f015c32fcde90375e1")]
+        [DataRow("sb", "complex128", "complex128", "col.v1", 40, 0, 42631UL, "complex128", "sha:9da16926728f5fbe8725f6c7742ef5d6")]
+        [DataRow("sb", "complex128", "complex128", "s0.mC", 2, 0, 42638UL, "complex128", "sha:62468a8eef1119ffb0b17395a300b1f0")]
+        [DataRow("sb", "complex128", "complex128", "s0.mC", 17, 0, 42645UL, "complex128", "sha:0f5dda64cd775cddab49617da74273b5")]
+        [DataRow("sb", "complex128", "complex128", "s0.mC", 40, 0, 42652UL, "complex128", "sha:813550187d645dd1e7ae52c69a96bbb5")]
+        [DataRow("sb", "complex128", "complex128", "s0.cs", 2, 0, 42659UL, "complex128", "sha:8fb8fb08c7a8e95dc323c04e79c646d3")]
+        [DataRow("sb", "complex128", "complex128", "s0.cs", 17, 0, 42666UL, "complex128", "sha:1c09da1a525c1f0f6f22be9b787c3622")]
+        [DataRow("sb", "complex128", "complex128", "s0.cs", 40, 0, 42673UL, "complex128", "sha:358d84a7163dea02c28cbb5ca87078f8")]
+        [DataRow("sb", "complex128", "complex128", "v1.v1", 2, 0, 42680UL, "complex128", "sha:e28b77045029f15dc09fb9745a7ea439")]
+        [DataRow("sb", "complex128", "complex128", "v1.v1", 17, 0, 42687UL, "complex128", "sha:f31a2b738c04675e9c22a0dc7702c175")]
+        [DataRow("sb", "complex128", "complex128", "v1.v1", 40, 0, 42694UL, "complex128", "sha:e28b77045029f15dc09fb9745a7ea439")]
+        [DataRow("sb", "complex128", "complex128", "s0.s0", 2, 0, 42701UL, "complex128", "sha:8649cfcbbfbca2e1f179391fdd2324ce")]
+        [DataRow("sb", "complex128", "complex128", "s0.s0", 17, 0, 42708UL, "complex128", "sha:432284a6fdf02bd8a1e9c6e47f9b9651")]
+        [DataRow("sb", "complex128", "complex128", "s0.s0", 40, 0, 42715UL, "complex128", "sha:91b69144bd0e87dfb3c82960ce02afbb")]
+        [DataRow("sb", "complex128", "complex128", "s11.s11", 2, 0, 42722UL, "complex128", "sha:bf32907ec0c0cdef84745719bf7d6937")]
+        [DataRow("sb", "complex128", "complex128", "s11.s11", 17, 0, 42729UL, "complex128", "sha:3daf1a49ccc77fb04b94a9282a577944")]
+        [DataRow("sb", "complex128", "complex128", "s11.s11", 40, 0, 42736UL, "complex128", "sha:8649cfcbbfbca2e1f179391fdd2324ce")]
+        [DataRow("sb", "complex128", "complex128", "zp:s0.v", 2, 0, 42743UL, "complex128", "sha:66687aadf862bd776c8fc18b8e9f8e20")]
+        [DataRow("sb", "complex128", "complex128", "zp:s0.v", 17, 0, 42750UL, "complex128", "sha:e4d879a3407de578f579dfab4366fcea")]
+        [DataRow("sb", "complex128", "complex128", "zp:s0.v", 40, 0, 42757UL, "complex128", "sha:9e132485d5107211de325a45e7917cbe")]
+        [DataRow("sb", "complex128", "complex128", "zn:s0.mC", 2, 0, 42764UL, "complex128", "sha:2ea9ab9198d1638007400cd2c3bef1cc")]
+        [DataRow("sb", "complex128", "complex128", "zn:s0.mC", 17, 0, 42771UL, "complex128", "sha:0645a4a67dcec462dc9f335bb0564e6e")]
+        [DataRow("sb", "complex128", "complex128", "zn:s0.mC", 40, 0, 42778UL, "complex128", "sha:155e437b946ac82ae591ff382b8d19ef")]
+        [DataRow("sb", "complex128", "complex128", "zp:s0.v1", 2, 0, 42785UL, "complex128", "sha:3daf1a49ccc77fb04b94a9282a577944")]
+        [DataRow("sb", "complex128", "complex128", "zp:s0.v1", 17, 0, 42792UL, "complex128", "sha:374708fff7719dd5979ec875d56cd228")]
+        [DataRow("sb", "complex128", "complex128", "zp:s0.v1", 40, 0, 42799UL, "complex128", "sha:38b0da9c7788133cfdd7d642ca85f43a")]
+        [DataRow("vdot", "float64", "float64", "rev", 100, 0, 42806UL, "float64", "sha:bef9f4b4aaf44cf9fa264eed00c2994f")]
+        [DataRow("vdot", "float32", "float32", "rev", 1500, 0, 42813UL, "float32", "sha:220f6486a64647048e47148fa01e7c8c")]
+        [DataRow("vecdot", "float32", "float64", "unit", 1, 0, 42820UL, "float64", "sha:d8d9109a70f73a3c5a5741dea7c33902")]
+        [DataRow("vecdot", "float32", "float64", "unit", 9, 0, 42827UL, "float64", "sha:dd32da6c0ce1d604b056d0f6620b1d90")]
+        [DataRow("vecdot", "float32", "float64", "unit", 40, 0, 42834UL, "float64", "sha:2d61d9a7bb648bd44cf9d0a53a6184c5")]
+        [DataRow("vecdot", "int32", "float64", "unit", 1, 0, 42841UL, "float64", "sha:71d64d69e60e8f6840ca222d72f7914c")]
+        [DataRow("vecdot", "int32", "float64", "unit", 9, 0, 42848UL, "float64", "sha:61786a41ac01d1971c0baf5b7662179f")]
+        [DataRow("vecdot", "int32", "float64", "unit", 40, 0, 42855UL, "float64", "sha:4ba0dd9797bb57f80b0ee814833ef1a2")]
+        [DataRow("vecdot", "float64", "complex128", "unit", 9, 0, 42862UL, "complex128", "sha:ee6c3a9f27bd1585179c2517dcc2f0fb")]
+        [DataRow("vecdot", "float64", "complex128", "unit", 40, 0, 42869UL, "complex128", "sha:d3040ac37c4da7a6578b5a6dcbcc9f67")]
+        [DataRow("vecdot", "int64", "float32", "unit", 1, 0, 42876UL, "float64", "sha:0903363d23ae697099a6d209c997ab8d")]
+        [DataRow("vecdot", "int64", "float32", "unit", 9, 0, 42883UL, "float64", "sha:baee5f2189ed1ac03567d9a442abef95")]
+        [DataRow("vecdot", "int64", "float32", "unit", 40, 0, 42890UL, "float64", "sha:7a4065554559300dcd13c649afb55fde")]
+        [DataRow("corr", "complex128", "complex128", "full", 12, 1, 42897UL, "complex128", "sha:fc5026db62d42f98ef033a34956f59f2")]
+        [DataRow("conv", "complex128", "complex128", "full", 12, 1, 42904UL, "complex128", "sha:b35caa63f7afc49e358492934c3fff6d")]
+        [DataRow("corr", "complex128", "complex128", "same", 12, 1, 42911UL, "complex128", "sha:a8e658ec1e543659000860a86793778d")]
+        [DataRow("conv", "complex128", "complex128", "same", 12, 1, 42918UL, "complex128", "sha:d045618cb13d34197a767c6fe18838b4")]
+        [DataRow("corr", "complex128", "complex128", "valid", 12, 1, 42925UL, "complex128", "sha:b6176033cda3f4776f9f5343ed2a359c")]
+        [DataRow("conv", "complex128", "complex128", "valid", 12, 1, 42932UL, "complex128", "sha:b6bdd8e1962e1a0fe310202eddb4ab37")]
+        [DataRow("corr", "complex128", "complex128", "full", 12, 3, 42939UL, "complex128", "sha:4df4e3cd0e44cdee220d525f343d55e4")]
+        [DataRow("conv", "complex128", "complex128", "full", 12, 3, 42946UL, "complex128", "sha:8235cfac307d0cfafb7742f278307847")]
+        [DataRow("corr", "complex128", "complex128", "same", 12, 3, 42953UL, "complex128", "sha:5f9f8d4b5a87db87c1b5c80ba2c6a745")]
+        [DataRow("conv", "complex128", "complex128", "same", 12, 3, 42960UL, "complex128", "sha:c0e6828552f17b6b9d468a92436e8357")]
+        [DataRow("corr", "complex128", "complex128", "valid", 12, 3, 42967UL, "complex128", "sha:a8c46b9c735cf0328b711297e4172c7d")]
+        [DataRow("conv", "complex128", "complex128", "valid", 12, 3, 42974UL, "complex128", "sha:c6bc9d8606aee47e56d60254ab46d61c")]
+        [DataRow("corr", "complex128", "complex128", "full", 12, 5, 42981UL, "complex128", "sha:8f5cc3c1d68b8dcac2049088a38ffc58")]
+        [DataRow("conv", "complex128", "complex128", "full", 12, 5, 42988UL, "complex128", "sha:7c5dff57eedfddd79ac8a5f9148a36cc")]
+        [DataRow("corr", "complex128", "complex128", "same", 12, 5, 42995UL, "complex128", "sha:4e611cdc3f5a525da2e1cbec4ebc507f")]
+        [DataRow("conv", "complex128", "complex128", "same", 12, 5, 43002UL, "complex128", "sha:c3db35bc041a1c9e204ff6218126a561")]
+        [DataRow("corr", "complex128", "complex128", "valid", 12, 5, 43009UL, "complex128", "sha:ca3750a361c94cb3ad9cb2a6c1a1317d")]
+        [DataRow("conv", "complex128", "complex128", "valid", 12, 5, 43016UL, "complex128", "sha:d4f5fe811eecc798e1bdfa207d70d802")]
+        public void NaNPriority_MatchesNumPyBits(string route, string dtypeA, string dtypeB, string kind, int n, int m,
+            ulong seed, string resultDtype, string expected)
+        {
+            var (a, b) = NaNOperands(route, dtypeA, dtypeB, kind, n, m, seed);
+            NDArray r = route switch
+            {
+                "nd" or "d1" or "sb" => np.dot(a, b),
+                "vdot" => np.vdot(a, b),
+                "vecdot" => np.vecdot(a, b),
+                "corr" => np.correlate(a, b, kind),
+                _ => np.convolve(a, b, kind),
+            };
+            AssertNumPyBits(r, resultDtype, expected, $"{route} {dtypeA}.{dtypeB} {kind} n={n} m={m}");
+        }
+
+        /// <summary>
+        ///     The two places that keep RyuJIT's NaN order, where a NaN check measured slower (D23 keeps their code):
+        ///     np.vecdot's complex128 vector walker for a core of one element beside more than one output (0.84x with a
+        ///     check), and np.correlate / np.convolve's float32 / float64 kernels (whose long-kernel values are bounded,
+        ///     PA3a). NumSharp gives NaN exactly where NumPy does and NumPy's bytes in every other slot; which NaN a NaN slot
+        ///     holds (payload, sign) can differ from NumPy's there. NumPy 2.4.2's bytes for the operands
+        ///     <see cref="NaNPlantedParts"/> builds.
+        /// </summary>
+        [TestMethod]
+        [Misaligned]
+        public void NaNPriority_KeptRyuJitOrderSites_NaNWhereNumPyIs()
+        {
+            // np.vecdot of two (6, 1) complex arrays: the one-term vector walker.
+            var a = Complexes(NaNPlantedParts(0, 12)).reshape(6, 1);
+            var b = Complexes(NaNPlantedParts(0x40, 12)).reshape(6, 1);
+            AssertNaNWhereNumPyIs(np.vecdot(a, b),
+                "410000000000f87f010000000000f87f440000000000f8ff440000000000f8ff00000000002002400000000000000000" +
+                "470000000000f87f070000000000f87f4a0000000000f8ff4a0000000000f8ff0000000000501a400000000000000000",
+                "vecdot complex128 (6, 1) . (6, 1)");
+
+            // np.correlate of 20 float64 values with a 3-term kernel: small_correlate's middle.
+            var d = np.array(NaNPlantedParts(0x80, 20));
+            var k = np.array(NaNPlantedParts(0xC0, 3));
+            AssertNaNWhereNumPyIs(np.correlate(d, k, "valid"),
+                string.Concat(System.Linq.Enumerable.Repeat("c10000000000f87f", 18)), "correlate float64 20 . 3 valid");
+        }
+
+        /// <summary>
+        ///     <paramref name="n"/> doubles where every third is a quiet NaN of payload <c>salt + i + 1</c> and alternating
+        ///     sign, the rest <c>0.5 + 0.125 * (i % 13)</c> with alternating sign (the generator's formula).
+        /// </summary>
+        /// <param name="salt">The payload offset that keeps two operands' NaNs apart.</param>
+        /// <param name="n">The number of doubles.</param>
+        /// <returns>The values.</returns>
+        private static double[] NaNPlantedParts(long salt, int n)
+        {
+            var v = new double[n];
+            for (int i = 0; i < n; i++)
+            {
+                ulong sign = (ulong)((i / 3) % 2);
+                v[i] = i % 3 == 0
+                    ? BitConverter.UInt64BitsToDouble(sign << 63 | 0x7FF8000000000000UL | (ulong)(salt + i + 1))
+                    : (i % 2 == 0 ? 1 : -1) * (0.5 + 0.125 * (i % 13));
+            }
+            return v;
+        }
+
+        /// <summary>The complex values whose parts are <paramref name="parts"/> in pairs (real, imaginary).</summary>
+        /// <param name="parts">An even number of doubles.</param>
+        /// <returns>A 1-D complex128 array.</returns>
+        private static NDArray Complexes(double[] parts)
+        {
+            var c = new System.Numerics.Complex[parts.Length / 2];
+            for (int i = 0; i < c.Length; i++)
+                c[i] = new System.Numerics.Complex(parts[2 * i], parts[2 * i + 1]);
+            return np.array(c);
+        }
+
+        /// <summary>
+        ///     The comparison for a site that keeps RyuJIT's NaN order: every 8-byte slot (a float64, or a complex part)
+        ///     NumPy fills with a NaN holds a NaN, every other slot NumPy's bytes.
+        /// </summary>
+        /// <param name="r">NumSharp's float64 / complex128 result.</param>
+        /// <param name="hex">NumPy's result bytes.</param>
+        /// <param name="what">The case, for the failure message.</param>
+        private static void AssertNaNWhereNumPyIs(NDArray r, string hex, string what)
+        {
+            byte[] bytes = r.tobytes(), want = Convert.FromHexString(hex);
+            bytes.Length.Should().Be(want.Length, what);
+            for (int i = 0; i < want.Length; i += 8)
+            {
+                if (double.IsNaN(BitConverter.ToDouble(want, i)))
+                    double.IsNaN(BitConverter.ToDouble(bytes, i)).Should().BeTrue("slot {0} of {1}: NumPy gives NaN", i / 8, what);
+                else
+                    bytes.AsSpan(i, 8).SequenceEqual(want.AsSpan(i, 8)).Should().BeTrue("slot {0} of {1}", i / 8, what);
+            }
+        }
+
+        /// <summary>
+        ///     The operands of a <see cref="NaNPriority_MatchesNumPyBits"/> row, built as the generator builds them: the
+        ///     generator's bases, <see cref="PlantNaNs"/>, then the route's views - nd: <c>(2, 3, n) . (n, m)</c>, strided
+        ///     <c>[..., ::2]</c> / <c>[::2]</c>, own <c>[..., ::-1]</c>, own2 <c>(m, n) . (2, n, 3)[:, ::-1, :]</c>; d1 /
+        ///     vdot: <c>(n,)</c> runs, rev, revrev, bcast (a broadcast <c>(1,)</c>), step <c>[::2]</c>; vecdot:
+        ///     <c>(6, n)</c> rows, rev <c>[:, ::-1]</c>, bcast (a <c>(n,)</c> second operand), step; sb: the scalar
+        ///     branch's kinds (<see cref="ScalarBranchShape"/>), a <c>zp:</c> / <c>zn:</c> prefix forcing the left scalar
+        ///     to +0.0 / -0.0 (both parts for complex) after planting; corr / conv: <c>(n + 7,)</c> data, <c>(m,)</c>
+        ///     kernel.
+        /// </summary>
+        /// <param name="route">The row's route.</param>
+        /// <param name="dtypeA">The first operand's dtype.</param>
+        /// <param name="dtypeB">The second operand's dtype.</param>
+        /// <param name="kind">The layout.</param>
+        /// <param name="n">The contracted length.</param>
+        /// <param name="m">The second length (see the test).</param>
+        /// <param name="seed">The generator seed.</param>
+        /// <returns>The two operands the route receives.</returns>
+        private static (NDArray A, NDArray B) NaNOperands(string route, string dtypeA, string dtypeB, string kind, int n,
+            int m, ulong seed)
+        {
+            var g = new Lcg(seed);
+            NDArray a, b;
+            string zero = null, lk = null, rk = null;
+            switch (route)
+            {
+                case "nd":
+                    if (kind == "own2")
+                    {
+                        a = g.Array(new long[] { m, n }, dtypeA);
+                        b = g.Array(new long[] { 2, n, 3 }, dtypeB);
+                    }
+                    else if (kind == "strided")
+                    {
+                        a = g.Array(new long[] { 2, 3, 2L * n }, dtypeA);
+                        b = g.Array(new long[] { 2L * n, m }, dtypeB);
+                    }
+                    else
+                    {
+                        a = g.Array(new long[] { 2, 3, n }, dtypeA);
+                        b = g.Array(new long[] { n, m }, dtypeB);
+                    }
+                    break;
+                case "d1":
+                case "vdot":
+                    a = g.Array(kind == "bcast" ? new long[] { 1 } : kind == "step" ? new long[] { 2L * n } : new long[] { n },
+                        dtypeA);
+                    b = g.Array(new long[] { n }, dtypeB);
+                    break;
+                case "vecdot":
+                    a = g.Array(kind == "step" ? new long[] { 6, 2L * n } : new long[] { 6, n }, dtypeA);
+                    b = g.Array(kind == "bcast" ? new long[] { n } : new long[] { 6, n }, dtypeB);
+                    break;
+                case "sb":
+                    (zero, lk, rk) = ScalarBranchKinds(kind);
+                    a = g.Array(ScalarBranchShape(lk, n), dtypeA);
+                    b = g.Array(ScalarBranchShape(rk, n), dtypeB);
+                    break;
+                default:
+                    a = g.Array(new long[] { n + 7 }, dtypeA);
+                    b = g.Array(new long[] { m }, dtypeB);
+                    break;
+            }
+
+            PlantNaNs(a, seed, 0);
+            PlantNaNs(b, seed + 1, 0x1000);
+            if (zero != null)
+            {
+                double z = zero == "n" ? -0.0 : 0.0;
+                var flat = a.reshape(-1);
+                if (a.typecode == NPTypeCode.Complex) flat.SetAtIndex(new System.Numerics.Complex(z, z), 0);
+                else if (a.typecode == NPTypeCode.Single) flat.SetAtIndex((float)z, 0);
+                else flat.SetAtIndex(z, 0);
+            }
+
+            return route switch
+            {
+                "nd" => kind switch
+                {
+                    "strided" => (a["..., ::2"], b["::2"]),
+                    "own" => (a["..., ::-1"], b),
+                    "own2" => (a, b[":, ::-1, :"]),
+                    _ => (a, b),
+                },
+                "d1" or "vdot" => kind switch
+                {
+                    "rev" => (a["::-1"], b),
+                    "revrev" => (a["::-1"], b["::-1"]),
+                    "bcast" => (np.broadcast_to(a, new Shape(n)), b),
+                    "step" => (a["::2"], b),
+                    _ => (a, b),
+                },
+                "vecdot" => kind switch
+                {
+                    "rev" => (a[":, ::-1"], b),
+                    "step" => (a[":, ::2"], b),
+                    _ => (a, b),
+                },
+                "sb" => (ScalarBranchView(lk, a, n), ScalarBranchView(rk, b, n)),
+                _ => (a, b),
+            };
+        }
+
+        /// <summary>A scalar-branch NaN row's kind split into its zero prefix and its two operand kinds.</summary>
+        /// <param name="kind">"lk.rk", or "zp:lk.rk" / "zn:lk.rk" (the left scalar forced to +0.0 / -0.0).</param>
+        /// <returns>"p", "n" or null, then the left and right kinds.</returns>
+        private static (string Zero, string Left, string Right) ScalarBranchKinds(string kind)
+        {
+            string zero = null;
+            if (kind.StartsWith("zp:", StringComparison.Ordinal) || kind.StartsWith("zn:", StringComparison.Ordinal))
+            {
+                zero = kind.Substring(1, 1);
+                kind = kind.Substring(3);
+            }
+            int dot = kind.IndexOf('.');
+            return (zero, kind.Substring(0, dot), kind.Substring(dot + 1));
+        }
+
+        /// <summary>
+        ///     Plants the generator's NaNs, infinities and zeros into a float32 / float64 / complex128 base (any other dtype
+        ///     is left alone): per slot (complex: per part, real first), from its own stream <c>Lcg(seed ^ 0x5DEECE66D)</c>,
+        ///     <c>r = (draw &gt;&gt; 40) % 96</c> - below 16 a quiet NaN of sign bit 63 and payload
+        ///     <c>salt + slot + 1</c>, below 22 an infinity of sign bit 62, below 28 a zero of sign bit 61.
+        /// </summary>
+        /// <param name="x">The base (C-contiguous, written in place).</param>
+        /// <param name="seed">The stream's seed.</param>
+        /// <param name="salt">The payload offset that keeps the two operands' NaNs apart.</param>
+        private static void PlantNaNs(NDArray x, ulong seed, ulong salt)
+        {
+            bool complex = x.typecode == NPTypeCode.Complex, single = x.typecode == NPTypeCode.Single;
+            if (!complex && !single && x.typecode != NPTypeCode.Double)
+                return;
+            var g = new Lcg(seed ^ 0x5DEECE66DUL);
+            var flat = x.reshape(-1);
+            long slots = complex ? 2 * flat.size : flat.size;
+            for (long i = 0; i < slots; i++)
+            {
+                ulong d = g.Next();
+                ulong r = (d >> 40) % 96;
+                if (r >= 28)
+                    continue;
+                ulong pay = salt + (ulong)i + 1;
+                double v = r < 16
+                    ? BitConverter.UInt64BitsToDouble(((d >> 63) << 63) | 0x7FF8000000000000UL | pay)
+                    : r < 22 ? (((d >> 62) & 1) == 1 ? double.NegativeInfinity : double.PositiveInfinity)
+                    : (((d >> 61) & 1) == 1 ? -0.0 : 0.0);
+                if (single)
+                {
+                    float f = r < 16
+                        ? BitConverter.UInt32BitsToSingle((uint)(((d >> 63) << 31) | 0x7FC00000UL | pay))
+                        : (float)v;
+                    flat.SetAtIndex(f, i);
+                }
+                else if (complex)
+                {
+                    var c = (System.Numerics.Complex)flat[i / 2];
+                    flat.SetAtIndex((i & 1) == 0 ? new System.Numerics.Complex(v, c.Imaginary) : new System.Numerics.Complex(c.Real, v), i / 2);
+                }
+                else
+                {
+                    flat.SetAtIndex(v, i);
+                }
+            }
+        }
+
+        /// <summary>
         ///     Compares a result with NumPy's: the dtype, then either the first 32 hex digits of SHA-256 over the result's
-        ///     bytes (<c>sha:</c>) or every byte (<c>hex:</c>), where a slot NumPy fills with a NaN only has to hold a NaN
-        ///     (which NaN survives when several meet follows RyuJIT's operand order: see <see cref="NDDot"/>).
+        ///     bytes (<c>sha:</c>) or every byte (<c>hex:</c>) - a NaN slot included, whose payload and sign say which
+        ///     NaN NumPy's order kept (<see cref="NDDot"/>'s NaN models give it).
         /// </summary>
         /// <param name="r">NumSharp's result.</param>
         /// <param name="resultDtype">NumPy's result dtype.</param>
@@ -2156,17 +2724,6 @@ namespace NumSharp.Tests.LinearAlgebra
             int part = resultDtype == "float32" ? 4 : 8;   // complex compares its two doubles separately
             for (int i = 0; i < want.Length; i += part)
             {
-                bool wantNaN = part == 4
-                    ? float.IsNaN(BitConverter.ToSingle(want, i))
-                    : double.IsNaN(BitConverter.ToDouble(want, i));
-                bool gotNaN = part == 4
-                    ? float.IsNaN(BitConverter.ToSingle(bytes, i))
-                    : double.IsNaN(BitConverter.ToDouble(bytes, i));
-                if (wantNaN)
-                {
-                    gotNaN.Should().BeTrue("slot {0} of {1}: NumPy gives NaN", i / part, what);
-                    continue;
-                }
                 bytes.AsSpan(i, part).SequenceEqual(want.AsSpan(i, part)).Should().BeTrue(
                     "slot {0} of {1}: NumPy {2}, NumSharp {3}", i / part, what,
                     Convert.ToHexString(want, i, part), Convert.ToHexString(bytes, i, part));

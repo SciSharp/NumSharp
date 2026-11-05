@@ -624,15 +624,30 @@ namespace NumSharp.Backends
         /// <remarks>
         ///     The middle hands the kernel to the row function as x, the operand its outputs share (two positions at a time):
         ///     zdotu's two cross sums swap roles (Σ xr·yi becomes Σ yr·xi), and the imaginary part adds the same two sums in
-        ///     the other order, the same value. Measured against the former per-position loop (the naive product from 8
-        ///     terms, scalar): 1.7-3.9x faster at 10,000 x 5..100.
+        ///     the other order, the same value. Only a NaN position depends on the order (which NaN survives), so one vector
+        ///     pass over the middle finds those and computes them again with the data window first, NumPy's operands,
+        ///     through <see cref="NDDot.ComplexDotUnit"/>, which gives NumPy's NaN; the pass costs the row nothing inside
+        ///     its loop (a check there measured 0.88-0.94x on 10,000 x 3..5). Measured against the former per-position
+        ///     loop (the naive product from 8 terms, scalar): 1.7-3.9x faster at 10,000 x 5..100.
         /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe void SlidingComplex(Complex* a, Complex* k, Complex* o, long n2, long nLeft, long nRight, long mid)
         {
             for (long j = 0; j < nLeft; j++)
                 o[j] = NDDot.ComplexDotUnit(a, 1, k + (nLeft - j), 1, n2 - nLeft + j);
-            NDDot.ComplexDotUnitRow(k, 1, a, 1, 1, o + nLeft, mid, n2);
+            Complex* om = o + nLeft;
+            // The middle in chunks of 512 positions (8 KB of outputs), each scanned for NaN while still in L1: one scan
+            // over the whole middle re-read it from L2, 5-7% of np.convolve with a 3-term kernel. The positions are
+            // independent, so splitting the row changes no value.
+            for (long c = 0; c < mid; c += 512)
+            {
+                long len = Math.Min(512, mid - c);
+                NDDot.ComplexDotUnitRow(k, 1, a + c, 1, 1, om + c, len, n2);
+                if (NDDot.AnyNaN((double*)(om + c), 2 * len))
+                    for (long i = c; i < c + len; i++)
+                        if (NDDot.HasNaN(om[i]))
+                            om[i] = NDDot.ComplexDotUnit(a + i, 1, k, 1, n2);
+            }
             Complex* orr = o + nLeft + mid;
             for (long j = 0; j < nRight; j++)
                 orr[j] = NDDot.ComplexDotUnit(a + mid + j, 1, k, 1, n2 - 1 - j);

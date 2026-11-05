@@ -14380,6 +14380,107 @@ def gen_products():
             for (lk, rk) in (("s0", "v"), ("s11", "row"), ("s0", "mW")):
                 sb_case(dta, dtb, lk, rk, ln)
 
+    # --- NaN priority (PA3b): where several NaNs meet in one dot - operands whose slots (complex: parts) are, one in
+    #     five, a quiet NaN of its own payload and a random sign, with infinities and signed zeros whose invalid products
+    #     make x86's default NaN - NumPy's binaries keep the NaN of each x86 instruction's first source, in the operand
+    #     order of the Haswell kernels' assembly, GCC's C loops and MSVC's own loops (NDDot.NaN.cs models them), and
+    #     cblas_?axpy returns before any arithmetic on a zero scalar (np.dot(0.0, [nan, inf]) is [0., 0.]).
+    #     params.nan_bits compares the NaN bits raw on an x86 host. Every layout reaches a dot function or the scalar
+    #     branch: no 2-D . 2-D (gemm) or matrix . vector (gemv), and no complex np.vecdot core of one element beside more
+    #     than one output (its vector walker keeps RyuJIT's NaN order, D23). The own-loop layouts (a reversed run:
+    #     N-D a[..., ::-1], np.vecdot's reversed cores) and np.vdot's strided views stay out: BlasBackendDelta holds the
+    #     OpenBLAS backend to these bytes, and its own loops keep RyuJIT's NaN order and its TryVdot copies a view
+    #     (pinned in ProductsLiveParityTests); NDDotTests.NaNPriority_MatchesNumPyBits covers them on the managed path.
+    nan_rs = np.random.RandomState(5150)
+    nan_pay = [0]
+
+    def nan_base(shape, dt):
+        dt = np.dtype(dt)
+        size = int(np.prod(shape)) if shape else 1
+        parts = 2 * size if dt.kind == "c" else size
+        pdt = np.float32 if dt == np.float32 else np.float64
+        vals = (nan_rs.uniform(0.5, 2.0, parts) * nan_rs.choice([-1.0, 1.0], parts)).astype(pdt)
+        u = vals.view(np.uint32 if pdt == np.float32 else np.uint64)
+        pick = nan_rs.randint(0, 80, parts)
+        for i in range(parts):
+            if pick[i] < 16:
+                nan_pay[0] += 1
+                sign = int(nan_rs.randint(0, 2))
+                if pdt == np.float32:
+                    u[i] = (sign << 31) | 0x7FC00000 | (nan_pay[0] & 0x3FFFFF)
+                else:
+                    u[i] = (sign << 63) | 0x7FF8000000000000 | nan_pay[0]
+            elif pick[i] < 21:
+                vals[i] = -np.inf if nan_rs.randint(0, 2) else np.inf
+            elif pick[i] < 26:
+                vals[i] = -0.0 if nan_rs.randint(0, 2) else 0.0
+        out = vals.view(np.complex128) if dt.kind == "c" else vals
+        return np.array(out.reshape(shape), order="C", copy=True)
+
+    def nan_case(op, dt, kind, ln):
+        if op == "dot":
+            if kind == "nd_unit":
+                a, b = nan_base((2, 3, ln), dt), nan_base((ln, 5), dt)
+                av, bv = a, b
+            elif kind == "nd_strided":
+                a, b = nan_base((2, 3, 2 * ln), dt), nan_base((2 * ln, 5), dt)
+                av, bv = a[..., ::2], b[::2]
+            elif kind == "nd_own":
+                a, b = nan_base((2, 3, ln), dt), nan_base((ln, 5), dt)
+                av, bv = a[..., ::-1], b
+            elif kind == "nd_own2":
+                a, b = nan_base((5, ln), dt), nan_base((2, ln, 3), dt)
+                av, bv = a, b[:, ::-1, :]
+            elif kind == "d1_unit":
+                a, b = nan_base((ln,), dt), nan_base((ln,), dt)
+                av, bv = a, b
+            elif kind == "d1_rev":
+                a, b = nan_base((ln,), dt), nan_base((ln,), dt)
+                av, bv = a[::-1], b
+            elif kind == "d1_bcast":
+                a, b = nan_base((1,), dt), nan_base((ln,), dt)
+                av, bv = np.broadcast_to(a, (ln,)), b
+            elif kind == "d1_step":
+                a, b = nan_base((2 * ln,), dt), nan_base((ln,), dt)
+                av, bv = a[::2], b
+            elif kind == "sb_zero":
+                # a zero scalar: cblas_?axpy's early return keeps the zeroed result whatever x holds
+                a = np.array(-0.0 if nan_rs.randint(0, 2) else 0.0, dtype=dt).reshape(())
+                b = nan_base((ln,), dt)
+                av, bv = a, b
+            else:   # sb_<lk>.<rk>
+                lk, rk = kind[3:].split(".")
+                a, b = nan_base(sb_shape(lk, ln), dt), nan_base(sb_shape(rk, ln), dt)
+                av, bv = a, b
+        elif op == "vdot":
+            a, b = nan_base((2 * ln,) if kind == "vd_step" else (ln,), dt), nan_base((ln,), dt)
+            av, bv = (a[::-1] if kind == "vd_rev" else a[::2] if kind == "vd_step" else a), b
+        else:   # vecdot
+            a = nan_base((6, ln), dt)
+            b = nan_base((ln,) if kind == "vec_bcast" else (6, ln), dt)
+            av, bv = (a[:, ::-1] if kind == "vec_rev" else a), b
+        f = {"dot": np.dot, "vdot": np.vdot, "vecdot": np.vecdot}[op]
+        with np.errstate(all="ignore"):
+            r = np.asarray(f(av, bv))
+        emit(op, {"nan_bits": True}, [(a, av), (b, bv)], r, f"nan_{kind}_n{ln}", dt)
+
+    for dt in ("float32", "float64", "complex128"):
+        for ln in (2, 9, 17, 33, 40):
+            for kind in ("nd_unit", "nd_strided", "d1_unit", "d1_rev", "d1_bcast", "d1_step"):
+                nan_case("dot", dt, kind, ln)
+        for ln in (2, 17, 40):
+            for kind in ("sb_s0.v", "sb_v.s0", "sb_s11.row", "sb_s0.mC", "sb_s0.mW", "sb_col.v1", "sb_zero"):
+                nan_case("dot", dt, kind, ln)
+        if dt != "complex128":   # the backend's complex plain product keeps RyuJIT's NaN order too (pinned)
+            nan_case("dot", dt, "sb_v1.v1", 1)
+            nan_case("dot", dt, "sb_s0.s0", 1)
+        for ln in (1, 9, 40, 100):
+            nan_case("vdot", dt, "vd_unit", ln)
+        # (no core of one element: the backend's one-term loop keeps RyuJIT's NaN order too - pinned with the rest)
+        for ln in (9, 40):
+            for kind in ("vec_rows", "vec_bcast"):
+                nan_case("vecdot", dt, kind, ln)
+
     if skipped:
         print(f"  (skipped {skipped} cases where NumPy raised)")
     return cases

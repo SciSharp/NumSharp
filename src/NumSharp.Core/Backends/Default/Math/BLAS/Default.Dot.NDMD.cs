@@ -94,7 +94,9 @@ namespace NumSharp.Backends
         ///         scipy-openblas kernels behind them (<see cref="NDDot"/>: the stride class of the contracted runs picks
         ///         unit-stride cblas, strided cblas or the dotfunc's own loop, once per call); a row of at least four outputs
         ///         along <paramref name="ap2"/>'s innermost iterated axis goes to a row function that runs four outputs'
-        ///         sums side by side (<see cref="WalkRows{T}"/>), each output keeping NumPy's order;</item>
+        ///         sums side by side (<see cref="WalkRows{T}"/>), each output keeping NumPy's order, and when one vector
+        ///         pass over the result finds a NaN output, the per-output function computes it again with NumPy's NaN
+        ///         (<see cref="WalkFixNaNs{T}"/>: the rows leave which NaN survives to RyuJIT);</item>
         ///         <item>decimal (no NumPy analog): an exact decimal sum.</item>
         ///     </list>
         /// </remarks>
@@ -106,6 +108,8 @@ namespace NumSharp.Backends
             // A row of at least four outputs along ap2's innermost iterated axis lets a row function run several
             // outputs' sums side by side (NDDot.*RowFor); a shorter row gains nothing over one call per output.
             bool rows = rshape.Length > 0 && rshape[rshape.Length - 1] >= 4;
+            // Whether the row walk has to scan its result for NaN (the rows leave which NaN survives to RyuJIT).
+            bool scan = rows && OperandsMayHoldNaN(ap1, ap2, result.size);
             switch (result.typecode)
             {
                 case NPTypeCode.Boolean: Walk<bool>(ap1, ap2, result, lshape, rshape, K, &BoolDot); return;
@@ -123,7 +127,12 @@ namespace NumSharp.Backends
                 {
                     var row = rows ? NDDot.FloatDotRowFor(ls, rs) : null;
                     if (row != null)
-                        WalkRows<float>(ap1, ap2, result, lshape, rshape, K, row);
+                    {
+                        // The row functions leave which NaN survives to RyuJIT's operand order; the walk scans what they
+                        // write, and a NaN output is computed again by the per-output dot function with NumPy's NaN.
+                        if (WalkRows<float>(ap1, ap2, result, lshape, rshape, K, row, scan))
+                            WalkFixNaNs<float>(ap1, ap2, result, lshape, rshape, K, NDDot.FloatDotFor(ls, rs));
+                    }
                     else
                         Walk<float>(ap1, ap2, result, lshape, rshape, K, NDDot.FloatDotFor(ls, rs));
                     return;
@@ -132,7 +141,10 @@ namespace NumSharp.Backends
                 {
                     var row = rows ? NDDot.DoubleDotRowFor(ls, rs) : null;
                     if (row != null)
-                        WalkRows<double>(ap1, ap2, result, lshape, rshape, K, row);
+                    {
+                        if (WalkRows<double>(ap1, ap2, result, lshape, rshape, K, row, scan))
+                            WalkFixNaNs<double>(ap1, ap2, result, lshape, rshape, K, NDDot.DoubleDotFor(ls, rs));
+                    }
                     else
                         Walk<double>(ap1, ap2, result, lshape, rshape, K, NDDot.DoubleDotFor(ls, rs));
                     return;
@@ -142,7 +154,10 @@ namespace NumSharp.Backends
                 {
                     var row = rows ? NDDot.ComplexDotRowFor(ls, rs) : null;
                     if (row != null)
-                        WalkRows<Complex>(ap1, ap2, result, lshape, rshape, K, row);
+                    {
+                        if (WalkRows<Complex>(ap1, ap2, result, lshape, rshape, K, row, scan))
+                            WalkFixNaNs<Complex>(ap1, ap2, result, lshape, rshape, K, NDDot.ComplexDotFor(ls, rs));
+                    }
                     else
                         Walk<Complex>(ap1, ap2, result, lshape, rshape, K, NDDot.ComplexDotFor(ls, rs));
                     return;
@@ -251,12 +266,19 @@ namespace NumSharp.Backends
         /// <param name="row">The row function: first operand, its stride, the row's first second operand, its stride, the
         ///     element distance between consecutive outputs' second operands, the row's first output, the output count, the
         ///     length (strides in elements). The row's outputs are consecutive in the C-ordered result.</param>
+        /// <param name="scan">Whether to scan the outputs for NaN (false when <see cref="OperandsMayHoldNaN"/> has shown no
+        ///     operand holds one).</param>
+        /// <returns>Whether an output is NaN (the caller computes those again with NumPy's NaN, <see cref="WalkFixNaNs{T}"/>:
+        ///     the row functions leave which NaN survives to RyuJIT's operand order); false when not scanning.</returns>
         /// <remarks>
-        ///     The positions advance as in <see cref="Walk{T}"/>: a coordinate odometer over the iterated axes, here over
-        ///     <paramref name="ap2"/>'s axes but the innermost, which each row call covers whole.
+        ///     <para>The positions advance as in <see cref="Walk{T}"/>: a coordinate odometer over the iterated axes, here
+        ///     over <paramref name="ap2"/>'s axes but the innermost, which each row call covers whole.</para>
+        ///     <para>The outputs are scanned for NaN 512 at a time, as soon as the rows have written them (still in L1):
+        ///     one scan of the whole result after the walk re-read it from L2, about 5% of np.dot of a (300, 3, 3)
+        ///     complex array by a transposed (8, 3), whose 3-term dots cost little else.</para>
         /// </remarks>
-        private static unsafe void WalkRows<T>(NDArray ap1, NDArray ap2, NDArray result, long[] lshape, long[] rshape,
-            long K, delegate*<T*, long, T*, long, long, T*, long, long, void> row) where T : unmanaged
+        private static unsafe bool WalkRows<T>(NDArray ap1, NDArray ap2, NDArray result, long[] lshape, long[] rshape,
+            long K, delegate*<T*, long, T*, long, long, T*, long, long, void> row, bool scan) where T : unmanaged
         {
             int lnd = ap1.ndim, rnd = ap2.ndim;
             long[] lst = ap1.Shape.strides, rst = ap2.Shape.strides;
@@ -273,7 +295,7 @@ namespace NumSharp.Backends
             for (int i = 0; i < rshape.Length; i++)
                 totalR *= rshape[i];
             if (totalL == 0 || totalR == 0)
-                return;   // an empty result: nothing to write
+                return false;   // an empty result: nothing to write
 
             int lk = lshape.Length, rk = rshape.Length;
             Span<long> lStride = lk <= 16 ? stackalloc long[16] : new long[lk];
@@ -290,6 +312,8 @@ namespace NumSharp.Backends
             long inner = rshape[rk - 1];          // the row: every position of ap2's innermost iterated axis
             long innerStride = rStride[rk - 1];
             long rows = totalR / inner;
+            T* unscanned = op;                    // the first output not yet scanned for NaN
+            bool anyNaN = false;
 
             long lOff = 0;
             for (long li = 0; li < totalL; li++)
@@ -300,7 +324,151 @@ namespace NumSharp.Backends
                 {
                     row(lp + lOff, ls, rp + rOff, rs, innerStride, op, inner, K);
                     op += inner;
+                    if (scan && op - unscanned >= 512)
+                    {
+                        anyNaN |= AnyNaNOf(unscanned, op - unscanned);
+                        unscanned = op;
+                    }
                     for (int d = rk - 2; d >= 0; d--)
+                    {
+                        rOff += rStride[d];
+                        if (++rc[d] < rshape[d])
+                            break;
+                        rOff -= rStride[d] * rshape[d];
+                        rc[d] = 0;
+                    }
+                }
+
+                for (int d = lk - 1; d >= 0; d--)
+                {
+                    lOff += lStride[d];
+                    if (++lc[d] < lshape[d])
+                        break;
+                    lOff -= lStride[d] * lshape[d];
+                    lc[d] = 0;
+                }
+            }
+
+            return scan && (anyNaN | AnyNaNOf(unscanned, op - unscanned));
+        }
+
+        /// <summary>
+        ///     Whether an output of the row walk can hold a NaN whose bits depend on the operand order: only when an operand
+        ///     holds a NaN - otherwise every NaN output comes from an invalid <c>inf * 0</c> / <c>inf - inf</c>, which is
+        ///     x86's default NaN whichever operand order. The operands are scanned instead of the result when they are
+        ///     smaller and each is one contiguous block (a short contracted axis: np.dot of (300, 3, 3) by (3, 8) reads
+        ///     2,724 elements and writes 7,200); otherwise the walk scans the result.
+        /// </summary>
+        /// <param name="ap1">The first operand.</param>
+        /// <param name="ap2">The second operand.</param>
+        /// <param name="outputs">The result's size.</param>
+        /// <returns>False when neither operand holds a NaN (the walk need not scan); true when one does, or when the result
+        ///     scan is the cheaper check.</returns>
+        /// <remarks>Only on an x86 host: elsewhere an invalid operation makes another default NaN (Arm64's is positive),
+        ///     which the walk's scan and the per-output models turn into x86's.</remarks>
+        private static unsafe bool OperandsMayHoldNaN(NDArray ap1, NDArray ap2, long outputs)
+        {
+            if (!System.Runtime.Intrinsics.X86.X86Base.IsSupported || ap1.size + ap2.size >= outputs)
+                return true;
+            return BlockMayHoldNaN(ap1) || BlockMayHoldNaN(ap2);
+        }
+
+        /// <summary>Whether an operand may hold a NaN: a C- or F-contiguous float32 / float64 / complex128 block is
+        ///     scanned (<see cref="NDDot.AnyNaN(double*, long)"/>); any other view answers true (unknown without a walk).</summary>
+        /// <param name="x">The operand (the result dtype's element type: the walk's operands are converted first).</param>
+        /// <returns>True unless the block was scanned and holds no NaN.</returns>
+        private static unsafe bool BlockMayHoldNaN(NDArray x)
+        {
+            if (!x.Shape.IsContiguous && !x.Shape.IsFContiguous)
+                return true;
+            switch (x.typecode)
+            {
+                case NPTypeCode.Single:
+                    return NDDot.AnyNaN((float*)x.Storage.Address + x.Shape.offset, x.size);
+                case NPTypeCode.Double:
+                    return NDDot.AnyNaN((double*)x.Storage.Address + x.Shape.offset, x.size);
+                case NPTypeCode.Complex:
+                    return NDDot.AnyNaN((double*)((Complex*)x.Storage.Address + x.Shape.offset), 2 * x.size);
+                default:
+                    return true;
+            }
+        }
+
+        /// <summary>Whether any of <paramref name="count"/> consecutive outputs is NaN (<see cref="NDDot.AnyNaN(double*, long)"/>
+        ///     for float32, float64 and complex128 - two doubles an output; never for the other dtypes).</summary>
+        /// <typeparam name="T">The result's element type (a constant per instantiation: the JIT keeps one branch).</typeparam>
+        /// <param name="p">The first output.</param>
+        /// <param name="count">The number of outputs.</param>
+        /// <returns>True when one holds a NaN.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe bool AnyNaNOf<T>(T* p, long count) where T : unmanaged
+        {
+            if (typeof(T) == typeof(float))
+                return NDDot.AnyNaN((float*)p, count);
+            if (typeof(T) == typeof(double))
+                return NDDot.AnyNaN((double*)p, count);
+            if (typeof(T) == typeof(Complex))
+                return NDDot.AnyNaN((double*)p, 2 * count);
+            return false;
+        }
+
+        /// <summary>
+        ///     After <see cref="WalkRows{T}"/>: every NaN output of <paramref name="result"/> computed again by the per-output
+        ///     dot function, which gives NumPy's NaN where several meet (NDDot.NaN.cs) - the row functions' value is the same,
+        ///     but which NaN survives follows RyuJIT's operand order there. The outputs are visited as
+        ///     <see cref="Walk{T}"/> visits them (the same odometer), and only a NaN one costs a dot.
+        /// </summary>
+        /// <typeparam name="T">float, double or Complex.</typeparam>
+        /// <param name="ap1">The first operand.</param>
+        /// <param name="ap2">The second operand.</param>
+        /// <param name="result">The C-contiguous result the row walk filled.</param>
+        /// <param name="lshape"><paramref name="ap1"/>'s dims without the last.</param>
+        /// <param name="rshape"><paramref name="ap2"/>'s dims without the second-to-last.</param>
+        /// <param name="K">The contracted length.</param>
+        /// <param name="dot">The per-output dot function for the call's strides (NDDot.*DotFor).</param>
+        /// <remarks>Why not a check inside the row functions: their four-output loops are short of registers, and a NaN
+        ///     branch there (or a scan per row) cost short rows of tiny dots up to 14% (np.dot of (300, 3, 3) by a
+        ///     transposed (8, 3)); one vector pass over the whole result costs about a quarter of a cycle per output.</remarks>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static unsafe void WalkFixNaNs<T>(NDArray ap1, NDArray ap2, NDArray result, long[] lshape, long[] rshape,
+            long K, delegate*<T*, long, T*, long, long, T> dot) where T : unmanaged, INumberBase<T>
+        {
+            int lnd = ap1.ndim, rnd = ap2.ndim;
+            long[] lst = ap1.Shape.strides, rst = ap2.Shape.strides;
+            T* lp = (T*)ap1.Storage.Address + ap1.Shape.offset;
+            T* rp = (T*)ap2.Storage.Address + ap2.Shape.offset;
+            T* op = (T*)result.Storage.Address;
+            long ls = lst[lnd - 1];
+            long rs = rst[rnd - 2];
+
+            long totalL = 1;
+            for (int i = 0; i < lshape.Length; i++)
+                totalL *= lshape[i];
+            long totalR = 1;
+            for (int i = 0; i < rshape.Length; i++)
+                totalR *= rshape[i];
+
+            int lk = lshape.Length, rk = rshape.Length;
+            var lStride = new long[Math.Max(lk, 1)];
+            var rStride = new long[Math.Max(rk, 1)];
+            var lc = new long[Math.Max(lk, 1)];
+            var rc = new long[Math.Max(rk, 1)];
+            for (int d = 0; d < lk; d++)
+                lStride[d] = lst[d];
+            for (int d = 0, j = 0; d < rnd; d++)
+                if (d != rnd - 2)
+                    rStride[j++] = rst[d];
+
+            long lOff = 0;
+            for (long li = 0; li < totalL; li++)
+            {
+                Array.Clear(rc);
+                long rOff = 0;
+                for (long ri = 0; ri < totalR; ri++, op++)
+                {
+                    if (T.IsNaN(*op))
+                        *op = dot(lp + lOff, ls, rp + rOff, rs, K);
+                    for (int d = rk - 1; d >= 0; d--)
                     {
                         rOff += rStride[d];
                         if (++rc[d] < rshape[d])

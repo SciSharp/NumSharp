@@ -104,23 +104,40 @@ namespace NumSharp.Backends
                 // A stride cblas is not handed (zero or negative) runs the dot function's own loop: four outputs' chains
                 // side by side along the innermost loop axis (the pair rows); every other class one dot per output.
                 bool own = !(c1 > 0 && c2 > 0);
+                // The pair rows leave which NaN survives to RyuJIT's operand order: after them, one vector pass over the
+                // result finds a NaN output, and the per-output dot function computes it again with NumPy's NaN.
                 switch (loop)
                 {
                     case NPTypeCode.Single:
-                        VecdotWalk((float*)x1.Address + x1.Shape.offset, c1, (float*)x2.Address + x2.Shape.offset, c2,
-                            (float*)result.Address, n, dims, s1, s2, NDDot.FloatDotFor(c1, c2),
+                    {
+                        float* p1 = (float*)x1.Address + x1.Shape.offset, p2 = (float*)x2.Address + x2.Shape.offset;
+                        var dot = NDDot.FloatDotFor(c1, c2);
+                        VecdotWalk(p1, c1, p2, c2, (float*)result.Address, n, dims, s1, s2, dot,
                             own ? &NDDot.FloatDotOwnPairRow : null);
+                        if (own && NDDot.AnyNaN((float*)result.Address, result.size))
+                            VecdotWalkFixNaNs(p1, c1, p2, c2, (float*)result.Address, n, dims, s1, s2, dot);
                         break;
+                    }
                     case NPTypeCode.Double:
-                        VecdotWalk((double*)x1.Address + x1.Shape.offset, c1, (double*)x2.Address + x2.Shape.offset, c2,
-                            (double*)result.Address, n, dims, s1, s2, NDDot.DoubleDotFor(c1, c2),
+                    {
+                        double* p1 = (double*)x1.Address + x1.Shape.offset, p2 = (double*)x2.Address + x2.Shape.offset;
+                        var dot = NDDot.DoubleDotFor(c1, c2);
+                        VecdotWalk(p1, c1, p2, c2, (double*)result.Address, n, dims, s1, s2, dot,
                             own ? &NDDot.DoubleDotOwnPairRow : null);
+                        if (own && NDDot.AnyNaN((double*)result.Address, result.size))
+                            VecdotWalkFixNaNs(p1, c1, p2, c2, (double*)result.Address, n, dims, s1, s2, dot);
                         break;
+                    }
                     default:
-                        VecdotWalk((Complex*)x1.Address + x1.Shape.offset, c1, (Complex*)x2.Address + x2.Shape.offset, c2,
-                            (Complex*)result.Address, n, dims, s1, s2, NDDot.ComplexDotcFor(c1, c2),
+                    {
+                        Complex* p1 = (Complex*)x1.Address + x1.Shape.offset, p2 = (Complex*)x2.Address + x2.Shape.offset;
+                        var dot = NDDot.ComplexDotcFor(c1, c2);
+                        VecdotWalk(p1, c1, p2, c2, (Complex*)result.Address, n, dims, s1, s2, dot,
                             own ? &NDDot.ComplexDotcOwnPairRow : null);
+                        if (own && NDDot.AnyNaN((double*)result.Address, 2 * result.size))   // a complex output: two doubles
+                            VecdotWalkFixNaNs(p1, c1, p2, c2, (Complex*)result.Address, n, dims, s1, s2, dot);
                         break;
+                    }
                 }
             }
 
@@ -223,6 +240,64 @@ namespace NumSharp.Backends
             }
         }
 
+        /// <summary>
+        ///     After a <see cref="VecdotWalk{T}"/> with pair rows: every NaN output computed again by the per-output dot
+        ///     function, which gives NumPy's NaN where several meet (the pair rows' value is the same, but which NaN
+        ///     survives follows RyuJIT's operand order there). The outputs are visited in <see cref="VecdotWalk{T}"/>'s
+        ///     order (the same odometer), and only a NaN one costs a dot.
+        /// </summary>
+        /// <typeparam name="T">float, double or Complex.</typeparam>
+        /// <param name="p1">The first operand's first core run.</param>
+        /// <param name="c1">Its core element stride.</param>
+        /// <param name="p2">The second operand's first core run.</param>
+        /// <param name="c2">Its core element stride.</param>
+        /// <param name="o">The first output of the result the walk filled.</param>
+        /// <param name="n">The core length.</param>
+        /// <param name="dims">The broadcast loop axes (empty for one output).</param>
+        /// <param name="s1">The first operand's element strides over them.</param>
+        /// <param name="s2">The second operand's element strides over them.</param>
+        /// <param name="dot">The per-output dot function for the core strides.</param>
+        /// <remarks>Why after the walk and not inside the pair rows: their four-output loops are short of registers, and a
+        ///     NaN branch there cost np.vecdot of reversed rows 0.74-0.79x; this pass costs a vector scan of the result.</remarks>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static unsafe void VecdotWalkFixNaNs<T>(T* p1, long c1, T* p2, long c2, T* o, long n, long[] dims, long[] s1,
+            long[] s2, delegate*<T*, long, T*, long, long, T> dot) where T : unmanaged, INumberBase<T>
+        {
+            int nd = dims.Length;
+            if (nd == 0)
+            {
+                // One output, which the walk computed with the per-output function already; recomputing changes nothing.
+                if (T.IsNaN(*o))
+                    *o = dot(p1, c1, p2, c2, n);
+                return;
+            }
+
+            long inner = dims[nd - 1], i1 = s1[nd - 1], i2 = s2[nd - 1];
+            long rows = 1;
+            for (int k = 0; k < nd - 1; k++)
+                rows *= dims[k];
+            var idx = new long[nd];
+            for (long r = 0; r < rows; r++)
+            {
+                T* q1 = p1, q2 = p2;
+                for (long j = 0; j < inner; j++, q1 += i1, q2 += i2, o++)
+                    if (T.IsNaN(*o))
+                        *o = dot(q1, c1, q2, c2, n);
+
+                for (int k = nd - 2; k >= 0; k--)
+                {
+                    p1 += s1[k];
+                    p2 += s2[k];
+                    if (++idx[k] < dims[k])
+                        break;
+                    // Axis k wrapped: rewind it and carry into the next outer axis.
+                    p1 -= s1[k] * dims[k];
+                    p2 -= s2[k] * dims[k];
+                    idx[k] = 0;
+                }
+            }
+        }
+
         // --------------------------------------------------------------------------------------------------------------
         //  A pair that needs a cast: blocks of runs cast into scratch
         // --------------------------------------------------------------------------------------------------------------
@@ -248,19 +323,31 @@ namespace NumSharp.Backends
             long e1 = x1.typecode != loop ? 1 : x1.Shape.strides[x1.ndim - 1];
             long e2 = x2.typecode != loop ? 1 : x2.Shape.strides[x2.ndim - 1];
             bool own = !(e1 > 0 && e2 > 0);
+            // The pair rows leave which NaN survives to RyuJIT's operand order; when one vector pass finds a NaN output,
+            // the walk runs again one dot function per output (NumPy's NaN) - every output recomputed, the same value but
+            // for the NaNs, which keeps the cast blocks in one place for a case NaN data makes rare.
             switch (loop)
             {
                 case NPTypeCode.Single:
                     VecdotBlockWalk(x1, x2, loop, (float*)result.Address, n, dims, e1, e2, NDDot.FloatDotFor(e1, e2),
                         own ? &NDDot.FloatDotOwnPairRow : null);
+                    if (own && NDDot.AnyNaN((float*)result.Address, result.size))
+                        VecdotBlockWalk<float>(x1, x2, loop, (float*)result.Address, n, dims, e1, e2,
+                            NDDot.FloatDotFor(e1, e2), null);
                     break;
                 case NPTypeCode.Double:
                     VecdotBlockWalk(x1, x2, loop, (double*)result.Address, n, dims, e1, e2, NDDot.DoubleDotFor(e1, e2),
                         own ? &NDDot.DoubleDotOwnPairRow : null);
+                    if (own && NDDot.AnyNaN((double*)result.Address, result.size))
+                        VecdotBlockWalk<double>(x1, x2, loop, (double*)result.Address, n, dims, e1, e2,
+                            NDDot.DoubleDotFor(e1, e2), null);
                     break;
                 default:
                     VecdotBlockWalk(x1, x2, loop, (Complex*)result.Address, n, dims, e1, e2, NDDot.ComplexDotcFor(e1, e2),
                         own ? &NDDot.ComplexDotcOwnPairRow : null);
+                    if (own && NDDot.AnyNaN((double*)result.Address, 2 * result.size))
+                        VecdotBlockWalk<Complex>(x1, x2, loop, (Complex*)result.Address, n, dims, e1, e2,
+                            NDDot.ComplexDotcFor(e1, e2), null);
                     break;
             }
         }
@@ -708,7 +795,10 @@ namespace NumSharp.Backends
             static abstract void Many(T* a, long sa, T* b, long sb, T* o, long count);
         }
 
-        /// <summary>FLOAT_dot's own loop for one term: <c>0f + a*b</c> (a -0.0 product gives +0.0).</summary>
+        /// <summary>
+        ///     FLOAT_dot's own loop for one term: <c>0f + a*b</c> (a -0.0 product gives +0.0), with NumPy's NaN choice when
+        ///     both factors are NaN: <c>a</c>'s (<see cref="NDDot.FloatOneNaN"/>).
+        /// </summary>
         private unsafe struct FloatOne : IVecdotOne<float>
         {
             /// <inheritdoc/>
@@ -717,33 +807,59 @@ namespace NumSharp.Backends
             {
                 float s = 0f;
                 s += *a * *b;
-                return s;
+                // RyuJIT may compute b * a, whose NaN is b's when both are NaN; NumPy's multiply keeps a's.
+                return float.IsNaN(s) ? NDDot.FloatOneNaN(*a, *b) : s;
             }
 
             /// <inheritdoc/>
+            /// <remarks>The vector loops AND each block's lanes-not-NaN masks together (a compare and an and per vector)
+            ///     and, when one lane was NaN, recompute the block's NaN outputs with <see cref="One"/>: which NaN a vector
+            ///     multiply returns follows the operand order RyuJIT gives it.</remarks>
             [MethodImpl(MethodImplOptions.AggressiveOptimization)]
             public static void Many(float* a, long sa, float* b, long sb, float* o, long count)
             {
                 long j = 0;
-                if (sa == 1 && sb == 1 && Vector256.IsHardwareAccelerated)
+                if (Vector256.IsHardwareAccelerated && (sa == 1 || sb == 1) && sa >= 0 && sb >= 0 && sa <= 1 && sb <= 1)
                 {
-                    // +0 + product per lane: the add keeps a -0.0 product from surviving, as the scalar sum's start does
-                    // (only `x + -0.0` folds to x; `+0.0 + x` is computed).
-                    for (; j + 8 <= count; j += 8)
-                        Vector256.Store(Vector256<float>.Zero + Vector256.Load(a + j) * Vector256.Load(b + j), o + j);
-                }
-                else if (sa == 1 && sb == 0 && Vector256.IsHardwareAccelerated)
-                {
-                    // A broadcast second operand: its one element in every lane, still the right factor of each product.
-                    var vb = Vector256.Create(*b);
-                    for (; j + 8 <= count; j += 8)
-                        Vector256.Store(Vector256<float>.Zero + Vector256.Load(a + j) * vb, o + j);
-                }
-                else if (sa == 0 && sb == 1 && Vector256.IsHardwareAccelerated)
-                {
-                    var va = Vector256.Create(*a);
-                    for (; j + 8 <= count; j += 8)
-                        Vector256.Store(Vector256<float>.Zero + va * Vector256.Load(b + j), o + j);
+                    var ok = Vector256<float>.AllBitsSet;
+                    if (sa == 1 && sb == 1)
+                    {
+                        // +0 + product per lane: the add keeps a -0.0 product from surviving, as the scalar sum's start
+                        // does (only `x + -0.0` folds to x; `+0.0 + x` is computed).
+                        for (; j + 8 <= count; j += 8)
+                        {
+                            var v = Vector256<float>.Zero + Vector256.Load(a + j) * Vector256.Load(b + j);
+                            ok &= Vector256.Equals(v, v);
+                            Vector256.Store(v, o + j);
+                        }
+                    }
+                    else if (sa == 1)
+                    {
+                        // A broadcast second operand: its one element in every lane, still the right factor of each product.
+                        var vb = Vector256.Create(*b);
+                        for (; j + 8 <= count; j += 8)
+                        {
+                            var v = Vector256<float>.Zero + Vector256.Load(a + j) * vb;
+                            ok &= Vector256.Equals(v, v);
+                            Vector256.Store(v, o + j);
+                        }
+                    }
+                    else
+                    {
+                        var va = Vector256.Create(*a);
+                        for (; j + 8 <= count; j += 8)
+                        {
+                            var v = Vector256<float>.Zero + va * Vector256.Load(b + j);
+                            ok &= Vector256.Equals(v, v);
+                            Vector256.Store(v, o + j);
+                        }
+                    }
+
+                    // The mask's sign bits, not a float compare: an all-ones lane is itself a NaN.
+                    if (Vector256.ExtractMostSignificantBits(ok) != 0xFFu)
+                        for (long k = 0; k < j; k++)
+                            if (float.IsNaN(o[k]))
+                                o[k] = One(a + k * sa, b + k * sb);
                 }
 
                 for (; j < count; j++)
@@ -751,7 +867,10 @@ namespace NumSharp.Backends
             }
         }
 
-        /// <summary>DOUBLE_dot's own loop for one term: <c>0.0 + a*b</c>.</summary>
+        /// <summary>
+        ///     DOUBLE_dot's own loop for one term: <c>0.0 + a*b</c>, with NumPy's NaN choice when both factors are NaN:
+        ///     <c>a</c>'s (<see cref="NDDot.DoubleOneNaN"/>).
+        /// </summary>
         private unsafe struct DoubleOne : IVecdotOne<double>
         {
             /// <inheritdoc/>
@@ -760,30 +879,55 @@ namespace NumSharp.Backends
             {
                 double s = 0.0;
                 s += *a * *b;
-                return s;
+                // RyuJIT may compute b * a, whose NaN is b's when both are NaN; NumPy's multiply keeps a's.
+                return double.IsNaN(s) ? NDDot.DoubleOneNaN(*a, *b) : s;
             }
 
             /// <inheritdoc/>
+            /// <remarks>The vector loops AND each block's lanes-not-NaN masks together and, when one lane was NaN,
+            ///     recompute the block's NaN outputs with <see cref="One"/> (see <see cref="FloatOne.Many"/>).</remarks>
             [MethodImpl(MethodImplOptions.AggressiveOptimization)]
             public static void Many(double* a, long sa, double* b, long sb, double* o, long count)
             {
                 long j = 0;
-                if (sa == 1 && sb == 1 && Vector256.IsHardwareAccelerated)
+                if (Vector256.IsHardwareAccelerated && (sa == 1 || sb == 1) && sa >= 0 && sb >= 0 && sa <= 1 && sb <= 1)
                 {
-                    for (; j + 4 <= count; j += 4)
-                        Vector256.Store(Vector256<double>.Zero + Vector256.Load(a + j) * Vector256.Load(b + j), o + j);
-                }
-                else if (sa == 1 && sb == 0 && Vector256.IsHardwareAccelerated)
-                {
-                    var vb = Vector256.Create(*b);
-                    for (; j + 4 <= count; j += 4)
-                        Vector256.Store(Vector256<double>.Zero + Vector256.Load(a + j) * vb, o + j);
-                }
-                else if (sa == 0 && sb == 1 && Vector256.IsHardwareAccelerated)
-                {
-                    var va = Vector256.Create(*a);
-                    for (; j + 4 <= count; j += 4)
-                        Vector256.Store(Vector256<double>.Zero + va * Vector256.Load(b + j), o + j);
+                    var ok = Vector256<double>.AllBitsSet;
+                    if (sa == 1 && sb == 1)
+                    {
+                        for (; j + 4 <= count; j += 4)
+                        {
+                            var v = Vector256<double>.Zero + Vector256.Load(a + j) * Vector256.Load(b + j);
+                            ok &= Vector256.Equals(v, v);
+                            Vector256.Store(v, o + j);
+                        }
+                    }
+                    else if (sa == 1)
+                    {
+                        var vb = Vector256.Create(*b);
+                        for (; j + 4 <= count; j += 4)
+                        {
+                            var v = Vector256<double>.Zero + Vector256.Load(a + j) * vb;
+                            ok &= Vector256.Equals(v, v);
+                            Vector256.Store(v, o + j);
+                        }
+                    }
+                    else
+                    {
+                        var va = Vector256.Create(*a);
+                        for (; j + 4 <= count; j += 4)
+                        {
+                            var v = Vector256<double>.Zero + va * Vector256.Load(b + j);
+                            ok &= Vector256.Equals(v, v);
+                            Vector256.Store(v, o + j);
+                        }
+                    }
+
+                    // The mask's sign bits, not a double compare: an all-ones lane is itself a NaN.
+                    if (Vector256.ExtractMostSignificantBits(ok) != 0xFu)
+                        for (long k = 0; k < j; k++)
+                            if (double.IsNaN(o[k]))
+                                o[k] = One(a + k * sa, b + k * sb);
                 }
 
                 for (; j < count; j++)
@@ -791,7 +935,11 @@ namespace NumSharp.Backends
             }
         }
 
-        /// <summary>CDOUBLE_dotc's own loop for one term: <c>(0 + (ar*br + ai*bi), 0 + (ar*bi - ai*br))</c>.</summary>
+        /// <summary>
+        ///     CDOUBLE_dotc's own loop for one term: <c>(0 + (ar*br + ai*bi), 0 + (ar*bi - ai*br))</c>, with NumPy's NaN
+        ///     choice where NaNs meet (<see cref="NDDot.ComplexDotcOwnNaN"/>: every product <c>b</c>'s part first, the
+        ///     real part <c>ai·bi + ar·br</c>).
+        /// </summary>
         private unsafe struct ComplexcOne : IVecdotOne<Complex>
         {
             /// <inheritdoc/>
@@ -803,10 +951,15 @@ namespace NumSharp.Backends
                 double sumr = 0.0, sumi = 0.0;
                 sumr += ar * br + ai * bi;
                 sumi += ar * bi - ai * br;
-                return new Complex(sumr, sumi);
+                var r = new Complex(sumr, sumi);
+                return NDDot.HasNaN(r) ? NDDot.ComplexDotcOwnNaN(a, 0, b, 0, 1) : r;
             }
 
             /// <inheritdoc/>
+            /// <remarks>The vector loop keeps RyuJIT's NaN order: where several NaNs meet in one of its outputs, which
+            ///     one survives follows its lanes, not NumPy's order (a NaN check there - a compare and an and per two
+            ///     outputs - measured 0.84x on 10,000 x 1, and D23 keeps a slower call site's code). The scalar
+            ///     <see cref="One"/>, which strided operands and an odd last output take, gives NumPy's NaN.</remarks>
             [MethodImpl(MethodImplOptions.AggressiveOptimization)]
             public static void Many(Complex* a, long sa, Complex* b, long sb, Complex* o, long count)
             {

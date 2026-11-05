@@ -35,16 +35,21 @@ namespace NumSharp.Utilities
     ///     goes through the dispatching <see cref="FloatDot"/> / <see cref="DoubleDot"/> / <see cref="ComplexDot"/>. All
     ///     three per-class functions of a dtype share its signature, so any of them can stand behind one function
     ///     pointer.</para>
-    ///     <para><b>NaN.</b> A single NaN keeps its payload, and a NaN that arises inside the sum (<c>inf * 0</c>,
-    ///     <c>inf - inf</c>) is x86's default NaN, as in NumPy. When two different NaNs meet in one dot, which one
-    ///     survives follows the operand order RyuJIT gives each add and fused multiply-add, not OpenBLAS's assembly order
-    ///     (the library's other NaN-order cases are documented the same way).</para>
+    ///     <para><b>NaN.</b> The per-output functions give NumPy's NaN too, payload and sign included, when several NaNs
+    ///     meet in one dot (an operand's NaN, or the default NaN of an invalid <c>inf * 0</c> / <c>inf - inf</c>). The
+    ///     vector kernels and loops below leave the operand order of each add and fused multiply-add to RyuJIT, which
+    ///     decides which of those NaNs survives; so each per-output function checks its result (one compare, its model's
+    ///     call in tail position), and a NaN result is computed again by its class's model in NDDot.NaN.cs, where each
+    ///     operation picks its NaN by the x86 rule of the instruction NumPy's binaries run. A result that is not NaN does
+    ///     not depend on the order. The row functions do not check: a branch in their four-output loops cost those loops
+    ///     registers (up to 0.74x), so their callers scan the finished result once (<see cref="AnyNaN(double*, long)"/>)
+    ///     and compute a NaN output again with the per-output function.</para>
     ///     <para><b>Never -0.0.</b> Every sum below starts at +0.0 and every vector accumulator at a zeroed register, and
     ///     in round-to-nearest <c>x + (+0.0)</c> is -0.0 only for <c>x = -0.0</c>, which the start excludes; so the zeroed
     ///     double that FLOAT_dot / DOUBLE_dot / CDOUBLE_dot add cblas' result into changes nothing but is kept as NumPy
     ///     writes it.</para>
     /// </remarks>
-    internal static class NDDot
+    internal static partial class NDDot
     {
         // ------------------------------------------------------------------------------------------------------------
         //  Run directions for the unit-stride models
@@ -287,7 +292,11 @@ namespace NumSharp.Utilities
         ///     terms, 200 of 200 1-D); from 32 terms, the kernel (200 of 200 1-D results from 32 to 1,000 terms).</remarks>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         internal static unsafe float FloatDotUnit(float* ip1, long is1, float* ip2, long is2, long n)
-            => FloatUnitCore<Forward, Forward>(ip1, ip2, n);
+        {
+            float r = FloatUnitCore<Forward, Forward>(ip1, ip2, n);
+            // Only a NaN result depends on which NaN won; NumPy's operation order decides it again (NDDot.NaN.cs).
+            return float.IsNaN(r) ? FloatUnitNaN(ip1, 1, ip2, 1, n) : r;
+        }
 
         /// <summary>
         ///     <see cref="FloatDotUnit"/>'s arithmetic over two runs read in order whatever their direction: what FLOAT_dot
@@ -304,7 +313,7 @@ namespace NumSharp.Utilities
         internal static unsafe float FloatDotUnitInOrder(float* x, long sx, float* y, long sy, long n)
         {
             // One instantiation per pair of directions: each is the plain kernel with its loads swapped.
-            return (sx, sy) switch
+            float r = (sx, sy) switch
             {
                 (1, 1) => FloatUnitCore<Forward, Forward>(x, y, n),
                 (1, -1) => FloatUnitCore<Forward, Backward>(x, y, n),
@@ -317,6 +326,8 @@ namespace NumSharp.Utilities
                 (0, 0) => FloatUnitCore<Repeat, Repeat>(x, y, n),
                 _ => throw new ArgumentOutOfRangeException(nameof(sx), "a unit model reads strides 1, -1 and 0 in place only"),
             };
+            // The model reads the runs in the same logical order (a stride of -1 or 0 included).
+            return float.IsNaN(r) ? FloatUnitNaN(x, sx, y, sy, n) : r;
         }
 
         /// <summary>The body of <see cref="FloatDotUnit"/> for any pair of run directions.</summary>
@@ -372,7 +383,13 @@ namespace NumSharp.Utilities
                 d += ip2[0] * ip1[0];
             double sum = 0.0;
             sum += (float)d;
-            return (float)sum;
+            float r = (float)sum;
+            // A NaN result depends on which NaN won: NumPy's order decides it again (NDDot.NaN.cs). The loops advanced
+            // ip1 / ip2 by n terms (a NaN needs n > 0), so the runs start n strides back: no copy lives through the loops,
+            // and the model's call sits in tail position, out of the fast path.
+            if (float.IsNaN(r))
+                return FloatStridedNaN(ip1 - n * is1, is1, ip2 - n * is2, is2, n);
+            return r;
         }
 
         /// <summary>
@@ -394,6 +411,9 @@ namespace NumSharp.Utilities
             float s = 0f;
             for (long i = 0; i < n; i++, ip1 += is1, ip2 += is2)
                 s += *ip1 * *ip2;
+            // A NaN takes NumPy's NaN from the own loop's model; the runs start n strides back (see FloatDotStrided).
+            if (float.IsNaN(s))
+                return FloatOwnNaN(ip1 - n * is1, is1, ip2 - n * is2, is2, n);
             return s;
         }
 
@@ -401,6 +421,8 @@ namespace NumSharp.Utilities
         ///     <see cref="FloatDotOwn"/> for a row of outputs whose operands both step: <c>o[j] = FLOAT_dot(x + j * xStep,
         ///     y + j * yStep)</c> with a stride cblas is not handed, four outputs at a time with their float32 sums side by
         ///     side; every output keeps the own loop's order, so the bits are <see cref="FloatDotOwn"/>'s.
+        ///     A NaN output is the exception: which NaN it holds follows RyuJIT's operand order here, so the callers scan
+        ///     their result once (<see cref="AnyNaN(double*, long)"/>) and compute a NaN output again with that function.
         /// </summary>
         /// <param name="x">The first output's first operand (NumPy's <c>ip1</c>).</param>
         /// <param name="is1">Its element stride (any sign).</param>
@@ -465,6 +487,8 @@ namespace NumSharp.Utilities
         ///     <c>o[j] = FLOAT_dot(x, y + j * yStep)</c>, two unit-stride runs each, four outputs at a time with their
         ///     sequential double tails side by side; every output keeps sdot's own order, so the bits are
         ///     <see cref="FloatDotUnit"/>'s.
+        ///     A NaN output is the exception: which NaN it holds follows RyuJIT's operand order here, so the callers scan
+        ///     their result once (<see cref="AnyNaN(double*, long)"/>) and compute a NaN output again with that function.
         /// </summary>
         /// <param name="x">The shared first operand (cblas' x), unit stride.</param>
         /// <param name="is1">Ignored: 1 (the walk's row signature).</param>
@@ -528,6 +552,8 @@ namespace NumSharp.Utilities
         ///     <c>o[j] = FLOAT_dot(x, y + j * yStep)</c> with a stride cblas is not handed, four outputs at a time with
         ///     their float32 sums side by side; every output keeps the own loop's order, so the bits are
         ///     <see cref="FloatDotOwn"/>'s.
+        ///     A NaN output is the exception: which NaN it holds follows RyuJIT's operand order here, so the callers scan
+        ///     their result once (<see cref="AnyNaN(double*, long)"/>) and compute a NaN output again with that function.
         /// </summary>
         /// <param name="x">The shared first operand (NumPy's <c>ip1</c>).</param>
         /// <param name="is1">Its element stride (any sign).</param>
@@ -576,6 +602,8 @@ namespace NumSharp.Utilities
         ///     <see cref="DoubleDotOwn"/> for a row of outputs whose operands both step: <c>o[j] = DOUBLE_dot(x + j * xStep,
         ///     y + j * yStep)</c> with a stride cblas is not handed, four outputs at a time with their sums side by side;
         ///     every output keeps the own loop's order, so the bits are <see cref="DoubleDotOwn"/>'s.
+        ///     A NaN output is the exception: which NaN it holds follows RyuJIT's operand order here, so the callers scan
+        ///     their result once (<see cref="AnyNaN(double*, long)"/>) and compute a NaN output again with that function.
         /// </summary>
         /// <param name="x">The first output's first operand (NumPy's <c>ip1</c>).</param>
         /// <param name="is1">Its element stride (any sign).</param>
@@ -640,6 +668,8 @@ namespace NumSharp.Utilities
         ///     <c>o[j] = DOUBLE_dot(x, y + j * yStep)</c> with a stride cblas is not handed, four outputs at a time with
         ///     their double sums side by side; every output keeps the own loop's order, so the bits are
         ///     <see cref="DoubleDotOwn"/>'s.
+        ///     A NaN output is the exception: which NaN it holds follows RyuJIT's operand order here, so the callers scan
+        ///     their result once (<see cref="AnyNaN(double*, long)"/>) and compute a NaN output again with that function.
         /// </summary>
         /// <param name="x">The shared first operand (NumPy's <c>ip1</c>).</param>
         /// <param name="is1">Its element stride (any sign).</param>
@@ -730,7 +760,11 @@ namespace NumSharp.Utilities
         ///     N-D 3 to 257.</remarks>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         internal static unsafe double DoubleDotUnit(double* ip1, long is1, double* ip2, long is2, long n)
-            => DoubleUnitCore<Forward, Forward>(ip1, ip2, n);
+        {
+            double r = DoubleUnitCore<Forward, Forward>(ip1, ip2, n);
+            // Only a NaN result depends on which NaN won; NumPy's operation order decides it again (NDDot.NaN.cs).
+            return double.IsNaN(r) ? DoubleUnitNaN(ip1, 1, ip2, 1, n) : r;
+        }
 
         /// <summary>
         ///     <see cref="DoubleDotUnit"/>'s arithmetic over two runs read in order whatever their direction: what
@@ -746,7 +780,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         internal static unsafe double DoubleDotUnitInOrder(double* x, long sx, double* y, long sy, long n)
         {
-            return (sx, sy) switch
+            double r = (sx, sy) switch
             {
                 (1, 1) => DoubleUnitCore<Forward, Forward>(x, y, n),
                 (1, -1) => DoubleUnitCore<Forward, Backward>(x, y, n),
@@ -759,6 +793,8 @@ namespace NumSharp.Utilities
                 (0, 0) => DoubleUnitCore<Repeat, Repeat>(x, y, n),
                 _ => throw new ArgumentOutOfRangeException(nameof(sx), "a unit model reads strides 1, -1 and 0 in place only"),
             };
+            // The model reads the runs in the same logical order (a stride of -1 or 0 included).
+            return double.IsNaN(r) ? DoubleUnitNaN(x, sx, y, sy, n) : r;
         }
 
         /// <summary>The body of <see cref="DoubleDotUnit"/> for any pair of run directions.</summary>
@@ -788,6 +824,8 @@ namespace NumSharp.Utilities
         ///     outputs at a time run their sequential tails side by side, so the tails' dependent adds overlap instead of
         ///     waiting on each other; every output keeps NumPy's own order of operations, so the bits are
         ///     <see cref="DoubleDotUnit"/>'s.
+        ///     A NaN output is the exception: which NaN it holds follows RyuJIT's operand order here, so the callers scan
+        ///     their result once (<see cref="AnyNaN(double*, long)"/>) and compute a NaN output again with that function.
         /// </summary>
         /// <param name="x">The shared first operand (cblas' x), unit stride.</param>
         /// <param name="is1">Ignored: 1 (the walk's row signature).</param>
@@ -883,6 +921,9 @@ namespace NumSharp.Utilities
                 t1 += ip2[0] * ip1[0];
             double sum = 0.0;
             sum += t1 + t2;
+            // A NaN takes NumPy's NaN from ddot's strided model; the runs start n strides back (see FloatDotStrided).
+            if (double.IsNaN(sum))
+                return DoubleStridedNaN(ip1 - n * is1, is1, ip2 - n * is2, is2, n);
             return sum;
         }
 
@@ -902,6 +943,9 @@ namespace NumSharp.Utilities
             double s = 0.0;
             for (long i = 0; i < n; i++, ip1 += is1, ip2 += is2)
                 s += *ip1 * *ip2;
+            // A NaN takes NumPy's NaN from the own loop's model; the runs start n strides back (see FloatDotStrided).
+            if (double.IsNaN(s))
+                return DoubleOwnNaN(ip1 - n * is1, is1, ip2 - n * is2, is2, n);
             return s;
         }
 
@@ -958,7 +1002,11 @@ namespace NumSharp.Utilities
         ///     200 from 8 terms on.</remarks>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         internal static unsafe Complex ComplexDotUnit(Complex* ip1, long is1, Complex* ip2, long is2, long n)
-            => ComplexUnitCore<Forward, Forward, Dotu>((double*)ip1, (double*)ip2, n);
+        {
+            Complex r = ComplexUnitCore<Forward, Forward, Dotu>((double*)ip1, (double*)ip2, n);
+            // Only a NaN part depends on which NaN won; NumPy's operation order decides it again (NDDot.NaN.cs).
+            return HasNaN(r) ? ComplexBlasNaN(ip1, 1, ip2, 1, n, unit: true, conjugate: false) : r;
+        }
 
         /// <summary>
         ///     <see cref="ComplexDotUnit"/>'s arithmetic over two runs read in order whatever their direction: what
@@ -975,7 +1023,7 @@ namespace NumSharp.Utilities
         internal static unsafe Complex ComplexDotUnitInOrder(Complex* x, long sx, Complex* y, long sy, long n)
         {
             double* xp = (double*)x, yp = (double*)y;
-            return (sx, sy) switch
+            Complex r = (sx, sy) switch
             {
                 (1, 1) => ComplexUnitCore<Forward, Forward, Dotu>(xp, yp, n),
                 (1, -1) => ComplexUnitCore<Forward, Backward, Dotu>(xp, yp, n),
@@ -988,6 +1036,8 @@ namespace NumSharp.Utilities
                 (0, 0) => ComplexUnitCore<Repeat, Repeat, Dotu>(xp, yp, n),
                 _ => throw new ArgumentOutOfRangeException(nameof(sx), "a unit model reads strides 1, -1 and 0 in place only"),
             };
+            // The model reads the runs in the same logical order (a stride of -1 or 0 included).
+            return HasNaN(r) ? ComplexBlasNaN(x, sx, y, sy, n, unit: true, conjugate: false) : r;
         }
 
         /// <summary>The body of <see cref="ComplexDotUnit"/> and <see cref="ComplexDotcUnit"/> for any pair of run
@@ -1043,7 +1093,10 @@ namespace NumSharp.Utilities
         ///     naive per-term complex product on 6 of them.</remarks>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         internal static unsafe Complex ComplexDotStrided(Complex* ip1, long is1, Complex* ip2, long is2, long n)
-            => ComplexStridedCore<Dotu>((double*)ip1, is1, (double*)ip2, is2, n);
+        {
+            Complex r = ComplexStridedCore<Dotu>((double*)ip1, is1, (double*)ip2, is2, n);
+            return HasNaN(r) ? ComplexBlasNaN(ip1, is1, ip2, is2, n, unit: false, conjugate: false) : r;
+        }
 
         /// <summary>The body of <see cref="ComplexDotStrided"/> and <see cref="ComplexDotcStrided"/>: zdot_compute's
         ///     strided branch, the four sums over every term in order.</summary>
@@ -1094,7 +1147,8 @@ namespace NumSharp.Utilities
                 sumr += ar * br - ai * bi;
                 sumi += ar * bi + ai * br;
             }
-            return new Complex(sumr, sumi);
+            var r = new Complex(sumr, sumi);
+            return HasNaN(r) ? ComplexOwnNaN(ip1, is1, ip2, is2, n) : r;
         }
 
         /// <summary>
@@ -1119,6 +1173,8 @@ namespace NumSharp.Utilities
         ///     <c>o[j] = CDOUBLE_dot(x, y + j * yStep)</c>, two unit-stride runs each, two outputs at a time with their
         ///     four-sum tails side by side; every output keeps zdotu's own order, so the bits are
         ///     <see cref="ComplexDotUnit"/>'s.
+        ///     A NaN output is the exception: which NaN it holds follows RyuJIT's operand order here, so the callers scan
+        ///     their result once (<see cref="AnyNaN(double*, long)"/>) and compute a NaN output again with that function.
         /// </summary>
         /// <param name="x">The shared first operand (cblas' x), unit stride.</param>
         /// <param name="is1">Ignored: 1 (the walk's row signature).</param>
@@ -1178,6 +1234,8 @@ namespace NumSharp.Utilities
         ///     <c>o[j] = CDOUBLE_dot(x, y + j * yStep)</c> with a stride cblas is not handed, four outputs at a time with
         ///     their two sums each side by side; every output keeps the own loop's order, so the bits are
         ///     <see cref="ComplexDotOwn"/>'s.
+        ///     A NaN output is the exception: which NaN it holds follows RyuJIT's operand order here, so the callers scan
+        ///     their result once (<see cref="AnyNaN(double*, long)"/>) and compute a NaN output again with that function.
         /// </summary>
         /// <param name="x">The shared first operand (NumPy's <c>ip1</c>).</param>
         /// <param name="is1">Its element stride (any sign).</param>
@@ -1300,7 +1358,11 @@ namespace NumSharp.Utilities
         /// <returns>The conjugated dot product NumPy writes.</returns>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         internal static unsafe Complex ComplexDotcUnit(Complex* ip1, long is1, Complex* ip2, long is2, long n)
-            => ComplexUnitCore<Forward, Forward, Dotc>((double*)ip1, (double*)ip2, n);
+        {
+            Complex r = ComplexUnitCore<Forward, Forward, Dotc>((double*)ip1, (double*)ip2, n);
+            // Only a NaN part depends on which NaN won; NumPy's operation order decides it again (NDDot.NaN.cs).
+            return HasNaN(r) ? ComplexBlasNaN(ip1, 1, ip2, 1, n, unit: true, conjugate: true) : r;
+        }
 
         /// <summary>
         ///     CDOUBLE_dotc / CDOUBLE_vdot over <c>cblas_zdotc_sub</c> with positive strides that are not both 1: the four
@@ -1314,7 +1376,10 @@ namespace NumSharp.Utilities
         /// <returns>The conjugated dot product NumPy writes.</returns>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         internal static unsafe Complex ComplexDotcStrided(Complex* ip1, long is1, Complex* ip2, long is2, long n)
-            => ComplexStridedCore<Dotc>((double*)ip1, is1, (double*)ip2, is2, n);
+        {
+            Complex r = ComplexStridedCore<Dotc>((double*)ip1, is1, (double*)ip2, is2, n);
+            return HasNaN(r) ? ComplexBlasNaN(ip1, is1, ip2, is2, n, unit: false, conjugate: true) : r;
+        }
 
         /// <summary>
         ///     CDOUBLE_dotc's / CDOUBLE_vdot's own loop, for a stride cblas is not handed (zero or negative, and np.vecdot's
@@ -1343,13 +1408,16 @@ namespace NumSharp.Utilities
                 sumr += ar * br + ai * bi;
                 sumi += ar * bi - ai * br;
             }
-            return new Complex(sumr, sumi);
+            var r = new Complex(sumr, sumi);
+            return HasNaN(r) ? ComplexDotcOwnNaN(ip1, is1, ip2, is2, n) : r;
         }
 
         /// <summary>
         ///     <see cref="ComplexDotcOwn"/> for a row of outputs whose operands both step: <c>o[j] = CDOUBLE_dotc(x + j *
         ///     xStep, y + j * yStep)</c> with a stride cblas is not handed, four outputs at a time with their two sums each
         ///     side by side; every output keeps the own loop's order, so the bits are <see cref="ComplexDotcOwn"/>'s.
+        ///     A NaN output is the exception: which NaN it holds follows RyuJIT's operand order here, so the callers scan
+        ///     their result once (<see cref="AnyNaN(double*, long)"/>) and compute a NaN output again with that function.
         /// </summary>
         /// <param name="x">The first output's first operand (NumPy's <c>ip1</c>, conjugated).</param>
         /// <param name="is1">Its element stride (any sign).</param>

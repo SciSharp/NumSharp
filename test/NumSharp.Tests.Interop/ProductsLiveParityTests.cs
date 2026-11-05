@@ -290,6 +290,68 @@ namespace NumSharp.Tests.Interop
                 "vdot complex, a reversed second operand: NumPy's own loop over the view");
         }
 
+        /// <summary>
+        ///     OPEN BUG (found 2026-11-05 by the products tier's NaN-priority cases, np-layer dtype plan PA3b): where several
+        ///     NaNs meet in one dot, the backend's own loops (a reversed run's <c>@name@_dot</c> loop, np.vecdot's core of
+        ///     one element), its complex plain product and its view-copying <c>TryVdot</c> keep the NaN that RyuJIT's
+        ///     operand order leaves, not NumPy's. The managed engine gives NumPy's (NDDot.NaN.cs: each operation picks its
+        ///     NaN by the x86 rule of the instruction NumPy's binaries run - MSVC's own loops, GCC's C loops, the Haswell
+        ///     kernels' assembly); the finite values agree. The products corpus keeps these layouts out of its NaN-exact
+        ///     cases, which BlasBackendDelta holds the backend to.
+        /// </summary>
+        [TestMethod]
+        [TestCategory("OpenBugs")]
+        public void NaNPriority_OwnLoopsAndViews_ByteExact()
+        {
+            RequireProducts();
+            var a = NaNPlanted(0, 2, 3, 9);
+            var b = NaNPlanted(0x400, 9, 5);
+            AssertBin(np.dot(a["..., ::-1"], b), "np.dot(a[..., ::-1], b)", a, b,
+                "N-D np.dot over a reversed run: DOUBLE_dot's own loop");
+            var x = NaNPlanted(0x800, 80);
+            var y = NaNPlanted(0xC00, 40);
+            AssertBin(np.vdot(x["40:"]["::-1"], y), "np.vdot(a[40:][::-1], b)", x, y,
+                "np.vdot of a reversed view: the own loop over the view");
+            AssertBin(np.vdot(x["::2"], y), "np.vdot(a[::2], b)", x, y,
+                "np.vdot of a stepped view: ddot's strided loop over the view");
+            var m1 = NaNPlanted(0x1000, 6, 9);
+            var m2 = NaNPlanted(0x1400, 6, 9);
+            AssertBin(np.vecdot(m1[":, ::-1"], m2), "np.vecdot(a[:, ::-1], b)", m1, m2,
+                "np.vecdot of reversed cores: the own loop");
+            var o1 = NaNPlanted(0x1800, 6, 1);
+            var o2 = NaNPlanted(0x1C00, 6, 1);
+            AssertBin(np.vecdot(o1, o2), "np.vecdot(a, b)", o1, o2,
+                "np.vecdot of one-element cores: the own loop's single term");
+            var c1 = np.array(new[] { new Complex(BitConverter.Int64BitsToDouble(0x7FF8000000000011), 1.5) });
+            var c2 = np.array(new[] { new Complex(2.5, BitConverter.Int64BitsToDouble(unchecked((long)0xFFF8000000000022))) });
+            AssertBin(np.dot(c1, c2), "np.dot(a, b)", c1, c2,
+                "np.dot of two (1,) complex operands: cblas_matrixproduct's plain product");
+        }
+
+        /// <summary>
+        ///     A float64 array of <paramref name="shape"/> in C order where every third element is a quiet NaN of payload
+        ///     <c>salt + i + 1</c> and alternating sign (NumPy's and NumSharp's dot functions see the same NaNs meet), and the
+        ///     rest is <c>0.5 + 0.125 * (i % 13)</c> with alternating sign.
+        /// </summary>
+        /// <param name="salt">The payload offset that keeps two operands' NaNs apart.</param>
+        /// <param name="shape">The shape.</param>
+        /// <returns>The fresh array.</returns>
+        private static NDArray NaNPlanted(long salt, params long[] shape)
+        {
+            long n = 1;
+            foreach (long d in shape)
+                n *= d;
+            var v = new double[n];
+            for (long i = 0; i < n; i++)
+            {
+                long sign = (i / 3) % 2;
+                v[i] = i % 3 == 0
+                    ? BitConverter.Int64BitsToDouble(unchecked((long)((ulong)sign << 63 | 0x7FF8000000000000UL | (ulong)(salt + i + 1))))
+                    : (i % 2 == 0 ? 1 : -1) * (0.5 + 0.125 * (i % 13));
+            }
+            return np.array(v).reshape(shape);
+        }
+
         [TestMethod]
         public void Vdot_Complex_ActuallyConjugates_NonVacuity()
         {
