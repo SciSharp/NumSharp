@@ -10,7 +10,7 @@ text exactly where NumPy's ufunc has a text loop, and the result equals NumPy's 
 |---|---|---|
 | E1 (MVP) | text leaves (S / U / StringDType arrays, 0-d, a C# `string` as NumPy's `str`) in the six comparisons anywhere in a tree; their bool results feed every numeric node, reduction and keyword | done (`2ab907a0`) |
 | E2 (next release) | the truth value of text (`LogicalAnd/Or/Xor`, `Where`'s condition, `Any` / `All` / `CountNonzero`), `IsNaN` over StringDType, the np.strings ufuncs and searches as factories (`StrLen`, the nine predicates, `Find` / `RFind` / `Count` / `Index` / `RIndex`, `StartsWith` / `EndsWith`), text → number `Cast` | done (`c6738c59`; the owner's "Continue with phase E2", 2026-11-05) |
-| E3 (next release) | text RESULTS: `Where` with text branches (np.where's promotion), `Add` (concatenation), `Multiply` (StringDType repeat; S / U need `out=`), `Maximum` / `Minimum` over StringDType, a bare text root; text reductions (`ArgMax` / `ArgMin` over S / U / T, `Max` / `Min` / `Sum` over StringDType); NumPy's own error for every other node with a text operand | planned |
+| E3 | text RESULTS: `Where` with text branches (np.where's promotion), `Add` (concatenation), `Multiply` (StringDType repeat; S / U need `out=`), `Maximum` / `Minimum` over StringDType, `Cast` to text, a bare text root; text reductions (`ArgMax` / `ArgMin` over S / U / T, `Max` / `Min` / `Sum` over StringDType, NumPy's answer for every other kind); NumPy's own error for every other node with a text operand; the keywords over a text result | done (`4b429c07`; the owner's "Complete fully", 2026-11-05) |
 
 ## 1. Decisions (owner, 2026-11-04, design-ask pages)
 
@@ -19,6 +19,7 @@ text exactly where NumPy's ufunc has a text loop, and the result equals NumPy's 
 | D1 | How a text node runs inside np.evaluate: block-staged / materialize / inline | "Measure performancewise" | measured in §3: whole-array text stages + one fused numeric pass |
 | D2 | Which text nodes in this round | "Everything NumPy does on text" — "But I want phases where we do minimal MVP and keep other phases for next release" | E1 now; E2 and E3 for the next release |
 | D3 | Spelling of the np.strings factories | "PascalCase like NDExpr" | `NDExpr.StrLen`, `NDExpr.IsAlpha`, `NDExpr.StartsWith`, `NDExpr.Find`, ... (E2) |
+| D4 | After E2 (2026-11-05): what is left | "Complete fully" | E3 in this round, then the open items (§6) |
 
 ## 2. What NumPy computes on text (2.4.2, probed)
 
@@ -120,6 +121,20 @@ contiguous calls stays possible later (it would sit behind the same lowering).
   as in NumPy's statement order (E1's 0-d stand-in for a comparison's computed number is gone). A constant-only sub-tree
   (`-(NDExpr)3`) is evaluated over a 0-d dummy and marked a Python scalar when its typing is weak.
 
+- **E3: text results.** A stage whose NumPy statement yields text leaves a TEXT value (`NDExprLowered.TextStage`)
+  instead of a remainder input: later stages read it (`StageResult`), and at the root it is the evaluation's answer
+  (`NDExprTextPlan.TextRoot`, also a bare text input, copied). Every remaining node runs the engine member that is NumPy's
+  statement for it (`NDExpr.TextResults.cs`): `ExecuteBinaryOp` for the binary ufuncs (its string guard concatenates,
+  repeats StringDType or raises NumPy's no-loop error), np.maximum / np.minimum, a two-sided `Clip` as one np.clip,
+  `NDArray.where` (NumPy's branch promotion), the unary members (np.real / np.imag compute), np.round, `astype` both
+  ways (`NDExpr.Cast(x, DType)` keeps a text descriptor), the reduction members and np.average. `NanSum` / `NanProd` are
+  marked (`ReduceNode.IsNanFamily`): over text they are np.sum / np.prod of the operand, NumPy's nansum of a string array.
+  The keywords over a text result (`FinishResult`): `dtype=` is NumPy's astype; `out=` takes the result under
+  np.evaluate's casting rule by descriptor and the ufunc shape rules (a reduction's exact rank); `where=` writes the mask's
+  elements of a fresh zeroed result; `order=` lays a fresh result out; a root ufunc over text takes `out=` / `where=` itself
+  (NumPy's call: an S / U repeat exists only into an `out=`). A numeric result asked for as text (a text `out=` /
+  `dtype=`, `EvaluateIntoText`) is computed and then formatted the same way. Only `NDExpr.Call` refuses text.
+
 ## 5. Gates
 
 - Unit tests from NumPy output: `test/NumSharp.Tests/Backends/Iterators/NDEvaluateTextTests.cs` (every comparison over
@@ -182,6 +197,67 @@ contiguous calls stays possible later (it would sit behind the same lowering).
   Fused is faster than NumSharp's own unfused statements in 87 of the 144 cells.
 - String oracle section `evaltext` (`test/oracle/gen_strings_oracle.py`, NumPy reference = the unfused statements):
   trees over text and numeric operands in the corpus layouts, strict.
+- E3: `NDEvaluateTextTests` (the concatenation / repeat / maximum / minimum results, np.where's promotion and refusals, the
+  casts to and from text, every root reduction kind, NumPy's own error for the remaining nodes and its statement order,
+  results read by later nodes, the keywords over a text result, a bare text root, the program identity of a text cast and
+  of NanSum); `np_where_Test.Where_ExplicitOffsetViews_ReadTheirOwnElements` (see the state log); the `evaltext`
+  section's E3 blocks N–U after E2's cases (8,180 cases in all, 1,687 NumPy errors): the binary ufuncs per class pair and
+  core layout, mixed classes and NA kinds, np.where's branch promotion, every unary node, the casts to text, the 15 root
+  reduction kinds flat and per axis over every class and NA kind, results read by later nodes, dtype= / order= / out= over
+  a text result, a bare text root; the reference reads a 0-d text answer as NumPy's array result (its ufuncs unwrap a 0-d
+  result to a scalar only as wide as its content) and keeps a flat reduction's Python str / NA object in the reduced
+  dtype.
+- Benchmark, E3 (`benchmark/fusion/probes/evaltext_e3_bench.cs` / `.py`, joined by `evaltext_sheet.py`; E2's method).
+  Trees: concat `Add(names, "!")`, concat_where `Where(age > 30, Add(names, "+"), names)`, where_text
+  `Where(age > 30, names, "-")`, eq_concat `Equal(Add(names, "x"), "parisx")`, strlen_cat
+  `CountNonzero(StrLen(Add(names, names)) > 10)`, argmax `ArgMax(names)`, cast_text `Cast(age, "U2")`.
+
+  Measured at `4b429c07` (pinned to two P-cores 0x14, best of 7 after a paused double warm-up, every fused result
+  checked against NumSharp's unfused statements first; NumPy 2.4.2 twin). Cells: NPY/NS (np.evaluate µs).
+
+  | text | layout | n | concat | concat_where | where_text | eq_concat | strlen_cat | argmax | cast_text |
+  |---|---|---|---|---|---|---|---|---|---|
+  | U | contig | 1,000 | ✅ 3.7× (3.5) | ✅ 1.3× (18.6) | 🟠 0.4× (29.0) | ✅ 5.1× (6.0) | ✅ 2.2× (8.8) | ✅ 1.4× (2.5) | ✅ 20.4× (7.4) |
+  | U | contig | 100,000 | ✅ 8.3× (252) | ✅ 2.3× (1,487) | 🟡 0.6× (2,003) | ✅ 12.2× (389) | ✅ 6.5× (569) | ✅ 1.6× (219) | ✅ 23.6× (641) |
+  | U | contig | 1,000,000 | ✅ 6.2× (3,289) | ✅ 1.6× (21,142) | 🟡 0.6× (19,995) | ✅ 8.6× (5,359) | ✅ 4.8× (7,995) | ✅ 1.4× (2,649) | ✅ 24.4× (6,374) |
+  | U | strided | 1,000 | ✅ 3.8× (3.4) | ✅ 1.3× (18.9) | 🟠 0.4× (29.2) | ✅ 5.4× (5.7) | ✅ 2.3× (8.2) | ✅ 2.8× (2.2) | ✅ 21.2× (7.5) |
+  | U | strided | 100,000 | ✅ 8.5× (253) | ✅ 2.3× (1,506) | 🟡 0.6× (2,090) | ✅ 10.8× (419) | ✅ 6.0× (600) | ✅ 4.9× (232) | ✅ 23.5× (650) |
+  | U | strided | 1,000,000 | ✅ 4.6× (4,578) | ✅ 1.5× (24,242) | 🟡 0.6× (21,092) | ✅ 6.8× (6,680) | ✅ 4.1× (9,033) | ✅ 2.9× (4,145) | ✅ 23.4× (6,586) |
+  | S | contig | 1,000 | ✅ 4.6× (2.7) | ✅ 1.2× (19.8) | 🟠 0.3× (28.8) | ✅ 6.7× (4.5) | ✅ 3.0× (6.2) | ✅ 2.2× (2.8) | ✅ 20.7× (7.4) |
+  | S | contig | 100,000 | ✅ 9.1× (175) | ✅ 1.9× (1,356) | 🟠 0.4× (2,023) | ✅ 15.6× (267) | ✅ 8.1× (352) | ✅ 4.2× (120) | ✅ 23.5× (642) |
+  | S | contig | 1,000,000 | ✅ 9.7× (1,745) | ✅ 1.8× (14,025) | 🟠 0.4× (20,688) | ✅ 14.7× (2,766) | ✅ 7.6× (4,066) | ✅ 4.2× (1,208) | ✅ 23.1× (6,513) |
+  | S | strided | 1,000 | ✅ 4.5× (2.7) | ✅ 1.1× (20.9) | 🟠 0.4× (29.6) | ✅ 6.7× (4.5) | ✅ 3.0× (6.2) | ✅ 2.8× (2.9) | ✅ 20.8× (7.5) |
+  | S | strided | 100,000 | ✅ 9.3× (177) | ✅ 1.8× (1,396) | 🟠 0.4× (2,168) | ✅ 14.8× (267) | ✅ 8.1× (355) | ✅ 5.5× (120) | ✅ 23.1× (671) |
+  | S | strided | 1,000,000 | ✅ 9.7× (1,760) | ✅ 1.8× (14,895) | 🟠 0.4× (23,386) | ✅ 14.4× (2,838) | ✅ 7.5× (3,972) | ✅ 6.3× (1,305) | ✅ 19.4× (8,287) |
+  | T | contig | 1,000 | ✅ 4.6× (14.1) | ✅ 8.5× (28.7) | ✅ 28.5× (15.0) | ✅ 5.1× (19.2) | ✅ 3.7× (18.1) | ✅ 6.8× (9.3) | ✅ 22.5× (7.5) |
+  | T | contig | 100,000 | ✅ 3.4× (1,085) | ✅ 8.8× (1,737) | ✅ 18.0× (577) | ✅ 2.7× (1,656) | ✅ 3.8× (1,419) | ✅ 9.5× (555) | ✅ 24.3× (637) |
+  | T | contig | 1,000,000 | ✅ 2.9× (11,717) | ✅ 9.0× (18,654) | ✅ 17.1× (6,911) | ✅ 2.8× (17,028) | ✅ 4.0× (13,945) | ✅ 9.5× (5,470) | ✅ 23.9× (6,390) |
+  | T | strided | 1,000 | ✅ 2.5× (13.5) | ✅ 6.3× (28.1) | ✅ 7.0× (16.5) | ✅ 2.6× (19.5) | ✅ 2.3× (27.0) | ✅ 7.8× (10.5) | ✅ 21.6× (7.5) |
+  | T | strided | 100,000 | ✅ 3.1× (1,076) | ✅ 8.5× (1,821) | ✅ 18.1× (637) | ✅ 3.0× (1,639) | ✅ 4.0× (1,384) | ✅ 9.5× (742) | ✅ 24.9× (657) |
+  | T | strided | 1,000,000 | ✅ 2.9× (11,543) | ✅ 7.4× (20,902) | ✅ 12.0× (8,771) | ✅ 2.8× (17,304) | ✅ 3.9× (14,488) | ✅ 8.1× (8,714) | ✅ 24.0× (6,510) |
+
+  Reading: at `4b429c07` 114 of the 126 cells beat NumPy (107 at 1.5× or more): the casts to text 19–25×, the
+  comparison of a concatenation 2.6–15.6×, the concatenation 2.5–9.7×, its length test 2.2–8.1×, ArgMax 1.4–9.5×,
+  the concatenating where 1.1–9.0× and StringDType's every tree 2.3–28×. The twelve losers were all one tree,
+  `where_text` over S / U (0.35–0.62×), and the cause was np.where's, not the stage's: its whole-element text kernel
+  took only operands that all have the result's dimensions and are C-contiguous, so the `"-"` branch (a scalar) and
+  a strided view sent it through the unit-view route (the condition broadcast over every element's characters, about
+  20 ns per element). `631bcab9` adds a step kernel (`GetWhereBytesStepKernel`: a one-element operand, a
+  C-contiguous one or a 1-D strided / reversed view, each at its own byte step) — re-measured with this benchmark's
+  where trees:
+
+  | where_text | 1,000 | 100,000 | 1,000,000 |
+  |---|---|---|---|
+  | U contig | 0.36× → ✅ 1.19× (8.8) | 0.58× → ✅ 2.74× (424) | 0.60× → ✅ 2.42× (4,920) |
+  | U strided | 0.38× → ✅ 1.15× (9.6) | 0.61× → ✅ 2.49× (514) | 0.62× → ✅ 1.70× (7,626) |
+  | S contig | 0.35× → ✅ 1.07× (9.4) | 0.36× → ✅ 1.65× (448) | 0.40× → ✅ 1.85× (4,526) |
+  | S strided | 0.36× → ✅ 1.09× (9.6) | 0.36× → ✅ 1.64× (477) | 0.41× → ✅ 1.81× (5,249) |
+
+  With it every cell beats NumPy (1.07–29×) and 115 of 126 reach 1.5×. The eleven under 1.5× are the 1K cells of
+  the two where trees (1.07–1.28×: three statements' fixed cost against NumPy's 10–24 µs calls), ArgMax over U
+  (1.38× at 1K and at 1M contiguous) and the 1M strided concatenating where over U (1.47×). Against NumSharp's own
+  unfused statements fused runs 0.71–1.45× (56 of 126 faster): a text result is NumPy's own whole-array statement per
+  node, so fusing them saves the entry and the temporaries' bookkeeping, not passes over the text.
 - Benchmark (E1 as built; `benchmark/fusion/probes/evaltext_bench.cs`, its NumPy twin `evaltext_bench.py`, the table
   joined by `evaltext_sheet.py`): pinned to two P-cores (0x14), best of 7
   after a paused double warm-up, every fused result checked against NumSharp's unfused statements first. Trees: filter
@@ -242,14 +318,34 @@ contiguous calls stays possible later (it would sit behind the same lowering).
   stand-in replaced). Gates: `NDEvaluateTextTests` 29 cases (E1's 21, two of them rewritten), the string oracle section
   `evaltext` 5,736 cases (E2's 2,787 after E1's; a second layout excuse, np.evaluate's own C / F result rule against a
   permuted temporary, 9 cases), the benchmark above (114 / 144 cells at 1.5× NumPy or more).
+- 2026-11-05 — E3 implemented (`4b429c07`; the owner's "Complete fully"): text results (`NDExprLowered.TextStage`,
+  `NDExprTextPlan.TextRoot`), the E3 stages (`NDExpr.TextResults.cs`), the keyword finishing (`FinishResult`,
+  `EvaluateIntoText`), `NDExpr.Cast(x, DType)` as the one Cast overload, `ReduceNode.IsNanFamily`, and the
+  StringComputationNotSupportedException refusals gone but the delegate's. The oracle found an engine bug on the way:
+  np.where's contiguous kernels read an explicit-offset view (`np.ndarray(buffer, offset=...)`, a storage alias) from the
+  buffer's start — every fast-path pointer now adds `Shape.offset` (basic slices fold their offset into the storage, so
+  only those constructions reached it; 24 other fast paths checked over such views were right). Gates: see §5. The gate
+  run under guard pages also caught a test bug outside E3 (`053edebf`): two string-sort tests read a raw buffer address
+  from an array nothing kept alive, which a GC in optimized code could free mid-sort.
+- 2026-11-05 — np.where over S / U with a scalar or strided branch (`631bcab9`): the step kernel above; the E3
+  benchmark's twelve losing cells all beat NumPy now (§5).
+- 2026-11-05 — the fused `Where` that branched per element (`919ffb45`, the P5.3 same-width vector plan of
+  `docs/plans/ndexpr-evaluate.md`): a tree whose non-bool dtypes share one element size now vectorizes, each node at its
+  own dtype and the masks reinterpreted between them. The where-mask probe's random mask runs 2.37× the unfused np.where
+  (was 0.46×) and 3.8× NumPy at 100K; seven same-width trees run 1.84–10.6× NumPy (were 0.34–6.11×). The find trees'
+  remainder `Where(find >= 0, price, 0)` is such a tree.
 - Open (pre-existing, not text): np.evaluate's axis reductions return a keepdims result as a view (OWNDATA False) and a
   permuted child's reduction C-ordered, where NumPy's np.sum / np.any allocate the keepdims shape in K order.
 - Open (pre-existing, not text): np.evaluate's fresh elementwise result is C- or F-ordered (F only when every input is
   strictly F-contiguous), where NumPy keeps a permuted operand's K order (`np.evaluate((NDExpr)x * 2)` of a 3-D
   transpose is C, NumPy's `x * 2` keeps the permutation).
-- Open (pre-existing, not text): np.evaluate's fused `Where` whose condition compares an int64 operand and whose branches
-  are float64 branches per element: over a random mask it is 0.46× of the unfused np.where at 100K (2.0× faster over a
-  patterned mask; `benchmark/fusion/probes/evaltext_where_mask_probe.cs`).
+- Closed (`919ffb45`): np.evaluate's fused `Where` whose condition compares an int64 operand and whose branches
+  are float64 branched per element (0.46× of the unfused np.where on a random mask at 100K) — it vectorizes under the
+  same-width plan (2.37× the unfused call, 3.8× NumPy).
+- Open (numbers, follow-up of `919ffb45`): `m != 0` over a bool array is an int64 compare by NumPy's typing, so
+  the same-width kernel widens every bool to an 8-byte lane and packs it back: 1.84–2.2× NumPy and 2× its former scalar
+  kernel, but 0.10–0.13× NumSharp's unfused `np.not_equal(m, 0)`, which has a bool-against-literal byte path. A byte-lane
+  rewrite of a bool-vs-integer-literal comparison would close it.
 - Open (engine performance, owner's call): the text functions the stages run are under 1.5× NumPy in places — np.strings.find
   over U / S at 100K+ (0.9–1.6×), startswith over strided U (0.74× at 100K), count_nonzero over strided text (1.1–1.4×),
   StringDType's truth cast (about 1.4×).
