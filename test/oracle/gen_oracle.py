@@ -14129,6 +14129,57 @@ def gen_products():
     emit("corrcoef", {}, [C(x1), C(y1)], np.corrcoef(x1, y1), "xy", "float64")
     emit("corrcoef", {}, [C(Mc)], np.corrcoef(Mc), "complex", "complex128")
 
+    # --- np.dot's dot functions over NumPy's N-D route (np-layer dtype plan, PA3a). A 3-D first operand keeps NumPy
+    #     off cblas_matrixproduct, so every output is one call of the dtype's dotfunc (FLOAT_dot / DOUBLE_dot /
+    #     CDOUBLE_dot) over the contracted runs, whose stride class picks the arithmetic: two unit strides reach the
+    #     OpenBLAS kernel (sdot's scalar loop below 32 terms and its Haswell kernel from 32, ddot's kernel from 16,
+    #     zdotu's from 8), other positive strides cblas' strided loops, a reversed or broadcast run the dotfunc's own
+    #     loop. Full-mantissa values spread over six decades so every order shows; lengths sit around the kernels'
+    #     8 / 16 / 32 blocks; one draw per (dtype, class) at 8 and 32 terms carries NaN / inf / -inf / -0.0.
+    #     NumSharp computes these with NDDot's managed models, so the bits are portable; they are scipy-openblas'
+    #     Haswell kernels at one thread (generate on an AVX2 host, OPENBLAS_NUM_THREADS=1).
+    dot_rng = np.random.RandomState(20261105)
+
+    def dot_spread(shape, dt):
+        v = dot_rng.standard_normal(shape) * 10.0 ** dot_rng.randint(-3, 3, shape)
+        if np.dtype(dt).kind == "c":
+            v = v + 1j * (dot_rng.standard_normal(shape) * 10.0 ** dot_rng.randint(-3, 3, shape))
+        return np.ascontiguousarray(v.astype(dt))
+
+    def dot_specials(x):
+        f = x.reshape(-1)
+        f[1] = np.nan
+        f[2] = -0.0
+        if f.size > 7:
+            f[5] = np.inf
+        if f.size > 11:
+            f[9] = -np.inf
+        return x
+
+    for dt in ("float32", "float64", "complex128"):
+        for K in (3, 8, 15, 16, 17, 31, 32, 33, 64):
+            for kind in ("unit", "strided", "rev", "bcast"):
+                for special in ((False, True) if K in (8, 32) else (False,)):
+                    a = dot_spread((2, 3, K), dt)
+                    if kind == "unit":
+                        b = dot_spread((4, K), dt)
+                        bv = b.T
+                    elif kind == "bcast":
+                        b = dot_spread((1, 4), dt)
+                        bv = np.broadcast_to(b, (K, 4))
+                    else:
+                        b = dot_spread((K, 4), dt)
+                        bv = b
+                    if special:
+                        dot_specials(a)
+                        if kind != "bcast":
+                            dot_specials(b)
+                    av = a[..., ::-1] if kind == "rev" else a
+                    with np.errstate(all="ignore"):
+                        r = np.dot(av, bv)
+                    tag = f"nd_{kind}_k{K}" + ("_special" if special else "")
+                    emit("dot", {}, [(a, av), (b, bv)], r, tag, dt)
+
     if skipped:
         print(f"  (skipped {skipped} cases where NumPy raised)")
     return cases

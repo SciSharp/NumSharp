@@ -126,6 +126,11 @@ namespace NumSharp.Backends
             // Compute lhs strides (for multi-index iteration)
             long[] lhsIterStrides = ComputeIterStrides64(lshape);
             long[] rhsIterStrides = ComputeIterStrides64(rshape);
+            // NumPy's FLOAT_dot for this pair of contracted strides (the same for every output). The usual class here,
+            // a C-ordered rhs contracted along its rows, is a direct call the JIT can inline, so a short dot pays no
+            // indirect call; the branch is the same for every output.
+            var fdot = NDDot.FloatDotFor(lhsInnerStride, rhsContractStride);
+            bool strided = lhsInnerStride > 0 && rhsContractStride > 0 && !(lhsInnerStride == 1 && rhsContractStride == 1);
 
             // For each position in lhs (excluding contract dim)
             for (long li = 0; li < totalLhs; li++)
@@ -140,10 +145,9 @@ namespace NumSharp.Backends
                     long rhsBase = ComputeRhsBaseOffset64(ri, rhsIterStrides, rhs.Shape.strides, rshape, rhsNdim);
 
                     // Compute dot product along contracting dimension
-                    float sum = DotProductFloat(
-                        lhsPtr + lhsBase, lhsInnerStride,
-                        rhsPtr + rhsBase, rhsContractStride,
-                        K);
+                    float sum = strided
+                        ? NDDot.FloatDotStrided(lhsPtr + lhsBase, lhsInnerStride, rhsPtr + rhsBase, rhsContractStride, K)
+                        : fdot(lhsPtr + lhsBase, lhsInnerStride, rhsPtr + rhsBase, rhsContractStride, K);
 
                     // Store result
                     resPtr[li * totalRhs + ri] = sum;
@@ -179,6 +183,9 @@ namespace NumSharp.Backends
 
             long[] lhsIterStrides = ComputeIterStrides64(lshape);
             long[] rhsIterStrides = ComputeIterStrides64(rshape);
+            // NumPy's DOUBLE_dot for this pair of contracted strides, chosen once (see DotNDMDSimdFloat).
+            var ddot = NDDot.DoubleDotFor(lhsInnerStride, rhsContractStride);
+            bool strided = lhsInnerStride > 0 && rhsContractStride > 0 && !(lhsInnerStride == 1 && rhsContractStride == 1);
 
             for (long li = 0; li < totalLhs; li++)
             {
@@ -188,10 +195,9 @@ namespace NumSharp.Backends
                 {
                     long rhsBase = ComputeRhsBaseOffset64(ri, rhsIterStrides, rhs.Shape.strides, rshape, rhsNdim);
 
-                    double sum = DotProductDouble(
-                        lhsPtr + lhsBase, lhsInnerStride,
-                        rhsPtr + rhsBase, rhsContractStride,
-                        K);
+                    double sum = strided
+                        ? NDDot.DoubleDotStrided(lhsPtr + lhsBase, lhsInnerStride, rhsPtr + rhsBase, rhsContractStride, K)
+                        : ddot(lhsPtr + lhsBase, lhsInnerStride, rhsPtr + rhsBase, rhsContractStride, K);
 
                     resPtr[li * totalRhs + ri] = sum;
                 }
@@ -257,145 +263,6 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// SIMD dot product for float with arbitrary strides.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe float DotProductFloat(float* a, long strideA, float* b, long strideB, long n)
-        {
-            float sum = 0;
-
-            // Fast path: both contiguous (stride=1)
-            if (strideA == 1 && strideB == 1)
-            {
-                long i = 0;
-
-                // SIMD loop
-                if (Vector256.IsHardwareAccelerated && n >= 8)
-                {
-                    var vsum = Vector256<float>.Zero;
-                    for (; i <= n - 8; i += 8)
-                    {
-                        var va = Vector256.Load(a + i);
-                        var vb = Vector256.Load(b + i);
-                        vsum = Vector256.Add(vsum, Vector256.Multiply(va, vb));
-                    }
-                    sum = Vector256.Sum(vsum);
-                }
-
-                // Scalar remainder
-                for (; i < n; i++)
-                    sum += a[i] * b[i];
-            }
-            else
-            {
-                // Strided access
-                for (long i = 0; i < n; i++)
-                    sum += a[i * strideA] * b[i * strideB];
-            }
-
-            return sum;
-        }
-
-        /// <summary>
-        ///     NumPy's <c>DOUBLE_dot</c> over two strided runs. Blasable strides (<c>blas_stride</c>: positive; the 64-bit
-        ///     CBLAS integers of scipy-openblas64 take any positive element stride and need no chunking) go to
-        ///     <c>cblas_ddot</c> and the result is added into a zeroed double; any other stride (negative, or a broadcast
-        ///     zero) runs DOUBLE_dot's own sequential loop.
-        /// </summary>
-        /// <param name="a">The first operand.</param>
-        /// <param name="strideA">Its stride (elements).</param>
-        /// <param name="b">The second operand.</param>
-        /// <param name="strideB">Its stride (elements).</param>
-        /// <param name="n">The length.</param>
-        /// <returns>The dot product.</returns>
-        /// <remarks>
-        ///     scipy-openblas' ddot, the build NumPy 2.4.2 ships: with two unit strides, its vector kernel over the first
-        ///     <c>n &amp; -16</c> elements and the rest added in order, so below 16 terms a plain sequential sum (exact here);
-        ///     the vector kernel's own order only the backend reproduces, so from 16 terms on the four-lane sum below is
-        ///     bounded, not NumPy's bits. With any other blasable stride, its strided loop: groups of four products
-        ///     <c>m1..m4</c> added as <c>t1 += m1 + m3; t2 += m2 + m4</c>, the remainder into <c>t1</c>, and
-        ///     <c>t1 + t2</c> - probed against NumPy 2.4.2 (a unit-stride run against a stride-3 one, 3 to 100 terms): 84 of
-        ///     84 results, where a sequential sum matched 29. The former code summed every strided pair sequentially.
-        /// </remarks>
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe double DotProductDouble(double* a, long strideA, double* b, long strideB, long n)
-        {
-            if (strideA > 0 && strideB > 0)
-            {
-                double dot = strideA == 1 && strideB == 1 ? UnitStrideDdot(a, b, n) : StridedDdot(a, strideA, b, strideB, n);
-                // DOUBLE_dot: `double sum = 0.; sum += cblas_ddot(...)` over its one chunk.
-                double sum = 0.0;
-                sum += dot;
-                return sum;
-            }
-
-            // DOUBLE_dot without cblas: sum += ip1 * ip2 from +0, the pointers stepped by their strides (ip1 += is1).
-            double plain = 0;
-            for (long i = 0; i < n; i++, a += strideA, b += strideB)
-                plain += *a * *b;
-            return plain;
-        }
-
-        /// <summary>scipy-openblas' unit-stride ddot: sequential below its vector block of 16 terms (NumPy's bits), the
-        ///     former four-lane SIMD sum from there on (bounded).</summary>
-        /// <param name="a">The first operand (unit stride).</param>
-        /// <param name="b">The second operand (unit stride).</param>
-        /// <param name="n">The length.</param>
-        /// <returns>The dot product.</returns>
-        private static unsafe double UnitStrideDdot(double* a, double* b, long n)
-        {
-            double sum = 0;
-            long i = 0;
-            if (n >= 16 && Vector256.IsHardwareAccelerated)
-            {
-                var vsum = Vector256<double>.Zero;
-                for (; i <= n - 4; i += 4)
-                {
-                    var va = Vector256.Load(a + i);
-                    var vb = Vector256.Load(b + i);
-                    vsum = Vector256.Add(vsum, Vector256.Multiply(va, vb));
-                }
-                sum = Vector256.Sum(vsum);
-            }
-
-            for (; i < n; i++)
-                sum += a[i] * b[i];
-            return sum;
-        }
-
-        /// <summary>scipy-openblas' strided ddot loop: four products a group, <c>t1 += m1 + m3; t2 += m2 + m4</c>, the
-        ///     remainder into <c>t1</c>, then <c>t1 + t2</c> (see <see cref="DotProductDouble"/>).</summary>
-        /// <param name="a">The first operand (NumPy's ip1, cblas' x).</param>
-        /// <param name="sa">Its stride (elements, positive).</param>
-        /// <param name="b">The second operand (ip2, cblas' y).</param>
-        /// <param name="sb">Its stride (elements, positive).</param>
-        /// <param name="n">The length.</param>
-        /// <returns>The dot product.</returns>
-        /// <remarks>RyuJIT never contracts a multiply and an add into a fused multiply-add, and neither did the kernel NumPy
-        ///     loads (the probe matched the separate roundings, tails included).</remarks>
-        private static unsafe double StridedDdot(double* a, long sa, double* b, long sb, long n)
-        {
-            double t1 = 0.0, t2 = 0.0;
-            // The kernel's own pointer stepping: the group's four elements at 0..3 strides, then both pointers moved on.
-            long sa2 = 2 * sa, sa3 = 3 * sa, sa4 = 4 * sa, sb2 = 2 * sb, sb3 = 3 * sb, sb4 = 4 * sb;
-            long i = 0;
-            long n1 = n & -4;
-            for (; i < n1; i += 4, a += sa4, b += sb4)
-            {
-                double m1 = b[0] * a[0];
-                double m2 = b[sb] * a[sa];
-                double m3 = b[sb2] * a[sa2];
-                double m4 = b[sb3] * a[sa3];
-                t1 += m1 + m3;
-                t2 += m2 + m4;
-            }
-
-            for (; i < n; i++, a += sa, b += sb)
-                t1 += *b * *a;
-            return t1 + t2;
-        }
-
-        /// <summary>
         ///     NumPy's N-D route of <c>PyArray_MatrixProduct2</c> for the operands <see cref="TryDotNDMDSimd"/> does not take:
         ///     the dtype's dot function (<c>PyArray_ArrFuncs.dotfunc</c>) once per output element, over the contracted
         ///     axes' strides - the last axis of <paramref name="ap1"/> and the second-to-last of <paramref name="ap2"/> - into
@@ -417,18 +284,22 @@ namespace NumSharp.Backends
         ///         value (the former route summed in double, so a sum past 2^53, or a uint64 product, lost its bits);</item>
         ///         <item>float16: <c>HALF_dot</c>, a sequential float32 sum of float32 products rounded once
         ///         (<see cref="NDHalfDot"/>);</item>
-        ///         <item>float64: <c>DOUBLE_dot</c> (<see cref="DotProductDouble"/>);</item>
-        ///         <item>complex128: <c>CDOUBLE_dot</c> (<see cref="ComplexDot"/>; the former route summed the real parts
-        ///         only);</item>
-        ///         <item>float32: not NumPy's - FLOAT_dot's blasable strides reach cblas_sdot, whose strided kernel no
-        ///         managed model was found to reproduce (seven candidate orders probed against NumPy 2.4.2, none exact), so
-        ///         the former double sum of the products stands; the backend gives NumPy's bits;</item>
+        ///         <item>float32, float64, complex128: <c>FLOAT_dot</c>, <c>DOUBLE_dot</c>, <c>CDOUBLE_dot</c> with the
+        ///         scipy-openblas kernels behind them (<see cref="NDDot"/>: the stride class of the contracted runs picks
+        ///         unit-stride cblas, strided cblas or the dotfunc's own loop, once per call); a row of at least four outputs
+        ///         along <paramref name="ap2"/>'s innermost iterated axis goes to a row function that runs four outputs'
+        ///         sums side by side (<see cref="WalkRows{T}"/>), each output keeping NumPy's order;</item>
         ///         <item>decimal (no NumPy analog): an exact decimal sum.</item>
         ///     </list>
         /// </remarks>
         private static unsafe void DotNDMDStrided(NDArray ap1, NDArray ap2, NDArray result, long[] lshape, long[] rshape,
             long K)
         {
+            // The contracted runs' strides are the same for every output: the BLAS dtypes pick their dot function once.
+            long ls = ap1.Shape.strides[ap1.ndim - 1], rs = ap2.Shape.strides[ap2.ndim - 2];
+            // A row of at least four outputs along ap2's innermost iterated axis lets a row function run several
+            // outputs' sums side by side (NDDot.*RowFor); a shorter row gains nothing over one call per output.
+            bool rows = rshape.Length > 0 && rshape[rshape.Length - 1] >= 4;
             switch (result.typecode)
             {
                 case NPTypeCode.Boolean: Walk<bool>(ap1, ap2, result, lshape, rshape, K, &BoolDot); return;
@@ -442,10 +313,34 @@ namespace NumSharp.Backends
                 case NPTypeCode.UInt64: Walk<ulong>(ap1, ap2, result, lshape, rshape, K, &IntegerDot<ulong>); return;
                 case NPTypeCode.Char: Walk<char>(ap1, ap2, result, lshape, rshape, K, &IntegerDot<char>); return;
                 case NPTypeCode.Half: Walk<Half>(ap1, ap2, result, lshape, rshape, K, &HalfDot); return;
-                case NPTypeCode.Single: Walk<float>(ap1, ap2, result, lshape, rshape, K, &SingleDot); return;
-                case NPTypeCode.Double: Walk<double>(ap1, ap2, result, lshape, rshape, K, &DotProductDouble); return;
+                case NPTypeCode.Single:
+                {
+                    var row = rows ? NDDot.FloatDotRowFor(ls, rs) : null;
+                    if (row != null)
+                        WalkRows<float>(ap1, ap2, result, lshape, rshape, K, row);
+                    else
+                        Walk<float>(ap1, ap2, result, lshape, rshape, K, NDDot.FloatDotFor(ls, rs));
+                    return;
+                }
+                case NPTypeCode.Double:
+                {
+                    var row = rows ? NDDot.DoubleDotRowFor(ls, rs) : null;
+                    if (row != null)
+                        WalkRows<double>(ap1, ap2, result, lshape, rshape, K, row);
+                    else
+                        Walk<double>(ap1, ap2, result, lshape, rshape, K, NDDot.DoubleDotFor(ls, rs));
+                    return;
+                }
                 case NPTypeCode.Decimal: Walk<decimal>(ap1, ap2, result, lshape, rshape, K, &DecimalDot); return;
-                case NPTypeCode.Complex: Walk<Complex>(ap1, ap2, result, lshape, rshape, K, &ComplexDot); return;
+                case NPTypeCode.Complex:
+                {
+                    var row = rows ? NDDot.ComplexDotRowFor(ls, rs) : null;
+                    if (row != null)
+                        WalkRows<Complex>(ap1, ap2, result, lshape, rshape, K, row);
+                    else
+                        Walk<Complex>(ap1, ap2, result, lshape, rshape, K, NDDot.ComplexDotFor(ls, rs));
+                    return;
+                }
                 default: throw new NotSupportedException($"np.dot of {result.typecode} operands");
             }
         }
@@ -535,6 +430,91 @@ namespace NumSharp.Backends
             }
         }
 
+        /// <summary>
+        ///     <see cref="Walk{T}"/> with the innermost iterated axis of <paramref name="ap2"/> handed to a row function in one
+        ///     call: the same outputs in the same C order, each computed by the row function as the per-output dot function
+        ///     would, so a row function may interleave several outputs' arithmetic without changing any one of them.
+        /// </summary>
+        /// <typeparam name="T">The element type of the result dtype.</typeparam>
+        /// <param name="ap1">The first operand (of <typeparamref name="T"/>).</param>
+        /// <param name="ap2">The second operand (of <typeparamref name="T"/>).</param>
+        /// <param name="result">The fresh C-contiguous result (of <typeparamref name="T"/>).</param>
+        /// <param name="lshape"><paramref name="ap1"/>'s dims without the last.</param>
+        /// <param name="rshape"><paramref name="ap2"/>'s dims without the second-to-last (at least one axis).</param>
+        /// <param name="K">The contracted length.</param>
+        /// <param name="row">The row function: first operand, its stride, the row's first second operand, its stride, the
+        ///     element distance between consecutive outputs' second operands, the row's first output, the output count, the
+        ///     length (strides in elements). The row's outputs are consecutive in the C-ordered result.</param>
+        /// <remarks>
+        ///     The positions advance as in <see cref="Walk{T}"/>: a coordinate odometer over the iterated axes, here over
+        ///     <paramref name="ap2"/>'s axes but the innermost, which each row call covers whole.
+        /// </remarks>
+        private static unsafe void WalkRows<T>(NDArray ap1, NDArray ap2, NDArray result, long[] lshape, long[] rshape,
+            long K, delegate*<T*, long, T*, long, long, T*, long, long, void> row) where T : unmanaged
+        {
+            int lnd = ap1.ndim, rnd = ap2.ndim;
+            long[] lst = ap1.Shape.strides, rst = ap2.Shape.strides;
+            T* lp = (T*)ap1.Storage.Address + ap1.Shape.offset;
+            T* rp = (T*)ap2.Storage.Address + ap2.Shape.offset;
+            T* op = (T*)result.Storage.Address;
+            long ls = lst[lnd - 1];
+            long rs = rst[rnd - 2];
+
+            long totalL = 1;
+            for (int i = 0; i < lshape.Length; i++)
+                totalL *= lshape[i];
+            long totalR = 1;
+            for (int i = 0; i < rshape.Length; i++)
+                totalR *= rshape[i];
+            if (totalL == 0 || totalR == 0)
+                return;   // an empty result: nothing to write
+
+            int lk = lshape.Length, rk = rshape.Length;
+            Span<long> lStride = lk <= 16 ? stackalloc long[16] : new long[lk];
+            Span<long> rStride = rk <= 16 ? stackalloc long[16] : new long[rk];
+            Span<long> lc = lk <= 16 ? stackalloc long[16] : new long[lk];
+            Span<long> rc = rk <= 16 ? stackalloc long[16] : new long[rk];
+            for (int d = 0; d < lk; d++)
+                lStride[d] = lst[d];
+            for (int d = 0, j = 0; d < rnd; d++)
+                if (d != rnd - 2)
+                    rStride[j++] = rst[d];
+            lc.Clear();
+
+            long inner = rshape[rk - 1];          // the row: every position of ap2's innermost iterated axis
+            long innerStride = rStride[rk - 1];
+            long rows = totalR / inner;
+
+            long lOff = 0;
+            for (long li = 0; li < totalL; li++)
+            {
+                rc.Clear();
+                long rOff = 0;
+                for (long ro = 0; ro < rows; ro++)
+                {
+                    row(lp + lOff, ls, rp + rOff, rs, innerStride, op, inner, K);
+                    op += inner;
+                    for (int d = rk - 2; d >= 0; d--)
+                    {
+                        rOff += rStride[d];
+                        if (++rc[d] < rshape[d])
+                            break;
+                        rOff -= rStride[d] * rshape[d];
+                        rc[d] = 0;
+                    }
+                }
+
+                for (int d = lk - 1; d >= 0; d--)
+                {
+                    lOff += lStride[d];
+                    if (++lc[d] < lshape[d])
+                        break;
+                    lOff -= lStride[d] * lshape[d];
+                    lc[d] = 0;
+                }
+            }
+        }
+
         /// <summary>NumPy's <c>BOOL_dot</c>: true at the first index where both elements are true.</summary>
         /// <param name="a">The first operand.</param><param name="sa">Its stride (elements).</param>
         /// <param name="b">The second operand.</param><param name="sb">Its stride (elements).</param>
@@ -587,23 +567,6 @@ namespace NumSharp.Backends
         /// <returns>The dot product.</returns>
         private static unsafe Half HalfDot(Half* a, long sa, Half* b, long sb, long n) => (Half)NDHalfDot.Sum(a, sa, b, sb, n);
 
-        /// <summary>
-        ///     The float32 dot of the strided route: the products and their sum in double, rounded once to float32 - NumSharp's
-        ///     former arithmetic, kept because NumPy's FLOAT_dot reaches cblas_sdot and no managed model of its strided
-        ///     kernel was found exact (seven candidate orders probed). Bounded, not NumPy's bits; the backend gives them.
-        /// </summary>
-        /// <param name="a">The first operand.</param><param name="sa">Its stride (elements).</param>
-        /// <param name="b">The second operand.</param><param name="sb">Its stride (elements).</param>
-        /// <param name="n">The length.</param>
-        /// <returns>The dot product.</returns>
-        private static unsafe float SingleDot(float* a, long sa, float* b, long sb, long n)
-        {
-            double sum = 0;
-            for (long i = 0; i < n; i++, a += sa, b += sb)
-                sum += (double)*a * *b;
-            return (float)sum;
-        }
-
         /// <summary>The decimal dot (no NumPy analog): an exact decimal sum of the products.</summary>
         /// <param name="a">The first operand.</param><param name="sa">Its stride (elements).</param>
         /// <param name="b">The second operand.</param><param name="sb">Its stride (elements).</param>
@@ -618,47 +581,5 @@ namespace NumSharp.Backends
             return s;
         }
 
-        /// <summary>
-        ///     NumPy's <c>CDOUBLE_dot</c>. Blasable strides (positive; see <see cref="DotProductDouble"/>) go to
-        ///     <c>cblas_zdotu_sub</c>: scipy-openblas' zdotu keeps four separate double sums (<c>Σ ar·br</c>, <c>Σ ai·bi</c>,
-        ///     <c>Σ ar·bi</c>, <c>Σ ai·br</c>) - at any length when a stride is not 1, below its vector block of eight when
-        ///     both are - and returns <c>re + im·I</c>, which CDOUBLE_dot adds into a zeroed pair
-        ///     (<see cref="SlidingDot.ZdotuResult(double, double)"/>). Any other stride runs CDOUBLE_dot's own loop.
-        /// </summary>
-        /// <param name="a">The first operand.</param><param name="sa">Its stride (elements).</param>
-        /// <param name="b">The second operand (not conjugated).</param><param name="sb">Its stride (elements).</param>
-        /// <param name="n">The length.</param>
-        /// <returns>The dot product.</returns>
-        /// <remarks>Probed against NumPy 2.4.2: a strided pair of 3 to 100 terms matches the four sums on every result (84 of
-        ///     84), the naive per-term complex product on 6 of them. Two unit strides past seven terms meet zdotu's vector
-        ///     kernel, whose order only the backend reproduces: the four sums are bounded there.</remarks>
-        private static unsafe Complex ComplexDot(Complex* a, long sa, Complex* b, long sb, long n)
-        {
-            if (sa > 0 && sb > 0)
-            {
-                double d0 = 0, d1 = 0, d2 = 0, d3 = 0;
-                for (long i = 0; i < n; i++, a += sa, b += sb)
-                {
-                    var x = *a;
-                    var y = *b;
-                    d0 += x.Real * y.Real;
-                    d1 += x.Imaginary * y.Imaginary;
-                    d2 += x.Real * y.Imaginary;
-                    d3 += x.Imaginary * y.Real;
-                }
-                return SlidingDot.ZdotuResult(d0 - d1, d2 + d3);
-            }
-
-            // CDOUBLE_dot without cblas: sumr += ar*br - ai*bi; sumi += ar*bi + ai*br, from +0.
-            double sumr = 0.0, sumi = 0.0;
-            for (long i = 0; i < n; i++, a += sa, b += sb)
-            {
-                var x = *a;
-                var y = *b;
-                sumr += x.Real * y.Real - x.Imaginary * y.Imaginary;
-                sumi += x.Real * y.Imaginary + x.Imaginary * y.Real;
-            }
-            return new Complex(sumr, sumi);
-        }
     }
 }
