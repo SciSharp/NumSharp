@@ -655,6 +655,34 @@ namespace NumSharp.Backends
             _ => s_complex,
         };
 
+        /// <summary>
+        ///     ONE call of NumPy's add loop in its reduce form (<c>IS_BINARY_REDUCE</c>: the output pointer fixed, the input
+        ///     walked): <c>*acc += pairwise_sum(a[0..n) at stride)</c> with <paramref name="loop"/>'s own arithmetic — the
+        ///     float32 / float64 fold added once, float16's float32 fold added to the widened result and narrowed back, the
+        ///     complex128 fold added per part. For a caller that already knows NumPy hands the whole range to ONE call (a
+        ///     reduction whose reduced axis is the iterator's innermost and is never split by a buffer), so it can skip the
+        ///     schedule machinery of <see cref="TryReduceFlat"/>.
+        /// </summary>
+        /// <remarks>
+        ///     The footgun is the call boundary: NumPy's bits depend on how its iterator cuts the reduction into calls, and
+        ///     this helper is exactly one of them. Splitting a range across two calls, or calling it for a reduction NumPy
+        ///     runs in its elementwise (slab) form, changes the last bits. The caller seeds <paramref name="acc"/> with the
+        ///     add identity (+0) before the first call, as <c>PyUFunc_ReduceWrapper</c> does.
+        /// </remarks>
+        /// <param name="loop">The loop dtype: float16, float32, float64 or complex128 (<see cref="SupportsLoop"/>); the
+        ///     elements at <paramref name="a"/> are already of this dtype.</param>
+        /// <param name="a">Address of the call's logical element 0.</param>
+        /// <param name="n">The call's element count (&gt;= 1: an empty reduction is the identity alone, so skip the call).</param>
+        /// <param name="stride">Distance between consecutive elements in ELEMENTS of <paramref name="loop"/> (complex128: whole
+        ///     complexes); negative walks backwards in logical order, 0 repeats one element.</param>
+        /// <param name="acc">The running result in <paramref name="loop"/>'s dtype (float16 as raw bits), updated in place.</param>
+        internal static void AccumulateCall(NPTypeCode loop, byte* a, long n, long stride, byte* acc)
+        {
+            // AccumulatorFor maps every other dtype to the complex step, which would read 16-byte elements: a caller bug.
+            System.Diagnostics.Debug.Assert(SupportsLoop(loop) && n >= 1, "AccumulateCall needs an inexact loop and n >= 1");
+            AccumulatorFor(loop)(a, n, stride, acc);
+        }
+
         private static readonly Accumulate s_double = AccumulateDouble;
         private static readonly Accumulate s_single = AccumulateSingle;
         private static readonly Accumulate s_half = AccumulateHalf;

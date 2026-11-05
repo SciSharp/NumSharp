@@ -138,7 +138,7 @@ makes is part of the answer:
   column's FIRST NaN where NumPy's elementwise add keeps the later row's (the axis kernel's slab fold, `[OpenBugs]` group
   15); the reduce step `*acc += pairwise_sum(call)` (`AccumulateDouble` / `AccumulateSingle`) leaves the NaN of NaN + NaN
   to the JIT, so a Debug build keeps the pairwise sum's NaN where NumPy and a Release build keep the accumulator's (NL8,
-  `OpenBugs.NpLayer.cs`); the multi-element nan-reductions keep their own folds (the W4-B excuse); an axis reduction in a
+  `OpenBugs.NpLayer.cs`); an axis reduction in a
   cast loop whose reduced runs exceed the buffer splits differently from NumPy
   (`OpenBugsReductionTests.Sum_CastLoopAxis_RowLongerThanTheBuffer_SplitsAcrossFills`; `np.var`/`np.std` with `dtype=`
   inherit it), except when the axis leaves ONE output (a 1-D operand's only axis, or siblings all of extent 1), which
@@ -429,6 +429,23 @@ non-broadcast float layout (np.evaluate's `NanMax`/`NanMin` too).
   reduction iterator (NumPy's bits).
 - Gates: `Backends/Kernels/NanMinMaxExactScheduleTests.cs` (NumPy-probed literals), NumPy replay oracles, and the
   `nanreduce`/`specials` tiers, where nanmax/nanmin are not excused (`MisalignedRegistry.NanReduceOps` leaves them out).
+
+### `np.nansum` / `np.nanprod`: NumPy's statements
+
+`Backends/Default/Math/Reduction/Default.Reduction.Nan.cs`, `NanReplacedReduceNumPy`: an inexact input (float16 /
+float32 / float64 / complex128) is `np.sum(_replace_nan(a, 0))` / `np.prod(_replace_nan(a, 1))`: a K-order copy
+(`Shape.KeepOrder()`) with every NaN overwritten (`np.copyto(a, val, where=isnan(a))`; a complex element with a NaN in
+EITHER part is replaced whole), then `ReduceAdd` / np.prod's engine over it, so the bits are np.sum's / np.prod's on
+every layout, axis and keepdims. Integers, bool, char and decimal are np.sum / np.prod.
+- Routes: a dense input (one memory run flat, C/F along an axis) of a real dtype streams `Sum` / `Prod` of
+  `Where(IsNaN(x), identity, x)` through np.evaluate (the same pairwise / sequential schedules, no copy); otherwise the
+  copy is materialized (`UnmanagedStorage.Copyto` + `CopytoPythonScalar` under the isnan mask); float16 and a complex
+  nanprod take the eager statements. A one-element input keeps the fused NaN-skipping helper (identity + replaced
+  element, order-free), reading a view from its offset.
+- Open: np.prod's float32 / float64 engine is not NumPy's sequential order (the accepted prod excuse), and a complex
+  nanprod of one element inherits np.prod's skipped `1+0j` identity.
+- Gates: the `nanreduce` / `specials` tiers (nansum / nanprod out of `NanReduceOps`), `view_flags` (VF30's cells back in
+  the gate), `Math/np.nansum.nanprod.NumPyPort.Test.cs`.
 
 ### `np.nanvar` / `np.nanstd`: NumPy's `nanvar` / `nanstd`
 

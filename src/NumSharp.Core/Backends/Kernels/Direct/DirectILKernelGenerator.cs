@@ -812,6 +812,38 @@ namespace NumSharp.Backends.Kernels
                 ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDFloatMath).FullName, "Tanh");
             public static readonly MethodInfo DoubleTanh = typeof(NumSharp.Utilities.NDFloatMath).GetMethod("Tanh", BindingFlags.Public | BindingFlags.Static, new[] { typeof(double) })
                 ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDFloatMath).FullName, "Tanh");
+            // float32 / float64 log1p and expm1: NDLog1pExpm1Math, the models of the UCRT routines NumPy's win-amd64 loops
+            // call (log1p / log1pf bit-exact; expm1 / expm1f bit-exact outside [-ln 2, ln 1.5], Sun's s_expm1 inside). The
+            // Exp(x) - 1 / Log(1 + x) compositions they replace cancel near zero. Scalar only, as NumPy's loops are there.
+
+            /// <summary>
+            /// <see cref="NumSharp.Utilities.NDLog1pExpm1Math.Log1p(double)"/>: float64 <c>np.log1p</c>'s element function,
+            /// NumPy's bits (the UCRT model); emitted by the scalar unary path, which every float64 log1p kernel takes.
+            /// </summary>
+            public static readonly MethodInfo DoubleLog1p = typeof(NumSharp.Utilities.NDLog1pExpm1Math).GetMethod("Log1p", BindingFlags.Public | BindingFlags.Static, new[] { typeof(double) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDLog1pExpm1Math).FullName, "Log1p");
+
+            /// <summary>
+            /// <see cref="NumSharp.Utilities.NDLog1pExpm1Math.Log1pF(float)"/>: float32 <c>np.log1p</c>'s element function,
+            /// the UCRT's <c>log1pf</c> bit for bit (float32 arithmetic throughout, not a narrowed double).
+            /// </summary>
+            public static readonly MethodInfo SingleLog1p = typeof(NumSharp.Utilities.NDLog1pExpm1Math).GetMethod("Log1pF", BindingFlags.Public | BindingFlags.Static, new[] { typeof(float) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDLog1pExpm1Math).FullName, "Log1pF");
+
+            /// <summary>
+            /// <see cref="NumSharp.Utilities.NDLog1pExpm1Math.Expm1(double)"/>: float64 <c>np.expm1</c>'s element function —
+            /// NumPy's bits outside <c>[-ln 2, ln 1.5]</c>, within 2 ULP of them inside (Sun's <c>s_expm1</c>).
+            /// </summary>
+            public static readonly MethodInfo DoubleExpm1 = typeof(NumSharp.Utilities.NDLog1pExpm1Math).GetMethod("Expm1", BindingFlags.Public | BindingFlags.Static, new[] { typeof(double) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDLog1pExpm1Math).FullName, "Expm1");
+
+            /// <summary>
+            /// <see cref="NumSharp.Utilities.NDLog1pExpm1Math.Expm1F(float)"/>: float32 <c>np.expm1</c>'s element function —
+            /// the UCRT's <c>expf(x) - 1f</c> outside the float32 band, the rounded float64 Sun port (within 3 ULP of
+            /// NumPy's undocumented polynomial) inside it.
+            /// </summary>
+            public static readonly MethodInfo SingleExpm1 = typeof(NumSharp.Utilities.NDLog1pExpm1Math).GetMethod("Expm1F", BindingFlags.Public | BindingFlags.Static, new[] { typeof(float) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDLog1pExpm1Math).FullName, "Expm1F");
             // Vector form is float32-only (the f64 lookup would cost 18 gathers per 4 lanes, and the
             // scalar f64 kernel already outruns NumPy). Nullable for the usual reason — a host with
             // no SIMD has no width to bind.

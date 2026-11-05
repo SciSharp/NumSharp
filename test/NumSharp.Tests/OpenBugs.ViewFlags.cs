@@ -18,8 +18,8 @@ namespace NumSharp.Tests
     //   * Offset views (VALUES). np.split / np.unstack / np.array_split children are C-contiguous views whose Shape
     //     carries a non-zero offset (a basic slice re-seats the storage address instead). Several kernels ignore that
     //     offset for a C-contiguous operand and read the parent from its start: np.where (condition, x, y), np.ldexp
-    //     (x2), np.nansum / np.nanprod with axis=None, and a[:, idx] (which throws); np.searchsorted (v, sorter, the
-    //     method too), np.repeat and ndarray.repeat, np.unique and the set routines did, and are fixed (below). The
+    //     (x2), and a[:, idx] (which throws); np.searchsorted (v, sorter, the method too), np.repeat and ndarray.repeat,
+    //     np.unique and the set routines, and np.nansum / np.nanprod with axis=None did, and are fixed (below). The
     //     results are silently wrong.
     //   * Read-only arrays. A copy of a read-only array stays read-only, a basic index of a read-only broadcast view
     //     through the object[] indexer is writeable, and np.broadcast_arrays hands a read-only broadcast operand back
@@ -44,6 +44,10 @@ namespace NumSharp.Tests
     // FIXED 2026-10-26 (np-layer-dtype-logic P2): np.linalg.multi_dot hands out= to its final np.dot, so an out np.dot
     // refuses is refused (VO01); its pin is untagged, the generator's VO01 rule is dropped and its 4 cells are back in
     // the gate.
+    //
+    // FIXED 2026-11-05 (parity QA-15): np.nansum / np.nanprod are NumPy's statements and their one-element shortcut reads
+    // a view from its offset (VF30); its two pins are untagged, the generator's VF30 rule is dropped and its 8 cells are
+    // back in the gate.
     //
     // Every expected value below is NumPy 2.4.2's answer for the same call. EXPECTED (when fixed): each test passes;
     // remove its [OpenBugs], move it next to its API's tests, and drop the gap's carve rule from the generator
@@ -153,10 +157,11 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>np.nansum</c> / <c>np.nanprod</c> of the 0-d <c>np.unstack(arange(6.))[5]</c> (offset 5): NumPy returns
-        ///     5.0 for both; NumSharp reads the parent's first element (gap VF30).
+        ///     FIXED by parity QA-15 (2026-11-05): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: <c>np.nansum</c> / <c>np.nanprod</c> of the 0-d <c>np.unstack(arange(6.))[5]</c> (offset 5):
+        ///     NumPy returns 5.0 for both; NumSharp's one-element shortcut read the parent's first element (gap VF30).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "viewflags-VF30")]
+        [TestMethod]
         public void ViewFlags_NanSumNanProd_OfAZeroDimOffsetView_ShouldReadTheView()
         {
             using var parent = np.arange(6.0);
@@ -169,11 +174,12 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>np.nansum</c> of the 2-D <c>np.split(arange(20.), [4, 16])[1].reshape(3, 4)</c> (offset 4): NumPy returns
-        ///     114.0 (4 + … + 15); <c>np.nanprod</c> of <c>np.split([9, 9, 1, 2, 3, 4], [2])[1]</c>: NumPy returns 24.0
-        ///     (gap VF30).
+        ///     FIXED by parity QA-15 (2026-11-05): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: <c>np.nansum</c> of the 2-D <c>np.split(arange(20.), [4, 16])[1].reshape(3, 4)</c> (offset
+        ///     4): NumPy returns 114.0 (4 + … + 15); <c>np.nanprod</c> of <c>np.split([9, 9, 1, 2, 3, 4], [2])[1]</c>: NumPy
+        ///     returns 24.0 (gap VF30).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "viewflags-VF30")]
+        [TestMethod]
         public void ViewFlags_NanSumNanProd_FlatOfAnOffsetView_ShouldReadTheView()
         {
             using var parent = np.arange(20.0);

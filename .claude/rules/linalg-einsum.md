@@ -89,6 +89,17 @@ numerics exist WITHOUT a backend depends on what a portable managed algorithm co
 - The `np.linalg` Array-API forms are not aliases: `linalg.trace`/`linalg.diagonal` reduce the LAST two axes where
   `np.trace`/`np.diagonal` take the first (a `(2,3,3)` stack gives `(2,)` against `(3,)`); `linalg.outer` demands 1-D
   where `np.outer` flattens anything; `linalg.cross` demands 3-vectors.
+- `np.trace` is `PyArray_Trace`, the diagonal VIEW's `add.reduce` along its last axis, so the loop form NumPy's reduction
+  iterator picks decides a float result's bits. The 2-D / 3-D fast path (`DefaultEngine.TryTraceFast`, no view) follows
+  it: when the diagonal is the iterator's innermost axis (every 2-D trace; a 3-D one unless the remaining axis has the
+  strictly smaller |stride|, a length-1 axis counting as stride 0) each output is ONE reduce-form call,
+  `+0 + pairwise_sum(diagonal)` (`NumPyAddReduce.AccumulateCall`: float16's float32 fold narrowed once, complex128's
+  CDOUBLE fold), any stride; otherwise every diagonal step is the elementwise add into all outputs, a sequential sum
+  from +0 (the IL `TraceKernel`; float16 narrows every step as HALF_add does, and two NaNs keep the later element's, the
+  ufunc loops' second-operand rule). Integers and decimal take the IL walk on every layout. Gates:
+  `Indexing/np.trace.NumPyLoopForms.Test.cs`. Open: a trace of more than 3 axes takes the general route, which sums a
+  contiguous copy of the diagonal (the reduce form) where NumPy's view takes the elementwise one (a C-ordered
+  `(20, 20, 3, 2)` differs in the last bits).
 - `NDArray.matrix_power(n)` with n < 0 is `inv(a)**|n|` (binary exponentiation), raises `LinAlgError` for non-square
   input, and its identity has the operand's dtype. `np.dot`/`np.matmul` "not aligned" messages render shapes as `(2,3)`
   through `Shape.ToPythonTuple()` (`ToString()` renders for humans).

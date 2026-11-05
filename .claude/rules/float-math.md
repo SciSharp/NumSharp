@@ -170,13 +170,34 @@ the bit-exact `NumPyPortedFloat32Kernels` list. Specials: NaN → `0x7fc00000`, 
 `±0` → `1`, integer `x` exact (`exp2(10) = 1024`). Other dtypes use `Math.Pow` (double/int/Half) or
 `NDComplexMath.Exp2`. Gates: the `unary_extra`/`specials` tiers, `Math/Exp2KernelTests.cs`.
 
-## The platform libm: `expm1` / `log1p`
+## `expm1` / `log1p` / `logaddexp`: models of the UCRT routines
 
-`expm1`/`log1p` at float32/float64 call the platform libm and are computed as `Exp(x)-1` / `Log(1+x)`: catastrophic for
-small |x| (`expm1(1e-8)` returns 0 where NumPy returns 1e-8) and wrong on the sign of zero (`expm1(-0.0)` gives `+0.0`).
-Neither is portable (NumPy calls the CRT for both), so bit parity is out of reach; the accuracy defect is a separate,
-open bug (.NET's `float.ExpM1`/`double.ExpM1`/`LogP1` are themselves `Exp(x)-1`/`Log(1+x)`). float64
-`exp`/`log`/`sin`/`cos` agree with NumPy bit for bit on win-amd64.
+NumPy's float32 / float64 `log1p` / `expm1` call the UCRT (`npy_log1p` / `npy_expm1`; the AVX-512 SVML loops are not in
+the win-amd64 wheel). `Utilities/NDLog1pExpm1Math.cs` models them, emitted by the scalar unary path (`CachedMethods`
+`DoubleLog1p` / `SingleLog1p` / `DoubleExpm1` / `SingleExpm1`), so the array kernels, strided views, 0-d operands and
+np.evaluate's nodes all take them (a win-amd64 pin, like hypot: glibc rounds differently).
+- `log1p` / `log1pf` are BIT-EXACT: the UCRT computes Goldberg's correction over its own `log` / `logf`,
+  `u = 1 + x; log(u) - ((u - 1) - x) / u` for every `u` (also above 2; the random samplers' `Generator.Log1p` skips it
+  there and differs on ~2% of [1, 10]), in float32 throughout for `log1pf`. `Math.Log` / `MathF.Log` are the UCRT's.
+  Specials by hand: a NaN passes through untouched (a signalling NaN stays signalling), `-1` → `-inf`, `+inf` → `+inf`,
+  `x < -1` and `-inf` → the POSITIVE quiet NaN. Probed on 320,000 inputs per dtype (tiny, subnormal, (-1, 1), near -1,
+  [1, 10], up to the largest finite value) and 100,000-element grid digests.
+- `expm1` / `expm1f`: outside `[-ln 2, ln 1.5]` the UCRT returns exactly `exp(x) - 1` (`expf(x) - 1f`, at and beyond the
+  float32 roundings of the same constants), so those results are NumPy's bits. Inside the band it runs an undocumented
+  polynomial (not correctly rounded; every public formula tested was rejected), so the band runs Sun's `s_expm1.c`
+  (`NDLog1pExpm1Math.Expm1Sun`, shared with the random samplers' `Generator.Expm1`; float32 rounds the float64 result
+  once): 58% / 57% of in-band inputs equal, never more than 2 (float64) / 3 (float32) ULP away, tiny arguments and -0.0
+  unchanged, a NaN untouched, `-inf` → `-1`. Oracle: branch (S1).
+- `np.logaddexp` / `np.logaddexp2` (`NDLogAddExpMath`, NumPy's `npy_logaddexp` statements) run the log1p model, so
+  logaddexp is bit-exact at float64 / float32 / float16, the cancellation regime included (the fdlibm log1p it ran before
+  was one ULP off, amplified up to 16,384 result ULP near zero). logaddexp2 inherits np.exp2's residual: .NET's
+  `double.Exp2` / `float.Exp2` (= `Math.Pow(2, x)`) differ from the UCRT's `exp2` on ~0.02% / 0.04% of inputs (one ULP,
+  amplified where the result cancels); Core takes no P/Invoke, so the UCRT's exp2 itself is out of reach.
+- `NDLogAddExpMath.Log1p` / `Log1pf` stay public as the portable fdlibm ports (≤ 1 ULP from the UCRT); no kernel calls
+  them. float64 `exp`/`log`/`sin`/`cos` agree with NumPy bit for bit on win-amd64.
+- Gates: `Math/Log1pExpm1NumPyLoops.Test.cs` (the finding's values, the specials, NaN pass-through, SHA-256 digests of
+  100,000-element grids, the cancellation pairs), the `unary_extra` / `specials` / `precision` tiers (log1p carved out
+  of the unary blanket at both widths, `UcrtModelExactKernels`).
 
 ## float16 `arctan2` / `log1p` / `expm1`, float32 `arctan2` (a win-amd64 pin)
 

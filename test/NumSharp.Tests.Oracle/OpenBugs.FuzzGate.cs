@@ -701,8 +701,9 @@ namespace NumSharp.Tests
         public void B8_UnportedUnaryFloat64_OneUlp_StillExcused()
         {
             // At float64 the platform libm already agrees with NumPy for these, so there is no port
-            // and the ~ULP envelope still applies. tanh is deliberately absent — see above.
-            foreach (var op in new[] { "exp", "log", "sin", "cos", "expm1", "log1p", "exp2" })
+            // and the ~ULP envelope still applies. tanh is deliberately absent — see above — and so is log1p
+            // since parity QA-22 (the UCRT model, B8_UcrtModelLog1p_OneUlp_NotExcused).
+            foreach (var op in new[] { "exp", "log", "sin", "cos", "expm1", "exp2" })
             {
                 var c = Case(op, ("float64", new long[] { 4 }));
                 MisalignedRegistry.Classify(c, DivergenceKind.Value,
@@ -714,16 +715,74 @@ namespace NumSharp.Tests
         [TestMethod]
         public void B8_UnportedUnaryFloat32_OneUlp_StillExcused()
         {
-            // expm1/log1p/exp2 are still the platform libm at float32, so they keep the documented
+            // expm1/exp2 are still not NumPy's bits at float32, so they keep the documented
             // envelope. If one of them is ported later, it moves into the carve-out set and this
-            // test must move with it — which is exactly what tanh just did.
-            foreach (var op in new[] { "expm1", "log1p", "exp2", "arctan" })
+            // test must move with it — which is exactly what tanh did, and log1p (parity QA-22).
+            foreach (var op in new[] { "expm1", "exp2", "arctan" })
             {
                 var c = Case(op, ("float32", new long[] { 4 }));
                 MisalignedRegistry.Classify(c, DivergenceKind.Value,
                     F32(0.84147096f), F32(UlpUpF(0.84147096f)), NPTypeCode.Single, OneDiff)
                     .Should().NotBeNull($"{op} is not ported — it keeps the ~ULP envelope");
             }
+        }
+
+        /// <summary>
+        ///     log1p's float32 and float64 loops are models of the UCRT's log1p / log1pf that equal NumPy on every probed
+        ///     input (parity QA-22, <c>NDLog1pExpm1Math</c>), so the blanket unary excuse skips them at both widths: a
+        ///     one-ULP drift is a regression.
+        /// </summary>
+        /// <param name="dtype">The operand dtype (float32 or float64).</param>
+        [TestMethod]
+        [DataRow("float32")]
+        [DataRow("float64")]
+        public void B8_UcrtModelLog1p_OneUlp_NotExcused(string dtype)
+        {
+            var c = Case("log1p", (dtype, new long[] { 4 }));
+            var verdict = dtype == "float32"
+                ? MisalignedRegistry.Classify(c, DivergenceKind.Value, F32(0.6931472f), F32(UlpUpF(0.6931472f)), NPTypeCode.Single, OneDiff)
+                : MisalignedRegistry.Classify(c, DivergenceKind.Value, BitConverter.GetBytes(0.6931471805599453),
+                    BitConverter.GetBytes(UlpUp(0.6931471805599453)), NPTypeCode.Double, OneDiff);
+            verdict.Should().BeNull($"{dtype} log1p is the UCRT model, bit-exact with NumPy — 1 ULP is a regression");
+        }
+
+        /// <summary>
+        ///     expm1's in-band excuse (S1) is bounded: Sun's s_expm1 against the UCRT's undocumented polynomial is within 3
+        ///     ULP at float32 (excused) and no further (4 ULP fails); at float64 the bound is 2 ULP. The absolute
+        ///     envelope the old Exp(x)-1 composition needed is gone.
+        /// </summary>
+        [TestMethod]
+        public void S1_Expm1_InBandBound_IsThreeUlpFloat32_TwoUlpFloat64()
+        {
+            var c32 = Case("expm1", ("float32", new long[] { 4 }));
+            MisalignedRegistry.Classify(c32, DivergenceKind.Value, F32(0.10517092f), F32(UlpUpF(0.10517092f, 3)), NPTypeCode.Single, OneDiff)
+                .Should().NotBeNull("3 ULP is the documented float32 in-band bound");
+            MisalignedRegistry.Classify(c32, DivergenceKind.Value, F32(0.10517092f), F32(UlpUpF(0.10517092f, 4)), NPTypeCode.Single, OneDiff)
+                .Should().BeNull("4 ULP is past the float32 in-band bound");
+            var c64 = Case("expm1", ("float64", new long[] { 4 }));
+            MisalignedRegistry.Classify(c64, DivergenceKind.Value, BitConverter.GetBytes(0.10517091807564763),
+                    BitConverter.GetBytes(UlpUp(0.10517091807564763, 2)), NPTypeCode.Double, OneDiff)
+                .Should().NotBeNull("2 ULP is the float64 bound");
+            MisalignedRegistry.Classify(c64, DivergenceKind.Value, BitConverter.GetBytes(0.10517091807564763),
+                    BitConverter.GetBytes(UlpUp(0.10517091807564763, 3)), NPTypeCode.Double, OneDiff)
+                .Should().BeNull("3 ULP is past the float64 bound");
+        }
+
+        /// <summary>
+        ///     logaddexp is bit-exact since parity QA-32 (its log1p is the UCRT model), so it has no excuse; logaddexp2 keeps a
+        ///     2-ULP one for .NET's exp2 (Math.Pow(2, x)), which differs from the UCRT's exp2 on ~0.02% of inputs.
+        /// </summary>
+        [TestMethod]
+        public void LogAddExp_NotExcused_LogAddExp2_TwoUlpExcused()
+        {
+            var lae = Case("logaddexp", ("float64", new long[] { 4 }), ("float64", new long[] { 4 }));
+            MisalignedRegistry.Classify(lae, DivergenceKind.Value, BitConverter.GetBytes(0.5), BitConverter.GetBytes(UlpUp(0.5)),
+                    NPTypeCode.Double, OneDiff)
+                .Should().BeNull("logaddexp is NumPy's bits — 1 ULP is a regression");
+            var lae2 = Case("logaddexp2", ("float64", new long[] { 4 }), ("float64", new long[] { 4 }));
+            MisalignedRegistry.Classify(lae2, DivergenceKind.Value, BitConverter.GetBytes(0.5), BitConverter.GetBytes(UlpUp(0.5, 2)),
+                    NPTypeCode.Double, OneDiff)
+                .Should().NotBeNull("logaddexp2's exp2 is the documented 2-ULP excuse");
         }
 
         // ---- P: truthful-vs-precise (the precision tier's truth-bearing adjudication) ----

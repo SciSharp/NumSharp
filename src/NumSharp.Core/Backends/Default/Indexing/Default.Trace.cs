@@ -8,8 +8,10 @@ namespace NumSharp.Backends
         /// <inheritdoc/>
         /// <remarks>
         ///     NumPy's <c>PyArray_Trace</c>: <c>add.reduce(diagonal(a, offset, axis1, axis2), axis=-1, dtype=dtype,
-        ///     out=out)</c>. A 2-D or 3-D operand without <paramref name="dtype"/> or <paramref name="out"/> takes the fused
-        ///     kernel (<see cref="TryTraceFast"/>, one strided walk of the diagonal accumulating in the promoted dtype); every
+        ///     out=out)</c>. A 2-D or 3-D operand without <paramref name="dtype"/> or <paramref name="out"/> takes the fast
+        ///     path (<see cref="TryTraceFast"/>: one strided walk of the diagonal, no view; a float16 / float32 / float64 /
+        ///     complex128 diagonal summed in the loop form NumPy's iterator picks — the pairwise reduce call, or the
+        ///     elementwise add along the diagonal — so its bits are add.reduce's); every
         ///     other call reads the diagonal view (<see cref="NDArray.diagonal(NDArray, int, int, int)"/>, the array
         ///     object's: a view is not an engine member) and runs the text routes; then an
         ///     <paramref name="out"/> takes the add reduction with an out operand (<see cref="ReduceAdd"/>: the reduce
@@ -98,15 +100,21 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     Fused 2-D / 3-D trace fast path. Computes the diagonal start
-        ///     offset and stride exactly like <see cref="Shape.Diagonal(int, int, int)"/> does, then
-        ///     calls the per-src-dtype IL kernel to walk and accumulate in one
-        ///     pass. For 3-D source: iterates the single non-axis1/axis2 axis
-        ///     in the kernel's outer loop, writing one accum-typed result per
-        ///     outer position. Returns <c>false</c> when the dtype has no
-        ///     kernel (Half / Decimal / Complex) so the caller falls through
-        ///     to the generic diagonal+ascontig+sum chain.
+        ///     Fused 2-D / 3-D trace fast path: NumPy's <c>add.reduce</c> of the diagonal without building the diagonal
+        ///     view. Computes the diagonal start offset and stride exactly like <see cref="Shape.Diagonal(int, int, int)"/>
+        ///     does, then reproduces the loop form NumPy's reduction iterator picks for that view. For the inexact dtypes
+        ///     (float16 / float32 / float64 / complex128) the form decides the last bits: a diagonal NumPy reduces along
+        ///     its innermost axis is ONE reduce-form call per output (<c>+0 + pairwise_sum(diagonal)</c>, through
+        ///     <see cref="NumPyAddReduce.AccumulateCall"/>); a 3-D diagonal whose remaining axis NumPy walks innermost is
+        ///     the elementwise add repeated along the diagonal (a sequential sum from +0, the per-dtype IL kernel). The
+        ///     integers (exact in any order) and decimal always take the IL kernel's single walk. For a 3-D source the
+        ///     single non-axis1/axis2 axis is the outer loop, one accumulator-typed result per outer position.
         /// </summary>
+        /// <remarks>
+        ///     Declines (returns false, the caller falls through to the diagonal view + sum chain) only when an IL kernel
+        ///     is needed and the host has no dynamic code. The reduce-form route needs no emitted code: the pairwise folds
+        ///     have scalar fallbacks.
+        /// </remarks>
         /// <param name="a">The 2-D or 3-D source array.</param>
         /// <param name="offset">The diagonal's offset (positive along <paramref name="axis2"/>, negative along
         ///     <paramref name="axis1"/>).</param>
@@ -114,7 +122,8 @@ namespace NumSharp.Backends
         /// <param name="axis2">The second axis of the 2-D sub-arrays.</param>
         /// <param name="result">The trace in the promoted dtype (0-d for 2-D, 1-D for 3-D) when the call is taken;
         ///     null otherwise.</param>
-        /// <returns>True when the fused kernel computed <paramref name="result"/>; false when the dtype has no kernel.</returns>
+        /// <returns>True when the fast path computed <paramref name="result"/>; false when the dtype has no route here or
+        ///     the route it needs has no kernel on this host.</returns>
         /// <exception cref="AxisError">An axis is out of range: "axis1: axis …" / "axis2: axis …" (axis1 checked
         ///     first).</exception>
         /// <exception cref="ValueError">The two axes are the same axis ("axis1 and axis2 cannot be the same").</exception>
@@ -134,9 +143,6 @@ namespace NumSharp.Backends
 
             var (accumCode, supported) = DirectILKernelGenerator.GetTraceAccumTypeCode(a.GetTypeCode);
             if (!supported) return false;
-
-            var kernel = DirectILKernelGenerator.GetTraceKernel(a.dtype.type);
-            if (kernel == null) return false;
 
             var shape = a.Shape;
             long dim1 = shape.dimensions[ax1];
@@ -190,6 +196,37 @@ namespace NumSharp.Backends
             // outerSize (the non-axis1/axis2 dim).
             int accumBytes = TraceAccumBytes(accumCode);
             long outerDstStride = accumBytes;
+
+            byte* srcPtr = (byte*)a.Storage.Address;
+
+            // The inexact loops' bits depend on the loop form NumPy runs (the integers are exact in any order and decimal
+            // has no NumPy loop to follow): one reduce-form call per output when NumPy's iterator reduces along the
+            // diagonal, else the elementwise form the IL kernel below walks.
+            NPTypeCode src = a.GetTypeCode;
+            if (NumPyAddReduce.SupportsLoop(src)
+                && NumPyReducesAlongTheDiagonal(diagSize, stride1 + stride2, outerSize, ndim == 3 ? shape.strides[outerAxis] : 0))
+            {
+                // Zero-filled = the add identity (+0, all-zero bits for float16 / float32 / float64 / complex128), which
+                // PyUFunc_ReduceWrapper stores in each output before the loop runs: an empty diagonal is +0, and -0.0
+                // elements sum to +0.
+                result = NewArray(accumCode, ndim == 2 ? Shape.NewScalar() : new Shape(outerSize), true);
+                if (diagSize > 0)
+                {
+                    byte* dst = (byte*)result.Storage.Address;
+                    for (long i = 0; i < outerSize; i++)
+                        // The loop dtype IS the source dtype for these four, so the diagonal is read in place; its stride
+                        // in elements is the view's stride[axis1] + stride[axis2] (negative walks back in logical order).
+                        NumPyAddReduce.AccumulateCall(src, srcPtr + startByteOffset + i * outerSrcStride, diagSize,
+                            stride1 + stride2, dst + i * outerDstStride);
+                }
+
+                // No GC.KeepAlive: the only caller, Trace, is [NDScoped], so the weaver roots `a` until it returns.
+                return true;
+            }
+
+            var kernel = DirectILKernelGenerator.GetTraceKernel(a.dtype.type);
+            if (kernel == null) return false;
+
             if (ndim == 2)
             {
                 result = NewArray(accumCode, Shape.NewScalar(), true);
@@ -199,12 +236,40 @@ namespace NumSharp.Backends
                 result = NewArray(accumCode, new Shape(outerSize), false);
             }
 
-            byte* srcPtr = (byte*)a.Storage.Address;
             byte* dstPtr = (byte*)result.Storage.Address;
 
             kernel(srcPtr, startByteOffset, diagSize, byteStride,
                    outerSize, outerSrcStride, outerDstStride, dstPtr);
             return true;
+        }
+
+        /// <summary>
+        ///     Whether NumPy's reduction iterator walks a trace's diagonal as its INNERMOST axis — so each output is one
+        ///     reduce-form loop call over the whole diagonal (<c>*out += pairwise_sum(diagonal)</c>) — rather than walking the
+        ///     3-D source's remaining axis innermost, where every diagonal step is an elementwise add into all outputs (a
+        ///     sequential sum per output). Only the inexact loops can tell the two apart.
+        /// </summary>
+        /// <remarks>
+        ///     NumPy's trace reduces the diagonal VIEW <c>(outer, diag)</c> along its last axis with a K-order iterator that
+        ///     keeps negative strides (<c>NPY_ITER_DONT_NEGATE_STRIDES</c>). <c>npyiter_fill_axisdata</c> zeroes the stride
+        ///     of a length-1 axis, and <c>npyiter_find_best_axis_ordering</c> compares only the operands whose strides on
+        ///     both axes are nonzero (the allocated output's strides are still zero then): a zero stride leaves C order (the
+        ///     diagonal innermost), and otherwise the remaining axis moves inside only when its |stride| is strictly smaller.
+        ///     Coalescing never merges the two axes (the output's stride is 0 on one and an item on the other), and when the
+        ///     diagonal is innermost no buffer splits it: either no operand is buffered and the inner loop grows to the whole
+        ///     diagonal, or the buffered core is the diagonal itself. A 2-D source has no remaining axis: always true.
+        /// </remarks>
+        /// <param name="diagSize">The diagonal's length.</param>
+        /// <param name="diagStride">The diagonal's stride in elements (<c>stride[axis1] + stride[axis2]</c>).</param>
+        /// <param name="outerSize">The remaining axis's length (1 for a 2-D source).</param>
+        /// <param name="outerStride">The remaining axis's stride in elements (ignored for a 2-D source, pass 0).</param>
+        /// <returns>True when each output is one pairwise reduce call; false for the elementwise (sequential) form.</returns>
+        private static bool NumPyReducesAlongTheDiagonal(long diagSize, long diagStride, long outerSize, long outerStride)
+        {
+            // A length-1 axis has stride 0 in NumPy's iterator, whatever the view says.
+            long sD = diagSize == 1 ? 0 : diagStride;
+            long sO = outerSize == 1 ? 0 : outerStride;
+            return sD == 0 || sO == 0 || Math.Abs(sD) <= Math.Abs(sO);
         }
 
         /// <summary>

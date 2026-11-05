@@ -323,9 +323,11 @@ namespace NumSharp
         ///     undocumented approximation that no public formula reproduces (not correctly rounded: about a third of its
         ///     results sit one ulp or more from the true value; Cephes, FreeBSD/Sun, Kahan's (with <c>log</c> and
         ///     <c>log1p</c>), Newton-on-<c>log1p</c>, Taylor/Horner, <c>sinh</c>/<c>tanh</c>/<c>exp2</c> forms, x87
-        ///     <c>F2XM1</c> roundings and AMD's libm all tested and rejected). There this port runs Sun's <c>s_expm1.c</c>,
+        ///     <c>F2XM1</c> roundings and AMD's libm all tested and rejected). There this port runs Sun's <c>s_expm1.c</c>
+        ///     (<see cref="NumSharp.Utilities.NDLog1pExpm1Math.Expm1Sun"/>, the transcription <c>np.expm1</c>'s band shares),
         ///     which agrees with ucrtbase on about 58% of in-band inputs and is never more than 2 ulp away (measured over
-        ///     millions of inputs).
+        ///     millions of inputs). Unlike <see cref="NumSharp.Utilities.NDLog1pExpm1Math.Expm1(double)"/> it does not pass a
+        ///     NaN through untouched (no sampler hands it one).
         ///     </para>
         ///     <para>
         ///     Linux NumPy calls glibc's <c>expm1</c> — the same Sun algorithm, but built with FMA on x86-64 — which
@@ -338,134 +340,7 @@ namespace NumSharp
         {
             if (x < Expm1BandLow || x > Expm1BandHigh)
                 return Math.Exp(x) - 1.0; // ucrtbase's own formula outside the band (NaN falls through: NaN - 1 = NaN)
-            return Expm1Sun(x);
-        }
-
-        /// <summary>Sun's (FreeBSD msun / glibc) <c>s_expm1.c</c>, transcribed statement by statement.</summary>
-        /// <param name="x">The argument (called for the band <c>[-ln 2, ln 1.5]</c>, but valid everywhere).</param>
-        /// <returns><c>e^x - 1</c>, within one ulp.</returns>
-        private static double Expm1Sun(double x)
-        {
-            const double o_threshold = 7.09782712893383973096e+02;
-            const double ln2_hi = 6.93147180369123816490e-01;
-            const double ln2_lo = 1.90821492927058770002e-10;
-            const double invln2 = 1.44269504088896338700e+00;
-            const double Q1 = -3.33333333333331316428e-02;
-            const double Q2 = 1.58730158725481460165e-03;
-            const double Q3 = -7.93650757867487942473e-05;
-            const double Q4 = 4.00821782732936239552e-06;
-            const double Q5 = -2.01099218183624371326e-07;
-
-            double y, hi, lo, c = 0, t, e, hxs, hfx, r1, twopk;
-            int k;
-            long bits = BitConverter.DoubleToInt64Bits(x);
-            uint hx = (uint)(bits >> 32);
-            bool negative = (hx & 0x80000000) != 0;
-            hx &= 0x7fffffff;
-
-            /* filter out huge and non-finite argument */
-            if (hx >= 0x4043687A)
-            {
-                if (hx >= 0x40862E42)
-                {
-                    if (hx >= 0x7ff00000)
-                    {
-                        uint low = (uint)bits;
-                        if (((hx & 0xfffff) | low) != 0)
-                            return x + x; /* NaN */
-                        return negative ? -1.0 : x; /* exp(+-inf) - 1 = {inf, -1} */
-                    }
-                    if (x > o_threshold)
-                        return double.PositiveInfinity; /* overflow */
-                }
-                if (negative && x + 1e-300 < 0.0)
-                    return 1e-300 - 1.0; /* x < -56*ln2: return -1.0 with inexact */
-            }
-
-            /* argument reduction */
-            if (hx > 0x3fd62e42)
-            {
-                /* if |x| > 0.5 ln2 */
-                if (hx < 0x3FF0A2B2)
-                {
-                    /* and |x| < 1.5 ln2 */
-                    if (!negative)
-                    {
-                        hi = x - ln2_hi;
-                        lo = ln2_lo;
-                        k = 1;
-                    }
-                    else
-                    {
-                        hi = x + ln2_hi;
-                        lo = -ln2_lo;
-                        k = -1;
-                    }
-                }
-                else
-                {
-                    k = (int)(invln2 * x + (!negative ? 0.5 : -0.5));
-                    t = k;
-                    hi = x - t * ln2_hi; /* t*ln2_hi is exact here */
-                    lo = t * ln2_lo;
-                }
-                x = hi - lo;
-                c = (hi - x) - lo;
-            }
-            else if (hx < 0x3c900000)
-            {
-                /* when |x| < 2**-54, return x */
-                t = 1e300 + x; /* return x with inexact flags when x != 0 */
-                return x - (t - (1e300 + x));
-            }
-            else
-            {
-                k = 0;
-            }
-
-            /* x is now in primary range */
-            hfx = 0.5 * x;
-            hxs = x * hfx;
-            r1 = 1.0 + hxs * (Q1 + hxs * (Q2 + hxs * (Q3 + hxs * (Q4 + hxs * Q5))));
-            t = 3.0 - r1 * hfx;
-            e = hxs * ((r1 - t) / (6.0 - x * t));
-            if (k == 0)
-                return x - (x * e - hxs); /* c is 0 */
-            twopk = BitConverter.Int64BitsToDouble((long)(0x3ff + k) << 52);
-            e = (x * (e - c) - c);
-            e -= hxs;
-            if (k == -1)
-                return 0.5 * (x - e) - 0.5;
-            if (k == 1)
-            {
-                if (x < -0.25)
-                    return -2.0 * (e - (x + 0.5));
-                return 1.0 + 2.0 * (x - e);
-            }
-            if (k <= -2 || k > 56)
-            {
-                /* suffice to return exp(x) - 1 */
-                y = 1.0 - (e - x);
-                if (k == 1024)
-                    y = y * 2.0 * BitConverter.Int64BitsToDouble(0x7fe0000000000000);
-                else
-                    y = y * twopk;
-                return y - 1.0;
-            }
-            if (k < 20)
-            {
-                t = BitConverter.Int64BitsToDouble((long)(0x3ff - (0x200000 >> k)) << 32); /* t = 1 - 2^-k */
-                y = t - (e - x);
-                y = y * twopk;
-            }
-            else
-            {
-                t = BitConverter.Int64BitsToDouble((long)((0x3ff - k) << 20) << 32); /* 2^-k */
-                y = x - (e + t);
-                y += 1.0;
-                y = y * twopk;
-            }
-            return y;
+            return NumSharp.Utilities.NDLog1pExpm1Math.Expm1Sun(x); // Sun's s_expm1.c, shared with np.expm1's band
         }
 
         /// <summary>

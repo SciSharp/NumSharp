@@ -59,11 +59,13 @@ namespace NumSharp.Tests.Fuzz
         ///     <c>nanvar</c> / <c>nanstd</c> left on 2026-10-05 (plan api-parameter-parity A3): they are NumPy's
         ///     <c>nanvar</c> / <c>nanstd</c> statement for statement and are held bit-exact in every tier (the
         ///     <c>nanvarstd</c> tier included). <c>nanmean</c> left the same day (plan A7): it is NumPy's <c>nanmean</c>
-        ///     statement for statement (the <c>nanmean</c> tier), and np.mean for an integer input (X9).
+        ///     statement for statement (the <c>nanmean</c> tier), and np.mean for an integer input (X9). <c>nansum</c> /
+        ///     <c>nanprod</c> left on 2026-11-05 (parity QA-15): they are NumPy's <c>np.sum</c> / <c>np.prod</c> of
+        ///     <c>_replace_nan(a, 0 / 1)</c> and are held bit-exact in every tier.
         /// </summary>
         private static readonly System.Collections.Generic.HashSet<string> NanReduceOps = new()
         {
-            "nansum", "nanprod", "nanmedian"
+            "nanmedian"
         };
 
         private static readonly System.Collections.Generic.HashSet<string> QuantileOps = new()
@@ -114,6 +116,18 @@ namespace NumSharp.Tests.Fuzz
         private static readonly System.Collections.Generic.HashSet<string> NumPyPortedFloat64Kernels = new()
         {
             "tanh"
+        };
+
+        /// <summary>
+        ///     Unary ops whose float32 AND float64 loops are models of the UCRT routines NumPy's win-amd64 wheel calls, exact
+        ///     over every probed input, so held BIT-EXACT at both widths (no ULP envelope): <c>log1p</c> is Goldberg's
+        ///     correction over the UCRT's <c>log</c> / <c>logf</c> (<c>NDLog1pExpm1Math</c>, parity QA-22, 2026-11-05; 320,000
+        ///     inputs per dtype and 100,000-element grid digests equal to NumPy's). <c>expm1</c> is NOT here: inside
+        ///     <c>[-ln 2, ln 1.5]</c> the UCRT runs an undocumented polynomial, so it keeps branch (S1).
+        /// </summary>
+        private static readonly System.Collections.Generic.HashSet<string> UcrtModelExactKernels = new()
+        {
+            "log1p"
         };
 
         /// <summary>
@@ -181,15 +195,16 @@ namespace NumSharp.Tests.Fuzz
         /// </summary>
         private static readonly System.Collections.Generic.HashSet<string> EvaluateLibmOps = new()
         {
-            "sqrt", "cbrt", "exp", "exp2", "expm1", "log", "log2", "log10", "log1p",
+            "sqrt", "cbrt", "exp", "exp2", "expm1", "log", "log2", "log10",
             "sin", "cos", "tan", "sinh", "cosh", "tanh", "asin", "acos", "atan",
             "asinh", "acosh", "atanh", "deg2rad", "rad2deg", "pow", "atan2", "div", "recip",
             // Phase 4 binary transcendentals — the SAME ~ULP envelope as the unary tier (documented
-            // per-op in the ufunc corpus): logaddexp/logaddexp2 ≤2 ULP (managed fdlibm log1p vs the
-            // closed UCRT log1p). hypot, copysign, nextafter, heaviside and fmod are BIT-EXACT and are
+            // per-op in the ufunc corpus): logaddexp2 ≤2 ULP (its exp2 is .NET's Math.Pow(2, x), which differs
+            // from the UCRT's exp2 on ~0.02% of inputs). log1p and logaddexp are BIT-EXACT since parity QA-22 /
+            // QA-32 (the UCRT log1p model) and, with hypot, copysign, nextafter, heaviside and fmod, are
             // deliberately NOT here — a 1-ULP regression there must turn red (hypot since parity QA-25:
             // its kernel is UCRT's own sqrt(x*x + y*y), no longer the correctly rounded Borges FMA).
-            "logaddexp", "logaddexp2",
+            "logaddexp2",
         };
 
         /// <summary>The bit-exact float32 ports, in the evaluate grammar's spelling (see NumPyPortedFloat32Kernels).</summary>
@@ -502,15 +517,16 @@ namespace NumSharp.Tests.Fuzz
                 && diffs.Count > 0 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
                 return "corrcoef(complex): cov's managed complex GEMM vs zgemm (bounded <=2 ULP) [documented]";
 
-            // logaddexp / logaddexp2: log(exp(x1)+exp(x2)) / log2(2**x1+2**x2). Math.Exp / double.Exp2
-            // / MathF.Exp are bit-identical to NumPy's ucrtbase exp/exp2/expf, but the compound uses
-            // log1p, and NumPy's ucrtbase log1p is CLOSED — the managed fdlibm port agrees to <=1 ULP
-            // (5% of log1p evaluations differ by 1). So logaddexp is <=1 ULP, logaddexp2 <=2 ULP (the
-            // LOG2E * log1p product), float16 via float32 <=2. nextafter is NOT here (bit-exact via
-            // BitIncrement/BitDecrement). Bounded per-element; a gross error still fails.
-            if (kind == DivergenceKind.Value && (c.Op == "logaddexp" || c.Op == "logaddexp2")
+            // logaddexp2: y + LOG2E * log1p(exp2(x - y)). Its log1p is the UCRT model (bit-exact since parity QA-32,
+            // which also made logaddexp exact, so logaddexp has no branch here), but its exp2 is .NET's double.Exp2 /
+            // float.Exp2 (= Math.Pow(2, x)), which differs from the UCRT's exp2 / exp2f by one ULP on ~0.02% / 0.04% of
+            // inputs (probed: ucrtbase's exp2 itself matches NumPy on every input; Core takes no P/Invoke). Where the
+            // result cancels toward zero that ULP is amplified, so the bound holds on the corpus's pairs, not on a
+            // cancellation pair. nextafter is NOT here (bit-exact via BitIncrement/BitDecrement). Bounded per-element; a
+            // gross error still fails.
+            if (kind == DivergenceKind.Value && c.Op == "logaddexp2"
                 && diffs.Count > 0 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
-                return "logaddexp/logaddexp2: managed fdlibm log1p <=2 ULP vs NumPy's closed ucrtbase log1p [documented]";
+                return "logaddexp2: .NET's exp2 (Math.Pow(2, x)) one ULP off the UCRT's exp2 on ~0.02% of inputs, <=2 ULP [documented]";
 
             // Generator.pareto / Generator.power: NumPy's modern samplers are expm1(E/a) and pow(-expm1(-E), 1/a), and
             // the win-amd64 CRT's expm1 is a closed approximation inside [-ln 2, ln 1.5] (outside it is exp(x)-1, which
@@ -802,13 +818,13 @@ namespace NumSharp.Tests.Fuzz
             //     algorithm (the exp/log/sin/cos/tanh route), never a win — hence the label.
             //     Two labels so the triage differentiates toward-truth from within-noise.
             //   * LESS truthful (beyond slack) -> genuine precision LOSS: fall through, where
-            //     only a tightly-scoped known-bug branch (e.g. S1 expm1/log1p) may still excuse
+            //     only a tightly-scoped known-bug branch (e.g. S1's in-band expm1) may still excuse
             //     it; otherwise the gate is red. The unbounded reduction blanket below is gated
             //     on truth==null precisely so a truth-bearing loss cannot hide in it.
             // The slack (4x relative, +8 absolute ULP) absorbs SIMD lane-count variation across
             // hosts (V128/V256/V512 pick different accumulation orders) while still failing the
-            // losses that matter — measured 512 ULP for a naive f32 wide-sum, ~6.7e7 ULP for
-            // Exp(x)-1 expm1 — by orders of magnitude.
+            // losses that matter — measured 512 ULP for a naive f32 wide-sum, ~6.7e7 ULP for the
+            // Exp(x)-1 expm1 NumSharp ran until parity QA-22 — by orders of magnitude.
             if (kind == DivergenceKind.Value && truth != null && expected != null
                 && truth.Length == expected.Length && diffs.Count > 0
                 && (tc == NPTypeCode.Half || tc == NPTypeCode.Single
@@ -975,7 +991,7 @@ namespace NumSharp.Tests.Fuzz
             //          documented multiply gap #12, which an order fix cannot close).
             //     (E2) a transcendental / libm node (the same set the unary tier excuses in (5)
             //          below, minus the bit-exact float32 ports) within 2 ULP.
-            //     (E3) expm1 / log1p composed as Exp(x)-1 / Log(1+x) — the (S1) envelope.
+            //     (E3) expm1's band (Sun's s_expm1 vs the UCRT's polynomial) — the (S1) bound.
             if (c.Op == "evaluate" && kind == DivergenceKind.Value && diffs.Count > 0
                 && c.Params != null && c.Params.TryGetValue("expr", out var evExpr))
             {
@@ -1020,10 +1036,9 @@ namespace NumSharp.Tests.Fuzz
                 if (libm && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
                     return "evaluate: transcendental node ~ULP (libm / algorithm difference, same policy as the unary tier)";
 
-                if (evOps.Overlaps(new[] { "expm1", "log1p" })
-                    && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)
-                                      || BitDiff.WithinAbs(expected, actual, d.Index, tc, Expm1Log1pAbsTol(tc))))
-                    return "evaluate: expm1/log1p composed as Exp(x)-1 / Log(1+x), bounded abs error [documented non-portable defect]";
+                if (evOps.Contains("expm1")
+                    && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, tc == NPTypeCode.Single ? 3 : 2)))
+                    return "evaluate: expm1 in [-ln 2, ln 1.5], Sun's s_expm1 vs the UCRT's polynomial, <= 2 ULP (float32 <= 3) [documented]";
 
                 // (E5) complex Min/Max reduction over a NaN-carrying pool: which NaN element wins is
                 //      iteration-order dependent (NumPy's reduce walks a negative-stride 1-D operand in
@@ -1109,6 +1124,7 @@ namespace NumSharp.Tests.Fuzz
             if (kind == DivergenceKind.Value && c.Operands.Length == 1 && c.Op != "evaluate"
                 && !(tc == NPTypeCode.Single && NumPyPortedFloat32Kernels.Contains(c.Op))
                 && !(tc == NPTypeCode.Double && NumPyPortedFloat64Kernels.Contains(c.Op))
+                && !((tc == NPTypeCode.Single || tc == NPTypeCode.Double) && UcrtModelExactKernels.Contains(c.Op))
                 && !ByteExactArithmeticUnaryOps.Contains(c.Op)
                 // numpy.polynomial evaluation is + - * / only (a Python-scalar x leaves ONE operand, the
                 // coefficients): bit-exact by construction, so it must never inherit this excuse.
@@ -1116,23 +1132,17 @@ namespace NumSharp.Tests.Fuzz
                 && diffs.Count > 0 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
                 return "unary ~ULP (transcendental/magnitude algorithm difference)";
 
-            // (S1) expm1 / log1p are computed by NumSharp as Exp(x)-1 / Log(1+x) rather than a
-            //      dedicated small-|x| kernel, so near zero they lose precision: a subnormal result
-            //      flushes to 0, expm1(-0.0) gives +0.0, and a moderate result can drift a ULP.
-            //      NumPy calls the CRT (npy_expm1 / npy_log1p), which is not reproducible here, so
-            //      this is a DOCUMENTED non-portable accuracy defect (see the CLAUDE.md math
-            //      section: "expm1(1e-8) returns 0 where NumPy returns 1e-8"). Bounded: every diff
-            //      is within 2 ULP OR within an absolute ~ulp(1) envelope of the dtype, so a gross
-            //      error (wrong magnitude/sign at a non-tiny result) exceeds it and still fails.
-            //      Surfaced by the specials tier's subnormal / tiny / -0 inputs — the ordinary pools
-            //      never reach the catastrophic small-|x| band. Placed AFTER the ~ULP branch so a
-            //      large-|x| expm1 (all diffs within 2 ULP) keeps the generic label.
-            if (kind == DivergenceKind.Value && (c.Op == "expm1" || c.Op == "log1p")
+            // (S1) expm1 inside [-ln 2, ln 1.5]: the UCRT's expm1 / expm1f run an undocumented approximation there that no
+            //      public formula reproduces, so NumSharp's band is Sun's s_expm1 (NDLog1pExpm1Math, parity QA-22,
+            //      2026-11-05): within 2 ULP of NumPy at float64 and 3 at float32 (the UCRT's polynomial is itself up to 4 ULP
+            //      from the true value there). Outside the band expm1 is the UCRT's own exp(x) - 1, bit-exact, and log1p is
+            //      exact everywhere (UcrtModelExactKernels), so neither needs an excuse. Until QA-22 this branch covered
+            //      the Exp(x)-1 / Log(1+x) compositions' cancellation with an absolute ~ulp(1) envelope; that loss is gone,
+            //      so the envelope is too. Placed AFTER the ~ULP branch, which already takes a float64 diff (≤ 2 ULP).
+            if (kind == DivergenceKind.Value && c.Op == "expm1"
                 && c.Operands.Length == 1 && diffs.Count > 0
-                && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)
-                                  || BitDiff.WithinAbs(expected, actual, d.Index, tc, Expm1Log1pAbsTol(tc))))
-                return "expm1/log1p computed as Exp(x)-1 / Log(1+x): small-|x| precision loss / -0 / "
-                     + "subnormal flush, bounded abs error [documented non-portable defect]";
+                && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, tc == NPTypeCode.Single ? 3 : 2)))
+                return "expm1 in [-ln 2, ln 1.5]: Sun's s_expm1 vs the UCRT's undocumented polynomial, <= 2 ULP (float32 <= 3) [documented]";
 
             // (6) np.negative on unsigned integers was FIXED in Phase 1 F4: np.negative now routes
             //     through the engine kernel (two's-complement wrap, e.g. -1u -> 255), matching NumPy.
@@ -1389,19 +1399,6 @@ namespace NumSharp.Tests.Fuzz
                 minA = c.Params["args"][0].GetDouble();
             return minA > 0 && double.IsFinite(2.0 / minA) ? (int)Math.Ceiling(2.0 / minA) + 3 : -1;
         }
-
-        /// <summary>
-        ///     The absolute-error envelope for the expm1/log1p Exp(x)-1 / Log(1+x) signature — a few
-        ///     ULP of 1.0 for the dtype (its worst absolute error near zero), well below any gross
-        ///     wrong-magnitude bug at a non-tiny result.
-        /// </summary>
-        private static double Expm1Log1pAbsTol(NPTypeCode tc) => tc switch
-        {
-            NPTypeCode.Double => 1e-13,
-            NPTypeCode.Single => 1e-6,
-            NPTypeCode.Half => 1e-2,
-            _ => 0.0,
-        };
 
         /// <summary>
         ///     Both the expected and actual Single tokens are a signed zero. BitDiff prints Single

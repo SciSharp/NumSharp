@@ -188,8 +188,9 @@ namespace NumSharp.Utilities
         {
             if (x == y) return x + LOGE2;              // handles same-sign infinities without warnings
             double tmp = x - y;
-            if (tmp > 0) return x + Log1p(Math.Exp(-tmp));
-            if (tmp <= 0) return y + Log1p(Math.Exp(tmp));
+            // npy_log1p is the UCRT's log1p: the exact model, not this class's fdlibm port (parity QA-32).
+            if (tmp > 0) return x + NDLog1pExpm1Math.Log1p(Math.Exp(-tmp));
+            if (tmp <= 0) return y + NDLog1pExpm1Math.Log1p(Math.Exp(tmp));
             return tmp;                                // NaN
         }
 
@@ -198,8 +199,9 @@ namespace NumSharp.Utilities
         {
             if (x == y) return x + LOGE2F;
             float tmp = x - y;
-            if (tmp > 0) return x + Log1pf(MathF.Exp(-tmp));
-            if (tmp <= 0) return y + Log1pf(MathF.Exp(tmp));
+            // npy_log1pf is the UCRT's log1pf: the exact float32 model (parity QA-32).
+            if (tmp > 0) return x + NDLog1pExpm1Math.Log1pF(MathF.Exp(-tmp));
+            if (tmp <= 0) return y + NDLog1pExpm1Math.Log1pF(MathF.Exp(tmp));
             return tmp;
         }
 
@@ -220,8 +222,9 @@ namespace NumSharp.Utilities
         {
             if (x == y) return x + 1.0;
             double tmp = x - y;
-            if (tmp > 0) return x + LOG2E * Log1p(double.Exp2(-tmp));
-            if (tmp <= 0) return y + LOG2E * Log1p(double.Exp2(tmp));
+            // npy_log2_1p(v) = LOG2E * npy_log1p(v), over the UCRT's log1p model (parity QA-32).
+            if (tmp > 0) return x + LOG2E * NDLog1pExpm1Math.Log1p(double.Exp2(-tmp));
+            if (tmp <= 0) return y + LOG2E * NDLog1pExpm1Math.Log1p(double.Exp2(tmp));
             return tmp;
         }
 
@@ -230,8 +233,9 @@ namespace NumSharp.Utilities
         {
             if (x == y) return x + 1.0f;
             float tmp = x - y;
-            if (tmp > 0) return x + LOG2EF * Log1pf(float.Exp2(-tmp));
-            if (tmp <= 0) return y + LOG2EF * Log1pf(float.Exp2(tmp));
+            // npy_log2_1pf(v) = LOG2EF * npy_log1pf(v), over the UCRT's log1pf model (parity QA-32).
+            if (tmp > 0) return x + LOG2EF * NDLog1pExpm1Math.Log1pF(float.Exp2(-tmp));
+            if (tmp <= 0) return y + LOG2EF * NDLog1pExpm1Math.Log1pF(float.Exp2(tmp));
             return tmp;
         }
 

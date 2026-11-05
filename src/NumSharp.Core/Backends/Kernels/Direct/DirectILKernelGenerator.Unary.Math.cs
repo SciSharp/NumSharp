@@ -201,9 +201,19 @@ namespace NumSharp.Backends.Kernels
                     break;
 
                 case UnaryOp.Expm1:
-                    // exp(x) - 1: call Exp then subtract 1
-                    EmitMathCall(il, "Exp", type);
-                    EmitSubtractOne(il, type);
+                    // float32 / float64: the UCRT's expm1 / expm1f as NumPy's loops call them (NDLog1pExpm1Math), accurate
+                    // near zero, where the exp(x) - 1 composition below keeps nothing (expm1(1e-300) was 0) and turns -0.0
+                    // into +0.0. Only another real dtype (none reaches here today) keeps the composition.
+                    if (type == NPTypeCode.Single)
+                        il.EmitCall(OpCodes.Call, CachedMethods.SingleExpm1, null);
+                    else if (type == NPTypeCode.Double)
+                        il.EmitCall(OpCodes.Call, CachedMethods.DoubleExpm1, null);
+                    else
+                    {
+                        // exp(x) - 1: call Exp then subtract 1
+                        EmitMathCall(il, "Exp", type);
+                        EmitSubtractOne(il, type);
+                    }
                     break;
 
                 case UnaryOp.Log2:
@@ -215,9 +225,18 @@ namespace NumSharp.Backends.Kernels
                     break;
 
                 case UnaryOp.Log1p:
-                    // log(1 + x): add 1 then call Log
-                    EmitAddOne(il, type);
-                    EmitMathCall(il, "Log", type);
+                    // float32 / float64: the UCRT's log1p / log1pf, bit for bit (NDLog1pExpm1Math: Goldberg's correction
+                    // over log), where log(1 + x) below loses every digit of a small x and quiets a signalling NaN.
+                    if (type == NPTypeCode.Single)
+                        il.EmitCall(OpCodes.Call, CachedMethods.SingleLog1p, null);
+                    else if (type == NPTypeCode.Double)
+                        il.EmitCall(OpCodes.Call, CachedMethods.DoubleLog1p, null);
+                    else
+                    {
+                        // log(1 + x): add 1 then call Log
+                        EmitAddOne(il, type);
+                        EmitMathCall(il, "Log", type);
+                    }
                     break;
 
                 case UnaryOp.Sign:

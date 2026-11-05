@@ -293,43 +293,6 @@ namespace NumSharp.Tests
         }
 
         // ------------------------------------------------------------------
-        // QA-15 — np.nansum is not np.sum of the NaN-replaced array
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     NumPy's <c>nansum</c> is <c>a, mask = _replace_nan(a, 0); return np.sum(a, ...)</c>, so its bits are np.sum's.
-        ///     NumSharp's np.sum matches NumPy bit for bit on these inputs, but np.nansum runs its own NaN-skipping kernels in
-        ///     another order: float16 along an axis drifts by several ULP (column 0 of the (10, 10) case below is
-        ///     <c>168.25</c>, NumPy <c>168.375</c>; a (1000, 10) column is <c>-3396</c> against <c>-3410</c>), float32 / float64
-        ///     by one to three ULP flat and per axis, and np.nanprod likewise. The oracle excuses the whole cell as a known bug
-        ///     (MisalignedRegistry "(W4-B) nansum/nanmean/nanprod … summation-order divergence [known bug]"; nanmean has
-        ///     since left it), with no unit pin until this one. Inputs come from <c>RandomState(n).random_sample(n) * 200 -
-        ///     100</c> with every 17th element NaN, which NumSharp reproduces bit for bit.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA15")]
-        public void ParityQa_Nansum_ShouldBeSumOfTheNaNReplacedArray()
-        {
-            var nan = BitConverter.Int64BitsToDouble(0x7FF8000000000000);
-            var rs100 = np.random.RandomState(100);
-            using var x100 = rs100.random_sample(100L) * 200.0 - 100.0;
-            x100["::17"] = nan;
-            using var f16 = x100.astype(np.float16).reshape(10, 10);
-
-            using var columns = np.nansum(f16, axis: 0);
-
-            columns.ToArray<Half>().Select(h => (double)h).Should().Equal(
-                168.375, -122.75, -216.75, -59.21875, -158.5, 190.25, 162.0, -149.875, -184.875, -48.21875);
-
-            var rs1000 = np.random.RandomState(1000);
-            using var x1000 = rs1000.random_sample(1000L) * 200.0 - 100.0;
-            x1000["::17"] = nan;
-
-            using var flat = np.nansum(x1000);
-
-            BitConverter.DoubleToInt64Bits((double)flat).Should().Be(BitConverter.DoubleToInt64Bits(-2291.4343639665312));
-        }
-
-        // ------------------------------------------------------------------
         // QA-17 — the float-tier binary ufuncs promote Char beside float16 / float32 to float64
         // ------------------------------------------------------------------
 
@@ -357,40 +320,6 @@ namespace NumSharp.Tests
             arctan2.dtype.Should().Be(np.float32);
             copysign.dtype.Should().Be(np.float32);
             nextafter.dtype.Should().Be(np.float32);
-        }
-
-        // ------------------------------------------------------------------
-        // QA-22 — np.expm1 / np.log1p cancel catastrophically for small arguments (known in float-math.md, unpinned)
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     NumPy's float32 / float64 <c>expm1</c> / <c>log1p</c> call the C library's <c>expm1</c> / <c>log1p</c>, which
-        ///     are accurate near zero: <c>np.expm1(1e-8)</c> is <c>1.000000005e-08</c>, <c>np.log1p(1e-300)</c> is
-        ///     <c>1e-300</c>, both keep <c>-0.0</c>, and float32 <c>np.expm1(6e-8)</c> is <c>5.9999998e-08</c>. NumSharp
-        ///     computes <c>Exp(x) - 1</c> / <c>Log(1 + x)</c> (.NET's <c>double.ExpM1</c> / <c>LogP1</c> are those
-        ///     expressions), so the leading digits cancel: <c>expm1(1e-8)</c> is <c>9.99999993922529e-09</c>,
-        ///     <c>expm1(1e-300)</c> and <c>log1p(1e-300)</c> are <c>0</c>, <c>-0.0</c> becomes <c>+0.0</c>, and the float32
-        ///     <c>expm1(6e-8)</c> is <c>1.1920929e-07</c> (twice the true value). float-math.md calls the accuracy defect "a
-        ///     separate, open bug"; the oracle excuses it (ledger S1, "≤ 2 ULP or ≤ ~ulp(1) abs"), and no pin existed.
-        ///     The float16 loops are right (they widen to float32 and call NumPy's float32 routine).
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA22")]
-        public void ParityQa_Expm1Log1p_SmallArguments_ShouldNotCancel()
-        {
-            using var x = np.array(new[] { 1e-8, 1e-300, -0.0 });
-            using var x32 = np.array(new[] { 6e-8f });
-
-            using var expm1 = np.expm1(x);
-            using var log1p = np.log1p(x);
-            using var expm1f = np.expm1(x32);
-
-            ((double)expm1.GetValue(0)).Should().Be(1.000000005e-08);
-            ((double)log1p.GetValue(0)).Should().Be(9.999999950000001e-09);
-            ((double)expm1.GetValue(1)).Should().Be(1e-300);
-            ((double)log1p.GetValue(1)).Should().Be(1e-300);
-            double.IsNegative((double)expm1.GetValue(2)).Should().BeTrue();
-            double.IsNegative((double)log1p.GetValue(2)).Should().BeTrue();
-            ((float)expm1f.GetValue(0)).Should().Be((float)5.99999978589949e-08);
         }
 
         // ------------------------------------------------------------------
@@ -583,41 +512,6 @@ namespace NumSharp.Tests
                 "operands could not be broadcast together with remapped shapes [original->remapped]: (3,)->(3) (3,4) ");
             median.Should().Throw<Exception>().Which.Message.Should().Be(
                 "operands could not be broadcast together with remapped shapes [original->remapped]: (3,)->(3) (1,4) ");
-        }
-
-        // ------------------------------------------------------------------
-        // QA-32 — logaddexp / logaddexp2 leave their documented 2-ULP envelope where the result cancels toward zero
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     NumPy's <c>npy_logaddexp(x, y)</c> is <c>y + log1p(exp(x - y))</c> (larger argument first), with the UCRT's
-        ///     <c>log1p</c>; NumSharp ports the statements over a managed fdlibm <c>log1p</c>, and the oracle registry
-        ///     excuses the pair at ≤ 2 ULP per element ("a gross error still fails"). When the result is near zero — the
-        ///     larger argument close to 0 below, the smaller one well below it — the final addition cancels, and the
-        ///     one-ULP <c>log1p</c> difference becomes many result ULPs: over 2,097,152 dense pairs (<c>p75</c>) float32
-        ///     logaddexp exceeds 2 ULP at 27 pairs (up to 64), float32 logaddexp2 at 21 (up to 32), float64 logaddexp at 35
-        ///     (up to 128) and float64 logaddexp2 at 28 (up to 16,384). <c>np.logaddexp(float32 -3.0742855, float32
-        ///     -0.048163086)</c> is <c>-0.0007993132</c> (<c>0xBA518900</c>) in NumPy, <c>-0.0007993169</c> in NumSharp;
-        ///     <c>np.logaddexp2(-1.0835713039595367, -0.9211879047455193)</c> is <c>-9.616429790881842e-05</c> in NumPy,
-        ///     <c>-9.616429790904046e-05</c> in NumSharp (closer to the truth: prefer-precise parity debt).
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA32")]
-        public void ParityQa_Logaddexp_Cancellation_ShouldStayWithinTwoUlpOfNumPy()
-        {
-            using var a32 = np.array(new[] { BitConverter.UInt32BitsToSingle(0xC044C118) });
-            using var b32 = np.array(new[] { BitConverter.UInt32BitsToSingle(0xBD4546A8) });
-            using var a64 = np.array(new[] { -1.0835713039595367 });
-            using var b64 = np.array(new[] { -0.9211879047455193 });
-
-            using var lae = np.logaddexp(a32, b32);
-            using var lae2 = np.logaddexp2(a64, b64);
-
-            // Both results are negative, so their bit patterns order like their magnitudes: the ULP distance is the
-            // difference of the raw bits.
-            long ulp32 = System.Math.Abs((long)BitConverter.SingleToUInt32Bits((float)lae.GetValue(0)) - 0xBA518900L);
-            long ulp64 = System.Math.Abs(BitConverter.DoubleToInt64Bits((double)lae2.GetValue(0)) - BitConverter.DoubleToInt64Bits(-9.616429790881842e-05));
-            ulp32.Should().BeLessThanOrEqualTo(2);
-            ulp64.Should().BeLessThanOrEqualTo(2);
         }
 
         // ------------------------------------------------------------------
@@ -886,32 +780,6 @@ namespace NumSharp.Tests
 
             equal.Should().NotThrow().Which.Should().BeFalse();
             notEqual.Should().NotThrow().Which.Should().BeTrue();
-        }
-
-        // ------------------------------------------------------------------
-        // QA-47 — np.trace's fused fast path sums the diagonal sequentially, not in add.reduce's pairwise order
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     NumPy's trace is <c>PyArray_Trace</c>: the diagonal's <c>add.reduce</c>, whose float loop is
-        ///     <c>pairwise_sum</c> (eight accumulators per block, combined as a tree), so <c>np.trace(m) == np.sum(np.diagonal(m))</c>
-        ///     bit for bit. NumSharp's <c>DefaultEngine.Trace</c> takes a fused 2-D / 3-D fast path for float32 / float64 (and the
-        ///     integers) when no <c>dtype=</c> / <c>out=</c> is given (<c>TryTraceFast</c>, Backends/Default/Indexing/Default.Trace.cs:
-        ///     "a single strided diagonal walk with inline accumulation"), which adds the diagonal sequentially: for
-        ///     <c>m = RandomState(7).rand(8, 8) * 1000 - 500</c> NumPy's trace is <c>469.51696132236486</c> and NumSharp's
-        ///     <c>469.5169613223648</c>, while NumSharp's own <c>np.sum(np.diagonal(m))</c> gives NumPy's value (<c>rp18</c>; a float32
-        ///     1000 x 1000 trace is about 5 ULP off; the random fuzz batch <c>fz14</c> found it on a 257 x 129 float32 matrix).
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA47")]
-        public void ParityQa_TraceFloat_ShouldSumInAddReducesPairwiseOrder()
-        {
-            var rs = np.random.RandomState(7);
-            using var m = rs.rand(8, 8) * 1000.0 - 500.0;
-
-            using var trace = np.trace(m);
-
-            BitConverter.DoubleToInt64Bits((double)trace).Should().Be(BitConverter.DoubleToInt64Bits(469.51696132236486),
-                "NumPy's trace is the diagonal's pairwise add.reduce");
         }
 
         // ------------------------------------------------------------------

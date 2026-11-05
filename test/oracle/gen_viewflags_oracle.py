@@ -1813,6 +1813,9 @@ _ARRAY_JOB_NUMPY = {
 # 2026-11-04 (parity QA-34, f0a00d4a): np.broadcast_arrays returns an operand that already has the broadcast shape as
 # ITSELF and keeps a read-only operand's views read-only, as NumPy 2.4.2 does, so VF17 matches NumPy; its GAPS entry and
 # its rule are dropped and its 6 cases moved back into view_flags.jsonl the same way (no regeneration).
+# 2026-11-05 (parity QA-15): np.nansum / np.nanprod are NumPy's statements (np.sum / np.prod of _replace_nan), and their
+# one-element shortcut reads a view from its offset, so VF30 matches NumPy; its GAPS entry and its rule are dropped and its
+# 8 cases moved back into view_flags.jsonl the same way (no regeneration).
 GAPS = {
     "VF01": "a NumPy SCALAR result (ufuncs, clip, round, nan_to_num, conj, dot / inner / kron of 0-d or 1-D pairs) "
             "comes back as a WRITEABLE 0-d array",
@@ -1843,8 +1846,6 @@ GAPS = {
             "np.kron with a 0-d, np.nanmedian along an axis — MaskedArray.filled's _data view) come back owning "
             "their data",
     "VF29": "np.median / np.nanmedian of a 0-d with keepdims=True are read-only; NumPy returns a writeable 0-d array",
-    "VF30": "np.nansum / np.nanprod with axis=None of a view at a non-zero offset (a 0-d np.unstack child, a 2-D "
-            "np.split child) read the WRONG elements (the owner's, from its start)",
     "VF32": "np.nan_to_num(copy=True) of an F input is C-ordered; NumPy allocates in K order",
     "VF34": "np.round of a permuted or broadcast input: decimals=0 is C-ordered where NumPy keeps K, decimals=1 keeps "
             "the input order where NumPy's is C",
@@ -1944,8 +1945,6 @@ def _gap_of(tier, case):
             return "VF26"
         if fn in ("median", "nanmedian") and lay in ("own_0d", "view_0d") and p.get("keepdims"):
             return "VF29"
-        if fn in ("nansum", "nanprod") and axis is None and lay in ("view_0d", "view_off_2d"):
-            return "VF30"
         if fn == "nan_to_num" and p.get("copy") and lay == "own_f_2d":
             return "VF32"
         if fn == "round" and ((lay == "view_perm_3d") or (lay == "view_bcast_2d" and p["decimals"] == 1)):
