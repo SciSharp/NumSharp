@@ -288,5 +288,168 @@ namespace NumSharp.Backends.Kernels
         }
 
         #endregion
+
+        #region Reversed-Run Unary Kernel
+
+        /// <summary>
+        /// Cache for the reversed-run unary kernels (a 1-D source at byte stride −elemSize), keyed like
+        /// <see cref="_stridedUnaryCache"/>. Separate kernels, so the strided kernel's IL stays as it was.
+        /// </summary>
+        internal static readonly ConcurrentDictionary<UnaryKernelKey, StridedUnaryKernel> _reversedUnaryCache = new();
+
+        /// <summary>
+        /// Get or generate the reversed-run unary kernel of <paramref name="key"/>: the
+        /// <see cref="StridedUnaryKernel"/> signature for a REVERSED source (<c>a[::-1]</c>, byte stride −elemSize),
+        /// which loads each vector with one contiguous load and a lane reversal (InnerLoop.Reversed.cs) where the
+        /// strided kernel assembles it from lane-count scalar loads.
+        /// </summary>
+        /// <param name="key">A same-width key (<c>InputType == OutputType</c>) whose op has a vector body, on a dtype
+        /// <see cref="CanReverseLanes"/> approves; the caller checks both.</param>
+        /// <returns>The kernel. Its <c>srcByteStride</c> argument is ignored: the source MUST be reversed.</returns>
+        /// <exception cref="InvalidOperationException">IL generation is disabled.</exception>
+        /// <exception cref="NotSupportedException">The op has no vector or scalar emission for the dtype.</exception>
+        public static StridedUnaryKernel GetReversedUnaryKernel(UnaryKernelKey key)
+        {
+            if (!Enabled)
+                throw new InvalidOperationException("IL generation is disabled");
+
+            return _reversedUnaryCache.GetOrAdd(key, GenerateReversedUnaryKernel);
+        }
+
+        /// <summary>Generate the kernel <see cref="GetReversedUnaryKernel"/> serves.</summary>
+        /// <param name="key">The same-width key.</param>
+        /// <returns>The kernel.</returns>
+        private static StridedUnaryKernel GenerateReversedUnaryKernel(UnaryKernelKey key)
+        {
+            var dm = new DynamicMethod(
+                name: $"ReversedUnary_{key}",
+                returnType: typeof(void),
+                parameterTypes: new[] { typeof(void*), typeof(long), typeof(void*), typeof(long) },
+                owner: typeof(DirectILKernelGenerator),
+                skipVisibility: true
+            );
+
+            var il = dm.GetILGenerator();
+            EmitReversedUnaryBody(il, key);
+            il.Emit(OpCodes.Ret);
+            return dm.CreateDelegate<StridedUnaryKernel>();
+        }
+
+        /// <summary>
+        /// Emit the reversed-run unary loop: a 4x-unrolled vector loop, a 1-vector remainder and a scalar tail. Vector
+        /// group <c>o</c> of the iteration at logical element <c>i</c> loads the V source elements that end at element
+        /// <c>i + o</c> (lowest address <c>src + (j − o − (V−1))·e</c>, with <c>j = −i</c>), reverses the lanes, applies the
+        /// op's vector body and stores at <c>dst + (i + o)·e</c>; the tail reads <c>src + j·e</c>.
+        /// </summary>
+        /// <param name="il">The kernel's generator.</param>
+        /// <param name="key">The same-width key.</param>
+        /// <remarks>
+        /// The elements that take the scalar body are the last <c>count mod V</c>, as in the strided kernel (its 2x
+        /// unroll and 1-vector remainder leave the same tail) and in the buffered route's contiguous kernel (its tiles are
+        /// whole vectors), so the vector / scalar split of every element — and so every result byte — is unchanged.
+        /// </remarks>
+        private static void EmitReversedUnaryBody(ILGenerator il, UnaryKernelKey key)
+        {
+            NPTypeCode dtype = key.InputType;
+            int elemSize = GetTypeSize(dtype);
+            long vectorCount = GetVectorCount(dtype);
+            long unrollStep = vectorCount * 4;
+
+            var locControl = EmitReverseControl(il, dtype);
+            var locSrc = il.DeclareLocal(typeof(byte*));
+            var locDst = il.DeclareLocal(typeof(byte*));
+            var locI = il.DeclareLocal(typeof(long));
+            var locJ = il.DeclareLocal(typeof(long));          // always −i
+            var locUnrollEnd = il.DeclareLocal(typeof(long));
+            var locVectorEnd = il.DeclareLocal(typeof(long));
+
+            var lblUnroll = il.DefineLabel();
+            var lblUnrollEnd = il.DefineLabel();
+            var lblRem = il.DefineLabel();
+            var lblRemEnd = il.DefineLabel();
+            var lblTail = il.DefineLabel();
+            var lblTailEnd = il.DefineLabel();
+
+            // src = arg0 (logical element 0, the highest address); dst = arg2; bounds; i = j = 0
+            il.Emit(OpCodes.Ldarg_0);
+            il.Emit(OpCodes.Stloc, locSrc);
+            il.Emit(OpCodes.Ldarg_2);
+            il.Emit(OpCodes.Stloc, locDst);
+            il.Emit(OpCodes.Ldarg_3);
+            il.Emit(OpCodes.Ldc_I8, unrollStep);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Stloc, locUnrollEnd);
+            il.Emit(OpCodes.Ldarg_3);
+            il.Emit(OpCodes.Ldc_I8, vectorCount);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Stloc, locVectorEnd);
+            il.Emit(OpCodes.Ldc_I8, 0L);
+            il.Emit(OpCodes.Stloc, locI);
+            il.Emit(OpCodes.Ldc_I8, 0L);
+            il.Emit(OpCodes.Stloc, locJ);
+
+            // === 4x UNROLLED SIMD LOOP ===
+            il.MarkLabel(lblUnroll);
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldloc, locUnrollEnd);
+            il.Emit(OpCodes.Bgt, lblUnrollEnd);
+            for (int u = 0; u < 4; u++)
+                EmitReversedUnaryGroup(il, key, locSrc, locDst, locI, locJ, locControl, u * vectorCount);
+            EmitStepIndices(il, locI, locJ, unrollStep);
+            il.Emit(OpCodes.Br, lblUnroll);
+            il.MarkLabel(lblUnrollEnd);
+
+            // === 1-VECTOR REMAINDER ===
+            il.MarkLabel(lblRem);
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldloc, locVectorEnd);
+            il.Emit(OpCodes.Bgt, lblRemEnd);
+            EmitReversedUnaryGroup(il, key, locSrc, locDst, locI, locJ, locControl, 0);
+            EmitStepIndices(il, locI, locJ, vectorCount);
+            il.Emit(OpCodes.Br, lblRem);
+            il.MarkLabel(lblRemEnd);
+
+            // === SCALAR TAIL: dst[i] = op(src[-i]) ===
+            il.MarkLabel(lblTail);
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldarg_3);
+            il.Emit(OpCodes.Bge, lblTailEnd);
+            EmitRunElementAddr(il, locDst, locI, 0, elemSize);
+            EmitRunElementAddr(il, locSrc, locJ, 0, elemSize);
+            EmitLoadIndirect(il, dtype);
+            EmitUnaryScalarOperation(il, key.Op, key.OutputType);
+            EmitStoreIndirect(il, key.OutputType);
+            EmitStepIndices(il, locI, locJ, 1);
+            il.Emit(OpCodes.Br, lblTail);
+            il.MarkLabel(lblTailEnd);
+        }
+
+        /// <summary>
+        /// One vector group of <see cref="EmitReversedUnaryBody"/>: load the V source elements ending at logical element
+        /// <c>i + offset</c>, reverse the lanes, apply the op's vector body, store at <c>dst + (i + offset)·e</c>.
+        /// </summary>
+        /// <param name="il">The kernel's generator.</param>
+        /// <param name="key">The same-width key.</param>
+        /// <param name="locSrc">The source pointer at logical element 0.</param>
+        /// <param name="locDst">The destination pointer.</param>
+        /// <param name="locI">i.</param>
+        /// <param name="locJ">j = −i.</param>
+        /// <param name="locControl">The lane-reversal control (null for 8-byte lanes).</param>
+        /// <param name="offset">The group's element offset from i.</param>
+        private static void EmitReversedUnaryGroup(
+            ILGenerator il, UnaryKernelKey key, LocalBuilder locSrc, LocalBuilder locDst, LocalBuilder locI, LocalBuilder locJ,
+            LocalBuilder? locControl, long offset)
+        {
+            int elemSize = GetTypeSize(key.InputType);
+            long lastLane = GetVectorCount(key.InputType) - 1;
+            EmitRunElementAddr(il, locSrc, locJ, -(offset + lastLane), elemSize);
+            EmitVectorLoad(il, key.InputType);
+            EmitReverseLanes(il, key.InputType, locControl);
+            EmitUnaryVectorOperation(il, key.Op, key.InputType);
+            EmitRunElementAddr(il, locDst, locI, offset, elemSize);
+            EmitVectorStore(il, key.OutputType);
+        }
+
+        #endregion
     }
 }

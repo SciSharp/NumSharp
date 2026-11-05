@@ -119,6 +119,17 @@ namespace NumSharp.Backends
                 if (trivial is not null) return trivial;
             }
 
+            // -------- Reversed 1-D input: one load and a lane reversal -----
+            // A 1-D input at element stride -1 (a[::-1], np.flip) of a same-width op
+            // with a vector body loads each vector with one contiguous load and a
+            // lane reversal (InnerLoop.Reversed.cs) — any SIMD dtype, where the
+            // strided kernel below assembles float vectors from scalar loads and the
+            // integers go through the buffered tile gather.
+            {
+                var reversed = TryReversedSimdUnaryOp(nd, op, inputType, outputType);
+                if (reversed is not null) return reversed;
+            }
+
             // -------- Fused strided-SIMD path for 1-D strided inputs -------
             // The fastest route for a non-contiguous 1-D *same-dtype* float/double
             // input: a single custom-IL kernel gathers each SIMD vector directly
@@ -266,6 +277,55 @@ namespace NumSharp.Backends
                 return result;
 
             ExecuteUnaryKernel(kernel, nd, result);
+            return result;
+        }
+
+        /// <summary>
+        ///     Reversed-run execution for a 1-D input at element stride −1 (<c>a[::-1]</c>, <c>np.flip(a)</c>) of a
+        ///     same-width op with a vector body: <see cref="DirectILKernelGenerator.GetReversedUnaryKernel"/> loads each
+        ///     vector with one contiguous load and a lane reversal and stores the result contiguously — for every SIMD
+        ///     dtype the host can reverse lanes for, where the float route assembled each vector from lane-count scalar
+        ///     loads (<see cref="TryStridedSimdUnaryOp"/>) and the integer route gathered tiles (<see cref="TryBufferedStridedUnaryOp"/>).
+        /// </summary>
+        /// <param name="nd">The input.</param>
+        /// <param name="op">The unary op.</param>
+        /// <param name="inputType">The input dtype.</param>
+        /// <param name="outputType">The output dtype (must equal <paramref name="inputType"/>).</param>
+        /// <returns>
+        ///     A fresh contiguous 1-D result — the layout the strided routes return — or null (→ the strided / buffered /
+        ///     iterator routes, unchanged) for any other input, a promoting op, an op without a vector body, or a host
+        ///     without the 256-bit AVX2 lane reversal.
+        /// </returns>
+        /// <remarks>
+        ///     The kernel's last <c>n mod V</c> elements take the op's scalar body, as in the routes it replaces, so every
+        ///     result byte is unchanged.
+        /// </remarks>
+        private unsafe NDArray? TryReversedSimdUnaryOp(
+            NDArray nd, UnaryOp op, NPTypeCode inputType, NPTypeCode outputType)
+        {
+            var s = nd.Shape;
+            if (s.NDim != 1 || s.IsBroadcasted || s.strides[0] != -1)
+                return null;
+            if (inputType != outputType || !DirectILKernelGenerator.CanReverseLanes(inputType))
+                return null;
+
+            var key = new UnaryKernelKey(inputType, outputType, op, IsContiguous: true);
+            if (!DirectILKernelGenerator.CanUseUnarySimd(key))
+                return null;
+
+            StridedUnaryKernel kernel;
+            try { kernel = DirectILKernelGenerator.GetReversedUnaryKernel(key); }
+            catch (NotSupportedException) { return null; }
+
+            long n = s.size;
+            var result = NewArray(outputType, new Shape(n), false);
+            if (n == 0)
+                return result;
+
+            // Logical element 0 — the view's highest address; the kernel walks down from it.
+            int elem = inputType.SizeOf();
+            byte* inBase = (byte*)nd.Address + s.offset * (long)elem;
+            kernel((void*)inBase, -elem, (void*)result.Address, n);
             return result;
         }
 

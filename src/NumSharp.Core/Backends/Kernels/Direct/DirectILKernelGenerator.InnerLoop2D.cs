@@ -277,14 +277,31 @@ namespace NumSharp.Backends.Kernels
 
         private const int Arg2DDataPtrs = 0, Arg2DInnerStrides = 1, Arg2DInnerCount = 2, Arg2DOuterStrides = 3, Arg2DOuterCount = 4;
 
+        /// <summary>
+        /// Emit one 2-D block kernel: the per-call inner-mode dispatch over the C / S patterns, their SIMD blocks, the
+        /// scalar 2-D block, and — in the reversed-run VARIANT only — the stages for reversed input rows.
+        /// </summary>
+        /// <param name="operandTypes">Inputs then the output.</param>
+        /// <param name="scalarBody">Per-element body.</param>
+        /// <param name="vectorBody">Optional per-vector body.</param>
+        /// <param name="cacheKey">The kernel's identity (names the method and its stages).</param>
+        /// <param name="withReversedRuns">
+        /// False: the kernel the 2-D route has always used, its IL unchanged. True: the reversed-run variant
+        /// (DirectILKernelGenerator.InnerLoop.Reversed.cs) <c>NDIterRef</c> picks only for an iteration with a reversed
+        /// input row. Its stage calls make the binary kernel a non-leaf method, and the JIT then allocates the whole
+        /// method's registers differently (callee-saved registers, a frame, a spill — seen in the disassembly), so
+        /// the iterations without a reversed row keep the plain kernel.
+        /// </param>
+        /// <returns>The kernel.</returns>
         private static ND2DElementwiseKernel Generate2DElementwiseKernel(
             NPTypeCode[] operandTypes,
             Action<ILGenerator> scalarBody,
             Action<ILGenerator>? vectorBody,
-            string cacheKey)
+            string cacheKey,
+            bool withReversedRuns = false)
         {
             var dm = new DynamicMethod(
-                name: $"ND2DLoop_{Sanitize(cacheKey)}",
+                name: withReversedRuns ? $"ND2DLoop_{Sanitize(cacheKey)}_rv" : $"ND2DLoop_{Sanitize(cacheKey)}",
                 returnType: typeof(void),
                 parameterTypes: new[] { typeof(void**), typeof(long*), typeof(long), typeof(long*), typeof(long) },
                 owner: typeof(DirectILKernelGenerator),
@@ -328,6 +345,14 @@ namespace NumSharp.Backends.Kernels
             {
                 int elemSize = GetTypeSize(operandTypes[0]);   // all operands same dtype here
 
+                // The reversed-run variant only: a reversed input row (inner byte stride -elemSize)
+                // runs a reversed-run stage (InnerLoop.Reversed.cs) for one- and two-input kernels the
+                // host can reverse lanes for; the C / S patterns below go there instead of the scalar
+                // block when they miss. In the plain kernel lblNotCS IS lblScalar, the IL unchanged.
+                bool reversedPossible = withReversedRuns && nIn <= MaxReversedRunInputs && CanReverseLanes(operandTypes[0]);
+                var lblTryReversed = il.DefineLabel();
+                var lblNotCS = reversedPossible ? lblTryReversed : lblScalar;
+
                 // The output row must be contiguous for the vector store.
                 il.Emit(OpCodes.Ldloc, innerStrideLocals[nIn]);
                 il.Emit(OpCodes.Ldc_I8, (long)elemSize);
@@ -344,7 +369,7 @@ namespace NumSharp.Backends.Kernels
                     il.Emit(OpCodes.Ldloc, innerStrideLocals[0]);
                     il.Emit(OpCodes.Ldc_I8, 0L);
                     il.Emit(OpCodes.Beq, lblS);
-                    il.Emit(OpCodes.Br, lblScalar);
+                    il.Emit(OpCodes.Br, lblNotCS);
 
                     il.MarkLabel(lblC);
                     Emit2DSimdBlock(il, operandTypes, ptrLocals, outerStrideLocals, new[] { false }, vectorBody!, scalarBody);
@@ -368,7 +393,7 @@ namespace NumSharp.Backends.Kernels
 
                     il.Emit(OpCodes.Ldloc, innerStrideLocals[0]);
                     il.Emit(OpCodes.Ldc_I8, (long)elemSize);
-                    il.Emit(OpCodes.Bne_Un, lblScalar);
+                    il.Emit(OpCodes.Bne_Un, lblNotCS);
 
                     il.Emit(OpCodes.Ldloc, innerStrideLocals[1]);
                     il.Emit(OpCodes.Ldc_I8, (long)elemSize);
@@ -376,12 +401,12 @@ namespace NumSharp.Backends.Kernels
                     il.Emit(OpCodes.Ldloc, innerStrideLocals[1]);
                     il.Emit(OpCodes.Ldc_I8, 0L);
                     il.Emit(OpCodes.Beq, lblCS);
-                    il.Emit(OpCodes.Br, lblScalar);
+                    il.Emit(OpCodes.Br, lblNotCS);
 
                     il.MarkLabel(lblLhsIsZero);
                     il.Emit(OpCodes.Ldloc, innerStrideLocals[1]);
                     il.Emit(OpCodes.Ldc_I8, (long)elemSize);
-                    il.Emit(OpCodes.Bne_Un, lblScalar);
+                    il.Emit(OpCodes.Bne_Un, lblNotCS);
                     il.Emit(OpCodes.Br, lblSC);
 
                     il.MarkLabel(lblCC);
@@ -416,6 +441,15 @@ namespace NumSharp.Backends.Kernels
                     }
                     Emit2DSimdBlock(il, operandTypes, ptrLocals, outerStrideLocals, new bool[nIn], vectorBody!, scalarBody);
                     il.Emit(OpCodes.Br, lblEnd);
+                }
+
+                // Reversed input rows: the C / R / S pattern's stage, or the scalar block for any
+                // other inner stride (the unary and binary checks above jump here).
+                if (reversedPossible)
+                {
+                    il.MarkLabel(lblTryReversed);
+                    Emit2DReversedRunDispatch(il, operandTypes, innerStrideLocals, vectorBody!, scalarBody, cacheKey,
+                        lblScalar, lblEnd);
                 }
             }
 
@@ -496,6 +530,20 @@ namespace NumSharp.Backends.Kernels
         /// The inner loop never mutates the base pointers; after a row the outer loop advances each
         /// by its own byte stride.
         /// </summary>
+        /// <param name="il">The kernel's (or stage's) generator.</param>
+        /// <param name="operandTypes">Inputs then the output; one shared SIMD dtype.</param>
+        /// <param name="ptrLocals">Per-operand pointers at the block's first row.</param>
+        /// <param name="outerStrideLocals">Per-operand outer (row) byte strides.</param>
+        /// <param name="isScalar">Per input: broadcast along the row (S) or not.</param>
+        /// <param name="vectorBody">The op's vector body.</param>
+        /// <param name="scalarBody">The op's scalar body (the tail on hosts without masked tails).</param>
+        /// <param name="isReversed">
+        /// Null (no reversed input — the shape this block always had), or per input whether its row is REVERSED
+        /// (inner byte stride −elemSize, a reversed-run stage of InnerLoop.Reversed.cs): such an input loads the
+        /// V elements that end at its logical element with one contiguous load and a lane reversal, its masked tail
+        /// uses the reversed lane mask, and its scalar tail walks down from the row's first element. A block with
+        /// none reversed emits exactly the IL it always did.
+        /// </param>
         private static void Emit2DSimdBlock(
             ILGenerator il,
             NPTypeCode[] operandTypes,
@@ -503,7 +551,8 @@ namespace NumSharp.Backends.Kernels
             LocalBuilder[] outerStrideLocals,
             bool[] isScalar,
             Action<ILGenerator> vectorBody,
-            Action<ILGenerator> scalarBody)
+            Action<ILGenerator> scalarBody,
+            bool[]? isReversed = null)
         {
             int nOp = operandTypes.Length;
             int nIn = nOp - 1;
@@ -549,6 +598,16 @@ namespace NumSharp.Backends.Kernels
                 ctx.LocScalarVal[op] = il.DeclareLocal(GetClrType(operandTypes[op]));
             }
 
+            // ---- Reversed input rows: j = -i addresses them, the lane-reversal control is read once per call ----
+            if (isReversed != null && Array.IndexOf(isReversed, true) >= 0)
+            {
+                ctx.IsReversed = isReversed;
+                ctx.LocJ = il.DeclareLocal(typeof(long));
+                ctx.LocControl = EmitReverseControl(il, outType);
+                if (masked)
+                    ctx.LocRevMask = il.DeclareLocal(vecType);
+            }
+
             // ---- Hoisted bounds ----
             // unrollEnd = innerCount - unrollStep
             EmitLdarg(il, Arg2DInnerCount);
@@ -585,6 +644,26 @@ namespace NumSharp.Backends.Kernels
                     il.EmitCall(OpCodes.Call, ms.MaskAs, null);
                 il.Emit(OpCodes.Stloc, ctx.LocMask!);
 
+                if (ctx.LocRevMask != null)
+                {
+                    // revMask = GreaterThan(Create(tail), {lanes-1, …, 0}) — all-ones where lanes-1-lane < tail,
+                    // i.e. the TOP `tail` lanes: a reversed row's last `tail` elements end the load that starts
+                    // V-1 elements below them, so they sit in the top lanes until the reversal moves them down.
+                    il.Emit(OpCodes.Ldloc, ctx.LocTail!);
+                    if (ms.Is32) il.Emit(OpCodes.Conv_I4);
+                    il.EmitCall(OpCodes.Call, ms.MaskBroadcast, null);
+                    for (int k = ms.Lanes - 1; k >= 0; k--)
+                    {
+                        if (ms.Is32) il.Emit(OpCodes.Ldc_I4, k);
+                        else il.Emit(OpCodes.Ldc_I8, (long)k);
+                    }
+                    il.EmitCall(OpCodes.Call, ms.MaskElements, null);
+                    il.EmitCall(OpCodes.Call, ms.MaskGreaterThan, null);
+                    if (ms.MaskAs != null)
+                        il.EmitCall(OpCodes.Call, ms.MaskAs, null);
+                    il.Emit(OpCodes.Stloc, ctx.LocRevMask);
+                }
+
                 if (ctx.LocFill != null)
                 {
                     // fill = AndNot(One, mask) — a 1 in every masked-OFF lane, 0 elsewhere.
@@ -619,9 +698,14 @@ namespace NumSharp.Backends.Kernels
                 var lblRemEnd = il2.DefineLabel();
                 var lblTailEnd = il2.DefineLabel();
 
-                // i = 0
+                // i = 0 (and j = -i = 0 when a reversed row is read)
                 il2.Emit(OpCodes.Ldc_I8, 0L);
                 il2.Emit(OpCodes.Stloc, ctx.LocI);
+                if (ctx.LocJ != null)
+                {
+                    il2.Emit(OpCodes.Ldc_I8, 0L);
+                    il2.Emit(OpCodes.Stloc, ctx.LocJ);
+                }
 
                 // --- 4x UNROLLED SIMD ---
                 il2.MarkLabel(lblUnroll);
@@ -632,10 +716,7 @@ namespace NumSharp.Backends.Kernels
                 for (int u = 0; u < 4; u++)
                     Emit2DVectorGroup(il2, ctx, ctx.LocI, u * vectorCount, masked: false);
 
-                il2.Emit(OpCodes.Ldloc, ctx.LocI);
-                il2.Emit(OpCodes.Ldc_I8, unrollStep);
-                il2.Emit(OpCodes.Add);
-                il2.Emit(OpCodes.Stloc, ctx.LocI);
+                Emit2DStepIndex(il2, ctx, unrollStep);
                 il2.Emit(OpCodes.Br, lblUnroll);
                 il2.MarkLabel(lblUnrollEnd);
 
@@ -647,10 +728,7 @@ namespace NumSharp.Backends.Kernels
 
                 Emit2DVectorGroup(il2, ctx, ctx.LocI, 0, masked: false);
 
-                il2.Emit(OpCodes.Ldloc, ctx.LocI);
-                il2.Emit(OpCodes.Ldc_I8, vectorCount);
-                il2.Emit(OpCodes.Add);
-                il2.Emit(OpCodes.Stloc, ctx.LocI);
+                Emit2DStepIndex(il2, ctx, vectorCount);
                 il2.Emit(OpCodes.Br, lblRem);
                 il2.MarkLabel(lblRemEnd);
 
@@ -680,7 +758,11 @@ namespace NumSharp.Backends.Kernels
                             il2.Emit(OpCodes.Ldloc, ctx.LocScalarVal[op]!);
                             continue;
                         }
-                        EmitAddrIPlusOffset(il2, ptrLocals[op], ctx.LocI, 0, GetTypeSize(operandTypes[op]));
+                        // A reversed row's element i sits at ptr - i·e = ptr + j·e.
+                        if (ctx.IsReversed?[op] == true)
+                            EmitRunElementAddr(il2, ptrLocals[op], ctx.LocJ!, 0, GetTypeSize(operandTypes[op]));
+                        else
+                            EmitAddrIPlusOffset(il2, ptrLocals[op], ctx.LocI, 0, GetTypeSize(operandTypes[op]));
                         EmitLoadIndirect(il2, operandTypes[op]);
                     }
                     scalarBody(il2);
@@ -689,10 +771,7 @@ namespace NumSharp.Backends.Kernels
                     il2.Emit(OpCodes.Ldloc, locOutVal);
                     EmitStoreIndirect(il2, outType);
 
-                    il2.Emit(OpCodes.Ldloc, ctx.LocI);
-                    il2.Emit(OpCodes.Ldc_I8, 1L);
-                    il2.Emit(OpCodes.Add);
-                    il2.Emit(OpCodes.Stloc, ctx.LocI);
+                    Emit2DStepIndex(il2, ctx, 1);
                     il2.Emit(OpCodes.Br, lblTail);
                 }
                 il2.MarkLabel(lblTailEnd);
@@ -733,6 +812,39 @@ namespace NumSharp.Backends.Kernels
             public LocalBuilder? LocTail, LocMask, LocFill, LocOutVec;
             public LocalBuilder?[] LocVScalar = null!;
             public LocalBuilder?[] LocScalarVal = null!;
+
+            /// <summary>Per input whether its row is reversed (inner byte stride −elemSize); null when none is.</summary>
+            public bool[]? IsReversed;
+
+            /// <summary>j = −i, the reversed rows' index (declared only when a row is reversed).</summary>
+            public LocalBuilder? LocJ;
+
+            /// <summary>The lane-reversal control (<see cref="EmitReverseControl"/>; null for 8-byte lanes or no reversed row).</summary>
+            public LocalBuilder? LocControl;
+
+            /// <summary>The masked tail's lane mask for a reversed row: its TOP <c>tail</c> lanes (masked hosts only).</summary>
+            public LocalBuilder? LocRevMask;
+        }
+
+        /// <summary>
+        /// Emit <c>i += step</c>, and <c>j -= step</c> when the block reads a reversed row (j stays −i). With no
+        /// reversed row this is exactly the index update the block always emitted.
+        /// </summary>
+        /// <param name="il">The generator.</param>
+        /// <param name="ctx">The block's context.</param>
+        /// <param name="step">The element step.</param>
+        private static void Emit2DStepIndex(ILGenerator il, Simd2DContext ctx, long step)
+        {
+            il.Emit(OpCodes.Ldloc, ctx.LocI);
+            il.Emit(OpCodes.Ldc_I8, step);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, ctx.LocI);
+            if (ctx.LocJ == null)
+                return;
+            il.Emit(OpCodes.Ldloc, ctx.LocJ);
+            il.Emit(OpCodes.Ldc_I8, step);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Stloc, ctx.LocJ);
         }
 
         /// <summary>
@@ -788,6 +900,19 @@ namespace NumSharp.Backends.Kernels
         /// <paramref name="locI"/> null the row start is the address — the short-row shapes
         /// keep no index at all.
         /// </summary>
+        /// <param name="il">The generator.</param>
+        /// <param name="ctx">The block's context.</param>
+        /// <param name="locI">The element index, or null for the short-row shapes (the group starts the row).</param>
+        /// <param name="offset">The group's element offset from the index.</param>
+        /// <param name="masked">True: the masked tail group (masked loads and store).</param>
+        /// <remarks>
+        /// A REVERSED input (<see cref="Simd2DContext.IsReversed"/>) loads the V elements that end at its logical
+        /// element <c>i + offset</c> — the lowest one at <c>ptr + (j − offset − (V−1))·e</c> — and reverses the lanes,
+        /// so lane k holds element <c>i + offset + k</c> exactly as a contiguous row's load would. Its masked tail
+        /// loads with the reversed mask (the top <c>tail</c> lanes), which the reversal moves to the bottom lanes the
+        /// output mask stores; the integer fill of the masked-off lanes is OR-ed in after the reversal, so it lands in
+        /// the lanes it always did.
+        /// </remarks>
         private static void Emit2DVectorGroup(ILGenerator il, Simd2DContext ctx, LocalBuilder? locI, long offset, bool masked)
         {
             int nIn = ctx.OperandTypes.Length - 1;
@@ -798,6 +923,30 @@ namespace NumSharp.Backends.Kernels
                 if (ctx.IsScalar[op])
                 {
                     il.Emit(OpCodes.Ldloc, ctx.LocVScalar[op]!);
+                    continue;
+                }
+                if (ctx.IsReversed?[op] == true)
+                {
+                    long lowest = offset + ctx.VectorCount - 1;
+                    if (locI != null)
+                        EmitRunElementAddr(il, ctx.PtrLocals[op], ctx.LocJ!, -lowest, ctx.ElemSize);
+                    else
+                        Emit2DRowAddr(il, ctx.PtrLocals[op], null, -lowest, ctx.ElemSize);
+                    if (masked)
+                    {
+                        il.Emit(OpCodes.Ldloc, ctx.LocRevMask!);
+                        il.EmitCall(OpCodes.Call, ctx.Mask.MaskLoad, null);
+                    }
+                    else
+                    {
+                        EmitVectorLoad(il, ctx.OperandTypes[op]);
+                    }
+                    EmitReverseLanes(il, ctx.OperandTypes[op], ctx.LocControl);
+                    if (masked && ctx.LocFill != null)
+                    {
+                        il.Emit(OpCodes.Ldloc, ctx.LocFill);
+                        il.EmitCall(OpCodes.Call, ctx.Mask.Or!, null);
+                    }
                     continue;
                 }
                 Emit2DRowAddr(il, ctx.PtrLocals[op], locI, offset, ctx.ElemSize);

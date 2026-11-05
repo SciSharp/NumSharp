@@ -54,6 +54,14 @@ using NumSharp.Backends.Iteration;
 // broadcast ones (two or more inputs). See
 // DirectILKernelGenerator.InnerLoop.BroadcastPatterns.cs.
 //
+// REVERSED RUNS (stride -elemSize)
+// --------------------------------
+// One- and two-input kernels whose operands are each contiguous, reversed
+// (a[::-1]) or broadcast, with at least one reversed, run a stage that loads a
+// reversed operand's vector with one contiguous load and a lane reversal (and
+// stores a reversed output the same way), ahead of the gather. See
+// DirectILKernelGenerator.InnerLoop.Reversed.cs.
+//
 // CACHE
 // -----
 // Keyed by user-provided string. Caller is responsible for uniqueness. The
@@ -214,12 +222,31 @@ namespace NumSharp.Backends.Kernels
                 GenerateTemplatedInnerLoop(operandTypes, scalarBody, vectorBody, cacheKey, nanOrderedOp));
         }
 
+        /// <summary>
+        /// Emit one Tier-3B inner-loop kernel: the contiguous / broadcast SIMD loops, the hardware gather, the scalar
+        /// strided fallback, and — in the reversed-run VARIANT only — the reversed-run stages ahead of the gather.
+        /// </summary>
+        /// <param name="operandTypes">Inputs then the output.</param>
+        /// <param name="scalarBody">Per-element body.</param>
+        /// <param name="vectorBody">Optional per-vector body.</param>
+        /// <param name="cacheKey">The kernel's identity (names the method and its stages).</param>
+        /// <param name="nanOrderedOp">The binary op of a 2-input ufunc kernel (the float add / multiply NaN region rule), or null.</param>
+        /// <param name="withReversedRuns">
+        /// False: the kernel every route has always used, its IL unchanged. True: the reversed-run variant
+        /// (DirectILKernelGenerator.InnerLoop.Reversed.cs) that <c>NDIterRef</c> picks only for an iteration with a
+        /// reversed operand. It is a complete kernel — every other stride pattern runs the very same loops — but the
+        /// stage calls it adds make the JIT allocate registers differently across the whole method (measured: callee-
+        /// saved registers, a stack frame and a spill in the 2-D kernel's contiguous loops), which is why the routes
+        /// without a reversed operand keep the plain kernel.
+        /// </param>
+        /// <returns>The kernel.</returns>
         private static NDInnerLoopFunc GenerateTemplatedInnerLoop(
             NPTypeCode[] operandTypes,
             Action<ILGenerator> scalarBody,
             Action<ILGenerator>? vectorBody,
             string cacheKey,
-            BinaryOp? nanOrderedOp)
+            BinaryOp? nanOrderedOp,
+            bool withReversedRuns = false)
         {
             int nOp = operandTypes.Length;
             int nIn = nOp - 1;
@@ -230,7 +257,7 @@ namespace NumSharp.Backends.Kernels
             bool nanOrdered = nanOrderedOp.HasValue && nIn == 2 && HasNaNOperandOrder(nanOrderedOp.Value, outType);
 
             var dm = new DynamicMethod(
-                name: $"NDInnerLoop_{Sanitize(cacheKey)}",
+                name: withReversedRuns ? $"NDInnerLoop_{Sanitize(cacheKey)}_rv" : $"NDInnerLoop_{Sanitize(cacheKey)}",
                 returnType: typeof(void),
                 parameterTypes: new[] { typeof(void**), typeof(long*), typeof(long), typeof(void*) },
                 owner: typeof(DirectILKernelGenerator),
@@ -271,12 +298,25 @@ namespace NumSharp.Backends.Kernels
             GatherSupport gatherSupport = default;
             bool gatherPossible = simdPossible && TryGetGatherSupport(operandTypes[0], out gatherSupport);
 
+            // ---- Reversed-run viability (InnerLoop.Reversed.cs; the variant kernel only). ----
+            // A reversed operand (byte stride -elemSize) next to contiguous / broadcast ones loads
+            // each vector with one contiguous load and a lane reversal instead of a gather (or, for
+            // the 1- and 2-byte dtypes AVX2 cannot gather, the scalar strided loop). One- and
+            // two-input kernels only: the patterns grow as 3^N. Without it every label below
+            // resolves exactly as it always did, so the plain kernel's IL is unchanged.
+            bool reversedPossible = withReversedRuns && simdPossible && nIn <= MaxReversedRunInputs
+                                    && CanReverseLanes(operandTypes[0]);
+
             var lblScalarStrided = il.DefineLabel();
             var lblTryGather = il.DefineLabel();
+            var lblTryReversed = il.DefineLabel();
             var lblEnd = il.DefineLabel();
-            // Where the contig/broadcast checks bail to: the gather dispatcher
+            // Where the reversed-run patterns that do not apply continue: the gather dispatcher
             // when available, else straight to the scalar-strided fallback.
-            var lblSimdBail = gatherPossible ? lblTryGather : lblScalarStrided;
+            var lblAfterReversed = gatherPossible ? lblTryGather : lblScalarStrided;
+            // Where the contig/broadcast checks bail to: the reversed-run dispatch when the dtype
+            // has it, else the route above.
+            var lblSimdBail = reversedPossible ? lblTryReversed : lblAfterReversed;
 
             if (simdPossible)
             {
@@ -374,6 +414,18 @@ namespace NumSharp.Backends.Kernels
                     }
                     EmitSimdContigLoop(il, operandTypes, ptrLocals, vectorBody!, scalarBody);
                     il.Emit(OpCodes.Br, lblEnd);
+                }
+
+                // ── Reversed-run dispatcher (InnerLoop.Reversed.cs) ─────────
+                // Reached when the contiguous / broadcast loops declined the call. A pattern of
+                // contiguous (+e), reversed (-e) and broadcast (0) operands with at least one
+                // reversed one runs its stage; any other stride continues to the gather /
+                // scalar route below, unchanged.
+                if (reversedPossible)
+                {
+                    il.MarkLabel(lblTryReversed);
+                    EmitReversedRunDispatch1D(il, operandTypes, strideLocals, vectorBody!, scalarBody, cacheKey,
+                        lblAfterReversed, lblEnd);
                 }
 
                 // ── Hardware-gather dispatcher (Phase 2a) ───────────────────

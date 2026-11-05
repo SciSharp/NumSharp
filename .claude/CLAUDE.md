@@ -345,7 +345,7 @@ Create issues on `SciSharp/NumSharp` with `gh issue create` (`GH_TOKEN` through 
 |------|-------|
 | `openblas.md` | the `IBlasBackend` seam; `NumSharp.Interop.OpenBLAS`: why it exists, the bundled binary and discovery order, the macOS loader, the build-time override, what decides the result bits, API, gates, examples |
 | `interop-packages.md` | the unreleased-package policy; ONNX Runtime, ML.NET, System.Numerics.Tensors (sources, verbs, dtypes, lifetime, gates); the pythonnet examples |
-| `kernels.md` | the two IL generators' contracts, shared infrastructure, coverage, kernel rules, float16 techniques, NaN operand order, the 2-D block kernel, broadcast pattern stages |
+| `kernels.md` | the two IL generators' contracts, shared infrastructure, coverage, kernel rules, float16 techniques, NaN operand order, the 2-D block kernel, broadcast pattern stages, reversed runs |
 | `memory-views.md` | `Shape` (fields, flags, sharing), Slice / broadcasting / operator internals, views and aliases, allocation from a view's Shape, the buffer pool |
 | `creation-manipulation.md` | `np.arange`, `np.ndarray`, the `as*` family, object-list coercion, full / ones / eye, `np.frombuffer`, linspace / logspace / geomspace, set routines, flips / transposes, stacking, resize / tolist, allocation and reshape guards, `np.copyto` |
 | `unique.md` | `np.unique` (`UniqueResult`, the axis path, NumPy's flat routes) and the Array-API unique family, the hash path |

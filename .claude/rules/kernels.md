@@ -169,7 +169,7 @@ scalar and vector emit bodies, so results are byte-identical.
 - Dispatch: `NDIterRef.{Is2DElementwiseShape,TryExecute2DElementwise}`, wired into the three packed-key
   `ExecuteElementWise*` entry points (`out=` and allocating unary/binary routes). It requires: unbuffered, no `where=`
   mask, EXTERNAL_LOOP, NDim ≥ 2, the output's inner axis element-contiguous, every input's inner axis contiguous or
-  broadcast (stride 1 or 0).
+  broadcast (stride 1 or 0), or reversed (−1) when the kernel's reversed-run variant serves it (next section but one).
 - The contract carries `innerByteStrides` and dispatches once per call on the inner-mode pattern (unary {C, S}, binary
   {CC, SC, CS}); each pattern is a full 2-D loop with the S operand loaded and broadcast once per row.
 - 32- and 64-bit lanes on a 256-bit AVX2 host finish each row's `innerCount % lanes` remainder, or the whole row when
@@ -209,3 +209,33 @@ of a 4×-unrolled SIMD loop in one method would exhaust the JIT's inline budget.
   materialized all-C route) and the `clip_ufunc` tier.
 - Diagnosing a slow stage: `DOTNET_JitDisasm="<method name>*"` + `DOTNET_JitStdOutFile`, then count `call`
   instructions. A method whose inline budget is spent inlines nothing more, `AggressiveInlining` included, so split it.
+
+## Reversed runs: one load and a lane reversal
+
+An operand at inner byte stride −elemSize (`a[::-1]`, `np.flip(a)`, `m[:, ::-1]`) loads the V elements of a vector
+group with one contiguous load that ends at the group's first element, then reverses the lanes; a reversed output
+reverses and stores the same way (`DirectILKernelGenerator.InnerLoop.Reversed.cs`). AVX2 at 256 bits: `vpermpd`/`vpermq`
+0x1B for 8-byte lanes, `vpermps`/`vpermd` with 7..0 for 4-byte lanes, `vpshufb` per 128-bit half then `vpermq` 0x4E for
+1- and 2-byte lanes. The op's vector body is unchanged, so every lane computes the element pair the gather or scalar
+route gave it: byte-identical results, the NaN operand order included.
+- Patterns: each operand C (+e), R (−e) or S (0, inputs only); a call's pattern with an R runs its stage (a DynamicMethod
+  compiled on its first call). One- and two-input same-dtype SIMD kernels on a 256-bit AVX2 host; three or more inputs
+  (3^N − 2^N stages per output mode) and other hosts keep the gather / scalar route.
+- The 1-D shell takes them before the gather (a reversed output too); the 2-D block kernel admits a reversed input row
+  (`Is2DElementwiseShape` reports it, `DirectILKernelGenerator.ServesReversedRows` confirms the kernel serves it), whose
+  masked tail loads with the reversed lane mask (the top `tail` lanes) and ORs the integer fill in after the reversal.
+- Variant kernels: the dispatch and its stage calls live in a reversed-run VARIANT of each kernel (the same generators
+  with `withReversedRuns`, cached in `_innerLoopReversedKeyCache` / `_innerLoop2DReversedCache`), which the three
+  packed-key `ExecuteElementWise*` routes run only for an unbuffered iteration with an operand at inner element stride
+  −1. Trap: stage calls inside the plain kernel change the JIT's register allocation across the whole method (the binary
+  2-D kernel became a non-leaf method with callee-saved registers, a frame and a spill in its contiguous loops), so the
+  plain kernels keep their IL.
+- A 1-D unary op over a reversed input does not reach the iterator: `DefaultEngine.TryReversedSimdUnaryOp` runs
+  `DirectILKernelGenerator.GetReversedUnaryKernel` (the same load and reversal, 4× unrolled) for a same-width op with a
+  vector body, ahead of the strided kernel's scalar gathers (floats) and the buffered tile gather (integers); its last
+  `n mod V` elements take the scalar body, as they did on both routes.
+- Not covered: the string-key `ExecuteElementWise`, buffered iterations, and promoting unary ops (`np.sqrt` of an
+  integer array keeps the buffered gather).
+- Gates: `Backends/Kernels/ReversedRunStageTests.cs` (every 1-D pattern × SIMD dtype × length around the vector groups,
+  reversed `out=`, NaN pairs, every 2-D row pattern and width, unary rows, leading axes, buffers fenced on both sides,
+  and the variants engaged) against the materialized call, byte for byte.

@@ -146,8 +146,9 @@ namespace NumSharp.Backends.Iteration
 
             ValidateElementWiseOperandCount(operandTypes.Length);
 
-            if (Is2DElementwiseShape() &&
-                TryExecute2DElementwise(operandTypes, scalarBody, vectorBody, key))
+            if (Is2DElementwiseShape(out bool reversedRow) &&
+                (!reversedRow || DirectILKernelGenerator.ServesReversedRows(operandTypes, vectorBody)) &&
+                TryExecute2DElementwise(operandTypes, scalarBody, vectorBody, key, reversedRow))
                 return;
 
             // The where= routes arrive here with a packed key and the mask as the trailing
@@ -156,9 +157,46 @@ namespace NumSharp.Backends.Iteration
                 TryExecute2DMasked(operandTypes, scalarBody, vectorBody, key))
                 return;
 
-            if (!DirectILKernelGenerator.TryGetInnerLoop(key, out var kernel))
+            NDInnerLoopFunc kernel;
+            if (HasReversedInnerRun(operandTypes.Length) &&
+                DirectILKernelGenerator.ServesReversedRows(operandTypes, vectorBody))
+            {
+                // A reversed operand: the kernel's reversed-run variant (InnerLoop.Reversed.cs).
+                if (!DirectILKernelGenerator.TryGetReversedRunInnerLoop(key, out kernel))
+                    kernel = DirectILKernelGenerator.CompileReversedRunInnerLoop(operandTypes, scalarBody, vectorBody, key);
+            }
+            else if (!DirectILKernelGenerator.TryGetInnerLoop(key, out kernel))
+            {
                 kernel = DirectILKernelGenerator.CompileInnerLoop(operandTypes, scalarBody, vectorBody, key);
+            }
             ForEach(kernel, auxdata);
+        }
+
+        /// <summary>
+        /// Whether some kernel operand walks the inner axis REVERSED (element stride −1, <c>a[::-1]</c>) in an
+        /// unbuffered external-loop iteration — the iterations that run a kernel's reversed-run variant
+        /// (<see cref="DirectILKernelGenerator.CompileReversedRunInnerLoop"/>). Unbuffered, the inner strides are the
+        /// operands' own and the same for every call, so the variant's reversed patterns cover every call; a buffered
+        /// iteration hands the kernel buffer strides and keeps the plain kernel.
+        /// </summary>
+        /// <param name="kernelOperandCount">The kernel's operand count (a trailing where= mask, driven by ForEach, excluded).</param>
+        /// <returns>True when an operand's inner element stride is −1.</returns>
+        /// <remarks>A few stride reads per call, on the routes that already built an iterator.</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private bool HasReversedInnerRun(int kernelOperandCount)
+        {
+            uint f = _state->ItFlags;
+            if ((f & (uint)NDIterFlags.BUFFER) != 0) return false;
+            if ((f & (uint)NDIterFlags.EXLOOP) == 0) return false;
+            int ndim = _state->NDim;
+            if (ndim < 1) return false;
+            int inner = ndim - 1;
+            for (int op = 0; op < kernelOperandCount; op++)
+            {
+                if (_state->GetStride(inner, op) == -1)
+                    return true;
+            }
+            return false;
         }
 
         /// <summary>
@@ -202,9 +240,18 @@ namespace NumSharp.Backends.Iteration
         /// and fails <c>NDim &gt;= 2</c> immediately; the callers only build an operand-type
         /// array when this returns true.
         /// </summary>
+        /// <param name="hasReversedRow">
+        /// Set when an input row is REVERSED (inner element stride −1, <c>m[:, ::-1]</c>). The gate admits such a row
+        /// only for the caller to confirm that its kernel runs it as a reversed-run stage
+        /// (<see cref="DirectILKernelGenerator.ServesReversedRows"/>): a kernel without one would reach its scalar block,
+        /// where the per-row route still had the gather. Checked only when it is set, so a call without a reversed
+        /// row pays nothing for it.
+        /// </param>
+        /// <returns>True when the iteration can run as 2-D blocks (subject to <paramref name="hasReversedRow"/>).</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private bool Is2DElementwiseShape()
+        private bool Is2DElementwiseShape(out bool hasReversedRow)
         {
+            hasReversedRow = false;
             uint f = _state->ItFlags;
             if ((f & (uint)NDIterFlags.BUFFER) != 0) return false;        // cast/promote → buffered path
             if ((f & (uint)NDIterFlags.EXLOOP) == 0) return false;        // need the coalesced inner axis
@@ -218,11 +265,17 @@ namespace NumSharp.Backends.Iteration
             // The output row must be element-contiguous — that is what lets the block kernel
             // SIMD-store each row in place.
             if (_state->GetStride(inner, nop - 1) != 1) return false;
-            // Each input row is contiguous (a vector load) or broadcast (one scalar per row). A
+            // Each input row is contiguous (a vector load), broadcast (one scalar per row) or
+            // reversed (a load and a lane reversal, if the caller's kernel has the stage). A
             // genuinely strided inner axis keeps the per-chunk route, whose gather path serves it.
             for (int op = 0; op < nop - 1; op++)
             {
                 long s = _state->GetStride(inner, op);
+                if (s == -1)
+                {
+                    hasReversedRow = true;
+                    continue;
+                }
                 if (s != 1 && s != 0) return false;
             }
             return true;
@@ -248,6 +301,15 @@ namespace NumSharp.Backends.Iteration
         /// so strides scale by SrcElementSizes exactly as NDIter.ExternalLoopNext does (identical
         /// to ElementSizes on this unbuffered path).
         /// </summary>
+        /// <param name="operandTypes">Inputs then the output.</param>
+        /// <param name="scalarBody">Per-element body.</param>
+        /// <param name="vectorBody">Optional per-vector body.</param>
+        /// <param name="key">The kernel's packed key.</param>
+        /// <param name="reversedRow">
+        /// True when an input row is reversed (<see cref="Is2DElementwiseShape"/>, confirmed by the caller): the block
+        /// kernel's reversed-run variant runs it; false keeps the plain kernel, its machine code unchanged.
+        /// </param>
+        /// <returns>True when the blocks ran (or there was nothing to run); false only when runtime IL is unavailable.</returns>
         /// <remarks>
         ///     An exception that leaves it marks the iteration failed (<see cref="MarkFailed"/>), so
         ///     <see cref="Dispose"/> clears the held buffers and discards the COPY_IF_OVERLAP write-backs instead of
@@ -257,7 +319,8 @@ namespace NumSharp.Backends.Iteration
             NPTypeCode[] operandTypes,
             Action<ILGenerator> scalarBody,
             Action<ILGenerator>? vectorBody,
-            in InnerLoopKernelKey key)
+            in InnerLoopKernelKey key,
+            bool reversedRow)
         {
             try
             {
@@ -307,9 +370,18 @@ namespace NumSharp.Backends.Iteration
                     outerStrides[op] = _state->GetStride(inner - 1, op) * srcSizes[op];
                 }
 
-                if (!DirectILKernelGenerator.TryGet2DKernel(key, out var kernel))
+                ND2DElementwiseKernel kernel;
+                if (reversedRow)
+                {
+                    // A reversed input row: the block kernel's reversed-run variant (InnerLoop.Reversed.cs).
+                    if (!DirectILKernelGenerator.TryGet2DReversedRunKernel(key, out kernel))
+                        kernel = DirectILKernelGenerator.Compile2DReversedRunKernel(operandTypes, scalarBody, vectorBody, key);
+                }
+                else if (!DirectILKernelGenerator.TryGet2DKernel(key, out kernel))
+                {
                     kernel = DirectILKernelGenerator.Compile2DElementwiseKernel(
                         operandTypes, scalarBody, vectorBody, key);
+                }
 
                 void** basePtrs = GetDataPtrArray();
                 if (first == 0)
@@ -537,11 +609,22 @@ namespace NumSharp.Backends.Iteration
             in InnerLoopKernelKey key)
         {
             ValidateElementWiseOperandCount(2);
-            if (Is2DElementwiseShape() &&
-                TryExecute2DElementwise(new[] { inType, outType }, scalarBody, vectorBody, key))
+            if (Is2DElementwiseShape(out bool reversedRow) &&
+                (!reversedRow || DirectILKernelGenerator.ServesReversedRows(inType, inType, outType, nIn: 1, vectorBody)) &&
+                TryExecute2DElementwise(new[] { inType, outType }, scalarBody, vectorBody, key, reversedRow))
                 return;
-            if (!DirectILKernelGenerator.TryGetInnerLoop(key, out var kernel))
+            NDInnerLoopFunc kernel;
+            if (HasReversedInnerRun(2) &&
+                DirectILKernelGenerator.ServesReversedRows(inType, inType, outType, nIn: 1, vectorBody))
+            {
+                // A reversed operand: the kernel's reversed-run variant (InnerLoop.Reversed.cs).
+                if (!DirectILKernelGenerator.TryGetReversedRunInnerLoop(key, out kernel))
+                    kernel = DirectILKernelGenerator.CompileReversedRunInnerLoop(new[] { inType, outType }, scalarBody, vectorBody, key);
+            }
+            else if (!DirectILKernelGenerator.TryGetInnerLoop(key, out kernel))
+            {
                 kernel = DirectILKernelGenerator.CompileInnerLoop(new[] { inType, outType }, scalarBody, vectorBody, key);
+            }
             ForEach(kernel);
         }
 
@@ -578,11 +661,22 @@ namespace NumSharp.Backends.Iteration
             void* auxdata)
         {
             ValidateElementWiseOperandCount(3);
-            if (Is2DElementwiseShape() &&
-                TryExecute2DElementwise(new[] { lhs, rhs, outType }, scalarBody, vectorBody, key))
+            if (Is2DElementwiseShape(out bool reversedRow) &&
+                (!reversedRow || DirectILKernelGenerator.ServesReversedRows(lhs, rhs, outType, nIn: 2, vectorBody)) &&
+                TryExecute2DElementwise(new[] { lhs, rhs, outType }, scalarBody, vectorBody, key, reversedRow))
                 return;
-            if (!DirectILKernelGenerator.TryGetInnerLoop(key, out var kernel))
+            NDInnerLoopFunc kernel;
+            if (HasReversedInnerRun(3) &&
+                DirectILKernelGenerator.ServesReversedRows(lhs, rhs, outType, nIn: 2, vectorBody))
+            {
+                // A reversed operand: the kernel's reversed-run variant (InnerLoop.Reversed.cs).
+                if (!DirectILKernelGenerator.TryGetReversedRunInnerLoop(key, out kernel))
+                    kernel = DirectILKernelGenerator.CompileReversedRunInnerLoop(new[] { lhs, rhs, outType }, scalarBody, vectorBody, key);
+            }
+            else if (!DirectILKernelGenerator.TryGetInnerLoop(key, out kernel))
+            {
                 kernel = DirectILKernelGenerator.CompileInnerLoop(new[] { lhs, rhs, outType }, scalarBody, vectorBody, key);
+            }
             ForEach(kernel, auxdata);
         }
 
