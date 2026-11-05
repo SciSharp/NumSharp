@@ -176,9 +176,22 @@ namespace NumSharp
         /// </summary>
         internal static IReadOnlyList<LegacyBuiltinDTypeMeta> NumericStorage { get; }
 
-        /// <summary>NumSharp-only: <see cref="System.Decimal"/> (type number 256, the user-defined range).</summary>
+        /// <summary>
+        ///     NumSharp-only: <see cref="System.Decimal"/> (type number 256, the user-defined range). Its <c>dtype.char</c> is
+        ///     <c>'A'</c>, a letter of its own as NumPy's user dtypes have one (<c>rational</c>'s is <c>'r'</c>): no NumPy
+        ///     type, kind letter or PEP 3118 format uses it, so NumPy's parser does not read it back
+        ///     (<c>np.dtype("A")</c> is "not understood") and ported code that classifies by character
+        ///     (<c>np.typecodes</c>, <c>np.mintypecode</c>) never takes decimal for another dtype.
+        /// </summary>
         public static LegacyBuiltinDTypeMeta Decimal { get; }
-        /// <summary>NumSharp-only: <see cref="System.Char"/> (type number 257, the user-defined range; promotes as uint16).</summary>
+        /// <summary>
+        ///     NumSharp-only: <see cref="System.Char"/> (type number 257, the user-defined range; promotes as uint16). Its
+        ///     <c>dtype.char</c> is <c>'u'</c>, a letter of its own (see <see cref="Decimal"/>): PEP 3118's code for a 2-byte
+        ///     UCS-2 character, which a char array's memoryview already reports as its format, and Python's array-module code
+        ///     for a wide character (<c>array('u')</c>, 2 bytes on Windows). NumPy reads <c>'u'</c> only as the unsigned
+        ///     KIND (<c>'u2'</c>), never alone (<c>np.dtype("u")</c> is "not understood"); NumPy's <c>'c'</c> is the one-byte
+        ///     string <c>S1</c>.
+        /// </summary>
         public static LegacyBuiltinDTypeMeta Char { get; }
         /// <summary>
         ///     <c>np.dtypes.StrDType</c> — fixed-width Unicode (<c>U</c>, type number 19, one UCS-4 code point per character).
@@ -278,8 +291,14 @@ namespace NumSharp
             Complex128 = Legacy("Complex128DType", numpy, 15, NPTypeCode.Complex, typeof(Complex), "complex128", 'c', 'D', 16, 8, builtin, null);
             CLongDouble = Legacy("CLongDoubleDType", numpy, 16, NPTypeCode.Complex, typeof(Complex), "clongdouble", 'c', 'G', 16, 8, builtin, null, ownsLane: false);
             Half = Legacy("Float16DType", numpy, 23, NPTypeCode.Half, typeof(System.Half), "float16", 'f', 'e', 2, 2, builtin, null);
-            Decimal = Legacy("DecimalDType", numsharp, 256, NPTypeCode.Decimal, typeof(decimal), "decimal", 'f', (char)NPY_TYPECHAR.NPY_LONGLONGLTR, 16, 8, builtin, null);
-            Char = Legacy("CharDType", numsharp, 257, NPTypeCode.Char, typeof(char), "char", 'u', (char)NPY_TYPECHAR.NPY_CHARLTR, 2, 2, builtin, null);
+            // NumSharp's own classes take NumPy's user-dtype convention: a type character of their own that NumPy's types,
+            // kind letters and PEP 3118 formats leave free (NumPy's rational test dtype is 'r'), so a round trip through
+            // np.dtype(d.char) is "not understood" instead of another dtype (int64's 'q' and S1's 'c' were borrowed before).
+            // Char takes PEP 3118's UCS-2 code, its memoryview's format already; decimal, which no buffer format names, the
+            // first free letter of its name ('D', 'C', 'I', 'M' are taken, and 'E' is left to NumPy's lower-real /
+            // upper-complex pattern, f/F d/D g/G, which would give it to a complex float16).
+            Decimal = Legacy("DecimalDType", numsharp, 256, NPTypeCode.Decimal, typeof(decimal), "decimal", 'f', 'A', 16, 8, builtin, null);
+            Char = Legacy("CharDType", numsharp, 257, NPTypeCode.Char, typeof(char), "char", 'u', 'u', 2, 2, builtin, null);
 
             // Every numeric storage class, the lane-sharing C-type classes included (in type-number order beside the
             // owners): each numeric cast table below spans them all, as NumPy's loops over its legacy type numbers do.

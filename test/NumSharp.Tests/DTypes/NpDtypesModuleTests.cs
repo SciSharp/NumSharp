@@ -99,11 +99,12 @@ namespace NumSharp.Tests.DTypes
             np.dtypes.DecimalDType.FullName.Should().Be("numsharp.dtypes.DecimalDType");
             np.dtypes.DecimalDType.type_num.Should().Be(256);
             np.dtypes.DecimalDType.Kind.Should().Be('f');
+            np.dtypes.DecimalDType.TypeChar.Should().Be('A');
             np.dtypes.DecimalDType.type.Should().Be(typeof(decimal));
             np.dtypes.CharDType.FullName.Should().Be("numsharp.dtypes.CharDType");
             np.dtypes.CharDType.type_num.Should().Be(257);
             np.dtypes.CharDType.Kind.Should().Be('u');
-            np.dtypes.CharDType.TypeChar.Should().Be('c');
+            np.dtypes.CharDType.TypeChar.Should().Be('u');
             DTypeRegistry.Str.Name.Should().Be("StrDType");
             DTypeRegistry.Str.type_num.Should().Be(19);
             DTypeRegistry.Str.HasStorage.Should().BeTrue("NPTypeCode.String is the lane both string classes store in");

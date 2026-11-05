@@ -85,6 +85,10 @@ namespace NumSharp.Tests.DTypes
             var dec = np.dtype("decimal");
             dec.num.Should().Be(256);
             dec.kind.Should().Be('f');
+            // A type character of its own (NumPy's user-dtype convention, rational's 'r'): no NumPy type, kind letter or
+            // PEP 3118 format uses 'A', so np.dtype("A") stays NumPy's "not understood" (it was int64's borrowed 'q').
+            dec.@char.Should().Be('A');
+            new Action(() => np.dtype(dec.@char.ToString())).Should().Throw<TypeError>().WithMessage("data type 'A' not understood");
             dec.itemsize.Should().Be(16);
             dec.name.Should().Be("decimal");
             dec.str.Should().Be("<f16");
@@ -96,7 +100,9 @@ namespace NumSharp.Tests.DTypes
             var ch = np.dtype("char");
             ch.num.Should().Be(257);
             ch.kind.Should().Be('u', "Char promotes and prints as uint16 everywhere");
-            ch.@char.Should().Be('c');
+            ch.@char.Should().Be('u', "PEP 3118's UCS-2 code; NumPy's 'c' is S1");
+            new Action(() => np.dtype(ch.@char.ToString())).Should().Throw<TypeError>().WithMessage("data type 'u' not understood");
+            np.array(new[] { 'a', 'b' }).data.format.Should().Be(ch.@char.ToString(), "the type character is the buffer format");
             ch.itemsize.Should().Be(2);
             ch.name.Should().Be("char");
             ch.str.Should().Be("<u2");

@@ -668,10 +668,10 @@ namespace NumSharp
         /// <exception cref="ArgumentException"><paramref name="typeCode"/> is <see cref="NPTypeCode.Empty"/>: no dtype, so no character.</exception>
         /// <exception cref="NotSupportedException">
         ///     <paramref name="typeCode"/> is one of NumSharp's own dtypes (<see cref="NPTypeCode.Decimal"/>,
-        ///     <see cref="NPTypeCode.Char"/>): NumPy has no such dtype, so no NumPy character names it. Do not substitute their
-        ///     descriptors' own <see cref="DType.@char"/>: it borrows NumPy characters of OTHER dtypes (decimal reports <c>'q'</c>,
-        ///     C <c>long long</c>; char reports <c>'c'</c>, NumPy's <c>S1</c>), so NumPy-facing code would read a decimal as an
-        ///     int64. Or <paramref name="typeCode"/> is <see cref="NPTypeCode.String"/>: the lane of the string classes
+        ///     <see cref="NPTypeCode.Char"/>): NumPy has no such dtype, so no NumPy character names it. Their descriptors'
+        ///     own <see cref="DType.@char"/> is a letter of NumSharp's (decimal <c>'A'</c>, char <c>'u'</c>, as NumPy's user
+        ///     dtypes have their own), which no <see cref="NPY_TYPECHAR"/> member holds. Or <paramref name="typeCode"/> is
+        ///     <see cref="NPTypeCode.String"/>: the lane of the string classes
         ///     (<c>S</c>, <c>U</c> and <c>StringDType</c>) names no one dtype, so ask the array's own descriptor
         ///     (<c>a.dtype.@char</c>) instead.
         /// </exception>

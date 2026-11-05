@@ -280,6 +280,7 @@ var total = np.sum(prices);     // exact decimal sum, no float drift
 
 **Characteristics:**
 - `kind == 'f'` (float-like-it's a fractional type even though internally integer-based)
+- `char == 'A'`, a type character of its own, as NumPy's user-defined dtypes have one: no NumPy dtype uses it, so `np.dtype("A")` is NumPy's "not understood" rather than some other dtype
 - No SIMD acceleration (decimal arithmetic is scalar-only; much slower than `double`)
 - No IEEE special values: no NaN, no Infinity, no subnormals
 - `np.finfo(NPTypeCode.Decimal)` works and returns limited info (bits=128, precision=28, no subnormals)
@@ -309,6 +310,7 @@ InfoOf<char>.Size;              // 2 (actual memory footprint)
 
 **Characteristics:**
 - `kind == 'u'` (unsigned-integer semantics, not the `S` / `U` text families)
+- `char == 'u'`, PEP 3118's code for a 2-byte UCS-2 character, which its memoryview reports as the format too; NumPy reads `'u'` only as the unsigned-integer kind (`'u2'`), so `np.dtype("u")` is "not understood" (NumPy's `'c'` is `S1`)
 - Treated as `ushort` for many operations (same byte width)
 - Boundary values: `'\0'` (0) to `char.MaxValue` (65535)
 - `np.dtype(typeof(char)).itemsize == 2`, matching `InfoOf<char>.Size`.

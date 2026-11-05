@@ -311,9 +311,11 @@ prefix (`GetCastingImpl`, `DTypePromotion.CommonDType`). PascalCase members (`Na
   follows the C `long` model, a control character below `'\x18'` is a type number, and the string characters (`'S'`,
   `'a'`, `'c'`, `'U'`, `'T'`) are the `NPTypeCode.String` lane (the class and width are lost: keep the descriptor).
   `ToTYPECHAR` is the lane's descriptor character (`'D'` for complex128, never the kind letter `'c'`). NumSharp's decimal
-  and char have no NumPy character and REFUSE (`NotSupportedException`): their descriptors' own `char` borrows other
-  dtypes' letters (decimal `'q'`, char `'c'`); so does the String lane, which names no one dtype (ask the array's own
-  `a.dtype.@char`).
+  and char have no NumPy character and REFUSE (`NotSupportedException`), and so does the String lane, which names no one
+  dtype (ask the array's own `a.dtype.@char`). Their descriptors' own `char` follows NumPy's user-dtype convention (a
+  letter of their own, as `rational`'s `'r'`, which NumPy's parser does not read back): decimal `'A'`, char `'u'` (PEP 3118's UCS-2 code, its memoryview's format) - free in
+  NumPy's types, kind letters and PEP 3118 formats ('E' is left to NumPy's f/F d/D g/G pattern); `np.dtype("A")` and
+  `np.dtype("u")` stay NumPy's "not understood" (the dtype oracle's single-character records hold it).
 - The header gate: the oracle's `members` record carries every C enum of `ndarraytypes.h` (`c_enums`, parsed from
   `refs/numpy`), and `DTypeOracleTests.CEnums_MirrorNumPysHeader` holds the mirrored ones (`NPY_TYPES`, `NPY_TYPECHAR`,
   `NPY_SCALARKIND`, `NPY_ORDER`, `NPY_CASTING`, `NPY_DATETIMEUNIT`, and `NPY_SORTKIND`, the sort kinds of
