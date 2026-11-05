@@ -147,7 +147,13 @@ OpenBLAS's `alpha == 0` early return; every measured cell equal. PA2a is done (`
 1-D shell, the 2-D block kernel and a 1-D unary kernel - the same bytes, 1.1–16× where the old route gathered or ran
 the scalar loop, no cell slower. PA2b is done (`da886b5d`): the 2-D block kernel's stationary-out variant holds a
 reduction's out row in registers across the rows, the same bytes as the plain block, 1.05–16.8× on 103 of 105 measured
-reduction-row cells, the other two equal. Next: PA2c.
+reduction-row cells, the other two equal. PA2c is done (`ddfe2d3f`): the reduction's float64 / float32 / decimal add
+loops are calls of the binary ufunc's own add kernels - one inner-loop call per elementwise call, the stationary-out
+variant for several rows, which gains row blocks and an x86 next-block prefetch - so NumPy's NaN operand order has
+one copy; the same bytes over 840 cases, np.average over an axis pair 1.91–1.96×, no cell of the 35 slower. PA2 is
+done. PA2a, PA2b and PA2c wait to land on `strings`, where another session holds an uncommitted edit of
+`DefaultEngine.UnaryOp.cs`, a file PA2a changes. Next, the owner's call (not asked yet): P10 item 6, PA5, PA6, the
+fixes of the pinned divergences.
 
 **The owner's decisions of 2026-10-31** ([§5](#5-decisions-for-the-owner), D7 to D22, asked with each option's code):
 - P7 is dropped. D7's first answer ("Rule on the result") gave it a design; in the step round the same day the owner
@@ -1292,8 +1298,8 @@ there. Rules (decided 2026-10-30):
     np.vecmat (the complex pools) identical; `decimal_varstd.jsonl`, `products.jsonl`; the cells decimal std and complex
     vdot at 1K and 100K.
 
-- [ ] **PA2. The add loops of the reduction iterator** (`da7adc53`; `NumPyAddLoops` in `Default.Reduction.Add.Axes.cs`;
-  the order below decided 2026-10-31, D16).
+- [x] **PA2. The add loops of the reduction iterator** (`da7adc53`; `NumPyAddLoops` in `Default.Reduction.Add.Axes.cs`;
+  the order below decided 2026-10-31, D16). Done 2026-11-05: PA2a, PA2b and PA2c below.
   The float64 and float32 elementwise forms (`DoubleBinary` / `SingleBinary` with their contiguous, broadcast, reversed
   and rows vector loops, about 250 lines) re-implement the rule for which NaN an add keeps, a rule the kernels already
   carry (`DirectILKernelGenerator.NaNOperandOrder.cs`). That makes two copies of a subtle rule that must agree.
@@ -1382,6 +1388,28 @@ there. Rules (decided 2026-10-30):
       33 (0.80–0.89×); scalar strips of 4 columns won everywhere (1.27–3.34×); a float32 row of 1000 broadcast down 100
       rows read 0.93× with 4 accumulator chains (the add's latency exposed where the plain block is throughput-bound in
       L1), and 8-vector strips made it 1.07×.
+  - [x] **PA2c, the move: done 2026-11-05** (`ddfe2d3f`; D23 "Approve both").
+    The float64, float32 and decimal elementwise forms are one call of the binary ufunc's own add inner loop each
+    (`SharedAdd`: operands `{o, x, o}`, NumPy's broadcast NaN rule as auxdata, the reversed-run variant for a reversed
+    input), and the float64 / float32 rows forms one call of the 2-D kernel's stationary-out variant (`SharedAddRows`;
+    one elementwise call per row for any other input, and while `DirectILKernelGenerator.Enabled` is off). The
+    hand-written vector loops and their copy of the NaN rule are gone. As planned, `ComplexBinary` stays (the shared
+    complex add picks a part's NaN differently), and so do `HalfBinary`, the reduce forms, `PairwiseOfCopies` and
+    `DecimalReduce`.
+    - The stationary-out mode gains row blocks (at least 32 rows, about 16 KB of the input each) and, on an x86 host,
+      a prefetch of the next block where a block is compact (32 KB or less) and a full block follows. PA2b's mode
+      walked every row once per strip (np.average over an axis pair 1.09–1.26× of the hand form); the blocks alone
+      measured 0.84–0.91× of the plain 2-D kernel on short rows streamed from memory (the memory idle through a
+      block's later strip passes), and with the prefetch 0.97–1.74×. Prefetching a block of long rows (2.5 MB ahead)
+      measured 0.75×, so long rows keep the hardware prefetcher.
+    - Measured: PA2c's 35 cells (both builds in one process) 0.995–1.94×: np.average over (0, 1) of a 100³ array
+      1.96× (float64) / 1.91× (float32), over (0, 2) (the reduce form, untouched) 0.99× / 1.04× after the rule's
+      re-measure (one pass read 0.914×). The stationary-out mode against the plain 2-D kernel over PA2b's 105 cells
+      plus rows of (10000, 100) and (100, 10000): 133 faster (1.06–14.6×), 2 equal, none slower.
+    - Gates: the snapshot (840 cases: np.sum / np.mean / np.average with NaN pairs, reversed, broadcast and stepped
+      axes, axis pairs; float64, float32, decimal, complex) identical; the oracle; the shared NaN rule's mutants now
+      fail the reduction's tests (on the old tree they pass: the reduction's own copy of the rule hid them); the row
+      blocks' mutants fail the kernel tests.
 
 - [x] **PA3. One home for NumPy's dot functions** (`ee9ce021`; `SlidingDot` and `Default.Dot.Fused.cs` predate the
   plan). Done 2026-11-05: PA3a and PA3b below (D23 lands no identical code moved, so the moves of PA3b's first text
@@ -1761,6 +1789,27 @@ breaks a subclass or a direct caller for a layering reason alone.
 ---
 
 ## 9. State log
+
+- **2026-11-05, PA2c (D23): the reduction's add loops are calls of the binary ufunc's own add kernels; PA2c is done,
+  and with it PA2.** One commit on top of PA2b's, `ddfe2d3f` (with PA2a's and PA2b's, waiting to land: the `strings`
+  worktree holds another session's uncommitted edit of `DefaultEngine.UnaryOp.cs`, a file PA2a changes).
+  - The moves, and the stationary-out mode's row blocks and prefetch: see PA2c in §7.
+  - The effort the rule asked for, in order: PA2b's mode as it stood (the axis pair 1.09–1.26× of the hand form,
+    where the prototype's plain 2-D kernel measured 2.00× / 1.91×); a shape rule sending such rows to the plain
+    kernel (2×, but a float32 row broadcast down 1000 rows 0.79×: dropped); row blocks (1.73× / 1.76×; 16, 32 and 64
+    KB alike); the kernel against the plain one (0.84–0.91× on 10,000–100,000 rows of 50–200 elements streamed from
+    memory); a next-block prefetch, tried as T0 / T1 / T2 / NTA over 16 and 32 KB blocks in one process (16 KB with T0
+    best, 1.05–1.29×; 0.75× where a block is 2.5 MB), kept for compact blocks only.
+  - Measured, old / new: PA2c's 35 cells 0.995–1.94× (the axis pair 1.96× / 1.91×; the one cell first read below
+    0.95×, np.average over (0, 2) in float32, the reduce form PA2c does not touch, re-measured 1.04×); the
+    stationary-out mode against the plain 2-D kernel, 135 cells: 133 faster (1.06–14.6×), 2 equal, none slower.
+  - Gates (Release): NumSharp.Tests 23,242 / 23,241 on net10.0 / net8.0 (+3 tests: two kernel tests over several row
+    blocks, one fenced; the rows form with the 2-D kernels switched off), the kernel and reduction classes on net8.0 and
+    under `NUMSHARP_DEBUG_GUARD_PAGES=1`; the oracle 419 passed, 2 skipped, the seven tiers the plan names among them;
+    the snapshot identical on the final build too (840 cases). Mutants: the shared NaN rule switched off (scalar body,
+    vector body, both) fails 2, 2 and 3 of the reduction's 10 NaN tests, and passes all of them on the old tree; the
+    row blocks' three mutants each fail the kernel tests. np.average over (0, 2), code PA2c does not reach, read
+    0.91–1.04× across runs and 1.006× with the harness's two places swapped (it prepares its first side first).
 
 - **2026-11-05, PA2b (D23): the 2-D block kernel's stationary-out mode - a reduction's out row held in registers across
   the rows; PA2b is done.** One commit on top of PA2a's, `da886b5d` (with PA2a's two, waiting to land: the `strings`
