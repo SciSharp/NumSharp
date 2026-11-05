@@ -268,6 +268,35 @@ Four traps the twins had to learn (each cost a red run):
 tuples and back (`numpy.zeros((2, 3))`, `(long, long) shape = a.shape`) through `TupleCodec`,
 registered by `RegisterCodec()`.
 
+## 7c. End-to-end text parity (`TextLiveParityHarness`)
+
+`TextOpsLiveParityTests`, `TextConversionLiveParityTests` and `TextPandasLiveParityTests` hold what a program does with
+text ONCE IT CROSSED (the crossing itself is `TextFixedWidthCrossingTests` / `TextStringDTypeCrossingTests` /
+`TextCrossingEdgeCaseTests`): numpy builds the input, the bridge hands it to NumSharp (a view of a fixed-width array,
+an exact copy of a `StringDType` one), NumSharp computes, the result crosses back and numpy's own answer over the same
+input is the expected one — dtype string, shape and C-order bytes, or the descriptor repr + values with NA identity for
+`StringDType`, or numpy's exception class and text. A family is a table of `TextOp`s (`E` / `E2` / `W` / `Lit` /
+`Lit2` build them: the numpy expression over `x` and its partner `p = x[::-1]`, and the NumSharp twin) run by
+`RunFamily` over four classes (`U12`, `S12`, `StringDType()`, `StringDType(na_object=None)` with NA cells) × twelve
+layouts × the class's routes; it fails once, listing every disagreeing cell.
+
+Conventions the harness encodes (change them only with the reason that put them there):
+- The copy route's numpy twin is `x.copy(order='C')`: the import copy is C-contiguous by `ToNDArray`'s contract, and the
+  order is observable — a refused cast names the first failing element of its MEMORY walk (`TextCastErrorOrderTests` in
+  the unit suite guards the walk).
+- An elementwise op on a 0-d input runs numpy over `x[None]` and takes `[0, ...]` (numpy returns a scalar there); a numpy
+  `str_` / `bytes_` scalar result is compared at NumSharp's 0-d width.
+- Error texts are compared without .NET's `(Parameter '…')` decoration; the class may be one of the two documented
+  house conventions (a `UFuncTypeError` cast refusal is `ArgumentException`, a shape `ValueError` is
+  `IncorrectShapeException`).
+- NumPy's own bugs are routed around in the numpy expression and named there: `_t2c` (StringDType → complex copies the
+  real part into the imaginary part), `_eager` (numpy's `S → StringDType` cast stores non-UTF-8 bytes and raises only on
+  a read; NumSharp raises at the cast), `np.ascontiguousarray(x)` under `argsort(axis=None)` (a non-contiguous
+  `StringDType` view raises `MemoryError` or misorders in numpy). A Windows numpy's 32-bit C long changes the TEXT of the
+  int64-edge parse cells; those keep the class check only there (LP64 numpy compares them exactly).
+- Adding an op: one `TextOp` line in the right family; a new divergence is pinned in the unit suite and waived here by the
+  narrowest `messageGap` (the class still compared), never by dropping the cell.
+
 ## 8. Running
 
 ```bash

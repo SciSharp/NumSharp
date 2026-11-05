@@ -82,6 +82,27 @@ seq_two.onnx            A, B float32 (any rank) -> SequenceConstruct -> S. A seq
                         different shapes: the reader's order and per-element shapes.
 two_dtypes.onnx         X ['N'] float32 -> Identity -> Yf ; X -> Cast -> Yi int32. Two outputs of two dtypes:
                         the pre-allocated output checks name the right output.
+string_concat.onnx      A, B string (any rank) -> Concat(axis=0) -> C. ORT's own string kernels END TO END: the
+                        text a NumSharp array feeds is moved by a real kernel and must read back as NumPy's
+                        np.concatenate gives it (every model below is held to its NumPy twin the same way).
+string_transpose.onnx   X string (any rank) -> Transpose (reversed axes) -> Y. Twin: np.transpose.
+string_gather.onnx      X string, I int64 -> Gather(axis=1) -> Y. Twin: np.take(X, I, axis=1), negative I too.
+                        (Axis 1: onnxruntime 1.29's string Gather on axis 0 of a 2-D tensor copies only the
+                        first string of each gathered row and leaves the rest empty.)
+string_reshape.onnx     X string, S int64 -> Reshape -> Y. Twin: np.reshape (a -1 in S included).
+string_slice.onnx       X string, starts/ends/axes/steps int64 -> Slice -> Y. Twin: basic slicing, negative steps.
+string_unique.onnx      X string (any rank) -> Unique(sorted=1) -> Y, indices, inverse_indices, counts. Twin:
+                        np.unique(X, return_index, return_inverse, return_counts) over the flattened X (ORT sorts
+                        UTF-8 bytes, which is NumPy's code-point order).
+string_where.onnx       cond bool, X, Y string (broadcasting) -> Where -> Z. Twin: np.where.
+string_expand.onnx      X string, S int64 -> Expand -> Y. Twin: np.broadcast_to (a materialized copy).
+string_tile.onnx        X string, R int64 -> Tile -> Y. Twin: np.tile.
+string_normalizer.onnx  X ['N'] string -> StringNormalizer(case_change_action="UPPER") -> Y. Twin:
+                        np.strings.upper over ASCII text (ORT maps case through the C locale's wide characters,
+                        which on Windows mangles non-ASCII text, so the twin holds ASCII only).
+string_label_encoder.onnx X string (any rank) -> LabelEncoder(ai.onnx.ml; cat/dog/bird -> 0/1/2, default -1) -> Y
+                        int64. A text CATEGORY input decoded by a real ML operator: the strings must arrive
+                        exactly (an embedded NUL or a stray byte would miss the key).
 """
 from __future__ import annotations
 
@@ -339,6 +360,47 @@ def build_all():
         [_tensor("X", TensorProto.FLOAT, ["N"])],
         [_tensor("Yf", TensorProto.FLOAT, ["N"]), _tensor("Yi", TensorProto.INT32, ["N"])])
 
+    # Text through ORT's own string kernels. Rank-agnostic string tensors (no declared shape) skip the static checker
+    # like string_io; self_check() runs each one against numpy's answer for the same operation.
+    S, I64 = TensorProto.STRING, TensorProto.INT64
+    models["string_concat"] = _model(
+        "string_concat", [helper.make_node("Concat", ["A", "B"], ["C"], axis=0)],
+        [_tensor("A", S), _tensor("B", S)], [_tensor("C", S)], check=False)
+    models["string_transpose"] = _model(
+        "string_transpose", [helper.make_node("Transpose", ["X"], ["Y"])], [_tensor("X", S)], [_tensor("Y", S)], check=False)
+    models["string_gather"] = _model(
+        "string_gather", [helper.make_node("Gather", ["X", "I"], ["Y"], axis=1)],
+        [_tensor("X", S), _tensor("I", I64)], [_tensor("Y", S)], check=False)
+    models["string_reshape"] = _model(
+        "string_reshape", [helper.make_node("Reshape", ["X", "S"], ["Y"])],
+        [_tensor("X", S), _tensor("S", I64)], [_tensor("Y", S)], check=False)
+    models["string_slice"] = _model(
+        "string_slice", [helper.make_node("Slice", ["X", "starts", "ends", "axes", "steps"], ["Y"])],
+        [_tensor("X", S), _tensor("starts", I64), _tensor("ends", I64), _tensor("axes", I64), _tensor("steps", I64)],
+        [_tensor("Y", S)], check=False)
+    models["string_unique"] = _model(
+        "string_unique", [helper.make_node("Unique", ["X"], ["Y", "indices", "inverse_indices", "counts"], sorted=1)],
+        [_tensor("X", S)], [_tensor("Y", S), _tensor("indices", I64), _tensor("inverse_indices", I64), _tensor("counts", I64)],
+        check=False)
+    models["string_where"] = _model(
+        "string_where", [helper.make_node("Where", ["cond", "X", "Y"], ["Z"])],
+        [_tensor("cond", TensorProto.BOOL), _tensor("X", S), _tensor("Y", S)], [_tensor("Z", S)], check=False)
+    models["string_expand"] = _model(
+        "string_expand", [helper.make_node("Expand", ["X", "S"], ["Y"])],
+        [_tensor("X", S), _tensor("S", I64)], [_tensor("Y", S)], check=False)
+    models["string_tile"] = _model(
+        "string_tile", [helper.make_node("Tile", ["X", "R"], ["Y"])],
+        [_tensor("X", S), _tensor("R", I64)], [_tensor("Y", S)], check=False)
+    models["string_normalizer"] = _model(
+        "string_normalizer", [helper.make_node("StringNormalizer", ["X"], ["Y"], case_change_action="UPPER")],
+        [_tensor("X", S, ["N"])], [_tensor("Y", S, ["M"])])
+    models["string_label_encoder"] = _model(
+        "string_label_encoder",
+        [helper.make_node("LabelEncoder", ["X"], ["Y"], domain="ai.onnx.ml", keys_strings=["cat", "dog", "bird"],
+                          values_int64s=[0, 1, 2], default_int64=-1)],
+        [_tensor("X", S)], [_tensor("Y", I64)], check=False,
+        opset_imports=[helper.make_opsetid("", OPSET), helper.make_opsetid("ai.onnx.ml", 2)])
+
     return models
 
 
@@ -463,6 +525,53 @@ def self_check(path: str, name: str) -> None:
         yf, yi = sess.run(None, {"X": x})
         assert yf.dtype == np.float32 and np.array_equal(yf, x), name
         assert yi.dtype == np.int32 and np.array_equal(yi, x.astype(np.int32)), name
+    elif name.startswith("string_"):
+        _self_check_text(sess, name)
+    else:
+        raise AssertionError(f"no self-check for {name}")
+
+
+def _self_check_text(sess, name: str) -> None:
+    """Run a text model on a representative feed and hold its output to numpy's answer for the same operation."""
+    x = np.array([["b", "a", "c", "a"], ["dd", "", "e" + chr(0x301), chr(0x1F600) + "x"], ["Title", "zz", "a", "q"]],
+                 dtype=object)
+    if name == "string_concat":
+        c, = sess.run(None, {"A": x, "B": x[::-1]})
+        assert c.tolist() == np.concatenate((x, x[::-1]), axis=0).tolist(), name
+    elif name == "string_transpose":
+        y, = sess.run(None, {"X": x})
+        assert y.tolist() == x.T.tolist(), name
+    elif name == "string_gather":
+        y, = sess.run(None, {"X": x, "I": np.array([2, 0, -1], np.int64)})
+        assert y.tolist() == np.take(x, [2, 0, -1], axis=1).tolist(), name
+    elif name == "string_reshape":
+        y, = sess.run(None, {"X": x, "S": np.array([4, -1], np.int64)})
+        assert y.tolist() == x.reshape(4, -1).tolist(), name
+    elif name == "string_slice":
+        y, = sess.run(None, {"X": x, "starts": np.array([-1, 1], np.int64), "ends": np.array([-10, 4], np.int64),
+                             "axes": np.array([0, 1], np.int64), "steps": np.array([-1, 2], np.int64)})
+        assert y.tolist() == x[::-1, 1:4:2].tolist(), name
+    elif name == "string_unique":
+        y, idx, inv, cnt = sess.run(None, {"X": x})
+        u, ui, uv, uc = np.unique(x.astype(str), return_index=True, return_inverse=True, return_counts=True)
+        assert y.tolist() == u.tolist() and idx.tolist() == ui.tolist(), name
+        assert inv.tolist() == uv.ravel().tolist() and cnt.tolist() == uc.tolist(), name
+    elif name == "string_where":
+        cond = np.array([[True, False, True, False]])
+        z, = sess.run(None, {"cond": cond, "X": x, "Y": np.array(["y"], dtype=object)})
+        assert z.tolist() == np.where(cond, x, np.array(["y"], dtype=object)).tolist(), name
+    elif name == "string_expand":
+        y, = sess.run(None, {"X": x[0], "S": np.array([2, 4], np.int64)})
+        assert y.tolist() == np.broadcast_to(x[0], (2, 4)).tolist(), name
+    elif name == "string_tile":
+        y, = sess.run(None, {"X": x, "R": np.array([1, 2], np.int64)})
+        assert y.tolist() == np.tile(x, (1, 2)).tolist(), name
+    elif name == "string_normalizer":
+        y, = sess.run(None, {"X": np.array(["ab", "Cd", "", "x1 z"], dtype=object)})
+        assert y.tolist() == np.strings.upper(np.array(["ab", "Cd", "", "x1 z"])).tolist(), name
+    elif name == "string_label_encoder":
+        y, = sess.run(None, {"X": np.array([["cat", "bird"], ["fish", "dog"]], dtype=object)})
+        assert y.tolist() == [[0, 2], [-1, 1]], name
     else:
         raise AssertionError(f"no self-check for {name}")
 

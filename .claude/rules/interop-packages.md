@@ -26,7 +26,10 @@ created and no release or public documentation mentions them. Unreleased is exac
    `absolute-basics.md` and the System.Numerics.Tensors page do not name or link them. ParquetNet has no page (its
    `PackageProjectUrl` points at the page to write when it ships).
 3. Gated. The `interop-test` job builds and tests all three (ONNX Runtime and ML.NET at their floor and current
-   versions, ParquetNet on both TFMs). Nothing else compiles them in CI.
+   versions, ParquetNet on both TFMs). Nothing else compiles them in CI. ParquetNet's text edge is `TextColumnTests`,
+   over a pyarrow-written fixture (`test/oracle/gen_parquet_text_fixture.py`): the loaders skip text columns, the direct
+   readers refuse them; under Parquet.Net 6 a text column's CLR type is `ReadOnlyMemory<char>`, so the bridge's text
+   refusal never fires (`[OpenBugs]`).
 
 Keep them out of release notes (`docs/releases/RELEASE_<version>.md`; when that file is missing, GitHub generates the
 notes from merged PR titles, so PR titles stay free of them too), the website, the root README, and the shipped XML docs
@@ -95,7 +98,12 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   (a cell per mode), property-based, metamorphic, ORT-consumer (six feed routes through ORT's own Identity), bit-pattern
   fuzz, concurrency stress, ARC/fault injection, boundary and API-approval suites, `LifetimeGcTests` (every finalization
   order of eight scenarios as a staged real collection), and `SessionRunModeTests`, `ImportAliasTests`, `TextTests`,
-  `PassThroughOutputTests`, `SessionRunAsyncTests`, `ValueOwnershipTests`, `MemoryManagerTests`. The `interop-test` CI job
+  `PassThroughOutputTests`, `SessionRunAsyncTests`, `ValueOwnershipTests`, `MemoryManagerTests`, and `TextModelsEndToEndTests`
+  (text through eleven string models - Concat, Transpose, Gather, Reshape, Slice, Unique, Where, Expand, Tile,
+  StringNormalizer, LabelEncoder - held to NumSharp's numpy-verified twins and to `np.array(list)`'s width; Python
+  onnxruntime's edges pinned `[Misaligned]`: an embedded NUL survives where it truncates, U+FFFD where it raises on a
+  lone surrogate or non-UTF-8 output; onnxruntime 1.29's string Gather on axis 0 of a 2-D tensor copies one string per
+  row, so the model gathers on axis 1). The `interop-test` CI job
   runs it against ONNX Runtime 1.16.0 (the async tests Inconclusive, the refusal tested) and 1.31.0 (the only leg that
   runs the async tests: never set it below 1.30.0), with no Python. Mutation runs restore a file from memory only: copy
   untracked files out of the tree before one.
@@ -136,7 +144,10 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   `Microsoft.ML` pipelines (NormalizeMinMax, Concatenate, Sdca, SdcaMaximumEntropy multiclass, OneHot, MapValueToKey,
   a POCO-loader cross-check), the technique suites (layout matrix, property-based, metamorphic, cursor-state
   differential against ML.NET's own cursors, real-pipeline consumer, bit-pattern fuzz, concurrency, ARC/fault injection,
-  boundary, API approval) and `LifetimeGcTests` (a getter keeps its cursor reachable until its row is committed). The
+  boundary, API approval), `LifetimeGcTests` (a getter keeps its cursor reachable until its row is committed) and
+  `TextEndToEndTests` (every text class × layout × verb refused before any rank check, leasing nothing; NumSharp text
+  through `MapValueToKey` gives `np.unique`'s inverse + 1; an ML.NET text column through `GetColumn<string>` is
+  `np.array(list)`; `FeaturizeText` rows cross back). The
   `interop-test` CI job runs it against ML.NET 2.0.1 and 4.0.2, with no Python.
 - Docs: `docs/website-src/docs/interop/mlnet.md` (excluded from the site).
 - Example: `examples/NumSharpMLNetExample` (regular csproj form over the published 0.80.0-beta1 and Microsoft.ML 5.0.1;
@@ -159,7 +170,10 @@ None of these computes NumSharp operations: each converts tensors between NumSha
 - All 15 dtypes cross as their own CLR type (the BCL containers are unconstrained generics). A negative-stride view is
   refused, because the BCL forbids negative strides (`ToTensor` or `np.ascontiguousarray` first).
 - Namespace `NumSharp.Interop.Tensors`, not the assembly name: a `System.*` namespace would shadow the types it uses.
-- Gate: `test/NumSharp.Tests.Interop.System.Numerics.Tensors`, both TFMs, in the `interop-test` CI job.
+- Gate: `test/NumSharp.Tests.Interop.System.Numerics.Tensors`, both TFMs, in the `interop-test` CI job. Text never
+  crosses (`TextRefusalTests`): every text class × layout × verb is refused before any layout check, and no import
+  verb instantiates for `string`; the refusal's TEXT is Core's storage-lane conversion error, not a text message
+  (`[OpenBugs]` `TextExports_RefuseWithATextMessage_NotTheStorageLaneError`).
 - Docs: `docs/website-src/docs/interop/system-numerics-tensors.md`.
 
 ## The pythonnet bridge carries text
@@ -182,6 +196,10 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   an `np.str_` (read a possible `str` subclass through Python's `str()`); a `T` cell written short over an arena string
   keeps the old offset's high bytes behind its text and numpy's `NpyString_dup` moves them: compare cells, and they must
   move too.
+- End to end: `TextOpsLiveParityTests`, `TextConversionLiveParityTests`, `TextPandasLiveParityTests` over
+  `TextLiveParityHarness` (numpy-born text crosses, NumSharp computes, the result crosses back, live numpy's answer
+  over the same memory: ~13,500 cells of `numpy.strings`, the text ufuncs, sort / unique, casts both ways, printing,
+  `.npy`, writes through views and the numeric neighbours; its conventions are in the project's CLAUDE.md, 7c).
 - Gates: `TextFixedWidthCrossingTests`, `TextStringDTypeCrossingTests` (live numpy, every NA kind × `coerce` × layout),
   `TextCrossingEdgeCaseTests` (cell histories, UTF-8 size boundaries, ranks 5–6, empty / read-only sources, a 64 KiB+
   arena, seeded random arrays and views, eight threads, `str` subclasses, corrupt cells on both sides failing cleanly with

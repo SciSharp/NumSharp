@@ -31,6 +31,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The committed pyarrow-written fixture (test/oracle/gen_parquet_text_fixture.py): text, binary,
+         dictionary-encoded and list columns next to numeric ones, read by TextColumnTests. -->
+    <None Include="Fixtures\**\*.parquet" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\NumSharp.Core\NumSharp.Core.csproj" />
     <ProjectReference Include="..\..\src\NumSharp.Interop.ParquetNet\NumSharp.Interop.ParquetNet.csproj" />
   </ItemGroup>
