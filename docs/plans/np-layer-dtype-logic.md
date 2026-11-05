@@ -136,8 +136,10 @@ each one. PA3a is done (`c032f867`, `3212b02e`, `93a3ffce`): np.dot computes wit
 (`Utilities/NDDot.cs`), bit for bit but for which NaN survives where several meet, and faster or equal in every measured
 cell; np.correlate / np.convolve's complex128 per-position engine too, while their float32 / float64 per-position dots
 stay where NumPy's exact model measured slower. PA3b's np.vecdot and np.vdot are done (`ef4265ea`, `f5c2c117`): NumPy's
-dot functions per output at the strides NumPy hands them, faster in every measured cell or equal. Next: PA3b's N-D
-walkers, np.dot's scalar branch and NaN priority, then PA2a, PA2b and PA2c.
+dot functions per output at the strides NumPy hands them, faster in every measured cell or equal. So are its N-D
+walkers (`debd5242`: one N-D walk, the same bits, faster or equal) and np.dot's scalar branch (`4d28ba74`: NumPy's
+`?axpy` for 0-d, `(1,)` and `(1, 1)` operands, faster or equal; a 0-d scalar beside a matrix with non-contiguous rows
+keeps the multiply). Next: PA3b's NaN priority, then PA2a, PA2b and PA2c.
 
 **The owner's decisions of 2026-10-31** ([§5](#5-decisions-for-the-owner), D7 to D22, asked with each option's code):
 - P7 is dropped. D7's first answer ("Rule on the result") gave it a design; in the step round the same day the owner
@@ -1418,10 +1420,29 @@ there. Rules (decided 2026-10-30):
     where np.vdot gives the dot over a copy, not NumPy's bits ([Misaligned] rows). 299 of 304 NumPy cases identical
     (169 before); 94 of 133 cells faster (complex128 1.3-3.6x), the rest equal. Found and pinned (D21): the OpenBLAS
     backend's `TryVdot` copies a view NumPy reads in place (`ProductsLiveParityTests.Vdot_ViewOperands_ReadInPlace_ByteExact`).
+  - **PA3b, the N-D walkers: done 2026-11-05 (`debd5242`).** The contiguous walkers (`TryDotNDMDSimd`'s
+    `DotNDMDSimdFloat` / `DotNDMDSimdDouble`, a division and a remainder per axis for every output) go: C-contiguous
+    float32 / float64 pairs take `Walk<T>` / `WalkRows<T>` too. The same bytes (0 of 32 cells differ); 26 of 31 cells
+    1.05-2.07x faster, 5 equal; an operand already in the result dtype skips `astype`. Found and fixed on the way: the
+    removed walkers read from the storage's start without `Shape.offset`, so an np.split / np.unstack child (a
+    C-contiguous view at a non-zero offset) gave its parent's first rows (`Dot_ContiguousViewAtAnOffset_ReadsItsOwnElements`).
+  - **PA3b, np.dot's scalar branch: done 2026-11-05 (`4d28ba74`).** `DefaultEngine.TryDotScalarBranch`
+    (`Default.Dot.Scalar.cs`, called from `DotProduct` after the Blas hook) follows `cblas_matrixproduct` for float32 /
+    float64 / complex128 operands of at most two dims, one of them 0-d, `(1,)` or `(1, 1)`: NumPy's classification,
+    swap, dims and `l`, the KEEPORDER conversions and the `_bad_strides` copy; one output is the plain product, more are
+    `?axpy` into zeros - scipy-openblas' fused Haswell kernel over the first `n & -32` (saxpy) / `n & -16` (daxpy, zaxpy)
+    terms of a unit-stride call, its plain C loop elsewhere (`IAxpyModel<T>`). Each output is +0 plus one term, so the
+    outputs are written once each in the result's memory order with the formula their NumPy call gives them, into an
+    unzeroed result (NumPy's zeroed result and per-line calls measured 0.08-0.4x). A 0-d scalar beside a matrix whose
+    rows are not contiguous keeps the multiply (a transposing read measured 0.23-0.75x; [Misaligned]: the result
+    F-ordered where NumPy's is C, -0.0 where NumPy gives +0.0). 910 of 969 NumPy cases identical (698 before; the 59
+    left are those kept cells); 63 of 110 cells faster ((N, 1) . (1,) 1.6-29x, (1, 1) . (1, N) 1.5-1.9x from 10^5,
+    complex 0-d . C-ordered matrices 1.1-3.1x), 47 equal, none slower. The pin
+    `Dot_SizeOneOperand_FollowsNumPysScalarBranch_OnTheManagedPath` is a regression pin now, and the reduce_start tier's
+    `_rs_carved` loses its dot / inner rule (18 cells join the zero-excuse gate). Gates: 516 NumPy-bit rows, 102
+    products cases.
   - Left for PA3b ("complete full dtype and edge cases parity"): which NaN survives where several meet (the operand
-    order of every add and fused multiply-add, as `NDHalfDot` encodes it for float16), np.dot's scalar branch for 0-d
-    and (1, 1) operands (`Dot_SizeOneOperand_FollowsNumPysScalarBranch_OnTheManagedPath`) and the contiguous N-D walkers
-    (`DotNDMDSimdFloat` / `DotNDMDSimdDouble`, an index division per output).
+    order of every add and fused multiply-add, as `NDHalfDot` encodes it for float16).
 
 - [x] **PA4. The logical ufuncs' combine** (`e41c90dc`). `CombineTruth` (`Default.Logical.cs`) is a hand vector
   AND / OR / XOR over bytes, which its own comment says works "as the bitwise ufunc combines". It becomes that ufunc's
@@ -1669,8 +1690,9 @@ breaks a subclass or a direct caller for a layering reason alone.
 
 ## 9. State log
 
-- **2026-11-05, the PA round (D23), PA3a's N-D and 1-D routes: np.dot computes with NumPy's dot functions.** Two
-  commits on `strings` (not pushed), each landed only after its cells measured faster or equal and none slower.
+- **2026-11-05, the PA round (D23): PA3a, then PA3b's np.vecdot, np.vdot, N-D walkers and np.dot's scalar branch -
+  np.dot, np.vecdot and np.vdot compute with NumPy's dot functions.** Seven commits on `strings` (not pushed), each
+  landed only after its cells measured faster or equal and none slower.
   - Before the round, a sizing run on the strings tip (3526cb7e) found N-D float32 np.dot at 0.04–0.56× NumPy on
     unit-stride and reversed runs: its strided route summed double products (`SingleDot`, 2.8 ns a term, not a tiering
     effect), and `a[::-1] + b` 2.3–12× slower than the contiguous add at 1K–100K (PA2a's target).
@@ -1702,7 +1724,19 @@ breaks a subclass or a direct caller for a layering reason alone.
     Gates: unit 22,352 / 22,351 after the rebase onto `5994ea16`, the product oracle tiers, 1,133 tests under guard
     pages. One net8.0 suite run aborted in np.unique's `LongIndexedFallback_GivesTheManagedOutputs` (an
     AccessViolation, outside the change; it had failed intermittently before this round's vecdot code too).
-  - Next: PA3b's N-D walkers, np.dot's scalar branch and NaN priority, then PA2a, PA2b, PA2c.
+  - `debd5242`, the N-D walkers (see PA3). The effort the rule asked for: the walk's sub-microsecond cells first read
+    0.92-0.96x, 40 ns of two `astype(copy: false)` calls that parse their arguments; an operand already in the result
+    dtype skips them now (1.03-1.15x). Each process's first timed cell read 0.55-0.67x on either route's turn (JIT
+    warm-up), so cells are re-measured after a warm-up cell. Gates: unit 22,354 / 22,353, the oracle 419 passed, 1,397
+    tests under guard pages.
+  - `4d28ba74`, np.dot's scalar branch (see PA3). The effort the rule asked for, in order: NumPy's procedure as written
+    (a zeroed result, one `?axpy` per line) read 0.08-0.4x on 10^4 - 10^6 elements - a zeroed buffer comes from fresh
+    pages where a pooled one is reused hot, and NumPy's lines walk a square or tall C-ordered matrix down its columns;
+    written once each in memory order (a C-contiguous matrix whose NumPy lines are strided as one flat run), 0-d .
+    10^6 went 0.25x -> 1.00x. The cells of a 0-d scalar beside an F-ordered, transposed or stepped matrix needed a
+    transposing read (0.23-0.75x) and keep the multiply. Gates: unit 22,872 / 22,871, the oracle 419 passed, 1,915
+    tests under guard pages.
+  - Next: PA3b's NaN priority, then PA2a, PA2b, PA2c.
 
 - **2026-11-02, P10 item 1: np.sum's family with NumPy's whole signature - P10's items 1 to 5 are done.** One commit on
   `strings` (not pushed).
