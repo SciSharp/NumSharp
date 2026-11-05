@@ -280,6 +280,21 @@ input is the expected one — dtype string, shape and C-order bytes, or the desc
 `RunFamily` over four classes (`U12`, `S12`, `StringDType()`, `StringDType(na_object=None)` with NA cells) × twelve
 layouts × the class's routes; it fails once, listing every disagreeing cell.
 
+`TextEdgeLiveParityTests` runs the edges over two more runners. `RunFamilyFromNumSharp` is the EXPORT direction:
+NumSharp builds each of `NumSharpLayouts` (the `np.split` child at an offset, broadcast, F order, transposed, stepped to
+the end, reversed rows, 0-d, empty) and hands it to numpy (`ExportTo`, a view, for `U` / `S`; `ExportCopyTo` for
+`StringDType`), so a wrong stride, offset or flag in the export fails a cell. `RunPairFamily` takes `OperandPair`s, `x`
+and `p` built separately (two classes, widths, NA objects or broadcastable shapes), and runs both-0-d pairs through the
+`x[None]` trick. The families there: export elementwise / order and casts, cross-class operands (numpy's promotion and
+refusals), broadcasting shapes, `out=` / `where=` / `dtype=` (`_kw1` / `_kw2` assert numpy returned the `out` object; the
+C# `Out` twin throws unless NumSharp returned it by reference), the NA kinds (NaN-like, string, `None`, `coerce=False`),
+`numpy.char` and its chararray, `partition` / `mod` / `translate` (when every element's part is empty numpy's part is
+ZERO-width and NumSharp's width 1, the pinned divergence; `_w1` widens numpy's side), fused `np.evaluate` text
+expressions against numpy's composition, and numpy's
+functions called with NumSharp arrays through `RegisterCodec` (a `StringDType` 0-d result arrives as a plain `str`,
+which `As<NDArray>()` refuses). The cross-class, NA-kind, keyword and char-comparison answers are also recorded by
+`test/oracle/gen_text_edge_twins.py` for `TextBridgeEdgeTwinTests` in the unit suite, which runs them without Python.
+
 Conventions the harness encodes (change them only with the reason that put them there):
 - The copy route's numpy twin is `x.copy(order='C')`: the import copy is C-contiguous by `ToNDArray`'s contract, and the
   order is observable — a refused cast names the first failing element of its MEMORY walk (`TextCastErrorOrderTests` in

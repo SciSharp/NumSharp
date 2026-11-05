@@ -456,6 +456,135 @@ namespace NumSharp.Tests.Interop
         }
 
         /// <summary>
+        ///     One operand PAIR of a two-operand family: the two numpy expressions (bound to <c>x</c> and <c>p</c>) and how
+        ///     each crosses into NumSharp.
+        /// </summary>
+        /// <param name="Label">The pair's label in a failure line.</param>
+        /// <param name="Class">The text class whose literals the operations take (the first operand's).</param>
+        /// <param name="X">The numpy expression of the first operand.</param>
+        /// <param name="P">The numpy expression of the second operand (any class, any shape that may broadcast).</param>
+        /// <param name="XRoute"><c>"view"</c> or <c>"copy"</c> for the first operand.</param>
+        /// <param name="PRoute"><c>"view"</c> or <c>"copy"</c> for the second operand.</param>
+        protected readonly record struct OperandPair(string Label, TextClass Class, string X, string P, string XRoute, string PRoute);
+
+        /// <summary>
+        ///     Runs every operation over every operand PAIR — operands of two different text classes, widths, NA objects or
+        ///     shapes (broadcasting) — and fails with the list of every disagreement. The operations read the second
+        ///     operand as their partner (<c>p</c> / the delegate's third argument).
+        /// </summary>
+        /// <param name="family">The family's label.</param>
+        /// <param name="ops">The operations (each reads <c>x</c> and <c>p</c>).</param>
+        /// <param name="pairs">The operand pairs.</param>
+        /// <returns>The number of cells run.</returns>
+        /// <remarks>
+        ///     A pair's operands cross independently (a view of one next to a copy of the other is a legitimate user
+        ///     situation); a copy route's numpy twin is the operand's C-ordered copy, as in <see cref="RunFamily(string, IReadOnlyList{TextOp}, IEnumerable{FamilyInput}, IEnumerable{ValueTuple{string, string}}, Func{string, bool})"/>.
+        /// </remarks>
+        protected int RunPairFamily(string family, IReadOnlyList<TextOp> ops, IEnumerable<OperandPair> pairs)
+        {
+            var failures = new List<string>();
+            int cells = 0;
+            foreach (OperandPair pair in pairs)
+            {
+                PyExec($"x = {pair.X}\np = {pair.P}");
+                bool zeroD = PyBool("x.ndim == 0 and p.ndim == 0");
+                using NDArray xs = pair.XRoute == "view" ? ViewOf("x", allowReadonly: true) : ImportOf("x");
+                using NDArray ps = pair.PRoute == "view" ? ViewOf("p", allowReadonly: true) : ImportOf("p");
+                if (pair.XRoute == "copy")
+                    PyExec("x = x.copy(order='C')");
+                if (pair.PRoute == "copy")
+                    PyExec("p = p.copy(order='C')");
+                foreach (TextOp op in ops)
+                {
+                    cells++;
+                    string verdict = RunCell(op, pair.Class, xs, ps, zeroD && op.Elementwise);
+                    if (verdict.Length > 0)
+                        failures.Add($"{family} | {pair.Label} | {op.Name}: {verdict}");
+                }
+            }
+
+            PyExec("x = p = None");
+            AssertNoFailures(family, cells, failures);
+            return cells;
+        }
+
+        /// <summary>
+        ///     The layouts NumSharp itself makes of its own 24-element array (the export direction): contiguous C and F, the
+        ///     transpose, a step that ends at the last element, reversed, reversed rows with an inner slice, a broadcast
+        ///     (stride 0), the child of an <c>np.split</c> (a view at a non-zero offset into its parent's buffer), 0-d by
+        ///     integer indexing, and two empty shapes.
+        /// </summary>
+        protected static readonly (string Name, Func<NDArray, NDArray> Make)[] NumSharpLayouts =
+        {
+            ("C 1-D", b => b),
+            ("C 2-D", b => b.reshape(4, 6)),
+            ("F 2-D", b => np.asfortranarray(b.reshape(4, 6))),
+            ("transposed", b => b.reshape(4, 6).T),
+            ("stepped to the end", b => b["2::3"]),
+            ("reversed", b => b["::-1"]),
+            ("reversed rows", b => b.reshape(4, 6)["::-1, 1:5"]),
+            ("broadcast", b => np.broadcast_to(b["0:6"], new Shape(3, 6))),
+            ("split child (offset view)", b => np.split(b, 4)[2]),
+            ("0-d", b => b["7"]),
+            ("empty", b => b["3:3"]),
+            ("empty 2-D", b => b.reshape(4, 6)[":, 2:2"]),
+        };
+
+        /// <summary>
+        ///     The EXPORT direction of a family: NumSharp owns the text (an owning copy of the class's numpy source), makes
+        ///     each of <see cref="NumSharpLayouts"/> by its own slicing, and hands the result to numpy — a zero-copy view of
+        ///     a fixed-width array, an exact copy of a <c>StringDType</c> one; numpy computes over what it was handed,
+        ///     NumSharp over its own array, and the answers are compared as in <see cref="RunFamily(string, IReadOnlyList{TextOp}, IEnumerable{TextClass}, IEnumerable{ValueTuple{string, string}}, Func{TextClass, string}, Func{string, bool})"/>.
+        /// </summary>
+        /// <param name="family">The family's label.</param>
+        /// <param name="ops">The operations.</param>
+        /// <param name="classes">The classes; null = <see cref="AllClasses"/>.</param>
+        /// <returns>The number of cells run.</returns>
+        /// <remarks>
+        ///     This proves the export's dtype, shape, strides and offset at once: numpy's kernels run over NumSharp's memory
+        ///     as numpy reads it, so a wrong stride or a dropped offset (the split child) gives numpy other elements than
+        ///     NumSharp computed over, and the cell fails.
+        /// </remarks>
+        protected int RunFamilyFromNumSharp(string family, IReadOnlyList<TextOp> ops, IEnumerable<TextClass> classes = null)
+        {
+            var failures = new List<string>();
+            int cells = 0;
+            foreach (TextClass cls in classes ?? AllClasses)
+            {
+                // NumSharp-born: an owning NumSharp copy of the class's source (no numpy memory behind it).
+                using NDArray b = ImportOf(SourceName(cls));
+                foreach (var (layoutName, make) in NumSharpLayouts)
+                {
+                    NDArray xs = make(b);
+                    if (cls is TextClass.Unicode or TextClass.Bytes)
+                        ExportTo("x", xs);
+                    else
+                        ExportCopyTo("x", xs);
+                    PyExec("p = x[::-1] if x.ndim else x");
+                    bool zeroD = xs.ndim == 0;
+                    NDArray ps = xs.ndim > 0 ? xs["::-1"] : xs;
+                    foreach (TextOp op in ops)
+                    {
+                        cells++;
+                        string verdict = RunCell(op, cls, xs, ps, zeroD && op.Elementwise);
+                        if (verdict.Length > 0)
+                            failures.Add($"{family} | {cls} | {layoutName} | export | {op.Name}: {verdict}");
+                    }
+
+                    // The export holds NumSharp's buffer until numpy releases it: drop numpy's names first.
+                    PyExec("x = p = None");
+                    if (!ReferenceEquals(ps, xs))
+                        ps.Dispose();
+                    if (!ReferenceEquals(xs, b))
+                        xs.Dispose();
+                }
+            }
+
+            AssertNoFailures(family, cells, failures);
+            return cells;
+        }
+
+        /// <summary>
         ///     Runs one cell: NumSharp computes (outside the GIL), numpy computes over the same input, and the two answers
         ///     are compared — NumSharp's result crossing back to numpy for the comparison.
         /// </summary>

@@ -29,7 +29,16 @@ created and no release or public documentation mentions them. Unreleased is exac
    versions, ParquetNet on both TFMs). Nothing else compiles them in CI. ParquetNet's text edge is `TextColumnTests`,
    over a pyarrow-written fixture (`test/oracle/gen_parquet_text_fixture.py`): the loaders skip text columns, the direct
    readers refuse them; under Parquet.Net 6 a text column's CLR type is `ReadOnlyMemory<char>`, so the bridge's text
-   refusal never fires (`[OpenBugs]`).
+   refusal never fires (`[OpenBugs]`). Its numeric edge is `NumericColumnParityTests`, over pyarrow fixtures
+   (`test/oracle/gen_parquet_numeric_fixture.py`: every width at its extremes in four writer configurations, a zero-row
+   file, wide decimals, a float16 column): numpy's `to_numpy()` view bit for bit across row groups, both faces streaming
+   the same bytes, and the null policy against numpy's NaN / None widening (`default(T)`, a per-call fill never cached,
+   Raise only where a null is actually read). Two `[OpenBugs]`: `ParquetConvert.ResolveFill` converts the fill for every
+   column before any null is met (a NaN fill breaks every integer and decimal column, the required ones included), and
+   converts it with `Convert.ChangeType` (a fraction ROUNDS, `"7"` is no Boolean) where numpy's setitem and `np.full`
+   truncate. Parquet.Net 6.1.0's own limits are `[Misaligned]`: data page v2 RLE booleans throw
+   `DivideByZeroException`, DELTA_BINARY_PACKED int8 / uint8 / decimal are refused, a float16 column refuses the whole
+   schema, a decimal past 28-29 digits rounds or overflows, and the decimal's trailing zeros are dropped.
 
 Keep them out of release notes (`docs/releases/RELEASE_<version>.md`; when that file is missing, GitHub generates the
 notes from merged PR titles, so PR titles stay free of them too), the website, the root README, and the shipped XML docs
@@ -103,7 +112,10 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   StringNormalizer, LabelEncoder - held to NumSharp's numpy-verified twins and to `np.array(list)`'s width; Python
   onnxruntime's edges pinned `[Misaligned]`: an embedded NUL survives where it truncates, U+FFFD where it raises on a
   lone surrogate or non-UTF-8 output; onnxruntime 1.29's string Gather on axis 0 of a 2-D tensor copies one string per
-  row, so the model gathers on axis 1). The `interop-test` CI job
+  row, so the model gathers on axis 1), and `TextRunTierEdgeTests` (text input through `RunInto` into a preallocated
+  numeric output, `Run`, `RunAsync` / `RunIntoAsync` over the fixed-shape LabelEncoder model - `RunAsync` cannot allocate
+  for an output declared without dimensions -, the declared rank validated, StringNormalizer stopwords removing elements
+  down to one empty string, eight concurrent string runs). The `interop-test` CI job
   runs it against ONNX Runtime 1.16.0 (the async tests Inconclusive, the refusal tested) and 1.31.0 (the only leg that
   runs the async tests: never set it below 1.30.0), with no Python. Mutation runs restore a file from memory only: copy
   untracked files out of the tree before one.
@@ -147,8 +159,12 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   boundary, API approval), `LifetimeGcTests` (a getter keeps its cursor reachable until its row is committed) and
   `TextEndToEndTests` (every text class × layout × verb refused before any rank check, leasing nothing; NumSharp text
   through `MapValueToKey` gives `np.unique`'s inverse + 1; an ML.NET text column through `GetColumn<string>` is
-  `np.array(list)`; `FeaturizeText` rows cross back). The
-  `interop-test` CI job runs it against ML.NET 2.0.1 and 4.0.2, with no Python.
+  `np.array(list)`; `FeaturizeText` rows cross back) and `TextEdgeEndToEndTests` (ML.NET reads a `null` text as empty
+  and keys the empty text 0, its missing value, so a `StringDType(na_object=None)` NA - `null` through `AsStringArray` -
+  lands on key 0 and the twin is `np.unique` over the non-empty texts; a `na_object=nan` NA is refused by `AsStringArray`,
+  `tolist()` is the route; `TokenizeIntoWords` rows are `np.char.split`'s and ragged rows refuse `np.array` with
+  numpy's `ValueError`; a `TextLoader` CSV's numbers cross the bridge as `np.loadtxt` reads them, quoted text by the
+  route). The `interop-test` CI job runs it against ML.NET 2.0.1 and 4.0.2, with no Python.
 - Docs: `docs/website-src/docs/interop/mlnet.md` (excluded from the site).
 - Example: `examples/NumSharpMLNetExample` (regular csproj form over the published 0.80.0-beta1 and Microsoft.ML 5.0.1;
   no workflow runs it): a binary classifier trained from a `(rows, 5)` array as five scalar columns with the label
@@ -199,7 +215,13 @@ None of these computes NumSharp operations: each converts tensors between NumSha
 - End to end: `TextOpsLiveParityTests`, `TextConversionLiveParityTests`, `TextPandasLiveParityTests` over
   `TextLiveParityHarness` (numpy-born text crosses, NumSharp computes, the result crosses back, live numpy's answer
   over the same memory: ~13,500 cells of `numpy.strings`, the text ufuncs, sort / unique, casts both ways, printing,
-  `.npy`, writes through views and the numeric neighbours; its conventions are in the project's CLAUDE.md, 7c).
+  `.npy`, writes through views and the numeric neighbours; its conventions are in the project's CLAUDE.md, 7c), and
+  `TextEdgeLiveParityTests` over the same harness: the EXPORT direction (NumSharp-born layouts handed to numpy), operand
+  pairs of two text classes / widths / NA objects, broadcasting shapes, `out=` / `where=` / `dtype=` (the `out=` object
+  returned), every `StringDType` NA kind, `numpy.char` and its chararray, `partition` / `mod` / `translate`, fused
+  `np.evaluate` text expressions against numpy's composition, and numpy's functions called with NumSharp arrays through
+  the codec. Their Python-free twins are `TextBridgeEdgeTwinTests` in the unit suite: NumPy's recorded answers
+  (`test/oracle/gen_text_edge_twins.py`) for the cross-class, NA-kind, keyword and char-comparison families.
 - Gates: `TextFixedWidthCrossingTests`, `TextStringDTypeCrossingTests` (live numpy, every NA kind × `coerce` × layout),
   `TextCrossingEdgeCaseTests` (cell histories, UTF-8 size boundaries, ranks 5–6, empty / read-only sources, a 64 KiB+
   arena, seeded random arrays and views, eight threads, `str` subclasses, corrupt cells on both sides failing cleanly with

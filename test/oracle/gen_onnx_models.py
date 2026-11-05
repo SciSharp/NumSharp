@@ -100,9 +100,13 @@ string_tile.onnx        X string, R int64 -> Tile -> Y. Twin: np.tile.
 string_normalizer.onnx  X ['N'] string -> StringNormalizer(case_change_action="UPPER") -> Y. Twin:
                         np.strings.upper over ASCII text (ORT maps case through the C locale's wide characters,
                         which on Windows mangles non-ASCII text, so the twin holds ASCII only).
+string_normalizer_stop.onnx X ['N'] string -> StringNormalizer(LOWER, case-insensitive stopwords 'the' / 'A') -> Y.
+                        Stopword removal: the output has FEWER elements than the input, all removed is [''] (1,).
 string_label_encoder.onnx X string (any rank) -> LabelEncoder(ai.onnx.ml; cat/dog/bird -> 0/1/2, default -1) -> Y
                         int64. A text CATEGORY input decoded by a real ML operator: the strings must arrive
                         exactly (an embedded NUL or a stray byte would miss the key).
+string_label_encoder_fixed.onnx X [2, 3] string -> LabelEncoder (the same mapping) -> Y [2, 3] int64. A FIXED declared
+                        output shape: the text-input model RunAsync can allocate an output for before the run.
 """
 from __future__ import annotations
 
@@ -394,11 +398,22 @@ def build_all():
     models["string_normalizer"] = _model(
         "string_normalizer", [helper.make_node("StringNormalizer", ["X"], ["Y"], case_change_action="UPPER")],
         [_tensor("X", S, ["N"])], [_tensor("Y", S, ["M"])])
+    models["string_normalizer_stop"] = _model(
+        "string_normalizer_stop",
+        [helper.make_node("StringNormalizer", ["X"], ["Y"], case_change_action="LOWER", is_case_sensitive=0,
+                          stopwords=["the", "A"])],
+        [_tensor("X", S, ["N"])], [_tensor("Y", S, ["M"])])
     models["string_label_encoder"] = _model(
         "string_label_encoder",
         [helper.make_node("LabelEncoder", ["X"], ["Y"], domain="ai.onnx.ml", keys_strings=["cat", "dog", "bird"],
                           values_int64s=[0, 1, 2], default_int64=-1)],
         [_tensor("X", S)], [_tensor("Y", I64)], check=False,
+        opset_imports=[helper.make_opsetid("", OPSET), helper.make_opsetid("ai.onnx.ml", 2)])
+    models["string_label_encoder_fixed"] = _model(
+        "string_label_encoder_fixed",
+        [helper.make_node("LabelEncoder", ["X"], ["Y"], domain="ai.onnx.ml", keys_strings=["cat", "dog", "bird"],
+                          values_int64s=[0, 1, 2], default_int64=-1)],
+        [_tensor("X", S, [2, 3])], [_tensor("Y", I64, [2, 3])],
         opset_imports=[helper.make_opsetid("", OPSET), helper.make_opsetid("ai.onnx.ml", 2)])
 
     return models
@@ -569,6 +584,14 @@ def _self_check_text(sess, name: str) -> None:
     elif name == "string_normalizer":
         y, = sess.run(None, {"X": np.array(["ab", "Cd", "", "x1 z"], dtype=object)})
         assert y.tolist() == np.strings.upper(np.array(["ab", "Cd", "", "x1 z"])).tolist(), name
+    elif name == "string_normalizer_stop":
+        y, = sess.run(None, {"X": np.array(["The", "Cat", "a", "MAT"], dtype=object)})
+        assert y.tolist() == ["cat", "mat"], name
+        y, = sess.run(None, {"X": np.array(["the", "A"], dtype=object)})
+        assert y.tolist() == [""], name                     # everything removed: one empty string
+    elif name == "string_label_encoder_fixed":
+        y, = sess.run(None, {"X": np.array([["cat", "bird", "x"], ["dog", "", "cat"]], dtype=object)})
+        assert y.tolist() == [[0, 2, -1], [1, -1, 0]], name
     elif name == "string_label_encoder":
         y, = sess.run(None, {"X": np.array([["cat", "bird"], ["fish", "dog"]], dtype=object)})
         assert y.tolist() == [[0, 2], [-1, 1]], name

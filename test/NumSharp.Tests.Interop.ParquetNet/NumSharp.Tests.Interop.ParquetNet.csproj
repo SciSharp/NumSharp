@@ -31,8 +31,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The committed pyarrow-written fixture (test/oracle/gen_parquet_text_fixture.py): text, binary,
-         dictionary-encoded and list columns next to numeric ones, read by TextColumnTests. -->
+    <!-- The committed pyarrow-written fixtures: text, binary, dictionary-encoded and list columns next to numeric
+         ones (test/oracle/gen_parquet_text_fixture.py, read by TextColumnTests), and every numeric width at its
+         extremes under four writer configurations plus zero-row / wide-decimal / float16 boundary files
+         (test/oracle/gen_parquet_numeric_fixture.py, read by NumericColumnParityTests). -->
     <None Include="Fixtures\**\*.parquet" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

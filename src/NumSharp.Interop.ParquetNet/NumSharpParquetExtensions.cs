@@ -75,8 +75,8 @@ namespace Parquet
         /// <exception cref="ArgumentNullException"><paramref name="reader"/> is null.</exception>
         /// <exception cref="ArgumentException">No column named <paramref name="columnName"/> exists in the schema.</exception>
         /// <exception cref="NotSupportedException">
-        /// The named column is a repeated/list field, or its CLR type is not one this bridge maps (surfaced when the
-        /// returned task is awaited).
+        /// The named column is a repeated/list field, or its CLR type is not one this bridge maps (thrown by the call
+        /// itself, before a task is returned: the refusal is checked synchronously).
         /// </exception>
         public static ValueTask<NDArray> ReadColumnAsNDArrayAsync(
             this ParquetReader reader, string columnName, ParquetLoadOptions options = null, CancellationToken ct = default)
@@ -100,7 +100,8 @@ namespace Parquet
         /// <returns>An <see cref="NDArray"/> holding the whole column, backed by raw unmanaged memory.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="reader"/> or <paramref name="field"/> is null.</exception>
         /// <exception cref="NotSupportedException">
-        /// The column is a repeated/list field, or its CLR type is not one this bridge maps (surfaced when awaited).
+        /// The column is a repeated/list field, or its CLR type is not one this bridge maps (thrown by the call itself,
+        /// before a task is returned: the refusal is checked synchronously).
         /// </exception>
         public static ValueTask<NDArray> ReadColumnAsNDArrayAsync(
             this ParquetReader reader, DataField field, ParquetLoadOptions options = null, CancellationToken ct = default)
@@ -121,7 +122,8 @@ namespace Parquet
         /// <returns>An <see cref="NDArray"/> of this row group's row count, backed by raw unmanaged memory.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="rowGroup"/> or <paramref name="field"/> is null.</exception>
         /// <exception cref="NotSupportedException">
-        /// The column is a repeated/list field, or its CLR type is not one this bridge maps (surfaced when awaited).
+        /// The column is a repeated/list field, or its CLR type is not one this bridge maps (thrown by the call itself,
+        /// before a task is returned: the refusal is checked synchronously).
         /// </exception>
         public static ValueTask<NDArray> ReadAsNDArrayAsync(
             this ParquetRowGroupReader rowGroup, DataField field, ParquetLoadOptions options = null, CancellationToken ct = default)
