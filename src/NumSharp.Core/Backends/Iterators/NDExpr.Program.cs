@@ -447,8 +447,9 @@ namespace NumSharp.Backends.Iteration
 
             // Text inputs: the nodes that compute on text become per-call stages (NDExpr.Text.cs), and the numeric
             // remainder over their results is resolved per call through the positional program cache — so this program
-            // holds only the plan, typed with the remainder's NumPy result dtype.
-            if (Array.IndexOf(inputTypes, NPTypeCode.String) >= 0)
+            // holds only the plan, typed with the remainder's NumPy result dtype. A numpy.strings node takes the plan even
+            // over numbers (bind.HoldsStageOnlyNode): it has no kernel, and its stage raises NumPy's own refusal per call.
+            if (Array.IndexOf(inputTypes, NPTypeCode.String) >= 0 || bind.HoldsStageOnlyNode)
             {
                 var plan = NDExprTextPlan.Lower(bound, inputTypes);
                 var textResult = plan.Remainder.ResolveNumPyTypes(plan.RemainderTypes, out _);

@@ -1040,7 +1040,9 @@ namespace NumSharp.Backends.Iteration
             _index = index;
         }
 
-        internal int Index => _index;
+        // `new`: the leaf's input index hides the inherited factory NDExpr.Index (np.strings.index), which is a static
+        // method of the base class and never called through a leaf.
+        internal new int Index => _index;
 
         public override bool SupportsSimd => true;
 

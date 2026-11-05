@@ -1015,6 +1015,13 @@ namespace NumSharp.Tests.Strings
                 var classExcuse = ClassExcuse(c);
                 if (classExcuse != null)
                     ExcusedClasses.TryAdd(c.Id, classExcuse);
+                // The permuted-layout excuse holds only where np.evaluate's fused pass allocated the result (C-ordered); a bare
+                // stage result (NumPy's statement's own array, permuted as NumPy's) keeps its layout compared.
+                if (ReferenceEquals(layoutExcuse, EvaluatePermutedExcuse) && !(result is NDArray evaluated && evaluated.Shape.IsContiguous))
+                {
+                    ExcusedLayouts.TryRemove(c.Id, out _);
+                    layoutExcuse = null;
+                }
                 Compare(c.Expected, result, layoutExcuse is null ? ops : null, diffs, compareLayout: layoutExcuse is null,
                         wantClassOverride: classExcuse is null ? null : "chararray", receiver: receiver);
                 var identityExcuse = IdentityExcuse(c);
@@ -1115,6 +1122,15 @@ namespace NumSharp.Tests.Strings
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> ExcusedLayouts = new();
 
         /// <summary>
+        ///     The reason of section evaltext's permuted-layout excuse (<see cref="LayoutExcuse"/>): np.evaluate's fused pass
+        ///     allocates a fresh result C- or F-ordered, where NumPy's statement keeps a permuted temporary's K order. Kept
+        ///     only when NumSharp's result IS C-contiguous: a bare stage result is NumPy's own statement's array, in NumPy's
+        ///     order, and its layout stays compared.
+        /// </summary>
+        private const string EvaluatePermutedExcuse =
+            "np.evaluate's fused result is C- or F-ordered: NumPy keeps a permuted temporary's K order";
+
+        /// <summary>
         ///     The known layout divergences, all numeric-path behavior every dtype shares:
         ///     <list type="bullet">
         ///       <item><description>an integer-array or boolean index BEHIND a slice / newaxis / ellipsis
@@ -1139,6 +1155,8 @@ namespace NumSharp.Tests.Strings
         /// <returns>The reason, or null when the layout must match.</returns>
         private static string LayoutExcuse(StringOracleCorpus.Case c)
         {
+            // (The permuted-layout excuse of np.evaluate, EvaluatePermutedExcuse, is decided here from NumPy's answer and
+            // confirmed after the call: it stands only for a C-ordered result, see the caller.)
             // Section evaltext: an np.evaluate AXIS reduction keeps np.evaluate's own result layout — a keepdims result is the
             // reduced array reshaped (a view, OWNDATA False) and the reduction of a permuted child is C-ordered — where
             // NumPy's np.<kind> allocates the keepdims shape itself and follows its operands' K order. The rule belongs to
@@ -1147,6 +1165,17 @@ namespace NumSharp.Tests.Strings
             if (c.Op == "evaluate" && c.Params is not null && c.Params.TryGetValue("reduce", out var evalReduce)
                 && evalReduce.ValueKind == JsonValueKind.Object && evalReduce.TryGetProperty("axis", out _))
                 return "np.evaluate's axis-reduction layout: a keepdims result is a reshaped view, a permuted child reduces in C order";
+            // Section evaltext: an elementwise np.evaluate result whose NumPy answer is a fresh array in a PERMUTED memory order
+            // (neither C- nor F-contiguous: the t3 layout's 3-D transpose, reached through a stage result in that order, as in
+            // lor(False, text) or str_len(text) > 1) is C-ordered, because np.evaluate's fused allocation knows two orders — F
+            // when every input is strictly F-contiguous, C otherwise (rules/evaluate.md) — where NumPy's next statement keeps
+            // the temporary's K-order permutation. The same over numbers (np.evaluate((NDExpr)x * 2) of a permuted x is C);
+            // the values, the dtype and the shape are still compared.
+            if (c.Op == "evaluate" && c.Error is null && c.Expected.ValueKind == JsonValueKind.Object
+                && c.Expected.TryGetProperty("c", out var evalC) && evalC.ValueKind == JsonValueKind.False
+                && c.Expected.TryGetProperty("f", out var evalF) && evalF.ValueKind == JsonValueKind.False
+                && c.Expected.TryGetProperty("owndata", out var evalOwn) && evalOwn.ValueKind == JsonValueKind.True)
+                return EvaluatePermutedExcuse;
             // (argwhere / flatnonzero / unravel_index were excused here until the open-bugs rundown's bug 8: they now
             // return NumPy's views of nonzero's / the interleaved index buffer, and their layout is compared.)
             // numpy.ma.compress_nd drops the masked columns of a 2-D array with `data[:, keep]`: a boolean index behind a

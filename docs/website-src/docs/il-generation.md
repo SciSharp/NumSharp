@@ -173,10 +173,11 @@ share `NPTypeCode.String`, but differ in element layout, width, ownership and NA
   to an allocator referenced by a raw copied cell.
 - Text sorting/searching uses prefix keys and NumPy's ordering rules; text/number
   casts use the shared format/parse machinery and descriptor-aware transfers.
-- `np.evaluate` compiles numerical expressions. A comparison over text inside an
-  expression runs over whole arrays through the string comparison kernels, and its
-  bool result enters the fused numerical pass; other text operations use the
-  descriptor-aware string kernels directly.
+- `np.evaluate` compiles numerical expressions. A node over text inside an
+  expression (a comparison, a truth test, a `np.strings` function, a cast to a
+  number) runs over whole arrays through the string kernels, and its numeric result
+  enters the fused numerical pass; text results use the descriptor-aware string
+  kernels directly.
 
 See [Strings, bytes and chararrays](fundamentals/strings-and-bytes.md) for the
 implemented public surface, and [String operands and buffers](NDIter.md#string-operands-and-buffers)

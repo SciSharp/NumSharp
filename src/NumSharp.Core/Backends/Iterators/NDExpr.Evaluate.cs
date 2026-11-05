@@ -160,6 +160,14 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         public Func<InputNode, NDExpr> InputRewrite;
 
+        /// <summary>
+        /// Set by a node that only a text plan runs (a numpy.strings function, <see cref="StringsNode"/>) when it is bound:
+        /// the program build then lowers the tree into stages even when no input is text, so the stage reaches the engine's
+        /// own refusal per call (<c>StrLen</c> over an int array raises NumPy's no-loop error) instead of a kernel build
+        /// failing on a node that has no IL.
+        /// </summary>
+        public bool HoldsStageOnlyNode;
+
         public int IndexOf(NDArray array)
         {
             for (int i = 0; i < Operands.Count; i++)

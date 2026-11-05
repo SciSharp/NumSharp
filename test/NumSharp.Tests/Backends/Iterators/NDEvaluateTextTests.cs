@@ -5,13 +5,14 @@ using NumSharp.Backends.Iteration;
 namespace NumSharp.Tests.Backends.Iterators
 {
     /// <summary>
-    ///     np.evaluate over text, phase E1 (docs/plans/evaluate-text.md): S, U and StringDType operands — arrays of any layout,
-    ///     0-d arrays and a C# <c>string</c> as NumPy's <c>str</c> — in the six comparisons anywhere in a tree, whose bool
-    ///     results feed every numeric node, reduction and keyword of the fused remainder. Each comparison runs as NumPy's own
-    ///     statement (the string ufuncs' guard), so its values, its StringDType NA rules and its errors are NumPy's; every
-    ///     other node with a text operand is refused, naming the node (docs/plans/evaluate-text.md lists the phase
-    ///     that lifts each refusal). Every expected value and message was
-    ///     probed against numpy==2.4.2.
+    ///     np.evaluate over text, phases E1 and E2 (docs/plans/evaluate-text.md): S, U and StringDType operands — arrays of
+    ///     any layout, 0-d arrays and a C# <c>string</c> as NumPy's <c>str</c> — in the six comparisons, the truth readers
+    ///     (the logical nodes, <c>Where</c>'s condition, <c>Any</c> / <c>All</c> / <c>CountNonzero</c>), <c>IsNaN</c>, a
+    ///     <c>Cast</c> to a number and the numpy.strings factories (<c>StrLen</c>, the predicates, the searches), anywhere in
+    ///     a tree; their numeric results feed every numeric node, reduction and keyword of the fused remainder. Each runs as
+    ///     NumPy's own statement (the engine's string functions), so its values, its StringDType NA rules and its errors are
+    ///     NumPy's; every other node with a text operand is refused, naming the node (docs/plans/evaluate-text.md lists the
+    ///     phase that lifts each refusal). Every expected value and message was probed against numpy==2.4.2.
     /// </summary>
     [TestClass]
     public class NDEvaluateTextTests
@@ -279,20 +280,44 @@ namespace NumSharp.Tests.Backends.Iterators
 
         /// <summary>
         ///     The factories' truth test is not a comparison: <c>CountNonzero</c> / <c>Any</c> / <c>All</c> of text read the
-        ///     text's truth in NumPy (refused here until the plan's phase E2), while a user's own <c>NotEqual(text, 0)</c> is
-        ///     NumPy's no-loop comparison.
+        ///     text's truth as NumPy does — <c>np.any</c> / <c>np.all</c> and an axis or keepdims count through the bool cast,
+        ///     a plain <c>np.count_nonzero</c> through the dtype's nonzero function (they differ for a StringDType whose NA
+        ///     object is the empty text) — over every axis form, a 0-d operand with axis 0 / -1 included; a user's own
+        ///     <c>NotEqual(text, 0)</c> stays NumPy's no-loop comparison.
         /// </summary>
         [TestMethod]
-        public void TruthTest_IsNotTheComparisonWithZero()
+        public void TruthTests_ReadTheTruthValue()
         {
             var u = U();
-            new Action(() => np.evaluate(NDExpr.CountNonzero(u)))
-                .Should().Throw<StringComputationNotSupportedException>()
-                .WithMessage("np.evaluate does not compute NDExpr.Any / All / CountNonzero over text (S, U or StringDType)*");
-            new Action(() => np.evaluate(NDExpr.Any(u, 0)))
-                .Should().Throw<StringComputationNotSupportedException>().WithMessage("*NDExpr.Any / All / CountNonzero over text*");
-            new Action(() => np.evaluate(NDExpr.All(u, keepdims: true)))
-                .Should().Throw<StringComputationNotSupportedException>().WithMessage("*NDExpr.Any / All / CountNonzero*");
+            ((long)np.evaluate(NDExpr.CountNonzero(u))).Should().Be(8);
+            ((long)np.evaluate(NDExpr.CountNonzero(S()))).Should().Be(8);
+            ((long)np.evaluate(NDExpr.CountNonzero(T()))).Should().Be(8);
+            ((bool)np.evaluate(NDExpr.Any(u, 0))).Should().BeTrue();
+            var allKeep = np.evaluate(NDExpr.All(u, keepdims: true));
+            allKeep.shape.Should().Equal(1L);
+            allKeep.ToArray<bool>().Should().Equal(false);
+
+            // StringDType with an empty-text NA object: np.count_nonzero(te) reads the nonzero function (the NA does not
+            // count), np.count_nonzero(te, axis=None, keepdims=True) and the axis form read the cast (it does), as do any / all.
+            using var te = np.array(new object[] { "a", "", "b" }, np.dtypes.StringDType(na_object: ""));
+            ((long)np.evaluate(NDExpr.CountNonzero(te))).Should().Be(2);
+            var countKeep = np.evaluate(NDExpr.CountNonzero(te, keepdims: true));
+            countKeep.shape.Should().Equal(1L);
+            countKeep.ToArray<long>().Should().Equal(3L);
+            ((long)np.evaluate(NDExpr.CountNonzero(te, 0))).Should().Be(3);
+            ((bool)np.evaluate(NDExpr.Any(te))).Should().BeTrue();
+            ((bool)np.evaluate(NDExpr.All(te))).Should().BeTrue();
+
+            var u2 = U().reshape(3, 3);
+            np.evaluate(NDExpr.CountNonzero(u2, 1)).ToArray<long>().Should().Equal(2L, 3L, 3L);
+            var anyKeep = np.evaluate(NDExpr.Any(u2, 0, true));
+            anyKeep.shape.Should().Equal(1L, 3L);
+            anyKeep.ToArray<bool>().Should().Equal(true, true, true);
+            np.evaluate(NDExpr.All(S().reshape(3, 3), 1)).ToArray<bool>().Should().Equal(Row("FTT"));
+            // NumPy lets axis 0 / -1 through for a 0-d operand
+            ((long)np.evaluate(NDExpr.CountNonzero(np.array(new[] { "q" }).reshape(Shape.NewScalar()), 0))).Should().Be(1);
+            ((bool)np.evaluate(NDExpr.Any(np.array(new[] { "" }).reshape(Shape.NewScalar()), -1))).Should().BeFalse();
+
             new Action(() => np.evaluate(NDExpr.Sum(NDExpr.NotEqual(u, 0))))
                 .Should().Throw<TypeError>()
                 .WithMessage("ufunc 'not_equal' did not contain a loop with signature matching types (<class 'numpy.dtypes.StrDType'>, <class 'numpy.dtypes._PyLongDType'>) -> None");
@@ -301,8 +326,248 @@ namespace NumSharp.Tests.Backends.Iterators
         }
 
         /// <summary>
+        ///     <c>LogicalAnd</c> / <c>LogicalOr</c> / <c>LogicalXor</c> read every text operand through its bool cast, for any
+        ///     mix of S, U, StringDType, bools and numeric sub-trees, the StringDType NA by its descriptor (a <c>None</c>-like NA
+        ///     is False, a NaN-like one True), and the result keeps the layout NumPy's own logical ufunc gives it: F for a
+        ///     transposed operand, C for a broadcast one (NumPy casts inside its iterator, so the broadcast operand abstains).
+        /// </summary>
+        [TestMethod]
+        public void LogicalNodes_ReadTheTruthValue()
+        {
+            var u = U();
+            var age = Age();
+            np.evaluate(NDExpr.LogicalAnd(u, (NDExpr)age > 3)).ToArray<bool>().Should().Equal(Row("FTTFTTFTT"));
+            np.evaluate(NDExpr.LogicalOr(S(), false)).ToArray<bool>().Should().Equal(Row("FTTTTTTTT"));
+            np.evaluate(NDExpr.LogicalXor(T(), UR())).ToArray<bool>().Should().Equal(Row("TFFFFFFFT"));
+            ((long)np.evaluate(NDExpr.CountNonzero(NDExpr.LogicalAnd(u, (NDExpr)age > 3) | NDExpr.Equal(age, 0)))).Should().Be(7);
+
+            var transposed = np.evaluate(NDExpr.LogicalAnd(u.reshape(3, 3).T, true));
+            transposed.ToArray<bool>().Should().Equal(Row("FTTTTTTTT"));
+            transposed.Shape.IsFContiguous.Should().BeTrue();
+            transposed.Shape.IsContiguous.Should().BeFalse();
+
+            var bc = np.broadcast_to(np.array(new[] { "a", "", "zz" }).reshape(1, 3), new Shape(3, 3));
+            var mixed = np.evaluate(NDExpr.LogicalAnd(bc, (NDExpr)age.reshape(3, 3) > 3));
+            mixed.ToArray<bool>().Should().Equal(Row("FFTFFTFFT"));
+            mixed.Shape.IsContiguous.Should().BeTrue();
+            var alone = np.evaluate(NDExpr.LogicalAnd(bc, true));
+            alone.ToArray<bool>().Should().Equal(Row("TFTTFTTFT"));
+            alone.Shape.IsContiguous.Should().BeTrue("the broadcast operand abstains, as in NumPy (its dense cast would be F)");
+
+            using var tn = np.array(new object[] { "a", "", null, "b" }, np.dtypes.StringDType(na_object: null));
+            using var tf = np.array(new object[] { "a", "", double.NaN, "b" }, np.dtypes.StringDType(na_object: double.NaN));
+            np.evaluate(NDExpr.LogicalAnd(tn, true)).ToArray<bool>().Should().Equal(Row("TFFT"));
+            np.evaluate(NDExpr.LogicalAnd(tf, true)).ToArray<bool>().Should().Equal(Row("TFTT"));
+        }
+
+        /// <summary>
+        ///     A text <c>Where</c> condition is read through its bool cast, as <c>np.where</c> reads it, the branches typed and
+        ///     fused as over numbers; a broadcast text condition leaves NumPy's C layout.
+        /// </summary>
+        [TestMethod]
+        public void WhereCondition_ReadsTheTruthValue()
+        {
+            var age = Age();
+            np.evaluate(NDExpr.Where(U(), age, -(NDExpr)age)).ToArray<long>().Should().Equal(0L, 7, 4, 1, 8, 5, 2, 9, 6);
+            var f = np.evaluate(NDExpr.Where(S(), 1.5, 0));
+            f.typecode.Should().Be(NPTypeCode.Double);
+            f.ToArray<double>().Should().Equal(0.0, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5);
+            using var tn = np.array(new object[] { "a", "", null, "b" }, np.dtypes.StringDType(na_object: null));
+            using var tf = np.array(new object[] { "a", "", double.NaN, "b" }, np.dtypes.StringDType(na_object: double.NaN));
+            np.evaluate(NDExpr.Where(tn, 1, 0)).ToArray<long>().Should().Equal(1L, 0, 0, 1);
+            np.evaluate(NDExpr.Where(tf, 1, 0)).ToArray<long>().Should().Equal(1L, 0, 1, 1);
+
+            var bc = np.broadcast_to(np.array(new[] { "a", "", "zz" }).reshape(1, 3), new Shape(3, 3));
+            var picked = np.evaluate(NDExpr.Where(bc, age.reshape(3, 3), -1));
+            picked.ToArray<long>().Should().Equal(0L, -1, 4, 1, -1, 5, 2, -1, 6);
+            picked.Shape.IsContiguous.Should().BeTrue();
+        }
+
+        /// <summary>
+        ///     <c>IsNaN</c> of text is NumPy's <c>np.isnan</c>: True for a StringDType NA whose NA object is NaN-like, False for
+        ///     every other element (a <c>None</c>-like NA included), NumPy's refusal for S / U.
+        /// </summary>
+        [TestMethod]
+        public void IsNaN_ReadsStringDTypesNaNLikeNA()
+        {
+            using var tn = np.array(new object[] { "a", "", null, "b" }, np.dtypes.StringDType(na_object: null));
+            using var tf = np.array(new object[] { "a", "", double.NaN, "b" }, np.dtypes.StringDType(na_object: double.NaN));
+            np.evaluate(NDExpr.IsNaN(tf)).ToArray<bool>().Should().Equal(Row("FFTF"));
+            np.evaluate(NDExpr.IsNaN(tn)).ToArray<bool>().Should().Equal(Row("FFFF"));
+            np.evaluate(NDExpr.IsNaN(T()) | ((NDExpr)Age() > 5)).ToArray<bool>().Should().Equal(Row("FTFFTFFTT"));
+            new Action(() => np.evaluate(NDExpr.IsNaN(U())))
+                .Should().Throw<TypeError>()
+                .WithMessage("ufunc 'isnan' not supported for the input types, and the inputs could not be safely coerced to any supported types according to the casting rule ''safe''");
+        }
+
+        /// <summary>
+        ///     The numpy.strings factories are NumPy's own functions over the operands: <c>StrLen</c>, the nine predicates and
+        ///     the searches with every <c>start</c> / <c>end</c> form — a literal, a negative one, a constant-only expression, an
+        ///     array, a computed sub-tree — and their results feed the fused remainder.
+        /// </summary>
+        [TestMethod]
+        public void StringsFunctions_AreNumPysStatements()
+        {
+            var u = U();
+            var t = T();
+            var age = Age();
+            np.evaluate(NDExpr.StrLen(u)).ToArray<long>().Should().Equal(0L, 1, 1, 2, 1, 1, 1, 3, 2);
+            np.evaluate(NDExpr.StrLen(S())).ToArray<long>().Should().Equal(0L, 1, 1, 2, 1, 2, 3, 3, 2);
+            np.evaluate(NDExpr.StrLen(t)).ToArray<long>().Should().Equal(0L, 1, 1, 2, 1, 1, 1, 3, 2);
+            ((long)np.evaluate(NDExpr.Sum(NDExpr.StrLen(t)))).Should().Be(12);
+
+            np.evaluate(NDExpr.IsAlpha(u)).ToArray<bool>().Should().Equal(Row("FTTTTTFFT"));
+            np.evaluate(NDExpr.IsDigit(np.array(new object[] { "1", "a", "", "²", "١" }, np.dtypes.StringDType())))
+                .ToArray<bool>().Should().Equal(Row("TFFTT"));
+            np.evaluate(NDExpr.IsNumeric(np.array(new[] { "1", "½", "a", "" }))).ToArray<bool>().Should().Equal(Row("TTFF"));
+            np.evaluate(NDExpr.IsUpper(np.array(new[] { "A", "a", "AB1", "1", "" }))).ToArray<bool>().Should().Equal(Row("TFTFF"));
+            np.evaluate(NDExpr.IsTitle(np.array(new[] { "Ab Cd", "ab", "AB", "A1b", "" }))).ToArray<bool>().Should().Equal(Row("TFFFF"));
+            np.evaluate(NDExpr.IsSpace(np.array(new[] { " ", "\t\n", "a ", "" }).astype(np.dtype("S2"))))
+                .ToArray<bool>().Should().Equal(Row("TTFF"));
+            np.evaluate(NDExpr.IsAlnum(np.array(new object[] { "a1", "a 1", "", "é" }, np.dtypes.StringDType())))
+                .ToArray<bool>().Should().Equal(Row("TFFT"));
+            np.evaluate(NDExpr.IsLower(np.array(new object[] { "ab", "aB", "1", "a1" }, np.dtypes.StringDType())))
+                .ToArray<bool>().Should().Equal(Row("TFFT"));
+            np.evaluate(NDExpr.IsDecimal(np.array(new[] { "12", "½", "" }))).ToArray<bool>().Should().Equal(Row("TFF"));
+
+            np.evaluate(NDExpr.Find(u, "a")).ToArray<long>().Should().Equal(-1L, 0, 0, 0, -1, -1, -1, 0, -1);
+            np.evaluate(NDExpr.Find(u, "a", 1)).ToArray<long>().Should().Equal(-1L, -1, -1, -1, -1, -1, -1, -1, -1);
+            np.evaluate(NDExpr.Find(u, "b", -2)).ToArray<long>().Should().Equal(-1L, -1, -1, 1, 0, -1, -1, 2, -1);
+            np.evaluate(NDExpr.Find(u, "a", -(NDExpr)3)).ToArray<long>().Should().Equal(-1L, 0, 0, 0, -1, -1, -1, 0, -1);
+            np.evaluate(NDExpr.Find(u, "a", (NDExpr)age - 5)).ToArray<long>().Should().Equal(-1L, -1, 0, 0, -1, -1, -1, -1, -1);
+            np.evaluate(NDExpr.Find(u, "a", 0, 2)).ToArray<long>().Should().Equal(-1L, 0, 0, 0, -1, -1, -1, 0, -1);
+            np.evaluate(NDExpr.RFind(t, "a")).ToArray<long>().Should().Equal(-1L, 0, 0, 0, -1, -1, -1, 0, -1);
+            np.evaluate(NDExpr.Count(u, "")).ToArray<long>().Should().Equal(1L, 2, 2, 3, 2, 2, 2, 4, 3);
+            np.evaluate(NDExpr.Count(t, "a", 1)).ToArray<long>().Should().Equal(0L, 0, 0, 0, 0, 0, 0, 0, 0);
+            np.evaluate(NDExpr.Index(u["3:4"], "b")).ToArray<long>().Should().Equal(1L);
+            np.evaluate(NDExpr.RIndex(t["3:5"], "b")).ToArray<long>().Should().Equal(1L, 0);
+            var bytesA = np.array(new[] { "a" }).astype(np.dtype("S1")).reshape(Shape.NewScalar());
+            np.evaluate(NDExpr.StartsWith(S(), bytesA)).ToArray<bool>().Should().Equal(Row("FTTTFFFTF"));
+            np.evaluate(NDExpr.StartsWith(u, "a", 1)).ToArray<bool>().Should().Equal(Row("FFFFFFFFF"));
+            np.evaluate(NDExpr.EndsWith(t, "b")).ToArray<bool>().Should().Equal(Row("FFFTTFFTF"));
+            np.evaluate(NDExpr.EndsWith(u, "z", -1)).ToArray<bool>().Should().Equal(Row("FFFFFFFFT"));
+
+            ((long)np.evaluate(NDExpr.CountNonzero(NDExpr.StartsWith(u, "a") & ((NDExpr)age > 3)))).Should().Be(3);
+            np.evaluate(NDExpr.Where(NDExpr.IsAlpha(u), age, -(NDExpr)age)).ToArray<long>().Should().Equal(0L, 7, 4, 1, 8, 5, -2, -9, 6);
+            using var tf = np.array(new object[] { "a", "", double.NaN, "b" }, np.dtypes.StringDType(na_object: double.NaN));
+            np.evaluate(NDExpr.StartsWith(tf, "a")).ToArray<bool>().Should().Equal(Row("TFFF"));
+        }
+
+        /// <summary>
+        ///     The numpy.strings factories raise NumPy's own errors per call: no loop for the operand classes (an <c>S</c> array
+        ///     with a <c>str</c> substring, a number, <c>isdecimal</c> over bytes), a float start, a missing match of
+        ///     <c>index</c>, and the StringDType NA rules of each function.
+        /// </summary>
+        [TestMethod]
+        public void StringsFunctions_RaiseNumPysErrors()
+        {
+            var u = U();
+            new Action(() => np.evaluate(NDExpr.Find(S(), "a"))).Should().Throw<TypeError>().WithMessage(
+                "ufunc 'find' did not contain a loop with signature matching types (<class 'numpy.dtypes.BytesDType'>, <class 'numpy.dtypes.StrDType'>, <class 'numpy.dtypes._PyLongDType'>, <class 'numpy.dtypes._PyLongDType'>) -> None");
+            new Action(() => np.evaluate(NDExpr.Find(u, "a", 1.5))).Should().Throw<ArgumentException>().WithMessage(
+                "Cannot cast ufunc 'find' input 2 from dtype('float64') to dtype('int64') with casting rule 'same_kind'");
+            new Action(() => np.evaluate(NDExpr.StrLen(Age()))).Should().Throw<TypeError>().WithMessage(
+                "ufunc 'str_len' did not contain a loop with signature matching types <class 'numpy.dtypes.Int64DType'> -> None");
+            new Action(() => np.evaluate(NDExpr.IsDecimal(S()))).Should().Throw<TypeError>().WithMessage(
+                "ufunc 'isdecimal' did not contain a loop with signature matching types <class 'numpy.dtypes.BytesDType'> -> None");
+            new Action(() => np.evaluate(NDExpr.Index(u, "z"))).Should().Throw<ValueError>().WithMessage("substring not found");
+
+            using var tn = np.array(new object[] { "a", "", null, "b" }, np.dtypes.StringDType(na_object: null));
+            using var tf = np.array(new object[] { "a", "", double.NaN, "b" }, np.dtypes.StringDType(na_object: double.NaN));
+            new Action(() => np.evaluate(NDExpr.StrLen(tn))).Should().Throw<ValueError>().WithMessage("The length of a null string is undefined");
+            new Action(() => np.evaluate(NDExpr.IsAlpha(tn))).Should().Throw<ValueError>()
+                .WithMessage("Cannot use the isalpha function with a null that is not a nan-like value");
+            new Action(() => np.evaluate(NDExpr.Find(tf, "a"))).Should().Throw<ValueError>()
+                .WithMessage("'find' not supported for null values that are not strings.");
+            new Action(() => np.evaluate(NDExpr.StartsWith(tn, "a"))).Should().Throw<ValueError>()
+                .WithMessage("'startswith' not supported for null values that are not nan-like or strings.");
+            new Action(() => NDExpr.Find(u, null)).Should().Throw<ArgumentNullException>().WithParameterName("sub");
+            new Action(() => NDExpr.StartsWith(u, null)).Should().Throw<ArgumentNullException>().WithParameterName("prefix");
+        }
+
+        /// <summary>
+        ///     A <c>Cast</c> of text to a number is NumPy's parse (<c>x.astype(dtype)</c>), its result fused into the rest:
+        ///     integers and floats from S / U / StringDType, the bool cast's truth, and NumPy's errors for a text that does not
+        ///     parse, an integer out of the target's range and a StringDType NA.
+        /// </summary>
+        [TestMethod]
+        public void CastToNumbers_IsNumPysParse()
+        {
+            var nums = np.array(new[] { "1", "2", "-3", "300" });
+            np.evaluate(NDExpr.Cast(nums, NPTypeCode.Int64) * 2).ToArray<long>().Should().Equal(2L, 4, -6, 600);
+            np.evaluate(NDExpr.Cast(nums, NPTypeCode.Double) + 0.5).ToArray<double>().Should().Equal(1.5, 2.5, -2.5, 300.5);
+            np.evaluate(NDExpr.Cast(U(), NPTypeCode.Boolean)).ToArray<bool>().Should().Equal(Row("FTTTTTTTT"));
+            np.evaluate(NDExpr.Cast(np.array(new[] { "12", "-4" }).astype(np.dtype("S2")), NPTypeCode.Int64))
+                .ToArray<long>().Should().Equal(12L, -4);
+            np.evaluate(NDExpr.Cast(np.array(new object[] { "1.5", "-2e3", "inf" }, np.dtypes.StringDType()), NPTypeCode.Single))
+                .ToArray<float>().Should().Equal(1.5f, -2000f, float.PositiveInfinity);
+
+            new Action(() => np.evaluate(NDExpr.Cast(nums, NPTypeCode.SByte)))
+                .Should().Throw<OverflowException>().WithMessage("Python integer 300 out of bounds for int8");
+            new Action(() => np.evaluate(NDExpr.Cast(nums, NPTypeCode.Byte)))
+                .Should().Throw<OverflowException>().WithMessage("Python integer -3 out of bounds for uint8");
+            new Action(() => np.evaluate(NDExpr.Cast(U(), NPTypeCode.Int64)))
+                .Should().Throw<ValueError>().WithMessage("invalid literal for int() with base 10: np.str_('')");
+            using var tf = np.array(new object[] { "a", "", double.NaN, "b" }, np.dtypes.StringDType(na_object: double.NaN));
+            new Action(() => np.evaluate(NDExpr.Cast(tf, NPTypeCode.Double)))
+                .Should().Throw<ValueError>().WithMessage("could not convert string to float: 'a'");
+        }
+
+        /// <summary>
+        ///     The stages take the call's keywords through the fused remainder (<c>out=</c>, <c>where=</c>, <c>dtype=</c>) and
+        ///     the explicit handles: a <c>Compile()</c>d tree over a strings function and the positional form, with the
+        ///     function's int64 result fused with a numeric operand.
+        /// </summary>
+        [TestMethod]
+        public void StringsStages_TakeTheKeywordsAndTheHandles()
+        {
+            var u = U();
+            var age = Age();
+            var o = np.zeros(new Shape(9), NPTypeCode.Int64);
+            var returned = np.evaluate(NDExpr.StrLen(u) + 1, @out: o);
+            ReferenceEquals(returned, o).Should().BeTrue();
+            o.ToArray<long>().Should().Equal(1L, 2, 2, 3, 2, 2, 2, 4, 3);
+
+            var masked = np.full(new Shape(9), -7L);
+            var mask = np.array(Row("TFTFTFTFT"));
+            np.evaluate(NDExpr.StrLen(u), @out: masked, where: mask);
+            masked.ToArray<long>().Should().Equal(0L, -7, 1, -7, 1, -7, 1, -7, 2);
+
+            var widened = np.evaluate(NDExpr.StrLen(u), dtype: np.float64);
+            widened.typecode.Should().Be(NPTypeCode.Double);
+            widened.ToArray<double>().Should().Equal(0.0, 1, 1, 2, 1, 1, 1, 3, 2);
+
+            var handle = NDExpr.Find(u, "a").Compile();
+            handle.IsReduction.Should().BeFalse();
+            handle.ResultType.Should().Be(NPTypeCode.Int64);
+            handle.Evaluate().ToArray<long>().Should().Equal(-1L, 0, 0, 0, -1, -1, -1, 0, -1);
+            NDExpr.CountNonzero(NDExpr.IsAlpha(u)).Compile().IsReduction.Should().BeTrue();
+
+            np.evaluate(NDExpr.StrLen(NDExpr.Input(0)) * NDExpr.Input(1), new[] { u, age })
+                .ToArray<long>().Should().Equal(0L, 7, 4, 2, 8, 5, 2, 27, 12);
+            var positional = NDExpr.StrLen(NDExpr.Input(0)).Compile(NPTypeCode.String);
+            positional.Evaluate(new[] { T() }).ToArray<long>().Should().Equal(0L, 1, 1, 2, 1, 1, 1, 3, 2);
+        }
+
+        /// <summary>
+        ///     A strings function's text arguments are inputs like a comparison's: trees that differ only in their literal
+        ///     substrings share one program.
+        /// </summary>
+        [TestMethod]
+        [DoNotParallelize] // reads the process-wide NDExpr program cache, which another test may clear when it fills
+        public void StringsArguments_AreInputs_OneProgramForEveryText()
+        {
+            var u = U();
+            var first = NDExpr.StartsWith(u, "a").GetProgram(null);
+            foreach (var prefix in new[] { "zz", "", "a\0b", "much longer than any element" })
+                Assert.AreSame(first, NDExpr.StartsWith(u, prefix).GetProgram(null), $"'{prefix}': one program serves every prefix");
+            np.evaluate(NDExpr.StartsWith(u, "zz")).ToArray<bool>().Should().Equal(Row("FFFFFFFFT"));
+        }
+
+        /// <summary>
         ///     Every other node with a text operand is refused when the program is built, naming the node, so no text is read and
-        ///     no result is half computed (the plan's phases E2 and E3 lift these refusals).
+        ///     no result is half computed (the plan's phase E3 lifts these refusals: text results, text reductions and NumPy's
+        ///     own error for every remaining node, <c>LogicalNot</c> of text included).
         /// </summary>
         [TestMethod]
         public void OtherTextNodes_AreRefusedByName()
@@ -313,11 +578,9 @@ namespace NumSharp.Tests.Backends.Iterators
             void Refused(Func<NDExpr> tree, string pattern)
                 => new Action(() => np.evaluate(tree())).Should().Throw<StringComputationNotSupportedException>().WithMessage(pattern);
 
-            Refused(() => NDExpr.LogicalAnd(u, age), "*NDExpr.LogicalAnd over text*");
-            Refused(() => NDExpr.LogicalXor(age, t), "*NDExpr.LogicalXor over text*");
-            Refused(() => NDExpr.Where(u, age, 0), "*NDExpr.Where's condition over text*");
-            Refused(() => NDExpr.IsNaN(t), "*NDExpr.IsNaN over text*");
-            Refused(() => NDExpr.Cast(u, NPTypeCode.Int64), "*NDExpr.Cast over text*");
+            Refused(() => NDExpr.LogicalNot(u), "*NDExpr.LogicalNot over text*");
+            Refused(() => NDExpr.IsInf(t), "*NDExpr.IsInf over text*");
+            Refused(() => NDExpr.Cast(u, NPTypeCode.String), "*NDExpr.Cast to a text dtype over text*");
             Refused(() => (NDExpr)u + u, "*NDExpr.Add over text*");
             Refused(() => (NDExpr)t * 2, "*NDExpr.Multiply over text*");
             Refused(() => NDExpr.Maximum(t, t), "*NDExpr.Maximum over text*");

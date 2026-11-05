@@ -1620,17 +1620,21 @@ np.evaluate((NDExpr)a * b + c, @out: output);
 
 Elementwise fusion supports broadcasting, strided operands, overlap-safe `out=`, and buffered write-back when `out` needs a cast. A root `Sum`, `Prod`, `Min`, `Max`, or `Mean` fuses element evaluation with the reduction; reductions nested inside a larger elementwise expression are intentionally rejected and require two calls.
 
-Text operands (`S`, `U` and `StringDType` arrays, and a C# `string`, which is NumPy's `str`) take part through the six comparisons. When the program is built, each comparison over text is cut out of the tree: per call it runs first as NumPy's own string comparison over whole arrays (its kernels, its `StringDType` NA rules and its errors), and its bool result is one more operand of the fused numeric pass. A text value is an input, not IL, so one compiled program serves every literal:
+Text operands (`S`, `U` and `StringDType` arrays, and a C# `string`, which is NumPy's `str`) take part wherever NumPy's answer is a number or a bool: the six comparisons, the truth value (the logical nodes, `Where`'s condition, `Any` / `All` / `CountNonzero`), `IsNaN`, `Cast` to a number and the `np.strings` functions (`NDExpr.StrLen`, `NDExpr.IsAlpha` … `NDExpr.IsNumeric`, `NDExpr.Find`, `NDExpr.RFind`, `NDExpr.Count`, `NDExpr.Index`, `NDExpr.RIndex`, `NDExpr.StartsWith`, `NDExpr.EndsWith`). When the program is built, each such node is cut out of the tree: per call it runs first as NumPy's own function over whole arrays (its kernels, its `StringDType` NA rules and its errors; a computed argument such as a search's `start` is evaluated first, into the temporary NumPy would hold), and its result is one more operand of the fused numeric pass. A text value is an input, not IL, so one compiled program serves every literal:
 
 ```csharp
 // A text filter and a numeric filter in one call; the program is shared by every city name.
 NDArray adults = np.evaluate(NDExpr.Equal(city, "paris") & ((NDExpr)age > 30));
 
-// A count over a text comparison: the reduction runs on its bool result.
-NDArray parisians = np.evaluate(NDExpr.CountNonzero(NDExpr.Equal(city, "paris")));
+// A count over a text test: the reduction runs on its bool result.
+NDArray parisians = np.evaluate(NDExpr.CountNonzero(NDExpr.StartsWith(city, "par") & ((NDExpr)age > 30)));
+
+// The truth value of a string (non-empty is True) and a search, fused with numbers.
+NDArray named = np.evaluate(NDExpr.Where(nickname, price, price * 0.9));
+NDArray hasO = np.evaluate(NDExpr.Find(city, "o") >= 0);
 ```
 
-Every other node over a text operand (arithmetic, the truth value of a string, `Where` with text branches, a text result) raises `StringComputationNotSupportedException` when the program is built; compute that part with the string functions and pass its result in.
+A node whose result would be text (concatenation, repetition, `Where` with text branches, a bare text array as the expression), a reduction of text other than those truth tests, and the arithmetic and math nodes over text raise `StringComputationNotSupportedException` when the program is built; compute that part with the string functions and pass its result in.
 
 ### Measured fused versus unfused performance
 

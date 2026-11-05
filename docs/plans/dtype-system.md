@@ -568,7 +568,7 @@ refusals. Phase 2 (`docs/plans/strings-phase2.md`) ended with P2.7, the switch-o
 truth values, concatenation and repetition, the reductions, sorting / searching / sets and the order statistics, all 46
 `numpy.strings` functions, the reductions into a text `out=` with NumPy's loop resolution —, and
 `StringComputationNotSupportedException` is only `np.evaluate`'s refusal of a text operand (since
-`docs/plans/evaluate-text.md` E1, of a text node outside its six comparisons). Gates: the string oracle
+`docs/plans/evaluate-text.md` E1 / E2, of a text node whose NumPy answer is not a number or a bool). Gates: the string oracle
 (`test/oracle/gen_strings_oracle.py`, 64 sections, 266,059 NumPy 2.4.2 cases, every one strict) and the
 `benchmark/strings` subsystem of `run_benchmark.py`. What stays out: NumPy's object arrays (a computation whose NumPy
 result is an object array of Python strings, as in the `numpy.polynomial` recurrences over text, raises

@@ -1,15 +1,14 @@
-"""Joins the outputs of evaltext_bench.cs and evaltext_bench.py into the table of docs/plans/evaluate-text.md (section 5).
+"""Joins the outputs of evaltext_bench.cs / evaltext_e2_bench.cs and their NumPy twins into the tables of
+docs/plans/evaluate-text.md (section 5).
 
     python benchmark/fusion/probes/evaltext_sheet.py cs.out py.out [--full]
 
-Default: one row per (text kind, layout, n), one column per tree, each cell "NPY/NS (np.evaluate us)" with the house
-icons (NPY/NS = NumPy time / NumSharp time, > 1 means NumSharp is faster; >= 1.0 / >= 0.5 / >= 0.2 / below). --full: one
-row per cell with NumPy, np.evaluate and unfused NumSharp times, NPY/NS and unfused/fused, then the worst NPY/NS cell.
-Lines that are not result rows (build output, warnings) are skipped.
+Default: one row per (text kind, layout, n), one column per tree (in the order the C# output first names them), each
+cell "NPY/NS (np.evaluate us)" with the house icons (NPY/NS = NumPy time / NumSharp time, > 1 means NumSharp is faster;
+>= 1.0 / >= 0.5 / >= 0.2 / below). --full: one row per cell with NumPy, np.evaluate and unfused NumSharp times, NPY/NS
+and unfused/fused, then the worst NPY/NS cell. Lines that are not result rows (build output, warnings) are skipped.
 """
 import sys
-
-TREES = ["filter", "count", "where", "compare"]
 
 
 def rows(path, width):
@@ -56,15 +55,17 @@ def main(argv):
         if worst:
             print(f"\nworst NPY/NS: {worst[0]} = {worst[1]:.2f}")
         return 0
-    print("| text | layout | n | filter | count | where | compare |")
-    print("|---|---|---|---|---|---|---|")
+    # The trees in the order the benchmark first names them (dicts keep insertion order).
+    trees = list(dict.fromkeys(key[3] for key in cs))
+    print("| text | layout | n | " + " | ".join(trees) + " |")
+    print("|---|---|---|" + "---|" * len(trees))
     seen = []
     for kind, layout, n, _ in cs:
         if (kind, layout, n) in seen:
             continue
         seen.append((kind, layout, n))
         cells = []
-        for tree in TREES:
+        for tree in trees:
             fused = cs[(kind, layout, n, tree)][0]
             ratio = py[(kind, layout, n, tree)][0] / fused
             cells.append(f"{icon(ratio)} {ratio:.1f}× ({us(fused)})")

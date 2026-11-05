@@ -5,11 +5,11 @@ using NumSharp.Tests.Fuzz;
 namespace NumSharp.Tests.Strings
 {
     /// <summary>
-    ///     The string oracle's op for section <c>evaltext</c>: np.evaluate over text (docs/plans/evaluate-text.md, phase E1).
-    ///     The case's tree is the numeric evaluate tier's prefix grammar (plus the <c>ls:</c> Python-str literal), so it is
-    ///     built and evaluated by that tier's own replay (<see cref="OpRegistry"/>'s evaluate parser, with its
-    ///     <c>reduce</c> / <c>dtype</c> / <c>order</c> parameters), here over the string corpus' operands (S, U and
-    ///     StringDType views rebuilt exactly).
+    ///     The string oracle's op for section <c>evaltext</c>: np.evaluate over text (docs/plans/evaluate-text.md, phases E1
+    ///     and E2). The case's tree is the numeric evaluate tier's prefix grammar (plus the <c>ls:</c> Python-str literal and
+    ///     numpy.strings' function names), so it is built and evaluated by that tier's own replay (<see cref="OpRegistry"/>'s
+    ///     evaluate parser, with its <c>reduce</c> / <c>dtype</c> / <c>order</c> parameters), here over the string corpus'
+    ///     operands (S, U and StringDType views rebuilt exactly).
     /// </summary>
     internal static partial class StringOracleOps
     {

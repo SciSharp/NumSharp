@@ -82,6 +82,7 @@ namespace NumSharp.Backends.Iteration
         Cast = 11,
         Round = 12,
         Logical = 13,
+        Strings = 14,   // a numpy.strings function (NDExpr.Strings.cs), always run as a text stage
     }
 
     /// <summary>

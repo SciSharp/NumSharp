@@ -3,12 +3,14 @@ using System;
 namespace NumSharp
 {
     /// <summary>
-    ///     A computation on text that NumSharp does not run (yet): an <c>np.evaluate</c> (and <c>NDExpr</c> evaluation) node
-    ///     that takes an <c>S</c>, <c>U</c> or <c>StringDType</c> operand the current phase of np.evaluate's text support does
-    ///     not compute, or a text argument to an <c>NDExpr.Call</c> delegate. <c>np.evaluate</c> is a NumSharp extension
-    ///     without a NumPy function to follow; it computes text in its six comparisons, whose bool results feed the rest of the
-    ///     tree, and the message names the refused node and how to compute it (the string functions first, their result
-    ///     passed into the expression).
+    ///     A computation on text that <c>np.evaluate</c> does not run: an <c>NDExpr</c> node that takes an <c>S</c>, <c>U</c> or
+    ///     <c>StringDType</c> operand where NumPy's answer is not a number or a bool (a text result such as a concatenation or
+    ///     a <c>Where</c> with text branches, a reduction of text other than the truth tests, an arithmetic or math node), or a
+    ///     text argument to an <c>NDExpr.Call</c> delegate. <c>np.evaluate</c> is a NumSharp extension without a NumPy function
+    ///     to follow; it computes text in the comparisons, the truth readers (the logical nodes, <c>Where</c>'s condition,
+    ///     <c>Any</c> / <c>All</c> / <c>CountNonzero</c>), <c>IsNaN</c>, <c>Cast</c> to a number and the numpy.strings factories
+    ///     (<c>StrLen</c>, the predicates, the searches), whose numeric results feed the rest of the tree, and the message names
+    ///     the refused node and how to compute it (the string functions first, their result passed into the expression).
     /// </summary>
     /// <remarks>
     ///     <para>

@@ -685,6 +685,9 @@ namespace NumSharp.Tests.Documentation
             // The comparison computes on the text and its bool result feeds the numbers, one call.
             np.evaluate(NDExpr.Equal(names, "cat") & ((NDExpr)np.array(new[] { 4, 2, 7 }) > 3)).ToArray<bool>()
                 .Should().Equal(true, false, false);
+            // The numpy.strings functions read the text too, their numbers fused with the rest (NumPy: 1, [0.5 0.5 1. ]).
+            ((long)np.evaluate(NDExpr.CountNonzero(NDExpr.StrLen(names) > 3))).Should().Be(1);
+            np.evaluate(NDExpr.Where(NDExpr.StartsWith(names, "b"), 1.0, 0.5)).ToArray<double>().Should().Equal(0.5, 0.5, 1.0);
             Action fused = () => np.evaluate((NDExpr)names + names);
             fused.Should().Throw<StringComputationNotSupportedException>()
                 .Where(e => e.Message.StartsWith("np.evaluate does not compute NDExpr.Add over text (S, U or StringDType)"));

@@ -241,6 +241,13 @@ namespace NumSharp.Tests.Fuzz
                 };
             }
 
+            /// <summary>The optional argument at position <paramref name="i"/> of a call (a search's start / end), or null
+            ///     when the tree omits it — the factory's spelling of NumPy's default.</summary>
+            /// <param name="a">The call's arguments.</param>
+            /// <param name="i">The position.</param>
+            /// <returns>The argument, or null.</returns>
+            private static NDExpr Opt(List<NDExpr> a, int i) => i < a.Count ? a[i] : null;
+
             private static NDExpr BuildNode(string name, List<NDExpr> a)
             {
                 // Phase 4.1b Cast: cast_<dtype>(child) → NDExpr.Cast(child, dtype). Handled before the
@@ -398,6 +405,26 @@ namespace NumSharp.Tests.Fuzz
                     }
                     case "mux": return NDExpr.Mux(a[0], a.GetRange(1, a.Count - 1).ToArray());
                     case "bucketize": return NDExpr.Bucketize(a[0], a.GetRange(1, a.Count - 1).ToArray());
+                    // numpy.strings' functions (np.evaluate over text, phase E2), under NumPy's names: the length and the
+                    // nine predicates take one operand, a search two to four (a, sub[, start[, end]]); an omitted start /
+                    // end is NumPy's default (0 / None), as the factory's null.
+                    case "str_len": return NDExpr.StrLen(a[0]);
+                    case "isalpha": return NDExpr.IsAlpha(a[0]);
+                    case "isdigit": return NDExpr.IsDigit(a[0]);
+                    case "isspace": return NDExpr.IsSpace(a[0]);
+                    case "isalnum": return NDExpr.IsAlnum(a[0]);
+                    case "islower": return NDExpr.IsLower(a[0]);
+                    case "isupper": return NDExpr.IsUpper(a[0]);
+                    case "istitle": return NDExpr.IsTitle(a[0]);
+                    case "isdecimal": return NDExpr.IsDecimal(a[0]);
+                    case "isnumeric": return NDExpr.IsNumeric(a[0]);
+                    case "find": return NDExpr.Find(a[0], a[1], Opt(a, 2), Opt(a, 3));
+                    case "rfind": return NDExpr.RFind(a[0], a[1], Opt(a, 2), Opt(a, 3));
+                    case "count": return NDExpr.Count(a[0], a[1], Opt(a, 2), Opt(a, 3));
+                    case "index": return NDExpr.Index(a[0], a[1], Opt(a, 2), Opt(a, 3));
+                    case "rindex": return NDExpr.RIndex(a[0], a[1], Opt(a, 2), Opt(a, 3));
+                    case "startswith": return NDExpr.StartsWith(a[0], a[1], Opt(a, 2), Opt(a, 3));
+                    case "endswith": return NDExpr.EndsWith(a[0], a[1], Opt(a, 2), Opt(a, 3));
                     default: throw new NotSupportedException($"evaluate node '{name}' has no NDExpr mapping");
                 }
             }

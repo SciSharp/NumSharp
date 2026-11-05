@@ -76,7 +76,7 @@ Exception
 | A C# cast of a 1-D array to a scalar | `IncorrectShapeException` | `TypeError` | NumSharp: `only 0-d arrays can be converted to scalar` |
 | An unknown dtype string | `NotSupportedException` | `TypeError` | `data type 'xyz' not understood` |
 | A factorisation without a backend (`np.linalg.svd`) | `OpenBlasMissingBackendException` | - | names the `NumSharp.Interop.OpenBLAS` package to reference |
-| An `np.evaluate` node over a text operand, other than the six comparisons | `StringComputationNotSupportedException` | - | names the node and the string functions to use |
+| An `np.evaluate` node over a text operand whose result would be text (concatenation, a `Where` with text branches), a reduction of text other than `Any` / `All` / `CountNonzero`, or an arithmetic or math node over text | `StringComputationNotSupportedException` | - | names the node and the string functions to use |
 
 `AxisError` derives from `ArgumentOutOfRangeException`, so its `Message` ends with .NET's parameter suffix (`(Parameter 'axis')`); the first line is NumPy's text.
 
