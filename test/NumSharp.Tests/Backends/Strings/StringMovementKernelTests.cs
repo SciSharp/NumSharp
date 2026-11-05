@@ -107,6 +107,54 @@ namespace NumSharp.Tests.Backends.Strings
             }
         }
 
+        /// <summary>
+        ///     The step kernel (<c>GetWhereBytesStepKernel</c>): a one-element branch broadcast over the result (NumPy's str
+        ///     or bytes scalar, a 0-d view of a larger buffer), a strided, reversed or stride-0 1-D branch, a strided 1-D
+        ///     condition, and a one-element condition, at every width class — each the element-by-element select, with the
+        ///     scalar converted to the result width as NumPy's promotion asks (<c>np.where(c, U6, "-")</c> is <c>&lt;U6</c>).
+        /// </summary>
+        [TestMethod]
+        public void Where_StepKernel_ScalarAndStridedOperands()
+        {
+            foreach (var spec in new[] { "S1", "S6", "S17", "U1", "U6", "U9" })
+            {
+                var dt = np.dtype(spec);
+                int chars = dt.kind == 'U' ? dt.itemsize / 4 : dt.itemsize;
+                var xs = Words(6000, chars);
+                var cond = Enumerable.Range(0, 3000).Select(_ => Rng.Next(2) == 0).ToArray();
+                var x = np.array(xs, dt);
+                NDArray Scalar(string s) => dt.kind == 'U' ? (NDArray)s : np.array(new[] { s }, np.dtype("S" + s.Length)).reshape(Shape.NewScalar());
+
+                // Contiguous condition and branch, one-element other branch, either side.
+                var c = np.array(cond);
+                var head = x["0:3000"];
+                Read(np.where(c, head, Scalar("-"))).Should().Equal(cond.Select((b, i) => b ? xs[i] : "-"), spec + " scalar y");
+                Read(np.where(c, Scalar("q"), head)).Should().Equal(cond.Select((b, i) => b ? "q" : xs[i]), spec + " scalar x");
+
+                // Strided and reversed branches; a strided condition.
+                var strided = x["::2"];
+                Read(np.where(c, strided, Scalar("z"))).Should().Equal(cond.Select((b, i) => b ? xs[2 * i] : "z"), spec + " strided");
+                var reversed = x["3000:"]["::-1"];
+                Read(np.where(c, reversed, head)).Should().Equal(cond.Select((b, i) => b ? xs[5999 - i] : xs[i]), spec + " reversed");
+                var c2 = np.array(Enumerable.Range(0, 6000).Select(i => cond[i / 2]).ToArray())["::2"];
+                Read(np.where(c2, head, Scalar("-"))).Should().Equal(cond.Select((b, i) => b ? xs[i] : "-"), spec + " strided cond");
+
+                // A 0-d view of a larger buffer reads its own element (its offset), and a stride-0 1-D branch repeats it.
+                var zeroD = x[5];
+                Read(np.where(c, zeroD, head)).Should().Equal(cond.Select((b, i) => b ? xs[5] : xs[i]), spec + " 0-d view");
+                var repeated = np.broadcast_to(x["7:8"], new Shape(3000));
+                Read(np.where(c, head, repeated)).Should().Equal(cond.Select((b, i) => b ? xs[i] : xs[7]), spec + " stride-0");
+
+                // A one-element condition selects one branch for every element.
+                Read(np.where(np.array(new[] { true }), head, Scalar("-"))).Should().Equal(xs.Take(3000), spec + " one-element cond");
+
+                // N-D: a C-contiguous 2-D branch with a scalar other branch walks flat.
+                var grid = x.reshape(60, 100);
+                var gridCond = np.array(Enumerable.Range(0, 6000).Select(i => i % 3 == 0).ToArray()).reshape(60, 100);
+                Read(np.where(gridCond, grid, Scalar("-"))).Should().Equal(xs.Select((w, i) => i % 3 == 0 ? w : "-"), spec + " 2-D");
+            }
+        }
+
         [TestMethod]
         public void Fill_PastTheCacheCap_WithAWidthThatDoesNotDivideIt()
         {

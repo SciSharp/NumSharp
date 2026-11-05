@@ -201,8 +201,11 @@ namespace NumSharp.Backends.Strings
             NDArray ys = SameElement(y, descr) ? y : ConvertUnchecked(y, descr);
             try
             {
-                // The common case selects whole elements in one pass; any broadcast or strided operand runs on the unit views.
-                if (TryWhereContiguous(cond, xs, ys, descr, dims, layout, out var selected))
+                // The common case selects whole elements in one pass — every operand contiguous, or (the step kernel) a
+                // one-element operand broadcast over the result or a strided / reversed 1-D view; any other broadcast or
+                // strided operand runs on the unit views.
+                if (TryWhereContiguous(cond, xs, ys, descr, dims, layout, out var selected)
+                    || TryWhereSteps(cond, xs, ys, descr, dims, layout, out selected))
                     return selected;
                 using var condUnits = NDArray.expand_dims(cond, -1);
                 using var xu = UnitArray(xs);
@@ -268,6 +271,89 @@ namespace NumSharp.Backends.Strings
                    n);
             result = r;
             return true;
+        }
+
+        /// <summary>
+        ///     <c>np.where</c> over string values whose operands each walk the result in one flat stride: a one-element operand
+        ///     broadcast over every element (the scalar branch of <c>np.where(c, names, "-")</c>, step 0), an operand of the
+        ///     result's dimensions that is C-contiguous (step = its element size), or — for a 1-D result — a strided or
+        ///     reversed view (step = its byte stride). Each condition byte then selects one whole element
+        ///     (<see cref="DirectILKernelGenerator.GetWhereBytesStepKernel"/>) into a fresh contiguous result, where the unit
+        ///     route broadcast the condition over each element's characters through the general iterator (0.36-0.58x NumPy at
+        ///     100K elements).
+        /// </summary>
+        /// <param name="cond">The bool condition.</param>
+        /// <param name="x">The values where the condition holds, in <paramref name="descr"/>.</param>
+        /// <param name="y">The values elsewhere, in <paramref name="descr"/>.</param>
+        /// <param name="descr">The result descriptor (its width is the kernel's element width).</param>
+        /// <param name="dims">The broadcast dimensions.</param>
+        /// <param name="layout">NumPy's result layout for the operands; the kernel writes only a C-contiguous one.</param>
+        /// <param name="result">The new array when the step path applied, else null.</param>
+        /// <returns>True when <paramref name="result"/> was produced; false when an operand cannot be walked in one flat
+        ///     stride or the layout is not C-contiguous (nothing allocated).</returns>
+        /// <remarks>
+        ///     The result never aliases an input (it is allocated here), so the kernel's read-then-write per element is safe.
+        ///     A one-element operand is read through its own first element (<c>Shape.offset</c>), so a 0-d view of a larger
+        ///     buffer reads the right element.
+        /// </remarks>
+        private static unsafe bool TryWhereSteps(NDArray cond, NDArray x, NDArray y, DType descr, long[] dims, Shape layout,
+                                                 out NDArray result)
+        {
+            result = null;
+            long n = 1;
+            foreach (var d in dims)
+                n *= d;
+            if (n == 0 || !layout.IsContiguous)
+                return false;
+
+            long width = descr.itemsize;
+            if (!FlatStep(cond, dims, 1, out long condStep) || !FlatStep(x, dims, width, out long xStep)
+                || !FlatStep(y, dims, width, out long yStep))
+                return false;
+            var kernel = DirectILKernelGenerator.GetWhereBytesStepKernel(descr.itemsize);
+            if (kernel is null)
+                return false;
+
+            var r = NDArray.ForOverwrite(descr, layout); // the kernel writes every element
+            kernel((bool*)(cond.Storage.Address + cond.Shape.offset), condStep,
+                   x.Storage.Address + x.Shape.offset * width, xStep,
+                   y.Storage.Address + y.Shape.offset * width, yStep,
+                   r.Storage.Address + r.Shape.offset * width,
+                   n);
+            result = r;
+            return true;
+        }
+
+        /// <summary>
+        ///     The byte step an operand advances by when the result's elements are walked in C order, if it has one: 0 for a
+        ///     one-element operand (broadcast), its element size for a C-contiguous operand of the result's dimensions, its
+        ///     byte stride for a 1-D operand of a 1-D result.
+        /// </summary>
+        /// <param name="a">The operand.</param>
+        /// <param name="dims">The result's dimensions.</param>
+        /// <param name="itemsize">The operand's element size in bytes.</param>
+        /// <param name="step">Receives the byte step.</param>
+        /// <returns>False when one flat stride cannot walk the operand (an N-D strided or partly broadcast operand).</returns>
+        private static bool FlatStep(NDArray a, long[] dims, long itemsize, out long step)
+        {
+            step = 0;
+            if (a.size == 1)
+                return true;
+            if (!SameDimensions(a.Shape.dimensions, dims))
+                return false;
+            if (a.Shape.IsContiguous)
+            {
+                step = itemsize;
+                return true;
+            }
+            if (dims.Length == 1)
+            {
+                // Shape strides count elements; the kernel steps bytes. A negative stride walks a reversed view from its
+                // first logical element (Shape.offset), which is where the kernel starts.
+                step = a.Shape.strides[0] * itemsize;
+                return true;
+            }
+            return false;
         }
 
         /// <summary>True when two dimension lists are equal (rank and every extent).</summary>
