@@ -10,7 +10,7 @@ text exactly where NumPy's ufunc has a text loop, and the result equals NumPy's 
 |---|---|---|
 | E1 (MVP) | text leaves (S / U / StringDType arrays, 0-d, a C# `string` as NumPy's `str`) in the six comparisons anywhere in a tree; their bool results feed every numeric node, reduction and keyword | done (`2ab907a0`) |
 | E2 (next release) | the truth value of text (`LogicalAnd/Or/Xor`, `Where`'s condition, `Any` / `All` / `CountNonzero`), `IsNaN` over StringDType, the np.strings ufuncs and searches as factories (`StrLen`, the nine predicates, `Find` / `RFind` / `Count` / `Index` / `RIndex`, `StartsWith` / `EndsWith`), text → number `Cast` | done (`c6738c59`; the owner's "Continue with phase E2", 2026-11-05) |
-| E3 | text RESULTS: `Where` with text branches (np.where's promotion), `Add` (concatenation), `Multiply` (StringDType repeat; S / U need `out=`), `Maximum` / `Minimum` over StringDType, `Cast` to text, a bare text root; text reductions (`ArgMax` / `ArgMin` over S / U / T, `Max` / `Min` / `Sum` over StringDType, NumPy's answer for every other kind); NumPy's own error for every other node with a text operand; the keywords over a text result | done (`4b429c07`; the owner's "Complete fully", 2026-11-05) |
+| E3 | text RESULTS: `Where` with text branches (np.where's promotion), `Add` (concatenation), `Multiply` (StringDType repeat; S / U need `out=`), `Maximum` / `Minimum` over StringDType, `Cast` to text, a bare text root; text reductions (`ArgMax` / `ArgMin` over S / U / T, `Max` / `Min` / `Sum` over StringDType, NumPy's answer for every other kind); NumPy's own error for every other node with a text operand; the keywords over a text result | done (`32292901`; the owner's "Complete fully", 2026-11-05) |
 
 ## 1. Decisions (owner, 2026-11-04, design-ask pages)
 
@@ -212,7 +212,7 @@ contiguous calls stays possible later (it would sit behind the same lowering).
   `Where(age > 30, names, "-")`, eq_concat `Equal(Add(names, "x"), "parisx")`, strlen_cat
   `CountNonzero(StrLen(Add(names, names)) > 10)`, argmax `ArgMax(names)`, cast_text `Cast(age, "U2")`.
 
-  Measured at `4b429c07` (pinned to two P-cores 0x14, best of 7 after a paused double warm-up, every fused result
+  Measured at `32292901` (pinned to two P-cores 0x14, best of 7 after a paused double warm-up, every fused result
   checked against NumSharp's unfused statements first; NumPy 2.4.2 twin). Cells: NPY/NS (np.evaluate µs).
 
   | text | layout | n | concat | concat_where | where_text | eq_concat | strlen_cat | argmax | cast_text |
@@ -236,13 +236,13 @@ contiguous calls stays possible later (it would sit behind the same lowering).
   | T | strided | 100,000 | ✅ 3.1× (1,076) | ✅ 8.5× (1,821) | ✅ 18.1× (637) | ✅ 3.0× (1,639) | ✅ 4.0× (1,384) | ✅ 9.5× (742) | ✅ 24.9× (657) |
   | T | strided | 1,000,000 | ✅ 2.9× (11,543) | ✅ 7.4× (20,902) | ✅ 12.0× (8,771) | ✅ 2.8× (17,304) | ✅ 3.9× (14,488) | ✅ 8.1× (8,714) | ✅ 24.0× (6,510) |
 
-  Reading: at `4b429c07` 114 of the 126 cells beat NumPy (107 at 1.5× or more): the casts to text 19–25×, the
+  Reading: at `32292901` 114 of the 126 cells beat NumPy (107 at 1.5× or more): the casts to text 19–25×, the
   comparison of a concatenation 2.6–15.6×, the concatenation 2.5–9.7×, its length test 2.2–8.1×, ArgMax 1.4–9.5×,
   the concatenating where 1.1–9.0× and StringDType's every tree 2.3–28×. The twelve losers were all one tree,
   `where_text` over S / U (0.35–0.62×), and the cause was np.where's, not the stage's: its whole-element text kernel
   took only operands that all have the result's dimensions and are C-contiguous, so the `"-"` branch (a scalar) and
   a strided view sent it through the unit-view route (the condition broadcast over every element's characters, about
-  20 ns per element). `631bcab9` adds a step kernel (`GetWhereBytesStepKernel`: a one-element operand, a
+  20 ns per element). `6b8c2ae4` adds a step kernel (`GetWhereBytesStepKernel`: a one-element operand, a
   C-contiguous one or a 1-D strided / reversed view, each at its own byte step) — re-measured with this benchmark's
   where trees:
 
@@ -318,32 +318,38 @@ contiguous calls stays possible later (it would sit behind the same lowering).
   stand-in replaced). Gates: `NDEvaluateTextTests` 29 cases (E1's 21, two of them rewritten), the string oracle section
   `evaltext` 5,736 cases (E2's 2,787 after E1's; a second layout excuse, np.evaluate's own C / F result rule against a
   permuted temporary, 9 cases), the benchmark above (114 / 144 cells at 1.5× NumPy or more).
-- 2026-11-05 — E3 implemented (`4b429c07`; the owner's "Complete fully"): text results (`NDExprLowered.TextStage`,
+- 2026-11-05 — E3 implemented (`32292901`; the owner's "Complete fully"): text results (`NDExprLowered.TextStage`,
   `NDExprTextPlan.TextRoot`), the E3 stages (`NDExpr.TextResults.cs`), the keyword finishing (`FinishResult`,
   `EvaluateIntoText`), `NDExpr.Cast(x, DType)` as the one Cast overload, `ReduceNode.IsNanFamily`, and the
   StringComputationNotSupportedException refusals gone but the delegate's. The oracle found an engine bug on the way:
   np.where's contiguous kernels read an explicit-offset view (`np.ndarray(buffer, offset=...)`, a storage alias) from the
   buffer's start — every fast-path pointer now adds `Shape.offset` (basic slices fold their offset into the storage, so
   only those constructions reached it; 24 other fast paths checked over such views were right). Gates: see §5. The gate
-  run under guard pages also caught a test bug outside E3 (`053edebf`): two string-sort tests read a raw buffer address
+  run under guard pages also caught a test bug outside E3 (`f6d422e4`): two string-sort tests read a raw buffer address
   from an array nothing kept alive, which a GC in optimized code could free mid-sort.
-- 2026-11-05 — np.where over S / U with a scalar or strided branch (`631bcab9`): the step kernel above; the E3
+- 2026-11-05 — np.where over S / U with a scalar or strided branch (`6b8c2ae4`): the step kernel above; the E3
   benchmark's twelve losing cells all beat NumPy now (§5).
-- 2026-11-05 — the fused `Where` that branched per element (`919ffb45`, the P5.3 same-width vector plan of
+- 2026-11-05 — the fused `Where` that branched per element (`4e02b910`, the P5.3 same-width vector plan of
   `docs/plans/ndexpr-evaluate.md`): a tree whose non-bool dtypes share one element size now vectorizes, each node at its
   own dtype and the masks reinterpreted between them. The where-mask probe's random mask runs 2.37× the unfused np.where
   (was 0.46×) and 3.8× NumPy at 100K; seven same-width trees run 1.84–10.6× NumPy (were 0.34–6.11×). The find trees'
   remainder `Where(find >= 0, price, 0)` is such a tree.
-- Closed (2026-11-05, the layout parity commit): np.evaluate's results take NumPy's layout. A fresh elementwise result of
+- Closed (2026-11-05, `a692f24e`): np.evaluate's results take NumPy's layout. A fresh elementwise result of
   the caller's `order='K'` follows NpyIter's K order over the leaves (`KeepOrderLayout`: a 3-D transpose keeps its
   permutation, F operands beside a broadcast row stay F); an axis reduction finishes in NumPy's reduce layout
   (`AsNumPyReductionLayout`: the child's K order with the axis removed or kept at its memory position, owning its data;
   C for ArgMax / ArgMin), keepdims relabelling a fresh C owner in place. The `evaltext` section's two layout excuses are
   gone: all 8,180 cases compare their layout (708 had been excused).
-- Closed (`919ffb45`): np.evaluate's fused `Where` whose condition compares an int64 operand and whose branches
+- Closed (`4e02b910`): np.evaluate's fused `Where` whose condition compares an int64 operand and whose branches
   are float64 branched per element (0.46× of the unfused np.where on a random mask at 100K) — it vectorizes under the
   same-width plan (2.37× the unfused call, 3.8× NumPy).
-- Open (numbers, follow-up of `919ffb45`): `m != 0` over a bool array is an int64 compare by NumPy's typing, so
+- Improved (`d6f99919`), still open: `m & (age > 30)` over a strided `age` runs the shells' scalar strided tier, which now
+  advances a running pointer per operand instead of multiplying the index by the stride (148 -> 108 µs at 100K, 1.37×):
+  0.48× -> 0.66× NumPy at 100K, 1.17× -> 1.46× at 1M. The contiguous form is 0.94× NumPy at 100K (2.8× at 1M): its bool
+  operand is widened to 8-byte lanes (about 15 µs per 100K on the shuffle port). Next steps: combine a streamed bool
+  input with the packed lane subtree at the byte level (one AND after the pack), and a gather / buffered tier that
+  admits bool operands for the strided form.
+- Open (numbers, follow-up of `4e02b910`): `m != 0` over a bool array is an int64 compare by NumPy's typing, so
   the same-width kernel widens every bool to an 8-byte lane and packs it back: 1.84–2.2× NumPy and 2× its former scalar
   kernel, but 0.10–0.13× NumSharp's unfused `np.not_equal(m, 0)`, which has a bool-against-literal byte path. A byte-lane
   rewrite of a bool-vs-integer-literal comparison would close it.
