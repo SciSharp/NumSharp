@@ -116,5 +116,14 @@ namespace NumSharp.Backends.Iteration
         ///     — it is the no-op default, so it never trips the reduction guard.
         /// </summary>
         public bool HasExplicitOrder => _order != '\0' && _order != 'K' && _order != 'k';
+
+        /// <summary>
+        /// True when the CALLER asked for <c>order='K'</c> (the public <c>np.evaluate</c> passes its default <c>'K'</c>), as
+        /// opposed to options left unset by an internal materialization. A fresh elementwise result of the former takes
+        /// NumPy's K-order layout (a permuted operand set gives a permuted result); the latter keeps the C / strict-F
+        /// layout the reduction and stage paths read their materialized children in — a K-ordered child would be read
+        /// as a C buffer there.
+        /// </summary>
+        internal bool IsCallerKeepOrder => _order is 'K' or 'k';
     }
 }

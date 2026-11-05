@@ -1596,6 +1596,8 @@ NDExpr tree
   → iter.ForEach(kernel)
 ```
 
+The result is laid out the way NumPy lays out its own statement's result. With the default `order='K'` a fresh elementwise result follows NpyIter's K order over the operands: C for C operands, F for F operands (a broadcast or 0-d operand beside them abstains), the shared permutation of a transposed operand set, C on a conflict. An axis reduction keeps its child's memory order for the remaining axes, and with `keepdims` its result owns its data, as `np.sum` does. `argmax` / `argmin` results are C-ordered.
+
 These are real expressions from `benchmark/fusion/evaluate_bench.cs`:
 
 ```csharp

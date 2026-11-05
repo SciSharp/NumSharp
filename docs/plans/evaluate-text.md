@@ -196,7 +196,7 @@ contiguous calls stays possible later (it would sit behind the same lowering).
     0.3–0.5 µs over the bare engine call.
   Fused is faster than NumSharp's own unfused statements in 87 of the 144 cells.
 - String oracle section `evaltext` (`test/oracle/gen_strings_oracle.py`, NumPy reference = the unfused statements):
-  trees over text and numeric operands in the corpus layouts, strict.
+  trees over text and numeric operands in the corpus layouts, strict, every layout compared.
 - E3: `NDEvaluateTextTests` (the concatenation / repeat / maximum / minimum results, np.where's promotion and refusals, the
   casts to and from text, every root reduction kind, NumPy's own error for the remaining nodes and its statement order,
   results read by later nodes, the keywords over a text result, a bare text root, the program identity of a text cast and
@@ -334,11 +334,12 @@ contiguous calls stays possible later (it would sit behind the same lowering).
   own dtype and the masks reinterpreted between them. The where-mask probe's random mask runs 2.37× the unfused np.where
   (was 0.46×) and 3.8× NumPy at 100K; seven same-width trees run 1.84–10.6× NumPy (were 0.34–6.11×). The find trees'
   remainder `Where(find >= 0, price, 0)` is such a tree.
-- Open (pre-existing, not text): np.evaluate's axis reductions return a keepdims result as a view (OWNDATA False) and a
-  permuted child's reduction C-ordered, where NumPy's np.sum / np.any allocate the keepdims shape in K order.
-- Open (pre-existing, not text): np.evaluate's fresh elementwise result is C- or F-ordered (F only when every input is
-  strictly F-contiguous), where NumPy keeps a permuted operand's K order (`np.evaluate((NDExpr)x * 2)` of a 3-D
-  transpose is C, NumPy's `x * 2` keeps the permutation).
+- Closed (2026-11-05, the layout parity commit): np.evaluate's results take NumPy's layout. A fresh elementwise result of
+  the caller's `order='K'` follows NpyIter's K order over the leaves (`KeepOrderLayout`: a 3-D transpose keeps its
+  permutation, F operands beside a broadcast row stay F); an axis reduction finishes in NumPy's reduce layout
+  (`AsNumPyReductionLayout`: the child's K order with the axis removed or kept at its memory position, owning its data;
+  C for ArgMax / ArgMin), keepdims relabelling a fresh C owner in place. The `evaltext` section's two layout excuses are
+  gone: all 8,180 cases compare their layout (708 had been excused).
 - Closed (`919ffb45`): np.evaluate's fused `Where` whose condition compares an int64 operand and whose branches
   are float64 branched per element (0.46× of the unfused np.where on a random mask at 100K) — it vectorizes under the
   same-width plan (2.37× the unfused call, 3.8× NumPy).

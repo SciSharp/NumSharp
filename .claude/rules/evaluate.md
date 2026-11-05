@@ -106,9 +106,8 @@ before promoting, as NumPy's unfused sequence does.
   (hash, equality; not the kernel key): over text the REDUCTION lowers it into a truth stage, while a user's
   `NotEqual(text, 0)` is NumPy's no-loop comparison. Rebuilding a `ComparisonNode` must keep the flag, a `ReduceNode` its
   NaN-family mark, a `CastNode` its text descriptor.
-- Gates: `NDEvaluateTextTests`, the string oracle section `evaltext` (8,180 cases; two layout excuses, both np.evaluate's
-  own rules over numbers too: an axis reduction's keepdims view / C-ordered permuted child, and a fused result C-ordered
-  where NumPy keeps a permuted temporary's K order). The section's NumPy reference reads a 0-d text answer as NumPy's
+- Gates: `NDEvaluateTextTests`, the string oracle section `evaltext` (8,180 cases, every layout compared). The section's
+  NumPy reference reads a 0-d text answer as NumPy's
   array result (its ufuncs unwrap 0-d results to scalars only as wide as their content) and a flat reduction's Python
   str / NA object as the 0-d array of the reduced dtype.
 
@@ -147,8 +146,8 @@ before promoting, as NumPy's unfused sequence does.
   empty input included) raises `DivideByZeroException("Weights sum to zero, can't be normalized")`; a NaN weight gives
   NaN. float16 and decimal results are refused.
 - `axis=None` + `keepdims` exists for every reduction kind: each flat factory has a `keepdims` overload (a REQUIRED
-  `bool`, so `Sum(x)` stays 0-d and `Sum(x, keepdims: true)` is `(1,)*ndim`), reshaping the 0-d result (a 0-d child stays
-  0-d; a direct `out=` is validated for the keepdims shape).
+  `bool`, so `Sum(x)` stays 0-d and `Sum(x, keepdims: true)` is `(1,)*ndim`), relabelling the 0-d result (it keeps
+  owning its buffer; a 0-d child stays 0-d; a direct `out=` is validated for the keepdims shape).
 - A tuple `axis` is not supported (every NumSharp reduction is single-axis).
 - Flat `Any`/`All`/`CountNonzero` stream rather than fold (`DefaultEngine.TryStreamBoolFold`): the bool child is
   evaluated block by block into L1 scratch and folded with vectorized span scans (`IndexOfAnyExcept`/`IndexOf`/`Count`);
@@ -206,6 +205,15 @@ before promoting, as NumPy's unfused sequence does.
   (a random mask mispredicts half the time: 0.46× the unfused np.where before the same-width plan). Every same-width rule
   reduces to the uniform one when the node's dtype is W, so uniform kernels are emitted unchanged. Gate:
   `NDEvaluateVectorTests` (vector == scalar byte for byte, the plan verdicts).
+- Result layout is NumPy's. A fresh elementwise result of the caller's `order='K'` (the default) is laid out in NpyIter's
+  K order over the call's leaf operands (`KeepOrderLayout`: C for C operands, F for F operands beside a broadcast or 0-d
+  one, a 3-D transpose's own permutation; C wins a conflict); `'A'` is F only when every input is strictly F, `'C'` /
+  `'F'` force. An internal materialization (a reduction's child; options left unset, `IsCallerKeepOrder` false) keeps
+  C / strict-F, which the reduction routes read their child in. A reduction finishes in NumPy's reduce layout
+  (`AsNumPyReductionLayout`: the child's K order with the axis removed, or kept at extent 1 at its memory position —
+  `np.sum(t, axis=0, keepdims=True)` of a (3,4,2) transpose has strides (32,8,32) — owning its data; C for `ArgMax` /
+  `ArgMin`); keepdims relabels a fresh C owner in place (`RelabelOrReshape`), anything else is copied once into the
+  layout. The order is taken over the LEAVES; NumPy decides it per statement, which agrees whenever the operands agree.
 - Trivially iterable calls skip NDIter (`DefaultEngine.Evaluate.Trivial.cs`, a port of NumPy's
   `try_trivial_single_output_loop`): identical dims on every non-0-d operand, each 1-D (any stride) or contiguous in one
   shared C/F order, no cast / `dtype=` / `where=`, and a provided `out` overlapping an input only exactly → the fused

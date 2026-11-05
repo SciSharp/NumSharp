@@ -325,11 +325,23 @@ namespace NumSharp.Backends
 
             // A weighted average reduces over TWO sub-trees (values, weights); it is host-computed like
             // the M4c summation kinds, so it precedes the elementwise + single-child-reduce dispatch.
+            // Both reductions finish in the layout NumPy's own call allocates (AsNumPyReductionLayout): the routes
+            // below compute over a C-ordered child and apply keepdims as a reshape.
             if (program.Average is not null)
-                return EvaluateWeightedAverage(program, inputs, @out, options);
+            {
+                var avg = program.Average;
+                var avgOps = Concat(program.AvgValuesProgram.IteratorOperands(inputs), program.AvgWeightsProgram.IteratorOperands(inputs));
+                return AsNumPyReductionLayout(EvaluateWeightedAverage(program, inputs, @out, options), avgOps,
+                    avg.Axis, avg.Keepdims, argReduction: false, @out);
+            }
 
             if (program.Reduce is not null)
-                return EvaluateReduce(program, inputs, @out, options);
+            {
+                var reduce = program.Reduce;
+                return AsNumPyReductionLayout(EvaluateReduce(program, inputs, @out, options), program.IteratorOperands(inputs),
+                    reduce.Axis, reduce.Keepdims, argReduction: reduce.Kind is NDExprReduceKind.ArgMax or NDExprReduceKind.ArgMin,
+                    @out);
+            }
 
             // Plan P6.3 — a tree that is ONE elementwise op over array leaves (abs(a), maximum(a, b),
             // a + b) has nothing to fuse, so the fused NDIter pass only ADDS fixed cost over the engine's
@@ -410,18 +422,25 @@ namespace NumSharp.Backends
             Shape targetShape = wantFOrder
                 ? Shape.Adopt((long[])iterShape.dimensions.Clone(), 'F')
                 : iterShape;
+            // order='K' (the default) is NumPy's ufunc output rule, not the strict-F heuristic: the fresh result is laid
+            // out in NpyIter's K order over the call's operands (KeepOrderLayout) - C for C operands, F for F operands
+            // even beside a broadcast or 0-d one, and a 3-D transpose's own permutation, which a C / F choice could
+            // not give (np.evaluate((NDExpr)x * 2) of a permuted x was C where NumPy's x * 2 keeps the permutation).
+            if (@out is null && options.IsCallerKeepOrder)
+                targetShape = KeepOrderLayout(ops, iterShape);
 
             var target = @out ?? NewArray(targetType, targetShape, false);
             if (target.size == 0)
                 return target;
 
-            // Iterate in the RESULT buffer's own contiguity order so the output writes never
-            // stride — F when the target is strictly F-contig (a fresh 'F'/heuristic alloc or a
-            // provided F-contig out), C otherwise. Elementwise results are order-independent, so
-            // this changes only traversal (perf), never values.
+            // Iterate in the RESULT buffer's own memory order so the output writes never stride — F when the target
+            // is strictly F-contig (a fresh 'F' / K alloc or a provided F-contig out), the iterator's K order for a
+            // FRESH permuted one (it then finds the shared permutation and coalesces), C otherwise (a provided strided
+            // out keeps the C traversal it always had). Elementwise results are order-independent, so this changes
+            // only traversal (perf), never values.
             var order = (target.Shape.IsFContiguous && !target.Shape.IsContiguous)
                 ? NPY_ORDER.NPY_FORTRANORDER
-                : NPY_ORDER.NPY_CORDER;
+                : @out is null && !target.Shape.IsContiguous ? NPY_ORDER.NPY_KEEPORDER : NPY_ORDER.NPY_CORDER;
 
             // where= appends ONE more operand (the mask) and flips the output to WRITEMASKED, so the
             // operand/flag/dtype arrays are all one slot longer and the output is followed by the mask.
@@ -619,6 +638,47 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
+        /// The layout NumPy's ufunc allocates for a fresh <c>order='K'</c> result over <paramref name="ops"/>: dense,
+        /// positive strides, its axes in NpyIter's K order (<see cref="NumPyIteratorAxisOrder"/>, a port of
+        /// <c>npyiter_find_best_axis_ordering</c>: by stride magnitude, a broadcast / extent-1 axis abstaining, C winning
+        /// a conflict between operands). C for C operands, F for F operands (a broadcast or 0-d operand beside them
+        /// abstains), the shared permutation of permuted operands.
+        /// </summary>
+        /// <param name="ops">The call's iterator operands (each broadcastable to <paramref name="iterShape"/>).</param>
+        /// <param name="iterShape">The iteration (broadcast) shape.</param>
+        /// <returns><paramref name="iterShape"/> itself when the K order is C (or the result has at most one axis), else
+        /// a fresh dense shape over the same dimensions in the K order.</returns>
+        /// <remarks>
+        /// The order is taken over the call's LEAF operands, as the other NumPy-layout routes of np.evaluate take it
+        /// (<c>MaterializeChildNumPyLayout</c>); NumPy decides it per statement over that statement's operands, which
+        /// gives the same order whenever the operands agree and, on a conflict, C either way. A tree whose
+        /// intermediate permutations disagree with each other could still differ (no such tree is known to the oracle).
+        /// </remarks>
+        internal static Shape KeepOrderLayout(NDArray[] ops, Shape iterShape)
+        {
+            int nd = iterShape.NDim;
+            if (nd <= 1 || ops.Length == 0)
+                return iterShape;
+            int[] mem = NumPyIteratorAxisOrder(ops, iterShape);   // logical axes, OUTERMOST first
+            bool isC = true;
+            for (int i = 0; i < nd; i++)
+                isC &= mem[i] == i;
+            if (isC)
+                return iterShape;
+
+            // npyiter_new_temp_array: element strides accumulate from the innermost memory axis outward.
+            long[] dims = iterShape.dimensions;
+            var strides = new long[nd];
+            long acc = 1;
+            for (int i = nd - 1; i >= 0; i--)
+            {
+                strides[mem[i]] = acc;
+                acc *= dims[mem[i]];
+            }
+            return Shape.Adopt((long[])dims.Clone(), strides);
+        }
+
+        /// <summary>
         /// Resolve np.evaluate's <c>order=</c> (plan P4.5) to whether the FRESH elementwise result is
         /// allocated F-contiguous: <c>'C'</c> → never (row-major), <c>'F'</c> → always (column-major, even
         /// from C-contiguous inputs), <c>'A'</c>/<c>'K'</c> → today's heuristic (<paramref
@@ -721,11 +781,49 @@ namespace NumSharp.Backends
             {
                 var dims = new long[childNdim];
                 for (int i = 0; i < childNdim; i++) dims[i] = 1;
-                return reduced.reshape(Shape.Adopt(dims));
+                return RelabelOrReshape(reduced, Shape.Adopt(dims));
             }
             // A flat reduce is a 0-d scalar; normalize away any spurious rank from a delegated reduction
             // (Shape.NewScalar() is the canonical 0-d shape the fold path allocates via FlatReduceShape).
-            return reduced.ndim == 0 ? reduced : reduced.reshape(Shape.NewScalar());
+            return reduced.ndim == 0 ? reduced : RelabelOrReshape(reduced, Shape.NewScalar());
+        }
+
+        /// <summary>
+        /// Gives a reduction's fresh result another rank over the same elements — keepdims' re-inserted axis, a flat
+        /// reduction's (1,)*ndim or 0-d — keeping it the OWNER of its buffer, as NumPy's reduction allocates its result
+        /// directly in that shape: a fresh C-contiguous owner is relabelled in place
+        /// (<see cref="UnmanagedStorage.SetShapeUnsafe"/>; an extent-1 axis inserted into C order keeps C order), anything
+        /// else is reshaped (a view, which the dispatch's <see cref="AsNumPyReductionLayout"/> then relays out).
+        /// </summary>
+        /// <param name="reduced">The reduction's result (consumed: returned relabelled, or as the reshape's base).</param>
+        /// <param name="target">The C-ordered shape to give it (the same element count).</param>
+        /// <returns><paramref name="reduced"/> relabelled, or a reshaped view of it.</returns>
+        private static NDArray RelabelOrReshape(NDArray reduced, Shape target)
+        {
+            var s = reduced.Shape;
+            if (s.OwnsData && s.offset == 0 && s.IsContiguous && s.size == target.size)
+            {
+                reduced.Storage.SetShapeUnsafe(target);
+                return reduced;
+            }
+            return reduced.reshape(target);
+        }
+
+        /// <summary>The dimensions of <paramref name="dims"/> with an extent-1 axis inserted at <paramref name="axis"/>
+        /// (keepdims' re-inserted axis), as a fresh C-ordered shape.</summary>
+        /// <param name="dims">The reduced result's dimensions.</param>
+        /// <param name="axis">The insertion position, 0 to <c>dims.Length</c> (a negative one counts from the end of the
+        ///     result's rank plus one, as np.expand_dims reads it).</param>
+        /// <returns>The keepdims shape.</returns>
+        private static Shape WithUnitAxis(long[] dims, int axis)
+        {
+            int nd = dims.Length + 1;
+            if (axis < 0)
+                axis += nd;
+            var kd = new long[nd];
+            for (int d = 0, rd = 0; d < nd; d++)
+                kd[d] = d == axis ? 1 : dims[rd++];
+            return Shape.Adopt(kd);
         }
 
         /// <summary>
@@ -771,6 +869,129 @@ namespace NumSharp.Backends
                 if (leaf.ndim != 0)
                     return false;
             return true;
+        }
+
+        /// <summary>
+        /// A fresh reduction result in the layout NumPy's own call allocates: owning its data, and along an axis laid out
+        /// in the CHILD's K order (<see cref="NumPyReduceLayout"/>: NumPy reduces its K-ordered temporary, whose remaining
+        /// axes keep their memory order and whose kept axis, under keepdims, sits at its memory position) — or C for
+        /// <c>argmax</c> / <c>argmin</c>, which NumPy computes over a C-ordered copy. np.evaluate's reduction routes compute
+        /// over a C-ordered child and apply keepdims as a reshape (a view), so a permuted or F child's result, and every
+        /// keepdims result, came back in another layout than NumPy's (the evaltext oracle excused it).
+        /// </summary>
+        /// <param name="result">The reduction's result (consumed: returned as is, or released after its values are
+        ///     copied into the relaid array).</param>
+        /// <param name="childOps">The child's leaf operands (the iterator operands of the reduced sub-tree(s)).</param>
+        /// <param name="axis">The reduced axis (negative counts from the end), or null for a flat reduction.</param>
+        /// <param name="keepdims">Whether the reduced axis is kept as size 1.</param>
+        /// <param name="argReduction">True for <c>argmax</c> / <c>argmin</c> (a C-ordered result).</param>
+        /// <param name="out">The caller's <c>out=</c>, or null; a result written into it keeps out's own layout.</param>
+        /// <returns><paramref name="result"/> when it already has NumPy's layout and owns its data, else a fresh owning
+        ///     array in that layout holding the same values.</returns>
+        /// <remarks>Values never change: the relayout is a logical copy. Only a result that differs pays it — a C child
+        ///     without keepdims (the common call) is returned untouched.</remarks>
+        private NDArray AsNumPyReductionLayout(NDArray result, NDArray[] childOps, int? axis, bool keepdims, bool argReduction,
+                                               NDArray @out)
+        {
+            if (@out is not null || result is null || ReferenceEquals(result, @out) || result.ndim == 0)
+                return result;
+
+            // Flat (axis=None) keepdims: (1,)*ndim — one element, every stride one element on both sides; only the
+            // ownership can differ (np.evaluate reshaped its 0-d answer).
+            Shape want;
+            if (axis is null || argReduction || childOps.Length == 0)
+                want = Shape.Adopt((long[])result.Shape.dimensions.Clone());
+            else
+            {
+                want = NumPyReduceLayout(childOps, axis.Value, keepdims);
+                // A 0-d child's axis 0 / -1 is the flat reduction (ZeroDimAxisIsFlat), and an all-0-d child set has no
+                // axis to place: keep the result's own dims then.
+                if (want.NDim != result.ndim)
+                    want = Shape.Adopt((long[])result.Shape.dimensions.Clone());
+            }
+
+            var have = result.Shape;
+            if (have.OwnsData && have.offset == 0 && have.strides.AsSpan().SequenceEqual(want.strides))
+                return result;
+
+            var laid = NewArray(result.GetTypeCode, want, false);
+            try
+            {
+                UnmanagedStorage.Copyto(laid, result, NPY_CASTING.NPY_UNSAFE_CASTING);
+            }
+            catch
+            {
+                laid.Dispose();
+                throw;
+            }
+            result.Dispose();
+            return laid;
+        }
+
+        /// <summary>
+        /// NumPy's layout for an axis reduction of a child whose leaf operands are <paramref name="childOps"/>: the
+        /// child's K order (<see cref="NumPyIteratorAxisOrder"/> over the leaves — the temporary NumPy reduces is laid out
+        /// that way), dense, with the reduced axis removed, or kept at extent 1 at its memory position under
+        /// <paramref name="keepdims"/> (so its stride is the product of the extents inside it). Probed (NumPy 2.4.2):
+        /// <c>np.sum(t, axis=0, keepdims=True)</c> of a <c>(3,4,2)</c> transpose with element strides <c>(4,1,12)</c> has
+        /// strides <c>(32,8,32)</c> bytes; a C <c>(3,4)</c> along axis 1 <c>(8,8)</c>; an F one along axis 1 <c>(8,24)</c>.
+        /// </summary>
+        /// <param name="childOps">The child's leaf operands (non-empty).</param>
+        /// <param name="axis">The reduced axis (negative counts from the end of the child's rank).</param>
+        /// <param name="keepdims">Whether the reduced axis is kept as size 1.</param>
+        /// <returns>The result layout (element strides).</returns>
+        private static Shape NumPyReduceLayout(NDArray[] childOps, int axis, bool keepdims)
+        {
+            Shape iter = ResolveInputShape(childOps);
+            int nd = iter.NDim;
+            if (nd == 0)
+                return Shape.NewScalar();
+            int ax = axis < 0 ? axis + nd : axis;
+            int[] mem = NumPyIteratorAxisOrder(childOps, iter);   // logical axes, OUTERMOST first
+            long[] cdims = iter.dimensions;
+
+            int ond = keepdims ? nd : nd - 1;
+            var dims = new long[ond];
+            var strides = new long[ond];
+            for (int a = 0, o = 0; a < nd; a++)
+            {
+                if (a == ax)
+                {
+                    if (keepdims)
+                        dims[o++] = 1;
+                    continue;
+                }
+                dims[o++] = cdims[a];
+            }
+
+            // Innermost memory axis first: each axis's stride is the product of the extents inside it; the kept axis
+            // (extent 1) takes the running product and leaves it unchanged, the dropped one is skipped.
+            long acc = 1;
+            for (int i = nd - 1; i >= 0; i--)
+            {
+                int a = mem[i];
+                if (a == ax)
+                {
+                    if (keepdims)
+                        strides[a] = acc;
+                    continue;
+                }
+                strides[keepdims || a < ax ? a : a - 1] = acc;
+                acc *= cdims[a];
+            }
+            return Shape.Adopt(dims, strides);
+        }
+
+        /// <summary>Two operand lists as one (the weighted average's values and weights leaves).</summary>
+        /// <param name="a">The first list.</param>
+        /// <param name="b">The second list.</param>
+        /// <returns>A new array holding <paramref name="a"/>'s then <paramref name="b"/>'s operands.</returns>
+        private static NDArray[] Concat(NDArray[] a, NDArray[] b)
+        {
+            var r = new NDArray[a.Length + b.Length];
+            a.CopyTo(r, 0);
+            b.CopyTo(r, a.Length);
+            return r;
         }
 
         private unsafe NDArray EvaluateReduce(NDExprProgram program, NDArray[] inputs, NDArray @out, in NDEvaluateOptions options = default)
@@ -1379,7 +1600,7 @@ namespace NumSharp.Backends
 
             if (avg.Keepdims && nax is int kdAxis)
             {
-                NDArray kd = NDArray.expand_dims(computed, kdAxis);
+                NDArray kd = RelabelOrReshape(computed, WithUnitAxis(computed.Shape.dimensions, kdAxis));
                 computed = kd;
             }
             else if (avg.Axis is null)
@@ -1755,7 +1976,7 @@ namespace NumSharp.Backends
         /// <summary>Apply keepdims (re-insert the size-1 axis) and cast a fresh reduced array to <paramref name="resultT"/>.</summary>
         private static NDArray FinishReduced(NDArray reduced, int axis, bool keepdims, NPTypeCode fromT, NPTypeCode resultT)
         {
-            NDArray r = keepdims ? NDArray.expand_dims(reduced, axis) : reduced;
+            NDArray r = keepdims ? RelabelOrReshape(reduced, WithUnitAxis(reduced.Shape.dimensions, axis)) : reduced;
             return fromT == resultT ? r : r.astype(DType.From(resultT));
         }
 
@@ -2096,7 +2317,7 @@ namespace NumSharp.Backends
             {
                 var kd = new long[ndim];
                 for (int d = 0, rd = 0; d < ndim; d++) kd[d] = (d == axis) ? 1 : reduced.Shape.dimensions[rd++];
-                reduced = reduced.reshape(Shape.Adopt(kd));
+                reduced = RelabelOrReshape(reduced, Shape.Adopt(kd));
             }
 
             if (@out is not null) { UnmanagedStorage.Copyto(@out, reduced, NPY_CASTING.NPY_SAME_KIND_CASTING); return @out; }
