@@ -1530,6 +1530,35 @@ namespace NumSharp.Tests.LinearAlgebra
         }
 
         /// <summary>
+        ///     N-D np.dot over a C-contiguous view at a non-zero offset - an np.split / np.unstack child, which, unlike a
+        ///     plain slice, keeps its offset in its shape - reads the view's own elements (NumPy 2.4.2's values). The former
+        ///     contiguous float32 / float64 walker read such a view from its storage's start: np.dot(np.split(a, 2)[1], b)
+        ///     gave the first half's products ([60, 70, ...] where NumPy gives [660, 820, ...]).
+        /// </summary>
+        /// <param name="dtype">float64 or float32.</param>
+        [DataTestMethod]
+        [DataRow("float64")]
+        [DataRow("float32")]
+        public void Dot_ContiguousViewAtAnOffset_ReadsItsOwnElements(string dtype)
+        {
+            var a = np.arange(60.0).reshape(4, 3, 5).astype(dtype);
+            var b = np.arange(10.0).reshape(5, 2).astype(dtype);
+            var child = np.split(a, 2)[1];
+            child.Shape.IsContiguous.Should().BeTrue("the case needs a contiguous view");
+            child.Shape.offset.Should().Be(30, "the case needs a view whose offset is not folded into its storage");
+            var r = np.dot(child, b);
+            r.dtype.name.Should().Be(dtype);
+            r.shape.Should().Equal(2L, 3L, 2L);
+            r.astype("float64").ToArray<double>().Should().Equal(
+                660, 820, 760, 945, 860, 1070, 960, 1195, 1060, 1320, 1160, 1445);
+
+            // The same for the second operand: the last np.unstack child of a (3, 5, 2) array (offset 20).
+            var rhs = np.unstack(np.arange(30.0).reshape(3, 5, 2).astype(dtype))[2];
+            rhs.Shape.offset.Should().Be(20, "the case needs a view whose offset is not folded into its storage");
+            np.dot(a["0:1"], rhs).astype("float64").ToArray<double>().Should().Equal(260, 270, 860, 895, 1460, 1520);
+        }
+
+        /// <summary>
         ///     The models' own arithmetic at the edges NumPy's tests pin: no terms give +0, a sum of -0.0 products is +0
         ///     (every sum starts at +0), and the unit kernels' block boundaries (sdot 32, ddot 16, zdotu 8) carry the tail
         ///     after the kernel.

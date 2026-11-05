@@ -15,8 +15,12 @@ namespace NumSharp.Backends
         /// </summary>
         /// <remarks>
         /// This replaces the original ~15,880 line implementation that used nested switch statements
-        /// for every combination of dimension counts. The new implementation uses dynamic iteration
-        /// with optional SIMD optimization for contiguous float/double arrays.
+        /// for every combination of dimension counts. Every layout and dtype runs one walk (<see cref="DotNDMDStrided"/>):
+        /// an odometer over both operands' iterated axes and the dtype's dot function per output, four outputs at a time
+        /// where a row allows. Contiguous float32 / float64 operands had a walker of their own that computed each output's
+        /// offsets with an index division and read a view from its storage's start; the walk measured 1.05-2.07x faster
+        /// on them, never slower, with the same bits, and reads a C-contiguous view at its own offset (an np.split /
+        /// np.unstack child), which the former walker did not.
         /// </remarks>
         public NDArray DotNDMD(NDArray lhs, NDArray rhs)
         {
@@ -41,13 +45,12 @@ namespace NumSharp.Backends
             var resultType = np._FindCommonArrayType(lhs.typecode, rhs.typecode);
             var result = NewArray(resultType, Shape.Adopt(retShape), true);
 
-            // Try SIMD fast path for contiguous same-type float/double
-            if (TryDotNDMDSimd(lhs, rhs, result, lshape, rshape, contractDim))
-                return result;
-
             // NumPy's N-D route (PyArray_MatrixProduct2): both operands converted to the result dtype (PyArray_FromAny),
-            // then the dtype's dot function once per output element over the contracted axes (DotNDMDStrided).
-            NDArray ap1 = lhs.astype(result.dtype, false), ap2 = rhs.astype(result.dtype, false);
+            // then the dtype's dot function once per output element over the contracted axes (DotNDMDStrided). An operand
+            // that already has the result dtype is used as it is - what astype(copy: false) returns too, without its
+            // argument parsing, which a sub-microsecond dot would feel.
+            NDArray ap1 = lhs.typecode == result.typecode ? lhs : lhs.astype(result.dtype, false);
+            NDArray ap2 = rhs.typecode == result.typecode ? rhs : rhs.astype(result.dtype, false);
             try
             {
                 DotNDMDStrided(ap1, ap2, result, lshape, rshape, contractDim);
@@ -66,204 +69,7 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// SIMD-optimized N-D dot product for contiguous float/double arrays.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-        private static unsafe bool TryDotNDMDSimd(NDArray lhs, NDArray rhs, NDArray result,
-            long[] lshape, long[] rshape, long K)
-        {
-            // Require contiguous arrays and same type
-            if (!lhs.Shape.IsContiguous || !rhs.Shape.IsContiguous || !result.Shape.IsContiguous)
-                return false;
-
-            var typeCode = result.typecode;
-            if (lhs.typecode != typeCode || rhs.typecode != typeCode)
-                return false;
-
-            switch (typeCode)
-            {
-                case NPTypeCode.Single:
-                    DotNDMDSimdFloat(lhs, rhs, result, lshape, rshape, K);
-                    return true;
-
-                case NPTypeCode.Double:
-                    DotNDMDSimdDouble(lhs, rhs, result, lshape, rshape, K);
-                    return true;
-
-                default:
-                    return false;
-            }
-        }
-
-        /// <summary>
-        /// SIMD float implementation of N-D dot product.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe void DotNDMDSimdFloat(NDArray lhs, NDArray rhs, NDArray result,
-            long[] lshape, long[] rshape, long K)
-        {
-            float* lhsPtr = (float*)lhs.Address;
-            float* rhsPtr = (float*)rhs.Address;
-            float* resPtr = (float*)result.Address;
-
-            int lhsNdim = lhs.ndim;
-            int rhsNdim = rhs.ndim;
-
-            // Pre-compute strides for iteration
-            long lhsInnerStride = lhs.Shape.strides[lhsNdim - 1];  // Stride along contracting dim in lhs
-            long rhsContractStride = rhs.Shape.strides[rhsNdim - 2];  // Stride along contracting dim in rhs
-            long rhsInnerStride = rhs.Shape.strides[rhsNdim - 1];  // Stride along last dim in rhs
-
-            // Total elements to compute
-            long totalLhs = 1;
-            for (int i = 0; i < lshape.Length; i++)
-                totalLhs *= lshape[i];
-
-            long totalRhs = 1;
-            for (int i = 0; i < rshape.Length; i++)
-                totalRhs *= rshape[i];
-
-            // Compute lhs strides (for multi-index iteration)
-            long[] lhsIterStrides = ComputeIterStrides64(lshape);
-            long[] rhsIterStrides = ComputeIterStrides64(rshape);
-            // NumPy's FLOAT_dot for this pair of contracted strides (the same for every output). The usual class here,
-            // a C-ordered rhs contracted along its rows, is a direct call the JIT can inline, so a short dot pays no
-            // indirect call; the branch is the same for every output.
-            var fdot = NDDot.FloatDotFor(lhsInnerStride, rhsContractStride);
-            bool strided = lhsInnerStride > 0 && rhsContractStride > 0 && !(lhsInnerStride == 1 && rhsContractStride == 1);
-
-            // For each position in lhs (excluding contract dim)
-            for (long li = 0; li < totalLhs; li++)
-            {
-                // Compute lhs base offset: position in lhs without last dim
-                long lhsBase = ComputeBaseOffset64(li, lhsIterStrides, lhs.Shape.strides, lshape.Length);
-
-                // For each position in rhs (excluding contract dim)
-                for (long ri = 0; ri < totalRhs; ri++)
-                {
-                    // Compute rhs base offset: we need to skip the contract dimension
-                    long rhsBase = ComputeRhsBaseOffset64(ri, rhsIterStrides, rhs.Shape.strides, rshape, rhsNdim);
-
-                    // Compute dot product along contracting dimension
-                    float sum = strided
-                        ? NDDot.FloatDotStrided(lhsPtr + lhsBase, lhsInnerStride, rhsPtr + rhsBase, rhsContractStride, K)
-                        : fdot(lhsPtr + lhsBase, lhsInnerStride, rhsPtr + rhsBase, rhsContractStride, K);
-
-                    // Store result
-                    resPtr[li * totalRhs + ri] = sum;
-                }
-            }
-        }
-
-        /// <summary>
-        /// SIMD double implementation of N-D dot product.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe void DotNDMDSimdDouble(NDArray lhs, NDArray rhs, NDArray result,
-            long[] lshape, long[] rshape, long K)
-        {
-            double* lhsPtr = (double*)lhs.Address;
-            double* rhsPtr = (double*)rhs.Address;
-            double* resPtr = (double*)result.Address;
-
-            int lhsNdim = lhs.ndim;
-            int rhsNdim = rhs.ndim;
-
-            long lhsInnerStride = lhs.Shape.strides[lhsNdim - 1];
-            long rhsContractStride = rhs.Shape.strides[rhsNdim - 2];
-            long rhsInnerStride = rhs.Shape.strides[rhsNdim - 1];
-
-            long totalLhs = 1;
-            for (int i = 0; i < lshape.Length; i++)
-                totalLhs *= lshape[i];
-
-            long totalRhs = 1;
-            for (int i = 0; i < rshape.Length; i++)
-                totalRhs *= rshape[i];
-
-            long[] lhsIterStrides = ComputeIterStrides64(lshape);
-            long[] rhsIterStrides = ComputeIterStrides64(rshape);
-            // NumPy's DOUBLE_dot for this pair of contracted strides, chosen once (see DotNDMDSimdFloat).
-            var ddot = NDDot.DoubleDotFor(lhsInnerStride, rhsContractStride);
-            bool strided = lhsInnerStride > 0 && rhsContractStride > 0 && !(lhsInnerStride == 1 && rhsContractStride == 1);
-
-            for (long li = 0; li < totalLhs; li++)
-            {
-                long lhsBase = ComputeBaseOffset64(li, lhsIterStrides, lhs.Shape.strides, lshape.Length);
-
-                for (long ri = 0; ri < totalRhs; ri++)
-                {
-                    long rhsBase = ComputeRhsBaseOffset64(ri, rhsIterStrides, rhs.Shape.strides, rshape, rhsNdim);
-
-                    double sum = strided
-                        ? NDDot.DoubleDotStrided(lhsPtr + lhsBase, lhsInnerStride, rhsPtr + rhsBase, rhsContractStride, K)
-                        : ddot(lhsPtr + lhsBase, lhsInnerStride, rhsPtr + rhsBase, rhsContractStride, K);
-
-                    resPtr[li * totalRhs + ri] = sum;
-                }
-            }
-        }
-
-        /// <summary>
-        /// Compute iteration strides for multi-index decomposition (64-bit).
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-        private static long[] ComputeIterStrides64(long[] shape)
-        {
-            var strides = new long[shape.Length];
-            long stride = 1;
-            for (int i = shape.Length - 1; i >= 0; i--)
-            {
-                strides[i] = stride;
-                stride *= shape[i];
-            }
-            return strides;
-        }
-
-        /// <summary>
-        /// Compute base offset for lhs array from linear index (64-bit).
-        /// Maps linear index over lshape to offset in lhs storage (using lhs strides, not contract dim).
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-        private static long ComputeBaseOffset64(long linearIdx, long[] iterStrides, long[] arrayStrides, int ndim)
-        {
-            long offset = 0;
-            for (int d = 0; d < ndim; d++)
-            {
-                long idx = linearIdx / iterStrides[d];
-                linearIdx %= iterStrides[d];
-                offset += idx * arrayStrides[d];
-            }
-            return offset;
-        }
-
-        /// <summary>
-        /// Compute base offset for rhs array from linear index (64-bit).
-        /// rshape excludes the contracting dimension (second-to-last in original rhs).
-        /// We need to map indices back, skipping the contract dim.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-        private static long ComputeRhsBaseOffset64(long linearIdx, long[] iterStrides, long[] arrayStrides, long[] rshape, int rhsNdim)
-        {
-            long offset = 0;
-            int contractDimIdx = rhsNdim - 2;  // The dimension we're contracting over
-
-            int rshapeIdx = 0;
-            for (int d = 0; d < rhsNdim; d++)
-            {
-                if (d == contractDimIdx)
-                    continue;  // Skip contract dimension
-
-                long idx = linearIdx / iterStrides[rshapeIdx];
-                linearIdx %= iterStrides[rshapeIdx];
-                offset += idx * arrayStrides[d];
-                rshapeIdx++;
-            }
-            return offset;
-        }
-
-        /// <summary>
-        ///     NumPy's N-D route of <c>PyArray_MatrixProduct2</c> for the operands <see cref="TryDotNDMDSimd"/> does not take:
+        ///     NumPy's N-D route of <c>PyArray_MatrixProduct2</c> for every operand pair:
         ///     the dtype's dot function (<c>PyArray_ArrFuncs.dotfunc</c>) once per output element, over the contracted
         ///     axes' strides - the last axis of <paramref name="ap1"/> and the second-to-last of <paramref name="ap2"/> - into
         ///     the C-ordered result, in the order NumPy's two all-but-axis iterators visit them.
