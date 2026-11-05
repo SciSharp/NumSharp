@@ -8,9 +8,11 @@ namespace NumSharp.Tests.Casting
     ///     <see cref="NDArray"/>. Ensures NumPy 2.x parity:
     ///     <list type="bullet">
     ///       <item>scalar → NDArray is implicit (always a 0-d array).</item>
-    ///       <item>NDArray → scalar is explicit and requires <c>ndim == 0</c>;
-    ///             even single-element 1-d/2-d arrays throw (matches NumPy 2.x
-    ///             "only 0-dimensional arrays can be converted to Python scalars").</item>
+    ///       <item>NDArray → number is explicit and requires <c>ndim == 0</c>;
+    ///             even single-element 1-d/2-d arrays throw NumPy 2.x's
+    ///             <see cref="TypeError"/> "only 0-dimensional arrays can be converted to Python scalars".</item>
+    ///       <item>NDArray → <see cref="bool"/> is NumPy's truth test instead: the only element of a one-element array
+    ///             of ANY rank, and NumPy's two ValueErrors for a larger or an empty array (parity QA-14).</item>
     ///     </list>
     ///     Focused on <see cref="sbyte"/>, <see cref="Half"/>, and <see cref="Complex"/>
     ///     which were missing cast operators before this branch.
@@ -224,7 +226,7 @@ namespace NumSharp.Tests.Casting
         {
             var arr = np.array(new sbyte[] { 1, 2, 3 });
             Action act = () => { var _ = (sbyte)arr; };
-            act.Should().Throw<IncorrectShapeException>();
+            act.Should().Throw<TypeError>().WithMessage("only 0-dimensional arrays can be converted to Python scalars");
         }
 
         [TestMethod]
@@ -232,7 +234,7 @@ namespace NumSharp.Tests.Casting
         {
             var arr = np.array(new Half[] { (Half)1.0, (Half)2.0 });
             Action act = () => { var _ = (Half)arr; };
-            act.Should().Throw<IncorrectShapeException>();
+            act.Should().Throw<TypeError>().WithMessage("only 0-dimensional arrays can be converted to Python scalars");
         }
 
         [TestMethod]
@@ -240,7 +242,7 @@ namespace NumSharp.Tests.Casting
         {
             var arr = np.array(new Complex[] { new Complex(1, 2), new Complex(3, 4) });
             Action act = () => { var _ = (Complex)arr; };
-            act.Should().Throw<IncorrectShapeException>();
+            act.Should().Throw<TypeError>().WithMessage("only 0-dimensional arrays can be converted to Python scalars");
         }
 
         [TestMethod]
@@ -249,7 +251,7 @@ namespace NumSharp.Tests.Casting
             // NumPy 2.x: np.array([42], dtype=int8) -> int(x) raises TypeError
             var arr = np.array(new sbyte[] { 42 });
             Action act = () => { var _ = (sbyte)arr; };
-            act.Should().Throw<IncorrectShapeException>();
+            act.Should().Throw<TypeError>().WithMessage("only 0-dimensional arrays can be converted to Python scalars");
         }
 
         [TestMethod]
@@ -257,7 +259,7 @@ namespace NumSharp.Tests.Casting
         {
             var arr = np.array(new Half[] { (Half)3.5 });
             Action act = () => { var _ = (Half)arr; };
-            act.Should().Throw<IncorrectShapeException>();
+            act.Should().Throw<TypeError>().WithMessage("only 0-dimensional arrays can be converted to Python scalars");
         }
 
         [TestMethod]
@@ -265,7 +267,7 @@ namespace NumSharp.Tests.Casting
         {
             var arr = np.array(new Complex[] { new Complex(1, 2) });
             Action act = () => { var _ = (Complex)arr; };
-            act.Should().Throw<IncorrectShapeException>();
+            act.Should().Throw<TypeError>().WithMessage("only 0-dimensional arrays can be converted to Python scalars");
         }
 
         [TestMethod]
@@ -274,7 +276,7 @@ namespace NumSharp.Tests.Casting
             // NumPy 2.x: np.array([[42]], dtype=int8) -> int(x) raises TypeError
             var arr = np.array(new sbyte[] { 42 }).reshape(1, 1);
             Action act = () => { var _ = (sbyte)arr; };
-            act.Should().Throw<IncorrectShapeException>();
+            act.Should().Throw<TypeError>().WithMessage("only 0-dimensional arrays can be converted to Python scalars");
         }
 
         [TestMethod]
@@ -282,7 +284,7 @@ namespace NumSharp.Tests.Casting
         {
             var arr = np.array(new Half[] { (Half)3.5 }).reshape(1, 1);
             Action act = () => { var _ = (Half)arr; };
-            act.Should().Throw<IncorrectShapeException>();
+            act.Should().Throw<TypeError>().WithMessage("only 0-dimensional arrays can be converted to Python scalars");
         }
 
         [TestMethod]
@@ -290,7 +292,7 @@ namespace NumSharp.Tests.Casting
         {
             var arr = np.array(new Complex[] { new Complex(1, 2) }).reshape(1, 1);
             Action act = () => { var _ = (Complex)arr; };
-            act.Should().Throw<IncorrectShapeException>();
+            act.Should().Throw<TypeError>().WithMessage("only 0-dimensional arrays can be converted to Python scalars");
         }
 
         // ---------------------------------------------------------------------
@@ -484,6 +486,131 @@ namespace NumSharp.Tests.Casting
             ((float)big).Should().Be(float.PositiveInfinity);
             using var exact = np.array(9007199254740992L);
             ((double)exact).Should().Be(9007199254740992.0);
+        }
+
+        // ================================================================
+        // Python's bool(): the truth test of ANY one-element array (parity QA-14; NumPy 2.4.2's answers)
+        // ================================================================
+
+        /// <summary>
+        ///     NumPy's <c>bool(arr)</c> is <c>array_nonzero</c>, which reads the only element of a one-element array whatever
+        ///     its rank: <c>bool(np.array([5.0]))</c> is True, <c>bool(np.array([[0.0]]))</c> False, a NaN True, <c>-0.0</c>
+        ///     False, a complex True when either part is nonzero, a text True when non-empty. The cast used to refuse every
+        ///     N-D array with the numeric conversions' 0-d rule.
+        /// </summary>
+        [TestMethod]
+        public void Bool_OneElementOfAnyRank_IsTheElementsTruth()
+        {
+            using var five = np.array(new[] { 5.0 });
+            using var zero2D = np.array(new[,] { { 0.0 } });
+            using var nan = np.array(new[] { double.NaN });
+            using var negZero = np.array(new[] { -0.0 });
+            using var complexZero3D = np.array(new[] { Complex.Zero }).reshape(1, 1, 1);
+            using var imaginary = np.array(new[] { Complex.ImaginaryOne });
+            using var text = np.array(new[] { "a" });
+            using var emptyText = np.array(new[] { "" });
+            using var truth = np.array(new[] { true });
+            using var int8Zero = np.array(new sbyte[,] { { 0 } });
+            using var half = np.array(new[] { (Half)0.5 });
+
+            ((bool)five).Should().BeTrue();
+            ((bool)zero2D).Should().BeFalse();
+            ((bool)nan).Should().BeTrue();
+            ((bool)negZero).Should().BeFalse();
+            ((bool)complexZero3D).Should().BeFalse();
+            ((bool)imaginary).Should().BeTrue();
+            ((bool)text).Should().BeTrue();
+            ((bool)emptyText).Should().BeFalse();
+            ((bool)truth).Should().BeTrue();
+            ((bool)int8Zero).Should().BeFalse();
+            ((bool)half).Should().BeTrue();
+        }
+
+        /// <summary>
+        ///     The truth test reads the view's own element, not its base's first: <c>arange(6).reshape(2, 3)[1:2, 2:3]</c> is
+        ///     <c>[[5]]</c> (True) at a non-zero offset, <c>[0:1, 0:1]</c> is <c>[[0]]</c> (False), and a <c>(1, 1)</c>
+        ///     broadcast of a 0-d zero is False.
+        /// </summary>
+        [TestMethod]
+        public void Bool_OneElementView_ReadsTheViewsElement()
+        {
+            using var grid = np.arange(6).reshape(2, 3);
+            using var five = grid["1:2, 2:3"];
+            using var zero = grid["0:1, 0:1"];
+            using var broadcastZero = np.broadcast_to(np.array(0.0), new Shape(1, 1));
+
+            ((bool)five).Should().BeTrue();
+            ((bool)zero).Should().BeFalse();
+            ((bool)broadcastZero).Should().BeFalse();
+        }
+
+        /// <summary>
+        ///     More than one element is ambiguous whatever the dtype: NumPy's <c>ValueError: The truth value of an array with
+        ///     more than one element is ambiguous. Use a.any() or a.all()</c> (the size check comes before any element check,
+        ///     so a complex array gets it too).
+        /// </summary>
+        [TestMethod]
+        public void Bool_MoreThanOneElement_RaisesTheAmbiguityValueError()
+        {
+            using var two = np.array(new[] { 1.0, 2.0 });
+            using var twoComplex = np.array(new[] { Complex.ImaginaryOne, new Complex(0, 2) });
+
+            Action real = () => _ = (bool)two;
+            Action complex = () => _ = (bool)twoComplex;
+
+            real.Should().Throw<ValueError>()
+                .WithMessage("The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()");
+            complex.Should().Throw<ValueError>()
+                .WithMessage("The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()");
+        }
+
+        /// <summary>
+        ///     An empty array is ambiguous too (NumPy 2.x made it an error): <c>ValueError: The truth value of an empty array
+        ///     is ambiguous. Use `array.size &gt; 0` to check that an array is not empty.</c>, for <c>(0,)</c> and
+        ///     <c>(0, 3)</c> alike.
+        /// </summary>
+        [TestMethod]
+        public void Bool_Empty_RaisesTheEmptyValueError()
+        {
+            using var empty = np.array(Array.Empty<double>());
+            using var emptyRows = np.zeros(new Shape(0, 3));
+
+            Action flat = () => _ = (bool)empty;
+            Action rows = () => _ = (bool)emptyRows;
+
+            flat.Should().Throw<ValueError>().WithMessage(
+                "The truth value of an empty array is ambiguous. Use `array.size > 0` to check that an array is not empty.");
+            rows.Should().Throw<ValueError>().WithMessage(
+                "The truth value of an empty array is ambiguous. Use `array.size > 0` to check that an array is not empty.");
+        }
+
+        /// <summary>
+        ///     <c>int()</c> / <c>float()</c> / <c>complex()</c> keep NumPy 2.x's 0-d rule, with NumPy's type and text:
+        ///     <c>TypeError: only 0-dimensional arrays can be converted to Python scalars</c> for a one-element 1-D or 2-D
+        ///     array, an empty array, a larger one and a text array; the rank check comes first, so <c>int(np.array([1j]))</c>
+        ///     gets it rather than the complex-to-int refusal. They threw <see cref="IncorrectShapeException"/> with
+        ///     NumSharp's own words.
+        /// </summary>
+        [TestMethod]
+        public void NumericTargets_NonZeroDim_RaiseNumPysTypeError()
+        {
+            using var oneFloat = np.array(new[] { 5.5 });
+            using var oneInt2D = np.array(new long[,] { { 3 } });
+            using var oneComplex = np.array(new[] { Complex.ImaginaryOne });
+            using var empty = np.array(Array.Empty<double>());
+            using var square = np.zeros(new Shape(2, 2));
+            using var text = np.array(new[] { "1.5" });
+
+            Action toDouble = () => _ = (double)oneFloat;
+            Action toLong = () => _ = (long)oneInt2D;
+            Action toComplex = () => _ = (Complex)oneComplex;
+            Action complexToInt = () => _ = (int)oneComplex;
+            Action emptyToDouble = () => _ = (double)empty;
+            Action squareToInt = () => _ = (int)square;
+            Action textToDouble = () => _ = (double)text;
+
+            foreach (var act in new[] { toDouble, toLong, toComplex, complexToInt, emptyToDouble, squareToInt, textToDouble })
+                act.Should().Throw<TypeError>().WithMessage("only 0-dimensional arrays can be converted to Python scalars");
         }
     }
 }

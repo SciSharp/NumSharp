@@ -333,6 +333,15 @@ Ported from NumPy's C (gates `Backends/AllocationGuardTests.cs`, `Manipulation/R
   `negative dimensions are not allowed`. Gate: `Creation/NpBroadcastFromNumPyTests.cs`.
   The axis errors of this family (`split(..., axis=oob)`'s leaked `IndexError`, `squeeze`) are NumPy's
   (`axis-arguments.md`).
+- No `NPY_MAXDIMS` (a documented divergence, `[Misaligned]`): an array may have more than NumPy's 64 dimensions. Where
+  NumPy 2.4.2 refuses the 65th (`maximum supported dimension for an ndarray is currently 64, found 65` from
+  `np.zeros` / `np.ones` / `reshape` / `np.expand_dims` / `np.broadcast_to`; `number of dimensions must be within [0, 64],
+  indexing result would have 65` from `[np.newaxis]` and a 64-d × 65-d broadcast; `ndmin must be <= ndmax (64)`),
+  NumSharp builds the array, and creation, `expand_dims`, new axes, reductions, elementwise ops, indexing, reshape,
+  transpose, copy and `broadcast_to` run to about 200,000 dimensions (measured to 300,000), so no path may size a
+  `stackalloc` by `ndim`. Two limits remain: such an array cannot cross to NumPy (the pythonnet bridge refuses 65), and
+  printing (`ToString` / `np.array2string`) recurses once per axis and overflows the stack, ending the process, past
+  about 1,000 to 2,000 dimensions (parity QA-50, open). Gate: `View/Shape.HighRank.Tests.cs`.
 
 ## `np.copyto`
 

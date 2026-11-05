@@ -185,14 +185,17 @@ namespace NumSharp.Tests.Casting
         // Shape guard still fires before the type guard
         // ---------------------------------------------------------------------
 
+        /// <summary>
+        ///     The rank check runs before the complex-source check, as NumPy's <c>int()</c> does: a 1-D complex array is refused
+        ///     for its rank (<c>only 0-dimensional arrays can be converted to Python scalars</c>), not with <c>int()</c>'s complex text (parity QA-14 made the rank refusal NumPy's
+        ///     TypeError; it was an IncorrectShapeException).
+        /// </summary>
         [TestMethod]
-        public void OneD_Complex_To_Int_Throws_IncorrectShape_First()
+        public void OneD_Complex_To_Int_Throws_TheRankTypeError_First()
         {
-            // ndim != 0 check runs before complex-source check. For 1-d Complex, we want
-            // IncorrectShapeException, not TypeError (shape is the more fundamental violation).
             var arr = np.array(new Complex[] { new Complex(1, 2) });
             Action act = () => { var _ = (int)arr; };
-            act.Should().Throw<IncorrectShapeException>();
+            act.Should().Throw<TypeError>().WithMessage("only 0-dimensional arrays can be converted to Python scalars");
         }
     }
 }

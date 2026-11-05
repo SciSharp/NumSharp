@@ -128,6 +128,10 @@ through `ToString("F"|"E"+precision)` (which rounds the true binary value half t
 string. NumSharp's `Char` dtype renders as strings (no NumPy equivalent). API: `array2string`, `array_repr`, `array_str`,
 `format_float_positional`, `format_float_scientific`, `get_printoptions`, `printoptions` (an IDisposable context),
 `set_printoptions`.
+- The printer recurses once per axis (`ArrayFormatter.Walk` / `ForEachIndex`, like NumPy's `_formatArray`), which NumPy's
+  64-dimension cap bounds and NumSharp's uncapped rank does not: past about 1,000 to 2,000 dimensions it overflows the
+  stack and ends the process (parity QA-50, open). Never format a high-rank array in a test, an assertion message
+  included.
 
 `np.format_float_positional` / `np.format_float_scientific` are NumPy's `dragon4.c`, statement for statement
 (`Backends/Printing/Dragon4.Port.cs`, `Dragon4.BigInt.cs`). The array printer keeps the emulation of `Dragon4.cs` (exact

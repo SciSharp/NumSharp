@@ -409,10 +409,11 @@ var scalar = np.array([42])[0];  // 0-d view
 int x = (int)scalar;                     // works
 
 var oneD = np.array([42]);
-int y = (int)oneD;   // throws IncorrectShapeException (ndim == 1)
+int y = (int)oneD;   // throws TypeError: only 0-dimensional arrays can be converted to Python scalars
+bool b = (bool)oneD; // true: bool() reads the only element of a one-element array of any rank
 ```
 
-This matches NumPy 2.x's strict behavior: `int(np.array([42]))` raises `TypeError: only 0-dimensional arrays can be converted to Python scalars`.
+This matches NumPy 2.x's strict behavior: `int(np.array([42]))` raises `TypeError: only 0-dimensional arrays can be converted to Python scalars`, while `bool(np.array([42]))` is NumPy's truth test (one element of any rank; a larger or empty array raises `ValueError`).
 
 ---
 
@@ -770,7 +771,8 @@ On `NDArray` itself the key properties are `.dtype` (a `DType`, NumPy's `ndarray
 | `DTypePromotionError` | No common dtype, such as `StringDType` with a numeric dtype or `S` |
 | `UnicodeEncodeError` / `UnicodeDecodeError` | An invalid encoding conversion, such as non-ASCII `U` → `S` or invalid UTF-8 `S` → `T` |
 | `TypeError` | Complex → non-complex scalar cast (`(int)complexScalar`, etc.) |
-| `IncorrectShapeException` | NDArray → scalar cast on non-0-d array (matches NumPy 2.x's strict 0-d requirement) |
+| `TypeError` | NDArray → numeric scalar cast on a non-0-d array (NumPy 2.x's strict 0-d requirement and text) |
+| `ValueError` | `(bool)` of an array with more than one element or none (NumPy's truth-value texts) |
 
 ---
 

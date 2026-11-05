@@ -81,8 +81,12 @@ namespace NumSharp.Backends
             }
             else
             {
-                // General NDIter gather (layout-aware: honors strides/offset/broadcast).
-                NDArray gatherMask = blockSize == 1 ? mask : BroadcastMaskAcrossBlock(mask, arr);
+                // General NDIter gather (layout-aware: honors strides/offset/broadcast). The mask is the operand's element
+                // mask only when it has the operand's RANK: a leading mask over trailing extents of 1 (blockSize 1 all the
+                // same, e.g. a (2,) mask over an (m[:, :1]) (2, 1) view) still names rows and must be laid over those axes,
+                // or the iterator right-aligns (2,) against (2, 1) and refuses (parity QA-23; the setter's scatter already
+                // tests the rank).
+                NDArray gatherMask = leadNdim == arr.ndim ? mask : BroadcastMaskAcrossBlock(mask, arr);
                 BooleanMaskGather(arr, gatherMask, result);
             }
 

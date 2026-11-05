@@ -73,7 +73,8 @@ Exception
 | An unknown codec name | `LookupError` | `LookupError` | `unknown encoding: nope` |
 | A singular matrix | `LinAlgError` | `LinAlgError` | `Singular matrix` |
 | `item()` of an array with several elements | `IncorrectSizeException` | `ValueError` | `can only convert an array of size 1 to a Python scalar` |
-| A C# cast of a 1-D array to a scalar | `IncorrectShapeException` | `TypeError` | NumSharp: `only 0-d arrays can be converted to scalar` |
+| A C# numeric cast of a non-0-d array to a scalar | `TypeError` | `TypeError` | `only 0-dimensional arrays can be converted to Python scalars` |
+| A `(bool)` cast of an array with several elements, or none | `ValueError` | `ValueError` | `The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()` (empty: ``The truth value of an empty array is ambiguous. Use `array.size > 0` to check that an array is not empty.``) |
 | An unknown dtype string | `NotSupportedException` | `TypeError` | `data type 'xyz' not understood` |
 | A factorisation without a backend (`np.linalg.svd`) | `OpenBlasMissingBackendException` | - | names the `NumSharp.Interop.OpenBLAS` package to reference |
 | An `np.evaluate` node over a text operand whose result would be text (concatenation, a `Where` with text branches), a reduction of text other than `Any` / `All` / `CountNonzero`, or an arithmetic or math node over text | `StringComputationNotSupportedException` | - | names the node and the string functions to use |

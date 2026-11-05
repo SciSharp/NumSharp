@@ -79,7 +79,12 @@ namespace NumSharp.Tests.Documentation
             Action item = () => np.array(new[] { 1, 2 }).item();
             item.Should().Throw<IncorrectSizeException>().WithMessage("can only convert an array of size 1 to a Python scalar");
             Action cast = () => _ = (int)np.array(new[] { 1, 2 });
-            cast.Should().Throw<IncorrectShapeException>().WithMessage("only 0-d arrays can be converted to scalar");
+            cast.Should().Throw<TypeError>().WithMessage("only 0-dimensional arrays can be converted to Python scalars");
+            Action truth = () => _ = (bool)np.array(new[] { 1, 2 });
+            truth.Should().Throw<ValueError>().WithMessage("The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()");
+            Action emptyTruth = () => _ = (bool)np.array(new double[0]);
+            emptyTruth.Should().Throw<ValueError>()
+                .WithMessage("The truth value of an empty array is ambiguous. Use `array.size > 0` to check that an array is not empty.");
             Action dtype = () => np.dtype("xyz");
             dtype.Should().Throw<NotSupportedException>().WithMessage("data type 'xyz' not understood");
             Action fused = () => np.evaluate((NDExpr)np.array(new[] { "a" }) + np.array(new[] { "b" }));

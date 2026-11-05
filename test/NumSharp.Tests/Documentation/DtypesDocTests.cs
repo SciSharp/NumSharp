@@ -135,7 +135,8 @@ namespace NumSharp.Tests.Documentation
             ((int)scalar).Should().Be(42);
             var oneD = np.array([42]);
             Action toInt = () => _ = (int)oneD;
-            toInt.Should().Throw<IncorrectShapeException>();
+            toInt.Should().Throw<TypeError>().WithMessage("only 0-dimensional arrays can be converted to Python scalars");
+            ((bool)oneD).Should().BeTrue();   // bool() reads the only element of a one-element array of any rank
         }
 
         /// <summary>The "Special Values" snippets: NaN and infinity survive a scalar round trip, and a complex value is NaN

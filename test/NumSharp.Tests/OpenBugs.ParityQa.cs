@@ -143,49 +143,6 @@ namespace NumSharp.Tests
         }
 
         // ------------------------------------------------------------------
-        // QA-14 — the explicit (bool) conversion applies float()'s 0-d rule instead of NumPy's truth test
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     NumPy's <c>bool(arr)</c> is <c>array_nonzero</c>: any one-element array has a truth value
-        ///     (<c>bool(np.array([5.0]))</c> is True, <c>bool(np.array([[0.0]]))</c> False), and only a larger or an empty array
-        ///     is refused, with <c>ValueError: The truth value of an array with more than one element is ambiguous. Use a.any()
-        ///     or a.all()</c>. NumSharp's explicit conversions all share <c>EnsureCastableToScalar</c>
-        ///     (Casting/Implicit/NDArray.Implicit.ValueTypes.cs), the 0-d rule of NumPy 2.x's <c>float()</c> / <c>int()</c>,
-        ///     so <c>(bool)</c> of a one-element 1-D or 2-D array throws <see cref="IncorrectShapeException"/> "only 0-d arrays
-        ///     can be converted to scalar", and a larger array gets that text instead of NumPy's ValueError.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA14")]
-        public void ParityQa_BoolConversion_ShouldFollowNumPysTruthTest()
-        {
-            using var one = np.array(new[] { 5.0 });
-            using var oneZero = np.array(new[,] { { 0.0 } });
-            using var two = np.array(new[] { 1.0, 2.0 });
-
-            ((bool)one).Should().BeTrue();
-            ((bool)oneZero).Should().BeFalse();
-            Action ambiguous = () => _ = (bool)two;
-            ambiguous.Should().Throw<ValueError>()
-                .WithMessage("The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()");
-        }
-
-        /// <summary>
-        ///     NumPy 2.4.2's <c>float(np.array([5.5]))</c> raises <c>TypeError: only 0-dimensional arrays can be converted to
-        ///     Python scalars</c>. NumSharp refuses the same calls (the explicit <c>(double)</c> / <c>(int)</c> / ... operators)
-        ///     but with <see cref="IncorrectShapeException"/> and the text "only 0-d arrays can be converted to scalar", so a
-        ///     caller catching NumPy's <see cref="TypeError"/> misses it.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA14")]
-        public void ParityQa_ScalarConversion_NonZeroDim_ShouldRaiseNumPysTypeError()
-        {
-            using var one = np.array(new[] { 5.5 });
-
-            Action act = () => _ = (double)one;
-
-            act.Should().Throw<TypeError>().WithMessage("only 0-dimensional arrays can be converted to Python scalars");
-        }
-
-        // ------------------------------------------------------------------
         // QA-17 — the float-tier binary ufuncs promote Char beside float16 / float32 to float64
         // ------------------------------------------------------------------
 
@@ -213,42 +170,6 @@ namespace NumSharp.Tests
             arctan2.dtype.Should().Be(np.float32);
             copysign.dtype.Should().Be(np.float32);
             nextafter.dtype.Should().Be(np.float32);
-        }
-
-        // ------------------------------------------------------------------
-        // QA-23 — a leading boolean mask over a strided view whose trailing extents are all 1 raises
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     <c>a[mask, 0:1]</c> (a mask on axis 0, then a slice that keeps ONE column) is NumPy's <c>(k, 1)</c> selection:
-        ///     <c>np.arange(6).reshape(2, 3)[[False, True], 0:1]</c> is <c>[[3]]</c>, and so are <c>a[mask, -1:]</c>,
-        ///     <c>b3[mask, 2:3, 3:4]</c> and a 2-D mask followed by a one-element slice. NumSharp raises
-        ///     <c>ValueError: non-broadcastable operand with shape (2,1) doesn't match the broadcast shape (2,2)</c> (the 2-D
-        ///     mask form: <c>IncorrectShapeException</c>). The getter slices first (<c>this[basic]</c>, a strided
-        ///     <c>(2, 1)</c> view) and hands the leading mask to <c>DefaultEngine.BooleanMask</c>, which uses the mask as a
-        ///     FULL element mask whenever the trailing block size is 1 (<c>gatherMask = blockSize == 1 ? mask : …</c>,
-        ///     Default.BooleanMask.cs); off the contiguous SIMD route, its NDIter gather then right-aligns the <c>(2,)</c>
-        ///     mask against the <c>(2, 1)</c> operand. The same happens for a plain strided <c>(n, 1)</c> view masked by an
-        ///     <c>(n,)</c> mask. A trailing extent above 1, a contiguous operand and the setter are fine.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA23")]
-        public void ParityQa_LeadingMask_StridedViewWithUnitTrailingExtents_ShouldSelectRows()
-        {
-            using var a = np.arange(6L).reshape(new Shape(2, 3));
-            using var mask = np.array(new[] { false, true });
-
-            using var oneColumn = a[mask, "0:1"];
-            using var lastColumn = a[mask, "-1:"];
-
-            oneColumn.shape.Should().Equal(new long[] { 1, 1 });
-            oneColumn.GetInt64(0, 0).Should().Be(3);
-            lastColumn.GetInt64(0, 0).Should().Be(5);
-
-            using var column = np.arange(6L).reshape(new Shape(3, 2))[":, :1"];
-            using var rows = column[np.array(new[] { true, false, true })];
-
-            rows.shape.Should().Equal(new long[] { 2, 1 });
-            rows.GetInt64(1, 0).Should().Be(4);
         }
 
         // ------------------------------------------------------------------
@@ -306,32 +227,6 @@ namespace NumSharp.Tests
             grid.shape.Should().Equal(new long[] { 2, 2 });
             grid.dtype.Should().Be(np.int64);
             contiguous.GetDouble(2).Should().Be(3.0);
-        }
-
-        // ------------------------------------------------------------------
-        // QA-29 — arrays of more than 64 dimensions are built where NumPy refuses them
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     NumPy caps an array's rank at <c>NPY_MAXDIMS</c> = 64: <c>np.zeros((1,) * 65)</c>,
-        ///     <c>np.expand_dims(a64, 0)</c> and a broadcast to 65 dimensions raise
-        ///     <c>ValueError: maximum supported dimension for an ndarray is currently 64, found 65</c>, and <c>a64[np.newaxis]</c>
-        ///     raises <c>IndexError: number of dimensions must be within [0, 64], indexing result would have 65</c>. NumSharp
-        ///     has no such check (its only 64 is <c>np.nditer</c>'s op_axes emulation and a few fast paths that decline past
-        ///     it), so every one of those calls returns a 65-dimensional array (<c>p68</c>) - which NumPy itself cannot
-        ///     receive through the pythonnet bridge.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA29")]
-        public void ParityQa_MoreThan64Dimensions_ShouldRaiseNumPysValueError()
-        {
-            var rank65 = Enumerable.Repeat(1L, 65).ToArray();
-            using var rank64 = np.zeros(new Shape(Enumerable.Repeat(1L, 64).ToArray()));
-
-            Action zeros = () => np.zeros(new Shape(rank65)).Dispose();
-            Action expand = () => np.expand_dims(rank64, 0).Dispose();
-
-            zeros.Should().Throw<ValueError>().WithMessage("maximum supported dimension for an ndarray is currently 64, found 65");
-            expand.Should().Throw<ValueError>().WithMessage("maximum supported dimension for an ndarray is currently 64, found 65");
         }
 
         // ------------------------------------------------------------------

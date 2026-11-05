@@ -68,6 +68,10 @@ paths:
     (`Backends/Unmanaged/UnmanagedStorage.Mapping.cs`); NDArray's protected `FetchIndices` / `SetIndices` / `...ND` /
     `...NDNonLinear` forward to them. The boolean-mask getter's result is not zero-filled: both of its gathers write every
     element, so `DefaultEngine.BooleanMask` allocates with `NDArray.ForOverwrite`.
+  - A leading boolean mask (fewer axes than the array) names whole rows even when every trailing extent is 1: the getter's
+    NDIter gather lays it across the trailing block (`BroadcastMaskAcrossBlock`), and only a mask of the array's FULL
+    rank is the element mask itself. `a[mask, 0:1]`, `a[mask, -1:]` and an `(n,)` mask over a strided `(n, 1)` view are
+    NumPy's `(k, 1)` selections (`Selection/BooleanMaskingTests.cs` `LeadingMask_*`).
 - `NDArray.PrepareAssignedValue` (`Selection/NDArray.Indexing.AssignedValue.cs`) is NumPy's MapIter value rule for every
   index-array assignment: a value with more axes than the selection loses its leading axes (a `(1, N)` matrix row fits an
   `(N,)` selection), and a value that does not fit raises `shape mismatch: value array of shape ... could not be
@@ -153,8 +157,16 @@ Every store entry point packs a C# literal as NumPy's `PyArray_Pack` of a Python
 
 ## Reading a scalar out: the explicit operators
 
-`(int)a`, `(double)a`, `(bool)a` … of a 0-d array are NumPy's `int(a)` / `float(a)` / `bool(a)`
-(`Casting/Implicit/NDArray.Implicit.ValueTypes.cs`; a non-0-d array raises `IncorrectShapeException`).
+`(int)a`, `(double)a`, `(bool)a` … are NumPy's `int(a)` / `float(a)` / `bool(a)`
+(`Casting/Implicit/NDArray.Implicit.ValueTypes.cs`).
+- The numeric targets (`int()` / `float()` / `complex()`) take a 0-d array only: any other rank, a one-element `(1,)` or
+  `(1, 1)` array included, raises NumPy 2.x's `TypeError: only 0-dimensional arrays can be converted to Python scalars`,
+  checked before the element (`(int)np.array(new[] { 1j })` gets this, not the complex refusal).
+- `(bool)a` is NumPy's truth test (`array_nonzero`), not a 0-d conversion: the only element of a one-element array of ANY
+  rank, read through the view's strides and offset (`(bool)np.array(new[,] { { 0.0 } })` is False); more than one
+  element raises `ValueError: The truth value of an array with more than one element is ambiguous. Use a.any() or
+  a.all()` and an empty array ``ValueError: The truth value of an empty array is ambiguous. Use `array.size > 0` to
+  check that an array is not empty.``, both before any element check.
 - Integer targets (`char` included): CPython's `int()` of the element as an exact integer (`PythonIntOf`: a float or
   decimal truncated toward zero, a text parsed by `int()`), then a CHECKED fit into the C# type (`ToCheckedInteger`): a
   float NaN raises `ValueError: cannot convert float NaN to integer`, an infinity `OverflowException: cannot convert float

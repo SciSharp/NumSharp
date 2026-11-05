@@ -81,12 +81,15 @@ namespace NumSharp
         /// <param name="d">The value.</param>
         public static implicit operator NDArray(Complex d) => NDArray.PythonLiteral<Complex>(d);
 
-        // ===== NDArray → scalar: EXPLICIT (requires 0-d, matches NumPy's int(arr) / float(arr) / bool(arr)) =====
+        // ===== NDArray → scalar: EXPLICIT (NumPy's int(arr) / float(arr) / complex(arr), which require 0-d, and
+        //       bool(arr), the truth test of any one-element array) =====
 
         /// <summary>
-        ///     Validates preconditions common to every NDArray → scalar cast:
+        ///     Validates the preconditions of every NDArray → number cast (<c>int()</c> / <c>float()</c> /
+        ///     <c>complex()</c>; <c>(bool)</c> runs only the element half, <see cref="EnsureElementConvertible"/>):
         ///     <list type="bullet">
-        ///       <item><c>ndim == 0</c> (only 0-d arrays can be converted to Python scalars, per NumPy 2.x).</item>
+        ///       <item><c>ndim == 0</c> (only 0-d arrays can be converted to Python scalars, per NumPy 2.x), checked
+        ///             before the element.</item>
         ///       <item>A complex source converts to <see cref="Complex"/> and to bool (its truth), and is refused by every
         ///             integer target with CPython's <c>int()</c> text and by every float target with its <c>float()</c>
         ///             text (NumPy's <c>array_int</c> / <c>array_float</c> hand the complex scalar to them).</item>
@@ -98,15 +101,31 @@ namespace NumSharp
         /// <param name="target">The conversion's target lane: <see cref="NPTypeCode.Boolean"/>, an integer lane
         ///     (<see cref="NPTypeCode.Char"/> included), a float lane (<see cref="NPTypeCode.Decimal"/> included) or
         ///     <see cref="NPTypeCode.Complex"/>.</param>
-        /// <exception cref="IncorrectShapeException"><paramref name="nd"/> is not 0-d.</exception>
-        /// <exception cref="TypeError">A complex source to an integer target (<c>int() argument must be a string, a
-        ///     bytes-like object or a real number, not 'complex'</c>) or a float target (<c>float() argument must be a string
-        ///     or a real number, not 'complex'</c>), or a string source to complex (NumPy's <c>Unable to convert
-        ///     dtype('&lt;U2') to complex</c>).</exception>
+        /// <exception cref="TypeError"><paramref name="nd"/> is not 0-d (NumPy's <c>only 0-dimensional arrays can be
+        ///     converted to Python scalars</c>, which <c>int()</c> / <c>float()</c> / <c>complex()</c> raise even for a
+        ///     one-element array; it was an <see cref="IncorrectShapeException"/> with NumSharp's own words until parity
+        ///     QA-14); a complex source to an integer target (<c>int() argument must be a string, a bytes-like object or a
+        ///     real number, not 'complex'</c>) or a float target (<c>float() argument must be a string or a real number, not
+        ///     'complex'</c>); or a string source to complex (NumPy's <c>Unable to convert dtype('&lt;U2') to
+        ///     complex</c>).</exception>
         private static void EnsureCastableToScalar(NDArray nd, NPTypeCode target)
         {
             if (nd.ndim != 0)
-                throw new IncorrectShapeException("only 0-d arrays can be converted to scalar");
+                throw new TypeError("only 0-dimensional arrays can be converted to Python scalars");
+            EnsureElementConvertible(nd, target);
+        }
+
+        /// <summary>
+        ///     The element checks of <see cref="EnsureCastableToScalar"/> without its rank check — what <c>bool(arr)</c>
+        ///     needs, since NumPy's truth test (<c>array_nonzero</c>) reads the only element of a one-element array of ANY
+        ///     rank.
+        /// </summary>
+        /// <param name="nd">The array whose (single) element is converted.</param>
+        /// <param name="target">The conversion's target lane (see <see cref="EnsureCastableToScalar"/>).</param>
+        /// <exception cref="TypeError">A complex source to an integer or float target, or a string source to complex
+        ///     (the texts of <see cref="EnsureCastableToScalar"/>).</exception>
+        private static void EnsureElementConvertible(NDArray nd, NPTypeCode target)
+        {
             if (nd.typecode == NPTypeCode.Complex)
             {
                 // bool(arr) is the element's truth and complex(arr) the element itself; only int() / float() refuse a
@@ -191,7 +210,8 @@ namespace NumSharp
         /// <param name="nd">The array being converted.</param>
         /// <param name="target">The lane of <typeparamref name="T"/>.</param>
         /// <returns>The element as <typeparamref name="T"/>, exact.</returns>
-        /// <exception cref="IncorrectShapeException"><paramref name="nd"/> is not 0-d.</exception>
+        /// <exception cref="TypeError"><paramref name="nd"/> is not 0-d (<c>only 0-dimensional arrays can be converted to
+        ///     Python scalars</c>).</exception>
         /// <exception cref="TypeError">A complex element (CPython's <c>int()</c> text).</exception>
         /// <exception cref="ValueError">A float NaN, or a text that is not an integer literal.</exception>
         /// <exception cref="OverflowException">A float infinity; a value outside <typeparamref name="T"/>
@@ -261,15 +281,26 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     NumPy's <c>bool(arr)</c> of a 0-d array: the element's truth — nonzero for a number (a NaN is True), either
-        ///     part nonzero for a complex (<c>(bool)np.array(1j)</c> is True; it used to refuse), non-empty for a text.
+        ///     NumPy's <c>bool(arr)</c> (<c>array_nonzero</c>): the truth of the ONLY element of a one-element array of any
+        ///     rank (<c>(bool)np.array(new[,] { { 0.0 } })</c> is False) — nonzero for a number (a NaN is True), either part
+        ///     nonzero for a complex (<c>(bool)np.array(1j)</c> is True), non-empty for a text. A larger or an empty array is
+        ///     ambiguous and refused with NumPy's two ValueErrors (parity QA-14: every N-D array was refused with the numeric
+        ///     conversions' 0-d rule).
         /// </summary>
-        /// <param name="nd">A 0-d array.</param>
+        /// <param name="nd">The array.</param>
         /// <returns>The element's truth.</returns>
-        /// <exception cref="IncorrectShapeException"><paramref name="nd"/> is not 0-d.</exception>
+        /// <exception cref="ValueError">More than one element (<c>The truth value of an array with more than one element is
+        ///     ambiguous. Use a.any() or a.all()</c>) or none (<c>The truth value of an empty array is ambiguous. Use
+        ///     `array.size &gt; 0` to check that an array is not empty.</c>).</exception>
         public static explicit operator bool(NDArray nd)
         {
-            EnsureCastableToScalar(nd, NPTypeCode.Boolean);
+            // array_nonzero: n == 1 reads the element; anything else is ambiguous (NumPy 2.x made the empty case an
+            // error too).
+            if (nd.size != 1)
+                throw new ValueError(nd.size == 0
+                    ? "The truth value of an empty array is ambiguous. Use `array.size > 0` to check that an array is not empty."
+                    : "The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()");
+            EnsureElementConvertible(nd, NPTypeCode.Boolean);
             // CDOUBLE_nonzero: real != 0 || imag != 0, so a NaN part counts as nonzero and -0j is False.
             if (nd.typecode == NPTypeCode.Complex)
                 return (Complex)nd.Storage.GetAtIndex(0) != Complex.Zero;
@@ -279,8 +310,8 @@ namespace NumSharp
         /// <summary>NumPy's <c>int(arr)</c> as an int8, checked (see <see cref="ToCheckedInteger{T}"/>).</summary>
         /// <param name="nd">A 0-d array.</param>
         /// <returns>The element as an <see cref="sbyte"/>, exact.</returns>
-        /// <exception cref="IncorrectShapeException"><paramref name="nd"/> is not 0-d.</exception>
-        /// <exception cref="TypeError">A complex element.</exception>
+        /// <exception cref="TypeError"><paramref name="nd"/> is not 0-d (<c>only 0-dimensional arrays can be converted to
+        ///     Python scalars</c>), or a complex element.</exception>
         /// <exception cref="ValueError">A float NaN, or a text that is not an integer literal.</exception>
         /// <exception cref="OverflowException">A float infinity, or a value outside int8.</exception>
         public static explicit operator sbyte(NDArray nd) => ToCheckedInteger<sbyte>(nd, NPTypeCode.SByte);
@@ -289,8 +320,8 @@ namespace NumSharp
         ///     raises instead of wrapping.</summary>
         /// <param name="nd">A 0-d array.</param>
         /// <returns>The element as a <see cref="byte"/>, exact.</returns>
-        /// <exception cref="IncorrectShapeException"><paramref name="nd"/> is not 0-d.</exception>
-        /// <exception cref="TypeError">A complex element.</exception>
+        /// <exception cref="TypeError"><paramref name="nd"/> is not 0-d (<c>only 0-dimensional arrays can be converted to
+        ///     Python scalars</c>), or a complex element.</exception>
         /// <exception cref="ValueError">A float NaN, or a text that is not an integer literal.</exception>
         /// <exception cref="OverflowException">A float infinity, or a value outside uint8.</exception>
         public static explicit operator byte(NDArray nd) => ToCheckedInteger<byte>(nd, NPTypeCode.Byte);
@@ -298,8 +329,8 @@ namespace NumSharp
         /// <summary>NumPy's <c>int(arr)</c> as an int16, checked (see <see cref="ToCheckedInteger{T}"/>).</summary>
         /// <param name="nd">A 0-d array.</param>
         /// <returns>The element as a <see cref="short"/>, exact.</returns>
-        /// <exception cref="IncorrectShapeException"><paramref name="nd"/> is not 0-d.</exception>
-        /// <exception cref="TypeError">A complex element.</exception>
+        /// <exception cref="TypeError"><paramref name="nd"/> is not 0-d (<c>only 0-dimensional arrays can be converted to
+        ///     Python scalars</c>), or a complex element.</exception>
         /// <exception cref="ValueError">A float NaN, or a text that is not an integer literal.</exception>
         /// <exception cref="OverflowException">A float infinity, or a value outside int16.</exception>
         public static explicit operator short(NDArray nd) => ToCheckedInteger<short>(nd, NPTypeCode.Int16);
@@ -307,8 +338,8 @@ namespace NumSharp
         /// <summary>NumPy's <c>int(arr)</c> as a uint16, checked (see <see cref="ToCheckedInteger{T}"/>).</summary>
         /// <param name="nd">A 0-d array.</param>
         /// <returns>The element as a <see cref="ushort"/>, exact.</returns>
-        /// <exception cref="IncorrectShapeException"><paramref name="nd"/> is not 0-d.</exception>
-        /// <exception cref="TypeError">A complex element.</exception>
+        /// <exception cref="TypeError"><paramref name="nd"/> is not 0-d (<c>only 0-dimensional arrays can be converted to
+        ///     Python scalars</c>), or a complex element.</exception>
         /// <exception cref="ValueError">A float NaN, or a text that is not an integer literal.</exception>
         /// <exception cref="OverflowException">A float infinity, or a value outside uint16.</exception>
         public static explicit operator ushort(NDArray nd) => ToCheckedInteger<ushort>(nd, NPTypeCode.UInt16);
@@ -317,8 +348,8 @@ namespace NumSharp
         ///     <c>(int)np.array(-3.7)</c> is -3, NaN / inf / <c>3e9</c> raise.</summary>
         /// <param name="nd">A 0-d array.</param>
         /// <returns>The element as an <see cref="int"/>, exact.</returns>
-        /// <exception cref="IncorrectShapeException"><paramref name="nd"/> is not 0-d.</exception>
-        /// <exception cref="TypeError">A complex element.</exception>
+        /// <exception cref="TypeError"><paramref name="nd"/> is not 0-d (<c>only 0-dimensional arrays can be converted to
+        ///     Python scalars</c>), or a complex element.</exception>
         /// <exception cref="ValueError">A float NaN, or a text that is not an integer literal.</exception>
         /// <exception cref="OverflowException">A float infinity, or a value outside int32.</exception>
         public static explicit operator int(NDArray nd) => ToCheckedInteger<int>(nd, NPTypeCode.Int32);
@@ -326,8 +357,8 @@ namespace NumSharp
         /// <summary>NumPy's <c>int(arr)</c> as a uint32, checked (see <see cref="ToCheckedInteger{T}"/>).</summary>
         /// <param name="nd">A 0-d array.</param>
         /// <returns>The element as a <see cref="uint"/>, exact.</returns>
-        /// <exception cref="IncorrectShapeException"><paramref name="nd"/> is not 0-d.</exception>
-        /// <exception cref="TypeError">A complex element.</exception>
+        /// <exception cref="TypeError"><paramref name="nd"/> is not 0-d (<c>only 0-dimensional arrays can be converted to
+        ///     Python scalars</c>), or a complex element.</exception>
         /// <exception cref="ValueError">A float NaN, or a text that is not an integer literal.</exception>
         /// <exception cref="OverflowException">A float infinity, or a value outside uint32.</exception>
         public static explicit operator uint(NDArray nd) => ToCheckedInteger<uint>(nd, NPTypeCode.UInt32);
@@ -336,8 +367,8 @@ namespace NumSharp
         ///     <c>1e300</c> raise instead of returning -1 / <c>long.MinValue</c>.</summary>
         /// <param name="nd">A 0-d array.</param>
         /// <returns>The element as a <see cref="long"/>, exact.</returns>
-        /// <exception cref="IncorrectShapeException"><paramref name="nd"/> is not 0-d.</exception>
-        /// <exception cref="TypeError">A complex element.</exception>
+        /// <exception cref="TypeError"><paramref name="nd"/> is not 0-d (<c>only 0-dimensional arrays can be converted to
+        ///     Python scalars</c>), or a complex element.</exception>
         /// <exception cref="ValueError">A float NaN, or a text that is not an integer literal.</exception>
         /// <exception cref="OverflowException">A float infinity, or a value outside int64.</exception>
         public static explicit operator long(NDArray nd) => ToCheckedInteger<long>(nd, NPTypeCode.Int64);
@@ -345,8 +376,8 @@ namespace NumSharp
         /// <summary>NumPy's <c>int(arr)</c> as a uint64, checked (see <see cref="ToCheckedInteger{T}"/>).</summary>
         /// <param name="nd">A 0-d array.</param>
         /// <returns>The element as a <see cref="ulong"/>, exact.</returns>
-        /// <exception cref="IncorrectShapeException"><paramref name="nd"/> is not 0-d.</exception>
-        /// <exception cref="TypeError">A complex element.</exception>
+        /// <exception cref="TypeError"><paramref name="nd"/> is not 0-d (<c>only 0-dimensional arrays can be converted to
+        ///     Python scalars</c>), or a complex element.</exception>
         /// <exception cref="ValueError">A float NaN, or a text that is not an integer literal.</exception>
         /// <exception cref="OverflowException">A float infinity, or a value outside uint64.</exception>
         public static explicit operator ulong(NDArray nd) => ToCheckedInteger<ulong>(nd, NPTypeCode.UInt64);
@@ -355,8 +386,8 @@ namespace NumSharp
         ///     see <see cref="ToCheckedInteger{T}"/>).</summary>
         /// <param name="nd">A 0-d array.</param>
         /// <returns>The element as a <see cref="char"/>, exact.</returns>
-        /// <exception cref="IncorrectShapeException"><paramref name="nd"/> is not 0-d.</exception>
-        /// <exception cref="TypeError">A complex element.</exception>
+        /// <exception cref="TypeError"><paramref name="nd"/> is not 0-d (<c>only 0-dimensional arrays can be converted to
+        ///     Python scalars</c>), or a complex element.</exception>
         /// <exception cref="ValueError">A float NaN, or a text that is not an integer literal.</exception>
         /// <exception cref="OverflowException">A float infinity, or a value outside [0, 65535].</exception>
         public static explicit operator char(NDArray nd) => ToCheckedInteger<char>(nd, NPTypeCode.Char);
@@ -365,7 +396,8 @@ namespace NumSharp
         ///     Python float).</summary>
         /// <param name="nd">A 0-d array.</param>
         /// <returns>The element as a <see cref="float"/>.</returns>
-        /// <exception cref="IncorrectShapeException"><paramref name="nd"/> is not 0-d.</exception>
+        /// <exception cref="TypeError"><paramref name="nd"/> is not 0-d (<c>only 0-dimensional arrays can be converted to
+        ///     Python scalars</c>).</exception>
         /// <exception cref="TypeError">A complex element (CPython's <c>float()</c> text).</exception>
         /// <exception cref="ValueError">A text that is not a float literal.</exception>
         public static explicit operator float(NDArray nd)
@@ -377,7 +409,8 @@ namespace NumSharp
         /// <summary>NumPy's <c>float(arr)</c>.</summary>
         /// <param name="nd">A 0-d array.</param>
         /// <returns>The element as a <see cref="double"/>.</returns>
-        /// <exception cref="IncorrectShapeException"><paramref name="nd"/> is not 0-d.</exception>
+        /// <exception cref="TypeError"><paramref name="nd"/> is not 0-d (<c>only 0-dimensional arrays can be converted to
+        ///     Python scalars</c>).</exception>
         /// <exception cref="TypeError">A complex element (CPython's <c>float()</c> text).</exception>
         /// <exception cref="ValueError">A text that is not a float literal.</exception>
         public static explicit operator double(NDArray nd)
@@ -391,7 +424,8 @@ namespace NumSharp
         ///     cannot hold converts to 0, NumSharp's decimal convention, not an error.</summary>
         /// <param name="nd">A 0-d array.</param>
         /// <returns>The element as a <see cref="decimal"/>.</returns>
-        /// <exception cref="IncorrectShapeException"><paramref name="nd"/> is not 0-d.</exception>
+        /// <exception cref="TypeError"><paramref name="nd"/> is not 0-d (<c>only 0-dimensional arrays can be converted to
+        ///     Python scalars</c>).</exception>
         /// <exception cref="TypeError">A complex element (CPython's <c>float()</c> text).</exception>
         /// <exception cref="ValueError">A text that is not a float literal.</exception>
         public static explicit operator decimal(NDArray nd)
@@ -403,7 +437,8 @@ namespace NumSharp
         /// <summary>NumPy's <c>float(arr)</c> rounded to float16 (an out-of-range value is ±inf).</summary>
         /// <param name="nd">A 0-d array.</param>
         /// <returns>The element as a <see cref="Half"/>.</returns>
-        /// <exception cref="IncorrectShapeException"><paramref name="nd"/> is not 0-d.</exception>
+        /// <exception cref="TypeError"><paramref name="nd"/> is not 0-d (<c>only 0-dimensional arrays can be converted to
+        ///     Python scalars</c>).</exception>
         /// <exception cref="TypeError">A complex element (CPython's <c>float()</c> text).</exception>
         /// <exception cref="ValueError">A text that is not a float literal.</exception>
         public static explicit operator Half(NDArray nd)
@@ -415,7 +450,8 @@ namespace NumSharp
         /// <summary>NumPy's <c>complex(arr)</c>: any numeric element (a real one gets a zero imaginary part).</summary>
         /// <param name="nd">A 0-d array.</param>
         /// <returns>The element as a <see cref="Complex"/>.</returns>
-        /// <exception cref="IncorrectShapeException"><paramref name="nd"/> is not 0-d.</exception>
+        /// <exception cref="TypeError"><paramref name="nd"/> is not 0-d (<c>only 0-dimensional arrays can be converted to
+        ///     Python scalars</c>).</exception>
         /// <exception cref="TypeError">A text element (<c>Unable to convert dtype('&lt;U2') to complex</c>).</exception>
         public static explicit operator Complex(NDArray nd)
         {
