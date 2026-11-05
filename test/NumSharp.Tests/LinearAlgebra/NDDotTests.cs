@@ -1488,6 +1488,650 @@ namespace NumSharp.Tests.LinearAlgebra
         }
 
         /// <summary>
+        ///     NumPy 2.4.2's bits for np.dot's scalar branch (<c>cblas_matrixproduct</c>): float32 / float64 / complex128
+        ///     operands of at most two dims, one of them 0-d, <c>(1,)</c> or <c>(1, 1)</c>. One output is the plain product
+        ///     (-0.0 kept); more outputs are <c>?axpy</c> into a zeroed result - scipy-openblas' Haswell kernel (a fused
+        ///     multiply-add into +0) over the first <c>n &amp; -32</c> (float32) / <c>n &amp; -16</c> terms of a unit-stride
+        ///     call, the plain <c>+0 + a*x</c> elsewhere; a matrix is one call per line along its longer axis.
+        /// </summary>
+        /// <param name="dtypeA">The first operand's dtype.</param>
+        /// <param name="dtypeB">The second operand's dtype.</param>
+        /// <param name="lk">The first operand's kind: s0 (0-d), v (n,), vrev (n,)[::-1], vb (broadcast from (1,)), v1 (1,),
+        ///     row (1, n), col (n, 1), s11 (1, 1), mC (3, n), mW (3, n) with n &gt; 3, cs (3, 2n)[:, :n].</param>
+        /// <param name="rk">The second operand's kind.</param>
+        /// <param name="n">The length.</param>
+        /// <param name="seed">The generator seed (a drawn first, then b).</param>
+        /// <param name="tiny">Whether products that underflow to zero are planted (the scalar -1e-200, every third
+        ///     element of the other operand 1e-200; float32 1e-30): the kernel keeps their -0.0, the C loop gives +0.0.</param>
+        /// <param name="resultDtype">NumPy's result dtype.</param>
+        /// <param name="expected">sha: and the first 32 hex digits of SHA-256 over NumPy's result bytes.</param>
+        [DataTestMethod]
+        [DataRow("float32", "float32", "s0", "v", 2, 9001UL, false, "float32", "sha:f9dfcd285cdb0fc6a367c8c0eb61910b")]
+        [DataRow("float32", "float32", "v", "s0", 2, 9002UL, false, "float32", "sha:2a3eabb31fdecd9c344b5f1cd8587269")]
+        [DataRow("float32", "float32", "s0", "vrev", 2, 9003UL, false, "float32", "sha:4ab7ec921420b218c1c9d61d7a53c143")]
+        [DataRow("float32", "float32", "s0", "vb", 2, 9004UL, false, "float32", "sha:486e804f67dc28fd7c68ed83b13d769f")]
+        [DataRow("float32", "float32", "s0", "row", 2, 9005UL, false, "float32", "sha:538b2d9d2b023dbf397450658b65c0b8")]
+        [DataRow("float32", "float32", "s0", "col", 2, 9006UL, false, "float32", "sha:ba5f47cd26e11a9ad63f628e581b1220")]
+        [DataRow("float32", "float32", "s0", "mC", 2, 9007UL, false, "float32", "sha:45d92f1a1b48acd342117ab598132c3b")]
+        [DataRow("float32", "float32", "mC", "s0", 2, 9008UL, false, "float32", "sha:3999d9ae793881dbf9bac55e7b985278")]
+        [DataRow("float32", "float32", "s0", "mW", 2, 9009UL, false, "float32", "sha:d8c6a5359c9caf757312525f669342c5")]
+        [DataRow("float32", "float32", "s0", "cs", 2, 9010UL, false, "float32", "sha:d558a206464e4f16533ee4f3b1dc935a")]
+        [DataRow("float32", "float32", "v1", "row", 2, 9011UL, false, "float32", "sha:cde6e590ae2ee887912f546667311c2d")]
+        [DataRow("float32", "float32", "col", "v1", 2, 9012UL, false, "float32", "sha:58517abc120784076ea23b554532ee9e")]
+        [DataRow("float32", "float32", "s11", "row", 2, 9013UL, false, "float32", "sha:c80bad04e82445df8358accdb848761e")]
+        [DataRow("float32", "float32", "col", "s11", 2, 9014UL, false, "float32", "sha:244a914079665529471cb8214201ecfc")]
+        [DataRow("float32", "float32", "s11", "s11", 2, 9015UL, false, "float32", "sha:c6c68d19ae30bbe0bb615a39377feca8")]
+        [DataRow("float32", "float32", "s0", "s0", 2, 9016UL, false, "float32", "sha:16bb600b75e5da03bf9df1a3e58164d4")]
+        [DataRow("float32", "float32", "v1", "v1", 2, 9017UL, false, "float32", "sha:49c57eda28e4acfc45ffc0eefa6db195")]
+        [DataRow("float32", "float32", "s0", "v1", 2, 9018UL, false, "float32", "sha:034165da93e7c62427f064568a78be33")]
+        [DataRow("float32", "float32", "v1", "s0", 2, 9019UL, false, "float32", "sha:25295ab3a6a32940202654d148d12ae5")]
+        [DataRow("float32", "float32", "s0", "s11", 2, 9020UL, false, "float32", "sha:577ebc2d228699a82a9198e06dc95859")]
+        [DataRow("float32", "float32", "s0", "v", 15, 9021UL, false, "float32", "sha:78f933701d0e7fa5931375d76c9a052b")]
+        [DataRow("float32", "float32", "v", "s0", 15, 9022UL, false, "float32", "sha:6d667196eced38da13d811e248b3ebc9")]
+        [DataRow("float32", "float32", "s0", "vrev", 15, 9023UL, false, "float32", "sha:19948283de6b1a0cfde23e2f7a030f0f")]
+        [DataRow("float32", "float32", "s0", "vb", 15, 9024UL, false, "float32", "sha:25eb572920a597e17567a47566fbba03")]
+        [DataRow("float32", "float32", "s0", "row", 15, 9025UL, false, "float32", "sha:779c59a8ceee167451993d6d1c7e8317")]
+        [DataRow("float32", "float32", "s0", "col", 15, 9026UL, false, "float32", "sha:c0706573cfa678e6c0a31b3c5c0f2d37")]
+        [DataRow("float32", "float32", "s0", "mC", 15, 9027UL, false, "float32", "sha:d137fad0f4c076bf8209944c4344dffd")]
+        [DataRow("float32", "float32", "mC", "s0", 15, 9028UL, false, "float32", "sha:b66c6a63bd54306d93052be1c6303729")]
+        [DataRow("float32", "float32", "s0", "mW", 15, 9029UL, false, "float32", "sha:12b07ea3205b8968beb9a4614384258b")]
+        [DataRow("float32", "float32", "s0", "cs", 15, 9030UL, false, "float32", "sha:9d1da3a4ce05c16c85a118719f1db290")]
+        [DataRow("float32", "float32", "v1", "row", 15, 9031UL, false, "float32", "sha:21a26769f2d2258b8f719d21f8c2802f")]
+        [DataRow("float32", "float32", "col", "v1", 15, 9032UL, false, "float32", "sha:28734ff39de60dde56314926fe25a36a")]
+        [DataRow("float32", "float32", "s11", "row", 15, 9033UL, false, "float32", "sha:db7ca0aeba41a04c90411009a14d4b19")]
+        [DataRow("float32", "float32", "col", "s11", 15, 9034UL, false, "float32", "sha:fb273bd4da9b1670669bf647a2d48228")]
+        [DataRow("float32", "float32", "s11", "s11", 15, 9035UL, false, "float32", "sha:2246fce378c2a5d2b265af98f6b37b4d")]
+        [DataRow("float32", "float32", "s0", "s0", 15, 9036UL, false, "float32", "sha:150ebd9f6ec93bb4f9c8e59c2a52b4e1")]
+        [DataRow("float32", "float32", "v1", "v1", 15, 9037UL, false, "float32", "sha:1401af912c9541573982564d53c5ae4a")]
+        [DataRow("float32", "float32", "s0", "v1", 15, 9038UL, false, "float32", "sha:374c4fb9747390bb64ddea2b9990de3e")]
+        [DataRow("float32", "float32", "v1", "s0", 15, 9039UL, false, "float32", "sha:703b7430b5c6c522d9947a17f51e2ff0")]
+        [DataRow("float32", "float32", "s0", "s11", 15, 9040UL, false, "float32", "sha:0c78f48d56b8dc2b1516eae4c5039781")]
+        [DataRow("float32", "float32", "s0", "v", 16, 9041UL, false, "float32", "sha:7f90263b65254e87b809142b8b751ec1")]
+        [DataRow("float32", "float32", "v", "s0", 16, 9042UL, false, "float32", "sha:05d9ede4ae861768afa65b62dcf10020")]
+        [DataRow("float32", "float32", "s0", "vrev", 16, 9043UL, false, "float32", "sha:a1bcbc8e05c8c63127750aaa2525132f")]
+        [DataRow("float32", "float32", "s0", "vb", 16, 9044UL, false, "float32", "sha:54f7fda761508e426cd138cdc062e4b5")]
+        [DataRow("float32", "float32", "s0", "row", 16, 9045UL, false, "float32", "sha:9d2e3aa07058df33c5c0a87111f6c8e6")]
+        [DataRow("float32", "float32", "s0", "col", 16, 9046UL, false, "float32", "sha:3a5a1f20b3d91c2778300a7ee16e6df6")]
+        [DataRow("float32", "float32", "s0", "mC", 16, 9047UL, false, "float32", "sha:1f3a9693f4df8205f28917cb5d49c0f0")]
+        [DataRow("float32", "float32", "mC", "s0", 16, 9048UL, false, "float32", "sha:c33203f0e9ada61d657c37151a7e3c4b")]
+        [DataRow("float32", "float32", "s0", "mW", 16, 9049UL, false, "float32", "sha:1f890089a8611a392df1f9fe43a1484e")]
+        [DataRow("float32", "float32", "s0", "cs", 16, 9050UL, false, "float32", "sha:6cc3946cd736b7b93e1714adb6d732d4")]
+        [DataRow("float32", "float32", "v1", "row", 16, 9051UL, false, "float32", "sha:5982ebc49596fefc9b57c167077b0e56")]
+        [DataRow("float32", "float32", "col", "v1", 16, 9052UL, false, "float32", "sha:4a0916ddec5f6e7490680f52c05babfc")]
+        [DataRow("float32", "float32", "s11", "row", 16, 9053UL, false, "float32", "sha:e9969825cda414842f6b397fc1fee0d3")]
+        [DataRow("float32", "float32", "col", "s11", 16, 9054UL, false, "float32", "sha:848eb5cedf8b9fdcab6c7ccf57d7918d")]
+        [DataRow("float32", "float32", "s11", "s11", 16, 9055UL, false, "float32", "sha:ff82bf2f3b20bdde68fd7d1e2b344964")]
+        [DataRow("float32", "float32", "s0", "s0", 16, 9056UL, false, "float32", "sha:989ebdbe37c448f7dee78e5b33ab3015")]
+        [DataRow("float32", "float32", "v1", "v1", 16, 9057UL, false, "float32", "sha:c5ed84a45bdfc5bf43a2f061e529621b")]
+        [DataRow("float32", "float32", "s0", "v1", 16, 9058UL, false, "float32", "sha:97cf52318e0bc42f6acdd75573b6cbe6")]
+        [DataRow("float32", "float32", "v1", "s0", 16, 9059UL, false, "float32", "sha:e63b93d53294fe5be8daf31887ef0164")]
+        [DataRow("float32", "float32", "s0", "s11", 16, 9060UL, false, "float32", "sha:d556342abf525a9c093415c2e0c02bb1")]
+        [DataRow("float32", "float32", "s0", "v", 17, 9061UL, false, "float32", "sha:7c0bd0aad1f22a9d18f6941b8c8697cb")]
+        [DataRow("float32", "float32", "v", "s0", 17, 9062UL, false, "float32", "sha:94eeeac8eea3ffd29ea2b72eed4228f2")]
+        [DataRow("float32", "float32", "s0", "vrev", 17, 9063UL, false, "float32", "sha:b1564fe88c9990e23c8f265cd9c05c58")]
+        [DataRow("float32", "float32", "s0", "vb", 17, 9064UL, false, "float32", "sha:bf9b1826b3fbdb7545b2eaac9719c4d4")]
+        [DataRow("float32", "float32", "s0", "row", 17, 9065UL, false, "float32", "sha:85b9573a6615bcae102e947d0f6e857a")]
+        [DataRow("float32", "float32", "s0", "col", 17, 9066UL, false, "float32", "sha:3124f2a9873e75a597bd47b793276f7d")]
+        [DataRow("float32", "float32", "s0", "mC", 17, 9067UL, false, "float32", "sha:7ab175be86d170ad7408f84ff1d6ca98")]
+        [DataRow("float32", "float32", "mC", "s0", 17, 9068UL, false, "float32", "sha:c2e9d1b65316508e0d3ac604340ea8c2")]
+        [DataRow("float32", "float32", "s0", "mW", 17, 9069UL, false, "float32", "sha:419580899a44e0eb5065d53b76233e71")]
+        [DataRow("float32", "float32", "s0", "cs", 17, 9070UL, false, "float32", "sha:895d95a9d210b31abd541b31189bdc6f")]
+        [DataRow("float32", "float32", "v1", "row", 17, 9071UL, false, "float32", "sha:8f78555d040c393d1d6ca7cef84908cc")]
+        [DataRow("float32", "float32", "col", "v1", 17, 9072UL, false, "float32", "sha:f83936b672204ff0e27fd1fc27b4ddfa")]
+        [DataRow("float32", "float32", "s11", "row", 17, 9073UL, false, "float32", "sha:e25349aa4bb0b8cf7b16418cc82f1f71")]
+        [DataRow("float32", "float32", "col", "s11", 17, 9074UL, false, "float32", "sha:a020e55a9402b20bf64031ea24258de7")]
+        [DataRow("float32", "float32", "s11", "s11", 17, 9075UL, false, "float32", "sha:d6f9bb9e8b6da3339d7cbe40bd2744b2")]
+        [DataRow("float32", "float32", "s0", "s0", 17, 9076UL, false, "float32", "sha:1d9200c5ac4fe28034eb8e68ef04db87")]
+        [DataRow("float32", "float32", "v1", "v1", 17, 9077UL, false, "float32", "sha:94b75f2efa174b8b24f4660224f26279")]
+        [DataRow("float32", "float32", "s0", "v1", 17, 9078UL, false, "float32", "sha:83da7df639526bd4313942205a45e014")]
+        [DataRow("float32", "float32", "v1", "s0", 17, 9079UL, false, "float32", "sha:0c4a7bd3a1571df6c0f2f7a9e76f637e")]
+        [DataRow("float32", "float32", "s0", "s11", 17, 9080UL, false, "float32", "sha:953a6e16590cb741f5ccc5b6ba007e6b")]
+        [DataRow("float32", "float32", "s0", "v", 32, 9081UL, false, "float32", "sha:320775d51f0e29f2f4af462b391c20de")]
+        [DataRow("float32", "float32", "v", "s0", 32, 9082UL, false, "float32", "sha:0f15aa0a4089d280d16a819dc14f8b3a")]
+        [DataRow("float32", "float32", "s0", "vrev", 32, 9083UL, false, "float32", "sha:5b70f1d30efcfea00f786481a5466dc4")]
+        [DataRow("float32", "float32", "s0", "vb", 32, 9084UL, false, "float32", "sha:b093b3c99044c47bdbaf4d11510a47a1")]
+        [DataRow("float32", "float32", "s0", "row", 32, 9085UL, false, "float32", "sha:f94e7784119ed1175383e53875b01364")]
+        [DataRow("float32", "float32", "s0", "col", 32, 9086UL, false, "float32", "sha:a4a307b07de5a7585fa22f9607bfd010")]
+        [DataRow("float32", "float32", "s0", "mC", 32, 9087UL, false, "float32", "sha:1389d8a97ed6adf2fa1ec8040b134ffb")]
+        [DataRow("float32", "float32", "mC", "s0", 32, 9088UL, false, "float32", "sha:bcea1371bde592e4d963a10a9aa9f674")]
+        [DataRow("float32", "float32", "s0", "mW", 32, 9089UL, false, "float32", "sha:c85acf93918aa8184227bd048c71f88b")]
+        [DataRow("float32", "float32", "s0", "cs", 32, 9090UL, false, "float32", "sha:583540c23103a9d411064c40f4bfc435")]
+        [DataRow("float32", "float32", "v1", "row", 32, 9091UL, false, "float32", "sha:8093cf18e3ae11937e6db85e330f7f67")]
+        [DataRow("float32", "float32", "col", "v1", 32, 9092UL, false, "float32", "sha:3f47f36424474164c8c11741d639eea1")]
+        [DataRow("float32", "float32", "s11", "row", 32, 9093UL, false, "float32", "sha:772f44d6b8d5636ae4ec275adaa97edd")]
+        [DataRow("float32", "float32", "col", "s11", 32, 9094UL, false, "float32", "sha:1aaa874d050969e579a03cc2e57d87c1")]
+        [DataRow("float32", "float32", "s11", "s11", 32, 9095UL, false, "float32", "sha:dcd54d0139426f657a8f67b2c5991f2f")]
+        [DataRow("float32", "float32", "s0", "s0", 32, 9096UL, false, "float32", "sha:b4897fce3b6f471e203c93cf3b64dbfc")]
+        [DataRow("float32", "float32", "v1", "v1", 32, 9097UL, false, "float32", "sha:b7ba3b163ed7ed4b6bd6d48bebf7f47e")]
+        [DataRow("float32", "float32", "s0", "v1", 32, 9098UL, false, "float32", "sha:d9f68f92b11ebe5ba784fff29ff21549")]
+        [DataRow("float32", "float32", "v1", "s0", 32, 9099UL, false, "float32", "sha:607c8e7f1d25107b841eaa63b810a059")]
+        [DataRow("float32", "float32", "s0", "s11", 32, 9100UL, false, "float32", "sha:ded98a7f43b28a291101b6c499292d19")]
+        [DataRow("float32", "float32", "s0", "v", 33, 9101UL, false, "float32", "sha:79261db2dceabb99e873804815547a43")]
+        [DataRow("float32", "float32", "v", "s0", 33, 9102UL, false, "float32", "sha:af332b818666692c3e93aaf53e0ec391")]
+        [DataRow("float32", "float32", "s0", "vrev", 33, 9103UL, false, "float32", "sha:0e521242961bb398c7ab0a9bc6b48968")]
+        [DataRow("float32", "float32", "s0", "vb", 33, 9104UL, false, "float32", "sha:d7e1c3afb29bd99cabec24b89dd68643")]
+        [DataRow("float32", "float32", "s0", "row", 33, 9105UL, false, "float32", "sha:1c66a7fb53240645dbd94eee892349aa")]
+        [DataRow("float32", "float32", "s0", "col", 33, 9106UL, false, "float32", "sha:0c286ec4f83d09652d61810351cd2a22")]
+        [DataRow("float32", "float32", "s0", "mC", 33, 9107UL, false, "float32", "sha:7879e32ec559cf39e4f61593939e5abc")]
+        [DataRow("float32", "float32", "mC", "s0", 33, 9108UL, false, "float32", "sha:4d8c073c55af3e66d0ae95bd0b0cdd29")]
+        [DataRow("float32", "float32", "s0", "mW", 33, 9109UL, false, "float32", "sha:0e020195e96e5cd60bc305b6f45bbf42")]
+        [DataRow("float32", "float32", "s0", "cs", 33, 9110UL, false, "float32", "sha:a5e83dbcc4104157facf8b0ec0b65dbf")]
+        [DataRow("float32", "float32", "v1", "row", 33, 9111UL, false, "float32", "sha:02a949a04ecef08b4ea07962c7b062f3")]
+        [DataRow("float32", "float32", "col", "v1", 33, 9112UL, false, "float32", "sha:07dc988989a2fff20e57c3307e4f6b8e")]
+        [DataRow("float32", "float32", "s11", "row", 33, 9113UL, false, "float32", "sha:8982fe6341e0aef62a6f747a01ec858c")]
+        [DataRow("float32", "float32", "col", "s11", 33, 9114UL, false, "float32", "sha:8f5be7e6e869bf90a5ebbb3629c7bfea")]
+        [DataRow("float32", "float32", "s11", "s11", 33, 9115UL, false, "float32", "sha:aee3d468d5bcbd13b6203fc1ff747468")]
+        [DataRow("float32", "float32", "s0", "s0", 33, 9116UL, false, "float32", "sha:4ae0e2b6b8b5f69614ef7564aab846f5")]
+        [DataRow("float32", "float32", "v1", "v1", 33, 9117UL, false, "float32", "sha:1409b8494e9794b1b3fb49b179cfdd54")]
+        [DataRow("float32", "float32", "s0", "v1", 33, 9118UL, false, "float32", "sha:a5893cda4659aabf06805b977a1c6dfc")]
+        [DataRow("float32", "float32", "v1", "s0", 33, 9119UL, false, "float32", "sha:eab29223dfb47974ca037441fd099ff5")]
+        [DataRow("float32", "float32", "s0", "s11", 33, 9120UL, false, "float32", "sha:34747edba3b9d49187ec88c9178a99b8")]
+        [DataRow("float32", "float32", "s0", "v", 40, 9121UL, false, "float32", "sha:35f4d70c6795faa09ed5d8d4970a7dd0")]
+        [DataRow("float32", "float32", "v", "s0", 40, 9122UL, false, "float32", "sha:7506d723234fdedd5efcd2032c5a5f3d")]
+        [DataRow("float32", "float32", "s0", "vrev", 40, 9123UL, false, "float32", "sha:3fc361f66c3f37622238ae282f6ccbf6")]
+        [DataRow("float32", "float32", "s0", "vb", 40, 9124UL, false, "float32", "sha:c18730ab132a1f025afd9c41eb4d5075")]
+        [DataRow("float32", "float32", "s0", "row", 40, 9125UL, false, "float32", "sha:afd80fd9ea0ba4419a1059519c4f8941")]
+        [DataRow("float32", "float32", "s0", "col", 40, 9126UL, false, "float32", "sha:0478573dea4bac46edb191a502033e69")]
+        [DataRow("float32", "float32", "s0", "mC", 40, 9127UL, false, "float32", "sha:52f1247fb32fd28ba16a6f801a017812")]
+        [DataRow("float32", "float32", "mC", "s0", 40, 9128UL, false, "float32", "sha:701aa1d0a2919cca766f92258e628174")]
+        [DataRow("float32", "float32", "s0", "mW", 40, 9129UL, false, "float32", "sha:501f7f197655c1906a6cca3787d82e44")]
+        [DataRow("float32", "float32", "s0", "cs", 40, 9130UL, false, "float32", "sha:127fec8c188af41f9b9e28088df6c6a9")]
+        [DataRow("float32", "float32", "v1", "row", 40, 9131UL, false, "float32", "sha:305c1e868cf2fe3c326b25e6ef3ab4e6")]
+        [DataRow("float32", "float32", "col", "v1", 40, 9132UL, false, "float32", "sha:303ee1681804ff3559ccd044e13c8881")]
+        [DataRow("float32", "float32", "s11", "row", 40, 9133UL, false, "float32", "sha:fc97832babadacfa901dbc612ae288aa")]
+        [DataRow("float32", "float32", "col", "s11", 40, 9134UL, false, "float32", "sha:0f429eb4513d61507cacecad9517d288")]
+        [DataRow("float32", "float32", "s11", "s11", 40, 9135UL, false, "float32", "sha:258638f4a73015c5713014fe6b9c7ac5")]
+        [DataRow("float32", "float32", "s0", "s0", 40, 9136UL, false, "float32", "sha:d6f88d460ee5bd04a1c107d8421d642a")]
+        [DataRow("float32", "float32", "v1", "v1", 40, 9137UL, false, "float32", "sha:398244a105b679d0755d797a83be6717")]
+        [DataRow("float32", "float32", "s0", "v1", 40, 9138UL, false, "float32", "sha:a4cfeec0e4b677dce283eb40a1f13421")]
+        [DataRow("float32", "float32", "v1", "s0", 40, 9139UL, false, "float32", "sha:93a19d951f9098fc1081e7bf3a793d54")]
+        [DataRow("float32", "float32", "s0", "s11", 40, 9140UL, false, "float32", "sha:2b0bd0b68f4e3edbfabf2e497e907fdb")]
+        [DataRow("float32", "float32", "s0", "v", 17, 9141UL, true, "float32", "sha:fd080c346aa22b000bd4b1abd4268c3e")]
+        [DataRow("float32", "float32", "v", "s0", 17, 9142UL, true, "float32", "sha:902fb01e22043f8e48e786700054fb56")]
+        [DataRow("float32", "float32", "s0", "mW", 17, 9143UL, true, "float32", "sha:ec53af8c918bb7727e2e4cc2da2b003c")]
+        [DataRow("float32", "float32", "s0", "mC", 17, 9144UL, true, "float32", "sha:a9ccf54cafd3184e55c86ca3a7762fe4")]
+        [DataRow("float32", "float32", "s11", "row", 17, 9145UL, true, "float32", "sha:a4f6c784ad0188caf93b00aba281abc8")]
+        [DataRow("float32", "float32", "s0", "cs", 17, 9146UL, true, "float32", "sha:20bdc081eef0f9158f9d4ab7b21fe96e")]
+        [DataRow("float32", "float32", "s0", "v", 40, 9147UL, true, "float32", "sha:6e4c2c22fb0215fcb72539b81b97eae5")]
+        [DataRow("float32", "float32", "v", "s0", 40, 9148UL, true, "float32", "sha:17d2a8ccac8301cb1a191ddc01905033")]
+        [DataRow("float32", "float32", "s0", "mW", 40, 9149UL, true, "float32", "sha:b72006c3cbf2165508f61fa798e05a66")]
+        [DataRow("float32", "float32", "s0", "mC", 40, 9150UL, true, "float32", "sha:4be4b37c9a647c91e741e9e8dcae5c84")]
+        [DataRow("float32", "float32", "s11", "row", 40, 9151UL, true, "float32", "sha:0942a40e8c2b188872f5859ccdce82ea")]
+        [DataRow("float32", "float32", "s0", "cs", 40, 9152UL, true, "float32", "sha:d08f451d2c0980d955e0917daf64dddd")]
+        [DataRow("float64", "float64", "s0", "v", 2, 9153UL, false, "float64", "sha:64d300265dde3bf3823d24f7df19c888")]
+        [DataRow("float64", "float64", "v", "s0", 2, 9154UL, false, "float64", "sha:aa02acf3e9490c7149994461cbc3e521")]
+        [DataRow("float64", "float64", "s0", "vrev", 2, 9155UL, false, "float64", "sha:191502c2456a044acd9e543204ade6d1")]
+        [DataRow("float64", "float64", "s0", "vb", 2, 9156UL, false, "float64", "sha:5833cefcaa915d5aeb3ad23347c95bb0")]
+        [DataRow("float64", "float64", "s0", "row", 2, 9157UL, false, "float64", "sha:9e04f46ff36e1e8e4536cd7e99006275")]
+        [DataRow("float64", "float64", "s0", "col", 2, 9158UL, false, "float64", "sha:02aaca09964f59dd0171cda14eb0b8f8")]
+        [DataRow("float64", "float64", "s0", "mC", 2, 9159UL, false, "float64", "sha:5be83fb48992a03b9ace9d89d251a792")]
+        [DataRow("float64", "float64", "mC", "s0", 2, 9160UL, false, "float64", "sha:2f068d31189941795862cdf89418b046")]
+        [DataRow("float64", "float64", "s0", "mW", 2, 9161UL, false, "float64", "sha:98e7afc0ed771cb80089b996c60a2509")]
+        [DataRow("float64", "float64", "s0", "cs", 2, 9162UL, false, "float64", "sha:644f855539fb22a2fae0887ae46ee898")]
+        [DataRow("float64", "float64", "v1", "row", 2, 9163UL, false, "float64", "sha:57995076b0b8601fbd8b386556725e27")]
+        [DataRow("float64", "float64", "col", "v1", 2, 9164UL, false, "float64", "sha:31307228cf15e6080e1ce2c121b8e839")]
+        [DataRow("float64", "float64", "s11", "row", 2, 9165UL, false, "float64", "sha:6620f6670dfa06811019a843dfa48579")]
+        [DataRow("float64", "float64", "col", "s11", 2, 9166UL, false, "float64", "sha:4f448bd0e6b2664537019bbaea6bbbf8")]
+        [DataRow("float64", "float64", "s11", "s11", 2, 9167UL, false, "float64", "sha:2d4cef85e1e9e08b6329c46da245e640")]
+        [DataRow("float64", "float64", "s0", "s0", 2, 9168UL, false, "float64", "sha:c35e698dbbdb36e15a6579f387e85ce9")]
+        [DataRow("float64", "float64", "v1", "v1", 2, 9169UL, false, "float64", "sha:940be2ac46b8b09d15fa0cd86d642fee")]
+        [DataRow("float64", "float64", "s0", "v1", 2, 9170UL, false, "float64", "sha:df1d848afcef85270906191bbccf96fe")]
+        [DataRow("float64", "float64", "v1", "s0", 2, 9171UL, false, "float64", "sha:7768512aeb11716e22be933a8dcd46ae")]
+        [DataRow("float64", "float64", "s0", "s11", 2, 9172UL, false, "float64", "sha:bcbb72fa67b8b51f49ead836f089d53f")]
+        [DataRow("float64", "float64", "s0", "v", 15, 9173UL, false, "float64", "sha:cd41cec6e63901a34af00630cb443475")]
+        [DataRow("float64", "float64", "v", "s0", 15, 9174UL, false, "float64", "sha:7d8f2b0df6c9a546e779e186543ee62d")]
+        [DataRow("float64", "float64", "s0", "vrev", 15, 9175UL, false, "float64", "sha:43286705264b3b28b42ed6035fcab2a2")]
+        [DataRow("float64", "float64", "s0", "vb", 15, 9176UL, false, "float64", "sha:2608df4f556c062ae9e950c58232f955")]
+        [DataRow("float64", "float64", "s0", "row", 15, 9177UL, false, "float64", "sha:c134306367d7765d632317b820ca8d0f")]
+        [DataRow("float64", "float64", "s0", "col", 15, 9178UL, false, "float64", "sha:6e85bf44e376f741ed984789ad1afde0")]
+        [DataRow("float64", "float64", "s0", "mC", 15, 9179UL, false, "float64", "sha:52d7ad6eb3309cfad99d1398b13d4f16")]
+        [DataRow("float64", "float64", "mC", "s0", 15, 9180UL, false, "float64", "sha:73022b35a57d748870fa835ea86b604a")]
+        [DataRow("float64", "float64", "s0", "mW", 15, 9181UL, false, "float64", "sha:fa488b0d46fdb397b5f00a307b964e89")]
+        [DataRow("float64", "float64", "s0", "cs", 15, 9182UL, false, "float64", "sha:34e3065397992c504c3093bff3a79e11")]
+        [DataRow("float64", "float64", "v1", "row", 15, 9183UL, false, "float64", "sha:5511412f14c4c0076de0415d3ce36d05")]
+        [DataRow("float64", "float64", "col", "v1", 15, 9184UL, false, "float64", "sha:ac773ee7de601580e9ccbbd4202f6c3f")]
+        [DataRow("float64", "float64", "s11", "row", 15, 9185UL, false, "float64", "sha:ca2eda5abe9f1b2b5908d51bda135cd2")]
+        [DataRow("float64", "float64", "col", "s11", 15, 9186UL, false, "float64", "sha:867655b7516a11342abbedbc310a01a9")]
+        [DataRow("float64", "float64", "s11", "s11", 15, 9187UL, false, "float64", "sha:05af2c909c3ba6a03805baca1ee07c60")]
+        [DataRow("float64", "float64", "s0", "s0", 15, 9188UL, false, "float64", "sha:86c7f504cbc3f49b3ae8052146053786")]
+        [DataRow("float64", "float64", "v1", "v1", 15, 9189UL, false, "float64", "sha:d96643a4d7495b75421cf1968670eada")]
+        [DataRow("float64", "float64", "s0", "v1", 15, 9190UL, false, "float64", "sha:3a503b807eb76f1ec50ee11183007f47")]
+        [DataRow("float64", "float64", "v1", "s0", 15, 9191UL, false, "float64", "sha:7c5a3aabc3b564591ec9f2f479ae77d2")]
+        [DataRow("float64", "float64", "s0", "s11", 15, 9192UL, false, "float64", "sha:54396b7e75d2029ad83db2e4f90e374d")]
+        [DataRow("float64", "float64", "s0", "v", 16, 9193UL, false, "float64", "sha:b991ffb5f38adf7b16f34d8a7c1b0bd4")]
+        [DataRow("float64", "float64", "v", "s0", 16, 9194UL, false, "float64", "sha:12528ca68be49d4e6bade324dcc4c833")]
+        [DataRow("float64", "float64", "s0", "vrev", 16, 9195UL, false, "float64", "sha:f4a13a85136bf362930ea2e0d6b88643")]
+        [DataRow("float64", "float64", "s0", "vb", 16, 9196UL, false, "float64", "sha:067eb14c6fc6939d75a631b516649383")]
+        [DataRow("float64", "float64", "s0", "row", 16, 9197UL, false, "float64", "sha:580769106a41a58e2b1aa6b6318fa97f")]
+        [DataRow("float64", "float64", "s0", "col", 16, 9198UL, false, "float64", "sha:18c70644b6af64406eae8c8972a99f93")]
+        [DataRow("float64", "float64", "s0", "mC", 16, 9199UL, false, "float64", "sha:07b52e439d7aa23b28d6eb703a1d12ce")]
+        [DataRow("float64", "float64", "mC", "s0", 16, 9200UL, false, "float64", "sha:d3d376896b2f40378fbcab1cd9b80850")]
+        [DataRow("float64", "float64", "s0", "mW", 16, 9201UL, false, "float64", "sha:129d22902aba3d57da74758dba9a5d3b")]
+        [DataRow("float64", "float64", "s0", "cs", 16, 9202UL, false, "float64", "sha:7f51dd5dd70e4fd27615ee1b2a3776be")]
+        [DataRow("float64", "float64", "v1", "row", 16, 9203UL, false, "float64", "sha:ddb23079c9f93576b2dbf2812eea86b8")]
+        [DataRow("float64", "float64", "col", "v1", 16, 9204UL, false, "float64", "sha:8641e244f608ddd3398ba247721e346a")]
+        [DataRow("float64", "float64", "s11", "row", 16, 9205UL, false, "float64", "sha:5f1baf9bd53f7db53f7de6bd3ecfd983")]
+        [DataRow("float64", "float64", "col", "s11", 16, 9206UL, false, "float64", "sha:d85d9571d32443b54e6bc245969c8560")]
+        [DataRow("float64", "float64", "s11", "s11", 16, 9207UL, false, "float64", "sha:f285f8dba62d258a38b8527d53af0a61")]
+        [DataRow("float64", "float64", "s0", "s0", 16, 9208UL, false, "float64", "sha:60f8ece8cf988cb1e28ced08ab687445")]
+        [DataRow("float64", "float64", "v1", "v1", 16, 9209UL, false, "float64", "sha:85ef5a9fa0bc4105e3e254a3aa117394")]
+        [DataRow("float64", "float64", "s0", "v1", 16, 9210UL, false, "float64", "sha:f7cf6a5b90696f1bae7a76aaec4c482d")]
+        [DataRow("float64", "float64", "v1", "s0", 16, 9211UL, false, "float64", "sha:12b5591b479fe9853c1b6a7d228e9d78")]
+        [DataRow("float64", "float64", "s0", "s11", 16, 9212UL, false, "float64", "sha:807bf75a506846a8782e12db634c34e6")]
+        [DataRow("float64", "float64", "s0", "v", 17, 9213UL, false, "float64", "sha:dc9eb667c7c37b4a25df4bae6531f5c5")]
+        [DataRow("float64", "float64", "v", "s0", 17, 9214UL, false, "float64", "sha:4364d03184d9c80416073ff78e72e59b")]
+        [DataRow("float64", "float64", "s0", "vrev", 17, 9215UL, false, "float64", "sha:30f2d2f6b57d5ed5fc94823f70a7274c")]
+        [DataRow("float64", "float64", "s0", "vb", 17, 9216UL, false, "float64", "sha:3c430fcc0be5cd7cc3be5dba8f071fc5")]
+        [DataRow("float64", "float64", "s0", "row", 17, 9217UL, false, "float64", "sha:d26dd984d0488d944f04ee21aecec3b7")]
+        [DataRow("float64", "float64", "s0", "col", 17, 9218UL, false, "float64", "sha:042814b75c28bb2e3f2f9af7bde4b4a1")]
+        [DataRow("float64", "float64", "s0", "mC", 17, 9219UL, false, "float64", "sha:ea5caaf92e2c8b4ff3be2451bca1ec5a")]
+        [DataRow("float64", "float64", "mC", "s0", 17, 9220UL, false, "float64", "sha:5e40544e18066fe79f76661e06f44aef")]
+        [DataRow("float64", "float64", "s0", "mW", 17, 9221UL, false, "float64", "sha:04ac058130d10378fc99df15e80f2931")]
+        [DataRow("float64", "float64", "s0", "cs", 17, 9222UL, false, "float64", "sha:8eff14e0f94c802fbcfd9ee66ecfc55c")]
+        [DataRow("float64", "float64", "v1", "row", 17, 9223UL, false, "float64", "sha:72e6173eea940c402e00a78995e75b8d")]
+        [DataRow("float64", "float64", "col", "v1", 17, 9224UL, false, "float64", "sha:85a330b445e42c3a5401c376394b0baa")]
+        [DataRow("float64", "float64", "s11", "row", 17, 9225UL, false, "float64", "sha:0a283c99d628ca25f7901d8b10b4b6c2")]
+        [DataRow("float64", "float64", "col", "s11", 17, 9226UL, false, "float64", "sha:0cb1e707d7eb959b6ae99111742697d9")]
+        [DataRow("float64", "float64", "s11", "s11", 17, 9227UL, false, "float64", "sha:decb257f612c1acec6d1ec083c98725a")]
+        [DataRow("float64", "float64", "s0", "s0", 17, 9228UL, false, "float64", "sha:828cf6cecebb7fd8b538585716e8c43c")]
+        [DataRow("float64", "float64", "v1", "v1", 17, 9229UL, false, "float64", "sha:fd624ef9fa04e6cbe689429929f4d2f5")]
+        [DataRow("float64", "float64", "s0", "v1", 17, 9230UL, false, "float64", "sha:eaaad76b7713744482eb59a17de1cb11")]
+        [DataRow("float64", "float64", "v1", "s0", 17, 9231UL, false, "float64", "sha:d541c7546525760ee4e51654cf6591c8")]
+        [DataRow("float64", "float64", "s0", "s11", 17, 9232UL, false, "float64", "sha:1e0f334cfad7207545437fdb75d5daca")]
+        [DataRow("float64", "float64", "s0", "v", 32, 9233UL, false, "float64", "sha:67bc8a81d5be6af9c22abd64c9b1a6f8")]
+        [DataRow("float64", "float64", "v", "s0", 32, 9234UL, false, "float64", "sha:71caba9ab4ad8eed1ea27a6c675d9d51")]
+        [DataRow("float64", "float64", "s0", "vrev", 32, 9235UL, false, "float64", "sha:17c88991999fe4fa005f1580ea9bdb7e")]
+        [DataRow("float64", "float64", "s0", "vb", 32, 9236UL, false, "float64", "sha:4c1b62ac8379fc47f978524cd8814f5e")]
+        [DataRow("float64", "float64", "s0", "row", 32, 9237UL, false, "float64", "sha:fcc5f317af27072e01835637edcc894c")]
+        [DataRow("float64", "float64", "s0", "col", 32, 9238UL, false, "float64", "sha:c716994a9196740756995fbdacf8cb9c")]
+        [DataRow("float64", "float64", "s0", "mC", 32, 9239UL, false, "float64", "sha:7366076e2004ef07e2d9de67c8e7627a")]
+        [DataRow("float64", "float64", "mC", "s0", 32, 9240UL, false, "float64", "sha:f414901a121a8ba02b3c9e6c3d74ab2c")]
+        [DataRow("float64", "float64", "s0", "mW", 32, 9241UL, false, "float64", "sha:80b07e44e21b5ce76db1e22d3406f20e")]
+        [DataRow("float64", "float64", "s0", "cs", 32, 9242UL, false, "float64", "sha:d653282de6d439058ad84d51c14034a6")]
+        [DataRow("float64", "float64", "v1", "row", 32, 9243UL, false, "float64", "sha:bba48dfa13d696519dd70ff6bd8cddb5")]
+        [DataRow("float64", "float64", "col", "v1", 32, 9244UL, false, "float64", "sha:66b56bdb4a6c92386dd1c5f611cdf957")]
+        [DataRow("float64", "float64", "s11", "row", 32, 9245UL, false, "float64", "sha:a025af0efd2204230367a260e7378677")]
+        [DataRow("float64", "float64", "col", "s11", 32, 9246UL, false, "float64", "sha:fd8d281f4396a85d710389199b70ba82")]
+        [DataRow("float64", "float64", "s11", "s11", 32, 9247UL, false, "float64", "sha:f23df7f5e8a365c8ba747688356b6fc0")]
+        [DataRow("float64", "float64", "s0", "s0", 32, 9248UL, false, "float64", "sha:a6e07433e3734ece03a07cb31f216383")]
+        [DataRow("float64", "float64", "v1", "v1", 32, 9249UL, false, "float64", "sha:24afa91a44b9351cdf568ed2f37690c4")]
+        [DataRow("float64", "float64", "s0", "v1", 32, 9250UL, false, "float64", "sha:e61239c0c64788e949db8aec4cec5951")]
+        [DataRow("float64", "float64", "v1", "s0", 32, 9251UL, false, "float64", "sha:fbff4b4e8d231fddde8f9f96e73e8484")]
+        [DataRow("float64", "float64", "s0", "s11", 32, 9252UL, false, "float64", "sha:926ad86d6167b56f783539f036f7ea0b")]
+        [DataRow("float64", "float64", "s0", "v", 33, 9253UL, false, "float64", "sha:a001567ab8b49d2974e8540a4313aaf8")]
+        [DataRow("float64", "float64", "v", "s0", 33, 9254UL, false, "float64", "sha:8eb26a9de98c014a025ff349c40884a2")]
+        [DataRow("float64", "float64", "s0", "vrev", 33, 9255UL, false, "float64", "sha:7b053d247866c8f220fd03c724dedcc3")]
+        [DataRow("float64", "float64", "s0", "vb", 33, 9256UL, false, "float64", "sha:168a8fd4868a3e79dfeb7b12452bf31d")]
+        [DataRow("float64", "float64", "s0", "row", 33, 9257UL, false, "float64", "sha:aa6394420aa213073649c7fb8247f2a2")]
+        [DataRow("float64", "float64", "s0", "col", 33, 9258UL, false, "float64", "sha:a5fa17085a0a76b6ddffc8823a9a398a")]
+        [DataRow("float64", "float64", "s0", "mC", 33, 9259UL, false, "float64", "sha:e3f39db458a759bbddd943084cbad6e4")]
+        [DataRow("float64", "float64", "mC", "s0", 33, 9260UL, false, "float64", "sha:c225e6dec50452c2980f5e1dbe95c876")]
+        [DataRow("float64", "float64", "s0", "mW", 33, 9261UL, false, "float64", "sha:92476c5e25a8f9a5935defb1a6bc4acf")]
+        [DataRow("float64", "float64", "s0", "cs", 33, 9262UL, false, "float64", "sha:f9777d3ced71bd19d0254a20bae30084")]
+        [DataRow("float64", "float64", "v1", "row", 33, 9263UL, false, "float64", "sha:5fec346ee35923386a77ef0fd87382ad")]
+        [DataRow("float64", "float64", "col", "v1", 33, 9264UL, false, "float64", "sha:fa153dd349d34bafcf9f2f9f7d55f306")]
+        [DataRow("float64", "float64", "s11", "row", 33, 9265UL, false, "float64", "sha:9c4dc4fb1627499f027fc908a0874f3a")]
+        [DataRow("float64", "float64", "col", "s11", 33, 9266UL, false, "float64", "sha:1ce0f039e21650e55429f91c5fd55bb1")]
+        [DataRow("float64", "float64", "s11", "s11", 33, 9267UL, false, "float64", "sha:608c351b5ac0e87e3de3a124fab868c6")]
+        [DataRow("float64", "float64", "s0", "s0", 33, 9268UL, false, "float64", "sha:41608598c71c30eb83027890668802f6")]
+        [DataRow("float64", "float64", "v1", "v1", 33, 9269UL, false, "float64", "sha:7e7f3433b795dccb356372e3acb7cd6d")]
+        [DataRow("float64", "float64", "s0", "v1", 33, 9270UL, false, "float64", "sha:c64885e6a0746707fbfe0d0fa2480f5d")]
+        [DataRow("float64", "float64", "v1", "s0", 33, 9271UL, false, "float64", "sha:66498c4d39fb1fce39bf895f601a1030")]
+        [DataRow("float64", "float64", "s0", "s11", 33, 9272UL, false, "float64", "sha:52f0f689e4f6b2f7a13a56c6b9a72427")]
+        [DataRow("float64", "float64", "s0", "v", 40, 9273UL, false, "float64", "sha:9592caa8f1aa5cadcebf918f42fb321d")]
+        [DataRow("float64", "float64", "v", "s0", 40, 9274UL, false, "float64", "sha:0f95c996611a6b3aa83cacbc2c44f17c")]
+        [DataRow("float64", "float64", "s0", "vrev", 40, 9275UL, false, "float64", "sha:2bdf798c1fc1304356f2cfe60316bf3c")]
+        [DataRow("float64", "float64", "s0", "vb", 40, 9276UL, false, "float64", "sha:c5efda7310c8b7abf83d6e29c8aa8abe")]
+        [DataRow("float64", "float64", "s0", "row", 40, 9277UL, false, "float64", "sha:53146d7ad3848fd1f259fc17b67cfb1f")]
+        [DataRow("float64", "float64", "s0", "col", 40, 9278UL, false, "float64", "sha:a7af82e3753290872fa17cdbc01819bc")]
+        [DataRow("float64", "float64", "s0", "mC", 40, 9279UL, false, "float64", "sha:289347b7e1d81c6beb5dd64b8ed99d41")]
+        [DataRow("float64", "float64", "mC", "s0", 40, 9280UL, false, "float64", "sha:97b9c8299fdc8ec266dec1a9eeb6b22a")]
+        [DataRow("float64", "float64", "s0", "mW", 40, 9281UL, false, "float64", "sha:0963e169c83ee611bc66daa362ef2c66")]
+        [DataRow("float64", "float64", "s0", "cs", 40, 9282UL, false, "float64", "sha:fd94d5b1c974bb809e788bbe0d15f027")]
+        [DataRow("float64", "float64", "v1", "row", 40, 9283UL, false, "float64", "sha:b4ac9da1290135143b8c173b60a9ffec")]
+        [DataRow("float64", "float64", "col", "v1", 40, 9284UL, false, "float64", "sha:01d0083893f26ffe9172410ecc268169")]
+        [DataRow("float64", "float64", "s11", "row", 40, 9285UL, false, "float64", "sha:0d743f52b2db92499bd821b6c344d51b")]
+        [DataRow("float64", "float64", "col", "s11", 40, 9286UL, false, "float64", "sha:b16d1f292355cd1a30524bc5130bdbbb")]
+        [DataRow("float64", "float64", "s11", "s11", 40, 9287UL, false, "float64", "sha:32134eeb66dac669323ba4775d6eb3fd")]
+        [DataRow("float64", "float64", "s0", "s0", 40, 9288UL, false, "float64", "sha:31249643c407b123c07c86a0edc62749")]
+        [DataRow("float64", "float64", "v1", "v1", 40, 9289UL, false, "float64", "sha:0bbbd194f80a69212995b50eae515b6a")]
+        [DataRow("float64", "float64", "s0", "v1", 40, 9290UL, false, "float64", "sha:37a493c6fa38590abd61d0dfa408e019")]
+        [DataRow("float64", "float64", "v1", "s0", 40, 9291UL, false, "float64", "sha:f8a7313d6113ad3eeda9b3153c9fddcd")]
+        [DataRow("float64", "float64", "s0", "s11", 40, 9292UL, false, "float64", "sha:3dee996934f8791e790540d6650f702b")]
+        [DataRow("float64", "float64", "s0", "v", 17, 9293UL, true, "float64", "sha:f31dc31b42c629be0baae5d98dd6aefc")]
+        [DataRow("float64", "float64", "v", "s0", 17, 9294UL, true, "float64", "sha:07e77df32c9bd856c55641665923a64f")]
+        [DataRow("float64", "float64", "s0", "mW", 17, 9295UL, true, "float64", "sha:e43f755f540dce1420798138b3d9e482")]
+        [DataRow("float64", "float64", "s0", "mC", 17, 9296UL, true, "float64", "sha:7671b7c4558cad13ef84f1bbe10dae03")]
+        [DataRow("float64", "float64", "s11", "row", 17, 9297UL, true, "float64", "sha:dccb0a3be7a27399a4cc8bd1dee5b026")]
+        [DataRow("float64", "float64", "s0", "cs", 17, 9298UL, true, "float64", "sha:92b53e7ee4702ef907257c65f4a04f4e")]
+        [DataRow("float64", "float64", "s0", "v", 40, 9299UL, true, "float64", "sha:73253b6cc17eff28c050aaf794291779")]
+        [DataRow("float64", "float64", "v", "s0", 40, 9300UL, true, "float64", "sha:07560f0af4e4dab2f0b77aba0c3e3c9b")]
+        [DataRow("float64", "float64", "s0", "mW", 40, 9301UL, true, "float64", "sha:b11481102471bbc219a4f229254c2cb6")]
+        [DataRow("float64", "float64", "s0", "mC", 40, 9302UL, true, "float64", "sha:3e5c45eee05f1242ae3d310afca10701")]
+        [DataRow("float64", "float64", "s11", "row", 40, 9303UL, true, "float64", "sha:47cf8ab21379e044b72fc17577f2b345")]
+        [DataRow("float64", "float64", "s0", "cs", 40, 9304UL, true, "float64", "sha:3510c542a6271a56fa0b2de7931f96fd")]
+        [DataRow("complex128", "complex128", "s0", "v", 2, 9305UL, false, "complex128", "sha:66b01e039b3110ef7c31ea349aa71c1a")]
+        [DataRow("complex128", "complex128", "v", "s0", 2, 9306UL, false, "complex128", "sha:eb641e8926be9af37ac36b908a2138d7")]
+        [DataRow("complex128", "complex128", "s0", "vrev", 2, 9307UL, false, "complex128", "sha:e0cb4ec3115329576a68c3203234bf43")]
+        [DataRow("complex128", "complex128", "s0", "vb", 2, 9308UL, false, "complex128", "sha:5846ed55e8b3ceef3b21d8e2dd9708eb")]
+        [DataRow("complex128", "complex128", "s0", "row", 2, 9309UL, false, "complex128", "sha:430aa0e3a7f8d761b8bfb22ba8f69962")]
+        [DataRow("complex128", "complex128", "s0", "col", 2, 9310UL, false, "complex128", "sha:19ff110b20975e8e600c19e735982f5e")]
+        [DataRow("complex128", "complex128", "s0", "mC", 2, 9311UL, false, "complex128", "sha:9f020cbd0d3a767461a344bb42f6caed")]
+        [DataRow("complex128", "complex128", "mC", "s0", 2, 9312UL, false, "complex128", "sha:d52dc032b65d9ec68b823a55ab746a5f")]
+        [DataRow("complex128", "complex128", "s0", "mW", 2, 9313UL, false, "complex128", "sha:32822626703c611acbf000ff5b773fa4")]
+        [DataRow("complex128", "complex128", "s0", "cs", 2, 9314UL, false, "complex128", "sha:c1bb9174ae369c20401eeeb6237b00e1")]
+        [DataRow("complex128", "complex128", "v1", "row", 2, 9315UL, false, "complex128", "sha:c5dc1402397f90e5e9d88edab04d7135")]
+        [DataRow("complex128", "complex128", "col", "v1", 2, 9316UL, false, "complex128", "sha:78c2e219cc3a3b9bef48372f321b2c75")]
+        [DataRow("complex128", "complex128", "s11", "row", 2, 9317UL, false, "complex128", "sha:eaea90ddc9939928ce0cb2252be225ff")]
+        [DataRow("complex128", "complex128", "col", "s11", 2, 9318UL, false, "complex128", "sha:7af72e3f6fe8cf749e960dcf7471053c")]
+        [DataRow("complex128", "complex128", "s11", "s11", 2, 9319UL, false, "complex128", "sha:52e4e4bdba8835f2dd5dcc6a5d813a1a")]
+        [DataRow("complex128", "complex128", "s0", "s0", 2, 9320UL, false, "complex128", "sha:8c6832b0d774afdf8312727677e23850")]
+        [DataRow("complex128", "complex128", "v1", "v1", 2, 9321UL, false, "complex128", "sha:ca3ddb30270430eb4d9996bb278369c5")]
+        [DataRow("complex128", "complex128", "s0", "v1", 2, 9322UL, false, "complex128", "sha:2c1a66d7fa5bc7ee84eb50f8b5378473")]
+        [DataRow("complex128", "complex128", "v1", "s0", 2, 9323UL, false, "complex128", "sha:af3215f6f0d9b3863ef3b7ad4b2c9ad2")]
+        [DataRow("complex128", "complex128", "s0", "s11", 2, 9324UL, false, "complex128", "sha:ec64df2576156afdeec11798f266f364")]
+        [DataRow("complex128", "complex128", "s0", "v", 15, 9325UL, false, "complex128", "sha:61f9084ec3a49749eed4e8be8978abd2")]
+        [DataRow("complex128", "complex128", "v", "s0", 15, 9326UL, false, "complex128", "sha:e2b9c69bd0b3bcc692da58d867c57d28")]
+        [DataRow("complex128", "complex128", "s0", "vrev", 15, 9327UL, false, "complex128", "sha:4ce2ef65c877bc4fcf271a0709d4f900")]
+        [DataRow("complex128", "complex128", "s0", "vb", 15, 9328UL, false, "complex128", "sha:30a6be8f0f01976266426f0b45491617")]
+        [DataRow("complex128", "complex128", "s0", "row", 15, 9329UL, false, "complex128", "sha:b573f437f7174fabb4975dc9b477dd33")]
+        [DataRow("complex128", "complex128", "s0", "col", 15, 9330UL, false, "complex128", "sha:bea1070e29282ae3c848ad8040570012")]
+        [DataRow("complex128", "complex128", "s0", "mC", 15, 9331UL, false, "complex128", "sha:24a95d228fcbd15fa64b038610bfcbfb")]
+        [DataRow("complex128", "complex128", "mC", "s0", 15, 9332UL, false, "complex128", "sha:a2a5417f3b1436a5a4bd7341d9e79bbc")]
+        [DataRow("complex128", "complex128", "s0", "mW", 15, 9333UL, false, "complex128", "sha:178e0e164c6af9d03db3dfbac624e501")]
+        [DataRow("complex128", "complex128", "s0", "cs", 15, 9334UL, false, "complex128", "sha:1ebac4ff0738487385e8baeb9a3f9f82")]
+        [DataRow("complex128", "complex128", "v1", "row", 15, 9335UL, false, "complex128", "sha:714ea02c1a188ff8a03f1e6fc426e21c")]
+        [DataRow("complex128", "complex128", "col", "v1", 15, 9336UL, false, "complex128", "sha:e257eed8355a5fdd2e7cd68255ff2566")]
+        [DataRow("complex128", "complex128", "s11", "row", 15, 9337UL, false, "complex128", "sha:4d0b968b225c921f8603dc063846c30f")]
+        [DataRow("complex128", "complex128", "col", "s11", 15, 9338UL, false, "complex128", "sha:fabf179be01fe63d622856070e2b8138")]
+        [DataRow("complex128", "complex128", "s11", "s11", 15, 9339UL, false, "complex128", "sha:fbb0fbb20effeae897b80be3db71cd9e")]
+        [DataRow("complex128", "complex128", "s0", "s0", 15, 9340UL, false, "complex128", "sha:42271f9c0ec8e0ece56b021c6186bbeb")]
+        [DataRow("complex128", "complex128", "v1", "v1", 15, 9341UL, false, "complex128", "sha:52185a1427dd43da9aa88b05a5bf1181")]
+        [DataRow("complex128", "complex128", "s0", "v1", 15, 9342UL, false, "complex128", "sha:c1d91230c31047b83579e4614c5dec3a")]
+        [DataRow("complex128", "complex128", "v1", "s0", 15, 9343UL, false, "complex128", "sha:71b6a936c54a4ee3e3bb66b1f0808e6a")]
+        [DataRow("complex128", "complex128", "s0", "s11", 15, 9344UL, false, "complex128", "sha:db135906d34e24fc6dcab81ae129a702")]
+        [DataRow("complex128", "complex128", "s0", "v", 16, 9345UL, false, "complex128", "sha:c5b0fc9ee6817451976f8be12cb03631")]
+        [DataRow("complex128", "complex128", "v", "s0", 16, 9346UL, false, "complex128", "sha:88855366ca077a83b4fec2f214f2252e")]
+        [DataRow("complex128", "complex128", "s0", "vrev", 16, 9347UL, false, "complex128", "sha:7a6c7a352a97a46cead0d8319e04bc5a")]
+        [DataRow("complex128", "complex128", "s0", "vb", 16, 9348UL, false, "complex128", "sha:9dca93d8668a8913be09865edf14e880")]
+        [DataRow("complex128", "complex128", "s0", "row", 16, 9349UL, false, "complex128", "sha:a5eeb670f1a3a587057a16fb41122a4b")]
+        [DataRow("complex128", "complex128", "s0", "col", 16, 9350UL, false, "complex128", "sha:efe2c3f632573bf944142499b13ae426")]
+        [DataRow("complex128", "complex128", "s0", "mC", 16, 9351UL, false, "complex128", "sha:d73a0ca2186e671e670e4dbce6a17745")]
+        [DataRow("complex128", "complex128", "mC", "s0", 16, 9352UL, false, "complex128", "sha:2c60c9d3eb0d8819a0196879803b9480")]
+        [DataRow("complex128", "complex128", "s0", "mW", 16, 9353UL, false, "complex128", "sha:32687e6893cbf0dc99f546eacb770295")]
+        [DataRow("complex128", "complex128", "s0", "cs", 16, 9354UL, false, "complex128", "sha:131d633373ff31c83be6c0489a1f513a")]
+        [DataRow("complex128", "complex128", "v1", "row", 16, 9355UL, false, "complex128", "sha:fcaa281703fdb50d91cc9ece2eac106e")]
+        [DataRow("complex128", "complex128", "col", "v1", 16, 9356UL, false, "complex128", "sha:0ce92739b22697678fc42dae938a0d2c")]
+        [DataRow("complex128", "complex128", "s11", "row", 16, 9357UL, false, "complex128", "sha:e27079a982c2287f2a889785d85947ba")]
+        [DataRow("complex128", "complex128", "col", "s11", 16, 9358UL, false, "complex128", "sha:c5e86820892966c46f56b6961ccce3dd")]
+        [DataRow("complex128", "complex128", "s11", "s11", 16, 9359UL, false, "complex128", "sha:bb60ed3edfb5f3756bc3985c480ff654")]
+        [DataRow("complex128", "complex128", "s0", "s0", 16, 9360UL, false, "complex128", "sha:10da93e86ec85dac4305b20651029b2f")]
+        [DataRow("complex128", "complex128", "v1", "v1", 16, 9361UL, false, "complex128", "sha:e6464efc201ecf10274a3e278b698e9a")]
+        [DataRow("complex128", "complex128", "s0", "v1", 16, 9362UL, false, "complex128", "sha:212bfbe53de37b065ed8be37b6a3e57f")]
+        [DataRow("complex128", "complex128", "v1", "s0", 16, 9363UL, false, "complex128", "sha:b24e59d2e12a6e69775aacf638b96780")]
+        [DataRow("complex128", "complex128", "s0", "s11", 16, 9364UL, false, "complex128", "sha:24552dab99b349075011bdd3811d7b8d")]
+        [DataRow("complex128", "complex128", "s0", "v", 17, 9365UL, false, "complex128", "sha:2f7102ae53174ee48d4a01e4ce2ad7c2")]
+        [DataRow("complex128", "complex128", "v", "s0", 17, 9366UL, false, "complex128", "sha:471bfc16ca012b29aa8a95fc380321d4")]
+        [DataRow("complex128", "complex128", "s0", "vrev", 17, 9367UL, false, "complex128", "sha:8da3a1e0ef764e06354f5966ada4ba34")]
+        [DataRow("complex128", "complex128", "s0", "vb", 17, 9368UL, false, "complex128", "sha:6ae1a3201b81a1bb8ef1bc9e8d0d421d")]
+        [DataRow("complex128", "complex128", "s0", "row", 17, 9369UL, false, "complex128", "sha:1ad0b6eb5d9bceaeb60ee45fe1cfe17a")]
+        [DataRow("complex128", "complex128", "s0", "col", 17, 9370UL, false, "complex128", "sha:c3b55fda1a05c89d799f5d4ca0928476")]
+        [DataRow("complex128", "complex128", "s0", "mC", 17, 9371UL, false, "complex128", "sha:206e38c8e56846988f42f31b342a563b")]
+        [DataRow("complex128", "complex128", "mC", "s0", 17, 9372UL, false, "complex128", "sha:61a7c37667e162a3ba682dc7957c1a88")]
+        [DataRow("complex128", "complex128", "s0", "mW", 17, 9373UL, false, "complex128", "sha:b7bddb9be6bf019719469e7d29606556")]
+        [DataRow("complex128", "complex128", "s0", "cs", 17, 9374UL, false, "complex128", "sha:4e0837566d32a161c4d191713bacfa52")]
+        [DataRow("complex128", "complex128", "v1", "row", 17, 9375UL, false, "complex128", "sha:bd3c1fe80beb64f266aba62e5509ef5f")]
+        [DataRow("complex128", "complex128", "col", "v1", 17, 9376UL, false, "complex128", "sha:c35e22a228238ef29005ac0b8c66ec62")]
+        [DataRow("complex128", "complex128", "s11", "row", 17, 9377UL, false, "complex128", "sha:2072e6025e6f74f56d9849a1a3929fd3")]
+        [DataRow("complex128", "complex128", "col", "s11", 17, 9378UL, false, "complex128", "sha:14cf74c793c24086f93a5a53a44c164b")]
+        [DataRow("complex128", "complex128", "s11", "s11", 17, 9379UL, false, "complex128", "sha:d3f3991bec3b757107112773bd17860d")]
+        [DataRow("complex128", "complex128", "s0", "s0", 17, 9380UL, false, "complex128", "sha:f607d7f3f6ddfb96327bcafe8d8bb925")]
+        [DataRow("complex128", "complex128", "v1", "v1", 17, 9381UL, false, "complex128", "sha:cfb5d372155ab20fcafeaffa126a146d")]
+        [DataRow("complex128", "complex128", "s0", "v1", 17, 9382UL, false, "complex128", "sha:501b769f97592938491274806be2d03b")]
+        [DataRow("complex128", "complex128", "v1", "s0", 17, 9383UL, false, "complex128", "sha:1c962f47c944bb857f40b5e70503ecf6")]
+        [DataRow("complex128", "complex128", "s0", "s11", 17, 9384UL, false, "complex128", "sha:b15ccdd0a6fc01d833d2ff86ce9aa2f0")]
+        [DataRow("complex128", "complex128", "s0", "v", 32, 9385UL, false, "complex128", "sha:b48fc6a11a2359cbd12037bb497b2f9d")]
+        [DataRow("complex128", "complex128", "v", "s0", 32, 9386UL, false, "complex128", "sha:2119ae1808f623eb701a5a8953583edc")]
+        [DataRow("complex128", "complex128", "s0", "vrev", 32, 9387UL, false, "complex128", "sha:f7ddede69bf7d4e74d1d1afea42d9165")]
+        [DataRow("complex128", "complex128", "s0", "vb", 32, 9388UL, false, "complex128", "sha:53a9fbf3f0c1803074966a16b7dde0f8")]
+        [DataRow("complex128", "complex128", "s0", "row", 32, 9389UL, false, "complex128", "sha:0f70dba0ee7a7912e33a0035883dd7eb")]
+        [DataRow("complex128", "complex128", "s0", "col", 32, 9390UL, false, "complex128", "sha:4c892347cfc423a11c8bef2838d6a655")]
+        [DataRow("complex128", "complex128", "s0", "mC", 32, 9391UL, false, "complex128", "sha:c9c146e3046cd6a8bff9245851cfffc9")]
+        [DataRow("complex128", "complex128", "mC", "s0", 32, 9392UL, false, "complex128", "sha:3f41fcbbf67355cb8dcf8f02a1e17595")]
+        [DataRow("complex128", "complex128", "s0", "mW", 32, 9393UL, false, "complex128", "sha:382369f0bb8ebdfea9eb7872b20280b6")]
+        [DataRow("complex128", "complex128", "s0", "cs", 32, 9394UL, false, "complex128", "sha:bc3ec55e6500663379456070d6e5daa5")]
+        [DataRow("complex128", "complex128", "v1", "row", 32, 9395UL, false, "complex128", "sha:5fea2f9d653e6a4cc5ac94f1a7038fe5")]
+        [DataRow("complex128", "complex128", "col", "v1", 32, 9396UL, false, "complex128", "sha:8193b58956d2ba1185f282a0ff116778")]
+        [DataRow("complex128", "complex128", "s11", "row", 32, 9397UL, false, "complex128", "sha:8aa74218e83360942214dd5ae491b047")]
+        [DataRow("complex128", "complex128", "col", "s11", 32, 9398UL, false, "complex128", "sha:f62c5ee03ee9850798a1cf7a73a116a7")]
+        [DataRow("complex128", "complex128", "s11", "s11", 32, 9399UL, false, "complex128", "sha:2cd940b64d2745d9490ce3e996e356f6")]
+        [DataRow("complex128", "complex128", "s0", "s0", 32, 9400UL, false, "complex128", "sha:91febf2dfff981fd454d34869cb30a5a")]
+        [DataRow("complex128", "complex128", "v1", "v1", 32, 9401UL, false, "complex128", "sha:a6035b8144c9963683a880d6c16cb5f1")]
+        [DataRow("complex128", "complex128", "s0", "v1", 32, 9402UL, false, "complex128", "sha:d927b8af08ae6c14caf9080913fceb76")]
+        [DataRow("complex128", "complex128", "v1", "s0", 32, 9403UL, false, "complex128", "sha:e8d0eb96cfb5f7bfb3dcb864d78bde5c")]
+        [DataRow("complex128", "complex128", "s0", "s11", 32, 9404UL, false, "complex128", "sha:2c7f91fad8a48607b25593e5813d891c")]
+        [DataRow("complex128", "complex128", "s0", "v", 33, 9405UL, false, "complex128", "sha:7efeef03ee8ad1b5d868cecffddc89ca")]
+        [DataRow("complex128", "complex128", "v", "s0", 33, 9406UL, false, "complex128", "sha:f08f0a8191971e31748e7ffe89c0c392")]
+        [DataRow("complex128", "complex128", "s0", "vrev", 33, 9407UL, false, "complex128", "sha:260f77184233210399fdd8915e566ec2")]
+        [DataRow("complex128", "complex128", "s0", "vb", 33, 9408UL, false, "complex128", "sha:63ffefc853a821bb3e13f31c2653adc3")]
+        [DataRow("complex128", "complex128", "s0", "row", 33, 9409UL, false, "complex128", "sha:60eb3d3ace930c1052ec89afa5b386cd")]
+        [DataRow("complex128", "complex128", "s0", "col", 33, 9410UL, false, "complex128", "sha:1677ff22d6b2ac4d71bfc740e9c0d480")]
+        [DataRow("complex128", "complex128", "s0", "mC", 33, 9411UL, false, "complex128", "sha:ad4041e1a7921cb4bf4c72cdc1e9246c")]
+        [DataRow("complex128", "complex128", "mC", "s0", 33, 9412UL, false, "complex128", "sha:fa5e2c0808b3690b9f321e0c81557b17")]
+        [DataRow("complex128", "complex128", "s0", "mW", 33, 9413UL, false, "complex128", "sha:fa1562ad2e1116da88a29f3f9895e5cb")]
+        [DataRow("complex128", "complex128", "s0", "cs", 33, 9414UL, false, "complex128", "sha:59254b36d7fff61edf52f7473142533c")]
+        [DataRow("complex128", "complex128", "v1", "row", 33, 9415UL, false, "complex128", "sha:2dfa49f1897b124eee1754e5b4d09f7e")]
+        [DataRow("complex128", "complex128", "col", "v1", 33, 9416UL, false, "complex128", "sha:d8fd1276c9fd4a1ec85a930d1d74f593")]
+        [DataRow("complex128", "complex128", "s11", "row", 33, 9417UL, false, "complex128", "sha:5d135fdee67b630084ab9c608b72cb90")]
+        [DataRow("complex128", "complex128", "col", "s11", 33, 9418UL, false, "complex128", "sha:bf7d224a071beb6758af0bcc91c5fff1")]
+        [DataRow("complex128", "complex128", "s11", "s11", 33, 9419UL, false, "complex128", "sha:58046d8c37b442fe69356aedb399952c")]
+        [DataRow("complex128", "complex128", "s0", "s0", 33, 9420UL, false, "complex128", "sha:34c2479d7bd80febe4128ded07cb6995")]
+        [DataRow("complex128", "complex128", "v1", "v1", 33, 9421UL, false, "complex128", "sha:b85c5c3ce67e5051f18c6cf9b64ac700")]
+        [DataRow("complex128", "complex128", "s0", "v1", 33, 9422UL, false, "complex128", "sha:2593990486cba6525faf208927dec521")]
+        [DataRow("complex128", "complex128", "v1", "s0", 33, 9423UL, false, "complex128", "sha:6ed881a32183dff34a3e7079c2170ae9")]
+        [DataRow("complex128", "complex128", "s0", "s11", 33, 9424UL, false, "complex128", "sha:58ae75e38f49d6d437f6e471cf3a4e53")]
+        [DataRow("complex128", "complex128", "s0", "v", 40, 9425UL, false, "complex128", "sha:3987ac918d0c610f1ec0c901a07f54a5")]
+        [DataRow("complex128", "complex128", "v", "s0", 40, 9426UL, false, "complex128", "sha:e1c8e57fc509ed111b85b9dd70b8902c")]
+        [DataRow("complex128", "complex128", "s0", "vrev", 40, 9427UL, false, "complex128", "sha:b4574e724ef51a13a2e555850c1d6708")]
+        [DataRow("complex128", "complex128", "s0", "vb", 40, 9428UL, false, "complex128", "sha:0289d094e18cd86cafe251b040c31908")]
+        [DataRow("complex128", "complex128", "s0", "row", 40, 9429UL, false, "complex128", "sha:fa8e7b8932abb2e6aab316bb0d46c05c")]
+        [DataRow("complex128", "complex128", "s0", "col", 40, 9430UL, false, "complex128", "sha:9fc52738ba7832cc6b1eaaafbddfc33a")]
+        [DataRow("complex128", "complex128", "s0", "mC", 40, 9431UL, false, "complex128", "sha:cd1700faf861d0668d64a0a5a262e076")]
+        [DataRow("complex128", "complex128", "mC", "s0", 40, 9432UL, false, "complex128", "sha:3bcfc87588caa1685cd9d59d1e3b7670")]
+        [DataRow("complex128", "complex128", "s0", "mW", 40, 9433UL, false, "complex128", "sha:e0a1e0fc07f690b764f9b88fc3ada9e2")]
+        [DataRow("complex128", "complex128", "s0", "cs", 40, 9434UL, false, "complex128", "sha:af80594c4695cd6d0b08b5576daa65fe")]
+        [DataRow("complex128", "complex128", "v1", "row", 40, 9435UL, false, "complex128", "sha:8ac494d4a141b71042ee3a1b9a1e8b51")]
+        [DataRow("complex128", "complex128", "col", "v1", 40, 9436UL, false, "complex128", "sha:ffa13330f89f1b64958a6ac63ee2cb58")]
+        [DataRow("complex128", "complex128", "s11", "row", 40, 9437UL, false, "complex128", "sha:cf5f9328e2a71dcb65c4486bf5a6ccd6")]
+        [DataRow("complex128", "complex128", "col", "s11", 40, 9438UL, false, "complex128", "sha:cde47c53ed4539cc0092fa9b6404e68d")]
+        [DataRow("complex128", "complex128", "s11", "s11", 40, 9439UL, false, "complex128", "sha:673316af71508730308f2b66d582b363")]
+        [DataRow("complex128", "complex128", "s0", "s0", 40, 9440UL, false, "complex128", "sha:d0022ca1100e53755fd9a63ea67d3937")]
+        [DataRow("complex128", "complex128", "v1", "v1", 40, 9441UL, false, "complex128", "sha:2c5124a93451d7002cb03f48352625cb")]
+        [DataRow("complex128", "complex128", "s0", "v1", 40, 9442UL, false, "complex128", "sha:95838bb251cfb3322b5a1e86e30952af")]
+        [DataRow("complex128", "complex128", "v1", "s0", 40, 9443UL, false, "complex128", "sha:5e5d0464044efc21b0b1c39d7d5703bd")]
+        [DataRow("complex128", "complex128", "s0", "s11", 40, 9444UL, false, "complex128", "sha:e4f5e6fa4688bdf3ea6650113a7e2e89")]
+        [DataRow("complex128", "complex128", "s0", "v", 17, 9445UL, true, "complex128", "sha:44e4a879154659787459f1baf95aaa7e")]
+        [DataRow("complex128", "complex128", "v", "s0", 17, 9446UL, true, "complex128", "sha:3c6ace1c3640ac4931ecdd0c8d97612b")]
+        [DataRow("complex128", "complex128", "s0", "mW", 17, 9447UL, true, "complex128", "sha:66b2f31fb22a14c05bd3feef14daf21e")]
+        [DataRow("complex128", "complex128", "s0", "mC", 17, 9448UL, true, "complex128", "sha:80280bdd2f0dedc5c13ae3d95a8883f3")]
+        [DataRow("complex128", "complex128", "s11", "row", 17, 9449UL, true, "complex128", "sha:437103c61791aa9159fdefcd840fe8e2")]
+        [DataRow("complex128", "complex128", "s0", "cs", 17, 9450UL, true, "complex128", "sha:9d6d9f2310d0b38831397238a06be8b2")]
+        [DataRow("complex128", "complex128", "s0", "v", 40, 9451UL, true, "complex128", "sha:f94e7b28a2bd4b4f7218003dd2966901")]
+        [DataRow("complex128", "complex128", "v", "s0", 40, 9452UL, true, "complex128", "sha:7b04dad3ea9a7dcdf82b5237aa79e725")]
+        [DataRow("complex128", "complex128", "s0", "mW", 40, 9453UL, true, "complex128", "sha:1bcac9eb3aa9020b374328ef04bedc7f")]
+        [DataRow("complex128", "complex128", "s0", "mC", 40, 9454UL, true, "complex128", "sha:098333abcd7be2b7738aafa1cfefdd78")]
+        [DataRow("complex128", "complex128", "s11", "row", 40, 9455UL, true, "complex128", "sha:ecb9391da0044d36272f15fe34d5a81d")]
+        [DataRow("complex128", "complex128", "s0", "cs", 40, 9456UL, true, "complex128", "sha:7953f8797aaf0ce429f07f9590acd7f5")]
+        [DataRow("int32", "float64", "s0", "v", 2, 9457UL, false, "float64", "sha:7ac313dd45fb2c7807f3f249de2ba32c")]
+        [DataRow("int32", "float64", "v", "s0", 2, 9458UL, false, "float64", "sha:bab847ca05ca5b88b0bdc0351dce34f4")]
+        [DataRow("int32", "float64", "s11", "row", 2, 9459UL, false, "float64", "sha:9b48bc7b2a93c2f978d3af7f5a5cbbc0")]
+        [DataRow("int32", "float64", "s11", "s11", 2, 9460UL, false, "float64", "sha:ff90b60822ba3169ce8dfa5cfafe6293")]
+        [DataRow("int32", "float64", "s0", "mW", 2, 9461UL, false, "float64", "sha:9fbfad74db9a86cb252b51075dbe8ed9")]
+        [DataRow("int32", "float64", "s0", "v", 17, 9462UL, false, "float64", "sha:4d75a7739d9bd1d15123f9895711eeee")]
+        [DataRow("int32", "float64", "v", "s0", 17, 9463UL, false, "float64", "sha:a7261466e298a977b60a3a56023086bd")]
+        [DataRow("int32", "float64", "s11", "row", 17, 9464UL, false, "float64", "sha:dd377ae31dfce046c62aabfa8fd07885")]
+        [DataRow("int32", "float64", "s11", "s11", 17, 9465UL, false, "float64", "sha:e48805075208cf14acd9d5251c680bae")]
+        [DataRow("int32", "float64", "s0", "mW", 17, 9466UL, false, "float64", "sha:9e1e3c81daec6a3cd129d40d09d69d04")]
+        [DataRow("int32", "float64", "s0", "v", 40, 9467UL, false, "float64", "sha:102207859691414fdffad69fcb27eda7")]
+        [DataRow("int32", "float64", "v", "s0", 40, 9468UL, false, "float64", "sha:dd4e8a466515f77ce96c3f8c5b792ea2")]
+        [DataRow("int32", "float64", "s11", "row", 40, 9469UL, false, "float64", "sha:6f2500881d62a19ac1b9316615fd0e64")]
+        [DataRow("int32", "float64", "s11", "s11", 40, 9470UL, false, "float64", "sha:a0084ad87ecb19be6617409df9acc819")]
+        [DataRow("int32", "float64", "s0", "mW", 40, 9471UL, false, "float64", "sha:4045c1d39964d47cd8627475b3f5cf8c")]
+        [DataRow("float32", "float64", "s0", "v", 2, 9472UL, false, "float64", "sha:c61d7f329b9c7061c0561db6aa5f0474")]
+        [DataRow("float32", "float64", "v", "s0", 2, 9473UL, false, "float64", "sha:13600a978299c7bd1d40ec283696cc01")]
+        [DataRow("float32", "float64", "s11", "row", 2, 9474UL, false, "float64", "sha:21aab4cc0f213cce6f23b3474dbe0ee9")]
+        [DataRow("float32", "float64", "s11", "s11", 2, 9475UL, false, "float64", "sha:1914611312b886da17feefad7bbf1da8")]
+        [DataRow("float32", "float64", "s0", "mW", 2, 9476UL, false, "float64", "sha:de19c02e2b97fe7d7e97c930a4d64a57")]
+        [DataRow("float32", "float64", "s0", "v", 17, 9477UL, false, "float64", "sha:3583b2c0328957b345e0e10ef4a9378e")]
+        [DataRow("float32", "float64", "v", "s0", 17, 9478UL, false, "float64", "sha:fef08b0d697c87669a4b02edd58931d5")]
+        [DataRow("float32", "float64", "s11", "row", 17, 9479UL, false, "float64", "sha:cae6462d0e6a5085837f611ee9393f48")]
+        [DataRow("float32", "float64", "s11", "s11", 17, 9480UL, false, "float64", "sha:73eb2123ba74fc393afff2c9f6415250")]
+        [DataRow("float32", "float64", "s0", "mW", 17, 9481UL, false, "float64", "sha:b08136c1824522a63dd7b81730903d81")]
+        [DataRow("float32", "float64", "s0", "v", 40, 9482UL, false, "float64", "sha:6faeab6cf1cbe047a22ca3c00af2d7a1")]
+        [DataRow("float32", "float64", "v", "s0", 40, 9483UL, false, "float64", "sha:76e1b28d2daba6074d1f1d2d2448017b")]
+        [DataRow("float32", "float64", "s11", "row", 40, 9484UL, false, "float64", "sha:a4f7a1a2d5da4ad8fbae834aad1ead1b")]
+        [DataRow("float32", "float64", "s11", "s11", 40, 9485UL, false, "float64", "sha:9a51ff896346ec518af4f3b1cb2184d1")]
+        [DataRow("float32", "float64", "s0", "mW", 40, 9486UL, false, "float64", "sha:f0c2b7c755ca591d3a2c55d1bdc22dd4")]
+        [DataRow("float32", "complex128", "s0", "v", 2, 9487UL, false, "complex128", "sha:60c9819236f2ee9939b2f7328cc50d38")]
+        [DataRow("float32", "complex128", "v", "s0", 2, 9488UL, false, "complex128", "sha:70eaf5d3903d23bb8de68d3b629c3ba6")]
+        [DataRow("float32", "complex128", "s11", "row", 2, 9489UL, false, "complex128", "sha:9ee3969c4098f14d2d858337880e413f")]
+        [DataRow("float32", "complex128", "s11", "s11", 2, 9490UL, false, "complex128", "sha:9a1707acc5c20bb2f328cceb8e7951c4")]
+        [DataRow("float32", "complex128", "s0", "mW", 2, 9491UL, false, "complex128", "sha:0d75612f3a1eba68e268fa2ef433d4ee")]
+        [DataRow("float32", "complex128", "s0", "v", 17, 9492UL, false, "complex128", "sha:bbde35c32840dc92cf23d7ee4adcdda5")]
+        [DataRow("float32", "complex128", "v", "s0", 17, 9493UL, false, "complex128", "sha:170e7bea6f0fa7705938d3a7fb51acc2")]
+        [DataRow("float32", "complex128", "s11", "row", 17, 9494UL, false, "complex128", "sha:c8cf69c1b79d203b8887516a6a2d3640")]
+        [DataRow("float32", "complex128", "s11", "s11", 17, 9495UL, false, "complex128", "sha:b632189b968d360df5c18cf745b8e5a6")]
+        [DataRow("float32", "complex128", "s0", "mW", 17, 9496UL, false, "complex128", "sha:37eac75fff0e7fcdf9b9016f86a27fbc")]
+        [DataRow("float32", "complex128", "s0", "v", 40, 9497UL, false, "complex128", "sha:c11b1f2a702186ac0d0c7d3b40bf932a")]
+        [DataRow("float32", "complex128", "v", "s0", 40, 9498UL, false, "complex128", "sha:e942419368753b58c71d5e658c7372fc")]
+        [DataRow("float32", "complex128", "s11", "row", 40, 9499UL, false, "complex128", "sha:784e8abb84951b0bff1663858dad5ed3")]
+        [DataRow("float32", "complex128", "s11", "s11", 40, 9500UL, false, "complex128", "sha:b0f46e51afa14abcb268df1967445f9e")]
+        [DataRow("float32", "complex128", "s0", "mW", 40, 9501UL, false, "complex128", "sha:bf9982957702c9f85a6373473ff572f6")]
+        [DataRow("int64", "float32", "s0", "v", 2, 9502UL, false, "float64", "sha:337f87f507b1f587f138c80b8078aae9")]
+        [DataRow("int64", "float32", "v", "s0", 2, 9503UL, false, "float64", "sha:e88229c91290873ddfe291032f01706d")]
+        [DataRow("int64", "float32", "s11", "row", 2, 9504UL, false, "float64", "sha:e5a47141393772e5a2f94b4c863325f8")]
+        [DataRow("int64", "float32", "s11", "s11", 2, 9505UL, false, "float64", "sha:6ce2d24885371ac50e0afe9ccd74f90d")]
+        [DataRow("int64", "float32", "s0", "mW", 2, 9506UL, false, "float64", "sha:1b0ce063dff3b0e29c6d912a3079d448")]
+        [DataRow("int64", "float32", "s0", "v", 17, 9507UL, false, "float64", "sha:f2eb6f28300d433f1ba40c9127d35c40")]
+        [DataRow("int64", "float32", "v", "s0", 17, 9508UL, false, "float64", "sha:a7d9c6892cf82a8a4089bb45ca90341b")]
+        [DataRow("int64", "float32", "s11", "row", 17, 9509UL, false, "float64", "sha:8997d42f684ff9e29635a26712a20cbd")]
+        [DataRow("int64", "float32", "s11", "s11", 17, 9510UL, false, "float64", "sha:aa4704611e416efa301490d49ce59a7c")]
+        [DataRow("int64", "float32", "s0", "mW", 17, 9511UL, false, "float64", "sha:2a297993cd954fe50ffed0bf86be53b5")]
+        [DataRow("int64", "float32", "s0", "v", 40, 9512UL, false, "float64", "sha:8777accb86a1acfabd8ecd8cf451b2aa")]
+        [DataRow("int64", "float32", "v", "s0", 40, 9513UL, false, "float64", "sha:2fe4296c32499b68eef715b04fa92546")]
+        [DataRow("int64", "float32", "s11", "row", 40, 9514UL, false, "float64", "sha:3c030bef62340c92c3dcfd9c70f6203a")]
+        [DataRow("int64", "float32", "s11", "s11", 40, 9515UL, false, "float64", "sha:8821d925dcabbe3342857b1ada30fd32")]
+        [DataRow("int64", "float32", "s0", "mW", 40, 9516UL, false, "float64", "sha:7f2e09034899828f249c597bb7453ba2")]
+        public void DotScalarBranch_MatchesNumPyBits(string dtypeA, string dtypeB, string lk, string rk, int n, ulong seed,
+            bool tiny, string resultDtype, string expected)
+        {
+            var g = new Lcg(seed);
+            var a = g.Array(ScalarBranchShape(lk, n), dtypeA);
+            var b = g.Array(ScalarBranchShape(rk, n), dtypeB);
+            if (tiny)
+            {
+                PlantTiny(a, lk is "s0" or "v1" or "s11");
+                PlantTiny(b, rk is "s0" or "v1" or "s11");
+            }
+
+            // NumPy's bits whichever path computes: the managed one here (no backend in the parallel phase), and the
+            // OpenBLAS backend's port of the same branch when one is installed - no process-wide state is touched.
+            AssertNumPyBits(np.dot(ScalarBranchView(lk, a, n), ScalarBranchView(rk, b, n)), resultDtype, expected,
+                $"dot {dtypeA}.{dtypeB} {lk}.{rk} n={n} tiny={tiny}");
+        }
+
+        /// <summary>
+        ///     np.dot of a 0-d scalar and a matrix whose rows are not contiguous (F-ordered here) keeps the multiply route:
+        ///     NumPy's C-ordered result needs a transposing read there, which measured 0.23-0.75x of the multiply's
+        ///     contiguous pass (whose result keeps the operand's K order). So the result is F-ordered where NumPy's is
+        ///     C-ordered, and a -0.0 product stays -0.0 where NumPy's <c>axpy</c> loop into zeros gives +0.0.
+        /// </summary>
+        [TestMethod]
+        [Misaligned]
+        public void DotScalarBranch_ZeroDTimesFOrderedMatrix_KeepsTheMultiplyRoute()
+        {
+            // The managed path's documented cell: a BLAS backend computes NumPy's own answer (C order, +0.0). The test
+            // reads the backend instead of removing it (a process-wide setting other parallel tests share).
+            if (BackendFactory.GetEngine().Blas != null)
+                Assert.Inconclusive("a BLAS backend is installed: it computes NumPy's scalar branch itself");
+            {
+                var m = np.arange(1.0, 7.0).reshape(2, 3).copy('F');
+                var r = np.dot(NDArray.Scalar(-0.0), m);
+                r.shape.Should().Equal(2L, 3L);
+                r.Shape.IsFContiguous.Should().BeTrue("the multiply keeps the operand's K order (NumPy's result is C)");
+                foreach (double v in r.ToArray<double>())
+                    BitConverter.DoubleToInt64Bits(v).Should().Be(unchecked((long)0x8000000000000000UL),
+                        "the multiply keeps -0.0 * x = -0.0 (NumPy's daxpy into zeros gives +0.0)");
+
+                // The C-ordered matrix takes the scalar branch: NumPy's +0.0 and C order.
+                var rc = np.dot(NDArray.Scalar(-0.0), np.arange(1.0, 7.0).reshape(2, 3));
+                rc.Shape.IsContiguous.Should().BeTrue();
+                foreach (double v in rc.ToArray<double>())
+                    BitConverter.DoubleToInt64Bits(v).Should().Be(0L, "NumPy's daxpy into a zeroed result gives +0.0");
+            }
+        }
+
+        /// <summary>The base shape of a scalar-branch row's operand kind (see <see cref="DotScalarBranch_MatchesNumPyBits"/>).</summary>
+        /// <param name="kind">The operand kind.</param>
+        /// <param name="n">The length.</param>
+        /// <returns>The shape the generator draws.</returns>
+        private static long[] ScalarBranchShape(string kind, int n) => kind switch
+        {
+            "s0" => Array.Empty<long>(),
+            "v" or "vrev" => new long[] { n },
+            "vb" or "v1" => new long[] { 1 },
+            "row" => new long[] { 1, n },
+            "col" => new long[] { n, 1 },
+            "s11" => new long[] { 1, 1 },
+            "mC" or "mW" => new long[] { 3, n },
+            "cs" => new long[] { 3, 2L * n },
+            _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "an unknown operand kind"),
+        };
+
+        /// <summary>The view a scalar-branch row hands np.dot (see <see cref="DotScalarBranch_MatchesNumPyBits"/>).</summary>
+        /// <param name="kind">The operand kind.</param>
+        /// <param name="x">The drawn base.</param>
+        /// <param name="n">The length.</param>
+        /// <returns>The operand.</returns>
+        private static NDArray ScalarBranchView(string kind, NDArray x, int n) => kind switch
+        {
+            "vrev" => x["::-1"],
+            "vb" => np.broadcast_to(x, new Shape(n)),
+            "cs" => x[":, :" + n],
+            _ => x,
+        };
+
+        /// <summary>
+        ///     Plants the generator's underflowing values: the scalar operand's element -1e-200 (float32 -1e-30, complex
+        ///     (-1e-200, 1e-200)), or every third element of the other operand 1e-200 (float32 1e-30, complex (1e-200,
+        ///     -1e-200)).
+        /// </summary>
+        /// <param name="x">The drawn base (C-contiguous, written in place).</param>
+        /// <param name="scalar">Whether it is the scalar operand.</param>
+        private static void PlantTiny(NDArray x, bool scalar)
+        {
+            var flat = x.reshape(-1);
+            void Set(long i, bool forScalar)
+            {
+                if (x.typecode == NPTypeCode.Complex)
+                    flat.SetAtIndex(forScalar ? new System.Numerics.Complex(-1e-200, 1e-200) : new System.Numerics.Complex(1e-200, -1e-200), i);
+                else if (x.typecode == NPTypeCode.Single)
+                    flat.SetAtIndex(forScalar ? -1e-30f : 1e-30f, i);
+                else
+                    flat.SetAtIndex(forScalar ? -1e-200 : 1e-200, i);
+            }
+
+            if (scalar)
+            {
+                Set(0, true);
+                return;
+            }
+
+            for (long i = 0; i < flat.size; i += 3)
+                Set(i, false);
+        }
+
+        /// <summary>
         ///     Compares a result with NumPy's: the dtype, then either the first 32 hex digits of SHA-256 over the result's
         ///     bytes (<c>sha:</c>) or every byte (<c>hex:</c>), where a slot NumPy fills with a NaN only has to hold a NaN
         ///     (which NaN survives when several meet follows RyuJIT's operand order: see <see cref="NDDot"/>).

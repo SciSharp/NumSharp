@@ -297,8 +297,8 @@ namespace NumSharp.Tests
         }
 
         // ======================================================================================================
-        //  GROUP 3 — np.dot of two length-1 vectors is NumPy's plain product (a regression pin since the 1-D
-        //  route follows cblas_matrixproduct).
+        //  GROUP 3 — np.dot of two length-1 vectors is NumPy's plain product, and a size-1 operand takes NumPy's
+        //  scalar branch (regression pins since the 1-D route and the scalar branch follow cblas_matrixproduct).
         // ======================================================================================================
 
         /// <summary>
@@ -346,12 +346,12 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     On the managed path, <c>np.dot</c> and <c>np.inner</c> with any size-1 operand must follow NumPy's
-        ///     scalar branch: a 0-d operand times a longer array is a <c>daxpy</c> INTO A ZERO-FILLED output
+        ///     Regression pin: on the managed path, <c>np.dot</c> and <c>np.inner</c> with any size-1 operand follow
+        ///     NumPy's scalar branch: a 0-d operand times a longer array is a <c>daxpy</c> INTO A ZERO-FILLED output
         ///     (<c>+0.0 + s * b</c>, so <c>-0.0 · [1, 1]</c> is <c>[+0.0, +0.0]</c>), and two size-1 operands are
-        ///     the plain product (<c>[[-0.0]] · [[1.0]]</c> is <c>[[-0.0]]</c>). NumSharp returns the plain
-        ///     product (<c>-0.0</c>) for the first and a zero-started sum (<c>+0.0</c>) for the second, the
-        ///     opposite of NumPy in both.
+        ///     the plain product (<c>[[-0.0]] · [[1.0]]</c> is <c>[[-0.0]]</c>). NumSharp used to return the plain
+        ///     product (<c>-0.0</c>) for the first and a zero-started sum (<c>+0.0</c>) for the second, the opposite of
+        ///     NumPy in both.
         /// </summary>
         /// <remarks>
         ///     <para>
@@ -359,10 +359,10 @@ namespace NumSharp.Tests
         ///     <c>np.dot</c> with operands of at most 2 dimensions, and <c>np.inner</c> reaches it through
         ///     <c>PyArray_MatrixProduct2</c>. It classifies any size-1 operand (0-d, <c>(1,)</c>, <c>(1,1)</c>) as
         ///     <c>_scalar</c>, zeroes the output, and then writes <c>a * b</c> when the result has one element
-        ///     (<c>l == 1</c>) or calls <c>?axpy</c> into the zeroed output otherwise. Root cause:
-        ///     <c>Default.Dot.cs</c> sends a 0-d operand to <c>Multiply</c> (a plain product) and a
-        ///     <c>(1,1)·(1,1)</c> pair to <c>MultiplyMatrix</c> (a sum started from 0). The 0-d · 0-d product and
-        ///     <c>(1,1)·(1,3)</c> (an <c>axpy</c> into zeros) already match.
+        ///     (<c>l == 1</c>) or calls <c>?axpy</c> into the zeroed output otherwise. The managed path follows it since
+        ///     2026-11-05 (<c>DefaultEngine.TryDotScalarBranch</c>, <c>Default.Dot.Scalar.cs</c>); before, a 0-d operand
+        ///     went to <c>Multiply</c> (a plain product) and a <c>(1,1)·(1,1)</c> pair to <c>MultiplyMatrix</c> (a sum
+        ///     started from 0).
         ///     </para>
         ///     <para>
         ///     The BLAS backend is removed for the test's duration, as in
@@ -370,7 +370,7 @@ namespace NumSharp.Tests
         ///     <c>cblas_matrixproduct</c> route for route and would hide the managed bug.
         ///     </para>
         /// </remarks>
-        [TestMethod, OpenBugs]
+        [TestMethod]
         public void Dot_SizeOneOperand_FollowsNumPysScalarBranch_OnTheManagedPath()
         {
             var engine = BackendFactory.GetEngine();

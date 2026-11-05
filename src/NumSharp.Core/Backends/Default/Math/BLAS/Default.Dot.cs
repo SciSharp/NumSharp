@@ -176,6 +176,11 @@ namespace NumSharp.Backends
             if (blas != null && blas.TryDot(left, right, out blasResult))
                 return blasResult;
 
+            // NumPy's cblas_matrixproduct scalar branch: float32 / float64 / complex128 operands of at most two dims, one
+            // of them 0-d, (1,) or (1, 1) - the plain product for one output, ?axpy into a zeroed result for more.
+            if (TryDotScalarBranch(left, right, out var scalarResult))
+                return scalarResult;
+
             var leftshape = left.Shape;
             var rightshape = right.Shape;
             var isLeftScalar = leftshape.IsScalar;
@@ -189,11 +194,9 @@ namespace NumSharp.Backends
             }
 
             //If either a or b is 0-D (scalar), it is equivalent to multiply and using numpy.multiply(a, b) or a * b is preferred.
-            // NumPy's own float/complex route differs in the sign of a zero: cblas_matrixproduct treats a size-1
-            // operand as a scalar and, for a result longer than one element, runs ?axpy into a ZERO-FILLED output,
-            // so np.dot(-0.0, [1, 1]) is [+0, +0] where this multiply gives [-0, -0]; a (1,1)·(1,1) pair is the
-            // plain product there but a zero-started sum in MultiplyMatrix below. Open gap, pinned by
-            // OpenBugsReductionTests.Dot_SizeOneOperand_FollowsNumPysScalarBranch_OnTheManagedPath.
+            // The float32 / float64 / complex128 operands of at most two dims took the scalar branch above
+            // (cblas_matrixproduct's); a 0-d operand here is NumPy's multiply route (another dtype, or the other operand
+            // has more than two dims).
             if (isLeftScalar || isRightScalar)
             {
                 return MultiplyInCommonDtype(left, right);

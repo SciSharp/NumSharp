@@ -8650,11 +8650,10 @@ def _rs_carved(op, layout, dt, params, shape):
         if layout == "c_1x1" and ax is None:
             return True
         return dt == "complex128" and ((ax is None and size >= 2) or (ax is not None and ext >= 2))
-    if op in ("dot", "inner"):
-        # A size-1 operand: NumPy's cblas_matrixproduct treats it as a scalar (scalar x scalar is the plain product,
-        # scalar x array a daxpy into a zero-filled output). Pinned by Dot_LengthOneVectors_* and
-        # Dot_SizeOneOperand_*.
-        return dt != "float16" and layout in ("1_1", "0d_2", "1x1_1x1")
+    # dot / inner have no rule since 2026-11-05: a size-1 operand takes NumPy's cblas_matrixproduct scalar branch on the
+    # managed path too (the plain product for one output, ?axpy into a zeroed result for more; np-layer dtype plan
+    # PA3a's 1-D route and PA3b's scalar branch), so the 1_1 / 0d_2 / 1x1_1x1 cells are exact (their pins,
+    # Dot_LengthOneVectors_* and Dot_SizeOneOperand_*, are regression tests now).
     if op == "einsum":
         # A bare elementwise product where NumPy adds every term to a zero-filled output. Pinned by
         # Einsum_ZeroFilledAccumulator_*.
@@ -14348,6 +14347,38 @@ def gen_products():
             vdot_case(dta, dtb, "c", ln, False)
             if dta == "complex128":
                 vdot_case(dta, dtb, "c", ln, True)
+
+    # --- np.dot's scalar branch (PA3b): cblas_matrixproduct takes float32 / float64 / complex128 operands of at most two
+    #     dims, and a 0-d / (1,) / (1, 1) operand makes one output the plain product and more outputs ?axpy into a zeroed
+    #     result - scipy-openblas' Haswell kernel (a fused multiply-add into +0) over the first n & -32 (float32) /
+    #     n & -16 terms of a unit-stride call, the plain C loop elsewhere; a matrix is one call per line along its longer
+    #     axis (s0.mW: lines along contiguous rows reach the kernel). Layouts with contiguous rows only: a 0-d scalar
+    #     beside an F-ordered matrix keeps NumSharp's multiply route (a documented divergence, NDDotTests).
+    def sb_shape(kind, n):
+        return {"s0": (), "v": (n,), "v1": (1,), "row": (1, n), "col": (n, 1), "s11": (1, 1), "mC": (3, n),
+                "mW": (3, n)}[kind]
+
+    def sb_case(dta, dtb, lk, rk, n):
+        def mk(shape, dt):
+            if np.dtype(dt).kind in "fc":
+                v = dot_spread(shape if shape else (1,), dt)
+                return np.array(v.reshape(shape), order="C", copy=True)
+            v = dot_rng.randint(-1000, 1000, int(np.prod(shape)) if shape else 1).astype(dt)
+            return np.array(v.reshape(shape), order="C", copy=True)
+        a, b = mk(sb_shape(lk, n), dta), mk(sb_shape(rk, n), dtb)
+        with np.errstate(all="ignore"):
+            r = np.asarray(np.dot(a, b))
+        emit("dot", {}, [(a, a), (b, b)], r, f"sb_{lk}.{rk}_n{n}", dta if dta == dtb else f"{dta}.{dtb}")
+
+    for dt in ("float32", "float64", "complex128"):
+        for ln in (2, 17, 40):
+            for (lk, rk) in (("s0", "v"), ("v", "s0"), ("s0", "mC"), ("s0", "mW"), ("v1", "row"), ("col", "v1"),
+                             ("s11", "row"), ("col", "s11"), ("s11", "s11"), ("s0", "s11")):
+                sb_case(dt, dt, lk, rk, ln)
+    for (dta, dtb) in (("int32", "float64"), ("float32", "complex128")):
+        for ln in (2, 40):
+            for (lk, rk) in (("s0", "v"), ("s11", "row"), ("s0", "mW")):
+                sb_case(dta, dtb, lk, rk, ln)
 
     if skipped:
         print(f"  (skipped {skipped} cases where NumPy raised)")
