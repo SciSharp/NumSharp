@@ -170,6 +170,33 @@ namespace NumSharp.Tests.DTypes
                 new Action(() => np.mintypecode(typechars)).Should().Throw<NotSupportedException>().WithMessage("*'Fg'*");
         }
 
+        /// <summary>
+        ///     <c>isinstance(t, str)</c> / <c>bytes</c> are NumSharp's boundary map (<see cref="NDScalarType.PyStr"/>,
+        ///     <see cref="NDScalarType.PyBytes"/>): an element of a <c>U</c> array is a <c>numpy.str_</c> (its text is the type
+        ///     character); a <c>byte[]</c> is Python's
+        ///     <c>bytes</c>, whose <c>asarray</c> is <c>'S'</c>, not uint8's <c>'B'</c>; a StringDType's missing value is its
+        ///     NA object (<c>None</c> is <c>'O'</c>). An empty second axis keeps the rows. Values from NumPy 2.4.2.
+        /// </summary>
+        [TestMethod]
+        public void Items_ArePythonsStrAndBytes_ByTheBoundaryMap()
+        {
+            var u = np.array(new[] { "f", "d" });
+            np.mintypecode(new object[] { u[0] }).Should().Be('f', "u[0] is a numpy.str_");
+            // (An explicit np.array("d") is an ndarray in NumPy, 'U'; NumSharp's np.array(string) does not mark it:
+            // OpenBugs.cs, NpArrayOfString_IsAnExplicitZeroDimArray.)
+
+            np.mintypecode(new object[] { new byte[] { (byte)'d' } }, "B").Should().Be('d', "bytes is 'S', never uint8's 'B'");
+            new Action(() => np.mintypecode(new object[] { new byte[] { (byte)'d' } }, "SB")).Should().Throw<ValueError>()
+                .WithMessage("substring not found");
+
+            var na = np.array(new object[] { "d", null }, np.dtypes.StringDType(na_object: null));
+            np.mintypecode(na).Should().Be('d');
+            new Action(() => np.mintypecode(na, "O")).Should().Throw<ValueError>()
+                .WithMessage("substring not found", "the NA object None is asarray(None)'s 'O'");
+
+            np.mintypecode(np.zeros(new Shape(3, 0), np.float32)).Should().Be('f', "a (3, 0) array is three rows in NumPy");
+        }
+
         /// <summary>Anything else is not iterable, with Python's texts (a descriptor names its numpy.dtypes class).</summary>
         [TestMethod]
         public void NonIterables_ArePythonsTypeErrors()

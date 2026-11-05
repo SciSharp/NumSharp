@@ -128,28 +128,42 @@ namespace NumSharp
 
         /// <summary>
         ///     NumPy's type characters of an array's elements along its first axis: the array's own character for each one,
-        ///     except a 1-D text array whose elements are Python <c>str</c> (<c>U</c>, <c>StringDType</c>), which gives each
-        ///     element's text.
+        ///     except a 1-D text array whose elements are Python <c>str</c> (<c>U</c>, <c>StringDType</c>), which are read
+        ///     item by item (<see cref="ItemTypeCode"/>) as the array's own <c>__iter__</c> hands them out: the element's text,
+        ///     a chararray's after its <c>rstrip()</c>, a StringDType's missing value as its NA object.
         /// </summary>
         /// <param name="array">The array (at least 1-D).</param>
         /// <returns>The type characters, one per element of the first axis.</returns>
+        /// <remarks>
+        ///     Every other array takes the count of its first axis instead of iterating: each element of a numeric (or
+        ///     <c>S</c>) vector is a scalar of the array's dtype and each row of an N-D array an array of it, so
+        ///     <c>asarray(t).dtype.char</c> is the array's own character every time, and <c>__iter__</c> would only box (or
+        ///     slice) every element to say so. The count also keeps NumPy's rows of an empty second axis (a (3, 0) array is
+        ///     three rows in NumPy), which NDArray's enumerator does not yield (<c>OpenBugs.cs</c>,
+        ///     <c>NDArrayIter_EmptySecondAxis_YieldsTheRows</c>).
+        /// </remarks>
         private static IEnumerable<string> ArrayTypeCodes(NDArray array)
         {
+            if (array.ndim == 1 && IsPyStrClass(array.dtype))
+            {
+                // Through the IEnumerable interface: a chararray's enumerator HIDES NDArray's (it is not virtual), and only
+                // the interface dispatch reaches the one that strips its elements.
+                foreach (object element in (System.Collections.IEnumerable)array)
+                    yield return ItemTypeCode(element);
+                yield break;
+            }
+
             long count = array.Shape.dimensions[0];
-            bool textElements = array.ndim == 1 && IsPyStrClass(array.dtype);
             string own = array.dtype.@char.ToString();
             for (long i = 0; i < count; i++)
-            {
-                // An element of a numeric (or S, or N-D) array is a NumPy scalar or a row: asarray(t).dtype.char is the
-                // array's own character every time.
-                yield return textElements ? StrTypeCode(ElementText(array, i)) : own;
-            }
+                yield return own;
         }
 
         /// <summary>
         ///     NumPy's type characters of a masked array's elements along its first axis: a masked element of a 1-D array is
         ///     <c>np.ma.masked</c> (a float64 constant, <c>'d'</c>); every other element, and every row of an N-D array, is
-        ///     read as its data's (<see cref="ArrayTypeCodes"/>).
+        ///     read as its data's (<see cref="ArrayTypeCodes"/>). NumSharp's masked array has no <c>__iter__</c> of its own,
+        ///     so the masked constant is placed from <c>np.ma.getmaskarray</c>.
         /// </summary>
         /// <param name="masked">The masked array (at least 1-D).</param>
         /// <returns>The type characters, one per element of the first axis.</returns>
@@ -190,11 +204,18 @@ namespace NumSharp
         /// <param name="item">The item.</param>
         /// <returns>The item's type character (a whole string for a string item).</returns>
         /// <remarks>
-        ///     A <see cref="char"/> is the one-character type character it spells (C# spells type characters as
-        ///     <see cref="char"/>: <see cref="DType.@char"/>), not NumSharp's <c>char</c> dtype. What NumPy's
-        ///     <c>asarray</c> would put in an object array is <c>'O'</c>: <c>None</c>, a descriptor or a class (NumPy has no
-        ///     array of those but the object array), and a C# object NumSharp has no dtype for. A Python int follows
-        ///     <c>asarray</c>'s rule for it: int64, else uint64, else object.
+        ///     <c>isinstance(t, str)</c> and <c>isinstance(t, bytes)</c> are <see cref="NDScalarType"/>'s, NumSharp's boundary
+        ///     map: a C# <see cref="string"/> is a <c>str</c> and a <c>byte[]</c> a <c>bytes</c> (whose <c>asarray</c> is the
+        ///     <c>S</c> class), and so is a NumPy scalar NumSharp hands out as an unmarked 0-d array - an element of a
+        ///     <c>U</c> array (<c>u[0]</c> is a <c>numpy.str_</c>), a chararray's stand-in - while a 0-d array marked
+        ///     explicit is an ndarray (NumSharp's <c>np.array(string)</c> does not mark its result, so it reads as the str
+        ///     where NumPy's <c>np.array("d")</c> gives <c>'U'</c>: <c>OpenBugs.cs</c>,
+        ///     <c>NpArrayOfString_IsAnExplicitZeroDimArray</c>). A <see cref="char"/> is the one-character type character it
+        ///     spells (C# spells type characters as <see cref="char"/>: <see cref="DType.@char"/>), not NumSharp's
+        ///     <c>char</c> dtype, which the boundary map would make it. What NumPy's <c>asarray</c> would put in an object
+        ///     array is <c>'O'</c>: <c>None</c>, a descriptor or a class (NumPy has no array of those but the object array),
+        ///     and a C# object NumSharp has no dtype for. A Python int follows <c>asarray</c>'s rule for it: int64, else
+        ///     uint64, else object.
         /// </remarks>
         private static string ItemTypeCode(object item)
         {
@@ -202,15 +223,26 @@ namespace NumSharp
             {
                 case null:
                     return "O";
-                case string text:
-                    return StrTypeCode(text);
                 case char c:
                     return c.ToString();
                 case NDMaskedConstant:
                     return "d";
-                case NDCharArray { IsScalarStandIn: true } standIn:
-                    // An element stand-in of a chararray is the str (U) or bytes (S) value it holds.
-                    return IsPyStrClass(standIn.dtype) ? StrTypeCode(standIn.GetValue(new long[standIn.ndim]) as string ?? string.Empty) : "S";
+            }
+
+            // isinstance(t, str) and t: the text of a str (a 0-d text element's own value; a missing StringDType value is
+            // its NA object, read again as an item).
+            if (NDScalarType.PyStr.__instancecheck__(item))
+            {
+                if (item is string text)
+                    return StrTypeCode(text);
+                object value = ((NDArray)item).GetValue(new long[((NDArray)item).ndim]);
+                return value is string elementText ? StrTypeCode(elementText) : ItemTypeCode(value);
+            }
+            if (NDScalarType.PyBytes.__instancecheck__(item))
+                return DTypeRegistry.Bytes.TypeChar.ToString();
+
+            switch (item)
+            {
                 case NDArray array:
                     return array.dtype.@char.ToString();
                 case NDMaskedArray masked:
@@ -253,26 +285,6 @@ namespace NumSharp
         /// <param name="descr">The descriptor.</param>
         /// <returns>True when the elements are <c>str</c>.</returns>
         private static bool IsPyStrClass(DType descr) => NDScalarType.PyStr.__subclasscheck__(descr);
-
-        /// <summary>
-        ///     The text of element <paramref name="index"/> of a 1-D text array, as NumPy's iteration hands it out: a
-        ///     chararray applies <c>rstrip()</c> (Python's whitespace) to the element it returns.
-        /// </summary>
-        /// <param name="array">A 1-D <c>U</c> or <c>StringDType</c> array.</param>
-        /// <param name="index">The element.</param>
-        /// <returns>The text (a missing StringDType value reads as its string form).</returns>
-        private static string ElementText(NDArray array, long index)
-        {
-            string text = array.GetValue(index) as string ?? string.Empty;
-            if (array is NDCharArray)
-            {
-                int end = text.Length;
-                while (end > 0 && NumSharp.Utilities.PyUnicode.IsSpace(text[end - 1]))
-                    end--;
-                text = text.Substring(0, end);
-            }
-            return text;
-        }
 
         /// <summary>
         ///     The body of <see cref="mintypecode(object, string, char)"/>, statement for statement NumPy's: the set of type
