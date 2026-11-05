@@ -198,6 +198,14 @@ before promoting, as NumPy's unfused sequence does.
 - Repeated NDArray references deduplicate to one iterator operand; `out=` follows the ufunc rules; `ExecuteExpression`
   (Tier 3C) throws without EXTERNAL_LOOP (a per-element walk would be about 40× slower); `np.evaluate` configures the
   iterator itself.
+- The fused kernel vectorizes under one of three plans (`NDExpr.Vector.cs`, `NDExprVectorPlan.TryPlan`): UNIFORM (one
+  non-bool dtype W; a Boolean node rides as a `Vector<W>` lane mask), MIXED-WIDTH (no Boolean node; half-lane dtypes
+  widen exactly into the root's lane; 256-bit AVX2) and SAME-WIDTH (every non-bool dtype of one element size: each node
+  computes at its own dtype, a mask crosses dtypes by reinterpretation — `Where(int64 >= 0, float64, 0)`). A value edge
+  between two dtypes (int64 → float64 rounds) keeps the tree scalar, and the scalar body's `Where` BRANCHES per element
+  (a random mask mispredicts half the time: 0.46× the unfused np.where before the same-width plan). Every same-width rule
+  reduces to the uniform one when the node's dtype is W, so uniform kernels are emitted unchanged. Gate:
+  `NDEvaluateVectorTests` (vector == scalar byte for byte, the plan verdicts).
 - Trivially iterable calls skip NDIter (`DefaultEngine.Evaluate.Trivial.cs`, a port of NumPy's
   `try_trivial_single_output_loop`): identical dims on every non-0-d operand, each 1-D (any stride) or contiguous in one
   shared C/F order, no cast / `dtype=` / `where=`, and a provided `out` overlapping an input only exactly → the fused

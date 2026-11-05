@@ -1805,6 +1805,9 @@ namespace NumSharp.Backends.Iteration
                 }
             }
 
+            // A numeric child is read at its OWN dtype — the lane W in the uniform plan, any dtype of W's
+            // size in a same-width tree — and the mask it yields is retyped to W (a no-op at W): a float64
+            // NaN test inside an int64-lane kernel must compare float64 lanes, not their int64 bits.
             switch (_op)
             {
                 case UnaryOp.LogicalNot:
@@ -1815,8 +1818,9 @@ namespace NumSharp.Backends.Iteration
                     }
                     else
                     {
-                        _child.EmitVector(il, ctx);       // value at lane
-                        NDExprVec.EmitIsZeroMask(il, lane);
+                        _child.EmitVector(il, ctx);       // value at its own dtype
+                        NDExprVec.EmitIsZeroMask(il, childType);
+                        NDExprVec.EmitReinterpret(il, childType, lane);
                     }
                     return;
 
@@ -1826,39 +1830,42 @@ namespace NumSharp.Backends.Iteration
                     return;
 
                 case UnaryOp.IsNan:
-                    if (!NDExprVec.IsFloatLane(lane) || childType == NPTypeCode.Boolean)
+                    if (!NDExprVec.IsFloatLane(childType) || childType == NPTypeCode.Boolean)
                     {
                         NDExprVec.EmitZero(il, lane);      // integers / bools are never NaN
                         return;
                     }
                     _child.EmitVector(il, ctx);
                     il.Emit(OpCodes.Dup);
-                    il.EmitCall(OpCodes.Call, VectorMethodCache.Equals(DirectILKernelGenerator.VectorBits, DirectILKernelGenerator.GetClrType(lane)), null);
-                    NDExprVec.EmitNot(il, lane);           // ~(x == x)
+                    il.EmitCall(OpCodes.Call, VectorMethodCache.Equals(DirectILKernelGenerator.VectorBits, DirectILKernelGenerator.GetClrType(childType)), null);
+                    NDExprVec.EmitNot(il, childType);      // ~(x == x)
+                    NDExprVec.EmitReinterpret(il, childType, lane);
                     return;
 
                 case UnaryOp.IsInf:
-                    if (!NDExprVec.IsFloatLane(lane) || childType == NPTypeCode.Boolean)
+                    if (!NDExprVec.IsFloatLane(childType) || childType == NPTypeCode.Boolean)
                     {
                         NDExprVec.EmitZero(il, lane);
                         return;
                     }
                     _child.EmitVector(il, ctx);
-                    NDExprVec.EmitAbs(il, lane);
-                    NDExprVec.EmitPositiveInfinity(il, lane);
-                    il.EmitCall(OpCodes.Call, VectorMethodCache.Equals(DirectILKernelGenerator.VectorBits, DirectILKernelGenerator.GetClrType(lane)), null);
+                    NDExprVec.EmitAbs(il, childType);
+                    NDExprVec.EmitPositiveInfinity(il, childType);
+                    il.EmitCall(OpCodes.Call, VectorMethodCache.Equals(DirectILKernelGenerator.VectorBits, DirectILKernelGenerator.GetClrType(childType)), null);
+                    NDExprVec.EmitReinterpret(il, childType, lane);
                     return;
 
                 case UnaryOp.IsFinite:
-                    if (!NDExprVec.IsFloatLane(lane) || childType == NPTypeCode.Boolean)
+                    if (!NDExprVec.IsFloatLane(childType) || childType == NPTypeCode.Boolean)
                     {
                         NDExprVec.EmitAllBitsSet(il, lane);
                         return;
                     }
                     _child.EmitVector(il, ctx);
-                    NDExprVec.EmitAbs(il, lane);
-                    NDExprVec.EmitPositiveInfinity(il, lane);
-                    il.EmitCall(OpCodes.Call, VectorMethodCache.LessThan(DirectILKernelGenerator.VectorBits, DirectILKernelGenerator.GetClrType(lane)), null);
+                    NDExprVec.EmitAbs(il, childType);
+                    NDExprVec.EmitPositiveInfinity(il, childType);
+                    il.EmitCall(OpCodes.Call, VectorMethodCache.LessThan(DirectILKernelGenerator.VectorBits, DirectILKernelGenerator.GetClrType(childType)), null);
+                    NDExprVec.EmitReinterpret(il, childType, lane);
                     return;                                // |x| < inf: NaN lanes compare false, like np.isfinite
 
                 default:                                   // abs / floor / ceil / trunc on a bool mask: identity
@@ -2367,12 +2374,17 @@ namespace NumSharp.Backends.Iteration
                 }
             }
 
-            // Compare at the common dtype (== the lane, or bool bytes in byte mode): the comparison
-            // kernel's own vector compare — NaN lanes false, NotEqual as ~Equals (NaN != NaN true),
-            // unsigned lanes through the unsigned-aware generic compares.
+            // Compare at the common dtype (== the lane, or bool bytes in byte mode; any dtype of the
+            // lane's size in a same-width tree): the comparison kernel's own vector compare — NaN lanes
+            // false, NotEqual as ~Equals (NaN != NaN true), unsigned lanes through the unsigned-aware
+            // generic compares.
             EmitVectorChildAs(il, ctx, _left, cmpType);
             EmitVectorChildAs(il, ctx, _right, cmpType);
             DirectILKernelGenerator.EmitVectorCompareMask(il, _op, cmpType);
+            // Every mask of a W-mode kernel is a Vector<W>: an int64 compare's mask selects float64 lanes
+            // as the same bits. Nothing is emitted when the compare ran at W (the uniform plan).
+            if (!ctx.ByteMode)
+                NDExprVec.EmitReinterpret(il, cmpType, lane);
         }
 
         public override void AppendSignature(StringBuilder sb)
@@ -2632,7 +2644,11 @@ namespace NumSharp.Backends.Iteration
         {
             var my = ctx.TypeOf(this);
             var lane = ctx.VectorLaneType;
-            var vecType = VectorMethodCache.V(DirectILKernelGenerator.VectorBits, DirectILKernelGenerator.GetSimdLaneType(lane));
+            // The select runs at the RESULT's dtype: W in the uniform plan (and for a bool result, whose
+            // branches are W masks), or this node's own dtype in a same-width tree — float64 branches
+            // chosen by an int64 comparison's mask.
+            var sel = my == NPTypeCode.Boolean || ctx.ByteMode ? lane : my;
+            var vecType = VectorMethodCache.V(DirectILKernelGenerator.VectorBits, DirectILKernelGenerator.GetSimdLaneType(sel));
             var locMask = il.DeclareLocal(vecType);
             var locA = il.DeclareLocal(vecType);
             var locB = il.DeclareLocal(vecType);
@@ -2642,6 +2658,8 @@ namespace NumSharp.Backends.Iteration
             EmitVectorChildAs(il, ctx, _cond, NPTypeCode.Boolean);
             if (ctx.ByteMode)
                 NDExprVec.EmitBytesToMask(il);
+            else
+                NDExprVec.EmitReinterpret(il, lane, sel);   // the Vector<W> mask typed at the select's dtype (no-op at W)
             il.Emit(OpCodes.Stloc, locMask);
 
             EmitVectorChildAs(il, ctx, _a, my);
@@ -2652,7 +2670,7 @@ namespace NumSharp.Backends.Iteration
             il.Emit(OpCodes.Ldloc, locMask);
             il.Emit(OpCodes.Ldloc, locA);
             il.Emit(OpCodes.Ldloc, locB);
-            NDExprVec.EmitSelect(il, lane);
+            NDExprVec.EmitSelect(il, sel);
         }
 
         public override void AppendSignature(StringBuilder sb)

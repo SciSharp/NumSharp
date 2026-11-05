@@ -98,15 +98,53 @@ namespace NumSharp.Backends.Kernels
         /// True for a P5.2 mixed-width kernel: operands may differ from W (each SIMD-capable, sized
         /// like W or exactly half, never Boolean) and the uniform-lane rules below do not apply.
         /// </param>
+        /// <param name="sameWidth">
+        /// True for a P5.3 same-width kernel: a non-bool operand may be any SIMD dtype of W's SIZE
+        /// (it streams at its own dtype, a full-width vector), bool operands are lane masks as in the
+        /// uniform mode, and the output is W or Boolean (the plan's W is the root dtype).
+        /// </param>
         /// <returns>
         /// Uniform mode: true when every operand is W or Boolean, W is SIMD-capable, and each bool
         /// operand can be handled on this host — a bool INPUT needs
         /// <see cref="FusedBoolInputMasksAvailable"/>, a bool OUTPUT needs only
         /// <see cref="FusedBoolLanesAvailable"/>. Mixed mode: true when
         /// <see cref="FusedMixedWidthAvailable"/> holds and every operand obeys the container rule.
+        /// Same-width mode: the uniform rules with "W" read as "a SIMD dtype of W's size" for the
+        /// inputs, and an output of W or Boolean.
         /// </returns>
-        internal static bool FusedSimdViable(NPTypeCode[] operandTypes, NPTypeCode laneType, bool mixedWidth = false)
+        internal static bool FusedSimdViable(NPTypeCode[] operandTypes, NPTypeCode laneType, bool mixedWidth = false, bool sameWidth = false)
         {
+            if (sameWidth)
+            {
+                // The same bool gates as the uniform mode; only the non-bool INPUT check widens from
+                // "is W" to "has W's size" — every such operand then loads one full-width vector of
+                // its own dtype. The output must be W itself (the store writes a Vector<W>) or bool.
+                if (VectorBits == 0 || !CanUseSimd(laneType))
+                    return false;
+                int laneSize = GetTypeSize(laneType);
+                int outIndex = operandTypes.Length - 1;
+                bool anyBoolOperand = false, boolInputOperand = false;
+                for (int op = 0; op < operandTypes.Length; op++)
+                {
+                    var t = operandTypes[op];
+                    if (t == NPTypeCode.Boolean)
+                    {
+                        anyBoolOperand = true;
+                        if (op != outIndex)
+                            boolInputOperand = true;
+                        continue;
+                    }
+                    if (op == outIndex ? t != laneType : (!CanUseSimd(t) || GetTypeSize(t) != laneSize))
+                        return false;
+                }
+
+                if (!anyBoolOperand)
+                    return true;
+                if (!FusedBoolLanesAvailable)
+                    return false;
+                return !boolInputOperand || FusedBoolInputMasksAvailable(laneType);
+            }
+
             if (mixedWidth)
             {
                 // Lane = root dtype; every operand streams at its own dtype. The container rule
@@ -197,6 +235,13 @@ namespace NumSharp.Backends.Kernels
         /// <c>Vector&lt;lane&gt;</c>; the shell then loads/broadcasts per-operand containers and checks
         /// contiguity against each operand's own element size. The scalar bodies are unaffected.
         /// </param>
+        /// <param name="sameWidth">
+        /// P5.3 same-width mode: a non-bool input may be any SIMD dtype of the lane's size; it streams
+        /// (and broadcasts) at its OWN dtype in a full-width vector, which the vector body's locals are
+        /// typed to, while bool operands stay <c>Vector&lt;lane&gt;</c> masks. Contiguity, the unrolled
+        /// block and the packed bool store are the uniform mode's (every operand has the lane's size);
+        /// the gather tier is skipped unless every operand IS the lane. The scalar bodies are unaffected.
+        /// </param>
         /// <returns>The compiled (cached) inner loop.</returns>
         /// <exception cref="ArgumentNullException">A required argument is null.</exception>
         /// <exception cref="ArgumentException">Fewer than one input plus the output.</exception>
@@ -207,7 +252,8 @@ namespace NumSharp.Backends.Kernels
             Action<ILGenerator>? vectorBody,
             string cacheKey,
             Action<ILGenerator>? prologue = null,
-            bool mixedWidth = false)
+            bool mixedWidth = false,
+            bool sameWidth = false)
         {
             if (operandTypes is null) throw new ArgumentNullException(nameof(operandTypes));
             if (operandTypes.Length < 2)
@@ -216,9 +262,23 @@ namespace NumSharp.Backends.Kernels
             if (cacheKey is null) throw new ArgumentNullException(nameof(cacheKey));
 
             return _innerLoopCache.GetOrAdd(cacheKey, _ =>
-                GenerateFusedInnerLoop(operandTypes, laneType, scalarBody, vectorBody, cacheKey, prologue, mixedWidth));
+                GenerateFusedInnerLoop(operandTypes, laneType, scalarBody, vectorBody, cacheKey, prologue, mixedWidth, sameWidth));
         }
 
+        /// <summary>
+        /// Emits one fused inner loop: the parameter prologue, then — when a vector body is viable — the contiguous
+        /// SIMD loop, the contiguous-output / broadcast-input SIMD loop and the strided gather tier, each falling to the
+        /// scalar strided loop; without a vector body, the scalar contiguous loop or the scalar strided one.
+        /// </summary>
+        /// <param name="operandTypes">The iterator operands' dtypes, [inputs..., output].</param>
+        /// <param name="laneType">The vector body's lane dtype W.</param>
+        /// <param name="scalarBody">Stack [operand scalars…] → [result scalar].</param>
+        /// <param name="vectorBody">Stack [operand vectors…] → [result vector], or null.</param>
+        /// <param name="cacheKey">The kernel's identity (names the DynamicMethod).</param>
+        /// <param name="prologue">Emitted once at entry, or null.</param>
+        /// <param name="mixedWidth">P5.2 mixed-width mode (see <see cref="CompileFusedInnerLoop"/>).</param>
+        /// <param name="sameWidth">P5.3 same-width mode (see <see cref="CompileFusedInnerLoop"/>).</param>
+        /// <returns>The compiled inner loop.</returns>
         private static NDInnerLoopFunc GenerateFusedInnerLoop(
             NPTypeCode[] operandTypes,
             NPTypeCode laneType,
@@ -226,7 +286,8 @@ namespace NumSharp.Backends.Kernels
             Action<ILGenerator>? vectorBody,
             string cacheKey,
             Action<ILGenerator>? prologue,
-            bool mixedWidth)
+            bool mixedWidth,
+            bool sameWidth)
         {
             int nOp = operandTypes.Length;
             int nIn = nOp - 1;
@@ -256,7 +317,7 @@ namespace NumSharp.Backends.Kernels
             var lblScalarStrided = il.DefineLabel();
             var lblEnd = il.DefineLabel();
 
-            bool simd = vectorBody != null && FusedSimdViable(operandTypes, laneType, mixedWidth);
+            bool simd = vectorBody != null && FusedSimdViable(operandTypes, laneType, mixedWidth, sameWidth);
             if (simd)
             {
                 bool byteMode = laneType == NPTypeCode.Boolean;
@@ -276,7 +337,7 @@ namespace NumSharp.Backends.Kernels
                     il.Emit(OpCodes.Ldc_I8, (long)ElemSize(op));
                     il.Emit(OpCodes.Bne_Un, lblNotAllContig);
                 }
-                EmitFusedSimdLoop(il, operandTypes, laneType, ptrLocals, strideLocals, vectorBody!, scalarBody, allowBroadcast: false, mixedWidth);
+                EmitFusedSimdLoop(il, operandTypes, laneType, ptrLocals, strideLocals, vectorBody!, scalarBody, allowBroadcast: false, mixedWidth, sameWidth);
                 il.Emit(OpCodes.Br, lblEnd);
                 il.MarkLabel(lblNotAllContig);
 
@@ -296,13 +357,15 @@ namespace NumSharp.Backends.Kernels
                     il.Emit(OpCodes.Bne_Un, lblTryGather);
                     il.MarkLabel(lblOk);
                 }
-                EmitFusedSimdLoop(il, operandTypes, laneType, ptrLocals, strideLocals, vectorBody!, scalarBody, allowBroadcast: true, mixedWidth);
+                EmitFusedSimdLoop(il, operandTypes, laneType, ptrLocals, strideLocals, vectorBody!, scalarBody, allowBroadcast: true, mixedWidth, sameWidth);
                 il.Emit(OpCodes.Br, lblEnd);
                 il.MarkLabel(lblTryGather);
 
                 // ── 3. strided 32/64-bit lanes, no bool operand anywhere → AVX2 gather ────────
                 // (Mixed-width kernels skip the gather tier — its loads are lane-shaped — and fall
-                // to the scalar strided loop, whose per-operand strides already handle mixed dtypes.)
+                // to the scalar strided loop, whose per-operand strides already handle mixed dtypes.
+                // A same-width kernel reaches it only when every operand IS the lane: the check
+                // below compares dtypes, not sizes.)
                 bool allLane = !byteMode && !mixedWidth && outType == laneType;
                 for (int op = 0; allLane && op < nIn; op++)
                     allLane = operandTypes[op] == laneType;
@@ -369,6 +432,16 @@ namespace NumSharp.Backends.Kernels
         /// (perfectly predicted) branch — an N-ary generalization of the production shell's
         /// scalar-lhs / scalar-rhs paths that needs no per-pattern specialization.
         /// </summary>
+        /// <param name="il">The kernel's IL generator.</param>
+        /// <param name="operandTypes">The iterator operands' dtypes, [inputs..., output].</param>
+        /// <param name="laneType">The lane dtype W (Boolean = byte mode).</param>
+        /// <param name="ptrLocals">Each operand's data pointer local.</param>
+        /// <param name="strideLocals">Each operand's byte stride local.</param>
+        /// <param name="vectorBody">Stack [operand vectors…] → [result vector].</param>
+        /// <param name="scalarBody">Stack [operand scalars…] → [result scalar], for the tail.</param>
+        /// <param name="allowBroadcast">Whether inputs may be stride-0 (hoisted) operands.</param>
+        /// <param name="mixedWidth">P5.2 mixed-width mode: operands at their own (possibly partial) containers.</param>
+        /// <param name="sameWidth">P5.3 same-width mode: non-bool operands at their own dtype, full width.</param>
         private static void EmitFusedSimdLoop(
             ILGenerator il,
             NPTypeCode[] operandTypes,
@@ -378,7 +451,8 @@ namespace NumSharp.Backends.Kernels
             Action<ILGenerator> vectorBody,
             Action<ILGenerator> scalarBody,
             bool allowBroadcast,
-            bool mixedWidth = false)
+            bool mixedWidth = false,
+            bool sameWidth = false)
         {
             int nOp = operandTypes.Length;
             int nIn = nOp - 1;
@@ -390,10 +464,13 @@ namespace NumSharp.Backends.Kernels
             // A mixed-width operand rides its OWN container: elemCount (the lane's) times its own
             // element size — 256-bit for a lane-sized operand, 128-bit for a half-lane one (the
             // viability gate admits nothing else, so a partial load is always exactly 16 bytes).
+            // A same-width operand rides its own dtype at full width (a bool one stays a W mask).
             int MixedBits(NPTypeCode t) => VectorBits * GetTypeSize(t) / GetTypeSize(laneType);
             Type OperandVecType(int op) => mixedWidth
                 ? VectorMethodCache.V(MixedBits(operandTypes[op]), GetClrType(operandTypes[op]))
-                : vecType;
+                : IsSameWidthOperand(sameWidth, operandTypes[op], laneType)
+                    ? VectorMethodCache.V(VectorBits, GetClrType(operandTypes[op]))
+                    : vecType;
 
             LocalBuilder[]? isBroadcast = null;
             LocalBuilder[]? hoisted = null;
@@ -416,7 +493,7 @@ namespace NumSharp.Backends.Kernels
                     var lblSkip = il.DefineLabel();
                     il.Emit(OpCodes.Ldloc, isBroadcast[op]);
                     il.Emit(OpCodes.Brfalse, lblSkip);
-                    EmitFusedBroadcastScalar(il, operandTypes[op], laneType, ptrLocals[op], mixedWidth);
+                    EmitFusedBroadcastScalar(il, operandTypes[op], laneType, ptrLocals[op], mixedWidth, sameWidth);
                     il.Emit(OpCodes.Stloc, hoisted[op]);
                     il.MarkLabel(lblSkip);
                 }
@@ -449,7 +526,7 @@ namespace NumSharp.Backends.Kernels
             {
                 for (int op = 0; op < nIn; op++)
                     EmitFusedLoad(il, operandTypes[op], laneType, ptrLocals[op], locI, offset,
-                        isBroadcast?[op], hoisted?[op], mixedWidth);
+                        isBroadcast?[op], hoisted?[op], mixedWidth, sameWidth);
                 vectorBody(il);
                 EmitFusedStore(il, operandTypes[nIn], laneType, ptrLocals[nIn], locI, offset);
             }
@@ -458,7 +535,8 @@ namespace NumSharp.Backends.Kernels
             // vector narrows into ONE 16/32-byte store (NumPy's npyv_pack_b8_b64/b32 shape) instead
             // of four PDEP + 4-byte stores — the comparison kernels are store-bound at L2 sizes.
             // (Unreachable in mixed-width mode — the mixed plan excludes Boolean-typed nodes, so the
-            // output is always the lane dtype there.)
+            // output is always the lane dtype there. A same-width tree's masks are Vector<W> like the
+            // uniform plan's, so its bool output packs the same way.)
             bool packBlock = !byteMode && !mixedWidth && operandTypes[nIn] == NPTypeCode.Boolean
                              && VectorBits == 256 && GetTypeSize(laneType) >= 2;
             LocalBuilder[]? maskLocals = null;
@@ -479,7 +557,7 @@ namespace NumSharp.Backends.Kernels
                 {
                     for (int op = 0; op < nIn; op++)
                         EmitFusedLoad(il, operandTypes[op], laneType, ptrLocals[op], locI, u * lanes,
-                            isBroadcast?[op], hoisted?[op]);
+                            isBroadcast?[op], hoisted?[op], mixedWidth: false, sameWidth);
                     vectorBody(il);
                     il.Emit(OpCodes.Stloc, maskLocals![u]);
                 }
@@ -524,9 +602,27 @@ namespace NumSharp.Backends.Kernels
             il.MarkLabel(lblTailEnd);
         }
 
+        /// <summary>
+        /// Whether a same-width kernel's operand of <paramref name="opType"/> streams at its OWN dtype rather than as
+        /// the lane's vector: a non-bool dtype other than W (a bool operand is a W lane mask, a W operand is W).
+        /// </summary>
+        /// <param name="sameWidth">Whether the kernel is a P5.3 same-width kernel (false: never).</param>
+        /// <param name="opType">The operand's dtype.</param>
+        /// <param name="laneType">The lane dtype W.</param>
+        /// <returns>True when the operand's vector is <c>Vector&lt;opType&gt;</c> at full width.</returns>
+        private static bool IsSameWidthOperand(bool sameWidth, NPTypeCode opType, NPTypeCode laneType)
+            => sameWidth && opType != laneType && opType != NPTypeCode.Boolean;
+
         /// <summary>Stack: [] → [Vector&lt;lane&gt;] — the broadcast of one operand's single element
-        /// (in mixed-width mode, the operand's OWN container — <c>Vector128</c> for a half-lane dtype).</summary>
-        private static void EmitFusedBroadcastScalar(ILGenerator il, NPTypeCode opType, NPTypeCode laneType, LocalBuilder ptr, bool mixedWidth = false)
+        /// (in mixed-width mode, the operand's OWN container — <c>Vector128</c> for a half-lane dtype;
+        /// in same-width mode a non-lane operand's own dtype at full width).</summary>
+        /// <param name="il">The kernel's IL generator.</param>
+        /// <param name="opType">The operand's dtype.</param>
+        /// <param name="laneType">The lane dtype W.</param>
+        /// <param name="ptr">The operand's data pointer local (its one element).</param>
+        /// <param name="mixedWidth">P5.2 mixed-width mode.</param>
+        /// <param name="sameWidth">P5.3 same-width mode.</param>
+        private static void EmitFusedBroadcastScalar(ILGenerator il, NPTypeCode opType, NPTypeCode laneType, LocalBuilder ptr, bool mixedWidth = false, bool sameWidth = false)
         {
             // Mixed-width: broadcast at the operand's own dtype and container; the tree's edge
             // conversions (NDExprVec.EmitWidenEdge) widen it where it meets a wider node, exactly
@@ -537,6 +633,16 @@ namespace NumSharp.Backends.Kernels
                 il.Emit(OpCodes.Ldloc, ptr);
                 EmitLoadIndirect(il, opType);
                 EmitVectorCreateAt(il, opType, VectorBits * GetTypeSize(opType) / GetTypeSize(laneType));
+                return;
+            }
+
+            // Same-width: the operand's own dtype at full width — the representation its streamed
+            // loads have, so a broadcast operand and a contiguous one feed the body identically.
+            if (IsSameWidthOperand(sameWidth, opType, laneType))
+            {
+                il.Emit(OpCodes.Ldloc, ptr);
+                EmitLoadIndirect(il, opType);
+                EmitVectorCreate(il, opType);
                 return;
             }
 
@@ -577,13 +683,24 @@ namespace NumSharp.Backends.Kernels
         /// Stack: [] → [Vector&lt;lane&gt;] — operand <c>op</c>'s vector at element (i + offset): a
         /// contiguous load (a bool operand expands to a lane mask), or the hoisted broadcast. In
         /// mixed-width mode a non-lane operand loads its OWN partial container instead (addressed by
-        /// its own element size — the shared element counter times a per-operand byte scale).
+        /// its own element size — the shared element counter times a per-operand byte scale); in
+        /// same-width mode a non-lane, non-bool operand loads one full vector of its own dtype.
         /// </summary>
+        /// <param name="il">The kernel's IL generator.</param>
+        /// <param name="opType">The operand's dtype.</param>
+        /// <param name="laneType">The lane dtype W.</param>
+        /// <param name="ptr">The operand's data pointer local.</param>
+        /// <param name="locI">The element counter.</param>
+        /// <param name="offset">The element offset of this group within the unrolled block.</param>
+        /// <param name="isBroadcast">The operand's stride-0 flag local, or null when broadcast is not allowed.</param>
+        /// <param name="hoisted">The operand's hoisted broadcast vector, or null.</param>
+        /// <param name="mixedWidth">P5.2 mixed-width mode.</param>
+        /// <param name="sameWidth">P5.3 same-width mode.</param>
         private static void EmitFusedLoad(
             ILGenerator il, NPTypeCode opType, NPTypeCode laneType,
             LocalBuilder ptr, LocalBuilder locI, long offset,
             LocalBuilder? isBroadcast, LocalBuilder? hoisted,
-            bool mixedWidth = false)
+            bool mixedWidth = false, bool sameWidth = false)
         {
             Label lblBroadcast = default, lblDone = default;
             if (isBroadcast != null)
@@ -600,6 +717,13 @@ namespace NumSharp.Backends.Kernels
                 // viability gate's container rule), so the partial load never over-reads.
                 EmitAddrIPlusOffset(il, ptr, locI, offset, GetTypeSize(opType));
                 EmitVectorLoadAt(il, VectorBits * GetTypeSize(opType) / GetTypeSize(laneType), GetClrType(opType));
+            }
+            else if (IsSameWidthOperand(sameWidth, opType, laneType))
+            {
+                // Same size as W, so the element counter addresses it exactly like a W operand and one
+                // full vector holds the group's lanes; it is typed at its own dtype for the body.
+                EmitAddrIPlusOffset(il, ptr, locI, offset, GetTypeSize(opType));
+                EmitVectorLoad(il, opType);
             }
             else if (laneType == NPTypeCode.Boolean || opType == laneType)
             {

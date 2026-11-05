@@ -340,6 +340,160 @@ namespace NumSharp.Tests.Backends.Iterators
         }
 
         /// <summary>
+        /// The P5.3 same-width plan's verdicts: dtypes of one element size that are not one dtype vectorize when every
+        /// crossing between them is a MASK (an int64 comparison selecting float64 lanes, a float64 NaN test anded with
+        /// an int64 test, an int64 mask made 1.0 / 0.0); a VALUE crossing (int64 → float64 rounds) or two sizes keep
+        /// the tree scalar. The bool gates are the uniform plan's, so each verdict is stated against the host.
+        /// </summary>
+        [TestMethod]
+        public void VectorPlan_SameWidth_DecidesLaneAndRefusals()
+        {
+            var i8f8 = new[] { NPTypeCode.Int64, NPTypeCode.Double };
+            bool boolOut = DirectILKernelGenerator.FusedBoolLanesAvailable;
+
+            // np.where(f >= 0, price, 0): the int64 mask selects float64 lanes; W = the root's dtype.
+            Assert.AreEqual(boolOut, PlanModes(NDExpr.Where(NDExpr.GreaterEqual(NDExpr.Input(0), 0), NDExpr.Input(1), 0), i8f8,
+                out var lane, out var mixed, out var same), "where(int64 cmp, float64, 0)");
+            if (boolOut)
+                Assert.IsTrue(lane == NPTypeCode.Double && same && !mixed);
+            // A weak float literal lifts the multiply to float64 over an int64-only input set: the mask becomes 1.0 / 0.0.
+            Assert.AreEqual(boolOut, PlanModes(NDExpr.Greater(NDExpr.Input(0), 30) * 1.5, new[] { NPTypeCode.Int64 },
+                out lane, out _, out same), "(int64 > 30) * 1.5");
+            if (boolOut)
+                Assert.IsTrue(lane == NPTypeCode.Double && same);
+            // A bool root: W is the first non-bool input's dtype (any dtype of the size carries the masks).
+            Assert.AreEqual(boolOut, PlanModes(NDExpr.Greater(NDExpr.Input(0), 0) & NDExpr.IsNaN(NDExpr.Input(1)), i8f8,
+                out lane, out _, out same), "(int64 > 0) & isnan(float64)");
+            if (boolOut)
+                Assert.IsTrue(lane == NPTypeCode.Int64 && same);
+            // 4-byte and 2-byte pairs, and two integer kinds of one size.
+            Assert.AreEqual(boolOut, PlanModes(NDExpr.Where(NDExpr.Less(NDExpr.Input(0), 5), NDExpr.Input(1), NDExpr.Input(1) * 2),
+                new[] { NPTypeCode.Int32, NPTypeCode.Single }, out lane, out _, out same), "where(int32 cmp, float32, float32)");
+            if (boolOut)
+                Assert.IsTrue(lane == NPTypeCode.Single && same);
+            Assert.AreEqual(boolOut, PlanModes(NDExpr.Where(NDExpr.Greater(NDExpr.Input(0), 9), NDExpr.Input(1), NDExpr.Input(1)),
+                new[] { NPTypeCode.UInt16, NPTypeCode.Int16 }, out lane, out _, out same), "where(uint16 cmp, int16, int16)");
+            if (boolOut)
+                Assert.IsTrue(lane == NPTypeCode.Int16 && same);
+            // A streamed bool operand needs the x86 byte → 8-byte lane expansion, as in the uniform plan.
+            bool boolIn = DirectILKernelGenerator.FusedBoolInputMasksAvailable(NPTypeCode.Double);
+            Assert.AreEqual(boolIn, PlanModes(NDExpr.Where(NDExpr.Input(2) & NDExpr.Greater(NDExpr.Input(0), 0), NDExpr.Input(1), 0),
+                new[] { NPTypeCode.Int64, NPTypeCode.Double, NPTypeCode.Boolean }, out _, out _, out same), "streamed bool input");
+
+            // Refusals: a value edge between two dtypes, two element sizes, a non-SIMD dtype.
+            Assert.IsFalse(PlanModes(NDExpr.Where(NDExpr.Greater(NDExpr.Input(0), 0), NDExpr.Input(0), NDExpr.Input(1)), i8f8,
+                out _, out _, out _), "an int64 branch of a float64 where rounds: scalar");
+            Assert.IsFalse(PlanModes(NDExpr.Greater(NDExpr.Input(0), NDExpr.Input(1)), i8f8, out _, out _, out _),
+                "int64 vs float64 compares at float64: a value edge, scalar");
+            Assert.IsFalse(PlanModes(NDExpr.Where(NDExpr.Greater(NDExpr.Input(0), 0), NDExpr.Input(1), 0),
+                new[] { NPTypeCode.Int32, NPTypeCode.Double }, out _, out _, out _), "two element sizes: scalar");
+            Assert.IsFalse(PlanModes(NDExpr.Where(NDExpr.Greater(NDExpr.Input(0), 0), NDExpr.Input(1), NDExpr.Input(1)),
+                new[] { NPTypeCode.Int16, NPTypeCode.Half }, out _, out _, out _), "float16 has no BCL vector lane here: scalar");
+        }
+
+        // ---- same-width trees (P5.3): two dtypes of one size, crossing only as masks ----------
+
+        /// <summary>The same-size dtype pairs (a's dtype, then b's and c's) the same-width sweep runs.</summary>
+        private static readonly (NPTypeCode A, NPTypeCode B)[] SameWidthPairs =
+        {
+            (NPTypeCode.Int64, NPTypeCode.Double), (NPTypeCode.UInt64, NPTypeCode.Double), (NPTypeCode.Double, NPTypeCode.Int64),
+            (NPTypeCode.Int64, NPTypeCode.UInt64), (NPTypeCode.Int32, NPTypeCode.Single), (NPTypeCode.Single, NPTypeCode.UInt32),
+            (NPTypeCode.UInt16, NPTypeCode.Int16), (NPTypeCode.SByte, NPTypeCode.Byte),
+        };
+
+        /// <summary>
+        /// Trees whose masks cross between a's dtype and b's / c's: each must compute the same bytes vectorized and on
+        /// the scalar body. A tree the same-width plan refuses (a value edge) still runs, scalar on both sides.
+        /// </summary>
+        /// <returns>The named trees over (a, b, c, m1, m2).</returns>
+        private static IEnumerable<(string name, Func<NDArray, NDArray, NDArray, NDArray, NDArray, NDExpr> build)> SameWidthTrees()
+        {
+            yield return ("where(a>3,b,c)", (a, b, c, m1, m2) => NDExpr.Where(NDExpr.Greater(a, 3), b, c));
+            yield return ("where(a>=0,b,0)", (a, b, c, m1, m2) => NDExpr.Where(NDExpr.GreaterEqual(a, 0), b, 0));
+            yield return ("where(a!=a,b,c)", (a, b, c, m1, m2) => NDExpr.Where(NDExpr.NotEqual(a, a), b, c));
+            yield return ("(a>3)*b", (a, b, c, m1, m2) => NDExpr.Greater(a, 3) * NDExpr.Arr(b));
+            yield return ("b+(a<=7)", (a, b, c, m1, m2) => NDExpr.Arr(b) + NDExpr.LessEqual(a, 7));
+            yield return ("(a>3)&(b<c)", (a, b, c, m1, m2) => NDExpr.Greater(a, 3) & NDExpr.Less(b, c));
+            yield return ("(a==b)", (a, b, c, m1, m2) => NDExpr.Equal(a, b));
+            yield return ("where(a,b,c)", (a, b, c, m1, m2) => NDExpr.Where(a, b, c));
+            yield return ("logical_and(a,b)", (a, b, c, m1, m2) => NDExpr.LogicalAnd(a, b));
+            yield return ("logical_xor(b,a)", (a, b, c, m1, m2) => NDExpr.LogicalXor(b, a));
+            yield return ("!a|isnan(b)", (a, b, c, m1, m2) => !NDExpr.Arr(a) | NDExpr.IsNaN(b));
+            yield return ("isfinite(b)^(a<0)", (a, b, c, m1, m2) => NDExpr.IsFinite(b) ^ NDExpr.Less(a, 0));
+            yield return ("isinf(a)&(b>1)", (a, b, c, m1, m2) => NDExpr.IsInf(a) & NDExpr.Greater(b, 1));
+            yield return ("where(m1&(a>3),b,-c)", (a, b, c, m1, m2) => NDExpr.Where(NDExpr.Arr(m1) & NDExpr.Greater(a, 3), b, -NDExpr.Arr(c)));
+            yield return ("where(a>3,m1,b<c)", (a, b, c, m1, m2) => NDExpr.Where(NDExpr.Greater(a, 3), m1, NDExpr.Less(b, c)));
+            yield return ("max(where(a>3,b,c),b)", (a, b, c, m1, m2) => NDExpr.Max(NDExpr.Where(NDExpr.Greater(a, 3), b, c), b));
+            yield return ("min(b,c)*(a<5)", (a, b, c, m1, m2) => NDExpr.Min(b, c) * NDExpr.Less(a, 5));
+            yield return ("abs(where(a>3,b,c))", (a, b, c, m1, m2) => NDExpr.Abs(NDExpr.Where(NDExpr.Greater(a, 3), b, c)));
+            yield return ("where(a>3,a,b)", (a, b, c, m1, m2) => NDExpr.Where(NDExpr.Greater(a, 3), a, b));
+        }
+
+        /// <summary>
+        /// Runs every same-width tree over every pair, with a's data from its kind's pool and b / c from theirs, and
+        /// compares vector against scalar bytes; also proves the sweep is not vacuous — the headline tree plans
+        /// same-width on a host with the bool lane helpers, so the kernels compared are really the vector ones.
+        /// </summary>
+        /// <param name="layout">The layout's name, for failure messages.</param>
+        /// <param name="shape">Shapes a fresh 1-D array into the layout under test (a view or a copy).</param>
+        /// <param name="n">The element count before shaping.</param>
+        /// <param name="bc">Builds the b / c operands (dtype, seed) when they take a layout of their own (a column, a 0-d).</param>
+        private static void RunSameWidth(string layout, Func<NDArray, NDArray> shape, int n,
+            Func<NPTypeCode, int, NDArray> bc = null)
+        {
+            var failures = new List<string>();
+            foreach (var (ta, tb) in SameWidthPairs)
+            {
+                if (DirectILKernelGenerator.FusedBoolLanesAvailable)
+                    Assert.IsTrue(PlanModes(NDExpr.Where(NDExpr.Greater(NDExpr.Input(0), 3), NDExpr.Input(1), NDExpr.Input(2)),
+                        new[] { ta, tb, tb }, out _, out _, out var same) && same, $"{ta}/{tb}: the sweep's headline tree must plan same-width");
+
+                NDArray Data(NPTypeCode t, int count, int seed) => IsFloatLane(t) ? Floats(t, count, seed) : Ints(t, count, seed);
+                NDArray a = shape(Data(ta, n, 0));
+                NDArray b = bc is null ? shape(Data(tb, n, 3)) : bc(tb, 3);
+                NDArray c = bc is null ? shape(Data(tb, n, 8)) : bc(tb, 8);
+                NDArray m1 = shape(Mask(n, 6)), m2 = shape(Mask(n, 10));
+                foreach (var (name, build) in SameWidthTrees())
+                {
+                    try { AssertVectorMatchesScalar($"{layout}/{ta}-{tb}/{name}", () => build(a, b, c, m1, m2)); }
+                    catch (Exception e) { failures.Add($"{layout}/{ta}-{tb}/{name}: {e.Message}"); }
+                }
+            }
+            Assert.AreEqual(0, failures.Count, string.Join("\n", failures));
+        }
+
+        /// <summary>Same-width trees over contiguous operands: the unrolled block, the remainder vector and the tail.</summary>
+        [TestMethod]
+        public void SameWidth_Contiguous_VectorMatchesScalar()
+        {
+            RunSameWidth("contig1d", x => x, N);
+            RunSameWidth("contig1d_149", x => x, 149);
+            RunSameWidth("contig2d", x => x.reshape(7, 19), 7 * 19);
+        }
+
+        /// <summary>Same-width trees over strided and reversed operands (the scalar strided loop) and an F-ordered copy.</summary>
+        [TestMethod]
+        public void SameWidth_StridedAndF_VectorMatchesScalar()
+        {
+            RunSameWidth("strided", x => x["::2"], 2 * N);
+            RunSameWidth("negstride", x => x["::-1"], N);
+            RunSameWidth("fcontig2d", x => x.reshape(19, 7).T.copy(order: 'F'), 7 * 19);
+        }
+
+        /// <summary>
+        /// Same-width trees whose b / c are (7, 1) columns (the hoisted stride-0 broadcast, typed at b's own dtype) and
+        /// 0-d arrays (np.evaluate's hoisted parameters, broadcast in the prologue at their own dtype).
+        /// </summary>
+        [TestMethod]
+        public void SameWidth_BroadcastAndZeroD_VectorMatchesScalar()
+        {
+            RunSameWidth("bcast", x => x.reshape(7, 19), 133,
+                (t, seed) => (IsFloatLane(t) ? Floats(t, 7, seed) : Ints(t, 7, seed)).reshape(7, 1));
+            RunSameWidth("scalar0d", x => x, N,
+                (t, seed) => (IsFloatLane(t) ? Floats(t, 1, seed) : Ints(t, 1, seed)).reshape());
+        }
+
+        /// <summary>
         /// Resolve <paramref name="tree"/>'s NumPy types and ask the v2 planner whether it vectorizes
         /// on THIS host — through the uniform OR the P5.2 mixed-width plan; use
         /// <see cref="PlanMixed"/> to also learn which one answered.
@@ -362,10 +516,24 @@ namespace NumSharp.Tests.Backends.Iterators
         /// <param name="isParam">Per input, whether it is a hoisted 0-d parameter; null = all streamed.</param>
         /// <returns>The planner's verdict: true = vector kernel, false = scalar shell.</returns>
         private static bool PlanMixed(NDExpr tree, NPTypeCode[] inputs, out NPTypeCode lane, out bool mixedWidth, bool[] isParam = null)
+            => PlanModes(tree, inputs, out lane, out mixedWidth, out _, isParam);
+
+        /// <summary>
+        /// <see cref="Plan"/>, also reporting which non-uniform plan answered: the P5.2 mixed-width
+        /// one or the P5.3 same-width one (both false for a uniform verdict or a scalar one).
+        /// </summary>
+        /// <param name="tree">The expression tree to plan.</param>
+        /// <param name="inputs">Every input's dtype, in input order.</param>
+        /// <param name="lane">Receives the planned lane dtype (Empty when the plan fails).</param>
+        /// <param name="mixedWidth">Receives true when the tree took the mixed-width plan.</param>
+        /// <param name="sameWidth">Receives true when the tree took the same-width plan.</param>
+        /// <param name="isParam">Per input, whether it is a hoisted 0-d parameter; null = all streamed.</param>
+        /// <returns>The planner's verdict: true = vector kernel, false = scalar shell.</returns>
+        private static bool PlanModes(NDExpr tree, NPTypeCode[] inputs, out NPTypeCode lane, out bool mixedWidth, out bool sameWidth, bool[] isParam = null)
         {
             var resolved = tree.ResolveNumPyTypes(inputs, out var types);
             _ = resolved;
-            return NDExprVectorPlan.TryPlan(tree, inputs, types, out lane, out mixedWidth, isParam);
+            return NDExprVectorPlan.TryPlan(tree, inputs, types, out lane, out mixedWidth, out sameWidth, isParam);
         }
 
         /// <summary>

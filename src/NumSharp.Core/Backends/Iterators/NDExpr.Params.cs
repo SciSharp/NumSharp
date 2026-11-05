@@ -145,8 +145,11 @@ namespace NumSharp.Backends.Iteration
         /// <param name="mixedWidth">P5.2 mixed-width mode: a non-lane parameter broadcasts at its OWN
         /// dtype's partial container (<c>Vector128</c> for a half-lane dtype) instead of the lane's —
         /// the consuming node's edge widens it, exactly as for a streamed operand.</param>
+        /// <param name="sameWidth">P5.3 same-width mode: a non-bool parameter other than the lane broadcasts at its
+        /// OWN dtype at full width (its size is the lane's), the representation its streamed twin has; a bool
+        /// parameter is still a constant W mask.</param>
         /// <exception cref="InvalidOperationException">A parameter dtype the vector plan should have rejected reached the vector prologue.</exception>
-        public void EmitPrologue(ILGenerator il, LocalBuilder[] scalarLocals, LocalBuilder[]? vectorLocals, NPTypeCode lane, int auxByteOffset, bool mixedWidth = false)
+        public void EmitPrologue(ILGenerator il, LocalBuilder[] scalarLocals, LocalBuilder[]? vectorLocals, NPTypeCode lane, int auxByteOffset, bool mixedWidth = false, bool sameWidth = false)
         {
             for (int j = 0; j < ParamTypes.Length; j++)
             {
@@ -177,6 +180,18 @@ namespace NumSharp.Backends.Iteration
                     vectorLocals[j] = il.DeclareLocal(VectorMethodCache.V(bits, DirectILKernelGenerator.GetClrType(t)));
                     il.Emit(OpCodes.Ldloc, scalarLocals[j]);
                     DirectILKernelGenerator.EmitVectorCreateAt(il, t, bits);
+                    il.Emit(OpCodes.Stloc, vectorLocals[j]);
+                    continue;
+                }
+
+                // Same-width: a parameter of another dtype of the lane's size is a full-width vector of
+                // its own dtype — what the shell gives a streamed operand of that dtype, so a 0-d and a
+                // streamed operand reach the body in one representation (the metamorphic pairs agree).
+                if (sameWidth && t != lane && t != NPTypeCode.Boolean)
+                {
+                    vectorLocals[j] = il.DeclareLocal(VectorMethodCache.V(DirectILKernelGenerator.VectorBits, DirectILKernelGenerator.GetClrType(t)));
+                    il.Emit(OpCodes.Ldloc, scalarLocals[j]);
+                    DirectILKernelGenerator.EmitVectorCreate(il, t);
                     il.Emit(OpCodes.Stloc, vectorLocals[j]);
                     continue;
                 }

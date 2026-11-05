@@ -502,13 +502,17 @@ namespace NumSharp.Backends.Iteration
             // with a vector emit at W. A NON-uniform tree may instead take the P5.2 MIXED-WIDTH
             // plan (lane = root dtype, half-lane operands/nodes ride partial Vector128s, edges
             // widen exactly) — mixedWidth then reshapes the operand locals, the parameter
-            // broadcasts and the shell's loads below. See NDExpr.Vector.cs.
+            // broadcasts and the shell's loads below; or the P5.3 SAME-WIDTH plan (every non-bool
+            // dtype of one size, each node at its own dtype, masks reinterpreted between them) —
+            // sameWidth then types each non-bool operand and parameter at its own dtype, full width.
+            // See NDExpr.Vector.cs.
             bool forceScalar = ForceScalar;
             NPTypeCode lane = NPTypeCode.Empty;
             bool mixedWidth = false;
+            bool sameWidth = false;
             // isParam lets the plan tell a hoisted bool parameter (portable constant mask) from a
             // streamed bool operand (host-dependent x86 byte→lane expansion).
-            bool wantSimd = !forceScalar && NDExprVectorPlan.TryPlan(this, inputTypes, nodeTypes, out lane, out mixedWidth, isParam);
+            bool wantSimd = !forceScalar && NDExprVectorPlan.TryPlan(this, inputTypes, nodeTypes, out lane, out mixedWidth, out sameWidth, isParam);
 
             // Parameter locals are declared by the prologue (emitted first, at kernel entry) and read
             // by the bodies through the context — the arrays are shared by closure.
@@ -516,9 +520,10 @@ namespace NumSharp.Backends.Iteration
             LocalBuilder[]? paramVector = plan.ParamCount > 0 && wantSimd ? new LocalBuilder[plan.ParamCount] : null;
             var laneType = lane;
             bool mixedPrologue = mixedWidth;
+            bool sameWidthPrologue = sameWidth;
             Action<ILGenerator>? prologue = plan.ParamCount == 0
                 ? null
-                : il => plan.EmitPrologue(il, paramScalar!, paramVector, laneType, auxByteOffset: 0, mixedPrologue);
+                : il => plan.EmitPrologue(il, paramScalar!, paramVector, laneType, auxByteOffset: 0, mixedPrologue, sameWidthPrologue);
 
             Action<ILGenerator> scalarBody = il =>
             {
@@ -542,15 +547,19 @@ namespace NumSharp.Backends.Iteration
                     // The fused shell hands every operand over on the stack: uniform mode as ONE CLR
                     // vector type — Vector<lane(W)> (a bool operand arrives as a lane MASK of W;
                     // byte mode uses the byte lanes) — mixed-width mode at each operand's OWN
-                    // dtype's container (Vector128 for a half-lane operand), so the locals must be
-                    // typed per operand or the Stloc would be a stack-type mismatch.
+                    // dtype's container (Vector128 for a half-lane operand), same-width mode at each
+                    // non-bool operand's own dtype at full width (a bool one is still a W mask), so
+                    // the locals must be typed per operand or the Stloc would be a stack-type mismatch.
                     var vectorLocals = new LocalBuilder[nOps];
                     var laneVecType = DirectILKernelGenerator.GetVectorType(DirectILKernelGenerator.GetSimdLaneType(laneType));
                     int laneSize = DirectILKernelGenerator.GetTypeSize(laneType);
                     for (int i = nOps - 1; i >= 0; i--)
                     {
                         var localType = laneVecType;
-                        if (mixedWidth && plan.OperandTypes[i] != laneType)
+                        // A same-width operand is the lane's size, so the formula below gives the full
+                        // width; a bool operand of a same-width kernel keeps the W-mask local.
+                        if ((mixedWidth || (sameWidth && plan.OperandTypes[i] != NPTypeCode.Boolean))
+                            && plan.OperandTypes[i] != laneType)
                         {
                             var opType = plan.OperandTypes[i];
                             int bits = DirectILKernelGenerator.VectorBits * DirectILKernelGenerator.GetTypeSize(opType) / laneSize;
@@ -572,10 +581,10 @@ namespace NumSharp.Backends.Iteration
 
             // Distinct cache namespace from legacy Compile — same signature, different emission
             // contract. A forced-scalar kernel is its own entry, and so is each parameter mask.
-            // (The mixed-width choice needs no key component: it is a pure function of the tree
-            // structure + input dtypes — both already in the key — and the host.)
+            // (The mixed-width and same-width choices need no key component: each is a pure function
+            // of the tree structure + input dtypes — both already in the key — and the host.)
             string key = (cacheKey ?? DeriveCacheKey(inputTypes, resolved)) + (forceScalar ? "|np|s" : "|np") + plan.KeySuffix;
-            return DirectILKernelGenerator.CompileFusedInnerLoop(operandTypes, wantSimd ? lane : resolved, scalarBody, vectorBody, key, prologue, mixedWidth);
+            return DirectILKernelGenerator.CompileFusedInnerLoop(operandTypes, wantSimd ? lane : resolved, scalarBody, vectorBody, key, prologue, mixedWidth, sameWidth);
         }
     }
 

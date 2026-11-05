@@ -31,6 +31,17 @@ using NumSharp.Backends.Kernels;
 // The plan (NDExprVectorPlan.TryPlan) decides W and asks every node whether it can emit at
 // W; the scalar body is unchanged, so the vector path can only differ from it by a bug — which
 // the metamorphic sweep (NDEvaluateVectorTests) and the evaluate.jsonl tier catch.
+//
+// SAME-WIDTH trees (P5.3): when the non-bool dtypes differ but share ONE element size — an int64
+// comparison choosing between float64 branches, `np.where(f >= 0, price, 0)` — every node computes
+// at its OWN dtype in a full-width vector, and the masks cross dtypes by reinterpretation: an
+// all-ones / zero lane is the same bits as a Vector<long> or a Vector<double> mask, so the
+// crossing costs nothing (EmitReinterpret). Masks travel as Vector<W> (W = the root dtype, or a
+// non-bool input's when the root is bool), and only VALUE edges between two different dtypes are
+// refused (int64 → float64 rounds and has no AVX2 vector form): such a tree stays scalar. Before
+// this plan the tree ran the scalar body, whose `where` BRANCHES per element — 0.46x of the
+// unfused np.where on a random mask. Every same-width rule reduces to the uniform rule when the
+// node's dtype IS the lane, so the uniform plan's kernels are emitted exactly as before.
 // =============================================================================
 
 namespace NumSharp.Backends.Iteration
@@ -64,6 +75,43 @@ namespace NumSharp.Backends.Iteration
             il.EmitCall(OpCodes.Call, VectorMethodCache.Zero(Bits, clr), null);
             il.EmitCall(OpCodes.Call, VectorMethodCache.Equals(Bits, clr), null);
         }
+
+        /// <summary>
+        /// [V&lt;from&gt;] → [V&lt;to&gt;]: the same bits under another lane type — how a lane MASK crosses between two
+        /// dtypes of one element size in a same-width tree (an int64 comparison's mask selecting float64 lanes). An
+        /// all-ones / zero lane means the same under either type, and the JIT emits no instruction for the cast.
+        /// </summary>
+        /// <param name="il">The IL generator; the vector to reinterpret is on the stack.</param>
+        /// <param name="from">The dtype the vector is typed at (a SIMD dtype).</param>
+        /// <param name="to">The dtype to type it at (a SIMD dtype of the same size).</param>
+        /// <remarks>
+        /// Emits nothing when the dtypes are equal — the uniform plan's every case, which is why its kernels are
+        /// unchanged by the same-width plan. Only for masks: reinterpreting a VALUE is not a conversion (the bits of
+        /// int64 3 are not float64 3.0); the plan refuses value edges between two dtypes.
+        /// </remarks>
+        /// <exception cref="InvalidOperationException">The two dtypes differ in size (a plan bug: the same-width plan admits one size).</exception>
+        internal static void EmitReinterpret(ILGenerator il, NPTypeCode from, NPTypeCode to)
+        {
+            if (from == to)
+                return;
+            if (DirectILKernelGenerator.GetTypeSize(from) != DirectILKernelGenerator.GetTypeSize(to))
+                throw new InvalidOperationException($"cannot reinterpret a {from} lane mask as {to}: the sizes differ (a same-width plan bug).");
+            il.EmitCall(OpCodes.Call, VectorMethodCache.As(Bits,
+                DirectILKernelGenerator.GetSimdLaneType(from), DirectILKernelGenerator.GetSimdLaneType(to)), null);
+        }
+
+        /// <summary>
+        /// Whether a child of dtype <paramref name="child"/> may feed a slot of dtype <paramref name="slot"/> in a v2
+        /// vector body: the same dtype (no conversion), a bool MASK meeting a numeric slot (<c>mask &amp; One</c> at the
+        /// slot's dtype), or a value meeting a Boolean slot (its truthiness mask at its own dtype). A value edge between
+        /// two different non-bool dtypes is refused — the uniform plan never has one, the same-width plan must not
+        /// reinterpret one.
+        /// </summary>
+        /// <param name="child">The child node's dtype.</param>
+        /// <param name="slot">The dtype the consuming node needs the child at.</param>
+        /// <returns>True when <c>EmitVectorChildAs</c> can deliver the child at the slot's dtype.</returns>
+        internal static bool IsVectorEdge(NPTypeCode child, NPTypeCode slot)
+            => child == slot || child == NPTypeCode.Boolean || slot == NPTypeCode.Boolean;
 
         internal static void EmitAllBitsSet(ILGenerator il, NPTypeCode w)
             => il.EmitCall(OpCodes.Call, VectorMethodCache.AllBitsSet(Bits, Clr(w)), null);
@@ -270,7 +318,8 @@ namespace NumSharp.Backends.Iteration
     /// emit at that lane. When the tree is NOT uniform — two distinct non-bool input dtypes, or
     /// nodes promoting past the input dtype (<c>i4 + 2.5</c>) — the P5.2 MIXED-WIDTH plan is tried
     /// instead (<see cref="TryPlanMixed"/>): lane = the root dtype, half-lane nodes ride partial
-    /// vectors, edges widen exactly.
+    /// vectors, edges widen exactly; then the P5.3 SAME-WIDTH plan (<see cref="TryPlanSameWidth"/>):
+    /// every non-bool dtype of one size, masks crossing dtypes by reinterpretation.
     /// </summary>
     internal static class NDExprVectorPlan
     {
@@ -286,6 +335,13 @@ namespace NumSharp.Backends.Iteration
         /// the caller must then type each operand's vector local at its own dtype's container and
         /// hand the shell <c>mixedWidth</c>. False for a uniform plan and whenever planning fails.
         /// </param>
+        /// <param name="sameWidth">
+        /// Receives true when the tree took the P5.3 same-width plan (<see cref="TryPlanSameWidth"/>):
+        /// the caller must then type each non-bool operand's vector local (and each non-bool
+        /// parameter's broadcast) at its OWN dtype — a full-width vector, since every such dtype has
+        /// the lane's size — and hand the shell <c>sameWidth</c>. False for the other plans and
+        /// whenever planning fails.
+        /// </param>
         /// <param name="isParam">
         /// Per input, whether it is a hoisted 0-d parameter (null = none). A bool PARAMETER becomes a
         /// constant lane mask via portable <c>Zero</c>/<c>AllBitsSet</c> in the prologue, so unlike a
@@ -294,10 +350,11 @@ namespace NumSharp.Backends.Iteration
         /// <returns>True when the tree vectorizes on THIS host; false sends it to the scalar shell.</returns>
         internal static bool TryPlan(
             NDExpr root, NPTypeCode[] inputTypes, IReadOnlyDictionary<NDExpr, NPTypeCode> nodeTypes,
-            out NPTypeCode lane, out bool mixedWidth, bool[]? isParam = null)
+            out NPTypeCode lane, out bool mixedWidth, out bool sameWidth, bool[]? isParam = null)
         {
             lane = NPTypeCode.Empty;
             mixedWidth = false;
+            sameWidth = false;
             if (DirectILKernelGenerator.VectorBits == 0)
                 return false;
 
@@ -362,7 +419,118 @@ namespace NumSharp.Backends.Iteration
                 }
             }
 
-            return TryPlanMixed(root, inputTypes, nodeTypes, out lane, out mixedWidth);
+            // The two non-uniform plans exclude each other (the mixed one admits no Boolean node and
+            // only half→full widenings, the same-width one only one element size and no value edge
+            // between dtypes), so their order decides nothing; mixed goes first as it always did.
+            if (TryPlanMixed(root, inputTypes, nodeTypes, out lane, out mixedWidth))
+                return true;
+            return TryPlanSameWidth(root, inputTypes, nodeTypes, isParam, out lane, out sameWidth);
+        }
+
+        /// <summary>
+        /// The P5.3 SAME-WIDTH plan: every non-bool dtype of the kernel — inputs, parameters and
+        /// nodes — is a SIMD dtype of ONE element size, but not one dtype (an int64 comparison over
+        /// float64 branches; a float64 test of an int64 count). Each node then computes at its OWN
+        /// dtype in a full-width <c>Vector&lt;T&gt;</c>, Boolean nodes ride as <c>Vector&lt;W&gt;</c>
+        /// lane masks, and a mask crosses into another dtype by reinterpretation
+        /// (<see cref="NDExprVec.EmitReinterpret"/>: all-ones / zero lanes are the same bits at
+        /// either type). The per-node capability check (<see cref="NDExpr.CanEmitVectorV2"/>) also
+        /// refuses every VALUE edge between two dtypes (<see cref="NDExprVec.IsVectorEdge"/>), so a
+        /// tree that would need int64 → float64 (a rounding conversion AVX2 cannot vectorize) stays
+        /// scalar, as before.
+        /// </summary>
+        /// <param name="root">The bound tree's root.</param>
+        /// <param name="inputTypes">Every input's dtype (parameters included).</param>
+        /// <param name="nodeTypes">The typing pass's node→dtype table.</param>
+        /// <param name="isParam">Per input, whether it is a hoisted 0-d parameter (null = none): a bool
+        /// parameter is a portable constant mask, a streamed bool operand needs the x86 expansion.</param>
+        /// <param name="lane">Receives W on success: the root's dtype when it is a number (the output
+        /// then stores at W, as in the uniform plan), else the first non-bool input's (or the smallest
+        /// non-bool node dtype when every input is bool) — any dtype of the size carries the masks.</param>
+        /// <param name="sameWidth">Receives true on success.</param>
+        /// <returns>True when the tree vectorizes under the same-width contract on this host.</returns>
+        /// <remarks>
+        /// The bool gates are the uniform plan's: a bool input or output needs the 128/256-bit
+        /// mask helpers, and a STREAMED bool input the x86 byte→lane expansion at W's size.
+        /// </remarks>
+        private static bool TryPlanSameWidth(
+            NDExpr root, NPTypeCode[] inputTypes, IReadOnlyDictionary<NDExpr, NPTypeCode> nodeTypes, bool[]? isParam,
+            out NPTypeCode lane, out bool sameWidth)
+        {
+            lane = NPTypeCode.Empty;
+            sameWidth = false;
+
+            int size = 0;
+            NPTypeCode firstInput = NPTypeCode.Empty;
+            bool boolInput = false, boolStreamedInput = false;
+            for (int i = 0; i < inputTypes.Length; i++)
+            {
+                var t = inputTypes[i];
+                if (t == NPTypeCode.Boolean)
+                {
+                    boolInput = true;
+                    if (isParam is null || i >= isParam.Length || !isParam[i])
+                        boolStreamedInput = true;
+                    continue;
+                }
+                if (!AdmitSameWidth(t, ref size))
+                    return false;
+                if (firstInput == NPTypeCode.Empty)
+                    firstInput = t;
+            }
+
+            // The node dtypes decide too: a weak literal can lift a node past every input dtype
+            // (`(i8 > 30) * 1.5` types its multiply float64 over an int64-only input set).
+            NPTypeCode smallestNode = NPTypeCode.Empty;
+            foreach (var kv in nodeTypes)
+            {
+                var t = kv.Value;
+                if (t == NPTypeCode.Boolean)
+                    continue;
+                if (!AdmitSameWidth(t, ref size))
+                    return false;
+                // The smallest code, not the first met: the dictionary's order is not a contract, and
+                // the choice must be a function of the tree (it shapes the emitted reinterprets).
+                if (smallestNode == NPTypeCode.Empty || t < smallestNode)
+                    smallestNode = t;
+            }
+
+            // No non-bool dtype at all is byte mode's tree, already answered by the uniform plan.
+            if (size == 0 || !nodeTypes.TryGetValue(root, out var rootType))
+                return false;
+
+            var w = rootType != NPTypeCode.Boolean ? rootType
+                : firstInput != NPTypeCode.Empty ? firstInput
+                : smallestNode;
+
+            bool boolIo = boolInput || rootType == NPTypeCode.Boolean;
+            if (boolIo && !DirectILKernelGenerator.FusedBoolLanesAvailable)
+                return false;
+            if (boolStreamedInput && !DirectILKernelGenerator.FusedBoolInputMasksAvailable(w))
+                return false;
+            if (!root.CanEmitVectorV2(w, nodeTypes))
+                return false;
+
+            lane = w;
+            sameWidth = true;
+            return true;
+        }
+
+        /// <summary>
+        /// Admits one non-bool dtype into a same-width plan: a SIMD dtype (not Half / Decimal /
+        /// Complex / Char, which have no BCL vector lanes here) of the size the plan has seen so far.
+        /// </summary>
+        /// <param name="t">The dtype (never Boolean — the caller skips masks).</param>
+        /// <param name="size">The plan's element size so far (0 = none yet); set by the first dtype.</param>
+        /// <returns>False when <paramref name="t"/> is not SIMD-capable or its size differs.</returns>
+        private static bool AdmitSameWidth(NPTypeCode t, ref int size)
+        {
+            if (!DirectILKernelGenerator.CanUseSimd(t))
+                return false;
+            int s = DirectILKernelGenerator.GetTypeSize(t);
+            if (size == 0)
+                size = s;
+            return s == size;
         }
 
         /// <summary>
@@ -462,8 +630,17 @@ namespace NumSharp.Backends.Iteration
         /// slot becomes its truthiness mask. Byte mode carries bool bytes only — no conversion. In
         /// MIXED-WIDTH mode a differing child dtype is instead an exact half→full-lane widening
         /// (<see cref="NDExprVec.EmitWidenEdge"/>) — the vector twin of the scalar body's
-        /// <c>EmitConvertTo</c> edge (bool never occurs there; the mixed plan excludes it).
+        /// <c>EmitConvertTo</c> edge (bool never occurs there; the mixed plan excludes it). In a
+        /// SAME-WIDTH tree (P5.3) the mask is a <c>Vector&lt;W&gt;</c> while the value side is at its
+        /// own dtype, so each mask edge reinterprets between the two (<see cref="NDExprVec.EmitReinterpret"/>
+        /// — nothing when the dtype is W, the uniform plan's every case).
         /// </summary>
+        /// <param name="il">The IL generator.</param>
+        /// <param name="ctx">The compile context (lane W, node dtypes, plan mode).</param>
+        /// <param name="child">The child to emit.</param>
+        /// <param name="target">The dtype the consuming node needs it at (a value dtype, or Boolean for a mask slot).</param>
+        /// <exception cref="InvalidOperationException">A value edge between two different non-bool dtypes outside
+        /// the mixed-width plan (a plan bug: <see cref="NDExprVec.IsVectorEdge"/> refuses such trees).</exception>
         private protected static void EmitVectorChildAs(ILGenerator il, NDExprCompileContext ctx, NDExpr child, NPTypeCode target)
         {
             child.EmitVector(il, ctx);
@@ -480,9 +657,24 @@ namespace NumSharp.Backends.Iteration
             if (lane == NPTypeCode.Boolean)
                 return;
             if (from == NPTypeCode.Boolean)
-                NDExprVec.EmitMaskToNumeric(il, lane);
+            {
+                // The Vector<W> mask typed at the slot's dtype first, so `& One` makes 1 / 0 of THAT dtype
+                // (1.0 / 0.0 for a float64 slot under an int64 lane).
+                NDExprVec.EmitReinterpret(il, lane, target);
+                NDExprVec.EmitMaskToNumeric(il, target);
+            }
+            else if (target == NPTypeCode.Boolean)
+            {
+                // Truthiness is tested at the value's OWN dtype (a float64 -0.0 is false, its int64 bits are not
+                // zero), and only the resulting mask is retyped to W.
+                NDExprVec.EmitValueToMask(il, from);
+                NDExprVec.EmitReinterpret(il, from, lane);
+            }
             else
-                NDExprVec.EmitValueToMask(il, lane);
+            {
+                throw new InvalidOperationException(
+                    $"a {from} child cannot feed a {target} slot in a vector body: a value edge between two dtypes (a vector plan bug).");
+            }
         }
     }
 
@@ -522,13 +714,18 @@ namespace NumSharp.Backends.Iteration
         {
             if (!_left.CanEmitVectorV2(lane, types) || !_right.CanEmitVectorV2(lane, types))
                 return false;
-            if (types[this] == NPTypeCode.Boolean)
+            var my = types[this];
+            if (my == NPTypeCode.Boolean)
                 return _op == BinaryOp.Add || _op == BinaryOp.Multiply ||
                        _op == BinaryOp.BitwiseAnd || _op == BinaryOp.BitwiseOr || _op == BinaryOp.BitwiseXor;
             // A Half tree vectorizes only the arithmetic four (widen-compute-narrow); a mixed op
             // (power/mod/floor_divide/min-max/bitwise on Half) has no Vector256<ushort> body → scalar.
             if (lane == NPTypeCode.Half)
-                return types[this] == NPTypeCode.Half && IsHalfVectorArith(_op);
+                return my == NPTypeCode.Half && IsHalfVectorArith(_op);
+            // Both children arrive at this node's dtype — the same dtype or a bool mask; a value edge
+            // between two dtypes (int64 + float64) has no vector form (always true in the uniform plan).
+            if (!NDExprVec.IsVectorEdge(types[_left], my) || !NDExprVec.IsVectorEdge(types[_right], my))
+                return false;
             return IsSimdOp(_op);
         }
 
@@ -576,10 +773,14 @@ namespace NumSharp.Backends.Iteration
                 return ct == NPTypeCode.Boolean && (_op == UnaryOp.BitwiseNot || _op == UnaryOp.Abs || IsRoundingOp(_op));
             }
 
-            // my == lane (W != Boolean): floor/ceil/round/trunc are the identity on integer lanes
-            if (IsRoundingOp(_op) && IsIntegerKind(lane))
+            // The op runs at this node's own dtype: W in the uniform plan, any dtype of W's size in the
+            // same-width one; the child arrives at that dtype (or as a bool mask), never converted.
+            if (!NDExprVec.IsVectorEdge(ct, my))
+                return false;
+            // floor/ceil/round/trunc are the identity on integer lanes
+            if (IsRoundingOp(_op) && IsIntegerKind(my))
                 return true;
-            return IsSimdUnaryAt(_op, lane);
+            return IsSimdUnaryAt(_op, my);
         }
     }
 
@@ -608,22 +809,36 @@ namespace NumSharp.Backends.Iteration
             if (!_left.CanEmitVectorV2(lane, types) || !_right.CanEmitVectorV2(lane, types))
                 return false;
             var cmp = NDExprTypeRules.ComparisonType(types[_left], types[_right]);
-            return cmp == lane || cmp == NPTypeCode.Boolean;
+            if (cmp == NPTypeCode.Boolean)
+                return true;
+            // The compare runs at its common dtype: W in the uniform plan, or — in a same-width tree —
+            // any SIMD dtype of W's size, its mask then retyped to W. Neither operand may need a value
+            // conversion to get there (int64 vs float64 compares at float64: a rounding edge).
+            return (cmp == lane || (DirectILKernelGenerator.CanUseSimd(cmp)
+                                    && DirectILKernelGenerator.GetTypeSize(cmp) == DirectILKernelGenerator.GetTypeSize(lane)))
+                   && NDExprVec.IsVectorEdge(types[_left], cmp) && NDExprVec.IsVectorEdge(types[_right], cmp);
         }
     }
 
     public sealed partial class MinMaxNode
     {
+        // The min / max runs at this node's own dtype (W, or a same-width dtype); both operands
+        // arrive at it as the same dtype or a bool mask (a bool result is the mask and / or).
         internal override bool CanEmitVectorV2(NPTypeCode lane, IReadOnlyDictionary<NDExpr, NPTypeCode> types)
             => lane != NPTypeCode.Half   // no f16 min/max vector body (Phase 5 = f16 arithmetic only)
-               && _left.CanEmitVectorV2(lane, types) && _right.CanEmitVectorV2(lane, types);
+               && _left.CanEmitVectorV2(lane, types) && _right.CanEmitVectorV2(lane, types)
+               && NDExprVec.IsVectorEdge(types[_left], types[this]) && NDExprVec.IsVectorEdge(types[_right], types[this]);
     }
 
     public sealed partial class WhereNode
     {
+        // The condition is a mask slot (any child); the branches arrive at this node's dtype — the
+        // same dtype or a bool mask — so a same-width tree selects float64 under an int64 mask, but a
+        // branch needing int64 → float64 keeps the tree scalar.
         internal override bool CanEmitVectorV2(NPTypeCode lane, IReadOnlyDictionary<NDExpr, NPTypeCode> types)
             => lane != NPTypeCode.Half   // no f16 select vector body (Phase 5 = f16 arithmetic only)
-               && _cond.CanEmitVectorV2(lane, types) && _a.CanEmitVectorV2(lane, types) && _b.CanEmitVectorV2(lane, types);
+               && _cond.CanEmitVectorV2(lane, types) && _a.CanEmitVectorV2(lane, types) && _b.CanEmitVectorV2(lane, types)
+               && NDExprVec.IsVectorEdge(types[_a], types[this]) && NDExprVec.IsVectorEdge(types[_b], types[this]);
     }
 
     public sealed partial class LogicalNode
