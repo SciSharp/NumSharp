@@ -145,7 +145,9 @@ operation picks its NaN by the x86 rule of the instruction NumPy's binaries run)
 OpenBLAS's `alpha == 0` early return; every measured cell equal. PA2a is done (`d1754bca`): a reversed operand
 (`a[::-1]`, `m[:, ::-1]`) loads each vector with one contiguous load and a lane reversal in the shared kernels - the
 1-D shell, the 2-D block kernel and a 1-D unary kernel - the same bytes, 1.1–16× where the old route gathered or ran
-the scalar loop, no cell slower. Next: PA2b, then PA2c.
+the scalar loop, no cell slower. PA2b is done (`da886b5d`): the 2-D block kernel's stationary-out variant holds a
+reduction's out row in registers across the rows, the same bytes as the plain block, 1.05–16.8× on 103 of 105 measured
+reduction-row cells, the other two equal. Next: PA2c.
 
 **The owner's decisions of 2026-10-31** ([§5](#5-decisions-for-the-owner), D7 to D22, asked with each option's code):
 - P7 is dropped. D7's first answer ("Rule on the result") gave it a design; in the step round the same day the owner
@@ -1361,6 +1363,25 @@ there. Rules (decided 2026-10-30):
       the string-key `ExecuteElementWise`, buffered iterations, promoting unary ops.
     - Left for PA2c: the reduction's reversed rows call the shared add kernel's variant
       (`DirectILKernelGenerator.CompileReversedRunInnerLoop`) instead of the hand form's load-and-permute.
+  - [x] **PA2b, the stationary-out mode: done 2026-11-05** (`da886b5d`; D23 "Approve both").
+    `DirectILKernelGenerator.InnerLoop2D.Stationary.cs`: a 2-D call whose operand 0 IS the output (the same pointer),
+    both contiguous along the row at outer stride 0, operand 1 a contiguous (or broadcast) row or a reversed one - a
+    reduction's rows `{o, x, o}` - holds the out row in registers across the rows: strips of 8, 4 and 1 vectors, then
+    the leftover columns as one masked vector (AVX2, 32/64-bit lanes) or scalar strips of 4 and 1 columns. Each lane is
+    its rows in order through the op's bodies with the plain block's vector / masked / scalar choice: the plain block's
+    bytes. It lives in a stationary-out variant (`Compile2DStationaryOutKernel`, which carries PA2a's reversed-run
+    stages too); no element-wise route produces such a call, so the plain kernel keeps its IL and PA2c's reduction asks
+    for the variant.
+    - Measured on its own, in one process (the plain 2-D kernel driving the same `{o, x, o}` call, against the
+      variant; 2 CPUs pinned, best of 3 × 15 interleaved rounds, the same bytes in every cell): float64 1.02–5.91×,
+      float32 1.01–5.94×, int32 1.28–16.8×, int16 1.28–3.38×, uint8 1.28–3.40× over (1000, 8), (10000, 10), (1000, 3),
+      (2000, 33), (100, 1000), (10, 100000) and (100000, 4) with contiguous, reversed and broadcast rows; 105 cells:
+      103 faster, 2 equal (reversed rows of 1000, float64 / float32), none slower.
+    - The effort, in order: one leftover column across all the rows lost on int16 / uint8 short rows (0.61–0.76×: all
+      leftover columns at 16 / 32 lanes, a dependent chain per column); walking the rows again for them lost on rows of
+      33 (0.80–0.89×); scalar strips of 4 columns won everywhere (1.27–3.34×); a float32 row of 1000 broadcast down 100
+      rows read 0.93× with 4 accumulator chains (the add's latency exposed where the plain block is throughput-bound in
+      L1), and 8-vector strips made it 1.07×.
 
 - [x] **PA3. One home for NumPy's dot functions** (`ee9ce021`; `SlidingDot` and `Default.Dot.Fused.cs` predate the
   plan). Done 2026-11-05: PA3a and PA3b below (D23 lands no identical code moved, so the moves of PA3b's first text
@@ -1740,6 +1761,20 @@ breaks a subclass or a direct caller for a layering reason alone.
 ---
 
 ## 9. State log
+
+- **2026-11-05, PA2b (D23): the 2-D block kernel's stationary-out mode - a reduction's out row held in registers across
+  the rows; PA2b is done.** One commit on top of PA2a's, `da886b5d` (with PA2a's two, waiting to land: the `strings`
+  worktree holds another session's uncommitted edit of `DefaultEngine.UnaryOp.cs`, a file PA2a changes).
+  - Measured on its own (no route calls the variant until PA2c): the plain 2-D kernel driving a reduction's `{o, x, o}`
+    against the stationary-out variant, both in one process; float64, float32, int32, int16, uint8 over seven
+    (rows, n) shapes from (1000, 3) to (10, 100000) and (100000, 4), with contiguous, reversed and broadcast rows: 105
+    cells, 103 faster (1.05–16.8×), 2 equal, none slower, the same bytes in every cell.
+  - The effort the rule asked for: see PA2b in §7 (the leftover columns three ways, the strips widened to 8 vectors).
+  - Gates (Release): NumSharp.Tests 23,239 / 23,238 on net10.0 / net8.0 (+4 tests,
+    `Backends/Kernels/StationaryOutKernelTests.cs`), the new class alone on net8.0, both kernel classes under
+    `NUMSHARP_DEBUG_GUARD_PAGES=1`. Four mutants killed (strips that never step a row, a reversed masked tail with the
+    forward mask - the fenced test ends the host - and reversed scalar / vector strips stepping the wrong way). The
+    oracle replays no route that reaches the variant.
 
 - **2026-11-05, PA2a (D23): the reversed-run load - a reversed operand loads each vector with one contiguous load and a
   lane reversal in the shared kernels; PA2a is done.** One commit on `strings` (not pushed), `d1754bca` (developed on
