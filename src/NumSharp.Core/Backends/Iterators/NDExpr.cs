@@ -454,10 +454,9 @@ namespace NumSharp.Backends.Iteration
 
         /// <summary>
         /// <c>sqrt(a**2 + b**2)</c> without spurious overflow/underflow (np.hypot). Same float-tier
-        /// promotion as <see cref="CopySign"/> (complex has no loop). float32/float16 are bit-exact with
-        /// NumPy; float64 is NumSharp's correctly-rounded Borges-FMA result, which is MORE accurate than
-        /// NumPy's faithfully-rounded UCRT hypot and so differs ≤1 ULP on ~9 % of inputs (gated within
-        /// that envelope, not byte-for-byte at float64).
+        /// promotion as <see cref="CopySign"/> (complex has no loop). Bit-exact with NumPy at every float
+        /// dtype: the node runs np.hypot's own kernel, UCRT's faithfully rounded <c>sqrt(a*a + b*b)</c> with
+        /// its power-of-two rescale (parity QA-25), so float64 matches NumPy byte for byte too.
         /// </summary>
         /// <param name="a">First leg.</param>
         /// <param name="b">Second leg.</param>

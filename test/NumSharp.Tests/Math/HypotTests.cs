@@ -10,9 +10,10 @@ namespace NumSharp.Tests.Math
     /// A float-tier binary ufunc with arctan2's promotion (ee->e, ff->f, dd->d, gg->g): bool/int8/uint8
     /// -> float16, int16/uint16 -> float32, int32+/int64+/char -> float64.
     ///
-    /// float32/float16 are BIT-EXACT with NumPy. float64 is CORRECTLY-ROUNDED (Borges' FMA algorithm),
-    /// so it matches NumPy on ~91% of inputs and is within 1 ULP — MORE accurate — on the rest, because
-    /// NumPy calls the platform (UCRT) hypot which is only faithfully rounded. See NDHypotMath.
+    /// Every float dtype is BIT-EXACT with NumPy: NumPy calls the platform (UCRT) hypot, which is the plain
+    /// sqrt(x*x + y*y) with a power-of-two rescale outside the safe range — only faithfully rounded — and
+    /// NDHypotMath is that model (parity QA-25; it was the correctly rounded Borges kernel before). A NaN
+    /// operand comes back as UCRT returns it, the first one with its payload and sign. See NDHypotMath.
     /// </summary>
     [TestClass]
     public class HypotTests
@@ -144,18 +145,73 @@ namespace NumSharp.Tests.Math
                 .Should().Be(np.hypot((NDArray)11.9, (NDArray)3.7).GetAtIndex<double>(0));
         }
 
-        // ---------------------------------------------------------------- correctly-rounded (prefer-precise)
+        // ---------------------------------------------------------------- UCRT's rounding (parity QA-25)
 
+        /// <summary>
+        /// NumPy's platform (UCRT) hypot is only FAITHFULLY rounded: <c>np.hypot(0.1, 0.1)</c> is
+        /// <c>0x3fc21a1851ff630b</c>, 1 ULP above the correctly rounded value (CPython's <c>math.hypot</c> gives
+        /// <c>...630a</c>). NumSharp computes UCRT's <c>sqrt(x*x + y*y)</c> and returns NumPy's bits, on the scalar
+        /// path, the contiguous SIMD path (length 8) and the scalar-broadcast path. Until parity QA-25 this test was
+        /// [Misaligned] and pinned the correctly rounded <c>...630a</c>.
+        /// </summary>
         [TestMethod]
-        [Misaligned]
-        public void Hypot_Float64_CorrectlyRounded_MoreAccurateThanNumPy()
+        public void Hypot_Float64_IsUcrtsFaithfulRounding_LikeNumPy()
         {
-            // NumPy's platform (UCRT) hypot is only FAITHFULLY rounded: np.hypot(0.1, 0.1) is
-            // 0x3fc21a1851ff630b, 1 ULP above the correctly-rounded value. NumSharp returns the
-            // correctly-rounded 0x3fc21a1851ff630a (== CPython's math.hypot) — bit-for-bit MORE accurate.
             long bits = BitConverter.DoubleToInt64Bits(
                 np.hypot((NDArray)0.1, (NDArray)0.1).GetAtIndex<double>(0));
-            bits.Should().Be(unchecked((long)0x3fc21a1851ff630aUL));
+            bits.Should().Be(unchecked((long)0x3fc21a1851ff630bUL));
+
+            using var eight = np.full(new Shape(8), 0.1);
+            using var vector = np.hypot(eight, eight);
+            using var broadcast = np.hypot(eight, NDArray.Scalar(0.1));
+            for (int i = 0; i < 8; i++)
+            {
+                BitConverter.DoubleToInt64Bits(vector.GetAtIndex<double>(i)).Should().Be(unchecked((long)0x3fc21a1851ff630bUL), "the SIMD lane");
+                BitConverter.DoubleToInt64Bits(broadcast.GetAtIndex<double>(i)).Should().Be(unchecked((long)0x3fc21a1851ff630bUL), "the broadcast lane");
+            }
+        }
+
+        /// <summary>
+        /// UCRT returns its FIRST NaN operand untouched — payload and sign — and an infinite operand beats a NaN
+        /// (probed through ucrtbase and np.hypot: <c>hypot(1, -nan(3))</c> is that <c>-nan(3)</c>; <c>hypot(nan(4),
+        /// -nan(5))</c> is <c>nan(4)</c>). NumSharp returned the canonical .NET NaN before parity QA-25 (the oracle
+        /// tokenizes NaNs, so only a raw-bit test sees it).
+        /// </summary>
+        [TestMethod]
+        public void Hypot_Float64_NaN_IsTheFirstNaNOperandVerbatim()
+        {
+            static double D(ulong bits) => BitConverter.Int64BitsToDouble(unchecked((long)bits));
+            static ulong H(double x, double y) => (ulong)BitConverter.DoubleToInt64Bits(np.hypot((NDArray)x, (NDArray)y).GetAtIndex<double>(0));
+
+            H(D(0x7ff8000000000001), 1.0).Should().Be(0x7ff8000000000001UL);
+            H(D(0xfff8000000000002), 1.0).Should().Be(0xfff8000000000002UL);
+            H(1.0, D(0xfff8000000000003)).Should().Be(0xfff8000000000003UL);
+            H(D(0x7ff8000000000004), D(0xfff8000000000005)).Should().Be(0x7ff8000000000004UL);
+            H(double.PositiveInfinity, D(0xfff8000000000006)).Should().Be(0x7ff0000000000000UL);
+        }
+
+        /// <summary>
+        /// The complex functions built on <c>npy_hypot</c> share the UCRT model (parity QA-25): NumPy's <c>nc_log1p</c>
+        /// is <c>log(hypot(x + 1, y))</c>, and near <c>|z + 1| = 1</c> a 1-ULP hypot difference is a 5e-4 relative error
+        /// after the log. <c>np.log1p(complex(-1.3339345080004047e-16, 9.344550712680563e-07)).real</c> is
+        /// <c>4.365396932825163e-13</c> in NumPy; the block-form hypot NumSharp used gave <c>4.3631764867759135e-13</c>
+        /// (4.4e12 ULP away). <c>np.sqrt</c> (csqrt's <c>hypot(a, b)</c>) takes the same kernel; a 1.2M-part dense
+        /// sample of log1p and sqrt is bit-identical to NumPy.
+        /// </summary>
+        [TestMethod]
+        public void ComplexLog1pAndSqrt_UseUcrtsHypot_LikeNumPy()
+        {
+            using var z = np.array(new[] { new Complex(-1.3339345080004047e-16, 9.344550712680563e-07) });
+
+            using var log1p = np.log1p(z);
+            log1p.GetAtIndex<Complex>(0).Real.Should().Be(4.365396932825163e-13);
+
+            // csqrt computes t = sqrt((a + hypot(a, b)) * 0.5): for this z the block form's hypot is 1 ULP off UCRT's and
+            // both parts came out 1 ULP from NumPy (0x...588 / 0x...36f).
+            using var w = np.array(new[] { new Complex(0.6441349919701778, -0.7410804937363649) });
+            using var sqrt = np.sqrt(w);
+            BitConverter.DoubleToInt64Bits(sqrt.GetAtIndex<Complex>(0).Real).Should().Be(unchecked((long)0x3fecda8002ac9589UL));
+            BitConverter.DoubleToInt64Bits(sqrt.GetAtIndex<Complex>(0).Imaginary).Should().Be(unchecked((long)0xbfda4cf7dd94936eUL));
         }
 
         // ---------------------------------------------------------------- broadcasting

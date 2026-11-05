@@ -186,10 +186,10 @@ namespace NumSharp.Tests.Fuzz
             "asinh", "acosh", "atanh", "deg2rad", "rad2deg", "pow", "atan2", "div", "recip",
             // Phase 4 binary transcendentals — the SAME ~ULP envelope as the unary tier (documented
             // per-op in the ufunc corpus): logaddexp/logaddexp2 ≤2 ULP (managed fdlibm log1p vs the
-            // closed UCRT log1p), hypot ≤1 ULP at float64 (correctly-rounded Borges FMA vs faithful
-            // UCRT hypot; f32/f16 are bit-exact and need no excuse). copysign/nextafter/heaviside/fmod
-            // are BIT-EXACT and are deliberately NOT here — a 1-ULP regression there must turn red.
-            "logaddexp", "logaddexp2", "hypot",
+            // closed UCRT log1p). hypot, copysign, nextafter, heaviside and fmod are BIT-EXACT and are
+            // deliberately NOT here — a 1-ULP regression there must turn red (hypot since parity QA-25:
+            // its kernel is UCRT's own sqrt(x*x + y*y), no longer the correctly rounded Borges FMA).
+            "logaddexp", "logaddexp2",
         };
 
         /// <summary>The bit-exact float32 ports, in the evaluate grammar's spelling (see NumPyPortedFloat32Kernels).</summary>
@@ -529,18 +529,10 @@ namespace NumSharp.Tests.Fuzz
                     return $"Generator.{m}: in-band expm1 (Sun's s_expm1) vs the closed ucrtbase expm1, <= {bound} ULP [documented]";
             }
 
-            // hypot: sqrt(x1**2 + x2**2). NumPy calls the platform (win-amd64 UCRT) hypot, which is only
-            // FAITHFULLY rounded — it disagrees with the exact correctly-rounded result on 8.7% of float64
-            // inputs (measured: np.hypot vs an 80-digit Decimal reference). NumSharp's kernel is the
-            // CORRECTLY-rounded result (Borges' FMA algorithm, verified bit-identical to CPython's
-            // correctly-rounded math.hypot over 1.1M adversarial pairs incl. subnormals/overflow), so it is
-            // bit-exact with NumPy on ~91% of float64 inputs and within 1 ULP — MORE accurate — on the rest
-            // (prefer-precise). float32/float16 round the correctly-rounded double down to the narrower type,
-            // which reproduces UCRT's hypotf EXACTLY (no room for its double-precision quirk), so those stay
-            // BIT-EXACT and the excuse is Double-only. Bounded per element; a gross error still fails.
-            if (kind == DivergenceKind.Value && c.Op == "hypot" && tc == NPTypeCode.Double
-                && diffs.Count > 0 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 1)))
-                return "hypot: correctly-rounded Borges FMA <=1 ULP vs NumPy's faithful UCRT hypot [documented, prefer-precise]";
+            // hypot has no excuse: since parity QA-25 its float64 kernel is UCRT's own sqrt(x*x + y*y) with UCRT's
+            // power-of-two rescale (NDHypotMath), bit-exact with np.hypot on every probed pair, so a float64 hypot
+            // divergence is a regression and must turn red (it was excused <= 1 ULP while the kernel was the
+            // correctly rounded Borges FMA). float32 / float16 were bit-exact before and stay so.
 
             // (F1) np.fft over a float32/float16 input. NumSharp has ONE complex type (complex128) and
             //      no complex64, so it returns complex128 (fft/rfft/ihfft/the N-D forms) or float64
@@ -710,18 +702,12 @@ namespace NumSharp.Tests.Fuzz
             // the whole complex128 tier (contig/F/strided/broadcast/negstride) is bit-exact with NumPy
             // 2.4.2 and needs no excuse (verified with this branch disabled).
 
-            // (S2) fmax/fmin ±0-tie sign on a negative-stride float32 view. NumPy's OWN fmax/fmin
-            //      pick which zero to return on a (+0,-0) tie by SIMD path: its array loop returns
-            //      the second operand (so array fmax(+0,-0) = -0, unlike the +0 its scalar path
-            //      gives). NumSharp matches that array behaviour on contiguous/strided operands but
-            //      diverges on the REVERSED f32 lane order, so the sign of the tied zero differs.
-            //      Non-contractual — NumPy is itself path-inconsistent here. Scoped razor-tight:
-            //      float32, and BOTH the expected and actual token are a signed zero — a wrong
-            //      NON-zero fmax/fmin result still fails.
-            if ((c.Op == "fmax" || c.Op == "fmin") && kind == DivergenceKind.Value
-                && tc == NPTypeCode.Single && diffs.Count > 0 && diffs.All(IsSignedZeroPairSingle))
-                return "fmax/fmin ±0-tie sign on a reversed float32 view (NumPy's own fmax ±0 sign is "
-                     + "SIMD-path-dependent) [documented non-contractual]";
+            // (S2 RETIRED 2026-11-05, parity QA-20) fmax/fmin ±0-tie sign on a negative-stride float32 view. NumPy's
+            //      float fmax / fmin give a ±0 tie (and a NaN pair) one rule inside whole SIMD vectors and the C
+            //      library's rule elsewhere, and on an AVX2 host a reversed float32 operand runs every element through
+            //      the C library (npyv_loadable_stride's unsigned division fails any negative stride). NumSharp now
+            //      reproduces NumPy's positions from its call plan (Default.FMaxFMin.Positions.cs), so the excuse is gone
+            //      and a ±0 sign flip of any fmax / fmin case fails.
 
             // (W11-A / clip_out FIXED) maximum/minimum/clip now PROPAGATE NaN on the out= path
             // (NumPy: maximum(NaN,x)=NaN, clip(NaN,lo,hi)=NaN). Root cause: the clip SIMD kernel used
@@ -1323,10 +1309,12 @@ namespace NumSharp.Tests.Fuzz
             // const fast path for scalar float bounds (clip.cpp _npy_clip_const_minmax_ keeps the
             // element on a tie, x < lo ? lo : x), which the clip kernel now reproduces
             // (DirectILKernelGenerator.UsesConstSelect). The out_clip cells are held bit-exact.
+            // fmax / fmin left this branch on 2026-11-05 (parity QA-20): their ±0 signs follow NumPy's SIMD / C-library
+            // positions exactly now, so a flip in an out_binary fmax / fmin case fails.
             if (kind == DivergenceKind.Value
                 && c.Op == "out_binary"
                 && c.Params != null && c.Params.TryGetValue("ufunc", out var mmUf)
-                && mmUf.GetString() is "maximum" or "minimum" or "fmax" or "fmin"
+                && mmUf.GetString() is "maximum" or "minimum"
                 && diffs.Count > 0 && diffs.All(d => BitDiff.IsSignedZeroFlip(expected, actual, d.Index, tc)))
                 return "min/max family signed-zero: the sign of a ±0 result is non-contractual "
                      + "(NumPy varies it by SIMD lane) — every diff is a pure +0/-0 flip [non-contractual]";

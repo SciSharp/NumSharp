@@ -105,6 +105,15 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         public readonly NDExprTextPlan TextPlan;
 
+        /// <summary>
+        /// The staged float32 / float64 fmax / fmin nodes of a numeric program (NDExpr.FMaxStages.cs): each runs per call as
+        /// NumPy's own np.fmax / np.fmin over its children, and the remainder over the stage results is resolved per call
+        /// through the positional program cache; null when the tree has no such node. Like a text program, a staged program
+        /// carries no kernel, reduction or average of its own, so every route that reads those fields must first send it
+        /// to its plan.
+        /// </summary>
+        public readonly NDExprFMaxPlan FMaxPlan;
+
         private NDInnerLoopFunc _flatReduce;
         private NDInnerLoopFunc _axisReduce;
         private NDExprProgram _childElementwise;
@@ -118,7 +127,8 @@ namespace NumSharp.Backends.Iteration
 
         private NDExprProgram(NDExpr bound, NPTypeCode[] inputTypes, bool[] isParam, bool forcedScalar,
             NDInnerLoopFunc kernel, NPTypeCode resultType, ReduceNode reduce, NPTypeCode reduceAcc,
-            WeightedAverageNode average = null, NDExprDirectOp directOp = default, NDExprTextPlan textPlan = null)
+            WeightedAverageNode average = null, NDExprDirectOp directOp = default, NDExprTextPlan textPlan = null,
+            NDExprFMaxPlan fmaxPlan = null)
         {
             Bound = bound;
             InputTypes = inputTypes;
@@ -132,15 +142,17 @@ namespace NumSharp.Backends.Iteration
             Average = average;
             DirectOp = directOp;
             TextPlan = textPlan;
+            FMaxPlan = fmaxPlan;
         }
 
         /// <summary>
-        /// Whether the root is a reduction (a <see cref="ReduceNode"/> or a weighted average) — for a text program, the
-        /// remainder's root. The keyword rules (no <c>dtype=</c> / <c>order=</c> / <c>where=</c> on a reduction tree) and
-        /// <see cref="CompiledExpression.IsReduction"/> read this, never <see cref="Reduce"/> / <see cref="Average"/>
-        /// alone, which a text program leaves null.
+        /// Whether the root is a reduction (a <see cref="ReduceNode"/> or a weighted average) — for a text or staged
+        /// program, the remainder's root. The keyword rules (no <c>dtype=</c> / <c>order=</c> / <c>where=</c> on a
+        /// reduction tree) and <see cref="CompiledExpression.IsReduction"/> read this, never <see cref="Reduce"/> /
+        /// <see cref="Average"/> alone, which a text or staged program leaves null.
         /// </summary>
-        public bool IsReduction => Reduce is not null || Average is not null || TextPlan is { IsReduction: true };
+        public bool IsReduction => Reduce is not null || Average is not null || TextPlan is { IsReduction: true }
+                                   || FMaxPlan is { IsReduction: true };
 
         private static int CountTrue(bool[] mask)
         {
@@ -442,6 +454,18 @@ namespace NumSharp.Backends.Iteration
                 var textResult = plan.Remainder.ResolveNumPyTypes(plan.RemainderTypes, out _);
                 return new NDExprProgram(bound, inputTypes, isParam, forcedScalar, null, textResult, reduce: null,
                     reduceAcc: NPTypeCode.Empty, textPlan: plan);
+            }
+
+            // float32 / float64 fmax / fmin: each node becomes a per-call stage running NumPy's own np.fmax / np.fmin over
+            // its children (their answers depend on NumPy's inner-loop calls, which a fused kernel does not have;
+            // NDExpr.FMaxStages.cs), and the remainder over the stage results resolves per call like the text plan's.
+            // Typed with the remainder's NumPy result dtype, which is the tree's (a stage result has its node's dtype).
+            var fmaxPlan = NDExprFMaxPlan.TryLower(bound, inputTypes);
+            if (fmaxPlan is not null)
+            {
+                var stagedResult = fmaxPlan.Remainder.ResolveNumPyTypes(fmaxPlan.RemainderTypes, out _);
+                return new NDExprProgram(bound, inputTypes, isParam, forcedScalar, null, stagedResult, reduce: null,
+                    reduceAcc: NPTypeCode.Empty, fmaxPlan: fmaxPlan);
             }
 
             if (bound is ReduceNode reduce)

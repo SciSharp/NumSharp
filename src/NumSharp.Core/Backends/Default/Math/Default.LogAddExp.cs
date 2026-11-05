@@ -18,7 +18,7 @@ namespace NumSharp.Backends
         //
         // Two members carry a C# SIMD fast path for the contiguous / scalar-broadcast float32/float64
         // cases (NumPy has no SIMD for either, so these beat it several-fold, bit-identically): hypot
-        // (correctly-rounded Borges kernel) and heaviside (branchless compare+select step). heaviside is
+        // (UCRT's sqrt(x*x + y*y), NDHypotMath) and heaviside (branchless compare+select step). heaviside is
         // the one NON-commutative member here — x1 selects the branch and x2 is only the x1==0 fill — so
         // its fast path keeps the operands in order (unlike hypot's, which may swap a scalar operand).
         // =====================================================================
@@ -127,7 +127,7 @@ namespace NumSharp.Backends
                 path = ClassifyATan2Path(aStrides, bStrides, shape, resultShape.NDim);
             }
 
-            // np.hypot has no SIMD in NumPy (a scalar BINARY_LOOP), so the correctly-rounded Borges kernel
+            // np.hypot has no SIMD in NumPy (a scalar BINARY_LOOP), so UCRT's sqrt(x*x + y*y) kernel
             // vectorizes cleanly and beats it several-fold. Take the C# SIMD driver for the contiguous /
             // scalar-broadcast, same-dtype (no per-element cast) float32/float64 cases — bit-identical to
             // the IL scalar kernel; every other layout/dtype falls through to it. (arctan2/logaddexp/… have

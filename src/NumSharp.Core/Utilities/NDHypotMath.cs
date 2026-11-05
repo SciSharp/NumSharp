@@ -17,18 +17,19 @@ namespace NumSharp.Utilities
     /// of inputs (1–2 ULP). So there is no managed call that reproduces the NumPy value, and the loop is
     /// scalar-only either way (no SIMD hypot exists in NumPy on this platform).</para>
     ///
-    /// <para><b>float32 / float16 are BIT-EXACT with NumPy; float64 is ≤1 ULP.</b> UCRT's <c>hypot</c> is
-    /// a <i>faithful</i> (≤1 ULP) but not correctly-rounded implementation — it disagrees with the exact
-    /// correctly-rounded result on 8.7% of float64 inputs (measured on this host: <c>np.hypot</c> vs a
-    /// 80-digit <c>Decimal</c> reference). <see cref="Hypot(double,double)"/> is the CORRECTLY-ROUNDED
-    /// result (Borges' FMA algorithm, verified bit-identical to CPython's correctly-rounded
-    /// <c>math.hypot</c> over 1.1M adversarial pairs including subnormals/overflow), so it is bit-exact
-    /// with NumPy on 91.3% of float64 inputs and ≤1 ULP (never 2) — and MORE accurate — on the rest.
-    /// That divergence is documented/excused in the oracle exactly like <c>logaddexp</c>'s ≤2 ULP libm
-    /// gap. The <c>ff->f</c> and (via float32, <c>astype e->f</c>) <c>ee->e</c> loops round the
-    /// correctly-rounded double down to float, which reproduces UCRT's <c>hypotf</c> EXACTLY (verified
-    /// 0-diff over 200K float32 and 300K float16 pairs) — a narrower type leaves no room for UCRT's
-    /// double-precision rounding quirk to show.</para>
+    /// <para><b>Every float dtype is BIT-EXACT with NumPy.</b> UCRT's <c>hypot</c> is only <i>faithfully</i>
+    /// rounded (it disagrees with the correctly rounded result on 8.7% of float64 inputs), because it is
+    /// the plain <c>sqrt(x*x + y*y)</c> — two products, a sum and a square root, each rounded — with an
+    /// exact power-of-two rescale only where <c>x*x</c> would overflow or lose <c>y*y</c> to underflow.
+    /// Probed through <c>ucrtbase</c> (parity QA-25): that model equals UCRT's <c>hypot</c> on every one
+    /// of 1.7M pairs spanning every exponent, subnormals and the corners, and <c>np.hypot</c> with it.
+    /// <see cref="Hypot(double,double)"/> is that model, so float64 <c>np.hypot</c> returns NumPy's bits —
+    /// including where they are 1 ULP from the correctly rounded value (<c>np.hypot(0.1, 0.1)</c> is
+    /// <c>0x3fc21a1851ff630b</c>). Until parity QA-25 this kernel was Borges' correctly rounded FMA
+    /// algorithm, more accurate than NumPy and excused in the oracle. The <c>ff->f</c> and (via float32,
+    /// <c>astype e->f</c>) <c>ee->e</c> loops round the double result down to float, which reproduces
+    /// UCRT's <c>hypotf</c> exactly (0 of 300,000 float32 pairs differ; a float operand's square is exact
+    /// in double, so the double sum leaves no room for a float32 rounding difference).</para>
     ///
     /// <para>Decimal (no NumPy analog) computes the highest-precision result natively via
     /// <see cref="DecimalMath.Sqrt(decimal)"/> with the overflow-safe scaled form.</para>
@@ -36,41 +37,42 @@ namespace NumSharp.Utilities
     public static partial class NDHypotMath
     {
         /// <summary>
-        /// Borges' correctly-rounded core (2020, "An Improved Algorithm for hypot(a,b)"): assumes
-        /// <paramref name="a"/> ≥ <paramref name="b"/> ≥ 0, both finite and pre-scaled so <c>a*a</c>
-        /// neither overflows nor loses <c>b*b</c> to underflow. Forms the exact <c>a²+b²</c> with two
-        /// FMA 2-products and a Fast2Sum, takes <c>sqrt</c>, then a single Newton step on the exactly
-        /// computed residual <c>(a²+b²) − h²</c> lifts the faithful root to the correctly-rounded one.
+        /// UCRT's <c>hypot</c> core: <c>sqrt(a*a + b*b)</c>, every operation rounded on its own (no fused
+        /// multiply-add — RyuJIT never contracts one, and UCRT's results carry the separate roundings).
+        /// Assumes both operands finite and pre-scaled so <c>a*a</c> neither overflows nor loses
+        /// <c>b*b</c> to underflow (the caller's safe middle); within it the operand order does not matter,
+        /// since IEEE addition is commutative.
         /// </summary>
+        /// <param name="a">The larger magnitude (non-negative, finite, in the safe range).</param>
+        /// <param name="b">The smaller magnitude (non-negative, finite).</param>
+        /// <returns>The faithfully rounded <c>sqrt(a² + b²)</c>, UCRT's bits.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static double Core(double a, double b)
-        {
-            double xx = a * a, e_xx = Math.FusedMultiplyAdd(a, a, -xx);   // a² = xx + e_xx  (exact)
-            double yy = b * b, e_yy = Math.FusedMultiplyAdd(b, b, -yy);   // b² = yy + e_yy  (exact)
-            double s = xx + yy, e_s = yy - (s - xx);    // xx+yy = s + e_s  (Fast2Sum, xx>=yy)
-            double sigma = e_xx + e_yy + e_s;           // low-order bits of a²+b²
-            double h = Math.Sqrt(s);
-            double hh = h * h, e_hh = Math.FusedMultiplyAdd(h, h, -hh);   // h² = hh + e_hh  (exact)
-            double residual = (s - hh) + sigma - e_hh;  // (a²+b²) − h²  (s−hh exact by Sterbenz)
-            return h + residual / (2.0 * h);            // one Newton step → correctly rounded
-        }
+        private static double Core(double a, double b) => Math.Sqrt(a * a + b * b);
 
         /// <summary>
-        /// Correctly-rounded <c>sqrt(x²+y²)</c> (double). Matches NumPy's <c>hypot</c> value on ~91% of
-        /// inputs and is within 1 ULP (more accurate) on the rest. Non-finite handling follows the C
-        /// contract NumPy inherits from UCRT: an infinite operand yields <c>+inf</c> even when the other
-        /// is NaN; otherwise a NaN operand yields NaN; the result is always non-negative.
+        /// float64 <c>np.hypot</c> of one pair, NumPy's <c>npy_hypot</c> = UCRT's <c>hypot</c> on win-amd64:
+        /// <c>sqrt(x² + y²)</c> faithfully rounded the way UCRT rounds it (see the class remarks), without
+        /// spurious overflow or underflow. An infinite operand yields <c>+inf</c> even when the other is NaN;
+        /// otherwise the FIRST NaN operand comes back as it is (payload and sign, as UCRT returns it); the
+        /// result is otherwise non-negative.
         /// </summary>
+        /// <param name="x">The first leg.</param>
+        /// <param name="y">The second leg.</param>
+        /// <returns>The hypotenuse, NumPy's bits.</returns>
         [MethodImpl(OptimizeAndInline)]
         public static double Hypot(double x, double y)
         {
+            // inf beats nan (C99 Annex F / npy_hypot): hypot(±inf, nan) = +inf.
+            if (double.IsInfinity(x) || double.IsInfinity(y))
+                return double.PositiveInfinity;
+            // UCRT returns its first NaN operand untouched (probed: hypot(1, -nan) is that -nan), so the NaN test
+            // runs BEFORE the absolute values, which would clear the sign.
+            if (double.IsNaN(x))
+                return x;
+            if (double.IsNaN(y))
+                return y;
             x = Math.Abs(x);
             y = Math.Abs(y);
-            // inf beats nan (C99 Annex F / npy_hypot): hypot(±inf, nan) = +inf.
-            if (double.IsPositiveInfinity(x) || double.IsPositiveInfinity(y))
-                return double.PositiveInfinity;
-            if (double.IsNaN(x) || double.IsNaN(y))
-                return double.NaN;                       // float NaN is tokenized by the oracle
             if (x < y) { double t = x; x = y; y = t; }   // x >= y >= 0
             if (y == 0.0) return x;                      // covers x==0 -> +0, and hypot(x,0)=|x|
 
@@ -81,7 +83,9 @@ namespace NumSharp.Utilities
 
             // Extremes: shift x into [1,2) by an exact power of 2, compute, shift the root back.
             // Math.ScaleB manipulates the exponent field, so no intermediate over/underflows even when
-            // 2^-ex is itself unrepresentable (subnormal x, ex down to -1074).
+            // 2^-ex is itself unrepresentable (subnormal x, ex down to -1074). A power-of-two rescale changes
+            // no rounding of the products, the sum or the root (an even exponent shift passes through sqrt
+            // exactly), so this is UCRT's own rescaled result bit for bit, its 2^±600 shift included.
             double xs = Math.ScaleB(x, -ex);
             double ys = Math.ScaleB(y, -ex);
             return Math.ScaleB(Core(xs, ys), ex);
@@ -89,8 +93,13 @@ namespace NumSharp.Utilities
 
         /// <summary>
         /// <c>hypotf</c> (float). NumPy's <c>ff->f</c> loop; bit-exact with UCRT's <c>hypotf</c> because
-        /// rounding the correctly-rounded double result down to float coincides with it.
+        /// rounding the double result down to float coincides with it (a float operand's square is exact in
+        /// double, so only the sum and the root round before the final narrowing: 0 of 300,000 probed pairs
+        /// differ from <c>ucrtbase</c>'s <c>_hypotf</c>).
         /// </summary>
+        /// <param name="x">The first leg.</param>
+        /// <param name="y">The second leg.</param>
+        /// <returns>The hypotenuse, NumPy's bits.</returns>
         [MethodImpl(OptimizeAndInline)]
         public static float HypotF(float x, float y) => (float)Hypot(x, y);
 

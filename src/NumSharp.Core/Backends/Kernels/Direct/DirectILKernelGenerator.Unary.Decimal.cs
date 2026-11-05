@@ -564,10 +564,10 @@ namespace NumSharp.Backends.Kernels
                 case UnaryOp.Square:
                     EmitUnaryHalfViaFloat(il, op);
                     return;
-                // Expm1 / Log1p deliberately stay on the double bridge below: .NET's float.ExpM1 /
-                // float.LogP1 lose small-|x| precision (float.ExpM1(2^-24) → 0x0002 where NumPy's
-                // npy_expm1f gives 0x0001; log1p is worse — 17 409 finite half diffs), while
-                // double.ExpM1 / double.LogP1 are byte-identical to NumPy's half loop.
+                // Expm1 / Log1p take their own helpers below (Expm1HalfNumPy / Log1pHalfNumPy): .NET's
+                // float.ExpM1 / float.LogP1 are exp(x)-1 / log(1+x) in float32 and lose small-|x| precision
+                // (float.ExpM1(2^-24) → 0x0002 where NumPy's npy_expm1f gives 0x0001), so the helpers model
+                // UCRT's expm1f / log1pf from float64 over the whole float16 domain instead.
             }
 
             switch (op)
@@ -617,43 +617,22 @@ namespace NumSharp.Backends.Kernels
                     break;
 
                 case UnaryOp.Log1p:
-                    // B21: Half.LogP1(x) computes (1 + x) in Half precision, which rounds
-                    // subnormal x to 0 because Half epsilon ≫ 2^-24. Promote to double (NumPy's
-                    // own model: float32 isn't enough either — float32 epsilon near 1 is ~2^-23,
-                    // already coarser than Half's smallest subnormal 2^-24).
-                    //
-                    // Sign-of-zero: .NET's double.LogP1(-0.0) returns +0.0, dropping the sign.
-                    // NumPy preserves sign through log1p. Wrap the result in CopySign(result, x)
-                    // to restore the input's sign. This happens to be correct over log1p's
-                    // entire domain because log1p(x) always has the same sign as x when
-                    // x ∈ (-1, ∞).
-                    {
-                        var locIn = il.DeclareLocal(typeof(double));
-                        il.EmitCall(OpCodes.Call, CachedMethods.HalfToDouble, null);
-                        il.Emit(OpCodes.Stloc, locIn);
-                        il.Emit(OpCodes.Ldloc, locIn);
-                        il.EmitCall(OpCodes.Call, CachedMethods.DoubleLogP1, null);
-                        il.Emit(OpCodes.Ldloc, locIn);
-                        il.EmitCall(OpCodes.Call, CachedMethods.MathCopySign, null);
-                        il.EmitCall(OpCodes.Call, CachedMethods.DoubleToHalf, null);
-                    }
+                    // NumPy's HALF_log1p is log1pf on the widened half, narrowed by npy_float_to_half
+                    // (Log1pHalfNumPy, parity QA-24): the float64 log(1 + x) rounded to float32 FIRST and
+                    // then to float16 is log1pf over the whole float16 domain, a NaN passes through untouched
+                    // (a signalling one stays signalling) and x < -1 is log1pf's positive quiet NaN. The old
+                    // double bridge rounded once from double (2 one-ULP results), quieted signalling NaNs and
+                    // gave the domain error a negative NaN. (Half.LogP1 rounds 1 + x in float16 and loses
+                    // every subnormal x, which is why neither bridge computes in float16.)
+                    il.EmitCall(OpCodes.Call, GetHelper(nameof(Log1pHalfNumPy)), null);
                     break;
 
                 case UnaryOp.Expm1:
-                    // B21: Half.ExpM1(x) suffers the same subnormal-precision loss as LogP1
-                    // (internal exp(x)-1 step loses bits). Promote through double. Same
-                    // CopySign sign-of-zero correction as Log1p — expm1(x) has the same sign
-                    // as x over its entire domain.
-                    {
-                        var locIn = il.DeclareLocal(typeof(double));
-                        il.EmitCall(OpCodes.Call, CachedMethods.HalfToDouble, null);
-                        il.Emit(OpCodes.Stloc, locIn);
-                        il.Emit(OpCodes.Ldloc, locIn);
-                        il.EmitCall(OpCodes.Call, CachedMethods.DoubleExpM1, null);
-                        il.Emit(OpCodes.Ldloc, locIn);
-                        il.EmitCall(OpCodes.Call, CachedMethods.MathCopySign, null);
-                        il.EmitCall(OpCodes.Call, CachedMethods.DoubleToHalf, null);
-                    }
+                    // NumPy's HALF_expm1 is expm1f on the widened half, narrowed by npy_float_to_half
+                    // (Expm1HalfNumPy, parity QA-24): the float64 exp(x) - 1 rounded once to float16 matches
+                    // UCRT's expm1f everywhere but two inputs, which the helper pins, and a NaN passes
+                    // through untouched (a signalling one stays signalling, where this bridge quieted it).
+                    il.EmitCall(OpCodes.Call, GetHelper(nameof(Expm1HalfNumPy)), null);
                     break;
 
                 case UnaryOp.Floor:

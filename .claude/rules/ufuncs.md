@@ -240,9 +240,14 @@ answers differ (`757.7617475757002 ** 2`: `x*x` `...03c1`, pow `...03c2`; `-0.0 
 - The decision is ported once (`Backends/Default/Math/DefaultEngine.UfuncInnerSteps.cs`, `NumPyUfuncInputSteps`, shared
   with np.clip's const loop): `check_for_trivial_loop` (a cast or unaligned 0-d / ≤ bufsize 1-D input is copied; any
   other, or an out of another dtype or unaligned, refuses the trivial loop), `try_trivial_single_output_loop` (a 0-d input
-  has step 0, a 1-D operand its own stride, an N-D operand the item size), then NpyIter (fill_axisdata, the axis sort,
-  flips, COPY_IF_OVERLAP, coalescing, `npyiter_find_buffering_setup`'s cost model with `np.getbufsize()`; a read-only 0-d
-  cast input is copied eagerly; a buffered single-stride broadcast keeps step 0). The decision is uniform over a call.
+  has step 0, a 1-D operand its own stride, an N-D operand the item size; an operand contiguous in BOTH orders does not
+  fix the operation order), then NpyIter (fill_axisdata, the axis sort, flips, COPY_IF_OVERLAP, coalescing,
+  `npyiter_find_buffering_setup`'s cost model with `np.getbufsize()`; a read-only 0-d cast input is copied eagerly; a
+  buffered single-stride broadcast keeps step 0). The decision is uniform over a call. The same port also yields the
+  whole call plan (`NumPyUfuncCalls` → `NumPyUfuncCallPlan`, `DefaultEngine.UfuncCallPlan.cs`): the visiting order (the
+  sorted, flipped axes before coalescing), the slab of one pass over the buffer core and its outer dimension, the call
+  size (the slab, or the largest multiple of the core within the buffer when an operand is buffered), and the
+  trivial loop's operand addresses. np.fmax / np.fmin read their positions from it (`comparison.md`).
   Consequences: a 0-d exponent is the fast path on every route (plain, out=, where=); `(1,) ** (1,)` is pow (the trivial
   loop's 1-D step) but `(5,) ** (1,)` and a one-element call with a cast out are fast (NpyIter, step 0); a column
   exponent `(R,1)` against `(R,n)` is fast only when NpyIter leaves it unbuffered (n > bufsize / 2 at the default; with

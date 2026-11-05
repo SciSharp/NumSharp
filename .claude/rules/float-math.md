@@ -175,8 +175,37 @@ the bit-exact `NumPyPortedFloat32Kernels` list. Specials: NaN → `0x7fc00000`, 
 `expm1`/`log1p` at float32/float64 call the platform libm and are computed as `Exp(x)-1` / `Log(1+x)`: catastrophic for
 small |x| (`expm1(1e-8)` returns 0 where NumPy returns 1e-8) and wrong on the sign of zero (`expm1(-0.0)` gives `+0.0`).
 Neither is portable (NumPy calls the CRT for both), so bit parity is out of reach; the accuracy defect is a separate,
-open bug (.NET's `float.ExpM1`/`double.ExpM1`/`LogP1` are themselves `Exp(x)-1`/`Log(1+x)`). float16 loops and float64
+open bug (.NET's `float.ExpM1`/`double.ExpM1`/`LogP1` are themselves `Exp(x)-1`/`Log(1+x)`). float64
 `exp`/`log`/`sin`/`cos` agree with NumPy bit for bit on win-amd64.
+
+## float16 `arctan2` / `log1p` / `expm1`, float32 `arctan2` (a win-amd64 pin)
+
+NumPy runs these float16 ufuncs through their float32 loops: the half widened bit for bit, the UCRT's `atan2f` /
+`log1pf` / `expm1f`, then `npy_float_to_half`. `DirectILKernelGenerator.HalfLibm.cs` reproduces it (`ATan2HalfNumPy`,
+`Log1pHalfNumPy`, `Expm1HalfNumPy`, wired into the unary and binary emitters, the 0-d × 0-d arctan2 shortcut and
+np.evaluate's nodes), all 65,536 float16 patterns bit for bit. Two shortcuts would round twice: computing in float64 and
+narrowing once (13 float16 arctan2, 2 log1p and 2 expm1 results one ULP off), and .NET's `(Half)MathF.X` (whose narrow
+quiets a signalling NaN).
+- `atan2f` is `MathF.Atan2` (the same UCRT entry point), which is also float32 `np.arctan2` (`EmitATan2Operation`:
+  NumPy's FLOAT_arctan2; float64 work narrowed would differ on 116 of 2M pairs).
+- `log1pf` / `expm1f` pass a NaN through untouched, a signalling NaN of either sign included; `log1p(x < -1)` and
+  `log1p(-inf)` are the POSITIVE quiet NaN `0x7E00`; `log1p(-1)` is `-inf`; `-0.0` keeps its sign.
+- The UCRT's `expm1f` below `|x| < 1` is an undocumented polynomial (2 – 4 ULP off at float32), so `Expm1HalfNumPy` is
+  `exp(x) - 1` in double rounded once, plus the two float16 inputs where expm1f's float32 result lands across a float16
+  midpoint (`0x2864` → `0x2878`, `0xB94E` → `0xB7C2`): exact over the float16 domain, a win-amd64 pin.
+- Gate: `Math/HalfLibmNumPyLoops.Test.cs` (the finding's values, the NaN rules, the scalar and evaluate routes, SHA-256
+  digests of every float16 pattern and of 1,048,576 float32 arctan2 pairs).
+
+## `np.hypot` and the complex modulus: the UCRT's hypot
+
+float64 `np.hypot` and the complex functions that take a modulus (`NDComplexMath.Hypot`: `sqrt`, `log` and so `log2` /
+`log10`, `log1p`; complex `abs` has its own fused `cabs`) run the win-amd64 UCRT's `hypot` (`Utilities/NDHypotMath.cs`): `sqrt(x*x + y*y)` with the operands
+scaled by a power of two outside `[2^-500, 2^500]`, which makes it faithfully rounded and bit-identical to NumPy. Special
+values: an infinity beats a NaN (`+inf`), else the FIRST NaN operand is returned verbatim (payload and sign). The
+`Vector256` body (`NDHypotMath.Simd.cs`) computes the same `sqrt(hi*hi + lo*lo)` per lane. Complex `log`/`log2`/`log10`
+near 1 keep a ≤ 2-ULP real-part difference: they run a managed log1p where the UCRT runs its own. Gates:
+`Math/HypotTests.cs` (the 8-element SIMD body and a broadcast included), the elementwise tiers (hypot left the libm
+excuse).
 
 ## complex128 unary ufuncs: NaN signs
 

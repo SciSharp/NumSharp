@@ -123,6 +123,12 @@ before promoting, as NumPy's unfused sequence does.
   operands streams (`DefaultEngine.Evaluate.MinMaxAxis.cs`), anything else is materialized in NumPy's layout first.
   Corpus block C9 (signed zeros kept) gates it. `MisalignedRegistry`'s generic unary ~ULP excuse does not apply to
   evaluate trees.
+- complex128 `Max`/`Min` delegate to `np.max` / `np.min` (`EvaluateDelegatingReduce` → `ReduceAMax` / `ReduceAMin`,
+  NumPy's scalar `CDOUBLE_maximum` / `CDOUBLE_minimum` loop in LOGICAL order): a bare leaf as it is, a computed child
+  materialized in NumPy's layout first (`TryComplexMinMaxEval`), so the first NaN-bearing element in logical order sticks
+  and a tie keeps the earlier element (`np.max(cn[::-1])` of `[nan+1j, 2, nan+2j, 1]` is `nan+2j`); an empty input raises
+  NumPy's "zero-size array to reduction operation maximum which has no identity". Gate:
+  `NDEvaluateMinMaxTests.Complex_MaxMin_PickNumPysElementInLogicalOrder`.
 - Flat reductions over a shared dense axis permutation (a transposed block) stream in memory order
   (`CanStreamChild(allowPermuted)` / `IsSharedDensePermutation`, NumPy's K-order coalescing), and a flat `Mean` of an
   integer/bool child is NumPy's buffered-cast float64 sum (a pairwise sum per `np.getbufsize()` chunk; `np.setbufsize`
@@ -148,6 +154,19 @@ before promoting, as NumPy's unfused sequence does.
   shared C/F order, no cast / `dtype=` / `where=`, and a provided `out` overlapping an input only exactly → the fused
   kernel runs once, the same call NDIter makes after coalescing (byte-identical). Everything else declines (never
   throws) to the NDIter pass. Hooks `NDExpr.DisableTrivialLoop` / `TrivialLoopRuns`; gate `NDEvaluateTrivialLoopTests`.
+- float32 / float64 `FMax` / `FMin` nodes are STAGED, not fused (`NDExpr.FMaxStages.cs`, `NDExprProgram.FMaxPlan`,
+  `DefaultEngine.Evaluate.FMaxStages.cs`). NumPy's answer to a ±0 tie or a NaN pair depends on the element's place in its
+  inner-loop calls (`comparison.md`), which no fused kernel has. So each such node runs per call as NumPy's own
+  `np.fmax` / `np.fmin` over its children. A leaf is passed as it is, a literal as a Python scalar, and a computed subtree
+  is evaluated over exactly the inputs it reads into the fresh array NumPy's ufunc would allocate (its K-order layout).
+  The node's NEP 50 dtype rides as `dtype=`, so a 0-d array stays strong. Nested nodes are staged inner first. A stage
+  result read further on is relaid out to NumPy's ufunc output layout (`Shape.NpyIterOutputShape`): its layout decides a
+  later stage's calls and a reduction's order. The remainder (the tree over the inputs it reads and the stage results)
+  is an ordinary cached program. When the expression IS one fmax / fmin, its stage takes `out=` / `where=` itself
+  (NumPy's masked or out= call has its own positions), unless `dtype=`, an explicit `order=` or a non-default `casting=`
+  shapes the result; a plain root result with the layout the fused path would allocate is returned as it is.
+  Constant-only fmax nodes and a stage over a literal expression stay fused. Gate:
+  `Math/np.fmax.NumPyPositions.Test.cs` (`Evaluate_FollowsTheUnfusedCalls`).
 
 ## Programs, parameters and the cache
 

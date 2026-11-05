@@ -64,6 +64,34 @@ namespace NumSharp.Backends
         internal static void NumPyUfuncInputSteps(UfuncLoopOperand[] inputs, NDArray @out, NDArray where,
                                                   NPTypeCode loop, long[] dims, Span<long> steps)
         {
+            var plan = NumPyUfuncCalls(inputs, @out, where, loop, dims);
+            for (int i = 0; i < inputs.Length; i++)
+                steps[i] = plan.Steps[i];
+        }
+
+        /// <summary>
+        /// Every inner-loop call NumPy 2.4.2 makes for an elementwise ufunc call with one output: the visiting order, the
+        /// call boundaries and each operand's step (see <see cref="NumPyUfuncCallPlan"/>). Use it when a NumPy inner loop's
+        /// bits depend on an element's place inside its call (np.fmax / np.fmin's SIMD body and CRT tail); a loop that only
+        /// branches on its steps reads <see cref="NumPyUfuncInputSteps"/>.
+        /// </summary>
+        /// <param name="inputs">The inputs as NumPy receives them (see <see cref="UfuncLoopOperand.Of"/> and
+        /// <see cref="UfuncLoopOperand.OfInput"/>). Not modified: the copies NumPy makes are modelled on a clone.</param>
+        /// <param name="out">The out= array, or null when NumPy allocates the result.</param>
+        /// <param name="where">The where= mask, or null. A mask disables the trivial loop and joins the iterator as a read
+        /// operand; its runs are not part of the plan (they depend on the mask's values).</param>
+        /// <param name="loop">The resolved loop dtype (every input is cast to it).</param>
+        /// <param name="dims">The broadcast iteration shape (inputs, out and mask together); NumPy's iterator iterates
+        /// it, and every position the plan describes is one of its elements.</param>
+        /// <returns>The plan. Its <see cref="NumPyUfuncCallPlan.Steps"/> hold the inputs' steps, then the output's.</returns>
+        /// <remarks>
+        /// The caller must have validated every cast the call needs and the shapes (<paramref name="dims"/> is the
+        /// operands' broadcast, an out exactly that shape): NumPy's trivial-loop check accepts any cast its casting rule
+        /// allows, and the iterator simulation trusts the broadcast.
+        /// </remarks>
+        internal static NumPyUfuncCallPlan NumPyUfuncCalls(UfuncLoopOperand[] inputs, NDArray @out, NDArray where,
+                                                           NPTypeCode loop, long[] dims)
+        {
             long bufsize = NDIterBufferManager.CurrentBufferSize;
             int loopSize = loop.SizeOf();
             int nin = inputs.Length;
@@ -94,10 +122,10 @@ namespace NumSharp.Backends
                     trivial = false;
             }
 
-            if (trivial && TryTrivialLoopSteps(ops, @out, loopSize, steps))
-                return;
+            if (trivial && TryTrivialLoopPlan(ops, @out, loopSize, out var plan))
+                return plan;
 
-            NpyIterInputSteps(ops, @out, where, loop, loopSize, dims, bufsize, steps);
+            return NpyIterPlan(ops, @out, where, loop, loopSize, dims, bufsize);
         }
 
         /// <summary>
@@ -108,14 +136,19 @@ namespace NumSharp.Backends
         /// <param name="ops">The inputs after <c>check_for_trivial_loop</c>'s copies.</param>
         /// <param name="out">The out= array, or null (the result is then allocated to fit).</param>
         /// <param name="loopSize">The loop dtype's item size, in bytes.</param>
-        /// <param name="steps">When this returns true: the step of each input in the one call.</param>
+        /// <param name="plan">When this returns true: the one call — the operation order's visiting order (C, or F when
+        /// every N-D operand is F-only contiguous; a 1-D operation in logical order), each operand's fixed step and data
+        /// address; null otherwise.</param>
         /// <returns>True when NumPy takes the trivial loop; false when it falls through to NpyIter.</returns>
-        private static bool TryTrivialLoopSteps(UfuncLoopOperand[] ops, NDArray @out, int loopSize, Span<long> steps)
+        private static bool TryTrivialLoopPlan(UfuncLoopOperand[] ops, NDArray @out, int loopSize, out NumPyUfuncCallPlan plan)
         {
+            plan = null;
             int nin = ops.Length;
             int operationNdim = 0;
             long[] operationShape = null;
             int operationOrder = 0;   // 0 = unset; else C (1) | F (2), as the flags read
+            var steps = new long[nin + 1];
+            var starts = new long[nin + 1];
 
             for (int i = 0; i <= nin; i++)
             {
@@ -126,6 +159,9 @@ namespace NumSharp.Backends
                     continue;
                 else
                     o = UfuncLoopOperand.Of(@out);
+
+                // The data pointer the call starts from (PyArray_BYTES); a fresh operand overlaps nothing.
+                starts[i] = o.IsFresh ? 0 : o.DataStart;
 
                 // 0-d inputs broadcast with a 0 step (a 0-d out has no such special case).
                 if (o.NDim == 0 && i < nin)
@@ -155,13 +191,16 @@ namespace NumSharp.Backends
                     int order = (o.CContiguous ? 1 : 0) | (o.FContiguous ? 2 : 0);
                     if (order == 0)
                         return false;   // N-D operands must be contiguous
-                    if (operationOrder == 0)
-                        operationOrder = order;
-                    else if (operationOrder != order)
-                        return false;
+                    // An operand contiguous in BOTH orders (at most one axis longer than 1) does not constrain the order.
+                    if (order != 3)
+                    {
+                        if (operationOrder == 0)
+                            operationOrder = order;
+                        else if (operationOrder != order)
+                            return false;
+                    }
                 }
-                if (i < nin)
-                    steps[i] = step;
+                steps[i] = step;
             }
 
             if (@out is not null)
@@ -174,7 +213,30 @@ namespace NumSharp.Backends
                 if (operationNdim == 1 && outOp.ByteStrides[0] < outOp.ItemSize && outOp.ByteStrides[0] != 0)
                     return false;
             }
+            else
+            {
+                // The allocated result: the loop dtype's item size (descriptors[nin]->elsize), fresh memory.
+                steps[nin] = loopSize;
+                starts[nin] = 0;
+            }
 
+            // The one call visits the operation shape in its memory order: C (the default, and for operands contiguous in
+            // both orders), F when an F-only operand fixed it, the logical order for 1-D. Its size is the shape's product
+            // (1 for a 0-d operation).
+            int nd = operationNdim;
+            var axisShape = new long[nd];
+            var axisArray = new int[nd];
+            long size = 1;
+            for (int k = 0; k < nd; k++)
+            {
+                int ax = operationOrder == 2 ? k : nd - 1 - k;
+                axisArray[k] = ax;
+                axisShape[k] = operationShape[ax];
+                size *= operationShape[ax];
+            }
+
+            plan = new NumPyUfuncCallPlan(axisShape, axisArray, new bool[nd], size, Math.Max(size, 1), Math.Max(size, 1),
+                                          steps, trivial: true, starts);
             return true;
         }
 
@@ -212,9 +274,10 @@ namespace NumSharp.Backends
             => o.Size == 1 ? 0 : (o.NDim == 1 ? o.ByteStrides[0] : o.ItemSize);
 
         /// <summary>
-        /// The input steps NumPy's NpyIter would hand the loop: broadcast every operand over
-        /// <paramref name="dims"/>, sort the axes, flip all-negative axes, apply COPY_IF_OVERLAP to the output,
-        /// allocate it, coalesce, then run <c>npyiter_find_buffering_setup</c>'s cost model.
+        /// The calls NumPy's NpyIter would hand the loop: broadcast every operand over <paramref name="dims"/>, sort the
+        /// axes, flip all-negative axes, apply COPY_IF_OVERLAP to the output, allocate it, coalesce, then run
+        /// <c>npyiter_find_buffering_setup</c>'s cost model, whose core size and buffer size cut the iteration into calls
+        /// (<c>npyiter_copy_to_buffers</c>: a call never runs past the outer dimension of its core, nor past the buffer).
         /// </summary>
         /// <param name="ops">The inputs (after any trivial-loop copies, which persist into this path).</param>
         /// <param name="out">The out= array, or null for an allocated result.</param>
@@ -223,9 +286,10 @@ namespace NumSharp.Backends
         /// <param name="loopSize">The loop dtype's item size, in bytes.</param>
         /// <param name="dims">The broadcast iteration shape.</param>
         /// <param name="bufsize">The ufunc buffer size (<see cref="np.getbufsize"/>).</param>
-        /// <param name="steps">Receives the inner byte step of each input.</param>
-        private static void NpyIterInputSteps(UfuncLoopOperand[] ops, NDArray @out, NDArray where,
-                                              NPTypeCode loop, int loopSize, long[] dims, long bufsize, Span<long> steps)
+        /// <returns>The plan: the visiting order (the sorted, flipped axes before coalescing), the slab and call sizes and
+        /// each input's and the output's inner step.</returns>
+        private static NumPyUfuncCallPlan NpyIterPlan(UfuncLoopOperand[] ops, NDArray @out, NDArray where,
+                                                      NPTypeCode loop, int loopSize, long[] dims, long bufsize)
         {
             int nd = dims.Length;
             int nin = ops.Length;
@@ -325,7 +389,9 @@ namespace NumSharp.Backends
             }
 
             // ---- npyiter_flip_negative_strides: never with an allocated output; otherwise an axis whose strides are
-            //      all <= 0, one of them negative, is walked forwards.
+            //      all <= 0, one of them negative, is walked forwards — in memory order, so from the result's last index
+            //      along it to its first, which the plan's visiting order records.
+            var flipped = new bool[nax];
             if (!outAllocated)
             {
                 for (int k = 0; k < nax; k++)
@@ -338,9 +404,24 @@ namespace NumSharp.Backends
                         else if (s != 0) allNonPositive = false;
                     }
                     if (anyNegative && allNonPositive)
+                    {
+                        flipped[k] = true;
                         for (int i = 0; i < nop; i++)
                             ad[k * nop + i] = -ad[k * nop + i];
+                    }
                 }
+            }
+
+            // The visiting order: the sorted (and flipped) axes before coalescing, which only merges neighbours walked as
+            // one run and so leaves the order of positions unchanged. A 0-d iteration has no axes and one position.
+            var axisShape = new long[nd];
+            var axisArray = new int[nd];
+            var axisReversed = new bool[nd];
+            for (int k = 0; k < nd; k++)
+            {
+                axisShape[k] = shp[k];
+                axisArray[k] = nd - 1 - perm[k];
+                axisReversed[k] = flipped[k];
             }
 
             // ---- COPY_IF_OVERLAP: an out sharing memory with any read operand (and not its exact elementwise alias)
@@ -415,6 +496,7 @@ namespace NumSharp.Backends
             long size = shp[0];
             int bestDim = 0, bestCost = cost;
             long bestSize = size;
+            long bestCoreSize = 1;   // the positions of the dims below bestDim (the buffer's core)
             for (int idim = 1; idim < ncoal; idim++)
             {
                 // GROWINNER is always set for ufuncs, so only a buffered iteration stops at the buffer size.
@@ -433,6 +515,7 @@ namespace NumSharp.Backends
                     if (!cast[i])
                         cost++;
                 }
+                long coreSize = size;   // if the iteration grows to idim, the dims below it are the core
                 size *= shp[idim];
                 if (size == 0)
                     break;
@@ -442,18 +525,35 @@ namespace NumSharp.Backends
                     bestCost = cost;
                     bestSize = size;
                     bestDim = idim;
+                    bestCoreSize = coreSize;
                 }
             }
 
-            // Inner stride of each input: an unbuffered operand keeps its axis-0 stride; a buffered one gets the item
-            // size, unless it is single-stride over the core and broadcast there (the buffer then repeats one element).
-            for (int i = 0; i < nin; i++)
+            // Inner stride of each input and of the output: an unbuffered operand keeps its axis-0 stride; a buffered one
+            // gets the item size, unless it is single-stride over the core and broadcast there (the buffer then repeats
+            // one element). Any buffered operand (the mask included) makes the iterator buffer, which caps the call size.
+            var steps = new long[nin + 1];
+            bool mustBuffer = false;
+            for (int i = 0; i < nop; i++)
             {
                 bool singleStride = single[i] > bestDim;
                 bool buffered = cast[i] || !singleStride;
+                mustBuffer |= buffered;
                 long axis0 = ad[i];
-                steps[i] = !buffered ? axis0 : (singleStride && axis0 == 0 ? 0 : itemSize[i]);
+                if (i <= iout)
+                    steps[i] = !buffered ? axis0 : (singleStride && axis0 == 0 ? 0 : itemSize[i]);
             }
+
+            // A slab is one pass over the core and its outer dimension (dims 0..bestDim). The buffer size is that slab,
+            // or, when the iterator buffers and the slab exceeds the buffer, the largest multiple of the core that fits;
+            // npyiter_copy_to_buffers then runs one call per buffer, cut short at the end of each slab.
+            long slab = bestSize;
+            long call = mustBuffer && bufsize < bestSize ? bestCoreSize * (bufsize / bestCoreSize) : bestSize;
+            long total = 1;
+            for (int k = 0; k < nd; k++)
+                total *= axisShape[k];
+            return new NumPyUfuncCallPlan(axisShape, axisArray, axisReversed, total, Math.Max(slab, 1), Math.Max(call, 1),
+                                          steps, trivial: false, starts: null);
         }
 
         /// <summary>

@@ -58,10 +58,14 @@ namespace NumSharp.Backends
         /// f32-rounding of sqrt/power dtype=f32 lands even in a wider out).
         /// Each input must be same_kind-castable to it, and a provided out is
         /// validated against it rather than the promoted dtype.</param>
+        /// <param name="numpyPositions">True (every caller's default) to give np.fmax / np.fmin at a float32 /
+        /// float64 loop NumPy's position-dependent answer — the C library's ±0-tie / NaN-pair rule at the elements
+        /// NumPy runs outside its SIMD vectors (Default.FMaxFMin.Positions.cs, QA-20). False runs the kernels alone,
+        /// the vector rule at every position: a probe of what the kernels compute, never a NumPy answer.</param>
         /// <returns>Result array with promoted type (or <paramref name="@out"/>)</returns>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         internal unsafe NDArray ExecuteBinaryOp(NDArray lhs, NDArray rhs, BinaryOp op,
-            NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
+            NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null, bool numpyPositions = true)
         {
             // A string operand never reaches the numeric promotion table or a kernel: NumPy resolves the ufunc loop
             // before anything else, and with a string operand it either refuses (its text) or computes on text (the next
@@ -160,6 +164,48 @@ namespace NumSharp.Backends
                 lhsType = lhs.GetTypeCode;
                 rhsType = rhs.GetTypeCode;
             }
+
+            // np.fmax / np.fmin at a float32 / float64 loop: NumPy's answer to a ±0 tie or a NaN pair depends on whether
+            // the element falls inside a whole SIMD vector of its inner-loop call or outside one (QA-20). The C library's
+            // answers at NumPy's scalar positions are computed here, from the untouched inputs (an out= may alias one), the
+            // kernels then run as for every op, and those positions are rewritten (Default.FMaxFMin.Positions.cs). Here,
+            // after the loop dtype is final and the early validations ran, so the positions see exactly the operands the
+            // kernels will; a shape or out= cast error is still raised by the kernels' run (the positions skip such a call).
+            if (numpyPositions && (op == BinaryOp.FMax || op == BinaryOp.FMin)
+                && (resultType == NPTypeCode.Single || resultType == NPTypeCode.Double))
+            {
+                var patches = NumPyFMaxFMinPatches(lhs, rhs, op == BinaryOp.FMax, resultType, @out, where);
+                var result = ExecuteBinaryOpResolved(lhs, rhs, op, lhsType, rhsType, resultType, @out, where);
+                patches?.ApplyTo(result, this);
+                return result;
+            }
+
+            return ExecuteBinaryOpResolved(lhs, rhs, op, lhsType, rhsType, resultType, @out, where);
+        }
+
+        /// <summary>
+        /// The dispatch half of <see cref="ExecuteBinaryOp"/>: everything after the loop dtype is resolved and the early
+        /// validations ran — the out= / where= routes, the 0-d × 0-d shortcut, the trivial contiguous loop, the NDIter
+        /// route and the direct kernels. Split out so np.fmax / np.fmin can wrap it with their position step without
+        /// resolving the call twice.
+        /// </summary>
+        /// <param name="lhs">The first operand, after the weak-scalar adjustments (any temp it is stays alive in the
+        /// caller until this returns).</param>
+        /// <param name="rhs">The second operand, likewise.</param>
+        /// <param name="op">The op, after the bool remaps (bool add/multiply/max/min run as bitwise OR / AND).</param>
+        /// <param name="lhsType">The first operand's dtype.</param>
+        /// <param name="rhsType">The second operand's dtype.</param>
+        /// <param name="resultType">The final loop dtype.</param>
+        /// <param name="out">The out= array (writeability already checked), or null.</param>
+        /// <param name="where">The where= mask (already validated as bool), or null.</param>
+        /// <returns>The result: <paramref name="out"/> when given, else a fresh array.</returns>
+        /// <exception cref="IncorrectShapeException">The operands do not broadcast, or out= does not have the broadcast
+        /// shape (NumPy's texts).</exception>
+        /// <exception cref="ArgumentException">out= cannot hold the loop dtype under same_kind casting.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private unsafe NDArray ExecuteBinaryOpResolved(NDArray lhs, NDArray rhs, BinaryOp op, NPTypeCode lhsType,
+                                                       NPTypeCode rhsType, NPTypeCode resultType, NDArray @out, NDArray where)
+        {
 
             // ufunc out=/where= path (Wave 2.1): the loop dtype above is final
             // (NumPy resolves the loop from the INPUTS; out only constrains the

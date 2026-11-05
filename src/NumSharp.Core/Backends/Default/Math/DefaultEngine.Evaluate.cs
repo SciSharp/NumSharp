@@ -313,6 +313,11 @@ namespace NumSharp.Backends
 
             ThrowIfReductionKeywords(program.IsReduction, options);
 
+            // Staged float fmax / fmin nodes run as NumPy's own ufunc calls before the remainder (NDExpr.FMaxStages.cs):
+            // their answers depend on NumPy's inner-loop calls, which no fused kernel has.
+            if (program.FMaxPlan is not null)
+                return EvaluateFMaxPlan(program, inputs, @out, options);
+
             // A weighted average reduces over TWO sub-trees (values, weights); it is host-computed like
             // the M4c summation kinds, so it precedes the elementwise + single-child-reduce dispatch.
             if (program.Average is not null)
@@ -779,6 +784,14 @@ namespace NumSharp.Backends
                 or NDExprReduceKind.ArgMax or NDExprReduceKind.ArgMin)
                 return EvaluateDelegatingReduce(program, inputs, @out, options);
 
+            // complex128 Max / Min delegate too (parity QA-21): NumPy's CDOUBLE_maximum / minimum fold is a SELECTION
+            // whose answer — the first NaN-bearing element, the earlier of a tie — depends on the visiting order, and
+            // np.max / np.min already walk NumPy's order on every layout (logical along a reversed axis, K order for a
+            // flat reduction). The fused fold below walks the iterator's memory order, so a reversed view returned
+            // another NaN. The result dtype of Max / Min is the child's, so ResultType names the child's dtype here.
+            if (reduce.Kind is NDExprReduceKind.Max or NDExprReduceKind.Min && program.ResultType == NPTypeCode.Complex)
+                return EvaluateDelegatingReduce(program, inputs, @out, options);
+
             // Plan P2 M4c (summation kinds) — NanMean/Var/Std. These are NOT order-independent (they
             // sum), so they can't ride EvaluateDelegatingReduce's engine np.nanmean/np.var (whose flat
             // sum is a drifting multi-accumulator fold). Instead the host materializes the child once and
@@ -1036,6 +1049,11 @@ namespace NumSharp.Backends
         /// float16 / complex128 run NumPy's sequential BINARY_LOOP fold — so the ±0 sign of a tie and WHICH NaN an all-NaN
         /// slice returns (payload intact) match NumPy. Integer children decline to the materialize route below, where
         /// every schedule is exact (integers have no bit-distinct ties).</item>
+        /// <item>complex128 <c>Max</c> / <c>Min</c> (parity QA-21) try <see cref="TryComplexMinMaxEval"/> first: the
+        /// engine's <c>np.max</c> / <c>np.min</c> over the buffer NumPy reduces (a bare leaf in place, a computed child
+        /// materialized in NumPy's K-order layout), so the first NaN-bearing element and the earlier of a tie are chosen
+        /// in NumPy's visiting order. An empty or 0-d child declines to the materialize route below, whose engine call
+        /// raises NumPy's zero-size error or returns the lone element.</item>
         /// <item><c>ArgMax</c> / <c>ArgMin</c> try <see cref="TryStreamArgReduce"/> first. Either way the index follows the
         /// LOGICAL C-order first-occurrence / first-NaN rule (NumPy's argmax ravels in C order), which no buffer layout
         /// can change — exact on both routes.</item>
@@ -1062,7 +1080,8 @@ namespace NumSharp.Backends
         /// <returns>The reduced array (a fresh 0-d scalar / reduced-shape array, or <paramref name="out"/> itself when supplied).</returns>
         /// <exception cref="ArgumentException">A flat reduction was given a wrong-rank <paramref name="out"/>; or the engine
         /// reduction rejects a zero-size input with NumPy's text — <c>zero-size array to reduction operation maximum which has
-        /// no identity</c> for Ptp (its max half runs first), <c>… fmax …</c> / <c>… fmin …</c> for NanMax / NanMin,
+        /// no identity</c> for Ptp (its max half runs first) and complex Max (<c>… minimum …</c> for Min),
+        /// <c>… fmax …</c> / <c>… fmin …</c> for NanMax / NanMin,
         /// <c>attempt to get argmax of an empty sequence</c> (argmin likewise) for the index kinds; or an out shape mismatch,
         /// or an out dtype not reachable under <see cref="NDEvaluateOptions.Casting"/>.</exception>
         /// <exception cref="NotSupportedException">The dispatcher routed a non-delegating kind here — an internal bug.</exception>
@@ -1092,6 +1111,10 @@ namespace NumSharp.Backends
             // the engine calls below; null = declined, nothing allocated.
             else if (reduce.Kind is NDExprReduceKind.NanMax or NDExprReduceKind.NanMin)
                 computed = TryExactNanMinMaxEval(program, inputs, out childNdim);
+            // complex128 Max / Min: np.max / np.min over the buffer NumPy reduces (TryComplexMinMaxEval); same contract,
+            // null = declined (an empty or 0-d child), nothing allocated.
+            else if (reduce.Kind is NDExprReduceKind.Max or NDExprReduceKind.Min)
+                computed = TryComplexMinMaxEval(program, inputs, out childNdim);
 
             if (computed is null)
             {
@@ -1114,6 +1137,9 @@ namespace NumSharp.Backends
                     NDExprReduceKind.Ptp    => Ptp(materialized, reduce.Axis, null, axisKd),
                     NDExprReduceKind.NanMin => NanMin(materialized, reduce.Axis, axisKd),
                     NDExprReduceKind.NanMax => NanMax(materialized, reduce.Axis, axisKd),
+                    // complex128 only (the dispatcher's gate); an empty or 0-d child reaches this arm.
+                    NDExprReduceKind.Max => ReduceAMax(materialized, reduce.Axis, axisKd),
+                    NDExprReduceKind.Min => ReduceAMin(materialized, reduce.Axis, axisKd),
                     NDExprReduceKind.ArgMax => reduce.Axis is int axMax
                         ? ArgMax(materialized, axMax, reduce.Keepdims)
                         : FlatArgIndex(materialized, isMax: true),

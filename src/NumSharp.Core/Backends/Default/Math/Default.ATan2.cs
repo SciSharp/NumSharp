@@ -221,12 +221,29 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// Execute scalar x scalar ATan2 operation.
+        /// Execute scalar x scalar ATan2 operation: each operand reaches the loop dtype, then the loop's function runs —
+        /// NumPy's HALF_arctan2 (<see cref="DirectILKernelGenerator.ATan2HalfNumPy"/>) for float16, the CRT's <c>atan2f</c>
+        /// for float32 (parity QA-24: <see cref="MathF.Atan2(float, float)"/>, the call NumPy's float32 loop makes),
+        /// <see cref="Math.Atan2(double, double)"/> for float64 and the decimal helper for decimal.
         /// </summary>
+        /// <param name="y">The 0-d ordinate.</param>
+        /// <param name="x">The 0-d abscissa.</param>
+        /// <param name="yType">The ordinate's dtype.</param>
+        /// <param name="xType">The abscissa's dtype.</param>
+        /// <param name="resultType">The loop dtype.</param>
+        /// <returns>The 0-d angle in <paramref name="resultType"/>.</returns>
         private NDArray ExecuteATan2ScalarScalar(
             NDArray y, NDArray x,
             NPTypeCode yType, NPTypeCode xType, NPTypeCode resultType)
         {
+            // float16 / float32: NumPy's float32 function on the operands cast to the loop dtype. A float16 operand keeps
+            // its own bits (a signalling NaN stays signalling into atan2f, as NumPy's widening keeps it); every other
+            // source dtype promoted to these loops (bool, 8- and 16-bit integers) is exact in double first.
+            if (resultType == NPTypeCode.Half)
+                return NewScalar(DirectILKernelGenerator.ATan2HalfNumPy(ScalarAsHalf(y, yType), ScalarAsHalf(x, xType)));
+            if (resultType == NPTypeCode.Single)
+                return NewScalar(MathF.Atan2(ScalarAsSingle(y, yType), ScalarAsSingle(x, xType)));
+
             // Get values as double for Math.Atan2
             double yVal = ConvertToDouble(y, yType);
             double xVal = ConvertToDouble(x, xType);
@@ -244,6 +261,30 @@ namespace NumSharp.Backends
                 _ => NewScalar(result)
             };
         }
+
+        /// <summary>
+        /// A 0-d operand cast to a float16 loop: a float16 element read as its own bits (no widen-and-narrow that could
+        /// quiet a signalling NaN), any other promoted dtype through its exact double value.
+        /// </summary>
+        /// <param name="arr">The 0-d operand.</param>
+        /// <param name="type">Its dtype (one NumPy promotes to the float16 loop).</param>
+        /// <returns>The operand as the loop's float16.</returns>
+        private static Half ScalarAsHalf(NDArray arr, NPTypeCode type)
+            => type == NPTypeCode.Half ? arr.GetAtIndex<Half>(0) : (Half)ConvertToDouble(arr, type);
+
+        /// <summary>
+        /// A 0-d operand cast to a float32 loop: a float32 element as it is, a float16 one widened bit for bit (NumPy's
+        /// <c>npy_half_to_float</c>), any other promoted dtype through its exact double value.
+        /// </summary>
+        /// <param name="arr">The 0-d operand.</param>
+        /// <param name="type">Its dtype (one NumPy promotes to the float32 loop).</param>
+        /// <returns>The operand as the loop's float32.</returns>
+        private static float ScalarAsSingle(NDArray arr, NPTypeCode type) => type switch
+        {
+            NPTypeCode.Single => arr.GetAtIndex<float>(0),
+            NPTypeCode.Half => DirectILKernelGenerator.HalfToFloatScalarExact(BitConverter.HalfToUInt16Bits(arr.GetAtIndex<Half>(0))),
+            _ => (float)ConvertToDouble(arr, type),
+        };
 
         /// <summary>
         /// Convert NDArray scalar to double.

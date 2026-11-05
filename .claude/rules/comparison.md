@@ -116,9 +116,30 @@ Floors: the bool-bool cells and logical_not of bool (the composition's one SIMD 
 ## `np.maximum` / `np.minimum` / `np.fmax` / `np.fmin`
 
 One scalar body per dtype (`DirectILKernelGenerator.EmitScalarClamp`), shared by the ufunc kernels on every route,
-np.clip's kernels and np.evaluate's Min / Max / FMax nodes, so fused and unfused results agree bit for bit.
+np.clip's kernels and np.evaluate's Min / Max nodes (its float32 / float64 FMax / FMin nodes run as staged ufunc calls,
+below), so fused and unfused results agree bit for bit.
 - float32 / float64: maximum / minimum propagate a NaN (the first operand's when both hold one) and give a ±0 tie to the
   SECOND operand, as the hardware MAXPD the SIMD body uses; fmax / fmin skip a NaN operand.
+- float32 / float64 fmax / fmin follow NumPy's POSITIONS (a win-amd64 pin). NumPy runs the whole AVX2 vectors of each
+  inner-loop call (8 float32 / 4 float64 lanes; `npyv_maxp`: a ±0 tie keeps the second operand, two NaNs the first) and
+  sends every other element (the tail, a call shorter than a vector, a call whose input and output ranges overlap, a
+  call with a negative float32 stride) through the UCRT's `fmax` / `fmin`: a tie gives +0.0 / -0.0 whatever the order,
+  two NaNs the SECOND, verbatim. The negative-stride rule is a quirk: `npyv_loadable_stride` divides the signed stride by
+  an unsigned `sizeof`, so a negative float32 stride fails AVX2's limit, where float64 has none. `np.fmax([0.0],
+  [-0.0])` is `[0.0]`; a 9-element float64 fmax of +0 and -0 is -0 eight times, then +0.
+  - The kernels apply the vector rule everywhere. `Default.FMaxFMin.Positions.cs` finds NumPy's scalar positions from
+    its call plan (`NumPyUfuncCalls`, `DefaultEngine.UfuncInnerSteps.cs`: the trivial loop's one call, or NpyIter's
+    sorted, flipped, coalesced iteration cut at its buffer size; a `where=` mask's true runs are calls of their own).
+    It computes the C library's answer there BEFORE the kernels run (an `out=` may alias an input), then writes the
+    differing ones (the two rules differ only on opposite-signed zeros and on NaN pairs). An `out=` of another dtype
+    receives them through the engine's cast. The common call (no `out=` / `where=`, 0-d, 1-D or C-contiguous inputs of
+    one shape) takes an allocation-free route.
+  - The model is the win-amd64 AVX2 build on every host. That wheel has no AVX-512 target; a Linux AVX-512 or an ARM
+    NumPy splits elsewhere, and glibc's fmax keeps the first operand on a tie.
+  - np.evaluate stages each float fmax / fmin node as NumPy's own call over its children (`evaluate.md`).
+  - Gate: `Math/np.fmax.NumPyPositions.Test.cs` (lengths, NaN pairs, layouts, `out=` / `where=` / in place, an
+    overlapping out on both sides, buffered calls, cast operands and out, np.evaluate); the oracle's elementwise tiers
+    compare every fmax / fmin ±0 sign raw (no excuse).
 - float16: the bit-level kernels (`kernels.md`); a tie keeps the FIRST operand (HALF_maximum's `ge`).
 - complex128: loops.c.src's `CDOUBLE_maximum` family, `maximum(a, b) = isnan(a) || CGE(a, b) ? a : b` and
   `fmax(a, b) = isnan(b) || CGE(a, b) ? a : b`, with the non-strict
@@ -126,7 +147,8 @@ np.clip's kernels and np.evaluate's Min / Max / FMax nodes, so fused and unfused
   with `CLE`): operands that compare equal keep the FIRST operand's bits (`np.maximum(0j, complex(-0.0, -0.0))` is
   `0j`), and through maximum / minimum a NaN in either part of either operand propagates. np.clip's two-bound loop
   selects differently (strict, the bound winning a tie: `ufuncs.md`).
-- Gates: `Math/np.maximum.ComplexTie.Test.cs`, `Math/UfuncMinMaxSignbitOutWhereTests.cs`, the elementwise tiers.
+- Gates: `Math/np.maximum.ComplexTie.Test.cs`, `Math/UfuncMinMaxSignbitOutWhereTests.cs`,
+  `Math/np.fmax.NumPyPositions.Test.cs`, the elementwise tiers.
 
 ## The comparison engine
 

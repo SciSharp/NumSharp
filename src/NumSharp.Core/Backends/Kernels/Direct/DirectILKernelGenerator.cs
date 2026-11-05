@@ -302,6 +302,10 @@ namespace NumSharp.Backends.Kernels
             public static readonly MethodInfo MathAtan2 = typeof(Math).GetMethod(nameof(Math.Atan2), new[] { typeof(double), typeof(double) })
                 ?? throw new MissingMethodException(typeof(Math).FullName, nameof(Math.Atan2));
 
+            /// <summary><see cref="MathF.Atan2(float, float)"/>: the CRT's <c>atan2f</c>, NumPy's float32 arctan2 loop.</summary>
+            public static readonly MethodInfo MathFAtan2 = typeof(MathF).GetMethod(nameof(MathF.Atan2), new[] { typeof(float), typeof(float) })
+                ?? throw new MissingMethodException(typeof(MathF).FullName, nameof(MathF.Atan2));
+
             // np.logaddexp / np.logaddexp2 / np.nextafter / np.copysign scalar kernels — one static
             // helper per (op, loop dtype), resolved through GetLogAddNextMethod. Operands reach
             // EmitScalarOperation already in the loop dtype, so the kernel is a single Call to the
@@ -339,7 +343,7 @@ namespace NumSharp.Backends.Kernels
             public static readonly MethodInfo SpacingDec = SP(typeof(decimal));
 
             // np.hypot scalar kernels — same shape/family as the LogAddNext helpers above, resolved by
-            // GetLogAddNextMethod. Borges' correctly-rounded FMA hypot lives in NDHypotMath.
+            // GetLogAddNextMethod. UCRT's sqrt(x*x + y*y) hypot (NumPy's npy_hypot) lives in NDHypotMath.
             private static MethodInfo HY(string name, Type t) =>
                 typeof(Utilities.NDHypotMath).GetMethod(name, new[] { t, t })
                 ?? throw new MissingMethodException(typeof(Utilities.NDHypotMath).FullName, name);
@@ -2000,13 +2004,25 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Emit ATan2 operation using Math.Atan2.
-        /// NumPy arctan2(y, x) computes the angle in radians between the positive x-axis
-        /// and the point (x, y), with the correct quadrant determination.
-        /// Stack: [y, x] -> [result] (angle in radians, range [-pi, pi])
+        /// Emit ATan2 operation: the angle in radians between the positive x-axis and the point (x, y), with the correct
+        /// quadrant. float32 is the CRT's <c>atan2f</c> (<see cref="MathF.Atan2(float, float)"/>, NumPy's float32 loop);
+        /// every other loop dtype reaching here widens to double and calls <see cref="Math.Atan2(double, double)"/>
+        /// (float16 takes <see cref="ATan2HalfNumPy"/> through <c>EmitHalfOperation</c>, decimal its own helper).
+        /// Stack: [y, x] -> [result] (range [-pi, pi]).
         /// </summary>
+        /// <param name="il">The IL stream; both operands are already converted to <paramref name="resultType"/>.</param>
+        /// <param name="resultType">The loop dtype.</param>
         private static void EmitATan2Operation(ILGenerator il, NPTypeCode resultType)
         {
+            // float32: NumPy's FLOAT_arctan2 is the CRT's atan2f, and MathF.Atan2 calls that same UCRT function (parity
+            // QA-24). Widening to double, Math.Atan2 and rounding back is the correctly rounded angle, one float32 ULP from
+            // atan2f wherever atan2f is not (116 of 2M probed pairs). Stack: [float y, float x] -> [float].
+            if (resultType == NPTypeCode.Single)
+            {
+                il.EmitCall(OpCodes.Call, CachedMethods.MathFAtan2, null);
+                return;
+            }
+
             // Math.Atan2(double y, double x) -> double
             // Stack has: y (resultType), x (resultType)
             // We need to convert both to double for Math.Atan2
@@ -2237,6 +2253,15 @@ namespace NumSharp.Backends.Kernels
             if (op == BinaryOp.Power)
             {
                 il.EmitCall(OpCodes.Call, GetHelper(nameof(PowerHalfNumPy)), null);
+                return;
+            }
+
+            // ATan2: NumPy's HALF_arctan2 is atan2f on the halves widened bit for bit, narrowed with npy_float_to_half
+            // (ATan2HalfNumPy, parity QA-24) — not the double bridge below, whose single rounding from Math.Atan2 lands on
+            // the other float16 neighbour where atan2f's float32 result is a float16 midpoint. Stack in: [Half y, Half x].
+            if (op == BinaryOp.ATan2)
+            {
+                il.EmitCall(OpCodes.Call, GetHelper(nameof(ATan2HalfNumPy)), null);
                 return;
             }
 

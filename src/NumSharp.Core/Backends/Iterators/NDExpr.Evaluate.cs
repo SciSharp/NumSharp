@@ -145,6 +145,21 @@ namespace NumSharp.Backends.Iteration
     {
         public readonly List<NDArray> Operands = new();
 
+        /// <summary>
+        /// A rewrite hook for a pass over an already-bound tree (null in ordinary binding): called by every
+        /// <see cref="BinaryNode"/> with the original node and its rewritten children, AFTER the children (so nested
+        /// nodes are rewritten first, in evaluation order); a non-null return replaces the node. The float fmax / fmin
+        /// staging (NDExpr.FMaxStages.cs) lowers those nodes into stage-result leaves through it.
+        /// </summary>
+        public Func<BinaryNode, NDExpr, NDExpr, NDExpr> BinaryRewrite;
+
+        /// <summary>
+        /// A rewrite hook for positional leaves (null in ordinary binding): called by every <see cref="InputNode"/>; a
+        /// non-null return replaces the leaf. The fmax / fmin staging renumbers a child subtree's inputs through it, so
+        /// the child is evaluated over exactly the operands it reads.
+        /// </summary>
+        public Func<InputNode, NDExpr> InputRewrite;
+
         public int IndexOf(NDArray array)
         {
             for (int i = 0; i < Operands.Count; i++)
@@ -696,7 +711,14 @@ namespace NumSharp.Backends.Iteration
 
     public sealed partial class InputNode
     {
-        internal override NDExpr BindArrays(NDExprBindContext ctx) => this;
+        /// <summary>
+        /// A positional leaf is already bound, so binding keeps it — unless a pass over a bound tree supplied
+        /// <see cref="NDExprBindContext.InputRewrite"/>, which may renumber it (the fmax / fmin staging evaluates a child
+        /// subtree over just the operands it reads).
+        /// </summary>
+        /// <param name="ctx">The binding pass.</param>
+        /// <returns>This leaf, or the rewrite's replacement.</returns>
+        internal override NDExpr BindArrays(NDExprBindContext ctx) => ctx.InputRewrite?.Invoke(this) ?? this;
         internal override bool ContainsReduce => false;
     }
 
@@ -708,10 +730,20 @@ namespace NumSharp.Backends.Iteration
 
     public sealed partial class BinaryNode
     {
+        /// <summary>
+        /// Binds both children, then rebuilds this node over them (this node itself when neither changed). A pass over a
+        /// bound tree may replace the whole node through <see cref="NDExprBindContext.BinaryRewrite"/>, which sees the
+        /// children already rewritten — the fmax / fmin staging turns a float fmax / fmin into a stage-result leaf there.
+        /// </summary>
+        /// <param name="ctx">The binding pass.</param>
+        /// <returns>The bound node: this node, a rebuilt one, or the rewrite's replacement.</returns>
         internal override NDExpr BindArrays(NDExprBindContext ctx)
         {
             var l = _left.BindArrays(ctx);
             var r = _right.BindArrays(ctx);
+            // A staging pass may replace this node once its children are rewritten (null in ordinary binding).
+            if (ctx.BinaryRewrite?.Invoke(this, l, r) is { } replaced)
+                return replaced;
             return ReferenceEquals(l, _left) && ReferenceEquals(r, _right)
                 ? this
                 : new BinaryNode(_op, l, r);
@@ -1028,9 +1060,10 @@ namespace NumSharp.Backends.Iteration
 
                 case NDExprReduceKind.Min:
                 case NDExprReduceKind.Max:
-                    // dtype preserved; complex folds lexicographically on (real, imag) with the
-                    // first NaN sticking — np.min([3-4j, 0, nan]) is (nan+0j) — via the engine's
-                    // ComplexMinNaN/ComplexMaxNaN clamp (see EmitFold).
+                    // dtype preserved; complex compares lexicographically on (real, imag) with the
+                    // first NaN sticking — np.min([3-4j, 0, nan]) is (nan+0j) — and is delegated to the
+                    // engine's np.max / np.min (DefaultEngine.EvaluateDelegatingReduce), which picks that
+                    // first NaN and the earlier of a tie in NumPy's visiting order (parity QA-21).
                     return child;
 
                 case NDExprReduceKind.Ptp:

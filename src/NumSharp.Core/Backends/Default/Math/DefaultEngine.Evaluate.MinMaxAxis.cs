@@ -195,8 +195,47 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// The float16 / complex128 arm of <see cref="TryExactNanMinMaxEval"/>: the engine's <c>np.nanmax</c> /
-        /// <c>np.nanmin</c> (NumPy's sequential fold, exact on every layout) applied to the very buffer NumPy reduces — a
+        /// np.evaluate's complex128 <c>Max</c> / <c>Min</c> root reduction as NumPy computes it (parity QA-21): the engine's
+        /// <c>np.max</c> / <c>np.min</c> — NumPy's <c>CDOUBLE_maximum</c> / <c>minimum</c> selection in NumPy's visiting
+        /// order (logical along a reversed axis, K order for a flat reduction) — over the very buffer NumPy reduces, through
+        /// <see cref="NanMinMaxSequentialEval"/>. The selection's answer depends on that order: the first NaN-bearing element
+        /// sticks and a tie keeps the earlier element, so the fused fold, which walks the iterator's memory order, returned
+        /// another NaN for a reversed view.
+        /// </summary>
+        /// <remarks>
+        /// Declines (null, nothing allocated, <paramref name="childNdim"/> 0) for a child that is not complex128 (the
+        /// dispatcher only sends complex here), for a child with no iterator operand or a 0-d one, and for an empty
+        /// reduction; the caller's materialize route then runs the same engine reduction, which returns the lone element or
+        /// raises NumPy's "zero-size array to reduction operation maximum / minimum" error.
+        /// </remarks>
+        /// <param name="program">The reduction program (kind Max / Min over a complex128 child).</param>
+        /// <param name="inputs">Every input of the call, in input order.</param>
+        /// <param name="childNdim">Receives the child's rank on success (the flat keepdims rank), else 0.</param>
+        /// <returns>The fresh result (the caller owns it), or null.</returns>
+        /// <exception cref="AxisError">The reduction's axis is out of bounds for the child.</exception>
+        private NDArray TryComplexMinMaxEval(NDExprProgram program, NDArray[] inputs, out int childNdim)
+        {
+            childNdim = 0;
+            var child = program.ChildElementwiseProgram;
+            if (child.ResultType != NPTypeCode.Complex)
+                return null;
+
+            var ops = child.IteratorOperands(inputs);
+            if (ops.Length == 0)
+                return null;
+            Shape inputShape = ResolveInputShape(ops);
+            int nd = inputShape.NDim;
+            if (nd == 0 || inputShape.size == 0)
+                return null;
+
+            childNdim = nd;
+            return NanMinMaxSequentialEval(program, child, inputs, ops);
+        }
+
+        /// <summary>
+        /// The float16 / complex128 arm of <see cref="TryExactNanMinMaxEval"/>, and the complex128 route of
+        /// <see cref="TryComplexMinMaxEval"/>: the engine's <c>np.nanmax</c> / <c>np.nanmin</c> / <c>np.max</c> /
+        /// <c>np.min</c> (NumPy's sequential fold, exact on every layout) applied to the very buffer NumPy reduces — a
         /// bare leaf as it is (no copy), any computed child materialized in the layout NumPy's own ufunc would allocate
         /// (<see cref="MaterializeChildNumPyLayout"/>, K order), since a flat fold's visiting order is that buffer's memory
         /// order.
@@ -207,26 +246,39 @@ namespace NumSharp.Backends
         /// single element is cloned, every reduction allocates) — so returning it never aliases the caller's leaf; the
         /// materialized temp is released before returning.
         /// </remarks>
-        /// <param name="program">The reduction program (kind NanMax / NanMin, a non-empty child of rank &gt;= 1).</param>
+        /// <param name="program">The reduction program (kind NanMax / NanMin, or Max / Min over a complex128 child; a
+        /// non-empty child of rank &gt;= 1).</param>
         /// <param name="child">The reduction's child elementwise program (float16 or complex128 result).</param>
         /// <param name="inputs">Every input of the call, in input order.</param>
         /// <param name="ops">The child's iterator operands.</param>
         /// <returns>The fresh result (the caller owns it).</returns>
         /// <exception cref="AxisError">The reduction's axis is out of bounds for the child.</exception>
+        /// <exception cref="NotSupportedException">The program's kind is none of the four this route serves (a dispatch
+        /// bug).</exception>
         private NDArray NanMinMaxSequentialEval(NDExprProgram program, NDExprProgram child, NDArray[] inputs, NDArray[] ops)
         {
             var reduce = program.Reduce;
-            bool isMax = reduce.Kind == NDExprReduceKind.NanMax;
             // A flat reduce runs without keepdims (the caller reshapes the 0-d result); an axis one passes it through.
             bool axisKd = reduce.Axis is int && reduce.Keepdims;
 
+            // The engine reduction each kind stands for: np.nanmax / np.nanmin (fmax / fmin.reduce) or np.max / np.min
+            // (maximum / minimum.reduce); each walks NumPy's visiting order over whatever layout it is handed.
+            NDArray Reduce(NDArray source) => reduce.Kind switch
+            {
+                NDExprReduceKind.NanMax => NanMax(source, reduce.Axis, axisKd),
+                NDExprReduceKind.NanMin => NanMin(source, reduce.Axis, axisKd),
+                NDExprReduceKind.Max => ReduceAMax(source, reduce.Axis, axisKd),
+                NDExprReduceKind.Min => ReduceAMin(source, reduce.Axis, axisKd),
+                _ => throw new NotSupportedException($"NanMinMaxSequentialEval reached with kind {reduce.Kind}: dispatch bug."),
+            };
+
             if (child.Bound is InputNode && ops.Length == 1)
-                return isMax ? NanMax(ops[0], reduce.Axis, axisKd) : NanMin(ops[0], reduce.Axis, axisKd);
+                return Reduce(ops[0]);
 
             var view = MaterializeChildNumPyLayout(child, inputs, ops, out var buffer);
             try
             {
-                return isMax ? NanMax(view, reduce.Axis, axisKd) : NanMin(view, reduce.Axis, axisKd);
+                return Reduce(view);
             }
             finally
             {

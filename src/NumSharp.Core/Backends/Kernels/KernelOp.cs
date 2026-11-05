@@ -45,8 +45,8 @@ namespace NumSharp.Backends.Kernels
         NextAfter,
         /// <summary>Magnitude of x1 with the sign of x2 (np.copysign).</summary>
         CopySign,
-        /// <summary>sqrt(x1**2 + x2**2) without spurious overflow/underflow (np.hypot). Correctly-rounded
-        /// (Borges FMA); routed to NDHypotMath, scalar-only like the rest of this family.</summary>
+        /// <summary>sqrt(x1**2 + x2**2) without spurious overflow/underflow (np.hypot). UCRT's faithfully
+        /// rounded sqrt(x*x + y*y), NumPy's bits; routed to NDHypotMath, scalar-only like the rest of this family.</summary>
         Hypot,
         /// <summary>The Heaviside step function (np.heaviside): 0 if x1&lt;0, x2 if x1==0, 1 if x1&gt;0, and
         /// the positive canonical NaN if x1 is NaN. NOT commutative — x1 selects the branch, x2 is only the

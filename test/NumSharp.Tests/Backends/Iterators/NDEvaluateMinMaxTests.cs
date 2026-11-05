@@ -445,5 +445,71 @@ namespace NumSharp.Tests.Backends.Iterators
             Assert.AreEqual(5.0, np.evaluate(NDExpr.Max((NDExpr)win)).GetAtIndex<double>(0));
             Assert.AreEqual(1, NDExpr.ExactMinMaxRuns, "the offset window is dense — in place");
         }
+
+        /// <summary>Asserts the raw bits of both parts of a complex value (a value compare cannot see a NaN's payload).</summary>
+        /// <param name="z">The value read back.</param>
+        /// <param name="re">NumPy's real-part bits.</param>
+        /// <param name="im">NumPy's imaginary-part bits.</param>
+        /// <param name="what">The case, for the failure text.</param>
+        private static void AssertComplexBits(Complex z, ulong re, ulong im, string what)
+        {
+            Assert.AreEqual(re, (ulong)BitConverter.DoubleToInt64Bits(z.Real), what + " (real part)");
+            Assert.AreEqual(im, (ulong)BitConverter.DoubleToInt64Bits(z.Imaginary), what + " (imaginary part)");
+        }
+
+        /// <summary>
+        /// complex128 <c>Max</c> / <c>Min</c> pick NumPy's element (parity QA-21): NumPy's <c>CDOUBLE_maximum</c> /
+        /// <c>minimum</c> is a selection in LOGICAL order (a reduction never negates a stride), so the first NaN-bearing
+        /// element of <c>cn[::-1]</c> — <c>nan+2j</c> — is the answer, along an axis of a reversed view too, and for a
+        /// computed child; a tie keeps the earlier element. np.evaluate delegates to np.max / np.min, which walk that order;
+        /// the fused fold walked memory order and returned <c>nan+1j</c>. Every literal is NumPy 2.4.2's.
+        /// </summary>
+        [TestMethod]
+        public void Complex_MaxMin_PickNumPysElementInLogicalOrder()
+        {
+            double nan = NaN64(0x7ff8000000000000);   // Python's float('nan'), positive
+            var cn = np.array(new[] { new Complex(nan, 1), new Complex(2, 0), new Complex(nan, 2), new Complex(1, 0) });
+            var reversed = cn["::-1"];
+
+            AssertComplexBits(np.evaluate(NDExpr.Max((NDExpr)reversed)).GetAtIndex<Complex>(0), 0x7ff8000000000000UL, 0x4000000000000000UL, "Max(cn[::-1])");
+            AssertComplexBits(np.evaluate(NDExpr.Min((NDExpr)reversed)).GetAtIndex<Complex>(0), 0x7ff8000000000000UL, 0x4000000000000000UL, "Min(cn[::-1])");
+            AssertComplexBits(np.evaluate(NDExpr.Max((NDExpr)cn)).GetAtIndex<Complex>(0), 0x7ff8000000000000UL, 0x3ff0000000000000UL, "Max(cn)");
+
+            // Along an axis of a row-reversed and a column-reversed 2-D view.
+            var m = np.array(new[,]
+            {
+                { new Complex(nan, 1), new Complex(2, 0) },
+                { new Complex(nan, 2), new Complex(1, 0) },
+                { new Complex(3, 0), new Complex(nan, 3) },
+            });
+            var down = np.evaluate(NDExpr.Max((NDExpr)m["::-1"], 0));
+            AssertComplexBits(down.GetAtIndex<Complex>(0), 0x7ff8000000000000UL, 0x4000000000000000UL, "axis 0 of m[::-1], column 0");
+            AssertComplexBits(down.GetAtIndex<Complex>(1), 0x7ff8000000000000UL, 0x4008000000000000UL, "axis 0 of m[::-1], column 1");
+            var across = np.evaluate(NDExpr.Max((NDExpr)m[":, ::-1"], 1));
+            AssertComplexBits(across.GetAtIndex<Complex>(0), 0x7ff8000000000000UL, 0x3ff0000000000000UL, "axis 1 of m[:, ::-1], row 0");
+            AssertComplexBits(across.GetAtIndex<Complex>(1), 0x7ff8000000000000UL, 0x4000000000000000UL, "axis 1 of m[:, ::-1], row 1");
+            AssertComplexBits(across.GetAtIndex<Complex>(2), 0x7ff8000000000000UL, 0x4008000000000000UL, "axis 1 of m[:, ::-1], row 2");
+
+            // A computed child (-x[::-1]): NumPy materializes the negation, then reduces it in logical order.
+            AssertComplexBits(np.evaluate(NDExpr.Max(-(NDExpr)reversed)).GetAtIndex<Complex>(0), 0xfff8000000000000UL, 0xc000000000000000UL, "Max(-cn[::-1])");
+
+            // The tie keeps the earlier element (CGE / CLE), and keepdims keeps the rank.
+            var zeros = np.array(new[] { new Complex(0.0, 0.0), new Complex(NegZero, NegZero) });
+            AssertComplexBits(np.evaluate(NDExpr.Max((NDExpr)zeros)).GetAtIndex<Complex>(0), 0UL, 0UL, "Max([0j, -0-0j])");
+            AssertComplexBits(np.evaluate(NDExpr.Min((NDExpr)zeros)).GetAtIndex<Complex>(0), 0UL, 0UL, "Min([0j, -0-0j])");
+            CollectionAssert.AreEqual(new long[] { 1 }, np.evaluate(NDExpr.Max((NDExpr)reversed, keepdims: true)).shape);
+
+            // An empty child is NumPy's zero-size error (a ValueError, which NumSharp derives from ArgumentException).
+            var empty = np.zeros(new Shape(0), NPTypeCode.Complex);
+            try
+            {
+                np.evaluate(NDExpr.Max((NDExpr)empty));
+                Assert.Fail("Max over an empty complex child must raise NumPy's zero-size error");
+            }
+            catch (ArgumentException ex)
+            {
+                StringAssert.Contains(ex.Message, "zero-size array to reduction operation maximum which has no identity");
+            }
+        }
     }
 }

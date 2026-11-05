@@ -3147,9 +3147,9 @@ NEXTAFTER_OP = {"nextafter": np.nextafter}
 # copysign: magnitude of x1 with the sign of x2. Same float-tier promotion; BIT-EXACT
 # (Math.CopySign is the IEEE bit op), so no MisalignedRegistry excuse (NaN payloads are tokenized).
 COPYSIGN_OP = {"copysign": np.copysign}
-# hypot: sqrt(x1**2 + x2**2) without spurious overflow/underflow. Same float-tier promotion. float32/
-# float16 are BIT-EXACT; float64 is <=1 ULP (NumSharp's correctly-rounded Borges FMA vs NumPy's only
-# faithfully-rounded UCRT hypot) — excused Double-only in MisalignedRegistry.
+# hypot: sqrt(x1**2 + x2**2) without spurious overflow/underflow. Same float-tier promotion. BIT-EXACT at
+# every float dtype: NumSharp's kernel is UCRT's own faithfully rounded sqrt(x*x + y*y) (parity QA-25), so
+# MisalignedRegistry has no hypot excuse.
 HYPOT_OP = {"hypot": np.hypot}
 # heaviside(x1, x2): 0 if x1<0, x2 if x1==0, 1 if x1>0, +NaN if x1 is NaN. Same float-tier promotion
 # (ee/ff/dd/gg). BIT-EXACT at every dtype (the step is a port of npy_heaviside; the x1==0 fill passes

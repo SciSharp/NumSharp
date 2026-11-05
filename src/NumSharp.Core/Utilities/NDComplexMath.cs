@@ -723,12 +723,19 @@ namespace NumSharp.Utilities
             return scale == 1 ? new Complex(result.Real * 2.0, result.Imaginary) : result;
         }
 
-        /// <summary>Overflow-safe <c>hypot</c> matching NumPy's <c>npy_hypot</c> (BCL lacks
-        /// <c>Math.Hypot</c> on net8.0). Returns <c>+inf</c> when EITHER part is infinite — even if the
-        /// other is NaN (C99: <c>hypot(±inf, NaN) = +inf</c>) — then <c>NaN</c> when either part is NaN,
-        /// before the overflow-safe <c>x·sqrt(1+(y/x)²)</c> core. The two non-finite guards mirror the
-        /// <c>NPY_BLOCK_HYPOT</c> path verbatim so <c>clog</c>/<c>csqrt</c>/<c>nc_log1p</c> agree with
-        /// NumPy on infinite operands (e.g. <c>log1p(nan + inf i).real = +inf</c>).</summary>
+        /// <summary>Overflow-safe <c>hypot</c> matching NumPy's <c>npy_hypot</c>, which on win-amd64 is the
+        /// UCRT's <c>hypot</c> (BCL lacks <c>Math.Hypot</c> on net8.0). Returns <c>+inf</c> when EITHER part is
+        /// infinite — even if the other is NaN (C99: <c>hypot(±inf, NaN) = +inf</c>) — then the NaN when either
+        /// part is NaN, before the finite core: <see cref="NDHypotMath.Hypot(double,double)"/>, UCRT's
+        /// <c>sqrt(x*x + y*y)</c> with its power-of-two rescale (parity QA-25). The core used to be the block
+        /// form <c>x·sqrt(1+(y/x)²)</c>, 1 ULP from UCRT on 23% of inputs — harmless in most callers, but
+        /// <c>nc_log1p</c> takes <c>log(hypot(x + 1, y))</c>, and near <c>|z + 1| = 1</c> one ULP of magnitude is a
+        /// 5e-4 relative error after the log. The non-finite guards mirror the C contract so
+        /// <c>clog</c>/<c>csqrt</c>/<c>nc_log1p</c> agree with NumPy on infinite operands (e.g.
+        /// <c>log1p(nan + inf i).real = +inf</c>).</summary>
+        /// <param name="x">The first leg.</param>
+        /// <param name="y">The second leg.</param>
+        /// <returns>The hypotenuse, NumPy's bits.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static double Hypot(double x, double y)
         {
@@ -736,12 +743,9 @@ namespace NumSharp.Utilities
             // original two-Infinity + two-NaN guards — IsFinite is a single exponent-field compare.
             if (!double.IsFinite(x) | !double.IsFinite(y))
                 return HypotNonFinite(x, y);
-            x = Math.Abs(x);
-            y = Math.Abs(y);
-            if (x < y) { double tmp = x; x = y; y = tmp; }
-            if (x == 0.0) return 0.0;   // both 0 -> 0
-            double r = y / x;
-            return x * Math.Sqrt(1.0 + r * r);
+            // The finite core is np.hypot's own float64 kernel, so the complex functions and the ufunc share UCRT's
+            // rounding (a zero pair returns +0 there, as the block form did).
+            return NDHypotMath.Hypot(x, y);
         }
 
         /// <summary>Non-finite corners of <see cref="Hypot"/>, split out (kept off the hot path):

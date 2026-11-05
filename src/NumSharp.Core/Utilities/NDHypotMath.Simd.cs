@@ -7,44 +7,39 @@ namespace NumSharp.Utilities
 {
     /// <summary>
     /// Vector-width driver for <see cref="NDHypotMath.Hypot(double,double)"/>. NumPy's <c>hypot</c> is a
-    /// SCALAR <c>BINARY_LOOP</c> (no SIMD on any platform), so vectorizing Borges' correctly-rounded
-    /// algorithm — which is nothing but FMA / sqrt / min-max / add — beats NumPy several-fold while staying
-    /// bit-identical to the scalar kernel (every step is elementwise, so lane <c>i</c> equals
-    /// <c>Hypot(x[i], y[i])</c>). Only the SAFE MIDDLE (|max operand| in [2^-500, 2^500], where the square
-    /// stays a normal double) is vectorized; the rare lanes that need magnitude scaling or are non-finite /
-    /// zero are masked out and completed by the scalar kernel, so the fast path never changes a result bit.
+    /// SCALAR <c>BINARY_LOOP</c> (no SIMD on any platform), so vectorizing UCRT's <c>sqrt(x*x + y*y)</c> —
+    /// two products, a sum and a root per lane — beats NumPy several-fold while staying bit-identical to the
+    /// scalar kernel (every step is elementwise, so lane <c>i</c> equals <c>Hypot(x[i], y[i])</c>). Only the
+    /// SAFE MIDDLE (|max operand| in [2^-500, 2^500], where the square stays a normal double) is vectorized;
+    /// the rare lanes that need magnitude scaling or are non-finite / zero are masked out and completed by the
+    /// scalar kernel, so the fast path never changes a result bit.
     /// </summary>
     public static partial class NDHypotMath
     {
-        // Squaring stays in the normal range for |v| in [2^-500, 2^500]; outside it Borges needs its power
+        // Squaring stays in the normal range for |v| in [2^-500, 2^500]; outside it the kernel needs its power
         // -of-2 rescale, which the scalar path does. These bounds also fence off 0/subnormal/inf/NaN (a NaN
         // fails both compares, so the "safe" AND is false and the lane is scalarised).
         private const double SafeLo = 3.05493636349960e-151;   // 2^-500
         private const double SafeHi = 3.27339060789614e+150;   // 2^+500
 
-        /// <summary>Whether the Vector256 hypot fast path can run (needs AVX2 FMA + hardware acceleration).</summary>
+        /// <summary>
+        /// Whether the Vector256 hypot fast path runs: AVX2-class x86 hosts (Vector256 acceleration; the float32 paths
+        /// use AVX's float / double conversions). The FMA test is the gate the path shipped with — the UCRT core itself
+        /// uses no fused multiply-add — and a host without it takes the scalar kernel, which returns the same bits.
+        /// </summary>
         public static bool SimdAvailable => Fma.IsSupported && Vector256.IsHardwareAccelerated;
 
-        // Borges' correctly-rounded core, four doubles at a time. Assumes each lane's max operand is in the
-        // safe middle (the driver masks the rest). Bit-identical to NDHypotMath.Core lane-by-lane: the FMA
-        // (Fma.MultiplySubtract == Math.FusedMultiplyAdd with a negated addend) and Vector256.Sqrt are the
-        // same hardware ops the scalar path uses.
+        /// <summary>
+        /// UCRT's hypot core four doubles at a time: <c>sqrt(hi*hi + lo*lo)</c> with every operation rounded on its
+        /// own — the vector twin of <c>NDHypotMath.Core</c>, bit-identical lane for lane (the same IEEE multiply, add
+        /// and <c>vsqrtpd</c>; no fused multiply-add, which UCRT's results do not carry).
+        /// </summary>
+        /// <param name="hi">Each lane's larger magnitude; in the safe middle (the driver masks the rest).</param>
+        /// <param name="lo">Each lane's smaller magnitude.</param>
+        /// <returns>The four hypotenuses, UCRT's bits.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static Vector256<double> Core256(Vector256<double> hi, Vector256<double> lo)
-        {
-            var xx = hi * hi;
-            var e_xx = Fma.MultiplySubtract(hi, hi, xx);          // hi*hi - xx  (exact low bits)
-            var yy = lo * lo;
-            var e_yy = Fma.MultiplySubtract(lo, lo, yy);
-            var s = xx + yy;
-            var e_s = yy - (s - xx);                              // Fast2Sum error (xx>=yy)
-            var sigma = e_xx + e_yy + e_s;
-            var h = Vector256.Sqrt(s);
-            var hh = h * h;
-            var e_hh = Fma.MultiplySubtract(h, h, hh);
-            var residual = (s - hh) + sigma - e_hh;              // (hi^2+lo^2) - h^2
-            return h + residual / (h + h);                       // one Newton step -> correctly rounded
-        }
+            => Vector256.Sqrt(hi * hi + lo * lo);
 
         private static readonly Vector256<double> AbsMask256 =
             Vector256.Create(long.MaxValue).AsDouble();          // 0x7FFF... clears the sign bit
