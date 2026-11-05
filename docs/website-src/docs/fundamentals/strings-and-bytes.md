@@ -682,13 +682,14 @@ np.sum(names);    // TypeError: the resolved dtypes are not compatible with add.
 np.sqrt(names);   // TypeError: ufunc 'sqrt' not supported for the input types, ...
 ```
 
-Those reductions differ for `StringDType`, which has concatenation and lexical-selection loops. The NumSharp expression engine, `np.evaluate`, is for numerical expressions; use the string functions directly for text:
+Those reductions differ for `StringDType`, which has concatenation and lexical-selection loops. The NumSharp expression engine, `np.evaluate`, compares text: its six comparisons take `S`, `U` and `StringDType` operands (a C# `string` is NumPy's `str`) anywhere in an expression, each runs as NumPy's own string comparison, and the bool results feed the rest of the expression in the same call. Every other operation on text raises `StringComputationNotSupportedException`; compute that part with the string functions and pass its result in:
 
 ```csharp
 var t = names.astype(np.dtypes.StringDType());
 t == t;                               // [ True  True  True]
 np.unique(t);                         // ['bird' 'cat' 'dog']
-np.evaluate((NDExpr)names + names);   // StringComputationNotSupportedException: np.evaluate does not take text operands
+np.evaluate(NDExpr.Equal(names, "cat") & ((NDExpr)np.array(new[] { 4, 2, 7 }) > 3));   // [ True False False]
+np.evaluate((NDExpr)names + names);   // StringComputationNotSupportedException: np.evaluate does not compute NDExpr.Add over text
 ```
 
 A comparison of text with numbers is "never equal" in NumPy, and in NumSharp: `names == np.array(new[] { 1, 2, 3 })` is `[False False False]`.
@@ -1100,7 +1101,7 @@ This is NumPy's `np.frombuffer` on a bytestring, and the general interop bridge.
 ## Troubleshooting
 
 ### "Why does `np.evaluate` reject my string array?"
-`np.evaluate` compiles numerical expressions. Use `np.strings` for text transformations and the ordinary `np.*` functions for comparisons, sorting and selection.
+`np.evaluate` computes text only in its six comparisons (`NDExpr.Equal(names, "cat")`, `(NDExpr)names < "m"`, ...), and those compare like `np.equal` and its siblings anywhere in the expression. Any other node that takes the array is refused with `StringComputationNotSupportedException`, which names the node. Compute that part with `np.strings` or the ordinary `np.*` functions first, and pass its numeric or bool result into the expression.
 
 ### "`ValueError: could not convert string to float`"
 A cast from text to a number parses every element, as NumPy does. Clean the text first, or keep it as text.

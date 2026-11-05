@@ -153,11 +153,8 @@ namespace NumSharp.Backends.Iteration
                     return i;
             }
 
-            // A fused expression computes on its leaves' values, and text has no numeric value: a text leaf (S, U or
-            // StringDType; IsText never throws) is refused when it is first bound (decision D20 of the strings plan).
-            if (Strings.NDStringUfuncs.IsText(array))
-                throw Strings.NDStringUfuncs.EvaluateTextOperand(array);
-
+            // A text leaf (S, U or StringDType) binds like any other: the program build lowers the nodes that compute on
+            // it into stages (NDExpr.Text.cs), so the fused kernel itself only ever sees numbers.
             Operands.Add(array);
             return Operands.Count - 1;
         }
@@ -362,7 +359,8 @@ namespace NumSharp.Backends.Iteration
         //
         // Any/All are their OWN kinds (bool result, logical OR/AND fold, False/True identity — the empty
         // input is False/True, not the "no identity" throw of max/min); the child is the nonzero-test
-        // NotEqual(x, 0), so the reduce just folds a bool stream.  CountNonzero/NanSum/NanProd are pure
+        // x != 0 (ComparisonNode.TruthTest: flagged, because over text NumPy reads the truth value where a
+        // comparison with 0 has no loop), so the reduce just folds a bool stream.  CountNonzero/NanSum/NanProd are pure
         // COMPOSITIONS over the (M1/M2-exact) Sum/Prod, so they inherit flat+axis+bit-exactness for free:
         // a rewrite is the whole implementation, no new kernel or host path.
 
@@ -372,7 +370,7 @@ namespace NumSharp.Backends.Iteration
         /// input is <c>False</c> — unlike <see cref="Max(NDExpr)"/>, which raises on a zero-size input.
         /// NaN is truthy (<c>nan != 0</c>), so <c>Any([nan])</c> is <c>True</c>, matching NumPy.
         /// </summary>
-        public static NDExpr Any(NDExpr x) => new ReduceNode(NDExprReduceKind.Any, NotEqual(x, Const(0)));
+        public static NDExpr Any(NDExpr x) => new ReduceNode(NDExprReduceKind.Any, ComparisonNode.TruthTest(x));
 
         /// <summary>
         /// One-pass fused <c>np.all</c>: <c>True</c> iff every element of the expression is truthy
@@ -380,14 +378,14 @@ namespace NumSharp.Backends.Iteration
         /// input is <c>True</c> (vacuous truth) — unlike <see cref="Min(NDExpr)"/>, which raises on a
         /// zero-size input.
         /// </summary>
-        public static NDExpr All(NDExpr x) => new ReduceNode(NDExprReduceKind.All, NotEqual(x, Const(0)));
+        public static NDExpr All(NDExpr x) => new ReduceNode(NDExprReduceKind.All, ComparisonNode.TruthTest(x));
 
         /// <summary>
         /// One-pass fused <c>np.count_nonzero</c>: the int64 count of truthy (nonzero) elements. Composed
         /// as <c>Sum(x != 0)</c> — a sum over the bool nonzero-test — so the result is int64 (NumPy's
         /// <c>intp</c>) at every child dtype, and an empty input counts to 0.
         /// </summary>
-        public static NDExpr CountNonzero(NDExpr x) => new ReduceNode(NDExprReduceKind.Sum, NotEqual(x, Const(0)));
+        public static NDExpr CountNonzero(NDExpr x) => new ReduceNode(NDExprReduceKind.Sum, ComparisonNode.TruthTest(x));
 
         /// <summary>
         /// One-pass fused <c>np.nansum</c>: the sum with NaNs treated as 0. Composed as
@@ -471,13 +469,13 @@ namespace NumSharp.Backends.Iteration
         // --- axis-aware forms of the M4 reductions (one pass along `axis`) ------------------------
 
         /// <summary>One-pass fused <c>np.any</c> along <paramref name="axis"/> (bool result; identity <c>False</c>).</summary>
-        public static NDExpr Any(NDExpr x, int axis, bool keepdims = false) => new ReduceNode(NDExprReduceKind.Any, NotEqual(x, Const(0)), axis, keepdims);
+        public static NDExpr Any(NDExpr x, int axis, bool keepdims = false) => new ReduceNode(NDExprReduceKind.Any, ComparisonNode.TruthTest(x), axis, keepdims);
 
         /// <summary>One-pass fused <c>np.all</c> along <paramref name="axis"/> (bool result; identity <c>True</c>).</summary>
-        public static NDExpr All(NDExpr x, int axis, bool keepdims = false) => new ReduceNode(NDExprReduceKind.All, NotEqual(x, Const(0)), axis, keepdims);
+        public static NDExpr All(NDExpr x, int axis, bool keepdims = false) => new ReduceNode(NDExprReduceKind.All, ComparisonNode.TruthTest(x), axis, keepdims);
 
         /// <summary>One-pass fused <c>np.count_nonzero</c> along <paramref name="axis"/> (int64 count).</summary>
-        public static NDExpr CountNonzero(NDExpr x, int axis, bool keepdims = false) => new ReduceNode(NDExprReduceKind.Sum, NotEqual(x, Const(0)), axis, keepdims);
+        public static NDExpr CountNonzero(NDExpr x, int axis, bool keepdims = false) => new ReduceNode(NDExprReduceKind.Sum, ComparisonNode.TruthTest(x), axis, keepdims);
 
         /// <summary>One-pass fused <c>np.nansum</c> along <paramref name="axis"/> (NaNs treated as 0).</summary>
         public static NDExpr NanSum(NDExpr x, int axis, bool keepdims = false) => new ReduceNode(NDExprReduceKind.Sum, Where(IsNaN(x), Const(0), x), axis, keepdims);
@@ -623,13 +621,13 @@ namespace NumSharp.Backends.Iteration
         public static NDExpr Mean(NDExpr x, bool keepdims) => new ReduceNode(NDExprReduceKind.Mean, x, null, keepdims);
 
         /// <summary>One-pass fused <c>np.any(x, axis=None, keepdims=True)</c> — the whole-array presence test kept as shape (1,…,1) (bool).</summary>
-        public static NDExpr Any(NDExpr x, bool keepdims) => new ReduceNode(NDExprReduceKind.Any, NotEqual(x, Const(0)), null, keepdims);
+        public static NDExpr Any(NDExpr x, bool keepdims) => new ReduceNode(NDExprReduceKind.Any, ComparisonNode.TruthTest(x), null, keepdims);
 
         /// <summary>One-pass fused <c>np.all(x, axis=None, keepdims=True)</c> — the whole-array universal test kept as shape (1,…,1) (bool).</summary>
-        public static NDExpr All(NDExpr x, bool keepdims) => new ReduceNode(NDExprReduceKind.All, NotEqual(x, Const(0)), null, keepdims);
+        public static NDExpr All(NDExpr x, bool keepdims) => new ReduceNode(NDExprReduceKind.All, ComparisonNode.TruthTest(x), null, keepdims);
 
         /// <summary>One-pass fused <c>np.count_nonzero(x, axis=None, keepdims=True)</c> — the whole-array nonzero count kept as shape (1,…,1) (int64).</summary>
-        public static NDExpr CountNonzero(NDExpr x, bool keepdims) => new ReduceNode(NDExprReduceKind.Sum, NotEqual(x, Const(0)), null, keepdims);
+        public static NDExpr CountNonzero(NDExpr x, bool keepdims) => new ReduceNode(NDExprReduceKind.Sum, ComparisonNode.TruthTest(x), null, keepdims);
 
         /// <summary>One-pass fused <c>np.nansum(x, axis=None, keepdims=True)</c> — the whole-array NaN-skipping sum kept as shape (1,…,1).</summary>
         public static NDExpr NanSum(NDExpr x, bool keepdims) => new ReduceNode(NDExprReduceKind.Sum, Where(IsNaN(x), Const(0), x), null, keepdims);
@@ -765,9 +763,11 @@ namespace NumSharp.Backends.Iteration
         {
             var l = _left.BindArrays(ctx);
             var r = _right.BindArrays(ctx);
+            // The rebuilt node keeps the truth-test flag (dropping it would let a factory's Any / All / CountNonzero of
+            // text lower as a plain comparison).
             return ReferenceEquals(l, _left) && ReferenceEquals(r, _right)
                 ? this
-                : new ComparisonNode(_op, l, r);
+                : new ComparisonNode(_op, l, r, _truthTest);
         }
 
         internal override bool ContainsReduce => _left.ContainsReduce || _right.ContainsReduce;

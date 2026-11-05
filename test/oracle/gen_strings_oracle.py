@@ -17299,6 +17299,246 @@ def gen_tsurface():
         globals()["add"] = real_add
 
 
+# ----------------------------------------------------------------------------------------------------------------------
+# Section evaltext: np.evaluate over text (docs/plans/evaluate-text.md, phase E1) — strict
+# ----------------------------------------------------------------------------------------------------------------------
+#
+# np.evaluate is a NumSharp extension, so NumPy's answer is the tree's UNFUSED statements: each comparison is np.<op> over
+# its operands (text arrays, a Python str, numbers), each numeric node NumPy's ufunc over the results, a root reduction the
+# np.<kind> of the elementwise result, dtype= the result's astype. The tree travels in the prefix grammar of the numeric
+# evaluate tier (gen_oracle.py's _ev_eval; OpRegistry.Evaluate.cs replays it), plus one literal: ``ls:<hex>`` is a Python
+# str as its UTF-32LE bytes in hex (a C# string in the tree).
+
+# The nodes the section's trees use, as NumPy's ufuncs (the tier's tokens).
+_ET_NODES = {"eq": np.equal, "ne": np.not_equal, "lt": np.less, "le": np.less_equal, "gt": np.greater,
+             "ge": np.greater_equal, "and": np.bitwise_and, "or": np.bitwise_or, "xor": np.bitwise_xor, "add": np.add,
+             "mul": np.multiply, "land": np.logical_and, "lor": np.logical_or, "where": np.where}
+
+# The root reductions the section's trees use (params["reduce"]["kind"]), as NumPy's functions.
+_ET_REDUCE = {"sum": np.sum, "count_nonzero": np.count_nonzero, "any": np.any, "all": np.all, "mean": np.mean}
+
+# The comparison tokens, in CMP_OPS' order.
+_ET_CMP = ["eq", "ne", "lt", "le", "gt", "ge"]
+
+
+def _et_ls(text):
+    """A Python str as the grammar's literal token.
+
+    :param text: the str (any code points; a NUL is kept).
+    :returns: ``ls:<UTF-32LE hex>``.
+    """
+    return "ls:" + text.encode("utf-32-le", "surrogatepass").hex()
+
+
+def _et_tokens(expr):
+    """Splits a prefix-grammar tree into tokens (names and literals, parentheses, commas), as the C# parser does.
+
+    :param expr: the tree.
+    :returns: the tokens.
+    """
+    out, cur = [], ""
+    for ch in expr:
+        if ch in "(),":
+            if cur.strip():
+                out.append(cur.strip())
+            cur = ""
+            out.append(ch)
+        else:
+            cur += ch
+    if cur.strip():
+        out.append(cur.strip())
+    return out
+
+
+def _et_literal(tok):
+    """A literal token as the Python value NumPy's statement receives.
+
+    :param tok: ``li:<int>``, ``lf:<float>``, ``lb:0|1`` or ``ls:<hex>``.
+    :returns: the Python int / float / bool / str.
+    :raises ValueError: an unknown literal kind (a generator bug).
+    """
+    kind, _, val = tok.partition(":")
+    if kind == "li":
+        return int(val)
+    if kind == "lf":
+        return float(val)
+    if kind == "lb":
+        return bool(int(val))
+    if kind == "ls":
+        return bytes.fromhex(val).decode("utf-32-le", "surrogatepass")
+    raise ValueError(f"unknown literal {tok!r}")
+
+
+def _et_eval(expr, operands):
+    """Evaluates a tree as NumPy's unfused statements, node by node.
+
+    :param expr: the prefix-grammar tree.
+    :param operands: the views ``in<k>`` names.
+    :returns: NumPy's result of the root node.
+    """
+    toks = _et_tokens(expr)
+    pos = [0]
+
+    def parse():
+        tok = toks[pos[0]]
+        pos[0] += 1
+        if tok.startswith("in") and tok[2:].isdigit():
+            return operands[int(tok[2:])]
+        if ":" in tok:
+            return _et_literal(tok)
+        assert toks[pos[0]] == "(", f"expected '(' after {tok} in {expr}"
+        pos[0] += 1
+        args = []
+        while True:
+            args.append(parse())
+            sep = toks[pos[0]]
+            pos[0] += 1
+            if sep == ")":
+                break
+            assert sep == ",", f"expected ',' in {expr}"
+        return _ET_NODES[tok](*args)
+
+    r = parse()
+    assert pos[0] == len(toks), f"trailing tokens in {expr}"
+    return r
+
+
+def _et_add(expr, operands, layout, reduce=None, dtype=None, order=None):
+    """Records one np.evaluate case: the tree, its operands and the keywords, against NumPy's unfused statements.
+
+    :param expr: the prefix-grammar tree over ``in0`` … (``operands`` in order).
+    :param operands: the (base, view) pairs.
+    :param layout: the case's layout label.
+    :param reduce: ``{"kind", "axis", "keepdims"}`` for a root reduction, or None.
+    :param dtype: the ``dtype=`` keyword's dtype name (``"float64"``), or None.
+    :param order: the ``order=`` keyword (``"C"`` / ``"F"``), or None.
+    """
+    params = {"expr": expr}
+    if reduce is not None:
+        params["reduce"] = reduce
+    if dtype is not None:
+        params["dtype"] = dtype
+    if order is not None:
+        params["order"] = order
+
+    def call(*views):
+        r = _et_eval(expr, list(views))
+        if reduce is not None:
+            r = _ET_REDUCE[reduce["kind"]](r, axis=reduce.get("axis"), keepdims=reduce.get("keepdims", False))
+            # np.evaluate returns a reduction as a 0-d ARRAY (a fresh, writeable one), NumPy's flat reduction a NumPy
+            # scalar: the values and the dtype are what the tier holds equal.
+            r = np.asarray(r)
+        if dtype is not None:
+            r = np.asarray(r).astype(dtype)
+        if order is not None:
+            r = np.asarray(r, order=order)
+        return r
+
+    add("evaltext", "evaluate", params=params, operands=operands, call=call, phase="compute", layout=layout)
+
+
+def _et_numeric(view, seed=0):
+    """A plain int64 operand of ``view``'s shape: ``(i * 7 + seed) % 10`` in C order (the trees compare it with 3).
+
+    :param view: the text operand whose shape it takes.
+    :param seed: the value phase.
+    :returns: the (base, view) pair.
+    """
+    n = int(np.prod(view.shape)) if view.ndim else 1
+    return num_operand((np.arange(n, dtype=np.int64) * 7 + seed).reshape(view.shape) % 10)
+
+
+def gen_evaltext():
+    """Section evaltext: np.evaluate over text (docs/plans/evaluate-text.md, phase E1) — the six comparisons over S / U /
+    StringDType operands anywhere in a tree, against a Python str on either side, feeding numeric nodes, Where, the
+    root reductions and the dtype= / order= keywords; StringDType's NA kinds; NumPy's refusals of a comparison."""
+    trees = ["{op}(in0,in1)", "and({op}(in0,in1),gt(in2,li:3))", "where({op}(in0,in1),mul(in2,li:2),in2)",
+             "lor(ge(in2,li:8),{op}(in0,in1))"]
+    # A. The comparison pairs NumPy has loops for, every core layout (both operands in it), each tree and comparison.
+    pairs = [("U", "U3", "U8"), ("S", "S3", "S9"), ("T", TD, TD), ("TU", TD, "U8"), ("UT", "U3", TD)]
+    for kind, s1, s2 in pairs:
+        for layout in CORE_LAYOUTS:
+            if kind == "U" or kind == "S":
+                b1, v1 = _cmp_operand(s1, layout, seed=1)
+                like = [x.item() if hasattr(x, "item") else x for x in b1.tolist()] if b1.size else None
+                o1, o2 = (b1, v1), _cmp_operand(s2, layout, seed=2, like=like)
+            elif kind == "T":
+                o1, o2 = _t_pair(s1, layout, s2, layout, seed=1)
+            else:
+                t_side = t_operand(TD, layout, seed=4, pool=T_CMP_POOL)
+                vals = [v if isinstance(v, str) else "NA" for v in t_values(TD, LAYOUTS[layout][0], 5, T_CMP_POOL, na_every=4)]
+                bu = np.array([v.replace("\x00", "") for v in vals], dtype="U20") if vals else np.zeros(0, "U20")
+                u_side = (bu, LAYOUTS[layout][1](bu))
+                o1, o2 = (t_side, u_side) if kind == "TU" else (u_side, t_side)
+            # The numeric operand takes the comparison's broadcast shape, so the fused remainder broadcasts nothing new.
+            o3 = _et_numeric(np.empty(np.broadcast_shapes(o1[1].shape, o2[1].shape)))
+            for op in _ET_CMP:
+                for tree in trees:
+                    _et_add(tree.format(op=op), [o1, o2, o3], f"{kind}:{layout}")
+            # The root reductions over one comparison: flat, and per axis with keepdims on an N-D view.
+            res_nd = len(np.broadcast_shapes(o1[1].shape, o2[1].shape))
+            for red in [{"kind": "count_nonzero"}, {"kind": "sum"}, {"kind": "any"}, {"kind": "all"}, {"kind": "mean"}]:
+                _et_add("ne(in0,in1)", [o1, o2], f"{kind}:{layout}", reduce=red)
+            if res_nd >= 1:
+                for red in [{"kind": "sum", "axis": 0, "keepdims": False}, {"kind": "any", "axis": -1, "keepdims": True},
+                            {"kind": "count_nonzero", "axis": 0, "keepdims": True}]:
+                    _et_add("lt(in0,in1)", [o1, o2], f"{kind}:{layout}", reduce=red)
+    # B. A Python str on either side of the comparison (a C# string in the tree), over U and StringDType operands of the
+    #    layouts that broadcast it, the texts covering the empty string, a trailing NUL, non-ASCII and a code point
+    #    above U+FFFF; fused with a numeric node.
+    for layout in ["c1", "c2", "f2", "z0", "e2", "r2", "s1"]:
+        u = _cmp_operand("U3", layout, seed=3)
+        t = t_operand(TDNAN, layout, seed=3, pool=T_CMP_POOL)
+        for text in ["", "a", "b\x00", "zzzz", "é", "\U0001F600"]:
+            for i, op in enumerate(_ET_CMP):
+                for name, o in [("U", u), ("T", t)]:
+                    _et_add(f"{op}(in0,{_et_ls(text)})", [o], f"{name}:{layout}")
+                    _et_add(f"{op}({_et_ls(text)},in0)", [o], f"{name}:{layout}")
+                    if i == 0:
+                        _et_add(f"and({op}(in0,{_et_ls(text)}),gt(in1,li:3))", [o, _et_numeric(o[1])], f"{name}:{layout}")
+    # C. Operands of different layouts that broadcast (and pairs that must refuse to).
+    for l1, l2 in CMP_CROSS:
+        b1, v1 = _cmp_operand("U3", l1, seed=1)
+        o2 = _cmp_operand("U5", l2, seed=2)
+        for op in ["eq", "lt"]:
+            _et_add(f"xor({op}(in0,in1),lb:1)", [(b1, v1), o2], f"U:{l1},{l2}")
+    # D. The result-shaping keywords over a fused text tree: dtype= casts the result, order= lays a fresh result out.
+    for layout in ["c2", "f2", "t3"]:
+        o1 = _cmp_operand("U4", layout, seed=5)
+        o2 = _cmp_operand("U4", layout, seed=6)
+        o3 = _et_numeric(o1[1], seed=2)
+        for dtype in ["float64", "int32"]:
+            _et_add("and(eq(in0,in1),gt(in2,li:3))", [o1, o2, o3], f"U:{layout}", dtype=dtype)
+        for order in ["C", "F"]:
+            _et_add("or(ge(in0,in1),lt(in2,li:2))", [o1, o2, o3], f"U:{layout}", order=order)
+    # E. StringDType's NA kinds in a fused tree (the first descriptor's rule decides; a None-like NA refuses an ordering).
+    for spec in T_COMPUTE_SPECS:
+        o1, o2 = _t_pair(spec, "c2", spec, "c2", seed=7)
+        o3 = _et_numeric(o1[1], seed=1)
+        for op in _ET_CMP:
+            _et_add(f"and({op}(in0,in1),gt(in2,li:3))", [o1, o2, o3], f"{_t_label(spec)}:c2")
+            _et_add(f"{op}({_et_ls('ab')},in0)", [o1], f"{_t_label(spec)}:c2")
+    for s1, s2 in [(TDNAN, TDS), (TDS, TSpec("other")), (TDN, TDNAN)]:
+        o1, o2 = _t_pair(s1, "c1", s2, "c1", seed=3)
+        _et_add("eq(in0,in1)", [o1, o2], f"{_t_label(s1)},{_t_label(s2)}")
+    # F. NumPy's refusals of a comparison, raised when the call runs: bytes against str, text against a Python int / float
+    #    / bool, against a numeric array and a computed number, and operands that do not broadcast.
+    u = _cmp_operand("U3", "c2", seed=8)
+    s = _cmp_operand("S3", "c2", seed=8)
+    n = _et_numeric(u[1])
+    _et_add("eq(in0,in1)", [s, u], "S,U")
+    _et_add("lt(in0,in1)", [u, s], "U,S")
+    _et_add(f"eq(in0,{_et_ls('a')})", [s], "S,str")
+    for lit in ["li:1", "lf:1.5", "lb:1"]:
+        _et_add(f"eq(in0,{lit})", [u], "U,literal")
+    _et_add("ge(in0,in1)", [u, n], "U,int64")
+    _et_add("eq(in0,mul(in1,li:2))", [u, n], "U,computed")
+    t = t_operand(TD, "c2", seed=8, pool=T_CMP_POOL)
+    _et_add("eq(in0,in1)", [t, s], "T,S")
+    _et_add("ne(in0,in1)", [t, n], "T,int64")
+    _et_add("eq(in0,in1)", [u, _cmp_operand("U3", "c1", seed=2)], "U:c2,c1")
+
+
 GENERATORS = [gen_dtypes, gen_creation, gen_astype, gen_views, gen_movement, gen_mutation, gen_access, gen_printing,
               gen_refusals, gen_string_requests, gen_text_precedence, gen_shape_decided, gen_validation_order, gen_surface,
               gen_strma, gen_striter, gen_strcomp, gen_strarith, gen_strconv, gen_tdtype, gen_tstore, gen_tcreate,
@@ -17306,7 +17546,7 @@ GENERATORS = [gen_dtypes, gen_creation, gen_astype, gen_views, gen_movement, gen
               gen_strsort, gen_strchar, gen_strsearch, gen_strchararray, gen_strcharops, gen_strcharfn, gen_strcharobj,
               gen_strcharmeth, gen_strcharlist, gen_strsets, gen_tcomp, gen_tarith, gen_treduce, gen_tsort, gen_qfamily, gen_qprec, gen_qprologue, gen_strfn,
               gen_tfn, gen_strprop, gen_tprop, gen_strcase, gen_tcase, gen_strtrans, gen_ttrans, gen_strmod, gen_tmod,
-              gen_strcodec, gen_tcodec, gen_strout, gen_strpad, gen_tsurface]
+              gen_strcodec, gen_tcodec, gen_strout, gen_strpad, gen_tsurface, gen_evaltext]
 
 
 def main():

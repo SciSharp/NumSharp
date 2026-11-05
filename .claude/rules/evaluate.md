@@ -12,8 +12,9 @@ paths:
 `NDExpr` tree to one NDIter pass: every elementwise node runs inside a single inner-loop kernel, so chained expressions
 allocate no intermediates and read each operand once (numexpr's `evaluate` role). One overload: the second position is
 the positional operand list, so `out=` is passed by name. The whole call is `TensorEngine.Evaluate` with the same raw
-keywords (`DefaultEngine` checks them in this order: a read-only `out=`, a text operand, then the keyword bundle,
-`DefaultEngine.BuildEvaluateOptions`). Benchmarks: the `benchmark/fusion` subsystem of `benchmark/run_benchmark.py`.
+keywords (`DefaultEngine` checks them in this order: a read-only `out=`, then the keyword bundle,
+`DefaultEngine.BuildEvaluateOptions`, then the tree at its program build). Benchmarks: the `benchmark/fusion` subsystem of
+`benchmark/run_benchmark.py`.
 
 ```csharp
 NDArray r = np.evaluate((NDExpr)a * b + 2);                          // fused a*b+2
@@ -35,6 +36,32 @@ crossing (`i4+f4 → f8`); weak Python-scalar literals (`i4+2 → i4`, `f2+2.5 �
 OverflowError); `true_divide` of ints → f64; `arctan2` tier floats; `power`/`remainder`/`floor_divide` bool → i8; the
 unary math tiers (bool/i8 → f16, i16 → f32, i32+ → f64); comparisons → bool. `(i4*i4)+f8` wraps the multiply in int32
 before promoting, as NumPy's unfused sequence does.
+
+## Text operands (plan `docs/plans/evaluate-text.md`)
+
+- Leaves: S / U / StringDType arrays (0-d included) bind like any array, and `implicit operator NDExpr(string)` is NumPy's
+  `str` (`NDArray.PythonStrLiteral`, a 0-d `<U{len}`). A text value is an INPUT, never IL: one program serves every
+  literal text, and a hoisted 0-d text array is read per call.
+- Lowering (`NDExpr.Text.cs`, at `NDExprProgram.Build` when a dtype of the signature is `String`): every node lowers its
+  children (`LowerText`, BindArrays' child order). A comparison with a text operand becomes a STAGE and leaves a bool
+  input in its place; the remainder is an ordinary numeric tree over the numeric inputs (renumbered first) and the stage
+  results. Any other node with a text operand raises `StringComputationNotSupportedException` naming the node (each site
+  carries a `plan:` comment with the phase that lifts it). A text program keeps only `TextPlan` (no kernel / `Reduce` /
+  `Average`): read `IsReduction`, and send a text program to its plan before any route reads the other fields.
+- Per call (`DefaultEngine.Evaluate.Text.cs`): the stages run in evaluation order through
+  `NDStringUfuncs.BinaryGuard(ufunc, x1, x2)`, the guard np.equal itself runs, so values, StringDType NA rules (the FIRST
+  descriptor's), broadcast errors and NumPy's no-loop `UFuncTypeError` (S with U, text with a literal / array / computed
+  number: a stand-in 0-d array of the sub-tree's dtype names its class) are NumPy's; then the remainder's program is
+  resolved through the positional cache and run by `EvaluateCore` with the call's keywords. A remainder that is one bare
+  stage result returns the stage's array when no keyword shapes the result. The reduction-keyword refusals run before any
+  stage; a text `out=` / `dtype=` is refused.
+- Why whole-array stages (measured in the plan, §3): the text kernel is 82–97 % of a filter; the stage keeps the text
+  kernels' rows route (narrow rows 14–24 % faster than a per-block stage) and costs ~0.5 µs at 1K; the program never
+  bakes a width or class, so the cache key needs no descriptor.
+- The factories' `x != 0` (`Any` / `All` / `CountNonzero`) is `ComparisonNode.TruthTest`, flagged in the node's identity
+  (hash, equality; not the kernel key): over text NumPy reads the truth there, while a user's `NotEqual(text, 0)` is
+  NumPy's no-loop comparison. Rebuilding a `ComparisonNode` must keep the flag.
+- Gates: `NDEvaluateTextTests`, the string oracle section `evaltext`.
 
 ## Reductions (root only)
 

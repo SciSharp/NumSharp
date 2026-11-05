@@ -664,10 +664,11 @@ namespace NumSharp.Tests.Documentation
         /// <summary>
         ///     The "Operations that do not accept text" examples: the comparison and the unique values of <c>StringDType</c>
         ///     text compute, as the same calls over <c>U</c> text do; a string <c>dtype=</c> request of <c>np.add</c> over
-        ///     numbers computes (the numbers written as text, then concatenated); <c>np.evaluate</c>, NumSharp's numerical
-        ///     expression engine, refuses a text operand of every kind (decision D20) with
+        ///     numbers computes (the numbers written as text, then concatenated); <c>np.evaluate</c>, NumSharp's expression
+        ///     engine, computes text in its six comparisons, whose bool results feed the rest of the expression, and refuses
+        ///     every other node over text (every text kind, a positional operand included) with
         ///     <see cref="StringComputationNotSupportedException"/> (a <see cref="NotSupportedException"/>) whose message
-        ///     names the operand's dtype and the string functions to use instead.
+        ///     names the node and the string functions to use instead.
         /// </summary>
         [TestMethod]
         public void Computing_StringDTypeAndEvaluate()
@@ -681,14 +682,17 @@ namespace NumSharp.Tests.Documentation
             NDArray.AsStringArray((NDArray)np.unique(names)).Should().Equal("bird", "cat", "dog");
             np.isin(names, np.array(new[] { "cow" })).ToArray<bool>().Should().Equal(false, false, false);
             NDArray.AsStringArray(np.add(np.array(new[] { 1.5 }), np.array(new[] { 1.5 }), dtype: "U")).Should().Equal("1.51.5");
+            // The comparison computes on the text and its bool result feeds the numbers, one call.
+            np.evaluate(NDExpr.Equal(names, "cat") & ((NDExpr)np.array(new[] { 4, 2, 7 }) > 3)).ToArray<bool>()
+                .Should().Equal(true, false, false);
             Action fused = () => np.evaluate((NDExpr)names + names);
             fused.Should().Throw<StringComputationNotSupportedException>()
-                .Where(e => e.Message.StartsWith("np.evaluate does not take text operands (dtype('<U4')): its fused kernels compute on numbers."));
+                .Where(e => e.Message.StartsWith("np.evaluate does not compute NDExpr.Add over text (S, U or StringDType)"));
             // StringComputationNotSupportedException is a NotSupportedException.
             fused.Should().Throw<NotSupportedException>();
             // Every text kind is refused the same way, a StringDType leaf and a positional operand included.
             Action fusedT = () => np.evaluate((NDExpr)t + t);
-            fusedT.Should().Throw<StringComputationNotSupportedException>().Where(e => e.Message.Contains("(StringDType())"));
+            fusedT.Should().Throw<StringComputationNotSupportedException>().Where(e => e.Message.Contains("NDExpr.Add"));
             Action positional = () => np.evaluate(NDExpr.Input(0) + NDExpr.Input(0), new[] { names });
             positional.Should().Throw<StringComputationNotSupportedException>();
 

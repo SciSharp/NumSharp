@@ -19,6 +19,7 @@ namespace NumSharp.Tests.Fuzz
     ///       li:&lt;int&gt; lu:&lt;uint64&gt;  weak Python int          lf:&lt;float&gt;  weak Python float
     ///       lb:0|1                 weak Python bool         lc:&lt;re&gt;;&lt;im&gt; weak Python complex
     ///       lh:&lt;float&gt;            STRONG float16 scalar
+    ///       ls:&lt;hex&gt;              Python str (its UTF-32LE bytes; the string oracle's evaltext section)
     ///       fn(arg,...)            node — see BuildNode
     ///     </code>
     ///     params["reduce"] = {kind, axis, keepdims} wraps the tree in a root reduction;
@@ -221,6 +222,9 @@ namespace NumSharp.Tests.Fuzz
                         return NDExpr.Const(new Complex(ParseDouble(parts[0]), ParseDouble(parts[1])));
                     }
                     case "lh": return NDExpr.Const((Half)ParseDouble(val));
+                    // A Python str (the string oracle's evaltext section): its UTF-32LE bytes in hex, so a NUL or a code
+                    // point above U+FFFF travels exactly; in the tree it is a C# string, NumPy's str.
+                    case "ls": return (NDExpr)System.Text.Encoding.UTF32.GetString(Convert.FromHexString(val));
                     default: throw new FormatException($"unknown evaluate literal '{kind}:{val}'");
                 }
             }

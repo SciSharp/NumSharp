@@ -23,11 +23,17 @@ namespace NumSharp
         ///     NDArray p = np.evaluate(NDExpr.Input(0) * NDExpr.Input(1), new[] { a, b }); // positional operands
         ///     NDArray o = np.evaluate((NDExpr)a * b, @out: x);                         // into x
         ///     </code>
-        ///     A repeated NDArray reference becomes ONE iterator operand.
+        ///     A repeated NDArray reference becomes ONE iterator operand. Text operands (<c>S</c>, <c>U</c> and
+        ///     <c>StringDType</c> arrays, and a C# <c>string</c>, which is NumPy's <c>str</c>) take part through the six
+        ///     comparisons, each computed as NumPy's own string comparison before the fused pass reads its bool result:
+        ///     <code>
+        ///     NDArray m = np.evaluate(NDExpr.Equal(city, "paris") &amp; ((NDExpr)age &gt; 30));   // text and numbers, one call
+        ///     </code>
         /// </param>
         /// <param name="operands">
         ///     The operands of a tree built over positional <see cref="NDExpr.Input"/> leaves, by position, or null (the
-        ///     default) for a tree whose leaves embed their arrays. A text operand is refused.
+        ///     default) for a tree whose leaves embed their arrays. Text operands follow the same rule as embedded text
+        ///     leaves (see <paramref name="expr"/>).
         /// </param>
         /// <param name="out">
         ///     Optional pre-allocated result (ufunc out= rules: joins the
@@ -72,15 +78,16 @@ namespace NumSharp
         /// </returns>
         /// <exception cref="ArgumentException">Both <paramref name="dtype"/> and <paramref name="out"/> were given; <paramref name="out"/> is not reachable from the result dtype under <paramref name="casting"/>; <paramref name="where"/> is not a boolean array (NumPy's verbatim "Cannot cast … to dtype('bool') according to the rule 'safe'"); or <paramref name="operands"/> is empty.</exception>
         /// <exception cref="ValueError">A read-only <paramref name="out"/>; <paramref name="casting"/> is not a legal rule, or <paramref name="order"/> is not one of 'C'/'F'/'A'/'K'.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A text operand among <paramref name="operands"/> (a fused expression computes on numbers).</exception>
+        /// <exception cref="StringComputationNotSupportedException">A node other than the six comparisons takes a text operand (the message names it); raised when the expression's program is built, before any text is read.</exception>
+        /// <exception cref="TypeError">A comparison of text that NumPy refuses (<c>S</c> with <c>U</c>, text with a number), with NumPy's <c>UFuncTypeError</c> text.</exception>
         /// <exception cref="ArgumentNullException"><paramref name="expr"/> is null, or an entry of <paramref name="operands"/> is.</exception>
         /// <exception cref="System.NotSupportedException"><paramref name="dtype"/>, a non-'K' <paramref name="order"/>, or a <paramref name="where"/> mask was given for a reduction tree; or the operands' engine has no fused evaluation.</exception>
         /// <remarks>
         ///     One overload, its optional parameters defaulted (the np-layer dtype plan's D11, D19: a function NumPy does not
         ///     have keeps one overload). The whole call is the engine member
         ///     <see cref="TensorEngine.Evaluate(NDExpr, NDArray[], NDArray, NDArray, DType, string, char)"/>, which takes the
-        ///     keywords as given and checks them in this order: a read-only <paramref name="out"/>, a text operand, then the
-        ///     keyword bundle.
+        ///     keywords as given and checks them in this order: a read-only <paramref name="out"/>, then the keyword bundle,
+        ///     then the tree itself when its program is built (a text node it does not compute among them).
         /// </remarks>
         public static NDArray evaluate(NDExpr expr, NDArray[] operands = null, NDArray @out = null, NDArray where = null,
             DType dtype = null, string casting = null, char order = 'K')

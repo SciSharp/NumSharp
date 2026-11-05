@@ -250,8 +250,9 @@ namespace NumSharp
         /// <exception cref="NotSupportedException">This engine has no fused evaluation (the default).</exception>
         /// <remarks>
         ///     An implementation checks the arguments in <c>np.evaluate</c>'s order: a read-only <paramref name="out"/>,
-        ///     a text operand among <paramref name="operands"/>, then the keywords (<paramref name="dtype"/> with
-        ///     <paramref name="out"/>, the order letter, the casting name) - <see cref="Backends.DefaultEngine"/>'s does.
+        ///     then the keywords (<paramref name="dtype"/> with <paramref name="out"/>, the order letter, the casting name),
+        ///     then the tree when its program is built (a node over a text operand that it does not compute among them) -
+        ///     <see cref="Backends.DefaultEngine"/>'s does.
         /// </remarks>
         public virtual NDArray Evaluate(NDExpr expr, NDArray[] operands = null, NDArray @out = null, NDArray where = null,
             DType dtype = null, string casting = null, char order = 'K')

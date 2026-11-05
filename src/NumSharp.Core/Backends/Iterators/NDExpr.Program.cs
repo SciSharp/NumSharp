@@ -97,6 +97,14 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         public readonly NDExprDirectOp DirectOp;
 
+        /// <summary>
+        /// The text half of a program whose inputs include text (S, U or StringDType; NDExpr.Text.cs): the stages that
+        /// compute on text per call and the numeric remainder over their results, or null for a numeric program. A text
+        /// program carries no kernel, reduction or average of its own — the remainder's program, resolved per call, does —
+        /// so every route that reads those fields must first send a text program to its plan.
+        /// </summary>
+        public readonly NDExprTextPlan TextPlan;
+
         private NDInnerLoopFunc _flatReduce;
         private NDInnerLoopFunc _axisReduce;
         private NDExprProgram _childElementwise;
@@ -110,7 +118,7 @@ namespace NumSharp.Backends.Iteration
 
         private NDExprProgram(NDExpr bound, NPTypeCode[] inputTypes, bool[] isParam, bool forcedScalar,
             NDInnerLoopFunc kernel, NPTypeCode resultType, ReduceNode reduce, NPTypeCode reduceAcc,
-            WeightedAverageNode average = null, NDExprDirectOp directOp = default)
+            WeightedAverageNode average = null, NDExprDirectOp directOp = default, NDExprTextPlan textPlan = null)
         {
             Bound = bound;
             InputTypes = inputTypes;
@@ -123,7 +131,16 @@ namespace NumSharp.Backends.Iteration
             ReduceAccType = reduceAcc;
             Average = average;
             DirectOp = directOp;
+            TextPlan = textPlan;
         }
+
+        /// <summary>
+        /// Whether the root is a reduction (a <see cref="ReduceNode"/> or a weighted average) — for a text program, the
+        /// remainder's root. The keyword rules (no <c>dtype=</c> / <c>order=</c> / <c>where=</c> on a reduction tree) and
+        /// <see cref="CompiledExpression.IsReduction"/> read this, never <see cref="Reduce"/> / <see cref="Average"/>
+        /// alone, which a text program leaves null.
+        /// </summary>
+        public bool IsReduction => Reduce is not null || Average is not null || TextPlan is { IsReduction: true };
 
         private static int CountTrue(bool[] mask)
         {
@@ -412,12 +429,23 @@ namespace NumSharp.Backends.Iteration
 
             bool forcedScalar = NDExpr.ForceScalar;
 
+            // A reduction is root-only, whatever the inputs: checked before the text lowering too, so a misplaced
+            // reduction is reported the same way over text and over numbers.
+            ThrowIfReductionMisplaced(bound);
+
+            // Text inputs: the nodes that compute on text become per-call stages (NDExpr.Text.cs), and the numeric
+            // remainder over their results is resolved per call through the positional program cache — so this program
+            // holds only the plan, typed with the remainder's NumPy result dtype.
+            if (Array.IndexOf(inputTypes, NPTypeCode.String) >= 0)
+            {
+                var plan = NDExprTextPlan.Lower(bound, inputTypes);
+                var textResult = plan.Remainder.ResolveNumPyTypes(plan.RemainderTypes, out _);
+                return new NDExprProgram(bound, inputTypes, isParam, forcedScalar, null, textResult, reduce: null,
+                    reduceAcc: NPTypeCode.Empty, textPlan: plan);
+            }
+
             if (bound is ReduceNode reduce)
             {
-                if (reduce.Child.ContainsReduce)
-                    throw new NotSupportedException(
-                        "nested reductions are not supported — a reduction must be the root of the expression.");
-
                 var resolved = reduce.ResolveNumPyTypes(inputTypes, out _);
                 var acc = ReduceNode.ResolveAccType(reduce.Kind, resolved);
                 return new NDExprProgram(bound, inputTypes, isParam, forcedScalar, null, resolved, reduce, acc);
@@ -428,19 +456,10 @@ namespace NumSharp.Backends.Iteration
             // and computes the average). Its children may not themselves reduce — a reduction is root-only.
             if (bound is WeightedAverageNode avg)
             {
-                if (avg.Values.ContainsReduce || avg.Weights.ContainsReduce)
-                    throw new NotSupportedException(
-                        "nested reductions are not supported — a reduction must be the root of the expression.");
-
                 var resolved = avg.ResolveNumPyTypes(inputTypes, out _);
                 return new NDExprProgram(bound, inputTypes, isParam, forcedScalar, null, resolved,
                     reduce: null, reduceAcc: NPTypeCode.Empty, average: avg);
             }
-
-            if (bound.ContainsReduce)
-                throw new NotSupportedException(
-                    "reduction nodes must be the root of the expression — " +
-                    "elementwise use of a reduced value needs two np.evaluate calls.");
 
             var kernel = bound.CompileNumPy(inputTypes, isParam, out var resultType);
             // Phase 6.3: recognise a single-op-over-array-leaves root ONCE, here, so a cached program
@@ -448,6 +467,36 @@ namespace NumSharp.Backends.Iteration
             var directOp = bound.AsDirectSingleOp();
             return new NDExprProgram(bound, inputTypes, isParam, forcedScalar, kernel, resultType, null, NPTypeCode.Empty,
                 average: null, directOp: directOp);
+        }
+
+        /// <summary>
+        /// Rejects a reduction anywhere but at the root: a root reduction whose child (or a weighted average whose values
+        /// or weights) reduces again, or an elementwise tree holding a reduction. The fused programs reduce once, at the end.
+        /// </summary>
+        /// <param name="bound">The bound tree.</param>
+        /// <exception cref="NotSupportedException">A reduction nests another, or sits below an elementwise root.</exception>
+        private static void ThrowIfReductionMisplaced(NDExpr bound)
+        {
+            if (bound is ReduceNode reduce)
+            {
+                if (reduce.Child.ContainsReduce)
+                    throw new NotSupportedException(
+                        "nested reductions are not supported — a reduction must be the root of the expression.");
+                return;
+            }
+
+            if (bound is WeightedAverageNode avg)
+            {
+                if (avg.Values.ContainsReduce || avg.Weights.ContainsReduce)
+                    throw new NotSupportedException(
+                        "nested reductions are not supported — a reduction must be the root of the expression.");
+                return;
+            }
+
+            if (bound.ContainsReduce)
+                throw new NotSupportedException(
+                    "reduction nodes must be the root of the expression — " +
+                    "elementwise use of a reduced value needs two np.evaluate calls.");
         }
 
         /// <summary>NumPy-style rendering of a dtype signature: <c>(float64, int32)</c>.</summary>
@@ -830,8 +879,9 @@ namespace NumSharp.Backends.Iteration
         /// <summary>True for a positional tree (<see cref="NDExpr.Input"/> leaves, operands supplied per call).</summary>
         public bool IsPositional => _inputs is null;
 
-        /// <summary>True when the root is a reduction (Sum / Prod / Min / Max / Mean / … or a weighted Average).</summary>
-        public bool IsReduction => _program.Reduce is not null || _program.Average is not null;
+        /// <summary>True when the root is a reduction (Sum / Prod / Min / Max / Mean / … or a weighted Average), over text
+        ///     comparisons too (<c>CountNonzero(NDExpr.Equal(city, "paris"))</c>).</summary>
+        public bool IsReduction => _program.IsReduction;
 
         /// <summary>Number of distinct inputs the kernel reads (embedded arrays are deduplicated by reference; hoisted 0-d parameters count).</summary>
         public int OperandCount => _program.InputTypes.Length;

@@ -3,10 +3,12 @@ using System;
 namespace NumSharp
 {
     /// <summary>
-    ///     A computation on text that NumSharp deliberately does not run: <c>np.evaluate</c> (and <c>NDExpr</c> evaluation)
-    ///     with an <c>S</c>, <c>U</c> or <c>StringDType</c> operand. <c>np.evaluate</c> is a NumSharp extension without a
-    ///     NumPy function to follow; its fused kernels compute on numbers, so text is computed with the string functions
-    ///     (<c>np.strings</c>, the comparisons, the truth tests) and their numeric or bool results feed the expression.
+    ///     A computation on text that NumSharp does not run (yet): an <c>np.evaluate</c> (and <c>NDExpr</c> evaluation) node
+    ///     that takes an <c>S</c>, <c>U</c> or <c>StringDType</c> operand the current phase of np.evaluate's text support does
+    ///     not compute, or a text argument to an <c>NDExpr.Call</c> delegate. <c>np.evaluate</c> is a NumSharp extension
+    ///     without a NumPy function to follow; it computes text in its six comparisons, whose bool results feed the rest of the
+    ///     tree, and the message names the refused node and how to compute it (the string functions first, their result
+    ///     passed into the expression).
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -18,12 +20,13 @@ namespace NumSharp
     ///     (<c>test/oracle/gen_strings_oracle.py</c>) holds every such case to NumPy byte for byte, with no deferral.
     ///     </para>
     ///     <para>
-    ///     It derives from <see cref="NotSupportedException"/>, so existing <c>catch (NotSupportedException)</c> code sees it.
+    ///     It is raised when the expression's program is built, before any text is read. It derives from
+    ///     <see cref="NotSupportedException"/>, so existing <c>catch (NotSupportedException)</c> code sees it.
     ///     </para>
     /// </remarks>
     public sealed class StringComputationNotSupportedException : NotSupportedException, INumSharpException
     {
-        /// <summary>Creates the exception with a message that names the operand's string dtype and says why it is refused.</summary>
+        /// <summary>Creates the exception with a message that names the refused node and the remedy.</summary>
         /// <param name="message">The message.</param>
         public StringComputationNotSupportedException(string message) : base(message) { }
     }

@@ -3113,8 +3113,9 @@ namespace NumSharp.Tests.Backends.Iterators
         /// <summary>
         ///     One np.evaluate overload with defaulted optionals (the np-layer dtype plan's D11): the second position is the
         ///     positional operand list (null for a tree that embeds its arrays), every keyword is reachable by name, and the
-        ///     engine member takes the keywords as given, checking them in np.evaluate's order - a read-only out=, then a text
-        ///     operand, then the keyword bundle (dtype= with out=, the order letter, the casting name).
+        ///     engine member takes the keywords as given, checking them in np.evaluate's order - a read-only out=, then the
+        ///     keyword bundle (dtype= with out=, the order letter, the casting name), then the tree's own checks at the program
+        ///     build (a node over a text operand that np.evaluate does not compute yet, docs/plans/evaluate-text.md).
         /// </summary>
         [TestMethod]
         public void OneOverload_TheEngineMemberChecksTheRawKeywordsInOrder()
@@ -3132,14 +3133,16 @@ namespace NumSharp.Tests.Backends.Iterators
             TensorEngine.Default.Evaluate((NDExpr)a + b, order: 'C', casting: "same_kind").ToArray<double>()
                 .Should().Equal(0.0, 3.0, 6.0, 9.0);
 
-            // the order of the checks: a read-only out before a text operand before a bad keyword
+            // the order of the checks: a read-only out before a bad keyword before the tree's own refusal of a text node
             var readOnly = np.zeros(new Shape(2));
             readOnly.setflags(write: false);
             var text = np.array(new[] { "x", "y" });
             new Action(() => np.evaluate(NDExpr.Input(0) + 1, new[] { text }, @out: readOnly, casting: "bogus"))
                 .Should().Throw<ValueError>().WithMessage("output array is read-only");
             new Action(() => np.evaluate(NDExpr.Input(0) + 1, new[] { text }, casting: "bogus"))
-                .Should().Throw<StringComputationNotSupportedException>();
+                .Should().Throw<ValueError>().WithMessage("casting must be one of*");
+            new Action(() => np.evaluate(NDExpr.Input(0) + 1, new[] { text }))
+                .Should().Throw<StringComputationNotSupportedException>().WithMessage("*NDExpr.Add over text*");
             new Action(() => np.evaluate((NDExpr)a + 1, casting: "bogus"))
                 .Should().Throw<ValueError>().WithMessage("casting must be one of*");
             new Action(() => np.evaluate((NDExpr)a + 1, order: 'Q'))

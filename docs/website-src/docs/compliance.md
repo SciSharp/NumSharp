@@ -559,8 +559,9 @@ back to Core for matrix products.
 The generated dashboard is the exhaustive API list. The important capability-level gaps are:
 
 - no native `complex64`, datetime/timedelta, object, structured or void array storage;
-- no general object-array formatting inputs or text leaves in `np.evaluate`; string operations use
-  `np.strings` / `np.@char` directly;
+- no general object-array formatting inputs; `np.evaluate` takes text only in its six comparisons, and
+  every other string operation uses `np.strings` / `np.@char` directly (its result can then enter an
+  expression);
 - no GPU device or DLPack import (`np.from_dlpack` is missing).
 
 The dashboard identifies other API gaps per published revision. A method that exists can still have

@@ -101,8 +101,11 @@ namespace NumSharp.Backends
         /// <exception cref="ValueError">A read-only <paramref name="out"/> (<c>output array is read-only</c>); a
         ///     <paramref name="casting"/> name that is not a rule; an <paramref name="order"/> that is not 'C' / 'F' / 'A' /
         ///     'K'.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A text operand among <paramref name="operands"/> (a fused expression computes on
-        ///     numbers).</exception>
+        /// <exception cref="StringComputationNotSupportedException">A node takes a text operand (S, U or StringDType) that
+        ///     np.evaluate does not compute yet: the six comparisons compute on text, every other node waits for a later phase
+        ///     of np.evaluate's text support (the message names it).</exception>
+        /// <exception cref="TypeError">A comparison of text that NumPy refuses (S with U, text with a number): NumPy's own
+        ///     <c>UFuncTypeError</c> text, raised by the comparison's guard when the call runs.</exception>
         /// <exception cref="ArgumentException">Both <paramref name="dtype"/> and <paramref name="out"/>; an empty
         ///     <paramref name="operands"/> list; an <paramref name="out"/> not reachable from the result dtype under
         ///     <paramref name="casting"/>; a <paramref name="where"/> that is not boolean.</exception>
@@ -111,9 +114,10 @@ namespace NumSharp.Backends
         /// <exception cref="NotSupportedException"><paramref name="dtype"/>, a non-'K' <paramref name="order"/> or a
         ///     <paramref name="where"/> mask for a reduction tree.</exception>
         /// <remarks>
-        ///     The checks run in the order np.evaluate ran them before they moved here (D11): the writeable check, the text
-        ///     refusal of positional operands, then the keyword bundle (<see cref="BuildEvaluateOptions"/>); the tree's
-        ///     own checks follow in <see cref="EvaluateTree"/> / <see cref="EvaluateOperands"/>.
+        ///     The checks run in the order np.evaluate ran them before they moved here (D11): the writeable check, then the
+        ///     keyword bundle (<see cref="BuildEvaluateOptions"/>); the tree's own checks follow in
+        ///     <see cref="EvaluateTree"/> / <see cref="EvaluateOperands"/> (the program build, which lowers the nodes that
+        ///     compute on text, see NDExpr.Text.cs).
         /// </remarks>
         public override NDArray Evaluate(NDExpr expr, NDArray[] operands = null, NDArray @out = null, NDArray where = null,
             DType dtype = null, string casting = null, char order = 'K')
@@ -122,13 +126,6 @@ namespace NumSharp.Backends
             // gap as the ufunc out= path), so a non-writeable target is refused up front, as the ufuncs this fuses do.
             if (@out is not null)
                 NumSharpException.ThrowIfNotWriteable(@out.Shape, "output array");
-            // Positional operands are refused like embedded leaves (decision D20 of the strings plan): a fused expression
-            // computes on numbers. IsText covers S, U and StringDType and never throws, so every text kind gets the one
-            // refusal before anything is bound.
-            if (operands != null)
-                foreach (var operand in operands)
-                    if (Strings.NDStringUfuncs.IsText(operand))
-                        throw Strings.NDStringUfuncs.EvaluateTextOperand(operand);
             var options = BuildEvaluateOptions(dtype, casting, order, @out is not null, where);
             // null operands: the tree embeds its arrays; a list (even an empty one, which EvaluateOperands refuses) names
             // the positional leaves
@@ -309,28 +306,12 @@ namespace NumSharp.Backends
 
         private unsafe NDArray EvaluateCore(NDExprProgram program, NDArray[] inputs, NDArray @out, in NDEvaluateOptions options = default)
         {
-            // Plan P4.5 — dtype= and order= shape a FRESH elementwise result, so they are unsupported on a
-            // reduction tree (a reduction fixes its own result dtype — its accumulator — and layout, and
-            // NumPy's reductions carry no order= parameter). casting= governs out= VALIDATION and threads
-            // through to the reduce paths unchanged. Reject the two result-shaping keywords up front, before
-            // any work; a bare/explicit 'K' order is the no-op default and does not trip this.
-            bool isReduction = program.Average is not null || program.Reduce is not null;
-            if (isReduction && (options.HasDtype || options.HasExplicitOrder))
-                throw new NotSupportedException(
-                    "np.evaluate: dtype= and order= are not supported on a reduction tree (a reduction " +
-                    "fixes its result dtype and layout). Cast the reduction result instead: " +
-                    "np.evaluate(expr).astype(dtype).");
+            // A program over text runs its stages first and then the numeric remainder's own program through this method
+            // again (DefaultEngine.Evaluate.Text.cs); it has no kernel, reduction or average of its own to dispatch on.
+            if (program.TextPlan is not null)
+                return EvaluateTextPlan(program, inputs, @out, options);
 
-            // where= is the ufunc masked-WRITE convention (write the result only where the mask is True),
-            // which is meaningful only for a per-element result. A masked REDUCTION is a different operation
-            // (skip masked-off elements from the accumulation, which needs the right per-kind identity), and
-            // np.evaluate's reduction kinds are host-computed without it — so reject where= on a reduction
-            // rather than silently ignore it. The remedy is to mask the inputs before reducing.
-            if (isReduction && options.HasWhere)
-                throw new NotSupportedException(
-                    "np.evaluate: where= is not supported on a reduction tree (a masked reduction is a " +
-                    "different operation). Mask the inputs before reducing instead, e.g. " +
-                    "np.evaluate(NDExpr.Sum(NDExpr.Where(mask, expr, NDExpr.Const(0)))).");
+            ThrowIfReductionKeywords(program.IsReduction, options);
 
             // A weighted average reduces over TWO sub-trees (values, weights); it is host-computed like
             // the M4c summation kinds, so it precedes the elementwise + single-child-reduce dispatch.
@@ -485,6 +466,36 @@ namespace NumSharp.Backends
 
             iter.ForEach(kernel, aux);
             return target;
+        }
+
+        /// <summary>
+        /// The keywords a reduction tree refuses, checked before any work (and, for a tree over text, before its stages read
+        /// any text): <c>dtype=</c> and <c>order=</c> shape a FRESH elementwise result (a reduction fixes its own result
+        /// dtype — its accumulator — and layout, and NumPy's reductions carry no <c>order=</c>), and <c>where=</c> is the
+        /// ufunc masked-WRITE convention, meaningful only for a per-element result (a masked REDUCTION skips elements from
+        /// the accumulation, a different operation np.evaluate's host-computed kinds do not run). <c>casting=</c> governs
+        /// <c>out=</c> validation and threads through to the reduce paths; a bare or explicit 'K' order is the no-op
+        /// default.
+        /// </summary>
+        /// <param name="isReduction">Whether the tree's root (for a text tree, its remainder's root) is a reduction.</param>
+        /// <param name="options">The call's resolved keywords.</param>
+        /// <exception cref="NotSupportedException">A reduction tree given <c>dtype=</c>, a non-'K' <c>order=</c> or a
+        ///     <c>where=</c> mask; the message names the remedy.</exception>
+        private static void ThrowIfReductionKeywords(bool isReduction, in NDEvaluateOptions options)
+        {
+            if (!isReduction)
+                return;
+            if (options.HasDtype || options.HasExplicitOrder)
+                throw new NotSupportedException(
+                    "np.evaluate: dtype= and order= are not supported on a reduction tree (a reduction " +
+                    "fixes its result dtype and layout). Cast the reduction result instead: " +
+                    "np.evaluate(expr).astype(dtype).");
+            // Rejected rather than silently ignored; the remedy is to mask the inputs before reducing.
+            if (options.HasWhere)
+                throw new NotSupportedException(
+                    "np.evaluate: where= is not supported on a reduction tree (a masked reduction is a " +
+                    "different operation). Mask the inputs before reducing instead, e.g. " +
+                    "np.evaluate(NDExpr.Sum(NDExpr.Where(mask, expr, NDExpr.Const(0)))).");
         }
 
         /// <summary>

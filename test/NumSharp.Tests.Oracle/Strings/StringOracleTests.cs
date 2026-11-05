@@ -145,6 +145,15 @@ namespace NumSharp.Tests.Strings
         [TestMethod] public void TextComparisonsAndTruth() => Run("strcomp");
 
         /// <summary>
+        ///     Section evaltext (docs/plans/evaluate-text.md, phase E1): np.evaluate trees whose six comparisons take S, U and
+        ///     StringDType operands of every core layout (and cross-layout broadcasts) or a Python str on either side, feeding
+        ///     the fused numeric remainder (bitwise / logical nodes, Where, arithmetic), the root reductions flat and per axis,
+        ///     dtype= and order=, StringDType's NA kinds, and NumPy's refusals of a comparison raised when the call runs.
+        ///     NumPy's answer is the tree's unfused statements; every case is strict.
+        /// </summary>
+        [TestMethod] public void EvaluateOverText() => Run("evaltext");
+
+        /// <summary>
         ///     Section strarith (strings phase 2, P2.3): <c>np.add</c> over two strings of one class across every layout kind,
         ///     cross-layout broadcasts and width pairs, special code units, <c>out=</c> (exact, narrower, wider, S into U,
         ///     refused) / <c>where=</c> / <c>dtype=</c>, the byte-width limit; the string repeat (<c>np.multiply</c> into
@@ -829,7 +838,7 @@ namespace NumSharp.Tests.Strings
                 "storenone", "tma", "tio", "strsort", "strchar", "strsearch", "strchararray", "strcharops", "strcharfn", "strcharobj",
                 "strcharmeth", "strcharlist", "strsets", "tcomp", "tarith",
                 "treduce", "tsort", "qfamily", "qprec", "qprologue", "strfn", "tfn", "strprop", "tprop", "strcase", "tcase", "strtrans",
-                "ttrans", "strmod", "tmod", "strcodec", "tcodec", "strout", "strpad", "tsurface",
+                "ttrans", "strmod", "tmod", "strcodec", "tcodec", "strout", "strpad", "tsurface", "evaltext",
             };
             var bySection = Cases.GroupBy(c => c.Id.Split('/')[0]).ToDictionary(g => g.Key, g => g.Count());
             foreach (var s in sections)
@@ -1130,6 +1139,14 @@ namespace NumSharp.Tests.Strings
         /// <returns>The reason, or null when the layout must match.</returns>
         private static string LayoutExcuse(StringOracleCorpus.Case c)
         {
+            // Section evaltext: an np.evaluate AXIS reduction keeps np.evaluate's own result layout — a keepdims result is the
+            // reduced array reshaped (a view, OWNDATA False) and the reduction of a permuted child is C-ordered — where
+            // NumPy's np.<kind> allocates the keepdims shape itself and follows its operands' K order. The rule belongs to
+            // np.evaluate's axis-reduction route, the same over numbers (a text tree's remainder is an ordinary numeric
+            // program); the values, the dtype and the shape are still compared, and every elementwise tree's layout is.
+            if (c.Op == "evaluate" && c.Params is not null && c.Params.TryGetValue("reduce", out var evalReduce)
+                && evalReduce.ValueKind == JsonValueKind.Object && evalReduce.TryGetProperty("axis", out _))
+                return "np.evaluate's axis-reduction layout: a keepdims result is a reshaped view, a permuted child reduces in C order";
             // (argwhere / flatnonzero / unravel_index were excused here until the open-bugs rundown's bug 8: they now
             // return NumPy's views of nonzero's / the interleaved index buffer, and their layout is compared.)
             // numpy.ma.compress_nd drops the masked columns of a 2-D array with `data[:, keep]`: a boolean index behind a

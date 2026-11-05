@@ -2169,12 +2169,44 @@ namespace NumSharp.Backends.Iteration
         private readonly NDExpr _left;
         private readonly NDExpr _right;
 
+        /// <summary>
+        /// True for the reduction factories' truth test (<see cref="TruthTest"/>): <c>x != 0</c> as <c>Any</c> / <c>All</c> /
+        /// <c>CountNonzero</c> spell it. Numerically it IS that comparison (same kernel, same result); the flag only keeps
+        /// apart what NumPy keeps apart over text, where <c>np.count_nonzero(text)</c> reads the truth value while
+        /// <c>np.not_equal(text, 0)</c> has no loop. Part of the node's identity (signature, structural hash, equality).
+        /// </summary>
+        private readonly bool _truthTest;
+
         public ComparisonNode(ComparisonOp op, NDExpr left, NDExpr right)
+            : this(op, left, right, truthTest: false)
+        {
+        }
+
+        /// <summary>Creates a comparison node, optionally flagged as the factories' truth test.</summary>
+        /// <param name="op">The comparison.</param>
+        /// <param name="left">The first operand.</param>
+        /// <param name="right">The second operand.</param>
+        /// <param name="truthTest">True for <see cref="TruthTest"/>'s <c>x != 0</c> (see <see cref="IsTruthTest"/>).</param>
+        /// <exception cref="ArgumentNullException"><paramref name="left"/> or <paramref name="right"/> is null.</exception>
+        internal ComparisonNode(ComparisonOp op, NDExpr left, NDExpr right, bool truthTest)
         {
             _op = op;
             _left = left ?? throw new ArgumentNullException(nameof(left));
             _right = right ?? throw new ArgumentNullException(nameof(right));
+            _truthTest = truthTest;
         }
+
+        /// <summary>
+        /// The truth test of the reduction factories (<see cref="NDExpr.Any(NDExpr)"/>, <see cref="NDExpr.All(NDExpr)"/>,
+        /// <see cref="NDExpr.CountNonzero(NDExpr)"/> and their axis / keepdims forms): <c>x != 0</c>, flagged so the text
+        /// lowering can tell it from a user's own <c>NotEqual(x, 0)</c> (<see cref="IsTruthTest"/>).
+        /// </summary>
+        /// <param name="x">The tested expression.</param>
+        /// <returns>The flagged <c>x != 0</c> node.</returns>
+        internal static ComparisonNode TruthTest(NDExpr x) => new(ComparisonOp.NotEqual, x, Const(0), truthTest: true);
+
+        /// <summary>Whether this node is the factories' truth test (see <see cref="TruthTest"/>).</summary>
+        internal bool IsTruthTest => _truthTest;
 
         /// <summary>
         /// The tested operand <c>x</c> when this node is the reduction factories' nonzero test <c>x != 0</c> — a
@@ -2296,6 +2328,8 @@ namespace NumSharp.Backends.Iteration
 
         public override void AppendSignature(StringBuilder sb)
         {
+            // The truth-test flag is left out on purpose: this text keys the KERNEL, and the flagged and plain x != 0 emit
+            // the same IL, so they share one kernel. The program identity (NDExpr.Structure.cs) does carry the flag.
             sb.Append("Cmp").Append(_op).Append('(');
             _left.AppendSignature(sb);
             sb.Append(',');

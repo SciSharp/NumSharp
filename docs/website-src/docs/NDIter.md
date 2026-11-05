@@ -1620,6 +1620,18 @@ np.evaluate((NDExpr)a * b + c, @out: output);
 
 Elementwise fusion supports broadcasting, strided operands, overlap-safe `out=`, and buffered write-back when `out` needs a cast. A root `Sum`, `Prod`, `Min`, `Max`, or `Mean` fuses element evaluation with the reduction; reductions nested inside a larger elementwise expression are intentionally rejected and require two calls.
 
+Text operands (`S`, `U` and `StringDType` arrays, and a C# `string`, which is NumPy's `str`) take part through the six comparisons. When the program is built, each comparison over text is cut out of the tree: per call it runs first as NumPy's own string comparison over whole arrays (its kernels, its `StringDType` NA rules and its errors), and its bool result is one more operand of the fused numeric pass. A text value is an input, not IL, so one compiled program serves every literal:
+
+```csharp
+// A text filter and a numeric filter in one call; the program is shared by every city name.
+NDArray adults = np.evaluate(NDExpr.Equal(city, "paris") & ((NDExpr)age > 30));
+
+// A count over a text comparison: the reduction runs on its bool result.
+NDArray parisians = np.evaluate(NDExpr.CountNonzero(NDExpr.Equal(city, "paris")));
+```
+
+Every other node over a text operand (arithmetic, the truth value of a string, `Where` with text branches, a text result) raises `StringComputationNotSupportedException` when the program is built; compute that part with the string functions and pass its result in.
+
 ### Measured fused versus unfused performance
 
 The current [fusion benchmark report](https://scisharp.github.io/NumSharp/docs/reports/fusion_results.html) uses 4 million elements and warmed best-window measurements. In this table, **speedup is NumSharp unfused ÷ NumSharp fused**; it is not a NumPy/NumSharp ratio.

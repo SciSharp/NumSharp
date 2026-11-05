@@ -766,7 +766,7 @@ On `NDArray` itself the key properties are `.dtype` (a `DType`, NumPy's `ndarray
 | Exception | When |
 |-----------|------|
 | `NotSupportedException` | dtype string unrecognized, or NumPy dtype NumSharp doesn't implement (`V`/`O`/`complex64`/…); an array of a descriptor with no storage yet (`M8`, `m8`); the conversion of `np.complex64` / `np.csingle` / `np.object_` / `np.void` to a dtype |
-| `StringComputationNotSupportedException` | A text operand passed to the numeric expression engine, `np.evaluate`; use the string operations directly |
+| `StringComputationNotSupportedException` | A node of the expression engine, `np.evaluate`, that takes a text operand outside its six comparisons; compute that part with the string operations |
 | `DTypePromotionError` | No common dtype, such as `StringDType` with a numeric dtype or `S` |
 | `UnicodeEncodeError` / `UnicodeDecodeError` | An invalid encoding conversion, such as non-ASCII `U` → `S` or invalid UTF-8 `S` → `T` |
 | `TypeError` | Complex → non-complex scalar cast (`(int)complexScalar`, etc.) |

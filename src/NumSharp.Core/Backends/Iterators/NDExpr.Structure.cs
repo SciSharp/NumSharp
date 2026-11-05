@@ -338,15 +338,28 @@ namespace NumSharp.Backends.Iteration
 
     public sealed partial class ComparisonNode
     {
+        /// <summary>
+        /// Folds this node into the structural hash: the comparison and the truth-test flag (the factories' <c>x != 0</c>
+        /// lowers differently from a user's own over text, so the two must not share a cached program), then both children.
+        /// </summary>
+        /// <param name="h">The running structural hash.</param>
+        /// <param name="operands">The operand scratch the leaves record their slots in.</param>
         internal override void HashStructure(ref NDExprStructureHasher h, NDExprOperandScratch operands)
         {
-            h.Add(NDExprNodeTag.Comparison, (long)_op);
+            h.Add(NDExprNodeTag.Comparison, (long)_op | (_truthTest ? 1L << 8 : 0L));
             _left.HashStructure(ref h, operands);
             _right.HashStructure(ref h, operands);
         }
 
+        /// <summary>
+        /// Whether <paramref name="bound"/> (a cached bound tree) has this node's structure: a comparison of the same op and
+        /// truth-test flag over structurally equal children. A hash hit is only trusted after this check.
+        /// </summary>
+        /// <param name="bound">The cached bound tree's node at this position.</param>
+        /// <param name="operands">The operand scratch the leaves compare their slots through.</param>
+        /// <returns>True when the structures match node for node.</returns>
         internal override bool StructureEquals(NDExpr bound, NDExprOperandScratch operands)
-            => bound is ComparisonNode o && o._op == _op
+            => bound is ComparisonNode o && o._op == _op && o._truthTest == _truthTest
                && _left.StructureEquals(o._left, operands)
                && _right.StructureEquals(o._right, operands);
     }

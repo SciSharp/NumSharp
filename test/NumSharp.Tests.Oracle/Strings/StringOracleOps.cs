@@ -289,6 +289,9 @@ namespace NumSharp.Tests.Strings
             // numpy.matrix reductions, np.pad's mode keywords over text; P2.7) live in their own partial.
             if (TryInvokeTextOut(c.Op, p, ops, out var textOut))
                 return textOut;
+            // Section evaltext (np.evaluate over text) replays its trees through the numeric evaluate tier's parser.
+            if (TryInvokeEvaluate(c.Op, p, ops, out var evaluated))
+                return evaluated;
             throw new InvalidOperationException($"the string oracle has no op '{c.Op}'");
         }
 
