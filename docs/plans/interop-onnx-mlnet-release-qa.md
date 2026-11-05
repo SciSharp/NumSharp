@@ -47,9 +47,9 @@ log (section 7). Every new idea becomes a work-list row before it is worked on.
   superseded by the open range.
 - **Deferred, documented**: P3, P8 (re-examined 2026-11-05: the 11-03 fix, a NumSharp copy pinned by ORT, returns
   another array's values through `OrtIoBinding`; recommended now: a NumSharp copy ORT owns through its deleter), P15
-  (section 5; all three re-asked and deferred again on 2026-11-05). P5 done (NDW020); P19 being ported. For Core, P19 (an elementwise result of a permuted view is
-  C-ordered where NumPy keeps the permutation, so `Postprocess.Softmax` on a transposed view differs from NumPy / SciPy
-  by 1-3 ulps, F79) now lives with the parity QA's QA-36.
+  (section 5; all three re-asked and deferred again on 2026-11-05). P5 done (NDW020); P19 done on branch `qa/ufunc-keeporder` (`ecd70236`, not merged): every fresh ufunc result takes
+  NumPy's layout, so an elementwise result of a permuted view keeps the permutation (parity QA-36). F79's
+  `Postprocess.Softmax` / `LogSoftmax` check is not re-run yet: this branch does not carry the Core change.
 - **F84 (high), resolved**: P21 merged (`6a5b9879`) - the result dictionary implements Core's public `INDArrayCarrier`,
   so `scope.ReturnsTask(session.RunAsync(...))` yields the outputs; a plain `using` still closes the scope at once.
 - **Examples** (section 6): ImageNet with ONNX Runtime, train / evaluate / k-means with ML.NET, and train in ML.NET ->
@@ -537,7 +537,7 @@ rides in P12's commit) - and `qa/proposals-all` merges all seven with their thre
   forms (ArgumentException naming the name and both positions - the names are the table's own, so a duplicate is a
   mistake there; ML.NET's shadowing stays for transforms); (b) keep ML.NET's semantics and document them. Recommended:
   (a) - a breaking change only for code that already loses a column; the dictionary form (P1) cannot hold duplicates.
-- **P19 (F79) Core: an elementwise result of a permuted view in NumPy's K order.** **Handed to the parity QA's QA-36 2026-11-03; on 2026-11-05 the owner chose "Port KEEPORDER now" - "With parity to Numpy" - in this track (branch `qa/ufunc-keeporder`, from strings).** Proven: NumPy allocates an
+- **P19 (F79) Core: an elementwise result of a permuted view in NumPy's K order.** **Handed to the parity QA's QA-36 2026-11-03; on 2026-11-05 the owner chose "Port KEEPORDER now" - "With parity to Numpy" - in this track (branch `qa/ufunc-keeporder`, from strings).** **Done 2026-11-05 (`ecd70236`)**: Core's `Shape.UfuncOutputShape` is NumPy's try_trivial_single_output_loop / NpyIter K rule for every fresh elementwise result (the two-output ufuncs, np.where, the scans, keepdims reductions, np.positive, np.clip, np.sinc and np.i0 follow), proven against NumPy 2.4.2 by the layout-parity corpus's 263-case `ufunc` family, probes and the oracle gate (17 carved gaps back in the gate); permuted operands compute 2-4x faster. Merging it into strings / the release branch is the owner's call. Proven: NumPy allocates an
   elementwise result in order K - for an input whose strides are a permutation of a dense layout, the same
   permutation; NumSharp's 'K' resolves to C or F only (issue #610's documented model), so `np.exp(x.transpose(2, 0,
   1))` is C-ordered (element strides 30, 5, 1) where NumPy's keeps (1, 40, 8). Per op the values are equal; in a
@@ -623,7 +623,7 @@ last option "Defer").
 | F11 / P3 | defer ("we will tackle string later") | stays deferred |
 | F20 / P8, F49 / P15, F11 / P3 (2026-11-05) | defer again (all three) | stay deferred |
 | F05 / F06 / P5 (2026-11-05) | build warning NDW020 | `e41c75f6` |
-| F79 / P19 (2026-11-05) | "Port KEEPORDER now" - "With parity to Numpy" | branch `qa/ufunc-keeporder` |
+| F79 / P19 (2026-11-05) | "Port KEEPORDER now" - "With parity to Numpy" | `ecd70236` on branch `qa/ufunc-keeporder` (from strings `1901e0ce`, not merged) |
 
 ## 8. Carrying the results to the release
 
@@ -813,3 +813,4 @@ The proposals (section 5) are separate, each the owner's to accept or drop:
 | 2026-11-05 14:28 | The five parked items re-asked (AskUserHtmlQuestion, the coloured-diff pages): P5 done as NDW020 (3 / 3 build tests on net10.0 and net8.0, the premise pinned: PublishAot=true writes IsDynamicCodeSupported=false even in a plain build); P8, P15, P3 deferred again; P19 to be ported now with NumPy parity, on `qa/ufunc-keeporder` from strings. |
 | 2026-11-05 14:40 | P8 re-examined on the owner's question in another session ("What should ToOrtValue do?", with how pythonnet, NumSharp and the bridges manage unsafe memory): the 11-03 fix (R2, a NumSharp copy pinned by ORT) returns another array's values through `OrtIoBinding` once the managed value is disposed or dropped; ORT's C-API deleter (R5, ORT 1.22 and newer, prototyped by reflection) keeps `OrtIoBinding` correct, forgotten +32 MB, 18.3-19.0 us against today's 17.3-17.9; pythonnet's `ToNumpyCopy` forgotten +2,150 MB. Section 5, P8; scripts `qa/interop-probes` `dc6cd75e`. Still deferred. |
 | 2026-11-05 15:25 | The owner asked for an HTML report of P8 (the blind spot, pythonnet's, the recommended fix and its alternatives as code): `report.html` on `qa/interop-probes` `72992df3`. Measured for it: R3 (`AsOrtValue(Copy)`) wrong under `OrtIoBinding` like R2; R6 (`GC.AddMemoryPressure`) correct but 543 / 284 gen-2 collections and 33.1 us; the pythonnet routes counted by live copies (private bytes do not repeat there), which corrects the 14:40 entry's "+24 MB" for `copy().ToNumpy()` to "peak 36 live copies (21 MB)". |
+| 2026-11-05 19:40 | P19 done on `qa/ufunc-keeporder` (`ecd70236`): every fresh ufunc result in NumPy 2.4.2's layout; the elementwise exp of a transposed view now keeps its order, the cause of F79's Softmax / LogSoftmax drift; F79's own check is to be re-run once both branches meet. Not merged. |
