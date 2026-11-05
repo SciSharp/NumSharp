@@ -125,7 +125,7 @@ namespace NumSharp.Tests.DTypes
         [DataRow("", "data type '' not understood")]
         [DataRow(">", "data type '>' not understood")]
         [DataRow("i3", "data type 'i3' not understood")]
-        [DataRow("f16", "data type 'f16' not understood")]
+        [DataRow("f32", "data type 'f32' not understood")]
         [DataRow("I4", "data type 'I4' not understood")]
         [DataRow(" i4", "data type ' i4' not understood")]
         [DataRow("i4 ", "data type 'i4 ' not understood")]
@@ -135,10 +135,35 @@ namespace NumSharp.Tests.DTypes
         [DataRow("?1", "data type '?1' not understood")]
         [DataRow("bool8", "Alias 'bool8' was removed in NumPy 2.0. Use a name without a digit at the end.")]
         [DataRow("int0", "Alias 'int0' was removed in NumPy 2.0. Use a name without a digit at the end.")]
-        public void InvalidStrings_KeepNotSupportedException_WithNumPysWording(string spelling, string message)
+        public void InvalidStrings_RaiseNumPysTypeError(string spelling, string message)
         {
             Action act = () => np.dtype(spelling);
-            act.Should().Throw<NotSupportedException>().WithMessage(message);
+            act.Should().Throw<TypeError>().Which.Message.Should().Be(message);
+        }
+
+        /// <summary>
+        ///     NumPy's own TypeError for a string it rejects, and NumSharp's NotSupportedException for a valid NumPy dtype
+        ///     it has no class for, are told apart by the host: the width of the C long double is a NumPy dtype only
+        ///     where the long double has it (<c>'f16'</c> / <c>'float128'</c> on a 16-byte host, 64-bit Linux), and is
+        ///     NumPy's "not understood" elsewhere (Windows, Apple arm64). Probed: Windows NumPy 2.4.2 raises
+        ///     <c>TypeError: data type 'f16' not understood</c>, Linux NumPy 2.4.2 answers <c>dtype('float128')</c>.
+        /// </summary>
+        [TestMethod]
+        public void LongDoubleWidth_IsNotUnderstood_OnlyWhereNumPyLacksIt()
+        {
+            int ld = DTypeRegistry.CLongDoubleSize;
+            foreach (var (spec, has) in new[] { ("f16", ld == 16), ("c32", ld == 16), ("float128", ld == 16), ("complex256", ld == 16),
+                                                ("f12", ld == 12), ("c24", ld == 12), ("float96", ld == 12), ("complex192", ld == 12) })
+            {
+                Action act = () => np.dtype(spec);
+                if (has)
+                    act.Should().Throw<NotSupportedException>(spec).Which.Message.Should().Be($"NumPy dtype '{spec}' is not supported by NumSharp");
+                else
+                    act.Should().Throw<TypeError>(spec).Which.Message.Should().Be($"data type '{spec}' not understood");
+            }
+            // A byte-order prefix before a kind + size is a byte order, before a name it is part of the name (NumPy
+            // looks names up by the whole string), so '<float128' is "not understood" on every host.
+            new Action(() => np.dtype("<float128")).Should().Throw<TypeError>().Which.Message.Should().Be("data type '<float128' not understood");
         }
 
         [DataTestMethod]
@@ -186,7 +211,7 @@ namespace NumSharp.Tests.DTypes
         public void ByteOrderPrefix_BeforeAName_IsNotUnderstood(string spelling)
         {
             Action act = () => np.dtype(spelling);
-            act.Should().Throw<NotSupportedException>().WithMessage($"data type '{spelling}' not understood");
+            act.Should().Throw<TypeError>().WithMessage($"data type '{spelling}' not understood");
         }
 
         /// <summary>The same prefixes before type codes and sized codes are byte orders (NumPy strips them first).</summary>
@@ -225,11 +250,11 @@ namespace NumSharp.Tests.DTypes
         public void ErrorTexts_QuoteTheStringWithPythonRepr()
         {
             Action quote = () => np.dtype("a'b");
-            quote.Should().Throw<NotSupportedException>().WithMessage("data type \"a'b\" not understood");
+            quote.Should().Throw<TypeError>().WithMessage("data type \"a'b\" not understood");
             Action newline = () => np.dtype("i4\n");
-            newline.Should().Throw<NotSupportedException>().WithMessage("data type 'i4\\n' not understood");
+            newline.Should().Throw<TypeError>().WithMessage("data type 'i4\\n' not understood");
             Action prefixedAlias = () => np.dtype("<int0");
-            prefixedAlias.Should().Throw<NotSupportedException>()
+            prefixedAlias.Should().Throw<TypeError>()
                 .WithMessage("Alias '<int0' was removed in NumPy 2.0. Use a name without a digit at the end.");
         }
 
@@ -244,9 +269,9 @@ namespace NumSharp.Tests.DTypes
             np.dtype("f\n8").Should().BeSameAs(DType.Double);
             np.dtype("i\v4").Should().BeSameAs(DType.Int32);
             Action nbsp = () => np.dtype("f\u00a08");
-            nbsp.Should().Throw<NotSupportedException>().WithMessage("data type 'f\\xa08' not understood");
+            nbsp.Should().Throw<TypeError>().WithMessage("data type 'f\\xa08' not understood");
             Action enQuad = () => np.dtype("f\u20008");
-            enQuad.Should().Throw<NotSupportedException>().WithMessage("data type 'f\\u20008' not understood");
+            enQuad.Should().Throw<TypeError>().WithMessage("data type 'f\\u20008' not understood");
         }
 
         /// <summary>
@@ -279,7 +304,7 @@ namespace NumSharp.Tests.DTypes
             Action voidType = () => np.dtype("\x14");
             voidType.Should().Throw<NotSupportedException>();
             Action expiredChar = () => np.dtype("\x18");
-            expiredChar.Should().Throw<NotSupportedException>().WithMessage("data type '\\x18' not understood");
+            expiredChar.Should().Throw<TypeError>().WithMessage("data type '\\x18' not understood");
         }
 
         /// <summary>
@@ -293,7 +318,7 @@ namespace NumSharp.Tests.DTypes
             foreach (var s in new[] { "(2)f8", "( )f8", "f8()", "(f8)" })
             {
                 Action act = () => np.dtype(s);
-                act.Should().Throw<NotSupportedException>().WithMessage($"data type '{s}' not understood");
+                act.Should().Throw<TypeError>().WithMessage($"data type '{s}' not understood");
             }
             foreach (var s in new[] { "()f8", "<()f8", "(2,)f8" })
             {
@@ -319,7 +344,7 @@ namespace NumSharp.Tests.DTypes
             foreach (var s in new[] { "<object", "|a", "O16", "O2", "<csingle", "<str", "<bytes" })
             {
                 Action act = () => np.dtype(s);
-                act.Should().Throw<NotSupportedException>().WithMessage($"data type '{s}' not understood", s);
+                act.Should().Throw<TypeError>().WithMessage($"data type '{s}' not understood", s);
             }
             np.dtype("a").Should().BeSameAs(DTypeRegistry.Bytes.singleton);
             np.dtype("bytes").Should().BeSameAs(DTypeRegistry.Bytes.singleton);

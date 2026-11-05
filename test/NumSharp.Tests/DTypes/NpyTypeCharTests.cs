@@ -68,7 +68,9 @@ namespace NumSharp.Tests.DTypes
             {
                 NPTypeCode? got;
                 try { got = ((NPY_TYPECHAR)c).ToTypeCode(); }
-                catch (NotSupportedException) { got = null; }
+                // NumPy's TypeError (a character NumPy does not know) and NumSharp's NotSupportedException (a NumPy
+                // dtype NumSharp has no lane for) are both refusals here; which one is pinned elsewhere.
+                catch (Exception e) when (e is TypeError || e is NotSupportedException) { got = null; }
 
                 if (expected.TryGetValue(c, out var want))
                 {
@@ -115,7 +117,7 @@ namespace NumSharp.Tests.DTypes
             ((NPY_TYPECHAR)0x0F).ToTypeCode().Should().Be(NPTypeCode.Complex);
             ((NPY_TYPECHAR)0x17).ToTypeCode().Should().Be(NPTypeCode.Half);
             Action past = () => ((NPY_TYPECHAR)0x18).ToTypeCode();
-            past.Should().Throw<NotSupportedException>().WithMessage("*not understood*");
+            past.Should().Throw<TypeError>().WithMessage("*not understood*");
         }
 
         /// <summary>
@@ -126,7 +128,7 @@ namespace NumSharp.Tests.DTypes
         public void ToTypeCode_KindLetters_AreNotTypeCharacters()
         {
             Action unsigned = () => NPY_TYPECHAR.NPY_UNSIGNEDLTR.ToTypeCode();
-            unsigned.Should().Throw<NotSupportedException>().WithMessage("*'u'*");
+            unsigned.Should().Throw<TypeError>().WithMessage("*'u'*");
 
             NPY_TYPECHAR.NPY_COMPLEXLTR.ToTypeCode().Should().Be(NPTypeCode.String, "'c' is NumPy's one-byte string type S1, never complex");
 
@@ -236,7 +238,7 @@ namespace NumSharp.Tests.DTypes
         {
             np.dtype("T").Meta.Should().BeSameAs(DTypeRegistry.VString);
             Action unknown = () => np.dtype("x");
-            unknown.Should().Throw<NotSupportedException>().WithMessage("*'x' not understood*");
+            unknown.Should().Throw<TypeError>().WithMessage("*'x' not understood*");
         }
 
         /// <summary>

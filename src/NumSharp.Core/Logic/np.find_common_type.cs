@@ -870,6 +870,7 @@ namespace NumSharp
         ///     NumSharp element type converts to.
         /// </exception>
         /// <exception cref="NotSupportedException">A dtype string names a dtype NumSharp cannot store (the <see cref="string"/> overload).</exception>
+        /// <exception cref="TypeError">A dtype string NumPy cannot parse either (the <see cref="string"/> overload; NumPy's <c>data type 'x' not understood</c>).</exception>
         public static DType find_common_type(NPTypeCode[] array_types, NPTypeCode[] scalar_types)
         {
             return _FindCommonType(array_types ?? Array.Empty<NPTypeCode>(), scalar_types ?? Array.Empty<NPTypeCode>());
@@ -1149,7 +1150,8 @@ namespace NumSharp
         /// <param name="involvedTypes">The dtype strings (<c>"int32"</c>, <c>"f8"</c>, <c>"&lt;u2"</c>).</param>
         /// <returns>The first type of NumPy's candidate list every entry casts to safely, the entry itself for one, null for none.</returns>
         /// <inheritdoc cref="find_common_type(NPTypeCode[], NPTypeCode[])" path="/remarks"/>
-        /// <exception cref="NotSupportedException">A string names a dtype NumSharp cannot store (NumPy's texts).</exception>
+        /// <exception cref="NotSupportedException">A string names a dtype NumSharp cannot store.</exception>
+        /// <exception cref="TypeError">A string NumPy cannot parse either (NumPy's <c>data type 'x' not understood</c>).</exception>
         [MethodImpl(Optimize)]
         public static DType find_common_type(params string[] involvedTypes)
         {

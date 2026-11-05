@@ -52,7 +52,8 @@ namespace NumSharp
         /// <param name="arg1">The dtype tested (NumPy's <c>dtype(arg1).type</c> is the class compared); null is NumPy's <c>None</c>, i.e. float64.</param>
         /// <param name="arg2">The scalar class, usually an abstract one (<see cref="integer"/>, <see cref="floating"/>, ...); null is float64.</param>
         /// <returns>True when <paramref name="arg1"/>'s scalar class is <paramref name="arg2"/> or derives from it.</returns>
-        /// <exception cref="NotSupportedException">A dtype string that is not one (<c>data type 'x' not understood</c>), raised while converting <paramref name="arg1"/>.</exception>
+        /// <exception cref="TypeError">A dtype string that is not one (NumPy's <c>data type 'x' not understood</c>), raised while converting <paramref name="arg1"/>.</exception>
+        /// <exception cref="NotSupportedException">A dtype string naming a dtype NumSharp has no class for (complex64, object, void).</exception>
         /// <example>
         /// <code>
         /// np.issubdtype(np.int32, np.integer)             // True
@@ -71,7 +72,8 @@ namespace NumSharp
         /// <param name="arg1">The scalar class tested; null is NumPy's <c>None</c>, i.e. float64.</param>
         /// <param name="arg2">The dtype (any spelling: a <see cref="DType"/>, <see cref="Type"/>, <see cref="NPTypeCode"/> or dtype string); null is float64.</param>
         /// <returns>True when <paramref name="arg1"/> is <paramref name="arg2"/>'s scalar class or derives from it.</returns>
-        /// <exception cref="NotSupportedException">A dtype string that is not one, raised while converting <paramref name="arg2"/>.</exception>
+        /// <exception cref="TypeError">A dtype string that is not one (NumPy's <c>data type 'x' not understood</c>), raised while converting <paramref name="arg2"/>.</exception>
+        /// <exception cref="NotSupportedException">A dtype string naming a dtype NumSharp has no class for (complex64, object, void).</exception>
         public static bool issubdtype(NDScalarType arg1, DType arg2)
             => ScalarClassOf(arg1).IsSubclassOf(ScalarClassOf(arg2));
 
@@ -118,7 +120,8 @@ namespace NumSharp
         /// <param name="arg1">A dtype string; null is NumPy's <c>None</c>, i.e. float64.</param>
         /// <param name="arg2">A dtype string; null is float64.</param>
         /// <returns>True when both name the same dtype class.</returns>
-        /// <exception cref="NotSupportedException">Either string is not a dtype string.</exception>
+        /// <exception cref="TypeError">Either string is not a dtype string (NumPy's <c>data type 'x' not understood</c>).</exception>
+        /// <exception cref="NotSupportedException">Either string names a dtype NumSharp has no class for.</exception>
         public static bool issubdtype(string arg1, string arg2)
             => ScalarClassOf(arg1).IsSubclassOf(ScalarClassOf(arg2));
 
@@ -126,7 +129,8 @@ namespace NumSharp
         /// <param name="arg1">The storage code tested.</param>
         /// <param name="arg2">A dtype string; null is NumPy's <c>None</c>, i.e. float64.</param>
         /// <returns>True when both name the same dtype class.</returns>
-        /// <exception cref="NotSupportedException"><paramref name="arg2"/> is not a dtype string, or <paramref name="arg1"/> has no dtype class.</exception>
+        /// <exception cref="TypeError"><paramref name="arg2"/> is not a dtype string (NumPy's <c>data type 'x' not understood</c>).</exception>
+        /// <exception cref="NotSupportedException"><paramref name="arg1"/> has no dtype class, or <paramref name="arg2"/> names a dtype NumSharp has no class for.</exception>
         public static bool issubdtype(NPTypeCode arg1, string arg2)
             => ScalarClassOf(DType.From(arg1)).IsSubclassOf(ScalarClassOf(arg2));
 
@@ -149,7 +153,8 @@ namespace NumSharp
         /// <param name="arg1">The C# element type tested; null is NumPy's <c>None</c>, i.e. float64.</param>
         /// <param name="arg2">A dtype string; null is float64.</param>
         /// <returns>True when both name the same dtype class.</returns>
-        /// <exception cref="NotSupportedException"><paramref name="arg2"/> is not a dtype string, or <paramref name="arg1"/> is no dtype's element type.</exception>
+        /// <exception cref="TypeError"><paramref name="arg2"/> is not a dtype string (NumPy's <c>data type 'x' not understood</c>).</exception>
+        /// <exception cref="NotSupportedException"><paramref name="arg1"/> is no dtype's element type, or <paramref name="arg2"/> names a dtype NumSharp has no class for.</exception>
         public static bool issubdtype(Type arg1, string arg2)
             => ScalarClassOf(arg1 is null ? null : DType.From(arg1)).IsSubclassOf(ScalarClassOf(arg2));
 
@@ -162,7 +167,8 @@ namespace NumSharp
         /// <param name="arg2">A dtype string; null is NumPy's <c>None</c>, i.e. float64.</param>
         /// <returns>True when the array's dtype and <paramref name="arg2"/> name the same dtype class.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="arr"/> is null.</exception>
-        /// <exception cref="NotSupportedException"><paramref name="arg2"/> is not a dtype string.</exception>
+        /// <exception cref="TypeError"><paramref name="arg2"/> is not a dtype string (NumPy's <c>data type 'x' not understood</c>).</exception>
+        /// <exception cref="NotSupportedException"><paramref name="arg2"/> names a dtype NumSharp has no class for.</exception>
         public static bool issubdtype(NDArray arr, string arg2)
         {
             if (arr is null)
@@ -201,7 +207,8 @@ namespace NumSharp
         /// <summary>The scalar class of a dtype string (NumPy's <c>dtype(arg).type</c>), float64's for null (NumPy's <c>None</c>).</summary>
         /// <param name="dtype">The dtype string, or null.</param>
         /// <returns>The class to compare.</returns>
-        /// <exception cref="NotSupportedException"><paramref name="dtype"/> is not a dtype string (<c>data type 'x' not understood</c>).</exception>
+        /// <exception cref="TypeError"><paramref name="dtype"/> is not a dtype string (NumPy's <c>data type 'x' not understood</c>).</exception>
+        /// <exception cref="NotSupportedException"><paramref name="dtype"/> names a dtype NumSharp has no class for.</exception>
         private static NDScalarType ScalarClassOf(string dtype) => NDScalarType.Of((dtype is null ? DType.Double : np.dtype(dtype)).Meta);
     }
 }

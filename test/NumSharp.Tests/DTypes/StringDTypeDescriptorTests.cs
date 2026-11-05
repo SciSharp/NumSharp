@@ -296,7 +296,7 @@ namespace NumSharp.Tests.DTypes
             foreach (var spec in new[] { "T8", "T16", "StringDType", "StringDType()", "t", "TT", "T()", "T(2)", "(2)T", "|T(2)" })
             {
                 Action a = () => np.dtype(spec);
-                a.Should().Throw<NotSupportedException>().WithMessage($"data type '{spec}' not understood", spec);
+                a.Should().Throw<TypeError>().WithMessage($"data type '{spec}' not understood", spec);
             }
             ((DType)"T").Should().Be(np.dtypes.StringDType(), "the implicit string conversion parses too");
             np.dtype(np.dtype("T")).Should().Be(np.dtypes.StringDType());
@@ -422,7 +422,7 @@ namespace NumSharp.Tests.DTypes
                 np.issubdtype(t, category).Should().BeFalse(category.ToString());
             np.issubdtype(t, np.bool_).Should().BeFalse();
             // The family is the CLASS: a string is a dtype string, and "character" is none (NumPy's TypeError).
-            new Action(() => np.issubdtype(t, "character")).Should().Throw<NotSupportedException>()
+            new Action(() => np.issubdtype(t, "character")).Should().Throw<TypeError>()
                 .WithMessage("*data type 'character' not understood*");
         }
 

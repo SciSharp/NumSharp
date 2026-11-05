@@ -75,7 +75,7 @@ Exception
 | `item()` of an array with several elements | `IncorrectSizeException` | `ValueError` | `can only convert an array of size 1 to a Python scalar` |
 | A C# numeric cast of a non-0-d array to a scalar | `TypeError` | `TypeError` | `only 0-dimensional arrays can be converted to Python scalars` |
 | A `(bool)` cast of an array with several elements, or none | `ValueError` | `ValueError` | `The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()` (empty: ``The truth value of an empty array is ambiguous. Use `array.size > 0` to check that an array is not empty.``) |
-| An unknown dtype string | `NotSupportedException` | `TypeError` | `data type 'xyz' not understood` |
+| An unknown dtype string | `TypeError` | `TypeError` | `data type 'xyz' not understood` |
 | A factorisation without a backend (`np.linalg.svd`) | `OpenBlasMissingBackendException` | - | names the `NumSharp.Interop.OpenBLAS` package to reference |
 | An `NDExpr.Call` delegate given a text argument inside `np.evaluate` (every other node computes on text or raises NumPy's own error) | `StringComputationNotSupportedException` | - | names the delegate and the text nodes to use |
 

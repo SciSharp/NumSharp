@@ -47,15 +47,33 @@ namespace NumSharp
         /// <param name="to">Data type to cast to.</param>
         /// <param name="casting">The casting rule (see <see cref="can_cast(DType, DType, string)"/>).</param>
         /// <returns>True if cast can occur according to the casting rule.</returns>
-        /// <exception cref="TypeError">A null argument (NumPy's texts, in NumPy's order: <c>to</c>, <c>casting</c>, then <c>from_</c>).</exception>
+        /// <exception cref="TypeError">
+        ///     A null argument (NumPy's texts, in NumPy's order: <c>to</c>, <c>casting</c>, then <c>from_</c>), or a
+        ///     <paramref name="from"/> string NumPy cannot parse: NumPy replaces the parser's error with <c>did not understand
+        ///     one of the types; 'None' not accepted</c> for <c>from_</c> (a bad <paramref name="to"/> string keeps the
+        ///     parser's own error, raised while the argument converts).
+        /// </exception>
         /// <exception cref="ValueError">An unknown casting name.</exception>
-        /// <exception cref="NotSupportedException"><paramref name="from"/> is not a dtype NumSharp understands (raised after <c>to</c> and <c>casting</c> are checked, as NumPy parses <c>from_</c> last).</exception>
+        /// <exception cref="NotSupportedException"><paramref name="from"/> is a valid NumPy dtype NumSharp does not implement (complex64, structured, ...).</exception>
         public static bool can_cast(string from, DType to, string casting = "safe")
         {
             if (to is null) throw new TypeError("did not understand one of the types; 'None' not accepted");
             var rule = DTypeCasting.ParseCasting(casting);
             if (from is null) throw new TypeError("did not understand one of the types; 'None' not accepted");
-            return DTypeCasting.CanCastTypeTo(dtype(from), to, rule);
+            DType fromDescr;
+            try
+            {
+                fromDescr = dtype(from);
+            }
+            catch (Exception e) when (e is TypeError || e is ValueError)
+            {
+                // array_can_cast_safely converts from_ with PyArray_DescrConverter2 and then REPLACES whatever error the
+                // converter set (PyErr_SetString), so "data type 'x' not understood", a removed alias and a bad datetime
+                // unit or divisor all read as this text. A NotSupportedException is not one of NumPy's errors (NumPy
+                // accepts the dtype) and passes through.
+                throw new TypeError("did not understand one of the types; 'None' not accepted");
+            }
+            return DTypeCasting.CanCastTypeTo(fromDescr, to, rule);
         }
 
         /// <summary>

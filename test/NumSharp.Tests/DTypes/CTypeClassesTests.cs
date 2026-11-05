@@ -94,9 +94,18 @@ namespace NumSharp.Tests.DTypes
             np.dtype("n").@char.Should().Be(DTypeRegistry.CLongIs32Bit ? 'q' : 'l');
             np.dtype("P").@char.Should().Be(DTypeRegistry.CLongIs32Bit ? 'Q' : 'L');
 
-            // The extended-precision names are Windows NumPy's TypeError: NumSharp has no 16-byte long double.
-            foreach (var spec in new[] { "float128", "f16", "complex256", "c32", "float96" })
-                new Action(() => np.dtype(spec)).Should().Throw<NotSupportedException>().WithMessage($"data type '{spec}' not understood");
+            // The extended-precision spellings name the host's C long double width: where NumPy has that width (16 bytes
+            // on 64-bit Linux: float128 / complex256, 12 on 32-bit x86: float96) it is a valid NumPy dtype NumSharp has no
+            // lane for; elsewhere (Windows) it is NumPy's own TypeError.
+            int ld = DTypeRegistry.CLongDoubleSize;
+            foreach (var (spec, width) in new[] { ("float128", 16), ("f16", 16), ("complex256", 16), ("c32", 16), ("float96", 12) })
+            {
+                Action act = () => np.dtype(spec);
+                if (ld == width)
+                    act.Should().Throw<NotSupportedException>().WithMessage($"NumPy dtype '{spec}' is not supported by NumSharp");
+                else
+                    act.Should().Throw<TypeError>().WithMessage($"data type '{spec}' not understood");
+            }
         }
 
         // ---- equality, casting, promotion ---------------------------------------------------------------------------

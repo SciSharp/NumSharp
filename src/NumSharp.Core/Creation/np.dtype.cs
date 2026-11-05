@@ -320,17 +320,37 @@ namespace NumSharp
 
         /// <summary>
         ///     The names of NumPy's <c>typeDict</c> (<c>np.sctypeDict</c>'s string keys) whose class NumSharp has no storage
-        ///     for: complex64, void and object. NumPy looks a name up by the WHOLE string, so only the bare name is a valid
+        ///     for: complex64, void, object, and the host's long double width where it is not 8 bytes (<c>'float128'</c>,
+        ///     <c>'complex256'</c> on 64-bit Linux). NumPy looks a name up by the WHOLE string, so only the bare name is a valid
         ///     dtype (<c>'object'</c>); with a byte-order prefix (<c>'&lt;object'</c>) it is NumPy's "not understood". The
         ///     string classes' names are NumSharp's own: <c>'str'</c> / <c>'str_'</c> / <c>'unicode'</c> resolve through the
         ///     name table, <c>'bytes'</c> / <c>'bytes_'</c> / <c>'a'</c> in <see cref="ConvertFromStr"/>.
         /// </summary>
-        private static readonly FrozenSet<string> _unsupported_numpy_names = new HashSet<string>(StringComparer.Ordinal)
+        private static readonly FrozenSet<string> _unsupported_numpy_names = UnsupportedNumPyNames();
+
+        /// <summary>
+        ///     Builds <see cref="_unsupported_numpy_names"/>: the fixed names, plus NumPy's names of the host's C long double
+        ///     width when that width is not 8 bytes (<c>'float128'</c> / <c>'complex256'</c> on 64-bit Linux and macOS x64,
+        ///     <c>'float96'</c> / <c>'complex192'</c> on 32-bit x86). NumPy registers a <c>float{bits}</c> name only for the
+        ///     width it has, so on Windows those names stay "not understood", as in NumPy.
+        /// </summary>
+        /// <returns>The frozen set.</returns>
+        private static FrozenSet<string> UnsupportedNumPyNames()
         {
-            "complex64", "csingle",            // complex64 - NumSharp has no 32-bit complex
-            "object", "object_",
-            "void",
-        }.ToFrozenSet();
+            var names = new HashSet<string>(StringComparer.Ordinal)
+            {
+                "complex64", "csingle",            // complex64 - NumSharp has no 32-bit complex
+                "object", "object_",
+                "void",
+            };
+            int longDouble = DTypeRegistry.CLongDoubleSize;
+            if (longDouble != 8)
+            {
+                names.Add($"float{8 * longDouble}");
+                names.Add($"complex{16 * longDouble}");
+            }
+            return names.ToFrozenSet();
+        }
 
         // NumPy 2.0 removed these bit-suffixed aliases; the message is NumPy's verbatim.
         private static readonly FrozenSet<string> _removed_numpy_aliases = new HashSet<string>(StringComparer.Ordinal)
@@ -375,10 +395,14 @@ namespace NumSharp
         /// </returns>
         /// <exception cref="NotSupportedException">
         ///     A valid NumPy dtype NumSharp does not implement — void, object, complex64,
-        ///     structured / sub-array / comma-string dtypes — or an invalid string, reported with NumPy's own
-        ///     <c>data type 'X' not understood</c> / <c>Alias 'bool8' was removed in NumPy 2.0. …</c> texts.
+        ///     structured / sub-array / comma-string dtypes ("is not supported by NumSharp"). NumPy accepts these, so the
+        ///     refusal is NumSharp's limit, not one of NumPy's errors.
         /// </exception>
-        /// <exception cref="TypeError">A malformed datetime unit (<c>Invalid datetime metadata string "[5]" at position 2</c>, verbatim).</exception>
+        /// <exception cref="TypeError">
+        ///     A string NumPy cannot parse either, with NumPy's own texts: <c>data type 'X' not understood</c> (the string
+        ///     quoted by Python's <c>repr</c>), <c>Alias 'bool8' was removed in NumPy 2.0. Use a name without a digit at the
+        ///     end.</c>; or a malformed datetime unit (<c>Invalid datetime metadata string "[5]" at position 2</c>, verbatim).
+        /// </exception>
         /// <exception cref="ValueError">A datetime divisor that is not a multiple of a lower unit (verbatim).</exception>
         /// <remarks>
         ///     Grammar, in NumPy's order: a comma string (a top-level comma, a leading digit or a leading <c>()</c>) is a
@@ -408,8 +432,8 @@ namespace NumSharp
         /// <param name="dtype">The dtype string.</param>
         /// <returns>The parsed descriptor (the shared singleton for a native builtin).</returns>
         /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
-        /// <exception cref="NotSupportedException">An unsupported or invalid dtype string (NumPy's texts).</exception>
-        /// <exception cref="TypeError">A malformed datetime unit.</exception>
+        /// <exception cref="NotSupportedException">A valid NumPy dtype NumSharp does not implement.</exception>
+        /// <exception cref="TypeError">A string NumPy cannot parse either (NumPy's texts), or a malformed datetime unit.</exception>
         /// <exception cref="ValueError">A datetime divisor that is not a multiple of a lower unit.</exception>
         private static DType ConvertFromStr(string dtype)
         {
@@ -572,8 +596,9 @@ namespace NumSharp
                     flexible = DTypeRegistry.Bytes.singleton;
                 else if (!_dtype_string_map.TryGetValue(dtype, out resolved))
                 {
+                    // NumPy raises both of these as TypeError: the string is not a dtype in NumPy either.
                     if (_removed_numpy_aliases.Contains(type))
-                        throw new NotSupportedException($"Alias {PyLiteral.Repr(dtype)} was removed in NumPy 2.0. Use a name without a digit at the end.");
+                        throw new TypeError($"Alias {PyLiteral.Repr(dtype)} was removed in NumPy 2.0. Use a name without a digit at the end.");
                     throw NotUnderstood(dtype);
                 }
             }
@@ -706,15 +731,19 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     NumPy's <c>_convert_from_str</c> failure: <c>data type %R not understood</c>, the string quoted by Python's
-        ///     <c>repr</c> — so a quote inside switches to double quotes (<c>data type "a'b" not understood</c>) and a control
-        ///     character is escaped (<c>data type 'i4\n' not understood</c>). NumPy raises <c>TypeError</c>; NumSharp keeps
-        ///     its long-standing <see cref="NotSupportedException"/> for every dtype string it cannot use, with NumPy's text.
+        ///     NumPy's <c>_convert_from_str</c> failure: <c>TypeError: data type %R not understood</c>, the string quoted by
+        ///     Python's <c>repr</c> — so a quote inside switches to double quotes (<c>data type "a'b" not understood</c>) and a
+        ///     control character is escaped (<c>data type 'i4\n' not understood</c>).
         /// </summary>
         /// <param name="dtype">The WHOLE string the caller passed (byte-order prefix included).</param>
         /// <returns>The exception to throw.</returns>
-        private static NotSupportedException NotUnderstood(string dtype)
-            => new NotSupportedException($"data type {PyLiteral.Repr(dtype)} not understood");
+        /// <remarks>
+        ///     Only strings NumPy itself rejects take this exception. A valid NumPy dtype NumSharp has no class for (complex64,
+        ///     object, void, structured) is a <see cref="NotSupportedException"/> "is not supported by NumSharp" instead, so a
+        ///     caller can tell "not a dtype" (NumPy's error) from "a dtype NumSharp lacks" (NumSharp's limit).
+        /// </remarks>
+        private static TypeError NotUnderstood(string dtype)
+            => new TypeError($"data type {PyLiteral.Repr(dtype)} not understood");
 
         /// <summary>
         ///     NumPy's <c>_check_for_commastring</c>: a comma outside square brackets, a leading digit (after an optional
@@ -861,8 +890,14 @@ namespace NumSharp
         /// <summary>
         ///     NumPy's <c>PyArray_TypestrConvert</c> restricted to NumSharp's types: kind letter + byte size → type.
         ///     Sizes with no NumSharp type return null ("not understood"); NumPy-valid-but-unsupported ones
-        ///     (<c>c8</c> complex64, <c>O8</c> object) raise <see cref="NotSupportedException"/>.
+        ///     (<c>c8</c> complex64, <c>O8</c> object, and the host's long double widths <c>f16</c> / <c>c32</c> where
+        ///     <see cref="DTypeRegistry.CLongDoubleSize"/> is 16) raise <see cref="NotSupportedException"/>.
         /// </summary>
+        /// <param name="itemsize">The byte size read after the kind letter.</param>
+        /// <param name="gentype">The kind letter.</param>
+        /// <param name="type">The endian-stripped string, for the refusal text.</param>
+        /// <returns>The C# element type, or null when NumPy has no such kind + size either.</returns>
+        /// <exception cref="NotSupportedException">A kind + size NumPy accepts and NumSharp has no class for.</exception>
         private static Type TypestrConvert(int itemsize, char gentype, string type)
         {
             switch (gentype)
@@ -893,14 +928,24 @@ namespace NumSharp
                         case 2: return typeof(Half);
                         case 4: return typeof(float);
                         case 8: return typeof(double);
-                        default: return null; // no extended precision (f16 is invalid on NumPy's win-amd64 build too)
+                        default:
+                            // The host's C long double width is NumPy's longdouble there ('f16' is float128 on 64-bit Linux):
+                            // a valid NumPy dtype NumSharp has no lane of that width for. Any other size, the long double
+                            // width on an 8-byte host (Windows) included, is "not understood" in NumPy too.
+                            if (itemsize == DTypeRegistry.CLongDoubleSize)
+                                throw new NotSupportedException($"NumPy dtype '{type}' is not supported by NumSharp");
+                            return null;
                     }
                 case 'c':
                     switch (itemsize)
                     {
                         case 8: throw new NotSupportedException($"NumPy dtype '{type}' is not supported by NumSharp");
                         case 16: return typeof(Complex);
-                        default: return null;
+                        default:
+                            // Twice the host's long double: NumPy's clongdouble ('c32' is complex256 on 64-bit Linux).
+                            if (itemsize == 2 * DTypeRegistry.CLongDoubleSize)
+                                throw new NotSupportedException($"NumPy dtype '{type}' is not supported by NumSharp");
+                            return null;
                     }
                 case 'O':
                     // PyArray_TypestrConvert takes 'O4' AND 'O8' as object on every platform (the deprecation of the two

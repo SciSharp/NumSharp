@@ -81,7 +81,8 @@ namespace NumSharp
         /// <param name="dtypes">One or more dtype strings; a null one is NumPy's <c>None</c>, the float64 descriptor.</param>
         /// <returns>The result descriptor.</returns>
         /// <exception cref="ValueError">No string is given: NumPy's "at least one array or dtype is required".</exception>
-        /// <exception cref="NotSupportedException">A string that is no NumSharp dtype (NumPy's texts).</exception>
+        /// <exception cref="TypeError">A string NumPy cannot parse either (NumPy's <c>data type 'x' not understood</c>).</exception>
+        /// <exception cref="NotSupportedException">A string naming a dtype NumSharp has no class for.</exception>
         /// <exception cref="DTypePromotionError">No common dtype exists.</exception>
         public static DType result_type(params string[] dtypes)
         {

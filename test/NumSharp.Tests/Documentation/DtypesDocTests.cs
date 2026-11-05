@@ -66,11 +66,13 @@ namespace NumSharp.Tests.Documentation
                 spelling.Should().Be(np.complex128);
             np.clongdouble.Should().Be(np.complex128, "its own class, stored as complex128 and equal to it");
 
-            foreach (var name in new[] { "complex64", "F", "c8", "complex_" })
+            foreach (var name in new[] { "complex64", "F", "c8" })
             {
                 Action request = () => np.dtype(name);
                 request.Should().Throw<NotSupportedException>(name);
             }
+            // NumPy 2.0 removed the name 'complex_' (np.complex_ is kept as a C# member): NumPy's own TypeError.
+            new Action(() => np.dtype("complex_")).Should().Throw<TypeError>().WithMessage("data type 'complex_' not understood");
 
             var c = NDArray.Scalar<Complex>(new Complex(3, 4));
             Action toInt = () => _ = (int)c;
@@ -198,16 +200,17 @@ namespace NumSharp.Tests.Documentation
             np.result_type(np.int8, np.int64).Should().Be(np.int64);
         }
 
-        /// <summary>The "Invalid Dtype Strings" snippets: NumPy's invalid strings and the dtypes NumSharp has no storage
-        /// for throw <see cref="NotSupportedException"/> with NumPy's text, while the fixed-width string dtypes parse.</summary>
+        /// <summary>The "Invalid Dtype Strings" snippets: NumPy's invalid strings throw NumPy's <see cref="TypeError"/> with
+        /// NumPy's text, the dtypes NumSharp has no storage for throw <see cref="NotSupportedException"/>, and the
+        /// fixed-width string dtypes parse.</summary>
         /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from the page.</exception>
         [TestMethod]
         public void InvalidDtypeStrings_Throw()
         {
-            foreach (var name in new[] { "xyz", "f16", "i3", "?1", "   i4", "<float64", "<str" })
+            foreach (var name in new[] { "xyz", "f32", "i3", "?1", "   i4", "<float64", "<str" })
             {
                 Action parse = () => np.dtype(name);
-                parse.Should().Throw<NotSupportedException>().WithMessage($"data type '{name}' not understood");
+                parse.Should().Throw<TypeError>().WithMessage($"data type '{name}' not understood");
             }
             foreach (var name in new[] { "V7", "object" })
             {

@@ -82,6 +82,43 @@ namespace NumSharp
         /// <summary>True when the platform C <c>long</c> is 32 bits (MSVC on Windows, any 32-bit process) — decides which class <c>LongDType</c> aliases.</summary>
         internal static readonly bool CLongIs32Bit = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) || IntPtr.Size != 8;
 
+        /// <summary>
+        ///     The byte size of the platform C <c>long double</c>, which NumPy's <c>longdouble</c> takes: 8 where it is a
+        ///     plain double (MSVC on Windows, Apple arm64, 32-bit ARM), 12 on 32-bit x86 outside Windows (the x87 80-bit type
+        ///     padded to 12), 16 on the other 64-bit ABIs (the x87 type padded to 16 on x64, IEEE binary128 on Linux arm64).
+        /// </summary>
+        /// <remarks>
+        ///     NumSharp's <c>longdouble</c> is an 8-byte class everywhere (it shares float64's lane), so this decides only
+        ///     how a dtype string naming the OTHER width is refused: where NumPy has that width (<c>'f16'</c> /
+        ///     <c>'float128'</c>, <c>'c32'</c> / <c>'complex256'</c> on a 16-byte host) it is a valid NumPy dtype NumSharp
+        ///     lacks, a <see cref="NotSupportedException"/>; where NumPy does not (on Windows) it is NumPy's own
+        ///     <c>TypeError: data type 'f16' not understood</c>. Read from the OS and the process architecture, the same
+        ///     way <see cref="CLongIs32Bit"/> models the C <c>long</c>.
+        /// </remarks>
+        internal static readonly int CLongDoubleSize = PlatformCLongDoubleSize();
+
+        /// <summary>The C <c>long double</c> size of the running platform's ABI (see <see cref="CLongDoubleSize"/>).</summary>
+        /// <returns>8, 12 or 16.</returns>
+        private static int PlatformCLongDoubleSize()
+        {
+            // MSVC defines long double as double on every Windows target.
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                return 8;
+            switch (RuntimeInformation.ProcessArchitecture)
+            {
+                case Architecture.X86:
+                    return 12; // i386 System V: the x87 extended type in 12 bytes
+                case Architecture.Arm:
+                case Architecture.Armv6:
+                    return 8;  // AAPCS: long double is double
+                case Architecture.Arm64:
+                    // Apple's arm64 ABI keeps long double a double; AAPCS64 (Linux) makes it IEEE binary128.
+                    return RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? 8 : 16;
+                default:
+                    return 16; // x64 System V (x87 extended in 16 bytes) and the other 64-bit ABIs
+            }
+        }
+
         // ---- the classes ----
         public static LegacyBuiltinDTypeMeta Bool { get; }
         public static LegacyBuiltinDTypeMeta Int8 { get; }

@@ -492,8 +492,8 @@ namespace NumSharp
         /// <returns>The result descriptor.</returns>
         /// <exception cref="ValueError"><c>at least one array or dtype is required</c>.</exception>
         /// <exception cref="DTypePromotionError">No common dtype exists.</exception>
-        /// <exception cref="TypeError">An operand that is no dtype (see <see cref="ClassifyOperand"/>).</exception>
-        /// <exception cref="NotSupportedException">A dtype string or <see cref="Type"/> NumSharp has no class for.</exception>
+        /// <exception cref="TypeError">An operand that is no dtype, or a dtype string NumPy cannot parse (see <see cref="ClassifyOperand"/>).</exception>
+        /// <exception cref="NotSupportedException">A dtype string or <see cref="Type"/> naming a dtype NumSharp has no class for.</exception>
         public static DType ResultType(params object[] arraysAndDtypes)
         {
             if (arraysAndDtypes == null || arraysAndDtypes.Length == 0)
@@ -591,8 +591,11 @@ namespace NumSharp
         /// </param>
         /// <param name="meta">The operand's DType class (an abstract <c>_Py*DType</c> class for a weak literal).</param>
         /// <param name="descr">The operand's descriptor when it is strong; null when it is a weak literal or a bare class.</param>
-        /// <exception cref="TypeError">An object that is no dtype (<c>Cannot interpret '…' as a data type</c>), or a malformed datetime unit in a dtype string.</exception>
-        /// <exception cref="NotSupportedException">A dtype string or <see cref="Type"/> NumSharp has no class for (NumPy's texts).</exception>
+        /// <exception cref="TypeError">
+        ///     An object that is no dtype (<c>Cannot interpret '…' as a data type</c>), a dtype string NumPy cannot parse
+        ///     (<c>data type 'x' not understood</c>), or a malformed datetime unit in a dtype string.
+        /// </exception>
+        /// <exception cref="NotSupportedException">A dtype string or <see cref="Type"/> naming a dtype NumSharp has no class for.</exception>
         /// <exception cref="ValueError">A datetime divisor in a dtype string that is not a multiple of a lower unit.</exception>
         /// <exception cref="ArgumentException"><see cref="NPTypeCode.Empty"/>, which has no class.</exception>
         internal static void ClassifyOperand(object operand, out DTypeMeta meta, out DType descr)

@@ -153,17 +153,20 @@ A port of `_convert_from_str`:
 - one-character codes (the `'n'`/`'N'` intp letters included; a lone control character below `'\x18'` is a TYPE NUMBER
   to `PyArray_DescrFromType`: `'\x0c'` is float64, `'\x0d'` the longdouble class, `'\x12'` bytes, `'\x13'` str, while
   `'\x11'` object and `'\x14'` void are refused); `kind+size` parsed with `strtol` semantics (`i04`, `i 4`, `i+4` are
-  int32; C whitespace only, so `'f\xa08'` is invalid; `b1` is bool; `i3`/`f16`/`?1` are invalid);
+  int32; C whitespace only, so `'f\xa08'` is invalid; `b1` is bool; `i3`/`?1` are invalid, `f16` where the C long
+  double is 8 bytes);
 - the string spellings are the string classes: `S`, `S10`, `a`, `a5`, `c` (`S1`), `U`, `U32`, `T` / `<T` (a new
   `StringDType()`), byte orders included (`=U2` is `<U2`, `|S3`, `>S` reads native);
 - then the name table, looked up by the WHOLE string as NumPy's `typeDict` is, so a byte-order prefix before a NAME is
   "not understood" (`'<float64'`, `'|bool'`, `'<str'`, `'<bytes'`) while it is a byte order before a code (`'<f8'`,
   `'>d'`); `'str'` is `<U0`, `'bytes'` / `'bytes_'` / `'a'` the bytes class, `'cdouble'` complex128.
-- Invalid strings raise `NotSupportedException` with NumPy's `data type %R not understood` / `Alias %R was removed in
-  NumPy 2.0. Use a name without a digit at the end.` wording, quoted by Python's `repr` (`data type "a'b" not
-  understood`); a valid NumPy dtype of a class NumSharp lacks (complex64 / `F` / `csingle`, `V` / `void`, `O` /
-  `object` / `O4` / `O8`) says "is not supported by NumSharp". The 24 C# spellings (`Int32`, `Single`, `Decimal`, …) are
-  NumSharp's superset, asserted refused by NumPy.
+- A string NumPy rejects raises NumPy's `TypeError`: `data type %R not understood` / `Alias %R was removed in NumPy 2.0.
+  Use a name without a digit at the end.`, quoted by Python's `repr` (`data type "a'b" not understood`). A valid NumPy
+  dtype of a class NumSharp lacks (complex64 / `F` / `csingle`, `V` / `void`, `O` / `object` / `O4` / `O8`, and the C
+  long double width where it is not 8 bytes, `DTypeRegistry.CLongDoubleSize`: `f16` / `c32` / `float128` /
+  `complex256` on 64-bit Linux) is a `NotSupportedException` "is not supported by NumSharp". `np.can_cast(str, …)`
+  replaces a FROM string's parse error with NumPy's `did not understand one of the types; 'None' not accepted`. The 24
+  C# spellings (`Int32`, `Single`, `Decimal`, …) are NumSharp's superset, asserted refused by NumPy.
 - Builtins are singletons (`np.dtype("i8")` is the same object every call, `isbuiltin 1`), and so are the datetime
   letters (`np.dtype("M")`) and the unsized string classes (`np.dtype("U")`, `np.dtype("S")`); datetime typestrs (`M8`,
   `M8[ns]`), sized strings and non-native descriptors are fresh.

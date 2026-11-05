@@ -630,10 +630,10 @@ namespace NumSharp
         /// </para>
         /// </remarks>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="typeCode"/> is outside 0..0xFFFF, so it is no UTF-16 character.</exception>
+        /// <exception cref="TypeError">NumPy does not know the character either: NumPy's <c>data type 'u' not understood</c>.</exception>
         /// <exception cref="NotSupportedException">
-        ///     NumPy does not know the character ("data type 'u' not understood"); NumSharp has no such dtype (complex64
-        ///     <c>'F'</c>, void <c>'V'</c>, object <c>'O'</c>); or the dtype has no storage lane yet (datetime64 <c>'M'</c>,
-        ///     timedelta64 <c>'m'</c>).
+        ///     NumSharp has no such dtype (complex64 <c>'F'</c>, void <c>'V'</c>, object <c>'O'</c>), or the dtype has no
+        ///     storage lane yet (datetime64 <c>'M'</c>, timedelta64 <c>'m'</c>).
         /// </exception>
         [DebuggerNonUserCode]
         [MethodImpl(OptimizeAndInline)]

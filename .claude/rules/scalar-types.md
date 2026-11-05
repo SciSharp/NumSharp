@@ -51,8 +51,8 @@ NumPy's scalar-type hierarchy over NumSharp's descriptors (the descriptors thems
   `float`/`double` → `float`, `Complex` → `complex`, `string` → `str`, `byte[]` → `bytes`, `np.MemoryView` →
   `memoryview`; `Half`/`char`/`decimal` are NumPy scalars only). A 0-d array follows NumPy's MROs: a float64 scalar is a
   Python `float`, an int64 one is not an `int`, as in NumPy. Every non-null value (classes too) is an `object`.
-- `np.issubdtype`'s string argument is a DTYPE string, as in NumPy (`dtype(arg).type`): `"integer"` raises
-  `NotSupportedException("data type 'integer' not understood")`, and `issubdtype(np.float32, "float")` is False
+- `np.issubdtype`'s string argument is a DTYPE string, as in NumPy (`dtype(arg).type`): `"integer"` raises NumPy's
+  `TypeError("data type 'integer' not understood")`, and `issubdtype(np.float32, "float")` is False
   (`"float"` is float64). Write the class: `np.issubdtype(x, np.floating)`. A null argument is NumPy's `None` (float64).
   A Python built-in class is read as NumPy's `dtype(cls).type` (`NDScalarType.NumPyClass`: `int` → the pointer-sized
   int64, `float` → float64, `object` → object_, `memoryview` → void), so `issubdtype(float, np.floating)` is True and

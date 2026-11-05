@@ -427,7 +427,7 @@ public class NPTypeHierarchyBattleTest
     {
         np.issubdtype(NPTypeCode.Int32, np.signedinteger).Should().BeTrue();
         np.issubdtype(NPTypeCode.Byte, np.signedinteger).Should().BeFalse();
-        new Action(() => np.issubdtype(NPTypeCode.Int32, "signed")).Should().Throw<NotSupportedException>()
+        new Action(() => np.issubdtype(NPTypeCode.Int32, "signed")).Should().Throw<TypeError>()
             .WithMessage("data type 'signed' not understood");
     }
 

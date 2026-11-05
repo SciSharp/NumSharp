@@ -309,9 +309,10 @@ namespace NumSharp
         ///     beside a <paramref name="type"/>); <c>Type must be a sub-type of ndarray type</c>; the class's finalize error
         ///     (<c>Can only create a chararray from string data.</c>, <c>shape too large to be a matrix.</c>).</exception>
         /// <exception cref="TypeError"><c>Cannot change data-type for array of references.</c> for a dtype that is not the
-        ///     object dtype; <c>Cannot interpret '1' as a data type</c> for a value that names no dtype.</exception>
-        /// <exception cref="NotSupportedException">A dtype string or CLR type NumSharp cannot parse (NumPy's <c>data type
-        ///     'x' not understood</c>); a view as an object matrix, masked array or typed <c>NDArray&lt;T&gt;</c>.</exception>
+        ///     object dtype; <c>Cannot interpret '1' as a data type</c> for a value that names no dtype; NumPy's
+        ///     <c>data type 'x' not understood</c> for a dtype string NumPy cannot parse.</exception>
+        /// <exception cref="NotSupportedException">A dtype string or CLR type naming a dtype NumSharp has no class for; a
+        ///     view as an object matrix, masked array or typed <c>NDArray&lt;T&gt;</c>.</exception>
         /// <exception cref="IncorrectShapeException">A matrix view of more than two axes where one has extent 0.</exception>
         /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
         /// <remarks>
@@ -373,8 +374,9 @@ namespace NumSharp
         /// </summary>
         /// <param name="dtype">The argument (null is NumPy's <c>None</c>, which converts to float64).</param>
         /// <returns>True for the object dtype.</returns>
-        /// <exception cref="NotSupportedException">A string or CLR type NumSharp cannot parse as a dtype.</exception>
-        /// <exception cref="TypeError">A value that names no dtype (<c>Cannot interpret '1' as a data type</c>).</exception>
+        /// <exception cref="NotSupportedException">A string or CLR type naming a dtype NumSharp has no class for.</exception>
+        /// <exception cref="TypeError">A value that names no dtype (<c>Cannot interpret '1' as a data type</c>), or a string
+        ///     NumPy cannot parse (<c>data type 'x' not understood</c>).</exception>
         private static bool IsObjectDescr(object dtype)
         {
             switch (dtype)

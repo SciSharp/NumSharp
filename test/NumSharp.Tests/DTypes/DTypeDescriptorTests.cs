@@ -274,7 +274,7 @@ namespace NumSharp.Tests.DTypes
             // the NumPy-shaped "unequal, never an error" answer is Equals(string) (asserted above). There are deliberately
             // no ==(DType, string) operators: a null literal would bind them and break every `descr == null` check.
             Action viaOperator = () => { bool _ = d == "garbage"; };
-            viaOperator.Should().Throw<NotSupportedException>();
+            viaOperator.Should().Throw<TypeError>().Which.Message.Should().Be("data type 'garbage' not understood");
             DType none = null;
             (none == null).Should().BeTrue();
             (none != null).Should().BeFalse();

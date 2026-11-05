@@ -20,9 +20,9 @@ namespace NumSharp.Tests.Creation
         public void UnknownName_IsNpDtypesRefusal()
         {
             var bytes = new byte[8];
-            ((Action)(() => np.frombuffer(bytes, "bogus"))).Should().Throw<NotSupportedException>()
+            ((Action)(() => np.frombuffer(bytes, "bogus"))).Should().Throw<TypeError>()
                 .WithMessage("data type 'bogus' not understood");
-            ((Action)(() => np.frombuffer(np.zeros(new Shape(1)).data, "bogus"))).Should().Throw<NotSupportedException>()
+            ((Action)(() => np.frombuffer(np.zeros(new Shape(1)).data, "bogus"))).Should().Throw<TypeError>()
                 .WithMessage("data type 'bogus' not understood");
         }
 
@@ -34,7 +34,7 @@ namespace NumSharp.Tests.Creation
         public void EmptyName_IsRefused_NullName_IsTheDefault()
         {
             var bytes = BitConverter.GetBytes(1.5);
-            ((Action)(() => np.frombuffer(bytes, ""))).Should().Throw<NotSupportedException>()
+            ((Action)(() => np.frombuffer(bytes, ""))).Should().Throw<TypeError>()
                 .WithMessage("data type '' not understood");
             using var r = np.frombuffer(bytes, (string)null);
             r.dtype.Should().Be(np.float64);
@@ -47,7 +47,7 @@ namespace NumSharp.Tests.Creation
         [TestMethod]
         public void BangPrefix_IsNotAByteOrder()
         {
-            ((Action)(() => np.frombuffer(new byte[4], "!i4"))).Should().Throw<NotSupportedException>()
+            ((Action)(() => np.frombuffer(new byte[4], "!i4"))).Should().Throw<TypeError>()
                 .WithMessage("data type '!i4' not understood");
         }
 

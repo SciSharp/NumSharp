@@ -745,12 +745,13 @@ namespace NumSharp.Tests.DTypes
                         problems.Add($"{id}: returned {d.ToString(true)}, NumPy raised {type}: {text}");
                         continue;
                     }
-                    // The house rule: a dtype string NumSharp cannot use is a NotSupportedException carrying NumPy's text.
-                    bool notUnderstood = type == "TypeError" && (text.StartsWith("data type ", StringComparison.Ordinal) || text.StartsWith("Alias ", StringComparison.Ordinal));
-                    string expectedType = notUnderstood ? nameof(NotSupportedException) : type;
+                    // NumPy's errors, type and text: a string NumPy rejects is NumPy's TypeError in NumSharp too
+                    // ("data type '…' not understood", "Alias '…' was removed …"), a bad datetime unit its TypeError or
+                    // ValueError. (The long double widths NumPy ACCEPTS on a 16-byte host are checked in the
+                    // LongDoubleClasses branch below.)
                     string actualType = error switch { TypeError => "TypeError", ValueError => "ValueError", _ => error.GetType().Name };
-                    if (actualType != expectedType || error.Message != text)
-                        problems.Add($"{id}: raised {actualType}: {Show(error.Message)}, expected {expectedType}: {Show(text)}");
+                    if (actualType != type || error.Message != text)
+                        problems.Add($"{id}: raised {actualType}: {Show(error.Message)}, expected {type}: {Show(text)}");
                     continue;
                 }
 
@@ -772,8 +773,13 @@ namespace NumSharp.Tests.DTypes
                     if (error != null)
                     {
                         // Linux's long double is 16 bytes: the spellings that name that WIDTH ('f16', 'c32', 'float128',
-                        // 'complex256') have no NumSharp lane.
-                        if (!(error is NotSupportedException && numpySize != own.ItemSize))
+                        // 'complex256') have no NumSharp lane. A host with the same long double refuses them as a NumPy
+                        // dtype NumSharp lacks; a host whose long double is 8 bytes (Apple arm64, replaying the Linux
+                        // records) has no such NumPy dtype and raises NumPy's "not understood".
+                        bool expected = numpySize != own.ItemSize && (DTypeRegistry.CLongDoubleSize * (cls == "LongDoubleDType" ? 1 : 2) == numpySize
+                            ? error is NotSupportedException
+                            : error is TypeError && error.Message.EndsWith(" not understood", StringComparison.Ordinal));
+                        if (!expected)
                             problems.Add($"{id}: raised {ErrorText(error)}, NumPy {numpy.GetProperty("repr").GetString()}");
                         continue;
                     }

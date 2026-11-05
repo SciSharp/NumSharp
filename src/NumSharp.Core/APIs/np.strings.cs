@@ -250,7 +250,10 @@ namespace NumSharp
                 }
                 catch (NotSupportedException)
                 {
-                    // NumPy raises TypeError for a descriptor string it cannot parse.
+                    // np.dtype raises NumPy's TypeError itself for a descriptor string NumPy cannot parse ('U6.0', a width
+                    // past the class limit), so that error passes through this catch unchanged. What lands here is a
+                    // valid NumPy dtype NumSharp has no class for, which the 'U' / 'S' specs built by the callers never
+                    // name; it is reported in NumPy's not-understood words, the error empty_like raises for a bad spec.
                     throw new TypeError($"data type '{spec}' not understood");
                 }
                 // An unsized flexible descriptor ('U0' / 'S0') is width 1 once allocated (NumPy's empty_like).

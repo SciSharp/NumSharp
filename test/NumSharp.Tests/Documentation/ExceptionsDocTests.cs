@@ -86,7 +86,7 @@ namespace NumSharp.Tests.Documentation
             emptyTruth.Should().Throw<ValueError>()
                 .WithMessage("The truth value of an empty array is ambiguous. Use `array.size > 0` to check that an array is not empty.");
             Action dtype = () => np.dtype("xyz");
-            dtype.Should().Throw<NotSupportedException>().WithMessage("data type 'xyz' not understood");
+            dtype.Should().Throw<TypeError>().WithMessage("data type 'xyz' not understood");
             // The table's row: a delegate inside np.evaluate given text (every other node computes on text or raises NumPy's
             // own error; the concatenation of two strings is NumPy's 'ab').
             Action fused = () => np.evaluate(NDExpr.Call((Func<double, double>)System.Math.Abs, np.array(new[] { "a" })));

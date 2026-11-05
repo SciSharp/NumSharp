@@ -203,6 +203,32 @@ namespace NumSharp.Tests.DTypes
                 .WithMessage("casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe' (got \"it's\")");
         }
 
+        /// <summary>
+        ///     <c>array_can_cast_safely</c> converts <c>from_</c> with <c>PyArray_DescrConverter2</c> and then REPLACES the
+        ///     converter's error, while <c>to</c> keeps it (it is converted while the arguments are parsed, so it also comes
+        ///     first). Probed against NumPy 2.4.2: <c>can_cast('garbage', 'f8')</c>, <c>('bool8', 'f8')</c>,
+        ///     <c>('M8[5]', 'f8')</c>, <c>('M8[s/7]', 'M8')</c> and <c>('', 'f8')</c> all raise <c>TypeError: did not
+        ///     understand one of the types; 'None' not accepted</c>; <c>('f8', 'garbage')</c> raises <c>data type 'garbage'
+        ///     not understood</c>, <c>('f8', 'M8[s/7]')</c> the divisor ValueError, <c>('garbage', 'also_bad')</c> the
+        ///     <c>'also_bad'</c> text. A valid NumPy dtype NumSharp lacks (<c>'c8'</c>, NumPy: True) stays NumSharp's
+        ///     NotSupportedException.
+        /// </summary>
+        [TestMethod]
+        public void CanCast_UnparseableFromString_IsNumPysReplacedTypeError()
+        {
+            const string Replaced = "did not understand one of the types; 'None' not accepted";
+            foreach (var from in new[] { "garbage", "bool8", "M8[5]", "" })
+                new Action(() => np.can_cast(from, DType.Double)).Should().Throw<TypeError>(from).Which.Message.Should().Be(Replaced);
+            new Action(() => np.can_cast("M8[s/7]", np.dtype("M8"))).Should().Throw<TypeError>().Which.Message.Should().Be(Replaced);
+
+            new Action(() => np.can_cast("f8", "garbage")).Should().Throw<TypeError>().Which.Message.Should().Be("data type 'garbage' not understood");
+            new Action(() => np.can_cast("f8", "M8[s/7]")).Should().Throw<ValueError>()
+                .WithMessage("divisor (7) is not a multiple of a lower-unit in datetime metadata \"[s/7]\"");
+            new Action(() => np.can_cast("garbage", "also_bad")).Should().Throw<TypeError>().Which.Message.Should().Be("data type 'also_bad' not understood");
+            new Action(() => np.can_cast("c8", DType.Complex)).Should().Throw<NotSupportedException>();
+            np.can_cast("i4", DType.Int64).Should().BeTrue();
+        }
+
         [TestMethod]
         public void MinCastSafety_TakesTheLessSafe()
         {

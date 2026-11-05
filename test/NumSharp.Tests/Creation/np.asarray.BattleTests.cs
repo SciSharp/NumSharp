@@ -84,11 +84,11 @@ public class np_asarray_BattleTests
     }
 
     [TestMethod]
-    public void Asarray_DtypeString_Invalid_ThrowsNotSupported()
+    public void Asarray_DtypeString_Invalid_ThrowsNumPysTypeError()
     {
         var a = np.arange(6);
         Action act = () => np.asarray(a, dtype: "xyz");
-        act.Should().Throw<NotSupportedException>();
+        act.Should().Throw<TypeError>().Which.Message.Should().Be("data type 'xyz' not understood");
     }
 
     [TestMethod]

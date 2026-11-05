@@ -185,9 +185,9 @@ public class NpIsSubdtypeBattleTests
     [TestMethod]
     public void IsSubdtype_FamilyNameString_IsNotADtype()
     {
-        new Action(() => np.issubdtype(NPTypeCode.Int32, "integer")).Should().Throw<NotSupportedException>()
+        new Action(() => np.issubdtype(NPTypeCode.Int32, "integer")).Should().Throw<TypeError>()
             .WithMessage("data type 'integer' not understood");
-        new Action(() => np.issubdtype(NPTypeCode.Int32, "invalid_category")).Should().Throw<NotSupportedException>()
+        new Action(() => np.issubdtype(NPTypeCode.Int32, "invalid_category")).Should().Throw<TypeError>()
             .WithMessage("data type 'invalid_category' not understood");
     }
 

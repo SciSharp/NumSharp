@@ -25,10 +25,12 @@ namespace NumSharp.Tests.Creation
         {
             // NumPy parity: these are not valid dtype strings, NumPy raises TypeError.
             Action act;
-            act = () => np.dtype("?64"); act.Should().Throw<NotSupportedException>();
-            act = () => np.dtype("d8");  act.Should().Throw<NotSupportedException>();
-            act = () => np.dtype("single16"); act.Should().Throw<NotSupportedException>();
-            act = () => np.dtype("f16"); act.Should().Throw<NotSupportedException>();
+            act = () => np.dtype("?64"); act.Should().Throw<TypeError>();
+            act = () => np.dtype("d8");  act.Should().Throw<TypeError>();
+            act = () => np.dtype("single16"); act.Should().Throw<TypeError>();
+            // 'f16' is the host's 16-byte long double on 64-bit Linux (NumPy's float128, which NumSharp lacks).
+            act = () => np.dtype("f16");
+            if (DTypeRegistry.CLongDoubleSize == 16) act.Should().Throw<NotSupportedException>(); else act.Should().Throw<TypeError>();
         }
     }
 }

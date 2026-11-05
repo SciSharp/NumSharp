@@ -78,7 +78,7 @@ Use strings when the dtype is dynamic (from config, JSON, a file header), or to 
 
 ## Dtype String Parsing
 
-NumSharp's `np.dtype(string)` mirrors NumPy 2.x exactly for every form NumSharp has a type for, and throws `NotSupportedException` for forms it doesn't (`V`, `O`, `complex64`, structured dtypes).
+NumSharp's `np.dtype(string)` mirrors NumPy 2.x exactly for every form NumSharp has a type for, throws NumPy's `TypeError` for a string NumPy rejects too, and throws `NotSupportedException` for valid NumPy forms it has no type for (`V`, `O`, `complex64`, structured dtypes).
 
 ### Single-char codes
 
@@ -149,9 +149,12 @@ A single control character below `"\x18"` is a type NUMBER, as in NumPy (`np.dty
 
 Byte-order prefixes (`<`, `>`, `=`, `|`) are parsed, not discarded, before a single-character or sized code. An explicit host order normalizes to native (`np.dtype("<i4")` on a little-endian host); a non-native descriptor keeps its order (`np.dtype(">U5").byteorder == '>'`, `np.dtype(">i4").isnative` is false). Buffer and file readers convert non-native data where required. `S` has no byte order. `StringDType` also has no byte order, and its `newbyteorder` operation raises NumPy's `TypeError`. A NAME takes no prefix, as in NumPy, which looks names up by the whole string: `np.dtype("<float64")` throws `data type '<float64' not understood`, and `np.dtype("<str")` throws the same way.
 
-An invalid string throws `NotSupportedException` with NumPy's text, the string quoted the way Python's `repr` quotes it
-(`data type "a'b" not understood`). A string that NumPy accepts but whose dtype NumSharp has no storage for (complex64,
-void, object) says `is not supported by NumSharp`.
+An invalid string throws NumPy's `TypeError` with NumPy's text, the string quoted the way Python's `repr` quotes it
+(`data type "a'b" not understood`); a removed alias says `Alias 'bool8' was removed in NumPy 2.0. Use a name without a
+digit at the end.` A string that NumPy accepts but whose dtype NumSharp has no storage for (complex64, void, object,
+and the 16-byte long double `f16` / `float128` where the platform has one, as 64-bit Linux does) throws
+`NotSupportedException` saying `is not supported by NumSharp`, so a caller can tell "not a dtype" from "a dtype
+NumSharp lacks".
 
 ---
 
@@ -664,17 +667,18 @@ NumPy 2.x made `int` an alias for `intp` (pointer-sized). NumSharp now follows. 
 
 ## Invalid Dtype Strings
 
-`np.dtype(s)` throws `NotSupportedException` (with a descriptive message) for any string that isn't a valid NumPy dtype:
+`np.dtype(s)` throws NumPy's `TypeError` (`data type 'xyz' not understood`) for any string that isn't a valid NumPy
+dtype:
 
 ```csharp
 np.dtype("xyz");       // throws - not a dtype
-np.dtype("f16");       // throws - f is 2/4/8 bytes only
+np.dtype("f32");       // throws - f is 2/4/8 bytes only (and 16 where the platform's long double is)
 np.dtype("i3");        // throws - i is 1/2/4/8 bytes only
 np.dtype("?1");        // throws - ? is not sized
 np.dtype("   i4");     // throws - no whitespace trimming
 ```
 
-It also throws for NumPy dtypes NumSharp doesn't implement:
+It throws `NotSupportedException` instead for NumPy dtypes NumSharp doesn't implement:
 
 ```csharp
 np.dtype("V7");        // throws - raw void bytes
@@ -766,7 +770,8 @@ On `NDArray` itself the key properties are `.dtype` (a `DType`, NumPy's `ndarray
 
 | Exception | When |
 |-----------|------|
-| `NotSupportedException` | dtype string unrecognized, or NumPy dtype NumSharp doesn't implement (`V`/`O`/`complex64`/…); an array of a descriptor with no storage yet (`M8`, `m8`); the conversion of `np.complex64` / `np.csingle` / `np.object_` / `np.void` to a dtype |
+| `TypeError` | A dtype string NumPy rejects too (`data type 'xyz' not understood`, a removed alias such as `'bool8'`) |
+| `NotSupportedException` | A NumPy dtype NumSharp doesn't implement (`V`/`O`/`complex64`/…); an array of a descriptor with no storage yet (`M8`, `m8`); the conversion of `np.complex64` / `np.csingle` / `np.object_` / `np.void` to a dtype |
 | `StringComputationNotSupportedException` | A delegate node of the expression engine (`NDExpr.Call` inside `np.evaluate`) given a text argument: its parameters are numbers. Every other node computes on text as NumPy does, or raises NumPy's own error |
 | `DTypePromotionError` | No common dtype, such as `StringDType` with a numeric dtype or `S` |
 | `UnicodeEncodeError` / `UnicodeDecodeError` | An invalid encoding conversion, such as non-ASCII `U` → `S` or invalid UTF-8 `S` → `T` |
