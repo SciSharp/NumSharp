@@ -624,7 +624,9 @@ namespace NumSharp.Tests.Backends.Strings
                 for (int trial = 0; trial < 4; trial++)
                 {
                     var ninth = Enumerable.Range(0, n).Select(_ => rng.Next(trial == 0 ? 1 : 3)).ToArray();
-                    var a = U(ninth.Select(v => "aaaaaaaa" + (char)('a' + v)).ToArray()).astype(np.dtype("U9"));
+                    // `using` keeps the array alive while the sorts read its raw address: past its last managed use a
+                    // Release GC may finalize it and free the buffer under them (an access violation under guard pages).
+                    using var a = U(ninth.Select(v => "aaaaaaaa" + (char)('a' + v)).ToArray()).astype(np.dtype("U9"));
                     byte* text = (byte*)a.Storage.Address;
                     var records = new ulong[2 * n];
                     var packed = new ulong[n];
@@ -738,7 +740,9 @@ namespace NumSharp.Tests.Backends.Strings
             foreach (var strings in lines)
             {
                 int n = strings.Length, width = strings.Max(x => x.Length);
-                var a = U(strings).astype(np.dtype("U" + width));
+                // `using` keeps the array alive while the sorts read its raw address: past its last managed use a Release
+                // GC may finalize it and free the buffer under them (an access violation under guard pages, .NET 8).
+                using var a = U(strings).astype(np.dtype("U" + width));
                 byte* text = (byte*)a.Storage.Address;
                 // The 8-bit packing of the first 8 units (every unit here is ASCII): the key kernel's packing.
                 var tailRecords = new ulong[2 * n];
