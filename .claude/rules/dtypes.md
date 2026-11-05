@@ -1,7 +1,7 @@
 ---
 paths:
   - "src/NumSharp.Core/DTypes/**"
-  - "src/NumSharp.Core/Creation/np.dtype.cs"
+  - "src/NumSharp.Core/Creation/np.dtype*.cs"
   - "src/NumSharp.Core/Logic/np.{find_common_type,issubdtype,isdtype,can_cast,result_type,promote_types,type_checks}*.cs"
   - "src/NumSharp.Core/APIs/np.typing.cs"
   - "src/NumSharp.Core/Backends/NPTypeCode.cs"
@@ -143,7 +143,19 @@ lane and reports its own type number, character, scalar type and class (`np.dtyp
 ## `np.dtype(string)`
 
 A port of `_convert_from_str`:
-- a comma string or sub-array is unsupported; the byte-order character is consumed (`'|'` reads native; a non-native
+- a comma string (a top-level comma, a leading digit or a leading `()`) is NumPy's `_commastring` +
+  `_convert_from_tuple` / `_convert_from_list` (`Creation/np.dtype.commastring.cs`): `(type, ())` is the type itself
+  (`'()f8'` is the float64 singleton), a count sizes an unsized class (`'5U'` is a fresh `<U5`, `'2>U'` `>U2`, `'0U'` a
+  fresh `U0`), any other count is a sub-array and several fields a structured dtype, both `NotSupportedException`
+  `NumPy dtype '3f8' (a sub-array dtype) is not supported by NumSharp`. NumPy's errors keep their type, text and ORDER:
+  every field is split and literal-evaluated before any converts, fields convert left to right, and a NumSharp-limit
+  refusal inside (`'F'`, `'O8'`, `'V'`) is deferred, carrying NumPy's item size in `Exception.Data`
+  (`NumPyOnlyDType`), so `'F,xyz'` is the TypeError for `'xyz'` and `'300000000F'` the byte-size ValueError. The repeat
+  group's `ast.literal_eval` is a decision model of CPython 3.12's two parser passes (tokenizer errors first; the
+  "Perhaps you forgot a comma?" hint only inside `(`, and `'(' was never closed` when the second number ends the
+  source), verified against every string of the group's language up to 7 characters; `\s` is `PyUnicode.IsSpace`.
+  NumPy's DeprecationWarning for `'(2)f8,i4'` has no NumSharp channel;
+- the byte-order character is consumed (`'|'` reads native; a non-native
   prefix is KEPT: `np.dtype(">i4")` has `byteorder '>'`, `isnative false`, `str ">i4"`, `repr dtype('>i4')`,
   `isbuiltin 0`); an explicit host byte order is folded into `'='` (`np.dtype("<f8")` is the float64 singleton);
 - datetime typestrs (`M8`, `m8`, `M`, `m`, `datetime64[10ns]`, `timedelta64[s/2]` → `m8[500ms]`, the divisor → multiple
@@ -164,7 +176,8 @@ A port of `_convert_from_str`:
   Use a name without a digit at the end.`, quoted by Python's `repr` (`data type "a'b" not understood`). A valid NumPy
   dtype of a class NumSharp lacks (complex64 / `F` / `csingle`, `V` / `void`, `O` / `object` / `O4` / `O8`, and the C
   long double width where it is not 8 bytes, `DTypeRegistry.CLongDoubleSize`: `f16` / `c32` / `float128` /
-  `complex256` on 64-bit Linux) is a `NotSupportedException` "is not supported by NumSharp". `np.can_cast(str, …)`
+  `complex256` on 64-bit Linux, a sub-array or structured comma string) is a `NotSupportedException` "is not supported
+  by NumSharp", raised only where NumPy returns a dtype. `np.can_cast(str, …)`
   replaces a FROM string's parse error with NumPy's `did not understand one of the types; 'None' not accepted`. The 24
   C# spellings (`Int32`, `Single`, `Decimal`, …) are NumSharp's superset, asserted refused by NumPy.
 - Builtins are singletons (`np.dtype("i8")` is the same object every call, `isbuiltin 1`), and so are the datetime

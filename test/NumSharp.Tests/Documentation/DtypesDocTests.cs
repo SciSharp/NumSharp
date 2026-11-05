@@ -200,9 +200,44 @@ namespace NumSharp.Tests.Documentation
             np.result_type(np.int8, np.int64).Should().Be(np.int64);
         }
 
+        /// <summary>The "Dtype String Parsing" paragraph on comma strings: a field whose NumPy result is a plain dtype parses
+        /// (<c>"()f8"</c>, <c>"5U"</c>, <c>"2&gt;U"</c>, <c>"3S"</c>), a sub-array or structured result throws
+        /// <see cref="NotSupportedException"/> with the quoted text, and NumPy's own errors keep NumPy's type and text -
+        /// the <c>TypeError</c> of <c>"F,xyz"</c> included, although NumSharp has no <c>F</c>.</summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from the page.</exception>
+        [TestMethod]
+        public void DtypeStringParsing_CommaStrings()
+        {
+            np.dtype("()f8").Should().BeSameAs(np.float64);
+            np.dtype("5U").ToString(true).Should().Be("dtype('<U5')");
+            np.dtype("2>U").ToString(true).Should().Be("dtype('>U2')");
+            np.dtype("3S").ToString(true).Should().Be("dtype('S3')");
+
+            Action subArray = () => np.dtype("3f8");
+            subArray.Should().Throw<NotSupportedException>().WithMessage("NumPy dtype '3f8' (a sub-array dtype) is not supported by NumSharp");
+            foreach (var s in new[] { "(2,3)i4", "i4,f8" })
+            {
+                Action refused = () => np.dtype(s);
+                refused.Should().Throw<NotSupportedException>(s);
+            }
+
+            Action wideDim = () => np.dtype("3000000000f8");
+            wideDim.Should().Throw<ValueError>().WithMessage("invalid shape in fixed-type tuple: dimension does not fit into a C int.");
+            Action orders = () => np.dtype("<2>i4");
+            orders.Should().Throw<ValueError>().WithMessage("inconsistent byte-order specification < and >");
+            Action unsized = () => np.dtype("()U");
+            unsized.Should().Throw<ValueError>().WithMessage("invalid itemsize in generic type tuple");
+            Action laterField = () => np.dtype("F,xyz");
+            laterField.Should().Throw<TypeError>().WithMessage("data type 'xyz' not understood");
+            Action leadingZeros = () => np.dtype("01f8");
+            leadingZeros.Should().Throw<SyntaxError>()
+                .Which.Message.Should().Be("leading zeros in decimal integer literals are not permitted; use an 0o prefix for octal integers (<unknown>, line 1)");
+        }
+
         /// <summary>The "Invalid Dtype Strings" snippets: NumPy's invalid strings throw NumPy's <see cref="TypeError"/> with
-        /// NumPy's text, the dtypes NumSharp has no storage for throw <see cref="NotSupportedException"/>, and the
-        /// fixed-width string dtypes parse.</summary>
+        /// NumPy's text, the dtypes NumSharp has no storage for throw <see cref="NotSupportedException"/> (the sub-array and
+        /// structured comma strings included), a comma string NumPy refuses throws NumPy's <see cref="ValueError"/> /
+        /// <see cref="SyntaxError"/>, and the fixed-width string dtypes parse in both spellings.</summary>
         /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from the page.</exception>
         [TestMethod]
         public void InvalidDtypeStrings_Throw()
@@ -217,8 +252,18 @@ namespace NumSharp.Tests.Documentation
                 Action parse = () => np.dtype(name);
                 parse.Should().Throw<NotSupportedException>().WithMessage($"NumPy dtype '{name}' is not supported by NumSharp");
             }
+            Action subArray = () => np.dtype("3f8");
+            subArray.Should().Throw<NotSupportedException>().WithMessage("NumPy dtype '3f8' (a sub-array dtype) is not supported by NumSharp");
+            Action structured = () => np.dtype("i4,f8");
+            structured.Should().Throw<NotSupportedException>().WithMessage("NumPy dtype 'i4,f8' (a structured dtype) is not supported by NumSharp");
+            Action wideDim = () => np.dtype("3000000000f8");
+            wideDim.Should().Throw<ValueError>().WithMessage("invalid shape in fixed-type tuple: dimension does not fit into a C int.");
+            Action notLiteral = () => np.dtype("1 2f8");
+            notLiteral.Should().Throw<SyntaxError>().WithMessage("invalid syntax (<unknown>, line 1)");
             np.dtype("S10").itemsize.Should().Be(10);
             np.dtype("U32").itemsize.Should().Be(128);
+            np.dtype("10S").itemsize.Should().Be(10);
+            np.dtype("32U").itemsize.Should().Be(128);
             Action datetime = () => np.zeros(new Shape(3), np.dtype("M8[s]"));
             datetime.Should().Throw<NotSupportedException>();
         }

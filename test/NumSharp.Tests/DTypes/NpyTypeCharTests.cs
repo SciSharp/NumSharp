@@ -68,9 +68,10 @@ namespace NumSharp.Tests.DTypes
             {
                 NPTypeCode? got;
                 try { got = ((NPY_TYPECHAR)c).ToTypeCode(); }
-                // NumPy's TypeError (a character NumPy does not know) and NumSharp's NotSupportedException (a NumPy
-                // dtype NumSharp has no lane for) are both refusals here; which one is pinned elsewhere.
-                catch (Exception e) when (e is TypeError || e is NotSupportedException) { got = null; }
+                // NumPy's TypeError (a character NumPy does not know), its SyntaxError (',' is a comma string whose
+                // field is no Python literal) and NumSharp's NotSupportedException (a NumPy dtype NumSharp has no lane
+                // for) are all refusals here; which one is pinned elsewhere.
+                catch (Exception e) when (e is TypeError || e is SyntaxError || e is NotSupportedException) { got = null; }
 
                 if (expected.TryGetValue(c, out var want))
                 {

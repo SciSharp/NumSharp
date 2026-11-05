@@ -678,22 +678,18 @@ namespace NumSharp.Tests.DTypes
         /// </summary>
         private static readonly HashSet<string> LongDoubleClasses = new(StringComparer.Ordinal) { "LongDoubleDType", "CLongDoubleDType" };
 
-        /// <summary>The text NumSharp refuses NumPy's comma strings (structured and sub-array dtypes) with.</summary>
-        private const string StructuredRefusal = "NumSharp does not support structured (comma-string / field list) dtypes";
-
         /// <summary>
         ///     Every probed dtype string through <c>np.dtype(str)</c>: the same descriptor as NumPy's (repr, str, byte order,
         ///     isbuiltin, kind, item size, type number and character, the C-name classes NumSharp shares a lane with
-        ///     included) or the same error text, under the house rules:
+        ///     included) or the same error, type and text, under the house rules:
         ///     <list type="bullet">
-        ///       <item><description>NumPy's <c>TypeError</c> "data type … not understood" / "Alias … was removed" is
-        ///       NumSharp's <see cref="NotSupportedException"/> with the same text; every other NumPy error keeps its
-        ///       type.</description></item>
-        ///       <item><description>A valid NumPy dtype of a class NumSharp has no storage for (<see cref="AbsentClasses"/>)
-        ///       raises <see cref="NotSupportedException"/>.</description></item>
-        ///       <item><description>A comma string (structured or sub-array, decided by NumPy's own
-        ///       <c>_check_for_commastring</c>) may raise <see cref="StructuredRefusal"/> whatever NumPy answers — the one
-        ///       representable outcome, <c>'()f8'</c> = float64, included.</description></item>
+        ///       <item><description>Every NumPy error keeps its type and text: <c>TypeError</c> "data type … not understood"
+        ///       / "Alias … was removed", the datetime parser's errors, and the comma-string errors of
+        ///       <c>_commastring</c> / <c>_convert_from_tuple</c> / <c>_convert_from_list</c> (<c>ValueError</c>, and the
+        ///       <c>SyntaxError</c> of <c>ast.literal_eval</c> over a repeat group).</description></item>
+        ///       <item><description>A valid NumPy dtype of a class NumSharp has no storage for (<see cref="AbsentClasses"/>,
+        ///       which takes in every sub-array and structured result of a comma string: their class is
+        ///       <c>VoidDType</c>) raises <see cref="NotSupportedException"/>.</description></item>
         ///       <item><description>NumPy's long double (8 bytes on Windows, 16 on Linux) is NumSharp's own
         ///       <c>LongDoubleDType</c> / <c>CLongDoubleDType</c> class over the 8-byte float64 / complex128 lane under its C
         ///       names (<c>'g'</c>, <c>'longdouble'</c>, the type numbers): equal to NumPy's descriptor where NumPy's is 8 bytes
@@ -709,7 +705,6 @@ namespace NumSharp.Tests.DTypes
             {
                 string id = rec.GetProperty("id").GetString();
                 string spec = rec.GetProperty("spec").GetString();
-                bool commastring = rec.GetProperty("commastring").GetBoolean();
                 var numpy = rec.GetProperty("outcome");
                 bool numpyOk = numpy.GetProperty("ok").GetBoolean();
 
@@ -733,9 +728,6 @@ namespace NumSharp.Tests.DTypes
                     continue;
                 }
 
-                if (commastring && error is NotSupportedException && error.Message == StructuredRefusal)
-                    continue; // the structured / sub-array family NumSharp refuses as a whole
-
                 if (!numpyOk)
                 {
                     string type = numpy.GetProperty("type").GetString();
@@ -747,8 +739,9 @@ namespace NumSharp.Tests.DTypes
                     }
                     // NumPy's errors, type and text: a string NumPy rejects is NumPy's TypeError in NumSharp too
                     // ("data type '…' not understood", "Alias '…' was removed …"), a bad datetime unit its TypeError or
-                    // ValueError. (The long double widths NumPy ACCEPTS on a 16-byte host are checked in the
-                    // LongDoubleClasses branch below.)
+                    // ValueError, a comma string its ValueError or (a repeat group that is no Python literal) SyntaxError -
+                    // also where a field before the failing one names a dtype NumSharp lacks ('F,xyz'). (The long double
+                    // widths NumPy ACCEPTS on a 16-byte host are checked in the LongDoubleClasses branch below.)
                     string actualType = error switch { TypeError => "TypeError", ValueError => "ValueError", _ => error.GetType().Name };
                     if (actualType != type || error.Message != text)
                         problems.Add($"{id}: raised {actualType}: {Show(error.Message)}, expected {type}: {Show(text)}");

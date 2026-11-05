@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 
 namespace NumSharp.Tests.DTypes
 {
@@ -310,7 +311,8 @@ namespace NumSharp.Tests.DTypes
         /// <summary>
         ///     Parentheses outside a comma string are no sub-array to NumPy: <c>'(2)f8'</c>, <c>'( )f8'</c> and
         ///     <c>'f8()'</c> are "not understood". A leading empty tuple, also after a byte-order character, IS a comma
-        ///     string (<c>_check_for_commastring</c>), which NumSharp refuses as structured.
+        ///     string (<c>_check_for_commastring</c>): <c>(type, ())</c> is the type itself, so <c>'()f8'</c> is the float64
+        ///     singleton and <c>'&gt;()i4'</c> a big-endian int32, while <c>'(2,)f8'</c> is a sub-array NumSharp refuses.
         /// </summary>
         [TestMethod]
         public void Parentheses_FollowNumPysCommaStringTest()
@@ -320,11 +322,161 @@ namespace NumSharp.Tests.DTypes
                 Action act = () => np.dtype(s);
                 act.Should().Throw<TypeError>().WithMessage($"data type '{s}' not understood");
             }
-            foreach (var s in new[] { "()f8", "<()f8", "(2,)f8" })
+            np.dtype("()f8").Should().BeSameAs(DType.Double);
+            np.dtype("<()f8").Should().BeSameAs(DType.Double);
+            np.dtype(">()i4").ToString(true).Should().Be("dtype('>i4')");
+            Action subArray = () => np.dtype("(2,)f8");
+            subArray.Should().Throw<NotSupportedException>().WithMessage("NumPy dtype '(2,)f8' (a sub-array dtype) is not supported by NumSharp");
+        }
+
+        /// <summary>
+        ///     NumPy's <c>_convert_from_tuple</c> over a comma string's <c>(dtype, repeats)</c>: a count SIZES an unsized
+        ///     string class (a fresh descriptor, byte order kept), and the texts of every refusal are NumPy's. Values from
+        ///     NumPy 2.4.2.
+        /// </summary>
+        [TestMethod]
+        public void CommaString_RepeatsSizeAnUnsizedStringClass()
+        {
+            var u2 = np.dtype("2U");
+            u2.ToString(true).Should().Be("dtype('<U2')");
+            u2.itemsize.Should().Be(8);
+            u2.isbuiltin.Should().Be(0);
+            np.dtype("2>U").ToString(true).Should().Be("dtype('>U2')");
+            np.dtype(">2U").ToString(true).Should().Be("dtype('>U2')");
+            np.dtype("2S").ToString(true).Should().Be("dtype('S2')");
+            np.dtype("2>S").ToString(true).Should().Be("dtype('S2')");
+            np.dtype("2a").ToString(true).Should().Be("dtype('S2')");
+            // '0U' is a FRESH unsized U (np.dtype('U') is the singleton): NumPy's PyArray_DESCR_REPLACE copies it.
+            var u0 = np.dtype("0U");
+            u0.ToString(true).Should().Be("dtype('<U')");
+            u0.isbuiltin.Should().Be(0);
+            u0.Should().NotBeSameAs(np.dtype("U"));
+            np.dtype("536870911U").itemsize.Should().Be(2147483644);
+            np.dtype("2147483647S").itemsize.Should().Be(int.MaxValue);
+
+            foreach (var s in new[] { "536870912U", "2147483648S", "(1,)U", "()U", "()S", "(2,3)S", "99999999999999999999U", "()V", "(1,)>0f8" })
             {
                 Action act = () => np.dtype(s);
-                act.Should().Throw<NotSupportedException>().WithMessage("NumSharp does not support structured*");
+                act.Should().Throw<ValueError>().WithMessage("invalid itemsize in generic type tuple", s);
             }
+        }
+
+        /// <summary>
+        ///     A comma string's sub-array shape is validated as NumPy validates it before NumSharp refuses the sub-array:
+        ///     C int dimensions, the byte size in a C int (left to right in <c>npy_intp</c>, so a 0 after an overflow comes
+        ///     too late), at most 64 dimensions, and nothing past <c>npy_intp</c>. Texts from NumPy 2.4.2.
+        /// </summary>
+        [TestMethod]
+        public void CommaString_SubArrayShapes_AreCheckedBeforeTheRefusal()
+        {
+            ExpectValueError("3000000000f8", "invalid shape in fixed-type tuple: dimension does not fit into a C int.");
+            ExpectValueError("(0,3000000000)f8", "invalid shape in fixed-type tuple: dimension does not fit into a C int.");
+            ExpectValueError("99999999999999999999f8", "invalid shape in fixed-type tuple.");
+            ExpectValueError("(" + string.Join(",", Enumerable.Repeat("1", 65)) + ")f8", "invalid shape in fixed-type tuple.");
+            ExpectValueError("(65536,65536)f8", "invalid shape in fixed-type tuple: dtype size in bytes must fit into a C int.");
+            ExpectValueError("300000000f8", "invalid shape in fixed-type tuple: dtype size in bytes must fit into a C int.");
+            ExpectValueError("(2147483647,2147483647,2147483647,0)f8", "invalid shape in fixed-type tuple: dtype size in bytes must fit into a C int.");
+            ExpectValueError("134217728T", "invalid shape in fixed-type tuple: dtype size in bytes must fit into a C int.");
+            // A dtype NumSharp lacks still has NumPy's item size: complex64 is 8 bytes.
+            ExpectValueError("300000000F", "invalid shape in fixed-type tuple: dtype size in bytes must fit into a C int.");
+
+            foreach (var s in new[] { "268435455f8", "(2147483647,2,0)f8", "(" + string.Join(",", Enumerable.Repeat("1", 64)) + ")f8", "2T", "2c", "2>3f8", "2,3f8", "2 ,f8" })
+            {
+                Action act = () => np.dtype(s);
+                act.Should().Throw<NotSupportedException>().WithMessage("*(a sub-array dtype) is not supported by NumSharp", s);
+            }
+        }
+
+        /// <summary>
+        ///     The fields of a comma string: NumPy's separator and padding (Python's Unicode whitespace), byte-order merge and
+        ///     field-list texts, and NumPy's ORDER - every field is split and literal-evaluated before any converts, so a
+        ///     SyntaxError in field 3 beats a TypeError in field 1, and a dtype NumSharp lacks in field 1 (<c>'F'</c>) does
+        ///     not hide NumPy's TypeError in field 2.
+        /// </summary>
+        [TestMethod]
+        public void CommaString_Fields_FollowNumPysOrderAndTexts()
+        {
+            foreach (var s in new[] { "i4,f8", "f8, i4", "f8 ,i4", "i4,", "i4,<", "i4, ", "f8, i4", "f8,\x1ci4", "f8,i4　", "U,S", "2f8,i4" })
+            {
+                Action act = () => np.dtype(s);
+                act.Should().Throw<NotSupportedException>().WithMessage("*(a structured dtype) is not supported by NumSharp", s);
+            }
+
+            ExpectValueError("f8,x y", "format number 2 of \"f8,x y\" is not recognized");
+            ExpectValueError("f8,​i4", "format number 2 of \"f8,​i4\" is not recognized");
+            ExpectValueError("()()f8", "format number 1 of \"()()f8\" is not recognized");
+            ExpectValueError("<()>f8", "inconsistent byte-order specification < and >");
+            ExpectValueError(">2=i4", "inconsistent byte-order specification > and <");
+            ExpectValueError("|2=i4", "inconsistent byte-order specification | and <");
+            ExpectValueError("\t,", "Expected at least one field name");
+
+            ExpectTypeError("\t,i4", "data type '' not understood");
+            ExpectTypeError("i4,>", "data type '>' not understood");
+            ExpectTypeError("()", "data type '' not understood");
+            ExpectTypeError("i4,2>3x", "data type '>x' not understood");
+            ExpectTypeError("F,xyz", "data type 'xyz' not understood");
+            ExpectTypeError("2V,xyz", "data type 'xyz' not understood");
+            ExpectTypeError("2M8[s,x]", "Invalid datetime unit in metadata string \"[s,x]\"");
+
+            Action syntaxFirst = () => np.dtype("xyz,f8,,");
+            syntaxFirst.Should().Throw<SyntaxError>().WithMessage("invalid syntax (<unknown>, line 1)");
+            Action unsupportedLast = () => np.dtype("()F");
+            unsupportedLast.Should().Throw<NotSupportedException>().WithMessage("NumPy dtype '()F' is not supported by NumSharp");
+        }
+
+        /// <summary>
+        ///     <c>ast.literal_eval</c> of a comma string's repeat group raises CPython 3.12's SyntaxError texts, with the
+        ///     tokenizer's errors first (leading zeros, an unmatched <c>')'</c>) and the parser's two-pass messages after.
+        ///     The port is checked against every string of the group's language up to 7 characters; these are its cases.
+        /// </summary>
+        [TestMethod]
+        public void CommaString_RepeatGroup_RaisesCPythonsSyntaxErrors()
+        {
+            ExpectSyntaxError("01f8", "leading zeros in decimal integer literals are not permitted; use an 0o prefix for octal integers (<unknown>, line 1)");
+            ExpectSyntaxError("i4,(1 02)f8", "leading zeros in decimal integer literals are not permitted; use an 0o prefix for octal integers (<unknown>, line 1)");
+            ExpectSyntaxError("1 2f8", "invalid syntax (<unknown>, line 1)");
+            ExpectSyntaxError("(,)f8", "invalid syntax (<unknown>, line 1)");
+            ExpectSyntaxError("i4,(1 2)f8", "invalid syntax. Perhaps you forgot a comma? (<unknown>, line 1)");
+            ExpectSyntaxError("i4,(1 2,", "invalid syntax. Perhaps you forgot a comma? (<unknown>, line 1)");
+            ExpectSyntaxError("i4,(1 2", "'(' was never closed (<unknown>, line 1)");
+            ExpectSyntaxError("f8,(1", "'(' was never closed (<unknown>, line 1)");
+            ExpectSyntaxError("i4,)", "unmatched ')' (<unknown>, line 1)");
+            ExpectSyntaxError("i4,< f8", "invalid syntax (<unknown>, line 0)");
+
+            // Valid groups: '00' is the int 0 (only a zero may lead a decimal literal of zeros), spaces separate nothing
+            // ('2 U' is 2), and a trailing comma makes a TUPLE, which no item size reads ('2,U').
+            np.dtype("00U").ToString(true).Should().Be("dtype('<U')");
+            np.dtype("2 U").ToString(true).Should().Be("dtype('<U2')");
+            ExpectValueError("2,U", "invalid itemsize in generic type tuple");
+            // '(2)U' is no comma string at all (neither a leading digit nor '()' nor a comma): NumPy's "not understood".
+            ExpectTypeError("(2)U", "data type '(2)U' not understood");
+        }
+
+        /// <summary>Asserts <c>np.dtype(spec)</c> raises <see cref="ValueError"/> with <paramref name="text"/>.</summary>
+        /// <param name="spec">The dtype string.</param>
+        /// <param name="text">NumPy's message.</param>
+        private static void ExpectValueError(string spec, string text)
+        {
+            Action act = () => np.dtype(spec);
+            act.Should().Throw<ValueError>().Which.Message.Should().Be(text, spec);
+        }
+
+        /// <summary>Asserts <c>np.dtype(spec)</c> raises <see cref="TypeError"/> with <paramref name="text"/>.</summary>
+        /// <param name="spec">The dtype string.</param>
+        /// <param name="text">NumPy's message.</param>
+        private static void ExpectTypeError(string spec, string text)
+        {
+            Action act = () => np.dtype(spec);
+            act.Should().Throw<TypeError>().Which.Message.Should().Be(text, spec);
+        }
+
+        /// <summary>Asserts <c>np.dtype(spec)</c> raises <see cref="SyntaxError"/> with <paramref name="text"/>.</summary>
+        /// <param name="spec">The dtype string.</param>
+        /// <param name="text">CPython's <c>str(e)</c>.</param>
+        private static void ExpectSyntaxError(string spec, string text)
+        {
+            Action act = () => np.dtype(spec);
+            act.Should().Throw<SyntaxError>().Which.Message.Should().Be(text, spec);
         }
 
         /// <summary>

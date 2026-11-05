@@ -630,7 +630,11 @@ namespace NumSharp
         /// </para>
         /// </remarks>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="typeCode"/> is outside 0..0xFFFF, so it is no UTF-16 character.</exception>
-        /// <exception cref="TypeError">NumPy does not know the character either: NumPy's <c>data type 'u' not understood</c>.</exception>
+        /// <exception cref="TypeError">NumPy does not know the character either: NumPy's <c>data type 'u' not understood</c>
+        ///     (a digit too: NumPy reads <c>'3'</c> as a comma string whose one field has no dtype, <c>data type '' not
+        ///     understood</c>).</exception>
+        /// <exception cref="SyntaxError">The comma <c>','</c>: a comma string to NumPy, whose field <c>','</c> is no Python
+        ///     literal (<c>invalid syntax (&lt;unknown&gt;, line 1)</c>, NumPy's own error).</exception>
         /// <exception cref="NotSupportedException">
         ///     NumSharp has no such dtype (complex64 <c>'F'</c>, void <c>'V'</c>, object <c>'O'</c>), or the dtype has no
         ///     storage lane yet (datetime64 <c>'M'</c>, timedelta64 <c>'m'</c>).

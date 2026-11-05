@@ -1,6 +1,6 @@
 # Structured arrays
 
-In NumPy a **structured array** is an `ndarray` whose dtype is a composition of named fields - a C-struct-like record: `np.dtype([('name', 'U10'), ('age', 'i4'), ('weight', 'f4')])`. **NumSharp does not implement structured or record dtypes.** Any dtype string containing a field specification (a `(`) raises `NotSupportedException`, and there is no `recarray` / `record` type.
+In NumPy a **structured array** is an `ndarray` whose dtype is a composition of named fields - a C-struct-like record: `np.dtype([('name', 'U10'), ('age', 'i4'), ('weight', 'f4')])`. **NumSharp does not implement structured or record dtypes.** A dtype string NumPy reads as a structured or sub-array dtype (a comma string such as `"i8, f4, S3"` or `"(2,3)f8"`) raises `NotSupportedException` once NumPy's own checks of it pass, and there is no `recarray` / `record` type.
 
 This page explains why, and gives the .NET-idiomatic replacements for the things structured arrays are used for.
 
@@ -18,6 +18,8 @@ np.dtype("i8, f4, S3");                 // throws NotSupportedException
 np.dtype("3int8, float32");             // throws
 // there is no np.dtype([("x","f4"),("y","i4")]) form at all
 ```
+
+The comma strings whose NumPy result is one plain dtype parse as NumPy parses them: `np.dtype("()f8")` is float64 and `np.dtype("10S")` is `S10`.
 
 The rejection is tested (`test/NumSharp.Tests/Creation/DTypeStringParityTests.cs`) with an explicit throw assertion, and it is deliberate rather than an oversight - a structured dtype pulls in field offsets, alignment/padding rules, titles, sub-array fields, unions, `recarray` attribute access, and multi-field view semantics, none of which have a natural home in NumSharp's single-dtype `NDArray`.
 

@@ -78,7 +78,7 @@ Use strings when the dtype is dynamic (from config, JSON, a file header), or to 
 
 ## Dtype String Parsing
 
-NumSharp's `np.dtype(string)` mirrors NumPy 2.x exactly for every form NumSharp has a type for, throws NumPy's `TypeError` for a string NumPy rejects too, and throws `NotSupportedException` for valid NumPy forms it has no type for (`V`, `O`, `complex64`, structured dtypes).
+NumSharp's `np.dtype(string)` mirrors NumPy 2.x exactly for every form NumSharp has a type for, throws NumPy's `TypeError` for a string NumPy rejects too, and throws `NotSupportedException` for valid NumPy forms it has no type for (`V`, `O`, `complex64`, sub-array and structured dtypes).
 
 ### Single-char codes
 
@@ -155,6 +155,18 @@ digit at the end.` A string that NumPy accepts but whose dtype NumSharp has no s
 and the 16-byte long double `f16` / `float128` where the platform has one, as 64-bit Linux does) throws
 `NotSupportedException` saying `is not supported by NumSharp`, so a caller can tell "not a dtype" from "a dtype
 NumSharp lacks".
+
+A comma string - a top-level comma, a leading digit or a leading `()` - is read the way NumPy's `_commastring` reads
+it: each field is `[byte order][repeat count][byte order]dtype`. A field whose NumPy result is a plain dtype parses:
+`np.dtype("()f8")` is float64 (an empty repeat count is the type itself), and a count sizes an unsized string class,
+so `np.dtype("5U")` is `<U5`, `np.dtype("2>U")` is `>U2` and `np.dtype("3S")` is `S3`. A sub-array (`"3f8"`,
+`"(2,3)i4"`) or a structured dtype (`"i4,f8"`) throws `NotSupportedException` (`NumPy dtype '3f8' (a sub-array
+dtype) is not supported by NumSharp`), and only after NumPy's own errors in the string, which keep NumPy's type and
+text: a `ValueError` such as `invalid shape in fixed-type tuple: dimension does not fit into a C int.`,
+`inconsistent byte-order specification < and >` or `invalid itemsize in generic type tuple` (`"()U"`), a `TypeError`
+for a field NumPy does not understand (`np.dtype("F,xyz")` names `'xyz'`, although NumSharp has no `F`), and a
+`SyntaxError` for a repeat count that is not a Python literal (`np.dtype("01f8")`: `leading zeros in decimal integer
+literals are not permitted; use an 0o prefix for octal integers (<unknown>, line 1)`).
 
 ---
 
@@ -236,8 +248,8 @@ NumPy has several dtype families that NumSharp does not store as arrays. They ar
 | `object` / `O` | `O` | Arbitrary Python-object arrays. Use .NET collections; `NDArray<object>` is not supported. The string split functions return the specialized `NDListArray`, not a general object dtype. |
 | `datetime64` | `M`, `M8[ns]` etc. | The descriptors exist (they parse, print, promote and cast-check with NumPy's unit rules), but arrays of them cannot be allocated yet. Use `DateTime[]` directly, or `long[]` with epoch seconds. |
 | `timedelta64` | `m`, `m8[us]` etc. | Same as `datetime64`: descriptors only. Use `TimeSpan[]` or `long[]`. |
-| Structured / record dtypes | comma strings: `"f8,i4"`, `"3f8"`, `"(2,)f8"` | NumPy allows composite dtypes like `np.dtype([('x', 'f4'), ('y', 'i4')])` for heterogeneous records. NumSharp throws on every string NumPy reads as a comma string (a top-level comma, a leading digit or a leading `()`). Use a struct array or multiple parallel `NDArray`s. |
-| Sub-array dtypes | `('f4', (3,))` | NumPy dtype-with-subshape. Not supported. |
+| Structured / record dtypes | comma strings with several fields: `"f8,i4"`, `"f8,"` | NumPy allows composite dtypes like `np.dtype([('x', 'f4'), ('y', 'i4')])` for heterogeneous records. NumSharp throws on every comma string whose NumPy result is structured, after NumPy's own errors in it. Use a struct array or multiple parallel `NDArray`s. |
+| Sub-array dtypes | `('f4', (3,))`; comma strings with a repeat count: `"3f8"`, `"(2,)f8"` | NumPy dtype-with-subshape. Not supported. A count on an unsized string class is no sub-array: `"5U"` is `<U5`, and `"()f8"` is float64. |
 
 Every row above is tested in `test/NumSharp.Tests/Creation/DTypeStringParityTests.cs` with an `ExpectThrow` assertion. If you run into one of these in ported NumPy code, the exception message tells you which NumSharp alternative to use.
 
@@ -683,9 +695,19 @@ It throws `NotSupportedException` instead for NumPy dtypes NumSharp doesn't impl
 ```csharp
 np.dtype("V7");        // throws - raw void bytes
 np.dtype("object");    // throws - object dtype
+np.dtype("3f8");       // throws - a sub-array of three float64
+np.dtype("i4,f8");     // throws - a structured dtype
 ```
 
-`np.dtype("S10")` and `np.dtype("U32")` are NumPy's fixed-width string dtypes, which NumSharp supports. A `datetime64` descriptor (`np.dtype("M8")`) parses, but `np.zeros(3, np.dtype("M8[s]"))` throws until its storage lands.
+A comma string NumPy refuses throws NumPy's error instead:
+
+```csharp
+np.dtype("3000000000f8");  // ValueError - invalid shape in fixed-type tuple: dimension does not fit into a C int.
+np.dtype("1 2f8");         // SyntaxError - invalid syntax (<unknown>, line 1)
+```
+
+`np.dtype("S10")` and `np.dtype("U32")` are NumPy's fixed-width string dtypes, which NumSharp supports, and so are
+their comma-string spellings `np.dtype("10S")` and `np.dtype("32U")`. A `datetime64` descriptor (`np.dtype("M8")`) parses, but `np.zeros(3, np.dtype("M8[s]"))` throws until its storage lands.
 
 This is strict on purpose: silently accepting "close enough" dtype strings produces hard-to-debug corruption downstream.
 
@@ -771,7 +793,8 @@ On `NDArray` itself the key properties are `.dtype` (a `DType`, NumPy's `ndarray
 | Exception | When |
 |-----------|------|
 | `TypeError` | A dtype string NumPy rejects too (`data type 'xyz' not understood`, a removed alias such as `'bool8'`) |
-| `NotSupportedException` | A NumPy dtype NumSharp doesn't implement (`V`/`O`/`complex64`/…); an array of a descriptor with no storage yet (`M8`, `m8`); the conversion of `np.complex64` / `np.csingle` / `np.object_` / `np.void` to a dtype |
+| `ValueError` / `SyntaxError` | A comma string NumPy refuses (`invalid shape in fixed-type tuple.`, `format number 2 of "f8,x y" is not recognized`; a repeat count that is not a Python literal) |
+| `NotSupportedException` | A NumPy dtype NumSharp doesn't implement (`V`/`O`/`complex64`/…, a sub-array or structured comma string); an array of a descriptor with no storage yet (`M8`, `m8`); the conversion of `np.complex64` / `np.csingle` / `np.object_` / `np.void` to a dtype |
 | `StringComputationNotSupportedException` | A delegate node of the expression engine (`NDExpr.Call` inside `np.evaluate`) given a text argument: its parameters are numbers. Every other node computes on text as NumPy does, or raises NumPy's own error |
 | `DTypePromotionError` | No common dtype, such as `StringDType` with a numeric dtype or `S` |
 | `UnicodeEncodeError` / `UnicodeDecodeError` | An invalid encoding conversion, such as non-ASCII `U` → `S` or invalid UTF-8 `S` → `T` |

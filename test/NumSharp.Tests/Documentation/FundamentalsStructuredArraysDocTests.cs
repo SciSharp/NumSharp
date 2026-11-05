@@ -16,11 +16,16 @@ namespace NumSharp.Tests.Documentation
     {
         // ── Not supported: structured dtype strings throw ──────────────────────────────────────────
 
+        /// <summary>The "Not supported" snippets: the structured comma strings throw, while the comma strings whose NumPy result
+        /// is one plain dtype parse (<c>"()f8"</c> is float64, <c>"10S"</c> is <c>S10</c>).</summary>
         [TestMethod]
         public void StructuredDtypeStrings_Throw()
         {
             ((Action)(() => np.dtype("i8, f4, S3"))).Should().Throw<NotSupportedException>();
             ((Action)(() => np.dtype("3int8, float32"))).Should().Throw<NotSupportedException>();
+            ((Action)(() => np.dtype("(2,3)f8"))).Should().Throw<NotSupportedException>();
+            np.dtype("()f8").Should().BeSameAs(np.float64);
+            np.dtype("10S").ToString(true).Should().Be("dtype('S10')");
         }
 
         // ── Replacement 1: parallel NDArrays (struct-of-arrays) ────────────────────────────────────

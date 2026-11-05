@@ -35,10 +35,12 @@ Record kinds (field "kind"):
   parse    one dtype STRING through np.dtype(str) — every sctypeDict name, every character below 128 (a control
            character is a type number to PyArray_DescrFromType), each of them behind each byte-order prefix (a name is
            looked up by the WHOLE string, so '<float64' is not understood while '<f8' is a byte order), kind + size
-           grids, strtol whitespace, parentheses / comma strings, quoting, and NumSharp's own C# aliases. The outcome:
-           the descriptor's attributes, its class and whether that class is the canonical one of its width, or the
-           exception type and str(e); plus whether NumPy reads the string as a comma string (_check_for_commastring,
-           over the UTF-8 bytes as NumPy does), the structured / sub-array family NumSharp refuses.
+           grids, strtol whitespace, parentheses, quoting, NumSharp's own C# aliases and the comma strings of
+           COMMA_EXTRA (each branch and text of _commastring / _convert_from_tuple / _convert_from_list, the repeat
+           group's ast.literal_eval SyntaxErrors). The outcome: the descriptor's attributes, its class (VoidDType for a
+           sub-array or structured result) and whether that class is the canonical one of its width, or the exception
+           type and str(e); plus whether NumPy reads the string as a comma string (_check_for_commastring, over the
+           UTF-8 bytes as NumPy does).
 
 Recipes (field "recipe") build a descriptor step by step, and the C# replay has a twin of each step:
   ["dtype", spec, kw]      np.dtype(spec, **kw)      (kw may hold align / copy / metadata)
@@ -612,6 +614,48 @@ PARSE_EXTRA = ["cdouble", "datetime", "timedelta", "float96", "float128", "compl
                "M8[ns,", "<M8[ns]x", "M8[generic]", "datetime64[]", "M8[]", "f+8", "f-0", "i 4", "u08"]
 
 
+# Comma strings (numpy._core._internal._commastring + descriptor.c's _convert_from_tuple / _convert_from_list), appended
+# after the grids so the records before them keep their order. They cover each branch NumPy takes and each of its texts:
+# (type, ()) is the type itself; a count sizes an unsized S / U / V; a sub-array's shape checks (C int dimensions, the
+# byte size, NPY_MAXDIMS, npy_intp); the byte-order merge; the field list (a trailing empty field dropped, "Expected at
+# least one field name"); Python's whitespace around separators; ast.literal_eval's SyntaxErrors over the repeat group;
+# and the order of errors - every field is split and literal-evaluated before any converts, the fields convert left to
+# right, and a dtype NumSharp lacks ('F', 'O', 'V') must not hide NumPy's error in a later field.
+COMMA_EXTRA = [
+    # (type, ()) -> the type itself
+    "()U5", ">()U5", "()S3", "()c", "()M8[s]", "()m8", "()M", "()b1", "()T", "()?", "()int8", "()e", "()g", "()G",
+    "()float64", "()complex128", "()datetime64[ns]", "|()f8", "=()f8", "()f8 ", "<()=f8", ">()>f8", "()F", "()c8",
+    "()O", "()V8", "()f16", "()c32", "()float128",
+    # a count sizes an unsized class
+    "2U", "0U", "2>U", ">2U", "(2)U", "2S", "0S", "2a", "2>S", "536870911U", "536870912U", "2147483647S",
+    "2147483648S", "(1,)U", "()U", "()S", "( )U", "(2,3)S", "99999999999999999999U", "2V", "0V", "()V", "(1,)V",
+    "2,U", "2 U",
+    # sub-array shapes and their checks
+    "2c", "2T", "(2,)T", "2O", "2M8[s]", "3000000000f8", "99999999999999999999f8", "(65536,65536)f8", "300000000f8",
+    "268435455f8", "(0,3000000000)f8", "(2147483647,2147483647,2147483647,0)f8", "(2147483647,2,0)f8",
+    "(0,2147483647,2147483647,2147483647)f8", "(0,)f8", "2>3f8", "2>0f8", "(1,)>0f8", "()>0f8",
+    "(" + ",".join(["1"] * 64) + ")f8", "(" + ",".join(["1"] * 65) + ")f8", "300000000F", "268435456O", "134217728T",
+    "134217727T", "(2,3)i4", "2i4", "(1,)f8", "( 2 ,)f8", "(1,2,)f8", "2 ,f8", "2 f8", "2f8 ", "2,3f8", "2, 3f8",
+    "2,f8", "2,,f8", "2f16", "2c32",
+    # the byte-order merge
+    "<2>i4", ">2=i4", "|2>i4", "=2<i4", "<2<i4", "|2|i4", ">2|i4", "=2=i4", "|2=i4", "<2=i4", ">2>i4",
+    # field lists
+    "i4,<", "i4,>", "i4,|", "i4,=", "\t,", "\t,i4", "<\t,", ">\t,", "xyz,f8,,", "f8,(1", "i4, ", "i4 ,f8", "M8[s],i4",
+    "f8,x y", "1,2", "f8, i4", "f8 ,i4", "f8,\xa0i4", "f8 ,i4", "f8,i4　", "f8,\x1ci4", "f8,\x85i4",
+    "f8,​i4", "f8,᠎i4", "i4,f8,xyz", "i4,2>3x", "2f8,i4", "i4,(2,)f8", "f8,,", ",", "U,S", "2U,3S", "i4,",
+    "f8,i4,", "2,", "F,xyz", "O,xyz", "V,(1", "2V,xyz", "c8,1 2", "<<3f8,i4", "i4,<<3f8", "i4,>>3f8", "f8,i4[2]",
+    "M8[s,],i4", "i4,M8[s", "i4,M8[s]", "f8,i4\n", "f8,i4 \t", "i4\t,f8",
+    # ast.literal_eval of the repeat group (CPython 3.12's SyntaxError texts)
+    "01f8", "1 2f8", "(,)f8", "1,,2f8", "i4,(1 2)f8", "i4,(1 2", "i4,(1 2,", "i4,(01", "i4,(1,)", "i4,)", "i4, )",
+    "i4, (", "i4,()", "i4,( )", "i4,(,)", "i4,1 2", "i4,(1 2 3)f8", "i4,(1, 2 3)f8", "i4,(1 02)f8", "i4,(1 2)03f8",
+    "i4, 3 ", "i4,< f8", "< f8,i4", "i4,0 01", "i4,(0 0", "i4,00f8", "i4,(0 0)", "i4,0 0", "i4,(1,2", "i4,(1,2,",
+    "i4,1, 2,", "i4,(1,,2)",
+    # neither: the ordinary grammar's errors
+    "[2]f8", "2[s]", "2f8[s]", "2.5f8", "2?", "2e", "2M8[s,x]", "2>3f8[,]", "<>3f8", "(3)", " 2f8", "M8[s,]",
+    "<  2f8", "(1 2)f8",
+]
+
+
 def is_commastring(s):
     """NumPy's _check_for_commastring over the UTF-8 bytes _convert_from_str reads: a leading digit (after an optional
     byte-order character), a leading empty tuple (likewise), or a comma outside square brackets."""
@@ -658,6 +702,8 @@ def parse_specs():
         for size in [0, 1, 2, 3, 4, 8, 10, 12, 16, 20, 24, 32]:
             add(f"{kind}{size}")
             add(f">{kind}{size}")
+    for s in COMMA_EXTRA:
+        add(s)
     return specs
 
 
