@@ -25,7 +25,9 @@ namespace NumSharp
         ///     A tuple <c>(Mantissa, Exponent)</c>: the mantissa in the promoted float dtype, and the
         ///     <b>int32</b> exponent (NumPy's exponent is always int32, regardless of the mantissa width) — or the
         ///     supplied <paramref name="out1"/>/<paramref name="out2"/>. Both have the shape of <paramref name="x"/>;
-        ///     an F-contiguous input yields F-contiguous outputs. Each is a 0-d scalar when <paramref name="x"/> is a scalar.
+        ///     fresh outputs take NumPy's layout (a two-output ufunc's iterator allocates them in the input's memory
+        ///     order: an F-contiguous input yields F-contiguous outputs, a transposed one keeps its axis order). Each is
+        ///     a 0-d scalar when <paramref name="x"/> is a scalar.
         /// </returns>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.frexp.html
@@ -37,13 +39,14 @@ namespace NumSharp
         /// </remarks>
         [NDScoped]
         public static (NDArray Mantissa, NDArray Exponent) frexp(NDArray x, NDArray out1 = null, NDArray out2 = null, NDArray where = null)
-            // The engine returns C-contiguous outputs (or the supplied out1/out2); PreserveFContig (shared with
-            // np.modf) relabels a fresh result column-major when the input was F-contiguous — but ONLY when no out
-            // was supplied (a caller's out array owns its own layout), matching NumPy's layout propagation.
+            // The engine returns C-contiguous outputs (or the supplied out1/out2); TwoOutputsInNumPyLayout (shared with
+            // np.modf) computes fresh outputs in NumPy's K order — but ONLY when no out was supplied (a caller's out
+            // array owns its own layout), matching NumPy's layout propagation.
             => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: both outputs come back as matrices, as from NumPy
                 ? NDMatrixBoundary.WrappedPair((x, out1, out2, where), static s => frexp(s.x, s.out1, s.out2, s.where), out1, out2)
                 : (out1 is null && out2 is null)
-                ? PreserveFContig(x, x.TensorEngine.Frexp(x, null, null, where))
+                ? TwoOutputsInNumPyLayout(x, where, 0,
+                    static (xv, wv, _) => xv.TensorEngine.Frexp(xv, null, null, wv))
                 : x.TensorEngine.Frexp(x, out1, out2, where);
     }
 }

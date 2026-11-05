@@ -1249,21 +1249,21 @@ def gen_text(em):
 # engine's N-D route converts both operands to the result dtype and calls that dtype's dot function once per output
 # element, as NumPy's PyArray_MatrixProduct2 does, so a complex128 product keeps its imaginary parts. Its rule is
 # dropped and its 3 cases were moved back into matrix.jsonl as they were.
+#
+# MX02 (np.cumsum / np.cumprod result layout), MX04 (ndarray.round of a broadcast operand) and MX05 (np.conjugate of a
+# transposed strided or reversed complex128 view, through matrix.H) were fixed 2026-11-05 by the ufunc result-layout
+# port: every fresh elementwise result takes NumPy's layout (try_trivial_single_output_loop's C / F allocation, NpyIter's
+# K order otherwise), the accumulate allocates in the order its iterator votes over the ORIGINAL operand (a bool
+# operand's int64 copy included), and np.round's complex path is the rint ufunc into a K-order result. Their rules are
+# dropped and their 43 cases were moved back into matrix.jsonl as they were, at the positions the generator gave them.
+# The same replay found MX09 (complex128 matrix.prod over a reversed view: the sign of a zero part) matching NumPy too,
+# values and memory facet; its rule is dropped and its 4 cases were moved back the same way.
 GAPS = {
     "MX01": "a[:, index_array]: NumPy returns its transposed MapIter view (F-contiguous for two axes); NumSharp's "
             "fancy getter returns a C-ordered array. Values equal. Library-wide (OpenBugs.FancyIndex.cs).",
-    "MX02": "np.cumsum / np.cumprod result layout for an operand that is not C-contiguous: NumPy's accumulate "
-            "allocates in the operand's order (F for an F or transposed operand), NumSharp in C order; a "
-            "broadcast bool operand goes the other way. Values equal.",
-    "MX04": "ndarray.round of a broadcast (stride-0) operand: the result layout differs (NumPy's KEEPORDER copy "
-            "/ PyArray_Empty(ISFORTRAN) against NumSharp's). Values equal.",
-    "MX05": "np.conjugate of a transposed strided or reversed complex128 view: NumPy's ufunc keeps the operand's "
-            "K order, NumSharp writes C order. Reached through matrix.H. Values equal.",
     "MX07": "fancy assignment with two index entries into a C-contiguous view at a non-zero offset "
             "(a[rows, cols] = v, a[:, cols] = v) throws IndexOutOfRangeException: the offsets include the view's "
             "offset and the bound does not. The offset-view class of the array-object oracle.",
-    "MX09": "complex128 np.prod over a reversed view: the sign of a zero part differs (NumPy's npy_cmul visiting "
-            "order). The complex Prod gap of the reductions tier.",
 }
 
 
@@ -1309,31 +1309,12 @@ def _gap_of(case):
         if len(index) == 2 and any(_is_advanced(e) for e in index) and not all(_is_advanced(e) for e in index):
             return "MX01"
 
-    if not raises and p.get("axis") in (0, 1):
-        if op == "matrix.cumprod" and layout in ("f", "t"):
-            return "MX02"
-        if op == "matrix.cumsum" and layout == "bcast" and dt == "bool":
-            return "MX02"
-
-    if op == "matrix.round" and layout == "bcast" and not raises:
-        decimals = p.get("decimals", 0)
-        if (dt == "complex128" and decimals == 0) or (dt == "float64" and decimals in (-1, 1)) \
-                or (dt == "int64" and decimals == -1):
-            return "MX04"
-
-    if op in ("matrix.H", "matrix.getH") and layout in ("rev", "step") and dt == "complex128":
-        return "MX05"
-
     if op == "matrix.__setitem__" and layout.startswith("off:") and not raises:
         # Only the assignments NumPy accepts reach the scatter that computes the offsets; a value NumPy refuses is
         # refused by NumSharp first, with the same text. An integer FIRST entry takes another route that is right.
         index = p.get("index") or []
         if len(index) == 2 and any(_is_advanced(e) for e in index) and not isinstance(index[0], int):
             return "MX07"
-
-    if op == "matrix.prod":
-        if layout.startswith("rev:") and dt == "complex128":
-            return "MX09"
 
     return None
 

@@ -42,6 +42,26 @@ namespace NumSharp.Backends
                 _ => SincEpsFloat64,
             };
 
+            // NumPy's sinc is four ufunc calls (pi * x, np.where, sin, /), so its result has the ufunc layout of x: plain C
+            // or F for a contiguous x (the last calls take the trivial loop), the iterator's K order otherwise (a permuted x
+            // stays permuted, a broadcast one is C). The fused pass writes C order, so a non-C layout runs it over x viewed
+            // in that layout's axis order and relabels the result (no copy).
+            if (TryUnaryNonCLayout(x, inputCast: false, out var layout))
+                return ComputeInLayout(x, layout, (Engine: this, Eps: eps), static (xv, s) => s.Engine.SincFused(xv, s.Eps));
+            return SincFused(x, eps);
+        }
+
+        /// <summary>
+        ///     The fused sinc pass: <c>sin(y) / y</c> with <c>y = where(pi * x != 0, pi * x, eps)</c>, one np.evaluate
+        ///     program, read once and written once in C order.
+        /// </summary>
+        /// <param name="x">The operand (a numeric array; text was refused by the caller).</param>
+        /// <param name="eps">NumPy's substitute for a zero <c>pi * x</c>: <c>finfo(dtype(pi * x)).eps</c> for a float
+        ///     result, 1e-20 otherwise.</param>
+        /// <returns>A fresh array of <c>dtype(pi * x)</c>, C-ordered (np.evaluate's layout for a C-ordered or strided
+        ///     operand).</returns>
+        private NDArray SincFused(NDArray x, double eps)
+        {
             // Build the fused tree in NumPy's exact order. `(NDExpr)x` wraps the array
             // as a leaf (no copy); `* Math.PI` and the eps/0.0 scalars are ConstNodes
             // (raw doubles downcast to the output precision on emit — the NEP 50

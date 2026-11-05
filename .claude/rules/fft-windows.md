@@ -29,7 +29,8 @@ has no operand to choose another) and keep the cephes `BesselI0` port behind kai
   `0.42+0.5·cos(πn/(M-1))+0.08·cos(2πn/(M-1))`; kaiser `i0(β·√(1-((n-α)/α)²))/i0(β)` with `α = (M-1)/2` and `i0` the cephes
   Chebyshev routine (`_i0_1`/`_i0_2`/`_chbevl`, the internal `np.BesselI0` scalar helper), which the public `np.i0` runs
   too (`TensorEngine.I0`, `Backends/Default/Math/Default.I0.cs`, one cephes kernel per float width; facade
-  `Math/np.i0.cs`). kaiser's member applies np.i0's float64 kernel delegate (`np._i0Double`) per element in its fused pass
+  `Math/np.i0.cs`); its result has the ufunc layout of `x` (NumPy's `piecewise` fills `zeros_like(abs(x))`), the fused
+  pass run over `x` in that layout's axis order and relabelled. kaiser's member applies np.i0's float64 kernel delegate (`np._i0Double`) per element in its fused pass
   and takes `i0(beta)` from the engine's own `I0` (NumPy's statement `i0(float(beta))`).
 - Bit-identical to NumPy 2.4.2: the transform is one `np.evaluate` fused expression in NumPy's exact operation order (so
   `(π·n)/(M-1)` rounds the same two steps), float64 add/sub/mul/div are IEEE-exact, and float64 `cos` is the `ucrtbase`

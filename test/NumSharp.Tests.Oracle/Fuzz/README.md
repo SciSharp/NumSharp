@@ -993,8 +993,8 @@ rather than portable IEEE parity — the same status as the "Host-dependent valu
 | `gen_varstd` and `gen_nanvarstd` section B, "pinned row longer than the buffer" | 12 cells each: var/std (nanvar/nanstd) with `dtype=` (a cast loop) along the axis that is innermost in memory, `c_contiguous_2d` (8, 25) along axis 1 under `np.setbufsize(16)`. NumPy splits each 25-element row across two buffer fills; np.sum's cast-loop axis route sums it in one pairwise call (9 of the 12 differ by 1 ULP). An np.sum residual both sums of `_var` and of `nanvar` inherit (plan `docs/plans/api-parameter-parity.md` X6) | `OpenBugsReductionTests.Sum_CastLoopAxis_RowLongerThanTheBuffer_SplitsAcrossFills` |
 | `gen_mean_loops` section B, "pinned row longer than the buffer" | 5 cells: a cast-loop np.mean along the axis innermost in memory under `np.setbufsize(16 / 32)`, rows longer than the buffer, unless order-free (np.sum's X6 residual, as in the varstd tiers) | `OpenBugsReductionTests.Sum_CastLoopAxis_RowLongerThanTheBuffer_SplitsAcrossFills` |
 | `gen_nanmean` section B, "pinned row longer than the buffer" | 5 cells: an inexact nanmean with `dtype=` (a cast loop) along the axis innermost in memory under `np.setbufsize(16 / 32)`, rows longer than the buffer (np.sum's X6 residual over the K-order copy) | `OpenBugsReductionTests.Sum_CastLoopAxis_RowLongerThanTheBuffer_SplitsAcrossFills` |
-| `gen_viewflags_oracle._gap_of` (view_flags / out_flags / shape_args / array_args) | 430 cells under 28 gap ids since VF30 (np.nansum / np.nanprod reading an offset view from its owner's start) was fixed on 2026-11-05 (parity QA-15); 438 under 29 since VF17 (np.broadcast_arrays of a read-only operand) was fixed on 2026-11-04; 444 cells under 30 gap ids since VO01 (np.linalg.multi_dot copying into an out= np.dot refuses) was fixed on 2026-10-26; 448 under 31 since VF27 (np.matvec / np.vecmat returning views) and VF01's np.matmul case were fixed the same day; 461 under 32 since VA01 (np.searchsorted's offset keys and sorter) was fixed on 2026-10-25; 465 under 33 after the numpy.char phase 2 of 2026-10-15 (VF31 and VF26's getfield part fixed); 474 under 34 after the strings rebase of 2026-10-12 (VF03, VF05, VF11, VF18, VF23-VF25, VF28, VF33, VF35, VF39 and VF40 fixed; VF01, VF08, VF12, VF26 and VF32 narrowed); 705 cells under 46 gap ids before it (VF15, np.asmatrix returning its operand, was fixed with NDMatrix on 2026-10-09), written to `corpus/gaps/<tier>_gaps.jsonl` instead of the gate: the returned object's flags / strides / view-copy-identity facet where NumSharp differs (the other VF ids, VS01, VA02, VA04; VO01 is fixed), and silent WRONG VALUES from C-contiguous views at a non-zero offset (VA03 where, VA05 ldexp, VF22 a[:, idx] throws; VA01 searchsorted, VF30 nansum / nanprod, VF39 repeat and VF40 unique + the set routines are fixed). The carve is exact: replayed uncarved, every carved cell diverges and no kept cell does | `FuzzCorpusTests` `*_KnownGaps` (per-gap open counts), `OpenBugs.ViewFlags.cs` (18 public-call repros, 7 of them still open; a fixed gap's pin stays untagged) |
-| `gen_relayout_oracle._gap_of` (relayout / relayout_host) | 20 cells under 2 gap ids since RL01 was fixed on 2026-10-25 (35 under 3 after RL07 was fixed on 2026-10-24; 75 under 4 after the strings rebase of 2026-10-12 fixed RL04, RL05 and RL06; 179 under 7 at delivery), written to `corpus/gaps/relayout_gaps.jsonl`: the C-contiguous-offset misreads RL01 (searchsorted, digitize, complex / float16 isin; fixed), RL02 (where, float16 / complex nancumsum / nancumprod), RL03 (ldexp), RL04 (unique, unique_values, the set routines; fixed), RL05 (repeat of a 0-d offset view; fixed), and the empty-operand early returns RL06 (comparison operators; fixed) and RL07 (logaddexp / logaddexp2; fixed). Drawn by emulating each bug (the misread window, the early return), so the carve is exact; also DROPPED (not carved): ufunc / where variants whose answer depends on NEP50's weak 0-d promotion (the registry's NEP50 branches document that divergence in every other tier), and the flat np.mean of a broadcast float operand that is not order-free (the mean_loops tier owns that residual) | `FuzzCorpusTests.Relayout_KnownGaps` (both verdicts), `OpenBugs.Relayout.cs` (8 public-call repros, 3 of them still open) |
+| `gen_viewflags_oracle._gap_of` (view_flags / out_flags / shape_args / array_args) | 350 cells under 17 gap ids since the ufunc result-layout port of 2026-11-05 fixed VF06, VF07, VF09, VF10, VF12, VF14, VF32, VF34, VF38, VA03, VA05 and VF08's np.median half (VF08 narrowed to np.nanmedian); 430 under 28 since VF30 (np.nansum / np.nanprod reading an offset view from its owner's start) was fixed on 2026-11-05 (parity QA-15); 438 under 29 since VF17 (np.broadcast_arrays of a read-only operand) was fixed on 2026-11-04; 444 cells under 30 gap ids since VO01 (np.linalg.multi_dot copying into an out= np.dot refuses) was fixed on 2026-10-26; 448 under 31 since VF27 (np.matvec / np.vecmat returning views) and VF01's np.matmul case were fixed the same day; 461 under 32 since VA01 (np.searchsorted's offset keys and sorter) was fixed on 2026-10-25; 465 under 33 after the numpy.char phase 2 of 2026-10-15 (VF31 and VF26's getfield part fixed); 474 under 34 after the strings rebase of 2026-10-12 (VF03, VF05, VF11, VF18, VF23-VF25, VF28, VF33, VF35, VF39 and VF40 fixed; VF01, VF08, VF12, VF26 and VF32 narrowed); 705 cells under 46 gap ids before it (VF15, np.asmatrix returning its operand, was fixed with NDMatrix on 2026-10-09), written to `corpus/gaps/<tier>_gaps.jsonl` instead of the gate: the returned object's flags / strides / view-copy-identity facet where NumSharp differs (the other VF ids, VS01, VA02, VA04; VO01 is fixed), and silent WRONG VALUES from C-contiguous views at a non-zero offset (VF22 a[:, idx] throws; VA01 searchsorted, VA03 where, VA05 ldexp, VF30 nansum / nanprod, VF39 repeat and VF40 unique + the set routines are fixed). The carve is exact: replayed uncarved, every carved cell diverges and no kept cell does | `FuzzCorpusTests` `*_KnownGaps` (per-gap open counts), `OpenBugs.ViewFlags.cs` (18 public-call repros, 7 of them still open; a fixed gap's pin stays untagged) |
+| `gen_relayout_oracle._gap_of` (relayout / relayout_host) | no cell since the ufunc result-layout port of 2026-11-05 fixed RL02 and RL03 (20 cells under 2 gap ids after RL01 was fixed on 2026-10-25; 35 under 3 after RL07 was fixed on 2026-10-24; 75 under 4 after the strings rebase of 2026-10-12 fixed RL04, RL05 and RL06; 179 under 7 at delivery), written to `corpus/gaps/relayout_gaps.jsonl`: the C-contiguous-offset misreads RL01 (searchsorted, digitize, complex / float16 isin; fixed), RL02 (where, float16 / complex nancumsum / nancumprod; fixed), RL03 (ldexp; fixed), RL04 (unique, unique_values, the set routines; fixed), RL05 (repeat of a 0-d offset view; fixed), and the empty-operand early returns RL06 (comparison operators; fixed) and RL07 (logaddexp / logaddexp2; fixed). Drawn by emulating each bug (the misread window, the early return), so the carve is exact; also DROPPED (not carved): ufunc / where variants whose answer depends on NEP50's weak 0-d promotion (the registry's NEP50 branches document that divergence in every other tier), and the flat np.mean of a broadcast float operand that is not order-free (the mean_loops tier owns that residual) | `FuzzCorpusTests.Relayout_KnownGaps` (both verdicts), `OpenBugs.Relayout.cs` (8 public-call repros, all untagged regression pins) |
 | `gen_surface_oracle._gap_of` (surface) | 192 cells under 14 gap ids since the strings rebase of 2026-10-12 fixed SU1, SU25-SU34, SU40, SU41, SU42 and SU4's 'auto' / 'fd', SU17 (dtype.newbyteorder's explicit byte order) was fixed on 2026-10-14 and the port of NumPy's dragon4.c fixed SU6-SU9, SU18 and SU19 on 2026-10-18 (SU5 found fixed by 287c3e2e the same day; 986 cells under 42 ids before), and the scan accumulator cast fixed SU38 on 2026-10-24 (the same regeneration found SU39 fixed by f44c9579), and np.linalg.cross as np.cross fixed SU2 on 2026-10-26 (the same regeneration found SU3 and SU4 fixed by 98ea7bcf, np.histogram's complex statements), and the merge of journey4 fixed SU35 on 2026-10-31 (the dtype name 'cdouble', read by the whole string as NumPy's typeDict; its finfo.minexp cell is SU12's), written to `corpus/gaps/surface_gaps.jsonl`: error texts and refusals (SU10, SU11, SU15, SU16, SU22), silent wrong values (SU12-SU14 finfo, SU20 broadcast.iters), reporting (SU21, SU23, SU24) and the cumulative_* aliases (SU36 / SU37). Drawn by fixed predicates and models where a bug is not a fixed set (the edgeitems=0 format from the last element), so the carve is exact: replayed uncarved, every carved cell diverges and no kept cell does | `FuzzCorpusTests.Surface_KnownGaps`, `OpenBugs.Surface.cs` (36 public-call repros, 23 of them untagged regression pins) |
 | `gen_ma_surface_oracle._gap_of` (ma_surface) | 6,960 cells under 20 gap ids since the strings rebase of 2026-10-12 fixed MS3, MS6-MS14, MS16, MS25, MS28, MS35 and MS2's column_stack / dstack / diagflat (10,123 cells under 37 ids before; the two set_fill_value / common_fill_value models went with MS12 / MS13), written to `corpus/gaps/ma_surface_gaps.jsonl`: the result FORM (MS1 an all-False result mask dropped to nomask, MS2 the _fromnxfunction wrappers' full mask, MS3 the *_like mask, MS4 a 0-d resize, MS5 apply_over_axes' plain ndarray, MS9 masked_object's kept all-False mask), silent wrong values (MS7 / MS12 / MS13 fill values never converted, MS11 / MS31 unsafe casts in putmask and the hard-masked setitem, MS14 the bool extremum fills, MS17 is_mask, MS34 corrcoef's masked-slot data, MS36 ids of a strided / reversed view, MS37 cov / corrcoef with a 1-D y under rowvar=False), crashes and refusals (MS15, MS26, MS33, MS35; MS22 found fixed by 32bfa4a7, np.frombuffer as NumPy's PyArray_FromBuffer, when the gaps were regenerated after the journey4 merge of 2026-10-31), NumPy's refusals and texts (MS6, MS8, MS21, MS23, MS24, MS25, MS27, MS28, MS30, MS32) and the API shape (MS10, MS16, MS18, MS19, MS20, MS29). Drawn by fixed predicates and two models (NumSharp's raw fill values for set_fill_value / common_fill_value; which ids views re-seat the storage address), so the carve is exact: replayed uncarved, every carved cell diverges and no kept cell does | `FuzzCorpusTests.MaSurface_KnownGaps`, `OpenBugs.MaSurface.cs` (30 public-call repros, 1 of them an untagged regression pin) |
 | `gen_ma_oracle.gen_ma_setops` (`ma_setops`), "tie order" | 221 cases (at generation): numpy.ma arraysetops whose NumPy answer depends on its unstable quicksort's order among equal keys that are not interchangeable (a masked slot tied with an unmasked value equal to the fill key — NaN, the dtype maximum, True for bool — or ±0 / NaN payloads among unmasked values). NumPy's own answer is host-dependent there (x86-simd-sort AVX2 vs AVX-512 networks); NumSharp's sort is stable | inherent, no pin (`ma_setops_reference.py` marks each case SENSITIVE; the generator stops on a drop that is not) |
@@ -1816,6 +1816,15 @@ dropped) and narrowed VF01 (no longer `np.unravel_index` of a 0-d), VF08 (np.med
 The replay of the gap files named the matching cases (231 moved back into the gates); the redrawn carve is exact again.
 The list below is the one found at delivery.
 
+**Redrawn 2026-11-05, again** (17 ids and 350 carved cells since): the ufunc result-layout port (parity QA-36) gives
+every fresh elementwise result NumPy's layout (`try_trivial_single_output_loop`'s C / F allocation, NpyIter's K order
+otherwise) and makes it writeable, and the functions built on it follow (np.array's K-order copy, the scans' accumulate
+order, np.diff, np.round, np.nan_to_num, np.tril / np.triu, np.median's mean), while np.where and np.ldexp read every
+operand from its view's offset. VF06, VF07, VF09, VF10, VF12, VF14, VF32, VF34, VF38, VA03 and VA05 match NumPy; VF08
+keeps only np.nanmedian (numpy.ma's median chain, and MaskedArray.filled's `_data` view, which is VF26's ownership
+class). Their rules are dropped (VF08's narrowed) and their 80 cases (76 `view_flags`, 4 `array_args`) moved back into
+the tiers the same way; `OpenBugs.ViewFlags.cs`'s VA03, VA05 and VF14 pins are untagged.
+
 **Redrawn 2026-11-05** (28 ids and 430 carved cells since): np.nansum / np.nanprod are NumPy's statements (np.sum /
 np.prod of `_replace_nan`'s copy, parity QA-15), and their one-element shortcut reads a view from its offset, so VF30
 matches NumPy. Its rule is dropped and its 8 `view_flags` cases moved back into the tier the same way;
@@ -1867,7 +1876,8 @@ regenerated; `OpenBugs.ViewFlags.cs`'s two searchsorted pins are untagged.
   keys' families are labelled `op:fn`).
 
 `NumSharp.Tests/OpenBugs.ViewFlags.cs` reproduces the value, read-only and order findings through public calls (18
-tests, NumPy 2.4.2 literals; 5 of them are untagged regression pins since the strings rebase fixed their gaps).
+tests, NumPy 2.4.2 literals; 14 of them are untagged regression pins since their gaps were fixed, four of them by the
+ufunc result-layout port of 2026-11-05).
 
 **Portability.** Every cell must hold on Windows, Linux and macOS. The out= rows of the libm-backed loops take an
 all-zero input: on -1..3, win-amd64 NumPy's `arccosh(2)`, `expm1(1)`, `cbrt(2)` and `logaddexp(-1, 0)` are not
@@ -1909,10 +1919,10 @@ NumSharp a `byte[]`).
 
 | File | Cases | Replayed by |
 |---|---|---|
-| `relayout.jsonl` | 15,117 variants of 297 op keys from 40 portable tiers (14,964 until the 104 RL04-RL06 cases returned on 2026-10-12, 15,068 until RL07's 40 returned on 2026-10-24, 15,123 until the regeneration of 2026-10-27, which dropped the broadcast-mean rule and met the source tiers changed since 2026-10-25: 43 variants added, 49 cells retired because their own tiers cover them now) | `FuzzCorpusTests.Relayout` (the source tiers' rules) |
+| `relayout.jsonl` | 15,137 variants of 297 op keys from 40 portable tiers (15,117 until RL02 and RL03's 20 returned on 2026-11-05; 14,964 until the 104 RL04-RL06 cases returned on 2026-10-12, 15,068 until RL07's 40 returned on 2026-10-24, 15,123 until the regeneration of 2026-10-27, which dropped the broadcast-mean rule and met the source tiers changed since 2026-10-25: 43 variants added, 49 cells retired because their own tiers cover them now) | `FuzzCorpusTests.Relayout` (the source tiers' rules) |
 | `relayout_host.jsonl` | 1,728 variants of the host-libm tiers | `FuzzCorpusTests.RelayoutHost` (`RunHostLibmCorpus`) |
 | both | 16,785 compared, 60 skipped (16,632 at delivery) | `FuzzCorpusTests.RelayoutLayoutInvariance` (no excuse table) |
-| `gaps/relayout_gaps.jsonl` | 20 carved under 2 ids, RL02 and RL03 (179 under 7 until 2026-10-12, 75 under 4 until 2026-10-24, 35 under 3 until RL01 was fixed on 2026-10-25) | `Relayout_KnownGaps` (`[OpenBugs]`) |
+| `gaps/relayout_gaps.jsonl` | empty since RL02 and RL03 were fixed on 2026-11-05 (179 under 7 until 2026-10-12, 75 under 4 until 2026-10-24, 35 under 3 until RL01 was fixed on 2026-10-25, 20 under 2 until then) | `Relayout_KnownGaps` (`[OpenBugs]`) |
 
 **Two validation holes closed.** (1) A variant inherits its source tier's excuses, and an unbounded excuse swallows a
 layout misread as readily as the divergence it was written for: the "[known bug]" `repeat` branch excused five 0-d
@@ -1947,6 +1957,12 @@ its own step.
 plan's P2), so RL01 matches NumPy, np.digitize's `x` and np.isin's complex / float16 element included (both reach the
 kernel through np.searchsorted). Its rule is dropped and its 15 cases moved back the same way (20 carved cells under
 RL02 and RL03 left); `OpenBugs.Relayout.cs`'s two RL01 pins are untagged.
+
+**Redrawn 2026-11-05:** with the ufunc result-layout port, np.where reads its condition, `x` and `y` from a view's
+offset (its all-0-d route too), np.nancumsum / np.nancumprod replace their NaNs as NumPy's `_replace_nan` does (a K-order
+copy, then `np.copyto(where=isnan)`), and np.ldexp's operand materialization copies a C-contiguous view at a non-zero
+offset, so RL02 and RL03 match NumPy. Their rules are dropped and their 20 cases moved back the same way: no relayout
+gap is open, and `OpenBugs.Relayout.cs`'s last three pins are untagged.
 
 **What it found** (7 ids, 179 carved cells, every one confirmed through a public call in
 `NumSharp.Tests/OpenBugs.Relayout.cs`, 8 tests with NumPy 2.4.2 literals):
@@ -2234,19 +2250,19 @@ member or an `np.*` function that `NDMatrix` delegates to:
 | Gap | Cells | What differs |
 |---|---|---|
 | MX01 | 56 | `a[:, index_array]`: NumPy returns its transposed MapIter view (F-contiguous); NumSharp a C-ordered array |
-| MX02 | 36 | `np.cumsum` / `np.cumprod` result layout for an F, transposed or broadcast-bool operand |
+| MX02 | 36 | `np.cumsum` / `np.cumprod` result layout for an F, transposed or broadcast-bool operand; fixed by the ufunc result-layout port (2026-11-05) |
 | MX03 | 15 | `ndarray.imag` of a real F-contiguous array is C-ordered (NumPy: Fortran order); fixed by `012ac869` |
-| MX04 | 5 | `ndarray.round` of a broadcast operand: result layout |
-| MX05 | 2 | `np.conjugate` of a transposed strided / reversed complex128 view writes C order (reached through `m.H`) |
+| MX04 | 5 | `ndarray.round` of a broadcast operand: result layout; fixed by the ufunc result-layout port (2026-11-05) |
+| MX05 | 2 | `np.conjugate` of a transposed strided / reversed complex128 view writes C order (reached through `m.H`); fixed by the ufunc result-layout port (2026-11-05) |
 | MX06 | 16 | `reshape` with -1 on a broadcast view throws NotSupportedException |
 | MX07 | 8 | a two-entry fancy assignment into a C-contiguous view at an offset throws IndexOutOfRangeException |
 | MX08 | 15 | `np.prod` in a cast loop: flat `dtype=bool` throws, flat complex128 / float16 loops return NaN or garbage; fixed by `d84021b8` |
-| MX09 | 4 | complex128 `np.prod` over a reversed view: the sign of a zero part |
+| MX09 | 4 | complex128 `np.prod` over a reversed view: the sign of a zero part; found matching NumPy by the replay of 2026-11-05 |
 | MX10 | 3 | `np.dot` of an N-D operand with an M-D one computes in float64: complex128 loses its imaginary parts; fixed by np-layer-dtype-logic P2 (2026-10-26) |
 | MX11 | 12 | `np.repeat` of a C-contiguous view at an offset reads from the parent's start |
 
-Seven of them had repros through public calls in `NumSharp.Tests/OpenBugs.Matrix.cs` (four open since MX03, MX08 and
-MX10 were fixed: MX02, MX04, MX05, MX07); MX01, MX06, MX09 and MX11 are pinned by older files (`OpenBugs.FancyIndex.cs`, `OpenBugs.ViewFlags.cs` VF24 / VF39, `OpenBugs.Reductions.cs`).
+Seven of them had repros through public calls in `NumSharp.Tests/OpenBugs.Matrix.cs` (one open since MX02, MX03, MX04,
+MX05, MX08 and MX10 were fixed: MX07); MX01, MX06, MX09 and MX11 are pinned by older files (`OpenBugs.FancyIndex.cs`, `OpenBugs.ViewFlags.cs` VF24 / VF39, `OpenBugs.Reductions.cs`).
 
 **Redrawn 2026-10-12, when branch strings was rebased onto journey4:** MX06 and MX11 match NumPy (strings fixed the
 reshape of a broadcast view and np.repeat of an offset view, VF24 / VF39 with them); their rules are dropped and their 28
@@ -2261,6 +2277,13 @@ MX09, MX10).
 the result dtype and calls that dtype's dot function once per output element, as `PyArray_MatrixProduct2` does); its
 rule is dropped and its 3 cases are in the gate (26,822 gate cases, 111 carved under 6 ids: MX01, MX02, MX04, MX05,
 MX07, MX09). Its pin moved from `OpenBugs.Matrix.cs` to `LinearAlgebra/np.dot.Test.cs`.
+
+**Redrawn 2026-11-05:** MX02, MX04 and MX05 match NumPy since the ufunc result-layout port (every fresh elementwise
+result takes NumPy's layout, the accumulate allocates in its iterator's order over the ORIGINAL operand, a bool
+operand's int64 copy included, and np.round's complex path is the rint ufunc into a K-order result), and the same
+replay found MX09 matching too; their rules are dropped and their 47 cases are in the gate at the positions the
+generator gave them (26,869 gate cases, 64 carved under 2 ids: MX01, MX07). The MX02, MX04 and MX05 pins in
+`OpenBugs.Matrix.cs` are untagged regression tests.
 
 **Generator rules worth keeping**: `argsort` is called with `kind="stable"` (NumPy's default sort orders equal elements
 by its SIMD kernel, NumSharp's argsort is always stable); the exact-inverse cases (`I`, negative powers) use diagonal

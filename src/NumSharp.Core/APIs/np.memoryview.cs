@@ -112,19 +112,56 @@ namespace NumSharp
             }
 
             /// <summary>
-            ///     Strides in BYTES (NumPy's <c>memoryview.strides</c>). NumSharp stores strides in
-            ///     ELEMENTS, so each is scaled by <see cref="itemsize"/> here — a broadcast axis keeps its
-            ///     <c>0</c> stride, a reversed view its negative stride. A fresh array per read.
+            ///     Strides in BYTES (NumPy's <c>memoryview.strides</c>), as NumPy's buffer export writes them
+            ///     (<c>_buffer_info_new</c> in <c>buffer.c</c>): a C-contiguous array reports the C strides of its
+            ///     shape, an F-contiguous one (not also C) the F strides of its shape, any other array its own
+            ///     strides scaled from NumSharp's elements to bytes. A fresh array per read.
             /// </summary>
+            /// <remarks>
+            ///     The recomputation is what callers see on two kinds of array, where the memoryview's strides are
+            ///     NOT the array's <c>strides</c>: a zero-size array NumPy allocated (all-zero strides, while
+            ///     <c>np.empty((0, 3)).data.strides</c> is <c>(24, 8)</c> and <c>np.zeros((2, 0, 3)).data.strides</c>
+            ///     <c>(0, 24, 8)</c>: the zero extents are multiplied in) and a contiguous array whose extent-1 axis
+            ///     carries an arbitrary stride (contiguity ignores it; the export reports the canonical one). An
+            ///     empty F array is also C-contiguous, so it reports C strides, as NumPy's <c>memoryview(a)</c>
+            ///     request (<c>PyBUF_FULL_RO</c>, no <c>PyBUF_F_CONTIGUOUS</c>) does. A broadcast axis keeps its
+            ///     <c>0</c> stride and a reversed view its negative stride (neither array is contiguous).
+            /// </remarks>
             public long[] strides
             {
                 get
                 {
+                    var dims = _arr.Shape.dimensions;
                     var st = _arr.Shape.strides;
                     long isz = _arr.dtypesize;
                     var ret = new long[st.Length];
-                    for (int i = 0; i < st.Length; i++)
-                        ret[i] = st[i] * isz;
+                    if (_arr.Shape.IsContiguous)
+                    {
+                        // NumPy's first branch: the C strides of the shape, innermost first, each extent
+                        // multiplied in (a zero extent zeroes every stride outside it).
+                        long sd = isz;
+                        for (int i = ret.Length - 1; i >= 0; i--)
+                        {
+                            ret[i] = sd;
+                            sd *= dims[i];
+                        }
+                    }
+                    else if (_arr.Shape.IsFContiguous)
+                    {
+                        // The F twin, outermost first: reached only by an array that is F- and not C-contiguous.
+                        long sd = isz;
+                        for (int i = 0; i < ret.Length; i++)
+                        {
+                            ret[i] = sd;
+                            sd *= dims[i];
+                        }
+                    }
+                    else
+                    {
+                        for (int i = 0; i < st.Length; i++)
+                            ret[i] = st[i] * isz;
+                    }
+
                     return ret;
                 }
             }

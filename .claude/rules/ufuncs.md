@@ -55,6 +55,16 @@ Supported on the binary ufuncs `add`/`subtract`/`multiply`/`divide`/`true_divide
   (`WhereResultShape`: F operands under an F mask give an F result). The ufuncs that handle `out=` themselves (`ldexp`,
   `divmod`, `modf`, `frexp`) keep their own texts and order (divmod's follows NumPy's two-output call: The divmod
   family).
+- A fresh result's layout is NumPy's, for every elementwise ufunc and operator (`Shape.UfuncOutputShape`, decided in
+  `DefaultEngine.UfuncResultLayout.cs`, `kernels.md`): `try_trivial_single_output_loop`'s allocation when the call
+  qualifies (inputs of one shape, every input of two or more dimensions C- or F-contiguous with the same flag pair as
+  the first, none of them cast or unaligned, no mask, one output: F when that pair is F-only, else C; 0-d inputs and
+  1-D inputs never fix the order), else NpyIter's K order (`Shape.NpyIterOutputShape`: an axis of extent 1, a missing
+  axis or a stride-0 axis abstains; operands are sorted by |stride|, C wins a conflict; an allocated output never
+  flips a negative stride). The two allocators differ only in the strides of extent-1 axes. The two-output ufuncs
+  (`divmod`, `modf`, `frexp`) always take the iterator's layout; a zero-size result has all-zero strides; the result is
+  always writeable (`np.positive` of a read-only or broadcast operand included). Gates: the `ufunc` family of the
+  layout-parity corpus (`Backends/LayoutParityOracleTests.cs`), `Backends/UfuncResultLayoutTests.cs`.
 - NEP 50's weak operand is the Python scalar alone: in C# the 0-d array a number literal becomes through the implicit
   conversion (`NDArray.WasPythonLiteral`: the integer primitives, `float`, `double`, `Complex`; the `object` operator
   overloads mark a boxed number the same way, `NDArray.OperatorOperand`). It adopts the other operand's dtype, an array or
@@ -165,9 +175,10 @@ NumPy's Python int (`type(min) is int`); every other bound is strong — an elem
   (`CGE` / `CLE`: a tie keeps x, any NaN propagates), which a ONE-bound complex clip runs, as NumPy routes it. Two-bound
   callers pass `clipSelection: true` to `EmitScalarClamp` (`ComplexClipMax` / `ComplexClipMin`): the flat kernel's
   scalar loop, the iterator body and `NDExpr.Clip`'s two clip-half nodes.
-- Result layout: a fresh result takes NumPy's ufunc output layout (`Shape.NpyIterOutputShape`: the operands' memory
-  order, the mask votes, C wins ties); a dense F or permuted input is clipped as a C run and relabelled
-  (`NDArray.AdoptLayout`).
+- Result layout: a fresh result takes NumPy's ufunc output layout (`Shape.UfuncOutputShape`, `ClipResultLayout`): the
+  trivial loop's plain C or F when there is no mask and no input of two or more dimensions is cast or unaligned, else
+  NpyIter's order (the operands' memory order, the mask votes, C wins ties); a dense F or permuted input is clipped as a
+  C run and relabelled (`NDArray.AdoptLayout`). The no-bound route is positive's own result (`IdentityLoopResult`).
 - Two execution routes (`Backends/Default/Math/Default.ClipNDArray{,.Iter,.ConstLoop}.cs`): the FLAT route (no `where=`,
   every operand one dense run after the layout permutation, no harmful overlap) runs the whole-array kernel
   (`DirectILKernelGenerator.Clip.cs`: an output-alignment peel, then aligned stores; past 16 MiB out of place,

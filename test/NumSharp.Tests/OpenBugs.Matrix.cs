@@ -20,7 +20,7 @@ namespace NumSharp.Tests
     //
     //   * A crash: fancy assignment with two index entries into a C-contiguous view at an offset (MX07).
     //   * Result LAYOUT (values equal): np.cumsum / np.cumprod (MX02), ndarray.round of a broadcast operand (MX04),
-    //     np.conjugate of a transposed strided view (MX05).
+    //     np.conjugate of a transposed strided view (MX05) were, and are fixed (below).
     //
     // FIXED 2026-10-15 (the numpy.char phase-2 work): ndarray.imag of a real F array is F-ordered (MX03); its pin stays
     // below as a regression test, untagged, its summary opening with "FIXED".
@@ -28,6 +28,13 @@ namespace NumSharp.Tests
     // FIXED 2026-10-24 (the np-layer dtype plan's P1d): np.prod in a cast loop casts the input first (MX08: the flat form
     // read a narrower input as its float16 / complex128 loop, past the end of the buffer). Its pin moved to
     // Math/np.prod.CastLoop.Test.cs with the probes of the fix, and the gap's cases are back in matrix.jsonl.
+    //
+    // FIXED 2026-11-05 (the ufunc result-layout port, parity QA-36): np.cumsum / np.cumprod allocate in the accumulate
+    // iterator's K order (MX02), a complex ndarray.round writes PyArray_Round's order='K' copy layout (MX04), and every
+    // fresh ufunc result takes NumPy's layout, np.conjugate's included (MX05). Their pins stay below as regression tests,
+    // untagged, each summary opening with "FIXED"; the generator's rules for MX02, MX04 and MX05 are dropped and their
+    // cases are back in matrix.jsonl. The same replay found MX09 (complex128 np.prod over a reversed view) matching NumPy;
+    // its rule is dropped too.
     //
     // FIXED 2026-10-26 (the np-layer dtype plan's P2): np.dot of an N-D operand with an M-D one calls the result dtype's
     // dot function once per output element (MX10: the route computed every dtype in float64, so a complex128 product
@@ -65,11 +72,13 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>np.cumprod(a, 0)</c> of an F-contiguous (2, 3) int64 array: NumPy's accumulate allocates the
-        ///     result in the operand's order (F-contiguous, strides (8, 16)). NumSharp returns a C-ordered array
-        ///     (gap MX02). The values are equal.
+        ///     FIXED by the ufunc result-layout port (2026-11-05: the scans allocate in the accumulate iterator's K order,
+        ///     Default.Reduction.CumAdd.cs AccumulateResultLayout): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     <c>np.cumprod(a, 0)</c> of an F-contiguous (2, 3) int64 array: NumPy's accumulate allocates the result in the
+        ///     operand's order (F-contiguous, strides (8, 16)). Before the fix NumSharp returned a C-ordered array (gap
+        ///     MX02). The values are equal.
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "matrix-MX02")]
+        [TestMethod]
         public void Matrix_Cumprod_OfAnFOrderedOperand_ShouldKeepTheOrder()
         {
             using var c = np.arange(1, 7).reshape(2, 3);
@@ -100,11 +109,13 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>a.round()</c> of a complex128 array broadcast from one row to (3, 2): NumPy rounds a KEEPORDER
-        ///     copy, which is F-contiguous for a row broadcast (the stride-0 axis is innermost). NumSharp returns a
-        ///     C-ordered array (gap MX04). The values are equal.
+        ///     FIXED by the ufunc result-layout port (2026-11-05: a complex round writes PyArray_Round's order='K' copy
+        ///     layout, Default.Round.cs): NumSharp gives NumPy's answer now, and this test pins it. <c>a.round()</c> of a
+        ///     complex128 array broadcast from one row to (3, 2): NumPy rounds a KEEPORDER copy, which is F-contiguous for a
+        ///     row broadcast (the stride-0 axis is innermost). Before the fix NumSharp returned a C-ordered array (gap MX04).
+        ///     The values are equal.
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "matrix-MX04")]
+        [TestMethod]
         public void Matrix_RoundOfABroadcastComplexOperand_ShouldKeepTheOrder()
         {
             using var row = np.array(new[] { new Complex(1.5, 2.5), new Complex(2.5, -0.5) });
@@ -117,11 +128,13 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>np.conjugate(v)</c> where <c>v</c> is the transpose of a stepped (2, 3) view of a (4, 6)
-        ///     complex128 array: NumPy's ufunc output keeps the operand's memory order (F-contiguous, strides
-        ///     (16, 48)). NumSharp writes C order (gap MX05, reached through <c>matrix.H</c>). The values are equal.
+        ///     FIXED by the ufunc result-layout port (2026-11-05: every fresh ufunc result takes NumPy's layout,
+        ///     DefaultEngine.UfuncResultLayout.cs): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     <c>np.conjugate(v)</c> where <c>v</c> is the transpose of a stepped (2, 3) view of a (4, 6) complex128 array:
+        ///     NumPy's ufunc output keeps the operand's memory order (F-contiguous, strides (16, 48)). Before the fix
+        ///     NumSharp wrote C order (gap MX05, reached through <c>matrix.H</c>). The values are equal.
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "matrix-MX05")]
+        [TestMethod]
         public void Matrix_ConjugateOfATransposedSteppedView_ShouldKeepTheOrder()
         {
             using var owner = np.arange(24).reshape(4, 6).astype(np.complex128) * new Complex(1, 1);

@@ -40,14 +40,115 @@ namespace NumSharp.Backends
                 return ExecuteComparisonScalarScalar(lhs, rhs, op);
             }
 
+            // -------- NumPy's result layout ----------------------------------
+            // A fresh bool result takes the layout NumPy allocates (DefaultEngine.UfuncResultLayout.cs): F for an F pair,
+            // a transposed operand's own axis order, C where NumPy's iterator votes C. The loop reads the comparison dtype,
+            // so an input of another dtype is a cast (refusing NumPy's trivial loop for an N-D input) — except int64
+            // against uint64, which NumPy compares with exact loops of their own (qQ / Qq). The routes below write C.
+            // Two C-contiguous (or 0-d) operands are C on both of NumPy's routes, so the common call skips the
+            // comparison-dtype lookup the cast flags need.
+            if (!((lhs.Shape.IsContiguous || lhs.ndim == 0) && (rhs.Shape.IsContiguous || rhs.ndim == 0)))
+            {
+                var comparisonType = ComparisonKernelKey.GetComparisonType(lhsType, rhsType);
+                bool exactPair = (lhsType == NPTypeCode.Int64 && rhsType == NPTypeCode.UInt64)
+                                 || (lhsType == NPTypeCode.UInt64 && rhsType == NPTypeCode.Int64);
+                if (TryBinaryNonCLayout(lhs, rhs, !exactPair && lhsType != comparisonType,
+                                        !exactPair && rhsType != comparisonType, out var layout))
+                    return ExecuteComparisonOpInLayout(lhs, rhs, op, lhsType, rhsType, layout);
+            }
+            return ExecuteComparisonOpCOrder(lhs, rhs, op, lhsType, rhsType);
+        }
+
+        /// <summary>
+        ///     A fresh comparison result in a layout NumPy allocates that is not C order (see
+        ///     <c>DefaultEngine.UfuncResultLayout.cs</c>).
+        /// </summary>
+        /// <param name="lhs">The first operand.</param>
+        /// <param name="rhs">The second operand.</param>
+        /// <param name="op">The comparison.</param>
+        /// <param name="lhsType">The first operand's dtype.</param>
+        /// <param name="rhsType">The second operand's dtype.</param>
+        /// <param name="layout">The layout to produce: dense, offset 0, not C-contiguous.</param>
+        /// <returns>A fresh bool array laid out as <paramref name="layout"/>.</returns>
+        /// <exception cref="NotSupportedException">No kernel exists for the dtypes (raised by the C routes).</exception>
+        /// <remarks>
+        ///     Operands stored exactly as the layout stores the result (an F pair, a dense transposed pair, either beside a
+        ///     one-element operand) run the comparison run or the whole-array kernel straight into the layout, of any two
+        ///     dtypes, as the C-ordered trivial loop does. Anything else runs the C routes over the operands viewed in the
+        ///     layout's memory order and relabels the C result
+        ///     (<see cref="ComputeInLayout{TState}(NDArray, NDArray, in Shape, TState, Func{NDArray, NDArray, TState, NDArray})"/>).
+        /// </remarks>
+        private unsafe NDArray<bool> ExecuteComparisonOpInLayout(NDArray lhs, NDArray rhs, ComparisonOp op,
+                                                                 NPTypeCode lhsType, NPTypeCode rhsType, Shape layout)
+        {
+            int nd = layout.NDim;
+            // A one-element operand of no higher rank than the result is read once; a non-C layout has at least two
+            // elements, so at most one operand can be such a scalar.
+            bool lhsScalar = lhs.Shape.size == 1 && lhs.ndim <= nd;
+            bool rhsScalar = rhs.Shape.size == 1 && rhs.ndim <= nd;
+            bool linear = rhsScalar ? IsLinearInLayout(lhs, layout)
+                        : lhsScalar ? IsLinearInLayout(rhs, layout)
+                        : IsLinearInLayout(lhs, layout) && IsLinearInLayout(rhs, layout);
+            if (linear)
+            {
+                var path = rhsScalar ? ExecutionPath.SimdScalarRight
+                         : lhsScalar ? ExecutionPath.SimdScalarLeft
+                         : ExecutionPath.SimdFull;
+                var ran = TryRunTrivialComparison(lhs, rhs, op, lhsType, rhsType, path, lhsScalar, rhsScalar, layout);
+                if (ran is not null)
+                    return ran;
+            }
+
+            var r = ComputeInLayout(lhs, rhs, layout, (Engine: this, op, lhsType, rhsType),
+                static (a, b, s) => (NDArray)s.Engine.ExecuteComparisonOpCOrder(a, b, s.op, s.lhsType, s.rhsType));
+            return AsBoolResult(r);
+        }
+
+        /// <summary>
+        ///     Types a relabelled comparison result as <see cref="NDArray{T}"/> of bool: the relabel returns the kernel's
+        ///     own <c>NDArray&lt;bool&gt;</c> instance; its copying fallback a plain array, wrapped here without orphaning a
+        ///     reference to the buffer.
+        /// </summary>
+        /// <param name="r">The relabelled result (bool dtype).</param>
+        /// <returns><paramref name="r"/> as an <c>NDArray&lt;bool&gt;</c>.</returns>
+        /// <exception cref="InvalidOperationException">The result is not bool (a kernel bug).</exception>
+        private static NDArray<bool> AsBoolResult(NDArray r)
+        {
+            if (r is NDArray<bool> typed)
+                return typed;
+            var wrapped = r.AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison expected a Boolean result.");
+            // AsGeneric wraps r's storage in a NEW NDArray<bool>; r's own reference on the buffer is then dropped so the
+            // caller's Dispose of the wrapper frees the buffer to the pool.
+            if (!ReferenceEquals(wrapped, r))
+                r.Dispose();
+            return wrapped;
+        }
+
+        /// <summary>
+        ///     The routes of a fresh comparison result in C order: the trivial contiguous loop, the two-level rows route,
+        ///     the NDIter route and the direct kernel. Every one allocates a C-contiguous bool result;
+        ///     <see cref="ExecuteComparisonOpInLayout"/> runs them over views in a non-C layout's memory order.
+        /// </summary>
+        /// <param name="lhs">The first operand (not both 0-d).</param>
+        /// <param name="rhs">The second operand.</param>
+        /// <param name="op">The comparison.</param>
+        /// <param name="lhsType">The first operand's dtype.</param>
+        /// <param name="rhsType">The second operand's dtype.</param>
+        /// <returns>A fresh C-contiguous bool result of the broadcast shape.</returns>
+        /// <exception cref="IncorrectShapeException">The operands do not broadcast (NumPy's text).</exception>
+        /// <exception cref="NotSupportedException">No kernel exists for the dtypes.</exception>
+        private unsafe NDArray<bool> ExecuteComparisonOpCOrder(NDArray lhs, NDArray rhs, ComparisonOp op,
+                                                               NPTypeCode lhsType, NPTypeCode rhsType)
+        {
             // -------- O(1) trivial-loop bypass -----------------------------
             // Same rationale as the binary route (NumPy check_for_trivial_loop):
-            // equal-shape contiguous (both C or both F) and array-vs-scalar cases
-            // route straight to the DirectIL SimdFull / SimdScalar comparison
-            // kernel, skipping NDIter construction. Unlike the binary bypass this
-            // allows mixed dtypes — comparison promotes per element inside the
-            // kernel with no cast temp, and the result is always bool. Returns null
-            // for broadcast/mixed-C-F/strided/unsupported → NDIter route below.
+            // equal-shape C-contiguous and array-vs-scalar cases route straight to
+            // the DirectIL SimdFull / SimdScalar comparison kernel, skipping NDIter
+            // construction. Unlike the binary bypass this allows mixed dtypes —
+            // comparison promotes per element inside the kernel with no cast temp,
+            // and the result is always bool. Returns null for broadcast/strided/
+            // unsupported → the routes below. (An F pair is NumPy's F result:
+            // ExecuteComparisonOpInLayout.)
             {
                 var trivial = TryTrivialContiguousComparisonOp(lhs, rhs, op, lhsType, rhsType);
                 if (trivial is not null) return trivial;
@@ -59,8 +160,8 @@ namespace NumSharp.Backends
             // stride apart. DefaultEngine.CompareOp.Rows.cs finds that structure
             // in the strides and runs one vector-kernel call per run; the
             // iterator below costs 0.45 us to build and 15 ns per chunk it hands
-            // out. Declines (null) for deeper iterations, F-ordered results and
-            // narrow rows, which the iterator route serves.
+            // out. Declines (null) for deeper iterations and narrow rows, which
+            // the iterator route serves.
             {
                 var rows = TryRowsComparisonOp(lhs, rhs, op, lhsType, rhsType);
                 if (rows is not null) return rows;
@@ -114,47 +215,38 @@ namespace NumSharp.Backends
             }
             else
             {
-                // Fallback - should not happen
+                // Fallback - should not happen; the unwritten result goes back to the pool.
+                result.Dispose();
                 throw new NotSupportedException(
                     $"IL kernel not available for comparison {lhsType} {op} {rhsType}. " +
                     "Please report this as a bug.");
             }
 
-            // NumPy-aligned layout preservation: comparisons preserve F-contig.
-            // copy('F') returns an NDArray; wrap its storage in place as NDArray<bool> via
-            // AsGeneric (the copy is a fresh bool array we own — no need for MakeGeneric's alias).
-            if (ShouldProduceFContigOutput(lhs, rhs, result.Shape))
-            {
-                var fResult = result.copy('F');
-                result.Dispose();   // C-contig kernel output now dead (mechanism-3 leak)
-                var fGeneric = fResult.AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison expected a Boolean result.");
-                // AsGeneric wraps fResult's storage in a NEW NDArray<bool> (fResult is a base NDArray,
-                // so `this as NDArray<bool>` misses the zero-alloc branch) — orphaning fResult itself,
-                // whose ARC reference on the shared buffer then leaks to the finalizer. Drop it: the
-                // returned wrapper holds the surviving reference, so the caller's Dispose frees the
-                // buffer to the pool. This is the residual copy('F')-path drop the scope gate flagged.
-                if (!ReferenceEquals(fGeneric, fResult))
-                    fResult.Dispose();
-                return fGeneric;
-            }
-
+            // The kernel writes C order. A non-C layout NumPy allocates reaches here only as operands viewed in that
+            // layout's memory order (ExecuteComparisonOpInLayout), whose C result is the layout's buffer.
             return result;
         }
 
         /// <summary>
         ///     Comparison arm of the trivial-loop bypass (see the binary
         ///     <c>TryTrivialContiguousBinaryOp</c>). Handles two trivially
-        ///     iterable shapes — equal-shape contiguous (both C or both F → one
-        ///     linear SimdFull walk) and array-vs-scalar (scalar read once, array
-        ///     walked linearly via SimdScalarLeft/Right) — and routes to the
-        ///     existing DirectIL comparison kernel, skipping NDIter construction.
-        ///     Dtypes may differ (the kernel promotes per element; result is always
-        ///     bool). The bool result takes the array operand's layout (C, or
-        ///     strictly-F) so the linear write matches the linear read, matching the
-        ///     post-kernel <see cref="ShouldProduceFContigOutput(NDArray, NDArray, Shape)"/>
-        ///     branch. Returns null (→ NDIter) for broadcast, mixed C/F, strided,
-        ///     or unsupported emit.
+        ///     iterable shapes — equal-shape C-contiguous (one linear SimdFull walk)
+        ///     and array-vs-scalar (scalar read once, a C-contiguous array walked
+        ///     linearly via SimdScalarLeft/Right) — and routes to the existing
+        ///     DirectIL comparison kernel, skipping NDIter construction. Dtypes may
+        ///     differ (the kernel promotes per element; result is always bool). The
+        ///     bool result is C-ordered, so the linear write matches the linear read;
+        ///     an F or transposed pair is NumPy's F / K result and takes the same run
+        ///     through <see cref="ExecuteComparisonOpInLayout"/>. Returns null
+        ///     (→ the routes below) for broadcast, non-C, strided, or unsupported
+        ///     emit.
         /// </summary>
+        /// <param name="lhs">The first operand.</param>
+        /// <param name="rhs">The second operand.</param>
+        /// <param name="op">The comparison.</param>
+        /// <param name="lhsType">The first operand's dtype.</param>
+        /// <param name="rhsType">The second operand's dtype.</param>
+        /// <returns>A fresh C-contiguous bool result, or null when the call is not trivially iterable in C order.</returns>
         private unsafe NDArray<bool>? TryTrivialContiguousComparisonOp(
             NDArray lhs, NDArray rhs, ComparisonOp op, NPTypeCode lhsType, NPTypeCode rhsType)
         {
@@ -175,9 +267,7 @@ namespace NumSharp.Backends
                     return null;
                 var array = rhsScalarLike ? lhs : rhs;
                 arrShape = array.Shape;
-                if (arrShape.IsBroadcasted)
-                    return null;
-                if (!arrShape.IsContiguous && !arrShape.IsFContiguous)
+                if (arrShape.IsBroadcasted || !arrShape.IsContiguous)
                     return null;   // strided/transposed array operand → NDIter
                 path = rhsScalarLike ? ExecutionPath.SimdScalarRight : ExecutionPath.SimdScalarLeft;
             }
@@ -193,19 +283,44 @@ namespace NumSharp.Backends
             }
             else
             {
-                // Equal-shape (both arrays, or both size-1). Same dims, one shared
-                // contiguous layout.
+                // Equal-shape (both arrays, or both size-1). Same dims, both C-contiguous.
                 if (!ls.Equals(rs))
                     return null;
                 if (ls.IsBroadcasted || rs.IsBroadcasted)
                     return null;
-                bool bothC = ls.IsContiguous && rs.IsContiguous;
-                bool bothF = !bothC && ls.IsFContiguous && rs.IsFContiguous;
-                if (!bothC && !bothF)
+                if (!ls.IsContiguous || !rs.IsContiguous)
                     return null;
                 path = ExecutionPath.SimdFull;
-                arrShape = bothF ? rs : ls;
+                arrShape = ls;
             }
+
+            return TryRunTrivialComparison(lhs, rhs, op, lhsType, rhsType, path, lhsScalarLike, rhsScalarLike,
+                                           CanonicalResultShape(arrShape, false));
+        }
+
+        /// <summary>
+        ///     Runs a trivially iterable comparison — every array operand stored exactly as <paramref name="resultShape"/>
+        ///     stores the result, at most one operand read once — straight into a fresh result of that shape: through the
+        ///     comparison run when one exists for the dtypes, else the whole-array comparison kernel of
+        ///     <paramref name="path"/>. Shared by the C-ordered trivial loop and the linear walk of a non-C layout.
+        /// </summary>
+        /// <param name="lhs">The first operand.</param>
+        /// <param name="rhs">The second operand.</param>
+        /// <param name="op">The comparison.</param>
+        /// <param name="lhsType">The first operand's dtype.</param>
+        /// <param name="rhsType">The second operand's dtype.</param>
+        /// <param name="path">SimdFull for two arrays (or two one-element operands), SimdScalarRight / SimdScalarLeft
+        ///     when the second / first operand is read once.</param>
+        /// <param name="lhsScalarLike">Whether the first operand is read once (one element).</param>
+        /// <param name="rhsScalarLike">Whether the second operand is read once.</param>
+        /// <param name="resultShape">The result's dense, offset-0 shape.</param>
+        /// <returns>The fresh bool result, or null (nothing allocated) when neither the run nor the kernel exists.</returns>
+        private unsafe NDArray<bool>? TryRunTrivialComparison(NDArray lhs, NDArray rhs, ComparisonOp op,
+                                                              NPTypeCode lhsType, NPTypeCode rhsType, ExecutionPath path,
+                                                              bool lhsScalarLike, bool rhsScalarLike, Shape resultShape)
+        {
+            var ls = lhs.Shape;
+            var rs = rhs.Shape;
 
             // The comparison run (Backends/Kernels/ComparisonRun.cs) executes the pair, each operand read as one
             // linear run of its memory (or as one value):
@@ -221,8 +336,7 @@ namespace NumSharp.Backends
             // (ComparisonRun.Disabled); the kernel lookup below then decides.
             if (ComparisonRun.Get(op, lhsType, rhsType) is { } run)
             {
-                bool runIsF = arrShape.IsFContiguous && !arrShape.IsContiguous;
-                var ran = NewArray<bool>(CanonicalResultShape(arrShape, runIsF), false);
+                var ran = NewArray<bool>(resultShape, false);
                 if (ran.size != 0)
                 {
                     int lhsItem = lhs.dtypesize, rhsItem = rhs.dtypesize;
@@ -247,9 +361,6 @@ namespace NumSharp.Backends
             if (kernel == null)
                 return null;
 
-            // Strictly-F (ndim > 1 column-major) → F result; C or 1-D → C result.
-            bool isF = arrShape.IsFContiguous && !arrShape.IsContiguous;
-            Shape resultShape = CanonicalResultShape(arrShape, isF);
             // The SimdFull / SimdScalar comparison kernels write every output byte
             // (4×-unrolled SIMD + remainder + scalar tail span [0, size)), so the
             // zero-fill is dead work for the bypass — allocate without it.
@@ -497,25 +608,15 @@ namespace NumSharp.Backends
             for (int i = 0; i < cleanShape.NDim; i++)
                 if (cleanShape.dimensions[i] > int.MaxValue) return null;
 
-            // Mirror binary-op F-preservation: F-allocate when every non-scalar
-            // operand is strict-F; else default to C and let the post-kernel
-            // looser-F copy step rectify.
-            bool allStrictFContig = AreAllOperandsStrictFContig(lhs, rhs, cleanShape);
-            Shape resultShape = allStrictFContig
-                ? Shape.Adopt((long[])cleanShape.dimensions.Clone(), 'F')
-                : cleanShape;
-
-            var result = NewArray<bool>(resultShape, true);
+            // A C-ordered result: a non-C layout NumPy allocates reaches this route only as operands viewed in that
+            // layout's memory order (ExecuteComparisonOpInLayout), whose C result is the layout's buffer.
+            var result = NewArray<bool>(cleanShape, true);
 
             // Empty broadcast result: nothing to compare. The iterator refuses a zero-size output against a size-1 input
             // axis ("output operand requires a reduction along dimension 0"), so (2,1,3) > (0,3) raised where NumPy
             // returns its (2,0,3) result; the binary route returns early for the same shapes.
             if (result.size == 0)
                 return result;
-
-            var order = allStrictFContig
-                ? NPY_ORDER.NPY_FORTRANORDER
-                : NPY_ORDER.NPY_CORDER;
 
             // Resolve common comparison type once (same rule as the kernel key — incl. the exact
             // int64/uint64 pair compared at Decimal, NumPy's qQ/Qq loops).
@@ -566,7 +667,7 @@ namespace NumSharp.Backends
                 using var iter = NDIterRef.MultiNew(
                     3, new[] { lhs, rhs, result },
                     NDIterGlobalFlags.EXTERNAL_LOOP | NDIterGlobalFlags.COPY_IF_OVERLAP,
-                    order,
+                    NPY_ORDER.NPY_CORDER,
                     NPY_CASTING.NPY_SAFE_CASTING,
                     new[]
                     {
@@ -585,22 +686,9 @@ namespace NumSharp.Backends
             }
             catch (NotSupportedException)
             {
+                // The direct kernel takes over; the unwritten result goes back to the pool rather than to the finalizer.
+                result.Dispose();
                 return null;
-            }
-
-            if (!allStrictFContig && ShouldProduceFContigOutput(lhs, rhs, result.Shape))
-            {
-                var fResult = result.copy('F');
-                result.Dispose();   // C-contig kernel output now dead (mechanism-3 leak)
-                var fGeneric = fResult.AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison expected a Boolean result.");
-                // AsGeneric wraps fResult's storage in a NEW NDArray<bool> (fResult is a base NDArray,
-                // so `this as NDArray<bool>` misses the zero-alloc branch) — orphaning fResult itself,
-                // whose ARC reference on the shared buffer then leaks to the finalizer. Drop it: the
-                // returned wrapper holds the surviving reference, so the caller's Dispose frees the
-                // buffer to the pool. This is the residual copy('F')-path drop the scope gate flagged.
-                if (!ReferenceEquals(fGeneric, fResult))
-                    fResult.Dispose();
-                return fGeneric;
             }
 
             return result;

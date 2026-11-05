@@ -22,36 +22,13 @@ namespace NumSharp.Tests
     //
     // Only `strides` is observable here (an empty array has no element to read); the flags already agree.
     // EXPECTED (when fixed): each test passes; remove its [OpenBugs] and move it next to the Shape tests.
+    //
+    // FIXED 2026-11-05 (the ufunc result-layout port): every fresh zero-size allocation gets all-zero strides
+    // (Shape.ForFreshAllocation, the funnel of every allocator), so the allocation rule's pin moved to
+    // View/Shape.ForFreshAllocation.Tests.cs (EmptyAllocation_HasAllZeroStrides). The slice rule below is still open.
     // =====================================================================
     public partial class OpenBugs
     {
-        /// <summary>
-        ///     Every zero-size array NumPy allocates has all-zero byte strides: <c>np.zeros((2, 0))</c>, <c>np.zeros((0, 3))</c>,
-        ///     <c>np.zeros(0)</c>, <c>np.empty((2, 3, 0))</c>, <c>np.ones((0, 3))</c>, <c>np.full((2, 0), 7.0)</c>,
-        ///     <c>np.arange(0)</c>, and the transpose <c>np.zeros((2, 0)).T</c>. NumSharp reports C strides with the zero
-        ///     extent multiplied in (<c>(0, 8)</c>, <c>(24, 8)</c>, <c>(8,)</c>, <c>(0, 0, 8)</c>, …).
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "empty-strides")]
-        public void EmptyAllocation_ShouldHaveAllZeroStrides()
-        {
-            foreach (var (name, make) in new (string, Func<NDArray>)[]
-                     {
-                         ("np.zeros((2, 0))", () => np.zeros(new Shape(2L, 0L))),
-                         ("np.zeros((0, 3))", () => np.zeros(new Shape(0L, 3L))),
-                         ("np.zeros(0)", () => np.zeros(new Shape(0L))),
-                         ("np.empty((2, 3, 0))", () => np.empty(new Shape(2L, 3L, 0L))),
-                         ("np.ones((0, 3))", () => np.ones(new Shape(0L, 3L))),
-                         ("np.full((2, 0), 7.0)", () => np.full(new Shape(2L, 0L), 7.0)),
-                         ("np.arange(0)", () => np.arange(0)),
-                         ("np.zeros((2, 0)).T", () => np.zeros(new Shape(2L, 0L)).T),
-                     })
-            {
-                using var a = make();
-                a.size.Should().Be(0, name);
-                a.strides.Should().OnlyContain(s => s == 0, $"{name}: NumPy zeroes every stride of an array it allocates empty");
-            }
-        }
-
         /// <summary>
         ///     A slice keeps the strides its slicing computed, even along an axis of extent 0. With
         ///     <c>a = np.arange(12).reshape(4, 3)</c>: <c>a[:0]</c> → <c>(24, 8)</c>, <c>a[:, :0]</c> → <c>(24, 8)</c>,

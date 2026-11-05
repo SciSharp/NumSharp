@@ -238,7 +238,7 @@ namespace NumSharp.Backends
             }
 
             if (keepdims)
-                tot.Storage.ExpandDimension(axis);
+                ExpandReducedAxis(tot, inputShape, axis);
             return tot;
         }
 
@@ -415,7 +415,7 @@ namespace NumSharp.Backends
                 if (exact is not null)
                 {
                     if (keepdims)
-                        exact.Storage.ExpandDimension(ax);
+                        ExpandReducedAxis(exact, arr.Shape, ax);
                     // Same PyArray_Return rule as ReduceAMax: a fresh 0-d result is a read-only scalar.
                     return exact.MarkReductionScalar();
                 }
@@ -678,7 +678,7 @@ namespace NumSharp.Backends
             if (result.size == 0)
             {
                 if (keepdims)
-                    result.Storage.ExpandDimension(axis);
+                    ExpandReducedAxis(result, arr.Shape, axis);
                 return result;
             }
 
@@ -693,9 +693,9 @@ namespace NumSharp.Backends
                 kernel((void*)inputAddr, (void*)result.Address, inputStrides, inputDims, outputStrides, axis, axisSize, arr.ndim, outputSize);
             }
 
-            // ExpandDimension re-inserts the reduced axis preserving the KEEPORDER layout.
+            // ExpandReducedAxis re-inserts the reduced axis preserving the KEEPORDER layout, with NumPy's keepdims stride.
             if (keepdims)
-                result.Storage.ExpandDimension(axis);
+                ExpandReducedAxis(result, arr.Shape, axis);
             // A 1-D input along its only axis leaves a 0-d result, which NumPy returns as a scalar (np.nansum(v, axis=0)
             // is np.float64, empty or not); this exit returned it writeable. A no-op for an array result.
             return result.MarkReductionScalar();
@@ -732,7 +732,7 @@ namespace NumSharp.Backends
             if (result.size == 0)
             {
                 if (keepdims)
-                    result.Storage.ExpandDimension(axis);
+                    ExpandReducedAxis(result, arr.Shape, axis);
                 return result;
             }
 
@@ -783,9 +783,9 @@ namespace NumSharp.Backends
                 result.SetAtIndex(reduced, outIdx);
             }
 
-            // ExpandDimension re-inserts the reduced axis preserving the KEEPORDER layout.
+            // ExpandReducedAxis re-inserts the reduced axis preserving the KEEPORDER layout, with NumPy's keepdims stride.
             if (keepdims)
-                result.Storage.ExpandDimension(axis);
+                ExpandReducedAxis(result, arr.Shape, axis);
             // The 0-d result of a 1-D input is NumPy's scalar, as in ExecuteNanAxisReduction; a no-op for an array.
             return result.MarkReductionScalar();
         }

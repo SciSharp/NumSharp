@@ -78,12 +78,16 @@ Casts:
 
 ## Rules
 
-- The direct binary route writes its result in C-coordinate order over the coalesced dims (`ExecuteKernelCoalesced`
-  passes no result strides), so an F-allocated result is correct there only when every dim coalesces into one run.
-  `HasNonScalarBroadcastOperand` keeps that route from allocating F for a broadcast set, and the small-broadcast
-  shortcut sends all-F sets to `NDIter`, which allocates F. A broadcast all-F set on that route (float16 add, subtract,
-  multiply, divide) is walked with its axes reversed: C order over the reversed dims is the F memory order. Gates: the
-  binary tiers' `pp_fbcast_*` layouts, `Backends/Kernels/FOrderBroadcastBinaryTests.cs`.
+- A fresh elementwise result's layout is decided once, before any kernel runs (`DefaultEngine.UfuncResultLayout.cs`):
+  `Shape.UfuncOutputShape` is NumPy's `try_trivial_single_output_loop` C / F allocation when the call qualifies (no
+  mask, one output, no input of two or more dimensions cast or unaligned) and NpyIter's K order otherwise
+  (`Shape.NpyIterOutputShape`). The binary, unary, comparison, shift and float-tier routes write C order only (the
+  direct route's `ExecuteKernelCoalesced` passes no result strides). A non-C layout is reached in one of two ways: when
+  every operand is stored exactly as the layout (same dims, `IsLaidOutAs`), the whole-array kernels run over flat memory
+  into the layout's result (the linear walk); otherwise each operand is viewed in the layout's dense axis order
+  (`OperandInLayoutOrder`), the C routes compute, and `NDArray.AdoptLayout` relabels the result (the permuted walk).
+  Gates: the `ufunc` family of the layout-parity corpus (`LayoutParityOracleTests`), `Backends/UfuncResultLayoutTests.cs`,
+  the binary tiers' `pp_fbcast_*` layouts, `Backends/Kernels/FOrderBroadcastBinaryTests.cs`.
 - A strided copy or cast never reads outside its view. The two-load deinterleave of the 1- and 2-byte strided kernels
   (`a[::2]`) starts its second load one element early and shifts the wanted half down instead of masking, so the load
   ends on the group's last element; the 4- and 8-byte kernels bound their loop. Gate:

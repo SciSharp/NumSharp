@@ -86,14 +86,112 @@ namespace NumSharp.Backends
                 return ExecuteScalarUnary(nd, op, outputType);
             }
 
+            // -------- NumPy's result layout ----------------------------------
+            // A fresh result takes the layout NumPy allocates (DefaultEngine.UfuncResultLayout.cs): F for an F input, a
+            // transposed input's own axis order, F for a flipped F input (NpyIter sorts by |stride|), C for everything NumPy
+            // resolves to C. The routes below write C order; a non-C layout runs through ExecuteUnaryOpInLayout. A cast
+            // input (sqrt of int32) refuses NumPy's trivial loop, which only changes extent-1 axes' strides. A C-contiguous
+            // or 1-D input costs two flag reads here.
+            if (TryUnaryNonCLayout(nd, UnaryLoopCastsInput(op, inputType, outputType), out var layout))
+                return ExecuteUnaryOpInLayout(nd, op, inputType, outputType, layout);
+            return ExecuteUnaryOpCOrder(nd, op, inputType, outputType);
+        }
+
+        /// <summary>
+        ///     Whether NumPy's loop for a unary ufunc reads another dtype than the input's, i.e. casts the input
+        ///     (<c>check_for_trivial_loop</c> then refuses the trivial loop for an input of two or more dimensions). Probed
+        ///     2.4.2 over every unary ufunc and dtype through the strides of an F-ordered (2,1,3) input's result.
+        /// </summary>
+        /// <param name="op">The op.</param>
+        /// <param name="inputType">The input's dtype.</param>
+        /// <param name="outputType">The resolved output dtype.</param>
+        /// <returns>True when the input is cast to the loop dtype.</returns>
+        /// <remarks>
+        ///     Most loops read their output dtype (<c>T->T</c>), so a different input dtype is a cast (np.sqrt of int32 runs
+        ///     the float64 loop). The exceptions keep a loop per input dtype with another output: the float
+        ///     classification predicates and np.logical_not (every numeric dtype → bool), np.abs of complex128
+        ///     (<c>D->d</c>), np.bitwise_count (every integer → uint8; bool has no loop and is cast). np.signbit has float
+        ///     loops only, so an integer or bool input is cast although NumSharp computes it from the input dtype.
+        /// </remarks>
+        private static bool UnaryLoopCastsInput(UnaryOp op, NPTypeCode inputType, NPTypeCode outputType)
+        {
+            switch (op)
+            {
+                case UnaryOp.SignBit:
+                    return inputType != NPTypeCode.Half && inputType != NPTypeCode.Single
+                           && inputType != NPTypeCode.Double && inputType != NPTypeCode.Decimal;
+                case UnaryOp.IsFinite:
+                case UnaryOp.IsNan:
+                case UnaryOp.IsInf:
+                case UnaryOp.IsPosInf:
+                case UnaryOp.IsNegInf:
+                case UnaryOp.LogicalNot:
+                    return false;
+                case UnaryOp.BitwiseCount:
+                    return inputType == NPTypeCode.Boolean;
+                case UnaryOp.Abs:
+                    if (inputType == NPTypeCode.Complex)
+                        return false;
+                    break;
+            }
+            return inputType != outputType;
+        }
+
+        /// <summary>
+        ///     A fresh unary result in a layout NumPy allocates that is not C order (see
+        ///     <c>DefaultEngine.UfuncResultLayout.cs</c>).
+        /// </summary>
+        /// <param name="nd">The input (not 0-d, not empty).</param>
+        /// <param name="op">The op.</param>
+        /// <param name="inputType">The input's dtype.</param>
+        /// <param name="outputType">The output dtype.</param>
+        /// <param name="layout">The layout to produce: dense, offset 0, not C-contiguous.</param>
+        /// <returns>A fresh array of <paramref name="outputType"/> laid out as <paramref name="layout"/>.</returns>
+        /// <exception cref="NotSupportedException">No kernel exists for the op and dtypes (raised by the C routes, as for
+        ///     a C-ordered call).</exception>
+        /// <remarks>
+        ///     An input stored exactly as the layout stores the result (an F array, a dense transposed one) runs the
+        ///     contiguous whole-array kernel straight into the layout — NumPy's single loop call over that memory. Anything
+        ///     else (a flipped, strided or broadcast input) runs the C routes over the input viewed in the layout's memory
+        ///     order and relabels the C result (<see cref="ComputeInLayout{TState}(NDArray, in Shape, TState, Func{NDArray, TState, NDArray})"/>).
+        /// </remarks>
+        private unsafe NDArray ExecuteUnaryOpInLayout(NDArray nd, UnaryOp op, NPTypeCode inputType, NPTypeCode outputType,
+                                                      Shape layout)
+        {
+            if (IsLinearInLayout(nd, layout))
+            {
+                var linear = TryContiguousUnaryKernel(nd, op, inputType, outputType, layout);
+                if (linear is not null)
+                    return linear;
+            }
+
+            return ComputeInLayout(nd, layout, (Engine: this, op, inputType, outputType),
+                static (v, s) => s.Engine.ExecuteUnaryOpCOrder(v, s.op, s.inputType, s.outputType));
+        }
+
+        /// <summary>
+        ///     The routes of a fresh unary result in C order: the trivial contiguous loop, the 1-D strided kernels, the
+        ///     NDIter route and the direct kernel. Every one allocates a C-contiguous result;
+        ///     <see cref="ExecuteUnaryOpInLayout"/> runs them over a view in a non-C layout's memory order.
+        /// </summary>
+        /// <param name="nd">The input (not 0-d).</param>
+        /// <param name="op">The op.</param>
+        /// <param name="inputType">The input's dtype.</param>
+        /// <param name="outputType">The output dtype.</param>
+        /// <returns>A fresh C-contiguous result of the input's dims.</returns>
+        /// <exception cref="NotSupportedException">No kernel exists for the op and dtypes.</exception>
+        private unsafe NDArray ExecuteUnaryOpCOrder(NDArray nd, UnaryOp op, NPTypeCode inputType, NPTypeCode outputType)
+        {
             // -------- O(1) trivial-loop bypass -----------------------------
             // Same rationale as the binary/comparison routes (NumPy
-            // check_for_trivial_loop): a single contiguous operand (C or F, not
+            // check_for_trivial_loop): a single C-contiguous operand (not
             // broadcast) routes straight to the existing DirectIL whole-array unary
             // kernel, skipping NDIter construction. The result takes the input's
             // layout so the linear read/write align; in/out dtypes may differ
             // (predicate ops -> bool, Abs(complex) -> double). Returns null for
-            // strided/broadcast/unsupported -> NDIter route below.
+            // strided/broadcast/unsupported -> NDIter route below. (An F input is
+            // NumPy's F result and takes the same kernel through
+            // ExecuteUnaryOpInLayout.)
             {
                 var trivial = TryTrivialContiguousUnaryOp(nd, op, inputType, outputType);
                 if (trivial is not null) return trivial;
@@ -173,48 +271,63 @@ namespace NumSharp.Backends
             }
             else
             {
-                // Fallback - should not happen for implemented operations
+                // Fallback - should not happen for implemented operations; the unwritten
+                // result goes back to the pool rather than to the finalizer.
+                result.Dispose();
                 throw new NotSupportedException(
                     $"IL kernel not available for {op}({inputType}) -> {outputType}. " +
                     "Please report this as a bug.");
             }
 
-            // NumPy-aligned layout preservation: unary ops preserve F-contig.
-            // The kernel writes in linear C-order; relay out when the input is strictly F-contig.
-            if (ShouldProduceFContigOutput(nd, result.Shape))
-                return result.copy('F');
-
+            // The kernel writes in linear C order. A non-C layout NumPy allocates reaches here only as a view in that
+            // layout's memory order (ExecuteUnaryOpInLayout), whose C result is the layout's buffer.
             return result;
         }
 
         /// <summary>
         ///     Unary arm of the trivial-loop bypass (see the binary
         ///     <c>TryTrivialContiguousBinaryOp</c>). When the single operand is
-        ///     contiguous (C or F, not broadcast), routes straight to the existing
+        ///     C-contiguous (not broadcast), routes straight to the existing
         ///     DirectIL whole-array unary kernel (the contiguous <see cref="UnaryKernelKey"/>
         ///     variant walks input/output linearly), skipping NDIter construction.
         ///
-        ///     For an F-contig input we force the contiguous kernel AND allocate an
-        ///     F result: both buffers are then walked in the same physical-linear =
-        ///     F-logical order, so element k of input maps to element k of output.
-        ///     This matches — and pre-empts — the post-kernel
-        ///     <see cref="ShouldProduceFContigOutput(NDArray, Shape)"/> copy('F').
         ///     In/out dtypes may differ (predicate ops -> bool, Abs(complex) ->
         ///     double); the kernel emits the conversion. Returns null (→ NDIter)
-        ///     for strided/broadcast inputs or unsupported emit.
+        ///     for strided/broadcast inputs or unsupported emit. An F input is
+        ///     NumPy's F result: <see cref="ExecuteUnaryOpInLayout"/> runs the same
+        ///     kernel over it into an F result (<see cref="TryContiguousUnaryKernel"/>).
         /// </summary>
+        /// <param name="nd">The input.</param>
+        /// <param name="op">The op.</param>
+        /// <param name="inputType">The input's dtype.</param>
+        /// <param name="outputType">The output dtype.</param>
+        /// <returns>A fresh C-contiguous result, or null when the input is not C-contiguous or the kernel is missing.</returns>
         private unsafe NDArray? TryTrivialContiguousUnaryOp(
             NDArray nd, UnaryOp op, NPTypeCode inputType, NPTypeCode outputType)
         {
             var s = nd.Shape;
-            if (s.IsBroadcasted)
-                return null;
-
-            bool isC = s.IsContiguous;
-            bool isF = !isC && s.IsFContiguous;
-            if (!isC && !isF)
+            if (s.IsBroadcasted || !s.IsContiguous)
                 return null;   // strided/transposed → NDIter
 
+            // Reuse the input's canonical shape (offset 0, owns its buffer, plain C strides)
+            // rather than cloning dims + recomputing strides/flags.
+            return TryContiguousUnaryKernel(nd, op, inputType, outputType, CanonicalResultShape(s, false));
+        }
+
+        /// <summary>
+        ///     Runs the contiguous whole-array unary kernel from an input stored exactly as <paramref name="resultShape"/>
+        ///     stores the result (a C-contiguous input into a C result; an F or dense transposed input into its own
+        ///     layout): both buffers are walked linearly, so element k of the input maps to element k of the output.
+        /// </summary>
+        /// <param name="nd">The input, linear in <paramref name="resultShape"/>'s memory order.</param>
+        /// <param name="op">The op.</param>
+        /// <param name="inputType">The input's dtype.</param>
+        /// <param name="outputType">The output dtype.</param>
+        /// <param name="resultShape">The result's dense, offset-0 shape.</param>
+        /// <returns>The fresh result, or null (nothing allocated) when the kernel cannot be emitted.</returns>
+        private unsafe NDArray? TryContiguousUnaryKernel(NDArray nd, UnaryOp op, NPTypeCode inputType,
+                                                         NPTypeCode outputType, Shape resultShape)
+        {
             // Contiguous kernel variant (4th arg = isContiguous): linear input[i] -> output[i].
             // Float-classification predicates (IsNan/IsInf/IsFinite over Single/Double →
             // bool) take their dedicated SIMD kernel — the generic unary SIMD gate is
@@ -237,10 +350,6 @@ namespace NumSharp.Backends
             if (kernel == null)
                 return null;
 
-            // Reuse the input's canonical shape (offset 0, owns its buffer, right order)
-            // rather than cloning dims + recomputing strides/flags. isF implies a strictly
-            // column-major input (ndim > 1).
-            Shape resultShape = CanonicalResultShape(s, isF);
             var result = NewArray(outputType, resultShape, false);
             if (result.size == 0)
                 return result;
@@ -498,10 +607,10 @@ namespace NumSharp.Backends
         ///     result on success or null if the route is unsupported (size
         ///     overflow vs int.MaxValue, NotSupportedException from emit).
         ///
-        ///     Layout: F-allocates output when input is strict-F (matches
-        ///     the post-kernel <c>result.copy('F')</c> the direct path
-        ///     applies via <see cref="ShouldProduceFContigOutput(NDArray, Shape)"/>);
-        ///     picks NPY_FORTRANORDER in that case, NPY_CORDER otherwise.
+        ///     Layout: a C-contiguous output, iterated in NPY_CORDER. A non-C
+        ///     layout NumPy allocates reaches this route only as a view in that
+        ///     layout's memory order (<see cref="ExecuteUnaryOpInLayout"/>), whose
+        ///     C result is the layout's buffer.
         ///
         ///     Same-dtype path: scalar body =
         ///     <see cref="DirectILKernelGenerator.EmitUnaryScalarOperation"/>;
@@ -522,21 +631,8 @@ namespace NumSharp.Backends
             for (int i = 0; i < cleanShape.NDim; i++)
                 if (cleanShape.dimensions[i] > int.MaxValue) return null;
 
-            // Mirror the direct path's F-preservation: input strict-F →
-            // allocate F-contig output AND iterate in F-order. Otherwise
-            // C-contig output + C-order; the post-kernel copy step at the
-            // end of this function handles the looser-F case.
-            bool inputStrictF = nd.Shape.IsFContiguous && !nd.Shape.IsContiguous
-                                 && cleanShape.NDim > 1 && cleanShape.size > 1
-                                 && !nd.Shape.IsScalar;
-            Shape resultShape = inputStrictF
-                ? Shape.Adopt((long[])cleanShape.dimensions.Clone(), 'F')
-                : cleanShape;
-            var result = NewArray(outputType, resultShape, false);
-
-            var order = inputStrictF
-                ? NPY_ORDER.NPY_FORTRANORDER
-                : NPY_ORDER.NPY_CORDER;
+            // A C-ordered result (see the summary): the iterator writes it in its own order.
+            var result = NewArray(outputType, cleanShape, false);
 
             // SIMD viability: same-dtype only (existing rule from the
             // direct path's CanUseUnarySimd) + op-supported check.
@@ -630,7 +726,7 @@ namespace NumSharp.Backends
                 using var iter = NDIterRef.MultiNew(
                     2, new[] { nd, result },
                     globalFlags,
-                    order, casting,
+                    NPY_ORDER.NPY_CORDER, casting,
                     s_unaryIterFlags,
                     opDtypes);
 
@@ -641,15 +737,10 @@ namespace NumSharp.Backends
             }
             catch (NotSupportedException)
             {
+                // The direct kernel takes over; the unwritten result goes back to the pool rather than to the finalizer.
+                result.Dispose();
                 return null;
             }
-
-            // Post-kernel "looser-F" copy step (mirrors the direct path's
-            // tail branch): triggers when result is currently C-contig but
-            // input is strict-F so the NumPy rule says output should be F.
-            // strict-F-input cases skipped this by allocating F up front.
-            if (!inputStrictF && ShouldProduceFContigOutput(nd, result.Shape))
-                return result.copy('F');
 
             return result;
         }

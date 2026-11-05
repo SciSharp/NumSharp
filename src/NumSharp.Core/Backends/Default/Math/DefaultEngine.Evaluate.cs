@@ -584,8 +584,8 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// N-input analogue of <see cref="AreAllOperandsStrictFContig"/> for the fused
-        /// elementwise path: true when the result is multi-dimensional (NDim &gt; 1,
+        /// The fused elementwise path's F rule (np.evaluate is numexpr's, not a NumPy ufunc, so it keeps its own 'K'
+        /// heuristic rather than NumPy's ufunc layout): true when the result is multi-dimensional (NDim &gt; 1,
         /// size &gt; 1) and every NON-scalar input operand is strictly F-contiguous
         /// (<c>IsFContiguous &amp;&amp; !IsContiguous</c>), with at least one such operand.
         /// Scalars / size-1 operands don't force the decision. When true, np.evaluate

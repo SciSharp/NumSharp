@@ -200,24 +200,31 @@ namespace NumSharp.Backends
         /// <summary>
         ///     Lean NDIter subtract used by the diff loop: computes
         ///     <c>hi - lo</c> into a freshly-allocated, <b>uninitialised</b>
-        ///     C-contiguous output via the NDIter Tier-3B inner-loop kernel
-        ///     (4×-unrolled SIMD + scalar-strided shell). <paramref name="hi"/>
-        ///     and <paramref name="lo"/> are always equal-shape, equal-dtype and
-        ///     non-broadcast, so this skips the type-promotion, broadcast
-        ///     resolution and F-contig analysis that <see cref="DefaultEngine"/>'s
-        ///     general binary path performs. Returns <c>null</c> when the kernel
-        ///     emitter rejects the dtype, signalling the caller to fall back to
-        ///     the <c>-</c> operator.
+        ///     output via the NDIter Tier-3B inner-loop kernel (4×-unrolled SIMD
+        ///     + scalar-strided shell). <paramref name="hi"/> and <paramref name="lo"/>
+        ///     are always equal-shape, equal-dtype and non-broadcast, so this skips
+        ///     the type-promotion and broadcast resolution that
+        ///     <see cref="DefaultEngine"/>'s general binary path performs. Returns
+        ///     <c>null</c> when the kernel emitter rejects the dtype, signalling the
+        ///     caller to fall back to the <c>-</c> operator.
         /// </summary>
+        /// <param name="hi">The later slice, <c>a[1:]</c> along the axis.</param>
+        /// <param name="lo">The earlier slice, <c>a[:-1]</c>.</param>
+        /// <returns>The difference, in the layout NumPy's <c>subtract(a[1:], a[:-1])</c> allocates: C for slices of a C
+        ///     array, the slices' K order otherwise (an F input's diff is F, a transposed one keeps its axis order;
+        ///     probed 2.4.2), or null.</returns>
         private unsafe NDArray DiffSubtractViaNDIter(NDArray hi, NDArray lo)
         {
             NPTypeCode dt = hi.GetTypeCode;
 
-            // Fresh C-contiguous, uninitialised output with hi's dimensions.
+            // A fresh, uninitialised output with hi's dimensions, in NumPy's layout for the subtract (no cast, no mask, one
+            // output: DefaultEngine.UfuncResultLayout.cs). A non-C layout is then walked in its memory order (KEEPORDER);
+            // the iterator writes the output through its strides either way.
             int nd = hi.ndim;
             long[] dims = new long[nd];
             for (int i = 0; i < nd; i++) dims[i] = hi.Shape.dimensions[i];
-            var outp = NewArray(hi.dtype, Shape.Adopt(dims), false);
+            bool laidOut = TryBinaryNonCLayout(hi, lo, false, false, out var layout);
+            var outp = NewArray(hi.dtype, laidOut ? layout : Shape.Adopt(dims), false);
 
             // Empty result: the NDIter element-wise path must not run over zero
             // elements (it walks broadcast dims as if non-empty). Nothing to do.
@@ -236,7 +243,7 @@ namespace NumSharp.Backends
                 using var iter = NDIterRef.MultiNew(
                     3, new[] { hi, lo, outp },
                     NDIterGlobalFlags.EXTERNAL_LOOP,
-                    NPY_ORDER.NPY_CORDER,
+                    laidOut ? NPY_ORDER.NPY_KEEPORDER : NPY_ORDER.NPY_CORDER,
                     NPY_CASTING.NPY_SAFE_CASTING,
                     _diffRRW);
 

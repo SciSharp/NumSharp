@@ -20,17 +20,22 @@ namespace NumSharp
         ///     <c>np.array(a)</c> which always copies (NumPy 2.x: <c>copy=True</c> by default).
         /// </summary>
         /// <param name="nd">Source array.</param>
-        /// <param name="copy">When <c>true</c> (default) the source storage is cloned; when <c>false</c> the storage is shared (alias). For "copy only if needed" semantics use <see cref="asarray(NDArray, DType, char, bool?, NDArray, string)"/>.</param>
+        /// <param name="copy">When <c>true</c> (default) the source is copied in NumPy's <c>order='K'</c> (the copy keeps
+        ///     the source's memory order: F stays F, a transposed array's axis order is kept, a broadcast's stride-0 axes sort
+        ///     innermost — <c>PyArray_NewLikeArray</c> with <c>NPY_KEEPORDER</c>); when <c>false</c> the storage is shared
+        ///     (alias). For "copy only if needed" semantics use <see cref="asarray(NDArray, DType, char, bool?, NDArray, string)"/>.</param>
         /// <returns>A new array object. A 0-d source that was built as an explicit 0-d ARRAY
         ///     (<see cref="NDArray.IsExplicitZeroDimArray"/>) gives an explicit 0-d array again, as NumPy's
         ///     <c>np.array(np.array(2))</c> is a 0-d array.</returns>
         /// <exception cref="NullReferenceException"><paramref name="nd"/> is <c>null</c>.</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html — <c>np.array(a)</c>'s defaults are
+        ///     <c>copy=True, order='K'</c> (probed 2.4.2: <c>np.array(a.transpose(1, 0, 2))</c> keeps the transpose's byte
+        ///     strides, <c>np.array(np.broadcast_to(row, (2, 3, 4)))</c> has (24, 8, 48)).</remarks>
         [MethodImpl(OptimizeAndInline)]
         public static NDArray array(NDArray nd, bool copy = true)
         {
             var result = copy
-                ? new NDArray(nd.Storage.Clone()) { TensorEngine = nd.TensorEngine }
+                ? nd.copy('K')
                 : new NDArray(nd.Storage) { TensorEngine = nd.TensorEngine };
             // The mark is per object, so a new object must receive it explicitly.
             return nd.IsExplicitZeroDimArray ? result.MarkExplicitZeroDimArray() : result;
@@ -294,7 +299,7 @@ namespace NumSharp
 
                 var strides = @out.Shape.strides;
                 long stride1 = strides[0];
-                Debug.Assert(strides[1] == 1);
+                Debug.Assert(@out.size == 0 || strides[1] == 1);   // a fresh empty array has all-zero strides (NumPy's layout)
 
                 T* addr = (T*)@out.Address;
                 for (int i1 = 0; i1 < len1; i1++)
@@ -343,7 +348,7 @@ namespace NumSharp
                 var strides = @out.Shape.strides;
                 long stride1 = strides[0];
                 long stride2 = strides[1];
-                Debug.Assert(strides[2] == 1);
+                Debug.Assert(@out.size == 0 || strides[2] == 1);   // a fresh empty array has all-zero strides (NumPy's layout)
 
                 T* addr = (T*)@out.Address;
                 for (int i1 = 0; i1 < len1; i1++)
@@ -399,7 +404,7 @@ namespace NumSharp
                 long stride1 = strides[0];
                 long stride2 = strides[1];
                 long stride3 = strides[2];
-                Debug.Assert(strides[3] == 1);
+                Debug.Assert(@out.size == 0 || strides[3] == 1);   // a fresh empty array has all-zero strides (NumPy's layout)
 
                 T* addr = (T*)@out.Address;
                 for (int i1 = 0; i1 < len1; i1++)
@@ -462,7 +467,7 @@ namespace NumSharp
                 long stride2 = strides[1];
                 long stride3 = strides[2];
                 long stride4 = strides[3];
-                Debug.Assert(strides[4] == 1);
+                Debug.Assert(@out.size == 0 || strides[4] == 1);   // a fresh empty array has all-zero strides (NumPy's layout)
 
                 T* addr = (T*)@out.Address;
                 for (int i1 = 0; i1 < len1; i1++)

@@ -57,11 +57,12 @@ namespace NumSharp.Backends
         ///     BOTH operands; the smallest such <c>s</c> gives the longest runs. <c>s == 0</c> is a single run (a
         ///     stepped 1-D array, <c>a[:, ::2]</c>, a fully broadcast operand). A 2-D pair always splits at 1.</para>
         ///     <para><b>Declined</b> (null): operand shapes that do not broadcast (the iterator route raises NumPy's
-        ///     error), an empty result, a result NumPy lays out in F order (every array operand F-contiguous, see
-        ///     <see cref="ShouldProduceFContigOutput(NDArray, NDArray, Shape)"/>), more levels than two, and many rows
-        ///     of fewer than <see cref="ComparisonRun.DirectRowMinElements"/> elements whose inputs are contiguous or
-        ///     one value each (the iterator's 2-D block kernel loops such rows inside one call), unless they are a
-        ///     matrix against one row (<see cref="ComparisonRun.RepeatsRow"/>).</para>
+        ///     error), an empty result, more levels than two, and many rows of fewer than
+        ///     <see cref="ComparisonRun.DirectRowMinElements"/> elements whose inputs are contiguous or one value each
+        ///     (the iterator's 2-D block kernel loops such rows inside one call), unless they are a matrix against one
+        ///     row (<see cref="ComparisonRun.RepeatsRow"/>). A result NumPy lays out in another order than C never
+        ///     reaches here as such: the engine views its operands in that order first
+        ///     (<c>ExecuteComparisonOpInLayout</c>).</para>
         ///     <para>The result is fresh, so no operand overlaps it and the order of the runs cannot be observed.</para>
         /// </remarks>
         private unsafe NDArray<bool>? TryRowsComparisonOp(NDArray lhs, NDArray rhs, ComparisonOp op, NPTypeCode lhsType, NPTypeCode rhsType)
@@ -115,18 +116,9 @@ namespace NumSharp.Backends
             if (size == 0 || axes == 0)
                 return null;
 
-            // NumPy lays the result out in F order when no array operand is C-contiguous-only and at least one is
-            // F-contiguous-only; the iterator route allocates and fills that layout.
-            if (rank > 1)
-            {
-                bool lArray = ls.size > 1, rArray = rs.size > 1;
-                bool lOnlyF = lArray && ls.IsFContiguous && !ls.IsContiguous;
-                bool rOnlyF = rArray && rs.IsFContiguous && !rs.IsContiguous;
-                bool lOnlyC = lArray && ls.IsContiguous && !ls.IsFContiguous;
-                bool rOnlyC = rArray && rs.IsContiguous && !rs.IsFContiguous;
-                if ((lOnlyF || rOnlyF) && !lOnlyC && !rOnlyC)
-                    return null;
-            }
+            // The result here is C-ordered: the comparison engine sends a call NumPy lays out otherwise to its layout
+            // route first (ExecuteComparisonOpInLayout), which reaches this method only with operands viewed in that
+            // layout's memory order.
 
             // The smallest split whose two groups are each one run for both operands.
             int split = 0;

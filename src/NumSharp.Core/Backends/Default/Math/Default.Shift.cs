@@ -229,17 +229,18 @@ namespace NumSharp.Backends
                 if (cleanShape.dimensions[i] > int.MaxValue)
                     return null;
 
-            // Mirror the unified path's NumPy-aligned F-order preservation.
-            bool allStrictFContig = AreAllOperandsStrictFContig(value, count, cleanShape);
-            Shape resultShape = allStrictFContig
-                ? Shape.Adopt((long[])cleanShape.dimensions.Clone(), 'F')
-                : cleanShape;
-
-            var result = NewArray(resultType, resultShape, false);
+            // NumPy's result layout (DefaultEngine.UfuncResultLayout.cs), voted by the operands AS GIVEN — the loop-dtype
+            // casts above are this route's own temporaries, which NumPy's iterator never sees: the trivial loop's C / F
+            // order when the call qualifies (an input of another dtype than the loop's is a cast), NpyIter's K order
+            // otherwise. A non-C result is walked in its memory order (KEEPORDER); the iterator writes it through its
+            // strides either way.
+            bool laidOut = TryBinaryNonCLayout(lhs, rhs, lhs.GetTypeCode != resultType, rhs.GetTypeCode != resultType,
+                                               out var layout);
+            var result = NewArray(resultType, laidOut ? layout : cleanShape, false);
             if (result.size == 0)
                 return result;
 
-            var order = allStrictFContig ? NPY_ORDER.NPY_FORTRANORDER : NPY_ORDER.NPY_CORDER;
+            var order = laidOut ? NPY_ORDER.NPY_KEEPORDER : NPY_ORDER.NPY_CORDER;
 
             var capType = resultType;
             bool capLeft = isLeftShift;
@@ -266,14 +267,6 @@ namespace NumSharp.Backends
                 iter.ExecuteElementWiseBinary(valueLoopType, resultType, resultType, scalarBody, vectorBody, cacheKey);
             }
 
-            if (!allStrictFContig && ShouldProduceFContigOutput(value, count, result.Shape))
-            {
-                // The F copy is the result; the C-order kernel output it was copied from is dead.
-                var fResult = result.copy('F');
-                result.Dispose();
-                return fResult;
-            }
-
             return result;
         }
 
@@ -295,6 +288,10 @@ namespace NumSharp.Backends
         /// count operand, F-allocated when the value operand is strictly F. A count of 0 keeps the
         /// fused cast-copy path (result == astype), and left shifts never take this route.
         /// </summary>
+        /// <param name="lhs">The value operand (bool).</param>
+        /// <param name="rhs">The count operand (one element).</param>
+        /// <param name="isLeftShift">Whether this is a left shift (never this route).</param>
+        /// <returns>The zero result in NumPy's layout, or null when the route does not apply.</returns>
         private NDArray? TryBoolScalarRightShiftZeros(NDArray lhs, NDArray rhs, bool isLeftShift)
         {
             if (isLeftShift || lhs.GetTypeCode != NPTypeCode.Boolean)
@@ -311,12 +308,11 @@ namespace NumSharp.Backends
                 return null;
 
             var (valueShape, _) = Broadcast(lhs.Shape, rhs.Shape);
-            var cleanShape = valueShape.Clean();
-            bool allStrictFContig = AreAllOperandsStrictFContig(lhs, rhs, cleanShape);
-            Shape resultShape = allStrictFContig
-                ? Shape.Adopt((long[])cleanShape.dimensions.Clone(), 'F')
-                : cleanShape;
-            return NewArray(resultType, resultShape, fillZeros: true);
+            // NumPy's layout for the shift it skips: the bool value is cast to the int8-or-wider loop, so NumPy's
+            // iterator votes (DefaultEngine.UfuncResultLayout.cs) — the value's memory order.
+            return NewArray(resultType,
+                TryBinaryNonCLayout(lhs, rhs, true, rhs.GetTypeCode != resultType, out var layout) ? layout : valueShape.Clean(),
+                fillZeros: true);
         }
 
         /// <summary>

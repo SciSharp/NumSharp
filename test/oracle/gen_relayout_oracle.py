@@ -793,15 +793,12 @@ def _predicted_kind(tname, nd, size):
 # 2026-10-25 (np-layer-dtype-logic P2): np.searchsorted reads its keys and its sorter from a view's offset, so RL01 (and
 # np.digitize / np.isin, which reach it through searchsorted) matches NumPy; its rule is dropped and its 15 cases moved
 # back into relayout.jsonl the same way.
-GAPS = {
-    "RL02": "np.where reads a C-contiguous condition (bool) / x / y already of the result dtype at a non-zero offset "
-            "from the owner's start (WRONG values; a cast operand is copied first and is read right), and so does its "
-            "all-0-d route for a 0-d y at an offset; np.nancumsum / np.nancumprod of float16 / complex128 run "
-            "np.where(np.isnan(a), fill, a) and inherit it (same root cause as VA03)",
-    "RL03": "np.ldexp reads a C-contiguous mantissa x1 already of the result dtype, or an int32 / int64 exponent x2, at "
-            "a non-zero offset from the owner's start (WRONG values): MaterializeContiguous passes such an operand "
-            "through np.ascontiguousarray unchanged and the kernel reads .Address without Shape.offset (VA05, x1 too)",
-}
+# 2026-11-05 (the ufunc result-layout port): np.where reads its condition, x and y from a view's offset (its all-0-d
+# route too), np.nancumsum / np.nancumprod replace their NaNs as NumPy's _replace_nan does (a K-order copy, then
+# np.copyto(where=isnan)), and np.ldexp's operand materialization copies a C-contiguous view at a non-zero offset, so
+# RL02 and RL03 match NumPy; their rules are dropped and their 20 cases moved back into relayout.jsonl the same way. No
+# relayout gap is open.
+GAPS = {}
 
 # The kinds whose first element sits past the buffer's start by an EXTRA offset (kind_of): the operands a kernel
 # that forgets Shape.offset misreads.
@@ -849,18 +846,7 @@ def _gap_of(case, misread):
     pos = int(pos)
     if kind in ("empty", "empty_view"):
         return _empty_gap(case, op, pos)
-    if not misread:
-        return None
-    dts = [d["dtype"] for d in case["operands"]]
-    result_dt = (case.get("expected") or {}).get("dtype")
-    if kind == "c_offset":
-        if op == "where" and ((pos == 0 and dts[0] == "bool") or (pos in (1, 2) and dts[pos] == result_dt)):
-            return "RL02"
-        if op == "ldexp" and ((pos == 0 and dts[0] == result_dt) or (pos == 1 and dts[1] in ("int32", "int64"))):
-            return "RL03"
-    if kind in ("c_offset", "0d_view") and op in ("nancumsum", "nancumprod") and pos == 0 \
-            and dts[0] in ("float16", "complex128"):
-        return "RL02"
+    # No offset-misread gap is open (RL01 - RL05 are fixed); a new one is a rule here, gated on ``misread``.
     return None
 
 

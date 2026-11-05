@@ -1,3 +1,4 @@
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 
 namespace NumSharp.Backends
@@ -93,12 +94,14 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="a">The array.</param>
         /// <param name="val">The replacement (0 for nancumsum, 1 for nancumprod).</param>
-        /// <returns>The NaN-replaced copy (float16 / float32 / float64 / complex128), or <paramref name="a"/>
-        ///     itself.</returns>
-        /// <remarks>Moved from <c>np._replace_nan_for_scan</c> by the np-layer dtype plan's P1b. The mask still goes
-        ///     through <c>np.isnan</c>'s engine member and the select through <c>np.where</c>, a computational call into the
-        ///     facade that the plan's P6 replaces with an engine select; the up-call ratchet pins it with that
-        ///     reason.</remarks>
+        /// <returns>The NaN-replaced copy (float16 / float32 / float64 / complex128) in NumPy's <c>order='K'</c> copy
+        ///     layout, or <paramref name="a"/> itself.</returns>
+        /// <remarks>Moved from <c>np._replace_nan_for_scan</c> by the np-layer dtype plan's P1b. The mask goes through
+        ///     <c>np.isnan</c>'s engine member and the fill through the internal masked copy NumPy's
+        ///     <c>np.copyto(a, val, where=mask)</c> runs (<see cref="UnmanagedStorage.Copyto"/>), not through the facade.
+        ///     The K-order copy is what makes nancumsum / nancumprod NumPy's layout: a broadcast input's copy sorts its
+        ///     stride-0 axes innermost (probed 2.4.2: <c>np.nancumsum(np.broadcast_to(row, (2, 3, 4)), axis=1)</c> has byte
+        ///     strides (24, 8, 48)), where the iterator's own vote would have kept C.</remarks>
         [NDScopedCovered] // only callers: NanCumSum / NanCumProd, [NDScoped] (the isnan mask and the superseded fill are scope-reclaimed)
         private NDArray ReplaceNanForScan(NDArray a, int val)
         {
@@ -108,19 +111,27 @@ namespace NumSharp.Backends
                 case NPTypeCode.Single:
                 case NPTypeCode.Double:
                 case NPTypeCode.Complex:
-                    // Hot path: a fused single-pass SIMD fill for a C-contiguous float32/float64 operand
-                    // (isnan + where would be two passes plus a bool-mask temp — see NanReplace). Every
-                    // other inexact case (Half, Complex, or any non-C-contiguous view — F-order/strided/
-                    // transposed/broadcast/reversed) takes the composed where(isnan(a), val, a) path, which
-                    // is bit-identical and fully gated but reads logical order correctly for those layouts.
-                    if ((a.typecode == NPTypeCode.Single || a.typecode == NPTypeCode.Double)
-                        && a.Shape.IsContiguous && !a.Shape.IsBroadcasted)
-                        return NanReplace.ReplaceContiguousFloat(a, val);
+                    // NumPy's _replace_nan: a = np.array(a, copy=True), an order='K' copy (an F input's copy is F, a
+                    // transposed one keeps its axis order, a broadcast's stride-0 axes sort innermost), then
+                    // np.copyto(a, val, where=isnan(a)) in place. The scan that follows allocates in that copy's
+                    // order, so the copy's layout is the result's.
+                    // Hot path: a fused single-pass SIMD fill for a dense float32/float64 operand stored as its copy
+                    // (isnan + copyto would be two passes plus a bool-mask temp — see NanReplace).
+                    if (a.typecode == NPTypeCode.Single || a.typecode == NPTypeCode.Double)
+                    {
+                        var fused = NanReplace.ReplaceDenseFloat(a, val);
+                        if (fused is not null)
+                            return fused;
+                    }
 
+                    // Every other inexact case (Half, Complex, a strided / reversed / broadcast view): NumPy's two
+                    // statements, bit-identical (the fill is copied into the NaN slots of the K-order copy).
                     NDArray fill = NewScalar(val);
                     if (fill.typecode != a.typecode)
                         fill = fill.astype(a.typecode);   // 0/1 -> (Half)0/1, 0+0j/1+0j — dtype-preserving
-                    return NDArray.where(a.TensorEngine.IsNan(a), fill, a);
+                    var copy = a.copy('K');
+                    UnmanagedStorage.Copyto(copy, fill, NPY_CASTING.NPY_SAME_KIND_CASTING, a.TensorEngine.IsNan(a));
+                    return copy;
                 default:
                     return a;                             // integer / bool / decimal / char cannot be NaN
             }

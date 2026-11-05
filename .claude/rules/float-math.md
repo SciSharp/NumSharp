@@ -103,7 +103,9 @@ pass in `Backends/Default/Math/Default.Sinc.cs`). NumPy's composition is `y = pi
   tiers); float16/float32/float64 kept; complex → complex128. The zero test is on `pi*x`, not `x`, so sub-underflow
   denormals behave as in NumPy.
 - One fused `np.evaluate` pass: the pi multiply, the zero → eps select, `sin` and the divide fold into one inner-loop
-  kernel over the shared `t = pi*x` subtree.
+  kernel over the shared `t = pi*x` subtree. The result has the ufunc layout of `x` (NumPy's four ufunc calls keep it:
+  plain C or F for a contiguous `x`, the iterator's order for a permuted one): the pass runs over `x` viewed in that
+  layout's axis order and the C result is relabelled (`ComputeInLayout`), no copy.
 - Bit-exact for every real dtype (float64 arithmetic is IEEE-exact; float32 `sin` is NumPy's kernel, float64 `sin` the
   shared `ucrtbase` `Math.Sin`). complex128's per-component bits are not reproducible (NumSharp's complex sin differs
   from NumPy's UCRT `csin` within the ≤ 3-ULP envelope), so complex is excluded from the byte corpus and pinned by an

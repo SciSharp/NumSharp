@@ -101,40 +101,59 @@ namespace NumSharp.Backends
                 return (qOut, rOut);
             }
 
-            // Materialize both operands as C-contiguous arrays of resultType (reads through any
-            // broadcast/strided/mixed-dtype layout). ascontiguousarray is a no-op view when the
-            // operand is already C-contiguous at resultType — so the common same-dtype contiguous
-            // case pays no copy. (np.modf uses the same materialize-then-fused-kernel pattern.)
-            var aC = MaterializeContiguous(lhs, cleanShape, resultType);
-            var bC = MaterializeContiguous(rhs, cleanShape, resultType);
-
-            var q = NewArray(resultType, cleanShape, fillZeros: false);
-            var r = NewArray(resultType, cleanShape, fillZeros: false);
-
-            unsafe
+            // NumPy's result layout: divmod has two outputs, so NumPy never takes its trivial loop and the iterator
+            // allocates both outputs in the inputs' memory order (K order: F for F inputs, a transposed input's own axis
+            // order, C where the votes conflict). The fused kernel writes C order, so a non-C layout runs it over the
+            // operands viewed in that order and relabels both C results (DefaultEngine.UfuncResultLayout.cs).
+            NDArray lv = lhs, rv = rhs;
+            Shape runShape = cleanShape;
+            bool relabel = TryNonCResultLayout(new[] { lhs.Shape, rhs.Shape }, cleanShape.dimensions,
+                                               trivialLoopEligible: false, out var layout);
+            try
             {
-                kernel((void*)aC.Address, (void*)bC.Address, (void*)q.Address, (void*)r.Address, cleanShape.size);
+                if (relabel)
+                {
+                    int[] perm = layout.DenseAxisOrder();
+                    lv = OperandInLayoutOrder(lhs, cleanShape.NDim, perm);
+                    rv = OperandInLayoutOrder(rhs, cleanShape.NDim, perm);
+                    var runDims = new long[perm.Length];
+                    for (int i = 0; i < perm.Length; i++)
+                        runDims[i] = cleanShape.dimensions[perm[i]];
+                    runShape = Shape.Adopt(runDims);
+                }
+
+                // Materialize both operands as C-contiguous arrays of resultType (reads through any
+                // broadcast/strided/mixed-dtype layout). ascontiguousarray is a no-op view when the
+                // operand is already C-contiguous at resultType — so the common same-dtype contiguous
+                // case (and a dense operand viewed in its own memory order) pays no copy. (np.modf uses
+                // the same materialize-then-fused-kernel pattern.)
+                var aC = MaterializeContiguous(lv, runShape, resultType);
+                var bC = MaterializeContiguous(rv, runShape, resultType);
+
+                var q = NewArray(resultType, runShape, fillZeros: false);
+                var r = NewArray(resultType, runShape, fillZeros: false);
+
+                unsafe
+                {
+                    kernel((void*)aC.Address, (void*)bC.Address, (void*)q.Address, (void*)r.Address, runShape.size);
+                }
+
+                // Reclaim the materialized operands. MaterializeContiguous returns the operand itself
+                // (passthrough, no copy) when it is already a C-contiguous resultType array; otherwise a
+                // fresh copy. Dispose only the ones we minted — never an operand — so the pooled buffer
+                // returns promptly instead of falling to the finalizer (the zero-leak UndisposedIntermediate gate).
+                if (!ReferenceEquals(aC, lv)) aC.Dispose();
+                if (!ReferenceEquals(bC, rv)) bC.Dispose();
+
+                if (relabel)
+                    return (NDArray.AdoptLayout(q, layout), NDArray.AdoptLayout(r, layout));
+                return (q, r);
             }
-
-            // Reclaim the materialized operands. MaterializeContiguous returns the ORIGINAL lhs/rhs
-            // (passthrough, no copy) when they are already C-contiguous resultType arrays; otherwise a
-            // fresh broadcast view or ascontiguousarray copy. Dispose only the ones we minted (a fresh
-            // view/copy) — never the caller's lhs/rhs — so the pooled buffer returns promptly instead
-            // of falling to the finalizer (the zero-leak UndisposedIntermediate gate).
-            if (!ReferenceEquals(aC, lhs)) aC.Dispose();
-            if (!ReferenceEquals(bC, rhs)) bC.Dispose();
-
-            // NumPy layout preservation: when every non-scalar operand is strictly F-contiguous the
-            // outputs are F-contiguous too (mirrors ExecuteBinaryOp / np.modf). Values are already
-            // correct C-order; copy('F') relabels them column-major.
-            if (AreAllOperandsStrictFContig(lhs, rhs, cleanShape))
+            finally
             {
-                var qf = q.copy('F'); q.Dispose();
-                var rf = r.copy('F'); r.Dispose();
-                return (qf, rf);
+                DisposeLayoutView(lv, lhs);
+                DisposeLayoutView(rv, rhs);
             }
-
-            return (q, r);
         }
 
         // =============================================================================
@@ -665,15 +684,35 @@ namespace NumSharp.Backends
         /// <paramref name="rt"/>. A no-op passthrough (no copy) when <paramref name="x"/> already IS a
         /// C-contiguous, offset-0, non-broadcast array of <paramref name="rt"/> with that shape.
         /// </summary>
+        /// <param name="x">The operand (any layout; 0-d or lower-rank operands broadcast).</param>
+        /// <param name="shape">The iteration shape (at least one dimension).</param>
+        /// <param name="rt">The loop dtype.</param>
+        /// <returns><paramref name="x"/> itself, or a fresh C-contiguous copy the caller disposes. Either way the result's
+        ///     first element is at its storage's base (offset 0), which the kernels read through <c>.Address</c>.</returns>
         private NDArray MaterializeContiguous(NDArray x, Shape shape, NPTypeCode rt)
         {
             var v = x.Shape.Equals(shape) && !x.Shape.IsBroadcasted ? x : NDArray.broadcast_to(x, shape);
-            if (v.GetTypeCode == rt && v.Shape.IsContiguous && v.Shape.offset == 0 && !v.Shape.IsBroadcasted)
-                return v;
+            if (v.GetTypeCode == rt && v.Shape.IsContiguous && !v.Shape.IsBroadcasted)
+            {
+                if (v.Shape.offset == 0)
+                    return v;
+                // A C-contiguous view at a non-zero offset (an np.split child, a row of a matrix): the kernels read from
+                // .Address, the storage's BASE, and np.ascontiguousarray returns such a view as it is — the divmod / frexp
+                // / ldexp kernels read the owner's start (relayout gap RL03: silently wrong values). Its elements are
+                // copied to a fresh buffer instead.
+                var fresh = v.copy('C');
+                if (!ReferenceEquals(v, x))
+                    v.Dispose();
+                return fresh;
+            }
             // asarray(order='C') materializes a C-contiguous resultType copy through any layout,
             // preserving the (ndim>=1) shape — unlike ascontiguousarray it does not reshape 0-d,
             // but this path only runs for ndim>=1 (0-d routes to the compose fallback above).
-            return NDArray.ascontiguousarray(v, rt);
+            var copy = NDArray.ascontiguousarray(v, rt);
+            // A broadcast view made here is dead once copied: back to the owner's count rather than the finalizer.
+            if (!ReferenceEquals(v, x) && !ReferenceEquals(v, copy))
+                v.Dispose();
+            return copy;
         }
     }
 }

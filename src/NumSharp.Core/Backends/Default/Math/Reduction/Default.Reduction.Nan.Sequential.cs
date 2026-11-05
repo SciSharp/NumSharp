@@ -437,7 +437,7 @@ namespace NumSharp.Backends
             }
 
             if (keepdims)
-                result.Storage.ExpandDimension(ax);
+                ExpandReducedAxis(result, arr.Shape, ax);
             return result.MarkReductionScalar();
         }
     }

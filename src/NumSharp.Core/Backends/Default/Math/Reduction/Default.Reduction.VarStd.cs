@@ -470,7 +470,7 @@ namespace NumSharp.Backends
                             reduced[k++] = dims[d];
                     ret = AllocateReductionResult(part.GetTypeCode, reduced, layout, axis);
                     if (keepdims)
-                        ret.Storage.ExpandDimension(axis);
+                        ExpandReducedAxis(ret, layout, axis);
                 }
 
                 dst[rc] = new Slice(start, start + e);
@@ -605,7 +605,7 @@ namespace NumSharp.Backends
             var ret = AllocateReductionResult(acc.GetTypeCode, reduced, layout, axis);
             UnmanagedStorage.Copyto(ret, accLogical, NPY_CASTING.NPY_SAME_KIND_CASTING);
             if (keepdims)
-                ret.Storage.ExpandDimension(axis);
+                ExpandReducedAxis(ret, layout, axis);
             VarStdChunkedRuns++;
             return ret;
         }

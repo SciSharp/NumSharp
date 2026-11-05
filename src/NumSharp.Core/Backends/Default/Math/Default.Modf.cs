@@ -92,9 +92,9 @@ namespace NumSharp.Backends
 
             // The OUT-OF-PLACE kernel reads `source[i]` and writes `frac[i]`/`integral[i]` at the SAME
             // linear index, so `source` AND every write target must share ONE memory layout for the logical
-            // positions to align — the whole family is made C-CONTIGUOUS (an F-contiguous fresh output is
-            // relabelled afterward by np.modf's PreserveFContig). iterShape can carry F/broadcast strides,
-            // so a fresh temp is built from its DIMENSIONS only.
+            // positions to align — the whole family is made C-CONTIGUOUS (np.modf computes fresh outputs in
+            // NumPy's K order by calling this over the input viewed in that order, then relabelling).
+            // iterShape can carry F/broadcast strides, so a fresh temp is built from its DIMENSIONS only.
 
             // READ source: a C-contiguous, loop-dtype view in logical order. ascontiguousarray RETURNS THE
             // INPUT when it is already C-contiguous and the loop dtype (the common float path — no copy),

@@ -115,9 +115,66 @@ namespace NumSharp.Tests.Backends
                 case "ust": return np.arange(12).astype(tc)["::2"];
                 case "ue": return np.zeros(new Shape(0, 3), tc);
                 case "u11": return np.array(new long[,] { { 4 } }).astype(tc);
+                // 3-D layouts of the ufunc family (values 1..24, so every op is exact)
+                case "c3": return np.arange(1, 25).astype(tc).reshape(2, 3, 4);
+                case "f3": return np.asfortranarray(np.arange(1, 25).astype(tc).reshape(2, 3, 4));
+                case "p3": return np.arange(1, 25).astype(tc).reshape(3, 2, 4).transpose(new[] { 1, 0, 2 });
+                case "q3": return np.arange(1, 25).astype(tc).reshape(4, 2, 3).transpose(new[] { 1, 2, 0 });
+                case "s3": return np.arange(1, 49).astype(tc).reshape(2, 3, 8)["..., ::2"];
+                case "r3": return np.arange(1, 25).astype(tc).reshape(2, 3, 4)[":, ::-1"];
+                case "flipf3": return np.flip(np.asfortranarray(np.arange(1, 25).astype(tc).reshape(2, 3, 4)), 2);
+                case "b3": return np.broadcast_to(np.arange(1, 5).astype(tc), new Shape(2, 3, 4));
+                case "f213": return np.asfortranarray(np.arange(1, 7).astype(tc).reshape(2, 1, 3));
+                case "e203": return np.zeros(new Shape(2, 0, 3), tc);
                 default: throw new ArgumentException(name);
             }
         }
+
+        /// <summary>
+        ///     The ufunc family's operations (twin of the generator's <c>UF</c> / <c>UF1</c> tables): a fresh ufunc result, or
+        ///     a function built on ufuncs or on order='K' copies, over the case's source.
+        /// </summary>
+        /// <param name="op">The operation key (the part of the case key before the source name).</param>
+        /// <param name="x">The source operand.</param>
+        /// <returns>The fresh result NumPy's layout rule decides.</returns>
+        /// <exception cref="ArgumentException">An unknown key.</exception>
+        private static NDArray UfuncOp(string op, NDArray x) => op switch
+        {
+            "neg" => np.negative(x),
+            "sqrt" => np.sqrt(x),
+            "sqrti" => np.sqrt(x.astype(NPTypeCode.Int32)),
+            "isnan" => np.isnan(x.typecode == NPTypeCode.Double ? x : x.astype(NPTypeCode.Double)),
+            "add0d" => x + 1.5,
+            "addself" => x + x,
+            "addrow" => x + np.arange(1.0, 5.0),
+            "addc" => x + Src("c3", NPTypeCode.Double),
+            "muli" => x.astype(NPTypeCode.Int32) * x,
+            "maximum" => np.maximum(x, (NDArray)7.0),
+            "copysign" => np.copysign(x, (NDArray)(-1.0)),
+            "gt" => x > 7.0,
+            "eq" => np.equal(x, x),
+            "land" => np.logical_and(x, x > 5.0),
+            "where" => np.where(x > 7.0, x, 0.0),
+            "divmod" => np.divmod(x, (NDArray)5.0).Item2,
+            "modf" => np.modf(x).Item2,
+            "frexp" => np.frexp(x).Item2,
+            "array" => np.array(x),
+            "n2n" => np.nan_to_num(x),
+            "around1" => np.around(x, 1),
+            "diff1" => np.diff(x, axis: 1),
+            "cumsum1" => np.cumsum(x, axis: 1),
+            "cumprod0" => np.cumprod(x, axis: 0),
+            "nancumsum2" => np.nancumsum(x, axis: 2),
+            "sumk1" => np.sum(x, axis: 1, keepdims: true),
+            "median1" => np.median(x, axis: 1),
+            "mediank1" => np.median(x, axis: 1, keepdims: true),
+            "tril" => np.tril(x),
+            "shl" => np.left_shift(x.astype(NPTypeCode.Int64), (NDArray)2L),
+            "ldexp" => np.ldexp(x, (NDArray)2L),
+            "clip" => np.clip(x, 3.0, 9.0),
+            "adds111" => x.astype(NPTypeCode.Double) + np.ones(new Shape(1, 1, 1)),
+            _ => throw new ArgumentException(op),
+        };
 
         private static Shape Tgt(string token) => token switch
         {
@@ -306,6 +363,20 @@ namespace NumSharp.Tests.Backends
                     int cut = c.Key.LastIndexOf('_');
                     var src = Src(c.Key.Substring(0, cut), i64);
                     return (src, c.Key.EndsWith("_copy") ? src.copy('K') : src.astype(NPTypeCode.Double, copy: true, order: 'K'));
+                }
+                case "ufunc":
+                {
+                    // key = {op}_{src}, except the complex row broadcast's round, which has a source of its own.
+                    if (c.Key == "around0_bcx")
+                    {
+                        var bcx = np.broadcast_to(
+                            np.array(new[] { new System.Numerics.Complex(1.5, 2.5), new System.Numerics.Complex(2.5, -0.5) }),
+                            new Shape(3, 2));
+                        return (bcx, np.around(bcx));
+                    }
+                    int cut = c.Key.LastIndexOf('_');
+                    var src = Src(c.Key.Substring(cut + 1), FlagsOracleRecipes.Dtype(c.Dtype));
+                    return (src, UfuncOp(c.Key.Substring(0, cut), src));
                 }
                 case "linspace":
                     return (null, c.Key switch
@@ -555,6 +626,16 @@ namespace NumSharp.Tests.Backends
 
         [TestMethod]
         public void CopyAstypeKeepOrder_MatchesNumpy() => RunFamily("copyk", floor: 10);
+
+        /// <summary>
+        ///     A fresh ufunc result's layout, NumPy's rule (QA-36): the trivial loop's C / F when the call qualifies, NpyIter's
+        ///     K order otherwise, over eight 3-D operand layouts (C, F, permuted twice, stepped, reversed, flipped F,
+        ///     broadcast) for 32 ufuncs and the functions built on them, plus the extent-1 strides that tell the two
+        ///     allocators apart and a complex round's K-order copy — shape, byte strides, flags, ownership, writeability,
+        ///     sharing and the values bit for bit.
+        /// </summary>
+        [TestMethod]
+        public void UfuncResultLayout_MatchesNumpy() => RunFamily("ufunc", floor: 263);
 
         [TestMethod]
         public void Linspace_MatchesNumpy() => RunFamily("linspace", floor: 10);

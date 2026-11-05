@@ -97,7 +97,7 @@ namespace NumSharp.Backends
                     if (typeCode.HasValue && typeCode.Value != np._FindCommonType(lhs, rhs))
                         ValidateBinaryInputCasts(lhs.GetTypeCode, rhs.GetTypeCode, typeCode.Value, UfuncName(BinaryOp.Power));
                     return fastOp == PowerStrideZeroOp.One
-                        ? NDArray.ones(PowerPlainResultShape(lhs, rhs, lhs.Shape.Clean()), loop)
+                        ? NDArray.ones(PowerPlainResultShape(lhs, rhs, lhs.Shape.Clean(), loop), loop)
                         : ExecuteUnaryOp(lhs, StrideZeroUnaryOp(fastOp), loop);
                 }
             }
@@ -198,7 +198,7 @@ namespace NumSharp.Backends
         /// <param name="iterShape">The validated iteration shape.</param>
         /// <param name="out">The out= array, or null.</param>
         /// <param name="where">The where= mask, or null.</param>
-        /// <returns>A fresh result (the binary route's layout: F only when the operands vote F), or <paramref name="out"/>.</returns>
+        /// <returns>A fresh result (NumPy's ufunc layout, the binary route's), or <paramref name="out"/>.</returns>
         /// <remarks>
         /// The unary kernels are bit-identical to NumPy's fast bodies: <c>x * x</c>, <c>sqrt</c>, <c>1.0 / x</c> (the
         /// float32 quotient equals NumPy's double quotient rounded to float) and a raw copy, after the same input cast
@@ -212,13 +212,13 @@ namespace NumSharp.Backends
             {
                 // A plain call: NumPy writes 1.0 for exponent 0 without reading the bases.
                 if (fastOp == PowerStrideZeroOp.One)
-                    return NDArray.ones(PowerPlainResultShape(lhs, rhs, iterShape), loop);
-                // The result has the bases' shape: the unary op's own allocation (C, or F for a strictly F base — the
+                    return NDArray.ones(PowerPlainResultShape(lhs, rhs, iterShape, loop), loop);
+                // The result has the bases' shape: the unary op's own allocation (NumPy's layout for the bases — the
                 // binary route's choice for a one-element exponent) is the result.
                 if (SameDims(lhs.Shape, iterShape))
                     return ExecuteUnaryOp(lhs, StrideZeroUnaryOp(fastOp), loop);
                 // The exponent adds leading axes ((3,) ** (1,1) is (1,3)): compute into a result of the broadcast shape.
-                var result = NewArray(loop, PowerPlainResultShape(lhs, rhs, iterShape), false);
+                var result = NewArray(loop, PowerPlainResultShape(lhs, rhs, iterShape, loop), false);
                 ExecuteUnaryOp(lhs, StrideZeroUnaryOp(fastOp), loop, result, null);
                 return result;
             }
@@ -283,7 +283,7 @@ namespace NumSharp.Backends
                                                           NDArray @out, NDArray where)
         {
             // A fresh result: the plain call's layout without a mask, NumPy's where= layout with one (WhereResultShape).
-            NDArray target = @out ?? NewArray(loop, where is null ? PowerPlainResultShape(lhs, rhs, iterShape) : WhereResultShape(iterShape, lhs.Shape, rhs.Shape, where), false);
+            NDArray target = @out ?? NewArray(loop, where is null ? PowerPlainResultShape(lhs, rhs, iterShape, loop) : WhereResultShape(iterShape, lhs.Shape, rhs.Shape, where), false);
 
             NPTypeCode lhsType = lhs.GetTypeCode, rhsType = rhs.GetTypeCode;
             Action<ILGenerator> scalarBody = il => DirectILKernelGenerator.EmitPowerStrideZeroBody(il, lhsType, rhsType, loop);
@@ -329,17 +329,20 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// The layout of a fresh plain power result: the binary route's choice (<see cref="ExecuteBinaryOp"/>) — F when
-        /// the operands vote F (<see cref="ShouldProduceFContigOutput(NDArray, NDArray, Shape)"/>), C otherwise — so the
-        /// fast and general paths of one call lay their results out alike.
+        /// The layout of a fresh plain power result: NumPy's ufunc layout (<c>DefaultEngine.UfuncResultLayout.cs</c>, the
+        /// binary route's choice in <see cref="ExecuteBinaryOp"/>) — the trivial loop's C / F order when the call
+        /// qualifies, NpyIter's K order otherwise — so the fast and general paths of one call lay their results out alike.
         /// </summary>
         /// <param name="lhs">The bases.</param>
         /// <param name="rhs">The exponents.</param>
-        /// <param name="iterShape">The clean iteration shape.</param>
-        /// <returns>An offset-0 shape of <paramref name="iterShape"/>'s dims, C or F ordered.</returns>
-        private static Shape PowerPlainResultShape(NDArray lhs, NDArray rhs, Shape iterShape)
-            => ShouldProduceFContigOutput(lhs, rhs, iterShape)
-                ? Shape.Adopt((long[])iterShape.dimensions.Clone(), 'F')
+        /// <param name="iterShape">The clean iteration shape (C-contiguous).</param>
+        /// <param name="loop">The loop dtype: an input of another dtype is a cast, which refuses NumPy's trivial loop for an
+        ///     input of two or more dimensions.</param>
+        /// <returns>A dense, offset-0 shape of <paramref name="iterShape"/>'s dims: <paramref name="iterShape"/> itself for
+        ///     C order.</returns>
+        private static Shape PowerPlainResultShape(NDArray lhs, NDArray rhs, Shape iterShape, NPTypeCode loop)
+            => TryBinaryNonCLayout(lhs, rhs, lhs.GetTypeCode != loop, rhs.GetTypeCode != loop, out var layout)
+                ? layout
                 : iterShape;
 
         /// <summary>

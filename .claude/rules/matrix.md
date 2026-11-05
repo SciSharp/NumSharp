@@ -172,12 +172,11 @@ to `NumSharp.NDMatrix` (all members but `ctypes` / `dump` / `dumps`, which ndarr
   against each operand) and NumPy's error type and text, over 14 source layouts and the dtypes; operands rebuild as
   `NDMatrix` (`"matrix": true`). It is replayed once per scaling route: `Matrix` (production: a counter proves the direct
   pass ran), `Matrix_FusedScaling` (direct pass off, fused pass forced) and `Matrix_TwoPassScaling` (both off), through
-  `NDMatrix.DisableDirectScale` / `FusedScaleMinElementsTestOverride`. 111 cases are carved into
-  `gaps/matrix_gaps.jsonl` under six gap ids; every one is an `NDArray` member or `np.*` function below the class. Pins in
-  `OpenBugs.Matrix.cs`: a fancy assignment into a C-contiguous view at an offset throws (MX07), and the result layouts of
-  np.cumsum / np.cumprod (MX02), ndarray.round of a broadcast operand (MX04) and np.conjugate of a transposed strided view
-  (MX05); MX01 (the fancy getter's layout) and MX09 (complex128 np.prod's zero sign) are pinned by
-  `OpenBugs.FancyIndex.cs` and `OpenBugs.Reductions.cs`.
+  `NDMatrix.DisableDirectScale` / `FusedScaleMinElementsTestOverride`. 64 cases are carved into
+  `gaps/matrix_gaps.jsonl` under two gap ids; each is an `NDArray` member below the class. Pins in `OpenBugs.Matrix.cs`:
+  a fancy assignment into a C-contiguous view at an offset throws (MX07; the result-layout pins MX02 / MX04 / MX05 are
+  regression tests since the ufunc result-layout port); MX01 (the fancy getter's layout) is pinned by
+  `OpenBugs.FancyIndex.cs`.
 - The matrix-operand tier (`test/oracle/gen_matrix_operand_oracle.py`, `oracle.md`): the public `np.*` functions with a
   matrix operand; gaps MO01–MO05 carved into `gaps/matrix_operand{,_host}_gaps.jsonl`.
 - Unit tests: `Matrixlib/NDMatrix.Tests.cs` (NumPy's `test_defmatrix.py` ported plus the design pins;

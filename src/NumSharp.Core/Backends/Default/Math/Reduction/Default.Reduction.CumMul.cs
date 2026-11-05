@@ -99,7 +99,7 @@ namespace NumSharp.Backends
             // Convert boolean input to int64 to match NumPy behavior
             if (arr.GetTypeCode == NPTypeCode.Boolean)
             {
-                var int64Arr = arr.astype(NPTypeCode.Int64, copy: true);
+                var int64Arr = BoolOperandAsAccumulateInt64(arr);
                 var cum = CumProdCore(int64Arr, axis_, (typeCode ?? NPTypeCode.Int64).AsType());
                 int64Arr.Dispose();
                 return cum;
@@ -145,22 +145,25 @@ namespace NumSharp.Backends
             }
 
             var axis = axisChecked;
+            var retTypeCode = typeCode ?? (arr.GetTypeCode.GetAccumulatingType());
+
+            // np.cumprod IS np.multiply.accumulate: NumPy allocates the output through its KEEPORDER iterator, so the
+            // layout follows the source (C for C, F for F, a transposed source's own axis order; a broadcast axis
+            // abstains) — AccumulateResultLayout, shared with np.cumsum.
+            Shape layout = AccumulateResultLayout(shape);
 
             if (shape[axis] == 1)
             {
-                //if the given div axis is 1 - cumprod is just the value itself
-                //Return a copy to avoid sharing memory with the original (NumPy behavior)
-                return arr.copy();
+                // A length-1 axis: every value is its own running product, in the accumulator dtype (NumPy:
+                // cumprod(int32[[5]], axis=0) is int64; dtype= is honoured) and the accumulate's layout. This returned an
+                // un-promoted C copy.
+                return CopyIntoAccumulateLayout(arr, retTypeCode, layout);
             }
 
             // For broadcast arrays, we iterate over the input (which has stride=0 for broadcast dims)
-            // but write to a contiguous output array.
+            // and write the output through its own strides.
             NDArray inputArr = arr;
-
-            // Create output with CONTIGUOUS strides even if input is broadcast.
-            var outputShape = Shape.Adopt(shape.dimensions);  // Fresh contiguous shape
-            var retTypeCode = typeCode ?? (inputArr.GetTypeCode.GetAccumulatingType());
-            var ret = NewArray(retTypeCode, outputShape, false);
+            var ret = NewArray(retTypeCode, layout, false);
 
             // Fast path: use IL-generated axis kernel when available
             // Note: We only use the IL kernel for contiguous arrays without offset, as it doesn't

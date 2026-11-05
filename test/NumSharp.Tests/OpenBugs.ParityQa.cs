@@ -118,31 +118,6 @@ namespace NumSharp.Tests
         }
 
         // ------------------------------------------------------------------
-        // QA-09 — np.cumprod along a length-1 axis keeps a narrow integer dtype
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     <c>np.cumprod(int32 array of shape (2, 1, 3), axis=1)</c> is int64 in NumPy (multiply.accumulate's NEP 50
-        ///     accumulator: signed integers narrower than int64 → int64, unsigned → uint64), whatever the axis length.
-        ///     NumSharp's length-1-axis shortcut returns the input dtype (int8 / uint8 / int16 / int32 / uint32 stay), through
-        ///     <c>np.cumprod</c>, <c>ndarray.cumprod</c> and <c>np.nancumprod</c>; any longer axis promotes. np.cumsum had the
-        ///     same shortcut and was fixed ("promoted to the accumulator dtype + copied", Default.Reduction.CumAdd.cs);
-        ///     cumprod's twin was not.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA09")]
-        public void ParityQa_CumprodLengthOneAxis_ShouldPromoteNarrowIntegers()
-        {
-            using var i32 = np.arange(6).astype(np.int32).reshape(2, 1, 3);
-            using var u8 = np.arange(6).astype(np.uint8).reshape(2, 1, 3);
-
-            using var signedResult = np.cumprod(i32, axis: 1);
-            using var unsignedResult = np.nancumprod(u8, axis: 1);
-
-            signedResult.dtype.Should().Be(np.int64);
-            unsignedResult.dtype.Should().Be(np.uint64);
-        }
-
-        // ------------------------------------------------------------------
         // QA-14 — the explicit (bool) conversion applies float()'s 0-d rule instead of NumPy's truth test
         // ------------------------------------------------------------------
 
@@ -405,77 +380,6 @@ namespace NumSharp.Tests
                 "operands could not be broadcast together with remapped shapes [original->remapped]: (3,)->(3) (3,4) ");
             median.Should().Throw<Exception>().Which.Message.Should().Be(
                 "operands could not be broadcast together with remapped shapes [original->remapped]: (3,)->(3) (1,4) ");
-        }
-
-        // ------------------------------------------------------------------
-        // QA-35 — np.array(ndarray) copies the source's read-only flag and C-orders a broadcast copy
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     <c>np.array(a)</c> is a copy (<c>copy=True</c>, <c>order='K'</c>), and a copy NumPy allocates is always
-        ///     writeable: <c>np.array(ro)[0, 0] = 99</c> works on a read-only <c>ro</c>. NumSharp's
-        ///     <c>np.array(NDArray, bool copy)</c> (Creation/np.array.cs) returns <c>new NDArray(nd.Storage.Clone())</c>,
-        ///     and <c>UnmanagedStorage.Clone</c>'s raw-layout branch (a C- or F-contiguous source at offset 0) builds the
-        ///     clone's shape with <c>new Shape(_shape)</c>, which keeps the source's flags: a read-only C, F or 0-d source
-        ///     gives a read-only copy, and the write raises <c>ValueError: assignment destination is read-only</c>
-        ///     (<c>p90</c>; a strided source takes the other branch and comes back writeable). The other branch lays a
-        ///     broadcast source out in C order, where NumPy's K-order copy of <c>broadcast_to(arange(4.), (3, 4))</c>
-        ///     (strides <c>(0, 8)</c>) is F-contiguous (<c>p89</c>; np.copy and ndarray.copy already give NumPy's F).
-        ///     <c>NDArray.Clone()</c> (not a NumPy API) shares the same storage clone.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA35")]
-        public void ParityQa_ArrayOfNDArray_ShouldBeAWriteableKOrderCopy()
-        {
-            using var ro = np.arange(6.0).reshape(2, 3);
-            ro.setflags(write: false);
-            using var bcast = np.broadcast_to(np.arange(4.0), new Shape(3, 4));
-
-            using var copy = np.array(ro);
-            using var bcastCopy = np.array(bcast);
-            Action write = () => copy[0, 0] = (NDArray)99.0;
-
-            copy.flags.writeable.Should().BeTrue("a copy NumPy allocates is writeable");
-            write.Should().NotThrow();
-            ro.GetDouble(0, 0).Should().Be(0.0);
-            bcastCopy.flags.f_contiguous.Should().BeTrue("order='K' keeps the stride-0 axis fastest");
-            bcastCopy.flags.c_contiguous.Should().BeFalse();
-        }
-
-        // ------------------------------------------------------------------
-        // QA-36 — fresh ufunc results over a permuted operand are C-ordered instead of NumPy's K order
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     A ufunc allocates its output with the iterator's K order (<c>npyiter_new_temp_array</c> over
-        ///     <c>npyiter_find_best_axis_ordering</c>): the axes sorted by the operands' strides, negative strides flipped.
-        ///     For <c>p = np.arange(24.).reshape(3, 2, 4).transpose(1, 0, 2)</c> (strides <c>(32, 64, 8)</c>)
-        ///     <c>np.negative(p)</c>, <c>p + p</c>, <c>np.where(p &gt; 3, p, 0)</c> and <c>np.cumsum(p, axis=2)</c> all keep
-        ///     strides <c>(32, 64, 8)</c>, so <c>np.ravel(np.negative(p), order='K')</c> is <c>-0., -1., -2., …</c> (the
-        ///     memory order). NumSharp's unary path keeps only a strictly F-contiguous layout
-        ///     (<c>TryExecuteUnaryOpViaNDIter</c>: "input strict-F → allocate F-contig output … Otherwise C-contig", likewise
-        ///     the binary engine's <c>bothF</c>) and returns C strides <c>(96, 32, 8)</c>, so the K-order ravel reads
-        ///     <c>-0, -1, -2, -3, -8, -9, …</c> (<c>p91</c>, <c>p92</c>: every unary and binary ufunc over a permuted or a
-        ///     flipped-F operand, cumsum / cumprod / nancumprod along an axis, diff, nan_to_num). Over a plain F operand the
-        ///     float-tier binaries (arctan2, copysign, heaviside, hypot, logaddexp, nextafter) and cumprod / nancumprod
-        ///     along an axis, diff and nan_to_num also return C where NumPy keeps F; the arithmetic ufuncs and cumsum keep F.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA36")]
-        public void ParityQa_UfuncResult_PermutedOperand_ShouldKeepItsMemoryOrder()
-        {
-            using var p = np.arange(24.0).reshape(3, 2, 4).transpose(new[] { 1, 0, 2 });
-            using var f = np.asfortranarray(np.arange(1.0, 25.0).reshape(2, 3, 4));
-
-            using var neg = np.negative(p);
-            using var sum = np.add(p, p);
-            using var memoryOrder = np.ravel(neg, 'K');
-            using var hyp = np.hypot(f, f);
-            using var cp = np.cumprod(f, axis: 0);
-
-            neg.strides.Should().Equal(32L, 64L, 8L);
-            sum.strides.Should().Equal(32L, 64L, 8L);
-            ((double)memoryOrder.GetValue(4)).Should().Be(-4.0, "a K-order ravel reads the result in memory order");
-            hyp.flags.f_contiguous.Should().BeTrue("hypot of two F operands is F in NumPy");
-            cp.flags.f_contiguous.Should().BeTrue("cumprod along an axis keeps an F operand's order");
         }
 
         // ------------------------------------------------------------------

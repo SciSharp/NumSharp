@@ -19,8 +19,9 @@ namespace NumSharp.Backends
         /// <param name="x2">Integer exponents (bool, int8/16/32/64, uint8/16/32, or char). An exponent outside
         /// the C-int range is clamped, so a huge magnitude overflows to ±inf / underflows to ±0 exactly as
         /// NumPy's int64 loop does. uint64, float and complex exponents are rejected.</param>
-        /// <returns><c>x1 * 2^x2</c> broadcast to the common shape, in <paramref name="x1"/>'s float tier.
-        /// F-contiguous inputs yield an F-contiguous result.</returns>
+        /// <returns><c>x1 * 2^x2</c> broadcast to the common shape, in <paramref name="x1"/>'s float tier, laid out as
+        /// NumPy allocates it (F-contiguous inputs yield an F-contiguous result, a transposed input's axis order is
+        /// kept), or <paramref name="out"/>.</returns>
         /// <exception cref="IncorrectTypeException"><paramref name="x1"/> is complex, or <paramref name="x2"/> is
         /// not a supported integer exponent (uint64/float/complex) — NumPy raises the same "not supported for
         /// the input types" TypeError.</exception>
@@ -42,6 +43,31 @@ namespace NumSharp.Backends
             if (@out is not null)
                 ValidateOutCast(floatType, @out.typecode, "ldexp");
 
+            // NumPy's result layout for a fresh result (DefaultEngine.UfuncResultLayout.cs): the trivial loop's C / F order
+            // when the call qualifies, NpyIter's K order otherwise. ldexp's loops pair the float mantissa with an int32 or
+            // int64 exponent, so a mantissa of another dtype, or an exponent of any other integer type, is a cast. The
+            // kernels below write C order, so a non-C layout computes over the operands viewed in its memory order and
+            // relabels the C result. An out= owns its own layout: the result is then only the copy source.
+            if (@out is null && TryBinaryNonCLayout(x1, x2, x1.GetTypeCode != floatType,
+                                                    x2.GetTypeCode != NPTypeCode.Int32 && x2.GetTypeCode != NPTypeCode.Int64,
+                                                    out var layout))
+                return ComputeInLayout(x1, x2, layout, (Engine: this, floatType),
+                    static (a, b, s) => s.Engine.LdexpC(a, b, s.floatType));
+            return FinishLdexpOut(LdexpC(x1, x2, floatType), @out, where);
+        }
+
+        /// <summary>
+        /// The C-ordered core of <see cref="Ldexp"/>: <c>x1 * 2**x2</c> broadcast, the mantissa materialized as a
+        /// contiguous buffer of the loop dtype, the exponent read once (a one-element exponent) or materialized as int32 /
+        /// int64, then one linear kernel pass into a fresh C result.
+        /// </summary>
+        /// <param name="x1">The mantissas (validated: not complex, not text).</param>
+        /// <param name="x2">The exponents (validated: an integer dtype).</param>
+        /// <param name="floatType">The loop (result) dtype.</param>
+        /// <returns>A fresh C-contiguous result of the broadcast shape.</returns>
+        /// <exception cref="NotSupportedException">The loop dtype has no ldexp kernel.</exception>
+        private NDArray LdexpC(NDArray x1, NDArray x2, NPTypeCode floatType)
+        {
             // Broadcast to the common result shape (the exponent never widens the mantissa's dtype).
             var (xShape, _) = Broadcast(x1.Shape, x2.Shape);
             var cleanShape = xShape.Clean();
@@ -49,7 +75,7 @@ namespace NumSharp.Backends
 
             long n = cleanShape.size;
             if (n == 0)
-                return FinishLdexpOut(result, @out, where); // empty broadcast -> empty result
+                return result; // empty broadcast -> empty result
 
             // Materialize x1 broadcast to the result shape as a contiguous buffer of the mantissa dtype
             // (reads through any layout; a no-op passthrough when x1 is already that contiguous dtype).
@@ -85,16 +111,7 @@ namespace NumSharp.Backends
             }
 
             if (!ReferenceEquals(xC, x1)) xC.Dispose(); // reclaim the materialized mantissa temp (never the caller's x1)
-
-            // NumPy layout preservation: an all-F operand set yields an F-contiguous result (mirrors DivMod/modf).
-            // (Skipped when out= is supplied — the caller's out array owns the layout.)
-            if (@out is null && AreAllOperandsStrictFContig(x1, x2, cleanShape))
-            {
-                var rf = result.copy('F');
-                result.Dispose();
-                return rf;
-            }
-            return FinishLdexpOut(result, @out, where);
+            return result;
         }
 
         /// <summary>

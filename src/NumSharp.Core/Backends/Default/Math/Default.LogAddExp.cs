@@ -106,6 +106,13 @@ namespace NumSharp.Backends
         /// logaddexp / logaddexp2 / nextafter. Mirrors <see cref="ExecuteATan2Op"/> but parameterized
         /// by op — the two differ only in the BinaryOp carried into the kernel key and the scalar fold.
         /// </summary>
+        /// <param name="x1">The first input (any layout).</param>
+        /// <param name="x2">The second input (any layout).</param>
+        /// <param name="op">The float-tier op.</param>
+        /// <param name="typeCode">The dtype= loop, or null for the arctan2 promotion.</param>
+        /// <returns>A fresh result in NumPy's layout (<c>DefaultEngine.UfuncResultLayout.cs</c>): F for F inputs, a
+        ///     transposed input's own axis order, C where NumPy's iterator votes C.</returns>
+        /// <exception cref="NotSupportedException">No IL kernel exists for the dtypes.</exception>
         private unsafe NDArray ExecuteFloatTierBinaryPlain(NDArray x1, NDArray x2, BinaryOp op, NPTypeCode? typeCode)
         {
             var t1 = x1.GetTypeCode;
@@ -114,6 +121,31 @@ namespace NumSharp.Backends
 
             if (x1.Shape.IsScalar && x2.Shape.IsScalar)
                 return ExecuteFloatTierScalarScalar(x1, x2, op, t1, t2, resultType);
+
+            // NumPy's result layout: the kernels below write C order, so a non-C layout computes over the inputs viewed
+            // in its memory order and relabels the C result (an F pair's views are C-contiguous, so the SIMD fast paths
+            // still serve it). The loop reads resultType: another input dtype is a cast.
+            if (TryBinaryNonCLayout(x1, x2, t1 != resultType, t2 != resultType, out var layout))
+                return ComputeInLayout(x1, x2, layout, (Engine: this, op, typeCode),
+                    static (a, b, s) => s.Engine.ExecuteFloatTierBinaryC(a, b, s.op, s.typeCode));
+            return ExecuteFloatTierBinaryC(x1, x2, op, typeCode);
+        }
+
+        /// <summary>
+        /// The C-ordered half of <see cref="ExecuteFloatTierBinaryPlain"/>: broadcast, allocate a C result, classify the
+        /// path and dispatch the kernel (the hypot / heaviside SIMD drivers first).
+        /// </summary>
+        /// <param name="x1">The first input (not both 0-d).</param>
+        /// <param name="x2">The second input.</param>
+        /// <param name="op">The float-tier op.</param>
+        /// <param name="typeCode">The dtype= loop, or null for the arctan2 promotion.</param>
+        /// <returns>A fresh C-contiguous result of the broadcast shape.</returns>
+        /// <exception cref="NotSupportedException">No IL kernel exists for the dtypes.</exception>
+        private unsafe NDArray ExecuteFloatTierBinaryC(NDArray x1, NDArray x2, BinaryOp op, NPTypeCode? typeCode)
+        {
+            var t1 = x1.GetTypeCode;
+            var t2 = x2.GetTypeCode;
+            NPTypeCode resultType = typeCode ?? PromoteATan2Binary(x1, x2);
 
             var (s1, s2) = Broadcast(x1.Shape, x2.Shape);
             var resultShape = s1.Clean();

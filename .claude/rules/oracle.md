@@ -203,8 +203,8 @@ test/NumSharp.Tests.Oracle/Fuzz/      C# replay harness (no Python)
   into `corpus/gaps/<tier>_gaps.jsonl` (exact: each carved case diverges, no kept case does), replayed by the
   `*_KnownGaps` `[OpenBugs]` tests, with repros in `NumSharp.Tests/OpenBugs.ViewFlags.cs`. The worst class found:
   C-contiguous views at a non-zero offset (`np.split` / `np.unstack` / `np.array_split` children) read from the parent's
-  start (silent wrong values); still open in `np.where`, `np.ldexp` and the flat `np.nansum` / `np.nanprod`, fixed in
-  `np.repeat`, `np.unique`, the set routines and `np.searchsorted`; `a[:, idx]` on such a view throws. Coverage join:
+  start (silent wrong values); fixed in `np.where`, `np.ldexp`, the flat `np.nansum` / `np.nanprod`, `np.repeat`,
+  `np.unique`, the set routines and `np.searchsorted`; `a[:, idx]` on such a view still throws. Coverage join:
   `oracle_map.json` `viewflags` / `outflags` / `shapearg` param keys (`params.fn`); the leak sweep labels these keys'
   families `op:fn`, and the leaks they found sit in `KnownEscapes` with ceilings. Portability: libm-backed `out=` rows
   take zeros; FFT lengths stay in {2, 3, 4, 6}.
@@ -218,8 +218,8 @@ test/NumSharp.Tests.Oracle/Fuzz/      C# replay harness (no Python)
   `RelayoutLayoutInvariance` holds, with no registry, that NumSharp's outcome equals its own outcome on a C-ordered copy
   (`FuzzCorpus.ReconstructCanonical`) wherever NumPy's does not change. The registry's NEP 50 0-d branches are retired
   (parity QA-05: a 0-d array operand promotes fully, only a C# literal is weak); the generator still drops the variants
-  whose NumPy answer depended on that divergence. Carved gaps: the open ids of RL01–RL07 (`gaps/relayout_gaps.jsonl`,
-  repros in `NumSharp.Tests/OpenBugs.Relayout.cs`). It and the matrix-operand generator skip each other's files, so their
+  whose NumPy answer depended on that divergence. Carved gaps: none open (RL01–RL07 are fixed; `gaps/relayout_gaps.jsonl` is
+  empty, and `NumSharp.Tests/OpenBugs.Relayout.cs` keeps their repros as regression pins). It and the matrix-operand generator skip each other's files, so their
   order does not matter. An empty operand descriptor with a buffer rebuilds as an empty VIEW over it.
 - The surface tier (`test/oracle/gen_surface_oracle.py`; README "The surface tier"): contracts for APIs the coverage
   inventory lists as available (the Array-API linalg forms, the histogram family, array_equiv, shares_memory /

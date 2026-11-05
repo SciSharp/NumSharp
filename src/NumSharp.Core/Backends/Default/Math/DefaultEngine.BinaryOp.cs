@@ -270,23 +270,162 @@ namespace NumSharp.Backends
                 }
             }
 
+            try
+            {
+                // -------- NumPy's result layout ----------------------------------
+                // A fresh result takes the layout NumPy allocates (DefaultEngine.UfuncResultLayout.cs): the trivial loop's
+                // C or F order when the call qualifies, NpyIter's K order otherwise — an F pair stays F, a transposed
+                // operand keeps its axis order, an F operand beside a C one gives C (C wins NpyIter's conflicts). The loop
+                // reads resultType, so an input of another dtype is a cast, which refuses NumPy's trivial loop when it has
+                // two or more dimensions. Two C-contiguous or 0-d operands cost two flag reads here.
+                if (TryBinaryNonCLayout(lhs, rhs, lhsType != resultType, rhsType != resultType, out var layout))
+                    return ExecuteBinaryOpInLayout(lhs, rhs, op, lhsType, rhsType, resultType, layout);
+                return ExecuteBinaryOpCOrder(lhs, rhs, op, lhsType, rhsType, resultType);
+            }
+            finally
+            {
+                // The NEP 50 scalar-cast temp is dead once a route returned: no result aliases it.
+                scalarCastTemp?.Dispose();
+            }
+        }
+
+        /// <summary>
+        ///     A fresh binary result in a layout NumPy allocates that is not C order (see
+        ///     <c>DefaultEngine.UfuncResultLayout.cs</c>): F for an F pair, the operands' own axis order for transposed
+        ///     ones, the K order NpyIter votes for a mixed set.
+        /// </summary>
+        /// <param name="lhs">The first operand (after the weak-scalar adjustments).</param>
+        /// <param name="rhs">The second operand.</param>
+        /// <param name="op">The op, after the bool remaps.</param>
+        /// <param name="lhsType">The first operand's dtype.</param>
+        /// <param name="rhsType">The second operand's dtype.</param>
+        /// <param name="resultType">The loop dtype.</param>
+        /// <param name="layout">The layout to produce: dense, offset 0, not C-contiguous.</param>
+        /// <returns>A fresh array of <paramref name="resultType"/> laid out as <paramref name="layout"/>.</returns>
+        /// <exception cref="NotSupportedException">The op has no kernel for these dtypes (raised by the C routes, exactly
+        ///     as for a C-ordered call).</exception>
+        /// <remarks>
+        ///     <para><b>The linear walk.</b> When the dtypes need no cast and every array operand is stored exactly as the
+        ///     layout stores the result (<see cref="IsLinearInLayout"/>), the whole-array kernels read and write all three
+        ///     buffers linearly — NumPy's single trivial-loop call over F-ordered memory, and its single coalesced
+        ///     iterator call over a dense transposed operand. No view is made.</para>
+        ///     <para><b>The permuted walk.</b> Anything else (a broadcast operand, a strided, reversed or differently
+        ///     ordered one, a cast) is computed by the C routes over the operands viewed in the layout's memory order
+        ///     (<see cref="OperandInLayoutOrder"/>): their C-ordered result over the permuted dims is the layout's buffer,
+        ///     which <see cref="NDArray.AdoptLayout"/> relabels without moving an element. NumPy's iterator walks the same
+        ///     memory order, so the inner loop sees the same strides (the float add / multiply NaN rule reads them).</para>
+        /// </remarks>
+        private unsafe NDArray ExecuteBinaryOpInLayout(NDArray lhs, NDArray rhs, BinaryOp op, NPTypeCode lhsType,
+                                                       NPTypeCode rhsType, NPTypeCode resultType, Shape layout)
+        {
+            var linear = TryLinearBinaryOp(lhs, rhs, op, lhsType, rhsType, resultType, layout);
+            if (linear is not null)
+                return linear;
+
+            return ComputeInLayout(lhs, rhs, layout, (Engine: this, op, lhsType, rhsType, resultType),
+                static (a, b, s) => s.Engine.ExecuteBinaryOpCOrder(a, b, s.op, s.lhsType, s.rhsType, s.resultType));
+        }
+
+        /// <summary>
+        ///     The linear walk of <see cref="ExecuteBinaryOpInLayout"/>: one dtype throughout, and each operand either read
+        ///     once (0-d, or one element of no higher rank than the result) or stored exactly as <paramref name="layout"/>
+        ///     stores the result. Runs the same whole-array kernels the C-ordered trivial loop runs (SimdFull, or
+        ///     SimdScalarRight / SimdScalarLeft beside a one-element operand) straight into a <paramref name="layout"/>
+        ///     result.
+        /// </summary>
+        /// <param name="lhs">The first operand.</param>
+        /// <param name="rhs">The second operand.</param>
+        /// <param name="op">The op, after the bool remaps.</param>
+        /// <param name="lhsType">The first operand's dtype.</param>
+        /// <param name="rhsType">The second operand's dtype.</param>
+        /// <param name="resultType">The loop dtype.</param>
+        /// <param name="layout">The result layout (dense, offset 0).</param>
+        /// <returns>The result, or null (nothing allocated) when an operand is not linear in the layout, a cast is
+        ///     needed, or the kernel is not available — the permuted walk then runs.</returns>
+        private unsafe NDArray? TryLinearBinaryOp(NDArray lhs, NDArray rhs, BinaryOp op, NPTypeCode lhsType,
+                                                  NPTypeCode rhsType, NPTypeCode resultType, in Shape layout)
+        {
+            if (lhsType != rhsType || lhsType != resultType)
+                return null;
+
+            int nd = layout.NDim;
+            // A one-element operand of no higher rank than the result is read once by the scalar-broadcast kernels; a
+            // non-C layout has at least two elements, so at most one operand can be such a scalar.
+            bool lhsScalar = lhs.Shape.size == 1 && lhs.ndim <= nd;
+            bool rhsScalar = rhs.Shape.size == 1 && rhs.ndim <= nd;
+            ExecutionPath path;
+            if (rhsScalar)
+            {
+                if (!IsLinearInLayout(lhs, layout))
+                    return null;
+                path = ExecutionPath.SimdScalarRight;
+            }
+            else if (lhsScalar)
+            {
+                if (!IsLinearInLayout(rhs, layout))
+                    return null;
+                path = ExecutionPath.SimdScalarLeft;
+            }
+            else
+            {
+                if (!IsLinearInLayout(lhs, layout) || !IsLinearInLayout(rhs, layout))
+                    return null;
+                path = ExecutionPath.SimdFull;
+            }
+
+            // An op the generator cannot emit for this dtype (bool subtract) is left to the C routes, which raise or
+            // handle it exactly as for a C-ordered call.
+            MixedTypeKernel kernel;
+            try
+            {
+                kernel = DirectILKernelGenerator.GetMixedTypeKernel(new MixedTypeKernelKey(resultType, resultType, resultType, op, path));
+            }
+            catch (NotSupportedException)
+            {
+                return null;
+            }
+            if (kernel == null)
+                return null;
+
+            var result = NewArray(resultType, layout, false);
+            ExecuteKernel(kernel, lhs, rhs, result, lhs.Shape, rhs.Shape);
+            return result;
+        }
+
+        /// <summary>
+        ///     The routes of a fresh binary result in C order: the trivial contiguous loop, the NDIter route and the direct
+        ///     kernels. Every one allocates a C-contiguous result; <see cref="ExecuteBinaryOpInLayout"/> runs them over
+        ///     views in a non-C layout's memory order.
+        /// </summary>
+        /// <param name="lhs">The first operand (any layout).</param>
+        /// <param name="rhs">The second operand (any layout).</param>
+        /// <param name="op">The op, after the bool remaps.</param>
+        /// <param name="lhsType">The first operand's dtype.</param>
+        /// <param name="rhsType">The second operand's dtype.</param>
+        /// <param name="resultType">The loop dtype.</param>
+        /// <returns>A fresh C-contiguous result of the broadcast shape.</returns>
+        /// <exception cref="IncorrectShapeException">The operands do not broadcast (NumPy's text).</exception>
+        /// <exception cref="NotSupportedException">No kernel or fallback exists for the op and dtypes.</exception>
+        private unsafe NDArray ExecuteBinaryOpCOrder(NDArray lhs, NDArray rhs, BinaryOp op, NPTypeCode lhsType,
+                                                     NPTypeCode rhsType, NPTypeCode resultType)
+        {
             // -------- O(1) trivial-loop bypass -----------------------------
             // NumSharp analogue of NumPy's check_for_trivial_loop +
             // try_trivial_single_output_loop (ufunc_object.c), which handle a
             // single strided inner loop "without using the (heavy) iterator."
-            // When both operands share ONE contiguous layout (both C, or both F),
-            // have identical shape (no broadcast) and the same dtype as the result
-            // (no cast), a single linear walk over all three buffers visits the
-            // same logical element — so we route straight to the existing DirectIL
-            // SimdFull whole-array kernel and skip the NDIter MultiNew/Initialize
-            // construction (measured ~600-2000 ns/call: 22-24% of a small
-            // contiguous op, <=3% once n>=64K). Returns null for anything that is
-            // not trivially contiguous (broadcast/mixed-C-F/strided/cast/scalar-
-            // broadcast/unsupported emit) → falls through to the NDIter route
-            // below with behaviour unchanged.
+            // When both operands are C-contiguous, have identical shape (no
+            // broadcast) and the same dtype as the result (no cast), a single
+            // linear walk over all three buffers visits the same logical element
+            // — so we route straight to the existing DirectIL SimdFull whole-array
+            // kernel and skip the NDIter MultiNew/Initialize construction
+            // (measured ~600-2000 ns/call: 22-24% of a small contiguous op, <=3%
+            // once n>=64K). Returns null for anything that is not trivially
+            // contiguous (broadcast/strided/cast/unsupported emit) → falls through
+            // to the NDIter route below with behaviour unchanged. (An F pair never
+            // reaches here: NumPy lays its result out F, ExecuteBinaryOpInLayout.)
             {
                 var trivial = TryTrivialContiguousBinaryOp(lhs, rhs, op, lhsType, rhsType, resultType);
-                if (trivial is not null) { scalarCastTemp?.Dispose(); return trivial; }
+                if (trivial is not null) return trivial;
             }
 
             // -------- NDIter Tier 3B fast path (all binary ops) -----------
@@ -306,47 +445,18 @@ namespace NumSharp.Backends
             // for the mixed-dtype cases the direct path used to handle.
             {
                 var routed = TryExecuteBinaryOpViaNDIter(lhs, rhs, op, lhsType, rhsType, resultType);
-                if (routed is not null) { scalarCastTemp?.Dispose(); return routed; }
+                if (routed is not null) return routed;
             }
 
             // Broadcast shapes
             var (leftShape, rightShape) = Broadcast(lhs.Shape, rhs.Shape);
-            var cleanShape = leftShape.Clean();
 
-            // NumPy-aligned layout preservation: when EVERY non-scalar operand is strictly
-            // F-contig, allocate the result in F-order up front and skip the post-kernel
-            // copy. Pre-L3-a this branch ran with C-allocated result + `result.copy('F')`
-            // at the end. Allocating F here saves the copy AND lets the L3-a coalesce
-            // collapse to 1-D SimdFull (≈15× speedup for the 1K×1K F-contig case).
-            //
-            // The stricter "all-F" rule is required for kernel correctness: kernels still
-            // walk the result buffer with linear `i*elemSize` indexing (C-order coords).
-            // If result is F-contig but any input operand is neither C nor F (e.g. negative
-            // strides, partial broadcast), the kernel writes positions that don't match
-            // the input's logical coords. The legacy `result.copy('F')` path stays for
-            // the looser "any F, no strict C" case via the post-kernel branch below.
-            //
-            // A strictly F operand can still BROADCAST: a (2,1,2) F array against a (2,3,2) F
-            // array is "strict F" by its own flags, yet its stride-0 middle axis blocks the
-            // F-order merge below, so the coalesced iteration keeps several dims and the linear
-            // C-order write over an F result scrambles the values (every SIMD dtype under the
-            // small-broadcast cutoff, and float16 add/subtract/multiply/divide at any size,
-            // which always take this route). So an F result is allocated here only when every
-            // non-scalar operand has the result's own dims; a broadcast all-F set computes in C
-            // order and the post-kernel branch relabels it F, NumPy's layout for that set.
-            //
-            // Such a broadcast all-F set is instead walked with its axes REVERSED: the kernel's C-coordinate order over
-            // the reversed dims is the F memory order of the original ones, so the linear write fills an F-allocated
-            // result correctly, every operand is read along its own contiguous (or stride-0) axis, and no C result is
-            // copied to F afterwards. Elementwise, so the visiting order changes no value; NumPy's iterator walks such a
-            // set in F order too (K order). This is the float16 add / subtract / multiply / divide route for every size
-            // (plan api-parameter-parity X4: a (30,40,20) F * (30,1,20) F product read 1,200-element strides along the
-            // C-order inner axis, then copied the result to F).
-            bool allStrictF = AreAllOperandsStrictFContig(lhs, rhs, cleanShape);
-            bool walkReversed = allStrictF && HasNonScalarBroadcastOperand(lhs, rhs, cleanShape);
-            Shape resultShape = allStrictF
-                ? Shape.Adopt((long[])cleanShape.dimensions.Clone(), 'F')
-                : cleanShape;
+            // The direct kernels write the result linearly in C-coordinate order over the coalesced dims, so the result
+            // is C-ordered. A non-C layout NumPy allocates (an F pair, a broadcast F set, a transposed operand) reaches
+            // here only as operands already viewed in that layout's memory order (ExecuteBinaryOpInLayout), whose C
+            // result is the layout's buffer — the walk the reversed-axes F route used to make for a broadcast F set, now
+            // for every order.
+            Shape resultShape = leftShape.Clean();
 
             // Allocate result
             var result = NewArray(resultType, resultShape, false);
@@ -356,13 +466,10 @@ namespace NumSharp.Backends
             // memory when a sibling dim is 0 (e.g. (3,1,1) op (1,0,2) -> (3,0,2)).
             // (The NDIter fast path above returns early for the same reason.)
             if (result.size == 0)
-            {
-                scalarCastTemp?.Dispose();
                 return result;
-            }
 
             // L3-a: pre-coalesce adjacent dims with compatible strides for BOTH operands
-            // (and the result). This collapses F-contig N-D to 1-D contig, so the path
+            // (and the result). This collapses a contiguous N-D walk to 1-D, so the path
             // classifier promotes from `General` (≈13× slower) to `SimdFull`. Broadcast
             // and arbitrary strided cases survive unchanged because their cross-axis
             // stride relationships don't satisfy the merge condition.
@@ -373,13 +480,10 @@ namespace NumSharp.Backends
             long* coalResStr = stackalloc long[origNdim > 0 ? origNdim : 1];
             for (int d = 0; d < origNdim; d++)
             {
-                // A reversed walk reads axis (ndim - 1 - d) as the d-th: the F result's strides then descend, so the
-                // coalescing below sees a C-ordered result and merges the axes the F operands run along.
-                int s = walkReversed ? origNdim - 1 - d : d;
-                coalShape[d] = resultShape.dimensions[s];
-                coalLhsStr[d] = leftShape.strides[s];
-                coalRhsStr[d] = rightShape.strides[s];
-                coalResStr[d] = resultShape.strides[s];
+                coalShape[d] = resultShape.dimensions[d];
+                coalLhsStr[d] = leftShape.strides[d];
+                coalRhsStr[d] = rightShape.strides[d];
+                coalResStr[d] = resultShape.strides[d];
             }
             int coalNdim = CoalesceTernaryDimensions(coalShape, coalLhsStr, coalRhsStr, coalResStr, origNdim);
 
@@ -404,21 +508,6 @@ namespace NumSharp.Backends
                 FallbackBinaryOp(lhs, rhs, result, op, leftShape, rightShape);
             }
 
-            // NumPy F-output preservation for the LOOSER case (at least one strict-F operand
-            // but not all): result is currently C-contig (correct kernel output). Copy to F
-            // to match NumPy. The strict-all-F case skipped this branch by allocating F up
-            // front (a broadcast all-F set too, through the reversed walk).
-            if (!allStrictF && ShouldProduceFContigOutput(lhs, rhs, result.Shape))
-            {
-                scalarCastTemp?.Dispose();
-                // copy('F') mints a fresh F-contig array; the C-contig `result` the kernel wrote
-                // is now dead — dispose it rather than drop it to the finalizer (mechanism-3 leak).
-                var fResult = result.copy('F');
-                result.Dispose();
-                return fResult;
-            }
-
-            scalarCastTemp?.Dispose();
             return result;
         }
 
@@ -429,12 +518,13 @@ namespace NumSharp.Backends
         ///     result exceeds int.MaxValue, NDIter not built for long-
         ///     shape arithmetic; unsupported op/dtype emit).
         ///
-        ///     Allocates the output as F-contig when both inputs are strictly
-        ///     F (matches the pre-existing direct-path rule from L3-b) and
-        ///     picks the NDIter order accordingly: NPY_FORTRANORDER for
-        ///     strict-F-both, NPY_CORDER everywhere else. NPY_CORDER also
-        ///     handles the reversed-stride case correctly because NDIter
-        ///     normalizes negative inner strides during init.
+        ///     Allocates a C-contiguous output and iterates in NPY_CORDER: a
+        ///     non-C layout NumPy allocates reaches this route only as operands
+        ///     viewed in that layout's memory order
+        ///     (<see cref="ExecuteBinaryOpInLayout"/>), whose C result is the
+        ///     layout's buffer. NPY_CORDER also handles the reversed-stride case
+        ///     correctly because NDIter normalizes negative inner strides during
+        ///     init.
         ///
         ///     Same-dtype path (<paramref name="lhsType"/> == <paramref name="rhsType"/>
         ///     == <paramref name="resultType"/>): scalar body is
@@ -448,11 +538,6 @@ namespace NumSharp.Backends
         ///     in EmitGeneralLoop / EmitChunkLoop. Vector body is null
         ///     because Tier 3B's <c>CanSimdAllOperands</c> rejects mixed
         ///     dtypes; factory drops straight to the scalar-strided loop.
-        ///
-        ///     After the kernel runs, applies the "looser-F" post-copy step
-        ///     that the direct path uses: if the result is C-contig but the
-        ///     NumPy-aligned rule says it should be F (at least one strict-F
-        ///     input, no strict-C input), return <c>result.copy('F')</c>.
         /// </summary>
         private unsafe NDArray? TryExecuteBinaryOpViaNDIter(
             NDArray lhs, NDArray rhs, BinaryOp op,
@@ -513,31 +598,20 @@ namespace NumSharp.Backends
             //   • both operands C- or F-contiguous — SimdChunk mishandles a strided /
             //     trailing-size-1 / negative-stride operand that NDIter absorbs
             //     (the (N,1)-strided-view and reshape-view integration gates), so
-            //     only clean-layout inputs take this route;
-            //   • NOT every non-scalar operand strictly F — NumPy lays such a set out F,
-            //     and the direct route can only write it in C and copy it to F (its F
-            //     allocation is unsafe once an operand broadcasts, see ExecuteBinaryOp),
-            //     which measured 4-6× slower than this route's F allocation (16³ float64:
-            //     7.1 µs vs 1.7 µs; NumPy 2.7 µs).
+            //     only clean-layout inputs take this route.
+            // (A set NumPy lays out F — every operand F, broadcast or not — arrives
+            // here as reversed-axes views, ExecuteBinaryOpInLayout, which are C.)
             // Above DirectBroadcastMaxElements NDIter's coalescing/vectorization wins,
             // so the op stays here.
             if (lhsType == rhsType && lhsType == resultType
                 && cleanShape.size < DirectBroadcastMaxElements
                 && (leftShape.IsBroadcasted ^ rightShape.IsBroadcasted)
                 && IsContiguousCorF(lhs.Shape) && IsContiguousCorF(rhs.Shape)
-                && !AreAllOperandsStrictFContig(lhs, rhs, cleanShape)
                 && DirectILKernelGenerator.CanUseSimdBinary(op, resultType))
                 return null;
 
-            // Mirror the direct path: F-allocate output when every non-scalar
-            // operand is strict-F. Otherwise default to C and let the
-            // post-kernel "looser-F" copy step rectify when needed.
-            bool allStrictFContig = AreAllOperandsStrictFContig(lhs, rhs, cleanShape);
-            Shape resultShape = allStrictFContig
-                ? Shape.Adopt((long[])cleanShape.dimensions.Clone(), 'F')
-                : cleanShape;
-
-            var result = NewArray(resultType, resultShape, false);
+            // A C-ordered result (see the summary): the iterator then writes it in its own order.
+            var result = NewArray(resultType, cleanShape, false);
 
             // Empty broadcast result (a stride-0 broadcast dim alongside a zero-size
             // dim, e.g. (3,1,1) op (1,0,2) -> (3,0,2)): there is nothing to compute.
@@ -546,11 +620,6 @@ namespace NumSharp.Backends
             // is guarded the same way). Matches NumPy: empty op -> empty result.
             if (result.size == 0)
                 return result;
-
-            // Order selection — see method-summary comment.
-            var order = allStrictFContig
-                ? NPY_ORDER.NPY_FORTRANORDER
-                : NPY_ORDER.NPY_CORDER;
 
             // SIMD viability: requires equal dtypes (CanSimdAllOperands in
             // the Tier 3B factory enforces this anyway, but we short-circuit
@@ -615,7 +684,7 @@ namespace NumSharp.Backends
                 using var iter = NDIterRef.MultiNew(
                     3, new[] { lhs, rhs, result },
                     NDIterGlobalFlags.EXTERNAL_LOOP | NDIterGlobalFlags.COPY_IF_OVERLAP,
-                    order,
+                    NPY_ORDER.NPY_CORDER,
                     NPY_CASTING.NPY_SAFE_CASTING,
                     s_binaryIterFlags);
 
@@ -629,19 +698,10 @@ namespace NumSharp.Backends
             {
                 // EmitScalarOperation / EmitVectorOperation / EmitConvertTo
                 // can throw for combos they don't cover. Surface as null so
-                // the caller falls back to the direct path.
+                // the caller falls back to the direct path; the unwritten result
+                // goes back to the pool rather than to the finalizer.
+                result.Dispose();
                 return null;
-            }
-
-            // Looser-F preservation: matches the post-kernel branch in the
-            // direct path. Triggers when the result is currently C-contig but
-            // the NumPy rule says it should be F because at least one input
-            // is strict-F and no input is strict-C.
-            if (!allStrictFContig && ShouldProduceFContigOutput(lhs, rhs, result.Shape))
-            {
-                var fResult = result.copy('F');
-                result.Dispose();   // C-contig kernel output now dead (mechanism-3 leak)
-                return fResult;
             }
 
             return result;
@@ -654,16 +714,14 @@ namespace NumSharp.Backends
         ///     using the (heavy) iterator."
         ///
         ///     Fires only when the op needs neither broadcasting nor casting and
-        ///     both operands share ONE contiguous layout, so element k of each
-        ///     operand's buffer (from its own offset) is the same logical element:
+        ///     both operands are C-contiguous, so element k of each operand's
+        ///     buffer (from its own offset) is the same logical element:
         ///       • dtypes identical (lhs == rhs == result) — no cast;
         ///       • shapes identical (<see cref="Shape.Equals(Shape)"/>, which
         ///         compares size + dimensions and ignores strides) — no broadcast;
         ///       • neither operand broadcasted (stride-0 dim with extent > 1);
-        ///       • both C-contiguous (→ C result) or both F-contiguous (→ F result).
-        ///     1-D arrays are both C and F; the C branch is tested first (C result
-        ///     == F result there), so the F branch implies ndim > 1 strictly-F,
-        ///     matching <see cref="AreAllOperandsStrictFContig"/>'s F-alloc rule.
+        ///       • both C-contiguous (→ C result). An F pair is NumPy's F result and
+        ///         takes the same kernel through <see cref="TryLinearBinaryOp"/>.
         ///     Contiguous slices (offset != 0) qualify because
         ///     <see cref="ExecuteKernel"/> applies each operand's offset.
         ///
@@ -719,10 +777,8 @@ namespace NumSharp.Backends
             if (ls.IsBroadcasted || rs.IsBroadcasted)
                 return null;
 
-            // One shared contiguous layout (C checked first; see summary).
-            bool bothC = ls.IsContiguous && rs.IsContiguous;
-            bool bothF = !bothC && ls.IsFContiguous && rs.IsFContiguous;
-            if (!bothC && !bothF)
+            // Both C-contiguous: the C result is walked in lockstep with both inputs.
+            if (!ls.IsContiguous || !rs.IsContiguous)
                 return null;
 
             // SimdFull kernel: ignores strides, walks result.size linearly. Emit may
@@ -741,10 +797,9 @@ namespace NumSharp.Backends
             if (kernel == null)
                 return null;
 
-            // Reuse a canonical input shape (offset 0, owns its buffer, right order)
-            // instead of cloning dims + reconstructing strides/flags. bothF implies
-            // strictly column-major ls (1-D would have satisfied bothC first).
-            Shape resultShape = CanonicalResultShape(ls, bothF);
+            // Reuse a canonical input shape (offset 0, owns its buffer, plain C strides)
+            // instead of cloning dims + reconstructing strides/flags.
+            Shape resultShape = CanonicalResultShape(ls, false);
             var result = NewArray(resultType, resultShape, false);
 
             // Empty result: nothing to compute (the kernel assumes >= 1 element).
@@ -761,9 +816,11 @@ namespace NumSharp.Backends
         ///     to the existing <see cref="ExecutionPath.SimdScalarRight"/> /
         ///     <see cref="ExecutionPath.SimdScalarLeft"/> DirectIL kernel (scalar read
         ///     once, array walked linearly), skipping NDIter construction. The result
-        ///     takes the array operand's shape and layout (C, or strictly-F) so the
-        ///     linear write aligns with the linear array read. Returns null (→ NDIter)
-        ///     when the array operand is non-contiguous or the emit is unsupported.
+        ///     takes the array operand's shape in C order, so the linear write aligns
+        ///     with the linear array read (an F array is NumPy's F result and takes
+        ///     the same kernel through <see cref="TryLinearBinaryOp"/>). Returns null
+        ///     (→ NDIter) when the array operand is not C-contiguous or the emit is
+        ///     unsupported.
         ///
         ///     Callers guarantee identical dtypes (same-dtype gate in
         ///     <see cref="TryTrivialContiguousBinaryOp"/>), so the kernel key uses
@@ -774,12 +831,7 @@ namespace NumSharp.Backends
             NDArray array, bool scalarIsRhs)
         {
             var arrShape = array.Shape;
-            if (arrShape.IsBroadcasted)
-                return null;
-
-            bool isC = arrShape.IsContiguous;
-            bool isF = !isC && arrShape.IsFContiguous;
-            if (!isC && !isF)
+            if (arrShape.IsBroadcasted || !arrShape.IsContiguous)
                 return null;   // strided/transposed array operand → NDIter
 
             var path = scalarIsRhs ? ExecutionPath.SimdScalarRight : ExecutionPath.SimdScalarLeft;
@@ -796,7 +848,7 @@ namespace NumSharp.Backends
             if (kernel == null)
                 return null;
 
-            Shape resultShape = CanonicalResultShape(arrShape, isF);
+            Shape resultShape = CanonicalResultShape(arrShape, false);
             var result = NewArray(resultType, resultShape, false);
             if (result.size == 0)
                 return result;
@@ -1221,101 +1273,6 @@ namespace NumSharp.Backends
             => s.size <= 1 || s.IsContiguous || s.IsFContiguous;
 
         /// <summary>
-        /// NumPy-aligned rule: the output is F-contiguous when every non-scalar operand
-        /// is strictly F-contiguous (IsFContiguous && !IsContiguous).
-        /// Scalars (and 1-element shapes, both C and F) do not change the decision.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-        internal static bool ShouldProduceFContigOutput(NDArray a, Shape resultShape)
-        {
-            if (resultShape.NDim <= 1 || resultShape.size <= 1)
-                return false;
-            var s = a.Shape;
-            // Scalars and size-1 shapes don't force a preference.
-            if (s.IsScalar || s.size <= 1)
-                return false;
-            return s.IsFContiguous && !s.IsContiguous;
-        }
-
-        /// <summary>
-        ///     Stricter L3-a rule: every non-scalar operand must be strictly F-contiguous
-        ///     (not just one of them). Required for the F-allocated-result optimization
-        ///     because the kernel walks the result buffer linearly. If any operand is
-        ///     neither C nor F (negative strides, partial broadcast, custom view), its
-        ///     linear walk doesn't align with the F-output's linear walk → wrong values.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-        internal static bool AreAllOperandsStrictFContig(NDArray lhs, NDArray rhs, Shape resultShape)
-        {
-            if (resultShape.NDim <= 1 || resultShape.size <= 1)
-                return false;
-
-            bool lhsScalar = lhs.Shape.IsScalar || lhs.Shape.size <= 1;
-            bool rhsScalar = rhs.Shape.IsScalar || rhs.Shape.size <= 1;
-
-            bool lhsPureF = !lhsScalar && lhs.Shape.IsFContiguous && !lhs.Shape.IsContiguous;
-            bool rhsPureF = !rhsScalar && rhs.Shape.IsFContiguous && !rhs.Shape.IsContiguous;
-
-            // Strict-all-F requires every non-scalar operand to be pure-F.
-            // The "all scalars" case never reaches here (excluded upstream).
-            if (!lhsScalar && !lhsPureF) return false;
-            if (!rhsScalar && !rhsPureF) return false;
-
-            // At least one non-scalar op must be pure-F (otherwise both are scalars,
-            // which the upstream IsScalar+IsScalar path already short-circuits).
-            return lhsPureF || rhsPureF;
-        }
-
-        /// <summary>
-        ///     True when a non-scalar operand of a binary op broadcasts to the result shape, i.e.
-        ///     its own dimensions differ from <paramref name="resultShape"/>'s (a scalar or any
-        ///     one-element operand does not count: it broadcasts as a scalar the kernels read once).
-        ///     The direct kernels (<see cref="ExecuteKernelCoalesced"/>) write the result linearly,
-        ///     in C-coordinate order over the coalesced dims, so an F-allocated result is correct
-        ///     only when every dim coalesces into one run. Strictly F operands of the result's own
-        ///     dims always do; a broadcast operand's stride-0 axis blocks the merge, so the direct
-        ///     path must not allocate F for such a set (see <see cref="ExecuteBinaryOp"/>).
-        /// </summary>
-        /// <param name="lhs">The left operand, before broadcasting.</param>
-        /// <param name="rhs">The right operand, before broadcasting.</param>
-        /// <param name="resultShape">The broadcast result shape.</param>
-        /// <returns>True when a non-scalar operand's dimensions differ from the result's.</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-        internal static bool HasNonScalarBroadcastOperand(NDArray lhs, NDArray rhs, Shape resultShape)
-        {
-            bool lhsScalar = lhs.Shape.IsScalar || lhs.Shape.size <= 1;
-            bool rhsScalar = rhs.Shape.IsScalar || rhs.Shape.size <= 1;
-            return (!lhsScalar && !SameDims(lhs.Shape, resultShape))
-                || (!rhsScalar && !SameDims(rhs.Shape, resultShape));
-        }
-
-        /// <summary>
-        /// Binary variant — require that every non-scalar operand is strictly F-contiguous
-        /// and at least one of them is (otherwise the scalar+scalar case is excluded upstream).
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-        internal static bool ShouldProduceFContigOutput(NDArray lhs, NDArray rhs, Shape resultShape)
-        {
-            if (resultShape.NDim <= 1 || resultShape.size <= 1)
-                return false;
-
-            bool lhsScalar = lhs.Shape.IsScalar || lhs.Shape.size <= 1;
-            bool rhsScalar = rhs.Shape.IsScalar || rhs.Shape.size <= 1;
-
-            bool lhsPureF = !lhsScalar && lhs.Shape.IsFContiguous && !lhs.Shape.IsContiguous;
-            bool rhsPureF = !rhsScalar && rhs.Shape.IsFContiguous && !rhs.Shape.IsContiguous;
-            bool lhsPureC = !lhsScalar && lhs.Shape.IsContiguous && !lhs.Shape.IsFContiguous;
-            bool rhsPureC = !rhsScalar && rhs.Shape.IsContiguous && !rhs.Shape.IsFContiguous;
-
-            // If any non-scalar operand is strictly C-contig, fall through to the C default.
-            if (lhsPureC || rhsPureC)
-                return false;
-
-            // At least one non-scalar operand must be strictly F-contig to trigger F output.
-            return lhsPureF || rhsPureF;
-        }
-
-        /// <summary>
         ///     Build the result <see cref="Shape"/> for a trivial-loop bypass without the
         ///     redundant dims-clone + strides-alloc + flag/size/stride walks that
         ///     <c>new Shape(dims[, 'F'])</c> performs.
@@ -1336,7 +1293,10 @@ namespace NumSharp.Backends
         ///     (<c>bufferSize &gt; size</c>) must NOT be reused — the freshly-allocated result
         ///     starts at 0 and owns exactly <c>size</c> elements, so inheriting the source's
         ///     offset/bufferSize would mis-describe it. Those fall back to building a fresh
-        ///     canonical Shape exactly as before.
+        ///     canonical Shape exactly as before. So does a contiguous source whose
+        ///     extent-1 axes carry other strides than the plain ones (a <c>newaxis</c> view's
+        ///     stride 0): the flags never read those axes, but NumPy's fresh result has the
+        ///     plain strides, and <c>.strides</c> shows them.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static Shape CanonicalResultShape(Shape src, bool wantF)
@@ -1348,9 +1308,9 @@ namespace NumSharp.Backends
                 // column-major (ndim > 1) sources — matching new Shape(dims, 'F').
                 if (!wantF)
                 {
-                    if (src.IsContiguous) return src;
+                    if (src.IsContiguous && Shape.HasPlainStrides(src, fortran: false)) return src;
                 }
-                else if (src.IsFContiguous && !src.IsContiguous)
+                else if (src.IsFContiguous && !src.IsContiguous && Shape.HasPlainStrides(src, fortran: true))
                 {
                     return src;
                 }

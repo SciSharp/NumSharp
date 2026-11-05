@@ -1303,8 +1303,10 @@ namespace NumSharp
         /// <param name="x">The values where <paramref name="condition"/> is true, an array (a weak 0-d array for a Python
         ///     scalar: the facades convert C# values with <see cref="FromPythonOperand"/>).</param>
         /// <param name="y">The values where <paramref name="condition"/> is false.</param>
-        /// <returns>A new array of the broadcast shape in NumPy's iterator layout (F order when every full-size operand is
-        ///     F-contiguous, C otherwise).</returns>
+        /// <returns>A new array of the broadcast shape in NumPy's iterator layout: <c>PyArray_Where</c> allocates it through
+        ///     an <c>NPY_KEEPORDER</c> iterator over the condition, x and y, so it takes their memory order (F for F
+        ///     operands, a transposed operand's own axis order, C where their orders conflict; 0-d and broadcast axes do
+        ///     not vote).</returns>
         /// <exception cref="IncorrectShapeException">The three operands do not broadcast together: NumPy's iterator text,
         ///     "operands could not be broadcast together with shapes (3,4) (7,) (3,4) " (see BroadcastWhereOperands).
         ///     Raised after the dtype check, as in NumPy.</exception>
@@ -1363,11 +1365,49 @@ namespace NumSharp
                 yArr = broadcasted[2];
             }
 
-            // Resolve output layout before dtype casts. Casts of broadcasted scalars can
-            // materialize C-contiguous temporaries, but NumPy's iterator ignores those for
-            // output-order selection.
-            char resultOrder = ResolveWhereOrder(cond, xArr, yArr);
+            // Resolve the output layout before the dtype casts, from the operands as given: NumPy's iterator votes with
+            // the arrays it receives, and a cast's temporary (or a broadcast scalar's) is not one of them. PyArray_Where
+            // allocates through an NPY_KEEPORDER iterator over (out, condition, x, y) and never takes a trivial loop, so
+            // the layout is NpyIter's K order (DefaultEngine.UfuncResultLayout.cs). The kernels below write C order, so a
+            // non-C layout runs them over the operands viewed in its memory order (views the scope reclaims) and
+            // relabels the C result.
+            if (Backends.DefaultEngine.TryNonCResultLayout(new[] { condition.Shape, x.Shape, y.Shape }, dims,
+                                                           trivialLoopEligible: false, out var layout))
+            {
+                int[] perm = layout.DenseAxisOrder();
+                int nd = layout.NDim;
+                var runDims = new long[nd];
+                for (int i = 0; i < nd; i++)
+                    runDims[i] = dims[perm[i]];
+                var selected = WhereSelect(Backends.DefaultEngine.OperandInLayoutOrder(cond, nd, perm),
+                                           Backends.DefaultEngine.OperandInLayoutOrder(xArr, nd, perm),
+                                           Backends.DefaultEngine.OperandInLayoutOrder(yArr, nd, perm),
+                                           x, y, xIsScalar, yIsScalar, descr, runDims);
+                return AdoptLayout(selected, layout);
+            }
 
+            return WhereSelect(cond, xArr, yArr, x, y, xIsScalar, yIsScalar, descr, (long[])dims.Clone());
+        }
+
+        /// <summary>
+        ///     The selection half of <see cref="where"/>: the condition coerced to bool and x / y to the result dtype, then
+        ///     the scalar-broadcast kernels, the contiguous kernel or the four-operand iterator write a fresh C-ordered
+        ///     result.
+        /// </summary>
+        /// <param name="cond">The condition, broadcast to the result's dims (any dtype; a view in the layout's memory
+        ///     order when the result is relabelled afterwards).</param>
+        /// <param name="xArr">The true values, broadcast likewise.</param>
+        /// <param name="yArr">The false values, broadcast likewise.</param>
+        /// <param name="x">The true values as given (read once when <paramref name="xIsScalar"/>).</param>
+        /// <param name="y">The false values as given (read once when <paramref name="yIsScalar"/>).</param>
+        /// <param name="xIsScalar">Whether x is one element (the hoisted-scalar kernels).</param>
+        /// <param name="yIsScalar">Whether y is one element.</param>
+        /// <param name="descr">The NEP 50 result dtype, or null when it is x's own dtype.</param>
+        /// <param name="resultDims">The result's dims, in the operands' axis order (adopted).</param>
+        /// <returns>A fresh C-contiguous result of <paramref name="resultDims"/>.</returns>
+        private static NDArray WhereSelect(NDArray cond, NDArray xArr, NDArray yArr, NDArray x, NDArray y,
+                                           bool xIsScalar, bool yIsScalar, DType descr, long[] resultDims)
+        {
             // Coerce the condition to boolean using NumPy's truthiness rules
             // (0/0.0 → False, everything else including NaN/±Inf → True). The
             // iterator-driven expression kernel requires a bool condition dtype.
@@ -1383,10 +1423,9 @@ namespace NumSharp
             if (yArr.GetTypeCode != outType)
                 yArr = yArr.astype(outType, copy: false);
 
-            // Use cond.shape (dimensions only) not cond.Shape (which may have broadcast strides).
-            // NumPy's iterator allocation preserves F-order when all full-size operands agree
-            // on F layout; any full C-contiguous or non-contiguous operand falls back to C.
-            var result = np.empty(Shape.Adopt((long[])cond.Shape.dimensions.Clone(), resultOrder), outType);
+            // The dims only, never cond.Shape (which may carry broadcast strides): a C-ordered result, which where relabels
+            // into NumPy's layout when the operands were viewed in another memory order.
+            var result = np.empty(Shape.Adopt(resultDims), outType);
 
             // Handle empty arrays - nothing to iterate
             if (result.size == 0)
@@ -1519,42 +1558,14 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     The layout NumPy's iterator gives <see cref="where"/>'s result: F when every full-size operand that has a
-        ///     preference is F-contiguous only, C when any is C-contiguous only or neither; scalars, 1-D and broadcast
-        ///     operands do not vote.
+        ///     The address of an operand's FIRST element: its storage's base plus its view's offset. <c>NDArray.Address</c>
+        ///     is the base alone, so a kernel handed it reads a C-contiguous view at a non-zero offset (an np.split /
+        ///     np.unstack child, a 0-d view <c>a[3]</c>) from its owner's start — the where kernels did (relayout gap RL02:
+        ///     silently wrong values).
         /// </summary>
-        /// <param name="operands">The broadcast condition, x and y.</param>
-        /// <returns><c>'F'</c> or <c>'C'</c>.</returns>
-        private static char ResolveWhereOrder(params NDArray[] operands)
-        {
-            bool sawStrictF = false;
-
-            foreach (var operand in operands)
-            {
-                var shape = operand.Shape;
-
-                // Scalar, 1-D, and broadcasted operands don't force the output layout.
-                if (shape.IsScalar || shape.NDim <= 1 || shape.IsBroadcasted)
-                    continue;
-
-                bool isC = shape.IsContiguous;
-                bool isF = shape.IsFContiguous;
-
-                if (isC && !isF)
-                    return 'C';
-
-                if (isF && !isC)
-                {
-                    sawStrictF = true;
-                    continue;
-                }
-
-                if (!isC && !isF)
-                    return 'C';
-            }
-
-            return sawStrictF ? 'F' : 'C';
-        }
+        /// <param name="a">The operand (any dtype; contiguous, or one element, for the kernels that read it linearly).</param>
+        /// <returns>The first element's address.</returns>
+        private static unsafe nint FirstElement(NDArray a) => (nint)((byte*)a.Address + a.Shape.offset * (long)a.dtypesize);
 
         /// <summary>
         /// IL Kernel dispatch for contiguous arrays.
@@ -1567,10 +1578,10 @@ namespace NumSharp
         /// <param name="outType">The result's storage lane.</param>
         private static unsafe void WhereKernelDispatch(NDArray cond, NDArray x, NDArray y, NDArray result, NPTypeCode outType)
         {
-            var condPtr = (nint)cond.Address;
+            var condPtr = FirstElement(cond);
             var count = result.size;
 
-            NpFunc.Invoke(outType, WhereKernelExecute<int>, condPtr, (nint)x.Address, (nint)y.Address, (nint)result.Address, count);
+            NpFunc.Invoke(outType, WhereKernelExecute<int>, condPtr, FirstElement(x), FirstElement(y), (nint)result.Address, count);
         }
 
         /// <summary>The typed body of <see cref="WhereKernelDispatch"/>: the contiguous IL where kernel of <typeparamref name="T"/>.</summary>
@@ -1603,7 +1614,7 @@ namespace NumSharp
             // materialize the scalar to a broadcast view of cond's shape and fall back
             // to the existing NDIter expression path.
             bool ok = NpFunc.Invoke(outType, TryWhereScalarXExecute<int>,
-                (nint)cond.Address, (nint)xScalar.Address, (nint)y.Address, (nint)result.Address, result.size);
+                FirstElement(cond), FirstElement(xScalar), FirstElement(y), (nint)result.Address, result.size);
             if (ok) return;
 
             var xBroadcast = np.broadcast_to(xScalar, cond.Shape);
@@ -1619,7 +1630,7 @@ namespace NumSharp
         private static unsafe void WhereScalarYDispatch(NDArray cond, NDArray x, NDArray yScalar, NDArray result, NPTypeCode outType)
         {
             bool ok = NpFunc.Invoke(outType, TryWhereScalarYExecute<int>,
-                (nint)cond.Address, (nint)x.Address, (nint)yScalar.Address, (nint)result.Address, result.size);
+                FirstElement(cond), FirstElement(x), FirstElement(yScalar), (nint)result.Address, result.size);
             if (ok) return;
 
             var yBroadcast = np.broadcast_to(yScalar, cond.Shape);
@@ -1635,7 +1646,7 @@ namespace NumSharp
         private static unsafe void WhereScalarXYDispatch(NDArray cond, NDArray xScalar, NDArray yScalar, NDArray result, NPTypeCode outType)
         {
             bool ok = NpFunc.Invoke(outType, TryWhereScalarXYExecute<int>,
-                (nint)cond.Address, (nint)xScalar.Address, (nint)yScalar.Address, (nint)result.Address, result.size);
+                FirstElement(cond), FirstElement(xScalar), FirstElement(yScalar), (nint)result.Address, result.size);
             if (ok) return;
 
             var xBroadcast = np.broadcast_to(xScalar, cond.Shape);

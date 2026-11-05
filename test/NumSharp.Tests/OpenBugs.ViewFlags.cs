@@ -16,14 +16,14 @@ namespace NumSharp.Tests
     // the *_KnownGaps tests there. This file reproduces the ones with consequences through PUBLIC calls:
     //
     //   * Offset views (VALUES). np.split / np.unstack / np.array_split children are C-contiguous views whose Shape
-    //     carries a non-zero offset (a basic slice re-seats the storage address instead). Several kernels ignore that
-    //     offset for a C-contiguous operand and read the parent from its start: np.where (condition, x, y), np.ldexp
-    //     (x2), and a[:, idx] (which throws); np.searchsorted (v, sorter, the method too), np.repeat and ndarray.repeat,
+    //     carries a non-zero offset (a basic slice re-seats the storage address instead). Kernels that ignore that
+    //     offset for a C-contiguous operand read the parent from its start: a[:, idx] (which throws); np.where
+    //     (condition, x, y), np.ldexp (x2), np.searchsorted (v, sorter, the method too), np.repeat and ndarray.repeat,
     //     np.unique and the set routines, and np.nansum / np.nanprod with axis=None did, and are fixed (below). The
-    //     results are silently wrong.
-    //   * Read-only arrays. A copy of a read-only array stays read-only, a basic index of a read-only broadcast view
-    //     through the object[] indexer is writeable, and np.broadcast_arrays hands a read-only broadcast operand back
-    //     writeable — a write through it changes every row the broadcast repeats.
+    //     results were silently wrong.
+    //   * Read-only arrays. A copy of a read-only array stayed read-only, a basic index of a read-only broadcast view
+    //     through the object[] indexer was writeable, and np.broadcast_arrays handed a read-only broadcast operand back
+    //     writeable (a write through it changed every row the broadcast repeats); all three are fixed (below).
     //   * Order and layout. ravel(order='K') of a permuted array returns the C-order values as a copy, astype(...,
     //     copy=False, order='C') of a stepped view returns the view itself, np.zeros(view.Shape) keeps the view's F
     //     layout, np.reshape(-1) of a broadcast view throws, and np.linalg.multi_dot writes into an out= that np.dot
@@ -48,6 +48,13 @@ namespace NumSharp.Tests
     // FIXED 2026-11-05 (parity QA-15): np.nansum / np.nanprod are NumPy's statements and their one-element shortcut reads
     // a view from its offset (VF30); its two pins are untagged, the generator's VF30 rule is dropped and its 8 cells are
     // back in the gate.
+    //
+    // FIXED 2026-11-05 (the ufunc result-layout port): np.where reads its condition, x and y from a view's offset (VA03)
+    // and np.ldexp copies a C-contiguous exponent view at a non-zero offset before its kernel reads it (VA05); a copy of
+    // a read-only array (np.array, np.positive) is writeable (VF14); and every fresh elementwise result, np.array's
+    // K-order copy, the scans, np.diff, np.round, np.nan_to_num, np.tril / np.triu and np.median take NumPy's layout
+    // (VF06, VF07, VF09, VF10, VF12, VF32, VF34, VF38, and VF08's np.median half; np.nanmedian's stays open). Their four
+    // pins are untagged, and the generator's rules for those gaps are dropped with their cells back in the gate.
     //
     // Every expected value below is NumPy 2.4.2's answer for the same call. EXPECTED (when fixed): each test passes;
     // remove its [OpenBugs], move it next to its API's tests, and drop the gap's carve rule from the generator
@@ -91,10 +98,12 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
+        ///     FIXED 2026-11-05 (the ufunc result-layout port): NumSharp gives NumPy's answer now, and this test pins it.
         ///     <c>np.where(cond, x, y)</c> with the condition an <c>np.split</c> child (offset 4, <c>[False, True, True,
-        ///     False]</c>): NumPy returns <c>[-0, 1, 2, -3]</c> (gap VA03).
+        ///     False]</c>): NumPy returns <c>[-0, 1, 2, -3]</c>. Before the fix the where kernels read a C-contiguous operand
+        ///     from its storage's start, not its view's offset (gap VA03); every dispatch now passes the first element.
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "viewflags-VA03")]
+        [TestMethod]
         public void ViewFlags_Where_ConditionAtAnOffset_ShouldReadTheView()
         {
             using var cbase = np.array(new[] { false, true, false, true, false, true, true, false, false, true, true, true });
@@ -107,11 +116,12 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
+        ///     FIXED 2026-11-05 (the ufunc result-layout port): NumSharp gives NumPy's answer now, and this test pins it.
         ///     <c>np.where(cond, x, 0)</c> and <c>np.where(cond, 0, x)</c> with <c>x</c> an <c>np.split</c> child (offset 2,
-        ///     <c>[1, 2, 3, 4]</c>): NumPy returns <c>[1, 0, 3, 0]</c> and <c>[0, 2, 0, 4]</c>; NumSharp reads the parent's
-        ///     <c>[9, 9, …]</c> (gap VA03).
+        ///     <c>[1, 2, 3, 4]</c>): NumPy returns <c>[1, 0, 3, 0]</c> and <c>[0, 2, 0, 4]</c>. Before the fix NumSharp read
+        ///     the parent's <c>[9, 9, …]</c> (gap VA03).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "viewflags-VA03")]
+        [TestMethod]
         public void ViewFlags_Where_XOrYAtAnOffset_ShouldReadTheView()
         {
             using var xbase = np.array(new double[] { 9, 9, 1, 2, 3, 4 });
@@ -126,10 +136,13 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
+        ///     FIXED 2026-11-05 (the ufunc result-layout port): NumSharp gives NumPy's answer now, and this test pins it.
         ///     <c>np.ldexp(ones(4), e)</c> with the exponents an <c>np.split</c> child (offset 3, <c>[-1, 0, 1, -1]</c>):
-        ///     NumPy returns <c>[0.5, 1, 2, 0.5]</c>; NumSharp scales by the parent's <c>[5, 5, 5, -1]</c> (gap VA05).
+        ///     NumPy returns <c>[0.5, 1, 2, 0.5]</c>. Before the fix NumSharp scaled by the parent's <c>[5, 5, 5, -1]</c>
+        ///     (gap VA05: the operand materialization kept a C-contiguous view at a non-zero offset, which the kernel read
+        ///     from the storage's start; such a view is now copied first).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "viewflags-VA05")]
+        [TestMethod]
         public void ViewFlags_Ldexp_ExponentAtAnOffset_ShouldReadTheView()
         {
             using var ebase = np.array(new long[] { 5, 5, 5, -1, 0, 1, -1 });
@@ -238,11 +251,13 @@ namespace NumSharp.Tests
         // ----- Read-only arrays -----
 
         /// <summary>
-        ///     A copy of a read-only array is writeable in NumPy: <c>np.array(ro, copy=True)</c> and <c>np.positive(ro)</c>
-        ///     of a <c>setflags(write=False)</c> owner both report <c>writeable True</c>; NumSharp's stay read-only, so a
-        ///     write to the fresh copy throws (gap VF14).
+        ///     FIXED 2026-11-05 (the ufunc result-layout port): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     A copy of a read-only array is writeable in NumPy: <c>np.array(ro, copy=True)</c> (a K-order copy) and
+        ///     <c>np.positive(ro)</c> (a ufunc result) of a <c>setflags(write=False)</c> owner both report
+        ///     <c>writeable True</c>. Before the fix both were storage clones that kept the read-only flag, so a write to the
+        ///     fresh copy threw (gap VF14).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "viewflags-VF14")]
+        [TestMethod]
         public void ViewFlags_CopiesOfAReadOnlyArray_ShouldBeWriteable()
         {
             using var ro = np.arange(12).reshape(3, 4);

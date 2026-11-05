@@ -261,8 +261,8 @@ numpy.matrix boundary and the null check.
   `count - ddof < 0` is a plain negative scalar. std is ma.sqrt of the variance and ignores `mean=`. anom is
   `self - mean`, the mean expanded only for a nonzero axis.
 - Layout: every intermediate a later sum walks is allocated in NumPy's ufunc layout (`UfuncResultBuffer`,
-  `Shape.NpyIterOutputShape`) and written in place, because NumSharp's eager ufuncs write C order for a permuted input,
-  which adds in another order. np.power's result is computed by the plain call and copied.
+  `Shape.NpyIterOutputShape`) and written in place, so the sums add in NumPy's order. np.power's result is computed by
+  the plain call and copied.
 - Gates: `ma_meanvar.jsonl` (zero excuses, valueclass `mameanvar`: raw data at every slot and the result's form —
   singleton / scalar / nomask / mask array — beside `filled(0)` and `getmaskarray`; NumPy's errors; no carve: the
   reversed and broadcast layouts are in the gate); `ma_reduce` holds the four strict; `Ma/np.ma.meanvar.NumPyPort.Test.cs`.
@@ -293,8 +293,9 @@ NumPy's:
   Decimal/Bool/Char use the IL kernels (value-exact; bool along its innermost axis → the keyword path's early-exit
   `logical_or` loop); `dtype=` casts; rank > 64. float16 has its own route (below). Hooks `NDExpr.DisableExactMinMax` /
   `ExactMinMaxRuns` (shared with np.evaluate).
-- Open: `np.max(x * 1, axis)` over a permuted input differs, because NumSharp's eager elementwise writes C order where
-  NumPy's ufunc keeps the K-order layout.
+- A computed operand reduces in NumPy's order because the elementwise result already has NumPy's layout:
+  `np.max(x * 1, axis)` over a permuted `x` walks the K-order product NumPy's ufunc allocates (`kernels.md`, the ufunc
+  result layout), so the ±0 and NaN survivors match.
 - Gates: `Backends/Kernels/MinMaxExactScheduleTests.cs` (NumPy-probed literals, including the every-lane-pair tie test and
   a ±0 tie / NaN pair on every node of the slab tree) and three NumPy replay oracles.
 

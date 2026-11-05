@@ -18,7 +18,8 @@ namespace NumSharp.Backends
         /// <returns>
         ///     A tuple <c>(Mantissa, Exponent)</c>: the mantissa in the promoted float dtype and the int32
         ///     exponent, both C-contiguous with the shape of <paramref name="x"/>. (The public
-        ///     <see cref="np.frexp"/> wrapper restores F-order when the input was F-contiguous.)
+        ///     <see cref="np.frexp"/> wrapper computes fresh outputs in NumPy's K order: it calls this over the input
+        ///     viewed in that order and relabels both results.)
         /// </returns>
         /// <param name="out1">The mantissa output, or null (a TEXT output receives the mantissas as text).</param>
         /// <param name="out2">The exponent output, or null (a TEXT output receives the exponents as text).</param>

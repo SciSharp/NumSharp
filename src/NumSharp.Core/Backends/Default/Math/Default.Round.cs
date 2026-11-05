@@ -1,5 +1,6 @@
 using System;
 using System.Numerics;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
 
@@ -26,7 +27,8 @@ namespace NumSharp.Backends
         /// stretched, and written under a same_kind cast from the loop dtype.</param>
         /// <param name="where">Optional bool mask (NumSharp convenience); validated for dtype only.</param>
         /// <returns>The rounded array — <paramref name="out"/> when supplied, otherwise a fresh array whose dtype
-        /// follows the rules above.</returns>
+        /// follows the rules above, laid out as NumPy's <c>PyArray_Round</c> lays it out: an integer or complex input's
+        /// <c>order='K'</c> copy, the rint ufunc's layout for every other dtype.</returns>
         /// <exception cref="IncorrectTypeException">A <paramref name="dtype"/> below <see cref="NPTypeCode.Single"/>
         /// selects no rint loop.</exception>
         public override NDArray Round(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
@@ -44,7 +46,19 @@ namespace NumSharp.Backends
             // round(uint16) -> identity uint16), but NPTypeCode.Char fails IsInteger().
             bool isInt = inputType.IsInteger() || inputType == NPTypeCode.Char;
             if (!typeCode.HasValue && isInt && @out is null && where is null)
-                return Cast(nd, inputType, copy: true); // np.round int path = identity copy
+                return Cast(nd, inputType, copy: true); // np.round int path = identity copy (K order, NumPy's NewCopy)
+
+            // NumPy's PyArray_Round takes complex FIRST, whatever the decimals: `arr = PyArray_NewCopy(a, NPY_KEEPORDER)`,
+            // then each part rounded into it. So a fresh complex result has the input's K-order COPY layout — a row
+            // broadcast's copy is F-contiguous (probed 2.4.2) — not the rint ufunc's (whose iterator lets a broadcast axis
+            // abstain). The values are rint's, written into that layout through the out= route.
+            if (inputType == NPTypeCode.Complex && !typeCode.HasValue && @out is null && where is null && nd.ndim > 0
+                && nd.size > 0)
+            {
+                var target = NewArray(NPTypeCode.Complex,
+                    Shape.NewLikeLayout(nd.Shape, 'K', (long[])nd.Shape.dimensions.Clone()), false);
+                return ExecuteUnaryOp(nd, UnaryOp.Round, NPTypeCode.Complex, target, null);
+            }
 
             // loopType: the integer identity above is already handled; every OTHER input rounds in a FLOAT/complex
             // loop, so bool must resolve to float16 (the rint tier), NOT ResolveUnaryReturnType's float64 default
@@ -218,15 +232,22 @@ namespace NumSharp.Backends
         /// <param name="decimals">The non-zero decimals (sign selects mul→div vs div→mul).</param>
         /// <param name="work">The working/loop dtype: a float (Half/Single/Double), Complex, Decimal, or Double for
         /// an integer input.</param>
-        /// <returns>A fresh, contiguous, writeable array of dtype <paramref name="work"/> holding the rounded values.</returns>
+        /// <returns>A fresh, dense, writeable array of dtype <paramref name="work"/> holding the rounded values, in the
+        /// layout NumPy's <c>PyArray_Round</c> allocates: F for an F-only-contiguous input and C for every other real one
+        /// (<c>PyArray_Empty(..., PyArray_ISFORTRAN(a))</c>: a transposed or broadcast input gives C, probed 2.4.2), the
+        /// input's K order for a complex one (<c>PyArray_NewCopy(a, NPY_KEEPORDER)</c>, then each part rounded).</returns>
         /// <exception cref="NotSupportedException"><paramref name="work"/> is not a float/complex/decimal dtype.</exception>
         /// <exception cref="OverflowException">A Decimal magnitude beyond decimal's exact range whose rescaled result
         /// no longer fits (an edge with no NumPy analog).</exception>
         private unsafe NDArray RoundScaleCore(NDArray nd, int decimals, NPTypeCode work)
         {
-            // copy:true -> a fresh, owned, C-contiguous buffer at `work` we may overwrite in place. This is also the
-            // int->double widen and the layout-densification, so the loops below never see strides.
-            var res = Cast(nd, work, copy: true);
+            // A fresh, owned, dense buffer at `work` we may overwrite in place. This is also the int->double widen and the
+            // layout-densification, so the loops below never see strides: order 'A' is C, or F for an F-only input
+            // (NumPy's PyArray_ISFORTRAN allocation); a complex input keeps its K order, as NumPy's complex branch copies.
+            // An empty input keeps the cast's own empty handling (no elements, no layout to choose).
+            var res = nd.GetTypeCode == NPTypeCode.Complex || nd.size == 0
+                ? Cast(nd, work, copy: true)
+                : NDIter.CopyAs(work, nd, 'A', nd.TensorEngine);
             long len = res.size;
             if (len == 0)
                 return res; // empty input: no elements to round (Cast already produced the right dtype/shape)

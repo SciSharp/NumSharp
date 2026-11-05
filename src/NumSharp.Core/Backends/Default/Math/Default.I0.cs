@@ -20,6 +20,24 @@ namespace NumSharp.Backends
             if (parsed is not null)
                 x = parsed;
 
+            // NumPy's i0 ends in piecewise(abs(x), ...), whose result is zeros_like(abs(x)) filled in place: the K-order
+            // twin of a ufunc result of x, so it has x's ufunc layout (plain C or F for a contiguous x, the iterator's
+            // order for a permuted one; an integer x is first a K-order float copy, which keeps that order). The fused
+            // pass writes C order, so a non-C layout runs it over x viewed in that layout's axis order and relabels.
+            if (x.typecode != NPTypeCode.Complex && TryUnaryNonCLayout(x, inputCast: false, out var layout))
+                return ComputeInLayout(x, layout, this, static (xv, engine) => engine.I0Fused(xv));
+            return I0Fused(x);
+        }
+
+        /// <summary>
+        ///     The fused I0 pass: the cephes kernel of the operand's precision domain, applied by one np.evaluate program.
+        /// </summary>
+        /// <param name="x">The operand (numbers; text was parsed by the caller).</param>
+        /// <returns>A fresh array of the kernel's float dtype, C-ordered (np.evaluate's layout for a C-ordered or strided
+        ///     operand).</returns>
+        /// <exception cref="IncorrectTypeException">A complex128 operand (NumPy's "i0 not supported for complex values").</exception>
+        private NDArray I0Fused(NDArray x)
+        {
             // Dispatch by PRECISION DOMAIN, not per-dtype: the cephes recurrence is bit-exact only
             // when run at the input's own float width (see the header). Each arm is a genuinely
             // different arithmetic — mirroring the kernel's own EmitUnaryHalfOperation / decimal /

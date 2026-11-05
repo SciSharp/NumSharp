@@ -32,8 +32,9 @@ namespace NumSharp
         ///     or a KEEPORDER permutation such as <see cref="KeepOrder"/> builds) — with <see cref="ArrayFlags.WRITEABLE"/>
         ///     set. Any other shape (a stepped, offset, reversed or broadcast view, a contiguous slice whose buffer is
         ///     larger than the slice) is replaced by <see cref="Clean"/>: its dimensions laid out in C order, NumPy's
-        ///     answer for a dims-only request. An uninitialized shape (<see cref="IsEmpty"/>) is returned unchanged, so
-        ///     each caller keeps its own error for it.
+        ///     answer for a dims-only request. A zero-size shape gets every stride 0, NumPy's layout for any fresh empty
+        ///     array. An uninitialized shape (<see cref="IsEmpty"/>) is returned unchanged, so each caller keeps its own
+        ///     error for it.
         /// </returns>
         /// <remarks>
         ///     <para>
@@ -73,6 +74,13 @@ namespace NumSharp
             if (IsEmpty)
                 return this;
 
+            // NumPy zeroes every stride of a fresh zero-size allocation (PyArray_NewFromDescr_int: `if (nbytes == 0)`
+            // sets each stride to 0), whatever layout was asked for: np.zeros((3, 0)).strides is (0, 0), and so is a
+            // ufunc result over an empty operand (probed 2.4.2). No element is ever addressed through them, and an empty
+            // shape's flags are C, F and writeable whatever its strides (ComputeFlagsStatic's empty branch).
+            if (size == 0 && dimensions.Length > 0)
+                return ZeroStridedEmpty();
+
             // A fresh layout starts at element 0 of a buffer exactly `size` long (0 = unset, the BufferSize convention)
             // and steps densely: C/F are the cached flags (never set on a broadcast of size > 0), anything else must be
             // a dense permutation. The `||` keeps the permutation walk off the hot path.
@@ -83,6 +91,22 @@ namespace NumSharp
                 return Clean();
 
             return IsWriteable ? this : WithFlags(flagsToSet: ArrayFlags.WRITEABLE);
+        }
+
+        /// <summary>
+        ///     The layout NumPy gives a fresh zero-size array: this shape's dimensions with every stride 0, at offset 0
+        ///     (writeable: empty flags are C, F and writeable).
+        /// </summary>
+        /// <returns>This shape when its strides already are all 0 and it starts at offset 0, else a new shape sharing its
+        ///     dimension array.</returns>
+        private readonly Shape ZeroStridedEmpty()
+        {
+            bool zero = offset == 0;
+            for (int i = 0; i < strides.Length && zero; i++)
+                zero = strides[i] == 0;
+            if (zero)
+                return IsWriteable ? this : WithFlags(flagsToSet: ArrayFlags.WRITEABLE);
+            return Adopt(dimensions, new long[dimensions.Length]);
         }
 
         /// <summary>

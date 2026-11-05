@@ -111,6 +111,10 @@ They are NumPy's coercion of a Python list (`NDArray.asanyarray` in `Creation/ND
   element with a sequence. The requested array has an inhomogeneous shape after N dimensions. The detected shape was (…)
   + inhomogeneous part.`, and the dims end at the first empty level (`new int[0][]` is int32 `(0,)`, `[[], []]` is
   `(2, 0)`). Gate: `Creation/np.array.JaggedAndListOfArrays.Test.cs`.
+- `np.array(nd)` of an `NDArray` is NumPy's defaults `copy=True, order='K'`: `nd.copy('K')`, a fresh WRITEABLE owner in
+  the operand's memory order (a read-only operand's copy is writeable; a permuted view keeps its permutation; a broadcast
+  copy puts the stride-0 axis innermost, so `np.array(np.broadcast_to(row, (3, 4)))` is F-contiguous). `copy: false`
+  returns a new view of the same storage. Gate: `Creation/np.array.Tests.cs` (`ArrayOfNDArray_IsAWriteableKOrderCopy`).
 - Gates: `Creation/np.array.PythonList.Test.cs` and the coercion family's snapshot (`tools/facade-move/snapshot.cs`).
 
 ## `np.full` / `np.full_like` / `np.ones` / `np.eye`

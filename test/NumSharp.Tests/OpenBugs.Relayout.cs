@@ -39,6 +39,11 @@ namespace NumSharp.Tests
     // np.digitize and np.isin's complex / float16 route read theirs right too (RL01); both pins are untagged the same way,
     // and the generator's RL01 rule is dropped.
     //
+    // FIXED 2026-11-05 (the ufunc result-layout port): np.nancumsum / np.nancumprod of float16 / complex128 replace their
+    // NaNs as NumPy's _replace_nan does (a K-order copy, then np.copyto(where=isnan)) and np.where reads every operand
+    // from its view's offset (RL02); np.ldexp's operand materialization copies a C-contiguous view at a non-zero offset
+    // (RL03). Their three pins are untagged the same way, and the generator's RL02 / RL03 rules are dropped.
+    //
     // Every expected value below is NumPy 2.4.2's answer for the same call. EXPECTED (when fixed): each test passes;
     // remove its [OpenBugs], move it next to its API's tests, and drop the gap's rule from the generator's _gap_of so
     // the cases return to the gate.
@@ -82,11 +87,14 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
+        ///     FIXED 2026-11-05 (the ufunc result-layout port): NumSharp gives NumPy's answer now, and this test pins it.
         ///     <c>np.nancumsum</c> / <c>np.nancumprod</c> of a float16 <c>np.split</c> child (offset 3,
-        ///     <c>[1.5, nan, 2.25]</c>): NumPy returns <c>[1.5, 1.5, 3.75]</c> and <c>[1.5, 1.5, 3.375]</c>; NumSharp scans
-        ///     the owner's sentinels <c>[7, 7, 7]</c> (gap RL02: the float16 / complex128 route runs np.where on the view).
+        ///     <c>[1.5, nan, 2.25]</c>): NumPy returns <c>[1.5, 1.5, 3.75]</c> and <c>[1.5, 1.5, 3.375]</c>. Before the fix
+        ///     NumSharp scanned the owner's sentinels <c>[7, 7, 7]</c> (gap RL02: the float16 / complex128 route ran
+        ///     np.where on the view, whose kernels read from the storage's start); the NaN replacement is now NumPy's
+        ///     <c>_replace_nan</c> (a K-order copy, then <c>np.copyto(where=isnan)</c>).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "relayout-RL02")]
+        [TestMethod]
         public void Relayout_NanCumsumNanCumprod_Float16AtAnOffset_ShouldReadTheView()
         {
             using var hbase = np.array(new[] { (Half)7, (Half)7, (Half)7, (Half)1.5, Half.NaN, (Half)2.25 });
@@ -99,11 +107,12 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
+        ///     FIXED 2026-11-05 (the ufunc result-layout port): NumSharp gives NumPy's answer now, and this test pins it.
         ///     <c>np.nancumsum</c> of a complex128 <c>np.split</c> child (offset 3, <c>[1+2j, nan+1j, 2]</c>): NumPy returns
-        ///     <c>[1+2j, 1+2j, 3+2j]</c> (a NaN in either part counts as NaN); NumSharp scans the owner's sentinels
-        ///     (gap RL02).
+        ///     <c>[1+2j, 1+2j, 3+2j]</c> (a NaN in either part counts as NaN). Before the fix NumSharp scanned the owner's
+        ///     sentinels (gap RL02).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "relayout-RL02")]
+        [TestMethod]
         public void Relayout_NanCumsum_ComplexAtAnOffset_ShouldReadTheView()
         {
             using var cbase = np.array(new Complex[] { 7, 7, 7, new(1, 2), new(double.NaN, 1), 2 });
@@ -114,11 +123,14 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
+        ///     FIXED 2026-11-05 (the ufunc result-layout port): NumSharp gives NumPy's answer now, and this test pins it.
         ///     <c>np.ldexp(x1, x2)</c> with the MANTISSA an <c>np.split</c> child (offset 3, <c>[0.5, -1.5, 3]</c>) and
-        ///     <c>x2 = [1, 2, 3]</c>: NumPy returns <c>[1, -6, 24]</c>; NumSharp scales the owner's sentinels to
-        ///     <c>[14, 28, 56]</c> (gap RL03; the exponent side is ViewFlags_Ldexp_ExponentAtAnOffset_ShouldReadTheView).
+        ///     <c>x2 = [1, 2, 3]</c>: NumPy returns <c>[1, -6, 24]</c>. Before the fix NumSharp scaled the owner's sentinels
+        ///     to <c>[14, 28, 56]</c> (gap RL03: the operand materialization kept a C-contiguous view at a non-zero offset,
+        ///     which the kernel read from the storage's start; such a view is now copied first). The exponent side is
+        ///     ViewFlags_Ldexp_ExponentAtAnOffset_ShouldReadTheView.
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "relayout-RL03")]
+        [TestMethod]
         public void Relayout_Ldexp_MantissaAtAnOffset_ShouldReadTheView()
         {
             using var mbase = np.array(new double[] { 7, 7, 7, 0.5, -1.5, 3 });

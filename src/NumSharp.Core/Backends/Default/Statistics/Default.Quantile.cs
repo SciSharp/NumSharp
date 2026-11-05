@@ -600,7 +600,40 @@ namespace NumSharp.Backends
             if (ignoreNaN && !legacyOut && axisArr != null && outerDims > 0 && (outRoute == 0 || (outRoute == 3 && movesQAxes)))
                 resultRaw = AlongAxisLayout(resultRaw, qNdim, prologue.NumPyAxis.Value);
 
+            // np.median along ONE axis returns np.mean(part[indexer], axis=axis) of `part = partition(a, kth, axis)`, whose
+            // copy is order='K', so the mean allocates in that copy's axis order (see MedianMeanLayout). A keepdims result
+            // is NumPy's newaxis view of this one (ApplyKeepdims); an out= has its own layout.
+            if (medianMean && !ignoreNaN && @out is null && qNdim == 0 && axisArr is { Length: 1 }
+                && resultRaw.ndim >= 2 && prologue.NumPyAxis is int medianAxis)
+                resultRaw = MedianMeanLayout(resultRaw, a, medianAxis);
+
             return FinishResult(resultRaw, a, axisArr, keepdims, qNdim, @out, target, outRoute, staged, outerDims);
+        }
+
+        /// <summary>
+        ///     The layout of np.median's result along one axis: NumPy's <c>_median</c> partitions an <c>order='K'</c> copy
+        ///     of the data (<c>partition</c>'s <c>a.copy(order="K")</c>, <see cref="Shape.NewLikeLayout"/>) and returns the
+        ///     mean of its middle slice along the axis, a reduction that allocates its result in the copy's axis order
+        ///     (<see cref="Shape.ReductionOutputShape(long[], Shape, int)"/>). So an F input's median is F, a transposed
+        ///     input's keeps its memory order, and a broadcast input's follows its K copy (probed 2.4.2:
+        ///     <c>np.median(np.broadcast_to(row, (2, 3, 4)), axis=1)</c> is F-contiguous).
+        /// </summary>
+        /// <param name="result">The computed medians: the kept axes in C order (the kernel writes one row per kept index).
+        ///     Consumed: returned, or left to the scope after its values are copied.</param>
+        /// <param name="a">The data.</param>
+        /// <param name="axis">The normalized reduced axis.</param>
+        /// <returns><paramref name="result"/> itself when NumPy's layout is C, else its values in a fresh array of that
+        ///     layout (one pass over the result, which is the axis length times smaller than the data).</returns>
+        private NDArray MedianMeanLayout(NDArray result, NDArray a, int axis)
+        {
+            var part = Shape.NewLikeLayout(a.Shape, 'K', (long[])a.Shape.dimensions.Clone());
+            var layout = Shape.ReductionOutputShape((long[])result.Shape.dimensions.Clone(), part, axis);
+            if (layout.IsContiguous)
+                return result;
+            var moved = NewArray(result.typecode, layout, false);
+            UnmanagedStorage.Copyto(moved, result, NPY_CASTING.NPY_NO_CASTING);
+            result.Dispose();
+            return moved;
         }
 
         /// <summary>
@@ -1046,15 +1079,16 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     <c>_ureduce</c>'s keepdims: the result reshaped so every reduced axis of the data is back with length one,
-        ///     after q's leading axes.
+        ///     <c>_ureduce</c>'s keepdims: the result viewed so every reduced axis of the data is back with length one,
+        ///     after q's leading axes — NumPy's <c>r[(Ellipsis,) + index_r]</c> with <c>np.newaxis</c> at each reduced axis.
         /// </summary>
         /// <param name="result">The result: q's axes, then the kept axes.</param>
         /// <param name="source">The data.</param>
         /// <param name="axisArr">The reduced axes, or null for all of them.</param>
         /// <param name="keepdims">Whether to keep the reduced axes (false returns <paramref name="result"/>).</param>
         /// <param name="qNdim">How many leading axes of <paramref name="result"/> are q's.</param>
-        /// <returns>The reshaped view, or <paramref name="result"/> itself.</returns>
+        /// <returns>A view of <paramref name="result"/> (its new axes of stride 0, NumPy's newaxis; owndata False), or
+        ///     <paramref name="result"/> itself.</returns>
         internal static NDArray ApplyKeepdims(NDArray result, NDArray source, int[] axisArr, bool keepdims, int qNdim)
         {
             if (!keepdims) return result;
@@ -1085,7 +1119,22 @@ namespace NumSharp.Backends
                     else outShape[qDim + i] = result.Shape.dimensions[srcIdx++];
                 }
             }
-            return result.reshape(Shape.Adopt(outShape));
+
+            // NumPy's `r[(Ellipsis,) + index_r]` with np.newaxis at every reduced axis: a VIEW of the result whose new axes
+            // have stride 0 and whose other axes keep the result's own strides (probed 2.4.2:
+            // np.median(F (2,3,4), axis=1, keepdims=True) has strides (8, 0, 16), owndata False; axis=None gives (0, 0, 0)).
+            // A reshape here gave the new axes C-style strides and, over a non-contiguous result, could copy.
+            var rs = result.Shape;
+            int[] reducedAxes = axisArr == null ? null : NormalizeAxes(axisArr, srcNd);
+            var strides = new long[outShape.Length];
+            int fromResult = 0;
+            for (int i = 0; i < outShape.Length; i++)
+            {
+                bool newAxis = i >= qDim && (reducedAxes == null || Array.IndexOf(reducedAxes, i - qDim) >= 0);
+                strides[i] = newAxis ? 0 : rs.strides[fromResult++];
+            }
+            var view = new Shape(outShape, strides, rs.offset, rs.bufferSize > 0 ? rs.bufferSize : rs.size);
+            return new NDArray(result.Storage.Alias(ref view)) { TensorEngine = result.TensorEngine };
         }
 
         /// <summary>

@@ -176,15 +176,19 @@ Every operand layout and dtype pair runs the vector kernels, for the operators a
   Two more forms belong to a whole iteration of rows (`RunRows`): tiled (an operand whose successive rows are adjacent
   elements, such as an F-ordered matrix beside a C-ordered one, or a matrix against its transpose) and repeated (a
   matrix against one short row, several rows per kernel call).
-- Three callers:
+- The result's layout is decided first, as for every ufunc (`kernels.md`, `Shape.UfuncOutputShape` over the comparison
+  dtype: an int64 / uint64 pair is an exact loop, not a cast). A layout other than C goes to
+  `ExecuteComparisonOpInLayout`: operands stored exactly as the layout (two F operands, say) are compared flat into it
+  (`TryRunTrivialComparison` with the layout); any other set is viewed in the layout's axis order, computed by the C
+  callers below and relabelled (`NDArray.AdoptLayout`). The three callers produce C results only:
   - `TryTrivialContiguousComparisonOp` → `Run`: two contiguous arrays of one shape, or an array and one value, of any two
     dtypes; also two one-element operands of different rank.
   - `TryRowsComparisonOp` (`DefaultEngine.CompareOp.Rows.cs`) → `RunRows`: an iteration of R runs of N elements, without
     an iterator, read from the strides with NumPy's coalescing rule (`stride[d] == stride[d+1] * extent[d+1]`): a matrix
-    against a row or a column, an outer product, a stepped or reversed view. It declines to the iterator route for a
-    result NumPy lays out in F order, an iteration of three or more levels, and many rows under 16 elements whose inputs
-    are contiguous or one value (the iterator's 2-D block kernel loops such rows inside one call), unless they are a
-    matrix against one row (`ComparisonRun.RepeatsRow`).
+    against a row or a column, an outer product, a stepped or reversed view. It declines to the iterator route for an
+    iteration of three or more levels, and many rows under 16 elements whose inputs are contiguous or one value (the
+    iterator's 2-D block kernel loops such rows inside one call), unless they are a matrix against one row
+    (`ComparisonRun.RepeatsRow`).
   - `NDIterRef.TryExecuteComparisonRun` → one `Chunk` call per inner-loop chunk: every other iteration, and every `out=`
     call (`ExecuteComparisonUfuncInto`; an out of another dtype is filled through the iterator's Boolean buffer). The
     `out=` route then tries the whole-array kernel (`NDIterRef.TryExecuteComparison`) when the inputs share a dtype and
@@ -226,8 +230,8 @@ Every operand layout and dtype pair runs the vector kernels, for the operators a
     read in place, a second tiled operand gets its own block. One kernel call a tile when every operand's rows of the tile
     follow each other and the output's do; else one call a row.
   - Not tiled: 16-byte elements with rows over 64 elements (a 16-byte element is one move whatever the route),
-    conversions to complex128 (the cast is slower than the per-element kernel), two F operands (the result is F-ordered:
-    the iterator route), `out=` calls (they arrive as chunks).
+    conversions to complex128 (the cast is slower than the per-element kernel), two F operands (the result is F-ordered
+    and compared flat), `out=` calls (they arrive as chunks).
 - A matrix against one row (`ComparisonRun.RunRepeatedRow`): when the matrix's rows follow each other, there are 16 rows
   or more and a row is at most 2,048 bytes, the row is repeated in an 8 KB stack block (filled by doubling) and a block of
   rows is compared per call, instead of one call (and one scalar tail) per row. Above 2,048 bytes a row, or with fewer

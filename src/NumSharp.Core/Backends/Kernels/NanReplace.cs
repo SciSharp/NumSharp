@@ -33,12 +33,44 @@ namespace NumSharp.Backends.Kernels
         ///     <paramref name="a"/> with every NaN replaced by <paramref name="identity"/> (0 for the
         ///     cumsum scan, 1 for the cumprod scan). ±inf and every finite value pass through unchanged.
         /// </summary>
+        /// <param name="a">A C-contiguous float32 or float64 array (any offset).</param>
+        /// <param name="identity">The replacement value.</param>
+        /// <returns>The fresh, C-ordered, NaN-free copy.</returns>
         internal static NDArray ReplaceContiguousFloat(NDArray a, int identity)
+            => ReplaceInto(a, Shape.Adopt((long[])a.Shape.dimensions.Clone()), identity);
+
+        /// <summary>
+        ///     NumPy's <c>_replace_nan</c> copy in one pass for a DENSE float32/float64 array: the copy
+        ///     <c>np.array(a, copy=True)</c> makes is laid out in <c>order='K'</c>
+        ///     (<see cref="Shape.NewLikeLayout"/>: C for a C array, F for an F one, a dense transposed array's own
+        ///     axis order), and an array stored exactly as that copy is read linearly into it while its NaNs become
+        ///     <paramref name="identity"/>.
+        /// </summary>
+        /// <param name="a">A float32 or float64 array.</param>
+        /// <param name="identity">The replacement value (0 for nancumsum, 1 for nancumprod).</param>
+        /// <returns>The NaN-free K-order copy, or null when <paramref name="a"/> is not stored as its copy (a gapped,
+        ///     reversed or broadcast view), which the caller then copies and fills in NumPy's two statements.</returns>
+        internal static NDArray ReplaceDenseFloat(NDArray a, int identity)
+        {
+            var layout = Shape.NewLikeLayout(a.Shape, 'K', (long[])a.Shape.dimensions.Clone());
+            return a.Shape.IsLaidOutAs(layout) ? ReplaceInto(a, layout, identity) : null;
+        }
+
+        /// <summary>
+        ///     The fused copy-and-replace: a fresh array of <paramref name="layout"/>, filled by one linear pass over
+        ///     <paramref name="a"/>'s buffer from its first element.
+        /// </summary>
+        /// <param name="a">A float32 or float64 array stored exactly as <paramref name="layout"/> (dense, positive
+        ///     strides).</param>
+        /// <param name="layout">The copy's dense, offset-0 layout (adopted).</param>
+        /// <param name="identity">The replacement value.</param>
+        /// <returns>The copy.</returns>
+        private static NDArray ReplaceInto(NDArray a, Shape layout, int identity)
         {
             var shape = a.Shape;
             long n = a.size;
-            // Fresh C-contiguous output; every element is written below, so skip the zero-fill.
-            var ret = new NDArray(a.typecode, Shape.Adopt((long[])shape.dimensions.Clone()), false);
+            // Fresh output; every element is written below, so skip the zero-fill.
+            var ret = new NDArray(a.typecode, layout, false);
             byte* src = (byte*)a.Address + shape.offset * (long)a.dtypesize;
 
             if (a.typecode == NPTypeCode.Double)

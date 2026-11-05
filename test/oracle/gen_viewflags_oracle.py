@@ -1816,22 +1816,23 @@ _ARRAY_JOB_NUMPY = {
 # 2026-11-05 (parity QA-15): np.nansum / np.nanprod are NumPy's statements (np.sum / np.prod of _replace_nan), and their
 # one-element shortcut reads a view from its offset, so VF30 matches NumPy; its GAPS entry and its rule are dropped and its
 # 8 cases moved back into view_flags.jsonl the same way (no regeneration).
+# 2026-11-05 (the ufunc result-layout port): every fresh elementwise result takes NumPy's layout (the trivial loop's C / F
+# allocation, NpyIter's K order otherwise) and is writeable, np.array(a) is a K-order copy, the accumulate allocates in
+# its iterator's order, np.diff / np.round / np.nan_to_num / np.tril / np.triu / np.median follow NumPy's statements, and
+# np.where / np.ldexp read every operand from its view's offset. VF06, VF07, VF09, VF10, VF12, VF14, VF32, VF34, VF38,
+# VA03 and VA05 match NumPy, and so does VF08's np.median half: their GAPS entries and rules are dropped (VF08's narrowed
+# to np.nanmedian, whose numpy.ma chain is still open) and their cases moved back into view_flags.jsonl /
+# array_args.jsonl the same way (no regeneration).
 GAPS = {
     "VF01": "a NumPy SCALAR result (ufuncs, clip, round, nan_to_num, conj, dot / inner / kron of 0-d or 1-D pairs) "
             "comes back as a WRITEABLE 0-d array",
     "VF02": "element access that NumPy answers with a scalar COPY (a[i, j], z[()], np.flip(z), np.nan_to_num(z, "
             "copy=False) of a 0-d z) returns a writeable 0-d VIEW of the operand",
     "VF04": "np.squeeze / ndarray.squeeze with no length-1 axis return a new view where NumPy returns the operand itself",
-    "VF06": "ufunc results over a dense permuted 3-D input are C-ordered; NumPy keeps the input's permuted (K) layout",
-    "VF07": "np.arctan2 of F-ordered inputs returns a C-ordered result; NumPy's (and NumSharp's np.add's) is F",
-    "VF08": "np.median / np.nanmedian along an axis of an F or permuted 3-D input return a C-ordered result; NumPy "
-            "keeps the input's axis order",
-    "VF09": "np.cumsum / np.cumprod along an axis of a permuted (cumprod also F) input return a C-ordered result",
-    "VF10": "np.diff of an F or permuted input returns a C-ordered result; NumPy keeps the input's order",
-    "VF12": "np.array(a, copy=True) of a permuted or broadcast input is C-ordered; NumPy copies in K order",
+    "VF08": "np.nanmedian along an axis of an F or permuted 3-D input returns a C-ordered result that owns its data; "
+            "NumPy's (numpy.ma's median of the sorted K-order copy, then MaskedArray.filled's _data view) keeps the "
+            "input's axis order and is a view",
     "VF13": "np.array(a, copy=False) returns a new view where NumPy returns the operand itself",
-    "VF14": "copies of a read-only array stay READ-ONLY: np.array(ro, copy=True) and np.positive(ro) of a read-only "
-            "owner or a same-shape broadcast",
     "VF16": "ndarray.astype(same dtype, copy=False, order='C' or 'F') of a strided 1-D view returns the operand; "
             "NumPy copies to satisfy the requested order",
     "VF19": "np.dot / np.inner of a 0-d with an F 2-D array: -0.0 where NumPy's scalar daxpy gives +0.0, and an F "
@@ -1846,23 +1847,16 @@ GAPS = {
             "np.kron with a 0-d, np.nanmedian along an axis — MaskedArray.filled's _data view) come back owning "
             "their data",
     "VF29": "np.median / np.nanmedian of a 0-d with keepdims=True are read-only; NumPy returns a writeable 0-d array",
-    "VF32": "np.nan_to_num(copy=True) of an F input is C-ordered; NumPy allocates in K order",
-    "VF34": "np.round of a permuted or broadcast input: decimals=0 is C-ordered where NumPy keeps K, decimals=1 keeps "
-            "the input order where NumPy's is C",
     "VF36": "the np.fft transforms (fft / ifft / rfft / irfft / hfft / ihfft along an axis and the 2-D / N-D forms) of "
             "an F, transposed, permuted or broadcast input return C-ordered results; NumPy's gufunc output follows "
             "the input's layout (K)",
     "VF37": "np.nanmean along an axis with keepdims=True returns a view of a reduced buffer (OWNDATA false); NumPy's "
             "result owns its data",
-    "VF38": "np.tril / np.triu of a dense permuted 3-D input return a C-ordered result; NumPy's (an np.where) keeps "
-            "the input's layout",
     "VS01": "np.zeros / ones / empty / full given a view's Shape of a dense F or permuted layout allocate that "
             "layout; NumPy's np.zeros(x.shape) is always C-ordered",
     "VA02": "np.take_along_axis with F-ordered indices returns a C-ordered result; NumPy's follows the indices (F)",
-    "VA03": "np.where reads a C-contiguous condition / x / y at a non-zero offset (an np.split child) WRONG",
     "VA04": "np.cov / np.corrcoef results do not own their data (OWNDATA false): both end with ndarray.squeeze, which "
             "in NumSharp returns a new view where NumPy returns the array itself (VF04)",
-    "VA05": "np.ldexp reads a C-contiguous exponent array x2 at a non-zero offset (an np.split child) WRONG",
 }
 
 # The ufuncs of the tier (unary and binary), for the rules keyed on "a ufunc".
@@ -1912,24 +1906,11 @@ def _gap_of(tier, case):
             return "VF02"
         if fn in ("squeeze", "ndarray.squeeze") and "axis" not in p and e["mem"]["same"][0]:
             return "VF04"
-        if fn in _UFUNC_FNS and lay in ("view_perm_3d", "view_perm_3d+view_perm_3d"):
-            return "VF06"
-        if fn == "arctan2" and e["mem"]["flags"][1] and not e["mem"]["flags"][0]:
-            return "VF07"
-        if fn in ("median", "nanmedian") and axis is not None and (
+        if fn == "nanmedian" and axis is not None and (
                 lay == "own_f_3d" or (lay == "view_perm_3d" and axis != 0)):
             return "VF08"
-        if axis is not None and ((fn == "cumsum" and lay == "view_perm_3d") or (
-                fn == "cumprod" and lay in ("own_f_2d", "own_f_3d", "view_t_2d", "view_perm_3d"))):
-            return "VF09"
-        if fn == "diff" and lay in ("own_f_2d", "view_t_2d", "view_perm_3d"):
-            return "VF10"
-        if lay in ("view_perm_3d", "view_bcast_2d") and fn == "array" and p.get("copy") is True:
-            return "VF12"
         if fn == "array" and p.get("copy") is False:
             return "VF13"
-        if lay in ("own_ro_2d", "view_bsame_2d") and ((fn == "array" and p.get("copy") is True) or fn == "positive"):
-            return "VF14"
         if (fn == "ndarray.astype" and p.get("copy") is False and p.get("dtype") == "int64"
                 and p.get("order") in ("C", "F") and lay in ("view_step_1d", "view_rev_1d")):
             return "VF16"
@@ -1945,10 +1926,6 @@ def _gap_of(tier, case):
             return "VF26"
         if fn in ("median", "nanmedian") and lay in ("own_0d", "view_0d") and p.get("keepdims"):
             return "VF29"
-        if fn == "nan_to_num" and p.get("copy") and lay == "own_f_2d":
-            return "VF32"
-        if fn == "round" and ((lay == "view_perm_3d") or (lay == "view_bcast_2d" and p["decimals"] == 1)):
-            return "VF34"
         # hfft conjugates first, and NumPy's np.conjugate of a broadcast input is C-ordered: that one input matches.
         if (fn.startswith("fft.") and fn not in ("fft.fftshift", "fft.ifftshift")
                 and lay in ("own_f_2d", "view_t_2d", "view_perm_3d", "view_bcast_2d")
@@ -1958,10 +1935,6 @@ def _gap_of(tier, case):
         if (fn == "nanmean" and axis is not None and p.get("keepdims")
                 and lay not in ("view_step_2d", "view_bcast_2d", "view_perm_3d")):
             return "VF37"
-        if fn in ("tril", "triu") and lay == "view_perm_3d":
-            return "VF38"
-        if fn == "where3" and lay == "view_off_2d":
-            return "VA03"
         return None
     if tier == "shapes":
         # Only where the view's dense layout is a real F / permuted one: a (1,1) or an empty transposed view's Shape is
@@ -1973,12 +1946,8 @@ def _gap_of(tier, case):
     if tier == "arrays":
         if fn == "take_along_axis" and lay in ("indices=f", "indices=t"):
             return "VA02"
-        if fn == "where" and lay in ("condition=off", "x=off", "y=off"):
-            return "VA03"
         if fn in ("cov", "corrcoef"):
             return "VA04"
-        if fn == "ldexp" and lay == "x2=off":
-            return "VA05"
         return None
     return None
 

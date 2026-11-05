@@ -75,6 +75,11 @@ namespace NumSharp.Backends
         /// Execute ATan2 using IL-generated kernels.
         /// Handles type promotion, broadcasting, and kernel dispatch.
         /// </summary>
+        /// <param name="y">The first input (the ordinate).</param>
+        /// <param name="x">The second input (the abscissa).</param>
+        /// <param name="typeCode">The dtype= loop, or null for arctan2's float promotion.</param>
+        /// <returns>A fresh result in NumPy's layout (<c>DefaultEngine.UfuncResultLayout.cs</c>).</returns>
+        /// <exception cref="NotSupportedException">No IL kernel exists for the dtypes.</exception>
         private unsafe NDArray ExecuteATan2Op(NDArray y, NDArray x, NPTypeCode? typeCode)
         {
             var yType = y.GetTypeCode;
@@ -95,6 +100,28 @@ namespace NumSharp.Backends
             {
                 return ExecuteATan2ScalarScalar(y, x, yType, xType, resultType);
             }
+
+            // NumPy's result layout: the kernel below writes C order, so a non-C layout computes over the inputs viewed
+            // in its memory order and relabels the C result. The loop reads resultType: another input dtype is a cast.
+            if (TryBinaryNonCLayout(y, x, yType != resultType, xType != resultType, out var layout))
+                return ComputeInLayout(y, x, layout, (Engine: this, resultType),
+                    static (a, b, s) => s.Engine.ExecuteATan2C(a, b, s.resultType));
+            return ExecuteATan2C(y, x, resultType);
+        }
+
+        /// <summary>
+        /// The C-ordered half of <see cref="ExecuteATan2Op"/>: broadcast, allocate a C result, classify the path and run
+        /// the arctan2 kernel.
+        /// </summary>
+        /// <param name="y">The first input (not both 0-d).</param>
+        /// <param name="x">The second input.</param>
+        /// <param name="resultType">The loop dtype.</param>
+        /// <returns>A fresh C-contiguous result of the broadcast shape.</returns>
+        /// <exception cref="NotSupportedException">No IL kernel exists for the dtypes.</exception>
+        private unsafe NDArray ExecuteATan2C(NDArray y, NDArray x, NPTypeCode resultType)
+        {
+            var yType = y.GetTypeCode;
+            var xType = x.GetTypeCode;
 
             // Broadcast shapes
             var (yShape, xShape) = Broadcast(y.Shape, x.Shape);
