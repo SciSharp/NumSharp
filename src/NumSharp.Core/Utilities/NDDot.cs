@@ -45,6 +45,154 @@ namespace NumSharp.Utilities
     internal static class NDDot
     {
         // ------------------------------------------------------------------------------------------------------------
+        //  Run directions for the unit-stride models
+        // ------------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     How a unit-stride model reads an operand: element <c>i</c> of the run in its logical order, alone or eight /
+        ///     four / two (complex) at a time, from a pointer to logical element 0. NumPy's 1-D route copies a reversed or
+        ///     broadcast operand to a contiguous array before the dot function runs (<c>_bad_strides</c>); reading the run
+        ///     in place in its logical order hands the dot function the same values in the same order, so the arithmetic
+        ///     and the bits are the copy's, without the copy.
+        /// </summary>
+        internal unsafe interface IRunRead
+        {
+            /// <summary>Elements <paramref name="i"/> to <paramref name="i"/> + 7 of a float32 run, in order.</summary>
+            /// <param name="p">Logical element 0.</param>
+            /// <param name="i">The first element read.</param>
+            /// <returns>Eight lanes, lane L holding element i + L.</returns>
+            static abstract Vector256<float> Load8(float* p, long i);
+
+            /// <summary>Elements <paramref name="i"/> to <paramref name="i"/> + 3 of a float64 run, in order.</summary>
+            /// <param name="p">Logical element 0.</param>
+            /// <param name="i">The first element read.</param>
+            /// <returns>Four lanes, lane L holding element i + L.</returns>
+            static abstract Vector256<double> Load4(double* p, long i);
+
+            /// <summary>Complex elements <paramref name="c"/> and <paramref name="c"/> + 1 of a complex128 run as four
+            ///     doubles: <c>[re(c), im(c), re(c + 1), im(c + 1)]</c>.</summary>
+            /// <param name="p">Logical element 0's real part.</param>
+            /// <param name="c">The first complex element read.</param>
+            /// <returns>The two elements, each with its parts in memory order.</returns>
+            static abstract Vector256<double> LoadComplex2(double* p, long c);
+
+            /// <summary>Element <paramref name="i"/> of a float32 run.</summary>
+            /// <param name="p">Logical element 0.</param>
+            /// <param name="i">The element.</param>
+            /// <returns>Its value.</returns>
+            static abstract float At(float* p, long i);
+
+            /// <summary>Element <paramref name="i"/> of a float64 run.</summary>
+            /// <param name="p">Logical element 0.</param>
+            /// <param name="i">The element.</param>
+            /// <returns>Its value.</returns>
+            static abstract double At(double* p, long i);
+
+            /// <summary>Where complex element <paramref name="c"/>'s two parts are.</summary>
+            /// <param name="p">Logical element 0's real part.</param>
+            /// <param name="c">The complex element.</param>
+            /// <returns>Its real part's address; the imaginary part follows.</returns>
+            static abstract double* ComplexAt(double* p, long c);
+        }
+
+        /// <summary>A run at element stride +1: plain loads.</summary>
+        internal struct Forward : IRunRead
+        {
+            /// <inheritdoc/>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public static unsafe Vector256<float> Load8(float* p, long i) => Vector256.Load(p + i);
+
+            /// <inheritdoc/>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public static unsafe Vector256<double> Load4(double* p, long i) => Vector256.Load(p + i);
+
+            /// <inheritdoc/>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public static unsafe Vector256<double> LoadComplex2(double* p, long c) => Vector256.Load(p + 2 * c);
+
+            /// <inheritdoc/>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public static unsafe float At(float* p, long i) => p[i];
+
+            /// <inheritdoc/>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public static unsafe double At(double* p, long i) => p[i];
+
+            /// <inheritdoc/>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public static unsafe double* ComplexAt(double* p, long c) => p + 2 * c;
+        }
+
+        /// <summary>
+        ///     A run at element stride -1 (<c>a[::-1]</c>): logical element <c>i</c> is <c>p[-i]</c>, so a group of lanes is
+        ///     one load ending at the group's first element, its lanes reversed (a complex pair: its two 128-bit halves
+        ///     swapped, each element's parts kept in order). The vector loads need AVX2, which the kernels check.
+        /// </summary>
+        internal struct Backward : IRunRead
+        {
+            /// <inheritdoc/>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public static unsafe Vector256<float> Load8(float* p, long i)
+                => Avx2.PermuteVar8x32(Vector256.Load(p - i - 7), Vector256.Create(7, 6, 5, 4, 3, 2, 1, 0));
+
+            /// <inheritdoc/>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public static unsafe Vector256<double> Load4(double* p, long i)
+                => Avx2.Permute4x64(Vector256.Load(p - i - 3), 0b00_01_10_11);
+
+            /// <inheritdoc/>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public static unsafe Vector256<double> LoadComplex2(double* p, long c)
+                => Avx2.Permute4x64(Vector256.Load(p - 2 * c - 2), 0b01_00_11_10);
+
+            /// <inheritdoc/>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public static unsafe float At(float* p, long i) => p[-i];
+
+            /// <inheritdoc/>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public static unsafe double At(double* p, long i) => p[-i];
+
+            /// <inheritdoc/>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public static unsafe double* ComplexAt(double* p, long c) => p - 2 * c;
+        }
+
+        /// <summary>A run at element stride 0 (a broadcast 1-D operand): every element is element 0.</summary>
+        internal struct Repeat : IRunRead
+        {
+            /// <inheritdoc/>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public static unsafe Vector256<float> Load8(float* p, long i) => Vector256.Create(*p);
+
+            /// <inheritdoc/>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public static unsafe Vector256<double> Load4(double* p, long i) => Vector256.Create(*p);
+
+            /// <inheritdoc/>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public static unsafe Vector256<double> LoadComplex2(double* p, long c) => Vector256.Create(p[0], p[1], p[0], p[1]);
+
+            /// <inheritdoc/>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public static unsafe float At(float* p, long i) => *p;
+
+            /// <inheritdoc/>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public static unsafe double At(double* p, long i) => *p;
+
+            /// <inheritdoc/>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public static unsafe double* ComplexAt(double* p, long c) => p;
+        }
+
+        /// <summary>Whether a run of element stride <paramref name="stride"/> can be read in order in place by the unit
+        ///     models (<see cref="Forward"/>, <see cref="Backward"/>, <see cref="Repeat"/>); any other stride is copied.</summary>
+        /// <param name="stride">The element stride.</param>
+        /// <returns>True for 1, -1 and 0.</returns>
+        internal static bool UnitReadable(long stride) => stride == 1 || stride == -1 || stride == 0;
+
+        // ------------------------------------------------------------------------------------------------------------
         //  float32: FLOAT_dot over cblas_sdot
         // ------------------------------------------------------------------------------------------------------------
 
@@ -84,7 +232,7 @@ namespace NumSharp.Utilities
 
         /// <summary>
         ///     FLOAT_dot over <c>cblas_sdot</c> with two unit strides (sdot.c): the Haswell vector kernel over the first
-        ///     <c>n &amp; -32</c> terms (<see cref="SdotKernel16"/>, a float32 result), the remaining terms' float32 products
+        ///     <c>n &amp; -32</c> terms (<see cref="SdotKernel16{TX, TY}"/>, a float32 result), the remaining terms' float32 products
         ///     summed into a double from +0, the kernel's result added last, the double rounded to float32, and that added
         ///     into FLOAT_dot's zeroed double and rounded again.
         /// </summary>
@@ -98,15 +246,61 @@ namespace NumSharp.Utilities
         ///     terms, 200 of 200 1-D); from 32 terms, the kernel (200 of 200 1-D results from 32 to 1,000 terms).</remarks>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         internal static unsafe float FloatDotUnit(float* ip1, long is1, float* ip2, long is2, long n)
+            => FloatUnitCore<Forward, Forward>(ip1, ip2, n);
+
+        /// <summary>
+        ///     <see cref="FloatDotUnit"/>'s arithmetic over two runs read in order whatever their direction: what FLOAT_dot
+        ///     computes on the contiguous copies NumPy's 1-D route makes of a reversed or broadcast operand.
+        /// </summary>
+        /// <param name="x">cblas' x: logical element 0 of the first run.</param>
+        /// <param name="sx">Its element stride: 1, -1 or 0 (<see cref="UnitReadable"/>).</param>
+        /// <param name="y">cblas' y: logical element 0 of the second run.</param>
+        /// <param name="sy">Its element stride: 1, -1 or 0.</param>
+        /// <param name="n">The number of terms; zero or negative gives +0.</param>
+        /// <returns>The dot product NumPy's float32 dotfunc writes for the copies.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">A stride other than 1, -1 or 0.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        internal static unsafe float FloatDotUnitInOrder(float* x, long sx, float* y, long sy, long n)
+        {
+            // One instantiation per pair of directions: each is the plain kernel with its loads swapped.
+            return (sx, sy) switch
+            {
+                (1, 1) => FloatUnitCore<Forward, Forward>(x, y, n),
+                (1, -1) => FloatUnitCore<Forward, Backward>(x, y, n),
+                (1, 0) => FloatUnitCore<Forward, Repeat>(x, y, n),
+                (-1, 1) => FloatUnitCore<Backward, Forward>(x, y, n),
+                (-1, -1) => FloatUnitCore<Backward, Backward>(x, y, n),
+                (-1, 0) => FloatUnitCore<Backward, Repeat>(x, y, n),
+                (0, 1) => FloatUnitCore<Repeat, Forward>(x, y, n),
+                (0, -1) => FloatUnitCore<Repeat, Backward>(x, y, n),
+                (0, 0) => FloatUnitCore<Repeat, Repeat>(x, y, n),
+                _ => throw new ArgumentOutOfRangeException(nameof(sx), "a unit model reads strides 1, -1 and 0 in place only"),
+            };
+        }
+
+        /// <summary>The body of <see cref="FloatDotUnit"/> for any pair of run directions.</summary>
+        /// <typeparam name="TX">How x is read.</typeparam>
+        /// <typeparam name="TY">How y is read.</typeparam>
+        /// <param name="x">cblas' x: logical element 0.</param>
+        /// <param name="y">cblas' y: logical element 0.</param>
+        /// <param name="n">The number of terms.</param>
+        /// <returns>The dot product NumPy's float32 dotfunc writes.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe float FloatUnitCore<TX, TY>(float* x, float* y, long n)
+            where TX : struct, IRunRead where TY : struct, IRunRead
         {
             long n1 = n > 0 ? n & -32 : 0;   // a negative count sums nothing (n & -32 would be negative)
+            // The kernel runs first, as in sdot.c (`sdot_kernel_16(n1, x, y, &mydot)`), but its float32 sum is added last.
+            // Calling it before the loop also keeps the double sum from living across a call, which would pin it to a
+            // callee-saved register that every call then saves and restores (a few percent of a short dot).
+            float kernel = n1 > 0 ? SdotKernel16<TX, TY>(n1, x, y) : 0f;
             // sdot.c's `double dot = 0.0`: the tail's float32 products (y * x, rounded) widened into it, in order.
             double dot = 0.0;
             for (long i = n1; i < n; i++)
-                dot += ip2[i] * ip1[i];
+                dot += TY.At(y, i) * TX.At(x, i);
             if (n1 > 0)
-                dot += SdotKernel16(n1, ip1, ip2);   // `dot += mydot`: the kernel's float32 sum comes last
-            double sum = 0.0;                         // FLOAT_dot's `double sum = 0.; sum += cblas_sdot(...)`
+                dot += kernel;                            // `dot += mydot`
+            double sum = 0.0;                             // FLOAT_dot's `double sum = 0.; sum += cblas_sdot(...)`
             sum += (float)dot;
             return (float)sum;
         }
@@ -220,10 +414,10 @@ namespace NumSharp.Utilities
                 if (n1 > 0)
                 {
                     // `dot += mydot` per output, after its tail, as sdot.c orders it.
-                    d0 += SdotKernel16(n1, x, y0);
-                    d1 += SdotKernel16(n1, x, y1);
-                    d2 += SdotKernel16(n1, x, y2);
-                    d3 += SdotKernel16(n1, x, y3);
+                    d0 += SdotKernel16<Forward, Forward>(n1, x, y0);
+                    d1 += SdotKernel16<Forward, Forward>(n1, x, y1);
+                    d2 += SdotKernel16<Forward, Forward>(n1, x, y2);
+                    d3 += SdotKernel16<Forward, Forward>(n1, x, y3);
                 }
 
                 // sdot returns (float)dot; FLOAT_dot adds that into a zeroed double and rounds again.
@@ -390,7 +584,7 @@ namespace NumSharp.Utilities
 
         /// <summary>
         ///     DOUBLE_dot over <c>cblas_ddot</c> with two unit strides (ddot.c): the Haswell vector kernel over the first
-        ///     <c>n &amp; -16</c> terms (<see cref="DdotKernel8"/>), whose result the sum starts from, then the remaining
+        ///     <c>n &amp; -16</c> terms (<see cref="DdotKernel8{TX, TY}"/>), whose result the sum starts from, then the remaining
         ///     terms added in order with separate multiplies and adds, and that added into DOUBLE_dot's zeroed double.
         /// </summary>
         /// <param name="ip1">cblas' x (NumPy's first operand), unit stride.</param>
@@ -403,12 +597,53 @@ namespace NumSharp.Utilities
         ///     N-D 3 to 257.</remarks>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         internal static unsafe double DoubleDotUnit(double* ip1, long is1, double* ip2, long is2, long n)
+            => DoubleUnitCore<Forward, Forward>(ip1, ip2, n);
+
+        /// <summary>
+        ///     <see cref="DoubleDotUnit"/>'s arithmetic over two runs read in order whatever their direction: what
+        ///     DOUBLE_dot computes on the contiguous copies NumPy's 1-D route makes of a reversed or broadcast operand.
+        /// </summary>
+        /// <param name="x">cblas' x: logical element 0 of the first run.</param>
+        /// <param name="sx">Its element stride: 1, -1 or 0 (<see cref="UnitReadable"/>).</param>
+        /// <param name="y">cblas' y: logical element 0 of the second run.</param>
+        /// <param name="sy">Its element stride: 1, -1 or 0.</param>
+        /// <param name="n">The number of terms; zero or negative gives +0.</param>
+        /// <returns>The dot product NumPy's float64 dotfunc writes for the copies.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">A stride other than 1, -1 or 0.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        internal static unsafe double DoubleDotUnitInOrder(double* x, long sx, double* y, long sy, long n)
+        {
+            return (sx, sy) switch
+            {
+                (1, 1) => DoubleUnitCore<Forward, Forward>(x, y, n),
+                (1, -1) => DoubleUnitCore<Forward, Backward>(x, y, n),
+                (1, 0) => DoubleUnitCore<Forward, Repeat>(x, y, n),
+                (-1, 1) => DoubleUnitCore<Backward, Forward>(x, y, n),
+                (-1, -1) => DoubleUnitCore<Backward, Backward>(x, y, n),
+                (-1, 0) => DoubleUnitCore<Backward, Repeat>(x, y, n),
+                (0, 1) => DoubleUnitCore<Repeat, Forward>(x, y, n),
+                (0, -1) => DoubleUnitCore<Repeat, Backward>(x, y, n),
+                (0, 0) => DoubleUnitCore<Repeat, Repeat>(x, y, n),
+                _ => throw new ArgumentOutOfRangeException(nameof(sx), "a unit model reads strides 1, -1 and 0 in place only"),
+            };
+        }
+
+        /// <summary>The body of <see cref="DoubleDotUnit"/> for any pair of run directions.</summary>
+        /// <typeparam name="TX">How x is read.</typeparam>
+        /// <typeparam name="TY">How y is read.</typeparam>
+        /// <param name="x">cblas' x: logical element 0.</param>
+        /// <param name="y">cblas' y: logical element 0.</param>
+        /// <param name="n">The number of terms.</param>
+        /// <returns>The dot product NumPy's float64 dotfunc writes.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe double DoubleUnitCore<TX, TY>(double* x, double* y, long n)
+            where TX : struct, IRunRead where TY : struct, IRunRead
         {
             long n1 = n > 0 ? n & -16 : 0;
             // The kernel STORES its result into dot (vmovsd), it does not add it: the sum starts as that value.
-            double dot = n1 > 0 ? DdotKernel8(n1, ip1, ip2) : 0.0;
+            double dot = n1 > 0 ? DdotKernel8<TX, TY>(n1, x, y) : 0.0;
             for (long i = n1; i < n; i++)
-                dot += ip2[i] * ip1[i];
+                dot += TY.At(y, i) * TX.At(x, i);
             double sum = 0.0;   // DOUBLE_dot's `double sum = 0.; sum += cblas_ddot(...)`
             sum += dot;
             return sum;
@@ -451,10 +686,10 @@ namespace NumSharp.Utilities
                 if (n1 > 0)
                 {
                     // Four independent kernel calls: nothing orders them, so the core overlaps their reductions.
-                    d0 = DdotKernel8(n1, x, y0);
-                    d1 = DdotKernel8(n1, x, y1);
-                    d2 = DdotKernel8(n1, x, y2);
-                    d3 = DdotKernel8(n1, x, y3);
+                    d0 = DdotKernel8<Forward, Forward>(n1, x, y0);
+                    d1 = DdotKernel8<Forward, Forward>(n1, x, y1);
+                    d2 = DdotKernel8<Forward, Forward>(n1, x, y2);
+                    d3 = DdotKernel8<Forward, Forward>(n1, x, y3);
                 }
 
                 for (long i = n1; i < n; i++)
@@ -575,7 +810,7 @@ namespace NumSharp.Utilities
 
         /// <summary>
         ///     CDOUBLE_dot over <c>cblas_zdotu_sub</c> with two unit strides (zdot.c): the Haswell vector kernel
-        ///     (<see cref="ZdotKernel8"/>) fills four double sums (<c>Σ xr·yr</c>, <c>Σ xi·yi</c>, <c>Σ xr·yi</c>,
+        ///     (<see cref="ZdotKernel8{TX, TY}"/>) fills four double sums (<c>Σ xr·yr</c>, <c>Σ xi·yi</c>, <c>Σ xr·yi</c>,
         ///     <c>Σ xi·yr</c>) over the first <c>n &amp; -8</c> terms, the remaining terms continue them in order, and zdotu's
         ///     C99 result reaches CDOUBLE_dot's zeroed pair (<see cref="ZdotuResult"/>).
         /// </summary>
@@ -590,32 +825,70 @@ namespace NumSharp.Utilities
         ///     200 from 8 terms on.</remarks>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         internal static unsafe Complex ComplexDotUnit(Complex* ip1, long is1, Complex* ip2, long is2, long n)
+            => ComplexUnitCore<Forward, Forward>((double*)ip1, (double*)ip2, n);
+
+        /// <summary>
+        ///     <see cref="ComplexDotUnit"/>'s arithmetic over two runs read in order whatever their direction: what
+        ///     CDOUBLE_dot computes on the contiguous copies NumPy's 1-D route makes of a reversed or broadcast operand.
+        /// </summary>
+        /// <param name="x">cblas' x: logical element 0 of the first run.</param>
+        /// <param name="sx">Its element stride: 1, -1 or 0 (<see cref="UnitReadable"/>).</param>
+        /// <param name="y">cblas' y: logical element 0 of the second run (not conjugated).</param>
+        /// <param name="sy">Its element stride: 1, -1 or 0.</param>
+        /// <param name="n">The number of terms; zero or negative gives (+0, +0).</param>
+        /// <returns>The dot product NumPy's complex128 dotfunc writes for the copies.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">A stride other than 1, -1 or 0.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        internal static unsafe Complex ComplexDotUnitInOrder(Complex* x, long sx, Complex* y, long sy, long n)
         {
-            double* xp = (double*)ip1;
-            double* yp = (double*)ip2;
+            double* xp = (double*)x, yp = (double*)y;
+            return (sx, sy) switch
+            {
+                (1, 1) => ComplexUnitCore<Forward, Forward>(xp, yp, n),
+                (1, -1) => ComplexUnitCore<Forward, Backward>(xp, yp, n),
+                (1, 0) => ComplexUnitCore<Forward, Repeat>(xp, yp, n),
+                (-1, 1) => ComplexUnitCore<Backward, Forward>(xp, yp, n),
+                (-1, -1) => ComplexUnitCore<Backward, Backward>(xp, yp, n),
+                (-1, 0) => ComplexUnitCore<Backward, Repeat>(xp, yp, n),
+                (0, 1) => ComplexUnitCore<Repeat, Forward>(xp, yp, n),
+                (0, -1) => ComplexUnitCore<Repeat, Backward>(xp, yp, n),
+                (0, 0) => ComplexUnitCore<Repeat, Repeat>(xp, yp, n),
+                _ => throw new ArgumentOutOfRangeException(nameof(sx), "a unit model reads strides 1, -1 and 0 in place only"),
+            };
+        }
+
+        /// <summary>The body of <see cref="ComplexDotUnit"/> for any pair of run directions.</summary>
+        /// <typeparam name="TX">How x is read.</typeparam>
+        /// <typeparam name="TY">How y is read.</typeparam>
+        /// <param name="x">cblas' x: logical element 0's real part.</param>
+        /// <param name="y">cblas' y: logical element 0's real part.</param>
+        /// <param name="n">The number of terms.</param>
+        /// <returns>The dot product NumPy's complex128 dotfunc writes.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe Complex ComplexUnitCore<TX, TY>(double* x, double* y, long n)
+            where TX : struct, IRunRead where TY : struct, IRunRead
+        {
             double d0 = 0.0, d1 = 0.0, d2 = 0.0, d3 = 0.0;
-            long i = 0;
             long n1 = n > 0 ? n & -8 : 0;
             if (n1 > 0)
             {
                 // The kernel STORES the four sums (vmovups), so they start as its values; it returns them by value so
                 // d0..d3 stay in registers (an out-parameter would make every tail add a store and a reload).
-                Vector256<double> k = ZdotKernel8(n1, xp, yp);
+                Vector256<double> k = ZdotKernel8<TX, TY>(n1, x, y);
                 d0 = k.GetElement(0);
                 d1 = k.GetElement(1);
                 d2 = k.GetElement(2);
                 d3 = k.GetElement(3);
-                i = n1;
-                xp += 2 * n1;
-                yp += 2 * n1;
             }
 
-            for (; i < n; i++, xp += 2, yp += 2)
+            for (long c = n1; c < n; c++)
             {
-                d0 += xp[0] * yp[0];
-                d1 += xp[1] * yp[1];
-                d2 += xp[0] * yp[1];
-                d3 += xp[1] * yp[0];
+                double* xs = TX.ComplexAt(x, c);
+                double* ys = TY.ComplexAt(y, c);
+                d0 += xs[0] * ys[0];
+                d1 += xs[1] * ys[1];
+                d2 += xs[0] * ys[1];
+                d3 += xs[1] * ys[0];
             }
             return ZdotuResult(d0 - d1, d2 + d3);
         }
@@ -727,8 +1000,8 @@ namespace NumSharp.Utilities
                 if (n1 > 0)
                 {
                     // Each output's kernel STORES its four sums, which its tail then continues.
-                    Vector256<double> ka = ZdotKernel8(n1, xp, ya);
-                    Vector256<double> kb = ZdotKernel8(n1, xp, yb);
+                    Vector256<double> ka = ZdotKernel8<Forward, Forward>(n1, xp, ya);
+                    Vector256<double> kb = ZdotKernel8<Forward, Forward>(n1, xp, yb);
                     a0 = ka.GetElement(0); a1 = ka.GetElement(1); a2 = ka.GetElement(2); a3 = ka.GetElement(3);
                     b0 = kb.GetElement(0); b1 = kb.GetElement(1); b2 = kb.GetElement(2); b3 = kb.GetElement(3);
                 }
@@ -832,14 +1105,18 @@ namespace NumSharp.Utilities
         ///     positive multiple of 32: four eight-lane float32 accumulators of fused multiply-adds, each folded to four
         ///     lanes (upper half + lower half), the four added as <c>(t3 + t2) + (t1 + t0)</c>, then two horizontal adds.
         /// </summary>
+        /// <typeparam name="TX">How x is read (<see cref="IRunRead"/>).</typeparam>
+        /// <typeparam name="TY">How y is read.</typeparam>
         /// <param name="n1">The terms the kernel takes (a positive multiple of 32).</param>
-        /// <param name="x">cblas' x, unit stride.</param>
-        /// <param name="y">cblas' y, unit stride.</param>
+        /// <param name="x">cblas' x: logical element 0.</param>
+        /// <param name="y">cblas' y: logical element 0.</param>
         /// <returns>The kernel's float32 sum.</returns>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe float SdotKernel16(long n1, float* x, float* y)
+        private static unsafe float SdotKernel16<TX, TY>(long n1, float* x, float* y)
+            where TX : struct, IRunRead where TY : struct, IRunRead
         {
-            if (Fma.IsSupported)
+            // AVX2 for the reversed loads' permutes; a host with FMA but not AVX2 takes the scalar emulation below.
+            if (Fma.IsSupported && Avx2.IsSupported)
             {
                 var a4 = Vector256<float>.Zero;
                 var a5 = Vector256<float>.Zero;
@@ -847,10 +1124,10 @@ namespace NumSharp.Utilities
                 var a7 = Vector256<float>.Zero;
                 for (long i = 0; i < n1; i += 32)
                 {
-                    a4 = Fma.MultiplyAdd(Vector256.Load(x + i), Vector256.Load(y + i), a4);
-                    a5 = Fma.MultiplyAdd(Vector256.Load(x + i + 8), Vector256.Load(y + i + 8), a5);
-                    a6 = Fma.MultiplyAdd(Vector256.Load(x + i + 16), Vector256.Load(y + i + 16), a6);
-                    a7 = Fma.MultiplyAdd(Vector256.Load(x + i + 24), Vector256.Load(y + i + 24), a7);
+                    a4 = Fma.MultiplyAdd(TX.Load8(x, i), TY.Load8(y, i), a4);
+                    a5 = Fma.MultiplyAdd(TX.Load8(x, i + 8), TY.Load8(y, i + 8), a5);
+                    a6 = Fma.MultiplyAdd(TX.Load8(x, i + 16), TY.Load8(y, i + 16), a6);
+                    a7 = Fma.MultiplyAdd(TX.Load8(x, i + 24), TY.Load8(y, i + 24), a7);
                 }
 
                 var t4 = a4.GetUpper() + a4.GetLower();
@@ -869,7 +1146,7 @@ namespace NumSharp.Utilities
                 acc[l] = 0f;
             for (long i = 0; i < n1; i += 32)
                 for (int l = 0; l < 32; l++)
-                    acc[l] = MathF.FusedMultiplyAdd(x[i + l], y[i + l], acc[l]);
+                    acc[l] = MathF.FusedMultiplyAdd(TX.At(x, i + l), TY.At(y, i + l), acc[l]);
 
             float* tt = stackalloc float[16];   // tt[4k + L]: accumulator k folded, lane L
             for (int k = 0; k < 4; k++)
@@ -887,14 +1164,17 @@ namespace NumSharp.Utilities
         ///     positive multiple of 16: four four-lane double accumulators of fused multiply-adds, each folded to two
         ///     lanes (upper half + lower half), the four added as <c>(t3 + t2) + (t1 + t0)</c>, then one horizontal add.
         /// </summary>
+        /// <typeparam name="TX">How x is read (<see cref="IRunRead"/>).</typeparam>
+        /// <typeparam name="TY">How y is read.</typeparam>
         /// <param name="n1">The terms the kernel takes (a positive multiple of 16).</param>
-        /// <param name="x">cblas' x, unit stride.</param>
-        /// <param name="y">cblas' y, unit stride.</param>
+        /// <param name="x">cblas' x: logical element 0.</param>
+        /// <param name="y">cblas' y: logical element 0.</param>
         /// <returns>The kernel's double sum.</returns>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe double DdotKernel8(long n1, double* x, double* y)
+        private static unsafe double DdotKernel8<TX, TY>(long n1, double* x, double* y)
+            where TX : struct, IRunRead where TY : struct, IRunRead
         {
-            if (Fma.IsSupported)
+            if (Fma.IsSupported && Avx2.IsSupported)
             {
                 var a4 = Vector256<double>.Zero;
                 var a5 = Vector256<double>.Zero;
@@ -902,10 +1182,10 @@ namespace NumSharp.Utilities
                 var a7 = Vector256<double>.Zero;
                 for (long i = 0; i < n1; i += 16)
                 {
-                    a4 = Fma.MultiplyAdd(Vector256.Load(x + i), Vector256.Load(y + i), a4);
-                    a5 = Fma.MultiplyAdd(Vector256.Load(x + i + 4), Vector256.Load(y + i + 4), a5);
-                    a6 = Fma.MultiplyAdd(Vector256.Load(x + i + 8), Vector256.Load(y + i + 8), a6);
-                    a7 = Fma.MultiplyAdd(Vector256.Load(x + i + 12), Vector256.Load(y + i + 12), a7);
+                    a4 = Fma.MultiplyAdd(TX.Load4(x, i), TY.Load4(y, i), a4);
+                    a5 = Fma.MultiplyAdd(TX.Load4(x, i + 4), TY.Load4(y, i + 4), a5);
+                    a6 = Fma.MultiplyAdd(TX.Load4(x, i + 8), TY.Load4(y, i + 8), a6);
+                    a7 = Fma.MultiplyAdd(TX.Load4(x, i + 12), TY.Load4(y, i + 12), a7);
                 }
 
                 var t4 = a4.GetUpper() + a4.GetLower();
@@ -921,7 +1201,7 @@ namespace NumSharp.Utilities
                 acc[l] = 0.0;
             for (long i = 0; i < n1; i += 16)
                 for (int l = 0; l < 16; l++)
-                    acc[l] = Math.FusedMultiplyAdd(x[i + l], y[i + l], acc[l]);
+                    acc[l] = Math.FusedMultiplyAdd(TX.At(x, i + l), TY.At(y, i + l), acc[l]);
 
             // acc[4k + L]: accumulator k, lane L; folded lanes are (L2 + L0, L3 + L1).
             double w0 = ((acc[14] + acc[12]) + (acc[10] + acc[8])) + ((acc[6] + acc[4]) + (acc[2] + acc[0]));
@@ -935,18 +1215,20 @@ namespace NumSharp.Utilities
         ///     <c>xi·yi</c> of two terms) and four of <c>x · swap(y)</c> (lanes <c>xr·yi</c>, <c>xi·yr</c>), added as
         ///     <c>(a3 + a2) + (a1 + a0)</c> and <c>(a7 + a6) + (a5 + a4)</c>, each then folded upper half + lower half.
         /// </summary>
+        /// <typeparam name="TX">How x is read (<see cref="IRunRead"/>).</typeparam>
+        /// <typeparam name="TY">How y is read.</typeparam>
         /// <param name="n1">The complex terms the kernel takes (a positive multiple of 8).</param>
-        /// <param name="x">cblas' x as interleaved doubles, unit complex stride.</param>
-        /// <param name="y">cblas' y as interleaved doubles, unit complex stride.</param>
+        /// <param name="x">cblas' x: logical element 0's real part (interleaved doubles).</param>
+        /// <param name="y">cblas' y: logical element 0's real part.</param>
         /// <returns>The kernel's four sums in lanes 0 to 3: <c>Σ xr·yr</c>, <c>Σ xi·yi</c>, <c>Σ xr·yi</c>,
         ///     <c>Σ xi·yr</c> (returned by value, so the caller's sums stay in registers).</returns>
         /// <remarks>The kernel has a second loop for more than 1,280 terms that only adds prefetches; its arithmetic is
         ///     the same.</remarks>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe Vector256<double> ZdotKernel8(long n1, double* x, double* y)
+        private static unsafe Vector256<double> ZdotKernel8<TX, TY>(long n1, double* x, double* y)
+            where TX : struct, IRunRead where TY : struct, IRunRead
         {
-            long doubles = 2 * n1;
-            if (Fma.IsSupported)
+            if (Fma.IsSupported && Avx2.IsSupported)
             {
                 var a0 = Vector256<double>.Zero;
                 var a1 = Vector256<double>.Zero;
@@ -956,16 +1238,17 @@ namespace NumSharp.Utilities
                 var a5 = Vector256<double>.Zero;
                 var a6 = Vector256<double>.Zero;
                 var a7 = Vector256<double>.Zero;
-                for (long i = 0; i < doubles; i += 16)
+                for (long c = 0; c < n1; c += 8)
                 {
-                    var x8 = Vector256.Load(x + i);
-                    var x9 = Vector256.Load(x + i + 4);
-                    var x10 = Vector256.Load(x + i + 8);
-                    var x11 = Vector256.Load(x + i + 12);
-                    var y12 = Vector256.Load(y + i);
-                    var y13 = Vector256.Load(y + i + 4);
-                    var y14 = Vector256.Load(y + i + 8);
-                    var y15 = Vector256.Load(y + i + 12);
+                    // Eight complex terms a step: two per register, x8..x11 / y12..y15 as the kernel names them.
+                    var x8 = TX.LoadComplex2(x, c);
+                    var x9 = TX.LoadComplex2(x, c + 2);
+                    var x10 = TX.LoadComplex2(x, c + 4);
+                    var x11 = TX.LoadComplex2(x, c + 6);
+                    var y12 = TY.LoadComplex2(y, c);
+                    var y13 = TY.LoadComplex2(y, c + 2);
+                    var y14 = TY.LoadComplex2(y, c + 4);
+                    var y15 = TY.LoadComplex2(y, c + 6);
                     a0 = Fma.MultiplyAdd(x8, y12, a0);
                     a1 = Fma.MultiplyAdd(x9, y13, a1);
                     a2 = Fma.MultiplyAdd(x10, y14, a2);
@@ -986,16 +1269,20 @@ namespace NumSharp.Utilities
             double* acc = stackalloc double[32];
             for (int l = 0; l < 32; l++)
                 acc[l] = 0.0;
-            for (long i = 0; i < doubles; i += 16)
+            for (long c = 0; c < n1; c += 8)
             {
                 for (int k = 0; k < 4; k++)
                 {
-                    double* xs = x + i + 4 * k;
-                    double* ys = y + i + 4 * k;
-                    for (int l = 0; l < 4; l++)
+                    // Accumulator k's lanes: complex c + 2k (lanes 0, 1) and c + 2k + 1 (lanes 2, 3).
+                    for (int h = 0; h < 2; h++)
                     {
-                        acc[4 * k + l] = Math.FusedMultiplyAdd(xs[l], ys[l], acc[4 * k + l]);
-                        acc[16 + 4 * k + l] = Math.FusedMultiplyAdd(xs[l], ys[l ^ 1], acc[16 + 4 * k + l]);
+                        double* xs = TX.ComplexAt(x, c + 2 * k + h);
+                        double* ys = TY.ComplexAt(y, c + 2 * k + h);
+                        int l = 4 * k + 2 * h;
+                        acc[l] = Math.FusedMultiplyAdd(xs[0], ys[0], acc[l]);
+                        acc[l + 1] = Math.FusedMultiplyAdd(xs[1], ys[1], acc[l + 1]);
+                        acc[16 + l] = Math.FusedMultiplyAdd(xs[0], ys[1], acc[16 + l]);
+                        acc[16 + l + 1] = Math.FusedMultiplyAdd(xs[1], ys[0], acc[16 + l + 1]);
                     }
                 }
             }

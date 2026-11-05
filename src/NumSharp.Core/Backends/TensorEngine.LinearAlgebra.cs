@@ -100,8 +100,22 @@ namespace NumSharp
             // "vectors have different lengths" the C code below it still carries.
             var left = NDArray.ravel(a, 'C');
             var right = b.reshape(new long[] {left.size});
-            return Dot(LinAlgHelper.Conjugate(left), right);
+            // array_vdot then calls the dtype's dot function itself - not np.dot's 1-D route, whose
+            // cblas_matrixproduct takes a length-1 pair as a plain product and copies a reversed operand.
+            return DotFunction1D(LinAlgHelper.Conjugate(left), right);
         }
+
+        /// <summary>
+        ///     The dtype's dot function over two 1-D operands of one length: np.vdot's last step (NumPy's
+        ///     <c>array_vdot</c> calls <c>PyArray_ArrFuncs.dotfunc</c> directly). The default computes np.dot of the two
+        ///     vectors; <see cref="DefaultEngine"/> runs the dot function itself, which differs from np.dot's 1-D route for
+        ///     a length-1 pair (summed from +0, not the plain product) and a reversed or broadcast operand (its own loop,
+        ///     not a copy).
+        /// </summary>
+        /// <param name="left">The first vector (conjugated by np.vdot when complex).</param>
+        /// <param name="right">The second vector, the same length.</param>
+        /// <returns>A fresh 0-d result.</returns>
+        internal virtual NDArray DotFunction1D(NDArray left, NDArray right) => Dot(left, right);
 
         /// <summary>
         ///     The <c>np.vecdot</c> gufunc <c>(n),(n)->()</c> — <paramref name="x1"/> conjugated when

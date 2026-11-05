@@ -14180,6 +14180,55 @@ def gen_products():
                     tag = f"nd_{kind}_k{K}" + ("_special" if special else "")
                     emit("dot", {}, [(a, av), (b, bv)], r, tag, dt)
 
+    # --- np.dot of two 1-D arrays (PA3a, the 1-D route): cblas_matrixproduct for the three BLAS dtypes - a length-1
+    #     pair is the plain product, an operand with a negative or zero stride is copied (_bad_strides) and then takes
+    #     the unit-stride kernel, a stepped one cblas' strided loop - and a mixed pair converted to the common dtype
+    #     first. Layouts: c, rev (a[::-1]), revb (b[::-1]), step (a[::2] . b[::2]), stepr (a[::2] . b[::-1]), bcast
+    #     (b broadcast from one element), rev2 (a[::-2], the one layout NumSharp copies too).
+    def dot1d_views(kind, a, b, n):
+        if kind == "rev":
+            return a[::-1], b
+        if kind == "revb":
+            return a, b[::-1]
+        if kind == "step":
+            return a[::2], b[::2]
+        if kind == "stepr":
+            return a[::2], b[::-1]
+        if kind == "bcast":
+            return a, np.broadcast_to(b, (n,))
+        if kind == "rev2":
+            return a[::-2], b
+        return a, b
+
+    def dot1d_case(dta, dtb, kind, n, special):
+        na = 2 * n if kind in ("step", "stepr", "rev2") else n
+        nb = 2 * n if kind == "step" else (1 if kind == "bcast" else n)
+        a = dot_spread((na,), dta) if np.dtype(dta).kind in "fc" else np.ascontiguousarray(
+            dot_rng.randint(-1000, 1000, na).astype(dta))
+        b = dot_spread((nb,), dtb) if np.dtype(dtb).kind in "fc" else np.ascontiguousarray(
+            dot_rng.randint(-1000, 1000, nb).astype(dtb))
+        if special:
+            dot_specials(a)
+            if kind != "bcast":
+                dot_specials(b)
+        av, bv = dot1d_views(kind, a, b, n)
+        with np.errstate(all="ignore"):
+            r = np.asarray(np.dot(av, bv))
+        tag = f"1d_{kind}_n{n}" + ("_special" if special else "")
+        emit("dot", {}, [(a, av), (b, bv)], r, tag, dta if dta == dtb else f"{dta}.{dtb}")
+
+    for dt in ("float32", "float64", "complex128"):
+        for n in (1, 2, 7, 8, 15, 16, 17, 31, 32, 33, 64):
+            for kind in ("c", "rev", "revb", "step", "stepr", "bcast", "rev2"):
+                dot1d_case(dt, dt, kind, n, False)
+        for n in (8, 32):
+            for kind in ("c", "rev"):
+                dot1d_case(dt, dt, kind, n, True)
+    for (dta, dtb) in (("float32", "float64"), ("int32", "float32"), ("float16", "float32"), ("int64", "complex128")):
+        for n in (1, 20, 40):
+            for kind in ("c", "rev"):
+                dot1d_case(dta, dtb, kind, n, False)
+
     if skipped:
         print(f"  (skipped {skipped} cases where NumPy raised)")
     return cases

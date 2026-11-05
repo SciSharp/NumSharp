@@ -52,10 +52,16 @@ namespace NumSharp.Tests.LinearAlgebra
                 return BitConverter.Int64BitsToDouble((long)((sign << 63) | ((ulong)(e + 1023) << 52) | mant));
             }
 
+            /// <summary>One integer in [-1000, 1000]: the draw's top 24 bits modulo 2001, minus 1000.</summary>
+            /// <returns>The value.</returns>
+            public long Integer() => (long)((Step() >> 40) % 2001) - 1000;
+
             /// <summary>An array of <paramref name="dtype"/> filled in C order (complex: real draw, then imaginary).
-            ///     float32 values are the doubles rounded to float32, as NumPy's astype rounds them.</summary>
+            ///     float32 values are the doubles rounded to float32, as NumPy's astype rounds them; integer, bool and
+            ///     float16 values are exact in their dtype (an <see cref="Integer"/>, the draw's top bit, an
+            ///     <see cref="Integer"/> over 8), so no conversion rounding has to agree between the two sides.</summary>
             /// <param name="shape">The shape.</param>
-            /// <param name="dtype">float32, float64 or complex128.</param>
+            /// <param name="dtype">float32, float64, complex128, int32, int64, bool or float16.</param>
             /// <returns>The fresh C-contiguous array.</returns>
             public NDArray Array(long[] shape, string dtype)
             {
@@ -64,6 +70,34 @@ namespace NumSharp.Tests.LinearAlgebra
                     n *= d;
                 switch (dtype)
                 {
+                    case "int32":
+                    {
+                        var v = new int[n];
+                        for (long i = 0; i < n; i++)
+                            v[i] = (int)Integer();
+                        return np.array(v).reshape(shape);
+                    }
+                    case "int64":
+                    {
+                        var v = new long[n];
+                        for (long i = 0; i < n; i++)
+                            v[i] = Integer();
+                        return np.array(v).reshape(shape);
+                    }
+                    case "bool":
+                    {
+                        var v = new bool[n];
+                        for (long i = 0; i < n; i++)
+                            v[i] = (Step() >> 63) == 1;
+                        return np.array(v).reshape(shape);
+                    }
+                    case "float16":
+                    {
+                        var v = new Half[n];
+                        for (long i = 0; i < n; i++)
+                            v[i] = (Half)(Integer() / 8.0);
+                        return np.array(v).reshape(shape);
+                    }
                     case "complex128":
                     {
                         var v = new System.Numerics.Complex[n];
@@ -111,6 +145,21 @@ namespace NumSharp.Tests.LinearAlgebra
             if (x.size > 11) Set(9, double.NegativeInfinity);
         }
 
+        /// <summary>
+        ///     NumPy 2.4.2's bits for np.dot over its N-D route (a 3-D first operand), one row per stride class, contracted
+        ///     length, row length and dtype pair (see the class remarks for the columns).
+        /// </summary>
+        /// <param name="dtypeA">The first operand's dtype.</param>
+        /// <param name="dtypeB">The second operand's dtype.</param>
+        /// <param name="kind">unit (<c>b.T</c>: two unit runs), strided (a C-ordered b), rev (<c>a[..., ::-1]</c>), bcast
+        ///     (b broadcast along K: stride 0).</param>
+        /// <param name="K">The contracted length.</param>
+        /// <param name="M">The rhs's last dimension (3: one call per output; 5: a row of four plus one).</param>
+        /// <param name="seed">The generator seed.</param>
+        /// <param name="special">Whether NaN / inf / -inf / -0.0 are planted.</param>
+        /// <param name="rhs3d">Whether the rhs is 3-D (the row walk advances an outer axis).</param>
+        /// <param name="resultDtype">NumPy's result dtype.</param>
+        /// <param name="expected">sha: or hex: and NumPy's result bytes.</param>
         [DataTestMethod]
         [DataRow("float32", "float32", "unit", 3, 3, 1001UL, false, false, "float32", "sha:5ca3dc4f637c702e04a3a1a83a3dc083")]
         [DataRow("float32", "float32", "unit", 3, 5, 1002UL, false, false, "float32", "sha:99439d6aae2639c54826d80c8121b550")]
@@ -256,21 +305,319 @@ namespace NumSharp.Tests.LinearAlgebra
             }
             NDArray av = kind == "rev" ? a[":, :, ::-1"] : a;
 
-            var r = np.dot(av, bv);
+            AssertNumPyBits(np.dot(av, bv), resultDtype, expected, $"{dtypeA}.{dtypeB} {kind} K={K} M={M}");
+        }
 
-            r.dtype.name.Should().Be(resultDtype);
+        /// <summary>
+        ///     NumPy 2.4.2's bits for np.dot of two 1-D arrays, the route of <c>cblas_matrixproduct</c> for float32 /
+        ///     float64 / complex128 (both operands converted to their common dtype first; a length-1 pair is the plain
+        ///     product; an operand with a negative or zero stride is copied, which the managed route reads in place;
+        ///     the dtype's dot function computes the rest) and of the dot function itself for the others.
+        /// </summary>
+        /// <param name="dtypeA">The first operand's dtype.</param>
+        /// <param name="dtypeB">The second operand's dtype.</param>
+        /// <param name="kind">c (both contiguous), rev (<c>a[::-1]</c>), revb (<c>b[::-1]</c>), step (<c>a[::2]</c>,
+        ///     <c>b[::2]</c>: cblas' strided loops), stepr (<c>a[::2]</c>, <c>b[::-1]</c>: one copied operand beside a
+        ///     stepped one), bcast (b broadcast from one element: stride 0), rev2 (<c>a[::-2]</c>: the one layout the
+        ///     route copies).</param>
+        /// <param name="n">The length.</param>
+        /// <param name="seed">The generator seed.</param>
+        /// <param name="special">Whether NaN / inf / -inf / -0.0 are planted.</param>
+        /// <param name="resultDtype">NumPy's result dtype.</param>
+        /// <param name="expected">sha: or hex: and NumPy's result bytes (see the class remarks).</param>
+        [DataTestMethod]
+        [DataRow("float32", "float32", "c", 1, 5001UL, false, "float32", "sha:99d0d37b1947e031c876063648bc02bd")]
+        [DataRow("float32", "float32", "c", 2, 5002UL, false, "float32", "sha:7b6dc596154ca47898694551d47aa76c")]
+        [DataRow("float32", "float32", "c", 7, 5003UL, false, "float32", "sha:a3038459cd33de59e64b27a0276a4240")]
+        [DataRow("float32", "float32", "c", 15, 5004UL, false, "float32", "sha:65fd377636adc9cc8a626dc388ddc669")]
+        [DataRow("float32", "float32", "c", 16, 5005UL, false, "float32", "sha:326d07cbde70945e8a2488359178b108")]
+        [DataRow("float32", "float32", "c", 17, 5006UL, false, "float32", "sha:4aeca6db8f715e41f8b912487af4d300")]
+        [DataRow("float32", "float32", "c", 31, 5007UL, false, "float32", "sha:003640d53e41603352c7d5b3bd731277")]
+        [DataRow("float32", "float32", "c", 33, 5008UL, false, "float32", "sha:5e423580b6f99efd630cfa523211d171")]
+        [DataRow("float32", "float32", "c", 40, 5009UL, false, "float32", "sha:0c98c3bbaea9b9efb231889eb23f45be")]
+        [DataRow("float32", "float32", "rev", 1, 5010UL, false, "float32", "sha:9ae7b4c46e91d6ae579176d87431492f")]
+        [DataRow("float32", "float32", "rev", 2, 5011UL, false, "float32", "sha:2e126115966a4dca640ab392f8ce0ea9")]
+        [DataRow("float32", "float32", "rev", 7, 5012UL, false, "float32", "sha:31662d9de81de505e994256d6f2c8243")]
+        [DataRow("float32", "float32", "rev", 15, 5013UL, false, "float32", "sha:b4b586e41720a573619cd8864b65e198")]
+        [DataRow("float32", "float32", "rev", 16, 5014UL, false, "float32", "sha:5511e4af89c6d074670b060d4d59bb5c")]
+        [DataRow("float32", "float32", "rev", 17, 5015UL, false, "float32", "sha:30c45fbfe42986d711520e2c08268dfc")]
+        [DataRow("float32", "float32", "rev", 31, 5016UL, false, "float32", "sha:d403af0a446dea61f11e2a975913c4b2")]
+        [DataRow("float32", "float32", "rev", 33, 5017UL, false, "float32", "sha:d990408891fc7415ae037e2468b14970")]
+        [DataRow("float32", "float32", "rev", 40, 5018UL, false, "float32", "sha:90962c7990c70a2e26207b4bb49de778")]
+        [DataRow("float32", "float32", "revb", 1, 5019UL, false, "float32", "sha:fda6c3a69c185df4615e63c08baf1abd")]
+        [DataRow("float32", "float32", "revb", 2, 5020UL, false, "float32", "sha:6d91bc279e2bfdb48717cd499b14579f")]
+        [DataRow("float32", "float32", "revb", 7, 5021UL, false, "float32", "sha:29a46f65dd0a9dcd508981af3ed3ad33")]
+        [DataRow("float32", "float32", "revb", 15, 5022UL, false, "float32", "sha:1f0ecbda42ef6a720fea342e5d63e0ed")]
+        [DataRow("float32", "float32", "revb", 16, 5023UL, false, "float32", "sha:8ee32f070c07f34ad88f4c78a6e8f088")]
+        [DataRow("float32", "float32", "revb", 17, 5024UL, false, "float32", "sha:96a3d2fb07fb5f4c842319058e812fb3")]
+        [DataRow("float32", "float32", "revb", 31, 5025UL, false, "float32", "sha:6a32cb9d1877df05633f9fe749348a88")]
+        [DataRow("float32", "float32", "revb", 33, 5026UL, false, "float32", "sha:0808986e2f86bb634503868f9a4b48d5")]
+        [DataRow("float32", "float32", "revb", 40, 5027UL, false, "float32", "sha:1c84fce842433f02b2a6e01b6c274c9c")]
+        [DataRow("float32", "float32", "step", 1, 5028UL, false, "float32", "sha:64b8f4e4d1e9ebe91c4999252f92d8fa")]
+        [DataRow("float32", "float32", "step", 2, 5029UL, false, "float32", "sha:a98cb2698e511ab3661645226e7c3682")]
+        [DataRow("float32", "float32", "step", 7, 5030UL, false, "float32", "sha:216b701751488bc7705fcf19f99e8c78")]
+        [DataRow("float32", "float32", "step", 15, 5031UL, false, "float32", "sha:b2a65dfc8a9733797d87ba8bb68649e6")]
+        [DataRow("float32", "float32", "step", 16, 5032UL, false, "float32", "sha:8b62cc6e0130fcf16d0badef0e95c53a")]
+        [DataRow("float32", "float32", "step", 17, 5033UL, false, "float32", "sha:f1f5c4b9d8315ba798c550de59d7eac2")]
+        [DataRow("float32", "float32", "step", 31, 5034UL, false, "float32", "sha:616be0f44e4439a80c57aa8c097c20b1")]
+        [DataRow("float32", "float32", "step", 33, 5035UL, false, "float32", "sha:28f6f05b6e225303319b389b50c7a817")]
+        [DataRow("float32", "float32", "step", 40, 5036UL, false, "float32", "sha:a2c806e657cc87ec4547c71488134ac6")]
+        [DataRow("float32", "float32", "stepr", 1, 5037UL, false, "float32", "sha:7475e0549861ef9a8d2a0616a60bb0ee")]
+        [DataRow("float32", "float32", "stepr", 2, 5038UL, false, "float32", "sha:7defa38c1dcd48ba34595566c902db86")]
+        [DataRow("float32", "float32", "stepr", 7, 5039UL, false, "float32", "sha:ad22d3c0a11a83d1cad247318ab3ed94")]
+        [DataRow("float32", "float32", "stepr", 15, 5040UL, false, "float32", "sha:f57724c483140ddba88ca8a03fb1165c")]
+        [DataRow("float32", "float32", "stepr", 16, 5041UL, false, "float32", "sha:694f150856b16f6bbc4b0ddd0f9ce50e")]
+        [DataRow("float32", "float32", "stepr", 17, 5042UL, false, "float32", "sha:aa5b5a53a5a3d2d17342bd4091ffe110")]
+        [DataRow("float32", "float32", "stepr", 31, 5043UL, false, "float32", "sha:d807e9f3340474c4b4850ded4aa3d70a")]
+        [DataRow("float32", "float32", "stepr", 33, 5044UL, false, "float32", "sha:fbc518cee5b8d30b7a23527ee2cae4e8")]
+        [DataRow("float32", "float32", "stepr", 40, 5045UL, false, "float32", "sha:4bb815dda70e35d37b8aacd7d5df5319")]
+        [DataRow("float32", "float32", "bcast", 1, 5046UL, false, "float32", "sha:845100e77872b088561835359d5fdfc1")]
+        [DataRow("float32", "float32", "bcast", 2, 5047UL, false, "float32", "sha:0697da7f01b8909310aa88a6896d3505")]
+        [DataRow("float32", "float32", "bcast", 7, 5048UL, false, "float32", "sha:4ac1d08073cd39d34bca5294dc4d10c7")]
+        [DataRow("float32", "float32", "bcast", 15, 5049UL, false, "float32", "sha:9228297c354713ac4c21c7a04d4fb1df")]
+        [DataRow("float32", "float32", "bcast", 16, 5050UL, false, "float32", "sha:bb9fc659d6b3d3df08017b3c9919bead")]
+        [DataRow("float32", "float32", "bcast", 17, 5051UL, false, "float32", "sha:70266f67dc2c38481c1bd8a0d31a2284")]
+        [DataRow("float32", "float32", "bcast", 31, 5052UL, false, "float32", "sha:4f3873c8c2c8ea88b2e345d14439e1e6")]
+        [DataRow("float32", "float32", "bcast", 33, 5053UL, false, "float32", "sha:2d6afe8b0060f3efbb9565c58435a195")]
+        [DataRow("float32", "float32", "bcast", 40, 5054UL, false, "float32", "sha:445bf4682cebc456c8446a8fde8b96c3")]
+        [DataRow("float32", "float32", "rev2", 1, 5055UL, false, "float32", "sha:84a6eff995e9d1538fd8109889a4567e")]
+        [DataRow("float32", "float32", "rev2", 2, 5056UL, false, "float32", "sha:a6c51a45bf9231549dc06d4fc007f1ff")]
+        [DataRow("float32", "float32", "rev2", 7, 5057UL, false, "float32", "sha:45c10c58cb7d9f3a0d13c62cc314c2f7")]
+        [DataRow("float32", "float32", "rev2", 15, 5058UL, false, "float32", "sha:d44572562d2ed1d16c9c807095a929df")]
+        [DataRow("float32", "float32", "rev2", 16, 5059UL, false, "float32", "sha:94ed4b38d002f8b6739daab7721a8dd9")]
+        [DataRow("float32", "float32", "rev2", 17, 5060UL, false, "float32", "sha:d5aa2af56d1620455d522a01801e4e10")]
+        [DataRow("float32", "float32", "rev2", 31, 5061UL, false, "float32", "sha:f10ec769b89e3c20ecf87ebd32bf056a")]
+        [DataRow("float32", "float32", "rev2", 33, 5062UL, false, "float32", "sha:4a53f9baf3e9a8aa4e408c8f2dc69611")]
+        [DataRow("float32", "float32", "rev2", 40, 5063UL, false, "float32", "sha:ec1690e0edb174a69456fe5942bc0603")]
+        [DataRow("float32", "float32", "c", 32, 5064UL, true, "float32", "hex:0000c07f")]
+        [DataRow("float32", "float32", "rev", 32, 5065UL, true, "float32", "hex:0000c07f")]
+        [DataRow("float32", "float32", "bcast", 32, 5066UL, true, "float32", "hex:0000c07f")]
+        [DataRow("float64", "float64", "c", 1, 5067UL, false, "float64", "sha:784ba200b4c6a4236481b1474cc5f5d2")]
+        [DataRow("float64", "float64", "c", 2, 5068UL, false, "float64", "sha:9fbfcc7a6cd99a296e7ac40c9414e9d8")]
+        [DataRow("float64", "float64", "c", 7, 5069UL, false, "float64", "sha:7329342ab6e087fcb2a0608124c105e7")]
+        [DataRow("float64", "float64", "c", 15, 5070UL, false, "float64", "sha:ecd4516f21cc3fa9b6709197b88cfa5b")]
+        [DataRow("float64", "float64", "c", 16, 5071UL, false, "float64", "sha:dfc1778a20f6c9a7e0d3bb28f2b9201c")]
+        [DataRow("float64", "float64", "c", 17, 5072UL, false, "float64", "sha:b0241ac18a9beb0b7a8b02e26266f023")]
+        [DataRow("float64", "float64", "c", 31, 5073UL, false, "float64", "sha:845aa411805e2a44f244ad31d2f380ed")]
+        [DataRow("float64", "float64", "c", 33, 5074UL, false, "float64", "sha:ba55611232c277955546df0b392e3848")]
+        [DataRow("float64", "float64", "c", 40, 5075UL, false, "float64", "sha:4d2a9f46c189c4bc55edaa26359810fd")]
+        [DataRow("float64", "float64", "rev", 1, 5076UL, false, "float64", "sha:4ad6aa1f2b621e4fa321b022853ad9e3")]
+        [DataRow("float64", "float64", "rev", 2, 5077UL, false, "float64", "sha:2460fc20ee54edd7ff1843a9aa39b182")]
+        [DataRow("float64", "float64", "rev", 7, 5078UL, false, "float64", "sha:9c7e2d5f067c24955a02c2aa8cbcc578")]
+        [DataRow("float64", "float64", "rev", 15, 5079UL, false, "float64", "sha:006e3edfffb33cfc93240ce92b632b25")]
+        [DataRow("float64", "float64", "rev", 16, 5080UL, false, "float64", "sha:72b17607c7e74286b73b19e96152e083")]
+        [DataRow("float64", "float64", "rev", 17, 5081UL, false, "float64", "sha:12c6a45cb0a075c80169efbbbbe872ba")]
+        [DataRow("float64", "float64", "rev", 31, 5082UL, false, "float64", "sha:6ba8c8f42496e9ac7ccea849e622da73")]
+        [DataRow("float64", "float64", "rev", 33, 5083UL, false, "float64", "sha:f9b781a4c3d8b0bc85d47058c294ddeb")]
+        [DataRow("float64", "float64", "rev", 40, 5084UL, false, "float64", "sha:3d3efbaa68024d7568ce57ed568fb84e")]
+        [DataRow("float64", "float64", "revb", 1, 5085UL, false, "float64", "sha:6ae0624a4028a3eb68b7c50f5a250a23")]
+        [DataRow("float64", "float64", "revb", 2, 5086UL, false, "float64", "sha:02b581d21297a12fa36282f97dcd6277")]
+        [DataRow("float64", "float64", "revb", 7, 5087UL, false, "float64", "sha:5b99c154b5906b5fb0371fb39e52cba6")]
+        [DataRow("float64", "float64", "revb", 15, 5088UL, false, "float64", "sha:6bb79356d9d0003262d0773cf9fac857")]
+        [DataRow("float64", "float64", "revb", 16, 5089UL, false, "float64", "sha:140c45ba846dca0ef708e341399c140a")]
+        [DataRow("float64", "float64", "revb", 17, 5090UL, false, "float64", "sha:2be29779593cbb683a871cdfc70edd7f")]
+        [DataRow("float64", "float64", "revb", 31, 5091UL, false, "float64", "sha:55ae23c5bdfd5e3433287aaa4d766f70")]
+        [DataRow("float64", "float64", "revb", 33, 5092UL, false, "float64", "sha:b91cba854e5efa00e0636b1e9d5243f0")]
+        [DataRow("float64", "float64", "revb", 40, 5093UL, false, "float64", "sha:763be166846263595c5dc549bcb676c3")]
+        [DataRow("float64", "float64", "step", 1, 5094UL, false, "float64", "sha:fba4b8800979f0b6ad52d51b536a5bb7")]
+        [DataRow("float64", "float64", "step", 2, 5095UL, false, "float64", "sha:1d83dacd4e8cc6dcc8d6b2d0dc913a4c")]
+        [DataRow("float64", "float64", "step", 7, 5096UL, false, "float64", "sha:0c07f948dd7bdb1dd55da6917c07551b")]
+        [DataRow("float64", "float64", "step", 15, 5097UL, false, "float64", "sha:550ed722b4d75afca3f40d5c049f693e")]
+        [DataRow("float64", "float64", "step", 16, 5098UL, false, "float64", "sha:e613f5ba3e9da3f6cb18ddd168d25a7b")]
+        [DataRow("float64", "float64", "step", 17, 5099UL, false, "float64", "sha:efa4ea8d69d1905fbdeba51a852a9a37")]
+        [DataRow("float64", "float64", "step", 31, 5100UL, false, "float64", "sha:d9038b151fe7af815c3c139e7815685b")]
+        [DataRow("float64", "float64", "step", 33, 5101UL, false, "float64", "sha:b77cf849db8419412c583027a8ee9b9a")]
+        [DataRow("float64", "float64", "step", 40, 5102UL, false, "float64", "sha:eca9bbf7f705acbc24ffc57f50607913")]
+        [DataRow("float64", "float64", "stepr", 1, 5103UL, false, "float64", "sha:1ab6ffc95e1e5042922739b7c6c9da53")]
+        [DataRow("float64", "float64", "stepr", 2, 5104UL, false, "float64", "sha:f4cdb77d0f9b27be7d13b93fe610008a")]
+        [DataRow("float64", "float64", "stepr", 7, 5105UL, false, "float64", "sha:db262d5394678f083cbe721ab0a22cf5")]
+        [DataRow("float64", "float64", "stepr", 15, 5106UL, false, "float64", "sha:71e2edd17e3e69db4873c3e9c94545d8")]
+        [DataRow("float64", "float64", "stepr", 16, 5107UL, false, "float64", "sha:d7f616aedd0ce9522dd5eb883cc237fb")]
+        [DataRow("float64", "float64", "stepr", 17, 5108UL, false, "float64", "sha:2bb47c4d387e6298939acba61c62c09b")]
+        [DataRow("float64", "float64", "stepr", 31, 5109UL, false, "float64", "sha:f22da8ae8a74cb1ff5c02b0ee3d6b6f3")]
+        [DataRow("float64", "float64", "stepr", 33, 5110UL, false, "float64", "sha:719661188e25949e34d07ea0572b8395")]
+        [DataRow("float64", "float64", "stepr", 40, 5111UL, false, "float64", "sha:0c07d9e118c5533bec949ef41aa3788c")]
+        [DataRow("float64", "float64", "bcast", 1, 5112UL, false, "float64", "sha:229657f8834ee3d00cc23aa35e1322d7")]
+        [DataRow("float64", "float64", "bcast", 2, 5113UL, false, "float64", "sha:1594b0fbdf48cf38cb10dc0fb8224ddb")]
+        [DataRow("float64", "float64", "bcast", 7, 5114UL, false, "float64", "sha:93988cabe3aebf06d340eacd0b10f407")]
+        [DataRow("float64", "float64", "bcast", 15, 5115UL, false, "float64", "sha:ee11b8eda08593f682f3ac5bf5924f58")]
+        [DataRow("float64", "float64", "bcast", 16, 5116UL, false, "float64", "sha:818b5403fb4f0c47232a33a41bbfac20")]
+        [DataRow("float64", "float64", "bcast", 17, 5117UL, false, "float64", "sha:4ec2183189cdc3f1663426d9db868f73")]
+        [DataRow("float64", "float64", "bcast", 31, 5118UL, false, "float64", "sha:0c3fcdc7fdb10a6b64a1d26e36dd60cf")]
+        [DataRow("float64", "float64", "bcast", 33, 5119UL, false, "float64", "sha:0158706fe6318781692cb0371281bad6")]
+        [DataRow("float64", "float64", "bcast", 40, 5120UL, false, "float64", "sha:dfa54126ecb18224ae7988b91d3ba3b6")]
+        [DataRow("float64", "float64", "rev2", 1, 5121UL, false, "float64", "sha:211014468de6e28469d6f6bfe0e28b40")]
+        [DataRow("float64", "float64", "rev2", 2, 5122UL, false, "float64", "sha:a0c62e2533d270d727ba776b88d02e21")]
+        [DataRow("float64", "float64", "rev2", 7, 5123UL, false, "float64", "sha:4e35b2c0081f2c7e5c315274dcba20bc")]
+        [DataRow("float64", "float64", "rev2", 15, 5124UL, false, "float64", "sha:81efd4a59be422b6c72e9bdcef9f19ef")]
+        [DataRow("float64", "float64", "rev2", 16, 5125UL, false, "float64", "sha:3346cbcb19dc82fdbbd5da7e934d3940")]
+        [DataRow("float64", "float64", "rev2", 17, 5126UL, false, "float64", "sha:2ffa02909cb16121bed0e75091499a3d")]
+        [DataRow("float64", "float64", "rev2", 31, 5127UL, false, "float64", "sha:95ca68589373e2a2e4efb43f01476a1c")]
+        [DataRow("float64", "float64", "rev2", 33, 5128UL, false, "float64", "sha:a3ed62d8730d69b19d829b216d0204ca")]
+        [DataRow("float64", "float64", "rev2", 40, 5129UL, false, "float64", "sha:e7e74e8690d9365763f8b456d3443289")]
+        [DataRow("float64", "float64", "c", 32, 5130UL, true, "float64", "hex:000000000000f87f")]
+        [DataRow("float64", "float64", "rev", 32, 5131UL, true, "float64", "hex:000000000000f87f")]
+        [DataRow("float64", "float64", "bcast", 32, 5132UL, true, "float64", "hex:000000000000f87f")]
+        [DataRow("complex128", "complex128", "c", 1, 5133UL, false, "complex128", "sha:f97702225bbbbc7fd19feec4e71f4848")]
+        [DataRow("complex128", "complex128", "c", 2, 5134UL, false, "complex128", "sha:04bf8ab25973498bbc9cf901378dae1e")]
+        [DataRow("complex128", "complex128", "c", 7, 5135UL, false, "complex128", "sha:fc45ee0198da4c792622d0ee5637a0bd")]
+        [DataRow("complex128", "complex128", "c", 15, 5136UL, false, "complex128", "sha:40a09edc0b5c083646708181e00c220b")]
+        [DataRow("complex128", "complex128", "c", 16, 5137UL, false, "complex128", "sha:9f247736b2591610018e3ae57bac3b9f")]
+        [DataRow("complex128", "complex128", "c", 17, 5138UL, false, "complex128", "sha:ab6bb581007f922cedf48121e1022a25")]
+        [DataRow("complex128", "complex128", "c", 31, 5139UL, false, "complex128", "sha:73a2e23b269b72c8e4f644cb2f1fd204")]
+        [DataRow("complex128", "complex128", "c", 33, 5140UL, false, "complex128", "sha:0ccd22b133e8cab5c7f1a97ba951d78e")]
+        [DataRow("complex128", "complex128", "c", 40, 5141UL, false, "complex128", "sha:ae3e04f4e365075fb28bbb367a5808c5")]
+        [DataRow("complex128", "complex128", "rev", 1, 5142UL, false, "complex128", "sha:133de571a98fad31e469af2f79c820d7")]
+        [DataRow("complex128", "complex128", "rev", 2, 5143UL, false, "complex128", "sha:b3d5b48d19ac9b69baafe70376592855")]
+        [DataRow("complex128", "complex128", "rev", 7, 5144UL, false, "complex128", "sha:14fda109e4b501c86a910324a1e4f82b")]
+        [DataRow("complex128", "complex128", "rev", 15, 5145UL, false, "complex128", "sha:87424a47a77810a388ed5b47a503f158")]
+        [DataRow("complex128", "complex128", "rev", 16, 5146UL, false, "complex128", "sha:f9918715fea2fcf23f46894749b0a656")]
+        [DataRow("complex128", "complex128", "rev", 17, 5147UL, false, "complex128", "sha:1158722e8cab6861d3d212e2bb87edb7")]
+        [DataRow("complex128", "complex128", "rev", 31, 5148UL, false, "complex128", "sha:c1f7054b84b25a72bc1cf4fd8a53d9e0")]
+        [DataRow("complex128", "complex128", "rev", 33, 5149UL, false, "complex128", "sha:2dad1ecece809cfd4446b93d4fddc9d2")]
+        [DataRow("complex128", "complex128", "rev", 40, 5150UL, false, "complex128", "sha:75001be3ce28ff6848decdbf4794c3f7")]
+        [DataRow("complex128", "complex128", "revb", 1, 5151UL, false, "complex128", "sha:55ad7c2acc8f84da0e1c3ebf81bb36cc")]
+        [DataRow("complex128", "complex128", "revb", 2, 5152UL, false, "complex128", "sha:03009e0e0df223965da144f1b6c6b2db")]
+        [DataRow("complex128", "complex128", "revb", 7, 5153UL, false, "complex128", "sha:92628a8a4a5efb6b1c3f12f0dcaa9fa2")]
+        [DataRow("complex128", "complex128", "revb", 15, 5154UL, false, "complex128", "sha:7e1d419a949cd80d8b77ad0435fe1933")]
+        [DataRow("complex128", "complex128", "revb", 16, 5155UL, false, "complex128", "sha:4bde1025f7e35fbdc89ea5da02265a10")]
+        [DataRow("complex128", "complex128", "revb", 17, 5156UL, false, "complex128", "sha:1e3c4235f034b468d0517327dbf4e793")]
+        [DataRow("complex128", "complex128", "revb", 31, 5157UL, false, "complex128", "sha:459e880b55b6d746710596b1bec8b2bb")]
+        [DataRow("complex128", "complex128", "revb", 33, 5158UL, false, "complex128", "sha:0171e95d0ba5869aee300f51587d13d8")]
+        [DataRow("complex128", "complex128", "revb", 40, 5159UL, false, "complex128", "sha:5cd8dc27e8e1664d2dcaef85a3658f7c")]
+        [DataRow("complex128", "complex128", "step", 1, 5160UL, false, "complex128", "sha:ee98d63568e40a98674d0757d9e70202")]
+        [DataRow("complex128", "complex128", "step", 2, 5161UL, false, "complex128", "sha:7aee06464b3e20c5379017aea2408f2a")]
+        [DataRow("complex128", "complex128", "step", 7, 5162UL, false, "complex128", "sha:d0679091bb09928d89d7d32cc559f53e")]
+        [DataRow("complex128", "complex128", "step", 15, 5163UL, false, "complex128", "sha:2af1f3aaec745985a0b9baf80440dfbd")]
+        [DataRow("complex128", "complex128", "step", 16, 5164UL, false, "complex128", "sha:b84b0641ca21609d256a4c7591791fb9")]
+        [DataRow("complex128", "complex128", "step", 17, 5165UL, false, "complex128", "sha:47034e66c07defb8cbb546715611fb3e")]
+        [DataRow("complex128", "complex128", "step", 31, 5166UL, false, "complex128", "sha:b69cf7b48e8afdcedb216ea556e1909a")]
+        [DataRow("complex128", "complex128", "step", 33, 5167UL, false, "complex128", "sha:95fe8438d4027b80eb67636b81c26f9f")]
+        [DataRow("complex128", "complex128", "step", 40, 5168UL, false, "complex128", "sha:060696bd5d50700f5385d8b783cdcd50")]
+        [DataRow("complex128", "complex128", "stepr", 1, 5169UL, false, "complex128", "sha:c8e36c96d2a4c9151670b6f3a9007874")]
+        [DataRow("complex128", "complex128", "stepr", 2, 5170UL, false, "complex128", "sha:49366885293217bcefe0053ccd6ffd93")]
+        [DataRow("complex128", "complex128", "stepr", 7, 5171UL, false, "complex128", "sha:8aa440265723fc86964922ce6f82a0ff")]
+        [DataRow("complex128", "complex128", "stepr", 15, 5172UL, false, "complex128", "sha:1a65be642826a4d264c74f0e2ddd6c03")]
+        [DataRow("complex128", "complex128", "stepr", 16, 5173UL, false, "complex128", "sha:05c12745ccf4065c7be5d5f8a70ee6a5")]
+        [DataRow("complex128", "complex128", "stepr", 17, 5174UL, false, "complex128", "sha:f8785f55874a7136f41ce1513ba56a4a")]
+        [DataRow("complex128", "complex128", "stepr", 31, 5175UL, false, "complex128", "sha:6377235a8115f1be0fe4a90078f6f775")]
+        [DataRow("complex128", "complex128", "stepr", 33, 5176UL, false, "complex128", "sha:3719740d56fc80b9b11c285bd3b1d4e4")]
+        [DataRow("complex128", "complex128", "stepr", 40, 5177UL, false, "complex128", "sha:4574417af5922d62687e745550cc3e7a")]
+        [DataRow("complex128", "complex128", "bcast", 1, 5178UL, false, "complex128", "sha:9a57d4911447e21d599e775037684379")]
+        [DataRow("complex128", "complex128", "bcast", 2, 5179UL, false, "complex128", "sha:f995d458d79372bf1ab5c73ba5846530")]
+        [DataRow("complex128", "complex128", "bcast", 7, 5180UL, false, "complex128", "sha:f33bbc159f138959c8a9f43c51d8d16b")]
+        [DataRow("complex128", "complex128", "bcast", 15, 5181UL, false, "complex128", "sha:20df63ac5445f759dc575c974d048e93")]
+        [DataRow("complex128", "complex128", "bcast", 16, 5182UL, false, "complex128", "sha:31b4c4c911a2367287c162df844527e3")]
+        [DataRow("complex128", "complex128", "bcast", 17, 5183UL, false, "complex128", "sha:d79a1062275752388287d61b7ea5e5c2")]
+        [DataRow("complex128", "complex128", "bcast", 31, 5184UL, false, "complex128", "sha:a4e671853bb48af9e891bebdbfb83497")]
+        [DataRow("complex128", "complex128", "bcast", 33, 5185UL, false, "complex128", "sha:c732d023b95e54c1d8d4970e43c7289e")]
+        [DataRow("complex128", "complex128", "bcast", 40, 5186UL, false, "complex128", "sha:45ebdacd808bf5a3e3bcf72bec2b6eb7")]
+        [DataRow("complex128", "complex128", "rev2", 1, 5187UL, false, "complex128", "sha:fbd11f13e25a2d3422a0e02d06621786")]
+        [DataRow("complex128", "complex128", "rev2", 2, 5188UL, false, "complex128", "sha:c288ee4e62df314bcf6ab7e791cd2e83")]
+        [DataRow("complex128", "complex128", "rev2", 7, 5189UL, false, "complex128", "sha:8fe33b408c78ac3f816e870a4e536fa9")]
+        [DataRow("complex128", "complex128", "rev2", 15, 5190UL, false, "complex128", "sha:af04b7d652b0cfec6c492d09ad7655dc")]
+        [DataRow("complex128", "complex128", "rev2", 16, 5191UL, false, "complex128", "sha:f916c457acbfbb03dd4c05749df553aa")]
+        [DataRow("complex128", "complex128", "rev2", 17, 5192UL, false, "complex128", "sha:76c85112913eb5d97342c2bfa67b53af")]
+        [DataRow("complex128", "complex128", "rev2", 31, 5193UL, false, "complex128", "sha:f0d06d8c02e88a4bb3736f15d3e9e459")]
+        [DataRow("complex128", "complex128", "rev2", 33, 5194UL, false, "complex128", "sha:bd08e86f51f87771a1c00234338415ce")]
+        [DataRow("complex128", "complex128", "rev2", 40, 5195UL, false, "complex128", "sha:1b0e2c668579aac57e40d4b591b299fd")]
+        [DataRow("complex128", "complex128", "c", 32, 5196UL, true, "complex128", "hex:000000000000f87f000000000000f8ff")]
+        [DataRow("complex128", "complex128", "rev", 32, 5197UL, true, "complex128", "hex:000000000000f87f000000000000f87f")]
+        [DataRow("complex128", "complex128", "bcast", 32, 5198UL, true, "complex128", "hex:000000000000f87f000000000000f87f")]
+        [DataRow("float32", "float64", "c", 1, 5199UL, false, "float64", "sha:3d8d9ffead41f05561e1d2203070da3b")]
+        [DataRow("float32", "float64", "rev", 1, 5200UL, false, "float64", "sha:9fc6ef70d2bd28129e9acb1752cc61fb")]
+        [DataRow("float32", "float64", "c", 20, 5201UL, false, "float64", "sha:1191c750d3de1955c9a8975ad1f46b48")]
+        [DataRow("float32", "float64", "rev", 20, 5202UL, false, "float64", "sha:3c461347995fa382b304be947dafaa7b")]
+        [DataRow("float32", "float64", "c", 40, 5203UL, false, "float64", "sha:63d5095d36e74e49feb13ee5570d19b6")]
+        [DataRow("float32", "float64", "rev", 40, 5204UL, false, "float64", "sha:3ac37775c3b51000564ac8699768677a")]
+        [DataRow("int32", "float32", "c", 1, 5205UL, false, "float64", "sha:e5d55fe427c5ad3c851cae7e8d8de458")]
+        [DataRow("int32", "float32", "rev", 1, 5206UL, false, "float64", "sha:ac802a1c48e54abf616c35a7e9d26e11")]
+        [DataRow("int32", "float32", "c", 20, 5207UL, false, "float64", "sha:77b2c3e5bab36c48adf92a520cd7ddea")]
+        [DataRow("int32", "float32", "rev", 20, 5208UL, false, "float64", "sha:37c905eca378872e9149e57eb8999d41")]
+        [DataRow("int32", "float32", "c", 40, 5209UL, false, "float64", "sha:3418aa3fec9dbc0f8915375735e0bd63")]
+        [DataRow("int32", "float32", "rev", 40, 5210UL, false, "float64", "sha:8aea2d99fe7a7323490eff9cbcf01fc2")]
+        [DataRow("float16", "float32", "c", 1, 5211UL, false, "float32", "sha:f48406e19a8ff58ccf10e9be428b2fbf")]
+        [DataRow("float16", "float32", "rev", 1, 5212UL, false, "float32", "sha:80e50522530df79ed692210685194980")]
+        [DataRow("float16", "float32", "c", 20, 5213UL, false, "float32", "sha:02d3059a694edac10673efa11b2ce2a1")]
+        [DataRow("float16", "float32", "rev", 20, 5214UL, false, "float32", "sha:454ab819fb01c3eda6869b430a6b1a81")]
+        [DataRow("float16", "float32", "c", 40, 5215UL, false, "float32", "sha:0f0adbeb6545367aac1c349d37b1296e")]
+        [DataRow("float16", "float32", "rev", 40, 5216UL, false, "float32", "sha:dd5e2ff00c741f1bf215a73fabd8ecd3")]
+        [DataRow("int64", "complex128", "c", 1, 5217UL, false, "complex128", "sha:e84686d0046d5ca28fbf11bf9ec6a6eb")]
+        [DataRow("int64", "complex128", "rev", 1, 5218UL, false, "complex128", "sha:0d3fa4a6b34690ae01bcbf40a9093f58")]
+        [DataRow("int64", "complex128", "c", 20, 5219UL, false, "complex128", "sha:5144836daeb1dd3476063d463abccd6b")]
+        [DataRow("int64", "complex128", "rev", 20, 5220UL, false, "complex128", "sha:360133cba53afbc9fa52bf4bcccfa7c4")]
+        [DataRow("int64", "complex128", "c", 40, 5221UL, false, "complex128", "sha:c356b1ab2b281c02f63bddbf0a24042d")]
+        [DataRow("int64", "complex128", "rev", 40, 5222UL, false, "complex128", "sha:6cfd66c6b600eeb6e8765a1bf9796e71")]
+        [DataRow("bool", "float64", "c", 1, 5223UL, false, "float64", "sha:e6ad6c9a3a3b7658c35bacf6553fcb8f")]
+        [DataRow("bool", "float64", "rev", 1, 5224UL, false, "float64", "sha:e6ad6c9a3a3b7658c35bacf6553fcb8f")]
+        [DataRow("bool", "float64", "c", 20, 5225UL, false, "float64", "sha:47d74147687ffeab020129ad547c2703")]
+        [DataRow("bool", "float64", "rev", 20, 5226UL, false, "float64", "sha:553f72ad128c15a0e0790a3e5c9ef9f6")]
+        [DataRow("bool", "float64", "c", 40, 5227UL, false, "float64", "sha:1face5ec61c13e3a079964182d797ea8")]
+        [DataRow("bool", "float64", "rev", 40, 5228UL, false, "float64", "sha:148bba074e29e147b4ebf13a21174855")]
+        [DataRow("float32", "complex128", "c", 1, 5229UL, false, "complex128", "sha:6b822bd089e3cf38c56d69f318f9dadc")]
+        [DataRow("float32", "complex128", "rev", 1, 5230UL, false, "complex128", "sha:3e2a7c9e33c44db20a4628e9d5766b1c")]
+        [DataRow("float32", "complex128", "c", 20, 5231UL, false, "complex128", "sha:35593a988c72e8408a0ef4437bf7a5d7")]
+        [DataRow("float32", "complex128", "rev", 20, 5232UL, false, "complex128", "sha:665c89cd772d7c96fb87c52abd60de78")]
+        [DataRow("float32", "complex128", "c", 40, 5233UL, false, "complex128", "sha:01aa123d02c3691d4c650bdf77f8db51")]
+        [DataRow("float32", "complex128", "rev", 40, 5234UL, false, "complex128", "sha:422a4b1a9e98958794edee9726baba55")]
+        [DataRow("int32", "int64", "c", 1, 5235UL, false, "int64", "sha:3522dfbc8845dc81133b5c0d6aad7fb8")]
+        [DataRow("int32", "int64", "rev", 1, 5236UL, false, "int64", "sha:a235b9df2f4f5db062b2e1011503ac62")]
+        [DataRow("int32", "int64", "c", 20, 5237UL, false, "int64", "sha:5697511bef10a50f628e517937984438")]
+        [DataRow("int32", "int64", "rev", 20, 5238UL, false, "int64", "sha:f88547a7a17e40d924c38d1be74b8308")]
+        [DataRow("int32", "int64", "c", 40, 5239UL, false, "int64", "sha:bd9814fbbc7dbb622a34699c3bfa21cc")]
+        [DataRow("int32", "int64", "rev", 40, 5240UL, false, "int64", "sha:c604354e589e60126150c81c13d1fe83")]
+        public void Route1D_MatchesNumPyBits(string dtypeA, string dtypeB, string kind, int n, ulong seed, bool special,
+            string resultDtype, string expected)
+        {
+            // The operands as the generator built them: a, then b, from one stream; the stepped / reversed-by-2 kinds
+            // draw twice as many elements for the operand they step.
+            var g = new Lcg(seed);
+            long na = kind is "step" or "stepr" or "rev2" ? 2L * n : n;
+            long nb = kind == "step" ? 2L * n : kind == "bcast" ? 1 : n;
+            var a = g.Array(new[] { na }, dtypeA);
+            var b = g.Array(new[] { nb }, dtypeB);
+            if (special)
+            {
+                Specials(a);
+                if (kind != "bcast")
+                    Specials(b);
+            }
+            var (av, bv) = kind switch
+            {
+                "rev" => (a["::-1"], b),
+                "revb" => (a, b["::-1"]),
+                "step" => (a["::2"], b["::2"]),
+                "stepr" => (a["::2"], b["::-1"]),
+                "bcast" => (a, np.broadcast_to(b, new Shape(n))),
+                "rev2" => (a["::-2"], b),
+                _ => (a, b),
+            };
+
+            AssertNumPyBits(np.dot(av, bv), resultDtype, expected, $"{dtypeA}.{dtypeB} {kind} n={n}");
+        }
+
+        /// <summary>
+        ///     Compares a result with NumPy's: the dtype, then either the first 32 hex digits of SHA-256 over the result's
+        ///     bytes (<c>sha:</c>) or every byte (<c>hex:</c>), where a slot NumPy fills with a NaN only has to hold a NaN
+        ///     (which NaN survives when several meet follows RyuJIT's operand order: see <see cref="NDDot"/>).
+        /// </summary>
+        /// <param name="r">NumSharp's result.</param>
+        /// <param name="resultDtype">NumPy's result dtype.</param>
+        /// <param name="expected">sha: or hex: and NumPy's bytes.</param>
+        /// <param name="what">The case, for the failure message.</param>
+        private static void AssertNumPyBits(NDArray r, string resultDtype, string expected, string what)
+        {
+            r.dtype.name.Should().Be(resultDtype, what);
             byte[] bytes = r.tobytes();
             if (expected.StartsWith("sha:", StringComparison.Ordinal))
             {
                 Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant().Substring(0, 32)
-                    .Should().Be(expected.Substring(4), "np.dot must give NumPy's bits for {0} {1} K={2} M={3}", dtypeA,
-                        kind, K, M);
+                    .Should().Be(expected.Substring(4), "np.dot must give NumPy's bits for {0}", what);
                 return;
             }
 
-            // Special rows: every byte, except that a NaN slot only has to be NaN.
             byte[] want = Convert.FromHexString(expected.Substring(4));
-            bytes.Length.Should().Be(want.Length);
+            bytes.Length.Should().Be(want.Length, what);
             int part = resultDtype == "float32" ? 4 : 8;   // complex compares its two doubles separately
             for (int i = 0; i < want.Length; i += part)
             {
@@ -282,11 +629,11 @@ namespace NumSharp.Tests.LinearAlgebra
                     : double.IsNaN(BitConverter.ToDouble(bytes, i));
                 if (wantNaN)
                 {
-                    gotNaN.Should().BeTrue("slot {0} of {1} {2}: NumPy gives NaN", i / part, dtypeA, kind);
+                    gotNaN.Should().BeTrue("slot {0} of {1}: NumPy gives NaN", i / part, what);
                     continue;
                 }
                 bytes.AsSpan(i, part).SequenceEqual(want.AsSpan(i, part)).Should().BeTrue(
-                    "slot {0} of {1} {2}: NumPy {3}, NumSharp {4}", i / part, dtypeA, kind,
+                    "slot {0} of {1}: NumPy {2}, NumSharp {3}", i / part, what,
                     Convert.ToHexString(want, i, part), Convert.ToHexString(bytes, i, part));
             }
         }

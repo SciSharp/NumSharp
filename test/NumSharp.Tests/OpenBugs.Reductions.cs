@@ -297,31 +297,31 @@ namespace NumSharp.Tests
         }
 
         // ======================================================================================================
-        //  GROUP 3 — np.dot of two length-1 vectors is NumPy's plain product; the managed 1-D dot starts from 0.
+        //  GROUP 3 — np.dot of two length-1 vectors is NumPy's plain product (a regression pin since the 1-D
+        //  route follows cblas_matrixproduct).
         // ======================================================================================================
 
         /// <summary>
-        ///     On the managed path (no BLAS backend), <c>np.dot</c> and <c>np.inner</c> of two length-1 vectors must
-        ///     be the plain product <c>a * b</c>, as NumPy computes it, so <c>[-0.0]·[1.0]</c> is <c>-0.0</c> (and a
-        ///     complex <c>(-0-0j)·(1+0j)</c> is <c>(+0, -0)</c>). NumSharp's managed dot returns <c>+0.0</c>.
+        ///     Regression pin: on the managed path (no BLAS backend), <c>np.dot</c> and <c>np.inner</c> of two length-1
+        ///     vectors are the plain product <c>a * b</c>, as NumPy computes them, so <c>[-0.0]·[1.0]</c> is <c>-0.0</c>
+        ///     (and a complex <c>(-0-0j)·(1+0j)</c> is <c>(+0, -0)</c>), not a sum started from +0.
         /// </summary>
         /// <remarks>
         ///     <para>
-        ///     Root cause: <c>Default.Dot.cs</c> sends 1-D·1-D to <c>DotInner1D</c>, a fused kernel whose sum starts
-        ///     from 0. NumPy's <c>cblas_matrixproduct</c> (cblasfuncs.c) classifies a length-1 1-D operand as
-        ///     <c>_scalar</c> and, for <c>l == 1</c>, writes <c>*ap2 * *ap1</c> (the naive complex product for
-        ///     complex). <c>np.matmul</c> and <c>np.vdot</c> of the same vectors are already correct (NumPy's own
-        ///     dot loop starts from <c>+0.0</c> there), and so is <c>(1,)·(1,3)</c> (NumPy's daxpy into a zeroed
-        ///     output).
+        ///     NumPy's <c>cblas_matrixproduct</c> (cblasfuncs.c) classifies a length-1 1-D operand as <c>_scalar</c>
+        ///     and, for <c>l == 1</c>, writes <c>*ap2 * *ap1</c> (the naive complex product for complex). The managed 1-D
+        ///     route follows it (<c>Dot1DDouble</c> / <c>Dot1DSingle</c> / <c>Dot1DComplex</c> in
+        ///     <c>Default.Dot.Fused.cs</c>); before, <c>DotInner1D</c>'s fused kernel started its sum from 0 and returned
+        ///     +0.0. <c>np.matmul</c> and <c>np.vdot</c> of the same vectors start from +0.0 in NumPy too (their own dot
+        ///     loops), and so does <c>(1,)·(1,3)</c> (NumPy's daxpy into a zeroed output).
         ///     </para>
         ///     <para>
-        ///     The test removes the BLAS backend for its duration because <c>NumSharp.Interop.OpenBLAS</c> already
-        ///     ports the <c>l == 1</c> branch (<c>OpenBlasEngine.Dot.cs</c>): with the bundled library loaded the
-        ///     product is right, and the bug would hide. MSTest runs this project serially, so swapping the
-        ///     engine-wide property cannot race another test.
+        ///     The test removes the BLAS backend for its duration because <c>NumSharp.Interop.OpenBLAS</c> ports the
+        ///     same <c>l == 1</c> branch (<c>OpenBlasEngine.Dot.cs</c>) and would answer for the managed path; the
+        ///     backend is restored in the finally.
         ///     </para>
         /// </remarks>
-        [TestMethod, OpenBugs]
+        [TestMethod]
         public void Dot_LengthOneVectors_IsThePlainProduct_OnTheManagedPath()
         {
             var engine = BackendFactory.GetEngine();
