@@ -15,6 +15,11 @@
     <!-- `dotnet exec <dll>` is the invocation on every OS; a platform-specific apphost.exe
          would only bloat tools/ and bind the package to one RID. -->
     <UseAppHost>false</UseAppHost>
+    <!-- TieredPGO OFF (written into runtimeconfig.json): the weaver is a short-lived, JIT-bound process that runs
+         once per build and target framework, so the instrumentation tier-0 code carries for dynamic PGO is pure cost -
+         the process exits before a profile could pay for itself. Measured on NumSharp's self-weave: about 15-20 %
+         of the weave's wall time. Tiered compilation itself stays on (its quick tier-0 JIT is what keeps startup low). -->
+    <TieredPGO>false</TieredPGO>
   </PropertyGroup>
 
   <!-- ==================================================================================

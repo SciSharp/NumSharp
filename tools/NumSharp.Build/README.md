@@ -135,6 +135,7 @@ Requires a project that references NumSharp (that is where `NDScope` and the att
 |---|---|
 | `-p:SkipNDScopeWeave=true` | build without weaving (the attribute is inert) |
 | `-p:NDScopeWeaveILVerify=true` | additionally run `dotnet-ilverify` on the woven output |
+| `<NumSharpBuildToolEnvironment>` | extra environment variables for the tool process (`NAME=value;NAME=value`); NumSharp's own self-weave sets the server GC with it |
 
 ## Documentation
 

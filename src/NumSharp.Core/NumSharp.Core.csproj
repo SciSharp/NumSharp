@@ -225,6 +225,13 @@
        ================================================================================== -->
   <PropertyGroup>
     <NumSharpBuildProject>$(MSBuildThisFileDirectory)..\..\tools\NumSharp.Build\NumSharp.Build.csproj</NumSharpBuildProject>
+    <!-- The server GC for the self-weave (the packaged target's NumSharpBuildToolEnvironment knob): Cecil's writer
+         allocates in bulk while it rewrites NumSharp's multi-megabyte assembly, and the server GC's larger budgets and
+         parallel collections cut the weave from about 1.45 s to 1.05 s per framework (measured as a cold tool process
+         on the performance cores, best of four). Four heaps bound its startup and memory on a many-core machine. A
+         consumer's assembly is small, where the server GC's own startup would cost more than it saves, so the knob
+         stays empty there. -->
+    <NumSharpBuildToolEnvironment>DOTNET_gcServer=1;DOTNET_GCHeapCount=4</NumSharpBuildToolEnvironment>
   </PropertyGroup>
 
   <!-- The marker path is spelled inline (not via a body-level property): IntermediateOutputPath

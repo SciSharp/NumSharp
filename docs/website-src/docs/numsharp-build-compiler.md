@@ -438,6 +438,16 @@ assembly, before it is copied to the output:
 - **Idempotent & incremental.** A body that already opens an `NDScope` is skipped, so re-weaving is a
   no-op; the target is incremental on a per-`TargetFramework` marker, so an unchanged assembly is not
   re-woven.
+- **Build cost.** The weave is one short process per `TargetFramework`: about 0.2-0.3 s on a typical
+  project's assembly (mostly the process starting), about 1.0-1.1 s for NumSharp's own multi-megabyte
+  assembly (measured as a cold process on an i9-13900K's performance cores). The tool declares itself
+  foreground work to Windows (a windowless build step is otherwise parked on a hybrid CPU's efficiency
+  cores, which doubled the weave), runs without dynamic PGO (whose instrumentation a one-shot process
+  never repays), and reads property and event accessors in linear time (Mono.Cecil's own read is
+  quadratic in a type's property count: a generated type with 50,000 properties took 8 s, now 1.8 s).
+  The analyzers below are pay-for-play: a per-compilation index of the names through which NumSharp
+  can reach code lets them skip, unread, every method body and type that cannot involve an `NDArray`,
+  so a project's NumSharp-free code costs next to nothing to analyze.
 
 A **coverage gate** ([`NDScopeWeaveTests`][gate-coverage]) reflects over the shipped assembly and
 asserts every `[NDScoped]` method carries a local of type `NDScope` - a necessary consequence of
@@ -779,6 +789,7 @@ downstream. Three layers keep it that way, and NDW018 is the third:
 |---|---|
 | `-p:SkipNDScopeWeave=true` | build **without** weaving - every `[NDScoped]` method runs unscoped (the finalizer backstop, the pre-weave status quo). Nothing else changes; the attribute is inert. |
 | `-p:NDScopeWeaveILVerify=true` | additionally run `dotnet-ilverify` on the woven output (opt-in, so machines without the tool still build). The weave adds **zero** ILVerify findings over the unwoven baseline. |
+| `<NumSharpBuildToolEnvironment>` | extra environment variables for the weaver process (`NAME=value;NAME=value`, empty by default). NumSharp itself sets `DOTNET_gcServer=1;DOTNET_GCHeapCount=4` for its own multi-megabyte self-weave (about a quarter faster); a typical project's assembly is small enough that the default GC starts faster, so leave it empty unless your assembly is several megabytes. |
 
 ## Troubleshooting
 

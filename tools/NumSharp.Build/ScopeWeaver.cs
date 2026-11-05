@@ -261,6 +261,19 @@ internal abstract class ScopeWeaver
         var module = assembly.MainModule;
         bool hasSymbols = module.HasSymbols;
 
+        // Before anything asks for a property or event accessor (the target collection does, the writer asks for every
+        // type): Cecil reads a type's accessors in time quadratic in its property count, and this fills the same answers
+        // in for the large types in linear time. A file that cannot be read a second time keeps Cecil's own, slower path.
+        try
+        {
+            CecilSemanticsPrefill.Prefill(module, assemblyPath);
+        }
+        catch (Exception e) when (e is IOException || e is BadImageFormatException || e is UnauthorizedAccessException)
+        {
+            if (verbose)
+                stdout.WriteLine($"NumSharp.Build: accessor prefill skipped ({e.GetType().Name}): {e.Message}");
+        }
+
         int woven = 0, skipped = 0, errors = 0;
 
         // Targets FIRST (before the seam is resolved): a consumer assembly with no scoped methods
