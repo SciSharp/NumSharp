@@ -132,9 +132,10 @@ Three items were tried first (2026-10-30):
   rows until those kernels gain the two speedups the hand forms have.
 
 The owner's PA round of 2026-11-05 (D23): every PA task lands only where it is measured faster, and the owner approves
-each one. PA3a's N-D and 1-D routes are done (`c032f867`, `3212b02e`): np.dot computes with NumPy's dot functions
+each one. PA3a is done (`c032f867`, `3212b02e`, `93a3ffce`): np.dot computes with NumPy's dot functions
 (`Utilities/NDDot.cs`), bit for bit but for which NaN survives where several meet, and faster or equal in every measured
-cell. np.correlate / np.convolve's per-position dots are next, then PA3b, PA2a, PA2b and PA2c.
+cell; np.correlate / np.convolve's complex128 per-position engine too, while their float32 / float64 per-position dots
+stay where NumPy's exact model measured slower. Next: PA3b, PA2a, PA2b and PA2c.
 
 **The owner's decisions of 2026-10-31** ([§5](#5-decisions-for-the-owner), D7 to D22, asked with each option's code):
 - P7 is dropped. D7's first answer ("Rule on the result") gave it a design; in the step round the same day the owner
@@ -1389,9 +1390,18 @@ there. Rules (decided 2026-10-30):
     stepped 1.0–1.8×, contiguous complex 1.05–3.3×, mixed dtypes 1.2–3.7×, contiguous float32 / float64 equal
     (0.96–1.09×: below 64 terms NumPy's float32 model costs more, hidden by the call's fixed cost); np.vdot equal to
     1.5×. Gates: 240 NumPy-bit rows, 267 products cases.
-  - Left for PA3a: np.correlate / np.convolve's per-position dots (`SlidingDot`). Left for PA3b ("complete full dtype
-    and edge cases parity"): which NaN survives where several meet (the operand order of every add and fused
-    multiply-add, as `NDHalfDot` encodes it for float16), and np.vecdot.
+  - **PA3a, np.correlate / np.convolve: done 2026-11-05 (`93a3ffce`); PA3a is done.** The blocked long-product
+    kernels (a finite kernel at or above the vector block on an AVX / FMA host) stay, bounded and about 2× NumPy. Of the
+    per-position engines the rest runs (a shorter kernel, a kernel holding inf / NaN, a host without x86 FMA), complex128
+    takes NDDot's zdotu: NumPy's bits at every position (216 of 216 cases with the blocked route off, 2 before),
+    1.7–3.9× faster, and 1.8–2.0× on the default route for kernels under 8 terms. float32 / float64 keep theirs: NumPy's
+    exact per-position model needs a horizontal reduction per position where their middles sum sequentially across
+    positions, 0.13–0.70× (not landed, per D23). `SlidingDot.LongKernelsDisabled` ([ThreadStatic]) turns the blocked
+    route off for tests.
+  - Left for PA3b ("complete full dtype and edge cases parity"): which NaN survives where several meet (the operand
+    order of every add and fused multiply-add, as `NDHalfDot` encodes it for float16), np.dot's scalar branch for 0-d
+    and (1, 1) operands (`Dot_SizeOneOperand_FollowsNumPysScalarBranch_OnTheManagedPath`), the contiguous N-D walkers
+    (`DotNDMDSimdFloat` / `DotNDMDSimdDouble`, an index division per output) and np.vecdot.
 
 - [x] **PA4. The logical ufuncs' combine** (`e41c90dc`). `CombineTruth` (`Default.Logical.cs`) is a hand vector
   AND / OR / XOR over bytes, which its own comment says works "as the bitwise ufunc combines". It becomes that ufunc's
@@ -1656,7 +1666,9 @@ breaks a subclass or a direct caller for a layering reason alone.
   - Gates (Release, both): NumSharp.Tests 21,597 / 21,596 passed on net10.0 / net8.0 after the rebase onto `fec5e086`,
     the oracle 415 passed and 2 skipped on net10.0, the product / reduce-start / matmul / einsum / polyalgebra /
     linalg tiers on net8.0, the dot / matmul / vdot / inner tests under `NUMSHARP_DEBUG_GUARD_PAGES=1`.
-  - Next: np.correlate / np.convolve's per-position dots (PA3a's last call site), then PA3b, PA2a, PA2b, PA2c.
+  - `93a3ffce`, np.correlate / np.convolve (see PA3): complex128 lands, float32 / float64 measured slower and kept.
+    Gates: unit 21,759 / 21,758, the oracle 415 passed, 560 correlate / dot tests under guard pages.
+  - Next: PA3b, then PA2a, PA2b, PA2c.
 
 - **2026-11-02, P10 item 1: np.sum's family with NumPy's whole signature - P10's items 1 to 5 are done.** One commit on
   `strings` (not pushed).
