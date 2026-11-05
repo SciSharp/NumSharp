@@ -30,8 +30,8 @@ namespace NumSharp.Backends.Strings
         /// <summary>
         ///     NumPy's refusal of <c>nonzero</c> on a 0-d array (<c>PyArray_Nonzero</c>), for any dtype but bool: NumPy raises
         ///     before it reads the element, so a 0-d string array gets it too. (NumPy's bool text adds the
-        ///     <c>arr[nonzero(cond)]</c> hint; the numeric 0-d path of NumSharp keeps its NumPy 1.x promotion, see
-        ///     <see cref="DefaultEngine.NonZero"/>.)
+        ///     <c>arr[nonzero(cond)]</c> hint; the numeric 0-d path raises through
+        ///     <see cref="DefaultEngine.NonZero0dMessage"/>, which picks the text by dtype.)
         /// </summary>
         internal const string NonZero0dMessage =
             "Calling nonzero on 0d arrays is not allowed. Use np.atleast_1d(scalar).nonzero() instead.";

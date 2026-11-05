@@ -1245,10 +1245,10 @@ namespace NumSharp.Tests.Fuzz
             if (c.Op == "isscalar" && c.Operands.Length == 1 && c.Operands[0].Shape.Length == 0)
                 return "isscalar(0-d array): NumSharp True, NumPy False (a 0-d ndarray is not a scalar) [known bug]";
 
-            // (K3) np.nonzero on a 0-D array. NumPy 2.x REFUSES it ("Calling nonzero on 0d arrays is
-            // not allowed. Use np.atleast_1d(scalar).nonzero() instead."); NumSharp returns a tuple.
-            if (c.Op == "nonzero_all" && c.Operands.Length == 1 && c.Operands[0].Shape.Length == 0)
-                return "nonzero(0-d): NumPy raises ValueError, NumSharp returns a tuple [known bug]";
+            // (K3) RESOLVED — no excuse. np.nonzero of a 0-D array raises NumPy 2.x's ValueError for every
+            // dtype (parity QA-02, 2840e5a5), with NumPy's longer text for a bool operand (2026-11-05), so the
+            // nine dtype_text cases nonzero_all/scalar_0d/* compare type and text; the branch is deleted, and a
+            // regression (an answer, or the other dtype's text) turns the tier red.
 
             // (K4/K5) RESOLVED — no excuse. cbrt/floor/ceil/trunc/deg2rad/rad2deg/floor_divide/mod on
             // complex input now raise NumPy's EXACT ufunc TypeError verbatim

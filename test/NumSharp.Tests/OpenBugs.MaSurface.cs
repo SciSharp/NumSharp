@@ -44,6 +44,8 @@ namespace NumSharp.Tests
     // gate on 2026-10-15, when the numpy.char phase-2 replay of the carved gaps found its 12 cells matching.
     // MS21 (ma.arange's zero step) was fixed on 2026-10-29, when np.arange became NumPy's PyArray_ArangeObj: a zero step
     // is Python's ZeroDivisionError, and its two cells returned to the gate.
+    // MS23 (ma.nonzero of a 0-d array) was fixed by parity QA-02 (2840e5a5, 2026-11-05: np.nonzero of a 0-d array raises
+    // NumPy's ValueError) and its bool text (2026-11-05): its 56 cells returned to the gate and its pin is untagged.
     //
     // Every expected value below is NumPy 2.4.2's answer for the same call. EXPECTED (when fixed): each test passes;
     // remove its [OpenBugs], move it next to its API's tests, and drop the gap's rule from the generator's _gap_of so the
@@ -304,9 +306,12 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>ma.nonzero</c> of a 0-d masked array: NumPy raises ValueError; NumSharp returns index arrays (gap MS23).
+        ///     FIXED by parity QA-02 (2840e5a5, 2026-11-05): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     Before the fix: <c>ma.nonzero</c> of a 0-d masked array: NumPy raises ValueError; NumSharp returned index
+        ///     arrays (gap MS23). A float operand gets the common text; a bool one NumPy's longer text (the
+        ///     <c>arr[nonzero(cond)]</c> hint), pinned in <c>Indexing/NonzeroIlRefactorTests.cs</c>.
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "ma-surface-MS23")]
+        [TestMethod]
         public void MaSurface_Nonzero_OfZeroD_RaisesValueError()
         {
             var a = np.ma.array(NDArray.Scalar(1.0));

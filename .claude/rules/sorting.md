@@ -48,8 +48,11 @@ sort):
 `np.nonzero` / `ndarray.nonzero` / single-argument `np.where` of a 0-d array raise NumPy 2.4.2's `ValueError: Calling
 nonzero on 0d arrays is not allowed. Use np.atleast_1d(scalar).nonzero() instead.` for every dtype, before reading the
 element (`DefaultEngine.NonZero`; parity QA-02, breaking: the numeric dtypes answered like `atleast_1d(a).nonzero()`).
-`np.argwhere` keeps NumPy's own atleast_1d branch, and a 0-d boolean INDEX (`a[np.array(True)]`) is not a nonzero call.
-Gate: `Indexing/NonzeroIlRefactorTests.cs` (`Refactor_0d_*`).
+A BOOL operand gets NumPy's longer text, the same words followed by ``If the context of this error is of the form
+`arr[nonzero(cond)]`, just use `arr[cond]`.`` (`PyArray_Nonzero`; `DefaultEngine.NonZero0dMessage` picks it, and
+numpy.ma's nonzero inherits it). `np.argwhere` keeps NumPy's own atleast_1d branch, and a 0-d boolean INDEX
+(`a[np.array(True)]`) is not a nonzero call. Gates: `Indexing/NonzeroIlRefactorTests.cs` (`Refactor_0d_*`), the nine
+`dtype_text` cases `nonzero_all/scalar_0d/*` (no excuse) and the `ma_surface` tier's ma.nonzero cases.
 
 ## `np.argwhere` / `np.flatnonzero`
 

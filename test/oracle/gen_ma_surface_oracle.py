@@ -999,6 +999,9 @@ SECTIONS = [gen_create, gen_join, gen_fill, gen_query, gen_putmask, gen_products
 # MS22 (ma.frombuffer's whole-buffer item-size check) matches NumPy since np.frombuffer became NumPy's
 # PyArray_FromBuffer (32bfa4a7: the buffer-size rule only for a negative count); the gap replay after the journey4
 # merge of 2026-10-31 reported its 4 cases matching, so its rule is dropped.
+# MS23 (ma.nonzero of a 0-d array) matches NumPy since np.nonzero of a 0-d array raises NumPy 2.x's ValueError (parity
+# QA-02, 2840e5a5) with NumPy's bool text (2026-11-05); its GAPS entry and its rule are dropped and its 56 cases moved
+# back into ma_surface.jsonl at the positions the generator gave them (no regeneration).
 GAPS = {
     "MS1": "convolve / correlate / cov / apply_along_axis drop an all-False result mask to nomask; NumPy keeps the mask "
            "array (masked_array(data, mask=mask) never shrinks)",
@@ -1012,8 +1015,6 @@ GAPS = {
     "MS19": "np.ma.ndenumerate has no compressed parameter (NumPy's compressed=False yields masked entries too)",
     "MS20": "creation wrappers lack NumPy parameters: ma.arange dtype= and a lone float stop, ma.zeros / ones / empty "
             "order=, ma.indices sparse=",
-    "MS23": "ma.nonzero of a 0-d array returns a result; NumPy raises ValueError ('Calling nonzero on 0d arrays is not "
-            "allowed')",
     "MS24": "clump_masked / clump_unmasked of a 0-d or empty array with a mask return a list; NumPy's _ezclump raises "
             "IndexError",
     "MS26": "notmasked_edges of a 0-d array with an axis raises AxisError; NumPy returns [(), ()]",
@@ -1094,8 +1095,6 @@ def _gap_of(c):
     if (op == "arange" and ("dtype" in p or (len(p["args"]) == 1 and not isinstance(p["args"][0], int)))) \
             or (op in ("zeros", "ones", "empty") and "order" in p) or (op == "indices" and "sparse" in p):
         return "MS20"
-    if op == "nonzero" and err:
-        return "MS23"
     if op in ("clump_masked", "clump_unmasked") and err:
         return "MS24"
     if op == "notmasked_edges" and e.get("value") == "[(), ()]":

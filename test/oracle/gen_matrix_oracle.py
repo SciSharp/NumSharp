@@ -1249,6 +1249,11 @@ def gen_text(em):
 # engine's N-D route converts both operands to the result dtype and calls that dtype's dot function once per output
 # element, as NumPy's PyArray_MatrixProduct2 does, so a complex128 product keeps its imaginary parts. Its rule is
 # dropped and its 3 cases were moved back into matrix.jsonl as they were.
+#
+# MX09 (complex128 np.prod over a reversed view) matches NumPy since parity QA-10 (5622c4d1, 2026-11-04): a complex128
+# product runs NumPy's reduction iterator, which visits a reversed view in NumPy's order, so npy_cmul meets the zero
+# parts in the same order. Matrix_KnownGaps reported its 4 cases matching on 2026-11-05; its rule is dropped and its 4
+# cases were moved back into matrix.jsonl as they were.
 GAPS = {
     "MX01": "a[:, index_array]: NumPy returns its transposed MapIter view (F-contiguous for two axes); NumSharp's "
             "fancy getter returns a C-ordered array. Values equal. Library-wide (OpenBugs.FancyIndex.cs).",
@@ -1262,8 +1267,6 @@ GAPS = {
     "MX07": "fancy assignment with two index entries into a C-contiguous view at a non-zero offset "
             "(a[rows, cols] = v, a[:, cols] = v) throws IndexOutOfRangeException: the offsets include the view's "
             "offset and the bound does not. The offset-view class of the array-object oracle.",
-    "MX09": "complex128 np.prod over a reversed view: the sign of a zero part differs (NumPy's npy_cmul visiting "
-            "order). The complex Prod gap of the reductions tier.",
 }
 
 
@@ -1330,10 +1333,6 @@ def _gap_of(case):
         index = p.get("index") or []
         if len(index) == 2 and any(_is_advanced(e) for e in index) and not isinstance(index[0], int):
             return "MX07"
-
-    if op == "matrix.prod":
-        if layout.startswith("rev:") and dt == "complex128":
-            return "MX09"
 
     return None
 

@@ -175,8 +175,14 @@ public class NonzeroIlRefactorTests
     // The numeric dtypes used to answer like np.atleast_1d(a).nonzero(); the owner chose NumPy's refusal (principle 4).
     // Each test pins the refusal and the migration NumPy's message names, so the old per-dtype answers stay covered.
 
-    /// <summary>NumPy 2.4.2's refusal text for a 0-d nonzero.</summary>
+    /// <summary>NumPy 2.4.2's refusal text for a 0-d nonzero of every dtype but bool.</summary>
     private const string ZeroDText = "Calling nonzero on 0d arrays is not allowed. Use np.atleast_1d(scalar).nonzero() instead.";
+
+    /// <summary>
+    ///     NumPy 2.4.2's refusal text for a BOOL 0-d nonzero: <c>PyArray_Nonzero</c> adds the
+    ///     <c>arr[nonzero(cond)]</c> hint after the common text (the batch-7 fix used the common text for bool too).
+    /// </summary>
+    private const string ZeroDBoolText = ZeroDText + " If the context of this error is of the form `arr[nonzero(cond)]`, just use `arr[cond]`.";
 
     /// <summary>A truthy int 0-d raises NumPy's ValueError; its atleast_1d form gives <c>(array([0]),)</c>.</summary>
     [TestMethod]
@@ -202,25 +208,25 @@ public class NonzeroIlRefactorTests
         r[0].size.Should().Be(0);
     }
 
-    /// <summary>A truthy bool 0-d raises (through ndarray.nonzero too); atleast_1d gives <c>[0]</c>.</summary>
+    /// <summary>A truthy bool 0-d raises NumPy's bool text (through ndarray.nonzero too); atleast_1d gives <c>[0]</c>.</summary>
     [TestMethod]
     public void Refactor_0d_TruthyBool_RaisesNumPysValueError()
     {
         var s = NDArray.Scalar(true);
         Action function = () => np.nonzero(s);
         Action member = () => s.nonzero();
-        function.Should().Throw<ValueError>().WithMessage(ZeroDText);
-        member.Should().Throw<ValueError>().WithMessage(ZeroDText);
+        function.Should().Throw<ValueError>().WithMessage(ZeroDBoolText);
+        member.Should().Throw<ValueError>().WithMessage(ZeroDBoolText);
         ColumnAsLongs(np.nonzero(np.atleast_1d(s))[0]).Should().Equal(0L);
     }
 
-    /// <summary>A falsy bool 0-d raises; atleast_1d gives an empty index.</summary>
+    /// <summary>A falsy bool 0-d raises NumPy's bool text; atleast_1d gives an empty index.</summary>
     [TestMethod]
     public void Refactor_0d_FalsyBool_RaisesNumPysValueError()
     {
         var s = NDArray.Scalar(false);
         Action act = () => np.nonzero(s);
-        act.Should().Throw<ValueError>().WithMessage(ZeroDText);
+        act.Should().Throw<ValueError>().WithMessage(ZeroDBoolText);
         np.nonzero(np.atleast_1d(s))[0].size.Should().Be(0);
     }
 
@@ -246,7 +252,8 @@ public class NonzeroIlRefactorTests
 
     /// <summary>
     ///     Single-argument <c>np.where(cond)</c> is <c>nonzero(cond)</c> in NumPy, so a 0-d condition raises the same
-    ///     ValueError; <c>np.argwhere</c> keeps NumPy's own atleast_1d branch (<c>(1, 0)</c> / <c>(0, 0)</c>), and a 0-d
+    ///     ValueError (a bool condition with NumPy's bool text); <c>np.argwhere</c> keeps NumPy's own atleast_1d branch
+    ///     (<c>(1, 0)</c> / <c>(0, 0)</c>), and a 0-d
     ///     boolean INDEX is not a nonzero call at all (<c>a[np.array(True)]</c> adds a length-1 axis).
     /// </summary>
     [TestMethod]
@@ -254,6 +261,8 @@ public class NonzeroIlRefactorTests
     {
         Action where = () => np.where(np.array(5));
         where.Should().Throw<ValueError>().WithMessage(ZeroDText);
+        Action whereBool = () => np.where(np.array(true));
+        whereBool.Should().Throw<ValueError>().WithMessage(ZeroDBoolText);
         np.argwhere(np.array(5)).shape.Should().Equal(1L, 0L);
         np.argwhere(np.array(0)).shape.Should().Equal(0L, 0L);
         var a = np.arange(3);

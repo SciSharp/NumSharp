@@ -40,8 +40,9 @@ namespace NumSharp.Backends
         ///     <para>
         ///     Routing:
         ///     <list type="bullet">
-        ///       <item>0-d → NumPy 2.x's ValueError, every dtype (parity QA-02: the numeric dtypes used to answer like
-        ///             <c>atleast_1d(a).nonzero()</c>, which NumPy's message points callers to).</item>
+        ///       <item>0-d → NumPy 2.x's ValueError, every dtype, bool with its longer text (parity QA-02: the numeric
+        ///             dtypes used to answer like <c>atleast_1d(a).nonzero()</c>, which NumPy's message points callers
+        ///             to).</item>
         ///       <item>size == 0 → tuple of <c>ndim</c> empty int64 arrays.</item>
         ///       <item>Contiguous → IL count + IL flat-scan + (ndim==1 ? direct write : IL per-dim expand).</item>
         ///       <item>Non-contiguous → materialize via <c>ascontiguousarray</c> then
@@ -51,31 +52,32 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="nd">The array.</param>
         /// <returns>One int64 index array per dimension.</returns>
-        /// <exception cref="ValueError">A 0-d array of any dtype: NumPy's <c>Calling nonzero on 0d arrays is not allowed. Use
-        ///     np.atleast_1d(scalar).nonzero() instead.</c>, raised before the element is read (single-argument
-        ///     <c>np.where</c> inherits it).</exception>
+        /// <exception cref="ValueError">A 0-d array of any dtype, raised before the element is read (single-argument
+        ///     <c>np.where</c> inherits it): NumPy's <c>Calling nonzero on 0d arrays is not allowed. Use
+        ///     np.atleast_1d(scalar).nonzero() instead.</c>, which a bool array follows with <c>If the context of this
+        ///     error is of the form `arr[nonzero(cond)]`, just use `arr[cond]`.</c> (<see cref="NonZero0dMessage"/>).</exception>
         /// <remarks>A string array of at least one dimension is searched by its truth values (a non-empty string is True;
         ///     the nonzero route never raises).</remarks>
         [NDScoped]
         public override unsafe NDArray<long>[] NonZero(NDArray nd)
         {
-            // Text: NumPy's nonzero refuses a 0-d array before it reads the element (its ValueError, which NumSharp's
-            // numeric 0-d promotion below deliberately keeps from the numeric dtypes), then reads the strings' truth values:
-            // the stand-in is the truth array, searched below.
+            // Text: NumPy's nonzero refuses a 0-d array before it reads the element (the string stand-in raises the
+            // non-bool text itself), then reads the strings' truth values: the stand-in is the truth array, searched below.
             if (Strings.NDStringUfuncs.ReduceStandIn("nonzero", nd) is { } standIn)
             {
                 using (standIn)
                     return NonZero(standIn);
             }
             // Boundary scope: the yielded tuple is the column VIEWS; the shared multi-index base
-            // matrix (and the 0-d promotion view) are reclaimed at exit — ARC keeps the buffer
-            // alive through the yielded views until the caller releases them.
+            // matrix is reclaimed at exit — ARC keeps the buffer alive through the yielded views until the caller
+            // releases them.
 
-            // 0-d: NumPy 2.4.2 refuses for every dtype, before reading the element. The numeric dtypes used to answer like np.atleast_1d(a).nonzero() to spare
-            // callers a break; the owner chose NumPy's error (parity QA-02, principle 4), and the message names the
-            // one-line migration. np.argwhere keeps its own atleast_1d branch (NumPy's), so it never reaches here 0-d.
+            // 0-d: NumPy 2.4.2 refuses for every dtype, before reading the element. The numeric dtypes used to answer like
+            // np.atleast_1d(a).nonzero() to spare callers a break; the owner chose NumPy's error (parity QA-02, principle
+            // 4), and the message names the one-line migration. np.argwhere keeps its own atleast_1d branch (NumPy's), so
+            // it never reaches here 0-d.
             if (nd.ndim == 0)
-                throw new ValueError("Calling nonzero on 0d arrays is not allowed. Use np.atleast_1d(scalar).nonzero() instead.");
+                throw new ValueError(NonZero0dMessage(nd.typecode));
 
             int ndim = nd.ndim;
             long size = nd.size;
@@ -180,6 +182,24 @@ namespace NumSharp.Backends
                 GC.KeepAlive(nd);
             }
         }
+
+        /// <summary>
+        ///     NumPy 2.4.2's refusal text for <c>nonzero</c> of a 0-d array (<c>PyArray_Nonzero</c>,
+        ///     <c>item_selection.c</c>): every dtype gets <c>Calling nonzero on 0d arrays is not allowed. Use
+        ///     np.atleast_1d(scalar).nonzero() instead.</c>, and a BOOL array gets the hint <c>If the context of this
+        ///     error is of the form `arr[nonzero(cond)]`, just use `arr[cond]`.</c> after it, because a 0-d boolean
+        ///     condition is usually a mask written as <c>arr[np.nonzero(cond)]</c>.
+        /// </summary>
+        /// <param name="dtype">The 0-d array's dtype; only <see cref="NPTypeCode.Boolean"/> changes the text.</param>
+        /// <returns>The text to raise as a <see cref="ValueError"/>.</returns>
+        /// <remarks>Shared by every 0-d nonzero refusal that can see a bool operand (np.nonzero / ndarray.nonzero /
+        ///     single-argument np.where, numpy.ma's nonzero through them); the string stand-in and the object array
+        ///     (<c>NDListArray</c>) are never bool and keep the short text.</remarks>
+        internal static string NonZero0dMessage(NPTypeCode dtype)
+            => dtype == NPTypeCode.Boolean
+                ? "Calling nonzero on 0d arrays is not allowed. Use np.atleast_1d(scalar).nonzero() instead. "
+                  + "If the context of this error is of the form `arr[nonzero(cond)]`, just use `arr[cond]`."
+                : "Calling nonzero on 0d arrays is not allowed. Use np.atleast_1d(scalar).nonzero() instead.";
 
         private NDArray<long>[] MakeEmptyNonZeroResult(int ndim)
         {
