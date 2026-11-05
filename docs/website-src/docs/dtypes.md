@@ -767,7 +767,7 @@ On `NDArray` itself the key properties are `.dtype` (a `DType`, NumPy's `ndarray
 | Exception | When |
 |-----------|------|
 | `NotSupportedException` | dtype string unrecognized, or NumPy dtype NumSharp doesn't implement (`V`/`O`/`complex64`/…); an array of a descriptor with no storage yet (`M8`, `m8`); the conversion of `np.complex64` / `np.csingle` / `np.object_` / `np.void` to a dtype |
-| `StringComputationNotSupportedException` | A node of the expression engine, `np.evaluate`, that takes a text operand where NumPy's answer is not a number or a bool (a text result, a text reduction, arithmetic on text); the comparisons, the truth value, `IsNaN`, `Cast` to a number and the `np.strings` functions compute. Compute the rest with the string operations |
+| `StringComputationNotSupportedException` | A delegate node of the expression engine (`NDExpr.Call` inside `np.evaluate`) given a text argument: its parameters are numbers. Every other node computes on text as NumPy does, or raises NumPy's own error |
 | `DTypePromotionError` | No common dtype, such as `StringDType` with a numeric dtype or `S` |
 | `UnicodeEncodeError` / `UnicodeDecodeError` | An invalid encoding conversion, such as non-ASCII `U` → `S` or invalid UTF-8 `S` → `T` |
 | `TypeError` | Complex → non-complex scalar cast (`(int)complexScalar`, etc.) |

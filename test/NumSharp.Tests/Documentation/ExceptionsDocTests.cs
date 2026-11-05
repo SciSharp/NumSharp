@@ -87,8 +87,11 @@ namespace NumSharp.Tests.Documentation
                 .WithMessage("The truth value of an empty array is ambiguous. Use `array.size > 0` to check that an array is not empty.");
             Action dtype = () => np.dtype("xyz");
             dtype.Should().Throw<NotSupportedException>().WithMessage("data type 'xyz' not understood");
-            Action fused = () => np.evaluate((NDExpr)np.array(new[] { "a" }) + np.array(new[] { "b" }));
-            fused.Should().Throw<StringComputationNotSupportedException>();
+            // The table's row: a delegate inside np.evaluate given text (every other node computes on text or raises NumPy's
+            // own error; the concatenation of two strings is NumPy's 'ab').
+            Action fused = () => np.evaluate(NDExpr.Call((Func<double, double>)System.Math.Abs, np.array(new[] { "a" })));
+            fused.Should().Throw<StringComputationNotSupportedException>().WithMessage("*NDExpr.Call delegate*");
+            NDArray.AsStringArray(np.evaluate((NDExpr)np.array(new[] { "a" }) + np.array(new[] { "b" }))).Should().Equal("ab");
         }
 
         /// <summary>The "Catching exceptions" example: <c>catch (AxisError)</c> takes the axis failure, a .NET

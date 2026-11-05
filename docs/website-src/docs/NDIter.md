@@ -1620,7 +1620,7 @@ np.evaluate((NDExpr)a * b + c, @out: output);
 
 Elementwise fusion supports broadcasting, strided operands, overlap-safe `out=`, and buffered write-back when `out` needs a cast. A root `Sum`, `Prod`, `Min`, `Max`, or `Mean` fuses element evaluation with the reduction; reductions nested inside a larger elementwise expression are intentionally rejected and require two calls.
 
-Text operands (`S`, `U` and `StringDType` arrays, and a C# `string`, which is NumPy's `str`) take part wherever NumPy's answer is a number or a bool: the six comparisons, the truth value (the logical nodes, `Where`'s condition, `Any` / `All` / `CountNonzero`), `IsNaN`, `Cast` to a number and the `np.strings` functions (`NDExpr.StrLen`, `NDExpr.IsAlpha` … `NDExpr.IsNumeric`, `NDExpr.Find`, `NDExpr.RFind`, `NDExpr.Count`, `NDExpr.Index`, `NDExpr.RIndex`, `NDExpr.StartsWith`, `NDExpr.EndsWith`). When the program is built, each such node is cut out of the tree: per call it runs first as NumPy's own function over whole arrays (its kernels, its `StringDType` NA rules and its errors; a computed argument such as a search's `start` is evaluated first, into the temporary NumPy would hold), and its result is one more operand of the fused numeric pass. A text value is an input, not IL, so one compiled program serves every literal:
+Text operands (`S`, `U` and `StringDType` arrays, and a C# `string`, which is NumPy's `str`) take every node, as NumPy's own functions do: the six comparisons, the truth value (the logical nodes, `Where`'s condition, `Any` / `All` / `CountNonzero`), `IsNaN`, `Cast` to and from text, the `np.strings` functions (`NDExpr.StrLen`, `NDExpr.IsAlpha` … `NDExpr.IsNumeric`, `NDExpr.Find`, `NDExpr.RFind`, `NDExpr.Count`, `NDExpr.Index`, `NDExpr.RIndex`, `NDExpr.StartsWith`, `NDExpr.EndsWith`), the concatenation (`+`), the `StringDType` repeat (`*`), `Maximum` / `Minimum` over `StringDType`, `Where` with text branches (NumPy's promotion of the branches) and the root reductions (`ArgMax` / `ArgMin` over every class, `Sum` / `Max` / `Min` over `StringDType`). When the program is built, each node over text is cut out of the tree: per call it runs first as NumPy's own function over whole arrays (its kernels, its `StringDType` NA rules and its errors; a computed argument such as a search's `start` is evaluated first, into the temporary NumPy would hold). A numeric result is one more operand of the fused numeric pass; a text result is read by the later text nodes or is the answer itself, which `out=`, `where=`, `dtype=` and `order=` then shape. A text value is an input, not IL, so one compiled program serves every literal and every width:
 
 ```csharp
 // A text filter and a numeric filter in one call; the program is shared by every city name.
@@ -1632,9 +1632,13 @@ NDArray parisians = np.evaluate(NDExpr.CountNonzero(NDExpr.StartsWith(city, "par
 // The truth value of a string (non-empty is True) and a search, fused with numbers.
 NDArray named = np.evaluate(NDExpr.Where(nickname, price, price * 0.9));
 NDArray hasO = np.evaluate(NDExpr.Find(city, "o") >= 0);
+
+// A text result: NumPy's concatenation and np.where, and a reduction of text.
+NDArray labels = np.evaluate(NDExpr.Where((NDExpr)age > 30, NDExpr.Add(city, " (senior)"), city));
+NDArray first = np.evaluate(NDExpr.ArgMin(city));
 ```
 
-A node whose result would be text (concatenation, repetition, `Where` with text branches, a bare text array as the expression), a reduction of text other than those truth tests, and the arithmetic and math nodes over text raise `StringComputationNotSupportedException` when the program is built; compute that part with the string functions and pass its result in.
+Where NumPy has no loop for the operands (the square root of text, bytes with `str`, text with a number in `Add`, a Python number beside fixed-width text in `Where`), the node raises NumPy's own error when the call runs, in the order NumPy's statements would raise it. Only `NDExpr.Call` refuses text in its own words (`StringComputationNotSupportedException`): a delegate's parameters are numbers.
 
 ### Measured fused versus unfused performance
 

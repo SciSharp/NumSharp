@@ -24,9 +24,8 @@ dtype system: `dtypes.md`; user docs: `docs/website-src/docs/fundamentals/string
   NumPy's type and text. Both happen after NumPy's earlier checks, in NumPy's order: the `dtype=` class check, a
   read-only `out=`, a non-bool `where=`, the axis under one of three rules, the quantile q / axis / method / empty-axis
   order, a computing loop's output cast and broadcast (`Backends/Strings/NDStringUfuncs{,.Precedence}.cs`).
-  `StringComputationNotSupportedException` is only `np.evaluate`'s refusal of a text node it does not compute (the
-  comparisons, the truth readers, `IsNaN`, `Cast` to a number and the numpy.strings factories compute on text,
-  `evaluate.md`).
+  `StringComputationNotSupportedException` is only `np.evaluate`'s refusal of a text argument to an `NDExpr.Call`
+  delegate (every other node computes on text as NumPy's statement or raises NumPy's error, `evaluate.md`).
 - Where dtypes, sizes or shapes decide NumPy's answer, NumSharp gives it without reading the text: an empty array, lines
   of one element, a pair the comparison operators cannot compare (truth tests, counts, the nonzero family,
   arg-reductions, sort / partition, `np.unique` and its Array-API forms, `isin`, the set routines, `array_equal` /

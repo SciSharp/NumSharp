@@ -682,7 +682,7 @@ np.sum(names);    // TypeError: the resolved dtypes are not compatible with add.
 np.sqrt(names);   // TypeError: ufunc 'sqrt' not supported for the input types, ...
 ```
 
-Those reductions differ for `StringDType`, which has concatenation and lexical-selection loops. The NumSharp expression engine, `np.evaluate`, reads text wherever NumPy's answer is a number or a bool: the six comparisons, the truth value (`LogicalAnd` / `LogicalOr` / `LogicalXor`, `Where`'s condition, `Any` / `All` / `CountNonzero`), `IsNaN`, `Cast` to a number, and the `np.strings` functions as `NDExpr.StrLen`, `NDExpr.IsAlpha` … `NDExpr.IsNumeric`, `NDExpr.Find` / `RFind` / `Count` / `Index` / `RIndex` and `NDExpr.StartsWith` / `EndsWith` take `S`, `U` and `StringDType` operands (a C# `string` is NumPy's `str`) anywhere in an expression. Each runs as NumPy's own function, and its result feeds the rest of the expression in the same call. An operation whose result is text (concatenation, repetition, a `Where` with text branches) raises `StringComputationNotSupportedException`; compute that part with the string functions and pass its result in:
+Those reductions differ for `StringDType`, which has concatenation and lexical-selection loops. The NumSharp expression engine, `np.evaluate`, computes on text as NumPy does: `S`, `U` and `StringDType` operands (a C# `string` is NumPy's `str`) take every node, anywhere in an expression, and each node runs as NumPy's own function — the six comparisons, the truth value (`LogicalAnd` / `LogicalOr` / `LogicalXor`, `Where`'s condition, `Any` / `All` / `CountNonzero`), `IsNaN`, `Cast` to and from text, the `np.strings` functions as `NDExpr.StrLen`, `NDExpr.IsAlpha` … `NDExpr.IsNumeric`, `NDExpr.Find` / `RFind` / `Count` / `Index` / `RIndex` and `NDExpr.StartsWith` / `EndsWith`, concatenation (`+`), `StringDType` repetition (`*`), `Maximum` / `Minimum` over `StringDType`, `Where` with text branches (NumPy's promotion) and the reductions (`ArgMax` / `ArgMin` over every class, `Sum` / `Max` / `Min` over `StringDType`). Its result, text or numbers, feeds the rest of the expression in the same call, and the call's `out=`, `where=`, `dtype=` and `order=` apply to a text result too. Where NumPy has no loop (the square root of text, bytes plus `str`), `np.evaluate` raises NumPy's own error; only `NDExpr.Call` refuses text, because a delegate's parameters are numbers (`StringComputationNotSupportedException`):
 
 ```csharp
 var t = names.astype(np.dtypes.StringDType());
@@ -691,7 +691,10 @@ np.unique(t);                         // ['bird' 'cat' 'dog']
 np.evaluate(NDExpr.Equal(names, "cat") & ((NDExpr)np.array(new[] { 4, 2, 7 }) > 3));   // [ True False False]
 np.evaluate(NDExpr.CountNonzero(NDExpr.StrLen(names) > 3));          // 1
 np.evaluate(NDExpr.Where(NDExpr.StartsWith(names, "b"), 1.0, 0.5)); // [0.5 0.5 1. ]
-np.evaluate((NDExpr)names + names);   // StringComputationNotSupportedException: np.evaluate does not compute NDExpr.Add over text
+np.evaluate((NDExpr)names + names);   // ['catcat' 'dogdog' 'birdbird']
+np.evaluate(NDExpr.Where(NDExpr.StrLen(names) > 3, names, "-"));   // ['-' '-' 'bird']
+np.evaluate(NDExpr.ArgMax(names));    // 1
+np.evaluate(NDExpr.Sqrt(names));      // TypeError: ufunc 'sqrt' not supported for the input types, ...
 ```
 
 A comparison of text with numbers is "never equal" in NumPy, and in NumSharp: `names == np.array(new[] { 1, 2, 3 })` is `[False False False]`.
@@ -1102,8 +1105,8 @@ This is NumPy's `np.frombuffer` on a bytestring, and the general interop bridge.
 
 ## Troubleshooting
 
-### "Why does `np.evaluate` reject my string array?"
-`np.evaluate` computes text wherever NumPy's answer is a number or a bool: the comparisons (`NDExpr.Equal(names, "cat")`, `(NDExpr)names < "m"`, ...), the truth value (`NDExpr.LogicalAnd(names, flags)`, `NDExpr.Where(names, x, y)`, `NDExpr.CountNonzero(names)`), `NDExpr.IsNaN`, `NDExpr.Cast` to a number and the `np.strings` functions (`NDExpr.StrLen`, `NDExpr.IsAlpha`, `NDExpr.Find`, `NDExpr.StartsWith`, ...), each behaving like its NumPy function anywhere in the expression. A node whose result would be text (`NDExpr.Add` of two strings, a `Where` with text branches, a bare text array as the whole expression), a reduction of text other than those truth tests, and the arithmetic and math nodes are refused with `StringComputationNotSupportedException`, which names the node. Compute that part with `np.strings` or the ordinary `np.*` functions first, and pass its result into the expression.
+### "Why does `np.evaluate` raise a `TypeError` on my string array?"
+`np.evaluate` computes on text exactly where NumPy does, so it raises exactly where NumPy raises, with NumPy's text: a node NumPy has no loop for (`NDExpr.Sqrt(names)`, `NDExpr.Subtract(names, names)`, `NDExpr.LogicalNot(names)`), operands NumPy will not mix (bytes with `str`, text with a number in `NDExpr.Add`, a Python number beside fixed-width text in `NDExpr.Where`), or a reduction NumPy refuses for that class (`NDExpr.Sum` of `U` text, a flat `NDExpr.Sum` of `StringDType` over several axes). The error comes when the call runs, in the order NumPy's statements would raise it. Only an `NDExpr.Call` delegate refuses text in its own words (`StringComputationNotSupportedException`): its parameters are numbers, so measure or compare the text in the expression (`NDExpr.StrLen`, `NDExpr.Equal`, ...) and pass that number in.
 
 ### "`ValueError: could not convert string to float`"
 A cast from text to a number parses every element, as NumPy does. Clean the text first, or keep it as text.

@@ -17300,29 +17300,79 @@ def gen_tsurface():
 
 
 # ----------------------------------------------------------------------------------------------------------------------
-# Section evaltext: np.evaluate over text (docs/plans/evaluate-text.md, phases E1 and E2) — strict
+# Section evaltext: np.evaluate over text (docs/plans/evaluate-text.md, phases E1, E2 and E3) — strict
 # ----------------------------------------------------------------------------------------------------------------------
 #
 # np.evaluate is a NumSharp extension, so NumPy's answer is the tree's UNFUSED statements: each comparison is np.<op> over
 # its operands (text arrays, a Python str, numbers), each truth reader (np.logical_*, np.where's condition, np.any /
 # np.all / np.count_nonzero), np.isnan, np.strings' functions and astype (``cast_<dtype>``) NumPy's own call, each numeric
 # node NumPy's ufunc over the results, a root reduction the np.<kind> of the elementwise result, dtype= the result's
-# astype. The tree travels in the prefix grammar of the numeric evaluate tier (gen_oracle.py's _ev_eval;
-# OpRegistry.Evaluate.cs replays it), plus one literal: ``ls:<hex>`` is a Python str as its UTF-32LE bytes in hex (a C#
-# string in the tree).
+# astype. Phase E3 adds the text RESULTS: a text node's statement (np.add, np.multiply, np.maximum, np.where, astype to
+# text, np.real, ...) yields text that later statements read; np.evaluate always answers with an array of its own, so a
+# result that IS an operand (a bare text leaf, np.real of text) or is read-only (np.imag of text) is copied in K order,
+# and a flat reduction NumPy answers with a Python str / NA object is the 0-d array of the reduced text's dtype. out=
+# (``params["out"]``, the out operand last) is the root ufunc's own out= over text, else np.evaluate's rule: the result
+# cast into out under same_kind. The tree travels in the prefix grammar of the numeric evaluate tier (gen_oracle.py's
+# _ev_eval; OpRegistry.Evaluate.cs replays it), plus one literal: ``ls:<hex>`` is a Python str as its UTF-32LE bytes in
+# hex (a C# string in the tree), and the cast targets ``cast_T`` / ``cast_Tnan`` (StringDType without and with a NaN NA)
+# beside NumPy's dtype strings (``cast_U5``, ``cast_S``).
 
 # The nodes the section's trees use, as NumPy's functions (the tier's tokens; np.strings' under their own names).
 _ET_NODES = {"eq": np.equal, "ne": np.not_equal, "lt": np.less, "le": np.less_equal, "gt": np.greater,
              "ge": np.greater_equal, "and": np.bitwise_and, "or": np.bitwise_or, "xor": np.bitwise_xor, "add": np.add,
              "sub": np.subtract, "mul": np.multiply, "neg": np.negative, "land": np.logical_and,
              "lor": np.logical_or, "lxor": np.logical_xor, "where": np.where, "isnan": np.isnan,
+             # Phase E3's nodes over text: the binary ufuncs (np.add / np.multiply compute, the rest refuse), the unary ones
+             # (np.real / np.imag compute), np.clip.
+             "div": np.divide, "mod": np.remainder, "pow": np.power, "floordiv": np.floor_divide, "max": np.maximum,
+             "min": np.minimum, "fmax": np.fmax, "fmin": np.fmin, "lshift": np.left_shift, "atan2": np.arctan2,
+             "positive": np.positive, "abs": np.absolute, "sqrt": np.sqrt, "exp": np.exp, "sign": np.sign,
+             "floor": np.floor, "lnot": np.logical_not, "isinf": np.isinf, "isfinite": np.isfinite,
+             "isposinf": np.isposinf, "round": np.round, "rint": np.rint, "conj": np.conjugate, "not": np.invert,
+             "angle": np.angle, "real": np.real, "imag": np.imag, "clip": np.clip,
              **{name: getattr(np.strings, name)
                 for name in ["str_len", "isalpha", "isdigit", "isspace", "isalnum", "islower", "isupper", "istitle",
                              "isdecimal", "isnumeric", "find", "rfind", "count", "index", "rindex", "startswith",
                              "endswith"]}}
 
 # The root reductions the section's trees use (params["reduce"]["kind"]), as NumPy's functions.
-_ET_REDUCE = {"sum": np.sum, "count_nonzero": np.count_nonzero, "any": np.any, "all": np.all, "mean": np.mean}
+_ET_REDUCE = {"sum": np.sum, "count_nonzero": np.count_nonzero, "any": np.any, "all": np.all, "mean": np.mean,
+              # Phase E3's root reductions of text (and NumPy's refusals of the rest).
+              "prod": np.prod, "max": np.max, "min": np.min, "argmax": np.argmax, "argmin": np.argmin, "ptp": np.ptp,
+              "nanmin": np.nanmin, "nanmax": np.nanmax, "nansum": np.nansum, "nanprod": np.nanprod,
+              "nanmean": np.nanmean, "var": np.var, "std": np.std}
+
+# The binary ufunc tokens whose call over text takes the evaluation's out= itself when the tree's root is one (np.evaluate's
+# root ufunc stage); any other root is cast into out under same_kind after it computes.
+_ET_UFUNC_ROOTS = {"add", "sub", "mul", "div", "mod", "pow", "floordiv", "max", "min", "fmax", "fmin", "lshift", "atan2",
+                   "and", "or", "xor"}
+
+# Named StringDType targets of a cast token / dtype= (NumPy spells them as instances, not dtype strings).
+_ET_TDTYPES = {"T": lambda: np.dtypes.StringDType(), "Tnan": lambda: np.dtypes.StringDType(na_object=np.nan)}
+
+
+def _et_dtype(name):
+    """A cast target / dtype= name as NumPy's descriptor: a StringDType for ``T`` / ``Tnan``, ``np.dtype(name)`` otherwise.
+
+    :param name: the name (``"U5"``, ``"S"``, ``"int64"``, ``"T"``, ``"Tnan"``).
+    :returns: the descriptor.
+    """
+    return _ET_TDTYPES[name]() if name in _ET_TDTYPES else np.dtype(name)
+
+
+def _et_into(out, r):
+    """np.evaluate's out= for a computed result that no root ufunc wrote: its dtype must reach out's under same_kind (the
+    evaluation's own refusal text otherwise), then the result is copied into out.
+
+    :param out: the out view.
+    :param r: the computed result.
+    :returns: ``out``.
+    :raises TypeError: the cast is not same_kind (np.evaluate's text).
+    """
+    if not np.can_cast(r.dtype, out.dtype, "same_kind"):
+        raise TypeError(f"Cannot cast ufunc 'evaluate' output from {r.dtype!r} to {out.dtype!r} with casting rule 'same_kind'")
+    np.copyto(out, r, casting="unsafe")
+    return out
 
 # The comparison tokens, in CMP_OPS' order.
 _ET_CMP = ["eq", "ne", "lt", "le", "gt", "ge"]
@@ -17376,17 +17426,19 @@ def _et_literal(tok):
     raise ValueError(f"unknown literal {tok!r}")
 
 
-def _et_eval(expr, operands):
+def _et_eval(expr, operands, root_out=None):
     """Evaluates a tree as NumPy's unfused statements, node by node.
 
     :param expr: the prefix-grammar tree.
     :param operands: the views ``in<k>`` names.
+    :param root_out: the evaluation's out= view for a root binary ufunc (``_ET_UFUNC_ROOTS``), which then writes it as
+        NumPy's own call does; None otherwise.
     :returns: NumPy's result of the root node.
     """
     toks = _et_tokens(expr)
     pos = [0]
 
-    def parse():
+    def parse(depth):
         tok = toks[pos[0]]
         pos[0] += 1
         if tok.startswith("in") and tok[2:].isdigit():
@@ -17397,31 +17449,38 @@ def _et_eval(expr, operands):
         pos[0] += 1
         args = []
         while True:
-            args.append(parse())
+            args.append(parse(depth + 1))
             sep = toks[pos[0]]
             pos[0] += 1
             if sep == ")":
                 break
             assert sep == ",", f"expected ',' in {expr}"
-        # cast_<dtype>(x) is the statement x.astype(dtype) (NDExpr.Cast; over text, NumPy's parse).
+        # cast_<dtype>(x) is the statement x.astype(dtype) (NDExpr.Cast; over text, NumPy's parse; to text, its format).
         if tok.startswith("cast_"):
-            return np.asarray(args[0]).astype(tok[len("cast_"):])
+            return np.asarray(args[0]).astype(_et_dtype(tok[len("cast_"):]))
+        # round_<d>(x) is np.round(x, d), d spelled m<n> for -n (NDExpr.Round with decimals).
+        if tok.startswith("round_"):
+            d = tok[len("round_"):]
+            return np.round(args[0], -int(d[1:]) if d.startswith("m") else int(d))
+        if depth == 0 and root_out is not None and tok in _ET_UFUNC_ROOTS:
+            return _ET_NODES[tok](*args, out=root_out)
         return _ET_NODES[tok](*args)
 
-    r = parse()
+    r = parse(0)
     assert pos[0] == len(toks), f"trailing tokens in {expr}"
     return r
 
 
-def _et_add(expr, operands, layout, reduce=None, dtype=None, order=None):
+def _et_add(expr, operands, layout, reduce=None, dtype=None, order=None, out=None):
     """Records one np.evaluate case: the tree, its operands and the keywords, against NumPy's unfused statements.
 
     :param expr: the prefix-grammar tree over ``in0`` … (``operands`` in order).
     :param operands: the (base, view) pairs.
     :param layout: the case's layout label.
     :param reduce: ``{"kind", "axis", "keepdims"}`` for a root reduction, or None.
-    :param dtype: the ``dtype=`` keyword's dtype name (``"float64"``), or None.
+    :param dtype: the ``dtype=`` keyword's dtype name (``"float64"``, ``"U3"``, ``"T"``), or None.
     :param order: the ``order=`` keyword (``"C"`` / ``"F"``), or None.
+    :param out: the ``out=`` operand as a (base, view) pair, recorded after the tree's operands, or None.
     """
     params = {"expr": expr}
     if reduce is not None:
@@ -17430,18 +17489,43 @@ def _et_add(expr, operands, layout, reduce=None, dtype=None, order=None):
         params["dtype"] = dtype
     if order is not None:
         params["order"] = order
+    if out is not None:
+        params["out"] = True
+        operands = list(operands) + [out]
 
     def call(*views):
-        r = _et_eval(expr, list(views))
+        views = list(views)
+        target = views.pop() if out is not None else None
+        r = _et_eval(expr, views, root_out=target)
+        if target is not None and r is target:
+            return target   # the root ufunc wrote out= itself
+        if (reduce is None and isinstance(r, (str, bytes, np.str_, np.bytes_)) and views
+                and all(np.ndim(v) == 0 for v in views)):
+            # Over 0-d operands NumPy's ufunc unwraps its 0-d result to a scalar, whose dtype is only as wide as its content
+            # (np.add of two 0-d <U12 is an np.str_ of <U3): the array answer, which np.evaluate returns, is the same
+            # statements over the operands as 1-element arrays.
+            r = _et_eval(expr, [np.asarray(v)[None] for v in views]).reshape(()).copy()
         if reduce is not None:
-            r = _ET_REDUCE[reduce["kind"]](r, axis=reduce.get("axis"), keepdims=reduce.get("keepdims", False))
+            reduced = _ET_REDUCE[reduce["kind"]](r, axis=reduce.get("axis"), keepdims=reduce.get("keepdims", False))
             # np.evaluate returns a reduction as a 0-d ARRAY (a fresh, writeable one), NumPy's flat reduction a NumPy
-            # scalar: the values and the dtype are what the tier holds equal.
-            r = np.asarray(r)
+            # scalar — or, over StringDType, a Python str / its NA object, which keeps the reduced text's dtype: the values
+            # and the dtype are what the tier holds equal.
+            if isinstance(reduced, (np.ndarray, np.generic)):
+                r = np.asarray(reduced)
+            else:
+                r = np.array([reduced], dtype=np.asarray(r).dtype).reshape(()).copy()
+        elif any(r is v for v in views) or (isinstance(r, np.ndarray) and not r.flags.writeable):
+            # np.evaluate answers with an array of its own: an operand itself (a bare text leaf, np.real of text) or a
+            # read-only answer (np.imag of text) is NumPy's copy in K order.
+            r = np.asarray(r).copy(order="K")
+        if isinstance(r, (str, bytes)):
+            r = np.array(r)   # a tree of literals alone: NumPy's Python str, np.evaluate's 0-d array
         if dtype is not None:
-            r = np.asarray(r).astype(dtype)
+            r = np.asarray(r).astype(_et_dtype(dtype))
         if order is not None:
             r = np.asarray(r, order=order)
+        if target is not None:
+            return _et_into(target, np.asarray(r))
         return r
 
     add("evaltext", "evaluate", params=params, operands=operands, call=call, phase="compute", layout=layout)
@@ -17624,12 +17708,177 @@ def _gen_evaltext_e2():
     _et_add("cast_int64(in0)", [_et_text(_ET_FLOAT_TEXTS, "U6", "c1")], "U,float text")
 
 
+def _gen_evaltext_e3():
+    """Phase E3's cases of section evaltext: text RESULTS (np.add's concatenation, np.multiply's StringDType repeat,
+    np.maximum / np.minimum over StringDType, np.where with text branches and NumPy's promotion, casts to text, a bare
+    text leaf), the root reductions of text, NumPy's own refusal for every other node over text, text results composed
+    into later nodes, and the keywords dtype= / order= / out= over a text result."""
+    # N. The binary ufuncs over two operands of one class in every core layout: the concatenation (with a Python str on
+    #    either side), the repeat (a literal and an int64 array, from either side; S / U refuse without out=), maximum /
+    #    minimum (StringDType only), and NumPy's no-loop refusal of every other binary token and of text with a number.
+    for (name, make_a), (_, make_b) in zip(_et_kinds(_ET_E2_POOL, seed=1), _et_kinds(_ET_E2_POOL, seed=4)):
+        for layout in CORE_LAYOUTS:
+            a, b = make_a(layout), make_b(layout)
+            n = _et_numeric(a[1])
+            label = f"{name}:{layout}"
+            _et_add("add(in0,in1)", [a, b], label)
+            if name != "S":
+                _et_add(f"add(in0,{_et_ls('!')})", [a], label)
+                _et_add(f"add({_et_ls('<')},in0)", [a], label)
+            _et_add("mul(in0,li:2)", [a], label)
+            _et_add("mul(li:3,in0)", [a], label)
+            _et_add("mul(in0,mod(in1,li:3))", [a, n], label)
+            _et_add("max(in0,in1)", [a, b], label)
+            _et_add("min(in0,in1)", [a, b], label)
+            for tok in ["sub", "div", "mod", "pow", "floordiv", "fmax", "and", "lshift", "atan2"]:
+                _et_add(f"{tok}(in0,in1)", [a, b], label)
+            _et_add("add(in0,in1)", [a, n], label)
+            _et_add("add(in0,li:1)", [a], label)
+    # N2. Mixed classes in one binary node: StringDType with U either way (add computes, maximum refuses), S with U and S
+    #     with StringDType (refused), a StringDType NA kind on one side.
+    for layout in ["c1", "c2", "bc", "t3"]:
+        u = _et_text(_ET_E2_POOL, "U12", layout, 1)
+        s = _et_text(_ET_E2_ASCII, "S10", layout, 2)
+        for spec in [TD, TDNAN, TDS, TDN]:
+            t = t_operand(spec, layout, seed=3, pool=_ET_E2_POOL)
+            tl = f"{_t_label(spec)}:{layout}"
+            _et_add("add(in0,in1)", [t, u], tl)
+            _et_add("add(in0,in1)", [u, t], tl)
+            _et_add("max(in0,in1)", [t, t_operand(TD, layout, seed=6, pool=_ET_E2_POOL)], tl)
+            _et_add("min(in0,in1)", [t, u], tl)
+            _et_add("mul(in0,li:2)", [t], tl)
+        _et_add("add(in0,in1)", [s, u], f"S,U:{layout}")
+        _et_add("add(in0,in1)", [s, t_operand(TD, layout, seed=3, pool=_ET_E2_POOL)], f"S,T:{layout}")
+        _et_add("clip(in0,in1,in2)", [u, _et_text(["a"], "U1", "z0"), _et_text(["m"], "U1", "z0")], f"U:{layout}")
+        _et_add(f"clip(in0,{_et_ls('a')},{_et_ls('m')})", [t_operand(TD, layout, seed=3, pool=_ET_E2_POOL)], f"T:{layout}")
+    # O. Where with text branches: NumPy's promotion of the branches (U with S, with int64, with float64, with StringDType,
+    #    with a Python str; StringDType with a NaN-NA StringDType), a text condition read inside the call, and NumPy's
+    #    DTypePromotionError (a Python int beside U, StringDType beside int64, S beside StringDType).
+    for layout in CORE_LAYOUTS:
+        u = _et_text(_ET_E2_POOL, "U12", layout, 1)
+        s = _et_text(_ET_E2_ASCII, "S10", layout, 2)
+        t = t_operand(TD, layout, seed=3, pool=_ET_E2_POOL)
+        tn = t_operand(TDNAN, layout, seed=4, pool=_ET_E2_POOL)
+        n = _et_numeric(u[1])
+        label = f"{layout}"
+        _et_add("where(gt(in2,li:3),in0,in1)", [u, s, n], f"U,S:{label}")
+        _et_add("where(gt(in2,li:3),in0,in1)", [u, t, n], f"U,T:{label}")
+        _et_add("where(gt(in2,li:3),in0,in1)", [t, tn, n], f"T,TNAN:{label}")
+        _et_add("where(gt(in1,li:3),in0,in1)", [u, n], f"U,int64:{label}")
+        _et_add("where(gt(in1,li:3),in0,mul(in1,lf:1.5))", [u, n], f"U,float64:{label}")
+        _et_add(f"where(gt(in1,li:3),in0,{_et_ls('-')})", [u, n], f"U,str:{label}")
+        _et_add(f"where(in0,in1,{_et_ls('-')})", [u, t], f"U?T,str:{label}")
+        _et_add("where(gt(in1,li:3),in0,li:5)", [u, n], f"U,pyint:{label}")
+        _et_add("where(gt(in1,li:3),in0,in1)", [t, n], f"T,int64:{label}")
+        _et_add("where(gt(in2,li:3),in0,in1)", [s, t, n], f"S,T:{label}")
+    # P. The unary nodes over every class: np.real / np.imag compute (a copy, a writeable all-empty array), every other
+    #    one is NumPy's refusal (the legacy resolver's text for S / U, the no-loop text naming StringDType's class), np.round
+    #    with decimals included.
+    unary = ["neg", "positive", "abs", "sqrt", "exp", "sign", "floor", "lnot", "isinf", "isfinite", "isposinf", "round",
+             "round_2", "rint", "conj", "not", "angle", "real", "imag"]
+    for name, make in _et_kinds(_ET_E2_POOL):
+        for layout in ["c1", "c2", "t3", "s1", "bc", "z0", "e2"]:
+            o = make(layout)
+            for tok in unary:
+                _et_add(f"{tok}(in0)", [o], f"{name}:{layout}")
+    # Q. Casts to text: numbers formatted (cut to a width, the class's own repr), bools, text recast between classes and
+    #    widths and NA objects (NumPy's ascii refusal of a non-ASCII character into S), and the cast results fused.
+    ints = num_operand(np.array([0, 7, -4, 123456, 9], dtype=np.int64))
+    floats = num_operand(np.array([0.5, -2.25, 1e20, np.nan, np.inf, 1 / 3]))
+    flags = num_operand(np.array([True, False, True]))
+    for to in ["U1", "U3", "U", "S2", "S", "T", "Tnan"]:
+        for op, label in [(ints, "int64"), (floats, "float64"), (flags, "bool")]:
+            _et_add(f"cast_{to}(in0)", [op], f"{label}->{to}")
+    _et_add(f"eq(cast_U1(in0),{_et_ls('7')})", [ints], "int64->U1,eq")
+    _et_add("str_len(cast_U(in0))", [floats], "float64->U,str_len")
+    _et_add(f"add(cast_U(in0),{_et_ls('!')})", [ints], "int64->U,add")
+    for name, make in _et_kinds(_ET_E2_POOL):
+        for layout in ["c1", "f2", "t3", "bc", "e2"]:
+            o = make(layout)
+            for to in ["U2", "S3", "T", "Tnan"]:
+                _et_add(f"cast_{to}(in0)", [o], f"{name}->{to}:{layout}")
+    for spec in T_COMPUTE_SPECS:
+        o = t_operand(spec, "c2", seed=5, pool=_ET_E2_POOL)
+        for to in ["U4", "T", "Tnan"]:
+            _et_add(f"cast_{to}(in0)", [o], f"{_t_label(spec)}->{to}:c2")
+    # R. The root reductions of text, flat and per axis (keepdims too), over every class and StringDType NA kind: NumPy's
+    #    answer (a StringDType sum / max / min, an argmax / argmin, a NaN-NA mean) or its refusal for each kind.
+    kinds = ["sum", "prod", "max", "min", "argmax", "argmin", "mean", "ptp", "nanmin", "nanmax", "nansum", "nanprod",
+             "nanmean", "var", "std"]
+    makers = [("U", lambda layout: _et_text(_ET_E2_POOL, "U12", layout, 1)),
+              ("S", lambda layout: _et_text(_ET_E2_ASCII, "S10", layout, 2))]
+    makers += [(_t_label(spec), lambda layout, spec=spec: t_operand(spec, layout, seed=3, pool=_ET_E2_POOL))
+               for spec in [TD, TDNAN, TDN, TDS]]
+    for name, make in makers:
+        for layout in ["c1", "c2", "f2", "s1", "z0", "e2"]:
+            o = make(layout)
+            label = f"{name}:{layout}"
+            for kind in kinds:
+                _et_add("in0", [o], label, reduce={"kind": kind})
+            if o[1].ndim >= 1:
+                for kind in ["sum", "max", "min", "argmax", "argmin", "mean", "nansum"]:
+                    _et_add("in0", [o], label, reduce={"kind": kind, "axis": 0, "keepdims": False})
+                    _et_add("in0", [o], label, reduce={"kind": kind, "axis": -1, "keepdims": True})
+            _et_add("in0", [o], label, reduce={"kind": "sum", "keepdims": True})
+    # S. Text results read by later nodes: a comparison, a numpy.strings function, a logical node, a reduction, a cast to a
+    #    number and a where over a stage's text result.
+    for name, make in _et_kinds(_ET_E2_POOL):
+        for layout in ["c1", "c2", "t3", "bc"]:
+            o = make(layout)
+            n = _et_numeric(o[1])
+            label = f"{name}:{layout}"
+            if name == "S":
+                ops, lit = [o, n, _et_text(["a"], "S1", "z0")], "in2"
+            else:
+                ops, lit = [o, n], _et_ls("a")
+            _et_add(f"eq(add(in0,in0),add({lit},{lit}))", ops, label)
+            _et_add("str_len(add(in0,in0))", [o], label)
+            _et_add("land(add(in0,in0),gt(in1,li:3))", [o, n], label)
+            _et_add(f"where(gt(in1,li:3),add(in0,{lit}),in0)", ops, label)
+            _et_add("add(in0,in0)", [o], label, reduce={"kind": "argmax"})
+    digits = _et_text(_ET_INT_TEXTS, "U4", "c1")
+    _et_add(f"mul(cast_int64(add(in0,{_et_ls('0')})),li:2)", [digits], "U,digits")
+    _et_add("neg(add(in0,in0))", [_et_text(_ET_E2_POOL, "U12", "c1", 1)], "U,refused after a text result")
+    # T. The keywords over a text result: dtype= (a text recast, a numeric result formatted), order= on a fresh text
+    #    result, out= written by the root ufunc (cut to its width, the S / U repeat that exists only into an out=, NumPy's
+    #    same_kind refusal) or by np.evaluate's cast (a where, a numeric result into a text out=).
+    for layout in ["c2", "f2", "t3"]:
+        u = _et_text(_ET_E2_POOL, "U12", layout, 1)
+        a = _et_text(_ET_E2_ASCII, "U10", layout, 2)
+        t = t_operand(TD, layout, seed=3, pool=_ET_E2_POOL)
+        n = _et_numeric(u[1])
+        label = f"U:{layout}"
+        _et_add("add(in0,in1)", [u, t], label, dtype="U3")
+        _et_add("add(in0,in0)", [a], label, dtype="S")
+        _et_add(f"where(gt(in1,li:3),in0,{_et_ls('-')})", [u, n], label, dtype="T")
+        _et_add("mul(in0,li:3)", [n], f"int64:{layout}", dtype="U1")
+        for order in ["C", "F"]:
+            _et_add(f"add(in0,{_et_ls('-')})", [u], label, order=order)
+            _et_add("in0", [t], f"T:{layout}", order=order)
+        shape = np.broadcast_shapes(u[1].shape)
+        _et_add("add(in0,in0)", [u], label, out=target(np.full(shape, "?", dtype="U2")))
+        _et_add("mul(in0,li:2)", [u], label, out=target(np.full(shape, "?", dtype="U30")))
+        _et_add("add(in0,in0)", [u], label, out=target(np.zeros(shape, dtype=np.int64)))
+        _et_add(f"where(gt(in1,li:3),in0,{_et_ls('-')})", [u, n], label, out=target(np.full(shape, "?", dtype="U2")))
+        _et_add("mul(in0,li:3)", [n], f"int64:{layout}", out=target(np.full(shape, "?", dtype="U1")))
+        _et_add("gt(in0,li:3)", [n], f"int64:{layout}", out=target(np.full(shape, "?", dtype="U5")))
+    # U. A bare text leaf as the whole expression: a copy in K order of every class and core layout, a C# string alone,
+    #    and a cast of the copy by dtype=.
+    for name, make in _et_kinds(_ET_E2_POOL):
+        for layout in CORE_LAYOUTS:
+            o = make(layout)
+            _et_add("in0", [o], f"{name}:{layout}")
+    _et_add(_et_ls("lone"), [num_operand(np.array([1]))], "str")
+    _et_add("in0", [_et_text(_ET_E2_ASCII, "U10", "c2", 1)], "U:c2", dtype="S4")
+
+
 def gen_evaltext():
-    """Section evaltext: np.evaluate over text (docs/plans/evaluate-text.md, phases E1 and E2) — the six comparisons over
+    """Section evaltext: np.evaluate over text (docs/plans/evaluate-text.md, phases E1, E2 and E3) — the six comparisons over
     S / U / StringDType operands anywhere in a tree, against a Python str on either side, feeding numeric nodes, Where,
     the root reductions and the dtype= / order= keywords; StringDType's NA kinds; NumPy's refusals of a comparison
     (phase E1); then the truth readers, IsNaN, the numpy.strings functions and Cast to a number (phase E2,
-    ``_gen_evaltext_e2``)."""
+    ``_gen_evaltext_e2``); then the text results, the text reductions and NumPy's refusals of every other node
+    (phase E3, ``_gen_evaltext_e3``)."""
     trees = ["{op}(in0,in1)", "and({op}(in0,in1),gt(in2,li:3))", "where({op}(in0,in1),mul(in2,li:2),in2)",
              "lor(ge(in2,li:8),{op}(in0,in1))"]
     # A. The comparison pairs NumPy has loops for, every core layout (both operands in it), each tree and comparison.
@@ -17715,8 +17964,9 @@ def gen_evaltext():
     _et_add("eq(in0,in1)", [t, s], "T,S")
     _et_add("ne(in0,in1)", [t, n], "T,int64")
     _et_add("eq(in0,in1)", [u, _cmp_operand("U3", "c1", seed=2)], "U:c2,c1")
-    # Phase E2's cases follow E1's, so the ids of E1's cases stay as they were.
+    # Phase E2's cases follow E1's, and phase E3's follow E2's, so the ids of the earlier phases' cases stay as they were.
     _gen_evaltext_e2()
+    _gen_evaltext_e3()
 
 
 GENERATORS = [gen_dtypes, gen_creation, gen_astype, gen_views, gen_movement, gen_mutation, gen_access, gen_printing,

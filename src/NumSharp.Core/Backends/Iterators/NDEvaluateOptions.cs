@@ -32,6 +32,15 @@ namespace NumSharp.Backends.Iteration
         public readonly NPTypeCode? Dtype;
 
         /// <summary>
+        ///     The requested result dtype as a whole descriptor, or <c>null</c> for none. It names what the type code in
+        ///     <see cref="Dtype"/> cannot: a TEXT dtype's class, width and NA object (<c>dtype: "U5"</c>,
+        ///     <c>np.dtypes.StringDType()</c>), which np.evaluate's text results and its number-to-text root cast need
+        ///     (<see cref="HasTextDtype"/>). For a numeric request it is that dtype's descriptor and adds nothing to
+        ///     <see cref="Dtype"/>.
+        /// </summary>
+        public readonly DType DtypeDescr;
+
+        /// <summary>
         ///     The optional <c>where=</c> boolean mask (plan P4.5): the fused kernel writes the result only
         ///     where the mask is True, leaving masked-off destination slots untouched — NumPy's ufunc
         ///     <c>where=</c> convention (the mask rides the iterator as a trailing ARRAYMASK operand and the
@@ -61,16 +70,35 @@ namespace NumSharp.Backends.Iteration
         /// <param name="casting">The out= cast rule, or <c>null</c> for <c>same_kind</c>.</param>
         /// <param name="order">The fresh-result order char, or <c>'\0'</c> for <c>'K'</c>.</param>
         /// <param name="where">The boolean write mask, or <c>null</c> for an unmasked (write-every-element) pass.</param>
-        public NDEvaluateOptions(NPTypeCode? dtype, NPY_CASTING? casting, char order, NDArray where = null)
+        /// <param name="dtypeDescr">The requested result dtype's whole descriptor (see <see cref="DtypeDescr"/>), or
+        ///     <c>null</c>; given with <paramref name="dtype"/> = its type code.</param>
+        public NDEvaluateOptions(NPTypeCode? dtype, NPY_CASTING? casting, char order, NDArray where = null, DType dtypeDescr = null)
         {
             Dtype = dtype;
             _casting = casting;
             _order = order;
             Where = where;
+            DtypeDescr = dtypeDescr;
         }
 
         /// <summary>True when a result dtype was requested (the implicit root cast is active).</summary>
         public bool HasDtype => Dtype.HasValue;
+
+        /// <summary>
+        ///     True when the requested result dtype is TEXT (<c>S</c>, <c>U</c> or StringDType): the result is computed at its
+        ///     natural dtype and then cast by NumPy's <c>astype</c> to the descriptor (<see cref="DtypeDescr"/>), which the
+        ///     fused kernels cannot write.
+        /// </summary>
+        public bool HasTextDtype => Dtype == NPTypeCode.String;
+
+        /// <summary>
+        ///     The keywords of the NATURAL result a text-shaped call computes first: only the layout request survives (a
+        ///     fresh result's order), while <c>dtype=</c>, <c>where=</c> and the out= cast rule are applied after, when that
+        ///     result is cast into the requested dtype or copied into <c>out=</c> under the mask
+        ///     (DefaultEngine.Evaluate.Text.cs).
+        /// </summary>
+        /// <returns>The options of the natural evaluation.</returns>
+        public NDEvaluateOptions ForNaturalResult() => new NDEvaluateOptions(null, null, _order);
 
         /// <summary>True when a <c>where=</c> write mask was supplied (the fused pass runs masked).</summary>
         public bool HasWhere => Where is not null;

@@ -81,7 +81,14 @@ namespace NumSharp.Backends
         // np.abs is 'absolute', np.negative is 'negative'.
         // =====================================================================
 
-        private static string UfuncName(BinaryOp op) => op switch
+        /// <summary>
+        ///     NumPy's ufunc name of a binary operation, as NumPy's error texts quote it (<c>remainder</c>, <c>divide</c>,
+        ///     <c>left_shift</c>, ...); also the name the string guard answers by, so np.evaluate's binary text stage
+        ///     (NDExpr.TextResults.cs) reports the same ufunc its call runs.
+        /// </summary>
+        /// <param name="op">The operation.</param>
+        /// <returns>The ufunc name.</returns>
+        internal static string UfuncName(BinaryOp op) => op switch
         {
             BinaryOp.Add => "add",
             BinaryOp.Subtract => "subtract",
@@ -116,7 +123,15 @@ namespace NumSharp.Backends
             _ => op.ToString().ToLowerInvariant(),
         };
 
-        private static string UfuncName(UnaryOp op) => op switch
+        /// <summary>
+        ///     NumPy's ufunc name of a unary operation for the ufunc entry's error texts (<c>absolute</c>, <c>invert</c>,
+        ///     <c>arcsinh</c>, ...); an operation without an entry here falls back to its lower-cased enum name, which is
+        ///     NumPy's for the plain math ufuncs (callers needing a NumPy FUNCTION name for np.isposinf / np.real / np.angle
+        ///     spell it themselves).
+        /// </summary>
+        /// <param name="op">The operation.</param>
+        /// <returns>The ufunc name.</returns>
+        internal static string UfuncName(UnaryOp op) => op switch
         {
             UnaryOp.Sqrt => "sqrt",
             UnaryOp.Abs => "absolute",

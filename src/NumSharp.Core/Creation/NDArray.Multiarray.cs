@@ -1567,11 +1567,20 @@ namespace NumSharp
         /// <param name="outType">The result's storage lane.</param>
         private static unsafe void WhereKernelDispatch(NDArray cond, NDArray x, NDArray y, NDArray result, NPTypeCode outType)
         {
-            var condPtr = (nint)cond.Address;
             var count = result.size;
-
-            NpFunc.Invoke(outType, WhereKernelExecute<int>, condPtr, (nint)x.Address, (nint)y.Address, (nint)result.Address, count);
+            NpFunc.Invoke(outType, WhereKernelExecute<int>, FirstElement(cond), FirstElement(x), FirstElement(y),
+                FirstElement(result), count);
         }
+
+        /// <summary>
+        ///     The address of an operand's first element: its storage's base address plus <see cref="Shape.offset"/>
+        ///     elements. A contiguous view built with an explicit offset (a storage alias, <c>np.ndarray(buffer, offset=...)</c>)
+        ///     keeps the offset in its shape, where a basic slice folds it into a narrowed storage, so the bare storage
+        ///     address is the first element only for the latter: the kernels below read the base's first elements otherwise.
+        /// </summary>
+        /// <param name="a">A contiguous operand (or a one-element scalar source).</param>
+        /// <returns>The first element's address.</returns>
+        private static unsafe nint FirstElement(NDArray a) => (nint)((byte*)a.Address + a.Shape.offset * a.dtypesize);
 
         /// <summary>The typed body of <see cref="WhereKernelDispatch"/>: the contiguous IL where kernel of <typeparamref name="T"/>.</summary>
         /// <typeparam name="T">The element type of x, y and the result.</typeparam>
@@ -1603,7 +1612,7 @@ namespace NumSharp
             // materialize the scalar to a broadcast view of cond's shape and fall back
             // to the existing NDIter expression path.
             bool ok = NpFunc.Invoke(outType, TryWhereScalarXExecute<int>,
-                (nint)cond.Address, (nint)xScalar.Address, (nint)y.Address, (nint)result.Address, result.size);
+                FirstElement(cond), FirstElement(xScalar), FirstElement(y), FirstElement(result), result.size);
             if (ok) return;
 
             var xBroadcast = np.broadcast_to(xScalar, cond.Shape);
@@ -1619,7 +1628,7 @@ namespace NumSharp
         private static unsafe void WhereScalarYDispatch(NDArray cond, NDArray x, NDArray yScalar, NDArray result, NPTypeCode outType)
         {
             bool ok = NpFunc.Invoke(outType, TryWhereScalarYExecute<int>,
-                (nint)cond.Address, (nint)x.Address, (nint)yScalar.Address, (nint)result.Address, result.size);
+                FirstElement(cond), FirstElement(x), FirstElement(yScalar), FirstElement(result), result.size);
             if (ok) return;
 
             var yBroadcast = np.broadcast_to(yScalar, cond.Shape);
@@ -1635,7 +1644,7 @@ namespace NumSharp
         private static unsafe void WhereScalarXYDispatch(NDArray cond, NDArray xScalar, NDArray yScalar, NDArray result, NPTypeCode outType)
         {
             bool ok = NpFunc.Invoke(outType, TryWhereScalarXYExecute<int>,
-                (nint)cond.Address, (nint)xScalar.Address, (nint)yScalar.Address, (nint)result.Address, result.size);
+                FirstElement(cond), FirstElement(xScalar), FirstElement(yScalar), FirstElement(result), result.size);
             if (ok) return;
 
             var xBroadcast = np.broadcast_to(xScalar, cond.Shape);

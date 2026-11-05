@@ -169,7 +169,7 @@ namespace NumSharp.Backends
             // by the evaluation, next to the identical dtype= / order= guards, so the whole reduction-tree keyword contract
             // lives in one place.
             NPY_CASTING? c = casting is null ? (NPY_CASTING?)null : DTypeCasting.ParseCasting(casting);
-            return new NDEvaluateOptions(dtype?.typecode, c, order, where);
+            return new NDEvaluateOptions(dtype?.typecode, c, order, where, dtype);
         }
 
         /// <summary>
@@ -312,6 +312,11 @@ namespace NumSharp.Backends
                 return EvaluateTextPlan(program, inputs, @out, options);
 
             ThrowIfReductionKeywords(program.IsReduction, options);
+
+            // A result asked for as TEXT (a text out= or dtype=): the kernels write numbers only, so the natural result is
+            // computed first and then cast — NumPy's formatting of each number, cut to the width (DefaultEngine.Evaluate.Text.cs).
+            if (options.HasTextDtype || (@out is not null && @out.typecode == NPTypeCode.String))
+                return EvaluateIntoText(program, inputs, @out, options);
 
             // Staged float fmax / fmin nodes run as NumPy's own ufunc calls before the remainder (NDExpr.FMaxStages.cs):
             // their answers depend on NumPy's inner-loop calls, which no fused kernel has.

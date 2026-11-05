@@ -41,43 +41,76 @@ before promoting, as NumPy's unfused sequence does.
 
 - Leaves: S / U / StringDType arrays (0-d included) bind like any array, and `implicit operator NDExpr(string)` is NumPy's
   `str` (`NDArray.PythonStrLiteral`, a 0-d `<U{len}`). A text value is an INPUT, never IL: one program serves every
-  literal text, and a hoisted 0-d text array is read per call.
-- What computes on text (each node one NumPy statement over whole arrays, a STAGE): the six comparisons
+  literal text and every width, and a hoisted 0-d text array is read per call.
+- Every node computes on text as NumPy's statement for it, each one a STAGE run over whole arrays: the six comparisons
   (`NDStringUfuncs.BinaryGuard`); the truth readers — `LogicalAnd` / `LogicalOr` / `LogicalXor`, `Where`'s condition and
   `Any` / `All` / `CountNonzero` read a text operand through a TRUTH stage (`NDStringTruth.Truth`: the bool cast for the
   logical nodes, the where and any / all; the nonzero function for a flat count; for a count with an axis or keepdims,
   `S` / `U` nonzero and StringDType the cast, NumPy's `count_nonzero` paths) and stay fused over its bool result;
-  `IsNaN` (`TensorEngine.IsNan`); `Cast` to a number (`astype`, NumPy's parse); the numpy.strings factories `StrLen`,
-  `IsAlpha` … `IsNumeric`, `Find` / `RFind` / `Count` / `Index` / `RIndex`, `StartsWith` / `EndsWith`
-  (`NDExpr.Strings.cs`, `StringsNode`: never IL, always `NDStringMethods`; a tree holding one takes the text plan even with
-  no text input, `NDExprBindContext.HoldsStageOnlyNode`, so `StrLen(int array)` raises NumPy's no-loop error per call).
-  Every other node with a text operand (a text RESULT, a text reduction, the other unary / binary nodes, `LogicalNot`)
-  raises `StringComputationNotSupportedException` naming the node; each site carries a `plan:` comment (E3 lifts them).
-- Lowering (`NDExpr.Text.cs`, at `NDExprProgram.Build` when the signature has `String` or the tree a `StringsNode`): every
-  node lowers its children (`LowerText`, BindArrays' child order) and a stage leaves an input of its result dtype in its
-  place; the remainder is an ordinary numeric tree over the numeric inputs (renumbered first) and the stage results. A
-  stage operand is an input, a literal (NumPy's Python scalar), an earlier stage's result, an omitted optional argument
-  (NumPy's default), or a COMPUTED numeric sub-tree, renumbered over the inputs it reads and evaluated per call into
-  NumPy's temporary layout (`MaterializeChildNumPyLayout`; a constant-only one over a 0-d dummy, marked weak when its
-  typing is weak), so its own errors come first, as in NumPy's statement order. A text program keeps only `TextPlan` (no
-  kernel / `Reduce` / `Average`): read `IsReduction`, and send a text program to its plan before any route reads the
-  other fields.
+  `IsNaN` (`TensorEngine.IsNan`); `Cast` with text on either side (`astype`: NumPy's parse, its formatting cut to the
+  width, a recast between classes, widths and NA objects); the numpy.strings factories `StrLen`, `IsAlpha` …
+  `IsNumeric`, `Find` / `RFind` / `Count` / `Index` / `RIndex`, `StartsWith` / `EndsWith` (`NDExpr.Strings.cs`,
+  `StringsNode`: never IL, always `NDStringMethods`). The other nodes (`NDExpr.TextResults.cs`) run the engine member that
+  is NumPy's statement: the binary ufuncs through `DefaultEngine.ExecuteBinaryOp` (np.add concatenates, np.multiply
+  repeats StringDType, everything else is NumPy's no-loop error), `Maximum` / `Minimum` (StringDType only), a two-sided
+  `Clip` as ONE `np.clip` stage (its refusal names all three operands; a one-sided clip is np.maximum / np.minimum),
+  `Where` with text branches through `NDArray.where` (NumPy's promotion: U with int64 `<U21`, U with StringDType
+  StringDType, a Python number beside fixed-width text a DTypePromotionError), the unary nodes through their
+  `TensorEngine` member (np.real / np.imag compute, copied when NumPy would hand back the operand or a read-only array),
+  the root reductions through their `TensorEngine` member (`ReduceAdd`, `ReduceAMax`, `ReduceArgMax`, `ReduceMean`, ...;
+  a read-only 0-d stand-in for NumPy's scalar is copied writeable), `Average` through `TensorEngine.Average`. Only a
+  delegate (`NDExpr.Call`) refuses text, with `StringComputationNotSupportedException`: its parameters are numbers.
+- A tree holding a node only a stage runs takes the text plan even with no text input
+  (`NDExprBindContext.HoldsStageOnlyNode`): a `StringsNode` (`StrLen(int array)` raises NumPy's no-loop error per call) and
+  a `Cast` to a text descriptor (`Cast(age, "U5")`).
+- `NDExpr.Cast(x, DType)` is the one Cast overload (an NPTypeCode, a Type or a dtype string converts to DType): a text
+  target is a whole descriptor kept on the `CastNode` (`TextTarget`, part of the node identity), and
+  `NPTypeCode.String` alone is refused by the conversion (no class, no width).
+- `NanSum` / `NanProd` mark their `ReduceNode` (`IsNanFamily`, part of the identity): over text they are np.sum / np.prod
+  of the operand (NumPy's `_replace_nan` leaves a string array as it is), not their numeric `Where(IsNaN(x), fill, x)`
+  rewrite, which a user's own `Sum(Where(IsNaN(x), 0, x))` still runs statement by statement; over numbers the
+  operand is lowered once and shared by the test and the selection.
+- Lowering (`NDExpr.Text.cs`, at `NDExprProgram.Build` when the signature has `String` or the tree a stage-only node):
+  every node lowers its children (`LowerText`, BindArrays' child order) and a stage leaves its result in its place — a
+  remainder input for a numeric result, a TEXT value for a text one (`NDExprLowered.TextStage`), which later stages read
+  (`NDExprStageOperand.StageResult`) and the remainder never sees. The remainder is an ordinary numeric tree over the
+  numeric inputs (renumbered first) and the numeric stage results (`RemainderStages` maps them back), or nothing when the
+  root is text (`NDExprTextPlan.TextRoot`: a text stage's result, or a text input — a bare text leaf as the whole tree).
+  A stage operand is an input, a literal (NumPy's Python scalar), an earlier stage's result, an omitted optional
+  argument (NumPy's default), or a COMPUTED numeric sub-tree, renumbered over the inputs it reads and evaluated per call
+  into NumPy's temporary layout (`MaterializeChildNumPyLayout`; a constant-only one over a 0-d dummy, marked weak when its
+  typing is weak), so its own errors come first, as in NumPy's statement order. A text program keeps only `TextPlan`
+  (no kernel / `Reduce` / `Average`): read `IsReduction` (a reduction of text that became a stage counts,
+  `RootReductionStage`), and send a text program to its plan before any route reads the other fields.
+- A stage's `ResultType` is the dtype NumPy's statement has when it computes: `String` for a text result (class and width
+  read per call), int64 for the arg-reductions, float64 for `Mean` / `NanMean` (a NaN-like NA's sum is NaN); a statement
+  NumPy refuses for every text class is typed `String`, so no remainder input is made for it.
 - Layout: a truth stage must not change the layout the original operand gives the fused result (NumPy casts inside its
   iterator, where a broadcast operand abstains): a broadcast text operand's truth is computed over its un-broadcast view
   and broadcast back (a dense cast of a row broadcast would be F). Every other stage is NumPy's own statement result.
 - Per call (`DefaultEngine.Evaluate.Text.cs`): the stages run in evaluation order (operands resolved, statement run, the
-  operands it made released), then the remainder's program is resolved through the positional cache and run by
-  `EvaluateCore` with the call's keywords. A remainder that is one bare stage result returns the stage's array when no
-  keyword shapes the result. The reduction-keyword refusals run before any stage; a text `out=` / `dtype=` is refused.
+  operands it made released). A numeric root goes to the remainder's program (positional cache) and `EvaluateCore` with
+  the call's keywords; a remainder that is one bare stage result returns the stage's array when no keyword shapes the
+  result. A TEXT root, a root reduction of text and a numeric result asked for as text (a text `out=` / `dtype=` over any
+  tree, `EvaluateIntoText`) are finished by `FinishResult`: `dtype=` is NumPy's `astype`, `out=` takes the result under
+  np.evaluate's casting rule (by descriptor: `U5 → U3` is same_kind, `U → S` is not; the evaluate error text) and the
+  ufunc shape rules (a flat reduction's exact rank), copied under `where=`; `where=` alone writes a fresh zeroed result
+  only where the mask holds; `order=` lays a fresh result out; with no keyword a borrowed result (a text input) is
+  copied K-order. A root ufunc over text (`TakesOutAndWhere`: the binary and maximum / minimum stages) takes `out=` /
+  `where=` itself when no `dtype=` and the default casting shape the call — NumPy's own call, the only way an S / U
+  repeat exists (`np.multiply(u, 3)` needs `out=`). The reduction-keyword refusals run before any stage.
 - Why whole-array stages (measured in the plan, §3): the text kernel is 82–97 % of a filter; the stage keeps the text
   kernels' rows route (narrow rows 8–24 % faster than a per-block stage) and costs ~0.5 µs at 1K; the program never
   bakes a width or class, so the cache key needs no descriptor.
 - The factories' `x != 0` (`Any` / `All` / `CountNonzero`) is `ComparisonNode.TruthTest`, flagged in the node's identity
   (hash, equality; not the kernel key): over text the REDUCTION lowers it into a truth stage, while a user's
-  `NotEqual(text, 0)` is NumPy's no-loop comparison. Rebuilding a `ComparisonNode` must keep the flag.
-- Gates: `NDEvaluateTextTests`, the string oracle section `evaltext` (two layout excuses, both np.evaluate's own rules over
-  numbers too: an axis reduction's keepdims view / C-ordered permuted child, and a fused result C-ordered where NumPy keeps
-  a permuted temporary's K order).
+  `NotEqual(text, 0)` is NumPy's no-loop comparison. Rebuilding a `ComparisonNode` must keep the flag, a `ReduceNode` its
+  NaN-family mark, a `CastNode` its text descriptor.
+- Gates: `NDEvaluateTextTests`, the string oracle section `evaltext` (8,180 cases; two layout excuses, both np.evaluate's
+  own rules over numbers too: an axis reduction's keepdims view / C-ordered permuted child, and a fused result C-ordered
+  where NumPy keeps a permuted temporary's K order). The section's NumPy reference reads a 0-d text answer as NumPy's
+  array result (its ufuncs unwrap 0-d results to scalars only as wide as their content) and a flat reduction's Python
+  str / NA object as the 0-d array of the reduced dtype.
 
 ## Reductions (root only)
 

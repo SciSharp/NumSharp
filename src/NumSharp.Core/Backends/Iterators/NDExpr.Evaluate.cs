@@ -161,10 +161,10 @@ namespace NumSharp.Backends.Iteration
         public Func<InputNode, NDExpr> InputRewrite;
 
         /// <summary>
-        /// Set by a node that only a text plan runs (a numpy.strings function, <see cref="StringsNode"/>) when it is bound:
-        /// the program build then lowers the tree into stages even when no input is text, so the stage reaches the engine's
-        /// own refusal per call (<c>StrLen</c> over an int array raises NumPy's no-loop error) instead of a kernel build
-        /// failing on a node that has no IL.
+        /// Set by a node that only a text plan runs (a numpy.strings function, <see cref="StringsNode"/>, or a cast to a text
+        /// dtype, <see cref="CastNode"/>) when it is bound: the program build then lowers the tree into stages even when no
+        /// input is text, so the stage gives NumPy's answer per call (<c>StrLen</c> over an int array raises NumPy's no-loop
+        /// error, <c>Cast(age, "U5")</c> formats the numbers) instead of a kernel build failing on a node that has no IL.
         /// </summary>
         public bool HoldsStageOnlyNode;
 
@@ -416,17 +416,20 @@ namespace NumSharp.Backends.Iteration
         /// is (float32/float64/complex via the M1 pairwise divert). An integer/bool child never carries a
         /// NaN — <c>IsNaN</c> is all-false there and the <c>Where</c> passes the child through unchanged —
         /// so <c>NanSum(int)</c> is exactly <c>Sum(int)</c> (int64), matching NumPy. An empty / all-NaN
-        /// input sums to 0.
+        /// input sums to 0. Over TEXT it is <c>np.nansum</c>'s own answer: NumPy's NaN replacement leaves a
+        /// string array as it is (a string dtype is not inexact), so the result is <c>np.sum</c>'s — a
+        /// StringDType concatenation, NumPy's <c>add.reduce</c> refusal for <c>S</c> / <c>U</c>.
         /// </summary>
-        public static NDExpr NanSum(NDExpr x) => new ReduceNode(NDExprReduceKind.Sum, Where(IsNaN(x), Const(0), x));
+        public static NDExpr NanSum(NDExpr x) => new ReduceNode(NDExprReduceKind.Sum, Where(IsNaN(x), Const(0), x), null, false, 0, nanFamily: true);
 
         /// <summary>
         /// One-pass fused <c>np.nanprod</c>: the product with NaNs treated as 1. Composed as
         /// <c>Prod(Where(IsNaN(x), 1, x))</c> — bit-exact wherever the plain <see cref="Prod(NDExpr)"/> is
         /// (float32/float64 via the M1 sequential divert), an identity pass-through for integer children,
-        /// and 1 for an empty / all-NaN input, matching NumPy.
+        /// and 1 for an empty / all-NaN input, matching NumPy. Over TEXT it is <c>np.nanprod</c>'s answer,
+        /// <c>np.prod</c>'s: NumPy's <c>multiply.reduce</c> refusal (no string loop multiplies two strings).
         /// </summary>
-        public static NDExpr NanProd(NDExpr x) => new ReduceNode(NDExprReduceKind.Prod, Where(IsNaN(x), Const(1), x));
+        public static NDExpr NanProd(NDExpr x) => new ReduceNode(NDExprReduceKind.Prod, Where(IsNaN(x), Const(1), x), null, false, 0, nanFamily: true);
 
         // --- range / NaN-aware min-max reductions (plan P2 M4-tail) -------------------------------
         //
@@ -501,10 +504,10 @@ namespace NumSharp.Backends.Iteration
         public static NDExpr CountNonzero(NDExpr x, int axis, bool keepdims = false) => new ReduceNode(NDExprReduceKind.Sum, ComparisonNode.TruthTest(x), axis, keepdims);
 
         /// <summary>One-pass fused <c>np.nansum</c> along <paramref name="axis"/> (NaNs treated as 0).</summary>
-        public static NDExpr NanSum(NDExpr x, int axis, bool keepdims = false) => new ReduceNode(NDExprReduceKind.Sum, Where(IsNaN(x), Const(0), x), axis, keepdims);
+        public static NDExpr NanSum(NDExpr x, int axis, bool keepdims = false) => new ReduceNode(NDExprReduceKind.Sum, Where(IsNaN(x), Const(0), x), axis, keepdims, 0, nanFamily: true);
 
         /// <summary>One-pass fused <c>np.nanprod</c> along <paramref name="axis"/> (NaNs treated as 1).</summary>
-        public static NDExpr NanProd(NDExpr x, int axis, bool keepdims = false) => new ReduceNode(NDExprReduceKind.Prod, Where(IsNaN(x), Const(1), x), axis, keepdims);
+        public static NDExpr NanProd(NDExpr x, int axis, bool keepdims = false) => new ReduceNode(NDExprReduceKind.Prod, Where(IsNaN(x), Const(1), x), axis, keepdims, 0, nanFamily: true);
 
         /// <summary>One-pass fused <c>np.ptp</c> along <paramref name="axis"/> (max − min; dtype preserved, wrapping).</summary>
         public static NDExpr Ptp(NDExpr x, int axis, bool keepdims = false) => new ReduceNode(NDExprReduceKind.Ptp, x, axis, keepdims);
@@ -653,10 +656,10 @@ namespace NumSharp.Backends.Iteration
         public static NDExpr CountNonzero(NDExpr x, bool keepdims) => new ReduceNode(NDExprReduceKind.Sum, ComparisonNode.TruthTest(x), null, keepdims);
 
         /// <summary>One-pass fused <c>np.nansum(x, axis=None, keepdims=True)</c> — the whole-array NaN-skipping sum kept as shape (1,…,1).</summary>
-        public static NDExpr NanSum(NDExpr x, bool keepdims) => new ReduceNode(NDExprReduceKind.Sum, Where(IsNaN(x), Const(0), x), null, keepdims);
+        public static NDExpr NanSum(NDExpr x, bool keepdims) => new ReduceNode(NDExprReduceKind.Sum, Where(IsNaN(x), Const(0), x), null, keepdims, 0, nanFamily: true);
 
         /// <summary>One-pass fused <c>np.nanprod(x, axis=None, keepdims=True)</c> — the whole-array NaN-skipping product kept as shape (1,…,1).</summary>
-        public static NDExpr NanProd(NDExpr x, bool keepdims) => new ReduceNode(NDExprReduceKind.Prod, Where(IsNaN(x), Const(1), x), null, keepdims);
+        public static NDExpr NanProd(NDExpr x, bool keepdims) => new ReduceNode(NDExprReduceKind.Prod, Where(IsNaN(x), Const(1), x), null, keepdims, 0, nanFamily: true);
 
         /// <summary>One-pass fused <c>np.ptp(x, axis=None, keepdims=True)</c> — the whole-array peak-to-peak range kept as shape (1,…,1) (dtype preserved, wrapping).</summary>
         public static NDExpr Ptp(NDExpr x, bool keepdims) => new ReduceNode(NDExprReduceKind.Ptp, x, null, keepdims);
@@ -775,10 +778,22 @@ namespace NumSharp.Backends.Iteration
 
     public sealed partial class CastNode
     {
+        /// <summary>
+        ///     Binds the child, rebuilding this node over it (this node itself when it did not change); the rebuilt node keeps
+        ///     a text target's descriptor. A cast TO text has no kernel — only the text plan runs it, as NumPy's
+        ///     <c>astype</c> stage — so binding one marks the tree as holding a stage-only node, which sends a tree over numbers
+        ///     alone (<c>Cast(age, "U5")</c>) to the text plan too.
+        /// </summary>
+        /// <param name="ctx">The binding pass.</param>
+        /// <returns>This node, or a copy over the bound child.</returns>
         internal override NDExpr BindArrays(NDExprBindContext ctx)
         {
+            if (_textTarget is not null)
+                ctx.HoldsStageOnlyNode = true;
             var c = _child.BindArrays(ctx);
-            return ReferenceEquals(c, _child) ? this : new CastNode(c, _target);
+            if (ReferenceEquals(c, _child))
+                return this;
+            return _textTarget is not null ? new CastNode(c, _textTarget) : new CastNode(c, _target);
         }
 
         internal override bool ContainsReduce => _child.ContainsReduce;
@@ -991,13 +1006,40 @@ namespace NumSharp.Backends.Iteration
         private readonly bool _keepdims;
         private readonly int _ddof;        // Var/Std delta degrees of freedom (divisor N-ddof); 0 for every other kind
 
+        /// <summary>
+        ///     Set by the <c>NanSum</c> / <c>NanProd</c> factories, whose child is their NaN replacement
+        ///     <c>Where(IsNaN(x), fill, x)</c>: the node IS <c>np.nansum</c> / <c>np.nanprod</c> of <c>x</c>. Over numbers the
+        ///     replacement is exactly NumPy's, so nothing reads the flag; over TEXT NumPy's <c>_replace_nan</c> returns the
+        ///     array unchanged (a string dtype is not inexact) and the call is <c>np.sum</c> / <c>np.prod</c> of <c>x</c>, which
+        ///     the text lowering reads the flag for — a user's own <c>Sum(Where(IsNaN(x), 0, x))</c> runs its statements
+        ///     (<c>np.where</c> of a Python int beside StringDType raises). Part of the node identity.
+        /// </summary>
+        private readonly bool _nanFamily;
+
         public ReduceNode(NDExprReduceKind kind, NDExpr child, int? axis = null, bool keepdims = false, int ddof = 0)
+            : this(kind, child, axis, keepdims, ddof, nanFamily: false)
+        {
+        }
+
+        /// <summary>
+        ///     Constructs a reduction, optionally marked as the NaN-skipping factories' (<see cref="_nanFamily"/>).
+        /// </summary>
+        /// <param name="kind">The reduction.</param>
+        /// <param name="child">The reduced expression.</param>
+        /// <param name="axis">The axis, or null for a flat reduction.</param>
+        /// <param name="keepdims">Whether the reduced axes stay as length 1.</param>
+        /// <param name="ddof">Var / Std's delta degrees of freedom.</param>
+        /// <param name="nanFamily">True for <c>NanSum</c> / <c>NanProd</c>: <paramref name="child"/> is their NaN replacement
+        ///     of one <c>x</c>.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="child"/> is null.</exception>
+        internal ReduceNode(NDExprReduceKind kind, NDExpr child, int? axis, bool keepdims, int ddof, bool nanFamily)
         {
             _kind = kind;
             _child = child ?? throw new ArgumentNullException(nameof(child));
             _axis = axis;
             _keepdims = keepdims;
             _ddof = ddof;
+            _nanFamily = nanFamily;
         }
 
         internal NDExprReduceKind Kind => _kind;
@@ -1007,6 +1049,30 @@ namespace NumSharp.Backends.Iteration
 
         /// <summary>Var/Std delta degrees of freedom — the divisor is <c>max(N − Ddof, 0)</c>. 0 for all other kinds.</summary>
         internal int Ddof => _ddof;
+
+        /// <summary>Whether this is the <c>NanSum</c> / <c>NanProd</c> factories' node (see <see cref="_nanFamily"/>).</summary>
+        internal bool IsNanFamily => _nanFamily;
+
+        /// <summary>
+        ///     The factories' NaN replacement of this node's child, <c>Where(IsNaN(x), fill, x)</c>, taken apart: the replaced
+        ///     operand <c>x</c> (the where's else branch, the same expression the IsNaN tests) and the fill literal.
+        /// </summary>
+        /// <param name="x">Receives the replaced operand.</param>
+        /// <param name="fill">Receives the fill (0 for NanSum, 1 for NanProd).</param>
+        /// <returns>True for a NaN-family node whose child has the factories' shape; false otherwise (the general lowering
+        ///     then applies, which is only reachable through a hand-built node).</returns>
+        internal bool TryGetNanReplacement(out NDExpr x, out NDExpr fill)
+        {
+            if (_nanFamily && _child is WhereNode { Condition: UnaryNode { Op: UnaryOp.IsNan } } where)
+            {
+                x = where.Else;
+                fill = where.Then;
+                return true;
+            }
+
+            x = fill = null;
+            return false;
+        }
 
         public override bool SupportsSimd => false;
 
@@ -1031,10 +1097,13 @@ namespace NumSharp.Backends.Iteration
             sb.Append(')');
         }
 
+        /// <summary>Binds the child, rebuilding this node over it (keeping the NaN-family mark, part of its identity).</summary>
+        /// <param name="ctx">The binding pass.</param>
+        /// <returns>This node, or a copy over the bound child.</returns>
         internal override NDExpr BindArrays(NDExprBindContext ctx)
         {
             var c = _child.BindArrays(ctx);
-            return ReferenceEquals(c, _child) ? this : new ReduceNode(_kind, c, _axis, _keepdims, _ddof);
+            return ReferenceEquals(c, _child) ? this : new ReduceNode(_kind, c, _axis, _keepdims, _ddof, _nanFamily);
         }
 
         internal override bool ContainsReduce => true;

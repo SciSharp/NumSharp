@@ -43,7 +43,7 @@ namespace NumSharp.Tests.Fuzz
             // rides the tuple out-path (EvaluateOutFromCorpus) when a case carries it.
             DType dtype = null;
             if (p.TryGetValue("dtype", out var dt) && dt.ValueKind == JsonValueKind.String)
-                dtype = FuzzCorpus.DtypeToTC(dt.GetString());   // NPTypeCode → DType (implicit)
+                dtype = EvaluateDtype(dt.GetString());   // a number's NPTypeCode, or a text descriptor (phase E3)
             char order = p.TryGetValue("order", out var ord) && ord.ValueKind == JsonValueKind.String
                 ? ord.GetString()[0] : 'K';
             return np.evaluate(expr, dtype: dtype, order: order);
@@ -62,6 +62,24 @@ namespace NumSharp.Tests.Fuzz
                 : np.evaluate(expr, @out: target);
             return new[] { returned, BaseBuffer(target) };
         }
+
+        /// <summary>
+        ///     A dtype name of the evaluate corpora (a <c>dtype=</c> param or a <c>cast_&lt;name&gt;</c> token) as the descriptor
+        ///     np.evaluate receives: a number's lane name (<c>float32</c>, <c>int8</c>, ...) through
+        ///     <see cref="FuzzCorpus.DtypeToTC"/>; a TEXT one (the string oracle's phase E3) as NumPy's descriptor — <c>U</c> /
+        ///     <c>S</c> of a width or unsized (<c>U5</c>, <c>S</c>) through <see cref="np.dtype(string)"/>, <c>T</c> as
+        ///     StringDType, <c>Tnan</c> as StringDType with a NaN NA object.
+        /// </summary>
+        /// <param name="name">The name.</param>
+        /// <returns>The descriptor.</returns>
+        /// <exception cref="NotSupportedException">A number's name the corpus helper does not know.</exception>
+        private static DType EvaluateDtype(string name) => name switch
+        {
+            "T" => np.dtypes.StringDType(),
+            "Tnan" => np.dtypes.StringDType(na_object: double.NaN),
+            _ when name.Length > 0 && (name[0] == 'U' || name[0] == 'S') => np.dtype(name),
+            _ => FuzzCorpus.DtypeToTC(name),
+        };
 
         private static NDExpr BuildEvaluateTree(IReadOnlyDictionary<string, JsonElement> p, NDArray[] ops, int nInputs)
         {
@@ -253,7 +271,7 @@ namespace NumSharp.Tests.Fuzz
                 // Phase 4.1b Cast: cast_<dtype>(child) → NDExpr.Cast(child, dtype). Handled before the
                 // switch because the target dtype is baked into the token name (cast_float32, cast_int8…).
                 if (name.StartsWith("cast_", StringComparison.Ordinal))
-                    return NDExpr.Cast(a[0], FuzzCorpus.DtypeToTC(name.Substring("cast_".Length)));
+                    return NDExpr.Cast(a[0], EvaluateDtype(name.Substring("cast_".Length)));
                 // Phase 4.1b Round(decimals): round_<d>(child) → NDExpr.Round(child, d); d spelled m<n> = -n.
                 if (name.StartsWith("round_", StringComparison.Ordinal))
                 {
@@ -304,6 +322,8 @@ namespace NumSharp.Tests.Fuzz
                     case "gt": return NDExpr.Greater(a[0], a[1]);
                     case "ge": return NDExpr.GreaterEqual(a[0], a[1]);
                     case "where": return NDExpr.Where(a[0], a[1], a[2]);
+                    // np.clip(x, lo, hi): NDExpr.Clip's two clip halves (the string oracle's evaltext refusals over text).
+                    case "clip": return NDExpr.Clip(a[0], a[1], a[2]);
                     // unary
                     case "neg": return NDExpr.Negate(a[0]);
                     case "abs": return NDExpr.Abs(a[0]);

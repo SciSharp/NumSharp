@@ -758,32 +758,41 @@ namespace NumSharp.Backends.Iteration
         /// engine's own casts use, so the RESULT dtype is exactly <paramref name="dtype"/> regardless of the
         /// child. Every conversion is allowed (float→int TRUNCATES toward zero, over/underflow WRAPS, a
         /// complex→real cast drops the imaginary part), matching NumPy's default-unsafe astype. Cast is the
-        /// building block for <c>Round(decimals)</c> (which must cast a float round back to an integer dtype)
-        /// and for a future root <c>dtype=</c> keyword.
+        /// building block for <c>Round(decimals)</c> (which must cast a float round back to an integer dtype).
         /// </summary>
         /// <remarks>
-        /// <b>Scalar-only in the fused kernel</b> for now: a tree containing a <c>Cast</c> runs scalar
+        /// <para>
+        /// One overload takes every dtype spelling through <see cref="DType"/>'s conversions: an
+        /// <see cref="NPTypeCode"/> (<c>NDExpr.Cast(x, NPTypeCode.Single)</c>), a <see cref="System.Type"/>
+        /// (<c>NDExpr.Cast(x, typeof(float))</c>), a dtype string (<c>"float32"</c>, <c>"U5"</c>, <c>"S3"</c>) or a
+        /// <see cref="DType"/> itself (<c>np.dtypes.StringDType()</c>). A TEXT target is a whole descriptor — the class
+        /// (<c>S</c>, <c>U</c>, StringDType) and the width or NA object — which the storage lane
+        /// <see cref="NPTypeCode.String"/> alone does not carry, so <c>NPTypeCode.String</c> is refused by the conversion
+        /// itself (<see cref="NotSupportedException"/>) and a text cast names its descriptor.
+        /// </para>
+        /// <para>
+        /// A cast whose operand or target is TEXT never enters the fused kernel: it is NumPy's own
+        /// <c>x.astype(dtype)</c> run as a stage (docs/plans/evaluate-text.md) — a number formatted as text
+        /// (<c>int64 → &lt;U21</c>, a narrower width cuts it), text parsed into a number (NumPy's <c>int(str)</c> /
+        /// <c>float(str)</c>, its errors included) or text recast between classes and widths.
+        /// </para>
+        /// <para>
+        /// <b>Scalar-only in the fused kernel</b> for now: a tree containing a numeric <c>Cast</c> runs scalar
         /// end-to-end (the SIMD-widening cast lanes are Phase 5). <b>Parity envelope:</b> bit-exact vs
         /// NumPy's <c>astype</c> for IN-RANGE, non-NaN conversions; the C-undefined edges (NaN/±inf/
         /// out-of-range → integer, complex→real) inherit the engine's own documented cast behaviour
         /// (host-dependent, the <c>astype_full</c> class), not a distinct guarantee.
+        /// </para>
         /// </remarks>
         /// <param name="x">The operand to convert.</param>
-        /// <param name="dtype">The target element dtype (any of the 15 NumSharp types).</param>
+        /// <param name="dtype">The target dtype: any of the 15 NumSharp types, or a text descriptor (<c>S</c> / <c>U</c> of a
+        ///     width, or StringDType with its NA object).</param>
         /// <returns>An expression node evaluating <paramref name="x"/> converted to <paramref name="dtype"/>.</returns>
-        public static NDExpr Cast(NDExpr x, NPTypeCode dtype) => new CastNode(x, dtype);
-
-        /// <summary>
-        /// Convert to the dtype of <paramref name="dtype"/> (the <see cref="System.Type"/> overload of
-        /// <see cref="Cast(NDExpr, NPTypeCode)"/>, e.g. <c>NDExpr.Cast(x, typeof(float))</c>). See that
-        /// overload for the full astype semantics and parity envelope.
-        /// </summary>
-        /// <param name="x">The operand to convert.</param>
-        /// <param name="dtype">The target element type, mapped to its <see cref="NPTypeCode"/>.</param>
-        /// <returns>An expression node evaluating <paramref name="x"/> converted to <paramref name="dtype"/>'s dtype.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
-        public static NDExpr Cast(NDExpr x, Type dtype)
-            => new CastNode(x, (dtype ?? throw new ArgumentNullException(nameof(dtype))).GetTypeCode());
+        /// <exception cref="ArgumentNullException"><paramref name="x"/> or <paramref name="dtype"/> is null.</exception>
+        /// <exception cref="NotSupportedException">The dtype was spelled as <see cref="NPTypeCode.String"/>, a storage lane
+        ///     without a text class or width (raised by the conversion to <see cref="DType"/>).</exception>
+        public static NDExpr Cast(NDExpr x, DType dtype)
+            => new CastNode(x, dtype ?? throw new ArgumentNullException(nameof(dtype)));
 
         // ===================================================================
         // Comparison factories (produce 0/1 at output dtype)
@@ -1881,18 +1890,48 @@ namespace NumSharp.Backends.Iteration
         private readonly NDExpr _child;
         private readonly NPTypeCode _target;
 
+        /// <summary>The whole descriptor of a TEXT target (<c>S</c> / <c>U</c> of a width, StringDType with its NA object),
+        ///     which the storage lane in <see cref="_target"/> cannot name; null for a numeric target.</summary>
+        private readonly DType _textTarget;
+
         /// <summary>Construct a cast of <paramref name="child"/> to <paramref name="target"/>.</summary>
         /// <param name="child">The sub-expression to convert.</param>
         /// <param name="target">The target element dtype.</param>
         /// <exception cref="ArgumentNullException"><paramref name="child"/> is null.</exception>
+        /// <exception cref="NotSupportedException"><paramref name="target"/> is <see cref="NPTypeCode.String"/>: the storage
+        ///     lane names no text class or width, so a text cast is built from its descriptor
+        ///     (<see cref="NDExpr.Cast(NDExpr, DType)"/>) — the refusal <see cref="DType.From(NPTypeCode)"/> gives the lane.</exception>
         public CastNode(NDExpr child, NPTypeCode target)
         {
             _child = child ?? throw new ArgumentNullException(nameof(child));
+            // A bare lane would reach the cast stage with no descriptor to cast to: refuse it here, with the text every
+            // other lane-only dtype request gets, rather than at the first evaluation.
+            if (target == NPTypeCode.String)
+                throw new NotSupportedException(DType.StringLaneHasNoDType);
             _target = target;
         }
 
-        /// <summary>The target dtype this node converts to (its result dtype).</summary>
+        /// <summary>
+        ///     Construct a cast of <paramref name="child"/> to a dtype descriptor: a numeric one keeps only its type code (the
+        ///     fused kernel's convert), a TEXT one is kept whole for the cast stage (NDExpr.Text.cs), which runs NumPy's
+        ///     <c>astype</c> to exactly that class, width and NA object.
+        /// </summary>
+        /// <param name="child">The sub-expression to convert.</param>
+        /// <param name="target">The target dtype (not null: the factory checks it).</param>
+        /// <exception cref="ArgumentNullException"><paramref name="child"/> is null.</exception>
+        internal CastNode(NDExpr child, DType target)
+        {
+            _child = child ?? throw new ArgumentNullException(nameof(child));
+            _target = target.typecode;
+            _textTarget = _target == NPTypeCode.String ? target : null;
+        }
+
+        /// <summary>The target dtype this node converts to (its result dtype; <see cref="NPTypeCode.String"/> for a text
+        ///     target, whose descriptor is <see cref="TextTarget"/>).</summary>
         internal NPTypeCode Target => _target;
+
+        /// <summary>The descriptor of a text target, or null for a numeric cast.</summary>
+        internal DType TextTarget => _textTarget;
 
         // NDComplexMath.RealPart(Complex)->double — np.astype's complex→real rule is "take the real
         // part" (with a ComplexWarning), so a complex source is reduced to its real lane BEFORE the
@@ -1954,9 +1993,18 @@ namespace NumSharp.Backends.Iteration
             => throw new InvalidOperationException(
                 "CastNode is scalar-only (Phase 5 adds the widening cast lanes); it must not reach the vector body.");
 
+        /// <summary>
+        ///     Appends this cast to the legacy string key: the target's type code, and for a text target its whole descriptor
+        ///     (NumPy's repr: the class, the width and a StringDType's NA object), since <c>Cast(x, "U5")</c> and
+        ///     <c>Cast(x, "U3")</c> share the lane but not the result.
+        /// </summary>
+        /// <param name="sb">The key under construction.</param>
         public override void AppendSignature(StringBuilder sb)
         {
-            sb.Append("cast").Append((int)_target).Append('(');
+            sb.Append("cast").Append((int)_target);
+            if (_textTarget is not null)
+                sb.Append('[').Append(_textTarget.ToString(true)).Append(']');
+            sb.Append('(');
             _child.AppendSignature(sb);
             sb.Append(')');
         }

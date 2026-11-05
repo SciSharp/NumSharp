@@ -156,8 +156,9 @@ object. The separate `Char` dtype remains a 2-byte UTF-16 code unit, not a text 
 partitioning, character slicing, Unicode properties, case conversion, translation, formatting and
 encoding/decoding. `np.@char` provides the legacy interface and the corresponding chararray methods.
 The [text guide](fundamentals/strings-and-bytes.md) describes their output widths, missing-value
-behavior and the operations that NumPy itself refuses. `np.evaluate` remains a numerical expression
-engine; text transformations use the string functions directly.
+behavior and the operations that NumPy itself refuses. `np.evaluate` computes on text as NumPy's own
+functions do (comparisons, truth values, casts, searches, concatenation, `np.where`, reductions); the
+`np.strings` transformations (case, stripping, padding, replacement) are called directly.
 
 ### NumPy dtype families not represented natively
 
@@ -559,10 +560,9 @@ back to Core for matrix products.
 The generated dashboard is the exhaustive API list. The important capability-level gaps are:
 
 - no native `complex64`, datetime/timedelta, object, structured or void array storage;
-- no general object-array formatting inputs; `np.evaluate` computes text only where NumPy's answer is a
-  number or a bool (the comparisons, the truth value, `IsNaN`, `Cast` to a number, the `np.strings`
-  functions), and a string operation with a text result uses `np.strings` / `np.@char` directly (its
-  result can then enter an expression);
+- no general object-array formatting inputs; `np.evaluate` has no node for the `np.strings`
+  transformations (`upper`, `strip`, `replace`, `center`, ...): call them directly, and their result can
+  then enter an expression, whose other nodes compute on text as NumPy does;
 - no GPU device or DLPack import (`np.from_dlpack` is missing).
 
 The dashboard identifies other API gaps per published revision. A method that exists can still have

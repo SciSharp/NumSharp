@@ -313,7 +313,7 @@ namespace NumSharp.Backends.Iteration
         /// <summary>
         /// <paramref name="x"/> converted to this program's <see cref="ResultType"/> — itself when
         /// <paramref name="xType"/> already is that dtype (no <c>Cast</c> node, so the fused kernel keeps its
-        /// vector body), else an explicit <see cref="NDExpr.Cast(NDExpr, NPTypeCode)"/>.
+        /// vector body), else an explicit <see cref="NDExpr.Cast(NDExpr, DType)"/>.
         /// </summary>
         /// <param name="x">A sub-tree of the bound weighted average (positional leaves).</param>
         /// <param name="xType">The sub-tree's own NumPy result dtype.</param>
@@ -447,12 +447,13 @@ namespace NumSharp.Backends.Iteration
 
             // Text inputs: the nodes that compute on text become per-call stages (NDExpr.Text.cs), and the numeric
             // remainder over their results is resolved per call through the positional program cache — so this program
-            // holds only the plan, typed with the remainder's NumPy result dtype. A numpy.strings node takes the plan even
-            // over numbers (bind.HoldsStageOnlyNode): it has no kernel, and its stage raises NumPy's own refusal per call.
+            // holds only the plan, typed with the remainder's NumPy result dtype (String for a text result). A numpy.strings
+            // node or a cast to text takes the plan even over numbers (bind.HoldsStageOnlyNode): neither has a kernel, and
+            // the stage gives NumPy's own answer per call.
             if (Array.IndexOf(inputTypes, NPTypeCode.String) >= 0 || bind.HoldsStageOnlyNode)
             {
                 var plan = NDExprTextPlan.Lower(bound, inputTypes);
-                var textResult = plan.Remainder.ResolveNumPyTypes(plan.RemainderTypes, out _);
+                var textResult = plan.ResolveResultType();
                 return new NDExprProgram(bound, inputTypes, isParam, forcedScalar, null, textResult, reduce: null,
                     reduceAcc: NPTypeCode.Empty, textPlan: plan);
             }

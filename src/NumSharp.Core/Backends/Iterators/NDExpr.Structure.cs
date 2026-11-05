@@ -311,16 +311,34 @@ namespace NumSharp.Backends.Iteration
 
     public sealed partial class CastNode
     {
+        /// <summary>
+        /// Folds this cast into the structural hash: the target's type code and, for a text target, its descriptor's own
+        /// hash (<c>Cast(x, "U5")</c> and <c>Cast(x, "U3")</c> share the lane but their stages cast to different widths), then
+        /// the child.
+        /// </summary>
+        /// <param name="h">The running structural hash.</param>
+        /// <param name="operands">The operand scratch the leaves record their slots in.</param>
         internal override void HashStructure(ref NDExprStructureHasher h, NDExprOperandScratch operands)
         {
             // The TARGET dtype is part of the program identity — Cast(x, f4) and Cast(x, i4) are
             // different kernels, so it must fold into the hash (like ReduceNode's kind/ddof).
             h.Add(NDExprNodeTag.Cast, (long)_target);
+            if (_textTarget is not null)
+                h.Add((ulong)(uint)_textTarget.GetHashCode());
             _child.HashStructure(ref h, operands);
         }
 
+        /// <summary>
+        /// Whether <paramref name="bound"/> (a cached bound tree) has this node's structure: a cast to the same target —
+        /// the same descriptor for a text target (NumPy's dtype equality: class, width, NA object) — over a structurally
+        /// equal child. A hash hit is only trusted after this check.
+        /// </summary>
+        /// <param name="bound">The cached bound tree's node at this position.</param>
+        /// <param name="operands">The operand scratch the leaves compare their slots through.</param>
+        /// <returns>True when the structures match node for node.</returns>
         internal override bool StructureEquals(NDExpr bound, NDExprOperandScratch operands)
-            => bound is CastNode o && o._target == _target && _child.StructureEquals(o._child, operands);
+            => bound is CastNode o && o._target == _target && Equals(o._textTarget, _textTarget)
+               && _child.StructureEquals(o._child, operands);
     }
 
     public sealed partial class RoundNode
@@ -464,14 +482,16 @@ namespace NumSharp.Backends.Iteration
             // programs even though the child kernel is shared.
             h.Add(NDExprNodeTag.Reduce, (long)_kind);
             h.Add((ulong)(_axis is int ax ? (long)ax : long.MinValue));
-            h.Add(_keepdims ? 1UL : 0UL);
+            // The NaN-family mark (NanSum / NanProd over their replacement) lowers differently over text from a user's own
+            // Sum(Where(IsNaN(x), 0, x)) — np.nansum against the statements — so the two must not share a cached program.
+            h.Add((_keepdims ? 1UL : 0UL) | (_nanFamily ? 2UL : 0UL));
             h.Add((ulong)(long)_ddof);
             _child.HashStructure(ref h, operands);
         }
 
         internal override bool StructureEquals(NDExpr bound, NDExprOperandScratch operands)
             => bound is ReduceNode o && o._kind == _kind && o._axis == _axis && o._keepdims == _keepdims
-               && o._ddof == _ddof
+               && o._ddof == _ddof && o._nanFamily == _nanFamily
                && _child.StructureEquals(o._child, operands);
     }
 

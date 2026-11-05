@@ -1006,28 +1006,6 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
-        ///     <c>np.evaluate</c>'s refusal of a node that takes a text operand (<c>S</c>, <c>U</c> or <c>StringDType</c>) it
-        ///     does not compute. Over text np.evaluate computes, anywhere in a tree, the nodes whose NumPy result is a number
-        ///     or a bool: the six comparisons, the truth value (the logical nodes, <c>Where</c>'s condition, <c>Any</c> /
-        ///     <c>All</c> / <c>CountNonzero</c>), <c>IsNaN</c>, a <c>Cast</c> to a number and the numpy.strings functions
-        ///     (<c>StrLen</c>, the predicates, the searches). Every other node over text — a text RESULT, a text reduction,
-        ///     an arithmetic or math node — is refused when the program is built, before any text is read. The message states
-        ///     the rule and the remedy; which later phase lifts each refusal is recorded in <c>docs/plans/evaluate-text.md</c>,
-        ///     not here.
-        /// </summary>
-        /// <param name="node">The node as its factory spells it (<c>NDExpr.Add</c>, <c>NDExpr.Where with text branches</c>, ...).</param>
-        /// <returns>The exception (not thrown): a <see cref="StringComputationNotSupportedException"/>, which is a
-        ///     <see cref="NotSupportedException"/>.</returns>
-        internal static StringComputationNotSupportedException EvaluateTextNotYet(string node)
-            => new StringComputationNotSupportedException(
-                $"np.evaluate does not compute {node} over text (S, U or StringDType): over text it computes the comparisons " +
-                "(Equal, NotEqual, Less, LessEqual, Greater, GreaterEqual), the truth value (LogicalAnd, LogicalOr, " +
-                "LogicalXor, Where's condition, Any, All, CountNonzero), IsNaN, Cast to a number and the numpy.strings " +
-                "functions (StrLen, IsAlpha ... IsNumeric, Find, RFind, Count, Index, RIndex, StartsWith, EndsWith), whose " +
-                "numeric results feed any expression. Compute the rest (a text result such as np.add's concatenation or " +
-                "np.where's text selection) with the string functions first and pass that array into the expression.");
-
-        /// <summary>
         ///     <c>np.evaluate</c>'s refusal of a text argument to an <c>NDExpr.Call</c> node, in every phase: a delegate's
         ///     parameters are numbers, so the text part is computed first (a comparison or a numpy.strings node in the same
         ///     tree, or a string function outside it) and its numeric result passed in.

@@ -77,7 +77,7 @@ Exception
 | A `(bool)` cast of an array with several elements, or none | `ValueError` | `ValueError` | `The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()` (empty: ``The truth value of an empty array is ambiguous. Use `array.size > 0` to check that an array is not empty.``) |
 | An unknown dtype string | `NotSupportedException` | `TypeError` | `data type 'xyz' not understood` |
 | A factorisation without a backend (`np.linalg.svd`) | `OpenBlasMissingBackendException` | - | names the `NumSharp.Interop.OpenBLAS` package to reference |
-| An `np.evaluate` node over a text operand whose result would be text (concatenation, a `Where` with text branches), a reduction of text other than `Any` / `All` / `CountNonzero`, or an arithmetic or math node over text | `StringComputationNotSupportedException` | - | names the node and the string functions to use |
+| An `NDExpr.Call` delegate given a text argument inside `np.evaluate` (every other node computes on text or raises NumPy's own error) | `StringComputationNotSupportedException` | - | names the delegate and the text nodes to use |
 
 `AxisError` derives from `ArgumentOutOfRangeException`, so its `Message` ends with .NET's parameter suffix (`(Parameter 'axis')`); the first line is NumPy's text.
 

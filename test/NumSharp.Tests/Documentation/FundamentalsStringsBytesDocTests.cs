@@ -665,10 +665,11 @@ namespace NumSharp.Tests.Documentation
         ///     The "Operations that do not accept text" examples: the comparison and the unique values of <c>StringDType</c>
         ///     text compute, as the same calls over <c>U</c> text do; a string <c>dtype=</c> request of <c>np.add</c> over
         ///     numbers computes (the numbers written as text, then concatenated); <c>np.evaluate</c>, NumSharp's expression
-        ///     engine, computes text in its six comparisons, whose bool results feed the rest of the expression, and refuses
-        ///     every other node over text (every text kind, a positional operand included) with
-        ///     <see cref="StringComputationNotSupportedException"/> (a <see cref="NotSupportedException"/>) whose message
-        ///     names the node and the string functions to use instead.
+        ///     engine, computes text as NumPy does — the comparisons and the numpy.strings functions feeding numbers into the
+        ///     rest of the expression, a concatenation, a <c>Where</c> with text branches and a reduction of text answering
+        ///     with NumPy's values (every text kind, a positional operand included) — raises NumPy's own error where NumPy has
+        ///     no loop, and refuses only a delegate's text argument with <see cref="StringComputationNotSupportedException"/>
+        ///     (a <see cref="NotSupportedException"/>).
         /// </summary>
         [TestMethod]
         public void Computing_StringDTypeAndEvaluate()
@@ -688,16 +689,22 @@ namespace NumSharp.Tests.Documentation
             // The numpy.strings functions read the text too, their numbers fused with the rest (NumPy: 1, [0.5 0.5 1. ]).
             ((long)np.evaluate(NDExpr.CountNonzero(NDExpr.StrLen(names) > 3))).Should().Be(1);
             np.evaluate(NDExpr.Where(NDExpr.StartsWith(names, "b"), 1.0, 0.5)).ToArray<double>().Should().Equal(0.5, 0.5, 1.0);
-            Action fused = () => np.evaluate((NDExpr)names + names);
-            fused.Should().Throw<StringComputationNotSupportedException>()
-                .Where(e => e.Message.StartsWith("np.evaluate does not compute NDExpr.Add over text (S, U or StringDType)"));
+            // A text result is NumPy's too: the concatenation, a Where with text branches, a reduction of text (NumPy:
+            // ['catcat' 'dogdog' 'birdbird'], ['-' '-' 'bird'], 1).
+            NDArray.AsStringArray(np.evaluate((NDExpr)names + names)).Should().Equal("catcat", "dogdog", "birdbird");
+            NDArray.AsStringArray(np.evaluate(NDExpr.Where(NDExpr.StrLen(names) > 3, names, "-"))).Should().Equal("-", "-", "bird");
+            ((long)np.evaluate(NDExpr.ArgMax(names))).Should().Be(1);
+            // Where NumPy has no loop, np.evaluate raises NumPy's own error; only a delegate refuses text in its own words.
+            Action root = () => np.evaluate(NDExpr.Sqrt(names));
+            root.Should().Throw<TypeError>().Where(e => e.Message.StartsWith("ufunc 'sqrt' not supported for the input types"));
+            Action call = () => np.evaluate(NDExpr.Call((Func<double, double>)System.Math.Abs, names));
+            call.Should().Throw<StringComputationNotSupportedException>();
             // StringComputationNotSupportedException is a NotSupportedException.
-            fused.Should().Throw<NotSupportedException>();
-            // Every text kind is refused the same way, a StringDType leaf and a positional operand included.
-            Action fusedT = () => np.evaluate((NDExpr)t + t);
-            fusedT.Should().Throw<StringComputationNotSupportedException>().Where(e => e.Message.Contains("NDExpr.Add"));
-            Action positional = () => np.evaluate(NDExpr.Input(0) + NDExpr.Input(0), new[] { names });
-            positional.Should().Throw<StringComputationNotSupportedException>();
+            call.Should().Throw<NotSupportedException>();
+            // Every text kind computes the same way, a StringDType leaf and a positional operand included.
+            NDArray.AsStringArray(np.evaluate((NDExpr)t + t).astype(np.dtype("U8"))).Should().Equal("catcat", "dogdog", "birdbird");
+            NDArray.AsStringArray(np.evaluate(NDExpr.Input(0) + NDExpr.Input(0), new[] { names }))
+                .Should().Equal("catcat", "dogdog", "birdbird");
 
             // The text step runs through np.strings.
             NDArray.AsStringArray(np.strings.upper(names)).Should().Equal("CAT", "DOG", "BIRD");

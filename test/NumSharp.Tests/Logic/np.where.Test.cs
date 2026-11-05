@@ -1,3 +1,4 @@
+using System.Linq;
 using NumSharp.Tests.Utilities;
 using Assert = Microsoft.VisualStudio.TestTools.UnitTesting.Assert;
 
@@ -488,6 +489,38 @@ namespace NumSharp.Tests.Logic
             Assert.AreEqual(typeof(bool), result.dtype);
             Assert.IsTrue((bool)result[0]);
             Assert.IsFalse((bool)result[1]);
+        }
+
+        #endregion
+
+        #region Explicit-offset views
+
+        /// <summary>
+        /// A contiguous view whose offset lives in its SHAPE (np.ndarray over a buffer with an offset, a storage alias) is
+        /// read from its own first element by every contiguous route of np.where: the condition, both branches, a one-element
+        /// branch hoisted as a scalar, and a StringDType branch (whose cells take the numeric route). A basic slice folds its
+        /// offset into the storage, so only these constructions reach the routes with a nonzero offset; the routes read the
+        /// buffer's first elements before (found by the string oracle's evaltext section; NumPy:
+        /// <c>np.where([F, T, T, F], -1.0, b[2:6])</c> is <c>[2, -1, -1, 5]</c>).
+        /// </summary>
+        [TestMethod]
+        public void Where_ExplicitOffsetViews_ReadTheirOwnElements()
+        {
+            var buffer = np.arange(12.0);
+            var view = np.ndarray(new Shape(4), np.float64, buffer, offset: 16);   // elements 2 .. 5
+            var cond = np.array(new[] { false, true, true, false });
+            np.where(cond, np.full(new Shape(4), -1.0), view).Should().BeOfValues(2.0, -1.0, -1.0, 5.0);
+            np.where(cond, view, -1.0).Should().BeOfValues(-1.0, 3.0, 4.0, -1.0);
+            var flags = np.ndarray(new Shape(4), np.@bool, np.array(new[] { true, true, false, true, true, false }), offset: 2);
+            np.where(flags, 1.0, 0.0).Should().BeOfValues(0.0, 1.0, 1.0, 0.0);
+            var one = np.ndarray(new Shape(1), np.float64, buffer, offset: 72);    // element 9, a one-element branch
+            np.where(cond, one, view).Should().BeOfValues(2.0, 9.0, 9.0, 5.0);
+
+            var text = np.array(new object[] { "t0", "t1", "t2", "t3", "t4", "t5" }, np.dtypes.StringDType());
+            var alias = new NDArray(text.Storage.Alias(new Shape(new long[] { 4 }, new long[] { 1 }, 2, 6)));   // t2 .. t5
+            var picked = np.where(cond, np.array(new[] { "u0", "u1", "u2", "u3" }), alias);
+            Enumerable.Range(0, 4).Select(i => (string)picked.Storage.GetAtIndex(i)).ToArray()
+                .Should().Equal("t2", "u1", "u2", "t5");
         }
 
         #endregion
