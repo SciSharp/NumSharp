@@ -14229,6 +14229,67 @@ def gen_products():
             for kind in ("c", "rev"):
                 dot1d_case(dta, dtb, kind, n, False)
 
+    # --- np.vecdot's loops (np-layer dtype plan, PA3b): FLOAT_vecdot / DOUBLE_vecdot / CDOUBLE_vecdot call the dot
+    #     function once per output - FLOAT_dot / DOUBLE_dot and the conjugating CDOUBLE_dotc (zdotc) - at the strides the
+    #     gufunc hands them: an operand of the loop dtype at its own core stride (c unit, t1 / step the strided loops,
+    #     rev / bcore the own loop), an operand cast to the loop dtype at unit stride (the iterator's copy lays the core
+    #     axis innermost, whatever the operand's layout: t1 / tt of a mixed pair), and stride 0 for a core of one element
+    #     (the own loop: n = 1). Six outputs per call, so four-output rows and their remainders both run; b2 / b1
+    #     broadcast an operand over the loop axis, d3 broadcasts two loop axes.
+    VD_M = 6
+
+    def vd_bases(kind, n, dta, dtb):
+        def mk(shape, dt):
+            if np.dtype(dt).kind in "fc":
+                return dot_spread(shape, dt)
+            if np.dtype(dt).kind == "b":
+                return np.ascontiguousarray(dot_rng.randint(0, 2, shape).astype(dt))
+            return np.ascontiguousarray(dot_rng.randint(-100, 100, shape).astype(dt))
+        shapes = {
+            "c": ((VD_M, n), (VD_M, n)), "rev": ((VD_M, n), (VD_M, n)), "b2": ((VD_M, n), (n,)),
+            "b1": ((n,), (VD_M, n)), "t1": ((n, VD_M), (VD_M, n)), "tt": ((n, VD_M), (n, VD_M)),
+            "step": ((VD_M, 2 * n), (VD_M, 2 * n)), "bcore": ((VD_M, n), (VD_M, 1)), "d3": ((2, 1, 3, n), (4, 1, n)),
+        }[kind]
+        return mk(shapes[0], dta), mk(shapes[1], dtb)
+
+    def vd_views(kind, a, b, n):
+        if kind == "rev":
+            return a[:, ::-1], b
+        if kind == "t1":
+            return a.T, b
+        if kind == "tt":
+            return a.T, b.T
+        if kind == "step":
+            return a[:, ::2], b[:, ::2]
+        if kind == "bcore":
+            return a, np.broadcast_to(b, (VD_M, n))
+        return a, b
+
+    def vd_case(dta, dtb, kind, n, special):
+        a, b = vd_bases(kind, n, dta, dtb)
+        if special:
+            dot_specials(a)
+            if kind != "bcore":
+                dot_specials(b)
+        av, bv = vd_views(kind, a, b, n)
+        with np.errstate(all="ignore"):
+            r = np.asarray(np.vecdot(av, bv))
+        tag = f"vd_{kind}_n{n}" + ("_special" if special else "")
+        emit("vecdot", {"axis": -1}, [(a, av), (b, bv)], r, tag, dta if dta == dtb else f"{dta}.{dtb}")
+
+    for dt in ("float32", "float64", "complex128"):
+        for n in (1, 2, 7, 8, 9, 15, 16, 17, 31, 32, 33):
+            for kind in ("c", "rev", "b2", "b1", "t1", "tt", "step", "bcore", "d3"):
+                vd_case(dt, dt, kind, n, False)
+        for n in (8, 16, 33):
+            for kind in ("c", "rev", "t1"):
+                vd_case(dt, dt, kind, n, True)
+    for (dta, dtb) in (("float32", "float64"), ("int32", "float32"), ("float16", "float32"), ("bool", "float64"),
+                       ("float64", "complex128"), ("int64", "complex128")):
+        for n in (1, 5, 20, 40):
+            for kind in ("c", "t1", "tt", "b2", "rev"):
+                vd_case(dta, dtb, kind, n, False)
+
     if skipped:
         print(f"  (skipped {skipped} cases where NumPy raised)")
     return cases

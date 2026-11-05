@@ -8,10 +8,12 @@ namespace NumSharp.Utilities
 {
     /// <summary>
     ///     NumPy's dot functions for float32, float64 and complex128 (<c>FLOAT_dot</c>, <c>DOUBLE_dot</c>,
-    ///     <c>CDOUBLE_dot</c> in arraytypes.c.src) with the BLAS arithmetic NumPy 2.4.2's wheel runs under them:
-    ///     scipy-openblas' <c>cblas_sdot</c> / <c>cblas_ddot</c> / <c>cblas_zdotu_sub</c> (OpenBLAS kernel/x86_64 sdot.c,
-    ///     ddot.c and zdot.c with their Haswell microkernels) at one thread. Every np.dot, np.correlate and np.convolve
-    ///     call site that NumPy routes through a dtype's <c>dotfunc</c> computes here, so they give NumPy's bits.
+    ///     <c>CDOUBLE_dot</c> in arraytypes.c.src, and the conjugating <c>CDOUBLE_dotc</c> / <c>CDOUBLE_vdot</c> of
+    ///     matmul.c.src and vdot.c) with the BLAS arithmetic NumPy 2.4.2's wheel runs under them: scipy-openblas'
+    ///     <c>cblas_sdot</c> / <c>cblas_ddot</c> / <c>cblas_zdotu_sub</c> / <c>cblas_zdotc_sub</c> (OpenBLAS
+    ///     kernel/x86_64/sdot.c, ddot.c and zdot.c with their Haswell microkernels) at one thread. Every np.dot,
+    ///     np.vdot, np.vecdot, np.correlate and np.convolve call site that NumPy routes through a dtype's dot function
+    ///     computes here, so they give NumPy's bits.
     /// </summary>
     /// <remarks>
     ///     <para><b>Which bits these are.</b> The Haswell kernels are what OpenBLAS dispatches on an AVX2 host (probed on
@@ -193,6 +195,45 @@ namespace NumSharp.Utilities
         internal static bool UnitReadable(long stride) => stride == 1 || stride == -1 || stride == 0;
 
         // ------------------------------------------------------------------------------------------------------------
+        //  zdot's two forms: zdotu and zdotc (kernel/x86_64/zdot.c built without and with CONJ)
+        // ------------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     How zdot_compute turns its four double sums into the complex result. OpenBLAS builds zdot.c twice, as zdotu
+        ///     and, with <c>CONJ</c> defined, as zdotc: the vector kernel, the tail and the strided loop compute the same four
+        ///     sums (<c>Σ xr·yr</c>, <c>Σ xi·yi</c>, <c>Σ xr·yi</c>, <c>Σ xi·yr</c>) in both builds and only this last step
+        ///     differs, so one generic body per stride class serves both functions.
+        /// </summary>
+        internal interface IZdotForm
+        {
+            /// <summary>The value NumPy's dot function writes from zdot_compute's four sums.</summary>
+            /// <param name="d0"><c>Σ xr·yr</c>.</param>
+            /// <param name="d1"><c>Σ xi·yi</c>.</param>
+            /// <param name="d2"><c>Σ xr·yi</c>.</param>
+            /// <param name="d3"><c>Σ xi·yr</c>.</param>
+            /// <returns>The result as the dot function receives it (<see cref="ZdotuResult"/>'s C99 receipt).</returns>
+            static abstract Complex Result(double d0, double d1, double d2, double d3);
+        }
+
+        /// <summary>zdotu, <c>Σ x·y</c>: <c>(d0 − d1, d2 + d3)</c> - CDOUBLE_dot's, for np.dot, np.correlate and
+        ///     np.convolve.</summary>
+        internal struct Dotu : IZdotForm
+        {
+            /// <inheritdoc/>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public static Complex Result(double d0, double d1, double d2, double d3) => ZdotuResult(d0 - d1, d2 + d3);
+        }
+
+        /// <summary>zdotc, <c>Σ conj(x)·y</c>: <c>(d0 + d1, d2 − d3)</c> - CDOUBLE_dotc's and CDOUBLE_vdot's, for np.vecdot
+        ///     and np.vdot.</summary>
+        internal struct Dotc : IZdotForm
+        {
+            /// <inheritdoc/>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public static Complex Result(double d0, double d1, double d2, double d3) => ZdotuResult(d0 + d1, d2 - d3);
+        }
+
+        // ------------------------------------------------------------------------------------------------------------
         //  float32: FLOAT_dot over cblas_sdot
         // ------------------------------------------------------------------------------------------------------------
 
@@ -357,6 +398,52 @@ namespace NumSharp.Utilities
         }
 
         /// <summary>
+        ///     <see cref="FloatDotOwn"/> for a row of outputs whose operands both step: <c>o[j] = FLOAT_dot(x + j * xStep,
+        ///     y + j * yStep)</c> with a stride cblas is not handed, four outputs at a time with their float32 sums side by
+        ///     side; every output keeps the own loop's order, so the bits are <see cref="FloatDotOwn"/>'s.
+        /// </summary>
+        /// <param name="x">The first output's first operand (NumPy's <c>ip1</c>).</param>
+        /// <param name="is1">Its element stride (any sign).</param>
+        /// <param name="xStep">The element distance from one output's first operand to the next one's (0 when shared).</param>
+        /// <param name="y">The first output's second operand (<c>ip2</c>).</param>
+        /// <param name="is2">Its element stride (any sign).</param>
+        /// <param name="yStep">The element distance from one output's second operand to the next one's.</param>
+        /// <param name="o">The first output; the row's outputs are consecutive elements.</param>
+        /// <param name="count">The number of outputs.</param>
+        /// <param name="n">The terms of each dot; zero or negative gives +0.</param>
+        /// <remarks>Why: the own loop is one chain of dependent adds, so a single dot waits on the add latency every
+        ///     term; four independent chains fill that wait (np.vecdot of reversed float32 rows of 1,000 terms measured
+        ///     0.82x of the former composition with one chain).</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        internal static unsafe void FloatDotOwnPairRow(float* x, long is1, long xStep, float* y, long is2, long yStep,
+            float* o, long count, long n)
+        {
+            long j = 0;
+            for (; j + 4 <= count; j += 4, x += 4 * xStep, y += 4 * yStep)
+            {
+                float* x0 = x, x1 = x + xStep, x2 = x + 2 * xStep, x3 = x + 3 * xStep;
+                float* y0 = y, y1 = y + yStep, y2 = y + 2 * yStep, y3 = y + 3 * yStep;
+                float s0 = 0f, s1 = 0f, s2 = 0f, s3 = 0f;
+                long xo = 0, yo = 0;
+                for (long t = 0; t < n; t++, xo += is1, yo += is2)
+                {
+                    s0 += x0[xo] * y0[yo];
+                    s1 += x1[xo] * y1[yo];
+                    s2 += x2[xo] * y2[yo];
+                    s3 += x3[xo] * y3[yo];
+                }
+
+                o[j] = s0;
+                o[j + 1] = s1;
+                o[j + 2] = s2;
+                o[j + 3] = s3;
+            }
+
+            for (; j < count; j++, x += xStep, y += yStep)
+                o[j] = FloatDotOwn(x, is1, y, is2, n);
+        }
+
+        /// <summary>
         ///     The float32 row function for one pair of strides, or null where the per-output function
         ///     (<see cref="FloatDotFor"/>) is the faster choice: a row computes <c>o[j] = FLOAT_dot(x, y + j * yStep)</c>
         ///     for consecutive outputs that share their first operand.
@@ -484,6 +571,52 @@ namespace NumSharp.Utilities
         // ------------------------------------------------------------------------------------------------------------
         //  float64: DOUBLE_dot over cblas_ddot
         // ------------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     <see cref="DoubleDotOwn"/> for a row of outputs whose operands both step: <c>o[j] = DOUBLE_dot(x + j * xStep,
+        ///     y + j * yStep)</c> with a stride cblas is not handed, four outputs at a time with their sums side by side;
+        ///     every output keeps the own loop's order, so the bits are <see cref="DoubleDotOwn"/>'s.
+        /// </summary>
+        /// <param name="x">The first output's first operand (NumPy's <c>ip1</c>).</param>
+        /// <param name="is1">Its element stride (any sign).</param>
+        /// <param name="xStep">The element distance from one output's first operand to the next one's (0 when shared).</param>
+        /// <param name="y">The first output's second operand (<c>ip2</c>).</param>
+        /// <param name="is2">Its element stride (any sign).</param>
+        /// <param name="yStep">The element distance from one output's second operand to the next one's.</param>
+        /// <param name="o">The first output; the row's outputs are consecutive elements.</param>
+        /// <param name="count">The number of outputs.</param>
+        /// <param name="n">The terms of each dot; zero or negative gives +0.</param>
+        /// <remarks>Why: the own loop is one chain of dependent adds, so a single dot waits on the add latency every
+        ///     term; four independent chains fill that wait (np.vecdot of reversed float32 rows of 1,000 terms measured
+        ///     0.82x of the former composition with one chain).</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        internal static unsafe void DoubleDotOwnPairRow(double* x, long is1, long xStep, double* y, long is2, long yStep,
+            double* o, long count, long n)
+        {
+            long j = 0;
+            for (; j + 4 <= count; j += 4, x += 4 * xStep, y += 4 * yStep)
+            {
+                double* x0 = x, x1 = x + xStep, x2 = x + 2 * xStep, x3 = x + 3 * xStep;
+                double* y0 = y, y1 = y + yStep, y2 = y + 2 * yStep, y3 = y + 3 * yStep;
+                double s0 = 0.0, s1 = 0.0, s2 = 0.0, s3 = 0.0;
+                long xo = 0, yo = 0;
+                for (long t = 0; t < n; t++, xo += is1, yo += is2)
+                {
+                    s0 += x0[xo] * y0[yo];
+                    s1 += x1[xo] * y1[yo];
+                    s2 += x2[xo] * y2[yo];
+                    s3 += x3[xo] * y3[yo];
+                }
+
+                o[j] = s0;
+                o[j + 1] = s1;
+                o[j + 2] = s2;
+                o[j + 3] = s3;
+            }
+
+            for (; j < count; j++, x += xStep, y += yStep)
+                o[j] = DoubleDotOwn(x, is1, y, is2, n);
+        }
 
         /// <summary>
         ///     The float64 row function for one pair of strides, or null where the per-output function
@@ -825,7 +958,7 @@ namespace NumSharp.Utilities
         ///     200 from 8 terms on.</remarks>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         internal static unsafe Complex ComplexDotUnit(Complex* ip1, long is1, Complex* ip2, long is2, long n)
-            => ComplexUnitCore<Forward, Forward>((double*)ip1, (double*)ip2, n);
+            => ComplexUnitCore<Forward, Forward, Dotu>((double*)ip1, (double*)ip2, n);
 
         /// <summary>
         ///     <see cref="ComplexDotUnit"/>'s arithmetic over two runs read in order whatever their direction: what
@@ -844,29 +977,31 @@ namespace NumSharp.Utilities
             double* xp = (double*)x, yp = (double*)y;
             return (sx, sy) switch
             {
-                (1, 1) => ComplexUnitCore<Forward, Forward>(xp, yp, n),
-                (1, -1) => ComplexUnitCore<Forward, Backward>(xp, yp, n),
-                (1, 0) => ComplexUnitCore<Forward, Repeat>(xp, yp, n),
-                (-1, 1) => ComplexUnitCore<Backward, Forward>(xp, yp, n),
-                (-1, -1) => ComplexUnitCore<Backward, Backward>(xp, yp, n),
-                (-1, 0) => ComplexUnitCore<Backward, Repeat>(xp, yp, n),
-                (0, 1) => ComplexUnitCore<Repeat, Forward>(xp, yp, n),
-                (0, -1) => ComplexUnitCore<Repeat, Backward>(xp, yp, n),
-                (0, 0) => ComplexUnitCore<Repeat, Repeat>(xp, yp, n),
+                (1, 1) => ComplexUnitCore<Forward, Forward, Dotu>(xp, yp, n),
+                (1, -1) => ComplexUnitCore<Forward, Backward, Dotu>(xp, yp, n),
+                (1, 0) => ComplexUnitCore<Forward, Repeat, Dotu>(xp, yp, n),
+                (-1, 1) => ComplexUnitCore<Backward, Forward, Dotu>(xp, yp, n),
+                (-1, -1) => ComplexUnitCore<Backward, Backward, Dotu>(xp, yp, n),
+                (-1, 0) => ComplexUnitCore<Backward, Repeat, Dotu>(xp, yp, n),
+                (0, 1) => ComplexUnitCore<Repeat, Forward, Dotu>(xp, yp, n),
+                (0, -1) => ComplexUnitCore<Repeat, Backward, Dotu>(xp, yp, n),
+                (0, 0) => ComplexUnitCore<Repeat, Repeat, Dotu>(xp, yp, n),
                 _ => throw new ArgumentOutOfRangeException(nameof(sx), "a unit model reads strides 1, -1 and 0 in place only"),
             };
         }
 
-        /// <summary>The body of <see cref="ComplexDotUnit"/> for any pair of run directions.</summary>
+        /// <summary>The body of <see cref="ComplexDotUnit"/> and <see cref="ComplexDotcUnit"/> for any pair of run
+        ///     directions: zdot_compute's unit-stride branch, the kernel's four sums continued by the tail.</summary>
         /// <typeparam name="TX">How x is read.</typeparam>
         /// <typeparam name="TY">How y is read.</typeparam>
+        /// <typeparam name="TF">zdotu or zdotc (<see cref="IZdotForm"/>): how the four sums become the result.</typeparam>
         /// <param name="x">cblas' x: logical element 0's real part.</param>
         /// <param name="y">cblas' y: logical element 0's real part.</param>
         /// <param name="n">The number of terms.</param>
-        /// <returns>The dot product NumPy's complex128 dotfunc writes.</returns>
+        /// <returns>The dot product NumPy's complex128 dot function writes.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe Complex ComplexUnitCore<TX, TY>(double* x, double* y, long n)
-            where TX : struct, IRunRead where TY : struct, IRunRead
+        private static unsafe Complex ComplexUnitCore<TX, TY, TF>(double* x, double* y, long n)
+            where TX : struct, IRunRead where TY : struct, IRunRead where TF : struct, IZdotForm
         {
             double d0 = 0.0, d1 = 0.0, d2 = 0.0, d3 = 0.0;
             long n1 = n > 0 ? n & -8 : 0;
@@ -890,7 +1025,7 @@ namespace NumSharp.Utilities
                 d2 += xs[0] * ys[1];
                 d3 += xs[1] * ys[0];
             }
-            return ZdotuResult(d0 - d1, d2 + d3);
+            return TF.Result(d0, d1, d2, d3);
         }
 
         /// <summary>
@@ -908,9 +1043,21 @@ namespace NumSharp.Utilities
         ///     naive per-term complex product on 6 of them.</remarks>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         internal static unsafe Complex ComplexDotStrided(Complex* ip1, long is1, Complex* ip2, long is2, long n)
+            => ComplexStridedCore<Dotu>((double*)ip1, is1, (double*)ip2, is2, n);
+
+        /// <summary>The body of <see cref="ComplexDotStrided"/> and <see cref="ComplexDotcStrided"/>: zdot_compute's
+        ///     strided branch, the four sums over every term in order.</summary>
+        /// <typeparam name="TF">zdotu or zdotc (<see cref="IZdotForm"/>).</typeparam>
+        /// <param name="xp">cblas' x: element 0's real part.</param>
+        /// <param name="is1">Its element stride (positive).</param>
+        /// <param name="yp">cblas' y: element 0's real part.</param>
+        /// <param name="is2">Its element stride (positive).</param>
+        /// <param name="n">The number of terms; zero or negative gives (+0, +0).</param>
+        /// <returns>The dot product NumPy's complex128 dot function writes.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe Complex ComplexStridedCore<TF>(double* xp, long is1, double* yp, long is2, long n)
+            where TF : struct, IZdotForm
         {
-            double* xp = (double*)ip1;
-            double* yp = (double*)ip2;
             long sx = 2 * is1, sy = 2 * is2;   // the strides in doubles, as zdot.c doubles them
             double d0 = 0.0, d1 = 0.0, d2 = 0.0, d3 = 0.0;
             for (long i = 0; i < n; i++, xp += sx, yp += sy)
@@ -920,7 +1067,7 @@ namespace NumSharp.Utilities
                 d2 += xp[0] * yp[1];
                 d3 += xp[1] * yp[0];
             }
-            return ZdotuResult(d0 - d1, d2 + d3);
+            return TF.Result(d0, d1, d2, d3);
         }
 
         /// <summary>
@@ -1084,9 +1231,11 @@ namespace NumSharp.Utilities
         ///     <c>im * (0 + 1i)</c> is <c>(im*0) + (im*1)i</c>: the real part becomes <c>re + im*0</c>, which an infinite or
         ///     NaN imaginary part poisons exactly as in NumPy.
         /// </summary>
-        /// <param name="re">zdotu's real part, <c>Σ ar·br − Σ ai·bi</c>.</param>
-        /// <param name="im">zdotu's imaginary part, <c>Σ ar·bi + Σ ai·br</c>.</param>
-        /// <returns>The value NumPy's complex128 dotfunc writes.</returns>
+        /// <param name="re">zdotu's real part, <c>Σ ar·br − Σ ai·bi</c> (zdotc's: <c>Σ ar·br + Σ ai·bi</c>).</param>
+        /// <param name="im">zdotu's imaginary part, <c>Σ ar·bi + Σ ai·br</c> (zdotc's: <c>Σ ar·bi − Σ ai·br</c>).</param>
+        /// <returns>The value NumPy's complex128 dot function writes.</returns>
+        /// <remarks>zdotc's result reaches CDOUBLE_dotc and CDOUBLE_vdot the same way: zdot.c builds both forms' results
+        ///     with one <c>OPENBLAS_MAKE_COMPLEX_FLOAT</c>, and both add it into a zeroed pair (<see cref="Dotc"/>).</remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static Complex ZdotuResult(double re, double im)
         {
@@ -1094,6 +1243,159 @@ namespace NumSharp.Utilities
             sum0 += re + im * 0.0;
             sum1 += im;
             return new Complex(sum0, sum1);
+        }
+
+        // ------------------------------------------------------------------------------------------------------------
+        //  complex128, the first operand conjugated: CDOUBLE_dotc / CDOUBLE_vdot over cblas_zdotc_sub
+        // ------------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's conjugating complex128 dot function for one dot, <c>Σ conj(ip1)·ip2</c>: CDOUBLE_dotc (matmul.c.src,
+        ///     np.vecdot's loop) and CDOUBLE_vdot (vdot.c, np.vdot's) are one function - two positive strides go to
+        ///     <c>cblas_zdotc_sub</c> (unit strides <see cref="ComplexDotcUnit"/>, others <see cref="ComplexDotcStrided"/>),
+        ///     any other stride to their own loop (<see cref="ComplexDotcOwn"/>).
+        /// </summary>
+        /// <param name="ip1">The operand conjugated (NumPy's <c>ip1</c>, cblas' x), element 0.</param>
+        /// <param name="is1">Its element stride (any sign).</param>
+        /// <param name="ip2">The second operand (<c>ip2</c>, cblas' y), element 0.</param>
+        /// <param name="is2">Its element stride (any sign).</param>
+        /// <param name="n">The number of terms (none summed when zero or negative).</param>
+        /// <returns>The conjugated dot product NumPy writes.</returns>
+        /// <remarks>Conjugating a copy of <paramref name="ip1"/> and running zdotu (<see cref="ComplexDot"/>) gives the
+        ///     same value but flips the sign of the NaN a NaN imaginary part spreads; this reads <paramref name="ip1"/>
+        ///     as it is, as zdotc does. A caller making many dots with one pair of strides should take
+        ///     <see cref="ComplexDotcFor"/> once.</remarks>
+        internal static unsafe Complex ComplexDotc(Complex* ip1, long is1, Complex* ip2, long is2, long n)
+        {
+            if (is1 > 0 && is2 > 0)
+                return is1 == 1 && is2 == 1 ? ComplexDotcUnit(ip1, 1, ip2, 1, n) : ComplexDotcStrided(ip1, is1, ip2, is2, n);
+            return ComplexDotcOwn(ip1, is1, ip2, is2, n);
+        }
+
+        /// <summary>
+        ///     The conjugating complex128 dot function for one pair of strides, chosen as <see cref="ComplexDotc"/>
+        ///     chooses: the function every output of an np.vecdot call with these core strides runs.
+        /// </summary>
+        /// <param name="is1">The conjugated operand's element stride.</param>
+        /// <param name="is2">The second operand's element stride.</param>
+        /// <returns><see cref="ComplexDotcUnit"/>, <see cref="ComplexDotcStrided"/> or <see cref="ComplexDotcOwn"/>.</returns>
+        internal static unsafe delegate*<Complex*, long, Complex*, long, long, Complex> ComplexDotcFor(long is1, long is2)
+        {
+            if (is1 > 0 && is2 > 0)
+                return is1 == 1 && is2 == 1 ? &ComplexDotcUnit : &ComplexDotcStrided;
+            return &ComplexDotcOwn;
+        }
+
+        /// <summary>
+        ///     CDOUBLE_dotc / CDOUBLE_vdot over <c>cblas_zdotc_sub</c> with two unit strides (zdot.c with CONJ): zdotu's
+        ///     four sums over the same kernel and tail (<see cref="ComplexDotUnit"/>), combined as
+        ///     <c>(Σ xr·yr + Σ xi·yi, Σ xr·yi − Σ xi·yr)</c> and received through zdotc's C99 result
+        ///     (<see cref="ZdotuResult"/>).
+        /// </summary>
+        /// <param name="ip1">cblas' x, the operand conjugated, unit stride.</param>
+        /// <param name="is1">Ignored: 1 (the shared dot-function signature).</param>
+        /// <param name="ip2">cblas' y, unit stride.</param>
+        /// <param name="is2">Ignored: 1.</param>
+        /// <param name="n">The number of terms; zero or negative gives (+0, +0).</param>
+        /// <returns>The conjugated dot product NumPy writes.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        internal static unsafe Complex ComplexDotcUnit(Complex* ip1, long is1, Complex* ip2, long is2, long n)
+            => ComplexUnitCore<Forward, Forward, Dotc>((double*)ip1, (double*)ip2, n);
+
+        /// <summary>
+        ///     CDOUBLE_dotc / CDOUBLE_vdot over <c>cblas_zdotc_sub</c> with positive strides that are not both 1: the four
+        ///     sums over every term in order (<see cref="ComplexDotStrided"/>'s), combined as zdotc combines them.
+        /// </summary>
+        /// <param name="ip1">cblas' x, the operand conjugated.</param>
+        /// <param name="is1">Its element stride (positive).</param>
+        /// <param name="ip2">cblas' y.</param>
+        /// <param name="is2">Its element stride (positive).</param>
+        /// <param name="n">The number of terms; zero or negative gives (+0, +0).</param>
+        /// <returns>The conjugated dot product NumPy writes.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        internal static unsafe Complex ComplexDotcStrided(Complex* ip1, long is1, Complex* ip2, long is2, long n)
+            => ComplexStridedCore<Dotc>((double*)ip1, is1, (double*)ip2, is2, n);
+
+        /// <summary>
+        ///     CDOUBLE_dotc's / CDOUBLE_vdot's own loop, for a stride cblas is not handed (zero or negative, and np.vecdot's
+        ///     core of one element, whose stride NumPy's gufunc sets to 0): <c>sumr += ar*br + ai*bi;
+        ///     sumi += ar*bi - ai*br</c> from +0. It builds no C99 complex, so an infinite imaginary part leaves the real
+        ///     part alone here (probed 2.4.2: np.vecdot of <c>[[1+1j]]</c> and <c>[[2+inf j]]</c> is <c>inf+inf j</c>, where
+        ///     np.vdot's blas route gives <c>nan+inf j</c>).
+        /// </summary>
+        /// <param name="ip1">The operand conjugated (NumPy's <c>ip1</c>), element 0.</param>
+        /// <param name="is1">Its element stride (any sign).</param>
+        /// <param name="ip2">The second operand (<c>ip2</c>), element 0.</param>
+        /// <param name="is2">Its element stride (any sign).</param>
+        /// <param name="n">The number of terms; zero or negative gives (+0, +0).</param>
+        /// <returns>The conjugated dot product NumPy writes.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        internal static unsafe Complex ComplexDotcOwn(Complex* ip1, long is1, Complex* ip2, long is2, long n)
+        {
+            double* xp = (double*)ip1;
+            double* yp = (double*)ip2;
+            long sx = 2 * is1, sy = 2 * is2;
+            double sumr = 0.0, sumi = 0.0;
+            for (long i = 0; i < n; i++, xp += sx, yp += sy)
+            {
+                double ar = xp[0], ai = xp[1], br = yp[0], bi = yp[1];
+                // ip1.conj() * ip2, each part's two products added before the sum (no contraction, as NumPy compiles it)
+                sumr += ar * br + ai * bi;
+                sumi += ar * bi - ai * br;
+            }
+            return new Complex(sumr, sumi);
+        }
+
+        /// <summary>
+        ///     <see cref="ComplexDotcOwn"/> for a row of outputs whose operands both step: <c>o[j] = CDOUBLE_dotc(x + j *
+        ///     xStep, y + j * yStep)</c> with a stride cblas is not handed, four outputs at a time with their two sums each
+        ///     side by side; every output keeps the own loop's order, so the bits are <see cref="ComplexDotcOwn"/>'s.
+        /// </summary>
+        /// <param name="x">The first output's first operand (NumPy's <c>ip1</c>, conjugated).</param>
+        /// <param name="is1">Its element stride (any sign).</param>
+        /// <param name="xStep">The element distance from one output's first operand to the next one's (0 when shared).</param>
+        /// <param name="y">The first output's second operand (<c>ip2</c>).</param>
+        /// <param name="is2">Its element stride (any sign).</param>
+        /// <param name="yStep">The element distance from one output's second operand to the next one's.</param>
+        /// <param name="o">The first output; the row's outputs are consecutive elements.</param>
+        /// <param name="count">The number of outputs.</param>
+        /// <param name="n">The terms of each dot; zero or negative gives (+0, +0).</param>
+        /// <remarks>Why: the own loop is one chain of dependent adds, so a single dot waits on the add latency every
+        ///     term; four independent chains fill that wait (np.vecdot of reversed float32 rows of 1,000 terms measured
+        ///     0.82x of the former composition with one chain).</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        internal static unsafe void ComplexDotcOwnPairRow(Complex* x, long is1, long xStep, Complex* y, long is2,
+            long yStep, Complex* o, long count, long n)
+        {
+            long sx = 2 * is1, sy = 2 * is2;
+            long j = 0;
+            for (; j + 4 <= count; j += 4, x += 4 * xStep, y += 4 * yStep)
+            {
+                double* x0 = (double*)x, x1 = (double*)(x + xStep), x2 = (double*)(x + 2 * xStep), x3 = (double*)(x + 3 * xStep);
+                double* y0 = (double*)y, y1 = (double*)(y + yStep), y2 = (double*)(y + 2 * yStep), y3 = (double*)(y + 3 * yStep);
+                double r0 = 0.0, i0 = 0.0, r1 = 0.0, i1 = 0.0, r2 = 0.0, i2 = 0.0, r3 = 0.0, i3 = 0.0;
+                long xo = 0, yo = 0;
+                for (long t = 0; t < n; t++, xo += sx, yo += sy)
+                {
+                    // CDOUBLE_dotc's `sumr += ar*br + ai*bi; sumi += ar*bi - ai*br`, per output
+                    r0 += x0[xo] * y0[yo] + x0[xo + 1] * y0[yo + 1];
+                    i0 += x0[xo] * y0[yo + 1] - x0[xo + 1] * y0[yo];
+                    r1 += x1[xo] * y1[yo] + x1[xo + 1] * y1[yo + 1];
+                    i1 += x1[xo] * y1[yo + 1] - x1[xo + 1] * y1[yo];
+                    r2 += x2[xo] * y2[yo] + x2[xo + 1] * y2[yo + 1];
+                    i2 += x2[xo] * y2[yo + 1] - x2[xo + 1] * y2[yo];
+                    r3 += x3[xo] * y3[yo] + x3[xo + 1] * y3[yo + 1];
+                    i3 += x3[xo] * y3[yo + 1] - x3[xo + 1] * y3[yo];
+                }
+
+                o[j] = new Complex(r0, i0);
+                o[j + 1] = new Complex(r1, i1);
+                o[j + 2] = new Complex(r2, i2);
+                o[j + 3] = new Complex(r3, i3);
+            }
+
+            for (; j < count; j++, x += xStep, y += yStep)
+                o[j] = ComplexDotcOwn(x, is1, y, is2, n);
         }
 
         // ------------------------------------------------------------------------------------------------------------
