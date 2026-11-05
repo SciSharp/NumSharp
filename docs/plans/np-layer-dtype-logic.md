@@ -142,7 +142,10 @@ walkers (`debd5242`: one N-D walk, the same bits, faster or equal) and np.dot's 
 keeps the multiply). PA3b is done with its NaN priority (`95191628`): where several NaNs meet, np.dot, np.vdot,
 np.vecdot and complex np.correlate / np.convolve give NumPy's NaN (each NaN output computed again by a model where every
 operation picks its NaN by the x86 rule of the instruction NumPy's binaries run), and np.dot's scalar branch keeps
-OpenBLAS's `alpha == 0` early return; every measured cell equal. Next: PA2a, PA2b and PA2c.
+OpenBLAS's `alpha == 0` early return; every measured cell equal. PA2a is done (`d1754bca`): a reversed operand
+(`a[::-1]`, `m[:, ::-1]`) loads each vector with one contiguous load and a lane reversal in the shared kernels - the
+1-D shell, the 2-D block kernel and a 1-D unary kernel - the same bytes, 1.1–16× where the old route gathered or ran
+the scalar loop, no cell slower. Next: PA2b, then PA2c.
 
 **The owner's decisions of 2026-10-31** ([§5](#5-decisions-for-the-owner), D7 to D22, asked with each option's code):
 - P7 is dropped. D7's first answer ("Rule on the result") gave it a design; in the step round the same day the owner
@@ -1330,6 +1333,34 @@ there. Rules (decided 2026-10-30):
     - So the two R-2 extensions come first, and PA2 lands after them:
       - a reversed-run load in the Tier-3B shell's strided dispatch, and a reversed inner stride in the 2-D kernel;
       - a short-row form with the out row stationary in registers, chosen by row length.
+  - [x] **PA2a, the reversed-run load: done 2026-11-05** (`d1754bca`; D23 "Approve").
+    `DirectILKernelGenerator.InnerLoop.Reversed.cs`: an operand at byte stride −elemSize loads the V elements that end
+    at its element with one contiguous load and an AVX2 lane reversal (`vpermpd`/`vpermq` 0x1B for 8-byte lanes,
+    `vpermps`/`vpermd` 7..0 for 4-byte lanes, `vpshufb` per half + `vpermq` 0x4E for 1- and 2-byte lanes); a reversed
+    output reverses and stores the same way. The op's vector body is unchanged, so every lane computes the element pair
+    the gather or scalar route gave it: no byte moves.
+    - The 1-D shell runs it ahead of the gather, as one stage per pattern (each operand C / R / S, an R among them);
+      the 2-D block kernel admits reversed input rows (`Is2DElementwiseShape` reports one, `ServesReversedRows`
+      confirms), its masked tail loading with the reversed lane mask; a 1-D unary op over a reversed input, which never
+      reaches the iterator, has its own kernel (`GetReversedUnaryKernel`, `DefaultEngine.TryReversedSimdUnaryOp`) ahead
+      of the strided kernel's scalar loads and the buffered tile gather. One- and two-input same-dtype kernels on a
+      256-bit AVX2 host.
+    - The dispatch lives in reversed-run VARIANTS of the kernels, which `NDIterRef` runs only for an iteration with an
+      operand at inner element stride −1: in the plain kernel, the stage calls made the JIT allocate the whole method's
+      registers differently (the binary 2-D kernel became non-leaf: callee-saved registers, a frame, a spill in its
+      contiguous loops). The plain kernels keep their IL; the plain 2-D kernel's machine code is the old build's again.
+    - Measured (both builds in one process, 2 CPUs pinned, best of 3 × 15 interleaved rounds, hashes compared first),
+      old / new: `a[::-1] + b` 1.18–1.48× at 1K, 1.09–12.0× at 100K, 1.01–5.68× at 1M (the 4- and 8-byte 1M cells
+      memory bound); `np.maximum(a[::-1], s)` up to 69× (int16: its scalar loop was slow); `np.negative(a[::-1])`
+      1.33–2.95× at 1K, up to 16× at 100K; `m[:, ::-1] + n` 2.96–8.10× at 1000 × 8, 2.26–9.81× at 100 × 1000. 290 cells:
+      131 faster, 149 equal, none slower after the rule's re-measure (the ten first read below 0.95× read 0.998–1.25×;
+      an A/A of them spans 0.925–1.30×). Equal by nature: np.sqrt over float64 (bound by `vsqrtpd`: the contiguous sqrt
+      measures the same) and np.sqrt of an integer array (promoting: its route is unchanged and already as fast as the
+      contiguous one).
+    - Not covered: three or more inputs (`np.clip(a[::-1], lo, hi)`; 3^N − 2^N stages per output mode), other hosts,
+      the string-key `ExecuteElementWise`, buffered iterations, promoting unary ops.
+    - Left for PA2c: the reduction's reversed rows call the shared add kernel's variant
+      (`DirectILKernelGenerator.CompileReversedRunInnerLoop`) instead of the hand form's load-and-permute.
 
 - [x] **PA3. One home for NumPy's dot functions** (`ee9ce021`; `SlidingDot` and `Default.Dot.Fused.cs` predate the
   plan). Done 2026-11-05: PA3a and PA3b below (D23 lands no identical code moved, so the moves of PA3b's first text
@@ -1709,6 +1740,35 @@ breaks a subclass or a direct caller for a layering reason alone.
 ---
 
 ## 9. State log
+
+- **2026-11-05, PA2a (D23): the reversed-run load - a reversed operand loads each vector with one contiguous load and a
+  lane reversal in the shared kernels; PA2a is done.** One commit on `strings` (not pushed), `d1754bca` (developed on
+  `4c78d673` as `7d408bc0`, picked onto `33d6ae44` when `strings` moved and re-gated there, then onto `b3551b9c`, a
+  release-notes-only commit).
+  - The owner's cells and more: `a[::-1] + b`, `a + b[::-1]`, `a[::-1] + b[::-1]`, `a[::-1] * s`,
+    `np.maximum(a[::-1], s)`, `np.negative` / `np.absolute` / `np.sqrt(a[::-1])`, `np.clip(a[::-1], lo, hi)` for float64,
+    float32, int32, int16 and uint8 at 1K / 100K / 1M; `m[:, ::-1] + n`, `m[:, ::-1] * s`, `np.sqrt(m[:, ::-1])` at
+    1000 × 8, 10000 × 10, 100 × 1000 and 10 × 100000; unchanged routes as controls (contiguous, `a[::2]`, `a + s`,
+    reversed rows `m[::-1, :]`). A two-build A/B: each build in its own AssemblyLoadContext of one process, CPUs 2 and 4
+    pinned, best of 3 passes × 15 interleaved rounds, result hashes compared before each cell (no byte differs).
+  - The effort the rule asked for, in order: the first build put the stage calls into every kernel; its A/B moved
+    untouched contiguous-row cells, and the JIT disassembly showed the binary 2-D kernel turned non-leaf (callee-saved
+    registers, a 40-byte frame, a spill, the blocks reordered). The dispatch moved into variant kernels the iterator
+    runs only for a reversed operand; the plain kernel's machine code matches the old build's again. `np.sqrt(a[::-1])`
+    took the fused strided kernel, which the shell change never reached: a reversed-run unary kernel made float32 sqrt
+    1.06–1.16× and the cheap unary ops 1.13–16×; float64 sqrt stays equal (`vsqrtpd` bound: the contiguous sqrt
+    measures the same 106 µs at 100K), and so does sqrt of an integer array (promoting; its buffered route already beats
+    the contiguous one). The ten cells below 0.95× after the final pass (six 1K cells of untouched routes, four
+    reversed-rows cells with identical machine code) read 0.998–1.25× in the rule's re-measure; an A/A of the same
+    cells spans 0.925–1.30×.
+  - Gates (Release): NumSharp.Tests 23,235 / 23,234 passed on net10.0 / net8.0 on `33d6ae44` (+7 tests,
+    `Backends/Kernels/ReversedRunStageTests.cs`), the new class alone on net8.0, the suite under
+    `NUMSHARP_DEBUG_GUARD_PAGES=1` (only the four pool-counting tests that mode fails), the oracle with OpenBugs excluded
+    419 passed and 2 skipped on net10.0. Four mutants killed (an 8-byte reversal swapping halves only, a load one element high, the 2-D masked tail
+    with the forward mask - the fenced test ends the host - and the unary kernel without its reversal).
+  - Found on the way: `np.ascontiguousarray` returns a contiguous argument itself, so a test helper's
+    `using var b = np.ascontiguousarray(want)` disposes the caller's array (the new helper disposes only a copy);
+    `np.clip` over a reversed int16 array runs 6 ns an element (a three-input kernel's scalar loop; outside PA2a).
 
 - **2026-11-05, the PA round (D23): PA3a, then PA3b's np.vecdot, np.vdot, N-D walkers, np.dot's scalar branch and NaN
   priority - np.dot, np.vecdot and np.vdot compute with NumPy's dot functions, NaNs included; PA3a and PA3b are done.**
