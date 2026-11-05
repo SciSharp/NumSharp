@@ -126,19 +126,42 @@ namespace NumSharp.Build.Analyzer
         public override void Initialize(AnalysisContext context)
         {
             context.EnableConcurrentExecution();
-            context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
+            // Generated code is never analyzed (no Analyze flag), and a diagnostic that lands in it (the generated
+            // declaration of a partial method, a [GeneratedCode] parameter) is dropped by CompilationFacts.Generated
+            // before it is reported: ReportDiagnostics only switches off the driver's own per-diagnostic test, whose
+            // first use per tree rescans the tree on every thread that reports into it (GeneratedCodeFilter).
+            context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.ReportDiagnostics);
             context.RegisterCompilationStartAction(start =>
             {
-                var known = KnownTypes.Resolve(start.Compilation);
-                if (known == null)
+                // Shared with the leak and holder analyzers: the name index tells which methods can inherit a scope
+                // at all, so the override / interface walk runs only for those.
+                var facts = CompilationFacts.Get(start.Compilation);
+                if (facts == null)
                     return; // NumSharp not referenced — nothing to analyze
+                var known = facts.Known;
+                var names = facts.Names;
+                var generated = facts.Generated;
 
                 bool weaverInactive = WeaverKnownInactive(start.Options.AnalyzerConfigOptionsProvider.GlobalOptions);
 
-                start.RegisterSymbolAction(c => AnalyzeMethod((IMethodSymbol)c.Symbol, known, weaverInactive, c.ReportDiagnostic), SymbolKind.Method);
-                start.RegisterSymbolAction(c => AnalyzeProperty((IPropertySymbol)c.Symbol, known, weaverInactive, c.ReportDiagnostic), SymbolKind.Property);
+                start.RegisterSymbolAction(c => AnalyzeMethod((IMethodSymbol)c.Symbol, known, names, weaverInactive, ReporterFor(c, generated)), SymbolKind.Method);
+                start.RegisterSymbolAction(c => AnalyzeProperty((IPropertySymbol)c.Symbol, known, weaverInactive, ReporterFor(c, generated)), SymbolKind.Property);
             });
         }
+
+        /// <summary>
+        ///     The diagnostic sink of one symbol action: reports through the action's context unless the location is in
+        ///     generated code, the test the driver would have applied had the analyzer not opted out of it.
+        /// </summary>
+        /// <param name="c">The symbol action's context (copied into the sink: the struct outlives no callback).</param>
+        /// <param name="generated">The compilation's generated-code test.</param>
+        /// <returns>The sink the gate checks report into.</returns>
+        private static Action<Diagnostic> ReporterFor(SymbolAnalysisContext c, GeneratedCodeFilter generated)
+            => d =>
+            {
+                if (!generated.IsInGeneratedCode(d.Location, c.Options, c.CancellationToken))
+                    c.ReportDiagnostic(d);
+            };
 
         /// <summary>
         ///     True only when the build DECLARED the weaver inactive: <c>NumSharpBuildActive</c> is present
@@ -159,8 +182,22 @@ namespace NumSharp.Build.Analyzer
             return true;
         }
 
-        private static void AnalyzeMethod(IMethodSymbol m, KnownTypes k, bool weaverInactive, Action<Diagnostic> report)
+        /// <summary>
+        ///     The gate and the NDW013 guard for one method: its own scope attribute, else an inherited one (the
+        ///     override / interface walk, run only when the name index says a declaration of the method's name could
+        ///     be inherited), then its own or inherited [NDScopedExit] parameters and [NDAnchored] when the weaver is
+        ///     declared inactive.
+        /// </summary>
+        /// <param name="m">The method symbol.</param>
+        /// <param name="k">The compilation's NumSharp symbols.</param>
+        /// <param name="names">The compilation's name index (the inheritance walk's gate).</param>
+        /// <param name="weaverInactive">True when the build declared the weaver inactive (NDW013 applies).</param>
+        /// <param name="report">The diagnostic sink.</param>
+        private static void AnalyzeMethod(IMethodSymbol m, KnownTypes k, NumSharpNameIndex names, bool weaverInactive, Action<Diagnostic> report)
         {
+            // Asked at most once: both the scope walk and the [NDScopedExit] walk need it.
+            bool mayInherit = names.MayInheritScope(m);
+
             bool hasBody = !m.IsAbstract && !m.IsExtern
                            && !(m.IsPartialDefinition && m.PartialImplementationPart == null);
 
@@ -194,7 +231,7 @@ namespace NumSharp.Build.Analyzer
                 // AnalyzeProperty's target; otherwise an override/implementation may INHERIT its
                 // declaration's attribute — the overwhelmingly common plain method finds nothing here and
                 // falls through to the [NDScopedExit] check, before any type work.
-                if (ScopeInheritance.Inherited(m, k) is ScopeDeclaration decl)
+                if (mayInherit && ScopeInheritance.Inherited(m, k) is ScopeDeclaration decl)
                 {
                     sync = (decl.Kinds & ScopeKind.Sync) != 0;
                     async = (decl.Kinds & ScopeKind.Async) != 0;
@@ -230,7 +267,7 @@ namespace NumSharp.Build.Analyzer
                 }
                 else
                 {
-                    var source = ScopeInheritance.InheritedExitSource(m, k);
+                    var source = mayInherit ? ScopeInheritance.InheritedExitSource(m, k) : null;
                     if (source != null)
                     {
                         var positions = ScopeInheritance.OwnExitParameters(source, k).Where(i => i < m.Parameters.Length).ToArray();
