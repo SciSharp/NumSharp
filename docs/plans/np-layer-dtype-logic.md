@@ -131,6 +131,11 @@ Three items were tried first (2026-10-30):
 - PA2 was measured but not moved: its float forms run 2–5× slower through the shared kernels on reversed axes and short
   rows until those kernels gain the two speedups the hand forms have.
 
+The owner's PA round of 2026-11-05 (D23): every PA task lands only where it is measured faster, and the owner approves
+each one. PA3a's N-D and 1-D routes are done (`c032f867`, `3212b02e`): np.dot computes with NumPy's dot functions
+(`Utilities/NDDot.cs`), bit for bit but for which NaN survives where several meet, and faster or equal in every measured
+cell. np.correlate / np.convolve's per-position dots are next, then PA3b, PA2a, PA2b and PA2c.
+
 **The owner's decisions of 2026-10-31** ([§5](#5-decisions-for-the-owner), D7 to D22, asked with each option's code):
 - P7 is dropped. D7's first answer ("Rule on the result") gave it a design; in the step round the same day the owner
   skipped P7a, then dropped P7b to P7d as well: "Drop because np.* uses the lhs to pick which". The class boundary
@@ -595,6 +600,7 @@ The owner's answers (2026-10-24; D1 again twice on 2026-10-28), and what they me
 | D20 | 2026-10-31, step 9 (PA5): "We can't support that as we need long index support which span doesn't do."; asked again without the `Span` items: "Drop PA5", "Note that for later (defer)" | PA5 waits (Later). Its `Span<T>` items are rejected for good: a `Span`'s length is an `int`, and NumSharp indexes with `long`. The items whose replacement takes long counts (np.eye's `DiagWrite`, np.unique's take-kernel gathers, the int64 ramp kernel, the allocation's NaN fill) wait with it. |
 | D21 | 2026-10-31, step 12 (the divergences found on the way): "Create an open bug reproducing the problem/s and defer to tackle them later" | Each is an `[OpenBugs]` reproduction in `test/NumSharp.Tests/OpenBugs.NpLayer.cs`, every expected value NumPy 2.4.2's: NL1 to NL6 (`f2eee1d1`) and B3 as NL7 (`efc50d14`, once P7 was dropped); NL8 (`2cad8823`), found by the merge's Debug gate; NL9 and NL10 (`401703b5`), found by P8's moves; NL11 (`845f99f2`), found by P8's snapshot tool. Their fixes are deferred; each will be a D4 commit. |
 | D22 | 2026-10-31, the step round: the rebase, P6b, P8, P9, P10 and P7b-d "Accept and start" (P7b-d dropped later, D7); P7a "Skip"; PA3 "Defer until after P7"; PA2 "Defer until after PA3"; PA6 "Defer until after PA5" | The order of the work: the rebase; P6b; P8; P9; P10; PA3 (where P7 stood); PA2. PA5 and PA6 later (D20). |
+| D23 | 2026-11-05, the PA round: "continue but for each you must prove that its faster and if its not after some effort then we should not land the change ... i'll approve each task individually"; on its pages PA3a "Approve, faster only"; PA3b "Approve, only if faster", "and complete full dtype and edge cases parity"; PA2a "Approve" and PA2b + PA2c "Approve both", each with the same parity note | Each task lands only where it is measured faster: old and new route switchable in one process, CPUs 2 and 4 pinned, best of 9 interleaved rounds after warm-up; faster above 1.05× old, slower below 0.95× old re-measured once. A call site still slower after the effort keeps its code. PA3b's moved code lands only where it is faster (identical code moved is not). Order: PA3a, PA3b, PA2a, PA2b, PA2c. |
 
 The recommendations as written before the answers:
 
@@ -1364,6 +1370,28 @@ there. Rules (decided 2026-10-30):
     `polyalgebra*.jsonl`; `matmul_parity` (the backend path) unchanged; the PA3b snapshot identical. Cells measured:
     N-D np.dot, np.correlate float64 / complex128, and 1-D np.dot at 1K / 100K / 10M. The Haswell model and `SimdDot`
     use the same number of FMAs.
+  - **PA3a, the N-D route: done 2026-11-05 (`c032f867`).** `Utilities/NDDot.cs` holds FLOAT_dot / DOUBLE_dot /
+    CDOUBLE_dot with sdot / ddot / zdotu: the three Haswell kernels ported from refs/OpenBLAS (a scalar emulation with
+    the same fused multiply-adds on a host without AVX2 / FMA), cblas' strided loops and the dot functions' own loops,
+    one function per stride class and a selector, so a walk picks its class once. zdotu's vector kernel, which this item
+    left for later, is modeled too: a probe matched it on every result (1-D 1 to 1,000 terms, N-D 7 to 64). Row
+    functions run four outputs' sums side by side (each output keeps NumPy's order) for the unit and own-loop classes
+    (`WalkRows<T>`). 630 of 699 NumPy cases identical (376 before); the rest differ only in which NaN survives. Speed,
+    old / new: 45 of 54 cells faster, 9 equal (strided float64 / complex128: the same arithmetic), none slower; against
+    NumPy NPY/NS went from 0.04–1.82 to 1.00–3.97. Gates: `NDDotTests` (114 NumPy-bit rows), 132 products cases.
+  - **PA3a, the 1-D route: done 2026-11-05 (`3212b02e`).** np.dot of two 1-D arrays follows `cblas_matrixproduct`: both
+    operands in their common dtype (a mixed pair cast into scratch with the cast kernels), a length-1 pair the plain
+    product, an operand with a negative or zero stride read in place in the order of NumPy's copy (`IRunRead`: forward,
+    backward, repeat loads in the unit kernels; a `[::-2]` run copied), then NDDot. np.vdot keeps `array_vdot`'s own
+    route, the dot function itself (`TensorEngine.DotFunction1D`, an internal hook): the oracle's reduce_start tier
+    caught the length-1 product reaching it. 863 of 874 NumPy cases identical (406 before); the length-1 pin
+    `Dot_LengthOneVectors_IsThePlainProduct_OnTheManagedPath` is a regression pin now. Speed: reversed runs 2.2–9.8×,
+    stepped 1.0–1.8×, contiguous complex 1.05–3.3×, mixed dtypes 1.2–3.7×, contiguous float32 / float64 equal
+    (0.96–1.09×: below 64 terms NumPy's float32 model costs more, hidden by the call's fixed cost); np.vdot equal to
+    1.5×. Gates: 240 NumPy-bit rows, 267 products cases.
+  - Left for PA3a: np.correlate / np.convolve's per-position dots (`SlidingDot`). Left for PA3b ("complete full dtype
+    and edge cases parity"): which NaN survives where several meet (the operand order of every add and fused
+    multiply-add, as `NDHalfDot` encodes it for float16), and np.vecdot.
 
 - [x] **PA4. The logical ufuncs' combine** (`e41c90dc`). `CombineTruth` (`Default.Logical.cs`) is a hand vector
   AND / OR / XOR over bytes, which its own comment says works "as the bitwise ufunc combines". It becomes that ufunc's
@@ -1610,6 +1638,25 @@ breaks a subclass or a direct caller for a layering reason alone.
 ---
 
 ## 9. State log
+
+- **2026-11-05, the PA round (D23), PA3a's N-D and 1-D routes: np.dot computes with NumPy's dot functions.** Two
+  commits on `strings` (not pushed), each landed only after its cells measured faster or equal and none slower.
+  - Before the round, a sizing run on the strings tip (3526cb7e) found N-D float32 np.dot at 0.04–0.56× NumPy on
+    unit-stride and reversed runs: its strided route summed double products (`SingleDot`, 2.8 ns a term, not a tiering
+    effect), and `a[::-1] + b` 2.3–12× slower than the contiguous add at 1K–100K (PA2a's target).
+  - `c032f867`, the N-D route: `Utilities/NDDot.cs` and the walks in `Default.Dot.NDMD.cs` (see PA3). The effort the
+    rule asked for, in order: the complex kernel's sums came back by value (out-parameters had pinned them to the
+    stack: strided complex 0.35×), the stride class chosen once per walk, four outputs' sums side by side (float64
+    unit runs of 17 to 31 terms carry ddot's sequential tail: 0.80× one output at a time), and the strided class
+    inlined in the contiguous walker.
+  - `3212b02e`, the 1-D route and np.vdot (see PA3). A reversed float64 run of 16 terms had read 0.83–1.04× from run
+    to run with machine code identical to the former loop (JIT disassembly: a branch-placement effect); the own-loop
+    rows made it 2× and up. Float32 dots of 16 to 63 terms are 0.66–0.91× at the kernel level (NumPy's double-summed
+    tail and longer reduction cost more than the former float32 sum) and 0.96–0.98× through np.dot.
+  - Gates (Release, both): NumSharp.Tests 21,597 / 21,596 passed on net10.0 / net8.0 after the rebase onto `fec5e086`,
+    the oracle 415 passed and 2 skipped on net10.0, the product / reduce-start / matmul / einsum / polyalgebra /
+    linalg tiers on net8.0, the dot / matmul / vdot / inner tests under `NUMSHARP_DEBUG_GUARD_PAGES=1`.
+  - Next: np.correlate / np.convolve's per-position dots (PA3a's last call site), then PA3b, PA2a, PA2b, PA2c.
 
 - **2026-11-02, P10 item 1: np.sum's family with NumPy's whole signature - P10's items 1 to 5 are done.** One commit on
   `strings` (not pushed).
