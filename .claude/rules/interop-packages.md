@@ -25,19 +25,24 @@ and merges like everything else, but no NuGet package is created and no release 
 2. No docs. ParquetNet has no page (its `PackageProjectUrl` points at the page to write when it ships). DocFX publishes
    every `.md` under `docs/website-src`, toc entry or not, so a hidden package's page needs a `docfx.json` exclude.
 3. Gated. The `interop-test` job builds and tests it on both TFMs; apart from `build-nuget`'s Build step on a release
-   tag (which compiles it so that releasing it needs no workflow edit), nothing else compiles it in CI. Its text edge is
-   `TextColumnTests`, over a pyarrow-written fixture (`test/oracle/gen_parquet_text_fixture.py`): the loaders skip text
-   columns, the direct readers refuse them; under Parquet.Net 6 a text column's CLR type is `ReadOnlyMemory<char>`, so
-   the bridge's text refusal never fires (`[OpenBugs]`). Its numeric edge is `NumericColumnParityTests`, over pyarrow
-   fixtures (`test/oracle/gen_parquet_numeric_fixture.py`: every width at its extremes in four writer configurations, a
-   zero-row file, wide decimals, a float16 column): numpy's `to_numpy()` view bit for bit across row groups, both faces
-   streaming the same bytes, and the null policy against numpy's NaN / None widening (`default(T)`, a per-call fill
-   never cached, Raise only where a null is actually read). Two `[OpenBugs]`: `ParquetConvert.ResolveFill` converts the
-   fill for every column before any null is met (a NaN fill breaks every integer and decimal column, the required ones
-   included), and converts it with `Convert.ChangeType` (a fraction ROUNDS, `"7"` is no Boolean) where numpy's setitem
-   and `np.full` truncate. Parquet.Net 6.1.0's own limits are `[Misaligned]`: data page v2 RLE booleans throw
-   `DivideByZeroException`, DELTA_BINARY_PACKED int8 / uint8 / decimal are refused, a float16 column refuses the whole
-   schema, a decimal past 28-29 digits rounds or overflows, and the decimal's trailing zeros are dropped.
+   tag (which compiles it so that releasing it needs no workflow edit), nothing else compiles it in CI. It READS text
+   (`ParquetConvert.TextKindOf`, keyed on both Parquet.Net's CLR type - `ReadOnlyMemory<char>` / `<byte>` in Parquet.Net
+   6, `string` / `byte[]` - and the schema, whose STRING / ENUM / JSON annotation makes text of bytes: Parquet.Net 6.1.0
+   hands JSON over as `ReadOnlyMemory<byte>`): a UTF-8 column becomes `StringDType(na_object=None)`, a null as the NA, a
+   binary column (variable or fixed length) an `S` array as wide as its longest value, a null as `b""`; a list of text
+   is refused as repeated, and a UTF-8-annotated column Parquet.Net decodes to another CLR type is refused AS TEXT (a
+   guard for other versions). Its gate is `TextColumnTests`, over pyarrow fixtures (`test/oracle/gen_parquet_text_fixture.py`,
+   one row group and three): numpy's view of every column, both streaming faces (each group's `S` as wide as its own
+   longest value), the null policies over text. The numeric edge is `NumericColumnParityTests`, over pyarrow fixtures
+   (`test/oracle/gen_parquet_numeric_fixture.py`: every width at its extremes in four writer configurations, a zero-row
+   file, wide decimals, a float16 column): numpy's `to_numpy()` view bit for bit across row groups, both faces streaming
+   the same bytes, and the null policy against numpy's NaN / None widening (`default(T)`, a per-call fill never cached,
+   Raise only where a null is actually read). A fill converts as NumPy's `a[i] = fill` (`ResolveFill` packs it with Core's
+   `PyArray_Pack` port, `ReductionInitial.PackStore`: a fraction truncates, NaN into an integer is numpy's `ValueError`, a
+   text fill into text stays text and NaN becomes `'nan'`), and only at the first null met, so a file-level NaN fill
+   leaves the null-free integer columns readable. Parquet.Net 6.1.0's own limits are `[Misaligned]`: data page v2 RLE
+   booleans throw `DivideByZeroException`, DELTA_BINARY_PACKED int8 / uint8 / decimal are refused, a float16 column
+   refuses the whole schema, a decimal past 28-29 digits rounds or overflows, and the decimal's trailing zeros are dropped.
 
 Keep it out of release notes (`docs/releases/RELEASE_<version>.md`; when that file is missing, GitHub generates the
 notes from merged PR titles, so PR titles stay free of it too), the website, the root README, and the shipped XML docs
@@ -186,10 +191,17 @@ None of these computes NumSharp operations: each converts tensors between NumSha
 - All 15 dtypes cross as their own CLR type (the BCL containers are unconstrained generics). A negative-stride view is
   refused, because the BCL forbids negative strides (`ToTensor` or `np.ascontiguousarray` first).
 - Namespace `NumSharp.Interop.Tensors`, not the assembly name: a `System.*` namespace would shadow the types it uses.
-- Gate: `test/NumSharp.Tests.Interop.System.Numerics.Tensors`, both TFMs, in the `interop-test` CI job. Text never
-  crosses (`TextRefusalTests`): every text class × layout × verb is refused before any layout check, and no import
-  verb instantiates for `string`; the refusal's TEXT is Core's storage-lane conversion error, not a text message
-  (`[OpenBugs]` `TextExports_RefuseWithATextMessage_NotTheStorageLaneError`).
+- Text crosses as a COPY both ways, since no string can be shared (`NDArrayTensorsInterop.Text.cs`; the owner's Auto
+  rule - view when possible, else copy - always lands on the copy): `ToStringTensor()` copies a `U`, `S` (decoded as
+  UTF-8, strictly) or `StringDType` array into a `Tensor<string>` (an NA whose object is not a string as `null`, a 0-d
+  array as `[1]`), and the non-generic `ToNDArray` overloads copy a `Tensor<string>` / string span into
+  `StringDType(na_object=None)` (a `null` as the NA). The unmanaged verbs and `ToTensorElementClrType` refuse a text array
+  with ONE message (`TextRefusal`, the ML.NET bridge's rule) naming its class and `ToStringTensor()`: the verbs pass the
+  array's `dtype`, since its type code's implicit `NPTypeCode → DType` conversion throws Core's storage-lane error.
+- Gate: `test/NumSharp.Tests.Interop.System.Numerics.Tensors`, both TFMs, in the `interop-test` CI job. Text:
+  `TextCrossingTests` (every class × layout against numpy's `tolist()`, imports, round trips, numpy's
+  `UnicodeDecodeError` / `UnicodeEncodeError`) and `TextRefusalTests` (every class × layout × unmanaged verb refused
+  before any layout check, naming the class and `ToStringTensor()`); `ApiSurfaceTests` approves the text verbs.
 - Docs: `docs/website-src/docs/interop/system-numerics-tensors.md`.
 
 ## The pythonnet bridge carries text

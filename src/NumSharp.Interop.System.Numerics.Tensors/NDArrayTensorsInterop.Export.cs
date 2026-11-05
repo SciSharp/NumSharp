@@ -71,7 +71,7 @@ namespace NumSharp.Interop.Tensors
         {
             if (source is null)
                 throw new ArgumentNullException(nameof(source));
-            EnsureElementType<T>(source.typecode, nameof(AsTensorSpan));
+            EnsureElementType<T>(source.dtype, nameof(AsTensorSpan));
 
             Shape shape = source.Shape;
             bool writeable = shape.IsWriteable;
@@ -148,7 +148,7 @@ namespace NumSharp.Interop.Tensors
         {
             if (source is null)
                 throw new ArgumentNullException(nameof(source));
-            EnsureElementType<T>(source.typecode, nameof(ToTensor));
+            EnsureElementType<T>(source.dtype, nameof(ToTensor));
 
             // The limit is Array.MaxLength, NOT int.MaxValue: a managed array holds at most 2,147,483,591 elements, so
             // comparing against int.MaxValue let every size in between reach `new T[n]`, which fails with

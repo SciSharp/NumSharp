@@ -32,7 +32,7 @@ namespace Parquet
         /// <param name="ct">Token to cancel the read.</param>
         /// <returns>
         /// A dictionary mapping each loadable column's name to its <see cref="NDArray"/>. Columns that are not
-        /// loadable (repeated/list fields, or CLR types this bridge does not map, text included) are silently skipped rather than
+        /// loadable (repeated/list fields, or CLR types with no NumSharp dtype such as a timestamp) are silently skipped rather than
         /// thrown on; request a specific unloadable column by name to get the explanatory exception instead.
         /// </returns>
         /// <exception cref="ArgumentNullException"><paramref name="stream"/> is null.</exception>

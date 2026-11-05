@@ -57,7 +57,7 @@ await rg.ReadAsync<double>(field, nd.AsMemory<double>());
 ## Nulls
 
 NumSharp's numeric dtypes have no native NA. The default policy is **`Fill`** — nulls become the option's `NullFill`, or
-`default(T)` (0 / false) when none is given:
+`default(T)` (0 / false; the NA in a text column; `b""` in a binary column) when none is given:
 
 ```csharp
 NDArray q  = pf.Column("qty");                 // nulls -> 0
@@ -65,16 +65,26 @@ NDArray q2 = pf.Column("qty", nullFill: -1);   // nulls -> -1
 using var pf2 = ParquetFile.Load(path, new ParquetLoadOptions { Nulls = NullHandling.Raise }); // throw on nulls
 ```
 
+A fill converts into each column as NumPy's `a[i] = fill` does: `1.5` fills an integer column with `1`, NaN into an
+integer column is refused, `"7"` fills a boolean column with `True`. It converts only where a null is, so a file-level
+`NullFill = double.NaN` (numpy's view of the float columns) leaves the integer columns without nulls readable.
+
 ## Supported dtypes
 
 The twelve Parquet.Net CLR column types that map 1:1 onto a NumSharp dtype:
 `bool, byte, sbyte, short, ushort, int, uint, long, ulong, float, double, decimal`.
 
+Text reads into NumSharp's text dtypes, as a copy (numpy's view of such a column is an object array of `str` /
+`bytes` and `None`):
+- a UTF-8 column (plain, large, dictionary-encoded, or bytes the schema annotates as STRING / ENUM / JSON) →
+  `StringDType(na_object=None)`, a null as the NA;
+- a binary column (variable or fixed length) → an `S` array as wide as its longest value, a null as `b""`. Like
+  numpy's `S`, an element read drops trailing NUL bytes (`b"z\x00"` reads `b"z"`); the buffer keeps them.
+
 Rejected with a clear message (no NumSharp dtype, or not rectangular): `DateTime` / `DateOnly` /
 `TimeOnly`, `BigDecimal`, `BigInteger`, `Interval`, `Guid`, and any nested (struct / map) or repeated (list /
-array) field. `string` / `byte[]` columns are rejected too: NumSharp has text dtypes (`U`, `S`,
-`StringDType`), but this bridge does not read Parquet text into them. `Half`, `Char` and `Complex` have no
-Parquet.Net source on the read path.
+array) field, a list of strings included. `Half`, `Char` and `Complex` have no Parquet.Net source on the read path
+(Parquet.Net 6.1.0 refuses a float16 column's whole schema).
 
 ## Notes
 

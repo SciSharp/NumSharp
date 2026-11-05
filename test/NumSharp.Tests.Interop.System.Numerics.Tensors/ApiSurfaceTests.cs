@@ -28,10 +28,14 @@ namespace NumSharp.Tests.Interop.Tensors
             "  static Int32 LiveExports { get; }",
             "  static Int32 LiveImports { get; }",
             "  static NDArray AsNDArray<T>(this Tensor<T> tensor)",
+            "  static NDArray ToNDArray(this ReadOnlyTensorSpan<String> span)",
+            "  static NDArray ToNDArray(this Tensor<String> tensor)",
+            "  static NDArray ToNDArray(this TensorSpan<String> span)",
             "  static NDArray ToNDArray<T>(this ReadOnlyTensorSpan<T> span)",
             "  static NDArray ToNDArray<T>(this Tensor<T> tensor)",
             "  static NDArray ToNDArray<T>(this TensorSpan<T> span)",
             "  static NPTypeCode TypeCodeOf<T>()",
+            "  static Tensor<String> ToStringTensor(this NDArray source)",
             "  static Tensor<T> ToTensor<T>(this NDArray source)",
             "  static TensorSpanHandle<T> AsTensorSpan<T>(this NDArray source)",
             "  static Type ToTensorElementClrType(DType dtype)",
@@ -68,7 +72,7 @@ namespace NumSharp.Tests.Interop.Tensors
 
             MethodInfo[] verbs = typeof(NDArrayTensorsInterop).GetMethods(BindingFlags.Public | BindingFlags.Static)
                 .Where(m => m.IsDefined(typeof(ExtensionAttribute))).ToArray();
-            verbs.Should().HaveCount(6, "AsTensorSpan, ToTensor, ToNDArray x3, AsNDArray");
+            verbs.Should().HaveCount(10, "AsTensorSpan, ToTensor, ToNDArray x3, AsNDArray, and text's ToStringTensor + ToNDArray x3");
             foreach (MethodInfo verb in verbs)
                 ExperimentalId(verb).Should().Be("NUMSHARP_TENSORS", $"{verb.Name}({verb.GetParameters()[0].ParameterType.Name}) must be [Experimental(\"NUMSHARP_TENSORS\")]");
         }

@@ -27,6 +27,22 @@ namespace NumSharp.Tests.Interop.Tensors
             nd.GetSingle(1, 2).Should().Be(15f);
         }
 
+        /// <summary>
+        ///     The docs page's text example: a <c>U</c> array copies into a <c>Tensor&lt;string&gt;</c> and back into
+        ///     <c>StringDType(na_object=None)</c>, the texts unchanged.
+        /// </summary>
+        [TestMethod]
+        public void Example_ToStringTensor_ThenBack()
+        {
+            using NDArray names = np.array(new[] { "ada", "grace", "linus" });
+            Tensor<string> texts = names.ToStringTensor();   // copy: ["ada", "grace", "linus"]
+            using NDArray back = texts.ToNDArray();          // copy: StringDType(na_object=None)
+
+            texts[new nint[] { 1 }].Should().Be("grace");
+            back.dtype.ToString().Should().Be("StringDType(na_object=None)");
+            back.GetValue(2).Should().Be("linus");
+        }
+
         [TestMethod]
         public void Example_ToTensor_ThenBack()
         {

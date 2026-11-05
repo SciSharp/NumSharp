@@ -58,8 +58,9 @@ long best = np.argmax(probs);                        // 1 - NumSharp reductions 
 
 ## The verbs
 
-Everything is packaging over five operations on the static `NDArrayTensorsInterop` class (also extension
-methods). The naming is the house convention: **`As…` shares memory, `To…` copies.**
+Everything is packaging over seven operations on the static `NDArrayTensorsInterop` class (also extension
+methods): five for the 15 numeric and boolean dtypes and two for text. The naming is the house convention:
+**`As…` shares memory, `To…` copies.**
 
 | Direction | Verb | Semantics |
 |---|---|---|
@@ -68,6 +69,8 @@ methods). The naming is the house convention: **`As…` shares memory, `To…` c
 | Tensors → NumSharp | `tensor.ToNDArray()` | fresh **owning** C-contiguous **copy** - the safe default |
 | Tensors → NumSharp | `tensor.AsNDArray()` | **zero-copy view** over the tensor's pinned backing store; dense → a C-contiguous view, strided → a strided view (no densifying copy) |
 | Tensors → NumSharp | `span.ToNDArray()` | **copy** of a `TensorSpan<T>` / `ReadOnlyTensorSpan<T>` (a `ref struct` span cannot be leased) |
+| NumSharp → Tensors | `nd.ToStringTensor()` → `Tensor<string>` | **copy** of a text array: `U`, `S` (decoded as UTF-8) or `StringDType` (an NA as `null`); any layout, logical order |
+| Tensors → NumSharp | `tensor.ToNDArray()` / `span.ToNDArray()` of `string` | **copy** into `StringDType(na_object=None)`, a `null` element as the NA |
 
 Plus the dtype maps (`ToTensorElementClrType`, `TypeCodeOf<T>`) and the counters
 `NDArrayTensorsInterop.LiveExports` / `LiveImports`, which count live export handles and import leases so a
@@ -81,6 +84,15 @@ ReadOnlyTensorSpan<float> ro = h.ReadOnlySpan;   // read-only, always available
 Tensor<float> t = nd.ToTensor<float>();          // dense copy, independent
 using NDArray copy = t.ToNDArray();              // owning copy back
 using NDArray view = t.AsNDArray();              // zero-copy view over t's buffer
+```
+
+Text is never shared - a `Tensor<string>` holds managed strings, NumSharp's text lives in its own buffers - so it
+crosses as a copy both ways:
+
+```csharp
+using NDArray names = np.array(new[] { "ada", "grace", "linus" });
+Tensor<string> texts = names.ToStringTensor();   // copy: ["ada", "grace", "linus"]
+using NDArray back = texts.ToNDArray();          // copy: StringDType(na_object=None)
 ```
 
 ### Why a handle, not the span itself
@@ -159,7 +171,7 @@ CLR element type without conversion; the bridge's generic methods require an unm
 | Char | `char` | zero-copy, UTF-16 code units; **directional** - a `ushort` element type reads back as `UInt16`, never `Char` |
 | Decimal | `System.Decimal` | zero-copy (a 16-byte unmanaged struct) - no conversion |
 | Complex | `System.Numerics.Complex` | zero-copy (a 16-byte unmanaged struct) - no refusal |
-| `S`, `U`, `StringDType` | not supported by this bridge | packed text is not a `Tensor<string>` buffer; use managed text values or the [NumPy bridge](pythonnet-numpy.md#how-does-text-cross) |
+| `S`, `U`, `StringDType` | `string`, as a **copy** only | `ToStringTensor()` / `ToNDArray()`: no string can be shared, since NumSharp packs text (UCS-4 code units, bytes, a UTF-8 arena) where a `Tensor<string>` holds managed strings. The unmanaged verbs refuse a text array naming its class and `ToStringTensor()` |
 
 `T` must be the array's own element type: a mismatch (`AsTensorSpan<int>()` on a `float` array) is refused
 up front rather than silently reinterpreting the bytes.
@@ -231,6 +243,8 @@ The dtype claims below cover the supported mappings in the table above.
 | 23 | Refused exports leave no reference behind; a handle holds exactly one, which `resize(refcheck)` sees; a lease pins while live and unpins on release (as the GC counts pinned objects), also when only the finalizer releases it | [`ArcAccountingTests`][gate] |
 | 24 | Random bit patterns (bool bytes beyond 0/1, NaN payloads, invalid decimals) survive every path byte-identical, contiguous and strided | [`BitPatternFuzzTests`][gate] |
 | 25 | The public surface is exactly the approved one, every type and verb marked `[Experimental("NUMSHARP_TENSORS")]` | [`ApiSurfaceTests`][gate] |
+| 26 | Every text class (`U`, `S`, `StringDType` with each NA object) × layout copies into a `Tensor<string>` of its shape holding numpy's `tolist()` texts (`S` decoded as UTF-8, a None / NaN NA as `null`); a `Tensor<string>` or string span copies into `StringDType(na_object=None)`, a `null` as the NA; invalid UTF-8 and a lone surrogate are refused with numpy's errors | [`TextCrossingTests`][gate] |
+| 27 | The unmanaged verbs and the dtype map refuse every text array with one message naming its class and `ToStringTensor()`, before anything is leased | [`TextRefusalTests`][gate] |
 
 ## See also
 

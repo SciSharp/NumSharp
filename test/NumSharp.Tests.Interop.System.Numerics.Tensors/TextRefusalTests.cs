@@ -10,19 +10,19 @@ using NumSharp.Interop.Tensors;
 namespace NumSharp.Tests.Interop.Tensors
 {
     /// <summary>
-    ///     Text and the System.Numerics.Tensors bridge: a BCL tensor holds an UNMANAGED element type (every verb is
-    ///     <c>where T : unmanaged</c>), and NumSharp's text dtypes — fixed-width <c>U</c> / <c>S</c> and
-    ///     <c>StringDType</c>, which share the <see cref="NPTypeCode.String"/> storage lane — have no such element type.
-    ///     So text never crosses: every export verb refuses every text array, of every class, width and layout, with a
-    ///     <see cref="NotSupportedException"/> before anything is read, leased or pinned, and no import verb can even be
-    ///     instantiated for <c>string</c>.
+    ///     Text and the System.Numerics.Tensors bridge's UNMANAGED verbs: <c>AsTensorSpan&lt;T&gt;</c> / <c>ToTensor&lt;T&gt;</c>
+    ///     are <c>where T : unmanaged</c>, and NumSharp's text dtypes — fixed-width <c>U</c> / <c>S</c> and
+    ///     <c>StringDType</c>, which share the <see cref="NPTypeCode.String"/> storage lane — have no such element type. So
+    ///     every unmanaged export verb refuses every text array, of every class, width and layout, with a
+    ///     <see cref="NotSupportedException"/> before anything is read, leased or pinned, naming text, the array's class and
+    ///     <c>ToStringTensor</c>, which copies text into a <c>Tensor&lt;string&gt;</c> (<c>TextCrossingTests</c>).
     /// </summary>
     /// <remarks>
-    ///     <para>WHICH text the refusal carries is an open bug
-    ///     (<see cref="TextExports_RefuseWithATextMessage_NotTheStorageLaneError"/>): the verbs hand the array's type code
-    ///     to the dtype map, whose parameter is a <see cref="DType"/>, and the implicit <c>NPTypeCode → DType</c> conversion
-    ///     throws Core's storage-lane error first ("… asked for a dtype by storage lane …"), which the ONNX Runtime and
-    ///     ML.NET bridges replaced with a text refusal on 2026-11-02 (<c>da1deae2</c>).</para>
+    ///     <para>The dtype map and the verbs throw ONE text (<c>NDArrayTensorsInterop.TextRefusal</c>), the ML.NET bridge's
+    ///     rule. The verbs used to hand the array's type code to the map, and the implicit <c>NPTypeCode → DType</c>
+    ///     conversion threw Core's storage-lane error first ("… asked for a dtype by storage lane …"), which told the caller
+    ///     to pass a dtype they never asked for and called a <c>StringDType</c> array fixed-width; the owner chose "Shared
+    ///     text refusal" on 2026-11-05.</para>
     ///     <para>NumSharp's 16-bit <see cref="NPTypeCode.Char"/> is NOT text and crosses as <see cref="char"/>
     ///     (<c>DtypeMapTests</c>); the 0-d and negative-stride cells prove the dtype refusal comes FIRST, before the layout
     ///     checks a numeric array of the same layout would meet.</para>
@@ -102,17 +102,13 @@ namespace NumSharp.Tests.Interop.Tensors
         }
 
         /// <summary>
-        ///     OPEN BUG (found by these tests, 2026-11-05): a text array's export refusal is Core's storage-lane conversion
-        ///     error — "This operation does not support fixed-width string arrays: it asked for a dtype by storage lane
-        ///     (NPTypeCode.String) … Use the array's own dtype (a.dtype), a dtype string such as 'U5' …" — because
-        ///     <c>EnsureElementType</c> passes the array's TYPE CODE to <c>ToTensorElementClrType(DType)</c> and the implicit
-        ///     conversion throws before the map's own refusal runs. The text tells the caller to pass a dtype they never
-        ///     asked for and calls a <c>StringDType</c> array fixed-width; the ONNX Runtime and ML.NET bridges answer text with
-        ///     their own refusal that names text (<c>da1deae2</c>). Expected: a refusal that names text (and the class the
-        ///     array is), never the storage lane.
+        ///     A text array's export refusal names TEXT, the array's own class — "a fixed-width text array (&lt;U5)", "a
+        ///     StringDType array (StringDType(na_object=None))", never calling a <c>StringDType</c> array fixed-width — and
+        ///     <c>ToStringTensor()</c>, the verb that copies it; never Core's storage-lane error ("… asked for a dtype by storage
+        ///     lane …"), which these verbs used to leak by handing the map the array's type code (fixed 2026-11-05, the owner's
+        ///     "Shared text refusal").
         /// </summary>
         [TestMethod]
-        [TestCategory("OpenBugs")]
         public void TextExports_RefuseWithATextMessage_NotTheStorageLaneError()
         {
             foreach (var (name, text) in TextArrays())
@@ -121,29 +117,43 @@ namespace NumSharp.Tests.Interop.Tensors
                 string message = call.Should().Throw<NotSupportedException>($"{name} / {verb}").Which.Message;
                 message.Should().NotContain("storage lane", $"{name} / {verb}: Core's storage-lane error leaked out");
                 message.Should().Contain("text", $"{name} / {verb}: the refusal names text");
+                message.Should().Contain("nd.ToStringTensor()", $"{name} / {verb}: the refusal names the verb that crosses text");
+                message.Should().Contain(text.dtype.kind == 'T' ? $"a StringDType array ({text.dtype})" : $"a fixed-width text array ({text.dtype.str})",
+                    $"{name} / {verb}: the refusal names the array's class");
                 if (text.dtype.kind == 'T')
                     message.Should().NotContain("fixed-width", $"{name} / {verb}: a StringDType array is not fixed-width");
             }
         }
 
         /// <summary>
-        ///     The dtype map's own refusal of a text DESCRIPTOR (<c>U5</c>, <c>S3</c>, <c>StringDType()</c>) — reached when a
-        ///     caller asks the map with the array's dtype — is "NumSharp dtype String has no CLR element type.", while
-        ///     NumSharp's 16-bit <see cref="NPTypeCode.Char"/> (a number, not text) maps to <see cref="char"/>.
+        ///     The dtype map refuses a text DESCRIPTOR (<c>U5</c>, <c>S3</c>, <c>StringDType()</c>) with the same text the verbs
+        ///     throw — the class and what <c>ToStringTensor()</c> does with it (copies; decodes an <c>S</c> array's bytes as
+        ///     UTF-8; turns a <c>StringDType</c> NA into null) — while NumSharp's 16-bit <see cref="NPTypeCode.Char"/> (a
+        ///     number, not text) maps to <see cref="char"/>.
         /// </summary>
         [TestMethod]
         public void DtypeMap_RefusesTextDescriptors_CharIsANumber()
         {
-            foreach (DType text in new[] { np.dtype("U5"), np.dtype("S3"), np.dtypes.StringDType() })
+            const string Head = "NumSharp text does not cross into System.Numerics.Tensors' unmanaged element types: ";
+            const string Mid = ", and the bridge maps the numeric and boolean dtypes to their own CLR types. nd.ToStringTensor() ";
+            var expected = new (DType Dtype, string Message)[]
+            {
+                (np.dtype("U5"), Head + "this is a fixed-width text array (<U5)" + Mid + "copies its texts into a Tensor<string>."),
+                (np.dtype("S3"), Head + "this is a fixed-width text array (|S3)" + Mid + "decodes its bytes as UTF-8 (np.strings.decode) into a Tensor<string>."),
+                (np.dtypes.StringDType(), Head + "this is a StringDType array (StringDType())" + Mid + "copies its texts into a Tensor<string>, an NA as null."),
+            };
+            foreach (var (text, message) in expected)
                 new Action(() => NDArrayTensorsInterop.ToTensorElementClrType(text)).Should().Throw<NotSupportedException>(text.ToString())
-                    .WithMessage("NumSharp dtype String has no CLR element type.");
+                    .Which.Message.Should().Be(message, text.ToString());
             NDArrayTensorsInterop.ToTensorElementClrType(NPTypeCode.Char).Should().Be(typeof(char), "NumSharp's char is a number, not text");
         }
 
         /// <summary>
-        ///     The import side cannot take text at all: every public verb that builds an NDArray from a BCL tensor or span is
-        ///     generic over <c>T : unmanaged</c>, so even reflection cannot instantiate one for <see cref="string"/> —
-        ///     <see cref="MethodInfo.MakeGenericMethod"/> refuses the constraint violation before any call.
+        ///     Text never reaches the GENERIC import verbs: every <c>ToNDArray&lt;T&gt;</c> / <c>AsNDArray&lt;T&gt;</c> is
+        ///     <c>where T : unmanaged</c>, so even reflection cannot instantiate one for <see cref="string"/> —
+        ///     <see cref="MethodInfo.MakeGenericMethod"/> refuses the constraint violation before any call. A
+        ///     <c>Tensor&lt;string&gt;</c> imports through the non-generic <c>ToNDArray</c> overloads instead (a copy into
+        ///     <c>StringDType</c>; <c>TextCrossingTests</c>), and there is no <c>AsNDArray</c> for it: no string can be viewed.
         /// </summary>
         [TestMethod]
         public void ImportVerbs_CannotBeInstantiatedForString()

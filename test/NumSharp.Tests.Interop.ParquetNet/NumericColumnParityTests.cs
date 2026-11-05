@@ -28,11 +28,11 @@ namespace NumSharp.Tests.Interop.ParquetNet
     ///     <para>The null policy is the bridge's own, and differs from numpy's view on purpose: pyarrow / pandas widen a
     ///     nullable integer to float64 with NaN and a nullable boolean to an object array with None, where the bridge keeps the
     ///     column's dtype and fills the nulls (<c>default(T)</c>, a custom fill, or a refusal under
-    ///     <see cref="NullHandling.Raise"/>). A fill value is held to numpy's <c>a[i] = fill</c> casting (the same answers as
-    ///     NumSharp's own <c>np.full(shape, fill, dtype)</c>).</para>
-    ///     <para>Pinned elsewhere in this class: two bridge defects (<c>[OpenBugs]</c> — the fill is converted for columns that
-    ///     hold no null, and converted with .NET's rules instead of numpy's) and three limits of Parquet.Net 6.1.0 or of the
-    ///     96-bit decimal (<c>[Misaligned]</c> — data page v2 booleans, float16 schemas, decimals past 28-29 digits).</para>
+    ///     <see cref="NullHandling.Raise"/>). A fill value is held to numpy's <c>a[i] = fill</c> casting (NumSharp's
+    ///     <c>PyArray_Pack</c> port), converted only where a null is.</para>
+    ///     <para>Pinned in this class: the limits of Parquet.Net 6.1.0 or of the 96-bit decimal (<c>[Misaligned]</c> — data
+    ///     page v2 booleans, DELTA_BINARY_PACKED int8 / uint8 / decimal, float16 schemas, decimals past 28-29 digits, the
+    ///     decimal's trailing zeros).</para>
     /// </remarks>
     [TestClass]
     public class NumericColumnParityTests
@@ -89,7 +89,7 @@ namespace NumSharp.Tests.Interop.ParquetNet
         /// <summary>The bridge's refusal of a column whose CLR type has no NumSharp dtype (the timestamp and the date).</summary>
         private const string NoDtype =
             "Parquet column '{0}' has type System.DateTime, which has no NumSharp dtype. " +
-            "Supported: bool, byte, sbyte, short, ushort, int, uint, long, ulong, float, double, decimal.";
+            "Supported: bool, byte, sbyte, short, ushort, int, uint, long, ulong, float, double, decimal, text and binary.";
 
         /// <summary>The absolute path of a committed fixture.</summary>
         /// <param name="name">The fixture's file name under <c>Fixtures/</c>.</param>
@@ -364,9 +364,10 @@ namespace NumSharp.Tests.Interop.ParquetNet
         /// <param name="NumpyFill">numpy's value for the fill in the column's dtype; <c>null</c> when numpy refuses the fill.</param>
         /// <param name="Refusal">
         ///     When numpy refuses, the exception the bridge must throw: <see cref="OverflowException"/> for numpy's
-        ///     <c>OverflowError</c>, or <see cref="Exception"/> when both refuse under different classes; <c>null</c> otherwise.
+        ///     <c>OverflowError</c>, <see cref="ValueError"/> for its <c>ValueError</c>; <c>null</c> otherwise.
         /// </param>
-        public readonly record struct FillCase(object Fill, string Column, object NumpyFill, Type Refusal);
+        /// <param name="Text">numpy's error text for a refusal (LP64 numpy 2.4.2's), or <c>null</c>.</param>
+        public readonly record struct FillCase(object Fill, string Column, object NumpyFill, Type Refusal, string Text = null);
 
         /// <summary>Reads <paramref name="c"/>'s column with its per-call fill and asserts numpy's answer.</summary>
         /// <param name="pf">The open default fixture.</param>
@@ -378,7 +379,10 @@ namespace NumSharp.Tests.Interop.ParquetNet
             if (c.Refusal != null)
             {
                 Action read = () => pf.Column(c.Column, c.Fill);
-                read.Should().Throw<Exception>(because).Which.Should().BeAssignableTo(c.Refusal, because);
+                Exception refusal = read.Should().Throw<Exception>(because).Which;
+                refusal.Should().BeAssignableTo(c.Refusal, because);
+                if (c.Text != null)
+                    refusal.Message.Should().Be(c.Text, because);
                 return;
             }
 
@@ -406,14 +410,14 @@ namespace NumSharp.Tests.Interop.ParquetNet
         }
 
         /// <summary>
-        ///     A fill value converts to the column's dtype as numpy's <c>a[i] = fill</c> converts it, wherever the bridge already
-        ///     agrees: a whole float or text into an integer, NaN / a negative / a fraction into a bool (all truthy), text into a
-        ///     float, <c>True</c> into a number, and an out-of-range value into uint8 refused as numpy's <c>OverflowError</c>
-        ///     (<c>-1</c>, <c>300</c>, and <c>-1.5</c>, which numpy truncates to <c>-1</c> before refusing). NaN or the text
-        ///     <c>'1.5'</c> into an integer is refused by both (numpy's <c>ValueError</c>; the bridge's overflow / format error).
+        ///     Every kind of fill converts to the column's dtype as numpy's <c>a[i] = fill</c> converts it: a whole float or text
+        ///     into an integer, NaN / a negative / a fraction into a bool (all truthy), text into a float, <c>True</c> into a
+        ///     number; NaN or the text <c>'1.5'</c> into an integer refused with numpy's <c>ValueError</c>, an out-of-range value
+        ///     into uint8 with numpy's <c>OverflowError</c> (<c>-1</c>, <c>300</c>, and <c>-1.5</c>, which numpy truncates to
+        ///     <c>-1</c> before refusing) — the classes and texts NumSharp's <c>PyArray_Pack</c> port raises.
         /// </summary>
         [TestMethod]
-        public void NullFill_ConvertsAsNumpysSetitem_WhereTheBridgeAgrees()
+        public void NullFill_EveryFillKind_ConvertsAsNumpysSetitem()
         {
             FillCase[] cases =
             {
@@ -421,12 +425,12 @@ namespace NumSharp.Tests.Interop.ParquetNet
                 new(-1L, "maybe_i64", -1L, null),
                 new("7", "maybe_i64", 7L, null),
                 new(true, "maybe_i64", 1L, null),
-                new(double.NaN, "maybe_i64", null, typeof(Exception)),
-                new("1.5", "maybe_i64", null, typeof(Exception)),
+                new(double.NaN, "maybe_i64", null, typeof(ValueError), "cannot convert float NaN to integer"),
+                new("1.5", "maybe_i64", null, typeof(ValueError), "invalid literal for int() with base 10: '1.5'"),
                 new("7", "maybe_u8", (byte)7, null),
-                new(-1L, "maybe_u8", null, typeof(OverflowException)),
-                new(300L, "maybe_u8", null, typeof(OverflowException)),
-                new(-1.5, "maybe_u8", null, typeof(OverflowException)),
+                new(-1L, "maybe_u8", null, typeof(OverflowException), "Python integer -1 out of bounds for uint8"),
+                new(300L, "maybe_u8", null, typeof(OverflowException), "Python integer 300 out of bounds for uint8"),
+                new(-1.5, "maybe_u8", null, typeof(OverflowException), "Python integer -1 out of bounds for uint8"),
                 new(double.NaN, "maybe_flag", true, null),
                 new(-1L, "maybe_flag", true, null),
                 new(1.5, "maybe_flag", true, null),
@@ -444,15 +448,14 @@ namespace NumSharp.Tests.Interop.ParquetNet
         }
 
         /// <summary>
-        ///     OPEN BUG: a fractional fill or a text fill converts by .NET's rules, not numpy's. <c>ParquetConvert.ResolveFill</c>
-        ///     converts with <see cref="Convert.ChangeType(object, Type, IFormatProvider)"/>, which ROUNDS a fraction into an
-        ///     integer (<c>1.5 → 2</c>, <c>0.7 → 1</c>, <c>-1.5 → -2</c>) and parses text as a .NET literal (<c>"7"</c> is no
-        ///     Boolean); numpy's <c>a[i] = fill</c> — and NumSharp's own <c>np.full(shape, fill, dtype)</c> — TRUNCATES toward zero
-        ///     (<c>1</c>, <c>0</c>, <c>-1</c>) and takes any non-empty text as <c>True</c>. The fix is to convert the fill through
-        ///     NumSharp's scalar cast (the one <c>np.full</c> applies) instead of <see cref="Convert"/>.
+        ///     A fractional fill or a text fill converts by numpy's rules: numpy's <c>a[i] = fill</c> TRUNCATES toward zero
+        ///     (<c>1.5 → 1</c>, <c>0.7 → 0</c>, <c>-1.5 → -1</c>) and takes any non-empty text as <c>True</c>.
+        ///     <c>ParquetConvert.ResolveFill</c> packs the fill with NumSharp's <c>PyArray_Pack</c> port; it used
+        ///     <see cref="Convert.ChangeType(object, Type, IFormatProvider)"/>, which ROUNDED a fraction (<c>1.5 → 2</c>) and
+        ///     parsed text as a .NET literal (<c>"7"</c> was no Boolean) — the owner's decision on 2026-11-05: "NumPy's
+        ///     a[i] = fill".
         /// </summary>
         [TestMethod]
-        [TestCategory("OpenBugs")]
         public void NullFill_FractionOrText_ConvertsAsNumpysSetitem()
         {
             FillCase[] cases =
@@ -470,16 +473,15 @@ namespace NumSharp.Tests.Interop.ParquetNet
         }
 
         /// <summary>
-        ///     OPEN BUG: a file-level fill that the column's dtype cannot hold breaks columns that have NO null to fill.
-        ///     <c>ParquetConvert</c> converts <see cref="ParquetLoadOptions.NullFill"/> to the column's type before it reads a
-        ///     value, for every column — so numpy's own NaN view of the float columns (<c>NullFill = double.NaN</c>) makes every
-        ///     integer and decimal column of the file unreadable (<see cref="OverflowException"/>), the REQUIRED ones included,
-        ///     the optional one that holds no null, and the columns of a zero-row file; a text fill (<c>"7"</c>) does the same to
-        ///     the required boolean (<see cref="FormatException"/>). A fill replaces nulls only: the fix is to convert it when the
-        ///     first null is met.
+        ///     A file-level fill that a column's dtype cannot hold leaves the columns WITHOUT nulls readable: numpy's own NaN
+        ///     view of the float columns (<c>NullFill = double.NaN</c>) keeps every integer and decimal column of the file
+        ///     readable — the REQUIRED ones, the optional one that holds no null, a zero-row file's — and a text fill
+        ///     (<c>"7"</c>) the required boolean. <c>ParquetConvert</c> converts the fill at the first null it meets; it used to
+        ///     convert it for every column before reading a value (<see cref="OverflowException"/> /
+        ///     <see cref="FormatException"/> on columns with nothing to fill) — the owner's decision on 2026-11-05: "At the
+        ///     first null".
         /// </summary>
         [TestMethod]
-        [TestCategory("OpenBugs")]
         public void NullFill_TheDtypeCannotHold_StillReadsColumnsWithoutNulls()
         {
             using (ParquetFile pf = ParquetFile.Load(Fixture(DefaultFile), new ParquetLoadOptions { NullFill = double.NaN }))

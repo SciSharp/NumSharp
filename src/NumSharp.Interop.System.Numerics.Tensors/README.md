@@ -22,6 +22,8 @@ dependency**. Referencing the package changes nothing until you call a verb.
 | `tensor.ToNDArray()` → `NDArray` | Tensors → NDArray | owning **copy** (the safe default) |
 | `tensor.AsNDArray()` → `NDArray` | Tensors → NDArray | **zero-copy** view over the pinned tensor backing store |
 | `span.ToNDArray()` | Tensors → NDArray | **copy** (a `ref struct` span cannot be leased) |
+| `nd.ToStringTensor()` → `Tensor<string>` | NDArray → Tensors | **copy** of a text array (`U`, `S` decoded as UTF-8, `StringDType`; an NA as `null`) |
+| `tensor.ToNDArray()` of `Tensor<string>` / a string span | Tensors → NDArray | **copy** into `StringDType(na_object=None)`, a `null` as the NA |
 
 ## Dtypes — all 15 cross as themselves
 
@@ -29,6 +31,13 @@ dependency**. Referencing the package changes nothing until you call a verb.
 zero-copy as its own CLR type — `bool`, the eight integers, `char`, **`System.Half`** (directly, no
 `Float16` wrapper), `float`, `double`, **`System.Decimal`** and **`System.Numerics.Complex`**. Nothing
 is refused and nothing is converted.
+
+## Text — always a copy
+
+NumSharp's text arrays (`U`, `S`, `StringDType`) are not an unmanaged element type, and a `Tensor<string>` holds managed
+strings, so no text can be shared in either direction: text crosses as a copy, `nd.ToStringTensor()` one way and
+`tensor.ToNDArray()` the other. `AsTensorSpan<T>()` / `ToTensor<T>()` refuse a text array with a message naming its class
+and `ToStringTensor()`.
 
 ## Layout — strided views share, negative strides copy
 
