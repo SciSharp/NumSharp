@@ -377,6 +377,8 @@ namespace NumSharp
         ///     stride on every axis that keeps its length, 0 on a stretched length-1 axis and on every prepended axis. When the
         ///     dimensions already agree it is <paramref name="from"/> itself (its strides and flags, WRITEABLE included); the
         ///     array form clears WRITEABLE on the result, this one does not.</returns>
+        /// <exception cref="ValueError">A dimension of <paramref name="against"/> is negative (<c>all elements of broadcast
+        ///     shape must be non-negative</c>), checked first.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="from"/> has more axes than <paramref name="against"/>,
         ///     or an axis of a length other than 1 differs from the target's (<c>operands could not be broadcast together with
         ///     remapped shapes [original->remapped]: (2,3) and requested shape (4,3)</c>), checked before any shape is
@@ -394,10 +396,19 @@ namespace NumSharp
         /// </summary>
         /// <param name="from">The source's shape; only its dimensions are read.</param>
         /// <param name="target">The requested shape; only its dimensions are read.</param>
+        /// <exception cref="ValueError">A dimension of <paramref name="target"/> is negative: NumPy's <c>all elements of
+        ///     broadcast shape must be non-negative</c>, checked first.</exception>
         /// <exception cref="IncorrectShapeException">The source does not broadcast to the target (the text names both
         ///     shapes' dimensions).</exception>
         private static void ValidateBroadcastTo(Shape from, Shape target)
         {
+            // _broadcast_to refuses a negative target dimension before it broadcasts anything (`if any(size < 0 for size in
+            // shape)`); a Shape accepts negatives (reshape's -1), and the stride-0 view built from one had a negative size
+            // that broke every later read (parity QA-13).
+            foreach (long d in target.dimensions)
+                if (d < 0)
+                    throw new ValueError("all elements of broadcast shape must be non-negative");
+
             if (from.NDim > target.NDim)
                 throw new IncorrectShapeException(
                     $"operands could not be broadcast together with remapped shapes " +

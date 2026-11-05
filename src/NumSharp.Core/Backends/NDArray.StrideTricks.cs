@@ -22,6 +22,8 @@ namespace NumSharp
         /// <returns>A new array over <paramref name="from"/>'s buffer, never writeable: several of its elements may be one
         ///     memory location, so a caller that writes must copy first (<c>.copy()</c>). It is a new object even when the
         ///     dimensions already agree, read-only all the same.</returns>
+        /// <exception cref="ValueError">A dimension of <paramref name="against"/> is negative (NumPy's <c>all elements of
+        ///     broadcast shape must be non-negative</c>), checked first.</exception>
         /// <exception cref="IncorrectShapeException">The source does not broadcast to the target one way
         ///     (<see cref="Shape.BroadcastTo"/>), checked before the view is built.</exception>
         /// <remarks>No numpy.matrix rule runs here: the result is a plain array whatever <paramref name="from"/>'s class,
@@ -38,6 +40,7 @@ namespace NumSharp
         ///     reference on the buffer.</param>
         /// <param name="against">The target; only its dimensions are read.</param>
         /// <returns>A new read-only view; see <see cref="broadcast_to(UnmanagedStorage, Shape)"/>.</returns>
+        /// <exception cref="ValueError">A dimension of <paramref name="against"/> is negative.</exception>
         /// <exception cref="IncorrectShapeException">The source does not broadcast to the target one way.</exception>
         internal static NDArray broadcast_to(NDArray from, Shape against) => broadcast_to(from.Storage, against);
 

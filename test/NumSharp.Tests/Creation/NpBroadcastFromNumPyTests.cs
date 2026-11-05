@@ -2013,6 +2013,38 @@ namespace NumSharp.Tests.Creation
                         $"N-arg[{r},{c}] should equal 2-arg[{r},{c}]={via2arg.GetInt64(r, c)}");
         }
 
+        #region Negative target dimensions (parity QA-13)
+
+        /// <summary>
+        ///     np.broadcast_to refuses a negative target dimension before broadcasting, with NumPy's own text
+        ///     (<c>_broadcast_to</c>: <c>all elements of broadcast shape must be non-negative</c>), through every overload
+        ///     whose target is a caller's Shape; it built a stride-0 view of negative size before (parity QA-13).
+        ///     np.broadcast_shapes keeps NumPy's <c>negative dimensions are not allowed</c>, and a valid target still views.
+        /// </summary>
+        [TestMethod]
+        public void BroadcastTo_NegativeTargetDimension_RaisesNumPysValueError()
+        {
+            using var a = np.arange(3);
+            const string text = "all elements of broadcast shape must be non-negative";
+
+            foreach (Action act in new Action[]
+                     {
+                         () => np.broadcast_to(a, new Shape(-1, 3)).Dispose(),
+                         () => np.broadcast_to(a, new Shape(3, -2)).Dispose(),
+                         () => np.broadcast_to(a.Storage, new Shape(-1, 3)).Dispose(),
+                         () => np.broadcast_to(a.Shape, new Shape(-1, 3)),
+                         () => np.broadcast_to(np.ones(new Shape(2, 3)), new Shape(-1)).Dispose(),
+                     })
+                act.Should().Throw<ValueError>().WithMessage(text);
+
+            Action shapes = () => np.broadcast_shapes(new Shape(-1, 3), new Shape(3));
+            shapes.Should().Throw<ValueError>().WithMessage("negative dimensions are not allowed");
+            using var ok = np.broadcast_to(a, new Shape(2, 3));
+            ok.shape.Should().Equal(2L, 3L);
+        }
+
+        #endregion
+
         #endregion
     }
 }

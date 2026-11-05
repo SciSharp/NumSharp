@@ -63,7 +63,9 @@ A view keeps its source's engine (`UnmanagedStorage.Engine`: `Alias`, the new-st
 - `Slice` (`View/Slice.cs`) parses Python notation (`"1:5:2"`) into `Start` / `Stop` / `Step`; `SliceDef` holds the
   absolute indices, and `SliceDef.Merge()` composes a slice of a slice. Special instances: `Slice.All` (`:`),
   `Slice.Ellipsis` (`...`, fills the missing dimensions), `Slice.NewAxis` (inserts a dimension), `Slice.Index(n)` (one
-  element; the dimension is dropped).
+  element; the dimension is dropped). A zero step is legal to BUILD (`new Slice(0, 5, 0)`, `np.s_["::0"]`, as Python's
+  `slice`) and refused when USED: `Slice.ToSliceDef`, which every getter, setter and view resolves through, raises NumPy's
+  `ValueError: slice step cannot be zero` (`PySlice_Unpack`; gate `View/Slice.Tests.cs`).
 - Broadcasting aligns shapes from the right; each dimension pair must be equal or contain a 1, which stretches.
   `DefaultEngine.Broadcast` (`Backends/Default/ArrayManipulation/Default.Broadcasting.cs`) resolves the shapes.
 - `np.broadcast_to` views are always read-only. `np.broadcast_arrays` is NumPy 2.4.2's

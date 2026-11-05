@@ -139,5 +139,48 @@ namespace NumSharp.Tests.View
             new Slice(":-6:-1").ToSliceDef(10).Should().Be(new SliceDef("(9>>-1*5)"));
         }
 
+        /// <summary>
+        ///     A zero step is NumPy's <c>ValueError: slice step cannot be zero</c> (<c>PySlice_Unpack</c>) wherever the slice
+        ///     is USED — a read through the string parser, a <see cref="Slice"/> object, an <c>np.s_</c> expression, a 2-D
+        ///     axis — while building the slice stays legal, as Python's <c>slice(0, 5, 0)</c> / <c>np.s_[::0]</c> are (parity
+        ///     QA-01; the step used to resolve to an empty selection, so <c>a[::0]</c> was an empty view).
+        /// </summary>
+        [TestMethod]
+        public void ZeroStep_RaisesWhenIndexing_BuildingIsLegal()
+        {
+            using var a = np.arange(10);
+            using var m = np.arange(6).reshape(2, 3);
+            var built = new Slice(0, 5, 0);
+            var sexpr = np.s_["::0"];
+
+            built.Step.Should().Be(0);
+            sexpr.Length.Should().Be(1);
+            foreach (Action read in new Action[]
+                     {
+                         () => a["::0"].Dispose(),
+                         () => a["1:8:0"].Dispose(),
+                         () => a[built].Dispose(),
+                         () => a[sexpr].Dispose(),
+                         () => m[":, ::0"].Dispose(),
+                     })
+                read.Should().Throw<ValueError>().WithMessage("slice step cannot be zero");
+            Action resolve = () => built.ToSliceDef(10);
+            resolve.Should().Throw<ValueError>().WithMessage("slice step cannot be zero");
+        }
+
+        /// <summary>
+        ///     A zero-step WRITE raises the same ValueError before anything is written (it used to return normally and drop
+        ///     the assignment silently).
+        /// </summary>
+        [TestMethod]
+        public void ZeroStep_Set_RaisesBeforeWriting()
+        {
+            using var a = np.arange(10);
+
+            Action act = () => a["1:8:0"] = 5;
+
+            act.Should().Throw<ValueError>().WithMessage("slice step cannot be zero");
+            a.ToArray<long>().Should().Equal(0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L);
+        }
     }
 }

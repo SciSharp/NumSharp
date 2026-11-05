@@ -2089,16 +2089,27 @@ namespace NumSharp.Backends
                 int firstTrue = tail.IndexOfAnyExcept((byte)0);
                 if (firstTrue >= 0)
                 {
-                    if (axisSize == 0)
+                    // PyArray_TakeFrom refuses a take from an empty axis up front only when its RESULT is non-empty
+                    // (`max_item == 0 && PyArray_SIZE(obj) != 0`): outer x count x inner, and count >= 1 here.
+                    if (axisSize == 0 && outerSize != 0 && innerCount != 0)
                         throw new IndexOutOfRangeException("cannot do a non-empty take from an empty axes.");
-                    int axisNumber = a.ndim == 0 || axis is null ? 0 : (axis.Value < 0 ? axis.Value + a.ndim : axis.Value);
-                    throw new IndexOutOfRangeException(
-                        $"index {axisSize + firstTrue} is out of bounds for axis {axisNumber} with size {axisSize}");
+                    // It checks each INDEX inside its loop over the extents before the axis (npy_fasttake: n passes, n =
+                    // their product), so when one of them is 0 the loop never runs and NumPy accepts a True past the axis
+                    // end, returning the empty result (parity QA-11; np.take already follows that loop). With n > 0 the
+                    // first True at or past the end is the first index it refuses (an empty inner extent included).
+                    if (outerSize != 0)
+                    {
+                        int axisNumber = a.ndim == 0 || axis is null ? 0 : (axis.Value < 0 ? axis.Value + a.ndim : axis.Value);
+                        throw new IndexOutOfRangeException(
+                            $"index {axisSize + firstTrue} is out of bounds for axis {axisNumber} with size {axisSize}");
+                    }
                 }
             }
 
-            // Pass 1: popcount mask over the effective scan range.
-            long count = countKernel(maskPtr, effectiveScan);
+            // Pass 1: popcount mask over the effective scan range. With an empty outer extent NumPy's result still takes
+            // every True of the condition on the axis (the nonzero indices, past-the-end ones included), so the count
+            // then scans the whole mask; nothing is copied either way.
+            long count = countKernel(maskPtr, outerSize == 0 ? maskSize : effectiveScan);
 
             // Build output shape: axis dim → count. For axis=None / 0-d, shape is (count,).
             if (a.ndim == 0 || axis is null)

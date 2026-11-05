@@ -843,6 +843,33 @@ public class SelectionTests
     // np.compress — validates 1-D, delegates to flatnonzero + take(axis)
     // =================================================================
 
+    /// <summary>
+    ///     np.compress is take(a, nonzero(condition), axis), and PyArray_TakeFrom checks each index inside its loop over the
+    ///     extents BEFORE the axis: with one of them 0 the loop never runs, so a True past the axis end is accepted and the
+    ///     empty result keeps every True on the axis (parity QA-11; it threw IndexOutOfRangeException). NumPy 2.4.2's
+    ///     answers, the refusals included: "cannot do a non-empty take from an empty axes" only when the RESULT is
+    ///     non-empty, and the first out-of-bounds index once the outer loop runs (an empty inner extent included).
+    /// </summary>
+    [TestMethod]
+    public void Compress_EmptyOuterExtent_AcceptsALongCondition_AsNumPysTakeLoop()
+    {
+        using var cond = np.array(new[] { true, false, true });
+
+        np.compress(cond, np.zeros(new Shape(0, 2)), axis: 1).shape.Should().Equal(0L, 2L);
+        np.compress(cond, np.zeros(new Shape(1, 0, 2)), axis: -1).shape.Should().Equal(1L, 0L, 2L);
+        np.compress(np.array(new[] { true }), np.zeros(new Shape(0, 0)), axis: 1).shape.Should().Equal(0L, 1L);
+        np.compress(np.array(new[] { false, false, true }), np.zeros(new Shape(0, 2)), axis: 1).shape.Should().Equal(0L, 1L);
+
+        Action outerRuns = () => np.compress(cond, np.zeros(new Shape(1, 2)), axis: 1);
+        outerRuns.Should().Throw<IndexOutOfRangeException>().WithMessage("index 2 is out of bounds for axis 1 with size 2");
+        Action emptyAxisNonEmptyResult = () => np.compress(np.array(new[] { false, true }), np.zeros(new Shape(2, 0)), axis: 1);
+        emptyAxisNonEmptyResult.Should().Throw<IndexOutOfRangeException>().WithMessage("cannot do a non-empty take from an empty axes.");
+        Action emptyInner = () => np.compress(np.array(new[] { true }), np.zeros(new Shape(2, 0, 0)), axis: 1);
+        emptyInner.Should().Throw<IndexOutOfRangeException>().WithMessage("index 0 is out of bounds for axis 1 with size 0");
+        Action flatEmpty = () => np.compress(np.array(new[] { true, true }), np.zeros(new Shape(0)), axis: null);
+        flatEmpty.Should().Throw<IndexOutOfRangeException>().WithMessage("cannot do a non-empty take from an empty axes.");
+    }
+
     [TestMethod]
     public void Compress_Axis0_IntCondition()
     {

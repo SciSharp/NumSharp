@@ -173,6 +173,11 @@ Every store entry point packs a C# literal as NumPy's `PyArray_Pack` of a Python
 
 ## `take` / `put` / `place` / `putmask`
 
+- `np.compress(condition, a, axis)` is `take(a, nonzero(condition), axis)` with `PyArray_TakeFrom`'s checks in its order
+  (`UnmanagedStorage.ItemSelection.cs`): a take from an empty axis is refused (`cannot do a non-empty take from an empty
+  axes.`) only when the RESULT is non-empty, and each index is checked inside the loop over the extents BEFORE the axis,
+  so with one of them 0 a True past the axis end is accepted and the empty result keeps every True on the axis (parity
+  QA-11; gate `Indexing/SelectionTests.cs`, `Compress_EmptyOuterExtent_*`).
 - `np.put` / `np.take` are NumPy's `PyArray_PutTo` / `PyArray_TakeFrom`, statement for statement
   (`Indexing/np.{put,take}.cs`, `Indexing/ClipModes.cs`; gates `Indexing/np.put.take.NumPyPort.Test.cs`, the `ma_put`
   tier and the aliasing tier's `put_selfvals` / `put_selfidx`, where the values or indices are a view of the target):

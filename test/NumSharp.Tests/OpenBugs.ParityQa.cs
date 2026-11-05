@@ -21,69 +21,6 @@ namespace NumSharp.Tests
     public partial class OpenBugs
     {
         // ------------------------------------------------------------------
-        // QA-01 — a slice with step 0 selects nothing instead of raising
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     <c>a[::0]</c> is NumPy's <c>ValueError: slice step cannot be zero</c> (<c>PySlice_Unpack</c>), for a read and a
-        ///     write alike. NumSharp's <c>Slice.ToSliceDef</c> (View/Slice.cs) answers a zero step with an EMPTY selection,
-        ///     so the read silently returns a zero-length view and hides the caller's mistake.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA01")]
-        public void ParityQa_Slice_ZeroStep_Get_ShouldRaiseValueError()
-        {
-            using var a = np.arange(10);
-
-            Action stringSlice = () => a["::0"].Dispose();
-            Action sliceObject = () => a[new Slice(0, 5, 0)].Dispose();
-
-            stringSlice.Should().Throw<ValueError>().WithMessage("slice step cannot be zero");
-            sliceObject.Should().Throw<ValueError>().WithMessage("slice step cannot be zero");
-        }
-
-        /// <summary>
-        ///     <c>a[1:8:0] = 5</c> raises NumPy's <c>ValueError: slice step cannot be zero</c> before anything is written.
-        ///     NumSharp's setter resolves the zero step to an empty selection and returns normally, so the assignment is
-        ///     silently dropped (the array keeps every old value and the caller is never told).
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA01")]
-        public void ParityQa_Slice_ZeroStep_Set_ShouldRaiseValueError()
-        {
-            using var a = np.arange(10);
-
-            Action act = () => a["1:8:0"] = 5;
-
-            act.Should().Throw<ValueError>().WithMessage("slice step cannot be zero");
-        }
-
-        // ------------------------------------------------------------------
-        // QA-02 — np.nonzero of a 0-d numeric array answers instead of raising
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     NumPy 2.4.2 refuses <c>np.nonzero(np.array(5))</c> and <c>np.array(5).nonzero()</c> with
-        ///     <c>ValueError: Calling nonzero on 0d arrays is not allowed. Use np.atleast_1d(scalar).nonzero() instead.</c>
-        ///     (the 1.17 deprecation became an error in 2.1). NumSharp returns <c>(array([0]),)</c>: on purpose, per the
-        ///     comment in <c>DefaultEngine.NonZero</c> (Backends/Default/Indexing/Default.NonZero.cs: "preserve that semantic,
-        ///     otherwise this becomes a breaking-change PR"), while the text dtypes, <c>NDListArray</c> and numpy.ma already
-        ///     raise NumPy's error. The project's principle 4 accepts breaking changes that align with NumPy 2.x, so the owner
-        ///     decides whether the numeric dtypes follow.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA02")]
-        public void ParityQa_Nonzero_ZeroDimNumeric_ShouldRaiseValueError()
-        {
-            using var five = np.array(5);
-            using var zero = np.array(0.0);
-
-            Action function = () => np.nonzero(five);
-            Action member = () => zero.nonzero();
-
-            const string text = "Calling nonzero on 0d arrays is not allowed. Use np.atleast_1d(scalar).nonzero() instead.";
-            function.Should().Throw<ValueError>().WithMessage(text);
-            member.Should().Throw<ValueError>().WithMessage(text);
-        }
-
-        // ------------------------------------------------------------------
         // QA-03 — np.tril / np.triu of a 0-d array raise the wrong exception type
         // ------------------------------------------------------------------
 
@@ -203,50 +140,6 @@ namespace NumSharp.Tests
 
             signedResult.dtype.Should().Be(np.int64);
             unsignedResult.dtype.Should().Be(np.uint64);
-        }
-
-        // ------------------------------------------------------------------
-        // QA-11 — np.compress checks a too-long condition even when an earlier axis is empty
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     <c>np.compress([True, False, True], np.zeros((0, 2)), axis=1)</c> returns an empty <c>(0, 2)</c> array in NumPy:
-        ///     compress is <c>take(a, nonzero(condition), axis)</c>, and <c>PyArray_TakeFrom</c> validates each index inside a
-        ///     loop over the dimensions BEFORE the axis, which runs zero times when one of them is 0 (NumSharp's own
-        ///     <c>np.take</c> already follows that). NumSharp's compress checks the condition's tail first
-        ///     (<c>UnmanagedStorage.ItemSelection.cs</c>, "OOB-True detection") and throws
-        ///     <see cref="IndexOutOfRangeException"/> "index 2 is out of bounds for axis 1 with size 2".
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA11")]
-        public void ParityQa_Compress_EmptyLeadingAxis_LongCondition_ShouldReturnEmpty()
-        {
-            using var cond = np.array(new[] { true, false, true });
-            using var a = np.zeros(new Shape(0, 2));
-
-            using var r = np.compress(cond, a, axis: 1);
-
-            r.shape.Should().Equal(0L, 2L);
-        }
-
-        // ------------------------------------------------------------------
-        // QA-13 — np.broadcast_to accepts a negative target dimension
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     <c>np.broadcast_to(np.arange(3), (-1, 3))</c> is NumPy's <c>ValueError: all elements of broadcast shape must be
-        ///     non-negative</c>. NumSharp returns an array of shape <c>(-1, 3)</c> and size -3: <c>np.sum</c> of it answers 0,
-        ///     its <c>ToString()</c> throws an IndexError ("index -2 is out of bounds for axis 0 with size -1"), its copy throws
-        ///     "negative dimensions are not allowed", and <c>np.broadcast_arrays</c> hands the negative shape on to its other
-        ///     operand. <c>Shape</c>'s constructor does not validate (only allocation does), and broadcast_to builds a view.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA13")]
-        public void ParityQa_BroadcastTo_NegativeDimension_ShouldRaiseValueError()
-        {
-            using var a = np.arange(3);
-
-            Action act = () => np.broadcast_to(a, new Shape(-1, 3)).Dispose();
-
-            act.Should().Throw<ValueError>().WithMessage("all elements of broadcast shape must be non-negative");
         }
 
         // ------------------------------------------------------------------

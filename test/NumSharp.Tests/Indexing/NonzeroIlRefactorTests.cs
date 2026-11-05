@@ -171,58 +171,94 @@ public class NonzeroIlRefactorTests
         ColumnAsLongs(np.nonzero(a)[0]).Should().Equal(1L, 3L, 4L);
     }
 
-    // ── 0-D special case — atleast_1d promotion + recursion ─────────────
+    // ── 0-D: NumPy 2.x's ValueError for every dtype (parity QA-02) ─────────────
+    // The numeric dtypes used to answer like np.atleast_1d(a).nonzero(); the owner chose NumPy's refusal (principle 4).
+    // Each test pins the refusal and the migration NumPy's message names, so the old per-dtype answers stay covered.
 
+    /// <summary>NumPy 2.4.2's refusal text for a 0-d nonzero.</summary>
+    private const string ZeroDText = "Calling nonzero on 0d arrays is not allowed. Use np.atleast_1d(scalar).nonzero() instead.";
+
+    /// <summary>A truthy int 0-d raises NumPy's ValueError; its atleast_1d form gives <c>(array([0]),)</c>.</summary>
     [TestMethod]
-    public void Refactor_0d_TruthyInt_ReturnsSingleZero()
+    public void Refactor_0d_TruthyInt_RaisesNumPysValueError()
     {
-        // NumPy 2.4 raises ValueError on bare 0-d nonzero, but its error
-        // message recommends `np.atleast_1d(scalar).nonzero()` — which
-        // returns `(array([0]),)` for any truthy 0-d input. We preserve
-        // that semantic (the historical NumSharp behaviour).
         var s = NDArray.Scalar(5);
-        var r = np.nonzero(s);
+        Action act = () => np.nonzero(s);
+        act.Should().Throw<ValueError>().WithMessage(ZeroDText);
+        var r = np.nonzero(np.atleast_1d(s));
         r.Length.Should().Be(1);
         ColumnAsLongs(r[0]).Should().Equal(0L);
     }
 
+    /// <summary>A falsy int 0-d raises; its atleast_1d form gives one empty index array.</summary>
     [TestMethod]
-    public void Refactor_0d_FalsyInt_ReturnsEmpty()
+    public void Refactor_0d_FalsyInt_RaisesNumPysValueError()
     {
         var s = NDArray.Scalar(0);
-        var r = np.nonzero(s);
+        Action act = () => np.nonzero(s);
+        act.Should().Throw<ValueError>().WithMessage(ZeroDText);
+        var r = np.nonzero(np.atleast_1d(s));
         r.Length.Should().Be(1);
         r[0].size.Should().Be(0);
     }
 
+    /// <summary>A truthy bool 0-d raises (through ndarray.nonzero too); atleast_1d gives <c>[0]</c>.</summary>
     [TestMethod]
-    public void Refactor_0d_TruthyBool()
+    public void Refactor_0d_TruthyBool_RaisesNumPysValueError()
     {
         var s = NDArray.Scalar(true);
-        ColumnAsLongs(np.nonzero(s)[0]).Should().Equal(0L);
+        Action function = () => np.nonzero(s);
+        Action member = () => s.nonzero();
+        function.Should().Throw<ValueError>().WithMessage(ZeroDText);
+        member.Should().Throw<ValueError>().WithMessage(ZeroDText);
+        ColumnAsLongs(np.nonzero(np.atleast_1d(s))[0]).Should().Equal(0L);
     }
 
+    /// <summary>A falsy bool 0-d raises; atleast_1d gives an empty index.</summary>
     [TestMethod]
-    public void Refactor_0d_FalsyBool()
+    public void Refactor_0d_FalsyBool_RaisesNumPysValueError()
     {
         var s = NDArray.Scalar(false);
-        np.nonzero(s)[0].size.Should().Be(0);
+        Action act = () => np.nonzero(s);
+        act.Should().Throw<ValueError>().WithMessage(ZeroDText);
+        np.nonzero(np.atleast_1d(s))[0].size.Should().Be(0);
     }
 
+    /// <summary>A decimal 0-d raises before its element is read; atleast_1d takes the decimal scan (<c>[0]</c>).</summary>
     [TestMethod]
-    public void Refactor_0d_TruthyDecimal_UsesScalarPath()
+    public void Refactor_0d_TruthyDecimal_RaisesNumPysValueError()
     {
-        // Decimal 0-d exercises the scalar op_Inequality branch.
         var s = NDArray.Scalar(1.5m);
-        ColumnAsLongs(np.nonzero(s)[0]).Should().Equal(0L);
+        Action act = () => np.nonzero(s);
+        act.Should().Throw<ValueError>().WithMessage(ZeroDText);
+        ColumnAsLongs(np.nonzero(np.atleast_1d(s))[0]).Should().Equal(0L);
     }
 
+    /// <summary>A NaN 0-d raises; atleast_1d counts the NaN as non-zero (IEEE: NaN != 0).</summary>
     [TestMethod]
-    public void Refactor_0d_NaN_IsTruthy()
+    public void Refactor_0d_NaN_RaisesNumPysValueError()
     {
-        // NaN ≠ 0.0 under IEEE 754 — must count as non-zero.
         var s = NDArray.Scalar(double.NaN);
-        ColumnAsLongs(np.nonzero(s)[0]).Should().Equal(0L);
+        Action act = () => np.nonzero(s);
+        act.Should().Throw<ValueError>().WithMessage(ZeroDText);
+        ColumnAsLongs(np.nonzero(np.atleast_1d(s))[0]).Should().Equal(0L);
+    }
+
+    /// <summary>
+    ///     Single-argument <c>np.where(cond)</c> is <c>nonzero(cond)</c> in NumPy, so a 0-d condition raises the same
+    ///     ValueError; <c>np.argwhere</c> keeps NumPy's own atleast_1d branch (<c>(1, 0)</c> / <c>(0, 0)</c>), and a 0-d
+    ///     boolean INDEX is not a nonzero call at all (<c>a[np.array(True)]</c> adds a length-1 axis).
+    /// </summary>
+    [TestMethod]
+    public void Refactor_0d_WhereRaises_ArgwhereAndBoolIndexDoNot()
+    {
+        Action where = () => np.where(np.array(5));
+        where.Should().Throw<ValueError>().WithMessage(ZeroDText);
+        np.argwhere(np.array(5)).shape.Should().Equal(1L, 0L);
+        np.argwhere(np.array(0)).shape.Should().Equal(0L, 0L);
+        var a = np.arange(3);
+        a[np.array(true)].shape.Should().Equal(1L, 3L);
+        a[np.array(false)].shape.Should().Equal(0L, 3L);
     }
 
     // ── Multi-SIMD-chunk arrays — exercise the SIMD body, not just the tail ─

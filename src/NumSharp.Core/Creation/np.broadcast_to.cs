@@ -12,6 +12,8 @@ namespace NumSharp
         /// <param name="against">The shape that'll be used to broadcast <paramref name="from"/> shape</param>
         /// <returns>A readonly view on the original array with the given shape. It is typically not contiguous. Furthermore, more than one element of a broadcasted array may refer to a single memory location.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.broadcast_to.html</remarks>
+        /// <exception cref="ValueError">A dimension of <paramref name="against"/> is negative: NumPy's <c>all elements of
+        ///     broadcast shape must be non-negative</c>, raised before the broadcast check.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="from"/> does not broadcast to
         ///     <paramref name="against"/> one way: it has more axes, or an axis of a length other than 1 that differs
         ///     from the target's.</exception>
@@ -27,6 +29,8 @@ namespace NumSharp
         /// <param name="against">The shape to broadcast against.</param>
         /// <returns>These arrays are views on the original arrays. They are typically not contiguous. Furthermore, more than one element of a broadcasted array may refer to a single memory location. If you need to write to the arrays, make copies first.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.broadcast_to.html</remarks>
+        /// <exception cref="ValueError">A dimension of <paramref name="against"/> is negative: NumPy's <c>all elements of
+        ///     broadcast shape must be non-negative</c>, raised before the broadcast check.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="from"/> does not broadcast to
         ///     <paramref name="against"/> one way: it has more axes, or an axis of a length other than 1 that differs
         ///     from the target's.</exception>
@@ -42,6 +46,8 @@ namespace NumSharp
         /// <param name="against">The shape to broadcast against.</param>
         /// <returns>These arrays are views on the original arrays. They are typically not contiguous. Furthermore, more than one element of a broadcasted array may refer to a single memory location. If you need to write to the arrays, make copies first.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.broadcast_to.html</remarks>
+        /// <exception cref="ValueError">A dimension of <paramref name="against"/> is negative: NumPy's <c>all elements of
+        ///     broadcast shape must be non-negative</c>, raised before the broadcast check.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="from"/> does not broadcast to
         ///     <paramref name="against"/> one way: it has more axes, or an axis of a length other than 1 that differs
         ///     from the target's.</exception>

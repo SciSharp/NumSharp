@@ -401,10 +401,15 @@ namespace NumSharp
         }
 
         /// <summary>
-        /// Converts the user Slice into an internal SliceDef which is easier to calculate with
+        /// Converts the user Slice into an internal SliceDef which is easier to calculate with: the start, step and
+        /// count resolved against one axis of length <paramref name="dim"/> (negative bounds counted from the end, bounds
+        /// clamped as Python's <c>slice.indices</c> does). Every indexing route (getters, setters, views) passes through
+        /// here, which is why a zero step is refused HERE and not when the Slice is built.
         /// </summary>
-        /// <param name="dim"></param>
-        /// <returns></returns>
+        /// <param name="dim">The length of the axis the slice indexes.</param>
+        /// <returns>The resolved slice; an empty one when the bounds select nothing; an index SliceDef for an integer.</returns>
+        /// <exception cref="ArgumentException">An integer index outside the axis.</exception>
+        /// <exception cref="ValueError">The step is 0: NumPy's <c>slice step cannot be zero</c>.</exception>
         [MethodImpl(OptimizeAndInline)]
         public SliceDef ToSliceDef(long dim)
         {
@@ -423,8 +428,11 @@ namespace NumSharp
                 return new SliceDef(index);
             }
 
+            // PySlice_Unpack: a zero step is refused when the slice is USED to index (a get, a set, a view) — building
+            // slice(0, 5, 0) / np.s_[::0] is legal Python, so the Slice constructor and the parser keep accepting it
+            // (parity QA-01; this returned an empty slice, so a[::0] was an empty view and a[::0] = v wrote nothing).
             if (Step == 0)
-                return new SliceDef() {Count = 0, Start = 0, Step = 0};
+                throw new ValueError("slice step cannot be zero");
             var astep = Math.Abs(Step);
             if (Step > 0)
             {

@@ -43,6 +43,14 @@ sort):
 - np.unique's argsort-and-gather routes run on it (`unique.md`). Gate `Sorting/np.argsort.HalfComplex.Test.cs` (NumPy's
   stable indices under every kind, past the insertion thresholds).
 
+## `np.nonzero` of a 0-d array
+
+`np.nonzero` / `ndarray.nonzero` / single-argument `np.where` of a 0-d array raise NumPy 2.4.2's `ValueError: Calling
+nonzero on 0d arrays is not allowed. Use np.atleast_1d(scalar).nonzero() instead.` for every dtype, before reading the
+element (`DefaultEngine.NonZero`; parity QA-02, breaking: the numeric dtypes answered like `atleast_1d(a).nonzero()`).
+`np.argwhere` keeps NumPy's own atleast_1d branch, and a 0-d boolean INDEX (`a[np.array(True)]`) is not a nonzero call.
+Gate: `Indexing/NonzeroIlRefactorTests.cs` (`Refactor_0d_*`).
+
 ## `np.argwhere` / `np.flatnonzero`
 
 Both return views of one buffer, as NumPy's do (`Backends/Default/Indexing/Default.{Argwhere,FlatNonZero}.cs`):

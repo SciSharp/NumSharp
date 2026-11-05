@@ -327,6 +327,10 @@ Ported from NumPy's C (gates `Backends/AllocationGuardTests.cs`, `Manipulation/R
 - Text divergences (each typed and texted on both sides): `np.split(a, 0)` raises "number sections must be
   larger than 0." where NumPy leaks `ZeroDivisionError: integer modulo by zero`; `repeat(-1)` and `tile(-1)` texts
   differ in wording; `np.broadcast_to(a, (2^62, 6))` builds the view where NumPy refuses with `iterator is too large`.
+- `np.broadcast_to` refuses a negative target dimension first, with NumPy's `ValueError: all elements of broadcast shape
+  must be non-negative` (`Shape.ValidateBroadcastTo`, behind every overload; parity QA-13): a `Shape` accepts negatives
+  (reshape's -1), and the stride-0 view built from one had a negative size. `np.broadcast_shapes` keeps NumPy's
+  `negative dimensions are not allowed`. Gate: `Creation/NpBroadcastFromNumPyTests.cs`.
   The axis errors of this family (`split(..., axis=oob)`'s leaked `IndexError`, `squeeze`) are NumPy's
   (`axis-arguments.md`).
 

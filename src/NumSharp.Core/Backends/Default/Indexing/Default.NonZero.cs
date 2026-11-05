@@ -40,8 +40,8 @@ namespace NumSharp.Backends
         ///     <para>
         ///     Routing:
         ///     <list type="bullet">
-        ///       <item>0-d → promote via <c>atleast_1d</c>, recurse
-        ///             (truthy→<c>([0],)</c>, falsy→<c>([],)</c>).</item>
+        ///       <item>0-d → NumPy 2.x's ValueError, every dtype (parity QA-02: the numeric dtypes used to answer like
+        ///             <c>atleast_1d(a).nonzero()</c>, which NumPy's message points callers to).</item>
         ///       <item>size == 0 → tuple of <c>ndim</c> empty int64 arrays.</item>
         ///       <item>Contiguous → IL count + IL flat-scan + (ndim==1 ? direct write : IL per-dim expand).</item>
         ///       <item>Non-contiguous → materialize via <c>ascontiguousarray</c> then
@@ -51,8 +51,9 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="nd">The array.</param>
         /// <returns>One int64 index array per dimension.</returns>
-        /// <exception cref="ValueError">A 0-d string array (NumPy's <c>Calling nonzero on 0d arrays is not allowed</c>, raised
-        ///     before the element is read).</exception>
+        /// <exception cref="ValueError">A 0-d array of any dtype: NumPy's <c>Calling nonzero on 0d arrays is not allowed. Use
+        ///     np.atleast_1d(scalar).nonzero() instead.</c>, raised before the element is read (single-argument
+        ///     <c>np.where</c> inherits it).</exception>
         /// <remarks>A string array of at least one dimension is searched by its truth values (a non-empty string is True;
         ///     the nonzero route never raises).</remarks>
         [NDScoped]
@@ -70,12 +71,11 @@ namespace NumSharp.Backends
             // matrix (and the 0-d promotion view) are reclaimed at exit — ARC keeps the buffer
             // alive through the yielded views until the caller releases them.
 
-            // 0-d: NumPy 2.4 raises ValueError, but its own error message suggests
-            // `np.atleast_1d(scalar).nonzero()`, which is exactly the result our
-            // historical implementation has always produced. Preserve that semantic
-            // (otherwise this becomes a breaking-change PR for downstream callers).
+            // 0-d: NumPy 2.4.2 refuses for every dtype, before reading the element. The numeric dtypes used to answer like np.atleast_1d(a).nonzero() to spare
+            // callers a break; the owner chose NumPy's error (parity QA-02, principle 4), and the message names the
+            // one-line migration. np.argwhere keeps its own atleast_1d branch (NumPy's), so it never reaches here 0-d.
             if (nd.ndim == 0)
-                return NonZero(nd.reshape(1));   // np.atleast_1d of a 0-d array: its (1,) view
+                throw new ValueError("Calling nonzero on 0d arrays is not allowed. Use np.atleast_1d(scalar).nonzero() instead.");
 
             int ndim = nd.ndim;
             long size = nd.size;
