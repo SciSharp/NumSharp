@@ -14217,17 +14217,19 @@ def gen_products():
         tag = f"1d_{kind}_n{n}" + ("_special" if special else "")
         emit("dot", {}, [(a, av), (b, bv)], r, tag, dta if dta == dtb else f"{dta}.{dtb}")
 
+    # The lengths loop over `ln`, not `n`: `n` is emit's case counter (nonlocal), and a loop over it would advance with
+    # every case emitted.
     for dt in ("float32", "float64", "complex128"):
-        for n in (1, 2, 7, 8, 15, 16, 17, 31, 32, 33, 64):
+        for ln in (1, 2, 7, 8, 15, 16, 17, 31, 32, 33, 64):
             for kind in ("c", "rev", "revb", "step", "stepr", "bcast", "rev2"):
-                dot1d_case(dt, dt, kind, n, False)
-        for n in (8, 32):
+                dot1d_case(dt, dt, kind, ln, False)
+        for ln in (8, 32):
             for kind in ("c", "rev"):
-                dot1d_case(dt, dt, kind, n, True)
+                dot1d_case(dt, dt, kind, ln, True)
     for (dta, dtb) in (("float32", "float64"), ("int32", "float32"), ("float16", "float32"), ("int64", "complex128")):
-        for n in (1, 20, 40):
+        for ln in (1, 20, 40):
             for kind in ("c", "rev"):
-                dot1d_case(dta, dtb, kind, n, False)
+                dot1d_case(dta, dtb, kind, ln, False)
 
     # --- np.vecdot's loops (np-layer dtype plan, PA3b): FLOAT_vecdot / DOUBLE_vecdot / CDOUBLE_vecdot call the dot
     #     function once per output - FLOAT_dot / DOUBLE_dot and the conjugating CDOUBLE_dotc (zdotc) - at the strides the
@@ -14278,17 +14280,74 @@ def gen_products():
         emit("vecdot", {"axis": -1}, [(a, av), (b, bv)], r, tag, dta if dta == dtb else f"{dta}.{dtb}")
 
     for dt in ("float32", "float64", "complex128"):
-        for n in (1, 2, 7, 8, 9, 15, 16, 17, 31, 32, 33):
+        for ln in (1, 2, 7, 8, 9, 15, 16, 17, 31, 32, 33):
             for kind in ("c", "rev", "b2", "b1", "t1", "tt", "step", "bcore", "d3"):
-                vd_case(dt, dt, kind, n, False)
-        for n in (8, 16, 33):
+                vd_case(dt, dt, kind, ln, False)
+        for ln in (8, 16, 33):
             for kind in ("c", "rev", "t1"):
-                vd_case(dt, dt, kind, n, True)
+                vd_case(dt, dt, kind, ln, True)
     for (dta, dtb) in (("float32", "float64"), ("int32", "float32"), ("float16", "float32"), ("bool", "float64"),
                        ("float64", "complex128"), ("int64", "complex128")):
-        for n in (1, 5, 20, 40):
+        for ln in (1, 5, 20, 40):
             for kind in ("c", "t1", "tt", "b2", "rev"):
-                vd_case(dta, dtb, kind, n, False)
+                vd_case(dta, dtb, kind, ln, False)
+
+    # --- np.vdot (PA3b): array_vdot flattens both operands with PyArray_Newshape(-1), then CDOUBLE_vdot for complex128 -
+    #     zdotc for positive strides, the first operand read as it is (a NaN imaginary part spreads with its own sign) -
+    #     and the dtype's dot function otherwise. Layouts the OpenBLAS backend reproduces too: c, two (both reshaped (2,
+    #     -1): flattened views), twoT (a.reshape(2, -1).T: no view, a C copy), mixed pairs. A view NumPy reads in place
+    #     (reversed, broadcast, stepped) is gated by NDDotTests.Vdot_MatchesNumPyBits for the managed engine: the
+    #     backend's TryVdot copies such an operand (an OpenBugs pin, ProductsLiveParityTests), and BlasBackendDelta would
+    #     hold it to NumPy's bits.
+    def vdot_views(kind, a, b, n):
+        if kind == "rev":
+            return a[::-1], b
+        if kind == "revb":
+            return a, b[::-1]
+        if kind == "step":
+            return a[::2], b[::2]
+        if kind == "bcasta":
+            return np.broadcast_to(a, (n,)), b
+        if kind == "colstep":
+            return a.reshape(2, -1)[:, ::2], b
+        if kind == "twoT":
+            return a.reshape(2, -1).T, b
+        if kind == "two":
+            return a.reshape(2, -1), b.reshape(2, -1)
+        return a, b
+
+    def vdot_case(dta, dtb, kind, n, nan):
+        na = 2 * n if kind in ("step", "colstep") else (1 if kind == "bcasta" else n)
+        nb = 2 * n if kind == "step" else n
+        a = dot_spread((na,), dta) if np.dtype(dta).kind in "fc" else np.ascontiguousarray(
+            dot_rng.randint(-1000, 1000, na).astype(dta))
+        b = dot_spread((nb,), dtb) if np.dtype(dtb).kind in "fc" else np.ascontiguousarray(
+            dot_rng.randint(-1000, 1000, nb).astype(dtb))
+        if nan:
+            a[0] = complex(a[0].real, np.nan)
+        av, bv = vdot_views(kind, a, b, n)
+        with np.errstate(all="ignore"):
+            r = np.asarray(np.vdot(av, bv))
+        tag = f"vdot_{kind}_n{n}" + ("_nanimag" if nan else "")
+        emit("vdot", {}, [(a, av), (b, bv)], r, tag, dta if dta == dtb else f"{dta}.{dtb}")
+
+    for ln in (1, 2, 7, 8, 9, 16, 17, 33, 64, 100):
+        for kind in ("c", "two", "twoT"):
+            if kind in ("two", "twoT") and ln % 2:
+                continue
+            vdot_case("complex128", "complex128", kind, ln, False)
+            vdot_case("complex128", "complex128", kind, ln, True)
+    for dt in ("float32", "float64"):
+        for ln in (2, 7, 16, 33, 64, 100):
+            for kind in ("c", "twoT"):
+                if kind == "twoT" and ln % 2:
+                    continue
+                vdot_case(dt, dt, kind, ln, False)
+    for (dta, dtb) in (("complex128", "float64"), ("float64", "complex128"), ("int32", "complex128")):
+        for ln in (1, 9, 33):
+            vdot_case(dta, dtb, "c", ln, False)
+            if dta == "complex128":
+                vdot_case(dta, dtb, "c", ln, True)
 
     if skipped:
         print(f"  (skipped {skipped} cases where NumPy raised)")

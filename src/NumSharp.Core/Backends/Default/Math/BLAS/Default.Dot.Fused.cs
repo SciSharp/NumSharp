@@ -85,15 +85,15 @@ namespace NumSharp.Backends
         ///     negative or zero stride runs the dot function's own loop instead of being copied. np.vdot ends here
         ///     (NumPy's <c>array_vdot</c> calls the dot function directly; <see cref="TensorEngine.Vdot"/>).
         /// </summary>
-        /// <param name="left">The first vector (<c>ip1</c>), already conjugated by np.vdot when complex.</param>
+        /// <param name="left">The first vector (<c>ip1</c>).</param>
         /// <param name="right">The second vector (<c>ip2</c>), the same length.</param>
         /// <returns>A fresh 0-d result of the operands' common dtype.</returns>
+        /// <exception cref="IncorrectShapeException">The vectors' lengths differ.</exception>
         /// <exception cref="DTypePromotionError">The operands have no common dtype.</exception>
         /// <remarks>
-        ///     <c>CDOUBLE_vdot</c> conjugates inside its sums (<c>cblas_zdotc_sub</c> / its own loop); np.vdot conjugates
-        ///     the first operand and runs <c>CDOUBLE_dot</c>, the same sums: negating every imaginary part of x negates
-        ///     the two sums that use it exactly (round-to-nearest is symmetric), so <c>re = Σxr·yr + Σxi·yi</c> and
-        ///     <c>im = Σxr·yi − Σxi·yr</c> come out as zdotc's.
+        ///     np.vdot of a complex128 pair does not end here: <see cref="VdotFunction1D"/> runs <c>CDOUBLE_vdot</c>, which
+        ///     conjugates inside its sums. A conjugated copy through this function gives the same values (negating every
+        ///     imaginary part of x negates the two sums that use it exactly) but flips a NaN imaginary part's sign.
         /// </remarks>
         internal override unsafe NDArray DotFunction1D(NDArray left, NDArray right)
         {
@@ -126,6 +126,92 @@ namespace NumSharp.Backends
                         (Complex*)right.Address + right.Shape.offset, sb, n));
                 default:
                     return OtherDotFunction1D(left, right, sa, sb, n);
+            }
+        }
+
+        /// <summary>
+        ///     np.vdot's last step (NumPy's <c>array_vdot</c>): a complex128 common dtype runs <c>CDOUBLE_vdot</c>
+        ///     (<see cref="NDDot.ComplexDotc"/>: zdotc for positive strides, the conjugating own loop otherwise) on the
+        ///     first operand as it is; every other common dtype runs its dot function (<see cref="DotFunction1D"/>, the
+        ///     first operand's conjugate being itself).
+        /// </summary>
+        /// <param name="left">The first vector (<c>ip1</c>), the one conjugated.</param>
+        /// <param name="right">The second vector (<c>ip2</c>), the same length.</param>
+        /// <returns>A fresh 0-d result of the common dtype.</returns>
+        /// <exception cref="IncorrectShapeException">The vectors' lengths differ (a direct call only).</exception>
+        /// <exception cref="DTypePromotionError">The operands have no common dtype.</exception>
+        /// <remarks>Why: the former route conjugated a copy of the first operand and ran zdotu - the same sums, but the
+        ///     copy flipped a NaN imaginary part's sign (NumPy: <c>np.vdot([1+nan j], [2+3j])</c> is the positive NaN in
+        ///     both parts) and cost a pass and an allocation.</remarks>
+        internal override unsafe NDArray VdotFunction1D(NDArray left, NDArray right)
+        {
+            if (left.typecode == NPTypeCode.Complex && right.typecode == NPTypeCode.Complex)
+            {
+                long n = left.Shape.dimensions[0];
+                if (right.Shape.dimensions[0] != n)
+                    throw new IncorrectShapeException(
+                        $"shapes ({left.Shape.dimensions[0]},) and ({right.Shape.dimensions[0]},) not aligned: " +
+                        $"{left.Shape.dimensions[0]} (dim 0) != {right.Shape.dimensions[0]} (dim 0)");
+                return NewScalar(NDDot.ComplexDotc((Complex*)left.Address + left.Shape.offset, left.Shape.strides[0],
+                    (Complex*)right.Address + right.Shape.offset, right.Shape.strides[0], n));
+            }
+
+            // A real operand beside a complex128 one: array_vdot converts both to complex128 (PyArray_FromAny) and runs
+            // CDOUBLE_vdot on the conversions.
+            if ((left.typecode == NPTypeCode.Complex || right.typecode == NPTypeCode.Complex)
+                && DTypePromotion.PromoteTypes(left.dtype, right.dtype).GetTypeCode() == NPTypeCode.Complex)
+                return VdotComplexMixed(left, right);
+
+            // Every other dtype is its own conjugate: the dot function as np.dot's own.
+            return DotFunction1D(left, right);
+        }
+
+        /// <inheritdoc/>
+        /// <remarks>
+        ///     <para>complex128 and every dtype but float32 / float64 read the view in place: NumPy's bits, and faster
+        ///     than the former copy at every measured length (complex128's own loop keeps two sums in flight).</para>
+        ///     <para>float32 / float64 read it in place up to the measured crossover - 64 elements for the own loop (a
+        ///     zero or negative stride), 1,000 for float32's strided pairs, every length for float64's strided loop -
+        ///     and copy it above, where NumPy's single chain of dependent adds measured slower than the copy and the
+        ///     vector kernel (old / new, one pinned process, best of 9 interleaved rounds: the own loop 1.06-1.54x up to
+        ///     32 terms and 0.29-0.84x from 1,000 to 100,000; float32's strided pairs 1.21-1.52x up to 1,000 and
+        ///     0.52-0.76x at 10,000 and 100,000; float64's strided loop 1.12-1.62x everywhere). Above the crossover the
+        ///     result is the dot function's over the copy, not NumPy's over the view (D23: a slower cell keeps its
+        ///     code).</para>
+        /// </remarks>
+        internal override bool VdotReadsFirstInPlace(NPTypeCode dtype, long stride, long n)
+        {
+            if (dtype != NPTypeCode.Single && dtype != NPTypeCode.Double)
+                return true;
+            if (stride <= 0)
+                return n <= 64;
+            return dtype == NPTypeCode.Double || n <= 1000;
+        }
+
+        /// <summary>
+        ///     <see cref="VdotFunction1D"/> for a complex128 operand beside a real one: the real operand converted to
+        ///     complex128 (imaginary +0, as NumPy's cast), then <c>CDOUBLE_vdot</c>.
+        /// </summary>
+        /// <param name="left">The first vector (conjugated by the sums).</param>
+        /// <param name="right">The second vector (the same length).</param>
+        /// <returns>A fresh complex128 0-d result.</returns>
+        /// <exception cref="IncorrectShapeException">The vectors' lengths differ (a direct call only).</exception>
+        /// <remarks>A method of its own so that <see cref="VdotFunction1D"/> carries no exception-handling region.</remarks>
+        private NDArray VdotComplexMixed(NDArray left, NDArray right)
+        {
+            NDArray ap1 = left.astype(NPTypeCode.Complex, false), ap2 = right.astype(NPTypeCode.Complex, false);
+            try
+            {
+                return VdotFunction1D(ap1, ap2);
+            }
+            finally
+            {
+                // astype(copy: false) is the operand itself when it already is complex128; a converted copy is this
+                // call's intermediate, released here because the engine may run outside any NDScope.
+                if (!ReferenceEquals(ap1, left))
+                    ap1.Dispose();
+                if (!ReferenceEquals(ap2, right))
+                    ap2.Dispose();
             }
         }
 

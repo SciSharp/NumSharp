@@ -98,12 +98,57 @@ namespace NumSharp
             // that buffer, so the second reshape no longer asks for (-1,) but for (a.size,) — which
             // is why a length mismatch surfaces as a reshape error and never as the
             // "vectors have different lengths" the C code below it still carries.
-            var left = NDArray.ravel(a, 'C');
+            // The first reshape is a view wherever _attempt_nocopy_reshape finds one: a reversed, broadcast or stepped
+            // run keeps its stride, and the dot function reads it there (its own loop / cblas' strided loop), not a
+            // copy (probed 2.4.2: np.vdot(a[::-1], b) is the own loop's sum for float32, float64 and complex128). Where no
+            // view exists both make the same C-ordered copy, and ravel's is the cheaper one. An engine may copy a view
+            // it reads slower in place (VdotReadsFirstInPlace): decided here, before the view is built.
+            bool view = a.Shape.IsContiguous;
+            long flatStride = 1;
+            if (!view && a.Shape.TryNocopyReshape(new[] {a.size}, false, out var flatStrides))
+            {
+                view = true;
+                flatStride = flatStrides[0];
+            }
+
+            var left = !view || (flatStride != 1 && !VdotReadsFirstInPlace(a.typecode, flatStride, a.size))
+                ? NDArray.ravel(a, 'C')
+                : a.reshape(new long[] {-1});
             var right = b.reshape(new long[] {left.size});
-            // array_vdot then calls the dtype's dot function itself - not np.dot's 1-D route, whose
-            // cblas_matrixproduct takes a length-1 pair as a plain product and copies a reversed operand.
-            return DotFunction1D(LinAlgHelper.Conjugate(left), right);
+            // array_vdot then calls the dtype's dot function itself - CDOUBLE_vdot for complex, which conjugates inside
+            // its sums - not np.dot's 1-D route, whose cblas_matrixproduct takes a length-1 pair as a plain product and
+            // copies a reversed operand.
+            return VdotFunction1D(left, right);
         }
+
+        /// <summary>
+        ///     np.vdot's last step over its two flattened operands of one length: NumPy's <c>array_vdot</c> runs
+        ///     <c>CDOUBLE_vdot</c> (<c>cblas_zdotc_sub</c> / its conjugating own loop) for a complex128 common dtype and the
+        ///     dtype's dot function for every other. The default conjugates <paramref name="left"/> and runs
+        ///     <see cref="DotFunction1D"/>: the same values, but the copy flips the sign of a NaN imaginary part and costs a
+        ///     pass and an allocation; <see cref="DefaultEngine"/> runs zdotc itself.
+        /// </summary>
+        /// <param name="left">The first vector (<c>ip1</c>), the one np.vdot conjugates, as the caller flattened it.</param>
+        /// <param name="right">The second vector (<c>ip2</c>), the same length.</param>
+        /// <returns>A fresh 0-d result of the operands' common dtype.</returns>
+        /// <exception cref="IncorrectShapeException">The vectors' lengths differ (np.vdot's reshape has already refused
+        ///     that: a direct call only).</exception>
+        /// <exception cref="DTypePromotionError">The operands have no common dtype.</exception>
+        internal virtual NDArray VdotFunction1D(NDArray left, NDArray right)
+            => DotFunction1D(LinAlgHelper.Conjugate(left), right);
+
+        /// <summary>
+        ///     Whether np.vdot reads its first operand in place when NumPy's flattening keeps it a view at a stride other
+        ///     than 1 (a reversed, broadcast or stepped run), as NumPy does: true by default, NumPy's arithmetic. An engine
+        ///     whose dot function is slower over such a run than over a contiguous copy may answer false: the operand is
+        ///     then copied (C order) and the result is the dot function's over the copy, within the usual reordering bound
+        ///     of NumPy's.
+        /// </summary>
+        /// <param name="dtype">The first operand's dtype (the dot function's when it is the operands' common dtype).</param>
+        /// <param name="stride">The flattened view's element stride (not 1).</param>
+        /// <param name="n">The number of elements.</param>
+        /// <returns>True to read the view in place (NumPy's bits), false to copy it first.</returns>
+        internal virtual bool VdotReadsFirstInPlace(NPTypeCode dtype, long stride, long n) => true;
 
         /// <summary>
         ///     The dtype's dot function over two 1-D operands of one length: np.vdot's last step (NumPy's

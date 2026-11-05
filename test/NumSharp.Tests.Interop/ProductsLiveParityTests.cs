@@ -262,6 +262,34 @@ namespace NumSharp.Tests.Interop
             AssertBin(np.vdot(CMat(2, 3), CMat(2, 3)), "np.vdot(a,b)", CMat(2, 3), CMat(2, 3), "vdot complex 2-D (flattened) zdotc");
         }
 
+        /// <summary>
+        ///     OPEN BUG (found 2026-11-05 by the products tier's np.vdot cases, np-layer dtype plan PA3b): the backend's
+        ///     <c>TryVdot</c> flattens a non-contiguous operand with ravel (a contiguous copy), where NumPy's
+        ///     <c>array_vdot</c> keeps the view (<c>PyArray_Newshape(-1)</c>) and reads it in place: a reversed or broadcast
+        ///     operand runs <c>CDOUBLE_vdot</c>'s own loop, a stepped one <c>cblas_zdotc_sub</c> at its stride, so NumPy's
+        ///     bits are not the copy's unit kernel's. The managed engine follows NumPy (<c>DefaultEngine.VdotFunction1D</c>);
+        ///     the backend's fix waits on its own measurement (the own loop over a long real run is slower than the copy).
+        /// </summary>
+        [TestMethod]
+        [TestCategory("OpenBugs")]
+        public void Vdot_ViewOperands_ReadInPlace_ByteExact()
+        {
+            RequireProducts();
+            // Full-mantissa values: the summation order shows in the last bits (the CVec builders' quarters sum exactly in
+            // every order).
+            var rs = np.random.RandomState(20261105);
+            NDArray Draw(int n) => rs.standard_normal(n).astype(NPTypeCode.Complex)
+                                   + rs.standard_normal(n).astype(NPTypeCode.Complex) * new Complex(0, 1);
+            var a = Draw(66);
+            var b = Draw(33);
+            AssertBin(np.vdot(a["33:"]["::-1"], b), "np.vdot(a[33:][::-1], b)", a, b,
+                "vdot complex, a reversed first operand: NumPy's own loop over the view");
+            AssertBin(np.vdot(a["::2"], b), "np.vdot(a[::2], b)", a, b,
+                "vdot complex, a stepped first operand: zdotc at stride 2");
+            AssertBin(np.vdot(b, a["33:"]["::-1"]), "np.vdot(b, a[33:][::-1])", a, b,
+                "vdot complex, a reversed second operand: NumPy's own loop over the view");
+        }
+
         [TestMethod]
         public void Vdot_Complex_ActuallyConjugates_NonVacuity()
         {

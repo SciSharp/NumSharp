@@ -1228,6 +1228,266 @@ namespace NumSharp.Tests.LinearAlgebra
         }
 
         /// <summary>
+        ///     NumPy 2.4.2's bits for np.vdot (<c>array_vdot</c>): both operands flattened by <c>PyArray_Newshape(-1)</c>,
+        ///     which keeps a view wherever a no-copy reshape exists (a reversed, broadcast or stepped first operand is read
+        ///     in place), then <c>CDOUBLE_vdot</c> - zdotc for positive strides, its conjugating own loop otherwise - for a
+        ///     complex128 common dtype, the dtype's dot function for float32 / float64. A NaN imaginary part in the first
+        ///     operand spreads with its own sign (a conjugated copy would flip it), so every row compares every bit.
+        /// </summary>
+        /// <param name="dtypeA">The first operand's dtype.</param>
+        /// <param name="dtypeB">The second operand's dtype.</param>
+        /// <param name="kind">c, rev (<c>a[::-1]</c>), revb (<c>b[::-1]</c>), step (both <c>[::2]</c>), bcast (b broadcast
+        ///     from one element), bcasta (a broadcast), colstep (<c>a.reshape(2, -1)[:, ::2]</c>: one stride-2 run after the
+        ///     reshape), twoT (<c>a.reshape(2, -1).T</c>: no view, a C copy), two (both reshaped (2, -1)).</param>
+        /// <param name="n">The number of terms.</param>
+        /// <param name="seed">The generator seed (a drawn first, then b).</param>
+        /// <param name="nanImag">Whether a's first element gets a NaN imaginary part (NumPy's positive NaN).</param>
+        /// <param name="resultDtype">NumPy's result dtype.</param>
+        /// <param name="expected">sha: and the first 32 hex digits of SHA-256 over NumPy's result bytes.</param>
+        [DataTestMethod]
+        [DataRow("complex128", "complex128", "c", 1, 8001UL, false, "complex128", "sha:22600feb4c2886d69449f128d465cb34")]
+        [DataRow("complex128", "complex128", "c", 1, 8002UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "rev", 1, 8003UL, false, "complex128", "sha:2202292d47346e6cc5be59cbbd353409")]
+        [DataRow("complex128", "complex128", "rev", 1, 8004UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "revb", 1, 8005UL, false, "complex128", "sha:b73fea984efec8297e581045ec7801d4")]
+        [DataRow("complex128", "complex128", "revb", 1, 8006UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "step", 1, 8007UL, false, "complex128", "sha:b61515e592c52351ca4db9cf9dce522e")]
+        [DataRow("complex128", "complex128", "step", 1, 8008UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "bcast", 1, 8009UL, false, "complex128", "sha:5b667258650d2aa04de5089f8cbad1fc")]
+        [DataRow("complex128", "complex128", "bcast", 1, 8010UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "bcasta", 1, 8011UL, false, "complex128", "sha:96ea4db1682b923152b71b843b0fb058")]
+        [DataRow("complex128", "complex128", "c", 2, 8012UL, false, "complex128", "sha:7a66213b9c43790052a7106bd82713b5")]
+        [DataRow("complex128", "complex128", "c", 2, 8013UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "rev", 2, 8014UL, false, "complex128", "sha:373014fd20c0adea7c9d6e33e831db20")]
+        [DataRow("complex128", "complex128", "rev", 2, 8015UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "revb", 2, 8016UL, false, "complex128", "sha:6ba45a91dffe2778146ac68f86f1d400")]
+        [DataRow("complex128", "complex128", "revb", 2, 8017UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "step", 2, 8018UL, false, "complex128", "sha:1030f37d9ea5f33fd71d4b235ff3dc49")]
+        [DataRow("complex128", "complex128", "step", 2, 8019UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "bcast", 2, 8020UL, false, "complex128", "sha:cbb57cdfe8a293dcc678cc5430793a57")]
+        [DataRow("complex128", "complex128", "bcast", 2, 8021UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "bcasta", 2, 8022UL, false, "complex128", "sha:e59c681d6c2d2b088b14672aa945c567")]
+        [DataRow("complex128", "complex128", "colstep", 2, 8023UL, false, "complex128", "sha:a318a7559faf3468122e667abe3a03e1")]
+        [DataRow("complex128", "complex128", "colstep", 2, 8024UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "twoT", 2, 8025UL, false, "complex128", "sha:deddd778f157462b40ab2ac2908dfcef")]
+        [DataRow("complex128", "complex128", "twoT", 2, 8026UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "two", 2, 8027UL, false, "complex128", "sha:502a9675b81fe8ac0c4e8d9efe14d7e7")]
+        [DataRow("complex128", "complex128", "two", 2, 8028UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "c", 7, 8029UL, false, "complex128", "sha:60dc4fa28f110eb9c2931e70d765e766")]
+        [DataRow("complex128", "complex128", "c", 7, 8030UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "rev", 7, 8031UL, false, "complex128", "sha:2f84ef4d1e548386fd9ccb2326d6bb80")]
+        [DataRow("complex128", "complex128", "rev", 7, 8032UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "revb", 7, 8033UL, false, "complex128", "sha:4d26ac8d0ec10359e875b2a8b15c1491")]
+        [DataRow("complex128", "complex128", "revb", 7, 8034UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "step", 7, 8035UL, false, "complex128", "sha:055fbc3d1eb7b74cf3f569932fea3b98")]
+        [DataRow("complex128", "complex128", "step", 7, 8036UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "bcast", 7, 8037UL, false, "complex128", "sha:ee2c0644626f0cf1cb6463b372b24cbf")]
+        [DataRow("complex128", "complex128", "bcast", 7, 8038UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "bcasta", 7, 8039UL, false, "complex128", "sha:2942b0872564c4c3cefcecbf1eb68bf9")]
+        [DataRow("complex128", "complex128", "c", 8, 8040UL, false, "complex128", "sha:4d8d4a650f12241620e4d7e171454bd3")]
+        [DataRow("complex128", "complex128", "c", 8, 8041UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "rev", 8, 8042UL, false, "complex128", "sha:491aa8f3ed2846c513919d9e9fdf7308")]
+        [DataRow("complex128", "complex128", "rev", 8, 8043UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "revb", 8, 8044UL, false, "complex128", "sha:f14501e0374328a4617fad735991ca7c")]
+        [DataRow("complex128", "complex128", "revb", 8, 8045UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "step", 8, 8046UL, false, "complex128", "sha:1c56e71b20129675f3e471e0f44051ae")]
+        [DataRow("complex128", "complex128", "step", 8, 8047UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "bcast", 8, 8048UL, false, "complex128", "sha:a324e01bb0f9a8e989d5c4c05cfbb812")]
+        [DataRow("complex128", "complex128", "bcast", 8, 8049UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "bcasta", 8, 8050UL, false, "complex128", "sha:836d47ef2b8564dd41d97618cc862256")]
+        [DataRow("complex128", "complex128", "colstep", 8, 8051UL, false, "complex128", "sha:462b3c7b016345bd0583107badcd245b")]
+        [DataRow("complex128", "complex128", "colstep", 8, 8052UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "twoT", 8, 8053UL, false, "complex128", "sha:91dd32c80a56edc0b9d2a8c61e2f9ae2")]
+        [DataRow("complex128", "complex128", "twoT", 8, 8054UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "two", 8, 8055UL, false, "complex128", "sha:e79e0c18d3fbe54cfc69344978d7cb44")]
+        [DataRow("complex128", "complex128", "two", 8, 8056UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "c", 9, 8057UL, false, "complex128", "sha:a3ff712b66d7ecf6d099bbfb590da4a6")]
+        [DataRow("complex128", "complex128", "c", 9, 8058UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "rev", 9, 8059UL, false, "complex128", "sha:1c3127a9c24800aabbf8fa861cb42049")]
+        [DataRow("complex128", "complex128", "rev", 9, 8060UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "revb", 9, 8061UL, false, "complex128", "sha:7a7ed057eb8a5bf2d1d9c8b2c043a00c")]
+        [DataRow("complex128", "complex128", "revb", 9, 8062UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "step", 9, 8063UL, false, "complex128", "sha:f420dd345dc8104822f8c57afa3fe427")]
+        [DataRow("complex128", "complex128", "step", 9, 8064UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "bcast", 9, 8065UL, false, "complex128", "sha:670af0eac643dfc476d74115d4c7aba8")]
+        [DataRow("complex128", "complex128", "bcast", 9, 8066UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "bcasta", 9, 8067UL, false, "complex128", "sha:b4b7109de8aa13362270e8d1945d3008")]
+        [DataRow("complex128", "complex128", "c", 16, 8068UL, false, "complex128", "sha:8d35457f7feac9a67efcf2a563c02bee")]
+        [DataRow("complex128", "complex128", "c", 16, 8069UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "rev", 16, 8070UL, false, "complex128", "sha:495aef36f37e2de43f3747f92c2f810b")]
+        [DataRow("complex128", "complex128", "rev", 16, 8071UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "revb", 16, 8072UL, false, "complex128", "sha:a3f5bfb81824a21ce73bb8e255fc517a")]
+        [DataRow("complex128", "complex128", "revb", 16, 8073UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "step", 16, 8074UL, false, "complex128", "sha:750ee7c6c93b782d7535d627b89d31b9")]
+        [DataRow("complex128", "complex128", "step", 16, 8075UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "bcast", 16, 8076UL, false, "complex128", "sha:fe1f96eda16ae2c99659940bc8d52f0a")]
+        [DataRow("complex128", "complex128", "bcast", 16, 8077UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "bcasta", 16, 8078UL, false, "complex128", "sha:c1ba676745f07352a5932d5493c0c191")]
+        [DataRow("complex128", "complex128", "colstep", 16, 8079UL, false, "complex128", "sha:f47551cbfbd1dd0d16f4e3a679015be7")]
+        [DataRow("complex128", "complex128", "colstep", 16, 8080UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "twoT", 16, 8081UL, false, "complex128", "sha:073e69a6a02ebe7e0ab17747a76196bd")]
+        [DataRow("complex128", "complex128", "twoT", 16, 8082UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "two", 16, 8083UL, false, "complex128", "sha:65958deda65e6ab43e717ac2c3cc5e16")]
+        [DataRow("complex128", "complex128", "two", 16, 8084UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "c", 17, 8085UL, false, "complex128", "sha:dec92512c857da9209337c0c905f6212")]
+        [DataRow("complex128", "complex128", "c", 17, 8086UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "rev", 17, 8087UL, false, "complex128", "sha:f7d2e792e0003bd34dafcd043585db92")]
+        [DataRow("complex128", "complex128", "rev", 17, 8088UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "revb", 17, 8089UL, false, "complex128", "sha:0e42d7548527ba87bcebbd1febec7ad4")]
+        [DataRow("complex128", "complex128", "revb", 17, 8090UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "step", 17, 8091UL, false, "complex128", "sha:3abb1345371b36911c6a981e5c38a14f")]
+        [DataRow("complex128", "complex128", "step", 17, 8092UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "bcast", 17, 8093UL, false, "complex128", "sha:fefc97f3cca9daf7c2f6ad69c6cf3490")]
+        [DataRow("complex128", "complex128", "bcast", 17, 8094UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "bcasta", 17, 8095UL, false, "complex128", "sha:7d3cd3434111ebaa39c1579af581c753")]
+        [DataRow("complex128", "complex128", "c", 33, 8096UL, false, "complex128", "sha:32c8181d44f242a039ad7a4f68692c18")]
+        [DataRow("complex128", "complex128", "c", 33, 8097UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "rev", 33, 8098UL, false, "complex128", "sha:c39e754f7f99c7c8e74945391b083430")]
+        [DataRow("complex128", "complex128", "rev", 33, 8099UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "revb", 33, 8100UL, false, "complex128", "sha:47c9bb246607dd972ca64ef477070c30")]
+        [DataRow("complex128", "complex128", "revb", 33, 8101UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "step", 33, 8102UL, false, "complex128", "sha:2b0aa999b81f11d3fe890daaf9c24568")]
+        [DataRow("complex128", "complex128", "step", 33, 8103UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "bcast", 33, 8104UL, false, "complex128", "sha:c9f9abb65b2d517a73826b7314fc28dc")]
+        [DataRow("complex128", "complex128", "bcast", 33, 8105UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "bcasta", 33, 8106UL, false, "complex128", "sha:adca8745450d7bdea106063f8862da20")]
+        [DataRow("complex128", "complex128", "c", 100, 8107UL, false, "complex128", "sha:2cc6ef7f31c8bccb61cd06ac38fb6546")]
+        [DataRow("complex128", "complex128", "c", 100, 8108UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "rev", 100, 8109UL, false, "complex128", "sha:29dea9f402fa9ceed68859f5b4cf1db9")]
+        [DataRow("complex128", "complex128", "rev", 100, 8110UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "revb", 100, 8111UL, false, "complex128", "sha:7ba27feb50898c94766b74ec5b98a74a")]
+        [DataRow("complex128", "complex128", "revb", 100, 8112UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "step", 100, 8113UL, false, "complex128", "sha:e26a5d90cb5a20ada70a76b36fa5cecd")]
+        [DataRow("complex128", "complex128", "step", 100, 8114UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "bcast", 100, 8115UL, false, "complex128", "sha:579772b1018e42ca4d33ce7950d951ac")]
+        [DataRow("complex128", "complex128", "bcast", 100, 8116UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "bcasta", 100, 8117UL, false, "complex128", "sha:73f2ce467e7aa7a3c8bd17900a96752b")]
+        [DataRow("complex128", "complex128", "colstep", 100, 8118UL, false, "complex128", "sha:b8bcb648fa8b981dbce8adac5114d6bd")]
+        [DataRow("complex128", "complex128", "colstep", 100, 8119UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "twoT", 100, 8120UL, false, "complex128", "sha:50a8a585b8738e90415b847e6f0409fa")]
+        [DataRow("complex128", "complex128", "twoT", 100, 8121UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "complex128", "two", 100, 8122UL, false, "complex128", "sha:d3abf6ff63bf6695391139957591517c")]
+        [DataRow("complex128", "complex128", "two", 100, 8123UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("float32", "float32", "rev", 2, 8124UL, false, "float32", "sha:65a0633e5ec4dbd4fa1981e2ecdbec0e")]
+        [DataRow("float32", "float32", "bcasta", 2, 8125UL, false, "float32", "sha:cc2e2446905a80e7abe308fa1efb8141")]
+        [DataRow("float32", "float32", "colstep", 2, 8126UL, false, "float32", "sha:0523aaa2821bdf3965c71541f4b15222")]
+        [DataRow("float32", "float32", "rev", 7, 8127UL, false, "float32", "sha:c83f9113e107a502586e1a9f1f5d6f04")]
+        [DataRow("float32", "float32", "bcasta", 7, 8128UL, false, "float32", "sha:d4cda4eaacc4ddf3e22c6bc6600be755")]
+        [DataRow("float32", "float32", "rev", 16, 8129UL, false, "float32", "sha:7ba30c2c6197c5e0e9f10b204ac1212f")]
+        [DataRow("float32", "float32", "bcasta", 16, 8130UL, false, "float32", "sha:1c6112714439e3d9a82f0eb038f6837a")]
+        [DataRow("float32", "float32", "colstep", 16, 8131UL, false, "float32", "sha:0225cd233e392159bbcceb811ad7ac3b")]
+        [DataRow("float32", "float32", "rev", 33, 8132UL, false, "float32", "sha:b98d85cabe99778331a43948063bdafd")]
+        [DataRow("float32", "float32", "bcasta", 33, 8133UL, false, "float32", "sha:eec9512c1617b971e9fe83e67f7052a4")]
+        [DataRow("float32", "float32", "rev", 64, 8134UL, false, "float32", "sha:4ee369221908644434d82f5e33851c64")]
+        [DataRow("float32", "float32", "bcasta", 64, 8135UL, false, "float32", "sha:c7a3ef83e392a637ec129f7efaf71035")]
+        [DataRow("float32", "float32", "colstep", 64, 8136UL, false, "float32", "sha:76fb30dd7cf67385b7cf2ff4c3d0ba8d")]
+        [DataRow("float32", "float32", "colstep", 100, 8137UL, false, "float32", "sha:ddcf98a7b3f70fd5047d6ea005b4ef52")]
+        [DataRow("float32", "float32", "colstep", 1000, 8138UL, false, "float32", "sha:417865e7f5dead2e512baebcbff9e264")]
+        [DataRow("float64", "float64", "rev", 2, 8139UL, false, "float64", "sha:42103d49c8f250edb49d36a3ce4f479b")]
+        [DataRow("float64", "float64", "bcasta", 2, 8140UL, false, "float64", "sha:e3448ba35df6a5835cdbb7093eb0b766")]
+        [DataRow("float64", "float64", "colstep", 2, 8141UL, false, "float64", "sha:b96a0022c61d89c3420808d0319e7a87")]
+        [DataRow("float64", "float64", "rev", 7, 8142UL, false, "float64", "sha:2f6f23ffd443ee45d04df6a6b85766e8")]
+        [DataRow("float64", "float64", "bcasta", 7, 8143UL, false, "float64", "sha:f208af0b3732959686abeb581659b36c")]
+        [DataRow("float64", "float64", "rev", 16, 8144UL, false, "float64", "sha:dacdbcce4c5a6ca7dc22df57f6d1a018")]
+        [DataRow("float64", "float64", "bcasta", 16, 8145UL, false, "float64", "sha:e6d5276bcd4b0b8ccbf29b46ea6adefe")]
+        [DataRow("float64", "float64", "colstep", 16, 8146UL, false, "float64", "sha:8d7bb6358e87ecd04885b2eeefa1d212")]
+        [DataRow("float64", "float64", "rev", 33, 8147UL, false, "float64", "sha:41db6c61296249c599aabab20766e952")]
+        [DataRow("float64", "float64", "bcasta", 33, 8148UL, false, "float64", "sha:1ef09aa8f7b27221076691391631cbe7")]
+        [DataRow("float64", "float64", "rev", 64, 8149UL, false, "float64", "sha:5d731b3733f45237852c233e0c7b263d")]
+        [DataRow("float64", "float64", "bcasta", 64, 8150UL, false, "float64", "sha:c3fa8a814587fcef2ca47741eb6ea2b4")]
+        [DataRow("float64", "float64", "colstep", 64, 8151UL, false, "float64", "sha:c1e8bff7a1cf47890f565312e26b5a91")]
+        [DataRow("float64", "float64", "colstep", 100, 8152UL, false, "float64", "sha:3e8accbc6dcc569b30f6ea13a110b46b")]
+        [DataRow("float64", "float64", "colstep", 1000, 8153UL, false, "float64", "sha:ae3b3dafb5aee947d24458793632d0ae")]
+        [DataRow("complex128", "float64", "c", 1, 8154UL, false, "complex128", "sha:ce778ed4362946775514301cdc744121")]
+        [DataRow("complex128", "float64", "c", 1, 8155UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "float64", "c", 9, 8156UL, false, "complex128", "sha:578c8ab103eab4097475554779ea154d")]
+        [DataRow("complex128", "float64", "c", 9, 8157UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "float64", "c", 33, 8158UL, false, "complex128", "sha:39256895e9589abbe615fa80332b00e2")]
+        [DataRow("complex128", "float64", "c", 33, 8159UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("float64", "complex128", "c", 1, 8160UL, false, "complex128", "sha:ec6492c2e0b9d62f4aab75eb1167e3eb")]
+        [DataRow("float64", "complex128", "c", 9, 8161UL, false, "complex128", "sha:9590230a72194ae50bded7116e500bea")]
+        [DataRow("float64", "complex128", "c", 33, 8162UL, false, "complex128", "sha:5be3ac8faf56226f2424a91ee3228b2f")]
+        [DataRow("int32", "complex128", "c", 1, 8163UL, false, "complex128", "sha:b884193193cfa0fdedcdeff1cbc863b2")]
+        [DataRow("int32", "complex128", "c", 9, 8164UL, false, "complex128", "sha:327c5ff8cf5f9735733fde616c2c1159")]
+        [DataRow("int32", "complex128", "c", 33, 8165UL, false, "complex128", "sha:d11235acb2f26955d8bc164add84290d")]
+        [DataRow("complex128", "float32", "c", 1, 8166UL, false, "complex128", "sha:c5cab8d46242664512d5abd3d4f4a83a")]
+        [DataRow("complex128", "float32", "c", 1, 8167UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "float32", "c", 9, 8168UL, false, "complex128", "sha:858e9cd07a37356f95873a7220f3bb0c")]
+        [DataRow("complex128", "float32", "c", 9, 8169UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        [DataRow("complex128", "float32", "c", 33, 8170UL, false, "complex128", "sha:b31d15dfb5fd1a5337564bfd32a03240")]
+        [DataRow("complex128", "float32", "c", 33, 8171UL, true, "complex128", "sha:241808cce19b49683d2308412efef71f")]
+        public void Vdot_MatchesNumPyBits(string dtypeA, string dtypeB, string kind, int n, ulong seed, bool nanImag,
+            string resultDtype, string expected)
+        {
+            var (a, b) = VdotOperands(dtypeA, dtypeB, kind, n, seed, nanImag);
+            AssertNumPyBits(np.vdot(a, b), resultDtype, expected, $"vdot {dtypeA}.{dtypeB} {kind} n={n} nan={nanImag}");
+        }
+
+        /// <summary>
+        ///     np.vdot of a long float32 / float64 first operand that NumPy's flattening keeps as a view at a stride other
+        ///     than 1: past the measured crossover (64 elements for the own loop, 1,000 for float32's strided pairs) the
+        ///     engine copies it and runs the dot function over the copy, faster than NumPy's single chain of dependent adds
+        ///     over the view (<c>DefaultEngine.VdotReadsFirstInPlace</c>). The result is NumPy's np.vdot over the contiguous
+        ///     copy, within the usual reordering bound of NumPy's over the view.
+        /// </summary>
+        /// <param name="dtype">float32 or float64 (both operands).</param>
+        /// <param name="kind">rev, bcasta or colstep (see <see cref="Vdot_MatchesNumPyBits"/>).</param>
+        /// <param name="n">The number of terms, past the crossover.</param>
+        /// <param name="seed">The generator seed.</param>
+        /// <param name="expected">sha: over NumPy's <c>np.vdot(np.ascontiguousarray(a_view), b)</c>.</param>
+        [DataTestMethod]
+        [Misaligned]
+        [DataRow("float32", "rev", 100, 8172UL, "sha:c0a8bd62e0bd3cf6e7f68f1bebcbb1d6")]
+        [DataRow("float32", "rev", 1000, 8173UL, "sha:0bd5ca7978cfb9f71bfada93400de6a9")]
+        [DataRow("float32", "bcasta", 1000, 8174UL, "sha:b9edb41389ad73d164347f9ddb877a07")]
+        [DataRow("float32", "colstep", 2000, 8175UL, "sha:dedf99a788cf90c28b6e50c76f668ead")]
+        [DataRow("float64", "rev", 100, 8176UL, "sha:4be37bdad5ba0d8071749709c8abd1ce")]
+        [DataRow("float64", "rev", 1000, 8177UL, "sha:a9d13784b4a06dbfb5160c1851c45910")]
+        [DataRow("float64", "bcasta", 1000, 8178UL, "sha:92b9194297dfa9ed94124bd92702eb72")]
+        public void Vdot_LongRealViewFirst_IsTheDotOverTheCopy(string dtype, string kind, int n, ulong seed,
+            string expected)
+        {
+            var (a, b) = VdotOperands(dtype, dtype, kind, n, seed, false);
+            AssertNumPyBits(np.vdot(a, b), dtype, expected, $"vdot {dtype} {kind} n={n} (the copy route)");
+        }
+
+        /// <summary>The operands of the np.vdot rows, built as the generator builds them.</summary>
+        /// <param name="dtypeA">The first operand's dtype.</param>
+        /// <param name="dtypeB">The second operand's dtype.</param>
+        /// <param name="kind">The layout (see <see cref="Vdot_MatchesNumPyBits"/>).</param>
+        /// <param name="n">The number of terms.</param>
+        /// <param name="seed">The generator seed.</param>
+        /// <param name="nanImag">Whether a's first element gets a NaN imaginary part.</param>
+        /// <returns>The two views np.vdot receives.</returns>
+        private static (NDArray A, NDArray B) VdotOperands(string dtypeA, string dtypeB, string kind, int n, ulong seed,
+            bool nanImag)
+        {
+            var g = new Lcg(seed);
+            long na = kind is "step" or "colstep" ? 2L * n : kind == "bcasta" ? 1 : n;
+            long nb = kind == "step" ? 2L * n : kind == "bcast" ? 1 : n;
+            var a = g.Array(new[] { na }, dtypeA);
+            var b = g.Array(new[] { nb }, dtypeB);
+            if (nanImag)
+            {
+                // NumPy's np.nan is the POSITIVE quiet NaN; .NET's double.NaN is negative.
+                var re = ((System.Numerics.Complex)a[0]).Real;
+                a.SetAtIndex(new System.Numerics.Complex(re, BitConverter.Int64BitsToDouble(0x7FF8000000000000)), 0);
+            }
+            return kind switch
+            {
+                "rev" => (a["::-1"], b),
+                "revb" => (a, b["::-1"]),
+                "step" => (a["::2"], b["::2"]),
+                "bcast" => (a, np.broadcast_to(b, new Shape(n))),
+                "bcasta" => (np.broadcast_to(a, new Shape(n)), b),
+                "colstep" => (a.reshape(2, -1)[":, ::2"], b),
+                "twoT" => (a.reshape(2, -1).T, b),
+                "two" => (a.reshape(2, -1), b.reshape(2, -1)),
+                _ => (a, b),
+            };
+        }
+
+        /// <summary>
         ///     Compares a result with NumPy's: the dtype, then either the first 32 hex digits of SHA-256 over the result's
         ///     bytes (<c>sha:</c>) or every byte (<c>hex:</c>), where a slot NumPy fills with a NaN only has to hold a NaN
         ///     (which NaN survives when several meet follows RyuJIT's operand order: see <see cref="NDDot"/>).
