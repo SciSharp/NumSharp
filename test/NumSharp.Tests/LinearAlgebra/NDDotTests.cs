@@ -1,5 +1,6 @@
 using System;
 using System.Security.Cryptography;
+using NumSharp.Backends;
 using NumSharp.Utilities;
 
 namespace NumSharp.Tests.LinearAlgebra
@@ -594,6 +595,202 @@ namespace NumSharp.Tests.LinearAlgebra
             };
 
             AssertNumPyBits(np.dot(av, bv), resultDtype, expected, $"{dtypeA}.{dtypeB} {kind} n={n}");
+        }
+
+        /// <summary>
+        ///     NumPy 2.4.2's bits for complex128 np.correlate / np.convolve through the per-position engine
+        ///     (<c>SlidingDot.SlidingComplex</c>: CDOUBLE_dot per output position over zdotu - its four sums below 8 terms,
+        ///     its vector kernel from 8 - which NumPy runs at every position of a complex correlation). The blocked long
+        ///     kernel is turned off on this thread (the route a kernel holding a non-finite value takes, and a host without
+        ///     AVX / FMA); a kernel shorter than 8 terms takes this engine anyway.
+        /// </summary>
+        /// <param name="fn">correlate or convolve.</param>
+        /// <param name="mode">full, same or valid.</param>
+        /// <param name="n1">The data length.</param>
+        /// <param name="n2">The kernel length.</param>
+        /// <param name="seed">The generator seed (the data drawn first, then the kernel).</param>
+        /// <param name="expected">sha: and the first 32 hex digits of SHA-256 over NumPy's result bytes.</param>
+        [DataTestMethod]
+        [DataRow("correlate", "full", 3, 3, 9001UL, "sha:e795c8a78f51ddd4b206e24af5ffca5c")]
+        [DataRow("correlate", "same", 3, 3, 9002UL, "sha:0932701eac6320ca2551af5ceb799f10")]
+        [DataRow("correlate", "valid", 3, 3, 9003UL, "sha:fec204e07ec53b97b3f638ccad96619e")]
+        [DataRow("convolve", "full", 3, 3, 9004UL, "sha:d997fda41291e6fea4dae6d3608ab4d6")]
+        [DataRow("convolve", "same", 3, 3, 9005UL, "sha:9c60286b6fb8d15b9579e3e933c682d0")]
+        [DataRow("convolve", "valid", 3, 3, 9006UL, "sha:39ed09d932806567fc8f1e949ff50f53")]
+        [DataRow("correlate", "full", 8, 3, 9007UL, "sha:7da45d7d415f92d9b983bb89fbd9dd5b")]
+        [DataRow("correlate", "same", 8, 3, 9008UL, "sha:522dbb48c041153ab707aaf1afe85d87")]
+        [DataRow("correlate", "valid", 8, 3, 9009UL, "sha:5191c156ec944d827ee197750686d39f")]
+        [DataRow("convolve", "full", 8, 3, 9010UL, "sha:024701a8cfb09cc5cd988f4756f0720e")]
+        [DataRow("convolve", "same", 8, 3, 9011UL, "sha:f54b55893a9e5ddd5f8000a9bb506493")]
+        [DataRow("convolve", "valid", 8, 3, 9012UL, "sha:d8b3034bf78fc2a6c1e3fff5eee2ff67")]
+        [DataRow("correlate", "full", 40, 3, 9013UL, "sha:0fa0b840a3f93475d130d7611953e941")]
+        [DataRow("correlate", "same", 40, 3, 9014UL, "sha:18bc50168a6e7d1e44140fec288014d6")]
+        [DataRow("correlate", "valid", 40, 3, 9015UL, "sha:8853eaba4a5caeb82e1a36b0e272900a")]
+        [DataRow("convolve", "full", 40, 3, 9016UL, "sha:df609df7aa97cab738854ea50867c139")]
+        [DataRow("convolve", "same", 40, 3, 9017UL, "sha:9506efe3d8700ff26c61d7349dae62ac")]
+        [DataRow("convolve", "valid", 40, 3, 9018UL, "sha:65146bb812c2e024261a8607f9f55a56")]
+        [DataRow("correlate", "full", 7, 7, 9019UL, "sha:b4fe45a2a4dcbfdf7370addcc6b10812")]
+        [DataRow("correlate", "same", 7, 7, 9020UL, "sha:529c96a2fe5da325c3ff6623678963a6")]
+        [DataRow("correlate", "valid", 7, 7, 9021UL, "sha:a94a79fb46d13bf7cd7d6157e9c9d43b")]
+        [DataRow("convolve", "full", 7, 7, 9022UL, "sha:41ffc6b8eb2541aa152de31cdd8b1f3d")]
+        [DataRow("convolve", "same", 7, 7, 9023UL, "sha:ac3a4f32959710797a54fc0e365f4680")]
+        [DataRow("convolve", "valid", 7, 7, 9024UL, "sha:6eceb7aa9c7c117aac9e27729b539a0f")]
+        [DataRow("correlate", "full", 12, 7, 9025UL, "sha:6e07fed74e7bedb935c0a326861251a7")]
+        [DataRow("correlate", "same", 12, 7, 9026UL, "sha:67f77c0587b53bd42c29e6e797d03055")]
+        [DataRow("correlate", "valid", 12, 7, 9027UL, "sha:c8b8f70e009defff886737f7674d7872")]
+        [DataRow("convolve", "full", 12, 7, 9028UL, "sha:7a725a6b7a76deb0318c9eb2d352b7cd")]
+        [DataRow("convolve", "same", 12, 7, 9029UL, "sha:99cea24693578cd765a62a0b503dc0a9")]
+        [DataRow("convolve", "valid", 12, 7, 9030UL, "sha:281ae2ac2f585d30eaac74d565351593")]
+        [DataRow("correlate", "full", 40, 7, 9031UL, "sha:9f12079fe05e4250c141e04bc4dcebb0")]
+        [DataRow("correlate", "same", 40, 7, 9032UL, "sha:07ff6c16ddccf387af1603d23dc22028")]
+        [DataRow("correlate", "valid", 40, 7, 9033UL, "sha:4d6421290b49e23602150b0c859d2d62")]
+        [DataRow("convolve", "full", 40, 7, 9034UL, "sha:193222a803d1bfc964dab2c6bf64af2c")]
+        [DataRow("convolve", "same", 40, 7, 9035UL, "sha:b9a48f178500e8b1da221bcbb8308dc3")]
+        [DataRow("convolve", "valid", 40, 7, 9036UL, "sha:f59c5228d9039e1160001942eb51886c")]
+        [DataRow("correlate", "full", 8, 8, 9037UL, "sha:b66e74225cb71f5d6b5a8543f9a725dd")]
+        [DataRow("correlate", "same", 8, 8, 9038UL, "sha:56c3998c765eb0ec48325dc576f475a4")]
+        [DataRow("correlate", "valid", 8, 8, 9039UL, "sha:2851df194b5456505d9eb7fda3c1820c")]
+        [DataRow("convolve", "full", 8, 8, 9040UL, "sha:30abe3fac43b057572cb24a1b67b2505")]
+        [DataRow("convolve", "same", 8, 8, 9041UL, "sha:cca4ff4c4fb93b5935549043924469ee")]
+        [DataRow("convolve", "valid", 8, 8, 9042UL, "sha:4af761da3df0bb73b8bc2eabc5b9fcb8")]
+        [DataRow("correlate", "full", 13, 8, 9043UL, "sha:b53c198edea8b7777ba635b34e11e700")]
+        [DataRow("correlate", "same", 13, 8, 9044UL, "sha:3401913ac30e2fa04b73b4f363332b3d")]
+        [DataRow("correlate", "valid", 13, 8, 9045UL, "sha:eab309cc5fe77cd9ac433b9a8b9e6630")]
+        [DataRow("convolve", "full", 13, 8, 9046UL, "sha:5ceffd52bee44f6206d36eab798430b8")]
+        [DataRow("convolve", "same", 13, 8, 9047UL, "sha:0d062c5acf5b84742dccba8e0753e807")]
+        [DataRow("convolve", "valid", 13, 8, 9048UL, "sha:caf8f8a4dd965634980319d69e0fd437")]
+        [DataRow("correlate", "full", 40, 8, 9049UL, "sha:54bf713fe125ad40692794ccea467754")]
+        [DataRow("correlate", "same", 40, 8, 9050UL, "sha:df4b34639c32f56d0fdcb59bd5287c47")]
+        [DataRow("correlate", "valid", 40, 8, 9051UL, "sha:030d3aa3e5910bc1cf1df12cfb51c8e1")]
+        [DataRow("convolve", "full", 40, 8, 9052UL, "sha:6aba70405ecb4da36df0240b55d5ffb3")]
+        [DataRow("convolve", "same", 40, 8, 9053UL, "sha:ffe0ac21bf1ffb48a58417419ddb15a4")]
+        [DataRow("convolve", "valid", 40, 8, 9054UL, "sha:7ec1ea55f517562d6f30825f2d81c9b7")]
+        [DataRow("correlate", "full", 9, 9, 9055UL, "sha:a80a7f0043836d077878ea7073d62d05")]
+        [DataRow("correlate", "same", 9, 9, 9056UL, "sha:4409ac562c9cb55ae2313f8622d59130")]
+        [DataRow("correlate", "valid", 9, 9, 9057UL, "sha:68ef6fa65932522b619a169ef85a11e3")]
+        [DataRow("convolve", "full", 9, 9, 9058UL, "sha:93e120053ff8218cff01b9396a6e2f24")]
+        [DataRow("convolve", "same", 9, 9, 9059UL, "sha:1213600523e05b533d8ce7768cca38b4")]
+        [DataRow("convolve", "valid", 9, 9, 9060UL, "sha:ce8997b06467ada4cbc8a3fcdf98a8df")]
+        [DataRow("correlate", "full", 14, 9, 9061UL, "sha:453a2b869a07cb54c8029606c9b64191")]
+        [DataRow("correlate", "same", 14, 9, 9062UL, "sha:e646cb8d615b387e3a83161e1bd5ed7e")]
+        [DataRow("correlate", "valid", 14, 9, 9063UL, "sha:b0e2e54ba73358fb6f1cd6f288b23c48")]
+        [DataRow("convolve", "full", 14, 9, 9064UL, "sha:956fc54d89185d37bf84bbb13fc9d271")]
+        [DataRow("convolve", "same", 14, 9, 9065UL, "sha:1780b437f5301c004ff4b7c71737cace")]
+        [DataRow("convolve", "valid", 14, 9, 9066UL, "sha:7567e7df6bfaa208e15259695a006c60")]
+        [DataRow("correlate", "full", 40, 9, 9067UL, "sha:4fd412bebfa19e92af69c360baf9b3b8")]
+        [DataRow("correlate", "same", 40, 9, 9068UL, "sha:27e87f2c08931d4af1657921376d5e2b")]
+        [DataRow("correlate", "valid", 40, 9, 9069UL, "sha:24acf00dd93be3e4fdd1ecc1c1d7a7c7")]
+        [DataRow("convolve", "full", 40, 9, 9070UL, "sha:69de845c380a8b02c15c62c253e79dba")]
+        [DataRow("convolve", "same", 40, 9, 9071UL, "sha:6c8561ec5e603833decf1599dced6136")]
+        [DataRow("convolve", "valid", 40, 9, 9072UL, "sha:c2e4d33044a7d1ab8e3facc8e77403cf")]
+        [DataRow("correlate", "full", 15, 15, 9073UL, "sha:4cb9bcb84aa8a09a39dcb12c0ee8f9bd")]
+        [DataRow("correlate", "same", 15, 15, 9074UL, "sha:f7075aa5d836bb720e44b6a25deadd98")]
+        [DataRow("correlate", "valid", 15, 15, 9075UL, "sha:5fc0cd922740a633ab2b5d11b9849aa3")]
+        [DataRow("convolve", "full", 15, 15, 9076UL, "sha:238fa11dc769205ed14ca1b032dc7f14")]
+        [DataRow("convolve", "same", 15, 15, 9077UL, "sha:4ed8904619152d00d46d7e52e005f619")]
+        [DataRow("convolve", "valid", 15, 15, 9078UL, "sha:b7aead636e2159dc914672a61a603e86")]
+        [DataRow("correlate", "full", 20, 15, 9079UL, "sha:685a3ae20ae9435de8f1f0ce35e1bbd4")]
+        [DataRow("correlate", "same", 20, 15, 9080UL, "sha:87318ed482be0eee27b907c7f16b5081")]
+        [DataRow("correlate", "valid", 20, 15, 9081UL, "sha:9a7edc45c62288c07af1165891492ba4")]
+        [DataRow("convolve", "full", 20, 15, 9082UL, "sha:0577f84ea46670c6ee58876c3d29d15d")]
+        [DataRow("convolve", "same", 20, 15, 9083UL, "sha:f110e94bf5934baa4b74253cf8ce8a04")]
+        [DataRow("convolve", "valid", 20, 15, 9084UL, "sha:b04c6b02dca6b0e716975ad1ff938586")]
+        [DataRow("correlate", "full", 40, 15, 9085UL, "sha:6faaf7775ce9eff9bc6d4b28af86f56e")]
+        [DataRow("correlate", "same", 40, 15, 9086UL, "sha:458dc5d3579e1b961b7776e51df638d3")]
+        [DataRow("correlate", "valid", 40, 15, 9087UL, "sha:3790c884b8666b8c29f68291cb03d6c3")]
+        [DataRow("convolve", "full", 40, 15, 9088UL, "sha:427423bd0969db270f8c0e8ad67a232a")]
+        [DataRow("convolve", "same", 40, 15, 9089UL, "sha:83b41168b4c407c83dcd972eb2797560")]
+        [DataRow("convolve", "valid", 40, 15, 9090UL, "sha:b103db32e6c63ec4514dab0dca6b23f4")]
+        [DataRow("correlate", "full", 16, 16, 9091UL, "sha:1455daddfba8a5c90a3e90cb42dcc4c3")]
+        [DataRow("correlate", "same", 16, 16, 9092UL, "sha:428966119c85409b93a5f8e499e5ec2a")]
+        [DataRow("correlate", "valid", 16, 16, 9093UL, "sha:d9566ecb099ff15fcd39363b4757e1df")]
+        [DataRow("convolve", "full", 16, 16, 9094UL, "sha:41534db6378ab32a9bc7d44399a60aa9")]
+        [DataRow("convolve", "same", 16, 16, 9095UL, "sha:074511317f459a0f089dbc493a8b194b")]
+        [DataRow("convolve", "valid", 16, 16, 9096UL, "sha:b70984360487e16f8d2f552217f74a49")]
+        [DataRow("correlate", "full", 21, 16, 9097UL, "sha:15dc70ca3eca6db1bc498c416deaeb73")]
+        [DataRow("correlate", "same", 21, 16, 9098UL, "sha:9d479998e08c18dbff9a78e4703a2fb5")]
+        [DataRow("correlate", "valid", 21, 16, 9099UL, "sha:660ee57817c2f327294b8fa7504f4206")]
+        [DataRow("convolve", "full", 21, 16, 9100UL, "sha:c075b0d75750f14f85242839175ea955")]
+        [DataRow("convolve", "same", 21, 16, 9101UL, "sha:3318c08bd88925b0106e67609c73a497")]
+        [DataRow("convolve", "valid", 21, 16, 9102UL, "sha:17faae9cbf5bfe4db3ce0e9ddfcaa9bb")]
+        [DataRow("correlate", "full", 40, 16, 9103UL, "sha:a4c18bc4efd3c6d760ce5c89f5a91010")]
+        [DataRow("correlate", "same", 40, 16, 9104UL, "sha:8af86c4f425e83b267b775a71daae5ae")]
+        [DataRow("correlate", "valid", 40, 16, 9105UL, "sha:47cfdc06c8f68f3dc58acf3493b8d65c")]
+        [DataRow("convolve", "full", 40, 16, 9106UL, "sha:5418cdd44354875e64953aa6a5ceb9de")]
+        [DataRow("convolve", "same", 40, 16, 9107UL, "sha:af489cabc7bcc6a4e49188acf0499fe9")]
+        [DataRow("convolve", "valid", 40, 16, 9108UL, "sha:dd0cdab1ac9113cb12e431a75ef8e88c")]
+        [DataRow("correlate", "full", 17, 17, 9109UL, "sha:e6b5c928d9b54e02afd1ba032be4db84")]
+        [DataRow("correlate", "same", 17, 17, 9110UL, "sha:eb5a08fc318b23728c014e49b0ee2c72")]
+        [DataRow("correlate", "valid", 17, 17, 9111UL, "sha:8cf1f25e98797be690bcd2f078780c7e")]
+        [DataRow("convolve", "full", 17, 17, 9112UL, "sha:7fb85ca4beee84d7be9f9836a7744bb7")]
+        [DataRow("convolve", "same", 17, 17, 9113UL, "sha:53b407ae298607745a73d5f009a329c9")]
+        [DataRow("convolve", "valid", 17, 17, 9114UL, "sha:5205b930b525c9f0f743be7f59db2d5b")]
+        [DataRow("correlate", "full", 22, 17, 9115UL, "sha:f448a36738ff0dfd79e8133346099e9a")]
+        [DataRow("correlate", "same", 22, 17, 9116UL, "sha:48219e904f22f50a80a3baf8cf596e64")]
+        [DataRow("correlate", "valid", 22, 17, 9117UL, "sha:746e218da9f9b54e3fb1d5c2188ae919")]
+        [DataRow("convolve", "full", 22, 17, 9118UL, "sha:fd507b0bfbadf569529ce7d993b08c59")]
+        [DataRow("convolve", "same", 22, 17, 9119UL, "sha:d32c8986ad3cea573602eb04a9218e0c")]
+        [DataRow("convolve", "valid", 22, 17, 9120UL, "sha:7b86cf367491adf07b5b7b345fe6d7e1")]
+        [DataRow("correlate", "full", 40, 17, 9121UL, "sha:cae21a1cef99b1951398194084dc5a7d")]
+        [DataRow("correlate", "same", 40, 17, 9122UL, "sha:da5de2fddd7fa70c8942aa264365e74f")]
+        [DataRow("correlate", "valid", 40, 17, 9123UL, "sha:5bb8843bb1e88f62723d0d04db7998f8")]
+        [DataRow("convolve", "full", 40, 17, 9124UL, "sha:69a0c992650ae2ce1fffedee730fcfd6")]
+        [DataRow("convolve", "same", 40, 17, 9125UL, "sha:3b53892e25d35e62588c2a74ce670df9")]
+        [DataRow("convolve", "valid", 40, 17, 9126UL, "sha:d10fbdf18e9066efe363077244eec8f3")]
+        [DataRow("correlate", "full", 31, 31, 9127UL, "sha:f00905b1cffb292956886a9824dd2476")]
+        [DataRow("correlate", "same", 31, 31, 9128UL, "sha:e3c8409b1d3b36a6465d473ab145c5bc")]
+        [DataRow("correlate", "valid", 31, 31, 9129UL, "sha:435a23e814e117e19a7b1721df690e93")]
+        [DataRow("convolve", "full", 31, 31, 9130UL, "sha:b434dfaa6ecfec0684f37ab2cefdbeb9")]
+        [DataRow("convolve", "same", 31, 31, 9131UL, "sha:ffe8d555f3c4aacb302c4bb5f2920e07")]
+        [DataRow("convolve", "valid", 31, 31, 9132UL, "sha:afefea4f041b85326e8c40a1c75f628f")]
+        [DataRow("correlate", "full", 36, 31, 9133UL, "sha:e47037694cb2b09adaa510202f1e9294")]
+        [DataRow("correlate", "same", 36, 31, 9134UL, "sha:40a10a6e743388035be2eecd9af84100")]
+        [DataRow("correlate", "valid", 36, 31, 9135UL, "sha:39d9d9760693a018a1f9579f22b24354")]
+        [DataRow("convolve", "full", 36, 31, 9136UL, "sha:5773db787bc7c9ddbacf5008ede98c8f")]
+        [DataRow("convolve", "same", 36, 31, 9137UL, "sha:35f78c8bbe612a58411410740fbf2f7a")]
+        [DataRow("convolve", "valid", 36, 31, 9138UL, "sha:e9283adcc68f021576fdd30d86c54df5")]
+        [DataRow("correlate", "full", 40, 31, 9139UL, "sha:2059d7cf5a2454db79858b9ab770bd40")]
+        [DataRow("correlate", "same", 40, 31, 9140UL, "sha:f3cf0250f55deb21952dfde107fc673a")]
+        [DataRow("correlate", "valid", 40, 31, 9141UL, "sha:6edee0c31be7d1c5bf1ce6b9d529c5f5")]
+        [DataRow("convolve", "full", 40, 31, 9142UL, "sha:71607fa6757e81c761635b06651db39b")]
+        [DataRow("convolve", "same", 40, 31, 9143UL, "sha:2d8b5a1d1bb2180a20fcf8d34d3d960a")]
+        [DataRow("convolve", "valid", 40, 31, 9144UL, "sha:f0f4700e440dcc25569eb7ea7094a032")]
+        [DataRow("correlate", "full", 33, 33, 9145UL, "sha:02d5b37502d34b3ff2f095d1172b4335")]
+        [DataRow("correlate", "same", 33, 33, 9146UL, "sha:40ead138c80e913b3e29a4e09e5b3a48")]
+        [DataRow("correlate", "valid", 33, 33, 9147UL, "sha:6a8e42fafb60633c75935f6f460bf1f6")]
+        [DataRow("convolve", "full", 33, 33, 9148UL, "sha:b7a8c8969a40fb78947f4fb5adea79a5")]
+        [DataRow("convolve", "same", 33, 33, 9149UL, "sha:2fe9337e1a07114524dd7d2a91a0ab0c")]
+        [DataRow("convolve", "valid", 33, 33, 9150UL, "sha:82186270d4f073a7f704a935b36d016c")]
+        [DataRow("correlate", "full", 38, 33, 9151UL, "sha:5e7a868e1397692dede72527b766ae51")]
+        [DataRow("correlate", "same", 38, 33, 9152UL, "sha:68017c6e14e69817525c3b13217873a4")]
+        [DataRow("correlate", "valid", 38, 33, 9153UL, "sha:e3cface9f80bf47359dfa0c57157c9c4")]
+        [DataRow("convolve", "full", 38, 33, 9154UL, "sha:a39cdacf7375ce994665af08be199aa6")]
+        [DataRow("convolve", "same", 38, 33, 9155UL, "sha:170e428c2173b8e1b06839ba14ec7490")]
+        [DataRow("convolve", "valid", 38, 33, 9156UL, "sha:c29c9c013405f3cc94be93f2f7b122ab")]
+        [DataRow("correlate", "full", 40, 33, 9157UL, "sha:f8ecaed62c165f8fd00bff68784aac85")]
+        [DataRow("correlate", "same", 40, 33, 9158UL, "sha:a3499fa4820b916f7dd9e7edf0545e6f")]
+        [DataRow("correlate", "valid", 40, 33, 9159UL, "sha:4514e3e283dc77a847787d1bc80d9de6")]
+        [DataRow("convolve", "full", 40, 33, 9160UL, "sha:c517d76c33beef81856d252d4f753200")]
+        [DataRow("convolve", "same", 40, 33, 9161UL, "sha:8c391a3abe7073e9286b14ad7be52a61")]
+        [DataRow("convolve", "valid", 40, 33, 9162UL, "sha:ba674b411f803f7d6a29896661fbc833")]
+        public void ComplexSliding_PerPosition_MatchesNumPyBits(string fn, string mode, int n1, int n2, ulong seed,
+            string expected)
+        {
+            var g = new Lcg(seed);
+            var a = g.Array(new long[] { n1 }, "complex128");
+            var v = g.Array(new long[] { n2 }, "complex128");
+            // The hook is [ThreadStatic]: it changes this test's thread only, and the finally restores it for the next
+            // test the worker runs.
+            SlidingDot.LongKernelsDisabled = true;
+            try
+            {
+                var r = fn == "correlate" ? np.correlate(a, v, mode) : np.convolve(a, v, mode);
+                AssertNumPyBits(r, "complex128", expected, $"{fn} {mode} n1={n1} n2={n2}");
+            }
+            finally
+            {
+                SlidingDot.LongKernelsDisabled = false;
+            }
         }
 
         /// <summary>

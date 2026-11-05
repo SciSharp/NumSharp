@@ -71,7 +71,18 @@ namespace NumSharp.Backends
         ///     Whether the blocked long-product kernels can run: x86-64 with AVX and FMA — every other host keeps the
         ///     per-position kernels, which are correct everywhere.
         /// </summary>
-        private static bool LongProductKernelsSupported => Fma.IsSupported && Avx.IsSupported;
+        private static bool LongProductKernelsSupported => !LongKernelsDisabled && Fma.IsSupported && Avx.IsSupported;
+
+        /// <summary>
+        ///     Test hook: true turns the blocked long-product kernels off on this thread, so every position takes the
+        ///     per-position engines (<c>SlidingSingle</c>, <c>SlidingSimd</c>, <c>SlidingComplex</c>, <c>SlidingHalf</c>) -
+        ///     what a host without AVX / FMA runs, and what a kernel holding a non-finite value takes everywhere. Off by
+        ///     default on every thread.
+        /// </summary>
+        /// <remarks>[ThreadStatic] because NumSharp.Tests runs in parallel: a process-wide switch would change the route
+        ///     of every concurrent correlate / convolve test.</remarks>
+        [ThreadStatic]
+        internal static bool LongKernelsDisabled;
 
         /// <summary>
         ///     The float64 correlation of a kernel of <see cref="DdotVectorMin"/> or more terms without the backend: the

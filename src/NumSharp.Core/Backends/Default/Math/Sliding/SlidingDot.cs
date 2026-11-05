@@ -611,18 +611,33 @@ namespace NumSharp.Backends
             }
         }
 
+        /// <summary>
+        ///     complex128 sliding engine when the blocked long kernel does not run (a kernel of fewer than 8 terms, a kernel
+        ///     holding a non-finite value, a host without AVX / FMA): CDOUBLE_dot per position over zdotu - its four sums
+        ///     below 8 terms, its eight-accumulator vector kernel from 8 (<see cref="NDDot.ComplexDotUnit"/>) - NumPy's bits
+        ///     at every position.
+        /// </summary>
+        /// <param name="a">Data element 0.</param><param name="k">Kernel element 0 (forward).</param>
+        /// <param name="o">Output element 0.</param><param name="n2">Kernel length.</param>
+        /// <param name="nLeft">Left-ramp positions.</param><param name="nRight">Right-ramp positions.</param>
+        /// <param name="mid">Middle positions.</param>
+        /// <remarks>
+        ///     The middle hands the kernel to the row function as x, the operand its outputs share (two positions at a time):
+        ///     zdotu's two cross sums swap roles (Σ xr·yi becomes Σ yr·xi), and the imaginary part adds the same two sums in
+        ///     the other order, the same value. Measured against the former per-position loop (the naive product from 8
+        ///     terms, scalar): 1.7-3.9x faster at 10,000 x 5..100.
+        /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe void SlidingComplex(Complex* a, Complex* k, Complex* o, long n2, long nLeft, long nRight, long mid)
         {
             for (long j = 0; j < nLeft; j++)
-                o[j] = ZdotuManaged(a, k + (nLeft - j), n2 - nLeft + j);
-            Complex* om = o + nLeft;
-            for (long i = 0; i < mid; i++)
-                om[i] = ZdotuManaged(a + i, k, n2);
+                o[j] = NDDot.ComplexDotUnit(a, 1, k + (nLeft - j), 1, n2 - nLeft + j);
+            NDDot.ComplexDotUnitRow(k, 1, a, 1, 1, o + nLeft, mid, n2);
             Complex* orr = o + nLeft + mid;
             for (long j = 0; j < nRight; j++)
-                orr[j] = ZdotuManaged(a + mid + j, k, n2 - 1 - j);
+                orr[j] = NDDot.ComplexDotUnit(a + mid + j, 1, k, 1, n2 - 1 - j);
         }
+
 
         /// <summary>
         ///     The complex128 sliding engine when NumPy's CDOUBLE_dot does NOT reach cblas (an operand whose stride its dot
