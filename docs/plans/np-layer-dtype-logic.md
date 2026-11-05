@@ -135,7 +135,9 @@ The owner's PA round of 2026-11-05 (D23): every PA task lands only where it is m
 each one. PA3a is done (`c032f867`, `3212b02e`, `93a3ffce`): np.dot computes with NumPy's dot functions
 (`Utilities/NDDot.cs`), bit for bit but for which NaN survives where several meet, and faster or equal in every measured
 cell; np.correlate / np.convolve's complex128 per-position engine too, while their float32 / float64 per-position dots
-stay where NumPy's exact model measured slower. Next: PA3b, PA2a, PA2b and PA2c.
+stay where NumPy's exact model measured slower. PA3b's np.vecdot and np.vdot are done (`ef4265ea`, `f5c2c117`): NumPy's
+dot functions per output at the strides NumPy hands them, faster in every measured cell or equal. Next: PA3b's N-D
+walkers, np.dot's scalar branch and NaN priority, then PA2a, PA2b and PA2c.
 
 **The owner's decisions of 2026-10-31** ([§5](#5-decisions-for-the-owner), D7 to D22, asked with each option's code):
 - P7 is dropped. D7's first answer ("Rule on the result") gave it a design; in the step round the same day the owner
@@ -1398,10 +1400,28 @@ there. Rules (decided 2026-10-30):
     exact per-position model needs a horizontal reduction per position where their middles sum sequentially across
     positions, 0.13–0.70× (not landed, per D23). `SlidingDot.LongKernelsDisabled` ([ThreadStatic]) turns the blocked
     route off for tests.
+  - **PA3b, np.vecdot: done 2026-11-05 (`ef4265ea`).** `DefaultEngine.Vecdot` (`Default.Vecdot.cs`) runs NumPy's
+    `@TYPE@_vecdot` for the float32 / float64 / complex128 loops: FLOAT_dot / DOUBLE_dot and CDOUBLE_dotc (NDDot's new
+    zdotc: `IZdotForm`, zdotu and zdotc sharing the kernel and the tail) once per output, at NumPy's strides - an operand
+    of the loop dtype at its own core stride, an operand cast to it at unit stride (the gufunc iterator's copy lays the
+    core axis innermost; cast here a block of runs at a time into L1 scratch), stride 0 for a core of one element (the
+    own loop: an inlined, vectorized term). Every other loop keeps the composition (its values are NumPy's). Four-output
+    pair rows run the own loop's dependent chains side by side. 1,223 of 1,230 NumPy cases identical (418 before; the
+    rest NaN sign only); 99 same-dtype cells 1.23-21.8x, 114 mixed-dtype cells 1.06-7.4x, none slower. Gates: 379
+    NumPy-bit rows, 444 products cases.
+  - **PA3b, np.vdot: done 2026-11-05 (`f5c2c117`).** np.vdot flattens its first operand as `PyArray_Newshape(-1)` does
+    (a reversed, broadcast or stepped view read in place; ravel's copy where no view exists) and ends in
+    `TensorEngine.VdotFunction1D`: DefaultEngine runs CDOUBLE_vdot's zdotc on the first operand as it is (no conjugated
+    copy; a NaN imaginary part keeps its sign). A float32 / float64 view is read in place up to the measured crossover
+    (64 elements for the own loop, 1,000 for float32's strided pairs; float64's strided loop always) and copied above it
+    (`VdotReadsFirstInPlace`: NumPy's single chain of dependent adds measured 0.29-0.84x there) - the one place left
+    where np.vdot gives the dot over a copy, not NumPy's bits ([Misaligned] rows). 299 of 304 NumPy cases identical
+    (169 before); 94 of 133 cells faster (complex128 1.3-3.6x), the rest equal. Found and pinned (D21): the OpenBLAS
+    backend's `TryVdot` copies a view NumPy reads in place (`ProductsLiveParityTests.Vdot_ViewOperands_ReadInPlace_ByteExact`).
   - Left for PA3b ("complete full dtype and edge cases parity"): which NaN survives where several meet (the operand
     order of every add and fused multiply-add, as `NDHalfDot` encodes it for float16), np.dot's scalar branch for 0-d
-    and (1, 1) operands (`Dot_SizeOneOperand_FollowsNumPysScalarBranch_OnTheManagedPath`), the contiguous N-D walkers
-    (`DotNDMDSimdFloat` / `DotNDMDSimdDouble`, an index division per output) and np.vecdot.
+    and (1, 1) operands (`Dot_SizeOneOperand_FollowsNumPysScalarBranch_OnTheManagedPath`) and the contiguous N-D walkers
+    (`DotNDMDSimdFloat` / `DotNDMDSimdDouble`, an index division per output).
 
 - [x] **PA4. The logical ufuncs' combine** (`e41c90dc`). `CombineTruth` (`Default.Logical.cs`) is a hand vector
   AND / OR / XOR over bytes, which its own comment says works "as the bitwise ufunc combines". It becomes that ufunc's
@@ -1668,7 +1688,21 @@ breaks a subclass or a direct caller for a layering reason alone.
     linalg tiers on net8.0, the dot / matmul / vdot / inner tests under `NUMSHARP_DEBUG_GUARD_PAGES=1`.
   - `93a3ffce`, np.correlate / np.convolve (see PA3): complex128 lands, float32 / float64 measured slower and kept.
     Gates: unit 21,759 / 21,758, the oracle 415 passed, 560 correlate / dot tests under guard pages.
-  - Next: PA3b, then PA2a, PA2b, PA2c.
+  - `ef4265ea`, np.vecdot (see PA3). The effort the rule asked for, in order: whole-operand casts measured 0.73x
+    (int32 . float32 at 1000 x 1000: a converted copy written and re-read), casts run by run lost below 32 terms, blocks
+    of runs in L1 scratch won everywhere; a core of one element called a dot function per output (0.26-0.64x), the
+    inlined term and its vector lanes made it 1.41-3.55x; nothing converted to complex128 (no cast kernel), a managed
+    block conversion made those 1.24-2.75x; reversed float32 rows read 0.82x in one run, the pair rows made them 1.62x.
+    The NDDot zdotu refactor compiles np.dot's complex functions to the same machine code (JIT disassembly). Gates:
+    unit 22,138 / 22,137, the oracle 417 passed, 955 tests under guard pages.
+  - `f5c2c117`, np.vdot (see PA3). The exact route over every view measured long float32 / float64 runs 0.29-0.84x; a
+    copy decided after the view cost both (0.71-0.92x), so the decision moved before the view
+    (`VdotReadsFirstInPlace`). The products tier's 1-D and vecdot sections had looped over emit's case counter `n`
+    (every emitted case advanced the length); they loop over `ln` now and were regenerated at their named lengths.
+    Gates: unit 22,352 / 22,351 after the rebase onto `5994ea16`, the product oracle tiers, 1,133 tests under guard
+    pages. One net8.0 suite run aborted in np.unique's `LongIndexedFallback_GivesTheManagedOutputs` (an
+    AccessViolation, outside the change; it had failed intermittently before this round's vecdot code too).
+  - Next: PA3b's N-D walkers, np.dot's scalar branch and NaN priority, then PA2a, PA2b, PA2c.
 
 - **2026-11-02, P10 item 1: np.sum's family with NumPy's whole signature - P10's items 1 to 5 are done.** One commit on
   `strings` (not pushed).
