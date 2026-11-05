@@ -610,6 +610,8 @@ namespace NumSharp.Tests.Fuzz
                 case "set_default_printstyle": return PolySetDefaultPrintstyle(p, ops);
                 case "array_repr": return np.array_repr(ops[0]);
                 case "mintypecode": return np.mintypecode(p["typechars"].GetString()).ToString();
+                // np.mintypecode(x) of an ARRAY: its elements along the first axis (a 0-d array raises NumPy's TypeError).
+                case "mintypecode_array": return np.mintypecode(ops[0]).ToString();
                 // einsum_path returns the contraction planner's info STRING (shape-derived, so
                 // the operand values are irrelevant). Byte-identical to NumPy for non-ellipsis
                 // subscripts; the tuple's path structure is encoded in this same string.

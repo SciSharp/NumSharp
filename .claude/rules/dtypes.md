@@ -330,6 +330,16 @@ prefix (`GetCastingImpl`, `DTypePromotion.CommonDType`). PascalCase members (`Na
   `_can_coerce_all(dtypelist, start)` takes NumPy's `start`: an index into that ladder, not into the list. A list holding
   decimal or char promotes by NumSharp's table. Gate: `Logic/corpus/find_common_type.numpy1264.jsonl` (from a
   numpy==1.26.4 environment, `test/oracle/gen_find_common_type_oracle.py`).
+- `np.mintypecode(object typechars, string typeset, char default)` is ONE overload over NumPy's "list of str or
+  array_like" (`Creation/np.dtype.cs`), read as NumPy's `(isinstance(t, str) and t) or asarray(t).dtype.char for t in
+  typechars`: a string's code points; an `NDArray`'s first-axis elements, each the array's `dtype.char`, except that a
+  1-D `U` / `StringDType` array's elements are `str` (`NDScalarType.PyStr.__subclasscheck__(dtype)`, so their TEXT is the
+  type character; a chararray's after `rstrip()`; `S` gives `'S'`); a masked 1-D array's masked element is
+  `np.ma.masked`, float64 `'d'`; a sequence item by item (a C# `char` spells a type character; what NumPy holds in an
+  object array - null, a `DType`, a class, an object NumSharp has no dtype for - is `'O'`). `t in typeset` is a SUBSTRING
+  test, so a multi-character item takes part; a char cannot hold it as the answer (`NotSupportedException`), and in a
+  tie NumSharp takes the one-character member (NumPy's pick follows Python's hash-randomized set order). Gates:
+  `DTypes/np.mintypecode.Test.cs`, the dtype_text tier's `mintypecode_array` cases (12 layouts x 9 dtypes).
 - `np.asanyarray(object[])` of mixed scalars reads each value through the boundary map (a `bool` is a Python bool, every
   C# integer primitive a Python int, `float` and `double` Python floats, `Complex` a Python complex, `Half` / `char` /
   `decimal` NumPy scalars) and promotes them as NumPy's array coercion does: a Python int is discovered as int64, which

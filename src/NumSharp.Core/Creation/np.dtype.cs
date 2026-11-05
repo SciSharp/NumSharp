@@ -12,93 +12,324 @@ namespace NumSharp
     public static partial class np
     {
         /// <summary>
-        ///     Return the character for the minimum-size type to which given types can be safely cast.
-        ///     The returned type character must represent the smallest size dtype such that an array of the returned type can handle the data from an array of all types in typechars(or if typechars is an array, then its dtype.char).
+        ///     Return the character for the minimum-size type to which given types can be safely cast — NumPy's
+        ///     <c>numpy.mintypecode</c>: the type characters of <paramref name="typechars"/> that are in
+        ///     <paramref name="typeset"/>, then the one NumPy ranks smallest.
         /// </summary>
-        /// <param name="typechars">every character represents a type. see <see cref="DType.@char"/></param>
-        /// <param name="typeset">The set of characters that the returned character is chosen from. The default set is ‘GDFgdf’.</param>
-        /// <param name="default">The default character, this is returned if none of the characters in typechars matches a character in typeset.</param>
+        /// <param name="typechars">
+        ///     NumPy's "list of str or array_like", read as NumPy's <c>(isinstance(t, str) and t) or
+        ///     asarray(t).dtype.char for t in typechars</c> reads it:
+        ///     <list type="bullet">
+        ///       <item><description>a <see cref="string"/>: each character is a type character (<c>"fd"</c>);</description></item>
+        ///       <item><description>an <see cref="NDArray"/>: its elements along the first axis. A numeric array gives its
+        ///       <c>dtype.char</c> once per element (none for an empty first axis); a ONE-dimensional <c>U</c> /
+        ///       <c>StringDType</c> array gives its elements' TEXT, because NumPy's <c>numpy.str_</c> elements are
+        ///       <c>str</c> (<c>np.array(new[] { "d", "f" })</c> reads like <c>"df"</c>; a chararray's text after its
+        ///       <c>rstrip()</c>); an <c>S</c> array gives <c>'S'</c> (bytes are no <c>str</c>);</description></item>
+        ///       <item><description>an <see cref="NDMaskedArray"/>: like its data, except that a masked element of a 1-D
+        ///       array is NumPy's <c>np.ma.masked</c>, a float64 constant, so it gives <c>'d'</c>;</description></item>
+        ///       <item><description>any other sequence (a C# array, a list, a tuple), item by item: a string is itself (the
+        ///       empty string is <c>np.asarray("")</c>'s <c>'U'</c>), a <see cref="char"/> is the one-character type
+        ///       character it spells, an array its <c>dtype.char</c>, a scalar its <c>np.asarray(x).dtype.char</c>
+        ///       (<c>1.5</c> is <c>'d'</c>, a C# <c>float</c> <c>'f'</c>), and anything NumPy holds in an object array
+        ///       (null, a <see cref="DType"/>, a class, an object NumSharp has no dtype for) is <c>'O'</c>.</description></item>
+        ///     </list>
+        ///     Null is NumPy's <c>None</c>, which is not iterable.
+        /// </param>
+        /// <param name="typeset">The characters the answer may be (default <c>'GDFgdf'</c>). NumPy tests each type
+        ///     character with <c>t in typeset</c>, a SUBSTRING test, so a multi-character item counts when typeset contains
+        ///     it.</param>
+        /// <param name="default">The answer when no type character of <paramref name="typechars"/> is in
+        ///     <paramref name="typeset"/>.</param>
         /// <returns>The character representing the minimum-size type that was found.</returns>
-        /// <exception cref="TypeError"><paramref name="typechars"/> is null, or <paramref name="typeset"/> is null while there is a character to test against it (Python's iteration / <c>in</c> errors).</exception>
+        /// <exception cref="TypeError">
+        ///     <paramref name="typechars"/> is not iterable, with Python's texts: <c>'NoneType' object is not iterable</c>,
+        ///     <c>'int' object is not iterable</c>, <c>iteration over a 0-d array</c>; or <paramref name="typeset"/> is null
+        ///     while a type character is tested against it (<c>argument of type 'NoneType' is not iterable</c>).
+        /// </exception>
         /// <exception cref="ValueError">
         ///     A matching character is not one of NumPy's sized codes <c>'GDFgdfQqLlIiHhBb?'</c> (<c>'e'</c>, <c>'n'</c>,
-        ///     <c>'p'</c>, …) and the answer is not the <c>'F'</c> + <c>'d'</c> rule: NumPy picks the minimum with
-        ///     <c>_typecodes_by_elsize.index</c>, whose <c>str.index</c> raises "substring not found" for it.
+        ///     <c>'p'</c>, <c>'O'</c>, …) and the answer is not the <c>'F'</c> + <c>'d'</c> rule: NumPy picks the minimum
+        ///     with <c>_typecodes_by_elsize.index</c>, whose <c>str.index</c> raises "substring not found" for it.
         /// </exception>
+        /// <exception cref="NotSupportedException">NumPy's answer is a multi-character item (<c>new[] { "Fg" }</c> is
+        ///     <c>'Fg'</c> in NumPy, a substring of <c>'GDFgdf'</c>), which a <see cref="char"/> cannot hold.</exception>
         /// <remarks>
-        ///     Port of <c>numpy/lib/_type_check_impl.py::mintypecode</c>: the characters of <paramref name="typechars"/> that
-        ///     are in <paramref name="typeset"/>, the default when there are none, <c>'D'</c> when both <c>'F'</c> and
-        ///     <c>'d'</c> are among them, else the one listed first in <c>'GDFgdfQqLlIiHhBb?'</c>.
+        ///     Port of <c>numpy/lib/_type_check_impl.py::mintypecode</c>: the characters found in <paramref name="typeset"/>,
+        ///     the default when there are none, <c>'D'</c> when both <c>'F'</c> and <c>'d'</c> are among them, else the one
+        ///     listed first in <c>'GDFgdfQqLlIiHhBb?'</c>. NumPy's generator is consumed lazily, so each item's type
+        ///     character is computed and tested before the next item is read; only the iteration of
+        ///     <paramref name="typechars"/> itself fails first (<c>iter(typechars)</c> runs when the generator is made).
+        ///     <code>
+        ///     np.mintypecode("dfS");                              // 'd'
+        ///     np.mintypecode(np.array(new[] { 1.1, 2.0 }) + 0j);  // 'D' (NumPy's docstring example)
+        ///     np.mintypecode("abceh", @default: 'G');             // 'G'
+        ///     </code>
         /// </remarks>
-        public static char mintypecode(string typechars, string typeset = "GDFgdf", char @default = 'd')
-        {
-            if (typechars == null)
-                throw new TypeError("'NoneType' object is not iterable");
-            return MinTypeCode(typechars, typeset, @default);
-        }
+        public static char mintypecode(object typechars, string typeset = "GDFgdf", char @default = 'd')
+            => MinTypeCode(TypeCodesOf(typechars), typeset, @default);
 
         /// <summary>
-        ///     Return the character for the minimum-size type to which given types can be safely cast.
-        ///     The returned type character must represent the smallest size dtype such that an array of the returned type can handle the data from an array of all types in typechars(or if typechars is an array, then its dtype.char).
+        ///     The type characters NumPy's <c>mintypecode</c> generator yields for <paramref name="typechars"/>, after the one
+        ///     check NumPy makes at once: <c>iter(typechars)</c>.
         /// </summary>
-        /// <param name="typechars">The type characters, one per type (see <see cref="DType.@char"/>).</param>
-        /// <param name="typeset">The set of characters that the returned character is chosen from. The default set is ‘GDFgdf’.</param>
-        /// <param name="default">The default character, this is returned if none of the characters in typechars matches a character in typeset.</param>
-        /// <returns>The character representing the minimum-size type that was found.</returns>
-        /// <exception cref="TypeError"><paramref name="typechars"/> is null, or <paramref name="typeset"/> is null while there is a character to test against it.</exception>
-        /// <exception cref="ValueError">A matching character is not one of NumPy's sized codes (see <see cref="mintypecode(string, string, char)"/>).</exception>
-        public static char mintypecode(char[] typechars, string typeset = "GDFgdf", char @default = 'd')
+        /// <param name="typechars">The argument of <see cref="mintypecode(object, string, char)"/>.</param>
+        /// <returns>The lazily computed type characters, in NumPy's order.</returns>
+        /// <exception cref="TypeError">The argument is not iterable (Python's texts).</exception>
+        private static IEnumerable<string> TypeCodesOf(object typechars)
         {
-            if (typechars == null)
-                throw new TypeError("'NoneType' object is not iterable");
-            return MinTypeCode(typechars, typeset, @default);
+            switch (typechars)
+            {
+                case null:
+                    throw new TypeError("'NoneType' object is not iterable");
+                case string text:
+                    return CodePointStrings(text);
+                case NDArray array:
+                    if (array.ndim == 0)
+                        throw new TypeError("iteration over a 0-d array");
+                    return ArrayTypeCodes(array);
+                case NDMaskedArray masked:
+                    if (masked.ndim == 0)
+                        throw new TypeError("iteration over a 0-d array");
+                    return MaskedTypeCodes(masked);
+                case DType descr:
+                    // Python names the class of the object: a NumPy descriptor's class is its numpy.dtypes class.
+                    throw new TypeError($"'numpy.dtypes.{descr.Meta.Name}' object is not iterable");
+                case NDScalarType:
+                case Type:
+                    throw new TypeError("'type' object is not iterable");
+                case System.Runtime.CompilerServices.ITuple tuple:
+                    return TupleTypeCodes(tuple);
+                case System.Collections.IEnumerable items:
+                    return ItemTypeCodes(items);
+                default:
+                    throw new TypeError($"'{NumSharp.Backends.Strings.NDPyObject.TypeName(typechars)}' object is not iterable");
+            }
+        }
+
+        /// <summary>A string's characters as Python iterates a <c>str</c>: one code point each (a surrogate pair is one).</summary>
+        /// <param name="text">The string.</param>
+        /// <returns>The one-code-point strings.</returns>
+        private static IEnumerable<string> CodePointStrings(string text)
+        {
+            for (int i = 0; i < text.Length; i++)
+            {
+                if (char.IsHighSurrogate(text[i]) && i + 1 < text.Length && char.IsLowSurrogate(text[i + 1]))
+                {
+                    yield return text.Substring(i, 2);
+                    i++;
+                }
+                else
+                {
+                    yield return text[i].ToString();
+                }
+            }
         }
 
         /// <summary>
-        ///     The body of <see cref="mintypecode(string, string, char)"/>, statement for statement NumPy's: the set of
+        ///     NumPy's type characters of an array's elements along its first axis: the array's own character for each one,
+        ///     except a 1-D text array whose elements are Python <c>str</c> (<c>U</c>, <c>StringDType</c>), which gives each
+        ///     element's text.
+        /// </summary>
+        /// <param name="array">The array (at least 1-D).</param>
+        /// <returns>The type characters, one per element of the first axis.</returns>
+        private static IEnumerable<string> ArrayTypeCodes(NDArray array)
+        {
+            long count = array.Shape.dimensions[0];
+            bool textElements = array.ndim == 1 && IsPyStrClass(array.dtype);
+            string own = array.dtype.@char.ToString();
+            for (long i = 0; i < count; i++)
+            {
+                // An element of a numeric (or S, or N-D) array is a NumPy scalar or a row: asarray(t).dtype.char is the
+                // array's own character every time.
+                yield return textElements ? StrTypeCode(ElementText(array, i)) : own;
+            }
+        }
+
+        /// <summary>
+        ///     NumPy's type characters of a masked array's elements along its first axis: a masked element of a 1-D array is
+        ///     <c>np.ma.masked</c> (a float64 constant, <c>'d'</c>); every other element, and every row of an N-D array, is
+        ///     read as its data's (<see cref="ArrayTypeCodes"/>).
+        /// </summary>
+        /// <param name="masked">The masked array (at least 1-D).</param>
+        /// <returns>The type characters, one per element of the first axis.</returns>
+        private static IEnumerable<string> MaskedTypeCodes(NDMaskedArray masked)
+        {
+            NDArray data = masked.data;
+            NDArray mask = masked.ndim == 1 ? np.ma.getmaskarray(masked) : null;
+            long i = 0;
+            foreach (string code in ArrayTypeCodes(data))
+            {
+                // `is not null`: NDArray's != is the elementwise comparison.
+                yield return mask is not null && mask.GetBoolean(i) ? "d" : code;
+                i++;
+            }
+        }
+
+        /// <summary>The type characters of a C# tuple standing in for a Python tuple, item by item (<see cref="ItemTypeCode"/>).</summary>
+        /// <param name="tuple">The tuple.</param>
+        /// <returns>The type characters.</returns>
+        private static IEnumerable<string> TupleTypeCodes(System.Runtime.CompilerServices.ITuple tuple)
+        {
+            for (int i = 0; i < tuple.Length; i++)
+                yield return ItemTypeCode(tuple[i]);
+        }
+
+        /// <summary>The type characters of a sequence, item by item (<see cref="ItemTypeCode"/>).</summary>
+        /// <param name="items">The sequence (a C# array, a list).</param>
+        /// <returns>The type characters.</returns>
+        private static IEnumerable<string> ItemTypeCodes(System.Collections.IEnumerable items)
+        {
+            foreach (object item in items)
+                yield return ItemTypeCode(item);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>(isinstance(t, str) and t) or asarray(t).dtype.char</c> for one item of a sequence.
+        /// </summary>
+        /// <param name="item">The item.</param>
+        /// <returns>The item's type character (a whole string for a string item).</returns>
+        /// <remarks>
+        ///     A <see cref="char"/> is the one-character type character it spells (C# spells type characters as
+        ///     <see cref="char"/>: <see cref="DType.@char"/>), not NumSharp's <c>char</c> dtype. What NumPy's
+        ///     <c>asarray</c> would put in an object array is <c>'O'</c>: <c>None</c>, a descriptor or a class (NumPy has no
+        ///     array of those but the object array), and a C# object NumSharp has no dtype for. A Python int follows
+        ///     <c>asarray</c>'s rule for it: int64, else uint64, else object.
+        /// </remarks>
+        private static string ItemTypeCode(object item)
+        {
+            switch (item)
+            {
+                case null:
+                    return "O";
+                case string text:
+                    return StrTypeCode(text);
+                case char c:
+                    return c.ToString();
+                case NDMaskedConstant:
+                    return "d";
+                case NDCharArray { IsScalarStandIn: true } standIn:
+                    // An element stand-in of a chararray is the str (U) or bytes (S) value it holds.
+                    return IsPyStrClass(standIn.dtype) ? StrTypeCode(standIn.GetValue(new long[standIn.ndim]) as string ?? string.Empty) : "S";
+                case NDArray array:
+                    return array.dtype.@char.ToString();
+                case NDMaskedArray masked:
+                    return masked.dtype.@char.ToString();
+                case DType:
+                case NDScalarType:
+                case Type:
+                    return "O";
+                case BigInteger big:
+                    return big >= long.MinValue && big <= long.MaxValue ? DType.Int64.@char.ToString()
+                        : big >= ulong.MinValue && big <= ulong.MaxValue ? DType.UInt64.@char.ToString()
+                        : "O";
+            }
+
+            try
+            {
+                return asanyarray(item).dtype.@char.ToString();
+            }
+            catch (NotSupportedException)
+            {
+                // NumSharp has no dtype for the object: NumPy's asarray would hold it in an object array.
+                return "O";
+            }
+        }
+
+        /// <summary>
+        ///     The type character of a Python <c>str</c> item: the text itself, or <c>'U'</c> for the empty string, which is
+        ///     falsy, so NumPy's <c>or</c> falls through to <c>asarray("").dtype.char</c>.
+        /// </summary>
+        /// <param name="text">The text.</param>
+        /// <returns>The type character.</returns>
+        private static string StrTypeCode(string text) => text.Length != 0 ? text : "U";
+
+        /// <summary>
+        ///     Whether a descriptor's elements are Python <c>str</c> objects in NumPy - NumPy's <c>isinstance(t, str)</c> for
+        ///     an element <c>t</c>, which is <c>issubclass(dtype.type, str)</c>: true for <c>U</c> (<c>numpy.str_</c> derives
+        ///     from <c>str</c>) and <c>StringDType</c> (its class IS <c>str</c>), false for <c>S</c> (<c>numpy.bytes_</c>) and
+        ///     every numeric class.
+        /// </summary>
+        /// <param name="descr">The descriptor.</param>
+        /// <returns>True when the elements are <c>str</c>.</returns>
+        private static bool IsPyStrClass(DType descr) => NDScalarType.PyStr.__subclasscheck__(descr);
+
+        /// <summary>
+        ///     The text of element <paramref name="index"/> of a 1-D text array, as NumPy's iteration hands it out: a
+        ///     chararray applies <c>rstrip()</c> (Python's whitespace) to the element it returns.
+        /// </summary>
+        /// <param name="array">A 1-D <c>U</c> or <c>StringDType</c> array.</param>
+        /// <param name="index">The element.</param>
+        /// <returns>The text (a missing StringDType value reads as its string form).</returns>
+        private static string ElementText(NDArray array, long index)
+        {
+            string text = array.GetValue(index) as string ?? string.Empty;
+            if (array is NDCharArray)
+            {
+                int end = text.Length;
+                while (end > 0 && NumSharp.Utilities.PyUnicode.IsSpace(text[end - 1]))
+                    end--;
+                text = text.Substring(0, end);
+            }
+            return text;
+        }
+
+        /// <summary>
+        ///     The body of <see cref="mintypecode(object, string, char)"/>, statement for statement NumPy's: the set of type
         ///     characters found in <paramref name="typeset"/>, the default for an empty set, the <c>'F'</c> + <c>'d'</c> →
         ///     <c>'D'</c> rule, then the minimum by position in <c>_typecodes_by_elsize</c>.
         /// </summary>
-        /// <param name="typechars">The type characters to test.</param>
-        /// <param name="typeset">The characters the answer may be; null raises only when a character reaches the test (Python's lazy set comprehension).</param>
+        /// <param name="typecodes">The type characters to test (a string item may be longer than one character).</param>
+        /// <param name="typeset">The characters the answer may be; null raises only when a type character reaches the test
+        ///     (Python's lazy set comprehension).</param>
         /// <param name="default">The answer for an empty intersection.</param>
         /// <returns>The minimum-size type character.</returns>
-        /// <exception cref="TypeError"><paramref name="typeset"/> is null and a character is tested against it.</exception>
-        /// <exception cref="ValueError">A character of the intersection is not in <c>_typecodes_by_elsize</c>.</exception>
-        private static char MinTypeCode(IEnumerable<char> typechars, string typeset, char @default)
+        /// <exception cref="TypeError"><paramref name="typeset"/> is null and a type character is tested against it.</exception>
+        /// <exception cref="ValueError">A member of the intersection is not in <c>_typecodes_by_elsize</c>.</exception>
+        /// <exception cref="NotSupportedException">The minimum is a multi-character item.</exception>
+        private static char MinTypeCode(IEnumerable<string> typecodes, string typeset, char @default)
         {
             const string _typecodes_by_elsize = "GDFgdfQqLlIiHhBb?";
 
-            var intersection = new HashSet<char>();
-            foreach (char t in typechars)
+            // Python's set, kept in first-seen order: min() then returns the first minimal member in that order.
+            var intersection = new List<string>();
+            var members = new HashSet<string>(StringComparer.Ordinal);
+            foreach (string t in typecodes)
             {
-                // `t in typeset` — evaluated per character, so a None typeset fails only once there is a character.
+                // `t in typeset` — evaluated per item, so a None typeset fails only once there is an item; a str typeset
+                // tests a SUBSTRING.
                 if (typeset == null)
                     throw new TypeError("argument of type 'NoneType' is not iterable");
-                if (typeset.IndexOf(t) >= 0)
+                if (typeset.Contains(t, StringComparison.Ordinal) && members.Add(t))
                     intersection.Add(t);
             }
             if (intersection.Count == 0)
                 return @default;
-            if (intersection.Contains('F') && intersection.Contains('d'))
+            if (members.Contains("F") && members.Contains("d"))
                 return 'D';
 
-            // min(intersection, key=_typecodes_by_elsize.index): Python's min evaluates the key of EVERY element, so any
-            // element missing from the string raises, even when another element would have been the minimum.
-            char best = '\0';
+            // min(intersection, key=_typecodes_by_elsize.index): Python's min evaluates the key of EVERY member, so any
+            // member missing from the string raises, even when another member would have been the minimum. Only a
+            // multi-character member can share a key with another ('Fg' and 'F' are both at 2); NumPy's pick among such
+            // a tie follows the set's order, which Python's string hashing randomizes per process (PYTHONHASHSEED 0-7
+            // give 'F' three times and 'Fg' five for ['Fg', 'F']), so NumSharp takes the one-character member - one of
+            // NumPy's answers, and the one a char can hold.
+            string best = null;
             int bestIndex = int.MaxValue;
-            foreach (char t in intersection)
+            foreach (string t in intersection)
             {
-                int index = _typecodes_by_elsize.IndexOf(t);
+                int index = _typecodes_by_elsize.IndexOf(t, StringComparison.Ordinal);
                 if (index < 0)
                     throw new ValueError("substring not found");
-                if (index < bestIndex)
+                if (index < bestIndex || (index == bestIndex && t.Length == 1))
                 {
                     bestIndex = index;
                     best = t;
                 }
             }
-            return best;
+            if (best.Length != 1)
+                throw new NotSupportedException($"np.mintypecode's answer is the multi-character item '{best}' (NumPy returns it: it is a substring of the type set), which a char cannot hold.");
+            return best[0];
         }
 
         // ---- Platform-detected types (MUST be declared BEFORE _dtype_string_map since

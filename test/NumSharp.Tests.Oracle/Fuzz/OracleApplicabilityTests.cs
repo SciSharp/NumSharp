@@ -272,7 +272,7 @@ namespace NumSharp.Tests.Fuzz
                 InapplicableNote: "promotion helpers: results are dtypes/bools, so every array-value axis is out of scope"),
 
             new("G14 printing",
-                new[] { "array_str", "array_repr", "savetxt", "mintypecode" },
+                new[] { "array_str", "array_repr", "savetxt", "mintypecode", "mintypecode_array" },
                 new[]
                 {
                     new Cell("text", CellStatus.Enforced, MinOps: 4),

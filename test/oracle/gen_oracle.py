@@ -12538,6 +12538,25 @@ def gen_dtype_text():
                                    cid=f"nonzero_all/{ln}/{s}/{n}"))
                 n += 1
 
+    # np.mintypecode of an ARRAY (NumPy's docstring form, np.mintypecode(x)): every element along the first axis gives
+    # the array's dtype.char, an empty first axis none, and a 0-d array is not iterable (NumPy's TypeError). The default
+    # type set only names float and complex characters, so the answers are the same on every C long model. Appended
+    # after the loops above so their case ids keep their numbers.
+    for ln in DTYPE_TEXT_LAYOUTS:
+        fn = LAYOUTS[ln]
+        for s in ITER_DTYPES:
+            base, view = fn(np.dtype(s))
+            operand = describe(base, view)
+            try:
+                mtc = np.mintypecode(view)
+            except Exception as e:
+                cases.append(_error_case("mintypecode_array", {}, [operand], e, ln, kind="text",
+                                         cid=f"mintypecode_array/{ln}/{s}/err/{n}"))
+            else:
+                cases.append(_case("mintypecode_array", {}, [operand], {"kind": "text", "value": mtc}, ln, "text",
+                                   cid=f"mintypecode_array/{ln}/{s}/{n}"))
+            n += 1
+
     return cases
 
 
