@@ -318,6 +318,22 @@ namespace NumSharp
             return true;
         }
 
+        /// <summary>The tokens CPython's tokenizer makes of a repeat group (spaces separate, and are no token).</summary>
+        private enum RepeatsToken
+        {
+            /// <summary><c>'('</c>, which only the group's first character can be.</summary>
+            Open,
+
+            /// <summary><c>')'</c>, which only the group's last character (before trailing spaces) can be.</summary>
+            Close,
+
+            /// <summary><c>','</c>.</summary>
+            Comma,
+
+            /// <summary>A decimal integer literal: a run of digits.</summary>
+            Number,
+        }
+
         /// <summary>
         ///     <c>ast.literal_eval(repeats)</c> on CPython 3.12 for the language of NumPy's repeat group
         ///     (<c> *[(]?[ ,0-9]*[)]? *</c>), with CPython's SyntaxError texts.
@@ -361,7 +377,7 @@ namespace NumSharp
                 throw new SyntaxError("invalid syntax (<unknown>, line 0)");
 
             // Tokenize the whole source first: a tokenizer error anywhere is the answer, the first in source order.
-            var tokens = new List<(char Kind, int Start, int Length)>();
+            var tokens = new List<(RepeatsToken What, int Start, int Length)>();
             int level = 0;
             for (int i = start; i < source.Length;)
             {
@@ -373,18 +389,18 @@ namespace NumSharp
                         continue;
                     case '(':
                         level++;
-                        tokens.Add(('(', i, 1));
+                        tokens.Add((RepeatsToken.Open, i, 1));
                         i++;
                         continue;
                     case ')':
                         if (level == 0)
                             throw RepeatsSyntax("unmatched ')'");
                         level--;
-                        tokens.Add((')', i, 1));
+                        tokens.Add((RepeatsToken.Close, i, 1));
                         i++;
                         continue;
                     case ',':
-                        tokens.Add((',', i, 1));
+                        tokens.Add((RepeatsToken.Comma, i, 1));
                         i++;
                         continue;
                 }
@@ -403,12 +419,12 @@ namespace NumSharp
                 // CPython's tokenizer: a decimal literal may start with '0' only when every digit is '0'.
                 if (c == '0' && nonzero)
                     throw RepeatsSyntax("leading zeros in decimal integer literals are not permitted; use an 0o prefix for octal integers");
-                tokens.Add(('N', i, end - i));
+                tokens.Add((RepeatsToken.Number, i, end - i));
                 i = end;
             }
 
             // The parse. '(' can only come first and ')' only last (the group's regex), so one optional pair surrounds the body.
-            bool paren = tokens.Count > 0 && tokens[0].Kind == '(';
+            bool paren = tokens.Count > 0 && tokens[0].What == RepeatsToken.Open;
             int k = paren ? 1 : 0;
             var values = new List<BigInteger>();
             bool expectNumber = true;
@@ -416,9 +432,9 @@ namespace NumSharp
             for (; k < tokens.Count; k++)
             {
                 var token = tokens[k];
-                if (token.Kind == ')')
+                if (token.What == RepeatsToken.Close)
                     break;
-                if (token.Kind == 'N')
+                if (token.What == RepeatsToken.Number)
                 {
                     if (!expectNumber)
                     {
@@ -441,7 +457,7 @@ namespace NumSharp
                 }
             }
 
-            bool closed = k < tokens.Count && tokens[k].Kind == ')';
+            bool closed = k < tokens.Count && tokens[k].What == RepeatsToken.Close;
             if (paren && !closed)
                 throw RepeatsSyntax("'(' was never closed");
             if (paren && values.Count == 0)
@@ -513,7 +529,7 @@ namespace NumSharp
                 // interpret next item as a typesize: PyArray_PyIntAsInt fails for a tuple (no __index__) and for an int past
                 // a C int; NumPy then replaces its error.
                 int itemsize = !val.IsTuple && val.Values[0] >= int.MinValue && val.Values[0] <= int.MaxValue ? (int)val.Values[0] : -1;
-                if (type.Descr?.Meta is StringDTypeMeta { IsUnicode: true })
+                if (type.Descr?.type_num == NPY_TYPES.NPY_UNICODE)
                     itemsize = itemsize > int.MaxValue / 4 ? -1 : itemsize * 4;
                 if (itemsize < 0)
                     throw new ValueError("invalid itemsize in generic type tuple");
