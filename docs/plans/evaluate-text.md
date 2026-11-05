@@ -8,7 +8,7 @@ text exactly where NumPy's ufunc has a text loop, and the result equals NumPy's 
 
 | Phase | Scope | Status |
 |---|---|---|
-| E1 (MVP) | text leaves (S / U / StringDType arrays, 0-d, a C# `string` as NumPy's `str`) in the six comparisons anywhere in a tree; their bool results feed every numeric node, reduction and keyword | done |
+| E1 (MVP) | text leaves (S / U / StringDType arrays, 0-d, a C# `string` as NumPy's `str`) in the six comparisons anywhere in a tree; their bool results feed every numeric node, reduction and keyword | done (`2ab907a0`) |
 | E2 (next release) | the truth value of text (`LogicalAnd/Or/Xor`, `Where`'s condition, `Any` / `All` / `CountNonzero`), `IsNaN` over StringDType, the np.strings ufuncs and searches as factories (`StrLen`, the nine predicates, `Find` / `RFind` / `Count` / `Index` / `RIndex`, `StartsWith` / `EndsWith`), text → number `Cast` | planned |
 | E3 (next release) | text RESULTS: `Where` with text branches (np.where's promotion), `Add` (concatenation), `Multiply` (StringDType repeat; S / U need `out=`), `Maximum` / `Minimum` over StringDType, a bare text root; text reductions (`ArgMax` / `ArgMin` over S / U / T, `Max` / `Min` / `Sum` over StringDType); NumPy's own error for every other node with a text operand | planned |
 
@@ -146,7 +146,7 @@ contiguous calls stays possible later (it would sit behind the same lowering).
 
 ## 6. State log
 
-- 2026-11-04/05 — decisions D1–D3; NumPy matrix (§2); architecture measured (§3); E1 implemented:
+- 2026-11-04/05 — decisions D1–D3; NumPy matrix (§2); architecture measured (§3); E1 implemented (`2ab907a0`):
   `NDExpr.Text.cs` (the `string` leaf, `LowerText` on every node, `NDExprTextStage` / `NDExprTextPlan`),
   `DefaultEngine.Evaluate.Text.cs` (the per-call driver), `NDExprProgram.TextPlan` / `IsReduction`, the D20 refusals
   removed (binding, positional operands), `ComparisonNode.TruthTest` for the factories' `x != 0`. Gates:
