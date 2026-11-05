@@ -1085,6 +1085,17 @@ namespace NumSharp.Backends.Kernels
         /// byte stride per iteration. Used as fallback when the contig check
         /// fails OR when no vector body was supplied / types not SIMD-able.
         /// </summary>
+        /// <param name="il">The kernel's IL generator.</param>
+        /// <param name="operandTypes">The operands' dtypes, inputs then the output.</param>
+        /// <param name="ptrLocals">Each operand's first-element pointer (read once, before the loop).</param>
+        /// <param name="strideLocals">Each operand's byte stride.</param>
+        /// <param name="scalarBody">Stack [input scalars…] → [result scalar].</param>
+        /// <remarks>
+        /// Each operand is read through a RUNNING pointer that advances by its stride after every element, not
+        /// through <c>ptr + i·stride</c>: the JIT kept the multiply, one <c>imul</c> per operand per element, and a
+        /// three-operand loop (<c>m &amp; (age[::2] &gt; 30)</c>) queued its three multiplies on the one multiply
+        /// port. The addresses, the element order and the body are the same, so the results are byte-identical.
+        /// </remarks>
         private static void EmitScalarStridedLoop(
             ILGenerator il,
             NPTypeCode[] operandTypes,
@@ -1092,6 +1103,20 @@ namespace NumSharp.Backends.Kernels
             LocalBuilder[] strideLocals,
             Action<ILGenerator> scalarBody)
         {
+            int nOp = operandTypes.Length;
+            int nIn = nOp - 1;
+            NPTypeCode outType = operandTypes[nIn];
+
+            // cursor[op] = ptr[op]: the running pointers start at each operand's first element.
+            var cursors = new LocalBuilder[nOp];
+            for (int op = 0; op < nOp; op++)
+            {
+                cursors[op] = il.DeclareLocal(typeof(byte*));
+                il.Emit(OpCodes.Ldloc, ptrLocals[op]);
+                il.Emit(OpCodes.Stloc, cursors[op]);
+            }
+            var locOutVal = il.DeclareLocal(GetClrType(outType));
+
             var locI = il.DeclareLocal(typeof(long));
             il.Emit(OpCodes.Ldc_I8, 0L);
             il.Emit(OpCodes.Stloc, locI);
@@ -1103,7 +1128,27 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldarg_2);
             il.Emit(OpCodes.Bge, lblLoopEnd);
 
-            EmitScalarElement(il, operandTypes, ptrLocals, strideLocals, locI, contig: false, scalarBody);
+            // Load the inputs through their cursors, run the body, store through the output's cursor.
+            for (int op = 0; op < nIn; op++)
+            {
+                il.Emit(OpCodes.Ldloc, cursors[op]);
+                EmitLoadIndirect(il, operandTypes[op]);
+            }
+            scalarBody(il);
+            il.Emit(OpCodes.Stloc, locOutVal);
+            il.Emit(OpCodes.Ldloc, cursors[nIn]);
+            il.Emit(OpCodes.Ldloc, locOutVal);
+            EmitStoreIndirect(il, outType);
+
+            // cursor[op] += stride[op] — an add per operand (any ALU port) where the indexed form multiplied.
+            for (int op = 0; op < nOp; op++)
+            {
+                il.Emit(OpCodes.Ldloc, cursors[op]);
+                il.Emit(OpCodes.Ldloc, strideLocals[op]);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Stloc, cursors[op]);
+            }
 
             il.Emit(OpCodes.Ldloc, locI);
             il.Emit(OpCodes.Ldc_I8, 1L);
