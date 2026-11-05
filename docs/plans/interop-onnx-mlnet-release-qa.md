@@ -390,10 +390,21 @@ rides in P12's commit) - and `qa/proposals-all` merges all seven with their thre
       internal `OrtValue(IntPtr, OnnxValueType)` constructor and `OrtMemoryInfo.Pointer`; an unmanaged `OrtAllocator`
       whose `Free` is an `[UnmanagedCallersOnly]` ARC release): forgotten +32 MB, disposed +1 MB (5,000 pooled),
       18.3-19.0 us; `OrtIoBinding` correct, the deleter running only at `ClearBoundInputs`.
-    - pythonnet's twin, measured the same way (CPython 3.12.12, numpy 2.4.2, pythonnet 3.0.5): `ToNumpyCopy()` forgotten
-      +2,150 MB with a single collection in the loop (numpy owns the copy; pythonnet's `~PyObject` only queues the decref,
-      drained every 200 wrapper constructions, and reports no memory to the GC), disposed +5 MB; `copy().ToNumpy()` (a
-      NumSharp copy exported zero-copy) forgotten +24 MB, disposed +0 MB, every buffer pooled.
+    - pythonnet's twin (CPython 3.12.12, numpy 2.4.2, pythonnet 3.0.5), counted by LIVE copies, because private bytes do
+      not repeat there (the C runtime heap keeps numpy's freed 602 KB blocks committed when other allocations land between
+      them: a disposed `ToNumpyCopy` loop with no copy alive measured +5 MB, then +294 MB): `ToNumpyCopy()` forgotten
+      keeps 5,000 of 5,000 copies alive to the end (2,871 MB) with zero .NET collections (numpy owns the copy;
+      pythonnet's `~PyObject` only queues the decref, drained every 200 wrapper constructions, and pythonnet reports no
+      memory to the GC); `copy().ToNumpy()` (a NumSharp copy exported zero-copy) peaks at 36 (21 MB) but returns a numpy
+      view (`owndata=False`); numpy's copy plus a booking keeper (its bytes booked into the pool until `weakref.finalize`
+      reports Python freed it) peaks at 136 (78 MB) and keeps `owndata=True`; disposed, every route holds 0. Per convert +
+      dispose: 27.1 us today, 36.9 with the keeper (one shared callable), 44.6 for the zero-copy export.
+    - Two more ORT alternatives, measured for the report: R3 "remove `ToOrtValue`" (`AsOrtValue(OnnxCodecMode.Copy)`)
+      returns another array's values under `OrtIoBinding` like R2 (the handle owns the copy; C1), +80 MB forgotten,
+      22.0 us; R6 (`GC.AddMemoryPressure` per value, the 11-03 "pressure-token option") is correct and +57 MB forgotten
+      but runs 543 collections in that loop, every one gen 2, and 284 gen-2 collections in a loop that disposed every
+      value, 33.1 us. The whole comparison, with each option's code as a coloured diff: `report.html` on
+      `qa/interop-probes` `72992df3` (`docs/plans/interop-qa-probes/p8-2026-11-05/`).
 
     Recommended (replaces the 11-03 recommendation): R5 where the loaded ORT has the deleter (1.22 or newer, found at
     first use), today's ORT-allocated copy otherwise (1.16 - 1.21, or ORT's internals renamed); never R2. R5 keeps the
@@ -801,3 +812,4 @@ The proposals (section 5) are separate, each the owner's to accept or drop:
 | 22:46 | Batch 6 (the last undecided items; asked in the terminal after the design-ask helper crashed twice with "Node.js v22.14.0"): F71's `Tensor<T>` overload done (ORT 1.16.0 309 + 22 of 331 both TFMs, 1.31.1 331 / 331); P3 deferred (strings later); P8 deferred with the owner's question answered - `ToOrtValue` forgotten +2,899 MB vs +64 MB for a NumSharp-owned copy pinned by ORT (P8 in section 5). |
 | 2026-11-05 14:28 | The five parked items re-asked (AskUserHtmlQuestion, the coloured-diff pages): P5 done as NDW020 (3 / 3 build tests on net10.0 and net8.0, the premise pinned: PublishAot=true writes IsDynamicCodeSupported=false even in a plain build); P8, P15, P3 deferred again; P19 to be ported now with NumPy parity, on `qa/ufunc-keeporder` from strings. |
 | 2026-11-05 14:40 | P8 re-examined on the owner's question in another session ("What should ToOrtValue do?", with how pythonnet, NumSharp and the bridges manage unsafe memory): the 11-03 fix (R2, a NumSharp copy pinned by ORT) returns another array's values through `OrtIoBinding` once the managed value is disposed or dropped; ORT's C-API deleter (R5, ORT 1.22 and newer, prototyped by reflection) keeps `OrtIoBinding` correct, forgotten +32 MB, 18.3-19.0 us against today's 17.3-17.9; pythonnet's `ToNumpyCopy` forgotten +2,150 MB. Section 5, P8; scripts `qa/interop-probes` `dc6cd75e`. Still deferred. |
+| 2026-11-05 15:25 | The owner asked for an HTML report of P8 (the blind spot, pythonnet's, the recommended fix and its alternatives as code): `report.html` on `qa/interop-probes` `72992df3`. Measured for it: R3 (`AsOrtValue(Copy)`) wrong under `OrtIoBinding` like R2; R6 (`GC.AddMemoryPressure`) correct but 543 / 284 gen-2 collections and 33.1 us; the pythonnet routes counted by live copies (private bytes do not repeat there), which corrects the 14:40 entry's "+24 MB" for `copy().ToNumpy()` to "peak 36 live copies (21 MB)". |
