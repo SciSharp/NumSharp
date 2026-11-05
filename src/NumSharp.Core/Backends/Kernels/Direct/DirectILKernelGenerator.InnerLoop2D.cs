@@ -292,16 +292,23 @@ namespace NumSharp.Backends.Kernels
         /// method's registers differently (callee-saved registers, a frame, a spill — seen in the disassembly), so
         /// the iterations without a reversed row keep the plain kernel.
         /// </param>
+        /// <param name="withStationaryOut">
+        /// True: the stationary-out variant a reduction's rows run (DirectILKernelGenerator.InnerLoop2D.Stationary.cs) —
+        /// a call whose first input IS the output at outer stride 0 holds the out row in registers across the rows,
+        /// before the kernel's own dispatch. The element-wise routes never produce such a call and keep the plain kernel.
+        /// </param>
         /// <returns>The kernel.</returns>
         private static ND2DElementwiseKernel Generate2DElementwiseKernel(
             NPTypeCode[] operandTypes,
             Action<ILGenerator> scalarBody,
             Action<ILGenerator>? vectorBody,
             string cacheKey,
-            bool withReversedRuns = false)
+            bool withReversedRuns = false,
+            bool withStationaryOut = false)
         {
+            string variant = withStationaryOut ? "_so" : withReversedRuns ? "_rv" : "";
             var dm = new DynamicMethod(
-                name: withReversedRuns ? $"ND2DLoop_{Sanitize(cacheKey)}_rv" : $"ND2DLoop_{Sanitize(cacheKey)}",
+                name: $"ND2DLoop_{Sanitize(cacheKey)}{variant}",
                 returnType: typeof(void),
                 parameterTypes: new[] { typeof(void**), typeof(long*), typeof(long), typeof(long*), typeof(long) },
                 owner: typeof(DirectILKernelGenerator),
@@ -352,6 +359,17 @@ namespace NumSharp.Backends.Kernels
                 bool reversedPossible = withReversedRuns && nIn <= MaxReversedRunInputs && CanReverseLanes(operandTypes[0]);
                 var lblTryReversed = il.DefineLabel();
                 var lblNotCS = reversedPossible ? lblTryReversed : lblScalar;
+
+                // The stationary-out variant only: a reduction's {o, x, o} call (the first input IS the output, at outer
+                // stride 0) holds the out row in registers across the rows (InnerLoop2D.Stationary.cs); any other call
+                // falls through to the dispatch below.
+                if (withStationaryOut && nIn == 2)
+                {
+                    var lblNotStationary = il.DefineLabel();
+                    Emit2DStationaryOutDispatch(il, operandTypes, ptrLocals, innerStrideLocals, outerStrideLocals,
+                        vectorBody!, scalarBody, cacheKey, lblNotStationary, lblEnd);
+                    il.MarkLabel(lblNotStationary);
+                }
 
                 // The output row must be contiguous for the vector store.
                 il.Emit(OpCodes.Ldloc, innerStrideLocals[nIn]);

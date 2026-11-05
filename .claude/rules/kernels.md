@@ -191,6 +191,14 @@ scalar and vector emit bodies, so results are byte-identical.
   block. The tail word is assembled from exactly `tail` bytes, so the mask array is never over-read.
 - Not covered: copy-class ops at w = 2/3 have no half-vector store; buffered cast routes run per chunk; a strided inner
   row that does not coalesce stays on the per-chunk gather path.
+- Stationary-out variant (`DirectILKernelGenerator.InnerLoop2D.Stationary.cs`, `Compile2DStationaryOutKernel`, cached in
+  `_innerLoop2DStationaryCache`): a reduction's rows `{o, x, o}` (operand 0 IS the output, both contiguous along the row
+  at outer stride 0; operand 1 a contiguous, broadcast or reversed row) hold the out row in registers across the rows:
+  strips of 8, 4 and 1 vectors, then the leftover columns as one masked vector (AVX2, 32/64-bit lanes) or scalar strips
+  of 4 and 1 columns. Each lane is its rows in order through the op's bodies, with the plain block's vector / masked /
+  scalar choice per element: the plain block's bytes. No element-wise route produces such a call (a ufunc's out is never
+  broadcast), so the plain kernel keeps its IL and a reduction asks for the variant (which carries the reversed-run
+  stages too). Gate: `Backends/Kernels/StationaryOutKernelTests.cs` against the plain kernel, byte for byte.
 
 ## Three or more inputs with a broadcast input: pattern stages
 

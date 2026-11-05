@@ -71,6 +71,12 @@ namespace NumSharp.Backends.Kernels
         /// reversed-run variants, compiled only for iterations with a reversed input row).
         /// </summary>
         public static int InnerLoop2DReversedCount => DirectILKernelGenerator._innerLoop2DReversedCache.Count;
+        // DirectILKernelGenerator.InnerLoop2D.Stationary.cs
+        /// <summary>
+        /// Cached kernels in <c>DirectILKernelGenerator._innerLoop2DStationaryCache</c> (the 2-D block kernels'
+        /// stationary-out variants a reduction's rows run).
+        /// </summary>
+        public static int InnerLoop2DStationaryCount => DirectILKernelGenerator._innerLoop2DStationaryCache.Count;
         // DirectILKernelGenerator.MatMul.cs
         /// <summary>Cached kernels in <c>DirectILKernelGenerator._matmulKernelCache</c>.</summary>
         public static int MatmulKernelCount => DirectILKernelGenerator._matmulKernelCache.Count;
@@ -159,7 +165,7 @@ namespace NumSharp.Backends.Kernels
             MaskedCastUnsupportedCount + InnerCastCount + CastCount + CastUnsupportedCount +
             StridedCastCount + StridedCastUnsupportedCount + ClipKernelCount + ComparisonCount +
             ComparisonScalarCount + CopyKernelCount + FilterAxisCount + InnerLoopCount + InnerLoop2DCount +
-            InnerLoopReversedCount + InnerLoop2DReversedCount +
+            InnerLoopReversedCount + InnerLoop2DReversedCount + InnerLoop2DStationaryCount +
             MatmulKernelCount + MixedTypeCount + QuantileKernelCount + BoolAxisReductionCount +
             NanAxisReductionCount + AxisReductionCount + NanElementReductionCount +
             ElementReductionCount + RepeatBroadcastCount + RepeatPerJCount + BinaryScalarCount +
@@ -196,6 +202,7 @@ namespace NumSharp.Backends.Kernels
             DirectILKernelGenerator._innerLoop2DCache.Clear();
             DirectILKernelGenerator._innerLoopReversedKeyCache.Clear();
             DirectILKernelGenerator._innerLoop2DReversedCache.Clear();
+            DirectILKernelGenerator._innerLoop2DStationaryCache.Clear();
         }
         internal static void ClearMatmulKernel() => DirectILKernelGenerator._matmulKernelCache.Clear();
         internal static void ClearMixedType() => DirectILKernelGenerator._mixedTypeCache.Clear();
