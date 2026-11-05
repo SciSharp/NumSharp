@@ -93,6 +93,30 @@ Codec state:
    - a byte stream encodes each write with `str.encode`, one-shot, so a stateful codec resets after every write;
    - a file name goes through TextIOWrapper's incremental encoder, whose state carries across writes and is never
      flushed at close (§2).
+4. NumPy has three more callers that NumSharp lacks: `np.genfromtxt(..., encoding=)`, `np.fromregex(..., encoding=)`
+   and `np.lib.npyio.DataSource.open(..., encoding=)`. They take the same two routes as `np.loadtxt` (a path opened
+   with the codec, or bytes decoded with it), so once they are ported they get every codec `TextIOCodec` has.
+5. A NumPy scalar's methods (`np.str_.encode`, `np.bytes_.decode`) are Python's own and reach every codec. NumSharp has
+   no scalar objects: an element reads out as a C# `string` / `byte[]`, and the per-element equivalent is
+   `np.strings.encode` of a 0-d array.
+
+### 1.5 What never reaches the registry
+
+NumPy's C code converts text between its dtypes with fixed codecs, and never looks a name up for them. NumSharp
+implements each of these already (`NDStringCodec` and the casting code), and the port changes none of them:
+
+| Conversion | NumPy's codec |
+|---|---|
+| `U` → `S` casts, `np.array(['é'], dtype='S')`, `np.bytes_('é')` | ASCII, strict |
+| `S` → `U` casts | ASCII, strict |
+| `S` → `StringDType` casts | UTF-8, strict (`StringDType` stores UTF-8) |
+| `ndarray.tofile(sep=...)` text | ASCII (`PyUnicode_AsASCIIString` in `PyArray_ToFile`) |
+| `.npy` / `.npz` headers | Latin-1 (format 1.0 / 2.0) or UTF-8 (3.0) |
+| `np.load(..., encoding=)` | not a text codec: pickle's Python 2 option, `'ASCII'` / `'latin1'` / `'bytes'` only, `ValueError` otherwise (NumSharp checks the same three) |
+
+The word "codec" also names unrelated NumSharp types. `NumpyCodec` / `TupleCodec` (pythonnet) convert Python objects,
+and `OnnxCodecMode` picks between sharing and copying a tensor. No interop package looks a codec name up; ONNX
+Runtime's string tensors are UTF-8 by ONNX's definition.
 
 ### 1.4 Gaps found on the way
 
