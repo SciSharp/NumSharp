@@ -51,8 +51,8 @@ namespace NumSharp
             // no file.
             CheckToFileArgument(sep, 2);
             CheckToFileArgument(format, 3);
-            // NumPy opens the filename with mode "wb" (create + truncate).
-            using var fs = new FileStream(fid, FileMode.Create, FileAccess.Write);
+            // NumPy opens the filename with mode "wb" (create + truncate), shared as Python's open() shares it.
+            using var fs = NumSharp.IO.NDFileShare.Create(fid);
             tofile(fs, sep, format);
         }
 

@@ -725,7 +725,8 @@ namespace NumSharp
                         byte[] b => Encoding.UTF8.GetString(b),
                         _ => ((FileSystemInfo)fid).FullName,
                     };
-                    using (var fs = new FileStream(path, FileMode.Create, FileAccess.Write))
+                    // open(path, 'wb'), shared as Python shares it (parity QA-39).
+                    using (var fs = NumSharp.IO.NDFileShare.Create(path))
                         WriteText(fs, sep, format);
                     return;
                 default:

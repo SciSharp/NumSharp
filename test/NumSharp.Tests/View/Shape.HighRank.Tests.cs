@@ -14,11 +14,10 @@ namespace NumSharp.Tests.View
     /// </summary>
     /// <remarks>
     ///     <para>
-    ///         Such an array cannot cross to NumPy (the pythonnet bridge hands NumPy an array it cannot represent), and
-    ///         printing one is the exception to the reach measured below: <c>ToString()</c> / <c>np.array2string</c>
-    ///         recurse once per axis and overflow the stack past about 1,000 to 2,000 dimensions, which ends the process
-    ///         (parity QA-50, open). No test here formats a high-rank array, a failing FluentAssertions message included:
-    ///         every assertion reads a number.
+    ///         Such an array cannot cross to NumPy (the pythonnet bridge hands NumPy an array it cannot represent). It
+    ///         prints at any rank: the layout engine walks the axes instead of recursing over them (parity QA-50; its
+    ///         tests are <c>Casting/np.ArrayPrint.ParityTests.cs</c>'s <c>Deep_*</c>). The assertions here read numbers
+    ///         all the same, so a failure message stays short.
     ///     </para>
     ///     <para>
     ///         The 200,000-dimension test pins the owner's stated reach: a <c>stackalloc long[ndim]</c> (1.6 MB) on any of

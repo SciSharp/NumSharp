@@ -17,20 +17,32 @@ namespace NumSharp
     {
         /// <summary>
         ///     Create an array from an existing <see cref="NDArray"/>. Matches NumPy's default
-        ///     <c>np.array(a)</c> which always copies (NumPy 2.x: <c>copy=True</c> by default).
+        ///     <c>np.array(a)</c> which always copies (NumPy 2.x: <c>copy=True</c> by default) into a FRESH, WRITEABLE array
+        ///     laid out in the source's K order — <see cref="copy(NDArray, char, bool)"/>'s route with <c>order='K'</c>, so a
+        ///     read-only, F-ordered or broadcast source gives a writeable copy that keeps the source's memory order (a
+        ///     <c>(0, 8)</c>-strided broadcast copies F-contiguous).
         /// </summary>
         /// <param name="nd">Source array.</param>
-        /// <param name="copy">When <c>true</c> (default) the source storage is cloned; when <c>false</c> the storage is shared (alias). For "copy only if needed" semantics use <see cref="asarray(NDArray, DType, char, bool?, NDArray, string)"/>.</param>
-        /// <returns>A new array object. A 0-d source that was built as an explicit 0-d ARRAY
-        ///     (<see cref="NDArray.IsExplicitZeroDimArray"/>) gives an explicit 0-d array again, as NumPy's
-        ///     <c>np.array(np.array(2))</c> is a 0-d array.</returns>
+        /// <param name="copy">When <c>true</c> (default) the data is copied as described above; when <c>false</c> the
+        ///     storage is shared (alias), flags included. For "copy only if needed" semantics use
+        ///     <see cref="asarray(NDArray, DType, char, bool?, NDArray, string)"/>.</param>
+        /// <returns>A new array object, a plain array whatever <paramref name="nd"/>'s class (NumPy's <c>subok=False</c>).
+        ///     A 0-d source that was built as an explicit 0-d ARRAY (<see cref="NDArray.IsExplicitZeroDimArray"/>) gives an
+        ///     explicit 0-d array again, as NumPy's <c>np.array(np.array(2))</c> is a 0-d array.</returns>
         /// <exception cref="NullReferenceException"><paramref name="nd"/> is <c>null</c>.</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
+        /// <remarks>
+        ///     <para>https://numpy.org/doc/stable/reference/generated/numpy.array.html</para>
+        ///     <para>Until parity QA-35 the copy was a storage clone that kept the source's flags: a read-only C, F or 0-d
+        ///     source gave a READ-ONLY copy (a write raised "assignment destination is read-only"), and a broadcast source
+        ///     came back C-ordered where NumPy's K-order copy is F-contiguous.</para>
+        /// </remarks>
         [MethodImpl(OptimizeAndInline)]
         public static NDArray array(NDArray nd, bool copy = true)
         {
+            // PyArray_NewCopy(a, NPY_KEEPORDER): a fresh owner, writeable, in the iterator's K order - exactly np.copy's
+            // copy (which also keeps the array's engine). `np.` qualifies the call: the bool parameter shadows the name.
             var result = copy
-                ? new NDArray(nd.Storage.Clone()) { TensorEngine = nd.TensorEngine }
+                ? np.copy(nd, 'K')
                 : new NDArray(nd.Storage) { TensorEngine = nd.TensorEngine };
             // The mark is per object, so a new object must receive it explicitly.
             return nd.IsExplicitZeroDimArray ? result.MarkExplicitZeroDimArray() : result;

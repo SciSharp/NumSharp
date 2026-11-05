@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Numerics;
 using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
@@ -1583,6 +1584,10 @@ namespace NumSharp.Backends
             bool anyString = false; // a fixed-width string choice: the common dtype is resolved by DESCRIPTOR below
             int weakRank = 0; // 0 none, 1 int, 2 float, 3 complex
             NPTypeCode strong = NPTypeCode.Empty;
+            // Every strong choice's dtype, promoted ONCE after the loop: NumPy's PyArray_ConvertToCommonType runs one
+            // PyArray_ResultType over all the choices, and NEP 50's promotion is not associative, so folding them pairwise
+            // from the left gave [int16, uint16, float16] float64 where NumPy gives float32 (parity QA-07).
+            var strongTypes = new List<NPTypeCode>(n);
 
             for (int i = 0; i < n; i++)
             {
@@ -1608,7 +1613,7 @@ namespace NumSharp.Backends
                         if (arr.typecode == NPTypeCode.String)
                             anyString = true;
                         else if (!anyString)
-                            strong = anyStrong ? NDExprTypeRules.PromoteStrong(strong, arr.GetTypeCode) : arr.GetTypeCode;
+                            strongTypes.Add(arr.GetTypeCode);
                         anyStrong = true;
                         break;
 
@@ -1638,13 +1643,17 @@ namespace NumSharp.Backends
                         if (mat.typecode == NPTypeCode.String)
                             anyString = true;
                         else if (!anyString)
-                            strong = anyStrong ? NDExprTypeRules.PromoteStrong(strong, mat.GetTypeCode) : mat.GetTypeCode;
+                            strongTypes.Add(mat.GetTypeCode);
                         anyStrong = true;
                         break;
                 }
 
                 mats[i] = mat;
             }
+
+            // The order-independent common dtype of the strong choices (a text result decides by descriptor below).
+            if (!anyString && strongTypes.Count > 0)
+                strong = NDExprTypeRules.PromoteStrongSequence(strongTypes);
 
             // Fixed-width strings: NumPy's ConvertToCommonType over DESCRIPTORS — the widest choice's width, S + U
             // giving U; a Python number next to a string has no common dtype (TypeError). A numeric choice array is

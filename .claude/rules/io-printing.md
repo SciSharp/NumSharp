@@ -80,6 +80,13 @@ lifts it.
   file handles"`. Big-endian and `<c8` files are refused (`NotSupportedException`): NumSharp byte-swaps / widens them on
   read and cannot present them as a zero-copy view; an object (`T` pickle) file is NumPy's `ValueError "Array can't be
   memory-mapped: Python objects in dtype."`. Tests: `IO/NpyMemmapTests.cs`.
+- Every file NumSharp opens by path is shared as Python's `open()` shares it on Windows (`FILE_SHARE_READ |
+  FILE_SHARE_WRITE`, .NET's `FileShare.ReadWrite`), through `IO/NDFileShare.cs` (`OpenRead`, `Create`, `Open`): the
+  memmap's handle, `np.load` (.npy / .npz), `np.save` / `np.savez`, `np.loadtxt` / `np.savetxt`, `ndarray.tofile`,
+  `np.fromfile`. A live `r+` map admits other loads and maps of its file, and a file another handle holds open read-write
+  is read and overwritten, as in NumPy (parity QA-39; .NET's defaults refused both). A new file-opening site takes its
+  stream from `NDFileShare`. Sharing is not coordination: two writers interleave, as in NumPy. Gate:
+  `IO/FileShareMode.Tests.cs`.
 - Intentional divergences: the five unsupported dtypes above are the only files NumPy loads that NumSharp refuses. NumPy
   reports `shape: (True,)` and overflowing dims through a later TypeError/OverflowError where NumSharp rejects them up
   front (both refuse; the text differs). Big-endian files byte-swap to native (NumPy keeps a byte-swapped dtype), and
@@ -128,10 +135,16 @@ through `ToString("F"|"E"+precision)` (which rounds the true binary value half t
 string. NumSharp's `Char` dtype renders as strings (no NumPy equivalent). API: `array2string`, `array_repr`, `array_str`,
 `format_float_positional`, `format_float_scientific`, `get_printoptions`, `printoptions` (an IDisposable context),
 `set_printoptions`.
-- The printer recurses once per axis (`ArrayFormatter.Walk` / `ForEachIndex`, like NumPy's `_formatArray`), which NumPy's
-  64-dimension cap bounds and NumSharp's uncapped rank does not: past about 1,000 to 2,000 dimensions it overflows the
-  stack and ends the process (parity QA-50, open). Never format a high-rank array in a test, an assertion message
-  included.
+- The layout engine is NumPy's `_formatArray` text written by an explicit-stack WALK (`ArrayFormatter.FormatArray`,
+  `FormatRow`, `CollectReducedValues`), not a recursion: elements are read at `Shape.offset + Σ index·stride`
+  (`UnmanagedStorage.ElementAtResolvedOffset`, no view per level), the text goes in order into one buffer, a hanging
+  indent is a counted run of spaces and a row's first indent is dropped as it is written (NumPy's
+  `s[len(hanging_indent):]`). NumPy's 64-dimension cap bounds its recursion; NumSharp's uncapped rank did not, and the
+  former recursive port overflowed the stack (ending the process) from about 2,000 dimensions and was quadratic in the
+  rank (parity QA-50). Now any rank prints in time linear in the text (rank 300,000: 2.4 M characters in 68 ms), byte
+  for byte what the recursion printed (a 4,757-case before/after corpus over dtypes, layouts, options, masked, text,
+  object and matrix arrays). Gates: `Casting/np.ArrayPrint.ParityTests.cs` (`Deep_*`: NumPy's literal at rank 64, its
+  pattern at 2,000 and 200,000).
 
 `np.format_float_positional` / `np.format_float_scientific` are NumPy's `dragon4.c`, statement for statement
 (`Backends/Printing/Dragon4.Port.cs`, `Dragon4.BigInt.cs`). The array printer keeps the emulation of `Dragon4.cs` (exact

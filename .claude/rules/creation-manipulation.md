@@ -67,6 +67,12 @@ paths:
 
 ## The `as*` family
 
+- `np.array(NDArray a, copy=true)` is NumPy's `PyArray_NewCopy(a, NPY_KEEPORDER)`, i.e. `np.copy(a, 'K')`: a fresh,
+  WRITEABLE owner in the source's memory order (a read-only source gives a writeable copy, a `(0, 8)`-strided broadcast
+  copies F-contiguous, a permuted view keeps its permutation), a plain array whatever the source's class, the explicit-0-d
+  mark carried over (parity QA-35; it was a storage clone keeping the source's flags, C order for a broadcast).
+  `copy=false` shares the storage. Gate: `Creation/np.array.BattleTests.cs` (`Array_FromReadOnlySources_*`,
+  `Array_CopyKeepsTheSourcesMemoryOrder`).
 - `asarray_chkfinite(a, dtype=None, order='K')` is `asarray`, then `ValueError("array must not contain infs or NaNs")`
   when a float-family dtype (Half/Single/Double/Complex, NumPy's `typecodes['AllFloat']`; Decimal, integers and bool skip
   the check) holds an inf or NaN. The check is a fused single-pass NaN-poison SIMD reduction
@@ -339,9 +345,8 @@ Ported from NumPy's C (gates `Backends/AllocationGuardTests.cs`, `Manipulation/R
   indexing result would have 65` from `[np.newaxis]` and a 64-d × 65-d broadcast; `ndmin must be <= ndmax (64)`),
   NumSharp builds the array, and creation, `expand_dims`, new axes, reductions, elementwise ops, indexing, reshape,
   transpose, copy and `broadcast_to` run to about 200,000 dimensions (measured to 300,000), so no path may size a
-  `stackalloc` by `ndim`. Two limits remain: such an array cannot cross to NumPy (the pythonnet bridge refuses 65), and
-  printing (`ToString` / `np.array2string`) recurses once per axis and overflows the stack, ending the process, past
-  about 1,000 to 2,000 dimensions (parity QA-50, open). Gate: `View/Shape.HighRank.Tests.cs`.
+  `stackalloc` by `ndim`, and no walk may recurse per axis: printing does not (`io-printing.md`, parity QA-50). One limit
+  remains: such an array cannot cross to NumPy (the pythonnet bridge refuses 65). Gate: `View/Shape.HighRank.Tests.cs`.
 
 ## `np.copyto`
 

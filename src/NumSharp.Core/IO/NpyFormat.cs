@@ -1067,7 +1067,9 @@ namespace NumSharp.IO
             string fileMode = ResolveMmapMode(mode);
             (FileAccess fileAccess, MemoryMappedFileAccess mapAccess, bool writeable) = MmapAccess(fileMode);
 
-            var fs = new FileStream(path, FileMode.Open, fileAccess, FileShare.Read);
+            // Python's open() share mode (numpy.memmap opens its file object with it): another load of the file, a second
+            // map or a plain reader / writer stays possible while this map lives, as in NumPy (parity QA-39).
+            var fs = NDFileShare.Open(path, fileAccess);
             MemoryMappedFile mmf = null;
             MemoryMappedViewAccessor view = null;
             bool transferred = false;

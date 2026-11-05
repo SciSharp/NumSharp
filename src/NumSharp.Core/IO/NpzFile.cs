@@ -147,7 +147,7 @@ namespace NumSharp.IO
 
         /// <summary>Open an archive from a file path. The file handle is owned and closed on dispose.</summary>
         public NpzFile(string path, bool allowPickle = false, long maxHeaderSize = NpyFormat.MaxHeaderSize)
-            : this(new FileStream(path, FileMode.Open, FileAccess.Read), ownStream: true, allowPickle, maxHeaderSize)
+            : this(NDFileShare.OpenRead(path), ownStream: true, allowPickle, maxHeaderSize)
         {
             _name = path;
         }

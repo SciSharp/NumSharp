@@ -1816,6 +1816,10 @@ _ARRAY_JOB_NUMPY = {
 # 2026-11-05 (parity QA-15): np.nansum / np.nanprod are NumPy's statements (np.sum / np.prod of _replace_nan), and their
 # one-element shortcut reads a view from its offset, so VF30 matches NumPy; its GAPS entry and its rule are dropped and its
 # 8 cases moved back into view_flags.jsonl the same way (no regeneration).
+# 2026-11-05, again (parity QA-35): np.array(a) of an NDArray is np.copy(a, 'K'), a fresh writeable owner in the source's
+# memory order, so VF12 (its K order over a permuted / broadcast input) matches NumPy and VF14 keeps only np.positive of a
+# read-only operand; VF12's GAPS entry and rule are dropped, VF14's narrowed, and their 4 np.array cases moved back into
+# view_flags.jsonl the same way (no regeneration).
 GAPS = {
     "VF01": "a NumPy SCALAR result (ufuncs, clip, round, nan_to_num, conj, dot / inner / kron of 0-d or 1-D pairs) "
             "comes back as a WRITEABLE 0-d array",
@@ -1828,10 +1832,9 @@ GAPS = {
             "keeps the input's axis order",
     "VF09": "np.cumsum / np.cumprod along an axis of a permuted (cumprod also F) input return a C-ordered result",
     "VF10": "np.diff of an F or permuted input returns a C-ordered result; NumPy keeps the input's order",
-    "VF12": "np.array(a, copy=True) of a permuted or broadcast input is C-ordered; NumPy copies in K order",
     "VF13": "np.array(a, copy=False) returns a new view where NumPy returns the operand itself",
-    "VF14": "copies of a read-only array stay READ-ONLY: np.array(ro, copy=True) and np.positive(ro) of a read-only "
-            "owner or a same-shape broadcast",
+    "VF14": "np.positive(ro) of a read-only owner or a same-shape broadcast stays READ-ONLY (np.array's copy is "
+            "writeable since parity QA-35)",
     "VF16": "ndarray.astype(same dtype, copy=False, order='C' or 'F') of a strided 1-D view returns the operand; "
             "NumPy copies to satisfy the requested order",
     "VF19": "np.dot / np.inner of a 0-d with an F 2-D array: -0.0 where NumPy's scalar daxpy gives +0.0, and an F "
@@ -1924,11 +1927,9 @@ def _gap_of(tier, case):
             return "VF09"
         if fn == "diff" and lay in ("own_f_2d", "view_t_2d", "view_perm_3d"):
             return "VF10"
-        if lay in ("view_perm_3d", "view_bcast_2d") and fn == "array" and p.get("copy") is True:
-            return "VF12"
         if fn == "array" and p.get("copy") is False:
             return "VF13"
-        if lay in ("own_ro_2d", "view_bsame_2d") and ((fn == "array" and p.get("copy") is True) or fn == "positive"):
+        if lay in ("own_ro_2d", "view_bsame_2d") and fn == "positive":
             return "VF14"
         if (fn == "ndarray.astype" and p.get("copy") is False and p.get("dtype") == "int64"
                 and p.get("order") in ("C", "F") and lay in ("view_step_1d", "view_rev_1d")):

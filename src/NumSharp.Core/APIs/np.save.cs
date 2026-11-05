@@ -42,7 +42,8 @@ namespace NumSharp
             if (!file.EndsWith(".npy", StringComparison.Ordinal))
                 file += ".npy";
 
-            using (var stream = new FileStream(file, FileMode.Create, FileAccess.Write))
+            // Shared as Python's open(file, 'wb') shares it (parity QA-39).
+            using (var stream = NumSharp.IO.NDFileShare.Create(file))
                 NpyFormat.WriteArray(stream, arr, null, allow_pickle);
         }
 
@@ -250,7 +251,7 @@ namespace NumSharp
             if (!file.EndsWith(".npz", StringComparison.Ordinal))
                 file += ".npz";
 
-            using (var stream = new FileStream(file, FileMode.Create, FileAccess.Write))
+            using (var stream = NumSharp.IO.NDFileShare.Create(file))
                 SaveZip(stream, args, kwds, level, allowPickle);
         }
 

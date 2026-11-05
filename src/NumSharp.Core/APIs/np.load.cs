@@ -78,7 +78,9 @@ namespace NumSharp
             // The stream is handed to NpzFile on the .npz branch, which then owns it; otherwise it is
             // closed here. mmap_mode is applied only on the .npy branch (LoadCore), where the path lets
             // OpenMemmap reopen the file for mapping — npz and pickle ignore it entirely, matching NumPy.
-            var stream = new FileStream(file, FileMode.Open, FileAccess.Read);
+            // Shared as Python's open() shares it (parity QA-39): a live memmap or another handle on the file does not
+            // lock this load out.
+            var stream = NumSharp.IO.NDFileShare.OpenRead(file);
             bool transferred = false;
             try
             {
@@ -157,7 +159,7 @@ namespace NumSharp
         {
             if (file == null) throw new ArgumentNullException(nameof(file));
 
-            using (var stream = new FileStream(file, FileMode.Open, FileAccess.Read))
+            using (var stream = NumSharp.IO.NDFileShare.OpenRead(file))
                 return LoadNpyChecked(stream, file, allow_pickle, max_header_size);
         }
 
@@ -221,7 +223,7 @@ namespace NumSharp
         {
             if (file == null) throw new ArgumentNullException(nameof(file));
 
-            var stream = new FileStream(file, FileMode.Open, FileAccess.Read);
+            var stream = NumSharp.IO.NDFileShare.OpenRead(file);
             try
             {
                 CheckIsNpz(stream, file);

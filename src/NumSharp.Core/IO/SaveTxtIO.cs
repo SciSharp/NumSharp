@@ -50,7 +50,8 @@ namespace NumSharp.IO
             PyDataSource.ThrowIfUnsupportedCompression(fname);
 
             bool gz = PyDataSource.IsGzip(fname);
-            Stream fs = new FileStream(fname, FileMode.Create, FileAccess.Write);
+            // open(fname, 'w'), shared as Python's open() shares it (parity QA-39).
+            Stream fs = NDFileShare.Create(fname);
             try
             {
                 // _datasource.open(fname, 'wt', encoding): the codec lookup happens after the truncation above.

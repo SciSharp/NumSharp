@@ -69,31 +69,6 @@ namespace NumSharp.Tests
         }
 
         // ------------------------------------------------------------------
-        // QA-07 — np.choose promotes its choices left to right instead of NumPy's order-independent result_type
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     <c>np.choose([0, 1, 2], [int16, uint16, float16])</c> is float32 in NumPy: <c>PyArray_ConvertToCommonType</c> runs
-        ///     <c>PyArray_ResultType</c> over all choices at once (NEP 50's order-independent reduction, which NumSharp's own
-        ///     <c>np.result_type</c>, <c>np.concatenate</c>, <c>np.stack</c> and <c>np.select</c> follow). NumSharp's
-        ///     <c>np.choose</c> promotes pairwise from the left, so int16 + uint16 → int32 and int32 + float16 → float64; the
-        ///     same choices in the order <c>[float16, int16, uint16]</c> give float32.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA07")]
-        public void ParityQa_Choose_ThreeDtypes_ShouldPromoteLikeResultType()
-        {
-            using var index = np.array(new long[] { 0, 1, 2 });
-            using var i16 = np.array(new short[] { 1, 2, 3 });
-            using var u16 = np.array(new ushort[] { 4, 5, 6 });
-            using var f16 = np.array(new[] { 0.5, 1.5, 2.5 }).astype(np.float16);
-
-            using var r = np.choose(index, new NDArray[] { i16, u16, f16 });
-
-            r.dtype.Should().Be(np.float32);
-            r.ToArray<float>().Should().Equal(1f, 5f, 2.5f);
-        }
-
-        // ------------------------------------------------------------------
         // QA-08 — np.ediff1d's to_begin / to_end refusal is an ArgumentException with a parameter suffix
         // ------------------------------------------------------------------
 
@@ -303,40 +278,6 @@ namespace NumSharp.Tests
         }
 
         // ------------------------------------------------------------------
-        // QA-35 — np.array(ndarray) copies the source's read-only flag and C-orders a broadcast copy
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     <c>np.array(a)</c> is a copy (<c>copy=True</c>, <c>order='K'</c>), and a copy NumPy allocates is always
-        ///     writeable: <c>np.array(ro)[0, 0] = 99</c> works on a read-only <c>ro</c>. NumSharp's
-        ///     <c>np.array(NDArray, bool copy)</c> (Creation/np.array.cs) returns <c>new NDArray(nd.Storage.Clone())</c>,
-        ///     and <c>UnmanagedStorage.Clone</c>'s raw-layout branch (a C- or F-contiguous source at offset 0) builds the
-        ///     clone's shape with <c>new Shape(_shape)</c>, which keeps the source's flags: a read-only C, F or 0-d source
-        ///     gives a read-only copy, and the write raises <c>ValueError: assignment destination is read-only</c>
-        ///     (<c>p90</c>; a strided source takes the other branch and comes back writeable). The other branch lays a
-        ///     broadcast source out in C order, where NumPy's K-order copy of <c>broadcast_to(arange(4.), (3, 4))</c>
-        ///     (strides <c>(0, 8)</c>) is F-contiguous (<c>p89</c>; np.copy and ndarray.copy already give NumPy's F).
-        ///     <c>NDArray.Clone()</c> (not a NumPy API) shares the same storage clone.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA35")]
-        public void ParityQa_ArrayOfNDArray_ShouldBeAWriteableKOrderCopy()
-        {
-            using var ro = np.arange(6.0).reshape(2, 3);
-            ro.setflags(write: false);
-            using var bcast = np.broadcast_to(np.arange(4.0), new Shape(3, 4));
-
-            using var copy = np.array(ro);
-            using var bcastCopy = np.array(bcast);
-            Action write = () => copy[0, 0] = (NDArray)99.0;
-
-            copy.flags.writeable.Should().BeTrue("a copy NumPy allocates is writeable");
-            write.Should().NotThrow();
-            ro.GetDouble(0, 0).Should().Be(0.0);
-            bcastCopy.flags.f_contiguous.Should().BeTrue("order='K' keeps the stride-0 axis fastest");
-            bcastCopy.flags.c_contiguous.Should().BeFalse();
-        }
-
-        // ------------------------------------------------------------------
         // QA-36 — fresh ufunc results over a permuted operand are C-ordered instead of NumPy's K order
         // ------------------------------------------------------------------
 
@@ -371,84 +312,6 @@ namespace NumSharp.Tests
             ((double)memoryOrder.GetValue(4)).Should().Be(-4.0, "a K-order ravel reads the result in memory order");
             hyp.flags.f_contiguous.Should().BeTrue("hypot of two F operands is F in NumPy");
             cp.flags.f_contiguous.Should().BeTrue("cumprod along an axis keeps an F operand's order");
-        }
-
-        // ------------------------------------------------------------------
-        // QA-39 — a memory-mapped np.load locks its file against the other loads NumPy allows
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     NumPy opens a memmap's file through Python's <c>open()</c>, whose Windows share mode lets other handles read
-        ///     and write, so while <c>a = np.load(p, mmap_mode='r+')</c> lives, <c>np.load(p)</c> reads the file (and sees
-        ///     <c>a</c>'s writes: <c>[0, 99, 2, 3]</c>), and an <c>'r'</c> map and an <c>'r+'</c> map of one file coexist.
-        ///     NumSharp's <c>NpyFormat.OpenMemmap</c> (IO/NpyFormat.cs) holds the file with <c>FileShare.Read</c> and the
-        ///     plain <c>np.load</c> opens it with the default <c>FileShare.Read</c> too, so (<c>p103</c>, isolated pairs):
-        ///     while an <c>'r+'</c> map lives every other load of the file (plain, <c>'r'</c>, <c>'r+'</c>) raises
-        ///     <see cref="System.IO.IOException"/> "The process cannot access the file … because it is being used by another
-        ///     process", and while an <c>'r'</c> or <c>'c'</c> map lives an <c>'r+'</c> load raises the same. Each succeeds
-        ///     once the first array is disposed. <c>[DoNotParallelize]</c>: the cleanup may force a collection.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA39"), DoNotParallelize]
-        public void ParityQa_LoadMmap_ShouldNotLockOutOtherLoadsOfTheFile()
-        {
-            string dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ns_qa39_" + Guid.NewGuid().ToString("N"));
-            System.IO.Directory.CreateDirectory(dir);
-            try
-            {
-                string p = System.IO.Path.Combine(dir, "a.npy");
-                using (var seed = np.arange(4.0))
-                    np.save(p, seed);
-
-                using (var rw = (NDArray)np.load(p, "r+"))
-                {
-                    rw[1] = (NDArray)99.0;
-                    using var plain = (NDArray)np.load(p);
-                    plain.GetDouble(1).Should().Be(99.0, "NumPy reads the file while the r+ map lives, writes included");
-                }
-
-                using (var ro = (NDArray)np.load(p, "r"))
-                {
-                    Action readWriteToo = () => ((NDArray)np.load(p, "r+")).Dispose();
-                    readWriteToo.Should().NotThrow("an 'r' map and an 'r+' map of one file coexist in NumPy");
-                }
-            }
-            finally
-            {
-                // A map the failing assertion left open is released by the helper's collection before the delete.
-                MappedFileCleanup.DeleteDirectory(dir);
-            }
-        }
-
-        /// <summary>
-        ///     QA-39 beyond memmaps: Python's <c>open()</c> shares read and write, so NumPy reads and overwrites a file that
-        ///     another handle holds open — another program's writer, or a .NET <c>FileStream</c> opened with
-        ///     <c>FileShare.ReadWrite</c>. NumSharp's readers and writers open with .NET's default share modes
-        ///     (<c>FileShare.Read</c> to read, none to write), so with such a handle open <c>np.load</c> (.npy and .npz),
-        ///     <c>np.loadtxt</c>, <c>np.save</c>, <c>np.savetxt</c> and <c>ndarray.tofile</c> raise <see cref="System.IO.IOException"/>
-        ///     "The process cannot access the file … because it is being used by another process" (<c>rp3</c>; NumPy's twin
-        ///     succeeds for all seven); only <c>np.fromfile</c> reads it.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA39"), DoNotParallelize]
-        public void ParityQa_LoadAndSave_ShouldShareAFileAnotherHandleHoldsOpen()
-        {
-            string dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ns_qa39b_" + Guid.NewGuid().ToString("N"));
-            System.IO.Directory.CreateDirectory(dir);
-            try
-            {
-                string p = System.IO.Path.Combine(dir, "a.npy");
-                using (var seed = np.arange(3.0))
-                    np.save(p, seed);
-
-                using (var other = new System.IO.FileStream(p, System.IO.FileMode.Open, System.IO.FileAccess.ReadWrite, System.IO.FileShare.ReadWrite))
-                {
-                    Action load = () => ((NDArray)np.load(p)).Dispose();
-                    load.Should().NotThrow("NumPy reads a file another handle shares");
-                }
-            }
-            finally
-            {
-                MappedFileCleanup.DeleteDirectory(dir);
-            }
         }
 
         // ------------------------------------------------------------------
@@ -597,6 +460,38 @@ namespace NumSharp.Tests
             spectrum.strides.Should().Equal(new long[] { 16, 64 }, "empty_like(a, ...) keeps an F input's order");
             spectrum.flags.f_contiguous.Should().BeTrue();
             half.strides.Should().Equal(new long[] { 16, 48 }, "the shorter axis keeps the same K order");
+        }
+
+        // ------------------------------------------------------------------
+        // QA-51 — np.select / np.r_ promote their operands left to right (QA-07's bug in two more functions)
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's <c>np.select</c> types its result <c>np.result_type(*choicelist, default)</c> and <c>np.r_</c>
+        ///     <c>result_type(*arrays, *scalars)</c>: ONE order-independent NEP 50 reduction, so
+        ///     <c>[int16, uint16, float16]</c> is float32 and <c>[uint8, int8, float16]</c> float16 in NumPy 2.4.2. Both
+        ///     NumSharp functions fold <c>NDExprTypeRules.PromoteStrong</c> pairwise from the left
+        ///     (<c>Manipulation/NDArray.FunctionBase.cs</c>, <c>Indexing/NDArray.IndexTricks.cs</c>), the fold np.choose had
+        ///     until parity QA-07 replaced it with <c>NDExprTypeRules.PromoteStrongSequence</c>: float64 and float32 here.
+        ///     Found on 2026-11-05 while fixing QA-07 (whose decision page had assumed np.select already matched).
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA51")]
+        public void ParityQa_SelectAndR_ThreeDtypes_ShouldPromoteLikeResultType()
+        {
+            using var i16 = np.array(new short[] { 1, 2, 3 });
+            using var u16 = np.array(new ushort[] { 4, 5, 6 });
+            using var f16 = np.array(new[] { 0.5, 1.5, 2.5 }).astype(np.float16);
+            using var u8 = np.array(new byte[] { 1, 2, 3 });
+            using var i8 = np.array(new sbyte[] { 4, 5, 6 });
+            var conditions = new NDArray[] { np.array(new[] { true, false, false }), np.array(new[] { false, true, false }), np.array(new[] { false, false, true }) };
+
+            using var selected = np.select(conditions, new object[] { i16, u16, f16 });
+            using var selectedNarrow = np.select(conditions, new object[] { u8, i8, f16 });
+            using var joined = np.r_[i16, u16, f16];
+
+            selected.dtype.Should().Be(np.float32);
+            selectedNarrow.dtype.Should().Be(np.float16);
+            joined.dtype.Should().Be(np.float32);
         }
     }
 }

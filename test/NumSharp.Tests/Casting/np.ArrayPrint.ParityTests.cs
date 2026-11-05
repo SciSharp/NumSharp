@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Numerics;
 
 namespace NumSharp.Tests.Casting;
@@ -667,6 +668,69 @@ public class np_ArrayPrint_ParityTests
     [TestMethod] public void A2S_BroadcastView_Separator() => np.array2string(np.broadcast_to(np.arange(3)["::-1"], new Shape(2, 3)), separator: ", ").Should().Be("[[2, 1, 0],\n [2, 1, 0]]");
 
     [TestMethod] public void A2S_BroadcastView_SuppressSmall() => np.array2string(np.broadcast_to(np.array(new double[]{1e-12, 2.0, 3.0})["::-1"], new Shape(2, 3)), suppress_small: true).Should().Be("[[3. 2. 0.]\n [3. 2. 0.]]");
+
+    #endregion
+
+    #region deep ranks: the layout engine is a walk, not a recursion (parity QA-50)
+
+    /// <summary>
+    ///     The text of <c>np.arange(3.).reshape((3,) + (1,) * (rank - 1))</c> as NumPy's <c>_formatArray</c> builds it:
+    ///     three children of <c>rank - 1</c> nested brackets, separated by <c>separator.rstrip() + '\n' * (rank - 1)</c>
+    ///     and the outer hanging indent. NumPy 2.4.2 prints exactly this for ranks 2, 3, 6 and 64 (probed, str and repr).
+    /// </summary>
+    /// <param name="rank">The array's rank (at least 2).</param>
+    /// <param name="repr">True for <c>repr</c> (<c>array(</c> prefix, <c>", "</c> separator).</param>
+    /// <returns>The expected text.</returns>
+    private static string DeepColumnText(int rank, bool repr)
+    {
+        string indent = repr ? "       " : " ";
+        string Kid(int k) => new string('[', rank - 1) + k + "." + new string(']', rank - 1);
+        string sep = (repr ? "," : "") + new string('\n', rank - 1);
+        string body = "[" + Kid(0) + sep + indent + Kid(1) + sep + indent + Kid(2) + "]";
+        return repr ? "array(" + body + ")" : body;
+    }
+
+    /// <summary>
+    ///     NumPy's deepest array (64 dimensions) prints NumPy's text: a column of three nested values in str and repr, and
+    ///     a summarized <c>(1,)*62 + (3, 4)</c> array at <c>threshold=5, edgeitems=1</c> whose rows (width 75 - 63 = 12)
+    ///     wrap after every word (NumPy 2.4.2's literal).
+    /// </summary>
+    [TestMethod]
+    public void Deep_Rank64_IsNumPysText()
+    {
+        using var column = np.arange(3.0).reshape(new Shape(new long[] { 3 }.Concat(Enumerable.Repeat(1L, 63)).ToArray()));
+        using var block = np.arange(12.0).reshape(new Shape(Enumerable.Repeat(1L, 62).Concat(new long[] { 3, 4 }).ToArray()));
+
+        column.ToString().Should().Be(DeepColumnText(64, repr: false));
+        column.ToString(true).Should().Be(DeepColumnText(64, repr: true));
+        using (np.printoptions(threshold: 5, edgeitems: 1))
+            block.ToString().Should().Be(
+                new string('[', 64) + " 0.\n" + new string(' ', 64) + "...\n" + new string(' ', 65) + "3.]\n" +
+                new string(' ', 63) + "...\n" + new string(' ', 63) + "[ 8.\n" + new string(' ', 64) + "...\n" +
+                new string(' ', 64) + "11." + new string(']', 64));
+    }
+
+    /// <summary>
+    ///     Past NumPy's 64-dimension cap (NumSharp's arrays have none, parity QA-29) the printer keeps NumPy's layout and
+    ///     costs time linear in the text: rank 2,000 and rank 200,000 print the same pattern (16,002 and 1,600,002
+    ///     characters). The former recursive port ended the process with a stack overflow from about 2,000 dimensions
+    ///     (parity QA-50).
+    /// </summary>
+    [TestMethod, Misaligned]
+    public void Deep_PastNumPysCap_PrintsNumPysPattern()
+    {
+        foreach (int rank in new[] { 2_000, 200_000 })
+        {
+            using var column = np.arange(3.0).reshape(new Shape(new long[] { 3 }.Concat(Enumerable.Repeat(1L, rank - 1)).ToArray()));
+
+            string str = column.ToString();
+            string repr = column.ToString(true);
+
+            (str == DeepColumnText(rank, repr: false)).Should().BeTrue($"rank {rank}: str follows NumPy's pattern");
+            (repr == DeepColumnText(rank, repr: true)).Should().BeTrue($"rank {rank}: repr follows NumPy's pattern");
+            str.Length.Should().Be(8 * rank + 2);
+        }
+    }
 
     #endregion
 }

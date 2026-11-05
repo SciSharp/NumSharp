@@ -97,6 +97,20 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
+        ///     Boxes the element at a storage offset the caller resolved itself from this storage's shape
+        ///     (<c>Shape.offset + Σ index·stride</c>, in elements) — the array printer's walk, which addresses every element
+        ///     through the strides instead of building a view per axis (parity QA-50).
+        /// </summary>
+        /// <param name="offset">The element's offset in the buffer, in elements.</param>
+        /// <returns>The element, boxed exactly as <see cref="GetAtIndex(long)"/> boxes it (a text element as its decoded
+        ///     C# value).</returns>
+        /// <exception cref="NotSupportedException">The storage has no element type.</exception>
+        /// <remarks>Unchecked: an offset that does not come from this storage's own shape reads memory outside the
+        ///     array. Only a walker that derives every offset from <c>Shape.dimensions</c> / <c>strides</c> /
+        ///     <c>offset</c> may call it.</remarks>
+        internal object ElementAtResolvedOffset(long offset) => ElementAt(offset);
+
+        /// <summary>
         ///     Boxes the element at a resolved storage offset as the dtype's own CLR type; the shared tail of the checked
         ///     boxing getters.
         /// </summary>

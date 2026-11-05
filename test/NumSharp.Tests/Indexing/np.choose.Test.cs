@@ -131,6 +131,99 @@ public class ChooseTests
         r.ToArray<sbyte>().Should().Equal(1, 4);
     }
 
+    // ---- the common dtype of three or more choices (parity QA-07) -------------
+
+    /// <summary>
+    ///     NumPy's <c>PyArray_ConvertToCommonType</c> runs ONE <c>PyArray_ResultType</c> over every choice, and NEP 50's
+    ///     promotion is not associative: these are the ten triples of NumPy's 13 dtypes where a left-to-right pairwise fold
+    ///     answers differently (<c>[int16, uint16, float16]</c> folds to float64), each with NumPy 2.4.2's
+    ///     <c>np.choose([0, 1, 2], …)</c> dtype; the values <c>[1, 2, 3]</c> come through.
+    /// </summary>
+    [TestMethod]
+    public void Choose_Dtype_ThreeChoices_IsNumPysResultType()
+    {
+        (NPTypeCode a, NPTypeCode b, NPTypeCode c, NPTypeCode numpy)[] cases =
+        {
+            (NPTypeCode.Byte, NPTypeCode.SByte, NPTypeCode.Half, NPTypeCode.Half),
+            (NPTypeCode.SByte, NPTypeCode.Byte, NPTypeCode.Half, NPTypeCode.Half),
+            (NPTypeCode.SByte, NPTypeCode.UInt16, NPTypeCode.Half, NPTypeCode.Single),
+            (NPTypeCode.SByte, NPTypeCode.UInt16, NPTypeCode.Single, NPTypeCode.Single),
+            (NPTypeCode.Int16, NPTypeCode.UInt16, NPTypeCode.Half, NPTypeCode.Single),
+            (NPTypeCode.Int16, NPTypeCode.UInt16, NPTypeCode.Single, NPTypeCode.Single),
+            (NPTypeCode.UInt16, NPTypeCode.SByte, NPTypeCode.Half, NPTypeCode.Single),
+            (NPTypeCode.UInt16, NPTypeCode.SByte, NPTypeCode.Single, NPTypeCode.Single),
+            (NPTypeCode.UInt16, NPTypeCode.Int16, NPTypeCode.Half, NPTypeCode.Single),
+            (NPTypeCode.UInt16, NPTypeCode.Int16, NPTypeCode.Single, NPTypeCode.Single),
+        };
+        using var index = np.array(new long[] { 0, 1, 2 });
+        foreach (var (a, b, c, numpy) in cases)
+        {
+            using var x = np.array(new long[] { 1, 2, 3 }).astype(a);
+            using var y = np.array(new long[] { 1, 2, 3 }).astype(b);
+            using var z = np.array(new long[] { 1, 2, 3 }).astype(c);
+            using var r = np.choose(index, new NDArray[] { x, y, z });
+            r.GetTypeCode.Should().Be(numpy, $"np.choose over [{a}, {b}, {c}]");
+            r.astype(NPTypeCode.Double).ToArray<double>().Should().Equal(1.0, 2.0, 3.0);
+        }
+    }
+
+    /// <summary>
+    ///     The common dtype does not depend on the choices' ORDER: every permutation of <c>[int16, uint16, float16]</c> is
+    ///     float32 and of <c>[uint8, int8, float16]</c> float16 (NumPy 2.4.2), where the pairwise fold gave float64 /
+    ///     float32 for some orders and float32 / float16 for others.
+    /// </summary>
+    [TestMethod]
+    public void Choose_Dtype_EveryOrderOfTheChoices_GivesOneDtype()
+    {
+        var lists = new (NPTypeCode[] dtypes, NPTypeCode numpy)[]
+        {
+            (new[] { NPTypeCode.Int16, NPTypeCode.UInt16, NPTypeCode.Half }, NPTypeCode.Single),
+            (new[] { NPTypeCode.Byte, NPTypeCode.SByte, NPTypeCode.Half }, NPTypeCode.Half),
+        };
+        int[][] permutations = { new[] { 0, 1, 2 }, new[] { 0, 2, 1 }, new[] { 1, 0, 2 }, new[] { 1, 2, 0 }, new[] { 2, 0, 1 }, new[] { 2, 1, 0 } };
+        using var index = np.array(new long[] { 2, 0, 1 });
+        foreach (var (dtypes, numpy) in lists)
+            foreach (var p in permutations)
+            {
+                var choices = p.Select(k => np.array(new long[] { 10 * k, 10 * k + 1, 10 * k + 2 }).astype(dtypes[k])).ToArray();
+                using var r = np.choose(index, choices);
+                r.GetTypeCode.Should().Be(numpy, $"order {string.Join(",", p.Select(k => dtypes[k]))}");
+                foreach (var ch in choices)
+                    ch.Dispose();
+            }
+    }
+
+    /// <summary>
+    ///     NumSharp's dtypes without a NumPy counterpart keep the pairwise table's rules inside the sequence: a char choice
+    ///     promotes as uint16 (<c>[int8, float16, char]</c> is float32, uint16's NumPy answer, not the float64 a char ranked
+    ///     by its own type number would give) and stays char at its own width (<c>[char, bool, uint8]</c>); decimal wins
+    ///     over every other real dtype and complex128 over decimal.
+    /// </summary>
+    [TestMethod]
+    public void Choose_Dtype_CharDecimalAndComplex_KeepTheirRules()
+    {
+        using var index = np.array(new long[] { 0, 1, 2 });
+        using var i8 = np.array(new sbyte[] { 1, 2, 3 });
+        using var f16 = np.array(new long[] { 1, 2, 3 }).astype(NPTypeCode.Half);
+        using var ch = np.array(new[] { 'a', 'b', 'c' });
+        using var b = np.array(new[] { true, false, true });
+        using var u8 = np.array(new byte[] { 1, 2, 3 });
+        using var i16 = np.array(new short[] { 1, 2, 3 });
+        using var u16 = np.array(new ushort[] { 1, 2, 3 });
+        using var dec = np.array(new[] { 1m, 2m, 3m });
+        using var c128 = np.array(new[] { new Complex(1, 1), new Complex(2, 2), new Complex(3, 3) });
+
+        using var charAsUInt16 = np.choose(index, new NDArray[] { i8, f16, ch });
+        using var charOwnWidth = np.choose(index, new NDArray[] { ch, b, u8 });
+        using var decimalWins = np.choose(index, new NDArray[] { i16, u16, dec });
+        using var complexWins = np.choose(index, new NDArray[] { dec, c128, i8 });
+
+        charAsUInt16.GetTypeCode.Should().Be(NPTypeCode.Single);
+        charOwnWidth.GetTypeCode.Should().Be(NPTypeCode.Char);
+        decimalWins.GetTypeCode.Should().Be(NPTypeCode.Decimal);
+        complexWins.GetTypeCode.Should().Be(NPTypeCode.Complex);
+    }
+
     // ---- broadcasting --------------------------------------------------------
 
     [TestMethod]

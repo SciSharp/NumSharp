@@ -75,7 +75,7 @@ namespace NumSharp
             FileStream fs;
             try
             {
-                fs = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                fs = NumSharp.IO.NDFileShare.OpenRead(file);
             }
             catch (FileNotFoundException e)
             {

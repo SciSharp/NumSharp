@@ -105,7 +105,8 @@ namespace NumSharp.IO
         internal static Stream OpenRead(string found)
         {
             ThrowIfUnsupportedCompression(found);
-            Stream fs = new FileStream(found, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 16);
+            // Shared as Python's open() shares it (parity QA-39): another handle writing the file does not refuse the read.
+            Stream fs = NDFileShare.OpenRead(found, 1 << 16);
             return IsGzip(found) ? new GZipStream(fs, CompressionMode.Decompress) : fs;
         }
     }

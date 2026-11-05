@@ -145,6 +145,71 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>
+        ///     NEP 50 strong promotion over ANY NUMBER of NumSharp dtypes, independent of their order: NumPy's
+        ///     <c>PyArray_ResultType</c> over arrays (<c>PyArray_PromoteDTypeSequence</c>), which the functions that convert
+        ///     several operands to one common dtype run once over all of them (<c>np.choose</c>'s
+        ///     <c>PyArray_ConvertToCommonType</c>). A left fold of <see cref="PromoteStrong"/> is NOT this: NEP 50's
+        ///     promotion is not associative, so <c>[int16, uint16, float16]</c> folds to float64 (int16 + uint16 = int32,
+        ///     then int32 + float16 = float64) where NumPy's sequence answers float32, and the fold's answer depends on the
+        ///     operands' order.
+        /// </summary>
+        /// <param name="types">The strong operands' dtypes, at least one; read in order only to be counted.</param>
+        /// <returns>The common dtype: for two dtypes exactly <see cref="PromoteStrong"/>'s answer (probed over every pair
+        ///     of the 15), for more NumPy's sequence answer.</returns>
+        /// <exception cref="ArgumentException"><paramref name="types"/> is empty.</exception>
+        /// <exception cref="NotSupportedException">A type is the string lane (the numeric promotion refuses text; callers
+        ///     resolve a text result by descriptor instead).</exception>
+        /// <remarks>
+        ///     NumSharp's two dtypes without a NumPy counterpart keep <see cref="PromoteStrong"/>'s rules, which the sequence
+        ///     cannot know: complex128 wins over everything and decimal over everything else; a char operand is read as
+        ///     uint16 (the masquerade NumSharp's promotion tables use) and a uint16 answer that is the char's own width
+        ///     (no uint16 operand present) is the char again. Passing a char straight to the registry would let its
+        ///     user-defined type number make it the sequence's "main" dtype and answer float64 for
+        ///     <c>[int8, float16, char]</c>, where uint16's NumPy answer is float32.
+        /// </remarks>
+        internal static NPTypeCode PromoteStrongSequence(IReadOnlyList<NPTypeCode> types)
+        {
+            if (types is null || types.Count == 0)
+                throw new ArgumentException("at least one dtype is required", nameof(types));
+            if (types.Count == 1)
+                return types[0];
+
+            bool anyComplex = false, anyDecimal = false, anyChar = false, anyUInt16 = false;
+            var asNumPy = new NPTypeCode[types.Count];
+            for (int i = 0; i < types.Count; i++)
+            {
+                NPTypeCode t = types[i];
+                anyComplex |= t == NPTypeCode.Complex;
+                anyDecimal |= t == NPTypeCode.Decimal;
+                anyChar |= t == NPTypeCode.Char;
+                anyUInt16 |= t == NPTypeCode.UInt16;
+                // The masquerade: the sequence promotes NumPy's dtypes, and char is uint16 to NumSharp's tables.
+                asNumPy[i] = t == NPTypeCode.Char ? NPTypeCode.UInt16 : t;
+            }
+
+            // NumSharp-only dtypes first, in PromoteStrongNumeric's order (complex, then decimal), so a pair keeps the
+            // pairwise table's answer and a longer list cannot rank them differently.
+            if (anyComplex)
+                return NPTypeCode.Complex;
+            if (anyDecimal)
+                return NPTypeCode.Decimal;
+
+            // NumPy's order-independent reduction over NumPy's own dtypes (PyArray_PromoteDTypeSequence over the DType
+            // classes; every operand is an array, so every operand is strong). The dtype layer is called directly: an
+            // engine file does not call up into np.* (the R2 layering ratchet), and np._FindCommonType_Array runs this
+            // same sequence. A builtin pair's common class IS the frozen array-array table, so a pair keeps it. Probed
+            // against NumPy 2.4.2 over all 2,197 triples of its 13 dtypes: equal on every one.
+            var metas = new DTypeMeta[asNumPy.Length];
+            for (int i = 0; i < metas.Length; i++)
+                metas[i] = DTypeRegistry.FromTypeCode(asNumPy[i]);
+            NPTypeCode r = DTypePromotion.PromoteDTypeSequence(metas).TypeCode;
+            // The char's own width again, as PromoteStrong maps it back for a pair.
+            if (r == NPTypeCode.UInt16 && anyChar && !anyUInt16)
+                return NPTypeCode.Char;
+            return r;
+        }
+
+        /// <summary>
         /// The NEP50 array-array promotion with NumSharp's char read as uint16 (<see cref="PromoteStrong"/> maps a uint16
         /// result that is the char's own width back to char).
         /// </summary>

@@ -238,9 +238,10 @@ namespace NumSharp.Tests
         // ----- Read-only arrays -----
 
         /// <summary>
-        ///     A copy of a read-only array is writeable in NumPy: <c>np.array(ro, copy=True)</c> and <c>np.positive(ro)</c>
-        ///     of a <c>setflags(write=False)</c> owner both report <c>writeable True</c>; NumSharp's stay read-only, so a
-        ///     write to the fresh copy throws (gap VF14).
+        ///     A copy of a read-only array is writeable in NumPy: <c>np.positive(ro)</c> of a <c>setflags(write=False)</c>
+        ///     owner reports <c>writeable True</c>; NumSharp's stays read-only, so a write to the fresh result throws (gap
+        ///     VF14). Its other half, <c>np.array(ro, copy=True)</c>, is FIXED by parity QA-35 (np.array is np.copy's
+        ///     K-order copy, a writeable owner) and asserted here as the regression pin it is now.
         /// </summary>
         [TestMethod, OpenBugs(IssueUrl = "viewflags-VF14")]
         public void ViewFlags_CopiesOfAReadOnlyArray_ShouldBeWriteable()
@@ -250,7 +251,7 @@ namespace NumSharp.Tests
             using var copy = np.array(ro, true);
             using var pos = np.positive(ro);
 
-            copy.flags.writeable.Should().BeTrue();
+            copy.flags.writeable.Should().BeTrue("parity QA-35: np.array's copy is a writeable owner");
             pos.flags.writeable.Should().BeTrue();
         }
 
