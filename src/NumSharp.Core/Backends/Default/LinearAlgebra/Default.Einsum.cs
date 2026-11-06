@@ -90,10 +90,11 @@ namespace NumSharp.Backends
             // dtype or checks a cast. An out extent that conflicts with an output label's extent (one other than 1; NumPy
             // would broadcast an extent of 1 up to the out's) is that broadcast error, so it precedes every TypeError below.
             // NumPy leaks the iterator's "remapped shapes" text; NumSharp words it about the contraction, as below.
+            // The extents are formatted culture-invariantly, as the later shape check's text is (analyzer NDW020).
             if (@out is not null && plan.OutConflicts(@out.Shape.dimensions))
                 throw new ValueError(
-                    $"einsum() output parameter has shape ({string.Join(",", @out.Shape.dimensions)}) " +
-                    $"but the contraction produces ({string.Join(",", plan.OutputDims())})");
+                    $"einsum() output parameter has shape ({string.Join(",", Array.ConvertAll(@out.Shape.dimensions, d => d.ToString(CultureInfo.InvariantCulture)))}) " +
+                    $"but the contraction produces ({string.Join(",", Array.ConvertAll(plan.OutputDims(), d => d.ToString(CultureInfo.InvariantCulture)))})");
 
             // Text (an operand, a string dtype= request, or a text out=) has no sum-of-products: after the parse and
             // the view path above (which hands text back as a view, as NumPy does), NumPy's common dtype, its
