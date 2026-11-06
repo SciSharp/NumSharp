@@ -916,6 +916,8 @@ namespace NumSharp.Tests.Fuzz
                 // P1/P2 truthful branch above instead — a divergence that is LESS truthful than
                 // NumPy would otherwise hide in here.
                 // A signed-zero flip of sum / mean is NOT order (IsIdentitySumSignedZeroFlip) and stays red.
+                // prod's share is a decision, not a gap: its float32 / float64 SIMD lane order is the owner's documented
+                // divergence (np-layer NL3, D24 2026-11-06: "Keep SIMD lanes"; Math/np.prod.LaneOrder.Test.cs pins it).
                 if (kind == DivergenceKind.Value && truth == null
                     && (tc == NPTypeCode.Half || tc == NPTypeCode.Single
                         || tc == NPTypeCode.Double || tc == NPTypeCode.Complex)

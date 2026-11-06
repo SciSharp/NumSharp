@@ -48,11 +48,14 @@ which NumPy's methods refuse). A positional third argument is `dtype` and a four
   NumPy's three forms (a complex `x` squared into its `real` view, which the last sum reads at stride 2), the masked last
   sum into `out`, `max(count - ddof, 0)` per output (`CountsMinusDdof`), `_std`'s sqrt.
 - A numpy.matrix operand takes the matrix method's rules (`matrix.md`).
-- Open: NL12 (a mask that does not broadcast gets np.broadcast_to's NumSharp texts), NL3's axis products in the plain
-  route (`OpenBugs.NpLayer.cs`); NumPy's `initial=None` (copy each output's first element) has no C# spelling.
+- `[Misaligned]` by decision (NL3, 2026-11-06: "Keep SIMD lanes"): the plain float32 / float64 `np.prod` (flat, along an
+  axis, and the `out=` route) multiplies in SIMD lane order, NumPy's reduce in sequence: the last bits differ, and an
+  overflow before a zero is NaN in NumPy and 0 here. The lanes are 3.7-16x NumPy; `initial=` or `where=` run NumPy's
+  sequential loop bit for bit (`Math/np.prod.LaneOrder.Test.cs`). NumPy's `initial=None` (copy each output's first
+  element) has no C# spelling.
 - Gates: `Math/ReductionKeywords.NumPyPort.Test.cs` and the `reduce_kwargs` tier's sum / prod / mean / var / std cells
-  (sections A–E with I `initial=`, D `dtype=`, M `mean=` / `ddof` / `correction=`; NL12 and np.prod's plain inexact
-  cells are not generated).
+  (sections A–E with I `initial=`, D `dtype=`, M `mean=` / `ddof` / `correction=`; the NL12 mask cells and np.prod's
+  plain inexact cells are not generated).
 
 ## `np.prod` / `np.cumprod`: the complex128 and float16 loops
 

@@ -22,8 +22,10 @@ namespace NumSharp.Tests
     //   NL2  FIXED (the plan's D24, 2026-11-06): np.median of complex data holding a NaN returned the mean of the middle
     //        values, not NumPy's NaN element (_median_nancheck); its tests moved to np_median_BattleTests
     //        (Median_Complex_WithANaN_*), and the oracle's complex-median excuse is gone.
-    //   NL3  the flat np.prod of float32 / float64 multiplies in SIMD lane order, not NumPy's sequential order: values
-    //        differ by an ULP, and a product that overflows before it meets a zero is NaN on one side and 0 on the other.
+    //   NL3  MISALIGNED (the plan's D24, 2026-11-06: "Keep SIMD lanes"): the float32 / float64 np.prod multiplies in
+    //        SIMD lane order, not NumPy's sequential order (an ULP apart; an overflow before a zero is NaN in NumPy, 0
+    //        here), flat, along an axis and through out=; initial= or where= run NumPy's loop. The lanes are 3.7-16x
+    //        NumPy; its cases moved to np_prod_lane_order_tests as [Misaligned] tests.
     //   NL4  FIXED (the plan's D24, 2026-11-06): 1-D np.polyval with complex coefficients and an infinite real x gave
     //        NaN+NaNj where NumPy keeps the coefficient's imaginary part (its first product is in x's dtype); its tests
     //        moved to PolynomialTests.Polyval_FirstProduct_IsInXsDtype.
@@ -75,9 +77,6 @@ namespace NumSharp.Tests
     //        casting='safe' and refuses a misshapen out with "could not broadcast input array from shape (2,4) into shape
     //        (2,5)". NumSharp keeps the C parser's texts (linalg-einsum.md) and c_einsum's out checks for every optimize=;
     //        an explicit path is planned first since NL5. Found by NL5's fix (2026-11-06).
-    //   NL3 also covers the axis products: an axis np.prod of float32 / float64 multiplies a row in SIMD lane order too
-    //        (and so does the out= route, which computes the plain product); np.prod with initial= or a mask runs
-    //        NumPy's sequential loop and is exact. Found by P10 item 1's reduce_kwargs cells (carved there).
     //
     // Every expected value below is NumPy 2.4.2's answer for the same call (probed on win-amd64). EXPECTED (when fixed):
     // each test passes; remove its [OpenBugs], move it next to its API's tests, and drop the oracle excuse named in its
@@ -85,107 +84,6 @@ namespace NumSharp.Tests
     // =====================================================================
     public partial class OpenBugs
     {
-        // ------------------------------------------------------------------
-        // NL3 — the flat float32 / float64 np.prod multiplies in SIMD lane order
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     The flat <c>np.prod</c> of a C-contiguous float32 (3, 4) array <c>[[2**64, 2**64, 1, 1], [0, 1, 1, 1],
-        ///     [1, 1, 1, 1]]</c>: NumPy's <c>FLOAT_multiply</c> reduce is a sequential loop (<c>acc *= *src</c>,
-        ///     loops_arithm_fp.dispatch.c.src: multiply is not pairwise), so <c>2**64 * 2**64</c> overflows to inf before
-        ///     the zero and the product is NaN (0xFFC00000). NumSharp's flat route (<c>prod_elementwise_il</c>, the IL SIMD
-        ///     reduction) multiplies lane by lane and combines the lanes at the end, so the zero enters a lane product before
-        ///     the two 2**64 meet and the product is 0. Random float32 data differs in the last bits the same way: 18 of 35
-        ///     C-contiguous 1-D products of 4 to 1,000 values. The oracle's unbounded "reduction summation/two-pass precision (algorithm
-        ///     order)" excuse covers prod today; narrow it to sum with the fix.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL3")]
-        public void NpLayer_Prod_Float32Flat_ShouldMultiplyInNumPysSequentialOrder()
-        {
-            const float big = 18446744073709551616f;   // 2**64: its square overflows float32
-            using var a = np.array(new float[,] { { big, big, 1, 1 }, { 0, 1, 1, 1 }, { 1, 1, 1, 1 } });
-            using var r = np.prod(a);
-
-            BitConverter.SingleToInt32Bits((float)r.GetValue()).Should().Be(unchecked((int)0xFFC00000));
-        }
-
-        /// <summary>
-        ///     The flat <c>np.prod</c> of an F-ordered float32 (3, 4) array: NumPy's reduction iterator walks the operand in
-        ///     MEMORY order (K order: the first axis is innermost here), so the product of these twelve values is 0x409D7A6B,
-        ///     one ULP from the C-ordered array's 0x409D7A6C (which NumSharp matches). NumSharp gives 0x409D7A6D. The values
-        ///     are the float32 casts of the fourth <c>uniform(0.5, 2.0, size=(3, 4))</c> draw of NumPy's
-        ///     <c>default_rng(7)</c>.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL3")]
-        public void NpLayer_Prod_Float32FOrdered_ShouldMultiplyInMemoryOrder()
-        {
-            using var c = np.array(new float[,]
-            {
-                { 1.0543044805526733f, 0.5056013464927673f, 1.7450716495513916f, 0.7316915988922119f },
-                { 0.9013989567756653f, 1.8204982280731201f, 1.2646862268447876f, 1.7707253694534302f },
-                { 1.4595757722854614f, 1.6126564741134644f, 0.637243390083313f, 1.3117157220840454f },
-            });
-            using var f = np.asfortranarray(c);
-            using var r = np.prod(f);
-
-            BitConverter.SingleToInt32Bits((float)r.GetValue()).Should().Be(0x409D7A6B);
-        }
-
-        /// <summary>
-        ///     The flat <c>np.prod</c> of a float32 view reversed on both axes: NumPy's reductions pass
-        ///     <c>NPY_ITER_DONT_NEGATE_STRIDES</c>, so a reversed view is multiplied in its LOGICAL order, where the two
-        ///     2**64 come first and overflow before the zero: NaN (0xFFC00000). NumSharp gives 0.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL3")]
-        public void NpLayer_Prod_Float32Reversed_ShouldMultiplyInLogicalOrder()
-        {
-            const float big = 18446744073709551616f;   // 2**64
-            using var owner = np.array(new float[,] { { 1, 1, 1, 1 }, { 1, 1, 1, 0 }, { 1, 1, big, big } });
-            using var reversed = owner["::-1, ::-1"];
-            using var r = np.prod(reversed);
-
-            BitConverter.SingleToInt32Bits((float)r.GetValue()).Should().Be(unchecked((int)0xFFC00000));
-        }
-
-        /// <summary>
-        ///     The flat <c>np.prod</c> of four float64 values: NumPy's sequential <c>DOUBLE_multiply</c> reduce gives NaN for
-        ///     <c>[1e200, 1e200, 0, 1]</c> (inf, then inf * 0) and 0 for <c>[1e200, 0, 1e200, 1]</c>. NumSharp answers the
-        ///     other way round (both answers fit lanes that pair the first value with the third and the second with the
-        ///     fourth), so four values are enough to show the order; random float64 data differs in the last bits in 20 of
-        ///     35 C-contiguous 1-D products of 4 to 1,000 values.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL3")]
-        public void NpLayer_Prod_Float64Flat_ShouldMultiplyInNumPysSequentialOrder()
-        {
-            using var overflowFirst = np.array(new[] { 1e200, 1e200, 0.0, 1.0 });
-            using var zeroFirst = np.array(new[] { 1e200, 0.0, 1e200, 1.0 });
-            using var r1 = np.prod(overflowFirst);
-            using var r2 = np.prod(zeroFirst);
-
-            BitConverter.DoubleToInt64Bits((double)r1.GetValue()).Should().Be(unchecked((long)0xFFF8000000000000));
-            BitConverter.DoubleToInt64Bits((double)r2.GetValue()).Should().Be(0L);
-        }
-
-        /// <summary>
-        ///     The AXIS <c>np.prod</c> of float64 rows: NumPy's reduce form over each row is the same sequential loop, so
-        ///     <c>[[1e200, 1e200, 0, 1], [1e200, 0, 1e200, 1]]</c> along axis 1 is <c>[nan, 0]</c>; NumSharp's axis kernel
-        ///     multiplies a row in lane order and answers <c>[0, nan]</c>. The <c>out=</c> route computes the same plain
-        ///     product. With <c>initial=</c> or a mask the product runs NumPy's iterator and loop
-        ///     (<c>NumPyMultiplyLoops</c>) and is exact, so the fix can route the plain product through the same loop.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL3")]
-        public void NpLayer_Prod_Float64Axis_ShouldMultiplyInNumPysSequentialOrder()
-        {
-            using var x = np.array(new[,] { { 1e200, 1e200, 0.0, 1.0 }, { 1e200, 0.0, 1e200, 1.0 } });
-            using var r = np.prod(x, 1);
-            using var o = np.zeros(new Shape(2));
-            np.prod(x, 1, @out: o);
-
-            BitConverter.DoubleToInt64Bits(r.GetAtIndex<double>(0)).Should().Be(unchecked((long)0xFFF8000000000000));
-            BitConverter.DoubleToInt64Bits(r.GetAtIndex<double>(1)).Should().Be(0L);
-            BitConverter.DoubleToInt64Bits(o.GetAtIndex<double>(0)).Should().Be(unchecked((long)0xFFF8000000000000));
-        }
-
         // ------------------------------------------------------------------
         // NL12 — np.broadcast_to's error texts
         // ------------------------------------------------------------------
