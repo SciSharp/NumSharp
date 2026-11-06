@@ -72,12 +72,6 @@ namespace NumSharp
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray compress(NDArray condition, NDArray a, int? axis = null, NDArray @out = null)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(a))
-                return NDMatrixBoundary.Wrapped((condition, a, axis, @out), static s => compress(s.condition, s.a, s.axis, s.@out), @out);
-            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(a))
-                return NDCharArrayBoundary.Kept((condition, a, axis, @out), static s => compress(s.condition, s.a, s.axis, s.@out), @out);
             if (condition is null) throw new ArgumentNullException(nameof(condition));
             if (a is null) throw new ArgumentNullException(nameof(a));
 

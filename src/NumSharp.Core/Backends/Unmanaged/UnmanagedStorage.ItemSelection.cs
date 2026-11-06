@@ -89,6 +89,7 @@ namespace NumSharp.Backends
         ///     </para>
         /// </remarks>
         [NDScopedCovered]
+        [NewSubtype("a", ZeroDim = NewSubtypeZeroDim.Scalar)]
         internal static NDArray TakeFrom(NDArray a, NDArray indices, int? axis, NDArray @out, int mode)
         {
             // PyArray_CheckAxis(self, &axis, CARRAY_RO): axis=None ravels the source, and so does a 0-d source (NumPy
@@ -1214,6 +1215,7 @@ namespace NumSharp.Backends
         ///     contiguous copies the tiling reads, and it roots <paramref name="a"/> while the kernels read it through raw
         ///     pointers.
         /// </remarks>
+        [NewSubtype("a")]
         internal static NDArray Repeat(NDArray a, long repeats, int? axis)
         {
             if (repeats < 0)
@@ -1249,6 +1251,7 @@ namespace NumSharp.Backends
         ///     The <c>[NDScoped]</c> <c>np.repeat</c> overload is its caller: its scope releases the raveled copies and
         ///     roots the operands while the kernels read them through raw pointers.
         /// </remarks>
+        [NewSubtype("a")]
         internal static NDArray Repeat(NDArray a, NDArray repeats, int? axis)
         {
             // PyArray_Repeat's needs_custom_copy, PyDataType_REFCHK(PyArray_DESCR(ret)) (ret has a's descriptor). A
@@ -1568,6 +1571,7 @@ namespace NumSharp.Backends
         ///     through raw pointers.
         /// </remarks>
         [NDScopedCovered]
+        [NewSubtype("a")]
         internal static unsafe NDArray ChooseCore(NDArray a, object[] choices, NDArray @out, string mode)
         {
             int modeInt = ParseChooseMode(mode);
@@ -1982,6 +1986,7 @@ namespace NumSharp.Backends
         ///     path allocates only its result.
         /// </remarks>
         [NDScoped] // reclaims TakeFrom's C-order source copy and out= temp, and the flat indices, on the generic path
+        [NewSubtype("a")]
         internal static NDArray Compress(NDArray condition, NDArray a, int? axis, NDArray @out)
         {
             // NumPy hard-requires 1-D condition; 0-D and 2-D+ both fail here (PyArray_Compress' ValueError).
@@ -2178,6 +2183,7 @@ namespace NumSharp.Backends
         ///     <c>np.resize</c> is not <c>ndarray.resize</c>: that one is <see cref="Resize"/> (NumPy's
         ///     <c>PyArray_Resize</c>), which works in place and fills a grown array with zeros.
         /// </remarks>
+        [SubclassRule(typeof(NDSubclassRules), nameof(NDSubclassRules.Resize))]
         internal static unsafe NDArray ResizeRepeating(NDArray a, Shape new_shape)
         {
             // Validate dimensions and compute the target element count. NumPy's np.resize

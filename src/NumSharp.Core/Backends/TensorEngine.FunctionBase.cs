@@ -35,6 +35,7 @@ namespace NumSharp
         ///     override runs those statements. An override replaces <c>np.angle</c> for every array whose engine it is,
         ///     so it must keep NumPy's dtype tiers and the real-input values above.</para>
         /// </remarks>
+        [ArrayWrap("z")]
         public abstract NDArray Angle(NDArray z, bool deg = false);
 
         /// <summary>
@@ -341,6 +342,7 @@ namespace NumSharp
         ///     null check; an override replaces it for every array whose engine it is. New in 0.71.0 (the np-layer dtype
         ///     plan, phase PE); it was the internal class <c>TrapezoidEngine</c>.
         /// </remarks>
+        [SubclassRule(typeof(NDSubclassRules), nameof(NDSubclassRules.Trapezoid))]
         public abstract NDArray Trapezoid(NDArray y, NDArray x = null, double dx = 1.0, int axis = -1);
 
         /// <summary>
@@ -484,6 +486,7 @@ namespace NumSharp
         ///     dimensional</c>).</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> out of range.</exception>
         /// <exception cref="TypeError">Text with <paramref name="n"/> above 0: subtract has no string loop.</exception>
+        [ArrayWrap("a")]
         public abstract NDArray Diff(NDArray a, int n = 1, int axis = -1, object prepend = null, object append = null);
 
         /// <summary>
@@ -528,6 +531,7 @@ namespace NumSharp
         /// <exception cref="TypeError">A complex <paramref name="p"/>.</exception>
         /// <exception cref="OverflowException">On the integer path, a bound or the period that does not fit the input
         ///     dtype (NumPy's OverflowError).</exception>
+        [AsArray]
         public abstract NDArray Unwrap(NDArray p, double? discont = null, int axis = -1, object period = null);
 
         /// <summary>
@@ -571,6 +575,7 @@ namespace NumSharp
         ///     string</c>).</exception>
         /// <remarks>The sort runs in the original dtype, so an int64 past 2^53 orders by its exact value, not by its
         ///     double image; only the sorted result is widened.</remarks>
+        [AsArray]
         public abstract NDArray SortComplex(NDArray a);
 
         /// <summary>
@@ -607,6 +612,7 @@ namespace NumSharp
         ///     bounding box is separable, so DefaultEngine takes each trimmed axis' first and last index from
         ///     <c>nonzero(any(filt, other axes))</c> instead: the same view, without every nonzero coordinate.
         /// </remarks>
+        [NewSubtype("filt")]
         public abstract NDArray TrimZeros(NDArray filt, string trim = "fb", int[] axis = null);
     }
 }

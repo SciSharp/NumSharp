@@ -24,13 +24,6 @@ namespace NumSharp
         /// <exception cref="InvalidCastException">An array that does not cast to the result dtype.</exception>
         public static NDArray dstack(params NDArray[] tup)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(tup))
-                return NDMatrixBoundary.Wrapped(tup, static s => dstack(s));
-            // a numpy.char.chararray operand: NumPy's dstack ends with np.concatenate, which drops the class; the rule's
-            // region keeps its inner atleast_3d calls plain (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(tup))
-                return NDCharArrayBoundary.Plain(tup, static s => dstack(s));
             if (tup == null)
                 throw new ArgumentNullException(nameof(tup));
 

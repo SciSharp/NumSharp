@@ -52,10 +52,6 @@ namespace NumSharp
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray apply_along_axis(Func<NDArray, NDArray> func1d, int axis, NDArray arr)
         {
-            // a numpy.matrix operand: NumPy wraps the assembled result in the operand's class (conv.wrap). func1d gets a
-            // plain 1-d slice here, where NumPy hands it the 1 x N matrix row its matrix indexing returns.
-            if (NDMatrixBoundary.Sees(arr))
-                return NDMatrixBoundary.Wrapped((func1d, axis, arr), static s => apply_along_axis(s.func1d, s.axis, s.arr));
             if (func1d is null)
                 throw new ArgumentNullException(nameof(func1d));
             if (arr is null)
@@ -84,10 +80,6 @@ namespace NumSharp
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray apply_along_axis(Func<NDArray, object[], NDArray> func1d, int axis, NDArray arr, params object[] args)
         {
-            // a numpy.matrix operand: NumPy wraps the assembled result in the operand's class (conv.wrap). func1d gets a
-            // plain 1-d slice here, where NumPy hands it the 1 x N matrix row its matrix indexing returns.
-            if (NDMatrixBoundary.Sees(arr))
-                return NDMatrixBoundary.Wrapped((func1d, axis, arr, args), static s => apply_along_axis(s.func1d, s.axis, s.arr, s.args));
             if (func1d is null)
                 throw new ArgumentNullException(nameof(func1d));
 

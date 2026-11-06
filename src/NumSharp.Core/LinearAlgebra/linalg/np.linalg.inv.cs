@@ -35,9 +35,6 @@ namespace NumSharp
             public static NDArray inv(NDArray a)
             {
                 if (a is null) throw new ArgumentNullException(nameof(a));
-                // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-                if (NDMatrixBoundary.Sees(a))
-                    return NDMatrixBoundary.Wrapped(a, static s => inv(s));
                 return a.TensorEngine.Linalg.Inv(a);
             }
 
@@ -68,9 +65,6 @@ namespace NumSharp
             public static NDArray pinv(NDArray a, double? rcond = null, bool hermitian = false, double? rtol = null)
             {
                 if (a is null) throw new ArgumentNullException(nameof(a));
-                // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-                if (NDMatrixBoundary.Sees(a))
-                    return NDMatrixBoundary.Wrapped((a, rcond, hermitian, rtol), static s => pinv(s.a, s.rcond, s.hermitian, s.rtol));
                 return a.TensorEngine.Linalg.Pinv(a, rcond, hermitian, rtol);
             }
 
@@ -103,7 +97,6 @@ namespace NumSharp
             public static NDArray tensorinv(NDArray a, int ind = 2)
             {
                 if (a is null) throw new ArgumentNullException(nameof(a));
-                using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
                 return a.TensorEngine.Linalg.Tensorinv(a, ind);
             }
         }

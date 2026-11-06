@@ -59,11 +59,7 @@ namespace NumSharp
         ///     ends with <c>np.concatenate</c>), which drops the class.
         /// </remarks>
         public static NDArray einsum(string subscripts, params NDArray[] operands)
-            => NDMatrixBoundary.Sees(operands)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
-            ? NDMatrixBoundary.Plain((subscripts, operands), static s => einsum(s.subscripts, s.operands))
-            : NDCharArrayBoundary.Sees(operands)   // a numpy.char.chararray operand too: asarray drops either class
-            ? NDCharArrayBoundary.Plain((subscripts, operands), static s => einsum(s.subscripts, s.operands))
-            : einsum(subscripts, operands, null);
+            => einsum(subscripts, operands, null);
 
         /// <summary>
         ///     Evaluates the Einstein summation convention, with NumPy's full keyword surface.
@@ -103,12 +99,6 @@ namespace NumSharp
         public static NDArray einsum(string subscripts, NDArray[] operands, NDArray @out = null,
             DType dtype = null, char order = 'K', string casting = "safe", object optimize = null)
         {
-            // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
-            if (NDMatrixBoundary.Sees(operands))
-                return NDMatrixBoundary.Plain((subscripts, operands, @out, dtype, order, casting, optimize), static s => einsum(s.subscripts, s.operands, s.@out, s.dtype, s.order, s.casting, s.optimize));
-            // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(operands))
-                return NDCharArrayBoundary.Plain((subscripts, operands, @out, dtype, order, casting, optimize), static s => einsum(s.subscripts, s.operands, s.@out, s.dtype, s.order, s.casting, s.optimize));
             // The engine of the first operand, as np.dot dispatches on its first; with no operand (or a null first one)
             // none decides, and TensorEngine.Default's member raises NumPy's error for it. The engine member checks the
             // arguments, parses and validates the subscripts (rank, ellipsis grammar, operand count, output labels,

@@ -19,11 +19,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.repeat.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray repeat(NDArray a, int repeats, int? axis = null)
-            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((a, repeats, axis), static s => repeat(s.a, s.repeats, s.axis))
-            : NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
-            ? NDCharArrayBoundary.Kept((a, repeats, axis), static s => repeat(s.a, s.repeats, s.axis))
-            : repeat(a, (long)repeats, axis);
+            => repeat(a, (long)repeats, axis);
 
         /// <summary>
         ///     Repeat each element of an array after themselves.
@@ -39,12 +35,6 @@ namespace NumSharp
         [NDScoped] // calculating overload: reclaims the ravel/ascontiguousarray/reshape temps
         public static NDArray repeat(NDArray a, long repeats, int? axis = null)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(a))
-                return NDMatrixBoundary.Wrapped((a, repeats, axis), static s => repeat(s.a, s.repeats, s.axis));
-            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(a))
-                return NDCharArrayBoundary.Kept((a, repeats, axis), static s => repeat(s.a, s.repeats, s.axis));
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
             return UnmanagedStorage.Repeat(a, repeats, axis);
@@ -81,12 +71,6 @@ namespace NumSharp
         [NDScoped] // calculating overload: reclaims the ravel temps
         public static NDArray repeat(NDArray a, NDArray repeats, int? axis = null)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(a))
-                return NDMatrixBoundary.Wrapped((a, repeats, axis), static s => repeat(s.a, s.repeats, s.axis));
-            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(a))
-                return NDCharArrayBoundary.Kept((a, repeats, axis), static s => repeat(s.a, s.repeats, s.axis));
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
             if (repeats is null)

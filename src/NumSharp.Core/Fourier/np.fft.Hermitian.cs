@@ -39,12 +39,6 @@ namespace NumSharp
         public NDArray hfft(NDArray a, int? n = null, int axis = -1, string norm = null, NDArray @out = null)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
-            if (NDMatrixBoundary.Sees(a))
-                return NDMatrixBoundary.Plain((self: this, a, n, axis, norm, @out), static s => s.self.hfft(s.a, s.n, s.axis, s.norm, s.@out));
-            // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(a))
-                return NDCharArrayBoundary.Plain((self: this, a, n, axis, norm, @out), static s => s.self.hfft(s.a, s.n, s.axis, s.norm, s.@out));
             return a.TensorEngine.Fft.Hfft(a, n, axis, norm, @out);
         }
 

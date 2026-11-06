@@ -18,9 +18,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.empty_like.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray empty_like(NDArray prototype, DType dtype = null, Shape shape = default, string device = null)
-            => NDMatrixBoundary.Sees(prototype)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((prototype, dtype, shape, device), static s => empty_like(s.prototype, s.dtype, s.shape, s.device))
-            : empty_like(prototype, dtype, shape, 'K', device);
+            => empty_like(prototype, dtype, shape, 'K', device);
 
         /// <summary>
         ///     Return a new array with the same shape and type as a given array.
@@ -41,24 +39,7 @@ namespace NumSharp
         /// <exception cref="ValueError"><paramref name="device"/> is neither null nor <c>"cpu"</c> (NumPy's <c>Device not
         ///     understood. Only "cpu" is allowed, but received: ...</c>).</exception>
         public static NDArray empty_like(NDArray prototype, DType dtype, Shape shape, char order, string device = null)
-        {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(prototype))
-                return NDMatrixBoundary.Wrapped((prototype, dtype, shape, order, device), static s => empty_like(s.prototype, s.dtype, s.shape, s.order, s.device));
-            // a numpy.char.chararray operand: PyArray_NewLikeArray allocates the result as the subclass (subok=True), so
-            // its dtype meets __array_finalize__ after the device, order and dimension checks (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(prototype))
-                return NDCharArrayBoundary.Kept((prototype, dtype, shape, order, device), static s => empty_like(s.prototype, s.dtype, s.shape, s.order, s.device));
-            // NumPy's empty_like converts its arguments in order (npy_parse_arguments): the order's letter before the device,
-            // so an unknown order is reported first (np.zeros_like(a, order='Z', device='cuda') raises the order's ValueError,
-            // probed 2.4.2). The layout itself is resolved after the device, as before.
-            OrderResolver.Convert(order);
-            DeviceArguments.ValidateDevice(device);
-            var dims = shape.IsEmpty ? (long[])prototype.Shape.dimensions.Clone() : (long[])shape;
-            // PyArray_NewLikeArrayWithShape's layout: order='K' keeps the prototype's axis permutation (C when shape=
-            // changes the rank), not merely C-or-F.
-            var resolvedShape = Shape.NewLikeLayout(prototype.Shape, order, dims);
-            return new NDArray(dtype ?? prototype.dtype, resolvedShape, false);
-        }
+            // NumPy's statements (the argument checks in their order, the layout, the allocation) are the array object's.
+            => NDArray.empty_like(prototype, dtype, shape, order, device);
     }
 }

@@ -37,8 +37,6 @@ namespace NumSharp
             ///     keeps only text results); a chararray <paramref name="out"/> comes back as a new view of it.</remarks>
             public static NDArray str_len(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
             {
-                if (NDCharArrayBoundary.Sees(x, @out))
-                    return NDCharArrayBoundary.WrappedUfunc((x, @out, where, dtype), static s => str_len(s.x, s.@out, s.where, s.dtype), x, null, @out);
                 if (x is null)
                     throw new ArgumentNullException(nameof(x));
                 return NDStringMethods.StrLen(x, @out, where, dtype);
@@ -144,9 +142,6 @@ namespace NumSharp
             ///     with at most <c>np.getbufsize()</c> elements: <c>Can only create a chararray from string data.</c>).</exception>
             public static NDArray find(NDArray a, NDArray sub, NDArray start = null, NDArray end = null)
             {
-                if (NDCharArrayBoundary.Sees(a, sub))
-                    return NDCharArrayBoundary.WrappedUfunc((a, sub, start, end),
-                                                            static s => find(s.a, s.sub, s.start, s.end), a, sub, null);
                 RequireOperand(a, nameof(a));
                 RequireOperand(sub, nameof(sub));
                 return NDStringMethods.FindLike("find", TextMethodOp.Find, a, sub, start, end);
@@ -170,9 +165,6 @@ namespace NumSharp
             ///     with at most <c>np.getbufsize()</c> elements: <c>Can only create a chararray from string data.</c>).</exception>
             public static NDArray rfind(NDArray a, NDArray sub, NDArray start = null, NDArray end = null)
             {
-                if (NDCharArrayBoundary.Sees(a, sub))
-                    return NDCharArrayBoundary.WrappedUfunc((a, sub, start, end),
-                                                            static s => rfind(s.a, s.sub, s.start, s.end), a, sub, null);
                 RequireOperand(a, nameof(a));
                 RequireOperand(sub, nameof(sub));
                 return NDStringMethods.FindLike("rfind", TextMethodOp.RFind, a, sub, start, end);
@@ -197,9 +189,6 @@ namespace NumSharp
             ///     <c>np.getbufsize()</c> elements: <c>Can only create a chararray from string data.</c>).</exception>
             public static NDArray index(NDArray a, NDArray sub, NDArray start = null, NDArray end = null)
             {
-                if (NDCharArrayBoundary.Sees(a, sub))
-                    return NDCharArrayBoundary.WrappedUfunc((a, sub, start, end),
-                                                            static s => index(s.a, s.sub, s.start, s.end), a, sub, null);
                 RequireOperand(a, nameof(a));
                 RequireOperand(sub, nameof(sub));
                 return NDStringMethods.FindLike("index", TextMethodOp.Find, a, sub, start, end);
@@ -224,9 +213,6 @@ namespace NumSharp
             ///     <c>np.getbufsize()</c> elements: <c>Can only create a chararray from string data.</c>).</exception>
             public static NDArray rindex(NDArray a, NDArray sub, NDArray start = null, NDArray end = null)
             {
-                if (NDCharArrayBoundary.Sees(a, sub))
-                    return NDCharArrayBoundary.WrappedUfunc((a, sub, start, end),
-                                                            static s => rindex(s.a, s.sub, s.start, s.end), a, sub, null);
                 RequireOperand(a, nameof(a));
                 RequireOperand(sub, nameof(sub));
                 return NDStringMethods.FindLike("rindex", TextMethodOp.RFind, a, sub, start, end);
@@ -251,9 +237,6 @@ namespace NumSharp
             ///     with at most <c>np.getbufsize()</c> elements: <c>Can only create a chararray from string data.</c>).</exception>
             public static NDArray count(NDArray a, NDArray sub, NDArray start = null, NDArray end = null)
             {
-                if (NDCharArrayBoundary.Sees(a, sub))
-                    return NDCharArrayBoundary.WrappedUfunc((a, sub, start, end),
-                                                            static s => count(s.a, s.sub, s.start, s.end), a, sub, null);
                 RequireOperand(a, nameof(a));
                 RequireOperand(sub, nameof(sub));
                 return NDStringMethods.FindLike("count", TextMethodOp.Count, a, sub, start, end);
@@ -278,9 +261,6 @@ namespace NumSharp
             ///     <c>np.getbufsize()</c> elements: <c>Can only create a chararray from string data.</c>).</exception>
             public static NDArray startswith(NDArray a, NDArray prefix, NDArray start = null, NDArray end = null)
             {
-                if (NDCharArrayBoundary.Sees(a, prefix))
-                    return NDCharArrayBoundary.WrappedUfunc((a, prefix, start, end),
-                                                            static s => startswith(s.a, s.prefix, s.start, s.end), a, prefix, null);
                 RequireOperand(a, nameof(a));
                 RequireOperand(prefix, nameof(prefix));
                 return NDStringMethods.FindLike("startswith", TextMethodOp.StartsWith, a, prefix, start, end);
@@ -305,9 +285,6 @@ namespace NumSharp
             ///     chararray from string data.</c>).</exception>
             public static NDArray endswith(NDArray a, NDArray suffix, NDArray start = null, NDArray end = null)
             {
-                if (NDCharArrayBoundary.Sees(a, suffix))
-                    return NDCharArrayBoundary.WrappedUfunc((a, suffix, start, end),
-                                                            static s => endswith(s.a, s.suffix, s.start, s.end), a, suffix, null);
                 RequireOperand(a, nameof(a));
                 RequireOperand(suffix, nameof(suffix));
                 return NDStringMethods.FindLike("endswith", TextMethodOp.EndsWith, a, suffix, start, end);

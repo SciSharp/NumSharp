@@ -19,13 +19,8 @@ namespace NumSharp
         /// <exception cref="AxisError"><paramref name="axis"/> is outside <c>[-(a.ndim + 1), a.ndim]</c>: "axis … is out of
         ///     bounds for array of dimension {a.ndim + 1}", the axis as given.</exception>
         public static NDArray expand_dims(NDArray a, int axis)
-        {
-            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(a))
-                return NDCharArrayBoundary.Kept((a, axis), static s => expand_dims(s.a, s.axis));
-            using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return NDArray.expand_dims(a, axis);
-        }
+            // NumPy's statements are the array object's.
+            => NDArray.expand_dims(a, axis);
 
         /// <summary>
         ///     Expand the shape of an array. Insert new axes that will appear at
@@ -46,22 +41,8 @@ namespace NumSharp
         /// <exception cref="AxisError">An axis is out of range for the result's rank.</exception>
         /// <exception cref="ValueError">Two axes name the same position ("repeated axis").</exception>
         public static NDArray expand_dims(NDArray a, int[] axis)
-        {
-            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(a))
-                return NDCharArrayBoundary.Kept((a, axis), static s => expand_dims(s.a, s.axis));
-            using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // An empty tuple reshapes to the same shape: a NEW view object in NumPy, never the input itself (a caller
-            // that disposes or resizes the result must not touch the input).
-            if (axis == null || axis.Length == 0)
-                return new NDArray(a.Storage.Alias()) { TensorEngine = a.TensorEngine };
-
-            // See the single-axis overload: a size == 0 array must still gain the new axes.
-            if (a.Shape.IsEmpty)
-                return a;
-
-            return new NDArray(a.Storage.Alias(a.Shape.ExpandDimensions(axis))) { TensorEngine = a.TensorEngine };
-        }
+            // NumPy's statements are the array object's.
+            => NDArray.expand_dims(a, axis);
 
         /// <summary>
         ///     Sequence overload — accepts any <see cref="IEnumerable{Int32}"/>,
@@ -76,10 +57,6 @@ namespace NumSharp
         /// <exception cref="ValueError">Two axes name the same position ("repeated axis").</exception>
         public static NDArray expand_dims(NDArray a, IEnumerable<int> axis)
         {
-            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(a))
-                return NDCharArrayBoundary.Kept((a, axis), static s => expand_dims(s.a, s.axis));
-            using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (axis == null)
                 return a;
 

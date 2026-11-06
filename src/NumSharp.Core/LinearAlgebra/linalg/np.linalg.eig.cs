@@ -29,9 +29,6 @@ namespace NumSharp
             public static (NDArray eigenvalues, NDArray eigenvectors) eig(NDArray a)
             {
                 if (a is null) throw new ArgumentNullException(nameof(a));
-                // a numpy.matrix operand: NumPy returns the plain eigenvalues and wrap(vt), the eigenvectors as a matrix
-                if (NDMatrixBoundary.Sees(a))
-                    return NDMatrixBoundary.WrappedPair(a, static s => eig(s), wrapFirst: false, wrapSecond: true);
                 return a.TensorEngine.Linalg.Eig(a);
             }
 
@@ -49,7 +46,6 @@ namespace NumSharp
             public static NDArray eigvals(NDArray a)
             {
                 if (a is null) throw new ArgumentNullException(nameof(a));
-                using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
                 return a.TensorEngine.Linalg.Eigvals(a);
             }
 
@@ -79,9 +75,6 @@ namespace NumSharp
             public static (NDArray eigenvalues, NDArray eigenvectors) eigh(NDArray a, char UPLO = 'L')
             {
                 if (a is null) throw new ArgumentNullException(nameof(a));
-                // a numpy.matrix operand: NumPy returns the plain eigenvalues and wrap(vt), the eigenvectors as a matrix
-                if (NDMatrixBoundary.Sees(a))
-                    return NDMatrixBoundary.WrappedPair((a, UPLO), static s => eigh(s.a, s.UPLO), wrapFirst: false, wrapSecond: true);
                 return a.TensorEngine.Linalg.Eigh(a, UPLO);
             }
 
@@ -95,7 +88,6 @@ namespace NumSharp
             public static NDArray eigvalsh(NDArray a, char UPLO = 'L')
             {
                 if (a is null) throw new ArgumentNullException(nameof(a));
-                using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
                 return a.TensorEngine.Linalg.Eigvalsh(a, UPLO);
             }
         }

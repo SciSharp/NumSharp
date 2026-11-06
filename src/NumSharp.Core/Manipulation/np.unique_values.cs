@@ -58,6 +58,7 @@ namespace NumSharp
             /// <summary>The number of times each unique value appears in the input.</summary>
             public NDArray counts { get; }
 
+            [SubclassRule(typeof(NDSubclassRules), nameof(NDSubclassRules.UniqueAll))]
             internal UniqueAllResult(NDArray values, NDArray indices, NDArray inverseIndices, NDArray counts)
             {
                 this.values = values;
@@ -116,6 +117,7 @@ namespace NumSharp
             /// <summary>The number of times each unique value appears in the input.</summary>
             public NDArray counts { get; }
 
+            [SubclassRule(typeof(NDSubclassRules), nameof(NDSubclassRules.UniqueCounts))]
             internal UniqueCountsResult(NDArray values, NDArray counts)
             {
                 this.values = values;
@@ -166,6 +168,7 @@ namespace NumSharp
             /// <summary>The indices into <see cref="values"/> that reconstruct the input, shaped like the input.</summary>
             public NDArray inverse_indices { get; }
 
+            [SubclassRule(typeof(NDSubclassRules), nameof(NDSubclassRules.UniqueInverse))]
             internal UniqueInverseResult(NDArray values, NDArray inverseIndices)
             {
                 this.values = values;
@@ -228,13 +231,6 @@ namespace NumSharp
         [NDScoped]
         public static NDArray unique_values(NDArray x)
         {
-            // a numpy.char.chararray operand: NumPy hands the values back through _array_converter.wrap or a boolean
-            // index (a chararray view); the index arrays stay plain. A call with a return flag sorts the chararray and finds
-            // its runs with the chararray's stripping `!=` (stripRuns; unique_values hashes the plain data). Decided before
-            // the matrix region below (NDCharArrayBoundary).
-            if (NDCharArrayBoundary.Sees(x))
-                return NDCharArrayBoundary.Wrapped(x, static s => unique_values(s));
-            using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // NumPy's statements after the class boundary (the text checks, the hash and sort routes).
             return x.TensorEngine.UniqueValues(x);
         }
@@ -259,16 +255,6 @@ namespace NumSharp
         [NDScoped]
         public static UniqueCountsResult unique_counts(NDArray x)
         {
-            // a numpy.char.chararray operand: NumPy hands the values back through _array_converter.wrap or a boolean
-            // index (a chararray view); the index arrays stay plain. A call with a return flag sorts the chararray and finds
-            // its runs with the chararray's stripping `!=` (stripRuns; unique_values hashes the plain data). Decided before
-            // the matrix region below (NDCharArrayBoundary).
-            if (NDCharArrayBoundary.Sees(x))
-            {
-                var kept = NDCharArrayBoundary.WrappedFirst(x, static s => unique_counts(s).ToArray(), stripRuns: true);
-                return new UniqueCountsResult(kept[0], kept[1]);
-            }
-            using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // NumPy's statements after the class boundary (the text checks, the hash and sort routes).
             var r = x.TensorEngine.UniqueCounts(x);
             return new UniqueCountsResult(r[0], r[1]);
@@ -298,16 +284,6 @@ namespace NumSharp
         [NDScoped]
         public static UniqueInverseResult unique_inverse(NDArray x)
         {
-            // a numpy.char.chararray operand: NumPy hands the values back through _array_converter.wrap or a boolean
-            // index (a chararray view); the index arrays stay plain. A call with a return flag sorts the chararray and finds
-            // its runs with the chararray's stripping `!=` (stripRuns; unique_values hashes the plain data). Decided before
-            // the matrix region below (NDCharArrayBoundary).
-            if (NDCharArrayBoundary.Sees(x))
-            {
-                var kept = NDCharArrayBoundary.WrappedFirst(x, static s => unique_inverse(s).ToArray(), stripRuns: true);
-                return new UniqueInverseResult(kept[0], kept[1]);
-            }
-            using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // NumPy's statements after the class boundary (the text checks, the computation, the inverse's reshape).
             var r = x.TensorEngine.UniqueInverse(x);
             return new UniqueInverseResult(r[0], r[1]);
@@ -335,16 +311,6 @@ namespace NumSharp
         [NDScoped]
         public static UniqueAllResult unique_all(NDArray x)
         {
-            // a numpy.char.chararray operand: NumPy hands the values back through _array_converter.wrap or a boolean
-            // index (a chararray view); the index arrays stay plain. A call with a return flag sorts the chararray and finds
-            // its runs with the chararray's stripping `!=` (stripRuns; unique_values hashes the plain data). Decided before
-            // the matrix region below (NDCharArrayBoundary).
-            if (NDCharArrayBoundary.Sees(x))
-            {
-                var kept = NDCharArrayBoundary.WrappedFirst(x, static s => unique_all(s).ToArray(), stripRuns: true);
-                return new UniqueAllResult(kept[0], kept[1], kept[2], kept[3]);
-            }
-            using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // NumPy's statements after the class boundary (the text checks, the computation, the inverse's reshape).
             var r = x.TensorEngine.UniqueAll(x);
             return new UniqueAllResult(r[0], r[1], r[2], r[3]);

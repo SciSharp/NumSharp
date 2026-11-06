@@ -472,6 +472,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
         /// <exception cref="TypeError">An NA that is neither NaN-like nor a string.</exception>
         /// <exception cref="OutOfMemoryException">A padded size no string can hold.</exception>
+        [ArrayWrap("a")]
         internal static NDArray ZFill(NDArray a, NDArray width)
         {
             RequireMultiplyPromoterInteger("_zfill", a, width);
@@ -517,6 +518,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
         /// <exception cref="ValueError">An NA the loop refuses; a chararray text input of the user's call that NumPy's
         ///     trivial loop copies into <c>StringDType()</c> (<c>Can only create a chararray from string data.</c>).</exception>
+        [Ufunc(Wrap = "a")]
         internal static NDArray Replace(NDArray a, NDArray old, NDArray @new, NDArray count)
         {
             if (!IsTextT(a) || !IsTextT(old) || !IsTextT(@new))
@@ -575,6 +577,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="OverflowException">A tab-size literal past int64; an expansion past 2^31 - 1.</exception>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
         /// <exception cref="ValueError">An NA under a non-string rule.</exception>
+        [ArrayWrap("a")]
         internal static NDArray ExpandTabs(NDArray a, NDArray tabsize)
         {
             RequireMultiplyPromoterInteger("_expandtabs", a, tabsize);

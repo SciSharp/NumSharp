@@ -40,13 +40,7 @@ namespace NumSharp
         public static NDArray sort(NDArray a, int? axis = -1, string kind = null, object order = null, bool? stable = null)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            return NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((a, axis, kind, order, stable), static s => sort(s.a, s.axis, s.kind, s.order, s.stable))
-            : NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
-            ? NDCharArrayBoundary.Kept((a, axis, kind, order, stable), static s => sort(s.a, s.axis, s.kind, s.order, s.stable))
-            // NumPy's sort is fromnumeric.sort over PyArray_Sort, the engine's: TensorEngine.Sort of a's engine (a null a
-            // is refused above).
-            : a.TensorEngine.Sort(a, axis, kind, order, stable);
+            return a.TensorEngine.Sort(a, axis, kind, order, stable);
         }
     }
 

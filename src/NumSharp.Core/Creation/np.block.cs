@@ -50,16 +50,12 @@ namespace NumSharp
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray block(object arrays)
         {
-            // A numpy.matrix block: NumPy's result class follows its ROUTE. Repeated concatenation returns a matrix
-            // (np.concatenate keeps the class of its operands); the single-allocation route fills a new ndarray
-            // (probed 2.4.2: np.block([m, m]) is a matrix, and an ndarray once it holds more than 2*512*512 elements).
-            if (NDMatrixBoundary.SeesNested(arrays))
-                return NDMatrixBoundary.WrappedIf(arrays, static s => block(s), static _ => !NDArray.t_blockTookSlicingRoute);
             if (arrays is null)
                 throw new ArgumentNullException(nameof(arrays));
 
             // NumPy's statements (_block_setup's depth checks, then repeated concatenation or the single-allocation
-            // route past 2*512*512 elements) are the array object's; the route it took is recorded for the rule above.
+            // route past 2*512*512 elements) are the array object's, which also decides a numpy.matrix block's class (the
+            // leaves are nested, so the computation handles them itself: NumPy's class follows the route it took).
             return NDArray.block(arrays);
         }
     }

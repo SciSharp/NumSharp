@@ -36,9 +36,6 @@ namespace NumSharp
             public static NDArray cholesky(NDArray a, bool upper = false)
             {
                 if (a is null) throw new ArgumentNullException(nameof(a));
-                // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-                if (NDMatrixBoundary.Sees(a))
-                    return NDMatrixBoundary.Wrapped((a, upper), static s => cholesky(s.a, s.upper));
                 return a.TensorEngine.Linalg.Cholesky(a, upper);
             }
         }

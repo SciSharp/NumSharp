@@ -36,6 +36,8 @@ namespace NumSharp
         ///     <c>axis 5 is out of bounds for array of dimension 2</c>, naming the axis as given).</exception>
         /// <remarks>No class boundary runs here: an engine caller sits inside its public function's boundary, and the
         ///     facade applies its rules before it calls this.</remarks>
+        [NewSubtype("a")]
+        [AsArrayFor(typeof(NDMatrix))]
         internal static NDArray expand_dims(NDArray a, int axis)
         {
             // Only the uninitialized-shape sentinel is passed through. A genuine empty array
@@ -68,6 +70,35 @@ namespace NumSharp
             return new NDArray(a.Storage.Alias(a.Shape.ExpandDimension(axis))) { TensorEngine = a.TensorEngine };
         }
 
+        /// <summary>
+        ///     NumPy's <c>numpy.expand_dims(a, axis)</c> for a tuple of axes: a VIEW of <paramref name="a"/> with a length-1
+        ///     axis at every position of <paramref name="axis"/>, each normalized against the OUTPUT's dimensions
+        ///     (<c>a.ndim + axis.Length</c>, <c>normalize_axis_tuple</c>: every range check before the repeat check).
+        /// </summary>
+        /// <param name="a">The array (not null).</param>
+        /// <param name="axis">The positions of the new axes in the result; null or empty inserts nothing.</param>
+        /// <returns>A NEW view object over <paramref name="a"/>'s buffer - also for an empty tuple, which NumPy's
+        ///     <c>a.reshape(shape)</c> answers with a new view, never the input itself (a caller that disposes or resizes the
+        ///     result must not touch the input) - or <paramref name="a"/> itself for the uninitialized-shape sentinel.</returns>
+        /// <exception cref="AxisError">An axis is out of range for the result's rank.</exception>
+        /// <exception cref="ValueError">Two axes name the same position (<c>repeated axis</c>).</exception>
+        /// <remarks>NumPy converts a matrix with <c>asarray</c> first (<c>[AsArrayFor(typeof(NDMatrix))]</c>) and keeps any
+        ///     other class (<c>asanyarray</c> and the class-keeping reshape: <c>[NewSubtype("a")]</c>).</remarks>
+        [NewSubtype("a")]
+        [AsArrayFor(typeof(NDMatrix))]
+        internal static NDArray expand_dims(NDArray a, int[] axis)
+        {
+            // An empty tuple reshapes to the same shape: a NEW view object in NumPy, never the input itself.
+            if (axis == null || axis.Length == 0)
+                return new NDArray(a.Storage.Alias()) { TensorEngine = a.TensorEngine };
+
+            // See the single-axis overload: only the uninitialized-shape sentinel is passed through.
+            if (a.Shape.IsEmpty)
+                return a;
+
+            return new NDArray(a.Storage.Alias(a.Shape.ExpandDimensions(axis))) { TensorEngine = a.TensorEngine };
+        }
+
         // ---------------------------- np.take_along_axis ----------------------------
 
         /// <summary>
@@ -89,6 +120,7 @@ namespace NumSharp
         /// <remarks>Scoped: the <c>axis=None</c> re-lay, its reshape view and the int64 index cast are temporaries of this
         ///     call.</remarks>
         [NDScoped]
+        [SubclassRule(typeof(NDSubclassRules), nameof(NDSubclassRules.TakeAlongAxis))]
         internal static unsafe NDArray take_along_axis(NDArray arr, NDArray indices, int? axis)
         {
             // A StringDType source: the same gather runs on its cell view (NumPy's checks, this array's shapes) and the cells
@@ -564,6 +596,7 @@ namespace NumSharp
         /// <exception cref="ValueError">An iteration dimension is 0, or <paramref name="func1d"/> returned null.</exception>
         /// <remarks>Not scoped: every array <paramref name="func1d"/> returns, and every slice handed to it, stays the
         ///     caller's; the buffer's wrapper and the transposed input are released here by hand.</remarks>
+        [ArrayWrap("arr")]
         internal static NDArray apply_along_axis(Func<NDArray, NDArray> func1d, int axis, NDArray arr)
         {
             int nd = arr.ndim;
@@ -809,6 +842,7 @@ namespace NumSharp
         /// <remarks>No class boundary runs here: the facade applies its rules (a matrix result wrapped, a chararray operand
         ///     computed plain) before it calls this. Every error but a null entry comes from concatenate, exactly as in NumPy,
         ///     whose column_stack ends with <c>_nx.concatenate(arrays, 1)</c>.</remarks>
+        [GetSubType("tup")]
         internal static NDArray column_stack(NDArray[] tup)
         {
             // Port of numpy/lib/_shape_base_impl.py::column_stack —
@@ -904,6 +938,7 @@ namespace NumSharp
         ///     until it is collected. The trailing underscore is NumPy's convention for a name already taken (D18):
         ///     <see cref="dstack(NDArray[])"/> is the array object's public instance method that stacks the array with
         ///     others.</remarks>
+        [GetSubType("tup")]
         internal static NDArray dstack_(NDArray[] tup)
         {
             // NumPy's atleast_3d(*tup) of no arrays is the empty tuple, and concatenating it is np.concatenate's ValueError —
@@ -936,6 +971,7 @@ namespace NumSharp
         /// <exception cref="ValueError"><paramref name="indices_or_sections"/> is not positive ("number sections must be
         ///     larger than 0.").</exception>
         /// <remarks>No class boundary runs here: np.array_split applies its rules before it calls this.</remarks>
+        [NewSubtype("ary")]
         internal static NDArray[] array_split(NDArray ary, int indices_or_sections, int axis)
         {
             // `Ntotal = ary.shape[axis]` first, then `Nsections = int(…); if Nsections <= 0: raise`.
@@ -962,6 +998,7 @@ namespace NumSharp
         ///     refuses every axis).</exception>
         /// <remarks>No class boundary runs here: np.array_split, and np.split / np.hsplit / np.vsplit / np.dsplit through
         ///     <see cref="split(NDArray, long[], int)"/>, apply their rules before they reach this.</remarks>
+        [NewSubtype("ary")]
         internal static NDArray[] array_split(NDArray ary, long[] indices, int axis)
         {
             // NumSharp's own guard - NumPy's single indices_or_sections argument reads a None as a count (int(None)'s
@@ -989,6 +1026,7 @@ namespace NumSharp
         ///     refuses every axis).</exception>
         /// <remarks>No class boundary runs here: np.array_split, and np.split / np.hsplit / np.vsplit / np.dsplit through
         ///     <see cref="split(NDArray, int[], int)"/>, apply their rules before they reach this.</remarks>
+        [NewSubtype("ary")]
         internal static NDArray[] array_split(NDArray ary, int[] indices, int axis)
         {
             // NumSharp's own guard, before the axis: see the long[] overload.
@@ -1015,6 +1053,7 @@ namespace NumSharp
         ///     in an equal division").</exception>
         /// <remarks>No class boundary runs here: the facades (np.split, np.hsplit, np.vsplit, np.dsplit) apply their rules
         ///     before they reach this.</remarks>
+        [NewSubtype("ary")]
         internal static NDArray[] split(NDArray ary, int indices_or_sections, int axis)
         {
             // `N = ary.shape[axis]` is NumPy's first statement: the axis is checked before the sections.
@@ -1045,6 +1084,7 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="indices"/> is null (array_split's guard).</exception>
         /// <exception cref="IndexError"><paramref name="axis"/> is out of range ("tuple index out of range").</exception>
         /// <remarks>No class boundary runs here: the facades apply their rules before they reach this.</remarks>
+        [NewSubtype("ary")]
         internal static NDArray[] split(NDArray ary, long[] indices, int axis) => array_split(ary, indices, axis);
 
         /// <summary>
@@ -1058,6 +1098,7 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="indices"/> is null (array_split's guard).</exception>
         /// <exception cref="IndexError"><paramref name="axis"/> is out of range ("tuple index out of range").</exception>
         /// <remarks>No class boundary runs here: the facades apply their rules before they reach this.</remarks>
+        [NewSubtype("ary")]
         internal static NDArray[] split(NDArray ary, int[] indices, int axis) => array_split(ary, indices, axis);
 
         /// <summary>
@@ -1451,6 +1492,7 @@ namespace NumSharp
         /// <exception cref="ValueError">The count is not positive, or does not divide the axis (split's texts).</exception>
         /// <exception cref="NullReferenceException"><paramref name="ary"/> is null.</exception>
         /// <remarks>No class boundary runs here: np.hsplit applies its rules before it calls this.</remarks>
+        [NewSubtype("ary")]
         internal static NDArray[] hsplit(NDArray ary, int indices_or_sections)
         {
             if (ary.ndim == 0)
@@ -1475,6 +1517,7 @@ namespace NumSharp
         ///     check).</exception>
         /// <exception cref="NullReferenceException"><paramref name="ary"/> is null.</exception>
         /// <remarks>No class boundary runs here: np.hsplit applies its rules before it calls this.</remarks>
+        [NewSubtype("ary")]
         internal static NDArray[] hsplit(NDArray ary, int[] indices)
         {
             if (ary.ndim == 0)
@@ -1496,6 +1539,7 @@ namespace NumSharp
         /// <exception cref="ValueError">The count is not positive, or does not divide the axis (split's texts).</exception>
         /// <exception cref="NullReferenceException"><paramref name="ary"/> is null.</exception>
         /// <remarks>No class boundary runs here: np.vsplit applies its rules before it calls this.</remarks>
+        [NewSubtype("ary")]
         internal static NDArray[] vsplit(NDArray ary, int indices_or_sections)
         {
             if (ary.ndim < 2)
@@ -1518,6 +1562,7 @@ namespace NumSharp
         ///     check).</exception>
         /// <exception cref="NullReferenceException"><paramref name="ary"/> is null.</exception>
         /// <remarks>No class boundary runs here: np.vsplit applies its rules before it calls this.</remarks>
+        [NewSubtype("ary")]
         internal static NDArray[] vsplit(NDArray ary, int[] indices)
         {
             if (ary.ndim < 2)
@@ -1538,6 +1583,7 @@ namespace NumSharp
         /// <exception cref="ValueError">The count is not positive, or does not divide the axis (split's texts).</exception>
         /// <exception cref="NullReferenceException"><paramref name="ary"/> is null.</exception>
         /// <remarks>No class boundary runs here: np.dsplit applies its rules before it calls this.</remarks>
+        [NewSubtype("ary")]
         internal static NDArray[] dsplit(NDArray ary, int indices_or_sections)
         {
             if (ary.ndim < 3)
@@ -1560,6 +1606,7 @@ namespace NumSharp
         ///     check).</exception>
         /// <exception cref="NullReferenceException"><paramref name="ary"/> is null.</exception>
         /// <remarks>No class boundary runs here: np.dsplit applies its rules before it calls this.</remarks>
+        [NewSubtype("ary")]
         internal static NDArray[] dsplit(NDArray ary, int[] indices)
         {
             if (ary.ndim < 3)
@@ -1595,6 +1642,7 @@ namespace NumSharp
         ///     overloads apply their rules before they call this.
         /// </remarks>
         [NDScoped /* the interleaved reshape, its broadcast view, the materialized copy and the empty path's zeros are released; the result is yielded */]
+        [NewSubtype("A")]
         internal static NDArray tile(NDArray A, long[] reps)
         {
             int d = reps.Length;

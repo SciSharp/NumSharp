@@ -15,10 +15,6 @@
         ///     subclass), owning its data exactly when the plain result would.
         /// </remarks>
         public static NDArray swapaxes(NDArray a, int axis1, int axis2)
-            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((a, axis1, axis2), static s => swapaxes(s.a, s.axis1, s.axis2))
-            : NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
-            ? NDCharArrayBoundary.Kept((a, axis1, axis2), static s => swapaxes(s.a, s.axis1, s.axis2))
-            : a.TensorEngine.SwapAxes(a, axis1, axis2);
+            => a.TensorEngine.SwapAxes(a, axis1, axis2);
     }
 }

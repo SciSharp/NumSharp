@@ -31,13 +31,9 @@ namespace NumSharp
             public static (NDArray Q, NDArray R) qr(NDArray a, string mode = "reduced")
             {
                 if (a is null) throw new ArgumentNullException(nameof(a));
-                // NumPy checks the mode first; the numpy.matrix rule needs it resolved (raw mode wraps h but not tau). The member
-                // resolves it again, which returns a resolved mode unchanged.
-                string resolved = Backends.DefaultLinalgEngine.ResolveQrMode(mode);
-                // A numpy.matrix operand: NumPy returns wrap(q), wrap(r) (wrap(r) alone for mode 'r'); for mode 'raw'
-                // it is wrap(h) and the plain tau.
-                if (NDMatrixBoundary.Sees(a))
-                    return NDMatrixBoundary.WrappedPair((a, mode), static s => qr(s.a, s.mode), wrapFirst: true, wrapSecond: resolved != "raw");
+                // NumPy checks the mode first. The member resolves it again (a resolved mode comes back unchanged), and so
+                // does the subclass rule that decides which slots a matrix operand's class wraps (raw mode: h but not tau).
+                Backends.DefaultLinalgEngine.ResolveQrMode(mode);
                 return a.TensorEngine.Linalg.Qr(a, mode);
             }
         }

@@ -36,12 +36,6 @@ namespace NumSharp
             public static NDArray solve(NDArray a, NDArray b)
             {
                 if (a is null) throw new ArgumentNullException(nameof(a));
-                // NumPy takes its wrap from b (`a, _ = _makearray(a); b, wrap = _makearray(b)`): a numpy.matrix b
-                // gives a matrix, a matrix a with a plain b a plain array (probed 2.4.2).
-                if (NDMatrixBoundary.Sees(a, b))
-                    return NDMatrixBoundary.IsMatrix(b)
-                        ? NDMatrixBoundary.Wrapped((a, b), static s => solve(s.a, s.b))
-                        : NDMatrixBoundary.Plain((a, b), static s => solve(s.a, s.b));
                 return a.TensorEngine.Linalg.Solve(a, b);
             }
 
@@ -86,12 +80,6 @@ namespace NumSharp
             public static NDArray tensorsolve(NDArray a, NDArray b, int[] axes = null)
             {
                 if (a is null) throw new ArgumentNullException(nameof(a));
-                // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-                if (NDMatrixBoundary.Sees(a))
-                    return NDMatrixBoundary.Wrapped((a, b, axes), static s => tensorsolve(s.a, s.b, s.axes));
-                // a numpy.char.chararray operand: NumPy's asarray(a) / asarray(b) drop the class (NDCharArrayBoundary)
-                if (NDCharArrayBoundary.Sees(a, b))
-                    return NDCharArrayBoundary.Plain((a, b, axes), static s => tensorsolve(s.a, s.b, s.axes));
                 return a.TensorEngine.Linalg.Tensorsolve(a, b, axes);
             }
         }

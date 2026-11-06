@@ -71,6 +71,7 @@ namespace NumSharp
 
         public abstract NDArray<long> FlatNonZero(NDArray a);
 
+        [AsArray]
         public abstract NDArray Argwhere(NDArray a);
 
         /// <summary>
@@ -195,6 +196,7 @@ namespace NumSharp
         /// <exception cref="TypeError">A text operand: multiply has no string loop (raised after the shape checks).</exception>
         /// <remarks>DefaultEngine composes NumPy's statements over multiply, negative, subtract and moveaxis (no kernel of its
         ///     own). The 2-vector forms are deprecated in NumPy 2.0; the warning is not modelled.</remarks>
+        [AsArray]
         public abstract NDArray Cross(NDArray a, NDArray b, int axisa = -1, int axisb = -1, int axisc = -1, int? axis = null);
 
         /// <summary>
@@ -247,6 +249,7 @@ namespace NumSharp
         ///     runs the list form. <c>np.tensordot</c> calls it after the matrix and chararray boundaries, and numpy.linalg's
         ///     Array-API <c>tensordot</c> directly; an override replaces both for every array whose engine it is.
         /// </remarks>
+        [AsArray]
         public abstract NDArray Tensordot(NDArray a, NDArray b, int axes = 2);
 
         /// <summary>
@@ -280,6 +283,7 @@ namespace NumSharp
         ///     installed. <c>np.tensordot</c>'s list and <c>(int, int)</c> forms call it (the pair as two one-element lists,
         ///     NumPy's <c>[axes_a]</c> / <c>[axes_b]</c>), and numpy.linalg's Array-API <c>tensordot</c> directly.
         /// </remarks>
+        [AsArray]
         public abstract NDArray Tensordot(NDArray a, NDArray b, int[] axesA, int[] axesB);
     }
 }

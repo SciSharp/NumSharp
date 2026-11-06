@@ -27,9 +27,6 @@ namespace NumSharp
         public static NDArray isreal(NDArray a)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(a))
-                return NDMatrixBoundary.Wrapped(a, static s => isreal(s));
             return a.TensorEngine.Isreal(a);
         }
 
@@ -56,12 +53,6 @@ namespace NumSharp
         public static NDArray iscomplex(NDArray a)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            // A numpy.matrix operand: a complex one is `ax.imag != 0`, a ufunc (a matrix comes back); any other
-            // dtype is a new zeros array, which is plain.
-            if (NDMatrixBoundary.Sees(a))
-                return a.GetTypeCode == NPTypeCode.Complex
-                    ? NDMatrixBoundary.Wrapped(a, static s => iscomplex(s))
-                    : NDMatrixBoundary.Plain(a, static s => iscomplex(s));
             return a.TensorEngine.Iscomplex(a);
         }
 

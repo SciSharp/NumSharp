@@ -53,15 +53,8 @@ namespace NumSharp
         public static NDArray asanyarray(in object a, DType dtype, char order, string device = null)
         {
             DeviceArguments.ValidateDevice(device);
-            // a numpy.matrix passes through as a matrix and a numpy.char.chararray as a chararray (np.asarray, which the
-            // body calls for an array, strips the class); None is no array, so the boundaries run first as before
-            if (a is NDArray nd)
-            {
-                if (NDMatrixBoundary.Sees(nd))
-                    return NDMatrixBoundary.Wrapped((nd, dtype, order), static s => asarray(s.nd, s.dtype, s.order));
-                if (NDCharArrayBoundary.Sees(nd))
-                    return NDCharArrayBoundary.Kept((nd, dtype, order), static s => asarray(s.nd, s.dtype, s.order));
-            }
+            // A numpy.matrix passes through as a matrix and a numpy.char.chararray as a chararray: the computation is the
+            // subclass-aware conversion ([SubclassAware]), which keeps the class np.asarray would strip.
             return NDArray.asanyarray(a, dtype, order);
         }
 

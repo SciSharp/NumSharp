@@ -30,6 +30,7 @@ namespace NumSharp
         ///     ValueError text).</exception>
         /// <remarks>Widened in place with <paramref name="out"/> (the np-layer dtype plan, P2): a call without it is the
         ///     product alone, as before, and an engine deriving from TensorEngine implements the three-parameter member.</remarks>
+        [ArrayWrap("x", "y")]
         public abstract NDArray Dot(NDArray x, NDArray y, NDArray @out = null);
 
         /// <summary>
@@ -49,6 +50,7 @@ namespace NumSharp
         /// <exception cref="AxisError">The axis is out of range.</exception>
         /// <remarks>New in 0.71.0 (the np-layer dtype plan, phase PE, E5): the public <c>np.lexsort</c> applies its class
         ///     boundaries and calls this.</remarks>
+        [AsArray]
         public abstract NDArray LexSort(NDArray[] keys, int axis = -1);
 
         /// <summary>
@@ -146,6 +148,7 @@ namespace NumSharp
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds for <paramref name="a"/>'s rank.</exception>
         /// <remarks>New in 0.71.0 (the np-layer dtype plan): the public <c>np.packbits</c> applies the <c>numpy.matrix</c>
         ///     rule and calls this.</remarks>
+        [NewSubtype("a")]
         public abstract NDArray Packbits(NDArray a, int? axis = null, string bitorder = "big");
 
         /// <summary>
@@ -173,6 +176,7 @@ namespace NumSharp
         /// <remarks>New in 0.71.0 (the np-layer dtype plan): the public <c>np.unpackbits</c> applies the <c>numpy.matrix</c>
         ///     rule and calls this. An empty input with a count that asks for elements gives zeros, where NumPy leaks
         ///     uninitialised memory.</remarks>
+        [NewSubtype("a")]
         public abstract NDArray Unpackbits(NDArray a, int? axis = null, long? count = null, string bitorder = "big");
 
         /// <summary>

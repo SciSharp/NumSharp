@@ -40,6 +40,7 @@ namespace NumSharp
         ///     has no multiply (in <paramref name="x"/>) or add (in <paramref name="p"/>) loop.</exception>
         /// <exception cref="IncorrectShapeException">An N-D p whose rows do not broadcast with x (the add's
         ///     <c>operands could not be broadcast together</c> text, NumPy's ValueError).</exception>
+        [NewSubtype("x")]
         public abstract NDArray Polyval(NDArray p, NDArray x);
 
         /// <summary>

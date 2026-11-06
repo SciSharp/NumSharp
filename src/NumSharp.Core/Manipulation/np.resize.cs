@@ -39,20 +39,6 @@ namespace NumSharp
         /// <exception cref="ArgumentException">If any element of <paramref name="new_shape"/> is negative.</exception>
         public static NDArray resize(NDArray a, Shape new_shape)
         {
-            // A numpy.char.chararray operand (decided before PlainFor's region hides it): NumPy's ravel(a) keeps the
-            // class, so an empty source or result is np.zeros_like(a, shape=new_shape) — a chararray (subok=True) owning
-            // its zeros; any other result is a slice of np.concatenate's plain ndarray. A negative dimension raises in the
-            // plain computation either way.
-            if (NDCharArrayBoundary.Sees(a))
-            {
-                long count = 1;
-                foreach (long d in new_shape.dimensions ?? Array.Empty<long>())
-                    count *= d;
-                return a.size == 0 || count == 0
-                    ? NDCharArrayBoundary.Kept((a, new_shape), static s => resize(s.a, s.new_shape))
-                    : NDCharArrayBoundary.Plain((a, new_shape), static s => resize(s.a, s.new_shape));
-            }
-            using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (a is null) throw new ArgumentNullException(nameof(a));
 
             return UnmanagedStorage.ResizeRepeating(a, new_shape);

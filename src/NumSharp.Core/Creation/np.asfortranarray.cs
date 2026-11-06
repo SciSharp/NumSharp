@@ -15,18 +15,9 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asfortranarray.html</remarks>
         public static NDArray asfortranarray(NDArray a, DType dtype = null)
         {
-            // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
-            if (NDMatrixBoundary.Sees(a))
-                return NDMatrixBoundary.Plain((a, dtype), static s => asfortranarray(s.a, s.dtype));
-            // a numpy.char.chararray operand: NumPy converts with np.asarray here, so the result is a plain array (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(a))
-                return NDCharArrayBoundary.Plain((a, dtype), static s => asfortranarray(s.a, s.dtype));
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
-            var result = asarray(a, dtype, 'F');
-            // Same ndim>=1 contract as ascontiguousarray. A 0-D scalar is both C/F contiguous,
-            // so NumPy returns a length-one view rather than materializing it.
-            return result.ndim == 0 ? result.reshape(1) : result;
+            return NDArray.asfortranarray(a, dtype);
         }
 
         /// <summary>

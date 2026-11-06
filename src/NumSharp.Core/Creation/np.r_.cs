@@ -76,12 +76,9 @@ namespace NumSharp
             ///     <see cref="NDArray"/>s, C# scalars, arrays and collections — in any mix.
             /// </param>
             public NDArray this[params object[] key]
-                // A numpy.matrix entry: the joined result comes back as a matrix, as np.concatenate returns it in
-                // NumPy. The function name is spelled out for the caller audit (an indexer's caller name is "Item",
-                // its frame is get_Item).
-                => NDMatrixBoundary.SeesNested(key, "get_Item")
-                ? NDMatrixBoundary.Wrapped((self: this, key), static s => s.self[s.key])
-                : NDArray.AxisConcatenate(key, _axis, _matrix, _ndmin, _trans1d);
+                // NumPy's __getitem__ is the array object's; a numpy.matrix entry's class (np.concatenate returns a matrix) is
+                // decided there too, because the entries are nested in the key.
+                => NDArray.AxisConcatenate(key, _axis, _matrix, _ndmin, _trans1d);
 
             /// <summary>NumPy's <c>__len__</c>, which is 0 for these objects.</summary>
             public int Count => 0;

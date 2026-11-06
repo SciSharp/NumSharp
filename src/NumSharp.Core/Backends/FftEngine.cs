@@ -272,6 +272,7 @@ namespace NumSharp
         /// <exception cref="IndexError"><paramref name="axis"/> out of range with <paramref name="n"/> omitted.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> out of range with <paramref name="n"/> given.</exception>
         /// <exception cref="TypeError">A text input (np.conjugate has no string loop).</exception>
+        [AsArray]
         public abstract NDArray Hfft(NDArray a, int? n = null, int axis = -1, string norm = null, NDArray @out = null);
 
         /// <summary>

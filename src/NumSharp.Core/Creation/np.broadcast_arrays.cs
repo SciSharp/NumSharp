@@ -17,11 +17,8 @@ namespace NumSharp
         ///     <see cref="NDArray.broadcast_arrays(NDArray[])"/> for the writeable rule (parity QA-34). A result that IS an
         ///     input must not be disposed as if it were a new view.</remarks>
         public static NDArray[] broadcast_arrays(params NDArray[] ndArrays)
-        {
-            using var plain = NDMatrixBoundary.PlainFor(ndArrays);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // The statement is the array object's (NDArray.broadcast_arrays, Backends/NDArray.StrideTricks.cs).
-            return NDArray.broadcast_arrays(ndArrays);
-        }
+            => NDArray.broadcast_arrays(ndArrays);
 
         /// <summary>
         ///     Broadcast two arrays against each other (NumPy 2.4.2's <c>numpy.broadcast_arrays(lhs, rhs)</c>): an array
@@ -36,11 +33,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.broadcast_arrays.html; the same statement as the
         ///     params overload (<see cref="NDArray.BroadcastArraysMember"/> per operand).</remarks>
         public static (NDArray Lhs, NDArray Rhs) broadcast_arrays(NDArray lhs, NDArray rhs)
-        {
-            using var plain = NDMatrixBoundary.PlainFor(lhs, rhs);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            var (leftShape, rightShape) = Shape.Broadcast(lhs.Shape, rhs.Shape);
-            // NumPy 2.4.2's rule per operand: a matching operand as itself, else a view writeable iff the operand is.
-            return (NDArray.BroadcastArraysMember(lhs, leftShape), NDArray.BroadcastArraysMember(rhs, rightShape));
-        }
+            // The statement is the array object's (NDArray.broadcast_arrays, Backends/NDArray.StrideTricks.cs).
+            => NDArray.broadcast_arrays(lhs, rhs);
     }
 }

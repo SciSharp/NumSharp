@@ -34,9 +34,7 @@ namespace NumSharp
             ///     the result.
             /// </remarks>
             public static NDArray strip(NDArray a, NDArray chars = null)
-                => NDCharArrayBoundary.Sees(a, chars)
-                    ? NDCharArrayBoundary.WrappedUfunc((a, chars), static s => strip(s.a, s.chars), a, chars, null)
-                    : Strip("_strip", NDTextElements.BothStrip, a, chars);
+                => Strip("_strip", NDTextElements.BothStrip, a, chars);
 
             /// <summary>
             ///     NumPy's <c>np.strings.lstrip(a, chars=None)</c>: each element without its LEADING characters found in
@@ -52,9 +50,7 @@ namespace NumSharp
             ///     <c>StringDType</c> one that NumPy's trivial loop copies into <c>StringDType()</c> (0-d, or 1-d with at most
             ///     <c>np.getbufsize()</c> elements: <c>Can only create a chararray from string data.</c>).</exception>
             public static NDArray lstrip(NDArray a, NDArray chars = null)
-                => NDCharArrayBoundary.Sees(a, chars)
-                    ? NDCharArrayBoundary.WrappedUfunc((a, chars), static s => lstrip(s.a, s.chars), a, chars, null)
-                    : Strip("_lstrip", NDTextElements.LeftStrip, a, chars);
+                => Strip("_lstrip", NDTextElements.LeftStrip, a, chars);
 
             /// <summary>
             ///     NumPy's <c>np.strings.rstrip(a, chars=None)</c>: each element without its TRAILING characters found in
@@ -70,9 +66,7 @@ namespace NumSharp
             ///     <c>StringDType</c> one that NumPy's trivial loop copies into <c>StringDType()</c> (0-d, or 1-d with at most
             ///     <c>np.getbufsize()</c> elements: <c>Can only create a chararray from string data.</c>).</exception>
             public static NDArray rstrip(NDArray a, NDArray chars = null)
-                => NDCharArrayBoundary.Sees(a, chars)
-                    ? NDCharArrayBoundary.WrappedUfunc((a, chars), static s => rstrip(s.a, s.chars), a, chars, null)
-                    : Strip("_rstrip", NDTextElements.RightStrip, a, chars);
+                => Strip("_rstrip", NDTextElements.RightStrip, a, chars);
 
             /// <summary>
             ///     The three strip wrappers' shared body: <c>_{name}_whitespace(a)</c> when <paramref name="chars"/> is null,
@@ -88,12 +82,10 @@ namespace NumSharp
             /// <exception cref="TypeError">No loop; two different NA objects.</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
             /// <exception cref="ValueError">A <c>StringDType</c> NA its rule refuses.</exception>
+            [Ufunc]
             private static NDArray Strip(string stem, int type, NDArray a, NDArray chars)
             {
                 RequireOperand(a, nameof(a));
-                // The chararray rule belongs to the public call above: the public functions this body calls compute plain
-                // (a chararray in another position must not reach their rules from inside the library).
-                using var plain = NDCharArrayBoundary.Inside();
                 return chars is null
                     ? NDStringMethods.StripWhitespace(stem + "_whitespace", type, a)
                     : NDStringMethods.StripChars(stem + "_chars", type, a, chars);
@@ -130,14 +122,6 @@ namespace NumSharp
             /// <exception cref="OverflowException">A <c>StringDType</c> result past <c>sys.maxsize</c> bytes.</exception>
             public static NDArray center(NDArray a, NDArray width, NDArray fillchar = null)
             {
-                if (NDCharArrayBoundary.Sees(a))
-                    return NDCharArrayBoundary.WrappedUfunc((a, width, fillchar),
-                                                            static s => center(s.a, s.width, s.fillchar), a, fillchar, null);
-                // A chararray fill beside a plain a: NumPy's result stays plain (its out= is made from a, and a StringDType
-                // result is no chararray), but the trivial loop still copies the fill into StringDType() as a chararray.
-                if (NDCharArrayBoundary.Sees(fillchar))
-                    return NDCharArrayBoundary.PlainUfunc((a, width, fillchar),
-                                                          static s => center(s.a, s.width, s.fillchar), a, fillchar, null);
                 return Justify("_center", NDTextElements.Center, a, width, fillchar);
             }
 
@@ -158,14 +142,6 @@ namespace NumSharp
             /// <exception cref="OverflowException">A <c>StringDType</c> result past <c>sys.maxsize</c> bytes.</exception>
             public static NDArray ljust(NDArray a, NDArray width, NDArray fillchar = null)
             {
-                if (NDCharArrayBoundary.Sees(a))
-                    return NDCharArrayBoundary.WrappedUfunc((a, width, fillchar),
-                                                            static s => ljust(s.a, s.width, s.fillchar), a, fillchar, null);
-                // A chararray fill beside a plain a: NumPy's result stays plain (its out= is made from a, and a StringDType
-                // result is no chararray), but the trivial loop still copies the fill into StringDType() as a chararray.
-                if (NDCharArrayBoundary.Sees(fillchar))
-                    return NDCharArrayBoundary.PlainUfunc((a, width, fillchar),
-                                                          static s => ljust(s.a, s.width, s.fillchar), a, fillchar, null);
                 return Justify("_ljust", NDTextElements.Left, a, width, fillchar);
             }
 
@@ -186,14 +162,6 @@ namespace NumSharp
             /// <exception cref="OverflowException">A <c>StringDType</c> result past <c>sys.maxsize</c> bytes.</exception>
             public static NDArray rjust(NDArray a, NDArray width, NDArray fillchar = null)
             {
-                if (NDCharArrayBoundary.Sees(a))
-                    return NDCharArrayBoundary.WrappedUfunc((a, width, fillchar),
-                                                            static s => rjust(s.a, s.width, s.fillchar), a, fillchar, null);
-                // A chararray fill beside a plain a: NumPy's result stays plain (its out= is made from a, and a StringDType
-                // result is no chararray), but the trivial loop still copies the fill into StringDType() as a chararray.
-                if (NDCharArrayBoundary.Sees(fillchar))
-                    return NDCharArrayBoundary.PlainUfunc((a, width, fillchar),
-                                                          static s => rjust(s.a, s.width, s.fillchar), a, fillchar, null);
                 return Justify("_rjust", NDTextElements.Right, a, width, fillchar);
             }
 
@@ -213,12 +181,10 @@ namespace NumSharp
             /// <exception cref="TypeError">See <see cref="center"/>.</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
             /// <exception cref="ValueError">An empty broadcast; a <c>StringDType</c> NA its rule refuses.</exception>
+            [Ufunc(Wrap = "a")]
             private static NDArray Justify(string ufunc, int pos, NDArray a, NDArray width, NDArray fillchar)
             {
                 RequireOperand(a, nameof(a));
-                // The chararray rule belongs to the public call above: the public functions this body calls compute plain
-                // (a chararray in another position must not reach their rules from inside the library).
-                using var plain = NDCharArrayBoundary.Inside();
                 RequireOperand(width, nameof(width));
                 NDArray w = null, arr = null, fill = null;
                 try
@@ -264,12 +230,7 @@ namespace NumSharp
             /// <exception cref="ValueError">An empty broadcast.</exception>
             public static NDArray zfill(NDArray a, NDArray width)
             {
-                if (NDCharArrayBoundary.Sees(a))
-                    return NDCharArrayBoundary.Wrapped((a, width), static s => zfill(s.a, s.width));
                 RequireOperand(a, nameof(a));
-                // The chararray rule belongs to the public call above: the public functions this body calls compute plain
-                // (a chararray in another position must not reach their rules from inside the library).
-                using var plain = NDCharArrayBoundary.Inside();
                 RequireOperand(width, nameof(width));
                 NDArray w = null, arr = null;
                 try
@@ -306,12 +267,7 @@ namespace NumSharp
             /// <exception cref="ValueError">An empty broadcast; a <c>StringDType</c> NA whose NA object is not a string.</exception>
             public static NDArray expandtabs(NDArray a, NDArray tabsize = null)
             {
-                if (NDCharArrayBoundary.Sees(a))
-                    return NDCharArrayBoundary.Wrapped((a, tabsize), static s => expandtabs(s.a, s.tabsize));
                 RequireOperand(a, nameof(a));
-                // The chararray rule belongs to the public call above: the public functions this body calls compute plain
-                // (a chararray in another position must not reach their rules from inside the library).
-                using var plain = NDCharArrayBoundary.Inside();
                 NDArray arr = null, t = null;
                 try
                 {
@@ -355,20 +311,7 @@ namespace NumSharp
             /// <exception cref="UnicodeEncodeError">A non-ASCII <paramref name="old"/> / <paramref name="new"/> cast to <c>S</c>.</exception>
             public static NDArray replace(NDArray a, NDArray old, NDArray @new, NDArray count = null)
             {
-                if (NDCharArrayBoundary.Sees(a))
-                    return NDCharArrayBoundary.WrappedUfunc((a, old, @new, count),
-                                                            static s => replace(s.a, s.old, s.@new, s.count), a, old, @new,
-                                                            null);
-                // A chararray old / new beside a plain a: NumPy's result stays plain (its out= is made from a, and a
-                // StringDType result is no chararray), but the trivial loop still copies a chararray old / new into
-                // StringDType() as a chararray.
-                if (NDCharArrayBoundary.Sees(old, @new))
-                    return NDCharArrayBoundary.PlainUfunc((a, old, @new, count),
-                                                          static s => replace(s.a, s.old, s.@new, s.count), a, old, @new);
                 RequireOperand(a, nameof(a));
-                // The chararray rule belongs to the public call above: the public functions this body calls compute plain
-                // (a chararray in another position must not reach their rules from inside the library).
-                using var plain = NDCharArrayBoundary.Inside();
                 RequireOperand(old, nameof(old));
                 RequireOperand(@new, nameof(@new));
                 NDArray c = null, arr = null, o = null, n = null;
@@ -432,17 +375,6 @@ namespace NumSharp
             ///     OWNDATA, and a part NumPy sizes at width 0 has width 1.</remarks>
             public static (NDArray Before, NDArray Separator, NDArray After) partition(NDArray a, NDArray sep)
             {
-                // The parts' class follows a alone: NumPy's out= is np.empty_like(a) (a separator's class never reaches it),
-                // and a StringDType result is never a chararray.
-                if (NDCharArrayBoundary.Sees(a))
-                {
-                    var parts = NDCharArrayBoundary.WrappedAll((a, sep), static s =>
-                    {
-                        var (b, m, e) = partition(s.a, s.sep);
-                        return new[] { b, m, e };
-                    });
-                    return (parts[0], parts[1], parts[2]);
-                }
                 return Partition(a, sep, back: false);
             }
 
@@ -462,15 +394,6 @@ namespace NumSharp
             /// <exception cref="UnicodeEncodeError">A non-ASCII separator cast to <c>S</c>.</exception>
             public static (NDArray Before, NDArray Separator, NDArray After) rpartition(NDArray a, NDArray sep)
             {
-                if (NDCharArrayBoundary.Sees(a))
-                {
-                    var parts = NDCharArrayBoundary.WrappedAll((a, sep), static s =>
-                    {
-                        var (b, m, e) = rpartition(s.a, s.sep);
-                        return new[] { b, m, e };
-                    });
-                    return (parts[0], parts[1], parts[2]);
-                }
                 return Partition(a, sep, back: true);
             }
 
@@ -487,12 +410,10 @@ namespace NumSharp
             /// <exception cref="TypeError">See <see cref="partition"/>.</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
             /// <exception cref="ValueError">See <see cref="partition"/>.</exception>
+            [ArrayWrap("a")]
             private static (NDArray Before, NDArray Separator, NDArray After) Partition(NDArray a, NDArray sep, bool back)
             {
                 RequireOperand(a, nameof(a));
-                // The chararray rule belongs to the public call above: the public functions this body calls compute plain
-                // (a chararray in another position must not reach their rules from inside the library).
-                using var plain = NDCharArrayBoundary.Inside();
                 RequireOperand(sep, nameof(sep));
                 NDArray arr = null, s = null;
                 try
@@ -517,9 +438,7 @@ namespace NumSharp
             /// <exception cref="TypeError">A non-text operand; a <c>StringDType</c> NA (<c>Cannot slice null
             ///     string</c>).</exception>
             public static NDArray slice(NDArray a)
-                => NDCharArrayBoundary.Sees(a)
-                    ? NDCharArrayBoundary.Wrapped(a, static s => slice(s))
-                    : SliceCore(a, null, null, null);
+                => SliceCore(a, null, null, null);
 
             /// <summary>
             ///     NumPy's <c>np.strings.slice(a, stop)</c>: one argument after <paramref name="a"/> is the STOP, as in
@@ -535,9 +454,7 @@ namespace NumSharp
             /// <exception cref="OverflowException">A stop literal past int64.</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
             public static NDArray slice(NDArray a, NDArray stop)
-                => NDCharArrayBoundary.Sees(a)
-                    ? NDCharArrayBoundary.Wrapped((a, stop), static s => slice(s.a, s.stop))
-                    : SliceCore(a, null, stop, null);
+                => SliceCore(a, null, stop, null);
 
             /// <summary>NumPy's <c>np.strings.slice(a, start, stop)</c>: each element's <c>s[start:stop]</c> (null bounds are
             ///     NumPy's <c>None</c>).</summary>
@@ -551,9 +468,7 @@ namespace NumSharp
             /// <exception cref="OverflowException">A bound literal past int64.</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
             public static NDArray slice(NDArray a, NDArray start, NDArray stop)
-                => NDCharArrayBoundary.Sees(a)
-                    ? NDCharArrayBoundary.Wrapped((a, start, stop), static s => slice(s.a, s.start, s.stop))
-                    : SliceCore(a, start, stop, null);
+                => SliceCore(a, start, stop, null);
 
             /// <summary>
             ///     NumPy's <c>np.strings.slice(a, start, stop, step)</c>: each element's <c>s[start:stop:step]</c>, characters
@@ -572,9 +487,7 @@ namespace NumSharp
             /// <exception cref="OverflowException">A bound literal past int64.</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
             public static NDArray slice(NDArray a, NDArray start, NDArray stop, NDArray step)
-                => NDCharArrayBoundary.Sees(a)
-                    ? NDCharArrayBoundary.Wrapped((a, start, stop, step), static s => slice(s.a, s.start, s.stop, s.step))
-                    : SliceCore(a, start, stop, step);
+                => SliceCore(a, start, stop, step);
 
             /// <summary>
             ///     The slice wrapper after its arity rule (one argument is the stop), statement for statement: the step's
@@ -592,12 +505,10 @@ namespace NumSharp
             /// <exception cref="ArgumentException">A bound that cannot reach int64.</exception>
             /// <exception cref="OverflowException">A bound literal past int64.</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
+            [ArrayWrap("a")]
             private static NDArray SliceCore(NDArray a, NDArray start, NDArray stop, NDArray step)
             {
                 RequireOperand(a, nameof(a));
-                // The chararray rule belongs to the public call above: the public functions this body calls compute plain
-                // (a chararray in another position must not reach their rules from inside the library).
-                using var plain = NDCharArrayBoundary.Inside();
                 NDArray st = null, s0 = null, s1 = null;
                 try
                 {

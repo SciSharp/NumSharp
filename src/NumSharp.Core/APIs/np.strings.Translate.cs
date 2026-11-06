@@ -73,8 +73,6 @@ namespace NumSharp
             /// </remarks>
             public static NDArray translate(NDArray a, object table, object deletechars = null)
             {
-                if (NDCharArrayBoundary.Sees(a))
-                    return NDCharArrayBoundary.Plain((a, table, deletechars), static s => translate(s.a, s.table, s.deletechars));
                 if (a is null)
                     throw new ArgumentNullException(nameof(a));
                 return NDCharObjectPath.Translate(a, table, deletechars);

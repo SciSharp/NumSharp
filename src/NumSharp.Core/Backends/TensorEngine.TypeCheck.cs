@@ -38,6 +38,7 @@ namespace NumSharp
         /// <remarks>DefaultEngine fills scalar fills into a contiguous target in one fused pass (the
         ///     <c>DirectILKernelGenerator.NanToNum</c> kernel); array fills and other layouts run NumPy's three
         ///     <c>copyto(where=)</c> statements.</remarks>
+        [NewSubtype("x")]
         public abstract NDArray NanToNum(NDArray x, bool copy = true, object nan = null, object posinf = null,
             object neginf = null);
 
@@ -49,6 +50,7 @@ namespace NumSharp
         /// <param name="a">The input.</param>
         /// <returns>A new bool array of <paramref name="a"/>'s shape (C order whatever its layout).</returns>
         /// <exception cref="System.ArgumentNullException"><paramref name="a"/> is null.</exception>
+        [ArrayWrap("a")]
         public abstract NDArray Isreal(NDArray a);
 
         /// <summary>
@@ -60,6 +62,7 @@ namespace NumSharp
         ///     <c>zeros(shape, bool)[()]</c>, a view of a fresh buffer (OWNDATA false; the 0-d array itself for a 0-d
         ///     input).</returns>
         /// <exception cref="System.ArgumentNullException"><paramref name="a"/> is null.</exception>
+        [SubclassRule(typeof(NDSubclassRules), nameof(NDSubclassRules.Iscomplex))]
         public abstract NDArray Iscomplex(NDArray a);
 
         /// <summary>
@@ -75,6 +78,7 @@ namespace NumSharp
         /// <exception cref="System.NullReferenceException"><paramref name="a"/> is null.</exception>
         /// <remarks>DefaultEngine decides in one early-exit pass over the imaginary parts (NaN and inf never
         ///     collapse).</remarks>
+        [NewSubtype("a")]
         public abstract NDArray RealIfClose(NDArray a, double tol = 100);
     }
 }

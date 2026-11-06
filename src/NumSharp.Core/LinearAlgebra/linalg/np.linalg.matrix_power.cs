@@ -44,9 +44,6 @@ namespace NumSharp
             public static NDArray matrix_power(NDArray a, int n)
             {
                 if (a is null) throw new ArgumentNullException(nameof(a));
-                // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-                if (NDMatrixBoundary.Sees(a))
-                    return NDMatrixBoundary.Wrapped((a, n), static s => matrix_power(s.a, s.n));
                 return a.TensorEngine.Linalg.MatrixPower(a, n);
             }
         }

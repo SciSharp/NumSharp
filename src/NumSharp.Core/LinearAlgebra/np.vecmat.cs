@@ -71,9 +71,6 @@ namespace NumSharp
             int? axis = null, bool keepdims = false, DType dtype = null, string casting = "same_kind",
             char order = 'K')
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(x1, x2))
-                return NDMatrixBoundary.Wrapped((x1, x2, @out, axes, axis, keepdims, dtype, casting, order), static s => vecmat(s.x1, s.x2, s.@out, s.axes, s.axis, s.keepdims, s.dtype, s.casting, s.order), @out);
             return x1.TensorEngine.Vecmat(x1, x2, @out, axes, axis, keepdims, dtype, casting, order);
         }
     }

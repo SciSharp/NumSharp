@@ -27,12 +27,6 @@ namespace NumSharp
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray squeeze(NDArray a)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(a))
-                return NDMatrixBoundary.Wrapped(a, static s => squeeze(s));
-            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(a))
-                return NDCharArrayBoundary.Kept(a, static s => squeeze(s));
             var dims = a.Shape.dimensions;
             int keep = 0;
             for (int i = 0; i < dims.Length; i++)
@@ -69,12 +63,6 @@ namespace NumSharp
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray squeeze(NDArray a, int axis)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(a))
-                return NDMatrixBoundary.Wrapped((a, axis), static s => squeeze(s.a, s.axis));
-            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(a))
-                return NDCharArrayBoundary.Kept((a, axis), static s => squeeze(s.a, s.axis));
             // The backward-compatibility special case of PyArray_ConvertMultiAxis: axis 0 / -1 of a 0-d input selects no
             // axis. NumPy then returns the array itself; NumSharp returns a.view(), a fresh view object (as squeeze(NDArray)
             // does for an array with nothing to remove), so disposing the result never disposes the input.
@@ -98,6 +86,7 @@ namespace NumSharp
         ///     <c>PyArray_Squeeze</c>/<c>SelectedSqueeze</c>. Writeability/read-onlyness inherit through
         ///     <see cref="UnmanagedStorage.Alias(Shape)"/>.
         /// </summary>
+        [NewSubtype("a")]
         private static NDArray SqueezeView(NDArray a, int keep, int onlyAxis)
         {
             var dims = a.Shape.dimensions;

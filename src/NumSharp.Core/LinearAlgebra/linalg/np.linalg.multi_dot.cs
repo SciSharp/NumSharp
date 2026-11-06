@@ -47,9 +47,6 @@ namespace NumSharp
             [NDScoped] // the class boundary's temporaries; the Linalg member scopes the computation's own
             public static NDArray multi_dot(NDArray[] arrays, NDArray @out = null)
             {
-                // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-                if (NDMatrixBoundary.Sees(arrays))
-                    return NDMatrixBoundary.Wrapped((arrays, @out), static s => multi_dot(s.arrays, s.@out), @out);
                 // the first array's engine computes the chain; a null, empty or null-led list has no operand to decide,
                 // so TensorEngine.Default's member reports NumPy's "Expecting at least two arrays." (or the operand error)
                 TensorEngine engine = arrays is { Length: > 0 } && arrays[0] is { } first ? first.TensorEngine : TensorEngine.Default;
@@ -58,9 +55,7 @@ namespace NumSharp
 
             /// <inheritdoc cref="multi_dot(NDArray[], NDArray)"/>
             /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
-            public static NDArray multi_dot(params NDArray[] arrays) => NDMatrixBoundary.Sees(arrays)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-                ? NDMatrixBoundary.Wrapped(arrays, static s => multi_dot(s))
-                : multi_dot(arrays, null);
+            public static NDArray multi_dot(params NDArray[] arrays) => multi_dot(arrays, null);
         }
     }
 }

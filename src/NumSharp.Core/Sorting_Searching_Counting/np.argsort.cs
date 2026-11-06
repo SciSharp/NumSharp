@@ -36,8 +36,6 @@ namespace NumSharp
         ///     value</c>, raised after the lines before it were sorted).</exception>
         /// <exception cref="System.OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         public static NDArray argsort(NDArray a, int? axis = -1, string kind = null, object order = null, bool? stable = null)
-            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((a, axis, kind, order, stable), static s => argsort(s.a, s.axis, s.kind, s.order, s.stable))
-            : a.argsort(axis, kind, order, stable);
+            => a.argsort(axis, kind, order, stable);
     }
 }

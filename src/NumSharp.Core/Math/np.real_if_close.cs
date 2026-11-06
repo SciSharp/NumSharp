@@ -53,9 +53,6 @@ namespace NumSharp
         public static NDArray real_if_close(NDArray a, double tol = 100)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(a))
-                return NDMatrixBoundary.Wrapped((a, tol), static s => real_if_close(s.a, s.tol));
             return a.TensorEngine.RealIfClose(a, tol);
         }
     }

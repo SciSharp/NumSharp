@@ -20,9 +20,6 @@ namespace NumSharp
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray imag(NDArray val)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(val))
-                return NDMatrixBoundary.Wrapped(val, static s => NDArray.imag_(s));
             // NumPy's `val.imag`: the statements are the array object's (NDArray.TypeCheck.cs)
             return NDArray.imag_(val);
         }

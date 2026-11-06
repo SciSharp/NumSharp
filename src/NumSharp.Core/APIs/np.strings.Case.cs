@@ -43,8 +43,6 @@ namespace NumSharp
             /// </remarks>
             public static NDArray upper(NDArray a)
             {
-                if (NDCharArrayBoundary.Sees(a))
-                    return NDCharArrayBoundary.Plain(a, static s => upper(s));
                 if (a is null)
                     throw new ArgumentNullException(nameof(a));
                 return NDStringMethods.CaseMap(NDTextElements.UpperMap, a);
@@ -66,8 +64,6 @@ namespace NumSharp
             ///     characters skipped) and none follows, else to U+03C3, as CPython's <c>lower_ucs4</c> decides.</remarks>
             public static NDArray lower(NDArray a)
             {
-                if (NDCharArrayBoundary.Sees(a))
-                    return NDCharArrayBoundary.Plain(a, static s => lower(s));
                 if (a is null)
                     throw new ArgumentNullException(nameof(a));
                 return NDStringMethods.CaseMap(NDTextElements.LowerMap, a);
@@ -89,8 +85,6 @@ namespace NumSharp
             ///     back to <c>'ss'</c>.</remarks>
             public static NDArray swapcase(NDArray a)
             {
-                if (NDCharArrayBoundary.Sees(a))
-                    return NDCharArrayBoundary.Plain(a, static s => swapcase(s));
                 if (a is null)
                     throw new ArgumentNullException(nameof(a));
                 return NDStringMethods.CaseMap(NDTextElements.SwapcaseMap, a);
@@ -112,8 +106,6 @@ namespace NumSharp
             ///     <c>'1abc'</c>, and a leading NUL stays first.</remarks>
             public static NDArray capitalize(NDArray a)
             {
-                if (NDCharArrayBoundary.Sees(a))
-                    return NDCharArrayBoundary.Plain(a, static s => capitalize(s));
                 if (a is null)
                     throw new ArgumentNullException(nameof(a));
                 return NDStringMethods.CaseMap(NDTextElements.CapitalizeMap, a);
@@ -134,8 +126,6 @@ namespace NumSharp
             ///     becomes <c>"They'Re Bill'S"</c> and <c>"hello2world"</c> <c>"Hello2World"</c>, as in Python.</remarks>
             public static NDArray title(NDArray a)
             {
-                if (NDCharArrayBoundary.Sees(a))
-                    return NDCharArrayBoundary.Plain(a, static s => title(s));
                 if (a is null)
                     throw new ArgumentNullException(nameof(a));
                 return NDStringMethods.CaseMap(NDTextElements.TitleMap, a);

@@ -73,9 +73,6 @@ namespace NumSharp
         [NDScoped]
         public static NDArray choose(NDArray a, object[] choices, NDArray @out = null, string mode = "raise")
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(a))
-                return NDMatrixBoundary.Wrapped((a, choices, @out, mode), static s => choose(s.a, s.choices, s.@out, s.mode), @out);
             if (a is null) throw new ArgumentNullException(nameof(a));
             if (choices is null) throw new ArgumentNullException(nameof(choices));
             return UnmanagedStorage.ChooseCore(a, choices, @out, mode);
@@ -105,9 +102,6 @@ namespace NumSharp
         [NDScoped]
         public static NDArray choose(NDArray a, NDArray[] choices, NDArray @out = null, string mode = "raise")
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(a))
-                return NDMatrixBoundary.Wrapped((a, choices, @out, mode), static s => choose(s.a, s.choices, s.@out, s.mode), @out);
             if (a is null) throw new ArgumentNullException(nameof(a));
             if (choices is null) throw new ArgumentNullException(nameof(choices));
             var objs = new object[choices.Length];
@@ -142,9 +136,6 @@ namespace NumSharp
         [NDScoped]
         public static NDArray choose(NDArray a, NDArray choices, NDArray @out = null, string mode = "raise")
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(a))
-                return NDMatrixBoundary.Wrapped((a, choices, @out, mode), static s => choose(s.a, s.choices, s.@out, s.mode), @out);
             if (a is null) throw new ArgumentNullException(nameof(a));
             if (choices is null) throw new ArgumentNullException(nameof(choices));
             if (choices.ndim == 0)

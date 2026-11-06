@@ -113,6 +113,8 @@ namespace NumSharp
         ///     An override replaces <c>np.unique_values</c> for every array whose engine it is. New in 0.71.0 (the np-layer
         ///     dtype plan, phase PE); it was the internal class <c>UniqueEngine</c>.
         /// </remarks>
+        [ArrayWrap("x")]
+        [AsArrayFor(typeof(NDMatrix))]
         public abstract NDArray UniqueValues(NDArray x);
 
         /// <summary>
@@ -228,6 +230,7 @@ namespace NumSharp
         /// <exception cref="UnicodeDecodeError">The membership test's sort path decodes <c>S</c> text holding a byte that
         ///     is not ASCII.</exception>
         /// <exception cref="ValueError">A <c>StringDType</c> array whose sort compares a None-like NA.</exception>
+        [SubclassRule(typeof(NDSubclassRules), nameof(NDSubclassRules.Setdiff1d))]
         public abstract NDArray Setdiff1d(NDArray ar1, NDArray ar2, bool assume_unique = false);
     }
 }

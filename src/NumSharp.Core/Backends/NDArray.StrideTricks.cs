@@ -72,6 +72,7 @@ namespace NumSharp
         ///     public function runs inside).
         ///     </para>
         /// </remarks>
+        [AsArray]
         internal static NDArray[] broadcast_arrays(NDArray[] ndArrays)
         {
             int len = ndArrays.Length;
@@ -86,6 +87,24 @@ namespace NumSharp
                 list[i] = BroadcastArraysMember(ndArrays[i], outputShapes[i]);
 
             return list;
+        }
+
+        /// <summary>
+        ///     NumPy 2.4.2's <c>broadcast_arrays(lhs, rhs)</c> for exactly two operands: each one itself when it already has the
+        ///     broadcast shape, else a view of it at that shape (<see cref="BroadcastArraysMember"/>).
+        /// </summary>
+        /// <param name="lhs">The first operand (not null).</param>
+        /// <param name="rhs">The second operand (not null).</param>
+        /// <returns>The pair, in the operands' order.</returns>
+        /// <exception cref="IncorrectShapeException">The two shapes do not broadcast.</exception>
+        /// <remarks><c>np.array(_m, copy=None, subok=False)</c> drops an array subclass: <c>[AsArray]</c> turns a subclass
+        ///     operand handed back into a new plain view of it.</remarks>
+        [AsArray]
+        internal static (NDArray Lhs, NDArray Rhs) broadcast_arrays(NDArray lhs, NDArray rhs)
+        {
+            var (leftShape, rightShape) = Shape.Broadcast(lhs.Shape, rhs.Shape);
+            // NumPy 2.4.2's rule per operand: a matching operand as itself, else a view writeable iff the operand is.
+            return (BroadcastArraysMember(lhs, leftShape), BroadcastArraysMember(rhs, rightShape));
         }
 
         /// <summary>
@@ -107,7 +126,7 @@ namespace NumSharp
         {
             // `args = [np.array(_m, copy=None, subok=False) for _m in args]`: a plain array is itself, a numpy.matrix or a
             // numpy.char.chararray becomes a new plain view of its memory (owned by the caller like any view).
-            var plain = NDCharArrayBoundary.PlainViewOf(NDMatrixBoundary.PlainOf(operand));
+            var plain = NDSubclass.PlainView(operand);
             // `array if array.shape == shape`: the operand itself, identity included (`r[0] is a` in NumPy).
             if (SameDims(plain.Shape.dimensions, broadcast.dimensions))
                 return plain;

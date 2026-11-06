@@ -87,6 +87,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
         /// <exception cref="NotSupportedException">A codec NumSharp does not implement; an object array of lists as an
         ///     argument.</exception>
+        [AsArray]
         internal static NDArray Encode(NDArray a, object encoding, object errors) => Code(a, encoding, errors, encode: true);
 
         /// <summary>
@@ -110,6 +111,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
         /// <exception cref="NotSupportedException">A codec NumSharp does not implement; an object array of lists as an
         ///     argument.</exception>
+        [AsArray]
         internal static NDArray Decode(NDArray a, object encoding, object errors) => Code(a, encoding, errors, encode: false);
 
         /// <summary>The shared driver of <see cref="Encode"/> and <see cref="Decode"/> (see the file header).</summary>

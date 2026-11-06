@@ -175,6 +175,7 @@ namespace NumSharp
         public abstract NDArray Sum(NDArray nd, int? axis = null, DType dtype = null, bool keepdims = false);
 
         public abstract NDArray Round(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
+        [SubclassRule(typeof(NDSubclassRules), nameof(NDSubclassRules.Round))]
         public abstract NDArray Round(NDArray nd, int decimals, DType dtype = null, NDArray @out = null);
 
         /// <summary>
@@ -898,6 +899,7 @@ namespace NumSharp
         ///     it first).</exception>
         /// <remarks>New in 0.71.0 (the np-layer dtype plan, phase PE, E5): the public <c>np.sort</c> applies its class
         ///     boundaries and calls this; DefaultEngine sorts with its AxisSort kernels.</remarks>
+        [NewSubtype("a")]
         public abstract NDArray Sort(NDArray a, int? axis = -1, string kind = null, object order = null, bool? stable = null);
 
         /// <summary>
@@ -984,6 +986,7 @@ namespace NumSharp
         ///     NumPy's kth=None raises its TypeError there).</exception>
         /// <remarks>New in 0.71.0 (the np-layer dtype plan, phase PE, E5): the public <c>np.partition</c> applies its class
         ///     boundaries and calls this; DefaultEngine partitions with its AxisPartition kernels.</remarks>
+        [SubclassRule(typeof(NDSubclassRules), nameof(NDSubclassRules.Partition), Check = nameof(NDSubclassRules.PartitionCheck))]
         public abstract NDArray Partition(NDArray a, object kth, int? axis = -1, string kind = "introselect", string order = null);
 
         /// <summary>
@@ -1043,6 +1046,7 @@ namespace NumSharp
         ///     NumPy's kth=None raises its TypeError there).</exception>
         /// <remarks>New in 0.71.0 (the np-layer dtype plan, phase PE, E5): <c>np.argpartition</c> and
         ///     <c>NDArray.argpartition</c> call this.</remarks>
+        [NewSubtype("a")]
         public abstract NDArray ArgPartition(NDArray a, object kth, int? axis = -1, string kind = "introselect", string order = null);
     }
 }

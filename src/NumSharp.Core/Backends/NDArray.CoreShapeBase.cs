@@ -28,6 +28,7 @@ namespace NumSharp
         ///     buffer, keeps it alive, and writes through.</returns>
         /// <remarks>No class boundary runs here: an engine caller sits inside its public function's boundary, and the
         ///     facade applies its rules before it calls this.</remarks>
+        [NewSubtype("a")]
         internal static NDArray atleast_1d(NDArray a)
         {
             switch (a.ndim)
@@ -53,6 +54,7 @@ namespace NumSharp
         /// <remarks>No class boundary runs here: an engine caller sits inside its public function's boundary, and the
         ///     facade applies its rules before it calls this. The 1-d case is np.expand_dims(a, 0)'s statement
         ///     (<see cref="expand_dims(NDArray, int)"/>) without that facade's chararray rule.</remarks>
+        [NewSubtype("a")]
         internal static NDArray atleast_2d(NDArray a)
         {
             switch (a.ndim)
@@ -128,6 +130,7 @@ namespace NumSharp
         ///     trailing axis first, as NumPy's statements do; the inner view it goes through is this call's own and is
         ///     reclaimed (the outer view keeps the buffer alive).</remarks>
         [NDScoped /* reclaims the inner expand_dims alias of the 1-d arm; the ndim >= 3 passthrough is an untracked input */]
+        [NewSubtype("a", KeepRank = true)]
         internal static NDArray atleast_3d(NDArray a)
         {
             switch (a.ndim)
@@ -141,6 +144,115 @@ namespace NumSharp
                 default:
                     return a;
             }
+        }
+
+        // ---------------------------- np.atleast_1d / 2d / 3d of several arrays ----------------------------
+
+        /// <summary>
+        ///     NumPy's <c>numpy.atleast_1d(*arys)</c> loop: each array itself when it has one dimension or more, else its
+        ///     <c>(1,)</c> reshape; no array at all is the empty tuple.
+        /// </summary>
+        /// <param name="arys">The arrays (the sequence not null; a null entry is NumPy's None, refused when read).</param>
+        /// <returns>One result per array: the array itself, or a VIEW of a 0-d array's element.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="arys"/> is null.</exception>
+        /// <exception cref="NullReferenceException">A null entry.</exception>
+        /// <remarks>Each result keeps ITS operand's class (NumPy's <c>asanyarray</c> per array:
+        ///     <see cref="NDSubclassRules.AtLeastEach"/>).</remarks>
+        [SubclassRule(typeof(NDSubclassRules), nameof(NDSubclassRules.AtLeastEach))]
+        internal static NDArray[] atleast_1d(NDArray[] arys)
+        {
+            if (arys == null)
+                throw new ArgumentNullException(nameof(arys));
+
+            // NumPy's atleast_nd(*arys) of no arrays returns the empty tuple (no error).
+            if (arys.Length == 0)
+                return System.Array.Empty<NDArray>();
+
+            var ret = new NDArray[arys.Length];
+            for (var i = 0; i < arys.Length; i++)
+            {
+                var arr = arys[i];
+                switch (arr.ndim)
+                {
+                    case 0:
+                        ret[i] = arr.reshape(1);
+                        continue;
+                    default:
+                        ret[i] = arr;
+                        continue;
+                }
+            }
+
+            return ret;
+        }
+
+        /// <summary>
+        ///     NumPy's <c>numpy.atleast_2d(*arys)</c> loop: each array itself when it has two dimensions or more, a
+        ///     <c>(1, 1)</c> reshape of a 0-d array and a <c>(1, N)</c> view of a 1-d one; no array at all is the empty tuple.
+        /// </summary>
+        /// <param name="arys">The arrays (the sequence not null; a null entry is NumPy's None, refused when read).</param>
+        /// <returns>One result per array: the array itself, or a VIEW with the leading axes added.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="arys"/> is null.</exception>
+        /// <exception cref="NullReferenceException">A null entry.</exception>
+        /// <remarks>Each result keeps ITS operand's class (<see cref="NDSubclassRules.AtLeastEach"/>).</remarks>
+        [SubclassRule(typeof(NDSubclassRules), nameof(NDSubclassRules.AtLeastEach))]
+        internal static NDArray[] atleast_2d(NDArray[] arys)
+        {
+            if (arys == null)
+                throw new ArgumentNullException(nameof(arys));
+
+            // NumPy's atleast_nd(*arys) of no arrays returns the empty tuple (no error).
+            if (arys.Length == 0)
+                return System.Array.Empty<NDArray>();
+
+            var ret = new NDArray[arys.Length];
+            for (var i = 0; i < arys.Length; i++)
+            {
+                var arr = arys[i];
+                switch (arr.ndim)
+                {
+                    case 0:
+                        ret[i] = arr.reshape(1, 1);
+                        continue;
+                    case 1:
+                        ret[i] = np.expand_dims(arr, 0);
+                        continue;
+                    default:
+                        ret[i] = arr;
+                        continue;
+                }
+            }
+
+            return ret;
+        }
+
+        /// <summary>
+        ///     NumPy's <c>numpy.atleast_3d(*arys)</c> loop: <see cref="atleast_3d(NDArray)"/> of each array; no array at all is
+        ///     the empty tuple.
+        /// </summary>
+        /// <param name="arys">The arrays (the sequence not null; a null entry is NumPy's None, refused when read).</param>
+        /// <returns>One result per array: the array itself (three dimensions or more), or a VIEW with the axes added.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="arys"/> is null.</exception>
+        /// <exception cref="NullReferenceException">A null entry.</exception>
+        /// <remarks>Each result keeps ITS operand's class, a matrix's at three dimensions (<c>m[:, :, newaxis]</c>:
+        ///     <see cref="NDSubclassRules.AtLeast3dEach"/>).</remarks>
+        [SubclassRule(typeof(NDSubclassRules), nameof(NDSubclassRules.AtLeast3dEach))]
+        internal static NDArray[] atleast_3d(NDArray[] arys)
+        {
+            if (arys == null)
+                throw new ArgumentNullException(nameof(arys));
+
+            // NumPy's atleast_nd(*arys) of no arrays returns the empty tuple (no error).
+            if (arys.Length == 0)
+                return System.Array.Empty<NDArray>();
+
+            // NumPy's loop over the arrays, each one's statements the single array's (their inner expand_dims aliases are
+            // reclaimed there; an array of three dimensions or more passes through).
+            var ret = new NDArray[arys.Length];
+            for (var i = 0; i < arys.Length; i++)
+                ret[i] = atleast_3d(arys[i]);
+
+            return ret;
         }
 
         // ---------------------------- np.vstack / np.hstack ----------------------------
@@ -162,6 +274,7 @@ namespace NumSharp
         ///     computed plain) before it calls this, so the inner atleast_2d and concatenate are the members. The trailing
         ///     underscore is NumPy's convention for a name already taken (D18): <see cref="vstack(NDArray[])"/> is the
         ///     array object's public instance method that stacks the array with others.</remarks>
+        [GetSubType("tup")]
         internal static NDArray vstack_(NDArray[] tup)
         {
             if (tup.Length == 0)
@@ -189,6 +302,7 @@ namespace NumSharp
         /// <remarks>No class boundary runs here: the facade applies its rules before it calls this. The trailing underscore
         ///     is NumPy's convention for a name already taken (D18): <see cref="hstack(NDArray[])"/> is the array object's
         ///     public instance method that stacks the array with others.</remarks>
+        [GetSubType("tup")]
         internal static NDArray hstack_(NDArray[] tup)
         {
             if (tup.Length == 0)
@@ -220,6 +334,7 @@ namespace NumSharp
         ///     refusal).</exception>
         /// <remarks>No class boundary runs here: the facade applies its rules before it calls this, so the inner expand_dims
         ///     and concatenate are the members.</remarks>
+        [GetSubType("arrays")]
         internal static NDArray stack(NDArray[] arrays, int axis)
         {
             // `if not arrays: raise ValueError('need at least one array to stack')`.
@@ -259,6 +374,7 @@ namespace NumSharp
         /// <exception cref="OverflowException">An axis longer than int.MaxValue (the result is a C# array).</exception>
         /// <remarks>No class boundary runs here: the facade applies its rules (a matrix's rows, a chararray's rows or
         ///     elements) before it calls this.</remarks>
+        [SubclassRule(typeof(NDSubclassRules), nameof(NDSubclassRules.Unstack))]
         internal static NDArray[] unstack(NDArray x, int axis)
         {
             // NumPy: ValueError("Input array must be at least 1-d.")
@@ -326,15 +442,35 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException">Blocks whose ranks or extents np.concatenate refuses.</exception>
         /// <exception cref="InvalidCastException">A block that does not cast to the result dtype.</exception>
         /// <remarks>
-        ///     <see cref="t_blockTookSlicingRoute"/> records which route ran, for the facade's matrix rule (NumPy's result class
-        ///     follows the route: repeated concatenation keeps a matrix leaf's class, the single allocation is an ndarray). A
-        ///     matrix leaf is never padded: NumPy's <c>_atleast_nd</c> is <c>array(a, ndmin=ndim, subok=True)</c>, which cannot
-        ///     give a numpy.matrix another axis.
+        ///     The subclass's own handling (<see cref="SubclassAwareAttribute"/>: the leaves are nested, which no woven
+        ///     prologue tests): a block holding a numpy.matrix or numpy.char.chararray leaf is computed from the leaves' plain
+        ///     views (<see cref="BlockOfSubclass"/>), and NumPy's result class follows the route - repeated concatenation is
+        ///     np.concatenate's <c>PyArray_GetSubType</c> (a matrix leaf wins), the single allocation an ndarray. A matrix leaf
+        ///     is never padded: NumPy's <c>_atleast_nd</c> is <c>array(a, ndmin=ndim, subok=True)</c>, which cannot give a
+        ///     numpy.matrix another axis.
         /// </remarks>
+        [SubclassAware]
         internal static NDArray block(object arrays)
         {
+            if (NDSubclass.IsNestedOperand(arrays))
+                return BlockOfSubclass(arrays);
+            return BlockCore(arrays, out _);
+        }
+
+        /// <summary>
+        ///     The body of <see cref="block(object)"/>: <c>_block_setup</c>, then the route NumPy's crossover picks.
+        /// </summary>
+        /// <param name="arrays">The nested lists of blocks (not null).</param>
+        /// <param name="tookSlicingRoute">True when the single-allocation slicing route ran, false for repeated
+        ///     concatenation (a subclass block's class follows it).</param>
+        /// <returns>A new array (see <see cref="block(object)"/>).</returns>
+        /// <exception cref="ValueError">Mismatched list depths, an empty list, or blocks that do not fit.</exception>
+        /// <exception cref="TypeError">A tuple anywhere in the nesting.</exception>
+        /// <exception cref="IncorrectShapeException">Blocks whose ranks or extents np.concatenate refuses.</exception>
+        /// <exception cref="InvalidCastException">A block that does not cast to the result dtype.</exception>
+        private static NDArray BlockCore(object arrays, out bool tookSlicingRoute)
+        {
             var (normalized, listNdim, resultNdim, finalSize) = _block_setup(arrays);
-            t_blockTookSlicingRoute = (long)listNdim * finalSize > 2 * 512 * 512;
 
             // NumPy wisdom (numpy/_core/shape_base.py): repeated concatenation
             // copies the data once per nesting level, single-allocation slicing
@@ -342,18 +478,45 @@ namespace NumSharp
             // benchmarked by NumPy at ~2*512*512 elements — replicated verbatim
             // so both libraries always run the same algorithm (and therefore
             // agree on per-path details like the dtype-resolution grouping).
-            if ((long)listNdim * finalSize > 2 * 512 * 512)
+            tookSlicingRoute = (long)listNdim * finalSize > 2 * 512 * 512;
+            if (tookSlicingRoute)
                 return _block_slicing(normalized, listNdim, resultNdim);
             else
                 return _block_concatenate(normalized, listNdim, resultNdim);
         }
 
         /// <summary>
-        ///     Which route the last <see cref="block(object)"/> call on this thread took: true for the single-allocation slicing
-        ///     route, false for repeated concatenation. Read only by np.block's matrix rule, right after the call it made
-        ///     returns; per thread, so concurrent np.block calls on other threads cannot change the answer it reads.
+        ///     <c>np.block</c> of nested blocks holding an array subclass leaf: the blocks computed from the leaves' plain views
+        ///     (which remember their class, so a matrix leaf is left unpadded), then NumPy's class - a matrix when a matrix leaf
+        ///     went through repeated concatenation (<c>PyArray_GetSubType</c>: priority 10 wins, a chararray never does), a plain
+        ///     array on the single-allocation route (probed 2.4.2: <c>np.block([m, m])</c> is a matrix, an ndarray past
+        ///     2*512*512 elements).
         /// </summary>
-        [ThreadStatic] internal static bool t_blockTookSlicingRoute;
+        /// <param name="arrays">The nested lists of blocks, at least one leaf a subclass operand.</param>
+        /// <returns>The matrix view of the block, or the plain block.</returns>
+        /// <exception cref="ValueError">The errors of <see cref="BlockCore"/>; a matrix result with more than two axes longer
+        ///     than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="TypeError">A tuple anywhere in the nesting.</exception>
+        /// <exception cref="IncorrectShapeException">Blocks whose ranks or extents np.concatenate refuses.</exception>
+        /// <exception cref="InvalidCastException">A block that does not cast to the result dtype.</exception>
+        /// <remarks>The scope reclaims the leaves' plain views and the hidden plain block, which the matrix view keeps alive
+        ///     through its own counted reference.</remarks>
+        private static NDArray BlockOfSubclass(object arrays)
+        {
+            NDScope scope = NDScope.Open();
+            try
+            {
+                bool matrixLeaf = NDSubclass.HoldsKind(arrays, NDSubclassKind.Matrix);
+                NDArray result = BlockCore(NDSubclass.PlainNested(arrays), out bool tookSlicingRoute);
+                if (matrixLeaf && !tookSlicingRoute)
+                    result = NDMatrix.FromWrapped(result);
+                return scope.Returns(result);
+            }
+            finally
+            {
+                scope.Dispose();
+            }
+        }
 
         // ------------------------------------------------------------------
         //  Port of numpy/_core/shape_base.py — same helper names, same flow.
@@ -517,8 +680,8 @@ namespace NumSharp
                 var arrs = new NDArray[list.Length];
                 for (int i = 0; i < list.Length; i++)
                     arrs[i] = _block(list[i], maxDepth, resultNdim, depth + 1);
-                // np.concatenate(arrs, axis)'s body: its matrix rule has nothing to see here (the facade's rule decided the
-                // class before the call, and inside its region no rule fires).
+                // np.concatenate(arrs, axis)'s body: the leaves are plain (a subclass block's class is decided once, by
+                // BlockOfSubclass, from the route this took).
                 var joined = concatenate(arrs, -(maxDepth - depth), null, null, "same_kind");
 
                 // Deeper-level results are fresh concatenate outputs consumed by
@@ -538,7 +701,7 @@ namespace NumSharp
             // list nested deeper than two levels fails in the join above as it does in NumPy (np.block([[[m]]]):
             // "axis -3 is out of bounds for array of dimension 2").
             var leaf = (NDArray)arrays;
-            return NDMatrixBoundary.IsMatrix(leaf) ? leaf : AtLeastNdView(leaf, resultNdim);
+            return NDSubclass.StandsForMatrix(leaf) ? leaf : AtLeastNdView(leaf, resultNdim);
         }
 
         /// <summary>NumPy's <c>_block_concatenate</c>: the repeated-concatenation route, with a COPY for a bare leaf.</summary>

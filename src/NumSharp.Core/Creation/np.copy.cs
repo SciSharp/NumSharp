@@ -23,19 +23,26 @@ namespace NumSharp
         ///     (<c>order must be one of 'C', 'F', 'A', or 'K' (got 'Q')</c>).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.copy.html</remarks>
         public static NDArray copy(NDArray a, char order = 'K', bool subok = false)
-        {
-            if (subok)
-            {
-                // subok=True creates the copy as a's class. Each rule computes the plain copy inside its region of plain
-                // semantics, then hands it out as the subclass (NDCharArrayBoundary / NDMatrixBoundary).
-                if (NDCharArrayBoundary.Sees(a))
-                    return NDCharArrayBoundary.Kept((a, order), static s => copy(s.a, s.order));
-                if (NDMatrixBoundary.Sees(a))
-                    return NDMatrixBoundary.Wrapped((a, order), static s => copy(s.a, s.order));
-            }
-            // An NDArray reference binds NDArray.copy (the subclasses' own copy members hide it, they do not override
-            // it), which is the plain copy NumPy's subok=False makes.
-            return a.copy(order);
-        }
+            // The copy is the array object's; subok decides the class of a subclass operand's copy (the computation's
+            // [SubclassRule]: NumPy's array(..., subok=subok)).
+            => NDArray.copy_(a, order);
+    }
+
+    public partial class NDArray
+    {
+        /// <summary>
+        ///     <c>np.copy</c>'s computation: NumPy's <c>array(a, order=order, copy=True)</c> on the array, a new array holding a
+        ///     copy of its data in the requested layout.
+        /// </summary>
+        /// <param name="a">The array (not null).</param>
+        /// <param name="order"><c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c>.</param>
+        /// <returns>The copy, a new owning array.</returns>
+        /// <exception cref="System.NullReferenceException"><paramref name="a"/> is null.</exception>
+        /// <exception cref="ValueError"><paramref name="order"/> is not one of NumPy's order codes.</exception>
+        /// <remarks>An NDArray reference binds the instance <see cref="NDArray.copy(char)"/> (the subclasses' own copy
+        ///     members hide it, they do not override it), which is the plain copy. The class of a subclass operand's copy is
+        ///     <c>np.copy</c>'s <c>subok</c> (<see cref="NDSubclassRules.Copy"/>).</remarks>
+        [SubclassRule(typeof(NDSubclassRules), nameof(NDSubclassRules.Copy))]
+        internal static NDArray copy_(NDArray a, char order) => a.copy(order);
     }
 }

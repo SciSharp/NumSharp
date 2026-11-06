@@ -17,9 +17,7 @@ namespace NumSharp
         /// <exception cref="ValueError"><paramref name="device"/> is neither null nor <c>"cpu"</c>; a chararray operand with a
         ///     dtype that is not string data (<c>Can only create a chararray from string data.</c>).</exception>
         /// <exception cref="NullReferenceException"><paramref name="a"/> is null (its layout is read after the order and device checks).</exception>
-        public static NDArray zeros_like(NDArray a, DType dtype = null, string device = null) => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((a, dtype, device), static s => zeros_like(s.a, s.dtype, s.device))
-            : zeros_like(a, dtype, 'K', device);
+        public static NDArray zeros_like(NDArray a, DType dtype = null, string device = null) => zeros_like(a, dtype, 'K', device);
 
         ///  <summary>
         ///     Return an array of zeros with the same shape and type as a given array.
@@ -44,18 +42,6 @@ namespace NumSharp
         /// <exception cref="NullReferenceException"><paramref name="a"/> is null (its layout is read after the order and device checks).</exception>
         public static NDArray zeros_like(NDArray a, DType dtype, char order, string device = null)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(a))
-                return NDMatrixBoundary.Wrapped((a, dtype, order, device), static s => zeros_like(s.a, s.dtype, s.order, s.device));
-            // a numpy.char.chararray operand: NumPy's res = empty_like(a, ...) allocates the result as the subclass, so its
-            // dtype meets __array_finalize__ after the order and device checks and BEFORE the fill (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(a))
-            {
-                Shape.NewLikeLayout(a.Shape, order, (long[])a.Shape.dimensions.Clone());   // the order check, before the device
-                DeviceArguments.ValidateDevice(device);
-                NDCharArrayBoundary.RequireStringResult(dtype ?? a.dtype);
-                return NDCharArrayBoundary.Kept((a, dtype, order, device), static s => zeros_like(s.a, s.dtype, s.order, s.device));
-            }
             // NumPy's statements (empty_like's argument checks and layout, then the fill with 0) are the array object's.
             return NDArray.zeros_like(a, dtype, order, device);
         }

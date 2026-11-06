@@ -40,10 +40,6 @@ namespace NumSharp
                 bool compute_uv = true, bool hermitian = false)
             {
                 if (a is null) throw new ArgumentNullException(nameof(a));
-                // a numpy.matrix operand: NumPy returns wrap(u), the plain singular values and wrap(vh)
-                if (NDMatrixBoundary.Sees(a))
-                    return NDMatrixBoundary.WrappedTriple((a, full_matrices, compute_uv, hermitian),
-                        static s => svd(s.a, s.full_matrices, s.compute_uv, s.hermitian), wrap0: true, wrap1: false, wrap2: true);
                 return a.TensorEngine.Linalg.Svd(a, full_matrices, compute_uv, hermitian);
             }
 
@@ -63,7 +59,6 @@ namespace NumSharp
             public static NDArray svdvals(NDArray x)
             {
                 if (x is null) throw new ArgumentNullException(nameof(x));
-                using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
                 return x.TensorEngine.Linalg.Svdvals(x);
             }
 
@@ -89,7 +84,6 @@ namespace NumSharp
                 double? rtol = null)
             {
                 if (A is null) throw new ArgumentNullException(nameof(A));
-                using var plain = NDMatrixBoundary.PlainFor(A);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
                 return A.TensorEngine.Linalg.MatrixRank(A, tol, hermitian, rtol);
             }
 
@@ -128,7 +122,6 @@ namespace NumSharp
             public static NDArray cond(NDArray x, object p = null)
             {
                 if (x is null) throw new ArgumentNullException(nameof(x));
-                using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
                 return x.TensorEngine.Linalg.Cond(x, p);
             }
         }

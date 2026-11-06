@@ -29,6 +29,7 @@ namespace NumSharp
         ///     byte-reinterpreting alias forwards its ARC to the owner), so a caller that drops it should dispose it or
         ///     create it inside a scope.
         /// </remarks>
+        [NewSubtype("val")]
         internal static NDArray real_(NDArray val)
         {
             // Complex: a strided float64 view onto the real lane (writes through, shares memory) — the
@@ -56,6 +57,7 @@ namespace NumSharp
         ///     No numpy.matrix rule here: np.imag's facade applies it. The zeros are allocated from the DESCRIPTOR, so a
         ///     text array's imaginary part is its own dtype (<c>np.imag(U3)</c> is <c>&lt;U3</c> of <c>''</c>).
         /// </remarks>
+        [NewSubtype("val")]
         internal static NDArray imag_(NDArray val)
         {
             // Complex: a strided float64 view onto the imaginary lane (writes through, shares memory).

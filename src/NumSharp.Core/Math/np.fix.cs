@@ -33,8 +33,6 @@ namespace NumSharp
         ///     into.</exception>
         /// <exception cref="System.NullReferenceException"><paramref name="x"/> is null.</exception>
         public static NDArray fix(NDArray x, NDArray @out = null)
-            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((x, @out), static s => fix(s.x, s.@out), @out)
-            : x.TensorEngine.Fix(x, @out);   // NumPy's body, `return nx.trunc(x, out=out)`, is the engine's (TensorEngine.Fix)
+            => x.TensorEngine.Fix(x, @out);   // NumPy's body, `return nx.trunc(x, out=out)`, is the engine's (TensorEngine.Fix)
     }
 }

@@ -31,12 +31,6 @@ namespace NumSharp
         /// </remarks>
         public static NDArray tensordot(NDArray a, NDArray b, int axes = 2)
         {
-            // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
-            if (NDMatrixBoundary.Sees(a, b))
-                return NDMatrixBoundary.Plain((a, b, axes), static s => tensordot(s.a, s.b, s.axes));
-            // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(a, b))
-                return NDCharArrayBoundary.Plain((a, b, axes), static s => tensordot(s.a, s.b, s.axes));
             // NumPy's body (the two axis lists from the count, the axis checks, the final dot) is the engine's.
             return a.TensorEngine.Tensordot(a, b, axes);
         }
@@ -62,11 +56,7 @@ namespace NumSharp
         ///     <see cref="TensorEngine.Tensordot(NDArray, NDArray, int[], int[])"/>, on <paramref name="a"/>'s engine.
         /// </remarks>
         public static NDArray tensordot(NDArray a, NDArray b, (int AxisA, int AxisB) axes)
-            => NDMatrixBoundary.Sees(a, b)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
-            ? NDMatrixBoundary.Plain((a, b, axes), static s => tensordot(s.a, s.b, s.axes))
-            : NDCharArrayBoundary.Sees(a, b)   // a numpy.char.chararray operand too: asarray drops either class
-            ? NDCharArrayBoundary.Plain((a, b, axes), static s => tensordot(s.a, s.b, s.axes))
-            : a.TensorEngine.Tensordot(a, b, new[] {axes.AxisA}, new[] {axes.AxisB});
+            => a.TensorEngine.Tensordot(a, b, new[] {axes.AxisA}, new[] {axes.AxisB});
 
         /// <summary>
         ///     Tensor contraction pairing <paramref name="axesA"/> of <paramref name="a"/> with
@@ -102,12 +92,6 @@ namespace NumSharp
         /// </remarks>
         public static NDArray tensordot(NDArray a, NDArray b, int[] axesA, int[] axesB)
         {
-            // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
-            if (NDMatrixBoundary.Sees(a, b))
-                return NDMatrixBoundary.Plain((a, b, axesA, axesB), static s => tensordot(s.a, s.b, s.axesA, s.axesB));
-            // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(a, b))
-                return NDCharArrayBoundary.Plain((a, b, axesA, axesB), static s => tensordot(s.a, s.b, s.axesA, s.axesB));
             // NumPy's body (the axis checks, the two transposes and reshapes, the final dot) is the engine's.
             return a.TensorEngine.Tensordot(a, b, axesA, axesB);
         }

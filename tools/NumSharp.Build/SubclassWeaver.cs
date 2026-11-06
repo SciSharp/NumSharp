@@ -76,6 +76,7 @@ internal static class SubclassWeaver
     private const string SubclassAwareAttr = "NumSharp.SubclassAwareAttribute";
     private const string ArraySubclassAttr = "NumSharp.ArraySubclassAttribute";
     private const string NumPyMethodAttr = "NumSharp.NumPyMethodAttribute";
+    private const string PlainReceiverAttr = "NumSharp.PlainReceiverAttribute";
     private const string ModuleNameAttr = "NumSharp.ModuleNameAttribute";
 
     private const string NDArrayFullName = "NumSharp.NDArray";
@@ -117,6 +118,12 @@ internal static class SubclassWeaver
 
         /// <summary>A <c>[SubclassRule]</c> method.</summary>
         Custom,
+
+        /// <summary>
+        ///     A <c>[PlainReceiver]</c> member (NumSharp's static-typing rule): the receiver and every NDArray operand are
+        ///     handed in as PLAIN views without provenance, and the result is the member's own - no mechanism, no audit.
+        /// </summary>
+        PlainReceiver,
     }
 
     /// <summary>
@@ -138,6 +145,12 @@ internal static class SubclassWeaver
 
         /// <summary>ArrayWrap of a ufunc: the inputs' views are marked for the trivial-loop copy.</summary>
         public bool UfuncInputs;
+
+        /// <summary>
+        ///     ArrayWrap of a ufunc whose out= NumPy creates from ONE operand (<c>[Ufunc(Wrap = "a")]</c>): the wrapping
+        ///     inputs, a subset of <see cref="Inputs"/> (which are all marked); null when every input may wrap.
+        /// </summary>
+        public List<ParameterDefinition> WrapInputs;
 
         /// <summary>NewSubtype / ReducesThrough / dispatch: the operand NumPy calls the method on.</summary>
         public ParameterDefinition Self;
@@ -215,7 +228,8 @@ internal static class SubclassWeaver
             string Names(IEnumerable<ParameterDefinition> ps) => string.Join(",", ps.Select(p => p?.Name ?? "-"));
             string s = Kind switch
             {
-                Kind.ArrayWrap => $"{(UfuncInputs ? "Ufunc" : "ArrayWrap")}({Names(Inputs)}{(Outputs != -1 ? $"; outputs={Outputs}" : "")})",
+                Kind.ArrayWrap => $"{(UfuncInputs ? "Ufunc" : "ArrayWrap")}({Names(Inputs)}{(WrapInputs is not null ? $"; wrap={Names(WrapInputs)}" : "")}" +
+                                  $"{(Outputs != -1 ? $"; outputs={Outputs}" : "")})",
                 Kind.NewSubtype => $"NewSubtype({Self?.Name}{(KeepRank ? "; keepRank" : "")}{(ZeroDim != 0 ? $"; zeroDim={ZeroDim}" : "")}{(FinalizeFirst ? "; finalizeFirst" : "")})",
                 Kind.GetSubType => $"GetSubType({Arrays?.Name})",
                 Kind.ReducesThrough => $"ReducesThrough({ReducesMethod ?? "null"}{(InexactMethod != null ? "/" + InexactMethod : "")}; {Self?.Name}{(SubtypeOthers ? "; others NewSubtype" : "")})",
@@ -241,7 +255,8 @@ internal static class SubclassWeaver
                ReducesMethod == other.ReducesMethod && InexactMethod == other.InexactMethod && SubtypeOthers == other.SubtypeOthers &&
                CustomRule == other.CustomRule && CustomCheck == other.CustomCheck &&
                DispatchMethod == other.DispatchMethod && DispatchIsReduction == other.DispatchIsReduction &&
-               Inputs.SequenceEqual(other.Inputs);
+               Inputs.SequenceEqual(other.Inputs) &&
+               (WrapInputs is null ? other.WrapInputs is null : other.WrapInputs is not null && WrapInputs.SequenceEqual(other.WrapInputs));
     }
 
     /// <summary>One array subclass the generated dispatch can route to.</summary>
@@ -357,6 +372,23 @@ internal static class SubclassWeaver
                 plan.Add((m, rule, operands));
         }
 
+        // [PlainReceiver] members (NDArray's members, NumSharp's static-typing rule): every one with a body, in any owner.
+        foreach (var type in AllTypes(module))
+            foreach (var m in type.Methods)
+                if (m.HasBody && m.CustomAttributes.Any(a => a.AttributeType.FullName == PlainReceiverAttr))
+                {
+                    // The re-call runs the member on an NDArray view: an instance member must be NDArray's own (a derived
+                    // type's member would run on an object of the wrong type).
+                    if (m.HasThis && m.DeclaringType.FullName != NDArrayFullName)
+                    {
+                        Fail(ctx, "NDW021", m, "[PlainReceiver] applies to NDArray's own members and to static members");
+                        continue;
+                    }
+                    var rule = new Rule { Kind = Kind.PlainReceiver, Source = "[PlainReceiver]" };
+                    ctx.Report.Add($"{m.DeclaringType.FullName}\t{Signature(m)}\tPlainReceiver\t{rule.Describe()}\t{rule.Source}\tcall-site");
+                    plan.Add((m, rule, OperandParameters(m)));
+                }
+
         int woven = 0;
         foreach (var (m, rule, operands) in plan)
         {
@@ -373,7 +405,7 @@ internal static class SubclassWeaver
             try
             {
                 var sub = GenerateSubclassPath(ctx, m, rule, operands);
-                WeavePrologue(m, sub, operands, ctx);
+                WeavePrologue(m, sub, operands, ctx, rule);
                 woven++;
                 if (verbose)
                     stdout.WriteLine($"NumSharp.Build: woven (array-subclass {rule.Describe()}): {m.FullName}");
@@ -738,7 +770,9 @@ internal static class SubclassWeaver
             if (checkName is not null)
                 rule.CustomCheck = holder.Methods.FirstOrDefault(x => x.Name == checkName && x.IsStatic)
                                    ?? throw new WeaveException("NDW023", $"{holder.FullName} has no static check method '{checkName}'");
-            rule.Self = SelfOf(target, null, args, m, rule);
+            // A custom rule binds its arguments by NAME, so it needs no self operand: a function whose operands are only
+            // sequences (np.meshgrid(NDArray[] xi), np.atleast_1d(params NDArray[])) has none, and that is no error.
+            rule.Self = m.Parameters.Any(IsNDArray) ? SelfOf(target, null, args, m, rule) : null;
         }
         else if ((attr = Attr(UfuncAttr)) is not null)
         {
@@ -746,6 +780,14 @@ internal static class SubclassWeaver
             rule.UfuncInputs = true;
             BindInputs(rule, target, UfuncInputNames(target), args, m);
             rule.Outputs = OutputsOf(attr);
+            // Wrap = "a": every input is marked, only the named ones choose the wrap (NumPy's out= is empty_like(a)).
+            if (attr.Properties.FirstOrDefault(p => p.Name == "Wrap").Argument.Value is string wrap)
+            {
+                var wrapRule = new Rule();
+                BindInputs(wrapRule, target, wrap.Split(',').Select(n => n.Trim()).ToList(), args, m);
+                rule.WrapInputs = wrapRule.Inputs;
+                rule.BoundByCallSite &= wrapRule.BoundByCallSite;
+            }
         }
         else if ((attr = Attr(ArrayWrapAttr)) is not null)
         {
@@ -949,6 +991,18 @@ internal static class SubclassWeaver
             var mapped = Map(inner.Inputs[i], i < roles.Count ? roles[i] : null);
             if (mapped is not null && !r.Inputs.Contains(mapped))
                 r.Inputs.Add(mapped);
+        }
+        if (inner.WrapInputs is not null)
+        {
+            // The wrapping subset maps like the inputs it is part of (a role fallback takes the input's position).
+            r.WrapInputs = new List<ParameterDefinition>();
+            foreach (var w in inner.WrapInputs)
+            {
+                int position = inner.Inputs.IndexOf(w);
+                var mapped = Map(w, position >= 0 && position < roles.Count ? roles[position] : null);
+                if (mapped is not null && !r.WrapInputs.Contains(mapped))
+                    r.WrapInputs.Add(mapped);
+            }
         }
         r.Self = Map(inner.Self, m.Parameters.FirstOrDefault(IsNDArray));
         r.Arrays = Map(inner.Arrays, m.Parameters.FirstOrDefault(p => p.ParameterType.FullName == NDArrayArrayFullName));
@@ -1256,7 +1310,8 @@ internal static class SubclassWeaver
     /// <param name="sub">Its generated subclass path.</param>
     /// <param name="operands">The operand parameters.</param>
     /// <param name="ctx">The weave.</param>
-    private static void WeavePrologue(MethodDefinition m, MethodDefinition sub, List<ParameterDefinition> operands, Context ctx)
+    /// <param name="rule">The function's mechanism (a <c>[PlainReceiver]</c> member also tests its receiver).</param>
+    private static void WeavePrologue(MethodDefinition m, MethodDefinition sub, List<ParameterDefinition> operands, Context ctx, Rule rule)
     {
         var module = m.Module;
         var body = m.Body;
@@ -1267,6 +1322,13 @@ internal static class SubclassWeaver
         var isOperandMany = module.ImportReference(Runtime(ctx, "IsOperand", NDArrayArrayFullName));
 
         var subCall = il.Create(OpCodes.Nop);
+        // A [PlainReceiver] member's receiver is its first operand (a matrix object seen through an NDArray reference).
+        if (rule.Kind == Kind.PlainReceiver && m.HasThis)
+        {
+            il.InsertBefore(first, il.Create(OpCodes.Ldarg, body.ThisParameter));
+            il.InsertBefore(first, il.Create(OpCodes.Call, isOperand));
+            il.InsertBefore(first, il.Create(OpCodes.Brtrue, subCall));
+        }
         foreach (var p in operands)
         {
             il.InsertBefore(first, il.Create(OpCodes.Ldarg, p));
@@ -1300,7 +1362,7 @@ internal static class SubclassWeaver
     {
         var module = m.Module;
         var attrs = MethodAttributes.Private | MethodAttributes.HideBySig | (m.IsStatic ? MethodAttributes.Static : 0);
-        var sub = new MethodDefinition("<" + m.Name + ">subclass", attrs, m.ReturnType);
+        var sub = new MethodDefinition("<" + m.Name + (rule.Kind == Kind.PlainReceiver ? ">plain" : ">subclass"), attrs, m.ReturnType);
         var map = new Dictionary<ParameterDefinition, ParameterDefinition>();
         foreach (var p in m.Parameters)
         {
@@ -1347,17 +1409,24 @@ internal static class SubclassWeaver
         var il = body.GetILProcessor();
         ParameterDefinition P(ParameterDefinition p) => p is null ? null : map[p];
 
-        // The audit hook (the caller of the user's call).
-        il.Append(il.Create(OpCodes.Ldstr, m.Name));
-        il.Append(il.Create(OpCodes.Call, module.ImportReference(Runtime(ctx, "AuditEntry", "System.String"))));
+        bool receiver = rule.Kind == Kind.PlainReceiver;
+
+        // The audit hook (the caller of the user's call). A [PlainReceiver] member is NumSharp's static-typing rule, not a
+        // subclass answer: library code that calls it on a subclass object is computing plain on purpose.
+        if (!receiver)
+        {
+            il.Append(il.Create(OpCodes.Ldstr, m.Name));
+            il.Append(il.Create(OpCodes.Call, module.ImportReference(Runtime(ctx, "AuditEntry", "System.String"))));
+        }
 
         // NumPy's method dispatch first: a subclass's own method gets the call before anything is computed.
         VariableDefinition wrapit = null;
         if (rule.DispatchMethod is not null)
             wrapit = EmitDispatch(ctx, m, sub, rule, map, il);
 
-        // The entry checks (NumPy's errors that come before the computation).
-        EmitChecks(ctx, m, rule, map, il);
+        // The entry checks (NumPy's errors that come before the computation); a [PlainReceiver] member has none.
+        if (!receiver)
+            EmitChecks(ctx, m, rule, map, il);
 
         // NDScope scope = NDScope.Open(); try { aliases; r = m(aliases); unalias; r = mechanism(r); r = scope.Returns(r); }
         // finally { scope.Dispose(); } return r;
@@ -1389,16 +1458,33 @@ internal static class SubclassWeaver
             il.Append(load);
             if (p.ParameterType.IsByReference)
                 il.Append(il.Create(OpCodes.Ldind_Ref));
-            string plain = valueType.FullName == NDArrayArrayFullName
-                ? "Plain"
-                : rule.UfuncInputs && rule.Inputs.Contains(p) ? "PlainUfuncInput" : "Plain";
+            // A [PlainReceiver] member computes as for plain arrays: views WITHOUT the class provenance a computation could
+            // react to. Every other path hands the computation views that remember the subclass they stand for.
+            string plain = receiver
+                ? "PlainView"
+                : valueType.FullName == NDArrayArrayFullName
+                    ? "Plain"
+                    : rule.UfuncInputs && rule.Inputs.Contains(p) ? "PlainUfuncInput" : "Plain";
             il.Append(il.Create(OpCodes.Call, module.ImportReference(Runtime(ctx, plain, valueType.FullName))));
             il.Append(il.Create(OpCodes.Stloc, v));
         }
 
+        // A [PlainReceiver] member's receiver: its plain view (the re-call runs the member on it).
+        VariableDefinition receiverAlias = null;
+        if (receiver && m.HasThis)
+        {
+            receiverAlias = new VariableDefinition(module.ImportReference(ctx.NDArray));
+            body.Variables.Add(receiverAlias);
+            var load = il.Create(OpCodes.Ldarg, body.ThisParameter);
+            tryStart ??= load;
+            il.Append(load);
+            il.Append(il.Create(OpCodes.Call, module.ImportReference(Runtime(ctx, "PlainView", NDArrayFullName))));
+            il.Append(il.Create(OpCodes.Stloc, receiverAlias));
+        }
+
         // The re-call: the plain views take the function's plain path.
         if (m.HasThis)
-            il.Append(il.Create(OpCodes.Ldarg, body.ThisParameter));
+            il.Append(receiverAlias is not null ? il.Create(OpCodes.Ldloc, receiverAlias) : il.Create(OpCodes.Ldarg, body.ThisParameter));
         foreach (var p in m.Parameters)
             il.Append(aliases.TryGetValue(p, out var av)
                 ? il.Create(p.ParameterType.IsByReference ? OpCodes.Ldloca : OpCodes.Ldloc, av)
@@ -1407,9 +1493,10 @@ internal static class SubclassWeaver
         if (!isVoid)
             il.Append(il.Create(OpCodes.Stloc, result));
 
-        // An operand handed back is the caller's object again (NDArray operands; a sequence's elements are never returned).
+        // An operand handed back is the caller's object again: an NDArray operand's view, and an element of a sequence
+        // operand's plain copy (np.atleast_1d(m, c) hands each array back when it already has the rank).
         var resultType = m.ReturnType;
-        var unalias = isVoid ? null : UnaliasFor(ctx, resultType);
+        var unalias = isVoid ? null : UnaliasFor(ctx, resultType, NDArrayFullName);
         if (unalias is not null)
             foreach (var p in operands.Where(IsNDArray))
             {
@@ -1417,6 +1504,24 @@ internal static class SubclassWeaver
                 il.Append(il.Create(OpCodes.Ldloc, aliases[p]));
                 LoadValue(il, P(p));
                 il.Append(il.Create(OpCodes.Call, module.ImportReference(unalias)));
+                il.Append(il.Create(OpCodes.Stloc, result));
+            }
+        if (unalias is not null && receiverAlias is not null)
+        {
+            il.Append(il.Create(OpCodes.Ldloc, result));
+            il.Append(il.Create(OpCodes.Ldloc, receiverAlias));
+            il.Append(il.Create(OpCodes.Ldarg, body.ThisParameter));
+            il.Append(il.Create(OpCodes.Call, module.ImportReference(unalias)));
+            il.Append(il.Create(OpCodes.Stloc, result));
+        }
+        var unaliasEach = isVoid ? null : UnaliasFor(ctx, resultType, NDArrayArrayFullName);
+        if (unaliasEach is not null)
+            foreach (var p in operands.Where(x => x.ParameterType.FullName == NDArrayArrayFullName))
+            {
+                il.Append(il.Create(OpCodes.Ldloc, result));
+                il.Append(il.Create(OpCodes.Ldloc, aliases[p]));
+                il.Append(il.Create(OpCodes.Ldarg, P(p)));
+                il.Append(il.Create(OpCodes.Call, module.ImportReference(unaliasEach)));
                 il.Append(il.Create(OpCodes.Stloc, result));
             }
 
@@ -1514,11 +1619,13 @@ internal static class SubclassWeaver
         switch (rule.Kind)
         {
             case Kind.ArrayWrap:
+                // A ufunc whose out= NumPy makes from one operand wraps by that subset; every other wrap by all inputs.
+                var wrapping = rule.WrapInputs ?? rule.Inputs;
                 EmitCall(ctx, il, module, result, "ArrayWrap", rt, () =>
                 {
                     Load(rule.Out);
                     for (int i = 0; i < 3; i++)
-                        Load(i < rule.Inputs.Count ? rule.Inputs[i] : null);
+                        Load(i < wrapping.Count ? wrapping[i] : null);
                     if (rt != NDArrayFullName)
                         il.Append(il.Create(OpCodes.Ldc_I4, rule.Outputs));
                 });
@@ -1615,7 +1722,9 @@ internal static class SubclassWeaver
 
     /// <summary>
     ///     Loads the function's argument for a rule or check parameter of the same name (converted to <c>int?</c> for an
-    ///     <c>int</c> axis); a parameter the function lacks gets its declared default, or the type's default.
+    ///     <c>int</c> axis, boxed for an <c>object</c> parameter, dereferenced for an <c>in</c> operand); a parameter the
+    ///     function lacks gets its declared default (<c>null</c>, a bool or int constant, or <c>default</c> of a value
+    ///     type), so one rule serves every overload that reaches its computation.
     /// </summary>
     /// <param name="il">The IL.</param>
     /// <param name="m">The function.</param>
@@ -1630,6 +1739,16 @@ internal static class SubclassWeaver
         if (p is not null && ValueTypeName(p) == q.ParameterType.FullName)
         {
             LoadValue(il, map[p]);   // an `in` operand is passed as the array it refers to
+            return;
+        }
+        if (p is not null && q.ParameterType.FullName == "System.Object")
+        {
+            // An `object` rule parameter takes the function's argument of that name whatever its type (np.require's
+            // requirements: a string[] in one overload, a string in the other): a reference as it is, a value boxed.
+            LoadValue(il, map[p]);
+            var pType = p.ParameterType is ByReferenceType byRef ? byRef.ElementType : p.ParameterType;
+            if (pType.IsValueType || pType.IsGenericParameter)
+                il.Append(il.Create(OpCodes.Box, m.Module.ImportReference(pType)));
             return;
         }
         if (p is not null && p.ParameterType.FullName == "System.Int32" && q.ParameterType.FullName == "System.Nullable`1<System.Int32>")
@@ -1648,6 +1767,23 @@ internal static class SubclassWeaver
         if (q.ParameterType.FullName == "System.Boolean")
         {
             il.Append(il.Create(q.HasConstant && q.Constant is true ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0));
+            return;
+        }
+        if (q.ParameterType.FullName == "System.Int32" && q.HasConstant && q.Constant is int constant)
+        {
+            il.Append(il.Create(OpCodes.Ldc_I4, constant));   // the rule's declared int default
+            return;
+        }
+        if (q.ParameterType.IsValueType && q.HasDefault && q.Constant is null)
+        {
+            // A value-type parameter declared `= default` (an int? axis, a tuple of outs another overload does not have):
+            // default(T) through a zero-initialized temporary, the IL form of `default`.
+            var type = m.Module.ImportReference(q.ParameterType);
+            var temp = new VariableDefinition(type);
+            il.Body.Variables.Add(temp);
+            il.Append(il.Create(OpCodes.Ldloca, temp));
+            il.Append(il.Create(OpCodes.Initobj, type));
+            il.Append(il.Create(OpCodes.Ldloc, temp));
             return;
         }
         throw new WeaveException("NDW026", $"{ruleMethod.FullName}'s parameter '{q.Name}' ({q.ParameterType.Name}) has no parameter of " +
@@ -1948,13 +2084,19 @@ internal static class SubclassWeaver
         // A number, a bool, a string or a type without arrays: nothing to yield.
     }
 
-    /// <summary>The <c>NDSubclass.Unalias</c> overload for a result type, or null when the type holds no operand.</summary>
+    /// <summary>
+    ///     The <c>NDSubclass.Unalias</c> overload for a result type and an operand kind, or null when the result type holds no
+    ///     operand of that kind (a number, a struct the mechanism rebuilds).
+    /// </summary>
     /// <param name="ctx">The weave.</param>
     /// <param name="resultType">The function's return type.</param>
+    /// <param name="aliasType">The operand's type: <c>NumSharp.NDArray</c> (one plain view) or <c>NumSharp.NDArray[]</c> (a
+    ///     sequence's plain copy, unaliased element by element).</param>
     /// <returns>The overload, or null.</returns>
-    private static MethodDefinition UnaliasFor(Context ctx, TypeReference resultType)
+    private static MethodDefinition UnaliasFor(Context ctx, TypeReference resultType, string aliasType)
         => ctx.Dispatcher.Methods.FirstOrDefault(x => x.Name == "Unalias" && x.Parameters.Count == 3 &&
-                                                     x.Parameters[0].ParameterType.FullName == resultType.FullName);
+                                                     x.Parameters[0].ParameterType.FullName == resultType.FullName &&
+                                                     x.Parameters[1].ParameterType.FullName == aliasType);
 
     /// <summary>A runtime method of <c>NDSubclass</c> by name and parameter types.</summary>
     /// <param name="ctx">The weave.</param>

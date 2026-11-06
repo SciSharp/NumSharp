@@ -22,11 +22,7 @@ namespace NumSharp
         /// </remarks>
         [NDScoped]
         public NDArray fftshift(NDArray x, int[] axes = null)
-            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
-            ? NDMatrixBoundary.Plain((self: this, x, axes), static s => s.self.fftshift(s.x, s.axes))
-            : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
-            ? NDCharArrayBoundary.Plain((self: this, x, axes), static s => s.self.fftshift(s.x, s.axes))
-            : Shift(x, axes, negate: false);
+            => Shift(x, axes, negate: false);
 
         /// <summary>
         ///     Shift the zero-frequency component to the center of the spectrum, over a single axis.
@@ -39,11 +35,7 @@ namespace NumSharp
         ///     ends with <c>np.concatenate</c>), which drops the class.
         /// </remarks>
         public NDArray fftshift(NDArray x, int axes)
-            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
-            ? NDMatrixBoundary.Plain((self: this, x, axes), static s => s.self.fftshift(s.x, s.axes))
-            : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
-            ? NDCharArrayBoundary.Plain((self: this, x, axes), static s => s.self.fftshift(s.x, s.axes))
-            : Shift(x, new[] { axes }, negate: false);
+            => Shift(x, new[] { axes }, negate: false);
 
         /// <summary>
         ///     The inverse of <see cref="fftshift(NDArray, int[])"/>. Rolls every axis by
@@ -59,11 +51,7 @@ namespace NumSharp
         /// </remarks>
         [NDScoped]
         public NDArray ifftshift(NDArray x, int[] axes = null)
-            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
-            ? NDMatrixBoundary.Plain((self: this, x, axes), static s => s.self.ifftshift(s.x, s.axes))
-            : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
-            ? NDCharArrayBoundary.Plain((self: this, x, axes), static s => s.self.ifftshift(s.x, s.axes))
-            : Shift(x, axes, negate: true);
+            => Shift(x, axes, negate: true);
 
         /// <summary>
         ///     The inverse of <see cref="fftshift(NDArray, int)"/>, over a single axis.
@@ -76,11 +64,7 @@ namespace NumSharp
         ///     ends with <c>np.concatenate</c>), which drops the class.
         /// </remarks>
         public NDArray ifftshift(NDArray x, int axes)
-            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
-            ? NDMatrixBoundary.Plain((self: this, x, axes), static s => s.self.ifftshift(s.x, s.axes))
-            : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
-            ? NDCharArrayBoundary.Plain((self: this, x, axes), static s => s.self.ifftshift(s.x, s.axes))
-            : Shift(x, new[] { axes }, negate: true);
+            => Shift(x, new[] { axes }, negate: true);
 
         /// <summary>
         ///     Roll <paramref name="x"/> along each requested axis by <c>±(shape[axis] // 2)</c>.
@@ -94,6 +78,7 @@ namespace NumSharp
         ///     (which <c>roll</c>'s own axis normalization would raise but never reaches). Every axis is
         ///     validated first, then the rolls run.</para>
         /// </summary>
+        [AsArray]
         private static NDArray Shift(NDArray x, int[] axes, bool negate)
         {
             int nd = x.ndim;

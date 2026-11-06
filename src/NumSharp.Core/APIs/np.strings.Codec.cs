@@ -73,8 +73,6 @@ namespace NumSharp
             /// </remarks>
             public static NDArray encode(NDArray a, object encoding = null, object errors = null)
             {
-                if (NDCharArrayBoundary.Sees(a))
-                    return NDCharArrayBoundary.Plain((a, encoding, errors), static s => encode(s.a, s.encoding, s.errors));
                 if (a is null)
                     throw new ArgumentNullException(nameof(a));
                 return NDCharObjectPath.Encode(a, encoding, errors);
@@ -123,8 +121,6 @@ namespace NumSharp
             /// </remarks>
             public static NDArray decode(NDArray a, object encoding = null, object errors = null)
             {
-                if (NDCharArrayBoundary.Sees(a))
-                    return NDCharArrayBoundary.Plain((a, encoding, errors), static s => decode(s.a, s.encoding, s.errors));
                 if (a is null)
                     throw new ArgumentNullException(nameof(a));
                 return NDCharObjectPath.Decode(a, encoding, errors);

@@ -28,9 +28,6 @@ namespace NumSharp
         [NDScoped]
         public static NDArray angle(NDArray z, bool deg = false)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(z))
-                return NDMatrixBoundary.Wrapped((z, deg), static s => angle(s.z, s.deg));
             // NumPy's angle body (the complex test, arctan2 and the degree scaling, the text refusals) is the
             // engine member's: the facade holds only the class rule above.
             return z.TensorEngine.Angle(z, deg);

@@ -20,9 +20,7 @@ namespace NumSharp
             public static NDArray matmul(NDArray x1, NDArray x2)
             {
                 if (x1 is null) throw new ArgumentNullException(nameof(x1));
-                return NDMatrixBoundary.Sees(x1, x2)   // np.matmul's rule: a numpy.matrix operand comes back as a matrix
-                ? NDMatrixBoundary.Wrapped((x1, x2), static s => matmul(s.x1, s.x2))
-                : x1.TensorEngine.Linalg.Matmul(x1, x2);
+                return x1.TensorEngine.Linalg.Matmul(x1, x2);
             }
 
             /// <summary>
@@ -55,22 +53,14 @@ namespace NumSharp
             public static NDArray tensordot(NDArray x1, NDArray x2, int axes = 2)
             {
                 if (x1 is null) throw new ArgumentNullException(nameof(x1));
-                return NDMatrixBoundary.Sees(x1, x2)   // np.tensordot's rule: NumPy converts with asarray, so the result is plain
-                ? NDMatrixBoundary.Plain((x1, x2, axes), static s => tensordot(s.x1, s.x2, s.axes))
-                : NDCharArrayBoundary.Sees(x1, x2)   // a numpy.char.chararray operand too: asarray drops either class
-                ? NDCharArrayBoundary.Plain((x1, x2, axes), static s => tensordot(s.x1, s.x2, s.axes))
-                : x1.TensorEngine.Linalg.Tensordot(x1, x2, axes);
+                return x1.TensorEngine.Linalg.Tensordot(x1, x2, axes);
             }
 
             /// <inheritdoc cref="tensordot(NDArray, NDArray, int)"/>
             public static NDArray tensordot(NDArray x1, NDArray x2, int[] axesA, int[] axesB)
             {
                 if (x1 is null) throw new ArgumentNullException(nameof(x1));
-                return NDMatrixBoundary.Sees(x1, x2)   // np.tensordot's rule: NumPy converts with asarray, so the result is plain
-                ? NDMatrixBoundary.Plain((x1, x2, axesA, axesB), static s => tensordot(s.x1, s.x2, s.axesA, s.axesB))
-                : NDCharArrayBoundary.Sees(x1, x2)   // a numpy.char.chararray operand too: asarray drops either class
-                ? NDCharArrayBoundary.Plain((x1, x2, axesA, axesB), static s => tensordot(s.x1, s.x2, s.axesA, s.axesB))
-                : x1.TensorEngine.Linalg.Tensordot(x1, x2, axesA, axesB);
+                return x1.TensorEngine.Linalg.Tensordot(x1, x2, axesA, axesB);
             }
 
             /// <summary>
@@ -89,9 +79,6 @@ namespace NumSharp
             public static NDArray trace(NDArray x, int offset = 0, DType dtype = null)
             {
                 if (x is null) throw new ArgumentNullException(nameof(x));
-                // np.trace's rule: no matrix rule, a numpy.matrix operand is computed as a plain array (the region only
-                // raises the boundary's depth: no temporary, so no scope; np.trace inside the member scopes its own).
-                using var plain = NDMatrixBoundary.PlainFor(x);
                 return x.TensorEngine.Linalg.Trace(x, offset, dtype);
             }
 
@@ -124,9 +111,7 @@ namespace NumSharp
             public static NDArray vecdot(NDArray x1, NDArray x2, int axis = -1)
             {
                 if (x1 is null) throw new ArgumentNullException(nameof(x1));
-                return NDMatrixBoundary.Sees(x1, x2)   // np.vecdot's rule: a numpy.matrix operand comes back as a matrix
-                ? NDMatrixBoundary.Wrapped((x1, x2, axis), static s => vecdot(s.x1, s.x2, s.axis))
-                : x1.TensorEngine.Linalg.Vecdot(x1, x2, axis);
+                return x1.TensorEngine.Linalg.Vecdot(x1, x2, axis);
             }
 
             /// <summary>
@@ -160,12 +145,6 @@ namespace NumSharp
             public static NDArray cross(NDArray x1, NDArray x2, int axis = -1)
             {
                 if (x1 is null) throw new ArgumentNullException(nameof(x1));
-                // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
-                if (NDMatrixBoundary.Sees(x1, x2))
-                    return NDMatrixBoundary.Plain((x1, x2, axis), static s => cross(s.x1, s.x2, s.axis));
-                // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
-                if (NDCharArrayBoundary.Sees(x1, x2))
-                    return NDCharArrayBoundary.Plain((x1, x2, axis), static s => cross(s.x1, s.x2, s.axis));
                 return x1.TensorEngine.Linalg.Cross(x1, x2, axis);
             }
         }

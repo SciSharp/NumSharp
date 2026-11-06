@@ -24,10 +24,6 @@ namespace NumSharp
         /// </remarks>
         [NDScoped]
         public static NDArray argwhere(NDArray a)
-            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
-            ? NDMatrixBoundary.Plain(a, static s => argwhere(s))
-            : NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand too: asarray drops either class
-            ? NDCharArrayBoundary.Plain(a, static s => argwhere(s))
-            : a.TensorEngine.Argwhere(a);
+            => a.TensorEngine.Argwhere(a);
     }
 }

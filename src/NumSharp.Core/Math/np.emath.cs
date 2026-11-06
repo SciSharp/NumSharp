@@ -81,11 +81,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.emath.sqrt.html</remarks>
         [NDScoped]
         public NDArray sqrt(NDArray x)
-            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
-            ? NDMatrixBoundary.Plain((self: this, x), static s => s.self.sqrt(s.x))
-            : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
-            ? NDCharArrayBoundary.Plain((self: this, x), static s => s.self.sqrt(s.x))
-            : x.TensorEngine.EmathSqrt(x);
+            => x.TensorEngine.EmathSqrt(x);
 
         /// <summary>
         ///     Compute the natural logarithm of <paramref name="x"/>, returning the complex principal value
@@ -102,11 +98,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.emath.log.html</remarks>
         [NDScoped]
         public NDArray log(NDArray x)
-            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
-            ? NDMatrixBoundary.Plain((self: this, x), static s => s.self.log(s.x))
-            : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
-            ? NDCharArrayBoundary.Plain((self: this, x), static s => s.self.log(s.x))
-            : x.TensorEngine.EmathLog(x);
+            => x.TensorEngine.EmathLog(x);
 
         /// <summary>
         ///     Compute the base-10 logarithm of <paramref name="x"/>, returning the complex principal value
@@ -121,11 +113,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.emath.log10.html</remarks>
         [NDScoped]
         public NDArray log10(NDArray x)
-            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
-            ? NDMatrixBoundary.Plain((self: this, x), static s => s.self.log10(s.x))
-            : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
-            ? NDCharArrayBoundary.Plain((self: this, x), static s => s.self.log10(s.x))
-            : x.TensorEngine.EmathLog10(x);
+            => x.TensorEngine.EmathLog10(x);
 
         /// <summary>
         ///     Compute the base-2 logarithm of <paramref name="x"/>, returning the complex principal value
@@ -140,11 +128,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.emath.log2.html</remarks>
         [NDScoped]
         public NDArray log2(NDArray x)
-            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
-            ? NDMatrixBoundary.Plain((self: this, x), static s => s.self.log2(s.x))
-            : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
-            ? NDCharArrayBoundary.Plain((self: this, x), static s => s.self.log2(s.x))
-            : x.TensorEngine.EmathLog2(x);
+            => x.TensorEngine.EmathLog2(x);
 
         /// <summary>
         ///     Take the log base <paramref name="n"/> of <paramref name="x"/>, computed and returned in the
@@ -164,12 +148,6 @@ namespace NumSharp
         [NDScoped]
         public NDArray logn(NDArray n, NDArray x)
         {
-            // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
-            if (NDMatrixBoundary.Sees(n, x))
-                return NDMatrixBoundary.Plain((self: this, n, x), static s => s.self.logn(s.n, s.x));
-            // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(n, x))
-                return NDCharArrayBoundary.Plain((self: this, n, x), static s => s.self.logn(s.n, s.x));
             return n.TensorEngine.EmathLogn(n, x);
         }
 
@@ -198,12 +176,6 @@ namespace NumSharp
         [NDScoped]
         public NDArray power(NDArray x, NDArray p)
         {
-            // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
-            if (NDMatrixBoundary.Sees(x, p))
-                return NDMatrixBoundary.Plain((self: this, x, p), static s => s.self.power(s.x, s.p));
-            // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(x, p))
-                return NDCharArrayBoundary.Plain((self: this, x, p), static s => s.self.power(s.x, s.p));
             return x.TensorEngine.EmathPower(x, p);
         }
 
@@ -223,11 +195,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.emath.arccos.html</remarks>
         [NDScoped]
         public NDArray arccos(NDArray x)
-            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
-            ? NDMatrixBoundary.Plain((self: this, x), static s => s.self.arccos(s.x))
-            : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
-            ? NDCharArrayBoundary.Plain((self: this, x), static s => s.self.arccos(s.x))
-            : x.TensorEngine.EmathArccos(x);
+            => x.TensorEngine.EmathArccos(x);
 
         /// <summary>
         ///     Compute the inverse sine of <paramref name="x"/>, returning the complex principal value for
@@ -242,11 +210,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.emath.arcsin.html</remarks>
         [NDScoped]
         public NDArray arcsin(NDArray x)
-            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
-            ? NDMatrixBoundary.Plain((self: this, x), static s => s.self.arcsin(s.x))
-            : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
-            ? NDCharArrayBoundary.Plain((self: this, x), static s => s.self.arcsin(s.x))
-            : x.TensorEngine.EmathArcsin(x);
+            => x.TensorEngine.EmathArcsin(x);
 
         /// <summary>
         ///     Compute the inverse hyperbolic tangent of <paramref name="x"/>, returning the complex
@@ -264,10 +228,6 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.emath.arctanh.html</remarks>
         [NDScoped]
         public NDArray arctanh(NDArray x)
-            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
-            ? NDMatrixBoundary.Plain((self: this, x), static s => s.self.arctanh(s.x))
-            : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
-            ? NDCharArrayBoundary.Plain((self: this, x), static s => s.self.arctanh(s.x))
-            : x.TensorEngine.EmathArctanh(x);
+            => x.TensorEngine.EmathArctanh(x);
     }
 }

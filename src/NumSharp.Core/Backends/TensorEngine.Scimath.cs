@@ -24,6 +24,7 @@ namespace NumSharp
         ///     array.</exception>
         /// <remarks>The scan reads every element of a real operand once (an early exit at the first negative one); a
         ///     complex operand skips it, because NumPy's conversion of a complex array is value-identical.</remarks>
+        [AsArray]
         public abstract NDArray EmathSqrt(NDArray x);
 
         /// <summary>
@@ -35,6 +36,7 @@ namespace NumSharp
         ///     (complex64 in NumPy for the narrow dtypes listed on <see cref="EmathSqrt"/>), else real; <c>log(0)</c> is
         ///     <c>-inf</c> and <c>log(inf)</c> <c>inf</c>, both real.</returns>
         /// <exception cref="TypeError">A text operand, with <see cref="EmathSqrt"/>'s text.</exception>
+        [AsArray]
         public abstract NDArray EmathLog(NDArray x);
 
         /// <summary>
@@ -44,6 +46,7 @@ namespace NumSharp
         /// <param name="x">The input, any dtype and layout.</param>
         /// <returns>The base-10 logarithm, complex under <see cref="EmathLog"/>'s conditions, else real.</returns>
         /// <exception cref="TypeError">A text operand, with <see cref="EmathSqrt"/>'s text.</exception>
+        [AsArray]
         public abstract NDArray EmathLog10(NDArray x);
 
         /// <summary>
@@ -53,6 +56,7 @@ namespace NumSharp
         /// <param name="x">The input, any dtype and layout.</param>
         /// <returns>The base-2 logarithm, complex under <see cref="EmathLog"/>'s conditions, else real.</returns>
         /// <exception cref="TypeError">A text operand, with <see cref="EmathSqrt"/>'s text.</exception>
+        [AsArray]
         public abstract NDArray EmathLog2(NDArray x);
 
         /// <summary>
@@ -71,6 +75,7 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException">Operands that do not broadcast together (NumPy's ValueError
         ///     <c>operands could not be broadcast together with shapes ...</c>), raised by the division after both
         ///     logarithms.</exception>
+        [AsArray]
         public abstract NDArray EmathLogn(NDArray n, NDArray x);
 
         /// <summary>
@@ -90,6 +95,7 @@ namespace NumSharp
         ///     ufunc.</exception>
         /// <remarks>A negative base with a non-integer exponent takes the complex power, which is <c>allclose</c> to
         ///     NumPy's but not bit-exact (the F5 complex-power divergence); integer exponents are exact.</remarks>
+        [AsArray]
         public abstract NDArray EmathPower(NDArray x, NDArray p);
 
         /// <summary>
@@ -103,6 +109,7 @@ namespace NumSharp
         /// <exception cref="TypeError">A text operand: the scan's <c>abs(x)</c> has no text loop, NumPy's <c>ufunc
         ///     'absolute' did not contain a loop with signature matching types ... -&gt; None</c>, even for an empty
         ///     array.</exception>
+        [AsArray]
         public abstract NDArray EmathArccos(NDArray x);
 
         /// <summary>
@@ -113,6 +120,7 @@ namespace NumSharp
         /// <returns>The inverse sine: real in <c>[-pi/2, pi/2]</c> while every real element has <c>|x| &lt;= 1</c>,
         ///     complex128 otherwise or for a complex input.</returns>
         /// <exception cref="TypeError">A text operand, with <see cref="EmathArccos"/>'s text.</exception>
+        [AsArray]
         public abstract NDArray EmathArcsin(NDArray x);
 
         /// <summary>
@@ -123,6 +131,7 @@ namespace NumSharp
         /// <returns>The inverse hyperbolic tangent: real while every real element has <c>|x| &lt;= 1</c>, complex128
         ///     otherwise or for a complex input.</returns>
         /// <exception cref="TypeError">A text operand, with <see cref="EmathArccos"/>'s text.</exception>
+        [AsArray]
         public abstract NDArray EmathArctanh(NDArray x);
     }
 }

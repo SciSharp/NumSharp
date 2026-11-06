@@ -47,6 +47,14 @@ namespace NumSharp
         ///     the wrap applies to, comma separated (<c>"0"</c>, <c>"0,2"</c>); <c>null</c> wraps every result.
         /// </summary>
         public string Outputs { get; set; }
+
+        /// <summary>
+        ///     The inputs whose class may wrap the result, comma separated (<c>nameof</c>), when NumPy's function creates the
+        ///     ufunc's <c>out=</c> from ONE operand (<c>np.strings.center</c>: <c>out = np.empty_like(a, ...)</c>, so a
+        ///     chararray fill beside a plain <c>a</c> gives a plain result); every input is still marked for the
+        ///     trivial-loop copy. <c>null</c>: every input may wrap, by priority.
+        /// </summary>
+        public string Wrap { get; set; }
     }
 
     /// <summary>
@@ -301,8 +309,11 @@ namespace NumSharp
     ///     matrix, the chararray). It returns the function's answer. An optional <see cref="Check"/> method is called at the
     ///     function's entry with the arguments bound the same way, before anything is computed (NumPy's errors that come
     ///     before the computation).
+    ///     <para>A rule may sit on the CONSTRUCTOR of the result struct a function returns (<c>np.unique</c>'s
+    ///     <c>UniqueResult</c>, <c>np.meshgrid</c>'s <c>MeshgridResult</c>): the struct is what the function computes, and
+    ///     the rule takes and returns it.</para>
     /// </remarks>
-    [AttributeUsage(AttributeTargets.Method, AllowMultiple = false, Inherited = false)]
+    [AttributeUsage(AttributeTargets.Method | AttributeTargets.Constructor, AllowMultiple = false, Inherited = false)]
     internal sealed class SubclassRuleAttribute : Attribute
     {
         /// <summary>Declares the rule.</summary>

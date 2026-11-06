@@ -72,6 +72,7 @@ namespace NumSharp
         ///     numpy.char.chararray boundaries and converts the sublist spelling before it calls this member.
         ///     </para>
         /// </remarks>
+        [AsArray]
         public abstract NDArray Einsum(string subscripts, NDArray[] operands, NDArray @out = null,
             DType dtype = null, char order = 'K', string casting = "safe", object optimize = null);
 

@@ -129,6 +129,27 @@ namespace NumSharp
         internal static bool IsNestedOperand(object nested)
             => NDMatrixBoundary.AtOutermostCall && HoldsOperand(nested);
 
+        /// <summary>
+        ///     Whether a nested sequence holds a subclass operand of <paramref name="kind"/> at any depth: the class
+        ///     <c>PyArray_GetSubType</c> would pick for a function that concatenates the leaves (<c>np.block</c>, <c>np.r_</c>:
+        ///     a matrix leaf wins).
+        /// </summary>
+        /// <param name="nested">An array, a sequence of arrays and sequences, or anything else.</param>
+        /// <param name="kind">The subclass looked for.</param>
+        /// <returns>True when a leaf is an operand of that class.</returns>
+        internal static bool HoldsKind(object nested, NDSubclassKind kind)
+        {
+            if (nested is NDArray array)
+                return KindOf(array) == kind;
+            if (!IsArraySequence(nested))
+                return false;
+            var list = (System.Collections.IList)nested;
+            for (int i = 0; i < list.Count; i++)
+                if (HoldsKind(list[i], kind))
+                    return true;
+            return false;
+        }
+
         /// <summary>Whether a nested sequence holds a subclass operand at any depth.</summary>
         /// <param name="nested">An array, a sequence, or anything else.</param>
         /// <returns>True when one is found.</returns>
@@ -283,6 +304,28 @@ namespace NumSharp
         internal static NDArray PlainView(NDArray a)
             => KindOf(a) == NDSubclassKind.None ? a : new NDArray(a.Storage.Alias()) { TensorEngine = a.TensorEngine };
 
+        /// <summary>
+        ///     <see cref="PlainView(NDArray)"/> for operands passed as one sequence (a <c>[PlainReceiver]</c> member's
+        ///     <c>NDArray[]</c> parameter): a NEW array holding each subclass element's plain view when any element is one;
+        ///     the sequence itself otherwise (the caller's array is never modified).
+        /// </summary>
+        /// <param name="arrays">The operands, or <c>null</c>.</param>
+        /// <returns>The plain sequence.</returns>
+        internal static NDArray[] PlainView(NDArray[] arrays)
+        {
+            if (arrays is null)
+                return null;
+            NDArray[] plain = null;
+            for (int i = 0; i < arrays.Length; i++)
+            {
+                if (KindOf(arrays[i]) == NDSubclassKind.None)
+                    continue;
+                plain ??= (NDArray[])arrays.Clone();
+                plain[i] = PlainView(arrays[i]);
+            }
+            return plain ?? arrays;
+        }
+
         #endregion
 
         #region Unaliasing (an operand handed back is the caller's object)
@@ -312,6 +355,49 @@ namespace NumSharp
             for (int i = 0; i < result.Length; i++)
                 if (ReferenceEquals(result[i], alias))
                     result[i] = original;
+            return result;
+        }
+
+        /// <summary>
+        ///     <see cref="Unalias(NDArray, NDArray, NDArray)"/> for a SEQUENCE operand: when the result is the plain view of one
+        ///     of its elements, the caller's element at that position.
+        /// </summary>
+        /// <param name="result">What the function returned on the plain sequence.</param>
+        /// <param name="aliases">The plain sequence the subclass path made (the caller's own array when no element was a
+        ///     subclass operand).</param>
+        /// <param name="originals">The caller's sequence.</param>
+        /// <returns>The caller's element, or <paramref name="result"/>.</returns>
+        internal static NDArray Unalias(NDArray result, NDArray[] aliases, NDArray[] originals)
+        {
+            // Nothing was replaced when the sequence held no subclass operand (Plain returned it itself).
+            if (result is null || aliases is null || ReferenceEquals(aliases, originals))
+                return result;
+            for (int i = 0; i < aliases.Length && i < originals.Length; i++)
+                if (ReferenceEquals(result, aliases[i]))
+                    return originals[i];
+            return result;
+        }
+
+        /// <summary>
+        ///     <see cref="Unalias(NDArray, NDArray[], NDArray[])"/> for each element of a multi-array result, in place
+        ///     (<c>np.atleast_1d(m, c)</c> hands back each array that already has the rank).
+        /// </summary>
+        /// <param name="result">The results (a new array the computation built, or the plain sequence itself).</param>
+        /// <param name="aliases">The plain sequence the subclass path made.</param>
+        /// <param name="originals">The caller's sequence.</param>
+        /// <returns><paramref name="result"/>, every element that is a plain view replaced by the caller's element.</returns>
+        /// <remarks>Quadratic in the two lengths: it runs on the subclass path only, over a call's handful of operands.</remarks>
+        internal static NDArray[] Unalias(NDArray[] result, NDArray[] aliases, NDArray[] originals)
+        {
+            if (result is null || aliases is null || ReferenceEquals(aliases, originals))
+                return result;
+            for (int r = 0; r < result.Length; r++)
+                for (int i = 0; i < aliases.Length && i < originals.Length; i++)
+                    if (ReferenceEquals(result[r], aliases[i]))
+                    {
+                        result[r] = originals[i];
+                        break;
+                    }
             return result;
         }
 
@@ -671,6 +757,12 @@ namespace NumSharp
                     result[i] = AsArray(result[i]);
             return result;
         }
+
+        /// <summary><see cref="AsArray(NDArray)"/> for each slot of a two-array result (<c>np.broadcast_arrays(lhs, rhs)</c>).</summary>
+        /// <param name="result">The pair on the plain views (unaliased).</param>
+        /// <returns>The pair, each slot plain.</returns>
+        internal static (NDArray, NDArray) AsArray((NDArray, NDArray) result)
+            => (AsArray(result.Item1), AsArray(result.Item2));
 
         #endregion
 

@@ -50,8 +50,6 @@ namespace NumSharp
             /// </remarks>
             public static NDArray isalpha(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
             {
-                if (NDCharArrayBoundary.Sees(x, @out))
-                    return NDCharArrayBoundary.WrappedUfunc((x, @out, where, dtype), static s => isalpha(s.x, s.@out, s.where, s.dtype), x, null, @out);
                 if (x is null)
                     throw new ArgumentNullException(nameof(x));
                 return NDStringMethods.Predicate(NDTextElements.IsAlphaKind, x, @out, where, dtype);
@@ -90,8 +88,6 @@ namespace NumSharp
             /// </remarks>
             public static NDArray isdigit(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
             {
-                if (NDCharArrayBoundary.Sees(x, @out))
-                    return NDCharArrayBoundary.WrappedUfunc((x, @out, where, dtype), static s => isdigit(s.x, s.@out, s.where, s.dtype), x, null, @out);
                 if (x is null)
                     throw new ArgumentNullException(nameof(x));
                 return NDStringMethods.Predicate(NDTextElements.IsDigitKind, x, @out, where, dtype);
@@ -131,8 +127,6 @@ namespace NumSharp
             /// </remarks>
             public static NDArray isspace(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
             {
-                if (NDCharArrayBoundary.Sees(x, @out))
-                    return NDCharArrayBoundary.WrappedUfunc((x, @out, where, dtype), static s => isspace(s.x, s.@out, s.where, s.dtype), x, null, @out);
                 if (x is null)
                     throw new ArgumentNullException(nameof(x));
                 return NDStringMethods.Predicate(NDTextElements.IsSpaceKind, x, @out, where, dtype);
@@ -171,8 +165,6 @@ namespace NumSharp
             /// </remarks>
             public static NDArray isalnum(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
             {
-                if (NDCharArrayBoundary.Sees(x, @out))
-                    return NDCharArrayBoundary.WrappedUfunc((x, @out, where, dtype), static s => isalnum(s.x, s.@out, s.where, s.dtype), x, null, @out);
                 if (x is null)
                     throw new ArgumentNullException(nameof(x));
                 return NDStringMethods.Predicate(NDTextElements.IsAlnumKind, x, @out, where, dtype);
@@ -211,8 +203,6 @@ namespace NumSharp
             /// </remarks>
             public static NDArray islower(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
             {
-                if (NDCharArrayBoundary.Sees(x, @out))
-                    return NDCharArrayBoundary.WrappedUfunc((x, @out, where, dtype), static s => islower(s.x, s.@out, s.where, s.dtype), x, null, @out);
                 if (x is null)
                     throw new ArgumentNullException(nameof(x));
                 return NDStringMethods.Predicate(NDTextElements.IsLowerKind, x, @out, where, dtype);
@@ -251,8 +241,6 @@ namespace NumSharp
             /// </remarks>
             public static NDArray isupper(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
             {
-                if (NDCharArrayBoundary.Sees(x, @out))
-                    return NDCharArrayBoundary.WrappedUfunc((x, @out, where, dtype), static s => isupper(s.x, s.@out, s.where, s.dtype), x, null, @out);
                 if (x is null)
                     throw new ArgumentNullException(nameof(x));
                 return NDStringMethods.Predicate(NDTextElements.IsUpperKind, x, @out, where, dtype);
@@ -292,8 +280,6 @@ namespace NumSharp
             /// </remarks>
             public static NDArray istitle(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
             {
-                if (NDCharArrayBoundary.Sees(x, @out))
-                    return NDCharArrayBoundary.WrappedUfunc((x, @out, where, dtype), static s => istitle(s.x, s.@out, s.where, s.dtype), x, null, @out);
                 if (x is null)
                     throw new ArgumentNullException(nameof(x));
                 return NDStringMethods.Predicate(NDTextElements.IsTitleKind, x, @out, where, dtype);
@@ -331,8 +317,6 @@ namespace NumSharp
             /// </remarks>
             public static NDArray isdecimal(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
             {
-                if (NDCharArrayBoundary.Sees(x, @out))
-                    return NDCharArrayBoundary.WrappedUfunc((x, @out, where, dtype), static s => isdecimal(s.x, s.@out, s.where, s.dtype), x, null, @out);
                 if (x is null)
                     throw new ArgumentNullException(nameof(x));
                 return NDStringMethods.Predicate(NDTextElements.IsDecimalKind, x, @out, where, dtype);
@@ -370,8 +354,6 @@ namespace NumSharp
             /// </remarks>
             public static NDArray isnumeric(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
             {
-                if (NDCharArrayBoundary.Sees(x, @out))
-                    return NDCharArrayBoundary.WrappedUfunc((x, @out, where, dtype), static s => isnumeric(s.x, s.@out, s.where, s.dtype), x, null, @out);
                 if (x is null)
                     throw new ArgumentNullException(nameof(x));
                 return NDStringMethods.Predicate(NDTextElements.IsNumericKind, x, @out, where, dtype);
