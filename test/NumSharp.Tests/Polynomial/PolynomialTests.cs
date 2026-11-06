@@ -163,6 +163,82 @@ namespace NumSharp.Tests.Polynomial
                 .Should().Throw<ValueError>().WithMessage("Order of derivative must be positive (see polyint)");
         }
 
+        /// <summary>
+        ///     NumPy 2.4.2's polyder is <c>n = len(p) - 1; y = p[:-1] * arange(n, 0, -1); val = p if m == 0 else
+        ///     polyder(y, m - 1)</c>: the ramp has <c>len(p) - 1</c> terms (the FIRST axis), so a 2-D p is differentiated
+        ///     along its rows, the ramp broadcasting against each row's last axis. Probed: <c>np.polyder(np.ones((3, 2)))</c>
+        ///     is <c>[[2, 1], [2, 1]]</c>, <c>np.polyder(np.arange(6.).reshape(3, 2))</c> is <c>[[0, 1], [4, 3]]</c>,
+        ///     <c>np.polyder(np.ones((3, 2, 2)))</c> is four rows of <c>[2, 1]</c> in shape (2, 2, 2), and the order 0 of a
+        ///     (3, 2, 2) p is p itself. NumSharp's ramp had <c>p.size - 1</c> terms before the np-layer plan's NL9, and every
+        ///     2-D call raised.
+        /// </summary>
+        [TestMethod]
+        public void Polyder_TwoDimensionalP_DifferentiatesAlongTheFirstAxis()
+        {
+            using var d1 = np.polyder(np.ones(new Shape(3, 2)));
+            d1.Should().BeShaped(2, 2).And.BeOfValues(2.0, 1.0, 2.0, 1.0);
+            using var d2 = np.polyder(np.arange(6.0).reshape(3, 2));
+            d2.Should().BeOfValues(0.0, 1.0, 4.0, 3.0);
+            using var d3 = np.polyder(np.ones(new Shape(3, 2, 2)));
+            d3.Should().BeShaped(2, 2, 2).And.BeOfValues(2.0, 1.0, 2.0, 1.0, 2.0, 1.0, 2.0, 1.0);
+            using var d0 = np.polyder(np.ones(new Shape(3, 2, 2)), 0);
+            d0.Should().BeShaped(3, 2, 2);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>n = len(p) - 1</c> runs before the <c>m == 0</c> test, so a 0-d p raises <c>TypeError: len() of
+        ///     unsized object</c> at EVERY order, 0 included (probed for m = 0, 1 and 2). NumSharp returned the 0-d array for
+        ///     m = 0 and raised the slice's IndexError for m &gt;= 1 before NL9.
+        /// </summary>
+        [TestMethod]
+        public void Polyder_ZeroDimensionalP_IsLensTypeErrorAtEveryOrder()
+        {
+            using var p = np.array(5.0);
+            foreach (int m in new[] { 0, 1, 2 })
+                new Action(() => np.polyder(p, m)).Should().Throw<TypeError>().WithMessage("len() of unsized object", $"m = {m}");
+        }
+
+        /// <summary>
+        ///     NumPy's recursion computes <c>y = p[:-1] * arange(n, 0, -1)</c> at every level, the last one (m == 0) included,
+        ///     and discards that last product - but it still raises when the product does not broadcast. Probed:
+        ///     <c>np.polyder(np.ones((3, 4)), 0)</c> raises <c>operands could not be broadcast together with shapes (2,4) (2,)
+        ///     </c>, and <c>np.polyder(np.ones((3, 2)), 2)</c> and <c>(..., 3)</c> raise it for <c>(0,2) (0,) </c> (after the
+        ///     products that succeed). NumSharp raises a broadcast mismatch as IncorrectShapeException with NumPy's text (the
+        ///     house type for NumPy's ValueError there).
+        /// </summary>
+        [TestMethod]
+        public void Polyder_DiscardedOrderZeroProduct_StillRaises()
+        {
+            new Action(() => np.polyder(np.ones(new Shape(3, 4)), 0))
+                .Should().Throw<IncorrectShapeException>().WithMessage("operands could not be broadcast together with shapes (2,4) (2,) ");
+            new Action(() => np.polyder(np.ones(new Shape(3, 2)), 2))
+                .Should().Throw<IncorrectShapeException>().WithMessage("operands could not be broadcast together with shapes (0,2) (0,) ");
+            new Action(() => np.polyder(np.ones(new Shape(3, 2)), 3))
+                .Should().Throw<IncorrectShapeException>().WithMessage("operands could not be broadcast together with shapes (0,2) (0,) ");
+        }
+
+        /// <summary>
+        ///     The 1-D results the m == 0 shortcut must not change, against NumPy 2.4.2: bool coefficients lift to int64
+        ///     (<c>[True, False, True]</c> gives <c>[2, 0]</c>, then <c>[2]</c>), complex ones stay complex
+        ///     (<c>[1+2j, 3, 4j]</c> gives <c>[2+4j, 3]</c>), an empty float p stays an empty float64 at every order, and a
+        ///     one-term int p is an empty int64 from m = 1 on (the int64 ramp), itself at m = 0.
+        /// </summary>
+        [TestMethod]
+        public void Polyder_OneDimensional_DtypesAndEdgeOrders_MatchNumPy()
+        {
+            np.polyder(np.array(new[] { true, false, true })).Should().BeOfValues(2L, 0L).And.BeOfType(NPTypeCode.Int64);
+            np.polyder(np.array(new[] { true, false, true }), 2).Should().BeOfValues(2L);
+            np.polyder(np.array(new[] { true, false, true }), 0).Should().BeOfValues(true, false, true);
+            var c = np.polyder(np.array(new[] { new System.Numerics.Complex(1, 2), new System.Numerics.Complex(3, 0), new System.Numerics.Complex(0, 4) }));
+            c.Should().BeOfType(NPTypeCode.Complex).And.BeShaped(2);
+            c.GetAtIndex<System.Numerics.Complex>(0).Should().Be(new System.Numerics.Complex(2, 4));
+            c.GetAtIndex<System.Numerics.Complex>(1).Should().Be(new System.Numerics.Complex(3, 0));
+            foreach (int m in new[] { 0, 1, 2 })
+                np.polyder(np.array(new double[0]), m).Should().BeShaped(0).And.BeOfType(NPTypeCode.Double);
+            np.polyder(np.array(new long[] { 5 }), 0).Should().BeOfValues(5L);
+            np.polyder(np.array(new long[] { 5 }), 2).Should().BeShaped(0).And.BeOfType(NPTypeCode.Int64);
+        }
+
         [TestMethod]
         public void Polyint_AlwaysFloat_WithConstants()
         {

@@ -66,18 +66,22 @@ namespace NumSharp
         ///     <c>p[:-1] * arange(n, 0, -1)</c> with <c>n = len(p) - 1</c>.
         /// </summary>
         /// <param name="p">The coefficients, highest degree first (null is NumPy's None: <c>asarray(None)</c>'s refusal).
-        ///     Each order slices the FIRST axis and multiplies by an int64 ramp of the array's size, so an N-D p meets
-        ///     the multiply's broadcast error, as in NumPy.</param>
-        /// <param name="m">The order of differentiation: 0 returns <c>asarray(p)</c> itself.</param>
+        ///     Each order slices the FIRST axis (<c>len(p)</c>) and multiplies by an int64 ramp of <c>len(p) - 1</c> terms,
+        ///     which broadcasts against the LAST axis of <c>p[:-1]</c>: a 2-D p is differentiated along its rows, as NumPy's
+        ///     statement does (<c>np.polyder(np.ones((3, 2)))</c> is <c>[[2, 1], [2, 1]]</c>).</param>
+        /// <param name="m">The order of differentiation: 0 returns <c>asarray(p)</c> itself, after NumPy's discarded
+        ///     <c>m == 0</c> product has had its chance to raise.</param>
         /// <returns>The derivative's coefficients (int32 coefficients become int64 through the int64 ramp); for
         ///     <paramref name="m"/> past the degree, an empty array.</returns>
         /// <exception cref="ValueError">A negative <paramref name="m"/> (<c>Order of derivative must be positive (see
         ///     polyint)</c>), checked before <paramref name="p"/> is read.</exception>
         /// <exception cref="System.NotSupportedException"><paramref name="p"/> is null (NumPy's object array of None).</exception>
-        /// <exception cref="IncorrectShapeException">An N-D p whose rows do not broadcast with the ramp (the multiply's
-        ///     <c>operands could not be broadcast together</c>, NumPy's ValueError).</exception>
-        /// <exception cref="IndexError">A 0-d p sliced with <c>[:-1]</c> (<c>too many indices for array</c>).</exception>
-        /// <exception cref="TypeError">Text coefficients, which the multiply has no loop for.</exception>
+        /// <exception cref="IncorrectShapeException">An N-D p whose <c>p[:-1]</c> does not broadcast with the ramp at some
+        ///     level, the <c>m == 0</c> one included (the multiply's <c>operands could not be broadcast together with shapes
+        ///     (2,4) (2,) </c>, NumPy's ValueError): <c>np.polyder(np.ones((3, 4)), 0)</c> raises.</exception>
+        /// <exception cref="TypeError">A 0-d p, at every order, 0 included (<c>len() of unsized object</c>); text
+        ///     coefficients the multiply has no loop for (a fixed-width one; a <c>StringDType</c> p repeats its strings, as
+        ///     NumPy's string multiply does).</exception>
         /// <remarks>
         ///     NumPy writes polyder in Python (<c>numpy/lib/_polynomial_impl.py</c>, which also handles a poly1d - NumSharp's
         ///     poly1d calls its own derivative); DefaultEngine runs its loop over the array object's slice and multiply.

@@ -43,11 +43,11 @@ namespace NumSharp.Tests
     //        build of NumSharp.Core keeps the call's NaN where NumPy (and a Release build, by the JIT's operand order)
     //        keeps the accumulator's. Found by the journey4 merge's Debug gate, where it fails
     //        ShortRows_SeveralNaNs_KeepTheRunningSumsNaN and Trapezoid_NaNSpacing_IsTheProductsFirstOperand.
-    //   NL9  np.polyder differentiates p.size - 1 terms per order where NumPy's `n = len(p) - 1` takes the first axis, and
-    //        computes m products where NumPy's recursion computes m + 1 (the last one, at m == 0, discarded): a 2-D p is
-    //        differentiated along its rows in NumPy and refused here, a 0-d p raises len()'s TypeError in NumPy at every
-    //        order (0 included), and an N-D p whose extra product does not broadcast raises in NumPy, also at m == 0.
-    //        Found by P8's move of polyder onto TensorEngine (434cc8d4), which kept the behaviour.
+    //   NL9  FIXED (the plan's D24, 2026-11-06): np.polyder differentiated p.size - 1 terms per order where NumPy's
+    //        `n = len(p) - 1` takes the first axis, and computed m products where NumPy's recursion computes m + 1 (the last
+    //        one discarded but still raising), so a 2-D p was refused and a 0-d p was not len()'s TypeError at every order.
+    //        Its tests moved to PolynomialTests (Polyder_TwoDimensionalP_DifferentiatesAlongTheFirstAxis,
+    //        Polyder_ZeroDimensionalP_IsLensTypeErrorAtEveryOrder, Polyder_DiscardedOrderZeroProduct_StillRaises).
     //   NL10 FIXED (the plan's D24, 2026-11-06): np.einsum_path with an ellipsis and too few operands leaked .NET's
     //        IndexOutOfRangeException where NumPy's _parse_einsum_input raises IndexError("list index out of range"), and
     //        an explicit path past the operands leaked ArgumentOutOfRangeException where NumPy's pop raises IndexError("pop
@@ -357,74 +357,6 @@ namespace NumSharp.Tests
             using var f = np.array(new[] { N32(1), 2f, N32(2) });
             using var sf = np.sum(f);
             BitConverter.SingleToInt32Bits(sf.GetSingle()).Should().Be(0x7FC00001, "float32 run: the first element's NaN");
-        }
-
-        // ------------------------------------------------------------------
-        // NL9 — np.polyder counts p.size terms and computes one product fewer than NumPy
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     NumPy 2.4.2's polyder is <c>n = len(p) - 1; y = p[:-1] * arange(n, 0, -1); val = p if m == 0 else
-        ///     polyder(y, m - 1)</c>: the ramp has <c>len(p) - 1</c> terms (the FIRST axis), so a 2-D p is differentiated
-        ///     along its rows, the rows broadcasting against the ramp. Probed: <c>np.polyder(np.ones((3, 2)))</c> is float64
-        ///     <c>[[2., 1.], [2., 1.]]</c> and <c>np.polyder(np.arange(6.).reshape(3, 2))</c> is <c>[[0., 1.], [4., 3.]]</c>.
-        ///     NumSharp's ramp has <c>p.size - 1</c> terms (5), which do not broadcast against the (2, 2) rows, so both calls
-        ///     raise the multiply's IncorrectShapeException.
-        /// </summary>
-        /// <remarks>Root cause: <c>DefaultEngine.Polyder</c> (Backends/Default/Polynomial/Default.Polynomial.cs) takes
-        ///     <c>n = p.size - 1</c> and loops m times instead of NumPy's len() and its recursion. A 1-D p is the same either
-        ///     way, which is why the oracle's <c>poly</c> tier (1-D series) passes.</remarks>
-        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL9")]
-        public void NpLayer_Polyder_TwoDimensionalP_ShouldDifferentiateAlongTheFirstAxis()
-        {
-            using var ones = np.ones(new Shape(3, 2));
-            using var ramp = np.arange(6.0).reshape(3, 2);
-
-            using var d1 = np.polyder(ones);
-            d1.shape.Should().Equal(2L, 2L);
-            d1.ToArray<double>().Should().Equal(2.0, 1.0, 2.0, 1.0);
-
-            using var d2 = np.polyder(ramp);
-            d2.ToArray<double>().Should().Equal(0.0, 1.0, 4.0, 3.0);
-        }
-
-        /// <summary>
-        ///     NumPy's <c>n = len(p) - 1</c> runs before the <c>m == 0</c> test, so a 0-d p raises <c>TypeError: len() of
-        ///     unsized object</c> at EVERY order, 0 included (probed for m = 0, 1 and 2). NumSharp returns the 0-d array for
-        ///     m = 0 and raises the slice's IndexError (<c>too many indices for array</c>) for m &gt;= 1.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL9")]
-        public void NpLayer_Polyder_ZeroDimensionalP_ShouldRaiseLensTypeErrorAtEveryOrder()
-        {
-            using var p = np.array(5.0);
-
-            foreach (int m in new[] { 0, 1, 2 })
-            {
-                Action act = () => np.polyder(p, m);
-                act.Should().Throw<TypeError>().WithMessage("len() of unsized object", $"m = {m}");
-            }
-        }
-
-        /// <summary>
-        ///     NumPy's recursion computes <c>y = p[:-1] * arange(n, 0, -1)</c> at every level, the last one (m == 0) included,
-        ///     and discards that last product - but it still raises when the product does not broadcast. Probed:
-        ///     <c>np.polyder(np.ones((3, 4)), 0)</c> raises <c>ValueError: operands could not be broadcast together with
-        ///     shapes (2,4) (2,) </c>, and <c>np.polyder(np.ones((3, 2)), 2)</c> raises the same for <c>(0,2) (0,) </c> (the
-        ///     third product, after two that succeed). NumSharp computes only m products: it returns p for m = 0, and its
-        ///     m = 2 call meets its own p.size ramp error at the first product instead. NumSharp raises a broadcast mismatch
-        ///     as IncorrectShapeException with NumPy's text (the house type for NumPy's ValueError there).
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL9")]
-        public void NpLayer_Polyder_ExtraProduct_ShouldRaiseWhereNumPysRecursionDoes()
-        {
-            using var wide = np.ones(new Shape(3, 4));
-            using var tall = np.ones(new Shape(3, 2));
-
-            Action orderZero = () => np.polyder(wide, 0);
-            Action orderTwo = () => np.polyder(tall, 2);
-
-            orderZero.Should().Throw<IncorrectShapeException>().WithMessage("operands could not be broadcast together with shapes (2,4) (2,) ");
-            orderTwo.Should().Throw<IncorrectShapeException>().WithMessage("operands could not be broadcast together with shapes (0,2) (0,) ");
         }
 
         // ------------------------------------------------------------------

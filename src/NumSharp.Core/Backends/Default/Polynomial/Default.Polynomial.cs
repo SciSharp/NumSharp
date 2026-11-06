@@ -213,20 +213,49 @@ namespace NumSharp.Backends
 
             p = NDArray.asarray(p, null, 'K', null);   // np.asarray(p)
 
-            // Each order differentiates once: y = p[:-1] * arange(n, 0, -1). The int64 arange is what lifts int32
-            // coefficients to int64 (matching NumPy). n is p.size - 1, where NumPy's statement is len(p) - 1: the same for a
-            // 1-D p, but an N-D p meets the multiply's broadcast error and a 0-d one the slice's IndexError, where NumPy
-            // differentiates along the first axis or raises len()'s TypeError (pinned as an open bug, not changed by a move).
-            for (int iteration = 0; iteration < m; iteration++)
+            // NumPy's recursion (numpy/lib/_polynomial_impl.py), unrolled from the order m down to 0:
+            //     n = len(p) - 1
+            //     y = p[:-1] * NX.arange(n, 0, -1)
+            //     val = p if m == 0 else polyder(y, m - 1)
+            // Every level - the m == 0 one included - measures p with len(), its FIRST axis: a 2-D p is differentiated along
+            // its rows (the ramp broadcasting against the LAST axis of p[:-1]), and a 0-d p is len()'s TypeError at every
+            // order. The int64 ramp lifts int32 coefficients to int64 (and a bool p to int64), as in NumPy.
+            for (int level = m; ; level--)
             {
-                long n = p.size - 1;
+                if (p.ndim == 0)
+                    throw new TypeError("len() of unsized object");
+
+                // The m == 0 level computes y too and discards it; it matters only when it raises. For a 1-D p of a
+                // numeric dtype it cannot (p[:-1] and the ramp both hold n elements, and multiply has a loop for every
+                // numeric dtype with int64), so that product is skipped - the result and every error stay NumPy's, and
+                // the default order costs one product, not two. An N-D or a text p computes it: its broadcast or loop
+                // error is NumPy's answer (np.polyder(ones((3, 4)), 0) raises; a StringDType p repeats its strings).
+                if (level == 0 && p.ndim == 1 && IsNumericForPolyder(p))
+                    return p;
+
+                long n = p.Shape.dimensions[0] - 1;
                 NDArray head = p[":-1"];
                 NDArray factors = UnmanagedStorage.ArangeObj(n, 0L, -1L, null);   // np.arange(n, 0, -1): an int64 ramp
-                p = head * factors;
+                NDArray y = head * factors;
+                if (level == 0)
+                    return p;
+                p = y;
             }
-
-            return p;
         }
+
+        /// <summary>
+        ///     Whether <c>p[:-1] * arange(n, 0, -1)</c> over a 1-D <paramref name="p"/> can never raise: one of the 15 numeric
+        ///     dtypes, for each of which the multiply has an int64 loop (the <see cref="NDArray"/> operator is elementwise
+        ///     whatever the operand's class). Text, or any dtype this test does not know, returns false, so its product runs
+        ///     and raises (or computes) as NumPy's does.
+        /// </summary>
+        /// <param name="p">The coefficients.</param>
+        /// <returns>True only for a numeric <see cref="NPTypeCode"/>.</returns>
+        private static bool IsNumericForPolyder(NDArray p)
+            => p.GetTypeCode is NPTypeCode.Boolean or NPTypeCode.Byte or NPTypeCode.SByte or NPTypeCode.Int16
+                or NPTypeCode.UInt16 or NPTypeCode.Int32 or NPTypeCode.UInt32 or NPTypeCode.Int64 or NPTypeCode.UInt64
+                or NPTypeCode.Char or NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Decimal
+                or NPTypeCode.Complex;
 
         /// <inheritdoc />
         [NDScoped /* PolyfitResult is an INDArrayCarrier: the outputs it carries are yielded, every float-cast / vander / scale / cov temporary is reclaimed */]
