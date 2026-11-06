@@ -61,7 +61,7 @@ A file-based app (`dotnet run app.cs`) starts with two lines, `#:package NumShar
 `#:property PublishAot=false`. Without the second, the app runs as Native AOT would, where .NET cannot run code
 generated at run time, and NumSharp's first array arithmetic (`x * 2`, `x > 0.5`, `np.sqrt(x)`) throws
 `PlatformNotSupportedException: Dynamic code generation is not supported on this platform`. The build says so
-first: any project that references NumSharp with `PublishAot=true` gets warning NDW020, which names the line to
+first: any project that references NumSharp with `PublishAot=true` gets warning NDW021, which names the line to
 add (`<PublishAot>false</PublishAot>` in a project file). NumSharp does not support Native AOT; a project that
 only uses NumSharp's types can silence the warning with `-p:NumSharpDisableAotWarning=true`.
 

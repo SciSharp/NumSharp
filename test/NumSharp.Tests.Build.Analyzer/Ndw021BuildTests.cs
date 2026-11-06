@@ -7,7 +7,8 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace NumSharp.Tests.Build.Analyzer
 {
     /// <summary>
-    ///     NDW020 (P5 of the 0.80.0-beta1 bridge QA, the owner's decision of 2026-11-05): NumSharp.Core's
+    ///     NDW021 (P5 of the 0.80.0-beta1 bridge QA, the owner's decision of 2026-11-05; numbered NDW020 until the merge into
+    ///     strings, where the culture rule of parity QA-41 had taken that id): NumSharp.Core's
     ///     <c>build/NumSharp.targets</c> warns at BUILD time when a project that references NumSharp sets
     ///     <c>PublishAot=true</c>, because that setting switches dynamic code off - in a plain build and
     ///     <c>dotnet run</c> too, and by default in every .NET 10 file-based app - and NumSharp generates its array
@@ -18,7 +19,7 @@ namespace NumSharp.Tests.Build.Analyzer
     /// </summary>
     [TestClass]
     [TestCategory("AnalyzerBuild")]
-    public class Ndw020BuildTests
+    public class Ndw021BuildTests
     {
         /// <summary>
         ///     The generated consumer targets the TFM of the RUNNING test host, because it references the host's own
@@ -27,17 +28,17 @@ namespace NumSharp.Tests.Build.Analyzer
         private static string HostTfm => $"net{Environment.Version.Major}.0";
 
         /// <summary>
-        ///     With <c>PublishAot=true</c> the build warns NDW020 - naming the project, the one-line fix for a
+        ///     With <c>PublishAot=true</c> the build warns NDW021 - naming the project, the one-line fix for a
         ///     file-based app and the help page - and still succeeds (a warning only). The test also pins the premise
         ///     the warning rests on: the SDK writes <c>IsDynamicCodeSupported=false</c> into the built app's
         ///     runtimeconfig, so even <c>dotnet run</c> (a JIT run, not a Native AOT publish) has no dynamic code.
         /// </summary>
         [TestMethod]
-        public void Ndw020_Fires_WhenPublishAotIsOn_NamingTheFix()
+        public void Ndw021_Fires_WhenPublishAotIsOn_NamingTheFix()
         {
             RunConsumer("-p:PublishAot=true", (output, work) =>
             {
-                StringAssert.Contains(output, "warning NDW020", "PublishAot=true must warn NDW020:\n" + output);
+                StringAssert.Contains(output, "warning NDW021", "PublishAot=true must warn NDW021:\n" + output);
                 StringAssert.Contains(output, "T sets PublishAot=true", "the message names the project");
                 StringAssert.Contains(output, "'#:property PublishAot=false'", "the message names the file-based app's fix");
                 StringAssert.Contains(output, "absolute-basics.html#ndw020", "the message links its help section");
@@ -50,25 +51,25 @@ namespace NumSharp.Tests.Build.Analyzer
             });
         }
 
-        /// <summary>An ordinary project (PublishAot unset) builds without NDW020.</summary>
+        /// <summary>An ordinary project (PublishAot unset) builds without NDW021.</summary>
         [TestMethod]
-        public void Ndw020_IsSilent_WhenPublishAotIsOff()
+        public void Ndw021_IsSilent_WhenPublishAotIsOff()
         {
             RunConsumer("", (output, _) =>
-                Assert.IsFalse(output.Contains("NDW020"), "NDW020 must be silent when PublishAot is not set:\n" + output));
+                Assert.IsFalse(output.Contains("NDW021"), "NDW021 must be silent when PublishAot is not set:\n" + output));
             RunConsumer("-p:PublishAot=false", (output, _) =>
-                Assert.IsFalse(output.Contains("NDW020"), "NDW020 must be silent when PublishAot=false:\n" + output));
+                Assert.IsFalse(output.Contains("NDW021"), "NDW021 must be silent when PublishAot=false:\n" + output));
         }
 
         /// <summary>
-        ///     The opt-out: a project that only uses NumSharp's types, and knows it never computes, silences NDW020 with
+        ///     The opt-out: a project that only uses NumSharp's types, and knows it never computes, silences NDW021 with
         ///     <c>NumSharpDisableAotWarning=true</c> - the knob the targets file documents.
         /// </summary>
         [TestMethod]
-        public void Ndw020_IsSilent_WithTheOptOut()
+        public void Ndw021_IsSilent_WithTheOptOut()
         {
             RunConsumer("-p:PublishAot=true -p:NumSharpDisableAotWarning=true", (output, _) =>
-                Assert.IsFalse(output.Contains("NDW020"), "NumSharpDisableAotWarning=true must silence NDW020:\n" + output));
+                Assert.IsFalse(output.Contains("NDW021"), "NumSharpDisableAotWarning=true must silence NDW021:\n" + output));
         }
 
         /// <summary>
@@ -82,7 +83,7 @@ namespace NumSharp.Tests.Build.Analyzer
         {
             var dotnet = FindDotnet();
             if (dotnet == null)
-                Assert.Inconclusive("dotnet CLI not found on PATH — skipping the NDW020 build test");
+                Assert.Inconclusive("dotnet CLI not found on PATH — skipping the NDW021 build test");
 
             var targets = RepoFile("src/NumSharp.Core/build/NumSharp.targets");
             var numsharpDll = typeof(NumSharp.NDArray).Assembly.Location;
@@ -138,7 +139,7 @@ namespace NumSharp.Tests.Build.Analyzer
                 Assert.Inconclusive("dotnet build timed out");
             }
             var output = sb.ToString();
-            Assert.AreEqual(0, p.ExitCode, "the generated project must build (NDW020 is only a warning):\n" + output);
+            Assert.AreEqual(0, p.ExitCode, "the generated project must build (NDW021 is only a warning):\n" + output);
             return output;
         }
 

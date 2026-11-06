@@ -56,7 +56,7 @@ log (section 7). Every new idea becomes a work-list row before it is worked on.
   over a pinned managed array (ML.NET, Tensors, and ORT's `DenseTensor<T>` view, which reported nothing) books it the
   same way - forgotten views of fresh 602 KB arrays held +2.3-2.7 GB unbooked and +96-299 MB booked, and disposed
   views pay no collection where per-lease pressure ran 12-41 gen-2 collections per 5,000 (section 5, P8).
-- **Deferred, documented**: P3, P15 (section 5; both re-asked and deferred again on 2026-11-05). P5 done (NDW020); P19 done on branch `qa/ufunc-keeporder` (`ecd70236`, not merged): every fresh ufunc result takes
+- **Deferred, documented**: P3, P15 (section 5; both re-asked and deferred again on 2026-11-05). P5 done (NDW021; NDW020 until the merge into strings, where parity QA-41's culture rule had taken that id); P19 done on branch `qa/ufunc-keeporder` (`ecd70236`, not merged): every fresh ufunc result takes
   NumPy's layout, so an elementwise result of a permuted view keeps the permutation (parity QA-36). F79's
   `Postprocess.Softmax` / `LogSoftmax` check is not re-run yet: this branch does not carry the Core change.
 - **F84 (high), resolved**: P21 merged (`6a5b9879`) - the result dictionary implements Core's public `INDArrayCarrier`,
@@ -321,7 +321,7 @@ rides in P12's commit) - and `qa/proposals-all` merges all seven with their thre
   still resolve in 0.80 - luck, not a contract). Options: an exact pin `[0.80.0-beta1]` (safest; the family is
   released together anyway), a minor window `[0.80.0-beta1, 0.81.0)`, or keep. Recommended: the exact pin for every
   package that uses internals, set once in the shared props.
-- **P5 (F05, F06) The first run in a .NET 10 file-based app.** **Done 2026-11-05 (`e41c75f6`): NDW020, the build warning when PublishAot=true.** Proven: `dotnet run app.cs` defaults to
+- **P5 (F05, F06) The first run in a .NET 10 file-based app.** **Done 2026-11-05 (`e41c75f6`): NDW021 (named NDW020 until the merge into strings on 2026-11-06: parity QA-41's analyzer rule for culture-independent exception texts had landed there as NDW020 first), the build warning when PublishAot=true.** Proven: `dotnet run app.cs` defaults to
   `PublishAot=true`, and NumSharp's first IL kernel throws `PlatformNotSupportedException: Dynamic code generation is
   not supported`; `#:property PublishAot=false` fixes it. Options: a build warning from `build/NumSharp.targets` when
   `PublishAot` is true (it also catches a real NativeAOT publish), and a line in the getting-started docs. NDW012 on
@@ -751,7 +751,7 @@ last option "Defer").
 | F20 / P8 | defer, with the question "like NDArray's C# and the pythonnet bridge, what do we miss here?" | answered in section 5 (P8): a measured fix is ready |
 | F11 / P3 | defer ("we will tackle string later") | stays deferred |
 | F20 / P8, F49 / P15, F11 / P3 (2026-11-05) | defer again (all three) | stay deferred |
-| F05 / F06 / P5 (2026-11-05) | build warning NDW020 | `e41c75f6` |
+| F05 / F06 / P5 (2026-11-05) | build warning NDW020 (NDW021 since the merge into strings) | `e41c75f6` |
 | F79 / P19 (2026-11-05) | "Port KEEPORDER now" - "With parity to Numpy" | `ecd70236` on branch `qa/ufunc-keeporder` (from strings `1901e0ce`, not merged) |
 | F20 / P8 (2026-11-06), `ToOrtValue` | "NumSharp manages ORT's value (Recommended)" (R7: ORT frees, NumSharp books until Dispose or collection) | branch `qa/p8-booking` |
 | F20 / P8 (2026-11-06), the native-memory import leases (ORT owning views, pythonnet views) | "Book with the pool (Recommended)" | branch `qa/p8-booking` |
@@ -760,15 +760,25 @@ last option "Defer").
 
 ## 8. Carrying the results to the release
 
-**The follow-ups are not in `strings` yet (2026-11-06).** `qa/interop-followups` - P8 included (`59a4265e`, `e498c9dc`) -
-branches from `strings` `1bb64586` and has not been merged back. When it is, the release notes (one document since
-`strings` `26e44587`, `docs/releases/RELEASE_0.80.0.md`) need P8's lines: a forgotten `ToOrtValue` copy is booked with
-NumSharp's memory accounting and collected (+68 MB instead of +2,898 MB for 5,000 of 602 KB; `OrtIoBinding` and every
-native holder unchanged, since ORT still owns and frees the copy), and every import lease books the memory it keeps
-alive instead of one `GC.AddMemoryPressure` per lease - the ONNX Runtime, ML.NET, System.Numerics.Tensors and pythonnet
-bridges - so views disposed at once trigger no gen-2 collection and forgotten views of large arrays stay bounded (Core:
-`SizeBucketedBufferPool.BookForeign` / `ReturnForeign`). Tensors and pythonnet are released packages: their lines go
-under fixes.
+**The follow-ups are merged into `strings` (2026-11-06, the owner: "Merge to strings").** `qa/interop-followups` (33
+commits on `strings` `1bb64586`, P8 and its verification included) merged into `strings` `a88da1d0` as `745ecee2`: made in
+a detached worktree, one conflict (`.claude/rules/interop-packages.md`: `strings`' release state kept, the follow-ups'
+facts carried over), then verified there before `strings` moved - Core unit 23,332 / 23,331 (net10.0 / net8.0, 0 failed),
+ORT 1.16.0 343 + 23 Inconclusive and 1.31.1 366 / 366, ML.NET 2.0.1 241 / 241 and 5.0.1 241 / 241, Tensors 114 / 114,
+ParquetNet 39 / 39, the build analyzers 476 / 476, pythonnet 817 / 819 (the two failures are `strings`' own
+`[OpenBugs]` pins in `ProductsLiveParityTests`, which CI's filter excludes). One clash no text merge could see: the
+PublishAot warning (P5, `e41c75f6`) and parity QA-41's analyzer rule for culture-independent exception texts
+(`c6fcbd8c`) both used NDW020; the culture rule keeps it (the release notes, `exceptions.md` and the parity journal
+already name it), and the PublishAot warning is NDW021.
+
+The release notes (`docs/releases/RELEASE_0.80.0.md`): the three statements the merge made false are corrected - the ONNX
+Runtime range is open, the ML.NET range is open, and the ML.NET bridge's `Postprocess` is the ONNX Runtime bridge's,
+which it references. Still to add, for whoever keeps the notes: Core's breaking P20 (a foreign-thread
+`NDScope.Dispose` throws, `9e75695d`); NDW021 (`e41c75f6`); P8 - a forgotten `ToOrtValue` copy is booked and collected
+(+68 MB instead of +2,898 MB for 5,000 of 602 KB; `OrtIoBinding` and every native holder unchanged, since ORT still owns
+and frees the copy), and every import lease books the memory it keeps alive instead of one `GC.AddMemoryPressure` per
+lease, in all four bridges (Tensors and pythonnet are released packages: their lines are fixes); the ONNX Runtime
+bridge's P2 + P12, P7, P11, P21 and F71; the ML.NET bridge's P1, P17 and P18 (a repeated column name refused).
 
 **Merged into `strings` (2026-11-03, on the owner's request).** The 84 commits after `1c001253` were replayed with
 `cherry-pick -x` onto `strings` `b154d164` (branch `qa/interop-onto-strings`) and merged into `strings` with a merge

@@ -114,7 +114,7 @@
   </Target>
 
   <!-- ==================================================================================
-       NDW020 — PublishAot is on, so NumSharp's kernels cannot be generated.
+       NDW021 — PublishAot is on, so NumSharp's kernels cannot be generated.
 
        NumSharp compiles its array kernels at run time (System.Reflection.Emit DynamicMethods). With
        PublishAot=true the SDK switches dynamic code OFF - not only in a Native AOT publish but in a plain
@@ -131,13 +131,13 @@
        that has the setting, before CoreCompile, and is not incremental like NDW013's scan: the warning
        repeats until the setting changes. Silent in design-time builds. Opting out (a project that knows
        what it is doing, e.g. one that only references NumSharp for its types): set
-       $(NumSharpDisableAotWarning)=true, or add NDW020 to $(MSBuildWarningsAsMessages).
+       $(NumSharpDisableAotWarning)=true, or add NDW021 to $(MSBuildWarningsAsMessages).
 
        Reach: this file ships in the package's build/net8.0/ (see NumSharp.Core.csproj), and NuGet imports
        build/ assets for DIRECT references only, so a project that reaches NumSharp solely through another
        package (an interop bridge) gets neither this warning nor NDW013's fallback. The getting-started page
        has every file-based app reference NumSharp itself (`#:package NumSharp@...`), which is the case the
-       warning was made for. Proven by test/NumSharp.Tests.Build.Analyzer/Ndw020BuildTests.cs, which also
+       warning was made for. Proven by test/NumSharp.Tests.Build.Analyzer/Ndw021BuildTests.cs, which also
        checks the premise: a PublishAot=true build writes IsDynamicCodeSupported=false into the runtimeconfig.
        ================================================================================== -->
   <Target Name="_NumSharpWarnPublishAot"
@@ -145,7 +145,7 @@
           Condition="'$(DesignTimeBuild)' != 'true'
                      and '$(PublishAot)' == 'true'
                      and '$(NumSharpDisableAotWarning)' != 'true'">
-    <Warning Code="NDW020"
+    <Warning Code="NDW021"
              Text="$(MSBuildProjectName) sets PublishAot=true (the default of a 'dotnet run app.cs' file-based app), which switches dynamic code off, but NumSharp generates its array kernels at run time: the first array arithmetic (x * 2, x &gt; 0.5, np.sqrt(x)) throws PlatformNotSupportedException, and kernels with a fallback run it far slower. Set PublishAot=false: in a file-based app, the line '#:property PublishAot=false'; in a project, &lt;PublishAot&gt;false&lt;/PublishAot&gt;. NumSharp does not support Native AOT. See https://scisharp.github.io/NumSharp/docs/absolute-basics.html#ndw020" />
   </Target>
 </Project>

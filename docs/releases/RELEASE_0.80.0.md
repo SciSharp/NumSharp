@@ -35,14 +35,14 @@ Three optional companion packages ship for the first time, co-versioned with **N
   - Text and non-tensor values - fixed-width `U` / `S` arrays cross as string tensors (a copy; `ReadStringTensor` reads one as `string[]`), and a `StringDType` array is refused with its sized-`U` remedy; `ToNDArrays`, `ToMap`, `ToMaps` and `GetMapKeys` read sequence and map outputs.
   - Post-processing - `Softmax`, `LogSoftmax`, `Sigmoid`, `Argmax`, `TopK`.
   - Dtypes - 12 cross without a copy, float16 by bit reinterpretation; `char` exports as uint16 and `decimal` as float64 through a copy the handle owns; complex and bfloat16 are refused, each refusal naming the route that works.
-  - Depends - [Microsoft.ML.OnnxRuntime.Managed](https://www.nuget.org/packages/Microsoft.ML.OnnxRuntime.Managed) 1.16.0 or later below 2.0, the C# API only: ONNX Runtime's native flavours exclude each other, so you reference the one you run. Verified on 1.16.0 and 1.31.1.
+  - Depends - [Microsoft.ML.OnnxRuntime.Managed](https://www.nuget.org/packages/Microsoft.ML.OnnxRuntime.Managed) 1.16.0 or later, the C# API only: ONNX Runtime's native flavours exclude each other, so you reference the one you run. Verified on 1.16.0 and 1.31.1.
 - **NumSharp.Interop.MLNet** - expose an `NDArray` to an [ML.NET](https://dotnet.microsoft.com/apps/machinelearning-ai/ml-dotnet) pipeline as an `IDataView` and read a transformer's output column back as an `NDArray`, with no POCO class and no row-by-row fill.
   - Export - `AsDataView` is a lazy `IDataView` over the buffer's strides (one vector column, or one scalar column per feature); `ToDataView` takes a snapshot; `ToVBuffer` copies into a `VBuffer<T>`.
   - Import - `ToNDArray` reads a scalar column as `(R,)` and a fixed-size vector column as `(R, C)`; `AsNDArray` views a dense `VBuffer<T>`'s array without copying.
   - Feeding a model - `transformer.Transform(nd.AsDataView("Features")).ToNDArray("Score")`: the `IDataView` is the whole bridge.
-  - Post-processing - `Softmax`, `LogSoftmax`, `Sigmoid`, `Argmax`, `TopK`.
+  - Post-processing - the ONNX Runtime bridge's `Postprocess` (`Softmax`, `LogSoftmax`, `Sigmoid`, `Argmax`, `TopK`), which this package references, so an app that uses both bridges has one.
   - Dtypes - 11 column types directly, `char` one way as uint16, float16 as float32 and `decimal` as float64 through a copy the view owns; complex and text arrays are refused, and a text, time or ragged column's refusal names the ML.NET route that reads it (`GetColumn<string>`, int64 ticks, `GetColumn<T[]>`).
-  - Depends - [Microsoft.ML.DataView](https://www.nuget.org/packages/Microsoft.ML.DataView) 2.0.0 or later below 6.0 only; the `Microsoft.ML` you reference brings the trainers and transforms. Verified on ML.NET 2.0.1 and 5.0.1.
+  - Depends - [Microsoft.ML.DataView](https://www.nuget.org/packages/Microsoft.ML.DataView) 2.0.0 or later, and NumSharp.Interop.OnnxRuntime for `Postprocess` (bringing ONNX Runtime's C# API, which `Postprocess` never loads); the `Microsoft.ML` you reference brings the trainers and transforms. Verified on ML.NET 2.0.1 and 5.0.1.
 
 ## Detailed Breakdown
 <details>
