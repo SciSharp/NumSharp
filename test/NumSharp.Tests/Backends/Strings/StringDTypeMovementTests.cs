@@ -797,6 +797,76 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
+        ///     <c>np.copyto(text, src, where=mask)</c> with a source of another dtype converts ONLY the elements the mask selects,
+        ///     as NumPy's masked transfer casts only the selected runs (a StringDType destination is never pre-cast, even from a
+        ///     0-d source): a bool byte that is no bool value (2, made through a uint8 view) raises
+        ///     <c>invalid value encountered in bool to string cast</c> when it is selected and is never read when it is not;
+        ///     broadcast rows, <c>U</c> text and float sources convert just their selected elements. Every expectation is NumPy
+        ///     2.4.2's (probed); this was the np-layer plan's NL1 (the whole source used to be converted first).
+        /// </summary>
+        /// <remarks>
+        ///     The ufunc route met it at random: a logical ufunc with a <c>StringDType</c> <c>out=</c> and <c>where=</c>
+        ///     computes into a bool temporary whose masked-off slots are uninitialized, then makes this copy under the
+        ///     mask, so a recycled buffer holding other bytes raised (1 to 5 of 40 calls in a mixed workload). That route
+        ///     cannot be forced through the public API - its masked text read reuses the same pool buffer just before the
+        ///     temporary - so the invalid byte comes from a uint8 view here, which reaches the same copy on every run.
+        /// </remarks>
+        [TestMethod]
+        public void Copyto_WhereMask_ConvertsOnlyTheSelectedElements()
+        {
+            using var bytes0 = np.array(new byte[] { 2 });
+            using var bad0 = bytes0.view(np.@bool).reshape(new Shape());
+            using var bytes1 = np.array(new byte[] { 1, 2, 0 });
+            using var bad1 = bytes1.view(np.@bool);
+
+            // A 0-d invalid bool: never cast under an all-False mask, whatever the destination size; cast when selected.
+            using (var t = A("x", "y", "z"))
+            {
+                np.copyto(t, bad0, where: np.zeros(new Shape(3), np.@bool));
+                V(t).Should().Equal(new object[] { "x", "y", "z" });
+                Action selected = () => np.copyto(t, bad0, where: np.array(new[] { true, false, false }));
+                selected.Should().Throw<RuntimeError>().WithMessage("invalid value encountered in bool to string cast");
+            }
+            using (var one = A("x"))
+            {
+                np.copyto(one, bad0, where: np.array(new[] { false }));
+                V(one).Should().Equal(new object[] { "x" });
+                Action selected = () => np.copyto(one, bad0, where: np.array(new[] { true }));
+                selected.Should().Throw<RuntimeError>().WithMessage("invalid value encountered in bool to string cast");
+            }
+
+            // A 1-D source whose middle byte is invalid: masked off it is never read; selected it raises.
+            using (var t = A("x", "y", "z"))
+            {
+                np.copyto(t, bad1, where: np.zeros(new Shape(3), np.@bool));
+                V(t).Should().Equal(new object[] { "x", "y", "z" });
+                np.copyto(t, bad1, where: np.array(new[] { true, false, true }));
+                V(t).Should().Equal(new object[] { "True", "y", "False" });
+                Action selected = () => np.copyto(t, bad1, where: np.array(new[] { false, true, false }));
+                selected.Should().Throw<RuntimeError>().WithMessage("invalid value encountered in bool to string cast");
+            }
+
+            // The row broadcast down two rows, its invalid column masked off in both.
+            using (var t = np.array(new[,] { { "a", "b", "c" }, { "d", "e", "f" } }, T))
+            {
+                np.copyto(t, bad1, where: np.array(new[,] { { true, false, true }, { true, false, true } }));
+                V(t).Should().Equal(new object[] { "True", "b", "False", "True", "e", "False" });
+            }
+
+            // U text and float sources: the selected elements only, each as NumPy's str().
+            using (var t = A("x", "y", "z"))
+            {
+                np.copyto(t, np.array(new[] { "p", "q", "r" }), where: np.array(new[] { true, false, true }));
+                V(t).Should().Equal(new object[] { "p", "y", "r" });
+            }
+            using (var t = A("x", "y", "z"))
+            {
+                np.copyto(t, np.array(new[] { 1.5, double.NaN, -0.0 }), where: np.array(new[] { false, true, true }));
+                V(t).Should().Equal(new object[] { "x", "nan", "-0.0" });
+            }
+        }
+
+        /// <summary>
         ///     A <c>StringDType</c> MASK (np.putmask / np.place) is read through StringDType's bool cast with its NA rules: an
         ///     NA of a <c>None</c> NA object is False (<c>['', 'x', None]</c> selects only element 1, probed).
         /// </summary>

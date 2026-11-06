@@ -14,10 +14,11 @@ namespace NumSharp.Tests
     // defer to tackle them later"). Each group below is one of them, reproduced through public calls with the smallest
     // input that shows it:
     //
-    //   NL1  np.copyto into a StringDType array under where= converts the WHOLE source, masked-off elements included;
-    //        a ufunc with a StringDType out= and where= (np.logical_and / or / xor / not) reaches it with a temporary
-    //        whose masked-off slots are uninitialized, so some calls raise "invalid value encountered in bool to string
-    //        cast" at random.
+    //   NL1  FIXED (the plan's D24, 2026-11-06): np.copyto into a StringDType array under where= converted the WHOLE
+    //        source, masked-off elements included, so a ufunc with a StringDType out= and where= (np.logical_and / or /
+    //        xor / not), whose temporary leaves its masked-off slots uninitialized, raised "invalid value encountered in
+    //        bool to string cast" at random. Only the selected elements are converted now; its tests moved to
+    //        StringDTypeMovementTests.Copyto_WhereMask_ConvertsOnlyTheSelectedElements.
     //   NL2  np.median of complex data holding a NaN returns the mean of the middle values, not NumPy's NaN element.
     //   NL3  the flat np.prod of float32 / float64 multiplies in SIMD lane order, not NumPy's sequential order: values
     //        differ by an ULP, and a product that overflows before it meets a zero is NaN on one side and 0 on the other.
@@ -75,68 +76,6 @@ namespace NumSharp.Tests
         ///     bits; otherwise an element-returning function (np.median's NaN check) would answer with the other sign.
         /// </summary>
         private static readonly double NpLayerPositiveNaN = BitConverter.Int64BitsToDouble(0x7FF8000000000000);
-
-        /// <summary>
-        ///     Reads every cell of a StringDType array in C order, so a test can compare all of them at once.
-        /// </summary>
-        /// <param name="a">The StringDType array.</param>
-        /// <returns>The cells' strings in C order.</returns>
-        private static string[] NpLayerCells(NDArray a)
-            => Enumerable.Range(0, (int)a.size).Select(i => (string)a.GetValue(i)).ToArray();
-
-        // ------------------------------------------------------------------
-        // NL1 — np.copyto into StringDType under where= converts masked-off elements
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     <c>np.copyto(out, src, where=all_false)</c> with a StringDType <c>out</c> and a bool <c>src</c> holding a byte
-        ///     that is no bool value (2, made through a uint8 view): NumPy writes nothing and reads nothing it does not
-        ///     write; its masked transfer (<c>PyArray_GetMaskedDTypeTransferFunction</c>) casts only the selected runs.
-        ///     NumSharp raises <c>RuntimeError: invalid value encountered in bool to string cast</c>:
-        ///     <c>UnmanagedStorage.CopytoAssignVStrings</c> (Backends/Unmanaged/UnmanagedStorage.Assign.VString.cs) converts
-        ///     the whole source with <c>src.astype(to, ...)</c> before it applies the mask.
-        /// </summary>
-        /// <remarks>
-        ///     The ufunc route is the visible symptom: <c>DefaultEngine.IntoTextOut</c> computes a ufunc's loop result under
-        ///     the mask into a temporary whose masked-off slots are left uninitialized (by design: "the masked copy never
-        ///     reads them"), then <c>NDStringArithmetic.CastInto</c> copies it here. So
-        ///     <c>np.logical_xor(x, y, out=text, where=all_false)</c> raises at random, depending on what the recycled
-        ///     memory holds (1 to 5 of 40 calls per case in a sweep of dtypes and (3, 4) / (2, 3, 4) / 0-d operands, none
-        ///     in 2,000 calls of one case alone). This pin uses an invalid byte the caller controls, so it fails on every
-        ///     run.
-        /// </remarks>
-        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL1")]
-        public void NpLayer_Copyto_StringDTypeOut_AllFalseMask_ShouldNotConvertTheSource()
-        {
-            using var bytes = np.array(new byte[] { 1, 2, 0 });
-            using var bad = bytes.view(np.@bool);
-            using var dst = np.array(new[] { "x", "y", "z" }, np.dtypes.StringDType());
-            using var mask = np.zeros(new Shape(3), np.@bool);
-
-            np.copyto(dst, bad, where: mask);
-
-            NpLayerCells(dst).Should().Equal("x", "y", "z");
-        }
-
-        /// <summary>
-        ///     <c>np.copyto(out, src, where=[True, False, True])</c> with the invalid bool byte in the MASKED-OFF element:
-        ///     NumPy converts the two selected elements only (<c>['True', 'y', 'False']</c>). NumSharp raises
-        ///     <c>RuntimeError: invalid value encountered in bool to string cast</c> from the same whole-source conversion as
-        ///     <see cref="NpLayer_Copyto_StringDTypeOut_AllFalseMask_ShouldNotConvertTheSource"/>. (With the invalid byte
-        ///     SELECTED, NumPy raises that error too; that case is correct today.)
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL1")]
-        public void NpLayer_Copyto_StringDTypeOut_Mask_ShouldConvertOnlyTheSelectedElements()
-        {
-            using var bytes = np.array(new byte[] { 1, 2, 0 });
-            using var bad = bytes.view(np.@bool);
-            using var dst = np.array(new[] { "x", "y", "z" }, np.dtypes.StringDType());
-            using var mask = np.array(new[] { true, false, true });
-
-            np.copyto(dst, bad, where: mask);
-
-            NpLayerCells(dst).Should().Equal("True", "y", "False");
-        }
 
         // ------------------------------------------------------------------
         // NL2 — complex np.median skips NumPy's _median_nancheck

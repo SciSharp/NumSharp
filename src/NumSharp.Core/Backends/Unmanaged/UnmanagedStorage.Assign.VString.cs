@@ -32,12 +32,14 @@ namespace NumSharp.Backends
         ///     does not parse into a number, an NA value into a non-nullable dtype).</exception>
         /// <remarks>
         ///     <para>
-        ///     <b>Into <c>StringDType</c>.</b> A source of another descriptor is converted to the destination's first (the cast
+        ///     <b>Into <c>StringDType</c>.</b> A source of another descriptor is converted to the destination's (the cast
         ///     route: <c>U</c> / <c>S</c> text, numbers as their <c>str()</c>, another <c>StringDType</c> with its NA rules), after
-        ///     NumPy's broadcast checks. Without a mask the copy is the <c>StringDType</c> copy core
-        ///     (<see cref="NDIter.Copy(UnmanagedStorage, UnmanagedStorage)"/>: broadcasting and NumPy's overlap rule). With a mask
-        ///     the numeric <c>np.copyto</c> runs on MARKS (the source's element numbers into an <c>int64</c> array of the
-        ///     destination's shape, under the mask) and the marked elements receive the strings (<see cref="NDVStringMove"/>).
+        ///     NumPy's broadcast checks. Without a mask the whole source is converted and the copy is the <c>StringDType</c> copy
+        ///     core (<see cref="NDIter.Copy(UnmanagedStorage, UnmanagedStorage)"/>: broadcasting and NumPy's overlap rule). With a
+        ///     mask the numeric <c>np.copyto</c> runs on MARKS (the source's element numbers into an <c>int64</c> array of the
+        ///     destination's shape, under the mask) and the marked elements receive the strings (<see cref="NDVStringMove"/>);
+        ///     a source of another descriptor then has only its selected elements converted
+        ///     (<see cref="CopytoIntoVStringSelected"/>), as NumPy's masked transfer casts only the selected runs.
         ///     </para>
         ///     <para>
         ///     <b>From <c>StringDType</c> into another dtype.</b> NumPy's broadcast and mask checks first, then only the elements
@@ -85,8 +87,18 @@ namespace NumSharp.Backends
             if (dst.size == 0)
                 return;
 
+            // A source of another descriptor under a mask: only the elements the mask selects are converted, as NumPy's
+            // masked transfer casts only the selected runs - a masked-off element is never read (it may not even be a value:
+            // a ufunc's text-out temporary leaves its masked-off slots uninitialized).
+            if (@where is not null && !from.Meta.HasReferences)
+            {
+                CopytoIntoVStringSelected(dst, src, @where, to);
+                return;
+            }
+
             // The source in the destination's descriptor: a StringDType source is copied as it is (the copy core applies the
-            // NA rules between two StringDType descriptors), any other one is converted.
+            // NA rules between two StringDType descriptors), any other one is converted (without a mask every source element
+            // reaches some destination element, so each is converted, as NumPy's transfer converts it).
             NDArray value = from.Meta.HasReferences ? src : src.astype(to, true, 'K', "unsafe");
             try
             {
@@ -107,6 +119,125 @@ namespace NumSharp.Backends
                 if (!ReferenceEquals(value, src))
                     value.Dispose();
             }
+        }
+
+        /// <summary>
+        ///     The masked half of <see cref="CopytoAssignVStrings"/> for a source of another descriptor (a number, <c>U</c> or
+        ///     <c>S</c> text, bool, ...) into a <c>StringDType</c> destination, once every check passed: the source elements a
+        ///     selected position takes are converted to <paramref name="to"/> - each once - and moved in through the
+        ///     allocators; no other source element is read or converted.
+        /// </summary>
+        /// <param name="dst">The writeable, non-empty <c>StringDType</c> destination.</param>
+        /// <param name="src">The source (its broadcast to <paramref name="dst"/> checked).</param>
+        /// <param name="where">The mask (not 0-d; its broadcast to <paramref name="dst"/> checked).</param>
+        /// <param name="to">The destination's descriptor.</param>
+        /// <exception cref="System.Exception">The cast's own errors for a SELECTED element (NumPy raises them too: an invalid
+        ///     bool byte gives <c>invalid value encountered in bool to string cast</c>).</exception>
+        /// <exception cref="OutOfMemoryException">NumPy's <c>MemoryError</c> texts while the strings are allocated.</exception>
+        /// <remarks>
+        ///     <para>NumPy's masked transfer (<c>PyArray_GetMaskedDTypeTransferFunction</c>) casts each run the mask selects, so
+        ///     a masked-off element is never cast. Converting the whole source first, as the unmasked copy does, would cast them
+        ///     all: a masked-off bool byte that is no bool value (a ufunc's text-out temporary leaves its masked-off slots
+        ///     uninitialized) raised <c>invalid value encountered in bool to string cast</c> where NumPy writes nothing (plan
+        ///     np-layer NL1).</para>
+        ///     <para>The selection is decided once on MARKS: the source's element numbers copied under the mask by the numeric
+        ///     masked copy (which broadcasts them, and the mask, exactly as it would the values). Each named source element is
+        ///     converted once, and the strings move through the allocators (<see cref="NDVStringMove.ScatterMarks"/>), each into
+        ///     its destination once. Two routes, by whether a source element can feed several positions:</para>
+        ///     <para><b>No broadcast</b> (the source has the destination's size): each source element feeds at most its own
+        ///     position. The selected positions are found with the vectorized compare and nonzero kernels; all of them is the
+        ///     unmasked copy's whole-source conversion; otherwise their source elements are gathered in the destination's C
+        ///     order, converted, and scattered through a ramp of slots.</para>
+        ///     <para><b>A broadcast source</b> (smaller than the destination): a source element is named when the mask
+        ///     selects any position along the axes it is broadcast over, so the flags are the vectorized <c>any()</c> of the
+        ///     mask over those axes (a scalar pass over every mark, branch-free, still measured 0.88x of the whole-source
+        ///     copy for a row broadcast down 100 rows); all of them is the whole conversion again; otherwise the named ones
+        ///     are converted and placed at their numbers in a value array of the source's length (its other cells never
+        ///     read), which the original marks then scatter. NumPy casts a broadcast element once per selected position;
+        ///     once per element gives the same strings and the same error (one per position measured 0.16-0.25x).</para>
+        ///     <para>NumPy visits a non-C destination in its memory order, so with several bad selected elements the first one
+        ///     it reports can differ from the one reported here, as in <see cref="CopytoFromVString"/>; the texts are equal.</para>
+        /// </remarks>
+        private static void CopytoIntoVStringSelected(NDArray dst, NDArray src, NDArray @where, DType to)
+        {
+            // Each destination element's source number (-1 where the mask leaves it alone).
+            using var marks = NDVStringMove.NewMarks(dst);
+            using (var index = NDVStringMove.ValueIndex(src))
+                Copyto(marks, index, NPY_CASTING.NPY_UNSAFE_CASTING, @where);
+            long sourceCount = src.size, positionCount = marks.size;
+
+            if (sourceCount == positionCount)
+            {
+                // No broadcast: the selected positions name distinct source elements.
+                using var zero = NDArray.Scalar(0L);
+                using var selected = marks.TensorEngine.GreaterEqual(marks, zero, null, null, null);
+                using var positions = selected.TensorEngine.FlatNonZero(selected);
+                if (positions.size == 0)
+                    return;
+                if (positions.size == positionCount)
+                {
+                    // Everything selected: the whole source converted once, as the unmasked copy converts it.
+                    using var all = src.astype(to, true, 'K', "unsafe");
+                    NDVStringMove.ScatterMarks(dst, marks, all);
+                    return;
+                }
+                using var flatMarks = NDArray.ravel(marks, 'C');
+                using var sourceNumbers = TakeFrom(flatMarks, positions, null, null, ClipModes.ClipModeRaise);
+                using var flatSource = NDArray.ravel(src, 'C');
+                using var picked = TakeFrom(flatSource, sourceNumbers, null, null, ClipModes.ClipModeRaise);
+                using var converted = picked.astype(to, true, 'K', "unsafe");
+                // Destination position -> its converted value's number (0 .. k-1), then the strings moved in.
+                using var slots = NDVStringMove.NewMarks(dst);
+                using (var ramp = NDVStringMove.ValueIndex(converted))
+                    PutTo(slots, positions, ramp, "raise");
+                NDVStringMove.ScatterMarks(dst, slots, converted);
+                return;
+            }
+
+            // A broadcast source: a source element is named when the mask selects any position along the axes it is broadcast
+            // over. Those axes are dst's axes where the source (its trailing dimensions aligned to dst's, leading extra ones
+            // all 1) has extent 1 while dst does not; any() over them with keepdims gives the flags in the source's own C
+            // order (the order of its element numbers), with the vectorized reduction instead of a pass over every mark.
+            int rank = dst.ndim;
+            long[] dstDims = dst.Shape.dimensions;
+            long[] srcDims = src.Shape.dimensions;
+            int broadcastAxisCount = 0;
+            var broadcastAxes = new int[rank];
+            for (int axis = 0; axis < rank; axis++)
+            {
+                int srcAxis = axis + (srcDims.Length - rank);
+                long srcExtent = srcAxis >= 0 ? srcDims[srcAxis] : 1;
+                if (srcExtent == 1 && dstDims[axis] != 1)
+                    broadcastAxes[broadcastAxisCount++] = axis;
+            }
+            Array.Resize(ref broadcastAxes, broadcastAxisCount);
+            using var maskOverDst = NDArray.broadcast_to(@where, dst.Shape);
+            using var named = maskOverDst.TensorEngine.Any(maskOverDst, broadcastAxes, null, keepdims: true);
+            using var numbers = named.TensorEngine.FlatNonZero(named);   // ascending source numbers
+            if (numbers.size == 0)
+                return;
+            if (numbers.size == sourceCount)
+            {
+                // Every source element reaches a selected position: one conversion of the whole source, scattered by the
+                // marks (flat C-order source numbers: the converted array's own flat indices).
+                using var all = src.astype(to, true, 'K', "unsafe");
+                NDVStringMove.ScatterMarks(dst, marks, all);
+                return;
+            }
+
+            // The named source elements, converted once each and placed at their source numbers in a value array of the
+            // source's length (its other cells are never read), which the original marks then scatter.
+            using var flatSrc = NDArray.ravel(src, 'C');
+            using var namedValues = TakeFrom(flatSrc, numbers, null, null, ClipModes.ClipModeRaise);
+            using var convertedNamed = namedValues.astype(to, true, 'K', "unsafe");
+            using var value = new NDArray(to, Shape.Vector(sourceCount), true);
+            using (var valueSlots = NDVStringMove.NewMarks(value))
+            {
+                using (var ramp = NDVStringMove.ValueIndex(convertedNamed))
+                    PutTo(valueSlots, numbers, ramp, "raise");
+                NDVStringMove.ScatterMarks(value, valueSlots, convertedNamed);
+            }
+            NDVStringMove.ScatterMarks(dst, marks, value);
         }
 
         /// <summary>
