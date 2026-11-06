@@ -447,12 +447,14 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <summary>Opens a lease and counts it in <see cref="NDArrayOnnxInterop.LiveImports"/>.</summary>
         /// <param name="release">What to run when the last NumSharp view over the memory is gone (dispose the OrtValue, release a pin, or only keep an object reachable until then).</param>
         /// <param name="ownedBytes">
-        ///     The native bytes this lease OWNS, booked with NumSharp's memory accounting for the lease's lifetime
-        ///     (<see cref="SizeBucketedBufferPool.BookForeign"/>); 0 when the lease owns none. Only a view that owns its
-        ///     OrtValue passes a count: its ORT buffer lives exactly as long as the view, and the GC cannot see it. A
-        ///     non-owning view (the caller owns the value), a pinned managed array (the GC already counts it) and a legacy
-        ///     output tensor (its results collection owns the memory) pass 0; reporting their bytes for every view made the
-        ///     GC collect more often for memory no collection can free.
+        ///     The bytes this lease keeps alive, booked with NumSharp's memory accounting for the lease's lifetime
+        ///     (<see cref="SizeBucketedBufferPool.BookForeign"/>); 0 books nothing. Two kinds of view pass a count: a view
+        ///     that owns its OrtValue (its ORT buffer lives exactly as long as the view, and the GC cannot see it), and a
+        ///     <c>DenseTensor&lt;T&gt;</c> view of a pinned MANAGED array (the GC counts the array, but the pin keeps it
+        ///     alive past the collection that finds a forgotten view dead, so unbooked forgotten views grew without bound:
+        ///     P8 Q3, the owner's decision of 2026-11-06). A non-owning view (the caller owns the value) and a legacy output
+        ///     tensor (its results collection owns the memory) pass 0: their bytes neither live nor die with the view, and
+        ///     reporting them for every view made the GC collect more often for memory no collection can free.
         /// </param>
         /// <remarks>
         ///     The bytes are BOOKED, not reported with <see cref="GC.AddMemoryPressure"/>: the GC counts every addition

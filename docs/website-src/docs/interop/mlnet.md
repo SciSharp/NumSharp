@@ -190,6 +190,12 @@ buffer (a dictionary view holds one per array, taken all or none). The pin takes
   (`using (var v = x.AsDataView("Features")) output = model.Transform(v);`, then `output.ToNDArray("Score")`)
   throws `ObjectDisposedException` at the read - for a `ToDataView` snapshot too, since it is the view that
   was disposed. Read the output inside the scope, or let the scope cover the whole pipeline.
+- **A `VBuffer<T>` view books the array it pins.** `vbuffer.AsNDArray()` pins the buffer's array until the
+  last NumSharp view over it (derived slices included) is disposed or collected, and books the array's bytes
+  with NumSharp's memory accounting meanwhile. The GC counts the array, but a forgotten view's pin keeps it
+  alive past the collection that found the view dead: 5,000 forgotten views of fresh 602 KB buffers held
+  2.3-2.7 GB with nothing booked and 96-299 MB booked. Views you dispose cost nothing: the booking ends
+  with the pin.
 
 **Cursors follow ML.NET's own contract**, checked against the cursors of ML.NET's `Cache`,
 `FilterRowsByColumn`, `TakeRows` and `LoadFromEnumerable`:

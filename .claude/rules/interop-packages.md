@@ -68,9 +68,13 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   `AsTensor<T>()` is declared to return, a non-dense one densified first - and `NamedOnnxValue` copy the same way),
   `ortValue.AsNDArray(ownsValue, mode)` (a zero-copy lease over ORT's
   buffer, CPU only; a counted NumSharp alias for a value the package made). Imports of NumSharp memory (a value the
-  package made, a fed input passed through) are counted aliases that inherit read-only; only an OWNING view books its
-  bytes (`SizeBucketedBufferPool.BookForeign`), and not over a value that carries a `MemoryHandle` (a `ToOrtValue` result
-  is booked already; a `CreateTensorValueFromMemory` value's memory is counted elsewhere or not freed with it). Importing a tensor of 2 GB or more that ORT owns is refused up front: ORT exposes tensor memory only as
+  package made, a fed input passed through) are counted aliases that inherit read-only. A view books
+  (`SizeBucketedBufferPool.BookForeign`) the memory it keeps alive: an OWNING view its ORT buffer - not over a value that
+  carries a `MemoryHandle` (a `ToOrtValue` result is booked already; a `CreateTensorValueFromMemory` value's memory is
+  counted elsewhere or not freed with it) - and a `DenseTensor<T>` view the MANAGED array it pins (`MemoryMarshal.TryGetArray`;
+  a legacy output's native buffer books nothing). Every lease over a pinned managed array books (this one, ML.NET's,
+  Tensors'): the GC counts the array, but a forgotten view's pin keeps it alive past the collection that found the view
+  dead, and unbooked forgotten views of large arrays grew to 1.9-2.7 GB. Importing a tensor of 2 GB or more that ORT owns is refused up front: ORT exposes tensor memory only as
   an `int`-length Span.
 - `session.Run(NDArray…)`: input names from the model metadata (overridable initializers and `optional(tensor)` inputs
   included), NumPy-`casting` dtype coercion checked on every call, declared-shape validation, copy / owning-view outputs.
@@ -132,7 +136,8 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   `VBuffer.AsNDArray<T>` with `WrapExternal` / `Pin` / `LiveExports` / `LiveImports`), `NDArrayDataView.cs` (the
   NDArray-backed `IDataView`, its strided lazy cursor - shuffled through a per-cursor permutation when ML.NET passes a
   `Random`, `CanShuffle` true - and ARC-pin lifetime), `VBufferAccessor.cs` (the compiled-expression
-  getter for the private `VBuffer<T>._values`), `ImportLease.cs` (the GCHandle pin that the last view releases).
+  getter for the private `VBuffer<T>._values`), `ImportLease.cs` (the GCHandle pin that the last view releases; it books
+  the pinned bytes with `SizeBucketedBufferPool.BookForeign`, never one `GC.AddMemoryPressure` per lease).
 - Export: `nd.AsDataView(colName)` (a vector column: a lazy `IDataView` that reads the NumSharp buffer through its
   strides, any layout, ARC-pinned; `NDArrayDataView` is `IDisposable`), `columns.AsDataView()` over an
   `IReadOnlyDictionary<string, NDArray>` (one column per array, each its own dtype and strides, equal rows, every pin
@@ -183,7 +188,8 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   NumSharp buffer for any non-negative-stride layout (strided, transposed and broadcast included), ARC-pinned. `.Span` /
   `.ReadOnlySpan` are rebuilt on each access, because a ref struct cannot be stored.
 - `nd.ToTensor<T>()` (a dense copy), `tensor.ToNDArray()` (an owning copy), `tensor.AsNDArray()` (a zero-copy view over
-  the tensor's pinned buffer), `span.ToNDArray()` (a copy).
+  the tensor's pinned buffer; its `ImportLease` in `TensorSpanHandle.cs` books the pinned bytes with `BookForeign` until
+  the last view releases the pin), `span.ToNDArray()` (a copy).
 - Routing NumSharp's kernels through `TensorPrimitives` would abandon bit parity with NumPy, so the package only converts.
 - Depends on `System.Numerics.Tensors [10.0.0, 11.0.0)` only, pinned to 10.x because `Tensor<T>`/`TensorSpan<T>` are
   `[Experimental("SYSLIB5001")]`; the package re-marks its surface `[Experimental("NUMSHARP_TENSORS")]`, so a consumer

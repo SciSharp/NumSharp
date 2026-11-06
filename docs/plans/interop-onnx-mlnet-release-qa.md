@@ -51,8 +51,11 @@ log (section 7). Every new idea becomes a work-list row before it is worked on.
   or the value's collection: 5,000 forgotten values of 602 KB peak at +68 / +72 MB (ORT 1.31.1 / 1.16.0) instead of
   +2,898 MB, and code that disposes them triggers no collection. The ORT owning-view and pythonnet view leases book with
   the pool too, instead of one `GC.AddMemoryPressure` per lease (45-47 and 8-15 gen-2 collections per 5,000 disposed
-  views -> none). The ML.NET and Tensors leases (a pinned MANAGED array) are deferred with the owner's question "why
-  would we want to report mem pressure" (section 5, P8).
+  views -> none). The ML.NET and Tensors leases (a pinned MANAGED array) were deferred with the owner's question "why
+  would we want to report mem pressure", measured for and against, re-asked the same day and DONE as well: every lease
+  over a pinned managed array (ML.NET, Tensors, and ORT's `DenseTensor<T>` view, which reported nothing) books it the
+  same way - forgotten views of fresh 602 KB arrays held +2.3-2.7 GB unbooked and +96-299 MB booked, and disposed
+  views pay no collection where per-lease pressure ran 12-41 gen-2 collections per 5,000 (section 5, P8).
 - **Deferred, documented**: P3, P15 (section 5; both re-asked and deferred again on 2026-11-05). P5 done (NDW020); P19 done on branch `qa/ufunc-keeporder` (`ecd70236`, not merged): every fresh ufunc result takes
   NumPy's layout, so an elementwise result of a permuted view keeps the permutation (parity QA-36). F79's
   `Postprocess.Softmax` / `LogSoftmax` check is not re-run yet: this branch does not carry the Core change.
@@ -466,10 +469,52 @@ rides in P12's commit) - and `qa/proposals-all` merges all seven with their thre
       Inconclusive of 341 (both TFMs each); ML.NET 229 / 229 (net10.0, floor); pythonnet 787 / 787 (both TFMs; a worktree without the fetched OpenBLAS
       binary, `src/NumSharp.Interop.OpenBLAS/runtimes/` from `tools/fetch_openblas.py`, fails the `Backend_IsOpenBlas*`
       checks and the two `Nes_*LiveNumpy` byte comparisons instead - an environment gap, not this change).
-    - Q3, deferred with the owner's question: the ML.NET (`VBuffer<T>`) and System.Numerics.Tensors import leases pin a
-      MANAGED array and still call `GC.AddMemoryPressure` per lease (13-17 / 12-16 gen-2 collections per 5,000 views
-      disposed at once). The GC already counts a managed array, so the question is what reporting it buys at all: the
-      arguments for and against, measured, go to the owner again.
+    - Q3, deferred with the owner's question ("But why would we want to report mem pressure, find in-favor in against
+      and ask again"), then measured, re-asked the same day and DONE. The ML.NET (`VBuffer<T>`) and
+      System.Numerics.Tensors import leases pin a MANAGED array and called `GC.AddMemoryPressure` per lease; ORT's
+      `DenseTensor<T>` view pins one too and reported nothing. The matrix (`qa/interop-probes` `63899e7c` + `09911042`,
+      `p8-2026-11-06/`: pressure / book / none x one shared array or a fresh array per view x each view disposed or
+      forgotten x an empty heap or 3,000,000 live objects, plus controls):
+      - For reporting: a forgotten view's pin is released only by its finalizer, so its LARGE array survives the gen-2
+        collection that found the view dead and the GC collects less often: 5,000 forgotten views of fresh 602 KB arrays
+        held +2.3-2.7 GB unreported (ML.NET, Tensors) and +1.9-2.4 GB through ORT's `DenseTensor<T>` view; the same
+        arrays with no view +4-26 MB (+867 MB with the big heap); 16 KB arrays stay bounded either way (+17-45 MB).
+      - Against per-lease pressure: the GC already counts the array - twice, and once per view (5,000 views of one array
+        report 2.9 GB for 602 KB). CoreCLR's `GCInterface::AddMemoryPressure` compares the bytes ADDED since the last gen-2
+        with a 4-40 MB budget (or a third of the heap) and never subtracts removals, so disposed views still paid 12-41
+        gen-2 collections per 5,000 (up to 11.3 ms of pauses); in a tight loop over a 3,000,000-object heap only 2 gen-2s
+        ran (its ~20% duty-cycle cap) and the forgotten loop held +2.76 GB anyway; the API docs reserve it for "a large
+        allocation of unmanaged memory", "not necessary ... in types that follow the dispose pattern".
+      - Booked (the ORT / pythonnet route): disposed views 0 collections; forgotten fresh views +96-299 MB (+582 MB with
+        the big heap) at 56-74 us per view (173-207 with it) against 8-12 unreported; forgotten views of one shared array
+        ~150 gen-0 collections per 5,000 (10-13 ms).
+
+      Decision (pages `ask-q3/make_pages.py` in the session scratchpad, each page with the same for / against panel and
+      the same table): "Book with the pool (Recommended)", with the comment "And internally if large array is allocated,
+      we do not use the pool, right? and disposal still happens". Answer: yes to both. NumSharp's own buffers of 64 MiB or
+      more (`MaxPoolableBytes`) skip the size buckets - `Take` allocates them fresh and `Return` frees them at once - while
+      smaller ones are recycled; every size goes through the same accounting (the outstanding total, the 64 MiB pressure
+      chunks, pacing). Booking a lease is that accounting only: the managed array is never copied into, taken from or
+      returned to the pool, it stays ML.NET's / the tensor's, and the lease's release (`GCHandle.Free`, the pin's
+      `Dispose`) runs exactly as before - at the last view's Dispose, or from its finalizer - and gives the booking back
+      in the same call.
+
+      Done: the ML.NET `ImportLease` and the Tensors `ImportLease` (`TensorSpanHandle.cs`) book with `BookForeign` /
+      `ReturnForeign` instead of the per-lease pressure (both now fully documented); ORT's `DenseTensor<T>.AsNDArray`
+      books `count * sizeof(T)` when `MemoryMarshal.TryGetArray` finds a managed array (a legacy output's native buffer:
+      0). Gates: `VBufferLeaseBookingTests` (3, ML.NET) and `TensorLeaseBookingTests` (3, Tensors) - the booking until the
+      last view, a disposing loop paces nothing, forgotten views pace and their finalizers give everything back -
+      and `ImportAliasTests.MemoryPressure_IsReportedOnlyByAnOwningView_AndTakenBack` (ORT), which now pins the
+      `DenseTensor<T>` booking and a legacy output's none. Suites: ORT 341 / 341 at 1.31.1 and 319 + 22 Inconclusive at
+      1.16.0 (net10.0 and net8.0 each); ML.NET 232 / 232 at the 2.0.1 floor (both TFMs) and at 5.0.1 (net10.0); Tensors
+      104 / 104 (both TFMs); the two new classes again after their last edit (3 / 3 each, both TFMs). Mutants
+      (`q3_mutants.sh`): either lease put back to per-lease `GC.AddMemoryPressure` fails 2 of its class's 3 tests, and ORT's
+      view without the booking fails the `ImportAliasTests` test; a gen-2 count assertion in the disposing-loop tests
+      passed under the old pressure too (the runtime skips a pressure collection within five durations of the test base's
+      settle collection), so it was dropped as vacuous. Measured after the change (the same probes, the real code):
+      forgotten views of fresh 602 KB arrays +33-34 MB through ORT's `DenseTensor<T>` view (was +1,880-2,373), +41-278 MB
+      through ML.NET (four runs), +70 MB through Tensors, at 47-469 us per view (most runs 47-147; two runs on a busier
+      machine 345-469); views of one array disposed at once: 0 collections, 2.2-2.6 us per view.
 - **P9 (F25) The release job and three new package ids.** **Done 2026-11-03 (`f9390a1b`: the push loop; the key check is the owner's).** Before tagging, check that the nuget.org API key in
   `NUGETAPIKEY` may push NEW ids matching `NumSharp.Interop.*` ("Push new packages and package versions", glob
   `NumSharp*`). Optionally let the push loop report every failure at the end instead of stopping at the first.
@@ -679,6 +724,7 @@ last option "Defer").
 | F20 / P8 (2026-11-06), `ToOrtValue` | "NumSharp manages ORT's value (Recommended)" (R7: ORT frees, NumSharp books until Dispose or collection) | branch `qa/p8-booking` |
 | F20 / P8 (2026-11-06), the native-memory import leases (ORT owning views, pythonnet views) | "Book with the pool (Recommended)" | branch `qa/p8-booking` |
 | F20 / P8 (2026-11-06), the managed-array import leases (ML.NET `VBuffer<T>`, System.Numerics.Tensors) | "Defer", with "But why would we want to report mem pressure, find in-favor in against and ask again" | the arguments measured and re-asked |
+| F20 / P8 (2026-11-06, re-asked), every lease over a pinned managed array (ML.NET, Tensors, ORT's `DenseTensor<T>` view) | "Book with the pool (Recommended)", with "And internally if large array is allocated, we do not use the pool, right? and disposal still happens" (answered in section 5, P8: yes to both) | branch `qa/p8-booking` |
 
 ## 8. Carrying the results to the release
 
@@ -870,3 +916,4 @@ The proposals (section 5) are separate, each the owner's to accept or drop:
 | 2026-11-05 15:25 | The owner asked for an HTML report of P8 (the blind spot, pythonnet's, the recommended fix and its alternatives as code): `report.html` on `qa/interop-probes` `72992df3`. Measured for it: R3 (`AsOrtValue(Copy)`) wrong under `OrtIoBinding` like R2; R6 (`GC.AddMemoryPressure`) correct but 543 / 284 gen-2 collections and 33.1 us; the pythonnet routes counted by live copies (private bytes do not repeat there), which corrects the 14:40 entry's "+24 MB" for `copy().ToNumpy()` to "peak 36 live copies (21 MB)". |
 | 2026-11-05 19:40 | P19 done on `qa/ufunc-keeporder` (`ecd70236`): every fresh ufunc result in NumPy 2.4.2's layout; the elementwise exp of a transposed view now keeps its order, the cause of F79's Softmax / LogSoftmax drift; F79's own check is to be re-run once both branches meet. Not merged. |
 | 2026-11-06 19:10 | P8 decided and done on `qa/p8-booking` (from `95ea3e0e`). The owner asked why NumSharp cannot own the disposal itself; the answer (the side whose reference count ends a buffer's use must hold the counted reference, and ORT's native holders are invisible to managed counters) and three decision pages: Q1 R7 "NumSharp manages ORT's value", Q2 "Book with the pool" for the ORT owning-view and pythonnet leases, Q3 the ML.NET / Tensors managed-array leases deferred with "why would we want to report mem pressure". R7: ORT frees, a token in `OrtValue._memHandle` books until `Dispose(true)` or collection; forgotten +68 / +72 MB (was +2,898), disposed paces nothing, +0.3-0.6 us; the leases' gen-2 churn (45-47 ORT, 8-15 pythonnet per 5,000 disposed views) gone. Suites green: Core unit, ORT 1.31.1 and 1.16.0 on both TFMs, ML.NET floor, pythonnet 787 / 787. Section 5, P8. |
+| 2026-11-06 21:30 | P8 Q3 measured for and against (the owner: "why would we want to report mem pressure"), re-asked and done. For: a forgotten view's pin keeps a LARGE managed array alive past the gen-2 that found the view dead, so 5,000 forgotten views of fresh 602 KB arrays held +2.3-2.7 GB unreported (+1.9-2.4 GB through ORT's `DenseTensor<T>` view, which reported nothing). Against per-lease pressure: double counting, 12-41 gen-2s per 5,000 disposed views (CoreCLR never subtracts removals), no help in a tight loop over a big heap. The owner chose "Book with the pool" and asked whether large NumSharp arrays bypass the pool and whether disposal still happens: yes to both (64 MiB+ skips the buckets, every size is accounted; booking is accounting only, the release runs as before). ML.NET + Tensors leases book, ORT's `DenseTensor<T>` view books its managed array; probes `qa/interop-probes` `63899e7c` + `09911042`. Section 5, P8. |

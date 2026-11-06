@@ -149,7 +149,9 @@ Gate: `Manipulation/TypedReshapeViewShapeTests.cs`.
   `AccountForeignAllocation` / `AccountForeignRelease` are for memory NumSharp allocates outside the buckets (VirtualAlloc
   blocks, StringDType arenas) and count as hand-outs. `BookForeign` / `ReturnForeign` are for memory a foreign runtime
   owns that NumSharp keeps alive or handed out (a `ToOrtValue` result, an ORT owning view's lease, a pythonnet view's
-  lease): they move the outstanding total and its 64 MiB pressure chunks, and pace one gen-0 collection per
+  lease), and for a MANAGED array a view pins (the ML.NET, Tensors and ORT `DenseTensor<T>` leases: the GC counts the
+  array, but a forgotten view's pin keeps it alive past the collection that found the view dead, and unbooked forgotten
+  views of large arrays grew to 1.9-2.7 GB). They move the outstanding total and its 64 MiB pressure chunks, and pace one gen-0 collection per
   `PaceThresholdBytes` of net GROWTH of the bookings, but are NOT hand-outs. A booking counted as a hand-out made the next
   ordinary pool miss pace a collection in a loop that disposed every view. Gate:
   `Backends/Unmanaged/ForeignBookingTests.cs`.

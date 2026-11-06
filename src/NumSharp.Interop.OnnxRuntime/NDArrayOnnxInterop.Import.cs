@@ -489,7 +489,11 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     <para><b>Modes.</b> A dense tensor can always be viewed, so <see cref="OnnxCodecMode.Auto"/> and
         ///     <see cref="OnnxCodecMode.View"/> do the same here; <see cref="OnnxCodecMode.Copy"/> returns what
         ///     <see cref="ToNDArray{T}(DenseTensor{T})"/> returns.</para>
-        ///     <para>The view reports no memory pressure to the GC: it never owns the tensor's memory.</para>
+        ///     <para><b>Memory accounting.</b> A view of a managed array books the array's viewed bytes with NumSharp's memory
+        ///     accounting until the pin is released: the pin keeps the array alive, and a forgotten view would otherwise keep
+        ///     it alive past the collection that found the view dead (5,000 forgotten views of fresh 602 KB tensors held
+        ///     +1.9-2.4 GB unbooked). A view of a legacy output books nothing: its results collection owns the memory. A
+        ///     view never owns or frees the tensor's memory either way.</para>
         /// </remarks>
         /// <typeparam name="T">The tensor's element type: bool, the eight integers, <see cref="Float16"/>, float or double.</typeparam>
         /// <param name="tensor">The tensor to view; row- or column-major.</param>
@@ -530,13 +534,16 @@ namespace NumSharp.Interop.OnnxRuntime
             // results, the OrtValue's finalizer freed the native buffer under the view and the next run's output showed
             // through it (20 of 20 rounds in a probe). The tensor holds its Memory, the Memory its manager, the manager
             // its OrtValue: keeping the tensor reachable keeps the buffer valid until the last view dies.
-            // No memory pressure: the view owns none of these bytes. A managed array is already counted by the GC, and a
-            // legacy output's native buffer belongs to its results collection.
+            // A pinned MANAGED array is booked with NumSharp's accounting: the GC counts the array, but the pin keeps it
+            // alive until the last view dies, so a forgotten view's array survives the collection that found the view dead
+            // and the GC collects less often (5,000 forgotten views of fresh 602 KB tensors held +1,880-2,373 MB unbooked;
+            // P8 Q3, 2026-11-06). A legacy output's native buffer is not booked: its results collection owns and frees it.
+            long pinnedBytes = MemoryMarshal.TryGetArray<T>(tensor.Buffer, out _) ? count * sizeof(T) : 0;
             var lease = new ImportLease(() =>
             {
                 handle.Dispose();
                 GC.KeepAlive(tensor);
-            }, ownedBytes: 0);
+            }, ownedBytes: pinnedBytes);
             try
             {
                 IArraySlice slice = WrapExternal(tc, handle.Pointer, count, lease.Release);

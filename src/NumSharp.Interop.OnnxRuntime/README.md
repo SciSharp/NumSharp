@@ -279,8 +279,10 @@ The one copy left — `stack` + `astype`/divide producing the planar normalized 
   is disposed or collected. A non-owning view roots the `OrtValue` (it cannot be finalized under the view) but
   the caller must not `Dispose` it while a view is in use — the rule ORT documents for `GetTensorDataAsSpan`.
   `ownsValue: true` transfers ownership: the last view disposes the `OrtValue`, and the caller must not. A
-  call that throws never disposes the value. Only an owning view books the buffer's size with NumSharp's
-  memory accounting (not for a `ToOrtValue` result, which the value has booked already). Views do
+  call that throws never disposes the value. An owning view books the buffer's size with NumSharp's memory
+  accounting (not for a `ToOrtValue` result, which the value has booked already), and so does a `DenseTensor<T>`
+  view of a managed array, whose pin keeps the array alive until the last view is gone (a forgotten view is then
+  collected like a forgotten NumSharp array); a view of a legacy run's output books nothing. Views do
   not own their data (`flags.owndata == False`): a size-changing `resize` refuses instead of detaching.
 - **Imports of NumSharp memory are ordinary NumSharp views.** A value this package made
   (`nd.AsOrtValue().Value.AsNDArray()`), a `tensor.AsNDArray()` of an `AsDenseTensor<T>` handle and an output

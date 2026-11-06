@@ -20,7 +20,7 @@ dependency**. Referencing the package changes nothing until you call a verb.
 | `nd.AsTensorSpan<T>()` → `TensorSpanHandle<T>` | NDArray → Tensors | **zero-copy** `TensorSpan<T>` / `ReadOnlyTensorSpan<T>` over the NDArray's buffer, **any non-negative-stride layout** |
 | `nd.ToTensor<T>()` → `Tensor<T>` | NDArray → Tensors | independent **dense copy** (any source layout, logical order) |
 | `tensor.ToNDArray()` → `NDArray` | Tensors → NDArray | owning **copy** (the safe default) |
-| `tensor.AsNDArray()` → `NDArray` | Tensors → NDArray | **zero-copy** view over the pinned tensor backing store |
+| `tensor.AsNDArray()` → `NDArray` | Tensors → NDArray | **zero-copy** view over the pinned tensor backing store, booked with NumSharp's memory accounting while pinned (a forgotten view is collected like a forgotten NumSharp array) |
 | `span.ToNDArray()` | Tensors → NDArray | **copy** (a `ref struct` span cannot be leased) |
 
 ## Dtypes — all 15 cross as themselves

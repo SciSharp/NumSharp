@@ -36,7 +36,7 @@ trainers, transforms) you already reference — NuGet unifies the DataView depen
 | `nd.ToDataView(...)`, `columns.ToDataView()` | NumSharp → ML.NET | Same, over an independent snapshot (no lifetime coupling to the source). |
 | `nd.ToVBuffer<T>()` | NumSharp → ML.NET | A dense `VBuffer<T>` (a copy — see [zero-copy note](#zero-copy-and-vbuffer)). |
 | `view.ToNDArray("col")` | ML.NET → NumSharp | Materialize a column across all rows: a scalar column → 1-D `(R,)`; a fixed-size vector column → 2-D `(R, C)`. |
-| `vbuffer.AsNDArray<T>()` | ML.NET → NumSharp | A **zero-copy** 1-D view over a dense `VBuffer<T>`'s own backing array (write-through), pinned for the view's lifetime; sparse/empty fall back to a copy. |
+| `vbuffer.AsNDArray<T>()` | ML.NET → NumSharp | A **zero-copy** 1-D view over a dense `VBuffer<T>`'s own backing array (write-through), pinned for the view's lifetime and booked with NumSharp's memory accounting meanwhile (so a forgotten view is collected like a forgotten NumSharp array); sparse/empty fall back to a copy. |
 | `vbuffer.ToNDArray()` | ML.NET → NumSharp | A dense 1-D `NDArray` copy (sparse buffers are densified). |
 
 ### Zero-copy and VBuffer

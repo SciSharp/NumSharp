@@ -76,11 +76,12 @@ namespace NumSharp.Interop.OnnxRuntime
         private static long _importPressureBytes;
 
         /// <summary>
-        ///     The bytes of ORT memory currently booked with NumSharp's memory accounting
-        ///     (<c>SizeBucketedBufferPool.BookForeign</c>: the GC hears about them as memory pressure) by import views that
-        ///     OWN their <see cref="OrtValue"/>. A diagnostic for the tests: the rule "only an owning view books, once, and
-        ///     gives it back when it dies" has no other observable effect. A steady non-zero value with no live owning view
-        ///     is a booking leak (the GC then collects more often for the life of the process).
+        ///     The bytes currently booked with NumSharp's memory accounting (<c>SizeBucketedBufferPool.BookForeign</c>: the
+        ///     GC hears about them as memory pressure) by import views: ORT memory of views that OWN their
+        ///     <see cref="OrtValue"/>, and the managed arrays <c>DenseTensor&lt;T&gt;</c> views pin. A diagnostic for the
+        ///     tests: the rule "a view books what it keeps alive, once, and gives it back when it dies" has no other
+        ///     observable effect. A steady non-zero value with no such live view is a booking leak (the GC then collects
+        ///     more often for the life of the process).
         /// </summary>
         internal static long ImportPressureBytes => Interlocked.Read(ref _importPressureBytes);
 

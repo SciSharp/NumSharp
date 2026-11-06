@@ -342,8 +342,11 @@ bytes)` on `slice.Address + Shape.Offset × itemsize`; the import takes the poin
   is disposed or collected. A non-owning view roots the `OrtValue` so it cannot be finalized under it, but
   you must not `Dispose` the `OrtValue` (or the `Run` result collection) while a view is in use - exactly
   ORT's rule for `GetTensorDataAsSpan`. With `ownsValue: true` the last view disposes the `OrtValue` and you
-  must not; a call that throws never disposes it. Only an owning view books the buffer's size with NumSharp's
-  memory accounting, and not for a `ToOrtValue` result, which the value itself has booked already.
+  must not; a call that throws never disposes it. An owning view books the buffer's size with NumSharp's
+  memory accounting (not for a `ToOrtValue` result, which the value itself has booked already), and so does a
+  `DenseTensor<T>` view of a managed array, whose pin keeps the array alive until the last view is gone: a
+  forgotten view is then collected like a forgotten NumSharp array (5,000 forgotten views of fresh 602 KB
+  tensors held 1.9-2.4 GB unbooked). A view of a legacy run's output books nothing: its results own it.
   Views do not own their data (`owndata == false`): a size-changing `resize` refuses instead of detaching.
 - **Imports of NumSharp memory are ordinary NumSharp views.** A value this package made
   (`nd.AsOrtValue().Value.AsNDArray()`), a `tensor.AsNDArray()` of an `AsDenseTensor<T>` handle, and an
@@ -459,7 +462,7 @@ an older ORT the tests of their behaviour report Inconclusive and the test of th
 | 19 | Tensors of 2 GB or more that ORT owns are refused by both imports before anything is allocated; `ToOrtValue` refuses exactly past the span limit; `AsDenseTensor` refuses more elements than a `Memory<T>` indexes | `BoundaryTests`, `DenseTensorEdgeTests` |
 | 20 | The public surface equals the approved list (defaults included) | `ApiSurfaceTests` |
 | 21 | In every order the runtime may run their finalizers, the handles, pins, views and imports never free a buffer an alias still reaches and give each reference back exactly once | `LifetimeGcTests` |
-| 22 | A view of a value this package made is a counted alias, valid after the handle and the source; it inherits the read-only flag; only an owning view books its bytes, and a `ToOrtValue` result is booked once | `ImportAliasTests` |
+| 22 | A view of a value this package made is a counted alias, valid after the handle and the source; it inherits the read-only flag; an owning view and a view of a pinned managed array book their bytes, a legacy output's view books none, a `ToOrtValue` result is booked once | `ImportAliasTests` |
 | 23 | Text crosses in both directions through every route, as a copy; `View` refuses it; a trailing NUL is lost in a text array and kept by `ReadStringTensor` | `TextTests` |
 | 24 | An output that is a fed input: `RunInto` writes the fed values, the zero-copy form returns a counted view of the fed buffer, also for a temporary | `PassThroughOutputTests` |
 | 25 | The asynchronous forms: the version rule, the completion off ORT's thread, a blocking wait under a context or a single-thread scheduler, arrays disposed in flight, errors from the call and through the task, the outputs `RunAsync` can and cannot allocate | `SessionRunAsyncTests` |
