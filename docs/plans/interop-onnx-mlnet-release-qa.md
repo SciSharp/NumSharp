@@ -515,6 +515,38 @@ rides in P12's commit) - and `qa/proposals-all` merges all seven with their thre
       forgotten views of fresh 602 KB arrays +33-34 MB through ORT's `DenseTensor<T>` view (was +1,880-2,373), +41-278 MB
       through ML.NET (four runs), +70 MB through Tensors, at 47-469 us per view (most runs 47-147; two runs on a busier
       machine 345-469); views of one array disposed at once: 0 collections, 2.2-2.6 us per view.
+  - **Verified 2026-11-06 (the owner: "Do you feel in terms of multithreading, memory safety and memory gc load, are we
+    good? Prove it"; branch `qa/p8-verify`).**
+    - Memory safety, statically: R7's `MemoryHandle(null, default, token)` is never dereferenced. ORT touches
+      `OrtValue._memHandle` in three places only - the declaration, the constructor's store and `Dispose(true)`'s
+      `_memHandle?.Dispose(); _memHandle = null;` - in the vendored 1.29.0 source and in the decompiled 1.16.0 and 1.31.1
+      assemblies alike; `Dispose(false)` (the finalizer) skips it. NumSharp never frees memory ORT owns, and the
+      bookings never free anything at all. ORT's own `Dispose` is not thread-safe (two threads disposing ONE value both
+      release the native handle): ORT's contract, which the token neither causes nor worsens (its end is once-guarded).
+    - Multithreading: new permanent tests, each green on net10.0 and net8.0 (ORT also at 1.16.0), 4-600 ms each.
+      `ForeignBookingConcurrencyTests` (Core: 16 threads booking and giving back on their own thread, another thread and
+      the finalizer thread under young collections - the foreign balance exact; 16 disposing threads pace nothing;
+      48 MiB booked from 16 threads at once paces without deadlock), `BookingConcurrencyTests` (ORT: `ToOrtValue` from 8
+      threads disposed anywhere or dropped; bound copies from 4 threads correct under pool churn after their managed
+      values are gone; `DenseTensor<T>` and owning views from 8 threads), `VBufferLeaseConcurrencyTests`,
+      `TensorLeaseConcurrencyTests` and `ImportLeaseConcurrencyTests` (pythonnet: 4 threads contending for the GIL):
+      every view and copy reads its own memory for as long as it lives, every booking comes back. A mutant that makes
+      the foreign counter's update non-atomic drifts 31-60 MB and fails two of the Core tests on both TFMs: the tests
+      see lost updates. By design and not asserted: the pacing window and the pressure-chunk registration are
+      heuristics (a lost update there moves WHICH call paces or registers a chunk, never a balance).
+    - Memory safety, dynamically: `NUMSHARP_DEBUG_GUARD_PAGES=1` (every pool buffer ends at an inaccessible page) over
+      the whole ORT (344 / 344), ML.NET (233 / 233), Tensors (105 / 105) and pythonnet (788 / 788) suites and the Core
+      booking classes (9 / 9), net10.0 and net8.0: no crash, no failure.
+    - GC load (soak, 8 threads x 40 s per phase, every bridge path, Release; `qa/interop-probes`, `p8-2026-11-06/`):
+      disposing over shared arrays ran 8.3 million operations (208,000 a second) with 0 paced collections, 1 gen-2
+      collection, 1.6% of the time paused and private memory flat at +28 MB; everything forgotten (fresh 602 KB arrays)
+      plateaued at +145 MB (both halves of the run), at ~12,000 paced gen-0 collections and 22% of the time paused - the
+      bounded-memory trade the owner chose; 90% disposed / 10% forgotten stayed at +86-176 MB with 13-116 paced
+      collections. The mixed phase's 10,893-13,307 gen-2 collections are the workload's own: the same large arrays
+      allocated with NO view (the control) ran 13,943-19,655 gen-2 collections and 33-49% paused. Every phase ended at 0
+      booked bytes, 0 live bookings and 0 live imports. Holding 976 MB of LIVE views on purpose costs 60 paced gen-0
+      collections, 3-4 extra gen-2 collections and ~6 ms of pauses against the same arrays held without views: the one
+      GC cost booking adds to correct code, small and bounded.
 - **P9 (F25) The release job and three new package ids.** **Done 2026-11-03 (`f9390a1b`: the push loop; the key check is the owner's).** Before tagging, check that the nuget.org API key in
   `NUGETAPIKEY` may push NEW ids matching `NumSharp.Interop.*` ("Push new packages and package versions", glob
   `NumSharp*`). Optionally let the push loop report every failure at the end instead of stopping at the first.
@@ -926,4 +958,5 @@ The proposals (section 5) are separate, each the owner's to accept or drop:
 | 2026-11-05 15:25 | The owner asked for an HTML report of P8 (the blind spot, pythonnet's, the recommended fix and its alternatives as code): `report.html` on `qa/interop-probes` `72992df3`. Measured for it: R3 (`AsOrtValue(Copy)`) wrong under `OrtIoBinding` like R2; R6 (`GC.AddMemoryPressure`) correct but 543 / 284 gen-2 collections and 33.1 us; the pythonnet routes counted by live copies (private bytes do not repeat there), which corrects the 14:40 entry's "+24 MB" for `copy().ToNumpy()` to "peak 36 live copies (21 MB)". |
 | 2026-11-05 19:40 | P19 done on `qa/ufunc-keeporder` (`ecd70236`): every fresh ufunc result in NumPy 2.4.2's layout; the elementwise exp of a transposed view now keeps its order, the cause of F79's Softmax / LogSoftmax drift; F79's own check is to be re-run once both branches meet. Not merged. |
 | 2026-11-06 19:10 | P8 decided and done on `qa/p8-booking` (from `95ea3e0e`). The owner asked why NumSharp cannot own the disposal itself; the answer (the side whose reference count ends a buffer's use must hold the counted reference, and ORT's native holders are invisible to managed counters) and three decision pages: Q1 R7 "NumSharp manages ORT's value", Q2 "Book with the pool" for the ORT owning-view and pythonnet leases, Q3 the ML.NET / Tensors managed-array leases deferred with "why would we want to report mem pressure". R7: ORT frees, a token in `OrtValue._memHandle` books until `Dispose(true)` or collection; forgotten +68 / +72 MB (was +2,898), disposed paces nothing, +0.3-0.6 us; the leases' gen-2 churn (45-47 ORT, 8-15 pythonnet per 5,000 disposed views) gone. Suites green: Core unit, ORT 1.31.1 and 1.16.0 on both TFMs, ML.NET floor, pythonnet 787 / 787. Section 5, P8. |
-| 2026-11-06 21:30 | P8 Q3 measured for and against (the owner: "why would we want to report mem pressure"), re-asked and done. For: a forgotten view's pin keeps a LARGE managed array alive past the gen-2 that found the view dead, so 5,000 forgotten views of fresh 602 KB arrays held +2.3-2.7 GB unreported (+1.9-2.4 GB through ORT's `DenseTensor<T>` view, which reported nothing). Against per-lease pressure: double counting, 12-41 gen-2s per 5,000 disposed views (CoreCLR never subtracts removals), no help in a tight loop over a big heap. The owner chose "Book with the pool" and asked whether large NumSharp arrays bypass the pool and whether disposal still happens: yes to both (64 MiB+ skips the buckets, every size is accounted; booking is accounting only, the release runs as before). ML.NET + Tensors leases book, ORT's `DenseTensor<T>` view books its managed array; probes `qa/interop-probes` `63899e7c` + `09911042`. Section 5, P8. |
+| 2026-11-06 20:14 | P8 Q3 measured for and against (the owner: "why would we want to report mem pressure"), re-asked and done. For: a forgotten view's pin keeps a LARGE managed array alive past the gen-2 that found the view dead, so 5,000 forgotten views of fresh 602 KB arrays held +2.3-2.7 GB unreported (+1.9-2.4 GB through ORT's `DenseTensor<T>` view, which reported nothing). Against per-lease pressure: double counting, 12-41 gen-2s per 5,000 disposed views (CoreCLR never subtracts removals), no help in a tight loop over a big heap. The owner chose "Book with the pool" and asked whether large NumSharp arrays bypass the pool and whether disposal still happens: yes to both (64 MiB+ skips the buckets, every size is accounted; booking is accounting only, the release runs as before). ML.NET + Tensors leases book, ORT's `DenseTensor<T>` view books its managed array; probes `qa/interop-probes` `63899e7c` + `09911042`. Section 5, P8. |
+| 2026-11-06 21:15 | P8 verified on the owner's "are we good? Prove it" (`qa/p8-verify`): ORT never dereferences `_memHandle` (1.16.0 / 1.29.0 / 1.31.1); new concurrency tests in Core, ORT, ML.NET, Tensors and pythonnet green on both TFMs (a non-atomic-counter mutant fails them); every bridge suite green under guard pages; the soak shows disposing code at 0 paced / 1 gen-2 in 40 s, forgotten views plateauing at +145 MB, and the mixed phase's gen-2 load matching a no-view control; holding 976 MB of live views costs 60 paced gen-0 and 3-4 gen-2. Section 5, P8. |
