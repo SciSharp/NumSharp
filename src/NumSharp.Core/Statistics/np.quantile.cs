@@ -60,23 +60,10 @@ namespace NumSharp
             string method = "linear", bool keepdims = false, NDArray weights = null)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
-            if (NDMatrixBoundary.Sees(a))
-                return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims, weights), static s => quantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), axis, keepdims, null);
-            // a numpy.char.chararray operand: with weights= NumPy's result is empty_like of the chararray, the plain call
-            // kept as a chararray (its checks run inside it, so an invalid argument raises the same error); without
-            // weights the flag goes down, where NumPy's text route meets the STRING partition (DefaultEngine.QuantileFunction).
-            bool chararray = NDCharArrayBoundary.Sees(a);   // the user's call decides the chararray rule (before any PlainFor region hides it)
-            if (chararray && weights is not null)
-                return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
-                    static s => quantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
             // NumPy's np.quantile body (q's checks, the weighted branch, the text routes, the numeric quantile) is
             // TensorEngine.Quantile's: the facade holds only the class rules above.
             int[] axes = axis.HasValue ? new[] { axis.Value } : null;
-            return chararray
-                ? DefaultEngine.Of(a).QuantileFunction("quantile", a, new QuantileArgument(q), axes, @out,
-                    overwrite_input, method, keepdims, weights, chararray: true)
-                : a.TensorEngine.Quantile(a, q, axes, @out, overwrite_input, method, keepdims, weights);
+            return a.TensorEngine.Quantile(a, q, axes, @out, overwrite_input, method, keepdims, weights);
         }
 
         /// <summary>
@@ -132,20 +119,9 @@ namespace NumSharp
             string method = "linear", bool keepdims = false, NDArray weights = null)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
-            if (NDMatrixBoundary.Sees(a))
-                return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims, weights), static s => quantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), axis, keepdims, null);
-            // a numpy.char.chararray operand: the weights= rule here, the flag below (see the double-q overload).
-            bool chararray = NDCharArrayBoundary.Sees(a);   // the user's call decides the chararray rule (before any PlainFor region hides it)
-            if (chararray && weights is not null)
-                return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
-                    static s => quantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
             // NumPy's np.quantile body is TensorEngine.Quantile's (a null q is reported there, after the complex check).
             int[] axes = axis.HasValue ? new[] { axis.Value } : null;
-            return chararray
-                ? DefaultEngine.Of(a).QuantileFunction("quantile", a, new QuantileArgument(q), axes, @out,
-                    overwrite_input, method, keepdims, weights, chararray: true)
-                : a.TensorEngine.Quantile(a, q, axes, @out, overwrite_input, method, keepdims, weights);
+            return a.TensorEngine.Quantile(a, q, axes, @out, overwrite_input, method, keepdims, weights);
         }
 
         /// <summary>
@@ -211,17 +187,8 @@ namespace NumSharp
             string method = "linear", bool keepdims = false, NDArray weights = null)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            bool chararray = NDCharArrayBoundary.Sees(a);   // the user's call decides the chararray rule (before any PlainFor region hides it)
-            using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // a numpy.char.chararray operand: the weights= rule here, the flag below (see the double-q overload).
-            if (chararray && weights is not null)
-                return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
-                    static s => quantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
             // NumPy's np.quantile body is TensorEngine.Quantile's.
-            return chararray
-                ? DefaultEngine.Of(a).QuantileFunction("quantile", a, new QuantileArgument(q), axis, @out,
-                    overwrite_input, method, keepdims, weights, chararray: true)
-                : a.TensorEngine.Quantile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
+            return a.TensorEngine.Quantile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
         }
 
         /// <summary>
@@ -288,17 +255,8 @@ namespace NumSharp
             string method = "linear", bool keepdims = false, NDArray weights = null)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            bool chararray = NDCharArrayBoundary.Sees(a);   // the user's call decides the chararray rule (before any PlainFor region hides it)
-            using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // a numpy.char.chararray operand: the weights= rule here, the flag below (see the double-q overload).
-            if (chararray && weights is not null)
-                return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
-                    static s => quantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
             // NumPy's np.quantile body is TensorEngine.Quantile's (a null q is reported there, after the complex check).
-            return chararray
-                ? DefaultEngine.Of(a).QuantileFunction("quantile", a, new QuantileArgument(q), axis, @out,
-                    overwrite_input, method, keepdims, weights, chararray: true)
-                : a.TensorEngine.Quantile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
+            return a.TensorEngine.Quantile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
         }
 
         /// <summary>
@@ -356,21 +314,10 @@ namespace NumSharp
             string method = "linear", bool keepdims = false, NDArray weights = null)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
-            if (NDMatrixBoundary.Sees(a))
-                return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims, weights), static s => quantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), axis, keepdims, null);
-            // a numpy.char.chararray operand: the weights= rule here, the flag below (see the double-q overload).
-            bool chararray = NDCharArrayBoundary.Sees(a);   // the user's call decides the chararray rule (before any PlainFor region hides it)
-            if (chararray && weights is not null)
-                return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
-                    static s => quantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
             // NumPy's np.quantile body is TensorEngine.Quantile's: a null or text q, the range check at any rank, an
             // integer q's index taken instead of interpolated, a weak C# literal, q's rank, all in NumPy's order.
             int[] axes = axis.HasValue ? new[] { axis.Value } : null;
-            return chararray
-                ? DefaultEngine.Of(a).QuantileFunction("quantile", a, new QuantileArgument(q), axes, @out,
-                    overwrite_input, method, keepdims, weights, chararray: true)
-                : a.TensorEngine.Quantile(a, q, axes, @out, overwrite_input, method, keepdims, weights);
+            return a.TensorEngine.Quantile(a, q, axes, @out, overwrite_input, method, keepdims, weights);
         }
 
         /// <summary>
@@ -435,17 +382,8 @@ namespace NumSharp
             string method = "linear", bool keepdims = false, NDArray weights = null)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            bool chararray = NDCharArrayBoundary.Sees(a);   // the user's call decides the chararray rule (before any PlainFor region hides it)
-            using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // a numpy.char.chararray operand: the weights= rule here, the flag below (see the double-q overload).
-            if (chararray && weights is not null)
-                return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
-                    static s => quantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
             // NumPy's np.quantile body is TensorEngine.Quantile's (see the one-axis overload).
-            return chararray
-                ? DefaultEngine.Of(a).QuantileFunction("quantile", a, new QuantileArgument(q), axis, @out,
-                    overwrite_input, method, keepdims, weights, chararray: true)
-                : a.TensorEngine.Quantile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
+            return a.TensorEngine.Quantile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
         }
 
         /// <summary>

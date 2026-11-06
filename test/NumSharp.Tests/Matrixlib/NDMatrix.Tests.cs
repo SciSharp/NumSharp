@@ -873,7 +873,9 @@ namespace NumSharp.Tests.Matrixlib
         }
 
         /// <summary>A matrix reduction is always NumPy's ARRAY form: std with an integer dtype raises for
-        ///     <c>axis: null</c> too, where np.std of the plain array returns a truncated scalar.</summary>
+        ///     <c>axis: null</c> too, where np.std of the plain array returns a truncated scalar. np.std of the matrix
+        ///     object is the matrix method (NumPy's _wrapreduction dispatch), so it raises the same error; only the plain
+        ///     view (<c>m.A</c>) takes the array's route.</summary>
         [TestMethod]
         public void Std_WithAnIntegerDtype_Raises()
         {
@@ -881,7 +883,10 @@ namespace NumSharp.Tests.Matrixlib
             Action flat = () => m.std(dtype: np.int64);
             flat.Should().ThrowExactly<TypeError>().WithMessage(
                 "Cannot cast ufunc 'sqrt' output from dtype('float64') to dtype('int64') with casting rule 'same_kind'");
-            ((long)np.std((NDArray)m, dtype: np.int64)).Should().Be(3L);
+            Action dispatched = () => np.std((NDArray)m, dtype: np.int64);
+            dispatched.Should().ThrowExactly<TypeError>().WithMessage(
+                "Cannot cast ufunc 'sqrt' output from dtype('float64') to dtype('int64') with casting rule 'same_kind'");
+            ((long)np.std(m.A, dtype: np.int64)).Should().Be(3L);
             ((long)m.var(dtype: np.int64)).Should().Be(12L);
         }
 

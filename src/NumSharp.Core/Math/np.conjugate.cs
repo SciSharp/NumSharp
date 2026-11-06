@@ -22,9 +22,6 @@ namespace NumSharp
         [NDScoped]
         public static NDArray conjugate(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(x))
-                return NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => conjugate(s.x, s.@out, s.where, s.dtype), @out);
             return x.TensorEngine.Conjugate(x, dtype, @out, where);
         }
 
@@ -39,8 +36,6 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.conj.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray conj(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => conj(s.x, s.@out, s.where, s.dtype), @out)
-            : conjugate(x, @out, where, dtype);
+            => conjugate(x, @out, where, dtype);
     }
 }

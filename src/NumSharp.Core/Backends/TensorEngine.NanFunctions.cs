@@ -13,7 +13,9 @@ namespace NumSharp
     public abstract partial class TensorEngine
     {
         // NaN-aware reductions
+        [ReducesThrough("sum")]
         public abstract NDArray NanSum(NDArray a, int? axis = null, bool keepdims = false);
+        [ReducesThrough("prod")]
         public abstract NDArray NanProd(NDArray a, int? axis = null, bool keepdims = false);
         /// <summary>
         ///     NumPy's <c>np.nanmin</c>, the whole call: the minimum ignoring NaNs, which on an ndarray IS
@@ -41,6 +43,7 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException">The mask or <paramref name="out"/> does not broadcast.</exception>
         /// <remarks>Widened with <paramref name="out"/>, <paramref name="initial"/> and <paramref name="where"/> in 0.71.0
         ///     (the np-layer dtype plan, phase PE, E5).</remarks>
+        [ReducesThrough("min")]
         public abstract NDArray NanMin(NDArray a, int? axis = null, bool keepdims = false, NDArray @out = null,
             object initial = null, NDArray @where = null);
 
@@ -70,6 +73,7 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException">The mask or <paramref name="out"/> does not broadcast.</exception>
         /// <remarks>Widened with <paramref name="out"/>, <paramref name="initial"/> and <paramref name="where"/> in 0.71.0
         ///     (the np-layer dtype plan, phase PE, E5).</remarks>
+        [ReducesThrough("max")]
         public abstract NDArray NanMax(NDArray a, int? axis = null, bool keepdims = false, NDArray @out = null,
             object initial = null, NDArray @where = null);
 
@@ -95,6 +99,7 @@ namespace NumSharp
         ///     those statements over <see cref="ReduceCumAdd"/>. An override replaces <c>np.nancumsum</c> for every array
         ///     whose engine it is. New in 0.71.0 (the np-layer dtype plan, phase PE).
         /// </remarks>
+        [ArrayWrap("a")]
         public abstract NDArray NanCumSum(NDArray a, int? axis = null, DType dtype = null, NDArray @out = null);
 
         /// <summary>
@@ -117,6 +122,7 @@ namespace NumSharp
         ///     DefaultEngine's override runs NumPy's statements over <see cref="ReduceCumMul"/>. An override replaces
         ///     <c>np.nancumprod</c> for every array whose engine it is. New in 0.71.0 (the np-layer dtype plan, phase PE).
         /// </remarks>
+        [ArrayWrap("a")]
         public abstract NDArray NanCumProd(NDArray a, int? axis = null, DType dtype = null, NDArray @out = null);
 
         /// <summary>
@@ -150,6 +156,7 @@ namespace NumSharp
         ///     override replaces <c>np.nanmean</c> for every array whose engine it is. New in 0.71.0 (the np-layer dtype
         ///     plan, phase PE).
         /// </remarks>
+        [ReducesThrough("mean", InexactMethod = "sum")]
         public abstract NDArray NanMean(NDArray a, int? axis = null, DType dtype = null, bool keepdims = false);
 
         /// <summary>
@@ -179,6 +186,7 @@ namespace NumSharp
         ///     <c>np.nanvar</c> for every array whose engine it is; <see cref="NanStd"/> is a separate member, so an engine
         ///     that changes one should change both. New in 0.71.0 (the np-layer dtype plan, phase PE).
         /// </remarks>
+        [ReducesThrough("var", InexactMethod = "sum")]
         public abstract NDArray NanVar(NDArray a, int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false);
 
         /// <summary>
@@ -204,6 +212,7 @@ namespace NumSharp
         ///     An input that cannot hold NaN is <c>np.std</c>'s, keywords included. New in 0.71.0 (the np-layer dtype plan,
         ///     phase PE).
         /// </remarks>
+        [ReducesThrough("var", InexactMethod = "sum")]
         public abstract NDArray NanStd(NDArray a, int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false);
 
         /// <summary>
@@ -243,6 +252,7 @@ namespace NumSharp
         ///     <c>np.nanquantile</c> calls it after its class rule; an override replaces it for every array whose engine it
         ///     is. New in 0.71.0 (the np-layer dtype plan, phase PE); it was the internal class <c>QuantileEngine</c>.
         /// </remarks>
+        [ReducesThrough(null)]
         public abstract NDArray NanQuantile(NDArray a, object q, int[] axis = null, NDArray @out = null,
             bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null);
 
@@ -275,6 +285,7 @@ namespace NumSharp
         ///     replaces it for every array whose engine it is. New in 0.71.0 (the np-layer dtype plan, phase PE); it was the
         ///     internal class <c>QuantileEngine</c>.
         /// </remarks>
+        [ReducesThrough(null)]
         public abstract NDArray NanPercentile(NDArray a, object q, int[] axis = null, NDArray @out = null,
             bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null);
 
@@ -306,6 +317,7 @@ namespace NumSharp
         ///     for every array whose engine it is. New in 0.71.0 (the np-layer dtype plan, phase PE); it was the internal
         ///     class <c>QuantileEngine</c>.
         /// </remarks>
+        [ReducesThrough(null)]
         public abstract NDArray NanMedian(NDArray a, int[] axis = null, NDArray @out = null, bool overwrite_input = false,
             bool keepdims = false);
 
@@ -335,6 +347,8 @@ namespace NumSharp
         ///     text).</exception>
         /// <remarks>The result cannot be trusted when a slice holds only NaNs and infinities of the losing sign (NumPy's
         ///     caveat).</remarks>
+        [ReducesThrough(null)]
+        [NewSubtype("a")]
         public abstract NDArray NanArgMax(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false);
 
         /// <summary>
@@ -363,6 +377,8 @@ namespace NumSharp
         ///     text).</exception>
         /// <remarks>The result cannot be trusted when a slice holds only NaNs and infinities of the losing sign (NumPy's
         ///     caveat).</remarks>
+        [ReducesThrough(null)]
+        [NewSubtype("a")]
         public abstract NDArray NanArgMin(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false);
     }
 }

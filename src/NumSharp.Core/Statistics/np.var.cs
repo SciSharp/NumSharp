@@ -65,25 +65,6 @@ namespace NumSharp
         {
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
-            if (NDMatrixBoundary.Sees(a))
-            {
-                // fromnumeric folds correction= into ddof before it looks at the operand's class; then NumPy hands a
-                // numpy.matrix to matrix.var(axis, dtype, out, ddof) with the other keywords the caller passed, which the
-                // method does not take (the first one passed is its TypeError).
-                int d = DefaultEngine.DdofWithCorrection(ddof, correction);
-                if (keepdims)
-                    throw NDMatrixBoundary.KeywordError("var", "keepdims");
-                if (@where is not null)
-                    throw NDMatrixBoundary.KeywordError("var", "where");
-                if (mean is not null)
-                    throw NDMatrixBoundary.KeywordError("var", "mean");
-                if (@out is not null)
-                    return NDMatrixBoundary.ReducedInto(a, @out, (axis, dtype, d),
-                        static (m, o, s) => m.var(s.axis, s.dtype, o, s.d),
-                        static (m, o, s) => m.TensorEngine.ReduceVar(m, s.axis, keepdims: true, s.d, s.dtype, o));
-                // a row, a column or the scalar, as NumPy's matrix method returns
-                return NDMatrixBoundary.Reduced((a, axis, dtype, d), static s => var(s.a, s.axis, s.dtype, ddof: s.d), axis, false, "var");
-            }
 
             // The whole call is the engine's: TensorEngine.ReduceVar of a's engine takes every keyword, correction= first.
             return a.TensorEngine.ReduceVar(a, axis, keepdims, ddof, dtype, @out, @where, mean, correction);

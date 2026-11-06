@@ -85,6 +85,7 @@ namespace NumSharp
     ///     </para>
     /// </remarks>
     /// <seealso href="https://numpy.org/doc/stable/reference/generated/numpy.char.chararray.html"/>
+    [ArraySubclass("chararray")]
     public partial class NDCharArray : NDArray, IEnumerable
     {
         /// <summary>NumPy's <c>__array_finalize__</c> error text, verbatim.</summary>

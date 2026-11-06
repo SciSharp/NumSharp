@@ -708,13 +708,23 @@ namespace NumSharp
         ///     itself. Any other operand keeps the result.
         /// </summary>
         /// <param name="result">The plain reduction (unaliased).</param>
+        /// <param name="out">The caller's <c>out=</c>, or <c>null</c> (handed to the other classes' subtype creation).</param>
         /// <param name="self">The operand.</param>
         /// <param name="axis">The caller's axis: it decides row or column for a 1-d plain result.</param>
-        /// <returns>The 0-d result, a matrix view of it, or <paramref name="result"/>.</returns>
-        /// <exception cref="ValueError">A matrix result with more than two axes longer than 1.</exception>
-        internal static NDArray Collapse(NDArray result, NDArray self, int? axis)
+        /// <param name="subtypeOthers">Whether a non-matrix subclass operand gets
+        ///     <see cref="NewSubtype(NDArray, NDArray, NDArray, bool, NewSubtypeZeroDim)"/> (NumPy's body creates its result as
+        ///     that class: <c>np.percentile</c> of a chararray partitions a subtype copy) instead of the plain result.</param>
+        /// <param name="zeroDim">The 0-d form of that subtype creation.</param>
+        /// <returns>The 0-d result, a matrix view of it, the other class's result, or <paramref name="result"/>.</returns>
+        /// <exception cref="ValueError">A matrix result with more than two axes longer than 1; a chararray result whose dtype
+        ///     is not string data (<c>Can only create a chararray from string data.</c>).</exception>
+        internal static NDArray Collapse(NDArray result, NDArray @out, NDArray self, int? axis, bool subtypeOthers,
+                                         NewSubtypeZeroDim zeroDim)
         {
-            if (KindOf(self) != NDSubclassKind.Matrix || result is null || result is NDMatrix)
+            NDSubclassKind kind = KindOf(self);
+            if (kind != NDSubclassKind.Matrix)
+                return subtypeOthers && kind != NDSubclassKind.None ? NewSubtype(result, @out, self, false, zeroDim) : result;
+            if (result is null || result is NDMatrix)
                 return result;
             Shape shape = result.Storage.Shape;
             if (shape.NDim == 0)
@@ -725,6 +735,23 @@ namespace NumSharp
                 return new NDMatrix(result.Storage.Alias(shape.AsMatrixColumn()));
             return NDMatrix.FromWrapped(result);
         }
+
+        /// <summary>
+        ///     <see cref="Collapse(NDArray, NDArray, NDArray, int?, bool, NewSubtypeZeroDim)"/> for a function that returns a C#
+        ///     number (<c>np.nanargmax(a)</c>'s flat index): a matrix's <c>_collapse(None)</c> is that scalar itself; a
+        ///     chararray's subtype creation refuses the int64 index (<see cref="NewSubtype(long, NDArray)"/>).
+        /// </summary>
+        /// <param name="result">The computed number.</param>
+        /// <param name="out">Unused (a number has no <c>out=</c>); kept for the woven call's uniform shape.</param>
+        /// <param name="self">The operand.</param>
+        /// <param name="axis">Unused: a number is the scalar of every axis.</param>
+        /// <param name="subtypeOthers">Whether a non-matrix subclass operand gets the subtype creation.</param>
+        /// <param name="zeroDim">Unused for a number.</param>
+        /// <returns><paramref name="result"/>.</returns>
+        /// <exception cref="ValueError"><paramref name="self"/> is a chararray and <paramref name="subtypeOthers"/> is set
+        ///     (<c>Can only create a chararray from string data.</c>), after the computation's own checks.</exception>
+        internal static long Collapse(long result, NDArray @out, NDArray self, int? axis, bool subtypeOthers, NewSubtypeZeroDim zeroDim)
+            => subtypeOthers ? NewSubtype(result, self) : result;
 
         /// <summary>
         ///     NumPy's error for a keyword a subclass method does not take (<c>np.sum(m, keepdims=True)</c>).

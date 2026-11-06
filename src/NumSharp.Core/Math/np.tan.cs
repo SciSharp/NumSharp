@@ -18,9 +18,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.tan.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray tan(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => tan(s.x, s.@out, s.where, s.dtype), @out)
-            : x.TensorEngine.Tan(x, dtype, @out, where);
+            => x.TensorEngine.Tan(x, dtype, @out, where);
 
         /// <summary>
         ///     Compute hyperbolic tangent element-wise. <br></br>
@@ -32,9 +30,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.tanh.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray tanh(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => tanh(s.x, s.@out, s.where, s.dtype), @out)
-            : x.TensorEngine.Tanh(x, dtype, @out, where);
+            => x.TensorEngine.Tanh(x, dtype, @out, where);
 
         /// <summary>
         ///     Compute trigonometric inverse tangent, element-wise. <br></br>
@@ -46,9 +42,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.arctan.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray arctan(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => arctan(s.x, s.@out, s.where, s.dtype), @out)
-            : x.TensorEngine.ATan(x, dtype, @out, where);
+            => x.TensorEngine.ATan(x, dtype, @out, where);
 
         /// <summary>
         ///     Compute Element-wise arc tangent of x1/x2 choosing the quadrant correctly. <br></br>
@@ -63,8 +57,6 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.arctan2.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray arctan2(NDArray y, NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => NDMatrixBoundary.Sees(y, x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((y, x, @out, where, dtype), static s => arctan2(s.y, s.x, s.@out, s.where, s.dtype), @out)
-            : x.TensorEngine.ATan2(y, x, dtype, @out, where);
+            => x.TensorEngine.ATan2(y, x, dtype, @out, where);
     }
 }

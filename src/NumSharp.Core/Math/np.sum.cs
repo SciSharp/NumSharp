@@ -76,23 +76,6 @@ namespace NumSharp
         {
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
-            if (NDMatrixBoundary.Sees(a))
-            {
-                // NumPy hands a numpy.matrix to matrix.sum(axis, dtype, out) with every keyword the caller passed, in its
-                // signature's order; the method takes none of them, so the first one passed is its TypeError.
-                if (keepdims)
-                    throw NDMatrixBoundary.KeywordError("sum", "keepdims");
-                if (initial is not null)
-                    throw NDMatrixBoundary.KeywordError("sum", "initial");
-                if (@where is not null)
-                    throw NDMatrixBoundary.KeywordError("sum", "where");
-                if (@out is not null)
-                    return NDMatrixBoundary.ReducedInto(a, @out, (axis, dtype),
-                        static (m, o, s) => m.sum(s.axis, s.dtype, o),
-                        static (m, o, s) => m.TensorEngine.ReduceAdd(m, s.axis, keepdims: true, s.dtype, o));
-                // a row, a column or the scalar, as NumPy's matrix method returns
-                return NDMatrixBoundary.Reduced((a, axis, dtype), static s => sum(s.a, s.axis, s.dtype), axis, false, "sum");
-            }
 
             // The whole call is the engine's: TensorEngine.ReduceAdd of a's engine takes every keyword.
             return a.TensorEngine.ReduceAdd(a, axis, keepdims, dtype, @out, initial, @where);

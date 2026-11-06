@@ -14,8 +14,6 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.trunc.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray trunc(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => trunc(s.x, s.@out, s.where, s.dtype), @out)
-            : x.TensorEngine.Truncate(x, dtype, @out, where);
+            => x.TensorEngine.Truncate(x, dtype, @out, where);
     }
 }

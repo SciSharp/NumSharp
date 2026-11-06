@@ -33,8 +33,6 @@ namespace NumSharp
         /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
         [NDScoped]
         public static NDArray nanmean(NDArray a, int? axis = null, bool keepdims = false, DType dtype = null)
-            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
-            ? NDMatrixBoundary.Reduced((a, axis, keepdims, dtype), static s => nanmean(s.a, s.axis, s.keepdims, s.dtype), axis, keepdims, (a.typecode is NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Complex) ? "sum" : "mean")
-            : a.TensorEngine.NanMean(a, axis, dtype, keepdims);
+            => a.TensorEngine.NanMean(a, axis, dtype, keepdims);
     }
 }

@@ -14,9 +14,7 @@ namespace NumSharp
         /// <returns>An ndarray containing the absolute value of each element in x.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.absolute.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
-        public static NDArray absolute(NDArray a) => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped(a, static s => absolute(s))
-            : a.TensorEngine.Abs(a);
+        public static NDArray absolute(NDArray a) => a.TensorEngine.Abs(a);
 
         /// <summary>
         ///     Calculate the absolute value element-wise.
@@ -29,9 +27,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.absolute.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray absolute(NDArray a, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((a, @out, where, dtype), static s => absolute(s.a, s.@out, s.where, s.dtype), @out)
-            : a.TensorEngine.Abs(a, dtype, @out, where);
+            => a.TensorEngine.Abs(a, dtype, @out, where);
 
         /// <summary>
         ///     Calculate the absolute value element-wise. <br></br>
@@ -41,9 +37,7 @@ namespace NumSharp
         /// <returns>An ndarray containing the absolute value of each element in x.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.absolute.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
-        public static NDArray abs(NDArray a) => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped(a, static s => abs(s))
-            : a.TensorEngine.Abs(a);
+        public static NDArray abs(NDArray a) => a.TensorEngine.Abs(a);
 
         /// <summary>
         ///     Calculate the absolute value element-wise (alias of <see cref="absolute(NDArray, NDArray, NDArray, DType)"/>).
@@ -56,8 +50,6 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.absolute.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray abs(NDArray a, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((a, @out, where, dtype), static s => abs(s.a, s.@out, s.where, s.dtype), @out)
-            : a.TensorEngine.Abs(a, dtype, @out, where);
+            => a.TensorEngine.Abs(a, dtype, @out, where);
     }
 }

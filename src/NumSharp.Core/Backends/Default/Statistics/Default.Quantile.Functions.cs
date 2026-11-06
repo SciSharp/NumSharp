@@ -116,8 +116,11 @@ namespace NumSharp.Backends
             bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null)
         {
             using var made = QuantileQ(q, out var argument);
+            // A numpy.char.chararray operand without weights takes NumPy's text route, which meets the STRING partition
+            // (the plain view the woven np.quantile hands over remembers the class); with weights the plain call runs and the
+            // woven rule keeps the class (empty_like of the chararray).
             return QuantileFunction("quantile", a, argument, axis, @out, overwrite_input, method, keepdims, weights,
-                chararray: false);
+                chararray: weights is null && NDSubclass.StandsForCharArray(a));
         }
 
         /// <summary>
@@ -140,8 +143,11 @@ namespace NumSharp.Backends
             bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null)
         {
             using var made = QuantileQ(q, out var argument);
+            // A numpy.char.chararray operand without weights takes NumPy's text route, which meets the STRING partition
+            // (the plain view the woven np.percentile hands over remembers the class); with weights the plain call runs and the
+            // woven rule keeps the class (empty_like of the chararray).
             return QuantileFunction("percentile", a, argument, axis, @out, overwrite_input, method, keepdims, weights,
-                chararray: false);
+                chararray: weights is null && NDSubclass.StandsForCharArray(a));
         }
 
         /// <summary>

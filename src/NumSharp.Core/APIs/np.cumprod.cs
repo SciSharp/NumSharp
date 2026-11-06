@@ -20,9 +20,6 @@ namespace NumSharp
         [NDScoped]
         public static NDArray cumprod(NDArray arr, int? axis = null, DType typeCode = null, NDArray @out = null)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(arr))
-                return NDMatrixBoundary.Wrapped((arr, axis, typeCode, @out), static s => cumprod(s.arr, s.axis, s.typeCode, s.@out), @out);
             // np.cumprod IS np.multiply.accumulate, and NumPy's whole call (the text routes, the parse of text under a numeric
             // dtype=, the loop resolution, out=) is the engine's: DefaultEngine.ReduceCumMul.
             return arr.TensorEngine.ReduceCumMul(arr, axis, typeCode, @out);

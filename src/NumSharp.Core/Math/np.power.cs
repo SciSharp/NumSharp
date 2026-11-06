@@ -27,9 +27,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.power.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
-        public static NDArray power(NDArray x1, object x2) => NDMatrixBoundary.Sees(x1)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((x1, x2), static s => power(s.x1, s.x2))
-            : x1.TensorEngine.Power(x1, np.asanyarray(x2), (Type)null);
+        public static NDArray power(NDArray x1, object x2) => x1.TensorEngine.Power(x1, np.asanyarray(x2), (Type)null);
 
         /// <summary>
         ///     First array elements raised to powers from second array, element-wise.
@@ -40,9 +38,7 @@ namespace NumSharp
         /// <returns>The bases in x1 raised to the exponents in x2.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.power.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
-        public static NDArray power(NDArray x1, NDArray x2) => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((x1, x2), static s => power(s.x1, s.x2))
-            : x1.TensorEngine.Power(x1, x2, (Type)null);
+        public static NDArray power(NDArray x1, NDArray x2) => x1.TensorEngine.Power(x1, x2, (Type)null);
 
         /// <summary>
         ///     First array elements raised to powers from second array, element-wise.
@@ -56,9 +52,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.power.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray power(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => power(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
-            : x1.TensorEngine.Power(x1, x2, dtype, @out, where);
+            => x1.TensorEngine.Power(x1, x2, dtype, @out, where);
 
         /// <summary>
         ///     First array elements raised to powers from second array, element-wise.
@@ -69,9 +63,7 @@ namespace NumSharp
         /// <returns>The bases in x1 raised to the exponents in x2.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.power.html</remarks>
         public static NDArray power(in NDArray x1, in NDArray x2)
-            => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix: the by-value overload's rule
-            ? power(x1, x2, null, null, null)
-            : x1.TensorEngine.Power(x1, x2, (Type)null);
+            => x1.TensorEngine.Power(x1, x2, (Type)null);
 
         /// <summary>
         ///     Return the element-wise square of the input.
@@ -80,9 +72,7 @@ namespace NumSharp
         /// <returns>Element-wise x*x, of the same shape and dtype as x. Returns scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.power.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
-        public static NDArray square(NDArray x) => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped(x, static s => square(s))
-            : x.TensorEngine.Square(x, (Type)null);
+        public static NDArray square(NDArray x) => x.TensorEngine.Square(x, (Type)null);
 
         /// <summary>
         ///     Return the element-wise square of the input.
@@ -95,8 +85,6 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.square.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray square(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => square(s.x, s.@out, s.where, s.dtype), @out)
-            : x.TensorEngine.Square(x, dtype, @out, where);
+            => x.TensorEngine.Square(x, dtype, @out, where);
     }
 }

@@ -70,6 +70,7 @@ internal static class SubclassWeaver
     private const string AsArrayForAttr = "NumSharp.AsArrayForAttribute";
     private const string WrapReductionAttr = "NumSharp.WrapReductionAttribute";
     private const string WrapFuncAttr = "NumSharp.WrapFuncAttribute";
+    private const string WrapArgumentAttr = "NumSharp.WrapArgumentAttribute";
     private const string ReducesThroughAttr = "NumSharp.ReducesThroughAttribute";
     private const string SubclassRuleAttr = "NumSharp.SubclassRuleAttribute";
     private const string SubclassAwareAttr = "NumSharp.SubclassAwareAttribute";
@@ -168,6 +169,9 @@ internal static class SubclassWeaver
         /// <summary>ReducesThrough: the method reached first for an inexact dtype, or null.</summary>
         public string InexactMethod;
 
+        /// <summary>ReducesThrough: the non-matrix classes take <c>NewSubtype</c> (a <c>[NewSubtype]</c> next to it).</summary>
+        public bool SubtypeOthers;
+
         /// <summary>Custom: the rule method, or null for a check only.</summary>
         public MethodDefinition CustomRule;
 
@@ -183,6 +187,10 @@ internal static class SubclassWeaver
         /// <summary>Method dispatch (<c>_wrapfunc</c>): the parameters passed only when given.</summary>
         public HashSet<string> WhenGiven = new(StringComparer.Ordinal);
 
+        /// <summary>Method dispatch: the method parameters NumPy's function computes first (<c>[WrapArgument]</c>), each
+        ///     with its computing method.</summary>
+        public Dictionary<string, MethodDefinition> WrapArguments = new(StringComparer.Ordinal);
+
         /// <summary>
         ///     MIGRATION: the rule comes through a public function that still decides its subclass answer with the legacy
         ///     boundary (a Sees test). Weaving the caller would hand that function plain views and bypass its rule, so the
@@ -196,6 +204,10 @@ internal static class SubclassWeaver
         /// </summary>
         public Rule Forwarded;
 
+        /// <summary>Whether the rule declares something even with no result mechanism: a method dispatch, or an
+        ///     <c>[AsArrayFor]</c> exception over the plain answer.</summary>
+        public bool Declares => Kind != Kind.Undeclared || DispatchMethod is not null || AsArrayKinds != 0;
+
         /// <summary>A short text for the report.</summary>
         /// <returns>The kind and its bindings.</returns>
         public string Describe()
@@ -206,7 +218,7 @@ internal static class SubclassWeaver
                 Kind.ArrayWrap => $"{(UfuncInputs ? "Ufunc" : "ArrayWrap")}({Names(Inputs)}{(Outputs != -1 ? $"; outputs={Outputs}" : "")})",
                 Kind.NewSubtype => $"NewSubtype({Self?.Name}{(KeepRank ? "; keepRank" : "")}{(ZeroDim != 0 ? $"; zeroDim={ZeroDim}" : "")}{(FinalizeFirst ? "; finalizeFirst" : "")})",
                 Kind.GetSubType => $"GetSubType({Arrays?.Name})",
-                Kind.ReducesThrough => $"ReducesThrough({ReducesMethod ?? "null"}{(InexactMethod != null ? "/" + InexactMethod : "")}; {Self?.Name})",
+                Kind.ReducesThrough => $"ReducesThrough({ReducesMethod ?? "null"}{(InexactMethod != null ? "/" + InexactMethod : "")}; {Self?.Name}{(SubtypeOthers ? "; others NewSubtype" : "")})",
                 Kind.Custom => $"Custom({CustomRule?.Name ?? "-"}{(CustomCheck != null ? "; check " + CustomCheck.Name : "")})",
                 _ => Kind.ToString(),
             };
@@ -226,7 +238,7 @@ internal static class SubclassWeaver
             => other is not null && Kind == other.Kind && UfuncInputs == other.UfuncInputs && Self == other.Self &&
                Arrays == other.Arrays && Out == other.Out && Outputs == other.Outputs && KeepRank == other.KeepRank &&
                ZeroDim == other.ZeroDim && FinalizeFirst == other.FinalizeFirst && AsArrayKinds == other.AsArrayKinds &&
-               ReducesMethod == other.ReducesMethod && InexactMethod == other.InexactMethod &&
+               ReducesMethod == other.ReducesMethod && InexactMethod == other.InexactMethod && SubtypeOthers == other.SubtypeOthers &&
                CustomRule == other.CustomRule && CustomCheck == other.CustomCheck &&
                DispatchMethod == other.DispatchMethod && DispatchIsReduction == other.DispatchIsReduction &&
                Inputs.SequenceEqual(other.Inputs);
@@ -426,7 +438,57 @@ internal static class SubclassWeaver
     /// <param name="m">The function.</param>
     /// <returns>The operand parameters in declaration order.</returns>
     private static List<ParameterDefinition> OperandParameters(MethodDefinition m)
-        => m.Parameters.Where(p => p.ParameterType.FullName is NDArrayFullName or NDArrayArrayFullName).ToList();
+        => m.Parameters.Where(p => IsNDArray(p) || p.ParameterType.FullName == NDArrayArrayFullName).ToList();
+
+    /// <summary>
+    ///     Whether a parameter carries one NDArray: by value, or by reference (<c>in NDArray x1</c>). A by-reference
+    ///     operand is read through its address everywhere the weaver loads it, and its plain alias is passed back by the
+    ///     address of a local, so the re-call keeps the overload the caller chose.
+    /// </summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True for <c>NDArray</c> and <c>NDArray&amp;</c>; false for anything else, NDArray[] included.</returns>
+    private static bool IsNDArray(ParameterDefinition p)
+        => p.ParameterType.FullName == NDArrayFullName ||
+           p.ParameterType is ByReferenceType br && br.ElementType.FullName == NDArrayFullName;
+
+    /// <summary>
+    ///     The full name of the value a parameter carries: its type's, or the element type's for a by-reference parameter.
+    ///     Comparisons between a caller's and a callee's parameters use it, so <c>in NDArray</c> binds to <c>NDArray</c>.
+    /// </summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>The value type's full name.</returns>
+    private static string ValueTypeName(ParameterDefinition p)
+        => p.ParameterType is ByReferenceType br ? br.ElementType.FullName : p.ParameterType.FullName;
+
+    /// <summary>
+    ///     Emits the VALUE of a parameter: <c>ldarg</c>, dereferenced (<c>ldind.ref</c>) for a by-reference NDArray, so
+    ///     every runtime call receives the array itself, never its address.
+    /// </summary>
+    /// <param name="il">The IL processor of the method being emitted.</param>
+    /// <param name="p">The parameter, of the method being emitted.</param>
+    private static void LoadValue(ILProcessor il, ParameterDefinition p)
+    {
+        il.Append(il.Create(OpCodes.Ldarg, p));
+        if (p.ParameterType.IsByReference)
+            il.Append(il.Create(OpCodes.Ldind_Ref));
+    }
+
+    /// <summary>
+    ///     The parameter whose VALUE an instruction pushes: <c>ldarg p</c> of a by-value parameter, or the
+    ///     <c>ldind.ref</c> that dereferences <c>ldarg p</c> of a by-reference NDArray (how C# reads an <c>in</c> operand).
+    ///     A by-reference parameter's bare <c>ldarg</c> pushes its address, not the array, so it is not a load of it.
+    /// </summary>
+    /// <param name="producer">The instruction, or null.</param>
+    /// <returns>The parameter, or null for any other instruction.</returns>
+    private static ParameterDefinition LoadedParameter(Instruction producer)
+    {
+        if (producer?.OpCode.Code == Code.Ldarg && producer.Operand is ParameterDefinition p)
+            return p.ParameterType.IsByReference ? null : p;
+        if (producer?.OpCode.Code == Code.Ldind_Ref && producer.Previous?.OpCode.Code == Code.Ldarg &&
+            producer.Previous.Operand is ParameterDefinition q && q.ParameterType.IsByReference)
+            return q;
+        return null;
+    }
 
     #endregion
 
@@ -490,13 +552,15 @@ internal static class SubclassWeaver
                         aware = true;
                     else if (r.Kind == Kind.Transparent)
                         transparent = true;
-                    else if (r.Kind == Kind.Undeclared)
+                    else if (r.Kind == Kind.Undeclared && !r.Declares)
                         undeclared = true;
                     else
                         rules.Add(r);
                     break;
                 case Code.Ldarg or Code.Ldnull:
                     continue;   // an operand handed back, or null: neutral
+                case Code.Ldind_Ref when LoadedParameter(p) is not null:
+                    continue;   // an `in` operand handed back: neutral
                 default:
                     undeclared = true;
                     break;
@@ -549,6 +613,12 @@ internal static class SubclassWeaver
 
         var args = flow.ArgumentProducers(call, target);
 
+        // A conversion of the computed array to the function's C# return type (np.argmax(a) returns (long)ArgMax(a)): the
+        // converted call is the computation.
+        if (target.IsStatic && target.Name is "op_Explicit" or "op_Implicit" && args.Length == 1 &&
+            args[0]?.OpCode.Code is Code.Call or Code.Callvirt)
+            return RuleOfCall(ctx, m, flow, args[0], (MethodReference)args[0].Operand);
+
         // Another public function: its own mechanism, re-bound through the call's arguments.
         if (target != m && IsApiMethod(target) && OperandParameters(target).Count > 0)
         {
@@ -562,7 +632,7 @@ internal static class SubclassWeaver
                 {
                     Kind = Kind.Transparent, Source = target.FullName,
                     ThroughLegacy = IsLegacyBody(target) || forwardedTo.ThroughLegacy,
-                    Forwarded = effective is null || effective.Kind is Kind.Undeclared or Kind.Aware or Kind.Transparent
+                    Forwarded = effective is null || !effective.Declares || effective.Kind is Kind.Aware or Kind.Transparent
                         ? effective
                         : Rebind(ctx, effective, target, args, m, target.FullName),
                 };
@@ -571,7 +641,7 @@ internal static class SubclassWeaver
             bool legacy = IsLegacyBody(target) || inner.ThroughLegacy;
             if (inner.Kind == Kind.Transparent && inner.Forwarded is not null)
                 inner = inner.Forwarded;   // the overload it forwards to answers
-            if (inner.Kind is Kind.Transparent or Kind.Undeclared or Kind.Aware)
+            if (inner.Kind is Kind.Transparent or Kind.Aware || inner.Kind == Kind.Undeclared && !inner.Declares)
                 return new Rule { Kind = inner.Kind == Kind.Transparent ? Kind.Undeclared : inner.Kind, Source = target.FullName, ThroughLegacy = legacy };
             var rebound = Rebind(ctx, inner, target, args, m, target.FullName);
             rebound.ThroughLegacy |= legacy;
@@ -587,7 +657,7 @@ internal static class SubclassWeaver
         {
             var inner = Resolve(ctx, target);
             bool legacy = IsLegacyBody(target) || inner.ThroughLegacy;
-            if (inner.Kind is Kind.Transparent or Kind.Undeclared)
+            if (inner.Kind is Kind.Transparent || inner.Kind == Kind.Undeclared && !inner.Declares)
                 return new Rule { Kind = Kind.Undeclared, Source = target.FullName, ThroughLegacy = legacy };
             var rebound = Rebind(ctx, inner, target, args, m, target.FullName);
             rebound.ThroughLegacy |= legacy;
@@ -622,6 +692,14 @@ internal static class SubclassWeaver
                 if (prop.Name == "WhenGiven" && prop.Argument.Value is string list)
                     foreach (var n in list.Split(','))
                         rule.WhenGiven.Add(n.Trim());
+            foreach (var w in target.CustomAttributes.Where(a => a.AttributeType.FullName == WrapArgumentAttr))
+            {
+                string parameter = (string)w.ConstructorArguments[0].Value;
+                var holder = ((TypeReference)w.ConstructorArguments[1].Value).Resolve();
+                string name = (string)w.ConstructorArguments[2].Value;
+                rule.WrapArguments[parameter] = holder.Methods.FirstOrDefault(x => x.Name == name && x.IsStatic)
+                    ?? throw new WeaveException("NDW023", $"{holder.FullName} has no static method '{name}' for [WrapArgument({parameter})]");
+            }
         }
 
         foreach (var a in target.CustomAttributes.Where(a => a.AttributeType.FullName == AsArrayForAttr))
@@ -631,7 +709,24 @@ internal static class SubclassWeaver
             return new Rule { Kind = Kind.Aware, Source = target.DeclaringType.Name + "." + target.Name };
 
         CustomAttribute attr;
-        if ((attr = Attr(SubclassRuleAttr)) is not null)
+        if ((attr = Attr(ReducesThroughAttr)) is not null)
+        {
+            // A matrix intermediate's _collapse; a [NewSubtype] next to it is how NumPy's body answers for the other
+            // classes (np.percentile of a chararray: the subtype copy partitioned in place).
+            rule.Kind = Kind.ReducesThrough;
+            rule.ReducesMethod = attr.ConstructorArguments[0].Value as string;
+            rule.InexactMethod = attr.Properties.FirstOrDefault(p => p.Name == "InexactMethod").Argument.Value as string;
+            rule.Self = SelfOf(target, null, args, m, rule);
+            var others = Attr(NewSubtypeAttr);
+            if (others is not null)
+            {
+                rule.SubtypeOthers = true;
+                foreach (var prop in others.Properties)
+                    if (prop.Name == "ZeroDim")
+                        rule.ZeroDim = (int)prop.Argument.Value;
+            }
+        }
+        else if ((attr = Attr(SubclassRuleAttr)) is not null)
         {
             rule.Kind = Kind.Custom;
             var holder = ((TypeReference)attr.ConstructorArguments[0].Value).Resolve();
@@ -685,13 +780,6 @@ internal static class SubclassWeaver
         {
             rule.Kind = Kind.AsArray;
         }
-        else if ((attr = Attr(ReducesThroughAttr)) is not null)
-        {
-            rule.Kind = Kind.ReducesThrough;
-            rule.ReducesMethod = attr.ConstructorArguments[0].Value as string;
-            rule.InexactMethod = attr.Properties.FirstOrDefault(p => p.Name == "InexactMethod").Argument.Value as string;
-            rule.Self = SelfOf(target, null, args, m, rule);
-        }
         else if (UfuncShaped(target))
         {
             rule.Kind = Kind.ArrayWrap;
@@ -737,11 +825,11 @@ internal static class SubclassWeaver
     /// <param name="m">The calling function.</param>
     private static void BindInputs(Rule rule, MethodDefinition target, IReadOnlyList<string> names, Instruction[] args, MethodDefinition m)
     {
-        var roles = m.Parameters.Where(p => p.ParameterType.FullName == NDArrayFullName && p.Name is not "out" and not "where").ToList();
+        var roles = m.Parameters.Where(p => IsNDArray(p) && p.Name is not "out" and not "where").ToList();
         for (int i = 0; i < names.Count && rule.Inputs.Count < 3; i++)
         {
             var mapped = MapNamed(target, names[i], args, m);
-            if (mapped is null || mapped.ParameterType.FullName != NDArrayFullName)
+            if (mapped is null || !IsNDArray(mapped))
             {
                 rule.BoundByCallSite = false;
                 mapped = i < roles.Count ? roles[i] : null;
@@ -776,10 +864,10 @@ internal static class SubclassWeaver
                     mapped = MapToCaller(args, target, first);
             }
         }
-        if (mapped is null || mapped.ParameterType.FullName != NDArrayFullName)
+        if (mapped is null || !IsNDArray(mapped))
         {
             rule.BoundByCallSite = false;
-            mapped = m.Parameters.FirstOrDefault(p => p.ParameterType.FullName == NDArrayFullName);
+            mapped = m.Parameters.FirstOrDefault(IsNDArray);
         }
         return mapped ?? throw new WeaveException("NDW024", $"{target.FullName}'s mechanism needs an NDArray operand, and the function has none");
     }
@@ -816,8 +904,8 @@ internal static class SubclassWeaver
         int slot = calleeParam is null ? 0 : calleeParam.Index + (callee.HasThis ? 1 : 0);
         if (slot >= args.Length)
             return null;
-        var producer = args[slot];
-        return producer?.OpCode.Code == Code.Ldarg && producer.Operand is ParameterDefinition p ? p : null;
+        // A by-value load, or the dereference of an `in` operand's address.
+        return LoadedParameter(args[slot]);
     }
 
     /// <summary>
@@ -837,19 +925,21 @@ internal static class SubclassWeaver
         {
             Kind = inner.Kind, UfuncInputs = inner.UfuncInputs, Outputs = inner.Outputs, KeepRank = inner.KeepRank,
             ZeroDim = inner.ZeroDim, FinalizeFirst = inner.FinalizeFirst, AsArrayKinds = inner.AsArrayKinds,
-            ReducesMethod = inner.ReducesMethod, InexactMethod = inner.InexactMethod, CustomRule = inner.CustomRule,
+            ReducesMethod = inner.ReducesMethod, InexactMethod = inner.InexactMethod, SubtypeOthers = inner.SubtypeOthers,
+            CustomRule = inner.CustomRule,
             CustomCheck = inner.CustomCheck, DispatchMethod = inner.DispatchMethod, DispatchIsReduction = inner.DispatchIsReduction,
-            WhenGiven = inner.WhenGiven, BoundByCallSite = inner.BoundByCallSite, Source = source + " <- " + inner.Source,
+            WhenGiven = inner.WhenGiven, WrapArguments = inner.WrapArguments, BoundByCallSite = inner.BoundByCallSite,
+            Source = source + " <- " + inner.Source,
             ThroughLegacy = inner.ThroughLegacy,
             Out = OutParameter(m),
         };
-        var roles = m.Parameters.Where(p => p.ParameterType.FullName == NDArrayFullName && p.Name is not "out" and not "where").ToList();
+        var roles = m.Parameters.Where(p => IsNDArray(p) && p.Name is not "out" and not "where").ToList();
         ParameterDefinition Map(ParameterDefinition calleeParam, ParameterDefinition fallback)
         {
             if (calleeParam is null)
                 return null;
             var mapped = MapToCaller(args, callee, calleeParam);
-            if (mapped is not null && mapped.ParameterType.FullName == calleeParam.ParameterType.FullName)
+            if (mapped is not null && ValueTypeName(mapped) == ValueTypeName(calleeParam))
                 return mapped;
             r.BoundByCallSite = false;
             return fallback;
@@ -860,7 +950,7 @@ internal static class SubclassWeaver
             if (mapped is not null && !r.Inputs.Contains(mapped))
                 r.Inputs.Add(mapped);
         }
-        r.Self = Map(inner.Self, m.Parameters.FirstOrDefault(p => p.ParameterType.FullName == NDArrayFullName));
+        r.Self = Map(inner.Self, m.Parameters.FirstOrDefault(IsNDArray));
         r.Arrays = Map(inner.Arrays, m.Parameters.FirstOrDefault(p => p.ParameterType.FullName == NDArrayArrayFullName));
         return r;
     }
@@ -877,7 +967,7 @@ internal static class SubclassWeaver
         if (args is null)
             return false;
         foreach (var p in OperandParameters(m))
-            if (!args.Any(a => a?.OpCode.Code == Code.Ldarg && a.Operand == p))
+            if (!args.Any(a => LoadedParameter(a) == p))
                 return false;
         return true;
     }
@@ -1180,7 +1270,9 @@ internal static class SubclassWeaver
         foreach (var p in operands)
         {
             il.InsertBefore(first, il.Create(OpCodes.Ldarg, p));
-            il.InsertBefore(first, il.Create(OpCodes.Call, p.ParameterType.FullName == NDArrayFullName ? isOperand : isOperandMany));
+            if (p.ParameterType.IsByReference)
+                il.InsertBefore(first, il.Create(OpCodes.Ldind_Ref));   // an `in NDArray` operand: test the array, not its address
+            il.InsertBefore(first, il.Create(OpCodes.Call, IsNDArray(p) ? isOperand : isOperandMany));
             il.InsertBefore(first, il.Create(OpCodes.Brtrue, subCall));
         }
         il.InsertBefore(first, il.Create(OpCodes.Br, first));
@@ -1287,16 +1379,20 @@ internal static class SubclassWeaver
         Instruction tryStart = null;
         foreach (var p in operands)
         {
-            var v = new VariableDefinition(p.ParameterType);
+            // An `in NDArray` operand's alias lives in a local of the element type; the re-call passes its address.
+            var valueType = p.ParameterType is ByReferenceType byRef ? byRef.ElementType : p.ParameterType;
+            var v = new VariableDefinition(valueType);
             body.Variables.Add(v);
             aliases[p] = v;
             var load = il.Create(OpCodes.Ldarg, P(p));
             tryStart ??= load;
             il.Append(load);
-            string plain = p.ParameterType.FullName == NDArrayArrayFullName
+            if (p.ParameterType.IsByReference)
+                il.Append(il.Create(OpCodes.Ldind_Ref));
+            string plain = valueType.FullName == NDArrayArrayFullName
                 ? "Plain"
                 : rule.UfuncInputs && rule.Inputs.Contains(p) ? "PlainUfuncInput" : "Plain";
-            il.Append(il.Create(OpCodes.Call, module.ImportReference(Runtime(ctx, plain, p.ParameterType.FullName))));
+            il.Append(il.Create(OpCodes.Call, module.ImportReference(Runtime(ctx, plain, valueType.FullName))));
             il.Append(il.Create(OpCodes.Stloc, v));
         }
 
@@ -1304,7 +1400,9 @@ internal static class SubclassWeaver
         if (m.HasThis)
             il.Append(il.Create(OpCodes.Ldarg, body.ThisParameter));
         foreach (var p in m.Parameters)
-            il.Append(aliases.TryGetValue(p, out var av) ? il.Create(OpCodes.Ldloc, av) : il.Create(OpCodes.Ldarg, P(p)));
+            il.Append(aliases.TryGetValue(p, out var av)
+                ? il.Create(p.ParameterType.IsByReference ? OpCodes.Ldloca : OpCodes.Ldloc, av)
+                : il.Create(OpCodes.Ldarg, P(p)));
         il.Append(il.Create(OpCodes.Call, m));
         if (!isVoid)
             il.Append(il.Create(OpCodes.Stloc, result));
@@ -1313,11 +1411,11 @@ internal static class SubclassWeaver
         var resultType = m.ReturnType;
         var unalias = isVoid ? null : UnaliasFor(ctx, resultType);
         if (unalias is not null)
-            foreach (var p in operands.Where(x => x.ParameterType.FullName == NDArrayFullName))
+            foreach (var p in operands.Where(IsNDArray))
             {
                 il.Append(il.Create(OpCodes.Ldloc, result));
                 il.Append(il.Create(OpCodes.Ldloc, aliases[p]));
-                il.Append(il.Create(OpCodes.Ldarg, P(p)));
+                LoadValue(il, P(p));
                 il.Append(il.Create(OpCodes.Call, module.ImportReference(unalias)));
                 il.Append(il.Create(OpCodes.Stloc, result));
             }
@@ -1381,7 +1479,7 @@ internal static class SubclassWeaver
             {
                 il.Append(il.Create(OpCodes.Ldloc, result));
                 il.Append(il.Create(OpCodes.Ldnull));
-                il.Append(il.Create(OpCodes.Ldarg, map[rule.Self]));
+                LoadValue(il, map[rule.Self]);
                 il.Append(il.Create(OpCodes.Ldnull));
                 il.Append(il.Create(OpCodes.Ldnull));
                 il.Append(il.Create(OpCodes.Call, module.ImportReference(Runtime(ctx, "ArrayWrap", NDArrayFullName, NDArrayFullName,
@@ -1396,7 +1494,7 @@ internal static class SubclassWeaver
         {
             // [AsArrayFor]: NumPy's isinstance test converts that class with asarray first.
             var normal = il.Create(OpCodes.Nop);
-            il.Append(il.Create(OpCodes.Ldarg, map[rule.Self]));
+            LoadValue(il, map[rule.Self]);
             il.Append(il.Create(OpCodes.Ldc_I4, rule.AsArrayKinds));
             il.Append(il.Create(OpCodes.Call, module.ImportReference(Runtime(ctx, "ConvertsWithAsArray", NDArrayFullName, "System.Int32"))));
             il.Append(il.Create(OpCodes.Brfalse, normal));
@@ -1410,7 +1508,7 @@ internal static class SubclassWeaver
             if (p is null)
                 il.Append(il.Create(OpCodes.Ldnull));
             else
-                il.Append(il.Create(OpCodes.Ldarg, map[p]));
+                LoadValue(il, map[p]);
         }
 
         switch (rule.Kind)
@@ -1450,8 +1548,11 @@ internal static class SubclassWeaver
             case Kind.ReducesThrough:
                 EmitCall(ctx, il, module, result, "Collapse", rt, () =>
                 {
+                    Load(rule.Out);
                     Load(rule.Self);
                     EmitAxis(ctx, il, m, map);
+                    il.Append(il.Create(rule.SubtypeOthers ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0));
+                    il.Append(il.Create(OpCodes.Ldc_I4, rule.ZeroDim));
                 });
                 break;
             case Kind.Custom when rule.CustomRule is not null:
@@ -1526,9 +1627,17 @@ internal static class SubclassWeaver
                                    ParameterDefinition q, MethodDefinition ruleMethod)
     {
         var p = m.Parameters.FirstOrDefault(x => x.Name == q.Name);
-        if (p is not null && p.ParameterType.FullName == q.ParameterType.FullName)
+        if (p is not null && ValueTypeName(p) == q.ParameterType.FullName)
         {
+            LoadValue(il, map[p]);   // an `in` operand is passed as the array it refers to
+            return;
+        }
+        if (p is not null && p.ParameterType.FullName == "System.Int32" && q.ParameterType.FullName == "System.Nullable`1<System.Int32>")
+        {
+            // an int argument for an int? parameter (np.std's ddof for DdofWithCorrection's)
             il.Append(il.Create(OpCodes.Ldarg, map[p]));
+            il.Append(il.Create(OpCodes.Call, m.Module.ImportReference(
+                m.Module.GetType(DispatcherFullName).Methods.First(x => x.Name == "Axis" && x.Parameters.Count == 1))));
             return;
         }
         if (!q.HasDefault && !q.ParameterType.IsValueType || q.HasDefault && q.Constant is null && !q.ParameterType.IsValueType)
@@ -1559,7 +1668,7 @@ internal static class SubclassWeaver
         var module = m.Module;
         if (rule.Kind == Kind.ReducesThrough)
         {
-            il.Append(il.Create(OpCodes.Ldarg, map[rule.Self]));
+            LoadValue(il, map[rule.Self]);
             var keepdims = m.Parameters.FirstOrDefault(p => p.Name == "keepdims" && p.ParameterType.FullName == "System.Boolean");
             il.Append(keepdims is null ? il.Create(OpCodes.Ldc_I4_0) : il.Create(OpCodes.Ldarg, map[keepdims]));
             il.Append(rule.ReducesMethod is null ? il.Create(OpCodes.Ldnull) : il.Create(OpCodes.Ldstr, rule.ReducesMethod));
@@ -1569,7 +1678,7 @@ internal static class SubclassWeaver
         }
         if (rule.Kind == Kind.NewSubtype && rule.FinalizeFirst)
         {
-            il.Append(il.Create(OpCodes.Ldarg, map[rule.Self]));
+            LoadValue(il, map[rule.Self]);
             var dtype = m.Parameters.FirstOrDefault(p => p.Name == "dtype" && p.ParameterType.FullName == "NumSharp.DType");
             il.Append(dtype is null ? il.Create(OpCodes.Ldnull) : il.Create(OpCodes.Ldarg, map[dtype]));
             il.Append(il.Create(OpCodes.Call, module.ImportReference(Runtime(ctx, "FinalizeFirst", NDArrayFullName, "NumSharp.DType"))));
@@ -1626,27 +1735,57 @@ internal static class SubclassWeaver
             if (target is null)
                 continue;   // the subclass inherits ndarray's method: the computation and its rule answer
 
-            // NumPy passes keywords: each method parameter takes the function's parameter of the same name.
+            // A function returning a C# number (np.argmax(a) -> long) has no arm: the subclass method's answer is an array,
+            // and NumPy's scalar of it is what the function computes plainly anyway.
+            if (target.ReturnType.FullName != m.ReturnType.FullName && (m.ReturnType.IsValueType || m.ReturnType.FullName != NDArrayFullName))
+                continue;
+
+            // NumPy passes keywords: each method parameter takes the function's parameter of the same name; one the function
+            // does not have is NumPy's default (np.argmax(a, axis) passes out=None).
             var args = new List<(ParameterDefinition Param, bool ToNullable)>();
+            var computed = new Dictionary<int, MethodDefinition>();
+            var consumed = new HashSet<string>(StringComparer.Ordinal);
+            bool bindable = true;
             foreach (var q in target.Parameters)
             {
+                if (rule.WrapArguments.TryGetValue(q.Name, out var compute))
+                {
+                    // NumPy's function computes this argument first (np.std folds correction= into ddof).
+                    computed[args.Count] = compute;
+                    args.Add((null, false));
+                    foreach (var cp in compute.Parameters)
+                        consumed.Add(cp.Name);
+                    continue;
+                }
                 var p = m.Parameters.FirstOrDefault(x => x.Name == q.Name);
+                if (p is null && !q.ParameterType.IsValueType)
+                {
+                    args.Add((null, false));
+                    continue;
+                }
                 if (p is null)
                     throw new WeaveException("NDW027", $"{subclass.PyName}.{rule.DispatchMethod}'s parameter '{q.Name}' has no parameter of " +
                                                        $"that name in {m.Name}");
                 bool toNullable = p.ParameterType.FullName == "System.Int32" &&
                                   q.ParameterType.FullName == "System.Nullable`1<System.Int32>";
-                if (!toNullable && p.ParameterType.FullName != q.ParameterType.FullName)
-                    throw new WeaveException("NDW027", $"{subclass.PyName}.{rule.DispatchMethod}'s parameter '{q.Name}' is " +
-                                                       $"{q.ParameterType.Name}, {m.Name}'s is {p.ParameterType.Name}");
+                if (!toNullable && ValueTypeName(p) != q.ParameterType.FullName)
+                {
+                    // An overload whose argument the method cannot take (a tuple axis for matrix.all's int axis): no arm,
+                    // the computation's other mechanism (or the plain answer) shapes this overload's result.
+                    bindable = false;
+                    break;
+                }
                 args.Add((p, toNullable));
             }
-            var missing = m.Parameters.Where(p => p != rule.Self && target.Parameters.All(q => q.Name != p.Name)).ToList();
+            if (!bindable)
+                continue;
+            var missing = m.Parameters.Where(p => p != rule.Self && target.Parameters.All(q => q.Name != p.Name) &&
+                                                  !consumed.Contains(p.Name)).ToList();
 
             var next = il.Create(OpCodes.Nop);
             var subVar = new VariableDefinition(subclass.Type);
             body.Variables.Add(subVar);
-            il.Append(il.Create(OpCodes.Ldarg, map[rule.Self]));
+            LoadValue(il, map[rule.Self]);
             il.Append(il.Create(OpCodes.Isinst, subclass.Type));   // self is NDMatrix __sub
             il.Append(il.Create(OpCodes.Stloc, subVar));
             il.Append(il.Create(OpCodes.Ldloc, subVar));
@@ -1674,9 +1813,22 @@ internal static class SubclassWeaver
                 il.Append(skip);
             }
             il.Append(il.Create(OpCodes.Ldloc, subVar));
-            foreach (var (p, toNullable) in args)
+            for (int ai = 0; ai < args.Count; ai++)
             {
-                il.Append(il.Create(OpCodes.Ldarg, map[p]));
+                var (p, toNullable) = args[ai];
+                if (computed.TryGetValue(ai, out var compute))
+                {
+                    foreach (var cp in compute.Parameters)
+                        LoadByName(il, m, map, cp, compute);
+                    il.Append(il.Create(OpCodes.Call, module.ImportReference(compute)));
+                    continue;
+                }
+                if (p is null)
+                {
+                    il.Append(il.Create(OpCodes.Ldnull));
+                    continue;
+                }
+                LoadValue(il, map[p]);
                 if (toNullable)
                     il.Append(il.Create(OpCodes.Call, module.ImportReference(Runtime(ctx, "Axis", "System.Int32"))));
             }
@@ -1707,6 +1859,16 @@ internal static class SubclassWeaver
     private static bool EmitIsDefault(ILProcessor il, ParameterDefinition p, Instruction skip, ModuleDefinition module)
     {
         var t = p.ParameterType;
+        if (t is ByReferenceType byRef && !byRef.ElementType.IsValueType)
+        {
+            // an `in` reference: its default is null, read through the address
+            il.Append(il.Create(OpCodes.Ldarg, p));
+            il.Append(il.Create(OpCodes.Ldind_Ref));
+            il.Append(il.Create(OpCodes.Brfalse, skip));
+            return true;
+        }
+        if (t.IsByReference)
+            return false;   // a by-reference value type: no comparison is emitted for it
         if (t.FullName == "System.Boolean")
         {
             il.Append(il.Create(OpCodes.Ldarg, p));

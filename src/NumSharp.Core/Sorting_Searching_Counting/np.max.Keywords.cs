@@ -87,11 +87,7 @@ namespace NumSharp
             NDArray @where = null)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            return NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
-            ? NDMatrixBoundary.Reduced((a, axis, @out, keepdims, initial, @where), static s => max(s.a, s.axis, s.@out, s.keepdims, s.initial, s.@where), axis, keepdims, "max")
-            // The whole call is the engine's: TensorEngine.ReduceAMax of a's engine takes the keywords (a null a is
-            // refused above).
-            : a.TensorEngine.ReduceAMax(a, axis, keepdims, null, @out, initial, @where);
+            return a.TensorEngine.ReduceAMax(a, axis, keepdims, null, @out, initial, @where);
         }
 
         /// <summary>
@@ -120,9 +116,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.amax.html</remarks>
         public static NDArray amax(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false, object initial = null,
             NDArray @where = null)
-            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
-            ? NDMatrixBoundary.Reduced((a, axis, @out, keepdims, initial, @where), static s => amax(s.a, s.axis, s.@out, s.keepdims, s.initial, s.@where), axis, keepdims, "max")
-            : max(a, axis, @out, keepdims, initial, @where);
+            => max(a, axis, @out, keepdims, initial, @where);
 
         /// <summary>
         ///     Return the minimum of an array or the minimum along an axis — NumPy's <c>np.min(a, axis=None, out=None,
@@ -154,11 +148,7 @@ namespace NumSharp
             NDArray @where = null)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            return NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
-            ? NDMatrixBoundary.Reduced((a, axis, @out, keepdims, initial, @where), static s => min(s.a, s.axis, s.@out, s.keepdims, s.initial, s.@where), axis, keepdims, "min")
-            // The whole call is the engine's: TensorEngine.ReduceAMin of a's engine takes the keywords (a null a is
-            // refused above).
-            : a.TensorEngine.ReduceAMin(a, axis, keepdims, null, @out, initial, @where);
+            return a.TensorEngine.ReduceAMin(a, axis, keepdims, null, @out, initial, @where);
         }
 
         /// <summary>
@@ -186,9 +176,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.amin.html</remarks>
         public static NDArray amin(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false, object initial = null,
             NDArray @where = null)
-            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
-            ? NDMatrixBoundary.Reduced((a, axis, @out, keepdims, initial, @where), static s => amin(s.a, s.axis, s.@out, s.keepdims, s.initial, s.@where), axis, keepdims, "min")
-            : min(a, axis, @out, keepdims, initial, @where);
+            => min(a, axis, @out, keepdims, initial, @where);
 
         /// <summary>
         ///     Return the maximum of an array or the maximum along an axis, ignoring NaNs — NumPy's <c>np.nanmax(a, axis=None,
@@ -243,11 +231,7 @@ namespace NumSharp
             NDArray @where = null)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            return NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
-            ? NDMatrixBoundary.Reduced((a, axis, @out, keepdims, initial, @where), static s => nanmax(s.a, s.axis, s.@out, s.keepdims, s.initial, s.@where), axis, keepdims, "max")
-            // The whole call is the engine's: TensorEngine.NanMax of a's engine takes the keywords (a null a is
-            // refused above).
-            : a.TensorEngine.NanMax(a, axis, keepdims, @out, initial, @where);
+            return a.TensorEngine.NanMax(a, axis, keepdims, @out, initial, @where);
         }
 
         /// <summary>
@@ -297,11 +281,7 @@ namespace NumSharp
             NDArray @where = null)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            return NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
-            ? NDMatrixBoundary.Reduced((a, axis, @out, keepdims, initial, @where), static s => nanmin(s.a, s.axis, s.@out, s.keepdims, s.initial, s.@where), axis, keepdims, "min")
-            // The whole call is the engine's: TensorEngine.NanMin of a's engine takes the keywords (a null a is
-            // refused above).
-            : a.TensorEngine.NanMin(a, axis, keepdims, @out, initial, @where);
+            return a.TensorEngine.NanMin(a, axis, keepdims, @out, initial, @where);
         }
     }
 }

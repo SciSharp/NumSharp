@@ -60,6 +60,11 @@ namespace NumSharp.Backends
         public override NDArray Median(NDArray a, int[] axis = null, NDArray @out = null, bool overwrite_input = false,
             bool keepdims = false)
         {
+            // A numpy.char.chararray operand (the plain view the woven np.median hands over remembers it): _median
+            // partitions the chararray, and chararray.partition is the STRING partition - NumPy's TypeError, or the string
+            // partition's own answer (MedianOfChararray), before anything below.
+            if (NDSubclass.StandsForCharArray(a))
+                throw MedianOfChararray(a, axis, @out, overwrite_input, keepdims);
             // Text (input or out=): NumPy's _ureduce normalizes the tuple (every axis, then repeats; a 0-d input refuses
             // every axis), then the closing mean(part, out=out) refuses on (out, part) with its verbatim text; see
             // NDStringUfuncs.ReduceError / ReduceOutError.

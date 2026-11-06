@@ -47,13 +47,6 @@ namespace NumSharp
             int? axis = null, NDArray @out = null, bool overwrite_input = false, bool keepdims = false)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
-            if (NDMatrixBoundary.Sees(a))
-                return NDMatrixBoundary.Reduced((a, axis, @out, overwrite_input, keepdims), static s => median(s.a, s.axis, s.@out, s.overwrite_input, s.keepdims), axis, keepdims, null);
-            // a numpy.char.chararray operand: _median partitions the chararray, and chararray.partition is the STRING
-            // partition (NDCharArrayBoundary): NumPy's TypeError, or the string partition's own answer (MedianOfChararray)
-            if (NDCharArrayBoundary.Sees(a))
-                throw DefaultEngine.Of(a).MedianOfChararray(a, axis.HasValue ? new[] { axis.Value } : null, @out, overwrite_input, keepdims);
             // NumPy's np.median body (the text routes, then the numeric median) is TensorEngine.Median's: the facade
             // holds only the class rules above.
             // NumPy's _ureduce turns an int axis into a 1-tuple: the engine member takes the axes as an array.
@@ -103,11 +96,6 @@ namespace NumSharp
             NDArray @out = null, bool overwrite_input = false, bool keepdims = false)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            // a numpy.char.chararray operand (decided before the matrix region below, which would hide it): the STRING
-            // partition's answer (MedianOfChararray, NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(a))
-                throw DefaultEngine.Of(a).MedianOfChararray(a, axis, @out, overwrite_input, keepdims);
-            using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // NumPy's np.median body (the text routes, then the numeric median) is TensorEngine.Median's: the facade
             // holds only the class rules above.
             return a.TensorEngine.Median(a, axis, @out, overwrite_input, keepdims);

@@ -38,8 +38,6 @@ namespace NumSharp
         /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
         [NDScoped]
         public static NDArray nanvar(NDArray a, int? axis = null, bool keepdims = false, int ddof = 0, DType dtype = null)
-            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
-            ? NDMatrixBoundary.Reduced((a, axis, keepdims, ddof, dtype), static s => nanvar(s.a, s.axis, s.keepdims, s.ddof, s.dtype), axis, keepdims, (a.typecode is NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Complex) ? "sum" : "var")
-            : a.TensorEngine.NanVar(a, axis, dtype, ddof, keepdims);
+            => a.TensorEngine.NanVar(a, axis, dtype, ddof, keepdims);
     }
 }

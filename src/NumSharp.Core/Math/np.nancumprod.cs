@@ -28,9 +28,6 @@ namespace NumSharp
         [NDScoped]
         public static NDArray nancumprod(NDArray a, int? axis = null, DType dtype = null, NDArray @out = null)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(a))
-                return NDMatrixBoundary.Wrapped((a, axis, dtype, @out), static s => nancumprod(s.a, s.axis, s.dtype, s.@out), @out);
             // NumPy's nancumprod is _replace_nan(a, 1) then np.cumprod(a, axis, dtype, out); the whole function, its text
             // routes included, is the engine's: TensorEngine.NanCumProd.
             return a.TensorEngine.NanCumProd(a, axis, dtype, @out);

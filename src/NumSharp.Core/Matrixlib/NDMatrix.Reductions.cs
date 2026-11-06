@@ -156,8 +156,12 @@ namespace NumSharp
         ///     <see cref="sum(int, DType, NDMatrix)"/> as an <see cref="NDArray"/> reference.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="ValueError"><paramref name="out"/> is read-only or does not have the result's shape.</exception>
+        /// <exception cref="AttributeError"><paramref name="out"/> is a plain (non-matrix) array: NumPy's reduction stores
+        ///     into it, then <c>_collapse</c> does not exist on it (<c>'numpy.ndarray' object has no attribute
+        ///     '_collapse'</c>).</exception>
         [NDScoped]
-        public NDArray sum(int? axis = null, DType dtype = null, NDMatrix @out = null)
+        [NumPyMethod]
+        public NDArray sum(int? axis = null, DType dtype = null, NDArray @out = null)
         {
             using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
             if (@out is null)
@@ -171,7 +175,10 @@ namespace NumSharp
             // concatenation computes into out, everything else is NumPy's refusal), the reduce prologue, the loop
             // promote_types(out, self) when dtype is null (the file header's out= rule), the unsafe store.
             TensorEngine.ReduceAdd(this, axis, keepdims: true, dtype, @out);
-            return axis is null ? ScalarFrom(@out) : @out;
+            // matrix._collapse(axis) on the out NumPy's reduction returned: a plain out has no _collapse (after the store)
+            if (@out is not NDMatrix matrixOut)
+                throw new AttributeError("'numpy.ndarray' object has no attribute '_collapse'");
+            return axis is null ? ScalarFrom(matrixOut) : matrixOut;
         }
 
         /// <summary>NumPy's <c>matrix.prod(axis, dtype, out)</c> for a given axis: the products as a matrix that
@@ -191,8 +198,12 @@ namespace NumSharp
         /// <returns>A 0-d array when <paramref name="axis"/> is <c>null</c>; otherwise the matrix.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="ValueError"><paramref name="out"/> is read-only or does not have the result's shape.</exception>
+        /// <exception cref="AttributeError"><paramref name="out"/> is a plain (non-matrix) array: NumPy's reduction stores
+        ///     into it, then <c>_collapse</c> does not exist on it (<c>'numpy.ndarray' object has no attribute
+        ///     '_collapse'</c>).</exception>
         [NDScoped]
-        public NDArray prod(int? axis = null, DType dtype = null, NDMatrix @out = null)
+        [NumPyMethod]
+        public NDArray prod(int? axis = null, DType dtype = null, NDArray @out = null)
         {
             using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
             if (@out is null)
@@ -206,7 +217,10 @@ namespace NumSharp
             // (integer counts into a text out repeat, everything else is NumPy's refusal), the reduce prologue, the loop
             // promote_types(out, self) when dtype is null (the file header's out= rule), the unsafe store.
             TensorEngine.ReduceProduct(this, axis, keepdims: true, dtype, @out);
-            return axis is null ? ScalarFrom(@out) : @out;
+            // matrix._collapse(axis) on the out NumPy's reduction returned: a plain out has no _collapse (after the store)
+            if (@out is not NDMatrix matrixOut)
+                throw new AttributeError("'numpy.ndarray' object has no attribute '_collapse'");
+            return axis is null ? ScalarFrom(matrixOut) : matrixOut;
         }
 
         /// <summary>NumPy's <c>matrix.mean(axis, dtype, out)</c> for a given axis: the means as a matrix that
@@ -229,8 +243,12 @@ namespace NumSharp
         /// <returns>A 0-d array when <paramref name="axis"/> is <c>null</c>; otherwise the matrix.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="ValueError"><paramref name="out"/> is read-only or does not have the result's shape.</exception>
+        /// <exception cref="AttributeError"><paramref name="out"/> is a plain (non-matrix) array: NumPy's reduction stores
+        ///     into it, then <c>_collapse</c> does not exist on it (<c>'numpy.ndarray' object has no attribute
+        ///     '_collapse'</c>).</exception>
         [NDScoped]
-        public NDArray mean(int? axis = null, DType dtype = null, NDMatrix @out = null)
+        [NumPyMethod]
+        public NDArray mean(int? axis = null, DType dtype = null, NDArray @out = null)
         {
             using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
             if (@out is null)
@@ -249,7 +267,10 @@ namespace NumSharp
             // keepdims) stores the sum into out (dtype=, else float64 for integers and bool, float32 for float16, else the
             // reduce rule for a missing dtype with an out), then true_divide(out, rcount, out=out, casting='unsafe').
             TensorEngine.ReduceMean(this, axis, keepdims: true, dtype, @out);
-            return axis is null ? ScalarFrom(@out) : @out;
+            // matrix._collapse(axis) on the out NumPy's reduction returned: a plain out has no _collapse (after the store)
+            if (@out is not NDMatrix matrixOut)
+                throw new AttributeError("'numpy.ndarray' object has no attribute '_collapse'");
+            return axis is null ? ScalarFrom(matrixOut) : matrixOut;
         }
 
         #endregion
@@ -283,8 +304,12 @@ namespace NumSharp
         ///     stored into <paramref name="out"/> with an unsafe cast, and <paramref name="out"/> is then divided
         ///     in place by <c>max(N - ddof, 0)</c>.
         /// </remarks>
+        /// <exception cref="AttributeError"><paramref name="out"/> is a plain (non-matrix) array: NumPy's reduction stores
+        ///     into it, then <c>_collapse</c> does not exist on it (<c>'numpy.ndarray' object has no attribute
+        ///     '_collapse'</c>).</exception>
         [NDScoped]
-        public NDArray var(int? axis = null, DType dtype = null, NDMatrix @out = null, int ddof = 0)
+        [NumPyMethod]
+        public NDArray var(int? axis = null, DType dtype = null, NDArray @out = null, int ddof = 0)
         {
             using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
             if (@out is null)
@@ -296,7 +321,10 @@ namespace NumSharp
             // _var(self, axis, dtype, out, ddof, keepdims=True) is the engine's out= route: out joins the last sum only,
             // then is divided in place.
             TensorEngine.ReduceVar(this, axis, keepdims: true, ddof, dtype, @out);
-            return axis is null ? ScalarFrom(@out) : @out;
+            // matrix._collapse(axis) on the out NumPy's reduction returned: a plain out has no _collapse (after the store)
+            if (@out is not NDMatrix matrixOut)
+                throw new AttributeError("'numpy.ndarray' object has no attribute '_collapse'");
+            return axis is null ? ScalarFrom(matrixOut) : matrixOut;
         }
 
         /// <summary>NumPy's <c>matrix.std(axis, dtype, out, ddof)</c> for a given axis: the standard deviations
@@ -330,8 +358,12 @@ namespace NumSharp
         ///     reduction is always the array form (file header), where <c>np.std</c> of a plain array returns a
         ///     truncated scalar.
         /// </exception>
+        /// <exception cref="AttributeError"><paramref name="out"/> is a plain (non-matrix) array: NumPy's reduction stores
+        ///     into it, then <c>_collapse</c> does not exist on it (<c>'numpy.ndarray' object has no attribute
+        ///     '_collapse'</c>).</exception>
         [NDScoped]
-        public NDArray std(int? axis = null, DType dtype = null, NDMatrix @out = null, int ddof = 0)
+        [NumPyMethod]
+        public NDArray std(int? axis = null, DType dtype = null, NDArray @out = null, int ddof = 0)
         {
             using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
             if (@out is null)
@@ -343,7 +375,10 @@ namespace NumSharp
             // _std(self, axis, dtype, out, ddof, keepdims=True) is the engine's out= route: _var into out, then
             // sqrt(out, out=out), whose ufunc refuses an integer or bool out after the variance is in it.
             TensorEngine.ReduceStd(this, axis, keepdims: true, ddof, dtype, @out);
-            return axis is null ? ScalarFrom(@out) : @out;
+            // matrix._collapse(axis) on the out NumPy's reduction returned: a plain out has no _collapse (after the store)
+            if (@out is not NDMatrix matrixOut)
+                throw new AttributeError("'numpy.ndarray' object has no attribute '_collapse'");
+            return axis is null ? ScalarFrom(matrixOut) : matrixOut;
         }
 
         #endregion
@@ -368,6 +403,7 @@ namespace NumSharp
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="TypeError"><paramref name="out"/> is not <c>null</c>.</exception>
         [NDScoped]
+        [NumPyMethod]
         public NDArray any(int? axis = null, NDArray @out = null)
         {
             using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
@@ -395,6 +431,7 @@ namespace NumSharp
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="TypeError"><paramref name="out"/> is not <c>null</c>.</exception>
         [NDScoped]
+        [NumPyMethod]
         public NDArray all(int? axis = null, NDArray @out = null)
         {
             using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
@@ -426,8 +463,12 @@ namespace NumSharp
         /// <returns>A 0-d array when <paramref name="axis"/> is <c>null</c>; otherwise the matrix.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="ValueError">An empty reduction, or <paramref name="out"/> is read-only or misshapen.</exception>
+        /// <exception cref="AttributeError"><paramref name="out"/> is a plain (non-matrix) array: NumPy's reduction stores
+        ///     into it, then <c>_collapse</c> does not exist on it (<c>'numpy.ndarray' object has no attribute
+        ///     '_collapse'</c>).</exception>
         [NDScoped]
-        public NDArray max(int? axis = null, NDMatrix @out = null)
+        [NumPyMethod]
+        public NDArray max(int? axis = null, NDArray @out = null)
         {
             using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
             if (@out is null)
@@ -438,7 +479,10 @@ namespace NumSharp
             }
 
             np.max((NDArray)this, axis: axis, @out: @out, keepdims: true);
-            return axis is null ? ScalarFrom(@out) : @out;
+            // matrix._collapse(axis) on the out NumPy's reduction returned: a plain out has no _collapse (after the store)
+            if (@out is not NDMatrix matrixOut)
+                throw new AttributeError("'numpy.ndarray' object has no attribute '_collapse'");
+            return axis is null ? ScalarFrom(matrixOut) : matrixOut;
         }
 
         /// <summary>NumPy's <c>matrix.min(axis, out)</c> for a given axis: the minima as a matrix that keeps the
@@ -457,8 +501,12 @@ namespace NumSharp
         /// <returns>A 0-d array when <paramref name="axis"/> is <c>null</c>; otherwise the matrix.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="ValueError">An empty reduction, or <paramref name="out"/> is read-only or misshapen.</exception>
+        /// <exception cref="AttributeError"><paramref name="out"/> is a plain (non-matrix) array: NumPy's reduction stores
+        ///     into it, then <c>_collapse</c> does not exist on it (<c>'numpy.ndarray' object has no attribute
+        ///     '_collapse'</c>).</exception>
         [NDScoped]
-        public NDArray min(int? axis = null, NDMatrix @out = null)
+        [NumPyMethod]
+        public NDArray min(int? axis = null, NDArray @out = null)
         {
             using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
             if (@out is null)
@@ -469,7 +517,10 @@ namespace NumSharp
             }
 
             np.min((NDArray)this, axis: axis, @out: @out, keepdims: true);
-            return axis is null ? ScalarFrom(@out) : @out;
+            // matrix._collapse(axis) on the out NumPy's reduction returned: a plain out has no _collapse (after the store)
+            if (@out is not NDMatrix matrixOut)
+                throw new AttributeError("'numpy.ndarray' object has no attribute '_collapse'");
+            return axis is null ? ScalarFrom(matrixOut) : matrixOut;
         }
 
         #endregion
@@ -505,6 +556,58 @@ namespace NumSharp
         /// <exception cref="AttributeError"><paramref name="out"/> is a plain array of the right shape.</exception>
         [NDScoped]
         public NDMatrix argmin(int axis, NDArray @out = null) => ArgReduce(axis, @out, max: false);
+
+        /// <summary>
+        ///     NumPy's <c>matrix.argmax(axis=None, out=None)</c> as the generated dispatch of <c>np.argmax</c> calls it
+        ///     (<c>_wrapfunc</c>): along an axis the aligned index matrix of <see cref="argmax(int, NDArray)"/>; without one
+        ///     <c>_align(None)</c>, the flat index as a 0-d array.
+        /// </summary>
+        /// <param name="axis">The axis (0 or 1), or <c>null</c> for the flat index. Deliberately without a default: an
+        ///     <c>m.argmax()</c> call keeps binding the inherited flat member.</param>
+        /// <param name="out">Must be <c>null</c> in practice: NumPy's method fails on every out (see the exceptions).</param>
+        /// <returns>The 0-d flat index without an axis; otherwise the int64 index matrix.</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
+        /// <exception cref="ValueError">An unsupported (negative) axis, an empty reduction, or a misshapen out.</exception>
+        /// <exception cref="AttributeError"><paramref name="out"/> is a plain array NumPy's reduction accepted: <c>_align</c>
+        ///     does not exist on it.</exception>
+        [NumPyMethod]
+        [NDScoped]
+        public NDArray argmax(int? axis, NDArray @out = null) => axis is int along ? ArgReduce(along, @out, max: true) : FlatArgReduce(@out, max: true);
+
+        /// <summary>NumPy's <c>matrix.argmin(axis=None, out=None)</c> as <c>np.argmin</c>'s generated dispatch calls it; see
+        ///     <see cref="argmax(int?, NDArray)"/>.</summary>
+        /// <param name="axis">The axis (0 or 1), or <c>null</c> for the flat index (no default, see argmax).</param>
+        /// <param name="out">Must be <c>null</c> in practice.</param>
+        /// <returns>The 0-d flat index without an axis; otherwise the int64 index matrix.</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
+        /// <exception cref="ValueError">An unsupported axis, an empty reduction, or a misshapen out.</exception>
+        /// <exception cref="AttributeError"><paramref name="out"/> is a plain array NumPy's reduction accepted.</exception>
+        [NumPyMethod]
+        [NDScoped]
+        public NDArray argmin(int? axis, NDArray @out = null) => axis is int along ? ArgReduce(along, @out, max: false) : FlatArgReduce(@out, max: false);
+
+        /// <summary>
+        ///     <c>ndarray.argmax(self, None, out)._align(None)</c>: the flat index of the first extreme element as a 0-d array;
+        ///     with an <paramref name="out"/> the index is stored into it and <c>_align</c> runs on it.
+        /// </summary>
+        /// <param name="out">The caller's out, or <c>null</c>.</param>
+        /// <param name="max">Maximum instead of minimum.</param>
+        /// <returns>The 0-d index, or the matrix out's scalar.</returns>
+        /// <exception cref="ValueError">An empty matrix (NumPy's empty-sequence text), or a misshapen out.</exception>
+        /// <exception cref="AttributeError"><paramref name="out"/> is a plain array (it holds the index afterwards, as in
+        ///     NumPy).</exception>
+        [NDScopedCovered]
+        private NDArray FlatArgReduce(NDArray @out, bool max)
+        {
+            using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the result
+            NDArray index = max ? np.argmax((NDArray)this, (int?)null, @out) : np.argmin((NDArray)this, (int?)null, @out);
+            if (@out is null)
+                return index;
+            // _align(None) is self[0, 0]: a plain out has no _align.
+            if (@out is not NDMatrix matrixOut)
+                throw new AttributeError("'numpy.ndarray' object has no attribute '_align'");
+            return ScalarFrom(matrixOut);
+        }
 
         /// <summary>The shared body of <see cref="argmax(int, NDArray)"/> and <see cref="argmin(int, NDArray)"/>.</summary>
         /// <param name="axis">The axis as passed.</param>

@@ -872,7 +872,8 @@ namespace NumSharp
         /// </remarks>
         internal static ValueError TrivialLoopCopyError(NDArray x1, DType loop1, NDArray x2, DType loop2, NDArray where)
         {
-            if (!TakeMarks(out var marks))
+            // The legacy rules' per-thread marks, else the woven path's marks on the inputs' plain views.
+            if (!TakeMarks(out var marks) && !TakeAliasMarks(x1, x2, null, out marks))
                 return null;
             // _wheremask_converter: only the Python object True is "no mask" (obj == Py_True); np.array(True) is a mask.
             if (where is not null && !(where.WasPythonBool && where.GetAtIndex<bool>(0)))
@@ -905,7 +906,8 @@ namespace NumSharp
         /// </remarks>
         internal static ValueError TrivialLoopCopyError(NDArray x1, DType loop1, NDArray x2, DType loop2, NDArray x3, DType loop3)
         {
-            if (!TakeMarks(out var marks))
+            // The legacy rules' per-thread marks, else the woven path's marks on the inputs' plain views.
+            if (!TakeMarks(out var marks) && !TakeAliasMarks(x1, x2, x3, out marks))
                 return null;
             long bufsize = np.getbufsize();
             if (CopyStep(x1, loop1, marks, bufsize, out bool stop) is { } first)
@@ -931,6 +933,33 @@ namespace NumSharp
             if (t_ufuncInput0 is null && t_ufuncInput1 is null && t_ufuncInput2 is null)
                 return false;
             t_ufuncInput0 = t_ufuncInput1 = t_ufuncInput2 = null;
+            return true;
+        }
+
+        /// <summary>
+        ///     Reads and CLEARS the woven path's marks: the plain views of the user's chararray ufunc inputs carry
+        ///     <see cref="NDArray.IsTextUfuncInput"/> (<see cref="NDSubclass.PlainUfuncInput(NDArray)"/>). Cleared on read, as
+        ///     the guard of ONE ufunc call consumes them: a ufunc the computation calls later on the same views computes plain.
+        /// </summary>
+        /// <param name="x1">The first input of the guarded call, or null.</param>
+        /// <param name="x2">The second input, or null.</param>
+        /// <param name="x3">The third input, or null.</param>
+        /// <param name="marks">The marked inputs, for <see cref="UfuncInputMarks.Holds"/>.</param>
+        /// <returns>False when no input is marked.</returns>
+        private static bool TakeAliasMarks(NDArray x1, NDArray x2, NDArray x3, out UfuncInputMarks marks)
+        {
+            NDArray m0 = x1 is not null && x1.IsTextUfuncInput ? x1 : null;
+            NDArray m1 = x2 is not null && x2.IsTextUfuncInput ? x2 : null;
+            NDArray m2 = x3 is not null && x3.IsTextUfuncInput ? x3 : null;
+            marks = new UfuncInputMarks(m0, m1, m2);
+            if (m0 is null && m1 is null && m2 is null)
+                return false;
+            if (m0 is not null)
+                m0.IsTextUfuncInput = false;
+            if (m1 is not null)
+                m1.IsTextUfuncInput = false;
+            if (m2 is not null)
+                m2.IsTextUfuncInput = false;
             return true;
         }
 

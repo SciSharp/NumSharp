@@ -85,6 +85,8 @@ namespace NumSharp
         ///     internal form, which keeps the class boundary's flag); an override replaces it for every array whose engine
         ///     it is. New in 0.71.0 (the np-layer dtype plan, phase PE); it was the internal class <c>QuantileEngine</c>.
         /// </remarks>
+        [ReducesThrough(null)]
+        [NewSubtype("a")]
         public abstract NDArray Quantile(NDArray a, object q, int[] axis = null, NDArray @out = null,
             bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null);
 
@@ -120,6 +122,8 @@ namespace NumSharp
         ///     replaces it for every array whose engine it is. New in 0.71.0 (the np-layer dtype plan, phase PE); it was the
         ///     internal class <c>QuantileEngine</c>.
         /// </remarks>
+        [ReducesThrough(null)]
+        [NewSubtype("a")]
         public abstract NDArray Percentile(NDArray a, object q, int[] axis = null, NDArray @out = null,
             bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null);
 
@@ -149,6 +153,7 @@ namespace NumSharp
         ///     class rules. An override replaces it for every array whose engine it is. New in 0.71.0 (the np-layer dtype
         ///     plan, phase PE); it was the internal class <c>QuantileEngine</c>.
         /// </remarks>
+        [ReducesThrough(null)]
         public abstract NDArray Median(NDArray a, int[] axis = null, NDArray @out = null, bool overwrite_input = false,
             bool keepdims = false);
 

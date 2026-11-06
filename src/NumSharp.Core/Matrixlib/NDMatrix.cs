@@ -106,6 +106,7 @@ namespace NumSharp
     ///     </para>
     /// </remarks>
     /// <seealso href="https://numpy.org/doc/stable/reference/generated/numpy.matrix.html"/>
+    [ArraySubclass("matrix", Priority = NDMatrix.__array_priority__)]
     public partial class NDMatrix : NDArray, IEnumerable
     {
         /// <summary>

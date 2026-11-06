@@ -213,7 +213,7 @@ namespace NumSharp.Statistics
             NDArray wgt = WeightsAreValid(weights, a, reduced);
             // `if np.any(weights < 0)` compares the weights as the caller gave them (`np.asanyarray` keeps a subclass): a
             // chararray's own `<` is compare_chararrays, which refuses a number whatever the text holds (probed 2.4.2).
-            if (NDCharArrayBoundary.IsCharArray(weights))
+            if (NDSubclass.StandsForCharArray(weights))
                 throw new TypeError("comparison of non-string arrays");
             // Otherwise the comparison with a Python int, so text weights raise the comparison's refusal naming
             // _PyLongDType.

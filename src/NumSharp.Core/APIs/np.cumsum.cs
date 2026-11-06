@@ -20,9 +20,6 @@ namespace NumSharp
         [NDScoped]
         public static NDArray cumsum(NDArray arr, int? axis = null, DType typeCode = null, NDArray @out = null)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(arr))
-                return NDMatrixBoundary.Wrapped((arr, axis, typeCode, @out), static s => cumsum(s.arr, s.axis, s.typeCode, s.@out), @out);
             // np.cumsum IS np.add.accumulate, and NumPy's whole call (the text routes, the loop resolution, out=) is the
             // engine's: DefaultEngine.ReduceCumAdd.
             return arr.TensorEngine.ReduceCumAdd(arr, axis, typeCode, @out);

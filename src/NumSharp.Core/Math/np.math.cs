@@ -20,25 +20,17 @@ namespace NumSharp
         ///     StringDType operand — without a <paramref name="where"/> mask: the finalize error
         ///     (<c>Can only create a chararray from string data.</c>).</exception>
         public static NDArray add(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => add(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
-            : NDCharArrayBoundary.Sees(x1, x2, @out)   // a numpy.char.chararray operand or out=: chararray.__array_wrap__'s view of a text result, as from NumPy (NDCharArrayBoundary)
-            ? NDCharArrayBoundary.WrappedUfunc((x1, x2, @out, where, dtype), static s => add(s.x1, s.x2, s.@out, s.where, s.dtype), x1, x2, @out)
-            : x1.TensorEngine.Add(x1, x2, dtype, @out, where);
+            => x1.TensorEngine.Add(x1, x2, dtype, @out, where);
 
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.divide.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray divide(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => divide(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
-            : x1.TensorEngine.Divide(x1, x2, dtype, @out, where);
+            => x1.TensorEngine.Divide(x1, x2, dtype, @out, where);
 
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.true_divide.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray true_divide(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => true_divide(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
-            : x1.TensorEngine.Divide(x1, x2, dtype, @out, where);
+            => x1.TensorEngine.Divide(x1, x2, dtype, @out, where);
 
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.multiply.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
@@ -53,30 +45,20 @@ namespace NumSharp
         ///     StringDType operand — without a <paramref name="where"/> mask: the finalize error
         ///     (<c>Can only create a chararray from string data.</c>).</exception>
         public static NDArray multiply(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => multiply(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
-            : NDCharArrayBoundary.Sees(x1, x2, @out)   // a numpy.char.chararray operand or out=: chararray.__array_wrap__'s view of a text result, as from NumPy (NDCharArrayBoundary)
-            ? NDCharArrayBoundary.WrappedUfunc((x1, x2, @out, where, dtype), static s => multiply(s.x1, s.x2, s.@out, s.where, s.dtype), x1, x2, @out)
-            : x1.TensorEngine.Multiply(x1, x2, dtype, @out, where);
+            => x1.TensorEngine.Multiply(x1, x2, dtype, @out, where);
 
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.subtract.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray subtract(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => subtract(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
-            : x1.TensorEngine.Subtract(x1, x2, dtype, @out, where);
+            => x1.TensorEngine.Subtract(x1, x2, dtype, @out, where);
 
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.mod.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray mod(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => mod(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
-            : x1.TensorEngine.Mod(x1, x2, dtype, @out, where);
+            => x1.TensorEngine.Mod(x1, x2, dtype, @out, where);
 
         public static NDArray mod(NDArray x1, float x2)
-            => NDMatrixBoundary.Sees(x1)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((x1, x2), static s => mod(s.x1, s.x2))
-            : x1.TensorEngine.Mod(x1, x2);
+            => x1.TensorEngine.Mod(x1, x2);
 
         /// <summary>
         /// Return element-wise remainder of division (the floored remainder — result has the same
@@ -91,14 +73,10 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.remainder.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray remainder(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => remainder(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
-            : x1.TensorEngine.Mod(x1, x2, dtype, @out, where);
+            => x1.TensorEngine.Mod(x1, x2, dtype, @out, where);
 
         public static NDArray remainder(NDArray x1, float x2)
-            => NDMatrixBoundary.Sees(x1)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((x1, x2), static s => remainder(s.x1, s.x2))
-            : x1.TensorEngine.Mod(x1, x2);
+            => x1.TensorEngine.Mod(x1, x2);
 
         /// <summary>
         /// Return the element-wise C-library remainder of division. Unlike
@@ -116,16 +94,12 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fmod.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray fmod(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => fmod(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
-            : x1.TensorEngine.Fmod(x1, x2, dtype, @out, where);
+            => x1.TensorEngine.Fmod(x1, x2, dtype, @out, where);
 
         // Scalar / array-like divisor convenience (the a % obj analog; asanyarray mints the operand).
         [NDScoped]
         public static NDArray fmod(NDArray x1, object x2)
-            => NDMatrixBoundary.Sees(x1)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((x1, x2), static s => fmod(s.x1, s.x2))
-            : x1.TensorEngine.Fmod(x1, np.asanyarray(x2));
+            => x1.TensorEngine.Fmod(x1, np.asanyarray(x2));
 
         /// <summary>
         /// Returns the discrete, linear convolution of two one-dimensional sequences.
@@ -217,23 +191,6 @@ namespace NumSharp
         {
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
-            if (NDMatrixBoundary.Sees(a))
-            {
-                // NumPy hands a numpy.matrix to matrix.prod(axis, dtype, out) with every keyword the caller passed, in its
-                // signature's order; the method takes none of them, so the first one passed is its TypeError.
-                if (keepdims)
-                    throw NDMatrixBoundary.KeywordError("prod", "keepdims");
-                if (initial is not null)
-                    throw NDMatrixBoundary.KeywordError("prod", "initial");
-                if (@where is not null)
-                    throw NDMatrixBoundary.KeywordError("prod", "where");
-                if (@out is not null)
-                    return NDMatrixBoundary.ReducedInto(a, @out, (axis, dtype),
-                        static (m, o, s) => m.prod(s.axis, s.dtype, o),
-                        static (m, o, s) => m.TensorEngine.ReduceProduct(m, s.axis, keepdims: true, s.dtype, o));
-                // a row, a column or the scalar, as NumPy's matrix method returns
-                return NDMatrixBoundary.Reduced((a, axis, dtype), static s => prod(s.a, s.axis, s.dtype), axis, false, "prod");
-            }
 
             // The whole call is the engine's: TensorEngine.ReduceProduct of a's engine takes every keyword.
             return a.TensorEngine.ReduceProduct(a, axis, keepdims, dtype, @out, initial, @where);
@@ -249,9 +206,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.positive.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray positive(NDArray nd, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => NDMatrixBoundary.Sees(nd)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((nd, @out, where, dtype), static s => positive(s.nd, s.@out, s.where, s.dtype), @out)
-            : nd.TensorEngine.Positive(nd, dtype, @out, where);
+            => nd.TensorEngine.Positive(nd, dtype, @out, where);
 
         /// <summary>
         ///     Numerical negative, element-wise.
@@ -264,9 +219,6 @@ namespace NumSharp
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray negative(NDArray nd, NDArray @out = null, NDArray where = null, DType dtype = null)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(nd))
-                return NDMatrixBoundary.Wrapped((nd, @out, where, dtype), static s => negative(s.nd, s.@out, s.where, s.dtype), @out);
             // ufunc out=/where=: the provided out is returned as-is (no
             // layout post-processing — NumPy returns out untouched).
             if (@out is not null || where is not null)

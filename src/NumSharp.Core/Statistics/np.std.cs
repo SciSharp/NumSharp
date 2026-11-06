@@ -59,24 +59,6 @@ namespace NumSharp
         {
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
-            if (NDMatrixBoundary.Sees(a))
-            {
-                // fromnumeric folds correction= into ddof first; then matrix.std(axis, dtype, out, ddof) refuses every other
-                // keyword the caller passed (the first one passed is its TypeError).
-                int d = DefaultEngine.DdofWithCorrection(ddof, correction);
-                if (keepdims)
-                    throw NDMatrixBoundary.KeywordError("std", "keepdims");
-                if (@where is not null)
-                    throw NDMatrixBoundary.KeywordError("std", "where");
-                if (mean is not null)
-                    throw NDMatrixBoundary.KeywordError("std", "mean");
-                if (@out is not null)
-                    return NDMatrixBoundary.ReducedInto(a, @out, (axis, dtype, d),
-                        static (m, o, s) => m.std(s.axis, s.dtype, o, s.d),
-                        static (m, o, s) => m.TensorEngine.ReduceStd(m, s.axis, keepdims: true, s.d, s.dtype, o));
-                // a row, a column or the scalar, as NumPy's matrix method returns
-                return NDMatrixBoundary.Reduced((a, axis, dtype, d), static s => std(s.a, s.axis, s.dtype, ddof: s.d), axis, false, "std");
-            }
 
             // The whole call is the engine's: TensorEngine.ReduceStd of a's engine takes every keyword, correction= first.
             return a.TensorEngine.ReduceStd(a, axis, keepdims, ddof, dtype, @out, @where, mean, correction);

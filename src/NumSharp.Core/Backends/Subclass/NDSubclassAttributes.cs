@@ -233,6 +233,38 @@ namespace NumSharp
     }
 
     /// <summary>
+    ///     An argument NumPy's function COMPUTES before it hands the call to the subclass's method (the generated dispatch of
+    ///     <see cref="WrapReductionAttribute"/> / <see cref="WrapFuncAttribute"/>): <c>np.std</c> folds <c>correction=</c>
+    ///     into <c>ddof</c> first, so <c>matrix.std</c> receives <c>ddof</c> and never sees <c>correction</c>.
+    /// </summary>
+    /// <remarks>The method's parameter <see cref="Parameter"/> takes <c>Type.Method(...)</c>, its parameters bound by name to
+    ///     the public function's; the function parameters that method reads are consumed (no unexpected-keyword error for
+    ///     them).</remarks>
+    [AttributeUsage(AttributeTargets.Method, AllowMultiple = true, Inherited = false)]
+    internal sealed class WrapArgumentAttribute : Attribute
+    {
+        /// <summary>Declares the computed argument.</summary>
+        /// <param name="parameter">The subclass method's parameter it fills (<c>ddof</c>).</param>
+        /// <param name="type">The class that holds the computing method.</param>
+        /// <param name="method">The static method that computes it (<c>nameof</c>).</param>
+        internal WrapArgumentAttribute(string parameter, Type type, string method)
+        {
+            Parameter = parameter;
+            Type = type;
+            Method = method;
+        }
+
+        /// <summary>The subclass method's parameter.</summary>
+        internal string Parameter { get; }
+
+        /// <summary>The class that holds the computing method.</summary>
+        internal Type Type { get; }
+
+        /// <summary>The computing method's name.</summary>
+        internal string Method { get; }
+    }
+
+    /// <summary>
     ///     NumPy's function ends by handing its (plain-computed) answer through <c>np.{method}</c> of an intermediate of the
     ///     operand's class - <c>np.nansum(m)</c> is <c>np.sum</c> of the nan-replaced matrix, <c>np.median(m)</c> ends in
     ///     <c>np.mean</c> of a partitioned matrix: that method's keyword errors apply at the entry and its <c>_collapse</c>
