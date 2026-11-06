@@ -483,5 +483,41 @@ namespace NumSharp.Tests.Math
             qm.ToArray<decimal>().Should().Equal(3m, -4m);
             rm.ToArray<decimal>().Should().Equal(1.5m, 0.5m);
         }
+
+        /// <summary>
+        ///     Parity QA-27: divmod has no complex loop, so a complex operand is NumPy's generic no-loop TypeError, raised
+        ///     for the LOOP before any element is read (a zero-size operand too), on the plain route and the out= / where=
+        ///     route alike; a non-bool mask is refused first (NumPy's argument parsing), a real dtype= turns it into the
+        ///     numbered input cast refusal, and dtype=complex is the no-loop text. Every row is NumPy 2.4.2's answer.
+        /// </summary>
+        [TestMethod]
+        public void Complex_RaisesNumPysTypeErrorInNumPysOrder()
+        {
+            const string notSupported = "ufunc 'divmod' not supported for the input types, and the inputs could not be safely coerced to any supported types according to the casting rule ''safe''";
+            using var c = np.array(new[] { new System.Numerics.Complex(1, 2), new System.Numerics.Complex(3, -1) });
+            using var f = np.array(new[] { 2.0, 1.0 });
+            using var emptyC = np.zeros(new Shape(0), NPTypeCode.Complex);
+            using var one = NDArray.Scalar(1.0);
+            using var two = NDArray.Scalar(2.0);
+            using var q = np.empty(new Shape(2), NPTypeCode.Complex);
+            using var r = np.empty(new Shape(2), NPTypeCode.Complex);
+            using var boolMask = np.array(new[] { true, false });
+            using var intMask = np.array(new[] { 1L, 0L });
+
+            new Action(() => np.divmod(c, f)).Should().ThrowExactly<TypeError>().WithMessage(notSupported);
+            new Action(() => np.divmod(f, c)).Should().ThrowExactly<TypeError>().WithMessage(notSupported);
+            new Action(() => np.divmod(c, c)).Should().ThrowExactly<TypeError>().WithMessage(notSupported);
+            new Action(() => np.divmod(emptyC, one)).Should().ThrowExactly<TypeError>().WithMessage(notSupported);
+            new Action(() => np.divmod(c, two)).Should().ThrowExactly<TypeError>().WithMessage(notSupported);
+            new Action(() => np.divmod(c, f, @out: (q, r))).Should().ThrowExactly<TypeError>().WithMessage(notSupported);
+            new Action(() => np.divmod(c, f, where: boolMask)).Should().ThrowExactly<TypeError>().WithMessage(notSupported);
+            new Action(() => np.divmod(c, f, dtype: NPTypeCode.Double)).Should().ThrowExactly<TypeError>().WithMessage(
+                "Cannot cast ufunc 'divmod' input 0 from dtype('complex128') to dtype('float64') with casting rule 'same_kind'");
+            new Action(() => np.divmod(f, f, dtype: NPTypeCode.Complex)).Should().Throw<TypeError>().WithMessage(
+                "No loop matching the specified signature and casting was found for ufunc divmod");
+            // The mask is parsed first: its refusal (NumPy's TypeError text, the house ArgumentException of where=).
+            new Action(() => np.divmod(c, f, where: intMask)).Should().ThrowExactly<ArgumentException>().WithMessage(
+                "Cannot cast array data from dtype('int64') to dtype('bool') according to the rule 'safe'");
+        }
     }
 }

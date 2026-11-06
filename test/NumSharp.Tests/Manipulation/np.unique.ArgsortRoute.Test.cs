@@ -1,5 +1,6 @@
 using System;
 using NumSharp.Backends;
+using NumSharp.Backends.Unmanaged.Pooling;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -291,6 +292,89 @@ namespace NumSharp.Tests.Manipulation
                         $"{a.typecode} n={a.size} ri={ri} rv={rv} rc={rc} en={en} output {k}");
                 }
             }
+        }
+
+        /// <summary>
+        ///     Parity QA-52: the long-indexed fallback releases its sort records before it returns. Each of the four routes
+        ///     reads its records through a raw pointer, which does not root the record block; the block used to be left to
+        ///     its finalizer, so it was unreachable from the pointer read on and a collection during the gather or the emit
+        ///     could free the records mid-read (one full suite run's test host ended with an access violation in
+        ///     <c>EmitOutputsLong</c>). The fix releases each block in a <c>finally</c> after the emit, which keeps it
+        ///     reachable until then and hands its buffer back to the pool at once. Measured here as the buffer pool's
+        ///     acquired-minus-released count over 10 and 20 calls (results disposed): the slope must be below half a
+        ///     buffer per call, where the finalizer-released block stranded one buffer per call.
+        /// </summary>
+        /// <remarks>Reads the process-wide pool counters inside a window no collection disturbed (the lifetime sweep's
+        ///     method, <c>Lifetime/BufferReleaseSweepTests.cs</c>), so it does not run in parallel.</remarks>
+        [TestMethod, DoNotParallelize]
+        public void LongIndexedFallback_ReleasesItsRecordsBeforeReturning()
+        {
+            var flags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            var engine = BackendFactory.GetEngine<DefaultEngine>();
+            var longFloat = typeof(DefaultEngine).GetMethods(flags)
+                .First(m => m.Name == "uniqueFlatSortedLongFloat" && m.IsGenericMethodDefinition).MakeGenericMethod(typeof(double));
+            var longPlain = typeof(DefaultEngine).GetMethods(flags)
+                .First(m => m.Name == "uniqueFlatSortedLong" && m.IsGenericMethodDefinition).MakeGenericMethod(typeof(long));
+            var longComplex = typeof(DefaultEngine).GetMethods(flags).First(m => m.Name == "uniqueFlatSortedLongComplex");
+
+            var rng = new System.Random(52);
+            const int n = 4096;
+            var raw = Enumerable.Range(0, n).Select(_ => (double)rng.Next(500)).ToArray();
+            using var doubles = np.array(raw);
+            using var longs = np.array(raw.Select(v => (long)v).ToArray());
+            using var complexes = np.array(raw.Select((v, i) => new Complex(v, i % 3)).ToArray());
+
+            // The four record blocks: the float argsort route (an index / inverse), the float in-place sort route (counts
+            // only), the integer route and the complex argsort route.
+            var routes = new (string name, Func<object> run)[]
+            {
+                ("float argsort route", () => longFloat.Invoke(engine, new object[] { doubles, (long)n, true, true, true, true })),
+                ("float sort route", () => longFloat.Invoke(engine, new object[] { doubles, (long)n, true, false, false, true })),
+                ("integer route", () => longPlain.Invoke(engine, new object[] { longs, (long)n, true, true, true, -1L })),
+                ("complex argsort route", () => longComplex.Invoke(engine, new object[] { complexes, (long)n, true, true, true, true })),
+            };
+
+            foreach (var (name, run) in routes)
+            {
+                DisposeAll(run());   // warm: JIT, kernels, caches
+                double perCall = (Deficit(run, 20) - Deficit(run, 10)) / 10.0;
+                perCall.Should().BeLessThan(0.5, $"{name}: the record block must go back to the pool before the call returns");
+            }
+        }
+
+        /// <summary>Disposes every array of a fallback's result (an <see cref="NDArray"/>[]).</summary>
+        /// <param name="result">The boxed result.</param>
+        private static void DisposeAll(object result)
+        {
+            foreach (var a in (NDArray[])result)
+                a?.Dispose();
+        }
+
+        /// <summary>
+        ///     The buffer pool's acquired-minus-released count over <paramref name="iterations"/> calls whose results are
+        ///     disposed, read inside a window no collection disturbed (a finalizer that ran inside it could hide a stranded
+        ///     buffer); retried up to five times, then the last reading, which can only err toward a smaller deficit.
+        /// </summary>
+        /// <param name="run">The call.</param>
+        /// <param name="iterations">How many calls the window holds.</param>
+        /// <returns>The buffers acquired and not released in the window.</returns>
+        private static long Deficit(Func<object> run, int iterations)
+        {
+            long deficit = 0;
+            for (int attempt = 1; attempt <= 5; attempt++)
+            {
+                GcQuiescence.CollectYoung();
+                var window = GcQuiescence.OpenWindow();
+                SizeBucketedBufferPool.ResetCounters();
+                for (int i = 0; i < iterations; i++)
+                    DisposeAll(run());
+                long acquired = SizeBucketedBufferPool.Hits + SizeBucketedBufferPool.Misses + SizeBucketedBufferPool.ZeroedAllocs;
+                long released = SizeBucketedBufferPool.Returns + SizeBucketedBufferPool.ReturnsFreed;
+                deficit = acquired - released;
+                if (GcQuiescence.Undisturbed(window))
+                    return deficit;
+            }
+            return deficit;
         }
     }
 }

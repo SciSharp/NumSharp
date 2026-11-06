@@ -86,8 +86,8 @@ namespace NumSharp.Backends
         /// <returns>A fresh 1-D array of dtype <paramref name="dt"/>; <c>null</c> when <paramref name="value"/> is
         ///     <c>null</c> or <paramref name="dt"/> is a string dtype (the caller refuses text before it would use the
         ///     operand — NumPy's subtract has no string loop — so a number-to-text conversion here would be wasted work).</returns>
-        /// <exception cref="ArgumentException"><paramref name="value"/>'s dtype cannot be cast to
-        ///     <paramref name="dt"/> under <c>same_kind</c> (NumPy's TypeError text; the house type for this check).</exception>
+        /// <exception cref="TypeError"><paramref name="value"/>'s dtype cannot be cast to <paramref name="dt"/> under
+        ///     <c>same_kind</c>: NumPy's TypeError and its exact text (parity QA-08).</exception>
         /// <remarks>Covered by <c>[NDScopedCovered]</c>: its only caller is the <c>[NDScoped]</c>
         ///     <see cref="Ediff1d"/>, so the conversion of a non-array <paramref name="value"/> and its ravel are
         ///     released by that scope, exceptions included. An <see cref="NDArray"/> <paramref name="value"/> is the
@@ -101,10 +101,12 @@ namespace NumSharp.Backends
 
             // NumPy's np.can_cast(to_begin, dtype_req, casting="same_kind") on the two DESCRIPTORS: a string operand or
             // a string input is judged by its class and width (float64 -> <U2 is same_kind, <U2 -> float64 is not).
+            // NumPy raises a plain TypeError here (parity QA-08), built without a parameter name so the message is NumPy's
+            // text exactly (an ArgumentException with a name appended " (Parameter 'to_begin')").
             if (!DTypeCasting.CanCastTypeTo(src.dtype, dt, NPY_CASTING.NPY_SAME_KIND_CASTING))
-                throw new ArgumentException(
+                throw new TypeError(
                     $"dtype of `{name}` must be compatible with input `ary` " +
-                    "under the `same_kind` rule.", name);
+                    "under the `same_kind` rule.");
 
             // A string input is refused by the caller right after both checks: the operand is never used.
             if (dt.Meta is StringDTypeMeta)

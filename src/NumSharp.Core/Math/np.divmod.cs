@@ -10,8 +10,8 @@ namespace NumSharp
         /// <c>divmod(x1, x2)</c> is equivalent to <c>(floor_divide(x1, x2), remainder(x1, x2))</c> but
         /// computed in a single fused pass. Item1 (<c>Quotient</c>) is the floored quotient, Item2
         /// (<c>Remainder</c>) the floored remainder (same sign as the divisor). Integer inputs stay
-        /// integer (NEP50; bool -> int8); float ÷0 yields (±inf/nan, nan). Complex is not supported
-        /// (NumPy has no complex divmod loop).
+        /// integer (NEP50; bool -> int8); float ÷0 yields (±inf/nan, nan). A complex operand raises NumPy's
+        /// TypeError: NumPy has no complex divmod loop.
         ///
         /// Mirrors NumPy's two-output ufunc <c>divmod(x1, x2[, out1, out2], / [, out=(None, None)],
         /// *, where=True, dtype=None)</c>. In C# the two outputs are a value tuple; pass an
@@ -26,6 +26,10 @@ namespace NumSharp
         /// <returns>(quotient, remainder). Both are scalars if x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.divmod.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="TypeError">A complex operand with no <paramref name="dtype"/>: divmod has no complex loop,
+        ///     so NumPy's <c>ufunc 'divmod' not supported for the input types, ...</c> (parity QA-27); under a real
+        ///     <paramref name="dtype"/>, an input or an out the loop cannot reach by a same_kind cast (NumPy's
+        ///     UFuncTypeError texts); a bool or complex <paramref name="dtype"/> (no loop).</exception>
         public static (NDArray Quotient, NDArray Remainder) divmod(NDArray x1, NDArray x2,
             (NDArray Quotient, NDArray Remainder) @out = default, NDArray where = null, DType dtype = null)
             => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand: both outputs come back as matrices, as from NumPy
@@ -38,6 +42,8 @@ namespace NumSharp
         /// <see cref="asanyarray"/> (the a // obj / a % obj analog).
         /// </summary>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="TypeError">A complex operand: divmod has no complex loop, so NumPy's <c>ufunc 'divmod' not
+        ///     supported for the input types, ...</c> (parity QA-27).</exception>
         // Scope: reclaims the np.asanyarray(x2) temp; the two result arrays are detached through the
         // tuple carrier (same as np.modf's [NDScoped] two-array return).
         [NDScoped]

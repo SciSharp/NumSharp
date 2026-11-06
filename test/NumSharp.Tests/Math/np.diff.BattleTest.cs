@@ -401,7 +401,7 @@ namespace NumSharp.Tests.Math
         {
             // float to_begin into int array: can_cast(float, int, same_kind) == False -> TypeError
             NDArray x = new int[] { 1, 2, 3 };
-            Assert.ThrowsException<ArgumentException>(() => np.ediff1d(x, to_begin: 0.5));
+            Assert.ThrowsException<TypeError>(() => np.ediff1d(x, to_begin: 0.5));
         }
 
         [TestMethod]
@@ -410,6 +410,26 @@ namespace NumSharp.Tests.Math
             // arange-like strided view ravels in C order before differencing
             var strided = ((NDArray)new int[] { 1, 2, 4, 7, 0 })["::2"]; // [1,4,0]
             np.ediff1d(strided).Should().Be(new int[] { 3, -4 });
+        }
+
+        /// <summary>
+        ///     Parity QA-08: an incompatible <c>to_begin</c> / <c>to_end</c> is NumPy's plain TypeError with its exact text
+        ///     (no .NET parameter suffix): <c>np.ediff1d(int8_array, to_begin=[1.5])</c> and <c>to_end=2.5</c>, NumPy 2.4.2's
+        ///     answers.
+        /// </summary>
+        [TestMethod]
+        public void Ediff1d_IncompatibleEnds_RaiseNumPysTypeErrorAndText()
+        {
+            using var a = np.array(new sbyte[] { 1, 2, 4 });
+            using var begin = np.array(new[] { 1.5 });
+
+            Action toBegin = () => np.ediff1d(a, to_begin: begin);
+            Action toEnd = () => np.ediff1d(a, to_end: 2.5);
+
+            toBegin.Should().ThrowExactly<TypeError>()
+                .Which.Message.Should().Be("dtype of `to_begin` must be compatible with input `ary` under the `same_kind` rule.");
+            toEnd.Should().ThrowExactly<TypeError>()
+                .Which.Message.Should().Be("dtype of `to_end` must be compatible with input `ary` under the `same_kind` rule.");
         }
     }
 }

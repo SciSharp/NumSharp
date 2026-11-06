@@ -4,6 +4,7 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Runtime.ExceptionServices;
 using System.Text.RegularExpressions;
 using NumSharp.Backends;
 using NumSharp.Backends.Iteration;
@@ -566,8 +567,17 @@ namespace NumSharp
             return arrays;
         }
 
-        // Builds the per-slice invoker once (see the field's remarks). The typed cases skip
-        // DynamicInvoke entirely; the fallback boxes the args and normalizes an arbitrary return.
+        /// <summary>
+        ///     Builds the signature mode's per-slice invoker once (see the field's remarks): the typed delegate shapes (one to
+        ///     three <see cref="NDArray"/> arguments, one <see cref="NDArray"/> result) are called directly; any other shape
+        ///     (a multi-output tuple or <see cref="NDArray"/>[] result, four or more core arguments) boxes its arguments and
+        ///     goes through <see cref="Delegate.DynamicInvoke"/>, whose <see cref="TargetInvocationException"/> is unwrapped
+        ///     so the caller sees exactly what the function threw, as NumPy's vectorize propagates it (parity QA-43).
+        /// </summary>
+        /// <returns>The invoker: the core slices in, the function's outputs (normalized to an <see cref="NDArray"/>[]) out.</returns>
+        /// <remarks>The invoker rethrows the function's own exception with its original stack trace
+        ///     (<see cref="ExceptionDispatchInfo"/>); a null or unrecognized result raises the ValueError of
+        ///     <see cref="NormalizeSignatureResult"/>.</remarks>
         private Func<NDArray[], NDArray[]> BuildSignatureInvoker()
         {
             switch (_pyfunc)
@@ -585,7 +595,19 @@ namespace NumSharp
                         var boxed = new object[a.Length];
                         for (int i = 0; i < a.Length; i++)
                             boxed[i] = a[i];
-                        return NormalizeSignatureResult(_pyfunc.DynamicInvoke(boxed));
+                        object raw;
+                        try
+                        {
+                            raw = _pyfunc.DynamicInvoke(boxed);
+                        }
+                        catch (TargetInvocationException e) when (e.InnerException is not null)
+                        {
+                            // NumPy's vectorize propagates the function's own exception: drop reflection's wrapper and
+                            // rethrow the inner exception with its original stack (parity QA-43).
+                            ExceptionDispatchInfo.Capture(e.InnerException).Throw();
+                            throw;   // unreachable: Throw() never returns, but the path must end for the compiler
+                        }
+                        return NormalizeSignatureResult(raw);
                     };
             }
         }

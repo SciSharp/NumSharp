@@ -1533,28 +1533,39 @@ namespace NumSharp.Backends
         ///     the only part sorted.</param>
         /// <returns>[values, index?, inverse?, counts?] (see <see cref="EmitOutputsLong{T}"/>).</returns>
         /// <remarks>Reached only above <see cref="Array.MaxLength"/> elements (and by reflection from the tests). The
-        ///     record block is not disposed: its buffer returns through the block's finalizer.</remarks>
+        ///     record block is released once the outputs are built (parity QA-52: a raw pointer does not root it, so the
+        ///     finally keeps it reachable through the emit and hands its buffer back to the pool at once).</remarks>
         private unsafe NDArray[] uniqueFlatSortedLong<T>(NDArray a, long n,
             bool return_index, bool return_inverse, bool return_counts,
             long firstNaN) where T : unmanaged, IComparable<T>, IEquatable<T>
         {
             var block = new UnmanagedMemoryBlock<KeyPerm<T>>(n);
-            KeyPerm<T>* kp = block.Address;
-            PopulateKeyPerm(a, kp, n);
-
-            if (firstNaN < 0)
+            try
             {
-                // Sort entire range with default compare
-                Utilities.LongIntroSort.Sort(kp, n);
-            }
-            else
-            {
-                // Sort only the non-NaN prefix (caller already partitioned)
-                Utilities.LongIntroSort.Sort(kp, firstNaN);
-            }
+                KeyPerm<T>* kp = block.Address;
+                PopulateKeyPerm(a, kp, n);
 
-            return BuildMaskAndEmitLong<T>(a, kp, n, firstNaN, equal_nan: true,
-                                            return_index, return_inverse, return_counts);
+                if (firstNaN < 0)
+                {
+                    // Sort entire range with default compare
+                    Utilities.LongIntroSort.Sort(kp, n);
+                }
+                else
+                {
+                    // Sort only the non-NaN prefix (caller already partitioned)
+                    Utilities.LongIntroSort.Sort(kp, firstNaN);
+                }
+
+                return BuildMaskAndEmitLong<T>(a, kp, n, firstNaN, equal_nan: true,
+                                                return_index, return_inverse, return_counts);
+            }
+            finally
+            {
+                // A raw pointer does not root the record block: this use keeps it reachable until the outputs are built
+                // (parity QA-52), and the 0 -> 1 -> 0 reference transition of a bare block hands its buffer back to the pool.
+                block.TryAddRef();
+                block.Release();
+            }
         }
 
         /// <summary>
@@ -1582,20 +1593,30 @@ namespace NumSharp.Backends
                 return uniqueFlatArgsortedLong<T>(a, n, equal_nan, return_index, return_inverse, return_counts);
 
             var block = new UnmanagedMemoryBlock<KeyPerm<T>>(n);
-            KeyPerm<T>* kp = block.Address;
-            PopulateKeyPerm(a, kp, n);
+            try
+            {
+                KeyPerm<T>* kp = block.Address;
+                PopulateKeyPerm(a, kp, n);
 
-            long firstNaN = PartitionNaN_Long<T>(kp, n);
-            Utilities.LongIntroSort.Sort(kp, firstNaN);
-            StabilizeNaNTailLong<T>(kp, firstNaN, n);
-            // NumPy's values-only and counts-only routes sort in place, which rewrites every float32 / float64 NaN
-            // (WriteSortNaNs); the index and inverse routes argsort and keep the bits (they returned above, so the test
-            // always holds here).
-            if (!return_index && !return_inverse)
-                WriteSortNaNsLong(kp, firstNaN, n);
+                long firstNaN = PartitionNaN_Long<T>(kp, n);
+                Utilities.LongIntroSort.Sort(kp, firstNaN);
+                StabilizeNaNTailLong<T>(kp, firstNaN, n);
+                // NumPy's values-only and counts-only routes sort in place, which rewrites every float32 / float64 NaN
+                // (WriteSortNaNs); the index and inverse routes argsort and keep the bits (they returned above, so the test
+                // always holds here).
+                if (!return_index && !return_inverse)
+                    WriteSortNaNsLong(kp, firstNaN, n);
 
-            return BuildMaskAndEmitLong<T>(a, kp, n, firstNaN, equal_nan,
-                                            return_index, return_inverse, return_counts);
+                return BuildMaskAndEmitLong<T>(a, kp, n, firstNaN, equal_nan,
+                                                return_index, return_inverse, return_counts);
+            }
+            finally
+            {
+                // A raw pointer does not root the record block: this use keeps it reachable until the outputs are built
+                // (parity QA-52), and the 0 -> 1 -> 0 reference transition of a bare block hands its buffer back to the pool.
+                block.TryAddRef();
+                block.Release();
+            }
         }
 
         /// <summary>
@@ -1642,35 +1663,46 @@ namespace NumSharp.Backends
         ///     <see cref="EmitOutputsLong{T}"/>'s index is each run's smallest position. Under the stable order that is the
         ///     position at the run's start, NumPy's <c>perm[mask]</c>: equal values keep their input order, and so do the
         ///     NaNs of a collapsed run. Reached only above <see cref="Array.MaxLength"/> elements (and by reflection from the
-        ///     tests); the record block is not disposed, its buffer returns through the block's finalizer.
+        ///     tests); the record block is released once the outputs are built (parity QA-52: a raw pointer does not root it,
+        ///     so the finally keeps it reachable through the emit and hands its buffer back to the pool at once).
         /// </remarks>
         private unsafe NDArray[] uniqueFlatArgsortedLong<T>(NDArray a, long n, bool equal_nan,
             bool return_index, bool return_inverse, bool return_counts)
             where T : unmanaged, IComparable<T>, IEquatable<T>
         {
             var block = new UnmanagedMemoryBlock<KeyPerm<T>>(n);
-            KeyPerm<T>* kp = block.Address;
-            using (var order = AxisSort.ArgSort(a, null, NPY_SORTKIND.NPY_STABLESORT))
+            try
             {
-                long* perm = (long*)order.Address;   // a fresh C-contiguous int64 array: its first element is at its base
-                if (a.Shape.IsContiguous)
+                KeyPerm<T>* kp = block.Address;
+                using (var order = AxisSort.ArgSort(a, null, NPY_SORTKIND.NPY_STABLESORT))
                 {
-                    // Base address PLUS the shape's offset: a contiguous view may keep the base with a non-zero offset.
-                    T* src = (T*)a.Address + a.Shape.offset;
-                    for (long j = 0; j < n; j++) { long p = perm[j]; kp[j].Key = src[p]; kp[j].Perm = p; }
+                    long* perm = (long*)order.Address;   // a fresh C-contiguous int64 array: its first element is at its base
+                    if (a.Shape.IsContiguous)
+                    {
+                        // Base address PLUS the shape's offset: a contiguous view may keep the base with a non-zero offset.
+                        T* src = (T*)a.Address + a.Shape.offset;
+                        for (long j = 0; j < n; j++) { long p = perm[j]; kp[j].Key = src[p]; kp[j].Perm = p; }
+                    }
+                    else
+                    {
+                        // perm indexes the C-order flattening; a.flat is that flattening (a copy for this layout).
+                        using var flat = a.flat;
+                        T* src = (T*)flat.Address;
+                        Func<long, long> getOffset = flat.Shape.GetOffset_1D;
+                        for (long j = 0; j < n; j++) { long p = perm[j]; kp[j].Key = src[getOffset(p)]; kp[j].Perm = p; }
+                    }
                 }
-                else
-                {
-                    // perm indexes the C-order flattening; a.flat is that flattening (a copy for this layout).
-                    using var flat = a.flat;
-                    T* src = (T*)flat.Address;
-                    Func<long, long> getOffset = flat.Shape.GetOffset_1D;
-                    for (long j = 0; j < n; j++) { long p = perm[j]; kp[j].Key = src[getOffset(p)]; kp[j].Perm = p; }
-                }
+                long firstNaN = n;
+                while (firstNaN > 0 && IsNaNKey(kp[firstNaN - 1].Key)) firstNaN--;
+                return BuildMaskAndEmitLong<T>(a, kp, n, firstNaN, equal_nan, return_index, return_inverse, return_counts);
             }
-            long firstNaN = n;
-            while (firstNaN > 0 && IsNaNKey(kp[firstNaN - 1].Key)) firstNaN--;
-            return BuildMaskAndEmitLong<T>(a, kp, n, firstNaN, equal_nan, return_index, return_inverse, return_counts);
+            finally
+            {
+                // A raw pointer does not root the record block: this use keeps it reachable until the outputs are built
+                // (parity QA-52), and the 0 -> 1 -> 0 reference transition of a bare block hands its buffer back to the pool.
+                block.TryAddRef();
+                block.Release();
+            }
         }
 
         /// <summary>
@@ -1688,31 +1720,42 @@ namespace NumSharp.Backends
         /// <param name="return_counts">Also return the counts.</param>
         /// <returns>[values, index?, inverse?, counts?] (see <see cref="BuildMaskAndEmitLongComplex"/>).</returns>
         /// <remarks>Reached only above <see cref="Array.MaxLength"/> elements (and by reflection from the tests); the record
-        ///     block is not disposed, its buffer returns through the block's finalizer.</remarks>
+        ///     block is released once the outputs are built (parity QA-52: a raw pointer does not root it, so the
+        ///     finally keeps it reachable through the emit and hands its buffer back to the pool at once).</remarks>
         private unsafe NDArray[] uniqueFlatArgsortedLongComplex(NDArray a, long n, bool equal_nan,
             bool return_index, bool return_inverse, bool return_counts)
         {
             var block = new UnmanagedMemoryBlock<ComplexKeyPerm>(n);
-            ComplexKeyPerm* kp = block.Address;
-            using (var order = AxisSort.ArgSort(a, null, NPY_SORTKIND.NPY_STABLESORT))
+            try
             {
-                long* perm = (long*)order.Address;
-                if (a.Shape.IsContiguous)
+                ComplexKeyPerm* kp = block.Address;
+                using (var order = AxisSort.ArgSort(a, null, NPY_SORTKIND.NPY_STABLESORT))
                 {
-                    Complex* src = (Complex*)a.Address + a.Shape.offset;
-                    for (long j = 0; j < n; j++) { long p = perm[j]; kp[j].Key = src[p]; kp[j].Perm = p; }
+                    long* perm = (long*)order.Address;
+                    if (a.Shape.IsContiguous)
+                    {
+                        Complex* src = (Complex*)a.Address + a.Shape.offset;
+                        for (long j = 0; j < n; j++) { long p = perm[j]; kp[j].Key = src[p]; kp[j].Perm = p; }
+                    }
+                    else
+                    {
+                        using var flat = a.flat;
+                        Complex* src = (Complex*)flat.Address;
+                        Func<long, long> getOffset = flat.Shape.GetOffset_1D;
+                        for (long j = 0; j < n; j++) { long p = perm[j]; kp[j].Key = src[getOffset(p)]; kp[j].Perm = p; }
+                    }
                 }
-                else
-                {
-                    using var flat = a.flat;
-                    Complex* src = (Complex*)flat.Address;
-                    Func<long, long> getOffset = flat.Shape.GetOffset_1D;
-                    for (long j = 0; j < n; j++) { long p = perm[j]; kp[j].Key = src[getOffset(p)]; kp[j].Perm = p; }
-                }
+                long firstNaN = n;
+                while (firstNaN > 0 && IsNaNKey(kp[firstNaN - 1].Key)) firstNaN--;
+                return BuildMaskAndEmitLongComplex(a, kp, n, firstNaN, equal_nan, return_index, return_inverse, return_counts);
             }
-            long firstNaN = n;
-            while (firstNaN > 0 && IsNaNKey(kp[firstNaN - 1].Key)) firstNaN--;
-            return BuildMaskAndEmitLongComplex(a, kp, n, firstNaN, equal_nan, return_index, return_inverse, return_counts);
+            finally
+            {
+                // A raw pointer does not root the record block: this use keeps it reachable until the outputs are built
+                // (parity QA-52), and the 0 -> 1 -> 0 reference transition of a bare block hands its buffer back to the pool.
+                block.TryAddRef();
+                block.Release();
+            }
         }
 
         /// <summary>
@@ -1770,7 +1813,9 @@ namespace NumSharp.Backends
         ///     at its run's start, NumPy's <c>perm[mask]</c>: the records are in NumPy's argsort order, and a collapsed run
         ///     of values with a NaN part, which holds different values, is represented by the first of them in that
         ///     order.</returns>
-        /// <remarks>The mask block is not disposed: its buffer returns through the block's finalizer.</remarks>
+        /// <remarks>The mask block is released once the outputs are built (parity QA-52: a raw pointer does not root
+        ///     it, so the finally keeps it reachable through the emit and hands its buffer back to the pool at
+        ///     once).</remarks>
         private unsafe NDArray[] BuildMaskAndEmitLongComplex(
             NDArray a, ComplexKeyPerm* kp, long n, long firstNaN, bool equal_nan,
             bool return_index, bool return_inverse, bool return_counts)
@@ -1778,83 +1823,93 @@ namespace NumSharp.Backends
             long nanStart = firstNaN;
 
             var maskBlock = new UnmanagedMemoryBlock<byte>(n);
-            byte* mask = maskBlock.Address;
-            for (long i = 0; i < n; i++) mask[i] = 0;
-            mask[0] = 1;
-            long uniqueCount = 1;
-
-            for (long i = 1; i < nanStart; i++)
+            try
             {
-                if (!kp[i].Key.Equals(kp[i - 1].Key)) { mask[i] = 1; uniqueCount++; }
-            }
+                byte* mask = maskBlock.Address;
+                for (long i = 0; i < n; i++) mask[i] = 0;
+                mask[0] = 1;
+                long uniqueCount = 1;
 
-            if (nanStart < n)
-            {
-                mask[nanStart] = 1;
-                if (nanStart > 0) uniqueCount++;
-                if (!equal_nan)
+                for (long i = 1; i < nanStart; i++)
                 {
-                    for (long i = nanStart + 1; i < n; i++)
+                    if (!kp[i].Key.Equals(kp[i - 1].Key)) { mask[i] = 1; uniqueCount++; }
+                }
+
+                if (nanStart < n)
+                {
+                    mask[nanStart] = 1;
+                    if (nanStart > 0) uniqueCount++;
+                    if (!equal_nan)
                     {
-                        mask[i] = 1;
-                        uniqueCount++;
+                        for (long i = nanStart + 1; i < n; i++)
+                        {
+                            mask[i] = 1;
+                            uniqueCount++;
+                        }
                     }
                 }
-            }
 
-            // Inline emit (same pattern as EmitOutputsLong but reads from ComplexKeyPerm)
-            int outCount = 1 + (return_index ? 1 : 0) + (return_inverse ? 1 : 0) + (return_counts ? 1 : 0);
-            var results = new NDArray[outCount];
+                // Inline emit (same pattern as EmitOutputsLong but reads from ComplexKeyPerm)
+                int outCount = 1 + (return_index ? 1 : 0) + (return_inverse ? 1 : 0) + (return_counts ? 1 : 0);
+                var results = new NDArray[outCount];
 
-            var valuesBlock = new UnmanagedMemoryBlock<Complex>(uniqueCount);
-            var valuesSlice = new ArraySlice<Complex>(valuesBlock);
-            Complex* vDst = valuesBlock.Address;
-            long vIdx = 0;
-            for (long i = 0; i < n; i++) if (mask[i] != 0) vDst[vIdx++] = kp[i].Key;
-            results[0] = new NDArray(valuesSlice, Shape.Vector(uniqueCount)) { TensorEngine = this };
-            int outPos = 1;
+                var valuesBlock = new UnmanagedMemoryBlock<Complex>(uniqueCount);
+                var valuesSlice = new ArraySlice<Complex>(valuesBlock);
+                Complex* vDst = valuesBlock.Address;
+                long vIdx = 0;
+                for (long i = 0; i < n; i++) if (mask[i] != 0) vDst[vIdx++] = kp[i].Key;
+                results[0] = new NDArray(valuesSlice, Shape.Vector(uniqueCount)) { TensorEngine = this };
+                int outPos = 1;
 
-            if (return_index)
-            {
-                // perm[mask]: the position of each run's first record.
-                var idxBlock = new UnmanagedMemoryBlock<long>(uniqueCount);
-                long* iDst = idxBlock.Address;
-                long oIdx = 0;
-                for (long i = 0; i < n; i++)
-                    if (mask[i] != 0) iDst[oIdx++] = kp[i].Perm;
-                results[outPos++] = new NDArray(new ArraySlice<long>(idxBlock), Shape.Vector(uniqueCount)) { TensorEngine = this };
-            }
-
-            if (return_inverse)
-            {
-                var invBlock = new UnmanagedMemoryBlock<long>(n);
-                var invSlice = new ArraySlice<long>(invBlock);
-                long* invDst = invBlock.Address;
-                long rank = -1;
-                for (long i = 0; i < n; i++)
+                if (return_index)
                 {
-                    if (mask[i] != 0) rank++;
-                    invDst[kp[i].Perm] = rank;
+                    // perm[mask]: the position of each run's first record.
+                    var idxBlock = new UnmanagedMemoryBlock<long>(uniqueCount);
+                    long* iDst = idxBlock.Address;
+                    long oIdx = 0;
+                    for (long i = 0; i < n; i++)
+                        if (mask[i] != 0) iDst[oIdx++] = kp[i].Perm;
+                    results[outPos++] = new NDArray(new ArraySlice<long>(idxBlock), Shape.Vector(uniqueCount)) { TensorEngine = this };
                 }
-                var invShape = a.ndim <= 1 ? Shape.Vector(n) : Shape.Adopt(a.Storage.Shape.dimensions);
-                results[outPos++] = new NDArray(invSlice, invShape) { TensorEngine = this };
-            }
 
-            if (return_counts)
-            {
-                var cntBlock = new UnmanagedMemoryBlock<long>(uniqueCount);
-                var cntSlice = new ArraySlice<long>(cntBlock);
-                long* cDst = cntBlock.Address;
-                long prevPos = 0, cIdx = 0;
-                for (long i = 1; i < n; i++)
+                if (return_inverse)
                 {
-                    if (mask[i] != 0) { cDst[cIdx++] = i - prevPos; prevPos = i; }
+                    var invBlock = new UnmanagedMemoryBlock<long>(n);
+                    var invSlice = new ArraySlice<long>(invBlock);
+                    long* invDst = invBlock.Address;
+                    long rank = -1;
+                    for (long i = 0; i < n; i++)
+                    {
+                        if (mask[i] != 0) rank++;
+                        invDst[kp[i].Perm] = rank;
+                    }
+                    var invShape = a.ndim <= 1 ? Shape.Vector(n) : Shape.Adopt(a.Storage.Shape.dimensions);
+                    results[outPos++] = new NDArray(invSlice, invShape) { TensorEngine = this };
                 }
-                cDst[cIdx++] = n - prevPos;
-                results[outPos++] = new NDArray(cntSlice, Shape.Vector(uniqueCount)) { TensorEngine = this };
-            }
 
-            return results;
+                if (return_counts)
+                {
+                    var cntBlock = new UnmanagedMemoryBlock<long>(uniqueCount);
+                    var cntSlice = new ArraySlice<long>(cntBlock);
+                    long* cDst = cntBlock.Address;
+                    long prevPos = 0, cIdx = 0;
+                    for (long i = 1; i < n; i++)
+                    {
+                        if (mask[i] != 0) { cDst[cIdx++] = i - prevPos; prevPos = i; }
+                    }
+                    cDst[cIdx++] = n - prevPos;
+                    results[outPos++] = new NDArray(cntSlice, Shape.Vector(uniqueCount)) { TensorEngine = this };
+                }
+
+                return results;
+            }
+            finally
+            {
+                // A raw pointer does not root the mask block: this use keeps it reachable until the outputs are built
+                // (parity QA-52), and the 0 -> 1 -> 0 reference transition of a bare block hands its buffer back to the pool.
+                maskBlock.TryAddRef();
+                maskBlock.Release();
+            }
         }
 
         /// <summary>
@@ -1960,7 +2015,9 @@ namespace NumSharp.Backends
         /// <param name="return_inverse">Also return the reconstruction indices.</param>
         /// <param name="return_counts">Also return the counts.</param>
         /// <returns>[values, index?, inverse?, counts?] (see <see cref="EmitOutputsLong{T}"/>).</returns>
-        /// <remarks>The mask block is not disposed: its buffer returns through the block's finalizer.</remarks>
+        /// <remarks>The mask block is released once the outputs are built (parity QA-52: a raw pointer does not root
+        ///     it, so the finally keeps it reachable through the emit and hands its buffer back to the pool at
+        ///     once).</remarks>
         private unsafe NDArray[] BuildMaskAndEmitLong<T>(
             NDArray a, KeyPerm<T>* kp, long n, long firstNaN, bool equal_nan,
             bool return_index, bool return_inverse, bool return_counts)
@@ -1970,32 +2027,42 @@ namespace NumSharp.Backends
             long nanStart = firstNaN >= 0 ? firstNaN : n;
 
             var maskBlock = new UnmanagedMemoryBlock<byte>(n);
-            byte* mask = maskBlock.Address;
-            // Zero-init isn't guaranteed; clear explicitly.
-            for (long i = 0; i < n; i++) mask[i] = 0;
-            mask[0] = 1;
-            long uniqueCount = 1;
-
-            for (long i = 1; i < nanStart; i++)
+            try
             {
-                if (!kp[i].Key.Equals(kp[i - 1].Key)) { mask[i] = 1; uniqueCount++; }
-            }
+                byte* mask = maskBlock.Address;
+                // Zero-init isn't guaranteed; clear explicitly.
+                for (long i = 0; i < n; i++) mask[i] = 0;
+                mask[0] = 1;
+                long uniqueCount = 1;
 
-            if (nanStart < n)
-            {
-                mask[nanStart] = 1;
-                if (nanStart > 0) uniqueCount++;
-                if (!equal_nan)
+                for (long i = 1; i < nanStart; i++)
                 {
-                    for (long i = nanStart + 1; i < n; i++)
+                    if (!kp[i].Key.Equals(kp[i - 1].Key)) { mask[i] = 1; uniqueCount++; }
+                }
+
+                if (nanStart < n)
+                {
+                    mask[nanStart] = 1;
+                    if (nanStart > 0) uniqueCount++;
+                    if (!equal_nan)
                     {
-                        mask[i] = 1;
-                        uniqueCount++;
+                        for (long i = nanStart + 1; i < n; i++)
+                        {
+                            mask[i] = 1;
+                            uniqueCount++;
+                        }
                     }
                 }
-            }
 
-            return EmitOutputsLong<T>(a, kp, mask, n, uniqueCount, return_index, return_inverse, return_counts);
+                return EmitOutputsLong<T>(a, kp, mask, n, uniqueCount, return_index, return_inverse, return_counts);
+            }
+            finally
+            {
+                // A raw pointer does not root the mask block: this use keeps it reachable until the outputs are built
+                // (parity QA-52), and the 0 -> 1 -> 0 reference transition of a bare block hands its buffer back to the pool.
+                maskBlock.TryAddRef();
+                maskBlock.Release();
+            }
         }
 
         /// <summary>

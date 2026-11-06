@@ -324,5 +324,25 @@ namespace NumSharp.Tests.APIs
             ((Action)(() => v.Call(np.array(new[] { 1, 2 }))))
                 .Should().Throw<ArgumentException>().WithMessage("*expected 2 input*");
         }
+
+        /// <summary>
+        ///     Parity QA-43: NumPy's vectorize propagates whatever the function raises, unchanged; the signature mode's
+        ///     reflection fallback (a multi-output signature, four or more core arguments) does too, instead of wrapping it
+        ///     in a TargetInvocationException, so a catch for the function's own type sees it.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">Never escapes the test: the callbacks throw it inside the calls,
+        ///     where the assertions expect to observe it unwrapped.</exception>
+        [TestMethod]
+        public void SignatureFallback_PropagatesTheCallbacksException()
+        {
+            using var x = np.arange(4.0).reshape(2, 2);
+            var twoOutputs = np.vectorize((Func<NDArray, (NDArray, NDArray)>)(v => throw new InvalidOperationException("boom")), "(n)->(),()");
+            var fourInputs = np.vectorize(
+                (Func<NDArray, NDArray, NDArray, NDArray, NDArray>)((p, q, r, s) => throw new InvalidOperationException("four")),
+                "(n),(n),(n),(n)->()");
+
+            ((Action)(() => twoOutputs.CallMany(x))).Should().ThrowExactly<InvalidOperationException>().WithMessage("boom");
+            ((Action)(() => fourInputs.Call(x, x, x, x))).Should().ThrowExactly<InvalidOperationException>().WithMessage("four");
+        }
     }
 }

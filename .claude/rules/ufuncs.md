@@ -236,6 +236,11 @@ NumPy's Python int (`type(min) is int`); every other bound is strong — an elem
   integers, signed MIN / -1 → (MIN, 0), ±inf, nan and -0.0. The common path is one fused IL kernel
   (`DirectILKernelGenerator.DivMod.cs`: a 4×-unrolled scalar two-in/two-out loop over `NDDivision.Divmod*(a, b, out mod)`
   for contiguous, promoted operands). The integer helpers use one division (`q = n / d; r = n - q * d`).
+- No complex loop (parity QA-27): a complex operand with no `dtype=` is NumPy's generic no-loop TypeError (`ufunc 'divmod'
+  not supported for the input types, ...`, the text floor_divide and remainder raise), refused for the loop before any
+  element is read (a zero-size operand too) and, on the keyword route, after the outs and the mask; under a real
+  `dtype=` it is the `input 0` cast refusal instead. Open (QA-53, `[OpenBugs]`): floor_divide / remainder / fmod with
+  `dtype=complex` reach their kernel's NotSupportedException where NumPy says `No loop matching … for ufunc X`.
 - `out=(q, r)` (either slot null), `where=` and `dtype=` run NumPy's two-output ufunc call (`DivModInto`,
   `Default.DivMod.cs`): ONE NDIter over `(x1, x2, out1, out2[, where])`, with np.clip's flags (COPY_IF_OVERLAP,
   OVERLAP_ASSUME_ELEMENTWISE, outputs NO_BROADCAST, a masked caller out READWRITE, buffered casts for an input or out of

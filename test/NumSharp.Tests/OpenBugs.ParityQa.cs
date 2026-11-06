@@ -21,55 +21,6 @@ namespace NumSharp.Tests
     public partial class OpenBugs
     {
         // ------------------------------------------------------------------
-        // QA-08 — np.ediff1d's to_begin / to_end refusal is an ArgumentException with a parameter suffix
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     NumPy's <c>np.ediff1d(int8_array, to_begin=[1.5])</c> raises <c>TypeError: dtype of `to_begin` must be compatible
-        ///     with input `ary` under the `same_kind` rule.</c> NumSharp throws <see cref="ArgumentException"/> built with a
-        ///     parameter name, so the type differs and the message gains .NET's <c> (Parameter 'to_begin')</c> suffix.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA08")]
-        public void ParityQa_Ediff1d_IncompatibleEnds_ShouldRaiseTypeErrorWithNumPysText()
-        {
-            using var a = np.array(new sbyte[] { 1, 2, 4 });
-            using var begin = np.array(new[] { 1.5 });
-
-            Action toBegin = () => np.ediff1d(a, to_begin: begin);
-            Action toEnd = () => np.ediff1d(a, to_end: 2.5);
-
-            toBegin.Should().Throw<TypeError>()
-                .WithMessage("dtype of `to_begin` must be compatible with input `ary` under the `same_kind` rule.");
-            toEnd.Should().Throw<TypeError>()
-                .WithMessage("dtype of `to_end` must be compatible with input `ary` under the `same_kind` rule.");
-        }
-
-        // ------------------------------------------------------------------
-        // QA-27 — np.divmod of a complex operand raises NotSupportedException instead of NumPy's TypeError
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     NumPy has no complex loop for <c>divmod</c> (nor for floor_divide / remainder) and raises
-        ///     <c>TypeError: ufunc 'divmod' not supported for the input types, and the inputs could not be safely coerced to
-        ///     any supported types according to the casting rule ''safe''</c> whenever either operand is complex. NumSharp's
-        ///     np.floor_divide and np.remainder raise exactly that (their own names in it); np.divmod reaches the kernel and
-        ///     throws <c>NotSupportedException: Operation DivMod not supported for Complex</c> — 25 of the 169 dtype pairs of
-        ///     a 26-ufunc matrix (<c>p59</c>), the only refusal in it with the wrong type.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA27")]
-        public void ParityQa_DivmodComplex_ShouldRaiseNumPysTypeError()
-        {
-            using var c = np.array(new[] { new Complex(1, 2), new Complex(3, -1) });
-            using var f = np.array(new[] { 2.0, 1.0 });
-
-            Action complexByFloat = () => np.divmod(c, f);
-
-            complexByFloat.Should().Throw<TypeError>().WithMessage(
-                "ufunc 'divmod' not supported for the input types, and the inputs could not be safely coerced to any " +
-                "supported types according to the casting rule ''safe''");
-        }
-
-        // ------------------------------------------------------------------
         // QA-28 — np.asarray (and the rest of the as* family) refuses a Python list (object[])
         // ------------------------------------------------------------------
 
@@ -211,33 +162,6 @@ namespace NumSharp.Tests
         }
 
         // ------------------------------------------------------------------
-        // QA-43 — np.vectorize's signature fallback wraps the callback's exception in TargetInvocationException
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     NumPy's vectorize propagates whatever the Python function raises, unchanged. NumSharp's other callback routes
-        ///     do the same (element-wise vectorize of any arity, frompyfunc with one or two outputs, the typed one- to
-        ///     three-argument signature delegates, apply_along_axis, apply_over_axes, piecewise: <c>rp10</c>, <c>rp11</c>), but
-        ///     <c>Vectorized.BuildSignatureInvoker</c>'s fallback (APIs/np.vectorize.cs: a multi-output signature such as
-        ///     <c>"(n)->(),()"</c>, or more than three core arguments) calls the delegate through <c>DynamicInvoke</c>, so the
-        ///     caller sees <see cref="System.Reflection.TargetInvocationException"/> "Exception has been thrown by the target of
-        ///     an invocation." with the user's exception as its inner exception, and a <c>catch</c> for the user's own type
-        ///     misses it.
-        /// </summary>
-        /// <exception cref="InvalidOperationException">Never escapes the test: the callback throws it inside
-        ///     <c>CallMany</c>, where the assertion expects to observe it unwrapped.</exception>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA43")]
-        public void ParityQa_VectorizeSignatureFallback_ShouldPropagateTheCallbacksException()
-        {
-            using var x = np.arange(4.0).reshape(2, 2);
-            var twoOutputs = np.vectorize((Func<NDArray, (NDArray, NDArray)>)(v => throw new InvalidOperationException("boom")), "(n)->(),()");
-
-            Action call = () => twoOutputs.CallMany(x);
-
-            call.Should().Throw<InvalidOperationException>().WithMessage("boom");
-        }
-
-        // ------------------------------------------------------------------
         // QA-46 — DType == / != a string that names no dtype throws instead of answering
         // ------------------------------------------------------------------
 
@@ -260,6 +184,39 @@ namespace NumSharp.Tests
 
             equal.Should().NotThrow().Which.Should().BeFalse();
             notEqual.Should().NotThrow().Which.Should().BeTrue();
+        }
+
+        // ------------------------------------------------------------------
+        // QA-53 — floor_divide / remainder / fmod / mod with dtype=complex raise NotSupportedException
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     Found 2026-11-06 while fixing QA-27: none of floor_divide, remainder (mod) and fmod has a complex loop, so a
+        ///     complex <c>dtype=</c> request finds no loop and NumPy 2.4.2 raises <c>TypeError: No loop matching the
+        ///     specified signature and casting was found for ufunc floor_divide</c> (<c>remainder</c> for np.mod, its alias;
+        ///     <c>fmod</c>). NumSharp reaches the kernel and throws <c>NotSupportedException: Operation FloorDivide not
+        ///     supported for Complex</c> (<c>Mod</c>, <c>Fmod</c>). np.divmod already raises NumPy's text for the same request
+        ///     (<c>DivModNoLoopText</c>), and a complex OPERAND without <c>dtype=</c> already raises NumPy's generic no-loop
+        ///     TypeError for all four.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA53")]
+        public void ParityQa_ComplexDtypeRequest_FloorDivideRemainderFmod_ShouldRaiseNumPysNoLoopTypeError()
+        {
+            using var f = np.array(new[] { 2.0, 1.0 });
+
+            Action floorDivide = () => np.floor_divide(f, f, dtype: NPTypeCode.Complex);
+            Action remainder = () => np.remainder(f, f, dtype: NPTypeCode.Complex);
+            Action fmod = () => np.fmod(f, f, dtype: NPTypeCode.Complex);
+            Action mod = () => np.mod(f, f, dtype: NPTypeCode.Complex);
+
+            floorDivide.Should().Throw<TypeError>()
+                .WithMessage("No loop matching the specified signature and casting was found for ufunc floor_divide");
+            remainder.Should().Throw<TypeError>()
+                .WithMessage("No loop matching the specified signature and casting was found for ufunc remainder");
+            fmod.Should().Throw<TypeError>()
+                .WithMessage("No loop matching the specified signature and casting was found for ufunc fmod");
+            mod.Should().Throw<TypeError>()
+                .WithMessage("No loop matching the specified signature and casting was found for ufunc remainder");
         }
     }
 }

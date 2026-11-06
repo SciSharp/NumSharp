@@ -177,8 +177,9 @@ namespace NumSharp
         /// <param name="to_begin">Values to prepend, or null for none.</param>
         /// <returns>A new 1-D array in <paramref name="ary"/>'s dtype.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="ary"/> is null.</exception>
-        /// <exception cref="ArgumentException">to_begin / to_end that cannot reach <paramref name="ary"/>'s dtype under
-        ///     <c>same_kind</c> (NumPy's TypeError text).</exception>
+        /// <exception cref="TypeError">to_begin / to_end that cannot reach <paramref name="ary"/>'s dtype under
+        ///     <c>same_kind</c> (NumPy's TypeError and text: <c>dtype of `to_begin` must be compatible with input `ary`
+        ///     under the `same_kind` rule.</c>).</exception>
         /// <exception cref="TypeError">Text or bool, which subtract has no loop for (NumPy's texts).</exception>
         public abstract NDArray Ediff1d(NDArray ary, object to_end = null, object to_begin = null);
 

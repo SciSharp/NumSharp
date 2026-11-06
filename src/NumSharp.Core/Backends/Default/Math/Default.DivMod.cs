@@ -41,7 +41,11 @@ namespace NumSharp.Backends
         /// <exception cref="TypeError">A <paramref name="dtype"/> naming more than a DType class (<c>'&gt;f8'</c>), a text
         /// operand or request divmod has no loop for, or (out= route) a bool / complex <paramref name="dtype"/>: NumPy's
         /// <c>No loop matching the specified signature and casting was found for ufunc divmod</c>.</exception>
-        /// <exception cref="NotSupportedException">A complex operand, or inputs that promote to complex.</exception>
+        /// <exception cref="TypeError">A complex operand with no <paramref name="dtype"/> (divmod has no complex loop):
+        ///     NumPy's <c>ufunc 'divmod' not supported for the input types, and the inputs could not be safely coerced to
+        ///     any supported types according to the casting rule ''safe''</c>, raised before any element is read (a
+        ///     zero-size operand too) and after the outs and the mask are checked; under a real <paramref name="dtype"/>
+        ///     it is the input cast refusal instead (parity QA-27).</exception>
         /// <exception cref="ValueError">A read-only array in <paramref name="out"/> (<c>output array is read-only</c>,
         /// checked for both slots before anything else), or a text out under <paramref name="where"/> whose current text
         /// does not parse into the loop dtype.</exception>
@@ -69,11 +73,8 @@ namespace NumSharp.Backends
             // divmod has no string loop (the legacy resolver's text); a string request is the no-loop text.
             Strings.NDStringUfuncs.ThrowIfBinary("divmod", lhs, rhs, @out.Quotient, UfuncLoopCode(dtype, "divmod", lhs, rhs), where);
             // Promotion mirrors ExecuteBinaryOp's Mod/FloorDivide path: result_type, then the
-            // no-bool-loop bump (True divmod True -> int8). Complex is unsupported (NumPy TypeError).
+            // no-bool-loop bump (True divmod True -> int8).
             var resultType = np._FindCommonType(lhs, rhs);
-            if (resultType == NPTypeCode.Complex ||
-                lhs.GetTypeCode == NPTypeCode.Complex || rhs.GetTypeCode == NPTypeCode.Complex)
-                throw new NotSupportedException("Operation DivMod not supported for Complex");
 
             bool hasOut = @out.Quotient is not null || @out.Remainder is not null;
 
@@ -82,6 +83,12 @@ namespace NumSharp.Backends
             // the quotient overwrite an input that the remainder pass then read (parity QA-44).
             if (hasOut || where is not null || dtype is not null)
                 return DivModInto(lhs, rhs, resultType, loopCode, @out.Quotient, @out.Remainder, where);
+
+            // divmod has no complex loop (nor floor_divide / remainder): with nothing else to parse, a complex operand is
+            // NumPy's generic no-loop TypeError, raised for the LOOP before any element is read, so a zero-size complex
+            // operand is refused too (parity QA-27; the text floor_divide and remainder raise, divmod's name in it).
+            if (lhs.GetTypeCode == NPTypeCode.Complex || rhs.GetTypeCode == NPTypeCode.Complex)
+                throw Strings.NDStringUfuncs.NotSupportedForInputTypes("divmod");
 
             if (resultType == NPTypeCode.Boolean)
                 resultType = NPTypeCode.SByte;
@@ -203,6 +210,9 @@ namespace NumSharp.Backends
         /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>; an out or mask that does not
         ///     broadcast, or an out that would be stretched (NumPy's texts).</exception>
         /// <exception cref="IncorrectTypeException">A bool or complex <paramref name="dtype"/> (<see cref="DivModNoLoopText"/>).</exception>
+        /// <exception cref="TypeError">A complex operand with no <paramref name="dtype"/>: divmod has no complex loop
+        ///     (NumPy's <c>ufunc 'divmod' not supported for the input types, ...</c>, parity QA-27), raised after the
+        ///     outs and the mask are checked.</exception>
         /// <exception cref="OverflowException">A weak C# integer literal outside the integer loop's range.</exception>
         /// <exception cref="IncorrectShapeException">The inputs do not broadcast together (every operand listed).</exception>
         /// <remarks>
@@ -236,6 +246,11 @@ namespace NumSharp.Backends
                 throw new IncorrectTypeException(DivModNoLoopText);
             var lhsType = lhs.GetTypeCode;
             var rhsType = rhs.GetTypeCode;
+            // No complex loop either (parity QA-27): with no dtype= a complex operand finds none, NumPy's generic
+            // no-loop TypeError; with a real dtype= the input cast below refuses it instead ("Cannot cast ufunc 'divmod'
+            // input 0 from dtype('complex128') ..."). Both come after the outs and the mask, NumPy's argument parsing.
+            if (!dtype.HasValue && (lhsType == NPTypeCode.Complex || rhsType == NPTypeCode.Complex))
+                throw Strings.NDStringUfuncs.NotSupportedForInputTypes("divmod");
             // NEP 50: a C# integer literal is NumPy's Python int, packed into the loop with a range check (int8 loop,
             // 1000 → OverflowError) while the loop resolves, before the dtype= input casts.
             CheckWeakPyIntOperand(lhs, rhs, dtype ?? resultType, loopFromPromotion: !dtype.HasValue);

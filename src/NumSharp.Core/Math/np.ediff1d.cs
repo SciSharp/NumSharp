@@ -44,8 +44,9 @@ namespace NumSharp
         ///     bracketed by <paramref name="to_begin"/> and <paramref name="to_end"/>.
         /// </returns>
         /// <exception cref="ArgumentNullException"><paramref name="ary"/> is null.</exception>
-        /// <exception cref="ArgumentException"><paramref name="to_begin"/> or <paramref name="to_end"/> cannot be
-        ///     cast to <paramref name="ary"/>'s dtype under <c>same_kind</c>.</exception>
+        /// <exception cref="TypeError"><paramref name="to_begin"/> or <paramref name="to_end"/> cannot be cast to
+        ///     <paramref name="ary"/>'s dtype under <c>same_kind</c>: NumPy's <c>dtype of `to_begin` must be compatible
+        ///     with input `ary` under the `same_kind` rule.</c> (parity QA-08).</exception>
         /// <exception cref="TypeError"><paramref name="ary"/> is boolean (NumPy's boolean-subtract TypeError).</exception>
         /// <exception cref="TypeError"><paramref name="ary"/> holds fixed-width strings: NumPy's subtract has no string
         ///     loop (<c>ufunc 'subtract' did not contain a loop with signature matching types (dtype('&lt;U2'),
