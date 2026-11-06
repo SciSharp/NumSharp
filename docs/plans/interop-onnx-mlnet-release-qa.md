@@ -728,6 +728,16 @@ last option "Defer").
 
 ## 8. Carrying the results to the release
 
+**The follow-ups are not in `strings` yet (2026-11-06).** `qa/interop-followups` - P8 included (`59a4265e`, `e498c9dc`) -
+branches from `strings` `1bb64586` and has not been merged back. When it is, the release notes (one document since
+`strings` `26e44587`, `docs/releases/RELEASE_0.80.0.md`) need P8's lines: a forgotten `ToOrtValue` copy is booked with
+NumSharp's memory accounting and collected (+68 MB instead of +2,898 MB for 5,000 of 602 KB; `OrtIoBinding` and every
+native holder unchanged, since ORT still owns and frees the copy), and every import lease books the memory it keeps
+alive instead of one `GC.AddMemoryPressure` per lease - the ONNX Runtime, ML.NET, System.Numerics.Tensors and pythonnet
+bridges - so views disposed at once trigger no gen-2 collection and forgotten views of large arrays stay bounded (Core:
+`SizeBucketedBufferPool.BookForeign` / `ReturnForeign`). Tensors and pythonnet are released packages: their lines go
+under fixes.
+
 **Merged into `strings` (2026-11-03, on the owner's request).** The 84 commits after `1c001253` were replayed with
 `cherry-pick -x` onto `strings` `b154d164` (branch `qa/interop-onto-strings`) and merged into `strings` with a merge
 commit. Every file equals `qa/interop-release`'s except where `strings` has no release prep: the ORT README's
