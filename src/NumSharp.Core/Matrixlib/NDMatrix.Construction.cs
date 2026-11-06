@@ -50,7 +50,10 @@ namespace NumSharp
         /// <exception cref="ValueError">More than two axes of <paramref name="data"/> are longer than 1
         ///     (<c>shape too large to be a matrix.</c>).</exception>
         /// <exception cref="IncorrectShapeException">More than two axes and one of extent 0.</exception>
+        /// <remarks><c>[SubclassAware]</c>: this is <c>matrix.__new__</c>'s own <c>isinstance(data, matrix)</c> branch, so the
+        ///     public functions that return it hand it the caller's matrix, never a plain view.</remarks>
         [NDScoped]
+        [SubclassAware]
         internal static NDMatrix Create(NDArray data, DType dtype, bool copy)
         {
             if (data is null)

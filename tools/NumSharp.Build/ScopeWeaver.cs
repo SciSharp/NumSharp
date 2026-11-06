@@ -293,6 +293,11 @@ internal abstract class ScopeWeaver
 
         int woven = 0, skipped = 0, errors = 0;
 
+        // NumPy's array-subclass handling first (NumSharp.Core's self-weave only; any other module is left alone): the
+        // prologues and the generated subclass paths are ordinary IL that the scope weave below treats like the rest of a
+        // body - an [NDScoped] function returns scope.Returns(<the subclass path's answer>).
+        woven += SubclassWeaver.Weave(module, verbose, stdout, stderr, ref errors);
+
         // Targets FIRST (before the seam is resolved): a consumer assembly with no scoped methods
         // exits without resolving NDScope and — crucially — without rewriting the file, so its
         // compile-time signature, determinism id and timestamps stay untouched. A method is a target
@@ -347,8 +352,9 @@ internal abstract class ScopeWeaver
         // it gets the same operand roots. A scope or anchor target is excluded (its own pass roots it).
         var handScoped = CollectHandScopedMethods(module, syncTargets, asyncTargets, anchorTargets);
 
+        // (Only when the subclass pass wove nothing either: its edits must be written.)
         if (syncTargets.Count == 0 && asyncTargets.Count == 0 && exitTargets.Count == 0 && anchorTargets.Count == 0 &&
-            handScoped.Count == 0)
+            handScoped.Count == 0 && woven == 0)
         {
             if (errors > 0)
                 return new WeaveResult(0, 0, errors, false, false);

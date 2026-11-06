@@ -158,6 +158,47 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     <c>chararray.__array_wrap__</c> of one result (a ufunc, <c>_array_converter.wrap</c>, an index by an array): a
+        ///     NEW chararray VIEW over a result of a string dtype (<c>dtype.char in 'SUbc'</c>), the result itself otherwise.
+        ///     The view never owns its data.
+        /// </summary>
+        /// <param name="result">The plain result, or <c>null</c> (the caller's scope reclaims its wrapper when it is
+        ///     replaced).</param>
+        /// <returns>The view, or <paramref name="result"/>.</returns>
+        /// <remarks>The wrap is <c>arr.view(type(self))</c>: a chararray result (the operand handed back) also gets a new
+        ///     object, never itself.</remarks>
+        internal static NDArray WrapResult(NDArray result)
+        {
+            if (result is null)
+                return null;
+            char code = result.dtype.@char;
+            if (code != 'S' && code != 'U' && code != 'b' && code != 'c')
+                return result;
+            return new NDCharArray(result.Storage.Alias()) { TensorEngine = result.TensorEngine };
+        }
+
+        /// <summary>
+        ///     The chararray for a result NumPy CREATES as the subclass (an ndarray method's result, <c>Py_TYPE(self)</c>): the
+        ///     finalize rule on the result's dtype, then a chararray over its storage - taken over when the result owns a buffer
+        ///     nothing else references (the chararray owns it then, as NumPy's does), an alias otherwise (a view shares its
+        ///     buffer, and a storage object is never shared by two live arrays).
+        /// </summary>
+        /// <param name="result">The plain result (the caller's scope reclaims its wrapper).</param>
+        /// <returns>The chararray.</returns>
+        /// <exception cref="ValueError">The result's dtype is not string data (<c>Can only create a chararray from string
+        ///     data.</c>).</exception>
+        internal static NDCharArray FromCreated(NDArray result)
+        {
+            Finalize(result.dtype);
+            var storage = result.Storage;
+            // An owning storage object that another live array might also wrap (an engine shortcut can hand an operand's own
+            // storage back in a second wrapper) holds more than this result's one reference: alias it then.
+            if (!storage.OwnsData || !storage.InternalArray.IsUniquelyReferenced)
+                storage = storage.Alias();
+            return new NDCharArray(storage) { TensorEngine = result.TensorEngine };
+        }
+
+        /// <summary>
         ///     The chararray for an ndarray method's result (<c>copy</c>, <c>astype</c>, <c>T</c>, <c>reshape</c>,
         ///     <c>take</c> ...): NumPy creates it as the subclass, so the finalize rule reads the RESULT's dtype; the chararray
         ///     takes over the result's storage object, so it owns its data exactly when the result did.
