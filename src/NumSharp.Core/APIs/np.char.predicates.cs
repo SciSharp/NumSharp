@@ -41,9 +41,10 @@ namespace NumSharp
         /// <exception cref="TypeError"><paramref name="x"/> is not text, or <paramref name="dtype"/> is not bool
         ///     (NumPy's no-loop text, which names a C# number by its default DType: <c>Int64DType</c>,
         ///     <c>Float64DType</c>).</exception>
-        /// <exception cref="ArgumentException"><paramref name="out"/> cannot receive bool (the same_kind output cast);
-        ///     a non-bool <paramref name="where"/>; operands that do not broadcast with <paramref name="out"/> /
-        ///     <paramref name="where"/>.</exception>
+        /// <exception cref="TypeError"><paramref name="out"/> cannot receive bool (the same_kind output
+        ///     cast).</exception>
+        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>; operands that do not broadcast with
+        ///     <paramref name="out"/> / <paramref name="where"/>.</exception>
         /// <exception cref="ValueError">A read-only <paramref name="out"/>; a selected <c>StringDType</c> NA whose
         ///     descriptor's NA object is neither NaN-like nor a string.</exception>
         /// <exception cref="NotSupportedException"><paramref name="x"/> has no NumSharp array form (an object NumPy
@@ -75,9 +76,10 @@ namespace NumSharp
         /// <exception cref="TypeError"><paramref name="x"/> is not text, or <paramref name="dtype"/> is not bool
         ///     (NumPy's no-loop text, which names a C# number by its default DType: <c>Int64DType</c>,
         ///     <c>Float64DType</c>).</exception>
-        /// <exception cref="ArgumentException"><paramref name="out"/> cannot receive bool (the same_kind output cast);
-        ///     a non-bool <paramref name="where"/>; operands that do not broadcast with <paramref name="out"/> /
-        ///     <paramref name="where"/>.</exception>
+        /// <exception cref="TypeError"><paramref name="out"/> cannot receive bool (the same_kind output
+        ///     cast).</exception>
+        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>; operands that do not broadcast with
+        ///     <paramref name="out"/> / <paramref name="where"/>.</exception>
         /// <exception cref="ValueError">A read-only <paramref name="out"/>; a selected <c>StringDType</c> NA whose
         ///     descriptor's NA object is neither NaN-like nor a string.</exception>
         /// <exception cref="NotSupportedException"><paramref name="x"/> has no NumSharp array form (an object NumPy
@@ -109,9 +111,10 @@ namespace NumSharp
         /// <exception cref="TypeError"><paramref name="x"/> is not text (an <c>S</c> operand too: NumPy's ufunc has no
         ///     bytes loop), or <paramref name="dtype"/> is not bool (NumPy's no-loop text, which names a C# number by
         ///     its default DType: <c>Int64DType</c>, <c>Float64DType</c>).</exception>
-        /// <exception cref="ArgumentException"><paramref name="out"/> cannot receive bool (the same_kind output cast);
-        ///     a non-bool <paramref name="where"/>; operands that do not broadcast with <paramref name="out"/> /
-        ///     <paramref name="where"/>.</exception>
+        /// <exception cref="TypeError"><paramref name="out"/> cannot receive bool (the same_kind output
+        ///     cast).</exception>
+        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>; operands that do not broadcast with
+        ///     <paramref name="out"/> / <paramref name="where"/>.</exception>
         /// <exception cref="ValueError">A read-only <paramref name="out"/>; a selected <c>StringDType</c> NA whose
         ///     descriptor's NA object is neither NaN-like nor a string.</exception>
         /// <exception cref="NotSupportedException"><paramref name="x"/> has no NumSharp array form (an object NumPy
@@ -143,9 +146,10 @@ namespace NumSharp
         /// <exception cref="TypeError"><paramref name="x"/> is not text, or <paramref name="dtype"/> is not bool
         ///     (NumPy's no-loop text, which names a C# number by its default DType: <c>Int64DType</c>,
         ///     <c>Float64DType</c>).</exception>
-        /// <exception cref="ArgumentException"><paramref name="out"/> cannot receive bool (the same_kind output cast);
-        ///     a non-bool <paramref name="where"/>; operands that do not broadcast with <paramref name="out"/> /
-        ///     <paramref name="where"/>.</exception>
+        /// <exception cref="TypeError"><paramref name="out"/> cannot receive bool (the same_kind output
+        ///     cast).</exception>
+        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>; operands that do not broadcast with
+        ///     <paramref name="out"/> / <paramref name="where"/>.</exception>
         /// <exception cref="ValueError">A read-only <paramref name="out"/>; a selected <c>StringDType</c> NA whose
         ///     descriptor's NA object is neither NaN-like nor a string.</exception>
         /// <exception cref="NotSupportedException"><paramref name="x"/> has no NumSharp array form (an object NumPy
@@ -176,9 +180,10 @@ namespace NumSharp
         /// <exception cref="TypeError"><paramref name="x"/> is not text, or <paramref name="dtype"/> is not bool
         ///     (NumPy's no-loop text, which names a C# number by its default DType: <c>Int64DType</c>,
         ///     <c>Float64DType</c>).</exception>
-        /// <exception cref="ArgumentException"><paramref name="out"/> cannot receive bool (the same_kind output cast);
-        ///     a non-bool <paramref name="where"/>; operands that do not broadcast with <paramref name="out"/> /
-        ///     <paramref name="where"/>.</exception>
+        /// <exception cref="TypeError"><paramref name="out"/> cannot receive bool (the same_kind output
+        ///     cast).</exception>
+        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>; operands that do not broadcast with
+        ///     <paramref name="out"/> / <paramref name="where"/>.</exception>
         /// <exception cref="ValueError">A read-only <paramref name="out"/>; a selected <c>StringDType</c> NA whose
         ///     descriptor's NA object is neither NaN-like nor a string.</exception>
         /// <exception cref="NotSupportedException"><paramref name="x"/> has no NumSharp array form (an object NumPy
@@ -211,9 +216,10 @@ namespace NumSharp
         /// <exception cref="TypeError"><paramref name="x"/> is not text (an <c>S</c> operand too: NumPy's ufunc has no
         ///     bytes loop), or <paramref name="dtype"/> is not bool (NumPy's no-loop text, which names a C# number by
         ///     its default DType: <c>Int64DType</c>, <c>Float64DType</c>).</exception>
-        /// <exception cref="ArgumentException"><paramref name="out"/> cannot receive bool (the same_kind output cast);
-        ///     a non-bool <paramref name="where"/>; operands that do not broadcast with <paramref name="out"/> /
-        ///     <paramref name="where"/>.</exception>
+        /// <exception cref="TypeError"><paramref name="out"/> cannot receive bool (the same_kind output
+        ///     cast).</exception>
+        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>; operands that do not broadcast with
+        ///     <paramref name="out"/> / <paramref name="where"/>.</exception>
         /// <exception cref="ValueError">A read-only <paramref name="out"/>; a selected <c>StringDType</c> NA whose
         ///     descriptor's NA object is neither NaN-like nor a string.</exception>
         /// <exception cref="NotSupportedException"><paramref name="x"/> has no NumSharp array form (an object NumPy
@@ -245,9 +251,10 @@ namespace NumSharp
         /// <exception cref="TypeError"><paramref name="x"/> is not text, or <paramref name="dtype"/> is not bool
         ///     (NumPy's no-loop text, which names a C# number by its default DType: <c>Int64DType</c>,
         ///     <c>Float64DType</c>).</exception>
-        /// <exception cref="ArgumentException"><paramref name="out"/> cannot receive bool (the same_kind output cast);
-        ///     a non-bool <paramref name="where"/>; operands that do not broadcast with <paramref name="out"/> /
-        ///     <paramref name="where"/>.</exception>
+        /// <exception cref="TypeError"><paramref name="out"/> cannot receive bool (the same_kind output
+        ///     cast).</exception>
+        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>; operands that do not broadcast with
+        ///     <paramref name="out"/> / <paramref name="where"/>.</exception>
         /// <exception cref="ValueError">A read-only <paramref name="out"/>; a selected <c>StringDType</c> NA whose
         ///     descriptor's NA object is neither NaN-like nor a string.</exception>
         /// <exception cref="NotSupportedException"><paramref name="x"/> has no NumSharp array form (an object NumPy
@@ -279,9 +286,10 @@ namespace NumSharp
         /// <exception cref="TypeError"><paramref name="x"/> is not text, or <paramref name="dtype"/> is not bool
         ///     (NumPy's no-loop text, which names a C# number by its default DType: <c>Int64DType</c>,
         ///     <c>Float64DType</c>).</exception>
-        /// <exception cref="ArgumentException"><paramref name="out"/> cannot receive bool (the same_kind output cast);
-        ///     a non-bool <paramref name="where"/>; operands that do not broadcast with <paramref name="out"/> /
-        ///     <paramref name="where"/>.</exception>
+        /// <exception cref="TypeError"><paramref name="out"/> cannot receive bool (the same_kind output
+        ///     cast).</exception>
+        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>; operands that do not broadcast with
+        ///     <paramref name="out"/> / <paramref name="where"/>.</exception>
         /// <exception cref="ValueError">A read-only <paramref name="out"/>; a selected <c>StringDType</c> NA whose
         ///     descriptor's NA object is neither NaN-like nor a string.</exception>
         /// <exception cref="NotSupportedException"><paramref name="x"/> has no NumSharp array form (an object NumPy
@@ -312,9 +320,10 @@ namespace NumSharp
         /// <exception cref="TypeError"><paramref name="x"/> is not text, or <paramref name="dtype"/> is not bool
         ///     (NumPy's no-loop text, which names a C# number by its default DType: <c>Int64DType</c>,
         ///     <c>Float64DType</c>).</exception>
-        /// <exception cref="ArgumentException"><paramref name="out"/> cannot receive bool (the same_kind output cast);
-        ///     a non-bool <paramref name="where"/>; operands that do not broadcast with <paramref name="out"/> /
-        ///     <paramref name="where"/>.</exception>
+        /// <exception cref="TypeError"><paramref name="out"/> cannot receive bool (the same_kind output
+        ///     cast).</exception>
+        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>; operands that do not broadcast with
+        ///     <paramref name="out"/> / <paramref name="where"/>.</exception>
         /// <exception cref="ValueError">A read-only <paramref name="out"/>; a selected <c>StringDType</c> NA whose
         ///     descriptor's NA object is neither NaN-like nor a string.</exception>
         /// <exception cref="NotSupportedException"><paramref name="x"/> has no NumSharp array form (an object NumPy

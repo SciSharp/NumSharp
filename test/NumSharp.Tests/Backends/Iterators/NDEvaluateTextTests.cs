@@ -464,7 +464,7 @@ namespace NumSharp.Tests.Backends.Iterators
             var u = U();
             new Action(() => np.evaluate(NDExpr.Find(S(), "a"))).Should().Throw<TypeError>().WithMessage(
                 "ufunc 'find' did not contain a loop with signature matching types (<class 'numpy.dtypes.BytesDType'>, <class 'numpy.dtypes.StrDType'>, <class 'numpy.dtypes._PyLongDType'>, <class 'numpy.dtypes._PyLongDType'>) -> None");
-            new Action(() => np.evaluate(NDExpr.Find(u, "a", 1.5))).Should().Throw<ArgumentException>().WithMessage(
+            new Action(() => np.evaluate(NDExpr.Find(u, "a", 1.5))).Should().Throw<TypeError>().WithMessage(
                 "Cannot cast ufunc 'find' input 2 from dtype('float64') to dtype('int64') with casting rule 'same_kind'");
             new Action(() => np.evaluate(NDExpr.StrLen(Age()))).Should().Throw<TypeError>().WithMessage(
                 "ufunc 'str_len' did not contain a loop with signature matching types <class 'numpy.dtypes.Int64DType'> -> None");
@@ -869,7 +869,7 @@ namespace NumSharp.Tests.Backends.Iterators
             var cut = np.empty(new Shape(9), np.dtype("U2"));
             np.evaluate(NDExpr.Add(u, u), @out: cut).Should().BeSameAs(cut);
             Txt(cut).Should().Equal("", "aa", "aa", "ab", "bb", "éé", "\U0001F600\U0001F600", "a", "zz");
-            new Action(() => np.evaluate(NDExpr.Add(u, u), @out: np.empty(new Shape(9), np.int64))).Should().Throw<ArgumentException>()
+            new Action(() => np.evaluate(NDExpr.Add(u, u), @out: np.empty(new Shape(9), np.int64))).Should().Throw<TypeError>()
                 .Which.Message.Should().Be("Cannot cast ufunc 'add' output from dtype('<U6') to dtype('int64') with casting rule 'same_kind'");
             var masked = np.full(new Shape(9), "?", np.dtype("U4"));
             np.evaluate(NDExpr.Add(u, "-"), @out: masked, where: (NDArray)(age > 3));
@@ -893,7 +893,7 @@ namespace NumSharp.Tests.Backends.Iterators
 
             using var digits = np.array(new[] { "1", "22", "3" });
             var parsed = np.empty(new Shape(3), np.int64);
-            new Action(() => np.evaluate(NDExpr.Add(digits, "0"), @out: parsed)).Should().Throw<ArgumentException>()
+            new Action(() => np.evaluate(NDExpr.Add(digits, "0"), @out: parsed)).Should().Throw<TypeError>()
                 .WithMessage("Cannot cast ufunc 'add' output from dtype('<U3') to dtype('int64') with casting rule 'same_kind'");
             np.evaluate(NDExpr.Add(digits, "0"), @out: parsed, casting: "unsafe");
             parsed.ToArray<long>().Should().Equal(10, 220, 30);

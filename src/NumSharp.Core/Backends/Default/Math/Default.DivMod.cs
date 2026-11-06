@@ -45,10 +45,11 @@ namespace NumSharp.Backends
         /// <exception cref="ValueError">A read-only array in <paramref name="out"/> (<c>output array is read-only</c>,
         /// checked for both slots before anything else), or a text out under <paramref name="where"/> whose current text
         /// does not parse into the loop dtype.</exception>
-        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>; an input <paramref name="dtype"/> cannot
-        /// take, or an out that cannot take the loop dtype, by a same_kind cast (NumPy's <c>Cannot cast ufunc 'divmod'
-        /// input 0 / output 2 …</c> texts); an out or mask that does not broadcast, or an out that would be
-        /// stretched.</exception>
+        /// <exception cref="TypeError">An input <paramref name="dtype"/> cannot take, or an out that cannot take the
+        ///     loop dtype, by a same_kind cast (NumPy's <c>Cannot cast ufunc 'divmod' input 0 / output 2 …</c>
+        ///     texts).</exception>
+        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>; an out or mask that does not
+        ///     broadcast, or an out that would be stretched.</exception>
         /// <exception cref="IncorrectShapeException">The inputs do not broadcast together.</exception>
         /// <exception cref="OverflowException">A C# integer literal operand (NumPy's Python int) outside the integer loop's
         /// range (<c>Python integer 1000 out of bounds for int8</c>).</exception>
@@ -197,9 +198,10 @@ namespace NumSharp.Backends
         /// that <see cref="NumSharpException.ThrowIfNotWriteable"/> raises, both slots checked before anything else.</exception>
         /// <exception cref="ValueError">A text out under <paramref name="where"/> whose current text does not parse into the
         /// loop dtype.</exception>
-        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>; an input <paramref name="dtype"/> cannot
-        /// take, or an out that cannot take the loop dtype, under same_kind; an out or mask that does not broadcast, or an
-        /// out that would be stretched (NumPy's texts).</exception>
+        /// <exception cref="TypeError">An input <paramref name="dtype"/> cannot take, or an out that cannot take the
+        ///     loop dtype, under same_kind (NumPy's texts).</exception>
+        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>; an out or mask that does not
+        ///     broadcast, or an out that would be stretched (NumPy's texts).</exception>
         /// <exception cref="IncorrectTypeException">A bool or complex <paramref name="dtype"/> (<see cref="DivModNoLoopText"/>).</exception>
         /// <exception cref="OverflowException">A weak C# integer literal outside the integer loop's range.</exception>
         /// <exception cref="IncorrectShapeException">The inputs do not broadcast together (every operand listed).</exception>

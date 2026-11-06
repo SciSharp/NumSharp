@@ -51,7 +51,7 @@ namespace NumSharp
         ///     observation.</exception>
         /// <exception cref="DTypePromotionError"><c>StringDType</c> variables without <paramref name="dtype"/>
         ///     (<c>result_type(m, y, float64)</c>), or a <c>StringDType</c> request with weights.</exception>
-        /// <exception cref="ArgumentException">An integer or bool <paramref name="dtype"/>: NumPy's in-place
+        /// <exception cref="TypeError">An integer or bool <paramref name="dtype"/>: NumPy's in-place
         ///     <c>X -= avg[:, None]</c> cannot cast the float64 mean's difference back (its UFuncTypeError text).</exception>
         /// <exception cref="DivideByZeroException">Weights that sum to zero (the weighted mean's "Weights sum to zero, can't
         ///     be normalized"; NumPy's ZeroDivisionError).</exception>

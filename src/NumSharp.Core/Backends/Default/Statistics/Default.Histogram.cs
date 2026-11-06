@@ -548,7 +548,7 @@ namespace NumSharp.Backends
         /// <returns>The counts (or summed weights), one per bin; edges holding a NaN can give negative counts (NumPy's
         ///     answer, see <see cref="HistogramCumulativeLoop"/>). Summed weights keep the weights' dtype, wrapping in a
         ///     narrow integer dtype. No edges at all give an empty array (int64 counts, or the weights' dtype).</returns>
-        /// <exception cref="ArgumentException">Bool weights with data: NumPy's UFuncTypeError <c>Cannot cast ufunc 'add'
+        /// <exception cref="TypeError">Bool weights with data: NumPy's UFuncTypeError <c>Cannot cast ufunc 'add'
         ///     output from dtype('int64') to dtype('bool') with casting rule 'same_kind'</c> (the in-place update of the
         ///     bool total by the weights' int64 cumulative sum).</exception>
         private NDArray HistogramCumulative(NDArray raveled, NDArray w, NDArray binEdges, NPTypeCode ntype)

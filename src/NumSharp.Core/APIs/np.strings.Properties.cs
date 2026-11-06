@@ -35,9 +35,10 @@ namespace NumSharp
             /// <exception cref="TypeError"><paramref name="x"/> is not text, or <paramref name="dtype"/> is not bool
             ///     (NumPy's no-loop text: <c>ufunc 'isalpha' did not contain a loop with signature matching types &lt;class
             ///     'numpy.dtypes.Int64DType'&gt; -&gt; None</c>).</exception>
-            /// <exception cref="ArgumentException"><paramref name="out"/> cannot receive bool (the same_kind output cast); a
-            ///     non-bool <paramref name="where"/>; operands that do not broadcast with <paramref name="out"/> /
-            ///     <paramref name="where"/>.</exception>
+            /// <exception cref="TypeError"><paramref name="out"/> cannot receive bool (the same_kind output
+            ///     cast).</exception>
+            /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>; operands that do not broadcast
+            ///     with <paramref name="out"/> / <paramref name="where"/>.</exception>
             /// <exception cref="ValueError">A read-only <paramref name="out"/>; a selected <c>StringDType</c> NA whose
             ///     descriptor's NA object is neither NaN-like nor a string (<c>Cannot use the isalpha function with a null that
             ///     is not a nan-like value</c>; a NaN-like NA is False, a string NA reads as its string).</exception>
@@ -74,9 +75,10 @@ namespace NumSharp
             /// <exception cref="TypeError"><paramref name="x"/> is not text, or <paramref name="dtype"/> is not bool
             ///     (NumPy's no-loop text: <c>ufunc 'isdigit' did not contain a loop with signature matching types &lt;class
             ///     'numpy.dtypes.Int64DType'&gt; -&gt; None</c>).</exception>
-            /// <exception cref="ArgumentException"><paramref name="out"/> cannot receive bool (the same_kind output cast); a
-            ///     non-bool <paramref name="where"/>; operands that do not broadcast with <paramref name="out"/> /
-            ///     <paramref name="where"/>.</exception>
+            /// <exception cref="TypeError"><paramref name="out"/> cannot receive bool (the same_kind output
+            ///     cast).</exception>
+            /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>; operands that do not broadcast
+            ///     with <paramref name="out"/> / <paramref name="where"/>.</exception>
             /// <exception cref="ValueError">A read-only <paramref name="out"/>; a selected <c>StringDType</c> NA whose
             ///     descriptor's NA object is neither NaN-like nor a string (<c>Cannot use the isdigit function with a null that
             ///     is not a nan-like value</c>; a NaN-like NA is False, a string NA reads as its string).</exception>
@@ -114,9 +116,10 @@ namespace NumSharp
             /// <exception cref="TypeError"><paramref name="x"/> is not text, or <paramref name="dtype"/> is not bool
             ///     (NumPy's no-loop text: <c>ufunc 'isspace' did not contain a loop with signature matching types &lt;class
             ///     'numpy.dtypes.Int64DType'&gt; -&gt; None</c>).</exception>
-            /// <exception cref="ArgumentException"><paramref name="out"/> cannot receive bool (the same_kind output cast); a
-            ///     non-bool <paramref name="where"/>; operands that do not broadcast with <paramref name="out"/> /
-            ///     <paramref name="where"/>.</exception>
+            /// <exception cref="TypeError"><paramref name="out"/> cannot receive bool (the same_kind output
+            ///     cast).</exception>
+            /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>; operands that do not broadcast
+            ///     with <paramref name="out"/> / <paramref name="where"/>.</exception>
             /// <exception cref="ValueError">A read-only <paramref name="out"/>; a selected <c>StringDType</c> NA whose
             ///     descriptor's NA object is neither NaN-like nor a string (<c>Cannot use the isspace function with a null that
             ///     is not a nan-like value</c>; a NaN-like NA is False, a string NA reads as its string).</exception>
@@ -153,9 +156,10 @@ namespace NumSharp
             /// <exception cref="TypeError"><paramref name="x"/> is not text, or <paramref name="dtype"/> is not bool
             ///     (NumPy's no-loop text: <c>ufunc 'isalnum' did not contain a loop with signature matching types &lt;class
             ///     'numpy.dtypes.Int64DType'&gt; -&gt; None</c>).</exception>
-            /// <exception cref="ArgumentException"><paramref name="out"/> cannot receive bool (the same_kind output cast); a
-            ///     non-bool <paramref name="where"/>; operands that do not broadcast with <paramref name="out"/> /
-            ///     <paramref name="where"/>.</exception>
+            /// <exception cref="TypeError"><paramref name="out"/> cannot receive bool (the same_kind output
+            ///     cast).</exception>
+            /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>; operands that do not broadcast
+            ///     with <paramref name="out"/> / <paramref name="where"/>.</exception>
             /// <exception cref="ValueError">A read-only <paramref name="out"/>; a selected <c>StringDType</c> NA whose
             ///     descriptor's NA object is neither NaN-like nor a string (<c>Cannot use the isalnum function with a null that
             ///     is not a nan-like value</c>; a NaN-like NA is False, a string NA reads as its string).</exception>
@@ -192,9 +196,10 @@ namespace NumSharp
             /// <exception cref="TypeError"><paramref name="x"/> is not text, or <paramref name="dtype"/> is not bool
             ///     (NumPy's no-loop text: <c>ufunc 'islower' did not contain a loop with signature matching types &lt;class
             ///     'numpy.dtypes.Int64DType'&gt; -&gt; None</c>).</exception>
-            /// <exception cref="ArgumentException"><paramref name="out"/> cannot receive bool (the same_kind output cast); a
-            ///     non-bool <paramref name="where"/>; operands that do not broadcast with <paramref name="out"/> /
-            ///     <paramref name="where"/>.</exception>
+            /// <exception cref="TypeError"><paramref name="out"/> cannot receive bool (the same_kind output
+            ///     cast).</exception>
+            /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>; operands that do not broadcast
+            ///     with <paramref name="out"/> / <paramref name="where"/>.</exception>
             /// <exception cref="ValueError">A read-only <paramref name="out"/>; a selected <c>StringDType</c> NA whose
             ///     descriptor's NA object is neither NaN-like nor a string (<c>Cannot use the islower function with a null that
             ///     is not a nan-like value</c>; a NaN-like NA is False, a string NA reads as its string).</exception>
@@ -231,9 +236,10 @@ namespace NumSharp
             /// <exception cref="TypeError"><paramref name="x"/> is not text, or <paramref name="dtype"/> is not bool
             ///     (NumPy's no-loop text: <c>ufunc 'isupper' did not contain a loop with signature matching types &lt;class
             ///     'numpy.dtypes.Int64DType'&gt; -&gt; None</c>).</exception>
-            /// <exception cref="ArgumentException"><paramref name="out"/> cannot receive bool (the same_kind output cast); a
-            ///     non-bool <paramref name="where"/>; operands that do not broadcast with <paramref name="out"/> /
-            ///     <paramref name="where"/>.</exception>
+            /// <exception cref="TypeError"><paramref name="out"/> cannot receive bool (the same_kind output
+            ///     cast).</exception>
+            /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>; operands that do not broadcast
+            ///     with <paramref name="out"/> / <paramref name="where"/>.</exception>
             /// <exception cref="ValueError">A read-only <paramref name="out"/>; a selected <c>StringDType</c> NA whose
             ///     descriptor's NA object is neither NaN-like nor a string (<c>Cannot use the isupper function with a null that
             ///     is not a nan-like value</c>; a NaN-like NA is False, a string NA reads as its string).</exception>
@@ -270,9 +276,10 @@ namespace NumSharp
             /// <exception cref="TypeError"><paramref name="x"/> is not text, or <paramref name="dtype"/> is not bool
             ///     (NumPy's no-loop text: <c>ufunc 'istitle' did not contain a loop with signature matching types &lt;class
             ///     'numpy.dtypes.Int64DType'&gt; -&gt; None</c>).</exception>
-            /// <exception cref="ArgumentException"><paramref name="out"/> cannot receive bool (the same_kind output cast); a
-            ///     non-bool <paramref name="where"/>; operands that do not broadcast with <paramref name="out"/> /
-            ///     <paramref name="where"/>.</exception>
+            /// <exception cref="TypeError"><paramref name="out"/> cannot receive bool (the same_kind output
+            ///     cast).</exception>
+            /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>; operands that do not broadcast
+            ///     with <paramref name="out"/> / <paramref name="where"/>.</exception>
             /// <exception cref="ValueError">A read-only <paramref name="out"/>; a selected <c>StringDType</c> NA whose
             ///     descriptor's NA object is neither NaN-like nor a string (<c>Cannot use the istitle function with a null that
             ///     is not a nan-like value</c>; a NaN-like NA is False, a string NA reads as its string).</exception>
@@ -309,9 +316,10 @@ namespace NumSharp
             /// <exception cref="TypeError"><paramref name="x"/> is not <c>U</c> / <c>StringDType</c> (an <c>S</c> operand
             ///     included: <c>ufunc 'isdecimal' did not contain a loop with signature matching types &lt;class
             ///     'numpy.dtypes.BytesDType'&gt; -&gt; None</c>), or <paramref name="dtype"/> is not bool.</exception>
-            /// <exception cref="ArgumentException"><paramref name="out"/> cannot receive bool (the same_kind output cast); a
-            ///     non-bool <paramref name="where"/>; operands that do not broadcast with <paramref name="out"/> /
-            ///     <paramref name="where"/>.</exception>
+            /// <exception cref="TypeError"><paramref name="out"/> cannot receive bool (the same_kind output
+            ///     cast).</exception>
+            /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>; operands that do not broadcast
+            ///     with <paramref name="out"/> / <paramref name="where"/>.</exception>
             /// <exception cref="ValueError">A read-only <paramref name="out"/>; a selected <c>StringDType</c> NA whose
             ///     descriptor's NA object is neither NaN-like nor a string (<c>Cannot use the isdecimal function with a null that
             ///     is not a nan-like value</c>; a NaN-like NA is False, a string NA reads as its string).</exception>
@@ -347,9 +355,10 @@ namespace NumSharp
             /// <exception cref="TypeError"><paramref name="x"/> is not <c>U</c> / <c>StringDType</c> (an <c>S</c> operand
             ///     included: <c>ufunc 'isnumeric' did not contain a loop with signature matching types &lt;class
             ///     'numpy.dtypes.BytesDType'&gt; -&gt; None</c>), or <paramref name="dtype"/> is not bool.</exception>
-            /// <exception cref="ArgumentException"><paramref name="out"/> cannot receive bool (the same_kind output cast); a
-            ///     non-bool <paramref name="where"/>; operands that do not broadcast with <paramref name="out"/> /
-            ///     <paramref name="where"/>.</exception>
+            /// <exception cref="TypeError"><paramref name="out"/> cannot receive bool (the same_kind output
+            ///     cast).</exception>
+            /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>; operands that do not broadcast
+            ///     with <paramref name="out"/> / <paramref name="where"/>.</exception>
             /// <exception cref="ValueError">A read-only <paramref name="out"/>; a selected <c>StringDType</c> NA whose
             ///     descriptor's NA object is neither NaN-like nor a string (<c>Cannot use the isnumeric function with a null that
             ///     is not a nan-like value</c>; a NaN-like NA is False, a string NA reads as its string).</exception>

@@ -55,6 +55,12 @@ namespace NumSharp.Tests
     // gate. They had no pin here: QA-36's pin covered the class, and NumSharp.Tests/Math/UfuncResultLayout.Test.cs holds
     // it now.
     //
+    // FIXED 2026-11-06 (parity QA-48): every np.fft transform keeps the input's memory order (empty_like's K order), so
+    // VF36 matches NumPy; its pin was QA-48's (NumSharp.Tests/Fourier/np.fft.ResultLayout.Test.cs holds it now). The same
+    // replay found VA03 (np.where reading an np.split child from its parent's start) and VF37 (np.nanmean keepdims owning
+    // its result) converged before it; the generator's three rules are dropped, their 105 cells are back in the gate, and
+    // VA03's two pins below are regression tests.
+    //
     // Every expected value below is NumPy 2.4.2's answer for the same call. EXPECTED (when fixed): each test passes;
     // remove its [OpenBugs], move it next to its API's tests, and drop the gap's carve rule from the generator
     // (_gap_of) so the case returns to the gate.
@@ -97,10 +103,11 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>np.where(cond, x, y)</c> with the condition an <c>np.split</c> child (offset 4, <c>[False, True, True,
-        ///     False]</c>): NumPy returns <c>[-0, 1, 2, -3]</c> (gap VA03).
+        ///     FIXED (found converged by the parity QA-48 replay, 2026-11-06): <c>np.where(cond, x, y)</c> with the condition
+        ///     an <c>np.split</c> child (offset 4, <c>[False, True, True, False]</c>) reads the view, as NumPy does:
+        ///     <c>[-0, 1, 2, -3]</c> (gap VA03, retired). This test pins it.
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "viewflags-VA03")]
+        [TestMethod]
         public void ViewFlags_Where_ConditionAtAnOffset_ShouldReadTheView()
         {
             using var cbase = np.array(new[] { false, true, false, true, false, true, true, false, false, true, true, true });
@@ -113,11 +120,12 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>np.where(cond, x, 0)</c> and <c>np.where(cond, 0, x)</c> with <c>x</c> an <c>np.split</c> child (offset 2,
-        ///     <c>[1, 2, 3, 4]</c>): NumPy returns <c>[1, 0, 3, 0]</c> and <c>[0, 2, 0, 4]</c>; NumSharp reads the parent's
-        ///     <c>[9, 9, …]</c> (gap VA03).
+        ///     FIXED (found converged by the parity QA-48 replay, 2026-11-06): <c>np.where(cond, x, 0)</c> and
+        ///     <c>np.where(cond, 0, x)</c> with <c>x</c> an <c>np.split</c> child (offset 2, <c>[1, 2, 3, 4]</c>) read the view,
+        ///     as NumPy does: <c>[1, 0, 3, 0]</c> and <c>[0, 2, 0, 4]</c> (gap VA03, retired; NumSharp read the parent's
+        ///     <c>[9, 9, …]</c>). This test pins it.
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "viewflags-VA03")]
+        [TestMethod]
         public void ViewFlags_Where_XOrYAtAnOffset_ShouldReadTheView()
         {
             using var xbase = np.array(new double[] { 9, 9, 1, 2, 3, 4 });

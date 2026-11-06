@@ -291,7 +291,7 @@ namespace NumSharp.Tests.Backends.Strings
             Action textWidth = () => cu.zfill("3");
             textWidth.Should().Throw<TypeError>().Where(e => e.Message == "unsupported type <U1 for operand 'width'");
             Action floatTab = () => cu.expandtabs(2.0);
-            floatTab.Should().Throw<ArgumentException>().Where(e => e.Message.StartsWith(
+            floatTab.Should().Throw<TypeError>().Where(e => e.Message.StartsWith(
                 "Cannot cast ufunc '_expandtabs_length' input 1 from dtype('float64') to dtype('int64') with casting rule 'same_kind'"));
             Action empty = () => ((NDCharArray)cu["0:0"]).center(4);
             empty.Should().Throw<ValueError>().Where(e => e.Message == "zero-size array to reduction operation maximum which has no identity");
@@ -395,7 +395,7 @@ namespace NumSharp.Tests.Backends.Strings
                 "ufunc 'count' did not contain a loop with signature matching types (<class 'numpy.dtypes.StrDType'>, " +
                 "<class 'numpy.dtypes.BytesDType'>, <class 'numpy.dtypes._PyLongDType'>, <class 'numpy.dtypes._PyLongDType'>) -> None");
             Action floatStart = () => cu.find("b", 1.5);
-            floatStart.Should().Throw<ArgumentException>().Where(e => e.Message.StartsWith(
+            floatStart.Should().Throw<TypeError>().Where(e => e.Message.StartsWith(
                 "Cannot cast ufunc 'find' input 2 from dtype('float64') to dtype('int64') with casting rule 'same_kind'"));
             Action missing = () => cu.index("z");
             missing.Should().Throw<ValueError>().Where(e => e.Message == "substring not found");

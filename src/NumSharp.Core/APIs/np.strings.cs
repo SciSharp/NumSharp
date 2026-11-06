@@ -41,9 +41,10 @@ namespace NumSharp
             /// <exception cref="TypeError">A bytes / str mix ("ufunc 'add' cannot use operands with types …"), a string and a
             ///     number (NumPy's no-loop text), or a result wider than 2^31 - 1 bytes ("addition result string of length …
             ///     is too large to store inside array.").</exception>
-            /// <exception cref="ArgumentException"><paramref name="out"/> cannot receive the result (the same_kind output cast,
-            ///     e.g. a <c>U</c> result into an <c>S</c> out), or the operands do not broadcast with
-            ///     <paramref name="out"/> / <paramref name="where"/>.</exception>
+            /// <exception cref="TypeError"><paramref name="out"/> cannot receive the result (the same_kind output cast,
+            ///     e.g. a <c>U</c> result into an <c>S</c> out).</exception>
+            /// <exception cref="ArgumentException">The operands do not broadcast with <paramref name="out"/> /
+            ///     <paramref name="where"/>.</exception>
             /// <exception cref="IncorrectShapeException">The two operands do not broadcast.</exception>
             /// <exception cref="UnicodeDecodeError">An <c>S</c> result cast into a <c>U</c> <paramref name="out"/> meets a byte
             ///     ≥ 0x80.</exception>

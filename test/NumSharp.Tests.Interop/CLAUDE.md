@@ -301,9 +301,9 @@ Conventions the harness encodes (change them only with the reason that put them 
   the unit suite guards the walk).
 - An elementwise op on a 0-d input runs numpy over `x[None]` and takes `[0, ...]` (numpy returns a scalar there); a numpy
   `str_` / `bytes_` scalar result is compared at NumSharp's 0-d width.
-- Error texts are compared without .NET's `(Parameter '…')` decoration; the class may be one of the two documented
-  house conventions (a `UFuncTypeError` cast refusal is `ArgumentException`, a shape `ValueError` is
-  `IncorrectShapeException`).
+- Error texts are compared without .NET's `(Parameter '…')` decoration; the class matches numpy's by name (a
+  `UFuncTypeError` cast refusal is NumSharp's `TypeError`, its builtin base) or is the documented house convention (a
+  shape `ValueError` is `IncorrectShapeException`).
 - NumPy's own bugs are routed around in the numpy expression and named there: `_t2c` (StringDType → complex copies the
   real part into the imaginary part), `_eager` (numpy's `S → StringDType` cast stores non-UTF-8 bytes and raises only on
   a read; NumSharp raises at the cast), `np.ascontiguousarray(x)` under `argsort(axis=None)` (a non-contiguous

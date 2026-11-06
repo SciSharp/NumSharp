@@ -658,7 +658,7 @@ namespace NumSharp.Backends.Iteration
         /// <exception cref="TypeError">No loop for the operand classes (a non-text <c>x</c> / <c>a</c>, an <c>S</c> array with a
         ///     <c>str</c> substring, <c>isdecimal</c> / <c>isnumeric</c> over <c>S</c>), or two <c>StringDType</c> operands
         ///     with different NA objects.</exception>
-        /// <exception cref="ArgumentException">A <c>start</c> / <c>end</c> that cannot reach int64 by a same_kind cast.</exception>
+        /// <exception cref="TypeError">A <c>start</c> / <c>end</c> that cannot reach int64 by a same_kind cast.</exception>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
         /// <exception cref="ValueError">A <c>StringDType</c> NA the function's rule refuses, or <c>index</c> / <c>rindex</c>
         ///     without a match.</exception>

@@ -90,7 +90,7 @@ namespace NumSharp.Tests.Documentation
 
             var ai = np.ones(3, np.int32);
             Action intoInt = () => np.add(ai, np.linspace(0, 3, 3), @out: ai);
-            intoInt.Should().Throw<ArgumentException>()
+            intoInt.Should().Throw<TypeError>()
                    .WithMessage("Cannot cast ufunc 'add' output from dtype('float64') to dtype('int32') with casting rule 'same_kind'");
 
             var c = np.ones(3, np.int32) + np.linspace(0, np.pi, 3);

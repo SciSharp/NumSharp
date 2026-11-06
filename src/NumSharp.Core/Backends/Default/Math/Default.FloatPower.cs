@@ -36,9 +36,10 @@ namespace NumSharp.Backends
         /// <param name="where">Boolean write-mask (NumPy ufunc <c>where=</c>).</param>
         /// <returns>Bases raised to exponents at float64/complex128 precision, or <paramref name="out"/> when supplied.</returns>
         /// <exception cref="IncorrectTypeException"><paramref name="dtype"/> is neither float64 nor complex128 (no matching loop).</exception>
-        /// <exception cref="System.ArgumentException"><paramref name="where"/> is non-bool; a complex input cannot
-        ///     same_kind-cast to a requested float64 loop; <paramref name="out"/> is read-only or not same_kind-castable
-        ///     from the loop dtype; or the operand shapes do not broadcast together.</exception>
+        /// <exception cref="TypeError">A complex input cannot same_kind-cast to a requested float64 loop, or the loop
+        ///     dtype cannot same_kind-cast into <paramref name="out"/>.</exception>
+        /// <exception cref="System.ArgumentException"><paramref name="where"/> is non-bool; <paramref name="out"/> is
+        ///     read-only; or the operand shapes do not broadcast together.</exception>
         public override NDArray FloatPower(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
             // float_power has float64/complex128 loops only: text is refused with NumPy's text before the float promotion

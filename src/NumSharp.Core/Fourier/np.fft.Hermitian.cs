@@ -65,7 +65,7 @@ namespace NumSharp
         /// <exception cref="AxisError"><paramref name="axis"/> out of range with <paramref name="n"/> given.</exception>
         /// <exception cref="TypeError">A complex input (rfft's refusal).</exception>
         /// <exception cref="DTypePromotionError">A text input.</exception>
-        /// <exception cref="System.ArgumentException">An <paramref name="out"/> dtype complex128 cannot be cast to under
+        /// <exception cref="TypeError">An <paramref name="out"/> dtype complex128 cannot be cast to under
         ///     same_kind.</exception>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.ihfft.html

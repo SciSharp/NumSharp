@@ -217,7 +217,7 @@ namespace NumSharp
         /// <exception cref="RuntimeError">A malformed weight array.</exception>
         /// <exception cref="DTypePromotionError"><c>StringDType</c> variables without <paramref name="dtype"/>, or a
         ///     <c>StringDType</c> request with weights.</exception>
-        /// <exception cref="ArgumentException">An integer or bool <paramref name="dtype"/> (the in-place centring's cast
+        /// <exception cref="TypeError">An integer or bool <paramref name="dtype"/> (the in-place centring's cast
         ///     refusal).</exception>
         /// <exception cref="DivideByZeroException">Weights that sum to zero.</exception>
         /// <exception cref="OverflowException">An integer text outside an integer <paramref name="dtype"/>, or decimal

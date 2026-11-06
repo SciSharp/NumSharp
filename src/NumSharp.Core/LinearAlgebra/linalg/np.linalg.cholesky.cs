@@ -30,7 +30,7 @@ namespace NumSharp
             /// <exception cref="LinAlgError">Fewer than two axes, a non-square operand, or a matrix that is not positive
             ///     definite.</exception>
             /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
-            /// <exception cref="ArgumentException">A text operand (NumPy's gufunc input-cast refusal).</exception>
+            /// <exception cref="TypeError">A text operand (NumPy's gufunc input-cast refusal).</exception>
             /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
             [NDScoped] // the class boundary's temporaries; the Linalg member scopes the computation's own
             public static NDArray cholesky(NDArray a, bool upper = false)

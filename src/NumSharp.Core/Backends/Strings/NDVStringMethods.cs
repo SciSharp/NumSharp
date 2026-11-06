@@ -571,7 +571,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="a">The <c>StringDType</c> operand.</param>
         /// <param name="tabsize">The tab sizes (<c>np.asanyarray</c>'d).</param>
         /// <returns>A fresh <c>StringDType</c> result.</returns>
-        /// <exception cref="ArgumentException">A tab size that cannot reach int64 by a same_kind cast.</exception>
+        /// <exception cref="TypeError">A tab size that cannot reach int64 by a same_kind cast.</exception>
         /// <exception cref="OverflowException">A tab-size literal past int64; an expansion past 2^31 - 1.</exception>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
         /// <exception cref="ValueError">An NA under a non-string rule.</exception>

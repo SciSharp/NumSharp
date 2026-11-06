@@ -17,10 +17,10 @@ namespace NumSharp.Tests.Backends.Strings
     /// <remarks>
     ///     <para>Each row is numpy's answer: the result's dtype (<c>dtype.str</c>, or the <c>StringDType</c> repr) and its
     ///     elements in C order (an NA as <c>null</c> / <c>double.NaN</c>, an <c>S</c> element as its Latin-1 text), or the
-    ///     exception's class chain and text. A NumSharp exception matches numpy's most specific builtin class by name, or
-    ///     one of the two documented house conventions (a <c>UFuncTypeError</c> cast refusal is an
-    ///     <see cref="ArgumentException"/>, a shape <c>ValueError</c> an <see cref="IncorrectShapeException"/>); its text,
-    ///     .NET's <c>(Parameter …)</c> decoration cut, is numpy's.</para>
+    ///     exception's class chain and text. A NumSharp exception matches numpy's most specific builtin class by name (a
+    ///     <c>UFuncTypeError</c> cast refusal is a <see cref="TypeError"/>, its builtin base), or the documented house
+    ///     convention (a shape <c>ValueError</c> is an <see cref="IncorrectShapeException"/>); its text, .NET's
+    ///     <c>(Parameter …)</c> decoration cut, is numpy's.</para>
     ///     <para>The operands: <c>['ab', 'c ', '', 'xyz']</c> as <c>U3</c>, <c>S3</c>, <c>StringDType()</c> and three NA
     ///     kinds with element 1 the NA (<c>None</c>, NaN, the string <c>'NA'</c>); a binary operation's second operand is the
     ///     reversed array.</para>
@@ -270,7 +270,6 @@ namespace NumSharp.Tests.Backends.Strings
             for (Type t = error.GetType(); t != null; t = t.BaseType)
                 names.Add(t.Name);
             bool classMatches = names.Contains(pyClass) ||
-                                (chain.Contains("UFuncTypeError") && error is ArgumentException) ||
                                 (chain.Contains("ValueError") && error is IncorrectShapeException);
             if (!classMatches)
                 return $"{label}: NumSharp raises {error.GetType().Name} -- numpy {pyClass}";

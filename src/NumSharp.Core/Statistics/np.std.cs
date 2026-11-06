@@ -43,9 +43,10 @@ namespace NumSharp
         /// <exception cref="ValueError">A nonzero <paramref name="ddof"/> together with <paramref name="correction"/> (raised
         ///     first); a read-only or misshapen <paramref name="out"/>.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
-        /// <exception cref="ArgumentException">An integer or bool <paramref name="dtype"/> with a result that has dimensions,
+        /// <exception cref="TypeError">An integer or bool <paramref name="dtype"/> with a result that has dimensions,
         ///     or an integer or bool <paramref name="out"/>: NumPy's <c>Cannot cast ufunc 'sqrt' output from
-        ///     dtype('float64') to dtype('int64') with casting rule 'same_kind'</c>; a non-bool <paramref name="where"/>.</exception>
+        ///     dtype('float64') to dtype('int64') with casting rule 'same_kind'</c>.</exception>
+        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="out"/>, <paramref name="where"/> or
         ///     <paramref name="mean"/> does not broadcast against <paramref name="a"/>.</exception>
         /// <exception cref="TypeError">A boolean subtraction (see <see cref="var"/>); a C# scalar passed as

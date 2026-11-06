@@ -39,7 +39,7 @@ namespace NumSharp.Backends
         /// <exception cref="ValueError"><paramref name="out"/> is read-only or does not have the result's shape (the
         /// reduce prologue's texts).</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not broadcast against the input.</exception>
-        /// <exception cref="ArgumentException"><c>np.std</c> with an integer or bool <paramref name="dtype"/> and a result
+        /// <exception cref="TypeError"><c>np.std</c> with an integer or bool <paramref name="dtype"/> and a result
         /// that has dimensions: NumPy's <c>sqrt</c> output-cast UFuncTypeError (a 0-d result casts instead).</exception>
         /// <remarks>
         ///     <para>
@@ -906,7 +906,7 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="ret">The variance; overwritten with its square root. Writeable.</param>
         /// <param name="scalarResult">True when <paramref name="ret"/> is 0-d (NumPy's scalar path).</param>
-        /// <exception cref="ArgumentException">An integer or bool <paramref name="ret"/> with dimensions: "Cannot cast
+        /// <exception cref="TypeError">An integer or bool <paramref name="ret"/> with dimensions: "Cannot cast
         /// ufunc 'sqrt' output from dtype('float64') to dtype('int32') with casting rule 'same_kind'" (the float dtype
         /// names the sqrt loop the integer width selects).</exception>
         /// <remarks>Internal, not private: <see cref="NDListArray"/>'s std runs the same <c>_std</c> step on the variance of

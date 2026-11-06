@@ -159,8 +159,9 @@ namespace NumSharp.Backends
         /// <exception cref="IncorrectShapeException">The mask does not broadcast to the array, or the mean does not broadcast
         ///     against it (the subtraction's text), or the out does not broadcast.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
-        /// <exception cref="ArgumentException">The mask is not bool; std into an integer or bool result with dimensions
-        ///     (NumPy's sqrt output-cast error).</exception>
+        /// <exception cref="TypeError">std into an integer or bool result with dimensions (NumPy's sqrt output-cast
+        ///     error).</exception>
+        /// <exception cref="ArgumentException">The mask is not bool.</exception>
         /// <exception cref="TypeError">A boolean subtraction (a bool input in a bool loop, or a bool mean of a bool input), or
         ///     NumPy's text refusals.</exception>
         /// <exception cref="ValueError">A read-only or misshapen out.</exception>

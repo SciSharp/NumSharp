@@ -86,10 +86,10 @@ namespace NumSharp.Backends
         /// <c>(float64)(1.6f)</c>. This exotic combination is not exercised by the round oracle (out=null); the
         /// no-out and same-dtype-out results are bit-identical to NumPy.</param>
         /// <returns>The rounded array — <paramref name="out"/> when supplied, otherwise fresh.</returns>
-        /// <exception cref="NotSupportedException">A <b>bool</b> input with <c>decimals != 0</c> and no
+        /// <exception cref="TypeError">A <b>bool</b> input with <c>decimals != 0</c> and no
         /// <paramref name="dtype"/> override: NumPy raises because the float64 composition result cannot cast
         /// <c>same_kind</c> back to bool (message reproduced verbatim, naming multiply/divide by sign).</exception>
-        /// <exception cref="ArgumentException">An <paramref name="out"/> whose dtype the loop result cannot reach by
+        /// <exception cref="TypeError">An <paramref name="out"/> whose dtype the loop result cannot reach by
         /// a <c>same_kind</c> cast (via <see cref="ValidateOutCast"/>).</exception>
         public override NDArray Round(NDArray nd, int decimals, DType dtype = null, NDArray @out = null)
         {
@@ -127,7 +127,7 @@ namespace NumSharp.Backends
             // a float64 that fails the same_kind cast back to bool. Reproduced verbatim (probed 2.4.2). A dtype
             // override escapes this (the caller asked for a float/complex loop), so it is gated on !typeCode.
             if (inputType == NPTypeCode.Boolean && !typeCode.HasValue)
-                throw new NotSupportedException(
+                throw new TypeError(
                     $"Cannot cast ufunc '{op1Name}' output from dtype('float64') to dtype('bool') with casting rule 'same_kind'");
 
             // Integer/char with POSITIVE decimals is an IDENTITY (no fractional part to remove, and — unlike the

@@ -26,9 +26,10 @@ namespace NumSharp.Backends
         /// mask).</exception>
         /// <exception cref="TypeError">A bool input with <c>dtype=bool</c> or a bool <paramref name="mean"/> of a bool input
         /// (NumPy's boolean-subtract TypeError), or a text out for a float or complex input.</exception>
-        /// <exception cref="System.ArgumentException">An integer or bool <paramref name="dtype"/> with a result that has
-        /// dimensions, or an integer or bool <paramref name="out"/>: NumPy's <c>sqrt</c> output-cast error (a 0-d result
-        /// without out truncates the root instead); a non-bool <paramref name="where"/>.</exception>
+        /// <exception cref="TypeError">An integer or bool <paramref name="dtype"/> with a result that has dimensions,
+        ///     or an integer or bool <paramref name="out"/>: NumPy's <c>sqrt</c> output-cast error (a 0-d result
+        ///     without out truncates the root instead).</exception>
+        /// <exception cref="System.ArgumentException">A non-bool <paramref name="where"/>.</exception>
         /// <exception cref="ValueError"><paramref name="out"/> is read-only or does not have the result's shape; a nonzero
         /// <paramref name="ddof"/> together with <paramref name="correction"/>.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="out"/>, <paramref name="where"/> or

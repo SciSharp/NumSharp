@@ -221,7 +221,7 @@ namespace NumSharp.Tests.Backends.Strings
             using (var f = np.zeros(new Shape(2)))
             {
                 Action cast = () => np.add(x, y, f);
-                cast.Should().Throw<ArgumentException>()
+                cast.Should().Throw<TypeError>()
                     .WithMessage("Cannot cast ufunc 'add' output from StringDType() to dtype('float64') with casting rule 'same_kind'");
             }
             using (var u = np.full(new Shape(2), "q", np.dtype("U3")))

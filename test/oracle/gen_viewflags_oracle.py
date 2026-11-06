@@ -1827,6 +1827,12 @@ _ARRAY_JOB_NUMPY = {
 # (np.diff), VF32 (np.nan_to_num), VF34 (np.round) and VF38 (np.tril / np.triu of a permuted input, an np.where) match
 # NumPy. Their GAPS entries and rules are dropped and their 55 cases moved back into view_flags.jsonl the same way (no
 # regeneration).
+# 2026-11-06 (parity QA-48): every np.fft transform lays its result out as NumPy's _raw_fft allocates it, empty_like's K
+# order of the input, so VF36 (an F, transposed, permuted or broadcast input's spectrum) matches NumPy. The same replay
+# found VF37 (np.nanmean along an axis with keepdims owns its result) and VA03 (np.where reads offset views from their
+# offset) converged before it, with batch 10's np.where and the reduction work that landed after it (the snapshot before
+# QA-48 already matches both). Their GAPS entries and rules are dropped and their 105 cases (VF36 78, VF37 23, VA03 1 +
+# 3) moved back into view_flags.jsonl / array_args.jsonl the same way (no regeneration).
 GAPS = {
     "VF01": "a NumPy SCALAR result (ufuncs, clip, round, nan_to_num, conj, dot / inner / kron of 0-d or 1-D pairs) "
             "comes back as a WRITEABLE 0-d array",
@@ -1852,15 +1858,9 @@ GAPS = {
             "np.kron with a 0-d, np.nanmedian along an axis — MaskedArray.filled's _data view) come back owning "
             "their data",
     "VF29": "np.median / np.nanmedian of a 0-d with keepdims=True are read-only; NumPy returns a writeable 0-d array",
-    "VF36": "the np.fft transforms (fft / ifft / rfft / irfft / hfft / ihfft along an axis and the 2-D / N-D forms) of "
-            "an F, transposed, permuted or broadcast input return C-ordered results; NumPy's gufunc output follows "
-            "the input's layout (K)",
-    "VF37": "np.nanmean along an axis with keepdims=True returns a view of a reduced buffer (OWNDATA false); NumPy's "
-            "result owns its data",
     "VS01": "np.zeros / ones / empty / full given a view's Shape of a dense F or permuted layout allocate that "
             "layout; NumPy's np.zeros(x.shape) is always C-ordered",
     "VA02": "np.take_along_axis with F-ordered indices returns a C-ordered result; NumPy's follows the indices (F)",
-    "VA03": "np.where reads a C-contiguous condition / x / y at a non-zero offset (an np.split child) WRONG",
     "VA04": "np.cov / np.corrcoef results do not own their data (OWNDATA false): both end with ndarray.squeeze, which "
             "in NumSharp returns a new view where NumPy returns the array itself (VF04)",
     "VA05": "np.ldexp reads a C-contiguous exponent array x2 at a non-zero offset (an np.split child) WRONG",
@@ -1935,17 +1935,6 @@ def _gap_of(tier, case):
             return "VF26"
         if fn in ("median", "nanmedian") and lay in ("own_0d", "view_0d") and p.get("keepdims"):
             return "VF29"
-        # hfft conjugates first, and NumPy's np.conjugate of a broadcast input is C-ordered: that one input matches.
-        if (fn.startswith("fft.") and fn not in ("fft.fftshift", "fft.ifftshift")
-                and lay in ("own_f_2d", "view_t_2d", "view_perm_3d", "view_bcast_2d")
-                and not (fn == "fft.hfft" and lay == "view_bcast_2d")):
-            return "VF36"
-        # The strided, broadcast and permuted inputs reduce through a materialized copy whose result owns its data.
-        if (fn == "nanmean" and axis is not None and p.get("keepdims")
-                and lay not in ("view_step_2d", "view_bcast_2d", "view_perm_3d")):
-            return "VF37"
-        if fn == "where3" and lay == "view_off_2d":
-            return "VA03"
         return None
     if tier == "shapes":
         # Only where the view's dense layout is a real F / permuted one: a (1,1) or an empty transposed view's Shape is
@@ -1957,8 +1946,6 @@ def _gap_of(tier, case):
     if tier == "arrays":
         if fn == "take_along_axis" and lay in ("indices=f", "indices=t"):
             return "VA02"
-        if fn == "where" and lay in ("condition=off", "x=off", "y=off"):
-            return "VA03"
         if fn in ("cov", "corrcoef"):
             return "VA04"
         if fn == "ldexp" and lay == "x2=off":

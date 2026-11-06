@@ -34,12 +34,12 @@ namespace NumSharp.Tests.Math
             e.Message.Should().Be(text);
         }
 
-        /// <summary>Asserts the call raises the house ArgumentException carrying NumPy's UFuncTypeError text.</summary>
+        /// <summary>Asserts the call raises TypeError, the class of NumPy's UFuncTypeError, carrying NumPy's text.</summary>
         /// <param name="call">The clip call expected to raise.</param>
         /// <param name="text">NumPy's message, verbatim.</param>
         private static void ExpectCastError(Func<object> call, string text)
         {
-            var e = Assert.ThrowsExactly<ArgumentException>(() => call());
+            var e = Assert.ThrowsExactly<TypeError>(() => call());
             e.Message.Should().Be(text);
         }
 

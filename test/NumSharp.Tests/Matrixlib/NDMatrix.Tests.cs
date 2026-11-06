@@ -879,7 +879,7 @@ namespace NumSharp.Tests.Matrixlib
         {
             NDMatrix m = np.matrix(np.arange(12).reshape(3, 4));
             Action flat = () => m.std(dtype: np.int64);
-            flat.Should().Throw<Exception>().WithMessage(
+            flat.Should().ThrowExactly<TypeError>().WithMessage(
                 "Cannot cast ufunc 'sqrt' output from dtype('float64') to dtype('int64') with casting rule 'same_kind'");
             ((long)np.std((NDArray)m, dtype: np.int64)).Should().Be(3L);
             ((long)m.var(dtype: np.int64)).Should().Be(12L);

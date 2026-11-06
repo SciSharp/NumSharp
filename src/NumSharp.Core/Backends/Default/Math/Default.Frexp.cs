@@ -26,8 +26,9 @@ namespace NumSharp.Backends
         /// <param name="where">The bool write mask, or null.</param>
         /// <exception cref="IncorrectTypeException"><paramref name="x"/> is complex — frexp has no complex loop
         /// (NumPy raises the same "not supported for the input types" TypeError).</exception>
-        /// <exception cref="ArgumentException">An output its loop dtype cannot be cast to under same_kind (NumPy numbers the
-        /// outputs: "output 1" / "output 2"), or a non-bool <paramref name="where"/>.</exception>
+        /// <exception cref="TypeError">An output its loop dtype cannot be cast to under same_kind (NumPy numbers the
+        ///     outputs: "output 1" / "output 2").</exception>
+        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>.</exception>
         /// <exception cref="ValueError">A text output under <paramref name="where"/> whose current text does not parse into
         /// its loop dtype.</exception>
         /// <exception cref="NotSupportedException">A dtype the frexp kernels do not handle.</exception>
@@ -53,8 +54,8 @@ namespace NumSharp.Backends
         /// <returns>The (mantissa, exponent) pair: fresh C-contiguous arrays of <paramref name="x"/>'s dims, or the given
         ///     outputs.</returns>
         /// <exception cref="IncorrectTypeException"><paramref name="x"/> is complex.</exception>
-        /// <exception cref="ArgumentException">An output its loop dtype cannot be cast to under same_kind, or a non-bool
-        ///     <paramref name="where"/>.</exception>
+        /// <exception cref="TypeError">An output its loop dtype cannot be cast to under same_kind.</exception>
+        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>.</exception>
         /// <exception cref="ValueError">A text output under <paramref name="where"/> whose current text does not parse.</exception>
         /// <exception cref="NotSupportedException">A dtype the frexp kernels do not handle.</exception>
         private (NDArray Mantissa, NDArray Exponent) FrexpCore(NDArray x, NDArray out1, NDArray out2, NDArray where)

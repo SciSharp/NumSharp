@@ -146,7 +146,7 @@ namespace NumSharp.Backends
         /// <exception cref="TypeError">A complex input to <c>rfft</c> (no complex loop).</exception>
         /// <exception cref="AxisError">An axis outside the input (the caller's <c>a.shape[axis]</c> lookup reports
         ///     NumPy's IndexError first when <c>n</c> was omitted).</exception>
-        /// <exception cref="ArgumentException">An <paramref name="out"/> whose dtype the kernel's result cannot be cast to
+        /// <exception cref="TypeError">An <paramref name="out"/> whose dtype the kernel's result cannot be cast to
         ///     under same_kind (the kernel's refusal, NumPy's UFuncTypeError text).</exception>
         internal NDArray RawFft(NDArray a, int n, int axis, bool isReal, bool isForward, string norm, NDArray @out, string name, bool floatPrec = false)
         {

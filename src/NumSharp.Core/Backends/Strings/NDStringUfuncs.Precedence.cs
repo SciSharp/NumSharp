@@ -146,8 +146,9 @@ namespace NumSharp.Backends.Strings
         /// <param name="out">The <c>out=</c> operand, or null.</param>
         /// <param name="where">The <c>where=</c> mask, or null.</param>
         /// <exception cref="ValueError">A read-only <paramref name="out"/>.</exception>
-        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>, or an input / output cast the string
-        ///     loop refuses (NumPy's UFuncTypeError text).</exception>
+        /// <exception cref="TypeError">An input / output cast the string loop refuses (NumPy's UFuncTypeError
+        ///     text).</exception>
+        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>.</exception>
         /// <exception cref="TypeError">NumPy has no loop for the request.</exception>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast (a computing call without out / where).</exception>
         /// <exception cref="InvalidOperationException">A call NumPy computes reached this refusal-only guard (a wiring
@@ -226,9 +227,11 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="TypeError">A sized request (<see cref="DefaultEngine.GeneralDTypeOnlyText"/>), two string classes
         ///     (<c>ufunc 'add' cannot use operands with types …</c>), or a concatenation wider than 2^31 - 1 bytes.</exception>
         /// <exception cref="ValueError">A read-only <paramref name="out"/>.</exception>
-        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>; an input the requested class cannot reach
-        ///     by a same_kind cast (<c>Cannot cast ufunc 'add' input 0 from dtype('&lt;U1') to dtype('S1') …</c>); a result
-        ///     that cannot be cast into <paramref name="out"/>; operands that do not broadcast.</exception>
+        /// <exception cref="TypeError">An input the requested class cannot reach by a same_kind cast (<c>Cannot cast
+        ///     ufunc 'add' input 0 from dtype('&lt;U1') to dtype('S1') …</c>), or a result that cannot be cast into
+        ///     <paramref name="out"/>.</exception>
+        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>; operands that do not
+        ///     broadcast.</exception>
         /// <exception cref="UnicodeDecodeError">An <c>S</c> input cast to a <c>U</c> request meets a byte ≥ 0x80.</exception>
         /// <remarks>
         ///     NumPy's order: the dtype class check, the <c>out=</c> / <c>where=</c> parse, the promoter (class mix, the input
@@ -267,7 +270,7 @@ namespace NumSharp.Backends.Strings
                 throw InputCastText("add", 1, d2, c2);
             var result = Concatenation(c1, c2);
             if (@out is not null && !DTypeCasting.CanCastTypeTo(result, @out.dtype, NPY_CASTING.NPY_SAME_KIND_CASTING))
-                throw new ArgumentException(
+                throw new TypeError(
                     $"Cannot cast ufunc 'add' output from {result.ToString(true)} to {@out.dtype.ToString(true)} with casting rule 'same_kind'");
             var broadcast = BroadcastError(x1, x2, @out, where);
             if (broadcast is not null)
@@ -454,16 +457,16 @@ namespace NumSharp.Backends.Strings
 
         /// <summary>
         ///     NumPy's input-cast refusal of a resolved loop: <c>Cannot cast ufunc 'add' input 0 from dtype('&lt;U2') to
-        ///     dtype('S2') with casting rule 'same_kind'</c> (UFuncTypeError; the house type for a cast refusal is
-        ///     <see cref="ArgumentException"/>).
+        ///     dtype('S2') with casting rule 'same_kind'</c> (UFuncTypeError, raised as <see cref="TypeError"/>, its
+        ///     class).
         /// </summary>
         /// <param name="ufunc">NumPy's ufunc name.</param>
         /// <param name="index">The input's position.</param>
         /// <param name="from">The input's descriptor.</param>
         /// <param name="to">The loop's descriptor for that input.</param>
         /// <returns>The exception (not thrown).</returns>
-        private static ArgumentException InputCastText(string ufunc, int index, DType from, DType to)
-            => new ArgumentException(
+        private static TypeError InputCastText(string ufunc, int index, DType from, DType to)
+            => new TypeError(
                 $"Cannot cast ufunc '{ufunc}' input {index} from {from.ToString(true)} to {to.ToString(true)} with casting rule 'same_kind'");
 
         /// <summary>
@@ -538,7 +541,7 @@ namespace NumSharp.Backends.Strings
             if (OutDescrCastError(@out, result) is { } outDescr)
                 return outDescr;
             if (@out is not null && !DTypeCasting.CanCastTypeTo(result, @out.dtype, NPY_CASTING.NPY_SAME_KIND_CASTING))
-                return new ArgumentException(
+                return new TypeError(
                     $"Cannot cast ufunc '{ufunc}' output from {result.ToString(true)} to {@out.dtype.ToString(true)} with casting rule 'same_kind'");
             // NumPy's trivial loop copies a short input its loop casts, keeping the input's class: a chararray input of the
             // user's call cast to bool (the logical ufuncs) or a chararray repeat count cast to int64 is refused by the

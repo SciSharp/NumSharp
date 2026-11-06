@@ -48,7 +48,7 @@ namespace NumSharp.Backends
         ///     new array in the view's order (the conjugate ufunc keeps it).</returns>
         /// <exception cref="LinAlgError">Fewer than two axes, or a non-square operand (eigh's checks).</exception>
         /// <exception cref="TypeError">A float16, decimal or char operand (<c>_commonType</c>).</exception>
-        /// <exception cref="ArgumentException">A text operand (eigh's gufunc input cast).</exception>
+        /// <exception cref="TypeError">A text operand (eigh's gufunc input cast).</exception>
         /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves.</exception>
         /// <remarks>
         ///     A zero eigenvalue's sign is 0, so its row of Vh is zero (Vh is not unitary then), as in NumPy. NumPy's
@@ -98,7 +98,7 @@ namespace NumSharp.Backends
         ///     stride, not an owner), as NumPy returns them.</returns>
         /// <exception cref="LinAlgError">Fewer than two axes, or a non-square operand (eigvalsh's checks).</exception>
         /// <exception cref="TypeError">A float16, decimal or char operand (<c>_commonType</c>).</exception>
-        /// <exception cref="ArgumentException">A text operand (eigvalsh's gufunc input cast).</exception>
+        /// <exception cref="TypeError">A text operand (eigvalsh's gufunc input cast).</exception>
         /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves.</exception>
         /// <remarks>eigvalsh is not eigh without the vectors: LAPACK computes the values in another way when it computes no
         ///     vectors, so these can differ from <see cref="SvdHermitian"/>'s S in the last bits, in NumPy as here. The

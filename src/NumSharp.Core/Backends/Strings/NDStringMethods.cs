@@ -25,8 +25,9 @@ using NumSharp.Backends.Kernels;
 //   * A C# number literal (NDArray.WasPythonLiteral) is NumPy's Python int / float: it names _PyLongDType in a no-loop
 //     error, converts to int64 with the LP64 OverflowError text past int64, and np.asanyarray makes it int64 (uint64 past
 //     int64) where a wrapper calls np.asanyarray first.
-//   * House exception types: TypeError for NumPy's UFuncTypeError / TypeError, ArgumentException for an input- or
-//     output-cast refusal, ValueError, IncorrectShapeException for a broadcast failure, OverflowException.
+//   * House exception types: TypeError for NumPy's UFuncTypeError / TypeError (an input- or output-cast refusal
+//     included), ArgumentException for a non-bool where= mask (NumPy's TypeError text), ValueError,
+//     IncorrectShapeException for a broadcast failure, OverflowException.
 // =============================================================================
 
 namespace NumSharp.Backends.Strings
@@ -152,7 +153,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="x">The operand, or null.</param>
         /// <param name="fallback">The default value of a null operand.</param>
         /// <returns>An int64 array (new unless <paramref name="x"/> already is one; the caller disposes it when new).</returns>
-        /// <exception cref="ArgumentException">The operand cannot reach int64 by a same_kind cast: <c>Cannot cast ufunc
+        /// <exception cref="TypeError">The operand cannot reach int64 by a same_kind cast: <c>Cannot cast ufunc
         ///     'find' input 2 from dtype('float64') to dtype('int64') with casting rule 'same_kind'</c> (a C# double literal
         ///     is NumPy's Python float, named float64).</exception>
         /// <exception cref="OverflowException">A C# literal past int64: <c>Python int too large to convert to C long</c>
@@ -187,8 +188,8 @@ namespace NumSharp.Backends.Strings
         /// <param name="index">The input position.</param>
         /// <param name="from">The source descriptor's repr.</param>
         /// <returns>The exception (not thrown).</returns>
-        private static ArgumentException InputCast(string ufunc, int index, string from)
-            => new ArgumentException($"Cannot cast ufunc '{ufunc}' input {index} from {from} to dtype('int64') with casting rule 'same_kind'");
+        private static TypeError InputCast(string ufunc, int index, string from)
+            => new TypeError($"Cannot cast ufunc '{ufunc}' input {index} from {from} to dtype('int64') with casting rule 'same_kind'");
 
         /// <summary>Disposes a temporary the call made (never the caller's operand).</summary>
         /// <param name="temp">The possibly-temporary array.</param>
@@ -236,8 +237,9 @@ namespace NumSharp.Backends.Strings
         /// <returns><paramref name="out"/>, or the fresh result.</returns>
         /// <exception cref="ValueError">A read-only <paramref name="out"/>; a <c>StringDType</c> NA that is not a string
         ///     (<c>The length of a null string is undefined</c>).</exception>
-        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>; an <paramref name="out"/> int64 cannot
-        ///     reach by a same_kind cast; operands that do not broadcast with <paramref name="out"/> / <paramref name="where"/>.</exception>
+        /// <exception cref="TypeError">An <paramref name="out"/> int64 cannot reach by a same_kind cast.</exception>
+        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>; operands that do not broadcast with
+        ///     <paramref name="out"/> / <paramref name="where"/>.</exception>
         /// <exception cref="TypeError">No loop: a non-text operand, or a <paramref name="dtype"/> other than int64; a
         ///     <paramref name="dtype"/> with details beyond its class (<c>'U1'</c>, <c>'&gt;i8'</c>) or a <c>StringDType</c>
         ///     instance (NumPy's <c>_get_dtype</c>, checked first).</exception>
@@ -259,7 +261,7 @@ namespace NumSharp.Backends.Strings
                 throw new TypeError($"ufunc 'str_len' did not contain a loop with signature matching types {NDStringUfuncs.UnaryDispatchClass(x)} -> " +
                                     (dtype is null ? "None" : dtype.Meta.ToString()));
             if (@out is not null && !DTypeCasting.CanCastTypeTo(Int64Descr, @out.dtype, NPY_CASTING.NPY_SAME_KIND_CASTING))
-                throw new ArgumentException(
+                throw new TypeError(
                     $"Cannot cast ufunc 'str_len' output from {Int64Descr.ToString(true)} to {@out.dtype.ToString(true)} with casting rule 'same_kind'");
             var shapeError = NDStringUfuncs.BroadcastError(x, null, @out, where);
             if (shapeError is not null)
@@ -309,8 +311,9 @@ namespace NumSharp.Backends.Strings
         /// <returns><paramref name="out"/>, or the fresh result (0-d for a 0-d operand).</returns>
         /// <exception cref="ValueError">A read-only <paramref name="out"/>; a <c>StringDType</c> NA its descriptor refuses
         ///     (<c>Cannot use the isalpha function with a null that is not a nan-like value</c>).</exception>
-        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>; an <paramref name="out"/> bool cannot reach
-        ///     by a same_kind cast; operands that do not broadcast with <paramref name="out"/> / <paramref name="where"/>.</exception>
+        /// <exception cref="TypeError">An <paramref name="out"/> bool cannot reach by a same_kind cast.</exception>
+        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>; operands that do not broadcast with
+        ///     <paramref name="out"/> / <paramref name="where"/>.</exception>
         /// <exception cref="TypeError">No loop: a non-text operand, an <c>S</c> operand of <c>isdecimal</c> /
         ///     <c>isnumeric</c>, or a <paramref name="dtype"/> other than bool (NumPy's UFuncTypeError text); a
         ///     <paramref name="dtype"/> with details beyond its class (<c>'U1'</c>) or a <c>StringDType</c> instance (NumPy's
@@ -337,7 +340,7 @@ namespace NumSharp.Backends.Strings
                 throw new TypeError($"ufunc '{ufunc}' did not contain a loop with signature matching types {NDStringUfuncs.UnaryDispatchClass(x)} -> " +
                                     (dtype is null ? "None" : dtype.Meta.ToString()));
             if (@out is not null && !DTypeCasting.CanCastTypeTo(DType.Boolean, @out.dtype, NPY_CASTING.NPY_SAME_KIND_CASTING))
-                throw new ArgumentException(
+                throw new TypeError(
                     $"Cannot cast ufunc '{ufunc}' output from {DType.Boolean.ToString(true)} to {@out.dtype.ToString(true)} with casting rule 'same_kind'");
             var shapeError = NDStringUfuncs.BroadcastError(x, null, @out, where);
             if (shapeError is not null)
@@ -463,7 +466,7 @@ namespace NumSharp.Backends.Strings
         /// <returns>The fresh result (0-d for 0-d operands).</returns>
         /// <exception cref="TypeError">No loop for the operand classes; two <c>StringDType</c> operands with different NA
         ///     objects (raised before the int64 casts, NumPy's resolve_descriptors).</exception>
-        /// <exception cref="ArgumentException">A start / end that cannot reach int64 by a same_kind cast.</exception>
+        /// <exception cref="TypeError">A start / end that cannot reach int64 by a same_kind cast.</exception>
         /// <exception cref="OverflowException">A start / end literal past int64.</exception>
         /// <exception cref="IncorrectShapeException">The four operands do not broadcast.</exception>
         /// <exception cref="ValueError"><c>index</c> / <c>rindex</c> found no match; a <c>StringDType</c> NA its rule
@@ -621,7 +624,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="step">The steps (<c>np.asanyarray</c>'d; the wrapper rejected 0).</param>
         /// <returns>The sliced strings.</returns>
         /// <exception cref="TypeError">A non-text operand.</exception>
-        /// <exception cref="ArgumentException">An index that cannot reach intp by a same_kind cast.</exception>
+        /// <exception cref="TypeError">An index that cannot reach intp by a same_kind cast.</exception>
         /// <exception cref="OverflowException">An index literal past int64.</exception>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
         /// <exception cref="TypeError">A <c>StringDType</c> NA (<c>Cannot slice null string</c>).</exception>
@@ -862,7 +865,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="tabsize">The tab sizes (<c>np.asanyarray</c>'d).</param>
         /// <returns>The expanded strings.</returns>
         /// <exception cref="TypeError">A non-text operand (<c>_expandtabs_length</c>'s no-loop text).</exception>
-        /// <exception cref="ArgumentException">A tab size that cannot reach int64 by a same_kind cast.</exception>
+        /// <exception cref="TypeError">A tab size that cannot reach int64 by a same_kind cast.</exception>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
         /// <exception cref="OverflowException">An expansion past 2^31 - 1 (<c>new string is too long</c>).</exception>
         /// <exception cref="ValueError">An empty broadcast.</exception>

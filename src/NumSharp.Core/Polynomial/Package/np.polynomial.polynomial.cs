@@ -325,7 +325,7 @@ namespace NumSharp
         ///     <paramref name="scl"/> whose broadcast would stretch the series, or a ragged list / tuple
         ///     (<paramref name="c"/> or <paramref name="scl"/>: np.array's inhomogeneous-shape text).</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
-        /// <exception cref="System.ArgumentException">A <paramref name="scl"/> the series cannot absorb in place — NumPy's
+        /// <exception cref="TypeError">A <paramref name="scl"/> the series cannot absorb in place — NumPy's
         ///     UFuncTypeError, e.g. a complex scl on a real series.</exception>
         /// <exception cref="IncorrectShapeException">An array <paramref name="scl"/> that does not broadcast with the series.</exception>
         /// <exception cref="System.OverflowException">A Python-int <paramref name="scl"/> too large for the series' dtype.</exception>
@@ -363,7 +363,7 @@ namespace NumSharp
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
         /// <exception cref="IndexError">An empty series (<c>index 0 is out of bounds for axis 0 with size 0</c>).</exception>
         /// <exception cref="TypeError">An array constant for a complex 1-D series (NumPy's <c>complex()</c> text).</exception>
-        /// <exception cref="System.ArgumentException">A scl, constant or complex lbnd the (N-D) series cannot absorb in
+        /// <exception cref="TypeError">A scl, constant or complex lbnd the (N-D) series cannot absorb in
         ///     place — NumPy's UFuncTypeError. (A 1-D series keeps the real part, as NumPy's setitem does.)</exception>
         /// <exception cref="IncorrectShapeException">Constants that do not broadcast with the series' columns.</exception>
         /// <exception cref="System.OverflowException">A Python-int scl, lbnd or constant too large for the series' dtype.</exception>

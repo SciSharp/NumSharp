@@ -1068,7 +1068,7 @@ namespace NumSharp.Backends.Iteration
             // positive decimals, divide for negative). Reproduced verbatim (probed 2.4.2). Bool with
             // decimals == 0 never reaches here — the factory routes it to the UnaryOp.Round node (→ f16).
             if (childType == NPTypeCode.Boolean)
-                throw new NotSupportedException(
+                throw new TypeError(
                     $"Cannot cast ufunc '{(_decimals > 0 ? "multiply" : "divide")}' output from dtype('float64') " +
                     "to dtype('bool') with casting rule 'same_kind'");
 

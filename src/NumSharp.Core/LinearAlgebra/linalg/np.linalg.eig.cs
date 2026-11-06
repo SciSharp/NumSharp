@@ -73,7 +73,7 @@ namespace NumSharp
             ///     a <paramref name="UPLO"/> that is neither 'L' nor 'U'.</exception>
             /// <exception cref="LinAlgError">Fewer than two axes, or a non-square operand.</exception>
             /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
-            /// <exception cref="ArgumentException">A text operand (NumPy's gufunc input-cast refusal).</exception>
+            /// <exception cref="TypeError">A text operand (NumPy's gufunc input-cast refusal).</exception>
             /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
             [NDScoped] // the class boundary's temporaries; the Linalg member scopes the computation's own
             public static (NDArray eigenvalues, NDArray eigenvectors) eigh(NDArray a, char UPLO = 'L')

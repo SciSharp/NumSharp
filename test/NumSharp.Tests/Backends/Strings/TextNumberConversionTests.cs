@@ -647,7 +647,7 @@ namespace NumSharp.Tests.Backends.Strings
             // S text reaches a U request (ASCII decode); U text never reaches S.
             np.add(S("ab"), np.array(new[] { 1.5 }), dtype: "U").ToString(true).Should().Be("array(['ab1.5'], dtype='<U34')");
             Action narrow = () => np.add(U("a"), np.array(new[] { 1.5 }), dtype: "S");
-            narrow.Should().Throw<ArgumentException>()
+            narrow.Should().Throw<TypeError>()
                   .WithMessage("Cannot cast ufunc 'add' input 0 from dtype('<U1') to dtype('S1') with casting rule 'same_kind'");
             Action sized = () => np.add(U("a"), np.array(new[] { 1.5 }), dtype: "U5");
             sized.Should().Throw<TypeError>().WithMessage("The `dtype` and `signature` arguments to ufuncs only select*");

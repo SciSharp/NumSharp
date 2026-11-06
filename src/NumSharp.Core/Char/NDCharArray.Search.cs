@@ -33,7 +33,7 @@ namespace NumSharp
         /// <exception cref="System.ArgumentNullException"><paramref name="sub"/> is null.</exception>
         /// <exception cref="TypeError">No loop for the classes (NumPy's <c>ufunc 'count' did not contain a loop with
         ///     signature matching types ...</c>).</exception>
-        /// <exception cref="System.ArgumentException">A start / end that cannot reach int64 by a same_kind cast (a float or
+        /// <exception cref="TypeError">A start / end that cannot reach int64 by a same_kind cast (a float or
         ///     text: <c>Cannot cast ufunc 'count' input 2 from dtype('float64') to dtype('int64') with casting rule
         ///     'same_kind'</c>).</exception>
         /// <exception cref="System.OverflowException">A start / end literal past int64.</exception>
@@ -52,7 +52,7 @@ namespace NumSharp
         /// <returns>A plain int64 array of the broadcast shape (0-d for a 0-d chararray).</returns>
         /// <exception cref="System.ArgumentNullException"><paramref name="sub"/> is null.</exception>
         /// <exception cref="TypeError">No loop for the classes.</exception>
-        /// <exception cref="System.ArgumentException">A start / end that cannot reach int64 by a same_kind cast.</exception>
+        /// <exception cref="TypeError">A start / end that cannot reach int64 by a same_kind cast.</exception>
         /// <exception cref="System.OverflowException">A start / end literal past int64.</exception>
         /// <exception cref="IncorrectShapeException">An argument does not broadcast.</exception>
         public NDArray find(object sub, object start = null, object end = null) => np.@char.find(this, sub, start, end);
@@ -67,7 +67,7 @@ namespace NumSharp
         /// <returns>A plain int64 array of the broadcast shape (0-d for a 0-d chararray).</returns>
         /// <exception cref="System.ArgumentNullException"><paramref name="sub"/> is null.</exception>
         /// <exception cref="TypeError">No loop for the classes.</exception>
-        /// <exception cref="System.ArgumentException">A start / end that cannot reach int64 by a same_kind cast.</exception>
+        /// <exception cref="TypeError">A start / end that cannot reach int64 by a same_kind cast.</exception>
         /// <exception cref="System.OverflowException">A start / end literal past int64.</exception>
         /// <exception cref="IncorrectShapeException">An argument does not broadcast.</exception>
         public NDArray rfind(object sub, object start = null, object end = null) => np.@char.rfind(this, sub, start, end);
@@ -82,7 +82,7 @@ namespace NumSharp
         /// <returns>A plain int64 array of the broadcast shape (0-d for a 0-d chararray).</returns>
         /// <exception cref="System.ArgumentNullException"><paramref name="sub"/> is null.</exception>
         /// <exception cref="TypeError">No loop for the classes.</exception>
-        /// <exception cref="System.ArgumentException">A start / end that cannot reach int64 by a same_kind cast.</exception>
+        /// <exception cref="TypeError">A start / end that cannot reach int64 by a same_kind cast.</exception>
         /// <exception cref="System.OverflowException">A start / end literal past int64.</exception>
         /// <exception cref="IncorrectShapeException">An argument does not broadcast.</exception>
         /// <exception cref="ValueError">An element without a match (<c>substring not found</c>).</exception>
@@ -98,7 +98,7 @@ namespace NumSharp
         /// <returns>A plain int64 array of the broadcast shape (0-d for a 0-d chararray).</returns>
         /// <exception cref="System.ArgumentNullException"><paramref name="sub"/> is null.</exception>
         /// <exception cref="TypeError">No loop for the classes.</exception>
-        /// <exception cref="System.ArgumentException">A start / end that cannot reach int64 by a same_kind cast.</exception>
+        /// <exception cref="TypeError">A start / end that cannot reach int64 by a same_kind cast.</exception>
         /// <exception cref="System.OverflowException">A start / end literal past int64.</exception>
         /// <exception cref="IncorrectShapeException">An argument does not broadcast.</exception>
         /// <exception cref="ValueError">An element without a match (<c>substring not found</c>).</exception>
@@ -114,7 +114,7 @@ namespace NumSharp
         /// <returns>A plain bool array of the broadcast shape (0-d for a 0-d chararray).</returns>
         /// <exception cref="System.ArgumentNullException"><paramref name="prefix"/> is null.</exception>
         /// <exception cref="TypeError">No loop for the classes.</exception>
-        /// <exception cref="System.ArgumentException">A start / end that cannot reach int64 by a same_kind cast.</exception>
+        /// <exception cref="TypeError">A start / end that cannot reach int64 by a same_kind cast.</exception>
         /// <exception cref="System.OverflowException">A start / end literal past int64.</exception>
         /// <exception cref="IncorrectShapeException">An argument does not broadcast.</exception>
         public NDArray startswith(object prefix, object start = null, object end = null)
@@ -131,7 +131,7 @@ namespace NumSharp
         /// <returns>A plain bool array of the broadcast shape (0-d for a 0-d chararray).</returns>
         /// <exception cref="System.ArgumentNullException"><paramref name="suffix"/> is null.</exception>
         /// <exception cref="TypeError">No loop for the classes.</exception>
-        /// <exception cref="System.ArgumentException">A start / end that cannot reach int64 by a same_kind cast.</exception>
+        /// <exception cref="TypeError">A start / end that cannot reach int64 by a same_kind cast.</exception>
         /// <exception cref="System.OverflowException">A start / end literal past int64.</exception>
         /// <exception cref="IncorrectShapeException">An argument does not broadcast.</exception>
         public NDArray endswith(object suffix, object start = null, object end = null)

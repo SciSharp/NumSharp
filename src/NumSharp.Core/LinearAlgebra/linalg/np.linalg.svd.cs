@@ -33,7 +33,7 @@ namespace NumSharp
             /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
             /// <exception cref="LinAlgError">Fewer than two axes, or a non-square operand with <paramref name="hermitian"/>.</exception>
             /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
-            /// <exception cref="ArgumentException">A text operand (NumPy's gufunc input-cast refusal).</exception>
+            /// <exception cref="TypeError">A text operand (NumPy's gufunc input-cast refusal).</exception>
             /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
             [NDScoped] // the class boundary's temporaries; the Linalg member scopes the computation's own
             public static (NDArray U, NDArray S, NDArray Vh) svd(NDArray a, bool full_matrices = true,
@@ -57,7 +57,7 @@ namespace NumSharp
             /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves (an empty operand or a zero-size batch needs none).</exception>
             /// <exception cref="LinAlgError">Fewer than two axes.</exception>
             /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
-            /// <exception cref="ArgumentException">A text operand (NumPy's gufunc input-cast refusal).</exception>
+            /// <exception cref="TypeError">A text operand (NumPy's gufunc input-cast refusal).</exception>
             /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
             [NDScoped] // the facade keeps its scope over the call; the Linalg member scopes the computation's own
             public static NDArray svdvals(NDArray x)
@@ -82,7 +82,7 @@ namespace NumSharp
             /// <exception cref="ValueError">Both <paramref name="tol"/> and <paramref name="rtol"/> set.</exception>
             /// <exception cref="LinAlgError">A non-square operand with <paramref name="hermitian"/>.</exception>
             /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
-            /// <exception cref="ArgumentException">A text operand of two or more axes (NumPy's gufunc input-cast refusal).</exception>
+            /// <exception cref="TypeError">A text operand of two or more axes (NumPy's gufunc input-cast refusal).</exception>
             /// <exception cref="ArgumentNullException"><paramref name="A"/> is null.</exception>
             [NDScoped] // the facade keeps its scope over the call; the Linalg member scopes the computation's own
             public static NDArray matrix_rank(NDArray A, double? tol = null, bool hermitian = false,
@@ -122,7 +122,7 @@ namespace NumSharp
             /// <exception cref="LinAlgError">An empty operand, a non-square one for an inverse-based order, or
             ///     <c>"nuc"</c> of a singular matrix (the SVD of its NaN inverse: <c>SVD did not converge</c>).</exception>
             /// <exception cref="ValueError">An order the norm refuses.</exception>
-            /// <exception cref="ArgumentException">A text operand (NumPy's gufunc input-cast refusal).</exception>
+            /// <exception cref="TypeError">A text operand (NumPy's gufunc input-cast refusal).</exception>
             /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
             [NDScoped] // the facade keeps its scope over the call; the Linalg member scopes the computation's own
             public static NDArray cond(NDArray x, object p = null)

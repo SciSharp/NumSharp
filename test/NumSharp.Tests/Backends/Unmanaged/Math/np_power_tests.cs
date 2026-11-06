@@ -58,7 +58,7 @@ namespace NumSharp.Tests.Backends.Unmanaged.Math
             // result — misaligned; aligned by the ufunc dtype= wave.)
             var right = np.zeros(new Shape(5, 5)).astype(NPTypeCode.Double) + 5;
             new Action(() => np.power(right, 2, dtype: NPTypeCode.Byte))
-                .Should().Throw<ArgumentException>()
+                .Should().Throw<TypeError>()
                 .WithMessage("Cannot cast ufunc 'power' input 0 from dtype('float64') to dtype('uint8') with casting rule 'same_kind'");
         }
     }

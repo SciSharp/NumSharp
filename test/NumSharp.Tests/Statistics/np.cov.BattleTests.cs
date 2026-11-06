@@ -158,18 +158,18 @@ public class np_cov_BattleTests
         var data = np.array(new double[] { 3, -1, 2, 0, 5, -4, 1, 7 }).reshape(2, 4);
         static string Refusal(string dt) =>
             $"Cannot cast ufunc 'subtract' output from dtype('float64') to dtype('{dt}') with casting rule 'same_kind'";
-        new Action(() => np.cov(data, dtype: np.int32)).Should().Throw<ArgumentException>().WithMessage(Refusal("int32"));
-        new Action(() => np.cov(data, dtype: np.int8)).Should().Throw<ArgumentException>().WithMessage(Refusal("int8"));
-        new Action(() => np.cov(data, dtype: np.bool_)).Should().Throw<ArgumentException>().WithMessage(Refusal("bool"));
-        new Action(() => np.cov(data, dtype: np.uint8)).Should().Throw<ArgumentException>().WithMessage(Refusal("uint8"));
+        new Action(() => np.cov(data, dtype: np.int32)).Should().Throw<TypeError>().WithMessage(Refusal("int32"));
+        new Action(() => np.cov(data, dtype: np.int8)).Should().Throw<TypeError>().WithMessage(Refusal("int8"));
+        new Action(() => np.cov(data, dtype: np.bool_)).Should().Throw<TypeError>().WithMessage(Refusal("bool"));
+        new Action(() => np.cov(data, dtype: np.uint8)).Should().Throw<TypeError>().WithMessage(Refusal("uint8"));
         new Action(() => np.cov(data, fweights: np.array(new long[] { 1, 2, 0, 3 }), dtype: np.int32))
-            .Should().Throw<ArgumentException>().WithMessage(Refusal("int32"));
-        new Action(() => np.cov(np.array(2.0), dtype: np.int32)).Should().Throw<ArgumentException>()
+            .Should().Throw<TypeError>().WithMessage(Refusal("int32"));
+        new Action(() => np.cov(np.array(2.0), dtype: np.int32)).Should().Throw<TypeError>()
             .WithMessage(Refusal("int32"));
-        new Action(() => np.corrcoef(data, dtype: np.int32)).Should().Throw<ArgumentException>()
+        new Action(() => np.corrcoef(data, dtype: np.int32)).Should().Throw<TypeError>()
             .WithMessage(Refusal("int32"));
         new Action(() => np.cov(np.array(new[] { "3", "-1", "2", "0" }).reshape(2, 2), dtype: np.int32))
-            .Should().Throw<ArgumentException>().WithMessage(Refusal("int32"));
+            .Should().Throw<TypeError>().WithMessage(Refusal("int32"));
         // No variables: the early return comes before the mean.
         np.cov(np.zeros(new Shape(0, 3)), dtype: np.int32).shape.Should().Equal(0, 0);
         // A float16 X takes a float64 weighted mean's difference rounded back (same_kind); the weighted product is float64.

@@ -219,7 +219,7 @@ namespace NumSharp.Tests.Math
         [TestMethod]
         public void FloatInputs_IntegerDtype_RaiseInputCast()
         {
-            var e = Assert.ThrowsException<ArgumentException>(() =>
+            var e = Assert.ThrowsException<TypeError>(() =>
                 np.gcd(np.array(new[] { 1.0 }), np.array(new[] { 2.0 }), dtype: np.int64));
             StringAssert.Contains(e.Message,
                 "Cannot cast ufunc 'gcd' input 0 from dtype('float64') to dtype('int64') with casting rule 'same_kind'");

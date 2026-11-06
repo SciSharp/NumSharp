@@ -31,7 +31,7 @@ namespace NumSharp.Backends
         ///     resolution take the double loop even for a complex64-precision operand.</param>
         /// <returns>A new complex128 array of <c>a.shape</c> with the axis replaced by <paramref name="n"/>, or
         ///     <paramref name="out"/> itself holding the result.</returns>
-        /// <exception cref="ArgumentException">An <paramref name="out"/> whose dtype complex128 cannot be cast to under
+        /// <exception cref="TypeError">An <paramref name="out"/> whose dtype complex128 cannot be cast to under
         ///     same_kind (<c>Cannot cast ufunc 'fft' output from dtype('complex128') to ...</c>).</exception>
         protected virtual NDArray C2CKernel(NDArray a, int n, int axis, bool forward, double fct, NDArray @out,
             bool singlePrecision, bool unitFactor)
@@ -57,7 +57,7 @@ namespace NumSharp.Backends
         ///     double loop.</param>
         /// <returns>A new complex128 array of <c>a.shape</c> with the axis replaced by <c>n // 2 + 1</c>, or
         ///     <paramref name="out"/> itself holding the result.</returns>
-        /// <exception cref="ArgumentException">An <paramref name="out"/> whose dtype complex128 cannot be cast to under
+        /// <exception cref="TypeError">An <paramref name="out"/> whose dtype complex128 cannot be cast to under
         ///     same_kind (the message names <c>rfft_n_even</c> or <c>rfft_n_odd</c> by the parity of
         ///     <paramref name="n"/>).</exception>
         protected virtual NDArray R2CKernel(NDArray a, int n, int axis, double fct, NDArray @out,
@@ -84,7 +84,7 @@ namespace NumSharp.Backends
         /// <returns>A new float64 array of <c>a.shape</c> with the axis replaced by <paramref name="n"/>, or
         ///     <paramref name="out"/> itself holding the result (a same_kind cast of float64, such as complex128 or
         ///     float32).</returns>
-        /// <exception cref="ArgumentException">An <paramref name="out"/> whose dtype float64 cannot be cast to under
+        /// <exception cref="TypeError">An <paramref name="out"/> whose dtype float64 cannot be cast to under
         ///     same_kind (<c>Cannot cast ufunc 'irfft' output from dtype('float64') to ...</c>).</exception>
         protected virtual NDArray C2RKernel(NDArray a, int n, int axis, double fct, NDArray @out,
             bool singlePrecision, bool unitFactor)

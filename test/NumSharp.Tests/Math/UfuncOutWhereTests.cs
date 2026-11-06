@@ -80,7 +80,7 @@ namespace NumSharp.Tests.Math
         public void Out_FloatToInt_ThrowsNumPyText()
         {
             // NumPy: UFuncTypeError, exact text.
-            var ex = Assert.ThrowsException<ArgumentException>(() =>
+            var ex = Assert.ThrowsException<TypeError>(() =>
                 np.add(Af(), Bf(), np.empty(new Shape(4), np.int32)));
 
             Assert.AreEqual(
@@ -93,11 +93,11 @@ namespace NumSharp.Tests.Math
         public void Out_UfuncNamesInCastErrors()
         {
             // NumPy ufunc names: np.mod is 'remainder', np.sqrt is 'sqrt'.
-            var exMod = Assert.ThrowsException<ArgumentException>(() =>
+            var exMod = Assert.ThrowsException<TypeError>(() =>
                 np.mod(Af(), Bf(), np.empty(new Shape(4), np.int32)));
             StringAssert.Contains(exMod.Message, "ufunc 'remainder'");
 
-            var exSqrt = Assert.ThrowsException<ArgumentException>(() =>
+            var exSqrt = Assert.ThrowsException<TypeError>(() =>
                 np.sqrt(Af(), np.empty(new Shape(4), np.int32)));
             StringAssert.Contains(exSqrt.Message, "ufunc 'sqrt'");
         }

@@ -27,7 +27,7 @@ namespace NumSharp
             /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
             /// <exception cref="LinAlgError">Fewer than two axes, a non-square operand, or a singular matrix.</exception>
             /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
-            /// <exception cref="ArgumentException">A text operand (NumPy's gufunc input-cast refusal).</exception>
+            /// <exception cref="TypeError">A text operand (NumPy's gufunc input-cast refusal).</exception>
             /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
             // Scope: the class boundary's temporaries; the Linalg member reclaims the ToCommon dtype-cast temp. Matches
             // the scoped siblings pinv/tensorinv.
@@ -97,7 +97,7 @@ namespace NumSharp
             /// <exception cref="LinAlgError">The reshaped matrix is not square, or is singular.</exception>
             /// <exception cref="TypeError">A float16, decimal or char operand (inv's <c>_commonType</c>), or a 0-d operand
             ///     whose 1x1 inverse succeeded (<c>reshape() takes exactly 1 argument (0 given)</c>).</exception>
-            /// <exception cref="ArgumentException">A text operand (inv's gufunc input cast, NumPy's UFuncTypeError).</exception>
+            /// <exception cref="TypeError">A text operand (inv's gufunc input cast, NumPy's UFuncTypeError).</exception>
             /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
             [NDScoped] // the facade keeps its scope over the call; the Linalg member scopes the computation's own
             public static NDArray tensorinv(NDArray a, int ind = 2)

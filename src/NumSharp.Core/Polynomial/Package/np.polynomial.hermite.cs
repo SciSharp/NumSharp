@@ -261,7 +261,7 @@ namespace NumSharp
         /// <exception cref="ValueError"><c>The order of derivation must be non-negative</c>, or an array scl whose
         ///     broadcast would stretch the series.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
-        /// <exception cref="System.ArgumentException">A scl the series cannot absorb in place (NumPy's UFuncTypeError).</exception>
+        /// <exception cref="TypeError">A scl the series cannot absorb in place (NumPy's UFuncTypeError).</exception>
         /// <exception cref="IncorrectShapeException">An array scl that does not broadcast with the series.</exception>
         /// <exception cref="System.NotSupportedException">A null or string series.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite.hermder.html</remarks>
@@ -286,7 +286,7 @@ namespace NumSharp
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
         /// <exception cref="IndexError">An empty series.</exception>
         /// <exception cref="TypeError">An array constant for a complex 1-D series (NumPy's <c>complex()</c> text).</exception>
-        /// <exception cref="System.ArgumentException">A value an N-D series cannot absorb in place (NumPy's UFuncTypeError).</exception>
+        /// <exception cref="TypeError">A value an N-D series cannot absorb in place (NumPy's UFuncTypeError).</exception>
         /// <exception cref="IncorrectShapeException">Constants that do not broadcast with the series' columns.</exception>
         /// <exception cref="System.NotSupportedException">A null or string series, constant or bound.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite.hermint.html</remarks>

@@ -198,11 +198,11 @@ public class np_histogram_cumulative_loop_tests
     {
         const string text = "Cannot cast ufunc 'add' output from dtype('int64') to dtype('bool') with casting rule 'same_kind'";
         var w = np.ones(new Shape(12), NPTypeCode.Boolean);
-        ((Action)(() => np.histogram(np.array(Twelve), Edges(), weights: w))).Should().Throw<ArgumentException>().WithMessage(text);
+        ((Action)(() => np.histogram(np.array(Twelve), Edges(), weights: w))).Should().Throw<TypeError>().WithMessage(text);
         ((Action)(() => np.histogram(np.array(Twelve), new[] { -2.0, 0.0, 1.5, 5.0 }, weights: w)))
-            .Should().Throw<ArgumentException>().WithMessage(text);
+            .Should().Throw<TypeError>().WithMessage(text);
         ((Action)(() => np.histogram(np.array(Twelve), np.array(new double[0]), weights: w)))
-            .Should().Throw<ArgumentException>().WithMessage(text);
+            .Should().Throw<TypeError>().WithMessage(text);
     }
 
     /// <summary>

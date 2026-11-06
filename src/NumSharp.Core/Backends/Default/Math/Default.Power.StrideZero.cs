@@ -67,9 +67,10 @@ namespace NumSharp.Backends
         /// <param name="out">The out= array, or null.</param>
         /// <param name="where">The bool where= mask, or null.</param>
         /// <returns>The powers: a fresh array of <paramref name="loop"/>, or <paramref name="out"/>.</returns>
-        /// <exception cref="ArgumentException">An input cannot reach a requested <c>dtype=</c> loop, the mask is not bool,
-        /// the out is read-only, or the loop cannot cast into the out (the general route's texts, the ufunc named
-        /// 'power').</exception>
+        /// <exception cref="TypeError">An input cannot reach a requested <c>dtype=</c> loop, or the loop cannot cast
+        ///     into the out (the general route's texts, the ufunc named 'power').</exception>
+        /// <exception cref="ArgumentException">The mask is not bool, or the out is read-only (the general route's
+        ///     texts).</exception>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast, or the out / mask does not fit
         /// the broadcast shape.</exception>
         /// <remarks>
@@ -163,8 +164,9 @@ namespace NumSharp.Backends
         /// <param name="out">The out= array, or null.</param>
         /// <param name="where">The where= mask, or null.</param>
         /// <returns>The clean (C-order, offset 0) iteration shape: the out's dims when one is given.</returns>
-        /// <exception cref="ArgumentException">An input cast, the mask dtype, a read-only out (<see cref="ValueError"/>) or
-        /// the out cast is refused, or the out / mask does not fit the inputs (NumPy's texts).</exception>
+        /// <exception cref="TypeError">An input cast or the out cast is refused (NumPy's texts).</exception>
+        /// <exception cref="ArgumentException">The mask dtype or a read-only out (<see cref="ValueError"/>) is refused,
+        ///     or the out / mask does not fit the inputs (NumPy's texts).</exception>
         /// <exception cref="IncorrectShapeException">The inputs do not broadcast (NumPy's text, which lists out= and where=
         /// too when given).</exception>
         private static Shape ValidatePowerUfuncCall(NDArray lhs, NDArray rhs, NPTypeCode loop, NPTypeCode? typeCode,

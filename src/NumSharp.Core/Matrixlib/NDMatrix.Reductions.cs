@@ -308,7 +308,7 @@ namespace NumSharp
         /// <returns>The standard deviations; <paramref name="out"/> itself when it is given.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="ValueError"><paramref name="out"/> is read-only or does not have the result's shape.</exception>
-        /// <exception cref="ArgumentException"><paramref name="out"/> or <paramref name="dtype"/> is an integer or
+        /// <exception cref="TypeError"><paramref name="out"/> or <paramref name="dtype"/> is an integer or
         ///     bool dtype: NumPy's <c>Cannot cast ufunc 'sqrt' output from dtype('float64') to dtype('int64') with
         ///     casting rule 'same_kind'</c>.</exception>
         public NDMatrix std(int axis, DType dtype = null, NDMatrix @out = null, int ddof = 0) => (NDMatrix)std((int?)axis, dtype, @out, ddof);
@@ -321,7 +321,7 @@ namespace NumSharp
         /// <returns>A 0-d array when <paramref name="axis"/> is <c>null</c>; otherwise the matrix.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="ValueError"><paramref name="out"/> is read-only or does not have the result's shape.</exception>
-        /// <exception cref="ArgumentException">
+        /// <exception cref="TypeError">
         ///     An integer or bool <paramref name="out"/> or <paramref name="dtype"/>: NumPy takes the square root
         ///     in place under the <c>same_kind</c> rule, which refuses the float root for an integer array
         ///     (<c>Cannot cast ufunc 'sqrt' output from dtype('float64') to dtype('int64') with casting rule

@@ -122,7 +122,7 @@ namespace NumSharp.Backends
         /// <param name="out">The <c>out=</c> operand, or null.</param>
         /// <param name="casting">The casting rule: <c>np.matmul</c>'s argument (already validated), <c>"same_kind"</c>
         ///     for the gufuncs without the keyword (NumPy's default).</param>
-        /// <exception cref="System.ArgumentException">A cast the rule refuses, with NumPy's UFuncTypeError text: "Cannot
+        /// <exception cref="TypeError">A cast the rule refuses, with NumPy's UFuncTypeError text: "Cannot
         ///     cast ufunc '{name}' input {i} from {from} to {loop} with casting rule '{casting}'", or "... output from {loop}
         ///     to {out} ...".</exception>
         /// <remarks>
@@ -147,12 +147,12 @@ namespace NumSharp.Backends
         /// <param name="to">The target descriptor.</param>
         /// <param name="casting">The rule's name, as the message quotes it.</param>
         /// <param name="rule">The rule.</param>
-        /// <exception cref="System.ArgumentException">The rule refuses the cast (NumPy's UFuncTypeError text).</exception>
+        /// <exception cref="TypeError">The rule refuses the cast (NumPy's UFuncTypeError text).</exception>
         private static void RequireCast(string name, string role, DType from, DType to, string casting, NPY_CASTING rule)
         {
             if (from == to || DTypeCasting.CanCastTypeTo(from, to, rule))
                 return;
-            throw new System.ArgumentException(
+            throw new TypeError(
                 $"Cannot cast ufunc '{name}' {role} from {from.ToString(true)} to {to.ToString(true)} " +
                 $"with casting rule '{casting}'");
         }

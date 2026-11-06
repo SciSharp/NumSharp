@@ -518,7 +518,7 @@ namespace NumSharp
         ///     <paramref name="dtype"/>; NumPy's out= checks.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="mean"/> does not broadcast with the array (<c>operands
         ///     could not be broadcast together with shapes (4,) (3,) </c>).</exception>
-        /// <exception cref="ArgumentException">std into an integer or bool <paramref name="out"/> (NumPy's sqrt output cast,
+        /// <exception cref="TypeError">std into an integer or bool <paramref name="out"/> (NumPy's sqrt output cast,
         ///     the house type).</exception>
         /// <exception cref="AxisError">An axis outside the array (a 0-d array has none).</exception>
         /// <exception cref="NotSupportedException">NumPy's result is an object array (along an axis of an empty array); a
@@ -557,7 +557,7 @@ namespace NumSharp
         /// <exception cref="DivideByZeroException">An empty slice (NumPy's ZeroDivisionError).</exception>
         /// <exception cref="ValueError">See <see cref="var"/>.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="mean"/> does not broadcast with the array.</exception>
-        /// <exception cref="ArgumentException">An integer or bool <paramref name="out"/> or array result (NumPy's
+        /// <exception cref="TypeError">An integer or bool <paramref name="out"/> or array result (NumPy's
         ///     <c>Cannot cast ufunc 'sqrt' output from dtype('float64') to dtype('int64') with casting rule 'same_kind'</c>, the
         ///     house type).</exception>
         /// <exception cref="AxisError">An axis outside the array.</exception>

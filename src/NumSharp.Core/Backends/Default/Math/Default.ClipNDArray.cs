@@ -59,9 +59,11 @@ namespace NumSharp.Backends
         /// do not broadcast together ("operands could not be broadcast together with shapes (3,) (4,) () "); or
         /// <paramref name="out"/> would have to be stretched ("non-broadcastable output operand with shape ... doesn't match
         /// the broadcast shape ...").</exception>
-        /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array (NumPy's 'safe' cast text);
-        /// or a <paramref name="dtype"/> the inputs cannot reach, or a loop dtype <paramref name="out"/> cannot hold, under
-        /// the same_kind rule (NumPy's UFuncTypeError texts, naming the routed ufunc).</exception>
+        /// <exception cref="TypeError">A <paramref name="dtype"/> the inputs cannot reach, or a loop dtype
+        ///     <paramref name="out"/> cannot hold, under the same_kind rule (NumPy's UFuncTypeError texts, naming the
+        ///     routed ufunc).</exception>
+        /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array (NumPy's 'safe' cast
+        ///     text).</exception>
         /// <exception cref="OverflowException">A kept Python-int bound does not fit an integer loop dtype
         /// ("Python integer 1000 out of bounds for int8"), raised before any element is read, so also for an
         /// empty <paramref name="lhs"/>. See <see cref="NDExprTypeRules.CheckPyIntPacksIntoLoop"/>.</exception>
@@ -211,7 +213,7 @@ namespace NumSharp.Backends
         /// <param name="where">The where= mask, or null.</param>
         /// <returns>The copy (<paramref name="out"/> when given).</returns>
         /// <exception cref="TypeError">The loop would be bool: positive has no bool loop (NumPy's verbatim texts).</exception>
-        /// <exception cref="ArgumentException">The loop dtype cannot be cast into <paramref name="out"/> under same_kind.</exception>
+        /// <exception cref="TypeError">The loop dtype cannot be cast into <paramref name="out"/> under same_kind.</exception>
         /// <exception cref="ValueError">The operands do not broadcast, or <paramref name="out"/> would be stretched.</exception>
         private NDArray ClipPositive(NDArray lhs, NPTypeCode? typeCode, NDArray @out, NDArray where)
         {
@@ -849,7 +851,7 @@ namespace NumSharp.Backends
         /// <param name="max">The kept upper bound, or null.</param>
         /// <param name="loop">The requested loop dtype.</param>
         /// <param name="ufunc">The routed ufunc's name, as NumPy's message quotes it.</param>
-        /// <exception cref="ArgumentException">An input cannot reach <paramref name="loop"/>:
+        /// <exception cref="TypeError">An input cannot reach <paramref name="loop"/>:
         /// "Cannot cast ufunc 'clip' input 1 from dtype('float64') to dtype('int8') with casting rule 'same_kind'".</exception>
         /// <remarks>
         /// A literal-marked bound (<see cref="NDArray.WasPythonLiteral"/>) is a weak Python scalar and is checked as NEP
@@ -878,7 +880,7 @@ namespace NumSharp.Backends
         /// <param name="index">The operand's input index in the routed ufunc.</param>
         /// <param name="loop">The requested loop dtype.</param>
         /// <param name="ufunc">The routed ufunc's name.</param>
-        /// <exception cref="ArgumentException">The operand cannot reach <paramref name="loop"/> (NumPy's UFuncTypeError text).</exception>
+        /// <exception cref="TypeError">The operand cannot reach <paramref name="loop"/> (NumPy's UFuncTypeError text).</exception>
         private static void ValidateClipInputCast(NPTypeCode from, bool strongOnly, bool isScalar, int index, NPTypeCode loop, string ufunc)
         {
             bool ok;
@@ -906,7 +908,7 @@ namespace NumSharp.Backends
             }
 
             if (!ok)
-                throw new ArgumentException(
+                throw new TypeError(
                     $"Cannot cast ufunc '{ufunc}' input {index} from dtype('{fromName}') to " +
                     $"dtype('{loop.AsNumpyDtypeName()}') with casting rule 'same_kind'");
         }

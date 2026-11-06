@@ -298,7 +298,7 @@ namespace NumSharp.Backends
         /// <exception cref="AxisError">See <see cref="VarianceIntoOut"/>.</exception>
         /// <exception cref="IncorrectShapeException">See <see cref="VarianceIntoOut"/>.</exception>
         /// <exception cref="TypeError">See <see cref="VarianceIntoOut"/>.</exception>
-        /// <exception cref="ArgumentException">An integer or bool <paramref name="out"/>: the square root's float loop cannot
+        /// <exception cref="TypeError">An integer or bool <paramref name="out"/>: the square root's float loop cannot
         ///     be cast back under <c>same_kind</c> (<c>Cannot cast ufunc 'sqrt' output from dtype('float64') to dtype('int64')
         ///     with casting rule 'same_kind'</c>), raised AFTER the variance was stored, so out holds the variance then.</exception>
         private NDArray StdIntoOut(NDArray arr, int? axis, bool keepdims, int ddof, DType dtype, NDArray @out)

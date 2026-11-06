@@ -66,6 +66,7 @@ Exception
 | A write into a read-only view (a broadcast) | `ValueError` | `ValueError` | `assignment destination is read-only` |
 | A dtype with no loop (`np.sqrt` of text) | `TypeError` | `TypeError` | `ufunc 'sqrt' not supported for the input types, ...` |
 | A `dtype=` request with no loop | `IncorrectTypeException` | `TypeError` | `No loop matching the specified signature and casting was found for ufunc sqrt` |
+| A ufunc cast a casting rule refuses (an `out=` the result cannot reach, a `dtype=` loop an input cannot reach, `np.around` of a bool array) | `TypeError` | `UFuncTypeError` (a `TypeError`) | `Cannot cast ufunc 'add' output from dtype('float64') to dtype('int32') with casting rule 'same_kind'` |
 | Two dtypes with no common dtype | `DTypePromotionError` | `DTypePromotionError` | `The DTypes ... do not have a common DType. ...` |
 | An out-of-range Python-style integer | `OverflowException` | `OverflowError` | `Python integer 300 out of bounds for int8` |
 | A text that does not parse as a number | `ValueError` | `ValueError` | `invalid literal for int() with base 10: np.str_('x')` |
@@ -83,7 +84,7 @@ Exception
 
 The other NumPy-named classes are raised where NumPy raises them: `KeyError` for a key NumPy looks up and does not find (an unknown `flags` name, a `%(name)s` formatting key, a dtype field name, an `einsum_path` path name), `AttributeError` for an attribute NumPy refuses, `BufferError` when a buffer cannot be exported in the requested form, `OSError` for a file operation NumPy refuses (`tofile` of a `StringDType` array in binary mode), `SystemError` for data no Python object can represent, `SyntaxError` for text that is not a valid Python literal, `TooHardError` when `np.shares_memory`'s bounded search exhausts `max_work`, and `RuntimeError` / `AssertionError` / `NameError` where NumPy's own code raises them. `MAError` and `MaskError` exist so code ported from `numpy.ma` can catch them.
 
-NumSharp also raises .NET's own exceptions where they describe the failure: `ArgumentNullException` for a `null` argument NumPy has no `None` meaning for, `InvalidCastException` for a cast that a casting rule refuses (`Cannot cast array data from dtype('float64') to dtype('int32') according to the rule 'safe'`), `ArgumentException` for a ufunc output cast that a casting rule refuses (`Cannot cast ufunc 'add' output from dtype('float64') to dtype('int32') with casting rule 'same_kind'`), `ObjectDisposedException` for a disposed array or iterator, and `OutOfMemoryException` for NumPy's `MemoryError`.
+NumSharp also raises .NET's own exceptions where they describe the failure: `ArgumentNullException` for a `null` argument NumPy has no `None` meaning for, `InvalidCastException` for a cast that a casting rule refuses (`Cannot cast array data from dtype('float64') to dtype('int32') according to the rule 'safe'`), `ObjectDisposedException` for a disposed array or iterator, and `OutOfMemoryException` for NumPy's `MemoryError`.
 
 ---
 

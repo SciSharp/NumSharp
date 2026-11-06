@@ -157,8 +157,8 @@ namespace NumSharp.Tests.Backends.Strings
         {
             new Action(() => np.linalg.pinv(T22)).Should().Throw<TypeError>().WithMessage("cannot conjugate non-numeric dtype");
             new Action(() => np.linalg.eigvals(T22)).Should().Throw<TypeError>().WithMessage(NoLoop("isfinite", "StringDType"));
-            // The gufunc's input cast (the house ArgumentException of NumPy's UFuncTypeError, its text verbatim).
-            new Action(() => np.linalg.cholesky(T22)).Should().Throw<ArgumentException>().WithMessage(
+            // The gufunc's input cast (NumPy's UFuncTypeError, a TypeError, its text verbatim).
+            new Action(() => np.linalg.cholesky(T22)).Should().Throw<TypeError>().WithMessage(
                 "Cannot cast ufunc 'cholesky_lo' input from StringDType() to dtype('float64') with casting rule 'same_kind'");
             // norm parses text into float64 (x.astype(float)), then the norm of the numbers.
             np.linalg.norm(T22).GetDouble(0).Should().Be(5.477225575051661);

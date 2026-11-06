@@ -48,7 +48,7 @@ namespace NumSharp
         ///     definite (<c>Matrix is not positive definite</c>).</exception>
         /// <exception cref="TypeError">A float16, decimal or char operand (<c>array type float16 is unsupported in
         ///     linalg</c>).</exception>
-        /// <exception cref="ArgumentException">A text operand (NumPy's gufunc input-cast refusal, a UFuncTypeError).</exception>
+        /// <exception cref="TypeError">A text operand (NumPy's gufunc input-cast refusal, a UFuncTypeError).</exception>
         /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves (an empty
         ///     operand or a zero-size batch needs none).</exception>
         public abstract NDArray Cholesky(NDArray a, bool upper = false);
@@ -68,7 +68,7 @@ namespace NumSharp
         /// <exception cref="TypeError">An array or list order (NumPy's <c>p in {2, -2}</c> hashes it: <c>unhashable type:
         ///     'numpy.ndarray'</c> / <c>'list'</c>); a float16, decimal or char operand.</exception>
         /// <exception cref="ValueError">An order the norm refuses (<c>Invalid norm order for matrices.</c>).</exception>
-        /// <exception cref="ArgumentException">A text operand (NumPy's gufunc input-cast refusal).</exception>
+        /// <exception cref="TypeError">A text operand (NumPy's gufunc input-cast refusal).</exception>
         /// <exception cref="OpenBlasMissingBackendException">An SVD-based order (null, ±2, <c>"nuc"</c>) over a non-empty
         ///     operand that no matrix backend serves. The inverse-based orders need none: the managed LU inverts.</exception>
         /// <remarks>The inverse runs in float64 (complex128 for a complex operand) whatever the result dtype, and a
@@ -103,7 +103,7 @@ namespace NumSharp
         ///     matrix of a stack.</returns>
         /// <exception cref="LinAlgError">Fewer than two axes, or a non-square operand.</exception>
         /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
-        /// <exception cref="ArgumentException">A text operand (NumPy's gufunc input-cast refusal).</exception>
+        /// <exception cref="TypeError">A text operand (NumPy's gufunc input-cast refusal).</exception>
         /// <remarks>Needs no backend: without one the managed LU computes it, allclose to NumPy's blocked LAPACK (a
         ///     matrix whose zero pivot appears only after several eliminations can give a tiny value where LAPACK gives
         ///     0).</remarks>
@@ -137,7 +137,7 @@ namespace NumSharp
         ///     'U'</c>, checked before the operand).</exception>
         /// <exception cref="LinAlgError">Fewer than two axes, a non-square operand, or no convergence.</exception>
         /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
-        /// <exception cref="ArgumentException">A text operand (NumPy's gufunc input-cast refusal).</exception>
+        /// <exception cref="TypeError">A text operand (NumPy's gufunc input-cast refusal).</exception>
         /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves.</exception>
         public abstract (NDArray eigenvalues, NDArray eigenvectors) Eigh(NDArray a, char UPLO = 'L');
 
@@ -163,7 +163,7 @@ namespace NumSharp
         /// <exception cref="ValueError"><paramref name="UPLO"/> is neither 'L' nor 'U'.</exception>
         /// <exception cref="LinAlgError">Fewer than two axes, a non-square operand, or no convergence.</exception>
         /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
-        /// <exception cref="ArgumentException">A text operand (NumPy's gufunc input-cast refusal).</exception>
+        /// <exception cref="TypeError">A text operand (NumPy's gufunc input-cast refusal).</exception>
         /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves.</exception>
         public abstract NDArray Eigvalsh(NDArray a, char UPLO = 'L');
 
@@ -177,7 +177,7 @@ namespace NumSharp
         /// <exception cref="LinAlgError">Fewer than two axes, a non-square operand, or a singular matrix (<c>Singular
         ///     matrix</c>).</exception>
         /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
-        /// <exception cref="ArgumentException">A text operand (NumPy's gufunc input-cast refusal).</exception>
+        /// <exception cref="TypeError">A text operand (NumPy's gufunc input-cast refusal).</exception>
         /// <remarks>Needs no backend: without one the managed LU computes it.</remarks>
         public abstract NDArray Inv(NDArray a);
 
@@ -195,7 +195,7 @@ namespace NumSharp
         ///     column), <paramref name="b"/>'s rows differ from <paramref name="a"/>'s (<c>Incompatible dimensions</c>), or
         ///     no convergence.</exception>
         /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
-        /// <exception cref="ArgumentException">A text operand (NumPy's gufunc input-cast refusal).</exception>
+        /// <exception cref="TypeError">A text operand (NumPy's gufunc input-cast refusal).</exception>
         /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves.</exception>
         public abstract (NDArray Solution, NDArray Residuals, NDArray Rank, NDArray SingularValues) Lstsq(
             NDArray a, NDArray b, double? rcond = null);
@@ -259,7 +259,7 @@ namespace NumSharp
         /// <exception cref="ValueError">Both <paramref name="tol"/> and <paramref name="rtol"/> are set.</exception>
         /// <exception cref="LinAlgError">A non-square operand with <paramref name="hermitian"/>.</exception>
         /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
-        /// <exception cref="ArgumentException">A text operand of two or more axes (NumPy's gufunc input-cast
+        /// <exception cref="TypeError">A text operand of two or more axes (NumPy's gufunc input-cast
         ///     refusal).</exception>
         /// <exception cref="OpenBlasMissingBackendException">A non-empty operand of two or more axes that no matrix backend
         ///     serves.</exception>
@@ -368,7 +368,7 @@ namespace NumSharp
         ///     unit-modulus complex sign.</returns>
         /// <exception cref="LinAlgError">Fewer than two axes, or a non-square operand.</exception>
         /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
-        /// <exception cref="ArgumentException">A text operand (NumPy's gufunc input-cast refusal).</exception>
+        /// <exception cref="TypeError">A text operand (NumPy's gufunc input-cast refusal).</exception>
         /// <remarks>Needs no backend: without one the managed LU computes it.</remarks>
         public abstract (NDArray sign, NDArray logabsdet) Slogdet(NDArray a);
 
@@ -382,7 +382,7 @@ namespace NumSharp
         /// <returns>The solution, a fresh array of the loop dtype (float64 for bool / integer operands).</returns>
         /// <exception cref="LinAlgError">Fewer than two axes, a non-square <paramref name="a"/>, or a singular matrix.</exception>
         /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
-        /// <exception cref="ArgumentException">A text operand (NumPy's gufunc input-cast refusal).</exception>
+        /// <exception cref="TypeError">A text operand (NumPy's gufunc input-cast refusal).</exception>
         /// <exception cref="ValueError">A core dimension of <paramref name="b"/> that does not match, a
         ///     <paramref name="b"/> of too few axes for the matrix gufunc, or stacked axes that do not broadcast (NumPy's
         ///     gufunc texts).</exception>
@@ -405,7 +405,7 @@ namespace NumSharp
         /// <exception cref="LinAlgError">Fewer than two axes, a non-square operand with <paramref name="hermitian"/>, or
         ///     no convergence.</exception>
         /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
-        /// <exception cref="ArgumentException">A text operand (NumPy's gufunc input-cast refusal).</exception>
+        /// <exception cref="TypeError">A text operand (NumPy's gufunc input-cast refusal).</exception>
         /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves.</exception>
         public abstract (NDArray U, NDArray S, NDArray Vh) Svd(NDArray a, bool full_matrices = true, bool compute_uv = true,
             bool hermitian = false);
@@ -418,7 +418,7 @@ namespace NumSharp
         /// <returns>The singular values, descending and real.</returns>
         /// <exception cref="LinAlgError">Fewer than two axes, or no convergence.</exception>
         /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
-        /// <exception cref="ArgumentException">A text operand (NumPy's gufunc input-cast refusal).</exception>
+        /// <exception cref="TypeError">A text operand (NumPy's gufunc input-cast refusal).</exception>
         /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves.</exception>
         public abstract NDArray Svdvals(NDArray x);
 
@@ -464,7 +464,7 @@ namespace NumSharp
         /// <exception cref="LinAlgError">The reshaped matrix is not square, or is singular.</exception>
         /// <exception cref="TypeError">A float16, decimal or char operand, or a 0-d operand whose 1x1 inverse succeeded
         ///     (NumPy's <c>reshape() takes exactly 1 argument (0 given)</c>).</exception>
-        /// <exception cref="ArgumentException">A text operand (inv's gufunc input-cast refusal).</exception>
+        /// <exception cref="TypeError">A text operand (inv's gufunc input-cast refusal).</exception>
         public abstract NDArray Tensorinv(NDArray a, int ind = 2);
 
         /// <summary>
@@ -483,7 +483,7 @@ namespace NumSharp
         /// <exception cref="LinAlgError"><c>a.size</c> is not <c>prod(oldshape) ** 2</c>, or the system is
         ///     singular.</exception>
         /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
-        /// <exception cref="ArgumentException">A text operand (solve's gufunc input-cast refusal).</exception>
+        /// <exception cref="TypeError">A text operand (solve's gufunc input-cast refusal).</exception>
         public abstract NDArray Tensorsolve(NDArray a, NDArray b, int[] axes = null);
 
         /// <summary>

@@ -261,8 +261,10 @@ namespace NumSharp.Backends.Strings
         /// <param name="where">The <c>where=</c> mask, or null.</param>
         /// <returns><paramref name="out"/> itself, or a fresh bool array in NumPy's output layout.</returns>
         /// <exception cref="ValueError">A read-only <paramref name="out"/>.</exception>
-        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>, an <paramref name="out"/> the bool output
-        ///     cannot be cast to (same_kind), or operands that do not broadcast.</exception>
+        /// <exception cref="TypeError">An <paramref name="out"/> the bool output cannot be cast to
+        ///     (same_kind).</exception>
+        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>, or operands that do not
+        ///     broadcast.</exception>
         /// <exception cref="TypeError">A numeric <paramref name="loop"/> other than bool (the dispatcher's refusal).</exception>
         internal static NDArray VStringIsNaN(NDArray x, NPTypeCode? loop, NDArray @out, NDArray where)
         {
@@ -393,7 +395,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="where">The <c>where=</c> mask, or null.</param>
         /// <param name="output">The loop's output descriptor.</param>
         /// <returns>The NA refusal (<see cref="TypeError"/>, <c>Cannot find a compatible null string value for null strings
-        ///     'None' and 'nan'</c>), the output-cast refusal (<see cref="ArgumentException"/>, NumPy's UFuncTypeError text),
+        ///     'None' and 'nan'</c>), the output-cast refusal (<see cref="TypeError"/>, NumPy's UFuncTypeError text),
         ///     the broadcast refusal, or null when the loop computes.</returns>
         /// <remarks>
         ///     The output descriptor of a <c>StringDType</c> loop (<c>add</c>, <c>multiply</c>, <c>maximum</c>,
@@ -416,7 +418,7 @@ namespace NumSharp.Backends.Strings
                 {
                     var produced = textLoop ? DTypeRegistry.VString.default_descr() : output;
                     if (!DTypeCasting.CanCastTypeTo(produced, @out.dtype, NPY_CASTING.NPY_SAME_KIND_CASTING))
-                        return new ArgumentException(
+                        return new TypeError(
                             $"Cannot cast ufunc '{ufunc}' output from {produced.ToString(true)} to {@out.dtype.ToString(true)} with casting rule 'same_kind'");
                 }
             }
@@ -846,7 +848,7 @@ namespace NumSharp.Backends.Strings
             if (a.ndim == 0 || b.ndim == 0)
             {
                 if (@out is not null)
-                    return OutWhereError(@out, null) ?? new ArgumentException(
+                    return OutWhereError(@out, null) ?? new TypeError(
                         $"Cannot cast ufunc 'multiply' output from dtype('O') to {@out.dtype.ToString(true)} with casting rule 'same_kind'");
                 // A 0-d operand broadcasts against anything; an empty other operand leaves no product to make.
                 if (a.size == 0 || b.size == 0)

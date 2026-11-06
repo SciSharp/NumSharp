@@ -186,7 +186,8 @@ namespace NumSharp
         /// <param name="where">The bool where= mask, or null for everywhere.</param>
         /// <returns><paramref name="out"/>, or a fresh array in NumPy's ufunc output layout.</returns>
         /// <exception cref="ValueError">A read-only out, or operands that do not broadcast / an out that would be stretched.</exception>
-        /// <exception cref="ArgumentException">A non-bool where, or a dtype= / out= cast NumPy's same_kind rule refuses.</exception>
+        /// <exception cref="TypeError">A dtype= / out= cast NumPy's same_kind rule refuses.</exception>
+        /// <exception cref="ArgumentException">A non-bool where.</exception>
         /// <exception cref="OverflowException">A kept Python-int bound does not fit an integer loop dtype.</exception>
         /// <exception cref="TypeError">No bound is left and the loop would be bool (positive has no bool loop).</exception>
         public abstract NDArray ClipNDArray(NDArray lhs, NDArray min, NDArray max, DType dtype = null, NDArray @out = null, NDArray where = null);
@@ -601,9 +602,9 @@ namespace NumSharp
         /// <exception cref="ValueError"><paramref name="out"/> is read-only or does not have the result's shape; both
         ///     <paramref name="ddof"/> (nonzero) and <paramref name="correction"/> given (<c>ddof and correction can't be
         ///     provided simultaneously.</c>).</exception>
-        /// <exception cref="ArgumentException">An integer or bool <paramref name="dtype"/> (with a result that has dimensions)
-        ///     or <paramref name="out"/>: NumPy's <c>sqrt</c> output-cast error under <c>same_kind</c>; a non-bool
-        ///     <paramref name="where"/>.</exception>
+        /// <exception cref="TypeError">An integer or bool <paramref name="dtype"/> (with a result that has dimensions)
+        ///     or <paramref name="out"/>: NumPy's <c>sqrt</c> output-cast error under <c>same_kind</c>.</exception>
+        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="where"/> or <paramref name="mean"/> does not broadcast
         ///     with the operand.</exception>
         /// <remarks>

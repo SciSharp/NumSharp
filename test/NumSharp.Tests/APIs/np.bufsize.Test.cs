@@ -14,8 +14,8 @@ namespace NumSharp.Tests.APIs
     [DoNotParallelize] // redirects the process-wide Console.Out
     public class np_bufsize_Test
     {
-        // bufsize is thread-local and persists until changed; reset after every test so a value
-        // set on the runner thread never leaks into the next test.
+        // bufsize is context-local (NumPy's ContextVar) and persists in the flow until changed; reset after every test so
+        // a value set on the runner thread never leaks into the next test.
         [TestCleanup]
         public void Reset() => np.setbufsize(8192);
 
@@ -152,8 +152,12 @@ namespace NumSharp.Tests.APIs
             np.array_equal(r1, r2).Should().BeTrue();
         }
 
+        /// <summary>
+        ///     NumPy 2.4.2 under Python 3.12: a new <c>threading.Thread</c> starts with an empty context, so it reads the
+        ///     8192 default after the starting thread's <c>np.setbufsize(1024)</c>, and its own setting stays in it.
+        /// </summary>
         [TestMethod]
-        public void Bufsize_IsThreadLocal()
+        public void Bufsize_NewThreadStartsAtTheDefault()
         {
             np.setbufsize(4096);
             long seen = -1, after = -1;
@@ -168,6 +172,24 @@ namespace NumSharp.Tests.APIs
             seen.Should().Be(8192L);              // isolated from the main thread's 4096
             after.Should().Be(160L);              // worker changed only its own thread
             np.getbufsize().Should().Be(4096L);   // main thread unaffected by the worker
+        }
+
+        /// <summary>
+        ///     NumPy 2.4.2 under Python 3.12: <c>asyncio.to_thread</c> and an <c>await</c> continuation run in a copy of the
+        ///     caller's context, so they read the caller's <c>np.setbufsize(1024)</c> (parity QA-40). <c>Task.Run</c> and the
+        ///     continuation after <c>Task.Yield</c> are their .NET twins.
+        /// </summary>
+        /// <returns>The test's task.</returns>
+        [TestMethod]
+        public async System.Threading.Tasks.Task Bufsize_FlowsIntoTasksAndAwaits()
+        {
+            np.setbufsize(1024);
+            long onTask = await System.Threading.Tasks.Task.Run(() => np.getbufsize());
+            await System.Threading.Tasks.Task.Yield();
+            long resumed = np.getbufsize();
+
+            onTask.Should().Be(1024L);
+            resumed.Should().Be(1024L);
         }
 
         [TestMethod]

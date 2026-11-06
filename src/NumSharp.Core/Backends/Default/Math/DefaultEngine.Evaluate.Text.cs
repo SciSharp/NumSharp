@@ -46,9 +46,10 @@ namespace NumSharp.Backends
         /// <exception cref="ValueError">A StringDType NA a stage's rule refuses, a parse a cast stage refuses, an
         ///     <c>index</c> / <c>rindex</c> without a match, a flat StringDType reduction over several axes, or the remainder's
         ///     own checks (NumPy's texts).</exception>
-        /// <exception cref="ArgumentException">The result cannot be cast into <paramref name="out"/> under the casting rule, or
-        ///     does not broadcast into it; a non-bool <c>where=</c>; a search's <c>start</c> / <c>end</c> that cannot reach
-        ///     int64.</exception>
+        /// <exception cref="TypeError">The result cannot be cast into <paramref name="out"/> under the casting rule, or
+        ///     a search's <c>start</c> / <c>end</c> cannot reach int64.</exception>
+        /// <exception cref="ArgumentException">The result does not broadcast into <paramref name="out"/>; a non-bool
+        ///     <c>where=</c>.</exception>
         /// <exception cref="OverflowException">A StringDType repeat by a negative count or past 2^63 - 1 characters, or a parse
         ///     out of the target's range.</exception>
         /// <remarks>
@@ -152,8 +153,10 @@ namespace NumSharp.Backends
         /// <param name="out">The caller's result array, or null.</param>
         /// <param name="options">The call's resolved keywords (a text <c>out=</c> or <c>dtype=</c> among them).</param>
         /// <returns><paramref name="out"/>, or a fresh text result.</returns>
-        /// <exception cref="ArgumentException">The natural result cannot be cast into <paramref name="out"/> under the casting
-        ///     rule, or does not broadcast into it; a non-bool <c>where=</c>.</exception>
+        /// <exception cref="TypeError">The natural result cannot be cast into <paramref name="out"/> under the casting
+        ///     rule.</exception>
+        /// <exception cref="ArgumentException">The natural result does not broadcast into <paramref name="out"/>; a
+        ///     non-bool <c>where=</c>.</exception>
         /// <remarks>Compute-then-cast gives NumPy's values for every selected element; a masked-off element of
         ///     <paramref name="out"/> keeps its text (np.evaluate's masked write never reads <paramref name="out"/>).</remarks>
         private NDArray EvaluateIntoText(NDExprProgram program, NDArray[] inputs, NDArray @out, in NDEvaluateOptions options)
@@ -210,10 +213,11 @@ namespace NumSharp.Backends
         /// <param name="reduction">For a root reduction, how its result takes <c>out=</c>; <c>default</c> for an elementwise
         ///     result.</param>
         /// <returns><paramref name="out"/>, or a fresh array the caller owns.</returns>
-        /// <exception cref="ArgumentException">The cast into <paramref name="out"/> is not allowed under the casting rule
-        ///     (<c>Cannot cast ufunc 'evaluate' output from ... with casting rule ...</c>); the result does not broadcast
-        ///     into <paramref name="out"/> / <c>where=</c> or would stretch <paramref name="out"/>; a reduction's
-        ///     <paramref name="out"/> of the wrong rank; a non-bool <c>where=</c>.</exception>
+        /// <exception cref="TypeError">The cast into <paramref name="out"/> is not allowed under the casting rule
+        ///     (<c>Cannot cast ufunc 'evaluate' output from ... with casting rule ...</c>).</exception>
+        /// <exception cref="ArgumentException">The result does not broadcast into <paramref name="out"/> /
+        ///     <c>where=</c> or would stretch <paramref name="out"/>; a reduction's <paramref name="out"/> of the wrong
+        ///     rank; a non-bool <c>where=</c>.</exception>
         /// <exception cref="ValueError">A text result that does not parse into a numeric <paramref name="out"/> /
         ///     <c>dtype=</c> (NumPy's parse, possible only under <c>casting='unsafe'</c> or an explicit dtype).</exception>
         private NDArray FinishResult(NDArray natural, bool owned, NDArray @out, in NDEvaluateOptions options, NDArray[] operands,
@@ -249,7 +253,7 @@ namespace NumSharp.Backends
                     // np.evaluate's out= rule: the result's dtype must reach out's under the casting rule (by descriptor, so a
                     // text width or class decides as in NumPy: U5 → U3 is same_kind, U → S is not), checked before any write.
                     if (!DTypeCasting.CanCastTypeTo(current.dtype, @out.dtype, options.Casting))
-                        throw new ArgumentException(
+                        throw new TypeError(
                             $"Cannot cast ufunc 'evaluate' output from {current.dtype.ToString(true)} to " +
                             $"{@out.dtype.ToString(true)} with casting rule '{DTypeCasting.CastingToString(options.Casting)}'");
                     if (reduction.Ufunc is not null)

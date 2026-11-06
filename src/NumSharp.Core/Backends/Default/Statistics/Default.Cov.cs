@@ -72,7 +72,7 @@ namespace NumSharp.Backends
         /// <exception cref="RuntimeError">A malformed weight array.</exception>
         /// <exception cref="DTypePromotionError"><c>StringDType</c> variables without <paramref name="dtype"/>, or a
         ///     <c>StringDType</c> request with weights.</exception>
-        /// <exception cref="ArgumentException">An integer or bool <paramref name="dtype"/> (the in-place centring's cast
+        /// <exception cref="TypeError">An integer or bool <paramref name="dtype"/> (the in-place centring's cast
         ///     refusal).</exception>
         /// <exception cref="DivideByZeroException">Weights that sum to zero.</exception>
         /// <exception cref="OverflowException">An integer text outside an integer <paramref name="dtype"/>, or decimal
@@ -167,7 +167,7 @@ namespace NumSharp.Backends
             // dtype under the in-place operator's same_kind rule. A float or complex X keeps its dtype (a float32 / float16
             // X takes a float64 weighted mean's difference rounded back); an integer or bool X — an integer or bool dtype=
             // request — cannot take the float64 mean's difference: NumPy's UFuncTypeError ("Cannot cast ufunc 'subtract'
-            // output from dtype('float64') to dtype('int32') with casting rule 'same_kind'"), the house ArgumentException.
+            // output from dtype('float64') to dtype('int32') with casting rule 'same_kind'"), raised as TypeError (its class).
             if (Xc.typecode != X.typecode)
             {
                 Backends.DefaultEngine.ValidateOutCast(Xc.typecode, X.typecode, "subtract");

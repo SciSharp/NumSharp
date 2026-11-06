@@ -112,9 +112,10 @@ namespace NumSharp.Backends.Strings
         ///     computing call broadcasts it with the other operands.</param>
         /// <exception cref="TypeError">NumPy has no loop for the operand classes (its UFuncTypeError / TypeError text).</exception>
         /// <exception cref="ValueError">A read-only <paramref name="out"/> (reported first, as NumPy parses it first).</exception>
-        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>, a numeric <paramref name="loop"/> that a
-        ///     string input cannot reach by a same_kind cast, a computing loop's output that <paramref name="out"/> cannot
-        ///     receive, or operands that do not broadcast with <paramref name="out"/> / <paramref name="where"/>.</exception>
+        /// <exception cref="TypeError">A numeric <paramref name="loop"/> that a string input cannot reach by a
+        ///     same_kind cast, or a computing loop's output that <paramref name="out"/> cannot receive.</exception>
+        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>, or operands that do not broadcast
+        ///     with <paramref name="out"/> / <paramref name="where"/>.</exception>
         /// <exception cref="IncorrectShapeException">The two inputs of a computing call do not broadcast.</exception>
         /// <exception cref="InvalidOperationException">A call whose string loop COMPUTES reached this refusal-only guard: such
         ///     calls go through <see cref="BinaryGuard"/>, so this is a wiring error inside NumSharp, never a user's error
@@ -451,8 +452,9 @@ namespace NumSharp.Backends.Strings
         /// <param name="where">The <c>where=</c> mask, or null; a non-bool one is reported before the loop answer.</param>
         /// <exception cref="TypeError">NumPy has no loop for the operand class (its UFuncTypeError / TypeError text).</exception>
         /// <exception cref="ValueError">A read-only <paramref name="out"/>.</exception>
-        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>, or a numeric <paramref name="loop"/> the
-        ///     string input cannot reach by a same_kind cast.</exception>
+        /// <exception cref="TypeError">A numeric <paramref name="loop"/> the string input cannot reach by a same_kind
+        ///     cast.</exception>
+        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>.</exception>
         internal static void ThrowIfUnary(string ufunc, NDArray x, NPTypeCode? loop = null, NDArray @out = null,
             NDArray where = null)
         {
@@ -495,7 +497,7 @@ namespace NumSharp.Backends.Strings
                     "No loop matching the specified signature and casting was found for ufunc logical_not");
             // A numeric dtype= fixes the loop, and the input's cast to it fails first. The unary text names no index.
             if (loop is { } numeric && numeric != NPTypeCode.String && numeric != NPTypeCode.Empty)
-                return new ArgumentException(
+                return new TypeError(
                     $"Cannot cast ufunc '{ufunc}' input from {d.ToString(true)} to dtype('{numeric.AsNumpyDtypeName()}') " +
                     "with casting rule 'same_kind'");
 
@@ -1106,7 +1108,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="from">The input's descriptor.</param>
         /// <param name="loop">The requested numeric loop.</param>
         /// <returns>The exception, or null when the cast is allowed.</returns>
-        private static ArgumentException InputCastError(string ufunc, int index, DType from, NPTypeCode loop)
+        private static TypeError InputCastError(string ufunc, int index, DType from, NPTypeCode loop)
         {
             if (from.Meta is not StringDTypeMeta)
             {
@@ -1114,7 +1116,7 @@ namespace NumSharp.Backends.Strings
                 if (code == loop || NDIterCasting.CanCast(code, loop, NPY_CASTING.NPY_SAME_KIND_CASTING))
                     return null;
             }
-            return new ArgumentException(
+            return new TypeError(
                 $"Cannot cast ufunc '{ufunc}' input {index} from {from.ToString(true)} to dtype('{loop.AsNumpyDtypeName()}') " +
                 "with casting rule 'same_kind'");
         }

@@ -184,10 +184,10 @@ namespace NumSharp.Tests.Backends.Strings
             highByte.Should().Throw<UnicodeDecodeError>()
                     .WithMessage("'ascii' codec can't decode byte 0xff in position 0: ordinal not in range(128)");
             Action toBytes = () => np.add(U3(), U4(), np.zeros(new Shape(5L), "S7"));
-            toBytes.Should().Throw<ArgumentException>()
+            toBytes.Should().Throw<TypeError>()
                    .WithMessage("Cannot cast ufunc 'add' output from dtype('<U7') to dtype('S7') with casting rule 'same_kind'");
             Action toNumber = () => np.add(U3(), U4(), np.zeros(new Shape(5L)));
-            toNumber.Should().Throw<ArgumentException>()
+            toNumber.Should().Throw<TypeError>()
                     .WithMessage("Cannot cast ufunc 'add' output from dtype('<U7') to dtype('float64') with casting rule 'same_kind'");
         }
 
@@ -358,10 +358,10 @@ namespace NumSharp.Tests.Backends.Strings
             Text(np.multiply(S3()["0:3"], 3, np.zeros(new Shape(3L), "U9"))).Should().Equal("ababab", "a\0ba\0ba\0b", "");
 
             Action toBytes = () => np.multiply(U3(), 3, np.zeros(new Shape(5L), "S9"));
-            toBytes.Should().Throw<ArgumentException>()
+            toBytes.Should().Throw<TypeError>()
                    .WithMessage("Cannot cast ufunc 'multiply' output from dtype('<U9') to dtype('S9') with casting rule 'same_kind'");
             Action toNumber = () => np.multiply(U3(), 3, np.zeros(new Shape(5L)));
-            toNumber.Should().Throw<ArgumentException>()
+            toNumber.Should().Throw<TypeError>()
                     .WithMessage("Cannot cast ufunc 'multiply' output from dtype('<U32') to dtype('float64') with casting rule 'same_kind'");
         }
 

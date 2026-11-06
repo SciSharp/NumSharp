@@ -358,7 +358,8 @@ rules apply to whatever class the callback returns.
   per row; negative `N`/`M` give an empty axis.
 - `tril(m, k=0)` / `triu(m, k=0)`: always a fresh writeable C-contiguous copy, the dtype kept, applied to the last two
   axes. A 1-D input yields a 2-D result (`tril([1,2,3])` → `[[1,0,0],[1,2,0],[1,2,3]]`), and a 0-d input raises NumPy's
-  leaked `tri() missing 1 required positional argument: 'N'`. Rows are filled directly (copy the kept run, zero the rest);
+  leaked `TypeError` `tri() missing 1 required positional argument: 'N'` (parity QA-03). Rows are filled directly (copy
+  the kept run, zero the rest);
   sources whose last axis is not unit-stride use `where(tri(...), m, 0)`.
 - `fill_diagonal(a, val, wrap=False)`: in place, returns void. Values tile cyclically and truncate, they do not broadcast
   (`[1,2,3,4]` into a 6×6 gives `[1,2,3,4,1,2]`; an empty one is a no-op); `wrap` only affects tall matrices. Errors:

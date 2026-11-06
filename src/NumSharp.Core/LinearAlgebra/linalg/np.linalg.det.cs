@@ -25,7 +25,7 @@ namespace NumSharp
             /// <returns>The determinant: a 0-d array for one matrix, one value per matrix of a stack.</returns>
             /// <exception cref="LinAlgError">Fewer than two axes, or a non-square operand.</exception>
             /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
-            /// <exception cref="ArgumentException">A text operand (NumPy's gufunc input-cast refusal).</exception>
+            /// <exception cref="TypeError">A text operand (NumPy's gufunc input-cast refusal).</exception>
             /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
             // Scope: the facade keeps its scope over the call (the Linalg member reclaims the ToCommon dtype-cast temp).
             [NDScoped]
@@ -55,7 +55,7 @@ namespace NumSharp
             /// <param name="a">The square matrix, or a stack of them.</param>
             /// <exception cref="LinAlgError">Fewer than two axes, or a non-square operand.</exception>
             /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
-            /// <exception cref="ArgumentException">A text operand (NumPy's gufunc input-cast refusal).</exception>
+            /// <exception cref="TypeError">A text operand (NumPy's gufunc input-cast refusal).</exception>
             /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
             // Scope: the facade keeps its scope over the call; the (sign, logabsdet) tuple result is yielded through the
             // weaver's Returns<T1,T2> tuple egress (the Linalg member reclaims the ToCommon dtype-cast temp).

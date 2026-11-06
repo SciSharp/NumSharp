@@ -22,8 +22,10 @@ namespace NumSharp
         /// <exception cref="TypeError">An input trunc has no loop for: text (NumPy's no-loop texts), or complex (<c>ufunc
         ///     'trunc' not supported for the input types</c>).</exception>
         /// <exception cref="ValueError">A read-only <paramref name="out"/> (<c>output array is read-only</c>).</exception>
-        /// <exception cref="ArgumentException">An <paramref name="out"/> the result does not reach under same_kind
-        ///     (<c>Cannot cast ufunc 'trunc' output from ...</c>), or one it does not broadcast into.</exception>
+        /// <exception cref="TypeError">An <paramref name="out"/> the result does not reach under same_kind (<c>Cannot
+        ///     cast ufunc 'trunc' output from ...</c>).</exception>
+        /// <exception cref="ArgumentException">An <paramref name="out"/> the result does not broadcast
+        ///     into.</exception>
         /// <exception cref="NullReferenceException"><paramref name="x"/> is null.</exception>
         /// <remarks>
         ///     DefaultEngine's member is that statement over <see cref="Truncate"/>, so trunc's error texts (they name

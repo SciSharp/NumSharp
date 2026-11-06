@@ -21,54 +21,6 @@ namespace NumSharp.Tests
     public partial class OpenBugs
     {
         // ------------------------------------------------------------------
-        // QA-03 — np.tril / np.triu of a 0-d array raise the wrong exception type
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     NumPy's <c>np.tril</c> / <c>np.triu</c> of a 0-d array leak <c>tri()</c>'s CPython <c>TypeError: tri() missing 1
-        ///     required positional argument: 'N'</c>. NumSharp reproduces the text but throws <see cref="ArgumentException"/>
-        ///     (<c>NDArray.TwoDimBase.cs</c>), so a caller catching NumPy's <see cref="TypeError"/> misses it;
-        ///     <c>Indexing/np.tri.Test.cs</c> (<c>Tril_ZeroD_Throws_NumPysLeakedText</c>) asserts the current type and moves
-        ///     with the fix.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA03")]
-        public void ParityQa_TrilTriu_ZeroDim_ShouldRaiseTypeError()
-        {
-            using var five = np.array(5);
-
-            Action tril = () => np.tril(five);
-            Action triu = () => np.triu(five);
-
-            tril.Should().Throw<TypeError>().WithMessage("tri() missing 1 required positional argument: 'N'");
-            triu.Should().Throw<TypeError>().WithMessage("tri() missing 1 required positional argument: 'N'");
-        }
-
-        // ------------------------------------------------------------------
-        // QA-04 — np.around of a bool array with decimals != 0 raises NotSupportedException
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     <c>np.around(bool_array, 1)</c> is NumPy's <c>UFuncTypeError</c> (a <c>TypeError</c>): <c>Cannot cast ufunc
-        ///     'multiply' output from dtype('float64') to dtype('bool') with casting rule 'same_kind'</c> (and <c>'divide'</c>
-        ///     for a negative <c>decimals</c>). NumSharp has NumPy's text but throws <see cref="NotSupportedException"/>, so
-        ///     neither a <see cref="TypeError"/> handler nor NumSharp's own house <see cref="ArgumentException"/> for ufunc cast
-        ///     refusals catches it.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA04")]
-        public void ParityQa_Around_BoolWithDecimals_ShouldRaiseTypeError()
-        {
-            using var b = np.array(new[] { true, false });
-
-            Action up = () => np.around(b, 1);
-            Action down = () => np.around(b, -1);
-
-            up.Should().Throw<TypeError>()
-                .WithMessage("Cannot cast ufunc 'multiply' output from dtype('float64') to dtype('bool') with casting rule 'same_kind'");
-            down.Should().Throw<TypeError>()
-                .WithMessage("Cannot cast ufunc 'divide' output from dtype('float64') to dtype('bool') with casting rule 'same_kind'");
-        }
-
-        // ------------------------------------------------------------------
         // QA-08 — np.ediff1d's to_begin / to_end refusal is an ArgumentException with a parameter suffix
         // ------------------------------------------------------------------
 
@@ -223,37 +175,6 @@ namespace NumSharp.Tests
         }
 
         // ------------------------------------------------------------------
-        // QA-40 — print options flow into new threads; NumPy starts each thread at the defaults
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     NumPy 2.4.2 keeps the print options in a <c>ContextVar</c>, and a new Python thread (3.12, the oracle's) starts
-        ///     with an empty context: after <c>np.set_printoptions(precision=2)</c> — or inside <c>with np.printoptions(...)</c>
-        ///     — a worker thread prints <c>np.array([1.23456789])</c> as <c>[1.23456789]</c>, the default. NumSharp keeps them in
-        ///     an <c>AsyncLocal</c> (Backends/Printing/PrintOptions.cs), whose value .NET copies into every thread and task the
-        ///     setting thread starts, so the worker prints <c>[1.23]</c> (<c>rp5</c>: <c>new Thread</c> and <c>Task.Run</c>
-        ///     alike). A worker's own <c>set_printoptions</c> stays in the worker in both libraries, and <c>np.setbufsize</c>
-        ///     (a [ThreadStatic]) already starts each thread at its default, as NumPy does.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA40")]
-        public void ParityQa_PrintOptions_NewThread_ShouldStartAtTheDefaults()
-        {
-            string seen = null;
-            using (np.printoptions(precision: 2))
-            {
-                var worker = new System.Threading.Thread(() =>
-                {
-                    using var value = np.array(new[] { 1.23456789 });
-                    seen = value.ToString();
-                });
-                worker.Start();
-                worker.Join();
-            }
-
-            seen.Should().Be("[1.23456789]", "a new thread starts with NumPy's default print options");
-        }
-
-        // ------------------------------------------------------------------
         // QA-41 — finfo's repr and the error texts follow the current culture
         // ------------------------------------------------------------------
 
@@ -339,35 +260,6 @@ namespace NumSharp.Tests
 
             equal.Should().NotThrow().Which.Should().BeFalse();
             notEqual.Should().NotThrow().Which.Should().BeTrue();
-        }
-
-        // ------------------------------------------------------------------
-        // QA-48 — every np.fft transform allocates its result in C order; NumPy keeps the input's memory order
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     NumPy 2.4.2's <c>_raw_fft</c> (<c>numpy/fft/_pocketfft.py</c>) allocates the result with
-        ///     <c>empty_like(a, shape=..., dtype=...)</c>, whose default <c>order='K'</c> keeps the input's memory order: an
-        ///     F-ordered input gives an F-ordered spectrum (<c>np.fft.fft(F, axis=1).strides == (16, 64)</c>), a permuted 3-D input
-        ///     a spectrum permuted the same way, and the N-D forms keep it through every 1-D pass. NumSharp's
-        ///     <c>PocketFFTDriver.Execute</c> allocates <c>TensorEngine.NewArray(outDtype, outShape, false)</c>, which is always C
-        ///     order, so all 14 non-C layouts of the <c>p131</c> sweep (fft / ifft / rfft / irfft / hfft / ihfft / fft2 / rfft2 /
-        ///     fftn, F, transposed and permuted inputs, any axis) come back C (<c>(96, 16)</c>). The values are identical; code
-        ///     that reads the flags or strides, or passes the buffer on in memory order, sees a different array.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA48")]
-        public void ParityQa_FftResult_FOrderInput_ShouldKeepTheInputsMemoryOrder()
-        {
-            using var c = np.arange(24.0).reshape(4, 6);
-            using var f = np.asfortranarray(c);
-
-            using var spectrum = np.fft.fft(f, axis: 1);
-            using var half = np.fft.rfft(f, axis: 0);
-
-            // NumPy: complex128 (4, 6) over an F input is (16, 64); rfft along axis 0 gives (3, 6) with strides (16, 48)
-            spectrum.strides.Should().Equal(new long[] { 16, 64 }, "empty_like(a, ...) keeps an F input's order");
-            spectrum.flags.f_contiguous.Should().BeTrue();
-            half.strides.Should().Equal(new long[] { 16, 48 }, "the shorter axis keeps the same K order");
         }
     }
 }

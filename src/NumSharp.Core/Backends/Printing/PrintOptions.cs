@@ -1,5 +1,5 @@
 using System;
-using System.Threading;
+using NumSharp.Utilities;
 
 namespace NumSharp.Backends.Printing
 {
@@ -48,14 +48,24 @@ namespace NumSharp.Backends.Printing
 
         internal PrintOptions Clone() => (PrintOptions)MemberwiseClone();
 
-        // NumPy stores print options in a ContextVar (per-thread/async-local). We mirror that
-        // with AsyncLocal so set_printoptions has the same scoping semantics.
-        private static readonly AsyncLocal<PrintOptions> _current = new AsyncLocal<PrintOptions>();
+        /// <summary>
+        ///     The options of the current flow: NumPy keeps them in a <c>ContextVar</c> (<c>format_options</c>), and
+        ///     <see cref="NDContextVar{T}"/> gives them its Python 3.12 semantics (parity QA-40) — an <c>await</c>
+        ///     continuation, <c>Task.Run</c> and the thread pool inherit the caller's options, a dedicated thread starts at
+        ///     the defaults until it sets its own.
+        /// </summary>
+        private static readonly NDContextVar<PrintOptions> _current = new NDContextVar<PrintOptions>();
 
+        /// <summary>
+        ///     The options in effect for the caller. Read-only by convention: every writer (<c>np.set_printoptions</c>,
+        ///     <c>np.printoptions</c>) clones, changes the clone and sets it back, so an instance read here is never mutated.
+        /// </summary>
+        /// <value>The set options, or a fresh instance of the defaults when none apply to the caller (allocated per read,
+        ///     so no shared default instance can be changed by mistake; printing reads it a few times per call).</value>
         internal static PrintOptions Current
         {
-            get => _current.Value ??= new PrintOptions();
-            set => _current.Value = value;
+            get => _current.TryGet(out var options) ? options : new PrintOptions();
+            set => _current.Set(value);
         }
 
         /// <summary>

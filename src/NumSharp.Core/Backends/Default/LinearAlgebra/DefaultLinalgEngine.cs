@@ -154,10 +154,9 @@ namespace NumSharp.Backends
         /// <param name="gufunc">The <c>_umath_linalg</c> gufunc NumPy calls (<c>"inv"</c>, <c>"cholesky_lo"</c>,
         ///     <c>"svd_f"</c>, <c>"solve1"</c>, ...).</param>
         /// <param name="operands">The gufunc's inputs, in its order; nothing happens when none holds strings.</param>
-        /// <exception cref="ArgumentException">The first string operand: <c>Cannot cast ufunc 'inv' input from
+        /// <exception cref="TypeError">The first string operand: <c>Cannot cast ufunc 'inv' input from
         ///     dtype('&lt;U2') to dtype('float64') with casting rule 'same_kind'</c> (a multi-input gufunc names the
-        ///     input: <c>input 1</c>). NumPy raises a UFuncTypeError; the house type of a ufunc input-cast refusal is
-        ///     <see cref="ArgumentException"/>.</exception>
+        ///     input: <c>input 1</c>). NumPy's UFuncTypeError, a TypeError.</exception>
         /// <remarks>
         ///     Call it right after <see cref="CommonType"/> (whose "unsupported in linalg" refusal of float16 / decimal /
         ///     char comes first, as NumPy's <c>_commonType</c> runs before the gufunc) and before any core-dimension
@@ -182,7 +181,7 @@ namespace NumSharp.Backends
             // _commonType: any complex operand makes the loop complex128, a string or any other operand float64.
             string target = complex ? "complex128" : "float64";
             string input = operands.Length > 1 ? $"input {first}" : "input";
-            throw new ArgumentException(
+            throw new TypeError(
                 $"Cannot cast ufunc '{gufunc}' {input} from {operands[first].dtype.ToString(true)} to dtype('{target}') " +
                 "with casting rule 'same_kind'");
         }

@@ -80,12 +80,20 @@ has no operand to choose another) and keep the cephes `BesselI0` port behind kai
   1` → `ValueError("Invalid number of FFT data points ({n}) specified.")`; `n` truncates/zero-pads; `rfft` output
   `n//2+1`; `irfft`/`hfft` default `n = 2*(m-1)`; the N-D `s`/`axes` cook (`s` without `axes` → the last `len(s)` axes,
   the `s[i] == -1` sentinel, `len(s) != len(axes)` → `ValueError("Shape and axes have different lengths.")`).
+- Result layout (parity QA-48): `_raw_fft` allocates each 1-D pass's output with `empty_like(a, shape=..., dtype=...)`,
+  order 'K', and `PocketFFTDriver.Execute` lays it out with `Shape.NewLikeLayout(a.Shape, 'K', outDims)` (NumPy's
+  `PyArray_NewLikeArrayWithShape`): an F input gives an F spectrum (`fft(F (4,6), axis=1)` strides (16, 64)), a permuted
+  input a spectrum permuted alike, a broadcast input an F one (its stride-0 axis ranks innermost), a C input C, and the
+  N-D forms keep the order through every pass. The driver writes through each lane's output strides and the float32
+  rounding pass walks any layout, so the layout costs no copy; the values do not depend on it. Gate:
+  `Fourier/np.fft.ResultLayout.Test.cs`.
 - Errors in NumPy's line order: the bad-`norm` message has no space after the first comma on a FORWARD transform but a
   space on the inverse/`hfft`/`ihfft` (`_swap_direction`'s KeyError path); an out-of-range axis is `IndexError("tuple
   index out of range")` when `n` is omitted (the `a.shape[axis]` subscript fires first) but `AxisError` when `n` is
   given; `rfft`/`ihfft` of a COMPLEX input is `TypeError("ufunc 'rfft_n_even'/'rfft_n_odd' not supported …")` (the ufunc
   chosen by input parity, raised only after n/norm/axis/out validate); a bad `out` is `ValueError("output array has wrong
-  shape.")`. `out=` accepts a same_kind cast from the loop dtype; the N-D wrappers accept `out` for signature parity but
+  shape.")`. `out=` accepts a same_kind cast from the loop dtype (a refused one is `TypeError` with NumPy's
+  `Cannot cast ufunc 'fft' output from …` text); the N-D wrappers accept `out` for signature parity but
   do not thread it (NumPy passes `out=None`).
 - Helpers: `fftfreq`/`rfftfreq` are float64 generators with NumPy's check order (divide by zero first, then `device`,
   then `fftfreq`'s negative length; a non-integer n → `ValueError("n should be an integer")`); `fftshift`/`ifftshift` are

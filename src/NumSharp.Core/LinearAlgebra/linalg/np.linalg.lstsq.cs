@@ -31,7 +31,7 @@ namespace NumSharp
             /// <exception cref="LinAlgError">An operand that is not two-dimensional, or <paramref name="b"/>'s rows differ
             ///     from <paramref name="a"/>'s.</exception>
             /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
-            /// <exception cref="ArgumentException">A text operand (NumPy's gufunc input-cast refusal).</exception>
+            /// <exception cref="TypeError">A text operand (NumPy's gufunc input-cast refusal).</exception>
             /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
             [NDScoped] // the class boundary's temporaries; the Linalg member scopes the computation's own
             public static (NDArray Solution, NDArray Residuals, NDArray Rank, NDArray SingularValues) lstsq(

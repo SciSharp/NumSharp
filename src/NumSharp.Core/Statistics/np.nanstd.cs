@@ -22,7 +22,7 @@ namespace NumSharp
         /// "If a is inexact, then dtype must be inexact".</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is outside <paramref name="a"/>'s dimensions (a 0-d array
         /// included).</exception>
-        /// <exception cref="System.ArgumentException">An integer or bool input with an integer <paramref name="dtype"/>
+        /// <exception cref="TypeError">An integer or bool input with an integer <paramref name="dtype"/>
         /// and an array result: NumPy's "Cannot cast ufunc 'sqrt' output ..." error, as np.std raises it.</exception>
         /// <remarks>
         ///     <para>

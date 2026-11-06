@@ -207,7 +207,7 @@ namespace NumSharp.Backends
         /// <param name="outType">The caller <c>out=</c> dtype the write must cast TO.</param>
         /// <param name="ufuncName">The ufunc name for the message ("evaluate" for the fused path).</param>
         /// <param name="casting">The cast rule to enforce; defaults to NumPy's ufunc <c>same_kind</c>.</param>
-        /// <exception cref="ArgumentException"><paramref name="resultType"/> is not castable to <paramref name="outType"/> under <paramref name="casting"/>.</exception>
+        /// <exception cref="TypeError"><paramref name="resultType"/> is not castable to <paramref name="outType"/> under <paramref name="casting"/>.</exception>
         /// <remarks>Internal (not private) because a composition that writes a ufunc result back into an operand the way
         ///     NumPy's in-place operator does (<c>np.cov</c>'s <c>X -= avg[:, None]</c>) refuses with the same rule and
         ///     text.</remarks>
@@ -218,7 +218,7 @@ namespace NumSharp.Backends
                 return;
             if (NDIterCasting.CanCast(resultType, outType, casting))
                 return;
-            throw new ArgumentException(
+            throw new TypeError(
                 $"Cannot cast ufunc '{ufuncName}' output from " +
                 $"dtype('{resultType.AsNumpyDtypeName()}') to " +
                 $"dtype('{outType.AsNumpyDtypeName()}') with casting rule '{DTypeCasting.CastingToString(casting)}'");
@@ -239,7 +239,7 @@ namespace NumSharp.Backends
                 return;
             if (NDIterCasting.CanCast(inputType, loopType, NPY_CASTING.NPY_SAME_KIND_CASTING))
                 return;
-            throw new ArgumentException(
+            throw new TypeError(
                 $"Cannot cast ufunc '{ufuncName}' input from " +
                 $"dtype('{inputType.AsNumpyDtypeName()}') to " +
                 $"dtype('{loopType.AsNumpyDtypeName()}') with casting rule 'same_kind'");
@@ -282,12 +282,12 @@ namespace NumSharp.Backends
         private static void ValidateBinaryInputCasts(NPTypeCode lhsType, NPTypeCode rhsType, NPTypeCode loopType, string ufuncName)
         {
             if (lhsType != loopType && !NDIterCasting.CanCast(lhsType, loopType, NPY_CASTING.NPY_SAME_KIND_CASTING))
-                throw new ArgumentException(
+                throw new TypeError(
                     $"Cannot cast ufunc '{ufuncName}' input 0 from " +
                     $"dtype('{lhsType.AsNumpyDtypeName()}') to " +
                     $"dtype('{loopType.AsNumpyDtypeName()}') with casting rule 'same_kind'");
             if (rhsType != loopType && !NDIterCasting.CanCast(rhsType, loopType, NPY_CASTING.NPY_SAME_KIND_CASTING))
-                throw new ArgumentException(
+                throw new TypeError(
                     $"Cannot cast ufunc '{ufuncName}' input 1 from " +
                     $"dtype('{rhsType.AsNumpyDtypeName()}') to " +
                     $"dtype('{loopType.AsNumpyDtypeName()}') with casting rule 'same_kind'");
@@ -471,9 +471,10 @@ namespace NumSharp.Backends
         /// <param name="compute">Computes the loop result without <c>out=</c>, under the given mask (a fresh array whose
         ///     masked-off slots are left uninitialized — the masked copy never reads them).</param>
         /// <returns><paramref name="out"/> itself.</returns>
-        /// <exception cref="ArgumentException">The loop dtype does not cast to <paramref name="out"/> under same_kind
-        ///     (NumPy's <c>Cannot cast ufunc 'add' output from dtype('float64') to dtype('&lt;U5') …</c>), or the operands do not
-        ///     broadcast into <paramref name="out"/> (NumPy's texts).</exception>
+        /// <exception cref="TypeError">The loop dtype does not cast to <paramref name="out"/> under same_kind (NumPy's
+        ///     <c>Cannot cast ufunc 'add' output from dtype('float64') to dtype('&lt;U5') …</c>).</exception>
+        /// <exception cref="ArgumentException">The operands do not broadcast into <paramref name="out"/> (NumPy's
+        ///     texts).</exception>
         /// <exception cref="ValueError">With <paramref name="where"/>: an element of <paramref name="out"/> that does not
         ///     parse into the loop dtype (see the remarks).</exception>
         /// <exception cref="OverflowException">With <paramref name="where"/>: an integer text of <paramref name="out"/> outside
@@ -507,13 +508,13 @@ namespace NumSharp.Backends
         ///     the outputs of a multi-output one (NumPy numbers them by operand position).</param>
         /// <param name="loop">The loop's output dtype.</param>
         /// <param name="out">The text output.</param>
-        /// <exception cref="ArgumentException">The cast is not same_kind (NumPy's UFuncTypeError text; every number → text
+        /// <exception cref="TypeError">The cast is not same_kind (NumPy's UFuncTypeError text; every number → text
         ///     cast NumPy has is same_kind, so this guards the contract rather than a reachable case).</exception>
         internal static void ThrowIfTextOutCastFails(string ufunc, string outputLabel, NPTypeCode loop, NDArray @out)
         {
             DType loopDescr = loop;
             if (!DTypeCasting.CanCastTypeTo(loopDescr, @out.dtype, NPY_CASTING.NPY_SAME_KIND_CASTING))
-                throw new ArgumentException(
+                throw new TypeError(
                     $"Cannot cast ufunc '{ufunc}' {outputLabel} from {loopDescr.ToString(true)} to {@out.dtype.ToString(true)} " +
                     "with casting rule 'same_kind'");
         }
@@ -548,7 +549,7 @@ namespace NumSharp.Backends
         /// <param name="position">The output's position (1-based, after the inputs: NumPy's operand index).</param>
         /// <param name="loop">The loop's dtype for this output.</param>
         /// <param name="out">The provided output.</param>
-        /// <exception cref="ArgumentException">The cast is not same_kind (NumPy's UFuncTypeError text).</exception>
+        /// <exception cref="TypeError">The cast is not same_kind (NumPy's UFuncTypeError text).</exception>
         private static void ValidateNumberedOutCast(string ufunc, int position, NPTypeCode loop, NDArray @out)
         {
             if (@out.typecode == NPTypeCode.String)
@@ -558,7 +559,7 @@ namespace NumSharp.Backends
             }
             if (loop == @out.typecode || NDIterCasting.CanCast(loop, @out.typecode, NPY_CASTING.NPY_SAME_KIND_CASTING))
                 return;
-            throw new ArgumentException(
+            throw new TypeError(
                 $"Cannot cast ufunc '{ufunc}' output {position} from dtype('{loop.AsNumpyDtypeName()}') to " +
                 $"dtype('{@out.typecode.AsNumpyDtypeName()}') with casting rule 'same_kind'");
         }
@@ -589,8 +590,10 @@ namespace NumSharp.Backends
         /// <returns><paramref name="out"/> itself, or the fresh result.</returns>
         /// <exception cref="INumSharpException">A read-only <paramref name="out"/>: NumPy's ValueError "output array is
         ///     read-only", raised first (<see cref="NumSharpException.ThrowIfNotWriteable"/>).</exception>
-        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>, a loop dtype <paramref name="out"/> cannot
-        ///     hold under same_kind, or operands that do not broadcast into <paramref name="out"/> (NumPy's texts).</exception>
+        /// <exception cref="TypeError">A loop dtype <paramref name="out"/> cannot hold under same_kind (NumPy's
+        ///     UFuncTypeError text).</exception>
+        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>, or operands that do not broadcast
+        ///     into <paramref name="out"/> (NumPy's texts).</exception>
         /// <exception cref="ValueError">A text <paramref name="out"/> under <paramref name="where"/> whose current text does
         ///     not parse into the loop dtype.</exception>
         private unsafe NDArray ExecuteBinaryUfuncInto(
@@ -772,8 +775,10 @@ namespace NumSharp.Backends
         /// <returns><paramref name="out"/> itself, or the fresh result.</returns>
         /// <exception cref="INumSharpException">A read-only <paramref name="out"/>: NumPy's ValueError "output array is
         ///     read-only", raised first (<see cref="NumSharpException.ThrowIfNotWriteable"/>).</exception>
-        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>, a loop dtype <paramref name="out"/> cannot
-        ///     hold under same_kind, or operands that do not broadcast into <paramref name="out"/> (NumPy's texts).</exception>
+        /// <exception cref="TypeError">A loop dtype <paramref name="out"/> cannot hold under same_kind (NumPy's
+        ///     UFuncTypeError text).</exception>
+        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>, or operands that do not broadcast
+        ///     into <paramref name="out"/> (NumPy's texts).</exception>
         /// <exception cref="ValueError">A text <paramref name="out"/> under <paramref name="where"/> whose current text does
         ///     not parse into the loop dtype.</exception>
         private unsafe NDArray ExecuteComparisonUfuncInto(
@@ -943,8 +948,10 @@ namespace NumSharp.Backends
         /// <returns><paramref name="out"/> itself, or the fresh result.</returns>
         /// <exception cref="INumSharpException">A read-only <paramref name="out"/>: NumPy's ValueError "output array is
         ///     read-only", raised first (<see cref="NumSharpException.ThrowIfNotWriteable"/>).</exception>
-        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>, a loop dtype <paramref name="out"/> cannot
-        ///     hold under same_kind, or operands that do not broadcast into <paramref name="out"/> (NumPy's texts).</exception>
+        /// <exception cref="TypeError">A loop dtype <paramref name="out"/> cannot hold under same_kind (NumPy's
+        ///     UFuncTypeError text).</exception>
+        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>, or operands that do not broadcast
+        ///     into <paramref name="out"/> (NumPy's texts).</exception>
         /// <exception cref="ValueError">A text <paramref name="out"/> under <paramref name="where"/> whose current text does
         ///     not parse into the loop dtype.</exception>
         private unsafe NDArray ExecuteUnaryUfuncInto(

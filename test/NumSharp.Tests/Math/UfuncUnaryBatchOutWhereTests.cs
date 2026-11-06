@@ -122,27 +122,27 @@ namespace NumSharp.Tests.Math
             var f = F8();
             var i4out = np.empty(new Shape(4), np.int32);
 
-            var exFloor = Assert.ThrowsException<ArgumentException>(() => np.floor(f, i4out));
+            var exFloor = Assert.ThrowsException<TypeError>(() => np.floor(f, i4out));
             Assert.AreEqual(
                 "Cannot cast ufunc 'floor' output from dtype('float64') to dtype('int32') " +
                 "with casting rule 'same_kind'", exFloor.Message);
 
-            var exTrunc = Assert.ThrowsException<ArgumentException>(() => np.trunc(f, i4out));
+            var exTrunc = Assert.ThrowsException<TypeError>(() => np.trunc(f, i4out));
             StringAssert.Contains(exTrunc.Message, "ufunc 'trunc'");
 
-            var exRint = Assert.ThrowsException<ArgumentException>(() => np.round_(f, @out: i4out));
+            var exRint = Assert.ThrowsException<TypeError>(() => np.round_(f, @out: i4out));
             StringAssert.Contains(exRint.Message, "ufunc 'rint'");
 
-            var exSinh = Assert.ThrowsException<ArgumentException>(() => np.sinh(f, i4out));
+            var exSinh = Assert.ThrowsException<TypeError>(() => np.sinh(f, i4out));
             StringAssert.Contains(exSinh.Message, "ufunc 'sinh'");
 
-            var exATan = Assert.ThrowsException<ArgumentException>(() => np.arctan(f, i4out));
+            var exATan = Assert.ThrowsException<TypeError>(() => np.arctan(f, i4out));
             StringAssert.Contains(exATan.Message, "ufunc 'arctan'");
 
-            var exSign = Assert.ThrowsException<ArgumentException>(() => np.sign(f, i4out));
+            var exSign = Assert.ThrowsException<TypeError>(() => np.sign(f, i4out));
             StringAssert.Contains(exSign.Message, "ufunc 'sign'");
 
-            var exAt2 = Assert.ThrowsException<ArgumentException>(() => np.arctan2(f, f, i4out));
+            var exAt2 = Assert.ThrowsException<TypeError>(() => np.arctan2(f, f, i4out));
             Assert.AreEqual(
                 "Cannot cast ufunc 'arctan2' output from dtype('float64') to dtype('int32') " +
                 "with casting rule 'same_kind'", exAt2.Message);
@@ -184,23 +184,23 @@ namespace NumSharp.Tests.Math
         public void Dtype_InputCastErrors_Verbatim()
         {
             // NumPy: the INPUT must reach the dtype-selected loop via same_kind.
-            var exFloor = Assert.ThrowsException<ArgumentException>(() =>
+            var exFloor = Assert.ThrowsException<TypeError>(() =>
                 np.floor(F8(), dtype: NPTypeCode.Int32));
             Assert.AreEqual(
                 "Cannot cast ufunc 'floor' input from dtype('float64') to dtype('int32') " +
                 "with casting rule 'same_kind'", exFloor.Message);
 
-            var exU = Assert.ThrowsException<ArgumentException>(() =>
+            var exU = Assert.ThrowsException<TypeError>(() =>
                 np.floor(I4(), dtype: NPTypeCode.UInt32));
             Assert.AreEqual(
                 "Cannot cast ufunc 'floor' input from dtype('int32') to dtype('uint32') " +
                 "with casting rule 'same_kind'", exU.Message);
 
-            var exSign = Assert.ThrowsException<ArgumentException>(() =>
+            var exSign = Assert.ThrowsException<TypeError>(() =>
                 np.sign(F8(), dtype: NPTypeCode.Int32));
             StringAssert.Contains(exSign.Message, "ufunc 'sign' input");
 
-            var exInv = Assert.ThrowsException<ArgumentException>(() =>
+            var exInv = Assert.ThrowsException<TypeError>(() =>
                 np.invert(F8(), dtype: NPTypeCode.Int32));
             StringAssert.Contains(exInv.Message, "ufunc 'invert' input");
         }
@@ -387,7 +387,7 @@ namespace NumSharp.Tests.Math
 
             // decimals==0 -> the rint ufunc. (np.round's 2nd positional is
             // decimals per NumPy — out rides the 3rd slot or the name.)
-            var exRint = Assert.ThrowsException<ArgumentException>(() =>
+            var exRint = Assert.ThrowsException<TypeError>(() =>
                 np.round_(x, @out: np.empty(new Shape(4), np.int32)));
             Assert.AreEqual(
                 "Cannot cast ufunc 'rint' output from dtype('float64') to dtype('int32') " +
@@ -395,7 +395,7 @@ namespace NumSharp.Tests.Math
 
             // decimals!=0 is NumPy's multiply→rint→divide composition: the cast
             // error names ufunc 'multiply' (probed).
-            var exMul = Assert.ThrowsException<ArgumentException>(() =>
+            var exMul = Assert.ThrowsException<TypeError>(() =>
                 np.round_(x, 1, np.empty(new Shape(4), np.int32)));
             Assert.AreEqual(
                 "Cannot cast ufunc 'multiply' output from dtype('float64') to dtype('int32') " +

@@ -76,7 +76,11 @@ namespace NumSharp
         ///     (<see cref="NDExpr.Sum(NDExpr)"/> / Prod / Min / Max / Mean)
         ///     return a 0-d scalar array.
         /// </returns>
-        /// <exception cref="ArgumentException">Both <paramref name="dtype"/> and <paramref name="out"/> were given; <paramref name="out"/> is not reachable from the result dtype under <paramref name="casting"/>; <paramref name="where"/> is not a boolean array (NumPy's verbatim "Cannot cast … to dtype('bool') according to the rule 'safe'"); or <paramref name="operands"/> is empty.</exception>
+        /// <exception cref="TypeError"><paramref name="out"/> is not reachable from the result dtype under
+        ///     <paramref name="casting"/> (NumPy's UFuncTypeError text).</exception>
+        /// <exception cref="ArgumentException">Both <paramref name="dtype"/> and <paramref name="out"/> were given;
+        ///     <paramref name="where"/> is not a boolean array (NumPy's verbatim "Cannot cast … to dtype('bool')
+        ///     according to the rule 'safe'"); or <paramref name="operands"/> is empty.</exception>
         /// <exception cref="ValueError">A read-only <paramref name="out"/>; <paramref name="casting"/> is not a legal rule, or <paramref name="order"/> is not one of 'C'/'F'/'A'/'K'.</exception>
         /// <exception cref="StringComputationNotSupportedException">A node takes a text operand where NumPy's answer is not a number or a bool — a text result (concatenation, a <c>Where</c> with text branches, a bare text leaf), a reduction of text other than <c>Any</c> / <c>All</c> / <c>CountNonzero</c>, an arithmetic or math node (the message names it); raised when the expression's program is built, before any text is read. The comparisons, the truth readers, <c>IsNaN</c>, <c>Cast</c> to a number and the numpy.strings factories compute on text.</exception>
         /// <exception cref="TypeError">A text node NumPy refuses (a comparison of <c>S</c> with <c>U</c> or of text with a number, a numpy.strings function over the wrong class, <c>IsNaN</c> of <c>S</c> / <c>U</c>), with NumPy's <c>UFuncTypeError</c> text.</exception>

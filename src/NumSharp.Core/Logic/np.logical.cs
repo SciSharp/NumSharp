@@ -38,9 +38,9 @@ namespace NumSharp
         ///     string loop refuses.</exception>
         /// <exception cref="SystemError">A <c>U</c> operand holding a unit above U+10FFFF (NumPy's bool cast of the
         ///     text).</exception>
-        /// <exception cref="System.ArgumentException">A <paramref name="where"/> that is not bool, an
-        ///     <paramref name="out"/> the bool result cannot be cast into, or a mask or <paramref name="out"/> that does
-        ///     not broadcast with the operands.</exception>
+        /// <exception cref="TypeError">An <paramref name="out"/> the bool result cannot be cast into.</exception>
+        /// <exception cref="System.ArgumentException">A <paramref name="where"/> that is not bool, or a mask or
+        ///     <paramref name="out"/> that does not broadcast with the operands.</exception>
         /// <exception cref="IncorrectShapeException">Operands that do not broadcast together.</exception>
         public static NDArray logical_and(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
         {
@@ -79,9 +79,9 @@ namespace NumSharp
         /// <exception cref="TypeError">A detailed or non-legacy <paramref name="dtype"/> descriptor, or a text call NumPy's
         ///     string loop refuses.</exception>
         /// <exception cref="SystemError">A <c>U</c> operand holding a unit above U+10FFFF.</exception>
-        /// <exception cref="System.ArgumentException">A <paramref name="where"/> that is not bool, an
-        ///     <paramref name="out"/> the bool result cannot be cast into, or a mask or <paramref name="out"/> that does
-        ///     not broadcast with the operands.</exception>
+        /// <exception cref="TypeError">An <paramref name="out"/> the bool result cannot be cast into.</exception>
+        /// <exception cref="System.ArgumentException">A <paramref name="where"/> that is not bool, or a mask or
+        ///     <paramref name="out"/> that does not broadcast with the operands.</exception>
         /// <exception cref="IncorrectShapeException">Operands that do not broadcast together.</exception>
         public static NDArray logical_or(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
         {
@@ -120,9 +120,9 @@ namespace NumSharp
         /// <exception cref="TypeError">A detailed or non-legacy <paramref name="dtype"/> descriptor, or a text call NumPy's
         ///     string loop refuses.</exception>
         /// <exception cref="SystemError">A <c>U</c> operand holding a unit above U+10FFFF.</exception>
-        /// <exception cref="System.ArgumentException">A <paramref name="where"/> that is not bool, an
-        ///     <paramref name="out"/> the bool result cannot be cast into, or a mask or <paramref name="out"/> that does
-        ///     not broadcast with the operands.</exception>
+        /// <exception cref="TypeError">An <paramref name="out"/> the bool result cannot be cast into.</exception>
+        /// <exception cref="System.ArgumentException">A <paramref name="where"/> that is not bool, or a mask or
+        ///     <paramref name="out"/> that does not broadcast with the operands.</exception>
         /// <exception cref="IncorrectShapeException">Operands that do not broadcast together.</exception>
         public static NDArray logical_xor(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
         {
@@ -152,10 +152,10 @@ namespace NumSharp
         /// <exception cref="IncorrectTypeException">A non-bool <paramref name="dtype"/> (NumPy's no-loop text).</exception>
         /// <exception cref="TypeError">A text operand (no string loop in NumPy), or a detailed or non-legacy
         ///     <paramref name="dtype"/> descriptor.</exception>
-        /// <exception cref="System.ArgumentException">A <paramref name="where"/> that is not bool, an
-        ///     <paramref name="out"/> the bool result cannot be cast into, a fixed-width text operand under
-        ///     <c>dtype=bool</c> (NumPy's input-cast refusal), or a mask or <paramref name="out"/> that does not broadcast
-        ///     with the operand.</exception>
+        /// <exception cref="TypeError">An <paramref name="out"/> the bool result cannot be cast into, or a fixed-width
+        ///     text operand under <c>dtype=bool</c> (NumPy's input-cast refusal).</exception>
+        /// <exception cref="System.ArgumentException">A <paramref name="where"/> that is not bool, or a mask or
+        ///     <paramref name="out"/> that does not broadcast with the operand.</exception>
         public static NDArray logical_not(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)

@@ -64,8 +64,9 @@ namespace NumSharp.Backends.Iteration
         internal override NDArray Execute(DefaultEngine engine, NDArray[] args) => engine.ExecuteBinaryOp(args[0], args[1], Op);
 
         /// <inheritdoc/>
-        /// <exception cref="ArgumentException">The loop's text result cannot be cast into <paramref name="out"/> under
-        ///     same_kind (NumPy's ufunc output-cast text), or the operands do not broadcast into it.</exception>
+        /// <exception cref="TypeError">The loop's text result cannot be cast into <paramref name="out"/> under
+        ///     same_kind (NumPy's ufunc output-cast text).</exception>
+        /// <exception cref="ArgumentException">The operands do not broadcast into <paramref name="out"/>.</exception>
         internal override NDArray ExecuteInto(DefaultEngine engine, NDArray[] args, NDArray @out, NDArray where)
             => engine.ExecuteBinaryOp(args[0], args[1], Op, @out, where);
     }
@@ -104,8 +105,9 @@ namespace NumSharp.Backends.Iteration
             => engine.ExecuteBinaryOp(args[0], args[1], IsMin ? BinaryOp.Minimum : BinaryOp.Maximum);
 
         /// <inheritdoc/>
-        /// <exception cref="ArgumentException">The result cannot be cast into <paramref name="out"/> under same_kind, or the
-        ///     operands do not broadcast into it.</exception>
+        /// <exception cref="TypeError">The result cannot be cast into <paramref name="out"/> under
+        ///     same_kind.</exception>
+        /// <exception cref="ArgumentException">The operands do not broadcast into <paramref name="out"/>.</exception>
         internal override NDArray ExecuteInto(DefaultEngine engine, NDArray[] args, NDArray @out, NDArray where)
             => engine.ExecuteBinaryOp(args[0], args[1], IsMin ? BinaryOp.Minimum : BinaryOp.Maximum, @out, where);
     }

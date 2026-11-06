@@ -294,8 +294,8 @@ namespace NumSharp.Backends.Strings
         ///     necessary ...</c>, an addition result too long, two incompatible NA objects), and the equivalence check
         ///     (<c>the resolved dtypes are not compatible with add.reduce. Resolved (dtype('&lt;U6'), dtype('&lt;U1'),
         ///     dtype('&lt;U7'))</c>).</exception>
-        /// <exception cref="ArgumentException">An operand cannot be cast to its loop descriptor at all (NumPy's
-        ///     <c>Cannot cast ufunc ... with casting rule 'unsafe'</c>; the house type of that UFuncTypeError).</exception>
+        /// <exception cref="TypeError">An operand cannot be cast to its loop descriptor at all (NumPy's UFuncTypeError
+        ///     <c>Cannot cast ufunc ... with casting rule 'unsafe'</c>).</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="ufunc"/> is neither add nor multiply.</exception>
         internal static ReduceLikeResolution Resolve(string ufunc, bool accumulate, DType arr, DType @out, DTypeMeta requested)
         {
@@ -726,7 +726,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="typeTup">The type tuple, or null.</param>
         /// <returns>The three descriptors.</returns>
         /// <exception cref="TypeError">No loop for a flexible operand, or the default resolver's refusal.</exception>
-        /// <exception cref="ArgumentException">An operand cannot be cast to the loop type at all.</exception>
+        /// <exception cref="TypeError">An operand cannot be cast to the loop type at all.</exception>
         private static DType[] SimpleUniformOperationTypeResolver(string ufunc, DType[] ops, DType[] typeTup)
         {
             if (IsCustomOrObject(ops[0]) || IsCustomOrObject(ops[1]))
@@ -837,7 +837,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="casting">The rule of the final check (unsafe).</param>
         /// <returns>The loop's descriptors.</returns>
         /// <exception cref="TypeError"><c>No loop matching the specified signature and casting was found for ufunc add</c>.</exception>
-        /// <exception cref="ArgumentException">An operand cannot be cast to the found loop at all.</exception>
+        /// <exception cref="TypeError">An operand cannot be cast to the found loop at all.</exception>
         private static DType[] TypeTupleTypeResolver(string ufunc, DType[] ops, DType[] typeTup, NPY_CASTING inputCasting, NPY_CASTING casting)
         {
             var specified = new int[3];
@@ -872,7 +872,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="casting">The output rule and the final check's.</param>
         /// <param name="specified">The fixed type numbers, <see cref="NPY_NOTYPE"/> for the free ones.</param>
         /// <returns>The loop's descriptors, or null when no loop fits.</returns>
-        /// <exception cref="ArgumentException">An operand cannot be cast to the found loop at all.</exception>
+        /// <exception cref="TypeError">An operand cannot be cast to the found loop at all.</exception>
         private static DType[] TypeTupleTypeResolverCore(string ufunc, DType[] ops, NPY_CASTING inputCasting, NPY_CASTING casting,
             int[] specified)
         {
@@ -978,18 +978,18 @@ namespace NumSharp.Backends.Strings
         /// <param name="ops">The operands' descriptors.</param>
         /// <param name="descrs">The loop's descriptors.</param>
         /// <param name="casting">The rule.</param>
-        /// <exception cref="ArgumentException">NumPy's UFuncTypeError texts (<c>Cannot cast ufunc 'add' input 0 from ... to
+        /// <exception cref="TypeError">NumPy's UFuncTypeError texts (<c>Cannot cast ufunc 'add' input 0 from ... to
         ///     ... with casting rule 'unsafe'</c>, <c>Cannot cast ufunc 'add' output from ... to ... with casting rule
-        ///     'unsafe'</c>), in the house type of an input-cast refusal.</exception>
+        ///     'unsafe'</c>), raised as TypeError, their class.</exception>
         private static void ValidateCasting(string ufunc, DType[] ops, DType[] descrs, NPY_CASTING casting)
         {
             string rule = DTypeCasting.CastingToString(casting);
             for (int i = 0; i < 2; i++)
                 if (!DTypeCasting.CanCastTypeTo(ops[i], descrs[i], casting))
-                    throw new ArgumentException(
+                    throw new TypeError(
                         $"Cannot cast ufunc '{ufunc}' input {i} from {ops[i].ToString(true)} to {descrs[i].ToString(true)} with casting rule '{rule}'");
             if (ops[2] is not null && !DTypeCasting.CanCastTypeTo(descrs[2], ops[2], casting))
-                throw new ArgumentException(
+                throw new TypeError(
                     $"Cannot cast ufunc '{ufunc}' output from {descrs[2].ToString(true)} to {ops[2].ToString(true)} with casting rule '{rule}'");
         }
 

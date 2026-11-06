@@ -306,7 +306,7 @@ namespace NumSharp.Tests.Backends.Iterators
             var a = np.array(new double[] { 1.5, 2.5 });
             var outI4 = np.zeros(new Shape(2), np.int32);
 
-            var ex = Assert.ThrowsException<ArgumentException>(
+            var ex = Assert.ThrowsException<TypeError>(
                 () => np.evaluate((NDExpr)a + 1.0, @out: outI4));
             StringAssert.Contains(ex.Message, "Cannot cast ufunc 'evaluate' output");
             StringAssert.Contains(ex.Message, "same_kind");
@@ -2102,9 +2102,9 @@ namespace NumSharp.Tests.Backends.Iterators
             // bool + decimals == 0 → the existing Round node (float16), NOT a RoundNode.
             Assert.AreEqual(NPTypeCode.Half, np.evaluate(NDExpr.Round(NDExpr.Arr(np.array(new[] { true, false })), 0)).typecode);
             // bool + decimals != 0 → throws, op-named (multiply for +, divide for -).
-            var exPos = Assert.ThrowsException<NotSupportedException>(() => np.evaluate(NDExpr.Round(NDExpr.Arr(np.array(new[] { true })), 1)));
+            var exPos = Assert.ThrowsException<TypeError>(() => np.evaluate(NDExpr.Round(NDExpr.Arr(np.array(new[] { true })), 1)));
             StringAssert.Contains(exPos.Message, "Cannot cast ufunc 'multiply' output from dtype('float64') to dtype('bool')");
-            var exNeg = Assert.ThrowsException<NotSupportedException>(() => np.evaluate(NDExpr.Round(NDExpr.Arr(np.array(new[] { true })), -1)));
+            var exNeg = Assert.ThrowsException<TypeError>(() => np.evaluate(NDExpr.Round(NDExpr.Arr(np.array(new[] { true })), -1)));
             StringAssert.Contains(exNeg.Message, "Cannot cast ufunc 'divide' output from dtype('float64') to dtype('bool')");
         }
 
@@ -2415,7 +2415,7 @@ namespace NumSharp.Tests.Backends.Iterators
 
             // default same_kind: f64 → i32 out is float→int (NOT same_kind) → rejected.
             var outI = np.zeros(new Shape(2, 3), np.int32);
-            var sk = Assert.ThrowsException<ArgumentException>(() => np.evaluate((NDExpr)a + a, @out: outI));
+            var sk = Assert.ThrowsException<TypeError>(() => np.evaluate((NDExpr)a + a, @out: outI));
             StringAssert.Contains(sk.Message, "'same_kind'");
 
             // casting='unsafe' admits it (values truncate into the i32 out).
@@ -2426,7 +2426,7 @@ namespace NumSharp.Tests.Backends.Iterators
 
             // casting='no' rejects even a same_kind float→float narrowing, naming 'no'.
             var outF = np.zeros(new Shape(2, 3), np.float32);
-            var no = Assert.ThrowsException<ArgumentException>(
+            var no = Assert.ThrowsException<TypeError>(
                 () => np.evaluate((NDExpr)a + a, @out: outF, casting: "no"));
             StringAssert.Contains(no.Message, "'no'");
 
@@ -2469,7 +2469,7 @@ namespace NumSharp.Tests.Backends.Iterators
 
             // casting= threads into a reduction's out= validation: 'no' rejects f64 → i32, default ok f64 → f32.
             var rOutI = np.zeros(new Shape(), np.int32);
-            Assert.ThrowsException<ArgumentException>(
+            Assert.ThrowsException<TypeError>(
                 () => np.evaluate(NDExpr.Sum((NDExpr)a + a), @out: rOutI, casting: "no"));
             var rOutF = np.zeros(new Shape(), np.float32);
             Assert.AreSame(rOutF, np.evaluate(NDExpr.Sum((NDExpr)a + a), @out: rOutF));

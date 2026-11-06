@@ -77,7 +77,7 @@ namespace NumSharp.Tests.Backends.Strings
             NDArray.AsStringArray(mixed).Should().Equal("ab1", "c2", "de3");
             // U text never reaches S by a same_kind cast: the input cast refusal names the resolved descriptor.
             Action narrow = () => np.add(U(), F(), dtype: "S");
-            narrow.Should().Throw<ArgumentException>()
+            narrow.Should().Throw<TypeError>()
                   .WithMessage("Cannot cast ufunc 'add' input 0 from dtype('<U2') to dtype('S2') with casting rule 'same_kind'");
         }
 
@@ -125,10 +125,10 @@ namespace NumSharp.Tests.Backends.Strings
         [TestMethod]
         public void ComputingLoop_ReportsTheOutputCastThenTheBroadcast()
         {
-            // The concatenation loop resolves <U3; a float64 out cannot take it (the house ArgumentException of a ufunc
-            // output cast, NumPy's UFuncTypeError text).
+            // The concatenation loop resolves <U3; a float64 out cannot take it (NumPy's UFuncTypeError, a TypeError, for a
+            // ufunc output cast, its text verbatim).
             Action cast = () => np.add(U(), U2(), np.zeros(3));
-            cast.Should().Throw<ArgumentException>().WithMessage(
+            cast.Should().Throw<TypeError>().WithMessage(
                 "Cannot cast ufunc 'add' output from dtype('<U3') to dtype('float64') with casting rule 'same_kind'");
 
             // Inputs that do not broadcast: NumPy's ufunc text after the loop answer.

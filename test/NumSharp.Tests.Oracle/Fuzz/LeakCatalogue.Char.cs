@@ -580,7 +580,7 @@ namespace NumSharp.Tests.Fuzz
                 {
                     np.@char.expandtabs(u, 2.0);
                 }
-                catch (ArgumentException)
+                catch (TypeError)
                 {
                 }
                 return np.@char.expandtabs(u);
@@ -1592,7 +1592,7 @@ namespace NumSharp.Tests.Fuzz
                 {
                     search(u, "b", 1.5, null);
                 }
-                catch (ArgumentException)
+                catch (TypeError)
                 {
                 }
                 return search(u, "b", null, null);

@@ -43,8 +43,9 @@ namespace NumSharp.Backends
         /// current text does not parse into the loop dtype (a text output receives the parts as text otherwise).</exception>
         /// <exception cref="INumSharpException">The read-only output's ValueError ("output array is read-only",
         /// <see cref="NumSharpException.ThrowIfNotWriteable"/>).</exception>
-        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>, an out not
-        /// same_kind-castable from the loop dtype, or an output that would have to be broadcast/stretched.</exception>
+        /// <exception cref="TypeError">An out not same_kind-castable from the loop dtype.</exception>
+        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>, or an output that would have to be
+        ///     broadcast/stretched.</exception>
         public override (NDArray Fractional, NDArray Integral) ModF(
             NDArray nd, DType dtype = null,
             NDArray outFrac = null, NDArray outIntegral = null, NDArray where = null)
@@ -67,8 +68,9 @@ namespace NumSharp.Backends
         /// <exception cref="TypeError">Complex input (no loop), or a non-float <paramref name="dtype"/>.</exception>
         /// <exception cref="ValueError">A read-only provided output, or a masked text output whose text does not parse.</exception>
         /// <exception cref="INumSharpException">The read-only output's ValueError.</exception>
-        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>, an out not same_kind-castable from the
-        ///     loop dtype, or an output that would have to be broadcast/stretched.</exception>
+        /// <exception cref="TypeError">An out not same_kind-castable from the loop dtype.</exception>
+        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>, or an output that would have to be
+        ///     broadcast/stretched.</exception>
         private (NDArray Fractional, NDArray Integral) ModFCore(
             NDArray nd, DType dtype,
             NDArray outFrac, NDArray outIntegral, NDArray where)
@@ -278,7 +280,7 @@ namespace NumSharp.Backends
         /// <param name="output">The provided output (a text one is checked by descriptor: its storage lane alone carries
         ///     no width or class).</param>
         /// <param name="operandIndex">1 for the fractional output, 2 for the integral output.</param>
-        /// <exception cref="ArgumentException">When the cast is not permitted under the same_kind rule.</exception>
+        /// <exception cref="TypeError">When the cast is not permitted under the same_kind rule.</exception>
         private static void ValidateModfOutCast(NPTypeCode loopType, NDArray output, int operandIndex)
         {
             if (output.typecode == NPTypeCode.String)
@@ -291,7 +293,7 @@ namespace NumSharp.Backends
                 return;
             if (NDIterCasting.CanCast(loopType, outType, NPY_CASTING.NPY_SAME_KIND_CASTING))
                 return;
-            throw new ArgumentException(
+            throw new TypeError(
                 $"Cannot cast ufunc 'modf' output {operandIndex} from " +
                 $"dtype('{loopType.AsNumpyDtypeName()}') to " +
                 $"dtype('{outType.AsNumpyDtypeName()}') with casting rule 'same_kind'");

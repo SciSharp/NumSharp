@@ -108,10 +108,10 @@ namespace NumSharp.Tests.LinearAlgebra
             np.dot(np.array((sbyte)2), np.array((sbyte)3), @out: square).Should().BeSameAs(square);
             square.Should().BeOfValues(6, 6, 6, 6);
 
-            // ... with multiply's refusals: the same_kind cast (UFuncTypeError's text, the house ArgumentException) and a
+            // ... with multiply's refusals: the same_kind cast (UFuncTypeError's text, raised as TypeError) and a
             // read-only out.
             new Action(() => np.dot(np.array((sbyte)2), np.array((sbyte)3), @out: np.zeros(new Shape(), NPTypeCode.Boolean)))
-                .Should().Throw<ArgumentException>()
+                .Should().Throw<TypeError>()
                 .WithMessage("Cannot cast ufunc 'multiply' output from dtype('int8') to dtype('bool') with casting rule 'same_kind'");
             new Action(() => np.dot(np.array((sbyte)2), i8, @out: np.broadcast_to(np.zeros(new Shape(1), NPTypeCode.SByte), new Shape(3))))
                 .Should().Throw<ValueError>().WithMessage("output array is read-only");

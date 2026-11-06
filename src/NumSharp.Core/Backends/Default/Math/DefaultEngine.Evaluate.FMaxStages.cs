@@ -28,8 +28,8 @@ namespace NumSharp.Backends
         /// <returns>The result: <paramref name="out"/> when given, else a fresh array.</returns>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast (a stage's or the remainder's), or out=
         /// does not have the result's shape.</exception>
-        /// <exception cref="ArgumentException">out= cannot hold the result's dtype under the casting rule, or where= is
-        /// not a bool array.</exception>
+        /// <exception cref="TypeError">out= cannot hold the result's dtype under the casting rule.</exception>
+        /// <exception cref="ArgumentException">where= is not a bool array.</exception>
         private NDArray EvaluateFMaxPlan(NDExprProgram program, NDArray[] inputs, NDArray @out, in NDEvaluateOptions options)
         {
             var plan = program.FMaxPlan;

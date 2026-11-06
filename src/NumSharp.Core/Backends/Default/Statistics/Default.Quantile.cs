@@ -226,9 +226,9 @@ namespace NumSharp.Backends
         ///     (<c>Cannot cast array data from dtype('float64') to dtype('float32') according to the rule 'safe'</c>; "scalar"
         ///     for a 0-d out), or a slice holding NaN copied into an out the data does not cast to under same_kind (NumPy's
         ///     <c>np.copyto</c> text).</exception>
-        /// <exception cref="ArgumentException">An interpolating method's out that the lerp's dtype does not cast to under
+        /// <exception cref="TypeError">An interpolating method's out that the lerp's dtype does not cast to under
         ///     same_kind: NumPy's UFuncTypeError <c>Cannot cast ufunc 'add' output from dtype('float64') to dtype('int64')
-        ///     with casting rule 'same_kind'</c> (the house type of the ufunc out= routes). The legacy routes: an
+        ///     with casting rule 'same_kind'</c> (the type every ufunc out= route raises). The legacy routes: an
         ///     <paramref name="out"/> of another shape than the result.</exception>
         [NDScoped]
         internal NDArray QuantileCompute(
@@ -1137,19 +1137,21 @@ namespace NumSharp.Backends
         /// <param name="target">The out the lerp writes.</param>
         /// <param name="lerpType">The lerp's dtype (the add's output).</param>
         /// <param name="resultShape">The result's shape.</param>
-        /// <exception cref="ValueError">A read-only out (<c>output array is read-only</c>); shapes that do not broadcast
-        ///     (<c>operands could not be broadcast together with shapes (2,) (2,) (3,) </c>) or would stretch out
-        ///     (<c>non-broadcastable output operand with shape (2,1) doesn't match the broadcast shape (2,2)</c>).</exception>
-        /// <exception cref="ArgumentException">A dtype the lerp's does not cast to under same_kind: NumPy's UFuncTypeError
+        /// <exception cref="NumSharpException">A read-only out: the <see cref="ValueError"/> <c>output array is read-only</c>
+        ///     that <see cref="NumSharpException.ThrowIfNotWriteable"/> raises, checked first.</exception>
+        /// <exception cref="ValueError">Shapes that do not broadcast (<c>operands could not be broadcast together with shapes
+        ///     (2,) (2,) (3,) </c>) or would stretch out (<c>non-broadcastable output operand with shape (2,1) doesn't match
+        ///     the broadcast shape (2,2)</c>).</exception>
+        /// <exception cref="TypeError">A dtype the lerp's does not cast to under same_kind: NumPy's UFuncTypeError
         ///     <c>Cannot cast ufunc 'add' output from dtype('float64') to dtype('int64') with casting rule 'same_kind'</c>
-        ///     (the house type of the ufunc out= routes).</exception>
+        ///     (the type every ufunc out= route raises).</exception>
         private static void LerpOutChecks(NDArray target, NPTypeCode lerpType, long[] resultShape)
         {
             NumSharpException.ThrowIfNotWriteable(target.Shape, "output array");
             DType lerp = DType.From(lerpType);
             if (lerpType != target.typecode
                 && !DTypeCasting.CanCastTypeTo(lerp, target.dtype, NPY_CASTING.NPY_SAME_KIND_CASTING))
-                throw new ArgumentException($"Cannot cast ufunc 'add' output from {lerp.ToString(true)} to " +
+                throw new TypeError($"Cannot cast ufunc 'add' output from {lerp.ToString(true)} to " +
                                             $"{target.dtype.ToString(true)} with casting rule 'same_kind'");
 
             // NpyIter's broadcast of (a, diff_b_a * t, out): right-aligned, a dimension of 1 stretches; out may not stretch.

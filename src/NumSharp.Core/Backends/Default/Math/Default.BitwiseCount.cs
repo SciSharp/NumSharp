@@ -14,13 +14,12 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="nd">Input array (bool/byte/sbyte/int16/uint16/int32/uint32/int64/uint64/char).</param>
         /// <param name="dtype">Output dtype request. Only uint8 (or null) is a valid loop; anything else raises the no-loop error.</param>
-        /// <param name="@out">Optional output (NumPy ufunc out=); the uint8 result is cast same_kind into it (e.g. an int32 out is fine).</param>
+        /// <param name="out">Optional output (NumPy ufunc out=); the uint8 result is cast same_kind into it (e.g. an int32 out is fine).</param>
         /// <param name="where">Optional bool write mask (NumPy ufunc where=).</param>
-        /// <returns>A uint8 array of set-bit counts (or <paramref name="@out"/> when supplied).</returns>
-        /// <exception cref="ArgumentException">
-        ///     <paramref name="where"/> is a non-bool mask, or an <paramref name="@out"/>/dtype input cannot cast
-        ///     same_kind (verbatim UFuncTypeError text).
-        /// </exception>
+        /// <returns>A uint8 array of set-bit counts (or <paramref name="out"/> when supplied).</returns>
+        /// <exception cref="TypeError">An <paramref name="out"/>/dtype input cannot cast same_kind (verbatim
+        ///     UFuncTypeError text).</exception>
+        /// <exception cref="ArgumentException"><paramref name="where"/> is a non-bool mask.</exception>
         /// <exception cref="IncorrectTypeException"><paramref name="dtype"/> is given and is not uint8 (no matching loop).</exception>
         /// <exception cref="TypeError">The input dtype is not integer/bool/char and cannot be coerced to a supported loop.</exception>
         public override NDArray BitwiseCount(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)

@@ -185,8 +185,8 @@ The `@out:` path also reproduces NumPy's in-place **casting rule**: writing a fl
 var ai = np.ones(3, np.int32);
 var bf = np.linspace(0, 3, 3);          // float64
 np.add(ai, bf, @out: ai);
-// ArgumentException: Cannot cast ufunc 'add' output from dtype('float64')
-//                    to dtype('int32') with casting rule 'same_kind'
+// TypeError: Cannot cast ufunc 'add' output from dtype('float64')
+//            to dtype('int32') with casting rule 'same_kind'
 ```
 
 See [Copies and views → in-place modification](fundamentals/copies-and-views.md#in-place-modification).

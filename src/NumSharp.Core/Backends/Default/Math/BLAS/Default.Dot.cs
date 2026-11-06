@@ -28,10 +28,11 @@ namespace NumSharp.Backends
         ///     <see cref="TensorEngine.Dot(NDArray, NDArray, NDArray)"/>); on the multiply route, a read-only out
         ///     (<c>output array is read-only</c>).</exception>
         /// <exception cref="IncorrectShapeException">Misaligned operands.</exception>
-        /// <exception cref="ArgumentException">On the multiply route, the ufunc's house type for NumPy's texts: an out
-        ///     dtype the product cannot be cast into same_kind (<c>Cannot cast ufunc 'multiply' output from …</c>, a
-        ///     UFuncTypeError in NumPy) or an out the product cannot broadcast into (<c>non-broadcastable output operand
-        ///     with shape …</c>, a ValueError in NumPy).</exception>
+        /// <exception cref="TypeError">On the multiply route, an out dtype the product cannot be cast into same_kind
+        ///     (<c>Cannot cast ufunc 'multiply' output from …</c>, NumPy's UFuncTypeError).</exception>
+        /// <exception cref="ArgumentException">On the multiply route, the ufunc's house type for NumPy's ValueError: an
+        ///     out the product cannot broadcast into (<c>non-broadcastable output operand with shape
+        ///     …</c>).</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.dot.html
         ///     <para><b>NumPy's routes</b> (<c>PyArray_MatrixProduct2</c>, <c>multiarraymodule.c</c>): both operands are

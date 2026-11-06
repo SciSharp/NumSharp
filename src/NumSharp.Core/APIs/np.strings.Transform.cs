@@ -299,7 +299,7 @@ namespace NumSharp
             ///     <paramref name="a"/>).</returns>
             /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
             /// <exception cref="TypeError">A non-text operand (NumPy's no-loop text).</exception>
-            /// <exception cref="ArgumentException">A tab size that cannot reach int64 by a same_kind cast (a float).</exception>
+            /// <exception cref="TypeError">A tab size that cannot reach int64 by a same_kind cast (a float).</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
             /// <exception cref="OverflowException">An expanded string longer than 2^31 - 1 (<c>new string is too
             ///     long</c>).</exception>
@@ -531,7 +531,7 @@ namespace NumSharp
             /// <returns>A fresh array of <paramref name="a"/>'s dtype.</returns>
             /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
             /// <exception cref="TypeError">A non-text operand; a <c>StringDType</c> NA.</exception>
-            /// <exception cref="ArgumentException">A stop that cannot reach int64 by a same_kind cast.</exception>
+            /// <exception cref="TypeError">A stop that cannot reach int64 by a same_kind cast.</exception>
             /// <exception cref="OverflowException">A stop literal past int64.</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
             public static NDArray slice(NDArray a, NDArray stop)
@@ -547,7 +547,7 @@ namespace NumSharp
             /// <returns>A fresh array of <paramref name="a"/>'s dtype.</returns>
             /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
             /// <exception cref="TypeError">A non-text operand; a <c>StringDType</c> NA.</exception>
-            /// <exception cref="ArgumentException">A bound that cannot reach int64 by a same_kind cast.</exception>
+            /// <exception cref="TypeError">A bound that cannot reach int64 by a same_kind cast.</exception>
             /// <exception cref="OverflowException">A bound literal past int64.</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
             public static NDArray slice(NDArray a, NDArray start, NDArray stop)
@@ -568,7 +568,7 @@ namespace NumSharp
             /// <exception cref="TypeError"><paramref name="step"/> is not an integer array (<c>unsupported type float64 for
             ///     operand 'step'</c>); a non-text operand; a <c>StringDType</c> NA (<c>Cannot slice null string</c>).</exception>
             /// <exception cref="ValueError">A zero step (<c>slice step cannot be zero</c>).</exception>
-            /// <exception cref="ArgumentException">A bound that cannot reach int64 by a same_kind cast.</exception>
+            /// <exception cref="TypeError">A bound that cannot reach int64 by a same_kind cast.</exception>
             /// <exception cref="OverflowException">A bound literal past int64.</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
             public static NDArray slice(NDArray a, NDArray start, NDArray stop, NDArray step)

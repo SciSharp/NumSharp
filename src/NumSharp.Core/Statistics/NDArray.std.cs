@@ -26,8 +26,9 @@ namespace NumSharp
         ///     result has no dimensions.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="ValueError">A read-only or misshapen <paramref name="out"/>.</exception>
-        /// <exception cref="ArgumentException">An integer or bool <paramref name="dtype"/> or <paramref name="out"/> with a
-        ///     result that has dimensions (NumPy's sqrt output-cast error); a non-bool <paramref name="where"/>.</exception>
+        /// <exception cref="TypeError">An integer or bool <paramref name="dtype"/> or <paramref name="out"/> with a
+        ///     result that has dimensions (NumPy's sqrt output-cast error).</exception>
+        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="out"/>, <paramref name="where"/> or
         ///     <paramref name="mean"/> does not broadcast.</exception>
         /// <exception cref="TypeError">A boolean subtraction; a C# scalar passed as <paramref name="out"/>; NumPy's text

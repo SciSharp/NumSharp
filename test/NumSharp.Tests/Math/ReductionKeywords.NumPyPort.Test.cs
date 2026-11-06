@@ -450,7 +450,7 @@ namespace NumSharp.Tests.Math
             ReferenceEquals(np.var(F(), 0, @out: o, where: M2()), o).Should().BeTrue();
             Expect(o, "float64", new long[] { 3 }, 0, 0, 21.390625);
             new Action(() => np.std(F(), 0, @out: np.zeros(new Shape(3), np.int32), where: M2()))
-                .Should().Throw<ArgumentException>().WithMessage("Cannot cast ufunc 'sqrt' output from dtype('float64') to dtype('int32') with casting rule 'same_kind'");
+                .Should().Throw<TypeError>().WithMessage("Cannot cast ufunc 'sqrt' output from dtype('float64') to dtype('int32') with casting rule 'same_kind'");
         }
 
         /// <summary>

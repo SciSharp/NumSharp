@@ -155,7 +155,7 @@ namespace NumSharp
         /// <returns>A chararray at NumPy's result width (a tab's columns plus every other character's BYTES, so a <c>U</c>
         ///     result is wider than its text): owning its data for <c>U</c>, a view of the computed array for
         ///     <c>S</c>.</returns>
-        /// <exception cref="System.ArgumentException">A tab size that cannot reach int64 by a same_kind cast (a float).</exception>
+        /// <exception cref="TypeError">A tab size that cannot reach int64 by a same_kind cast (a float).</exception>
         /// <exception cref="ValueError">An empty array.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="tabsize"/> does not broadcast.</exception>
         /// <exception cref="System.OverflowException">An expanded string longer than 2^31 - 1.</exception>

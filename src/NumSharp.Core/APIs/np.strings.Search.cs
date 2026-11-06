@@ -26,9 +26,10 @@ namespace NumSharp
             /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
             /// <exception cref="TypeError"><paramref name="x"/> is not text, or <paramref name="dtype"/> is not int64 (NumPy's
             ///     no-loop text).</exception>
-            /// <exception cref="ArgumentException"><paramref name="out"/> cannot receive int64 (the same_kind output cast); a
-            ///     non-bool <paramref name="where"/>; operands that do not broadcast with <paramref name="out"/> /
-            ///     <paramref name="where"/>.</exception>
+            /// <exception cref="TypeError"><paramref name="out"/> cannot receive int64 (the same_kind output
+            ///     cast).</exception>
+            /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>; operands that do not broadcast
+            ///     with <paramref name="out"/> / <paramref name="where"/>.</exception>
             /// <exception cref="ValueError">A read-only <paramref name="out"/>; a <c>StringDType</c> NA whose descriptor's NA
             ///     object is not a string (<c>The length of a null string is undefined</c>).</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
@@ -133,7 +134,7 @@ namespace NumSharp
             /// <returns>An int64 array of the broadcast shape (0-d for scalar operands).</returns>
             /// <exception cref="TypeError">No loop for the operand classes (an <c>S</c> array with a <c>str</c> substring, a
             ///     number, …: NumPy's no-loop text); two <c>StringDType</c> operands with different NA objects.</exception>
-            /// <exception cref="ArgumentException"><paramref name="start"/> / <paramref name="end"/> cannot reach int64 by a
+            /// <exception cref="TypeError"><paramref name="start"/> / <paramref name="end"/> cannot reach int64 by a
             ///     same_kind cast (a float: <c>Cannot cast ufunc 'find' input 2 from dtype('float64') …</c>).</exception>
             /// <exception cref="OverflowException">A start / end literal past int64 (<c>Python int too large to convert to C
             ///     long</c>).</exception>
@@ -161,7 +162,7 @@ namespace NumSharp
             /// <param name="end">The range end (null = the whole string).</param>
             /// <returns>An int64 array of the broadcast shape.</returns>
             /// <exception cref="TypeError">No loop for the operand classes; two different <c>StringDType</c> NA objects.</exception>
-            /// <exception cref="ArgumentException">A start / end that cannot reach int64 by a same_kind cast.</exception>
+            /// <exception cref="TypeError">A start / end that cannot reach int64 by a same_kind cast.</exception>
             /// <exception cref="OverflowException">A start / end literal past int64.</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
             /// <exception cref="ValueError">A <c>StringDType</c> NA whose NA object is not a string; a chararray operand
@@ -187,7 +188,7 @@ namespace NumSharp
             /// <param name="end">The range end (null = the whole string).</param>
             /// <returns>An int64 array of the broadcast shape.</returns>
             /// <exception cref="TypeError">No loop for the operand classes; two different <c>StringDType</c> NA objects.</exception>
-            /// <exception cref="ArgumentException">A start / end that cannot reach int64 by a same_kind cast.</exception>
+            /// <exception cref="TypeError">A start / end that cannot reach int64 by a same_kind cast.</exception>
             /// <exception cref="OverflowException">A start / end literal past int64.</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
             /// <exception cref="ValueError">An element without a match (<c>substring not found</c>); a <c>StringDType</c> NA
@@ -214,7 +215,7 @@ namespace NumSharp
             /// <param name="end">The range end (null = the whole string).</param>
             /// <returns>An int64 array of the broadcast shape.</returns>
             /// <exception cref="TypeError">No loop for the operand classes; two different <c>StringDType</c> NA objects.</exception>
-            /// <exception cref="ArgumentException">A start / end that cannot reach int64 by a same_kind cast.</exception>
+            /// <exception cref="TypeError">A start / end that cannot reach int64 by a same_kind cast.</exception>
             /// <exception cref="OverflowException">A start / end literal past int64.</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
             /// <exception cref="ValueError">An element without a match; a <c>StringDType</c> NA whose NA object is not a
@@ -242,7 +243,7 @@ namespace NumSharp
             /// <param name="end">The range end (null = the whole string).</param>
             /// <returns>An int64 array of the broadcast shape.</returns>
             /// <exception cref="TypeError">No loop for the operand classes; two different <c>StringDType</c> NA objects.</exception>
-            /// <exception cref="ArgumentException">A start / end that cannot reach int64 by a same_kind cast.</exception>
+            /// <exception cref="TypeError">A start / end that cannot reach int64 by a same_kind cast.</exception>
             /// <exception cref="OverflowException">A start / end literal past int64.</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
             /// <exception cref="ValueError">A <c>StringDType</c> NA whose NA object is not a string; a chararray operand
@@ -268,7 +269,7 @@ namespace NumSharp
             /// <param name="end">The range end (null = the whole string).</param>
             /// <returns>A bool array of the broadcast shape.</returns>
             /// <exception cref="TypeError">No loop for the operand classes; two different <c>StringDType</c> NA objects.</exception>
-            /// <exception cref="ArgumentException">A start / end that cannot reach int64 by a same_kind cast.</exception>
+            /// <exception cref="TypeError">A start / end that cannot reach int64 by a same_kind cast.</exception>
             /// <exception cref="OverflowException">A start / end literal past int64.</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
             /// <exception cref="ValueError">A <c>StringDType</c> NA whose NA object is neither a string nor NaN-like (a
@@ -295,7 +296,7 @@ namespace NumSharp
             /// <param name="end">The range end (null = the whole string).</param>
             /// <returns>A bool array of the broadcast shape.</returns>
             /// <exception cref="TypeError">No loop for the operand classes; two different <c>StringDType</c> NA objects.</exception>
-            /// <exception cref="ArgumentException">A start / end that cannot reach int64 by a same_kind cast.</exception>
+            /// <exception cref="TypeError">A start / end that cannot reach int64 by a same_kind cast.</exception>
             /// <exception cref="OverflowException">A start / end literal past int64.</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
             /// <exception cref="ValueError">A <c>StringDType</c> NA whose NA object is neither a string nor NaN-like; a

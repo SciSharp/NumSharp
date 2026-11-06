@@ -14,7 +14,7 @@ namespace NumSharp
         ///     (2-D for a 1-D <paramref name="m"/>, whose row is broadcast down a square matrix).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.tril.html</remarks>
         /// <exception cref="ArgumentNullException"><paramref name="m"/> is null.</exception>
-        /// <exception cref="ArgumentException"><paramref name="m"/> is 0-d (NumPy's leaked text: <c>tri() missing 1
+        /// <exception cref="TypeError"><paramref name="m"/> is 0-d (NumPy's leaked CPython TypeError: <c>tri() missing 1
         ///     required positional argument: 'N'</c>).</exception>
         public static NDArray tril(NDArray m, int k = 0)
         {
@@ -34,7 +34,7 @@ namespace NumSharp
         ///     (2-D for a 1-D <paramref name="m"/>, whose row is broadcast down a square matrix).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.triu.html</remarks>
         /// <exception cref="ArgumentNullException"><paramref name="m"/> is null.</exception>
-        /// <exception cref="ArgumentException"><paramref name="m"/> is 0-d (NumPy's leaked text: <c>tri() missing 1
+        /// <exception cref="TypeError"><paramref name="m"/> is 0-d (NumPy's leaked CPython TypeError: <c>tri() missing 1
         ///     required positional argument: 'N'</c>).</exception>
         public static NDArray triu(NDArray m, int k = 0)
         {

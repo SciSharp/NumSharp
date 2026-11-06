@@ -14,7 +14,7 @@ namespace NumSharp.Backends.Iteration
     {
         /// <summary>
         /// Built-in default buffer size (number of elements) — NumPy's <c>NPY_BUFSIZE</c>.
-        /// Used whenever neither an explicit nditer <c>buffersize</c> nor a per-thread
+        /// Used whenever neither an explicit nditer <c>buffersize</c> nor the flow's
         /// override (<see cref="NumSharp.np.setbufsize(long)"/>) applies.
         /// </summary>
         public const long DefaultBufferSize = 8192;
@@ -31,15 +31,18 @@ namespace NumSharp.Backends.Iteration
         internal const long MaxBufferSize = 10_000_000;
 
         /// <summary>
-        /// Per-thread override for the ufunc/NDIter default buffer size, set through
-        /// <see cref="NumSharp.np.setbufsize(long)"/>. Zero means "unset" — the thread then
-        /// falls back to <see cref="DefaultBufferSize"/>. Thread-local to mirror NumPy 2.x's
-        /// context-local extobj (a <c>setbufsize</c> on one thread never leaks into another).
+        /// The flow's override of the ufunc/NDIter default buffer size, set through
+        /// <see cref="NumSharp.np.setbufsize(long)"/>; unset means <see cref="DefaultBufferSize"/>. Context-local like
+        /// NumPy 2.x's extobj (a <c>ContextVar</c>), with <see cref="NDContextVar{T}"/>'s Python 3.12 semantics (parity
+        /// QA-40): an <c>await</c> continuation, <c>Task.Run</c> and the thread pool inherit the caller's size, a dedicated
+        /// thread starts at the default until it sets its own, and a setbufsize never reaches a thread already running.
+        /// It was a <c>[ThreadStatic]</c>, which Task.Run did not inherit and which a pool thread carried from one task
+        /// into the next.
         /// </summary>
-        [ThreadStatic] private static long _userBufferSize;
+        private static readonly NDContextVar<long> _userBufferSize = new NDContextVar<long>();
 
         /// <summary>
-        /// The current default NDIter/ufunc buffer size for the calling thread — exactly the
+        /// The current default NDIter/ufunc buffer size for the caller's flow — exactly the
         /// value <see cref="NumSharp.np.getbufsize"/> returns (its whole body), and what the engine
         /// reads where NumPy's C code reads the extobj's buffer size. Equals the last
         /// <see cref="NumSharp.np.setbufsize(long)"/> value on this thread, or
@@ -54,8 +57,8 @@ namespace NumSharp.Backends.Iteration
         public static long CurrentBufferSize
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get { long v = _userBufferSize; return v > 0 ? v : DefaultBufferSize; }
-            internal set => _userBufferSize = value; // validated by np.setbufsize before it reaches here
+            get => _userBufferSize.TryGet(out long v) && v > 0 ? v : DefaultBufferSize;
+            internal set => _userBufferSize.Set(value); // validated by np.setbufsize before it reaches here
         }
 
         /// <summary>

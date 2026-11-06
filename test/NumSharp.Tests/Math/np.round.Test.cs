@@ -47,10 +47,10 @@ namespace NumSharp.Tests.Math
         public void Round_Bool_NonzeroDecimals_Raises()
         {
             Action pos = () => np.round_(np.array(new bool[] { false, true }), 1);
-            pos.Should().Throw<NotSupportedException>()
+            pos.Should().Throw<TypeError>()
                .WithMessage("Cannot cast ufunc 'multiply' output from dtype('float64') to dtype('bool')*");
             Action neg = () => np.round_(np.array(new bool[] { false, true }), -1);
-            neg.Should().Throw<NotSupportedException>()
+            neg.Should().Throw<TypeError>()
                .WithMessage("Cannot cast ufunc 'divide' output from dtype('float64') to dtype('bool')*");
         }
 
@@ -150,11 +150,11 @@ namespace NumSharp.Tests.Math
         public void Round_Out_CastError_NamesFirstUfunc()
         {
             Action pos = () => np.round_(np.array(new double[] { 1.55 }), 1, np.zeros(new Shape(1), np.int32));
-            pos.Should().Throw<ArgumentException>()
+            pos.Should().Throw<TypeError>()
                .WithMessage("Cannot cast ufunc 'multiply' output from dtype('float64') to dtype('int32')*");
             // round(int, -1, out=int): the negative-decimals result is a float64 that cannot cast same_kind to int
             Action neg = () => np.round_(np.array(new int[] { 125 }), -1, np.zeros(new Shape(1), np.int32));
-            neg.Should().Throw<ArgumentException>()
+            neg.Should().Throw<TypeError>()
                .WithMessage("Cannot cast ufunc 'divide' output from dtype('float64') to dtype('int32')*");
         }
 

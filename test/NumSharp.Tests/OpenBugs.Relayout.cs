@@ -39,6 +39,11 @@ namespace NumSharp.Tests
     // np.digitize and np.isin's complex / float16 route read theirs right too (RL01); both pins are untagged the same way,
     // and the generator's RL01 rule is dropped.
     //
+    // FIXED (found converged by parity QA-48's replay, 2026-11-06): np.where reads its operands from a view's offset
+    // since parity batch 10 (a KEEPORDER iterator over condition, x and y), and np.nancumsum / np.nancumprod run
+    // _replace_nan's statements, so RL02 matches NumPy; its two pins are untagged the same way, and the generator's RL02
+    // rule is dropped.
+    //
     // Every expected value below is NumPy 2.4.2's answer for the same call. EXPECTED (when fixed): each test passes;
     // remove its [OpenBugs], move it next to its API's tests, and drop the gap's rule from the generator's _gap_of so
     // the cases return to the gate.
@@ -82,11 +87,12 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>np.nancumsum</c> / <c>np.nancumprod</c> of a float16 <c>np.split</c> child (offset 3,
-        ///     <c>[1.5, nan, 2.25]</c>): NumPy returns <c>[1.5, 1.5, 3.75]</c> and <c>[1.5, 1.5, 3.375]</c>; NumSharp scans
-        ///     the owner's sentinels <c>[7, 7, 7]</c> (gap RL02: the float16 / complex128 route runs np.where on the view).
+        ///     FIXED (found converged by parity QA-48's replay, 2026-11-06): <c>np.nancumsum</c> / <c>np.nancumprod</c> of a
+        ///     float16 <c>np.split</c> child (offset 3, <c>[1.5, nan, 2.25]</c>) read the view, as NumPy does:
+        ///     <c>[1.5, 1.5, 3.75]</c> and <c>[1.5, 1.5, 3.375]</c> (gap RL02, retired; NumSharp scanned the owner's
+        ///     sentinels <c>[7, 7, 7]</c>). This test pins it.
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "relayout-RL02")]
+        [TestMethod]
         public void Relayout_NanCumsumNanCumprod_Float16AtAnOffset_ShouldReadTheView()
         {
             using var hbase = np.array(new[] { (Half)7, (Half)7, (Half)7, (Half)1.5, Half.NaN, (Half)2.25 });
@@ -99,11 +105,11 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>np.nancumsum</c> of a complex128 <c>np.split</c> child (offset 3, <c>[1+2j, nan+1j, 2]</c>): NumPy returns
-        ///     <c>[1+2j, 1+2j, 3+2j]</c> (a NaN in either part counts as NaN); NumSharp scans the owner's sentinels
-        ///     (gap RL02).
+        ///     FIXED (found converged by parity QA-48's replay, 2026-11-06): <c>np.nancumsum</c> of a complex128
+        ///     <c>np.split</c> child (offset 3, <c>[1+2j, nan+1j, 2]</c>) reads the view, as NumPy does:
+        ///     <c>[1+2j, 1+2j, 3+2j]</c> (a NaN in either part counts as NaN; gap RL02, retired). This test pins it.
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "relayout-RL02")]
+        [TestMethod]
         public void Relayout_NanCumsum_ComplexAtAnOffset_ShouldReadTheView()
         {
             using var cbase = np.array(new Complex[] { 7, 7, 7, new(1, 2), new(double.NaN, 1), 2 });

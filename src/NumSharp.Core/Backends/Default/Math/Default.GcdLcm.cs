@@ -31,7 +31,10 @@ namespace NumSharp.Backends
         /// <param name="where">Boolean mask (NumPy ufunc <c>where=</c>); masked-off elements keep their prior value.</param>
         /// <returns>The element-wise gcd in the promoted integer dtype.</returns>
         /// <exception cref="TypeError">The inputs (or an explicit <paramref name="dtype"/>) name no integer gcd loop — bool/float/complex/decimal, or a uint64+signed promotion to float64.</exception>
-        /// <exception cref="System.ArgumentException"><paramref name="where"/> is not boolean, an input cannot be same_kind-cast to an explicit <paramref name="dtype"/>, or <paramref name="out"/> cannot hold the result / does not broadcast.</exception>
+        /// <exception cref="TypeError">An input cannot be same_kind-cast to an explicit <paramref name="dtype"/>, or
+        ///     <paramref name="out"/> cannot hold the result.</exception>
+        /// <exception cref="System.ArgumentException"><paramref name="where"/> is not boolean, or
+        ///     <paramref name="out"/> does not broadcast.</exception>
         public override NDArray Gcd(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
             NPTypeCode? typeCode = UfuncLoopCode(dtype, "gcd", lhs, rhs, @out, where);
@@ -53,7 +56,10 @@ namespace NumSharp.Backends
         /// <param name="where">Boolean mask (NumPy ufunc <c>where=</c>); masked-off elements keep their prior value.</param>
         /// <returns>The element-wise lcm in the promoted integer dtype.</returns>
         /// <exception cref="TypeError">The inputs (or an explicit <paramref name="dtype"/>) name no integer lcm loop — bool/float/complex/decimal, or a uint64+signed promotion to float64.</exception>
-        /// <exception cref="System.ArgumentException"><paramref name="where"/> is not boolean, an input cannot be same_kind-cast to an explicit <paramref name="dtype"/>, or <paramref name="out"/> cannot hold the result / does not broadcast.</exception>
+        /// <exception cref="TypeError">An input cannot be same_kind-cast to an explicit <paramref name="dtype"/>, or
+        ///     <paramref name="out"/> cannot hold the result.</exception>
+        /// <exception cref="System.ArgumentException"><paramref name="where"/> is not boolean, or
+        ///     <paramref name="out"/> does not broadcast.</exception>
         public override NDArray Lcm(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
             NPTypeCode? typeCode = UfuncLoopCode(dtype, "lcm", lhs, rhs, @out, where);

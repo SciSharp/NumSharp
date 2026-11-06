@@ -713,18 +713,17 @@ namespace NumSharp.Tests.Interop
         }
 
         /// <summary>
-        ///     The two documented NumSharp house conventions for an exception CLASS, where the text is still numpy's: a
-        ///     <c>UFuncTypeError</c> cast refusal ("Cannot cast ufunc … with casting rule …") is an
-        ///     <see cref="ArgumentException"/> (the parity journal names it "the house ArgumentException the rules name
-        ///     for ufunc cast refusals"), and a shape <c>ValueError</c> is an <see cref="IncorrectShapeException"/>
-        ///     ("library-wide", <c>.claude/rules/axis-arguments.md</c>).
+        ///     The documented NumSharp house convention for an exception CLASS, where the text is still numpy's: a shape
+        ///     <c>ValueError</c> is an <see cref="IncorrectShapeException"/> ("library-wide",
+        ///     <c>.claude/rules/axis-arguments.md</c>). A <c>UFuncTypeError</c> cast refusal ("Cannot cast ufunc … with
+        ///     casting rule …") is no convention: NumSharp raises <see cref="TypeError"/>, its builtin base, which the
+        ///     class-name match already accepts, so an <see cref="ArgumentException"/> with that text fails.
         /// </summary>
         /// <param name="chain">numpy's exception class names, most derived first.</param>
         /// <param name="error">NumSharp's exception.</param>
-        /// <returns>Whether the pair is one of the two conventions (the caller still compares the texts).</returns>
+        /// <returns>Whether the pair is the convention (the caller still compares the texts).</returns>
         protected static bool IsHouseConvention(string[] chain, Exception error)
-            => (chain.Contains("UFuncTypeError") && error is ArgumentException) ||
-               (chain.Contains("ValueError") && error is IncorrectShapeException);
+            => chain.Contains("ValueError") && error is IncorrectShapeException;
 
         /// <summary>
         ///     The part of a NumSharp exception's message that answers numpy's <c>str(e)</c>: .NET decorates an

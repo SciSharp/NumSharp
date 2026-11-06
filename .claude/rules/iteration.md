@@ -117,7 +117,8 @@ are `long` (intp), and every step yields a fresh index array.
     `npyiter_goto_iterindex`'s core offset; `NPY_ITER_CONTIG` makes a non-contiguous operand a CAST operand. Mapping:
     NumPy numbers axes from the innermost (idim 0 = NumSharp axis `NDim - 1`); its USERPTRS are `DataPtrs` and its
     NIT_DATAPTRS `ArrayWritebackPtrs`; `np.nditer` passes a buffer size of 8192 when given 0 (NumPy's NPY_BUFSIZE:
-    `np.setbufsize` reaches only the engine's ufunc iterators, as in NumPy). NumPy's own edges are kept where they are
+    `np.setbufsize` reaches only the engine's ufunc iterators, as in NumPy; its value is context-local, see
+    `io-printing.md`). NumPy's own edges are kept where they are
     memory-safe (a fill started inside a core writes nothing back; a reset that finds a buffer starting at the range start
     keeps it, so `NDIterRef.Iternext`'s range-end pre-check spares an iterator that still holds a buffer;
     `remove_multi_index` keeps the setup where it still walks the right elements, so an external loop after a merge of

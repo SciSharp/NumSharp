@@ -56,8 +56,9 @@ namespace NumSharp.Tests
     ///         is private to the test and needs nothing);</item>
     ///       <item>asserts wall-clock time.</item>
     ///     </list>
-    ///     Thread-local state is safe as it is: <c>np.setbufsize</c> (thread-local, like NumPy's), the print options
-    ///     (<c>AsyncLocal</c>), the culture, the engine's <c>[ThreadStatic]</c> test hooks and counters. A hook a test
+    ///     Thread-local and context-local state is safe as it is: <c>np.setbufsize</c> and the print options (context-local,
+    ///     NumPy's <c>ContextVar</c>s: a test's own flow and the tasks it starts see its value, other tests never do), the
+    ///     culture, the engine's <c>[ThreadStatic]</c> test hooks and counters. A hook a test
     ///     sets is seen only by the thread that set it, so a test that hands its work to other threads
     ///     (<c>Parallel.For</c>, its own threads) must set the hook on each of them.</para>
     ///     <para><b>Concurrency storms run in the parallel phase.</b> The collection storm tests spawn their own threads;

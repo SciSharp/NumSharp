@@ -26,7 +26,7 @@ namespace NumSharp.Tests.Logic
             readOnly.setflags(write: false);
             const string noLoop = "No loop matching the specified signature and casting was found for ufunc logical_not";
 
-            new Action(() => np.logical_not(u, dtype: np.@bool)).Should().ThrowExactly<ArgumentException>()
+            new Action(() => np.logical_not(u, dtype: np.@bool)).Should().ThrowExactly<TypeError>()
                 .WithMessage("Cannot cast ufunc 'logical_not' input from dtype('<U2') to dtype('bool') with casting rule 'same_kind'");
             new Action(() => np.logical_not(s, dtype: np.float64)).Should().ThrowExactly<IncorrectTypeException>().WithMessage(noLoop);
             new Action(() => np.logical_not(u, dtype: np.int8)).Should().ThrowExactly<IncorrectTypeException>().WithMessage(noLoop);

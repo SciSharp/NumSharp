@@ -91,7 +91,7 @@ namespace NumSharp.Tests.Math
         public void Out_SignedToUnsigned_ThrowsSameKindText()
         {
             // NumPy: UFuncTypeError — signed → unsigned is NOT same_kind.
-            var ex = Assert.ThrowsException<ArgumentException>(() =>
+            var ex = Assert.ThrowsException<TypeError>(() =>
                 np.bitwise_and(Ai(), Bi(), np.empty(new Shape(4), np.uint32)));
 
             Assert.AreEqual(
@@ -104,14 +104,14 @@ namespace NumSharp.Tests.Math
         public void Out_IntToBool_ThrowsSameKindText()
         {
             // NumPy: int → bool is NOT same_kind (ufunc name per op pinned too).
-            var exAnd = Assert.ThrowsException<ArgumentException>(() =>
+            var exAnd = Assert.ThrowsException<TypeError>(() =>
                 np.bitwise_and(Ai(), Bi(), np.empty(new Shape(4), np.@bool)));
             Assert.AreEqual(
                 "Cannot cast ufunc 'bitwise_and' output from dtype('int32') to " +
                 "dtype('bool') with casting rule 'same_kind'",
                 exAnd.Message);
 
-            var exOr = Assert.ThrowsException<ArgumentException>(() =>
+            var exOr = Assert.ThrowsException<TypeError>(() =>
                 np.bitwise_or(Ai(), Bi(), np.empty(new Shape(4), np.uint32)));
             StringAssert.Contains(exOr.Message, "ufunc 'bitwise_or'");
         }

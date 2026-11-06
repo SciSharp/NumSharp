@@ -20,8 +20,10 @@
         /// <exception cref="System.NullReferenceException"><paramref name="a"/> or <paramref name="b"/> is null.</exception>
         /// <exception cref="TypeError">Operands the multiply has no loop for (text with numbers, two texts).</exception>
         /// <exception cref="ValueError">A read-only <paramref name="out"/>.</exception>
-        /// <exception cref="System.ArgumentException">An <paramref name="out"/> the product does not reach under same_kind,
-        ///     or one the products do not broadcast into.</exception>
+        /// <exception cref="TypeError">An <paramref name="out"/> the product does not reach under
+        ///     same_kind.</exception>
+        /// <exception cref="System.ArgumentException">An <paramref name="out"/> the products do not broadcast
+        ///     into.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.outer.html
         ///     <para>NumPy's statement <c>multiply(a.ravel()[:, newaxis], b.ravel()[newaxis, :], out)</c> is

@@ -25,7 +25,7 @@ namespace NumSharp
         /// <exception cref="TypeError">A complex input (<c>ufunc 'rfft_n_even'</c> / <c>'rfft_n_odd' not supported for
         ///     the input types, ...</c>).</exception>
         /// <exception cref="DTypePromotionError">A text input.</exception>
-        /// <exception cref="ArgumentException">An <paramref name="out"/> dtype complex128 cannot be cast to under
+        /// <exception cref="TypeError">An <paramref name="out"/> dtype complex128 cannot be cast to under
         ///     same_kind.</exception>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.rfft.html
@@ -53,7 +53,7 @@ namespace NumSharp
         /// <exception cref="IndexError"><paramref name="axis"/> out of range with <paramref name="n"/> omitted.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> out of range with <paramref name="n"/> given.</exception>
         /// <exception cref="DTypePromotionError">A text input.</exception>
-        /// <exception cref="ArgumentException">An <paramref name="out"/> dtype float64 cannot be cast to under
+        /// <exception cref="TypeError">An <paramref name="out"/> dtype float64 cannot be cast to under
         ///     same_kind.</exception>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.irfft.html

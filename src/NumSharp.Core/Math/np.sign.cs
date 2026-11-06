@@ -19,7 +19,7 @@ namespace NumSharp
         /// </param>
         /// <returns>The sign of x, in the input's dtype unless <paramref name="dtype"/> names another. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.sign.html</remarks>
-        /// <exception cref="ArgumentException">A <paramref name="dtype"/> the input cannot reach under <c>same_kind</c> (<c>Cannot cast
+        /// <exception cref="TypeError">A <paramref name="dtype"/> the input cannot reach under <c>same_kind</c> (<c>Cannot cast
         ///     ufunc 'sign' input from dtype('float64') to dtype('int64') with casting rule 'same_kind'</c>; NumPy raises
         ///     <c>UFuncTypeError</c>).</exception>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>

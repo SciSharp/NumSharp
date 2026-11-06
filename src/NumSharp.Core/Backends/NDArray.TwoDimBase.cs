@@ -313,7 +313,7 @@ namespace NumSharp
         /// <param name="k">The diagonal above which elements are zeroed.</param>
         /// <returns>A new, writeable, C-contiguous array of <paramref name="m"/>'s dtype (2-d for a 1-d operand).</returns>
         /// <exception cref="ArgumentNullException"><paramref name="m"/> is null.</exception>
-        /// <exception cref="ArgumentException"><paramref name="m"/> is 0-d (NumPy leaks <c>tri()</c>'s TypeError text:
+        /// <exception cref="TypeError"><paramref name="m"/> is 0-d (NumPy leaks <c>tri()</c>'s CPython TypeError:
         ///     <c>tri() missing 1 required positional argument: 'N'</c>).</exception>
         /// <exception cref="OverflowException">The last two axes exceed <see cref="int.MaxValue"/> on the general
         ///     <c>where</c> path.</exception>
@@ -328,8 +328,8 @@ namespace NumSharp
         /// <param name="k">The diagonal below which elements are zeroed.</param>
         /// <returns>A new, writeable, C-contiguous array of <paramref name="m"/>'s dtype (2-d for a 1-d operand).</returns>
         /// <exception cref="ArgumentNullException"><paramref name="m"/> is null.</exception>
-        /// <exception cref="ArgumentException"><paramref name="m"/> is 0-d (<c>tri() missing 1 required positional
-        ///     argument: 'N'</c>).</exception>
+        /// <exception cref="TypeError"><paramref name="m"/> is 0-d (NumPy's leaked CPython TypeError: <c>tri() missing 1
+        ///     required positional argument: 'N'</c>).</exception>
         /// <exception cref="OverflowException">The last two axes exceed <see cref="int.MaxValue"/> on the general
         ///     <c>where</c> path.</exception>
         internal static NDArray triu(NDArray m, int k) => Triangle(m, k, lower: false);
@@ -342,7 +342,7 @@ namespace NumSharp
         /// <param name="lower">True for tril (keep at and below the diagonal), false for triu (keep at and above).</param>
         /// <returns>A new array (see <see cref="tril"/>).</returns>
         /// <exception cref="ArgumentNullException"><paramref name="m"/> is null.</exception>
-        /// <exception cref="ArgumentException"><paramref name="m"/> is 0-d.</exception>
+        /// <exception cref="TypeError"><paramref name="m"/> is 0-d (NumPy's leaked CPython TypeError).</exception>
         /// <exception cref="OverflowException">The last two axes exceed <see cref="int.MaxValue"/> on the general
         ///     path.</exception>
         /// <remarks>
@@ -384,8 +384,9 @@ namespace NumSharp
 
             int ndim = m.ndim;
             if (ndim == 0)
-                // NumPy leaks tri()'s own TypeError here: `tri(*m.shape[-2:])` gets no args.
-                throw new ArgumentException("tri() missing 1 required positional argument: 'N'");
+                // NumPy leaks tri()'s own TypeError here: `tri(*m.shape[-2:])` gets no args, so CPython's
+                // argument check raises TypeError before NumPy runs (parity QA-03: it was ArgumentException).
+                throw new TypeError("tri() missing 1 required positional argument: 'N'");
 
             // NumPy: tri(*m.shape[-2:], ...) — for 1-D that is tri(n) which squares up to (n, n).
             long rows = ndim == 1 ? m.Shape.dimensions[0] : m.Shape.dimensions[ndim - 2];

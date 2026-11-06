@@ -72,10 +72,16 @@ namespace NumSharp
             // Coerce the input to the dtype the engine reads.
             NDArray src = a.GetTypeCode == inDtype ? a : a.astype(inDtype, copy: false);
 
-            // Build the output shape = input shape with axis -> nout.
+            // Build the output shape = input shape with axis -> nout, laid out as NumPy's _raw_fft allocates it:
+            // `out = empty_like(a, shape=..., dtype=...)`, whose order 'K' keeps the INPUT's axis order
+            // (PyArray_NewLikeArrayWithShape: C stays C, F stays F, a permutation or a broadcast's stride ranking is kept)
+            // with the transformed axis resized (parity QA-36 / QA-48: it was always C). copy_output below writes through
+            // outAxisStride and the lane strides, so any dense layout is written right; the N-D forms inherit each pass's
+            // order because every pass's input is the previous result. The original operand votes, not the dtype cast
+            // `src` (NumPy's empty_like sees `a`).
             var outDims = (long[])src.Shape.dimensions.Clone();
             outDims[ax] = nout;
-            var outShape = Shape.Adopt(outDims);
+            var outShape = Shape.NewLikeLayout(a.Shape, 'K', outDims);
 
             NDArray result;
             NDArray castTarget = null;   // set when out's dtype is a same_kind cast OF the loop dtype
@@ -104,9 +110,9 @@ namespace NumSharp
                 }
                 else
                 {
-                    // Verbatim NumPy ufunc-cast rejection (house ArgumentException, exactly as
-                    // DefaultEngine.UfuncOut.ValidateOutCast renders it — no trailing period).
-                    throw new ArgumentException(
+                    // Verbatim NumPy ufunc-cast rejection (TypeError, the class of NumPy's UFuncTypeError, exactly
+                    // as DefaultEngine.UfuncOut.ValidateOutCast renders it — no trailing period).
+                    throw new TypeError(
                         $"Cannot cast ufunc '{UfuncName(isReal, isForward, n)}' output from " +
                         $"dtype('{outDtype.AsNumpyDtypeName()}') to " +
                         $"dtype('{outTc.AsNumpyDtypeName()}') with casting rule 'same_kind'");

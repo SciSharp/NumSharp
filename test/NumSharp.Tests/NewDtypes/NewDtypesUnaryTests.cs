@@ -615,7 +615,7 @@ namespace NumSharp.Tests.NewDtypes
             {
                 // complex input + real-float dtype= -> verbatim NumPy cast error (no crash).
                 Action narrow = () => op.Item2(NPTypeCode.Double);
-                narrow.Should().Throw<ArgumentException>($"{op.Item1}(complex, dtype=float64) must reject the cast")
+                narrow.Should().Throw<TypeError>($"{op.Item1}(complex, dtype=float64) must reject the cast")
                     .WithMessage($"Cannot cast ufunc '{op.Item1}' input from dtype('complex128') to dtype('float64') with casting rule 'same_kind'");
 
                 // complex input + integer dtype= -> no loop exists at all (different NumPy error).

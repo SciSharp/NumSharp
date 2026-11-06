@@ -211,9 +211,10 @@ namespace NumSharp
         /// <exception cref="TypeError">Operands the multiply has no loop for (text with numbers, two texts; NumPy's no-loop
         ///     texts), or a text product without <paramref name="out"/>'s string multiply.</exception>
         /// <exception cref="ValueError">A read-only <paramref name="out"/> (<c>output array is read-only</c>).</exception>
-        /// <exception cref="ArgumentException">An <paramref name="out"/> the product dtype does not reach under same_kind
-        ///     (<c>Cannot cast ufunc 'multiply' output from ...</c>), or one the products do not broadcast into (<c>operands
-        ///     could not be broadcast together with shapes ...</c>).</exception>
+        /// <exception cref="TypeError">An <paramref name="out"/> the product dtype does not reach under same_kind
+        ///     (<c>Cannot cast ufunc 'multiply' output from ...</c>).</exception>
+        /// <exception cref="ArgumentException">An <paramref name="out"/> the products do not broadcast into
+        ///     (<c>operands could not be broadcast together with shapes ...</c>).</exception>
         /// <remarks>
         ///     NumPy writes outer in Python (<c>numpy/_core/numeric.py</c>); DefaultEngine runs its one statement over the
         ///     array object's ravel and expand_dims and <paramref name="a"/>'s engine's <see cref="Multiply"/>.

@@ -556,10 +556,10 @@ namespace NumSharp.Tests.Polynomial
             a = () => cheb.chebint(np.zeros(0), 1);
             a.Should().Throw<IndexError>().WithMessage("index 0 is out of bounds for axis 0 with size 0");
             a = () => cheb.chebder(new object[] { 1.0, 2.0, 3.0 }, 1, new Complex(0, 1));
-            a.Should().Throw<ArgumentException>().WithMessage(
+            a.Should().Throw<TypeError>().WithMessage(
                 "Cannot cast ufunc 'multiply' output from dtype('complex128') to dtype('float64') with casting rule 'same_kind'");
             a = () => cheb.chebint(new object[] { 1.0, 2.0, 3.0 }, 1, scl: new Complex(0, 1));
-            a.Should().Throw<ArgumentException>().WithMessage(
+            a.Should().Throw<TypeError>().WithMessage(
                 "Cannot cast ufunc 'multiply' output from dtype('complex128') to dtype('float64') with casting rule 'same_kind'");
             a = () => cheb.chebder(np.ones(new Shape(3, 1)), 1, np.ones(4));
             a.Should().Throw<ValueError>().WithMessage(
@@ -591,13 +591,13 @@ namespace NumSharp.Tests.Polynomial
                                    new object[] { np.array(new[] { 1.0, 2.0 }) });
             a.Should().Throw<TypeError>().WithMessage("only 0-dimensional arrays can be converted to Python scalars");
             a = () => cheb.chebint(np.ones(new Shape(3, 2), NPTypeCode.Single), 1, lbnd: new Complex(0, 0.5));
-            a.Should().Throw<ArgumentException>().WithMessage(
+            a.Should().Throw<TypeError>().WithMessage(
                 "Cannot cast ufunc 'add' output from dtype('complex64') to dtype('float32') with casting rule 'same_kind'");
             a = () => cheb.chebint(np.ones(new Shape(3, 2)), 1, lbnd: new Complex(0, 0.5));
-            a.Should().Throw<ArgumentException>().WithMessage(
+            a.Should().Throw<TypeError>().WithMessage(
                 "Cannot cast ufunc 'add' output from dtype('complex128') to dtype('float64') with casting rule 'same_kind'");
             a = () => cheb.chebint(np.ones(new Shape(3, 2)), 1, new object[] { new Complex(0, 1) });
-            a.Should().Throw<ArgumentException>().WithMessage(
+            a.Should().Throw<TypeError>().WithMessage(
                 "Cannot cast ufunc 'add' output from dtype('complex128') to dtype('float64') with casting rule 'same_kind'");
 
             // 1-D: the complex value's real part is stored (NumPy's ComplexWarning), in the series dtype.

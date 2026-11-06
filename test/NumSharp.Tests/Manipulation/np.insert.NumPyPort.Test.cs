@@ -228,12 +228,12 @@ namespace NumSharp.Tests.Manipulation
             var v = np.array(new long[] { 100, 200 });
             // >>> np.insert(np.arange(12), np.array([0, 2], np.uint8), [100, 200])
             // UFuncTypeError: Cannot cast ufunc 'add' output from dtype('int64') to dtype('uint8') with casting rule 'same_kind'
-            // (NumSharp's ufunc output-cast refusal is the house ArgumentException with NumPy's text.)
+            // (NumSharp's ufunc output-cast refusal is TypeError, the class of NumPy's UFuncTypeError, with its text.)
             Action unsigned = () => np.insert(np.arange(12L), np.array(new byte[] { 0, 2 }), v);
-            unsigned.Should().ThrowExactly<ArgumentException>().WithMessage(
+            unsigned.Should().ThrowExactly<TypeError>().WithMessage(
                 "Cannot cast ufunc 'add' output from dtype('int64') to dtype('uint8') with casting rule 'same_kind'");
             Action emptyUnsigned = () => np.insert(np.arange(12L), np.array(new byte[0]), v);
-            emptyUnsigned.Should().ThrowExactly<ArgumentException>().WithMessage(
+            emptyUnsigned.Should().ThrowExactly<TypeError>().WithMessage(
                 "Cannot cast ufunc 'add' output from dtype('int64') to dtype('uint8') with casting rule 'same_kind'");
             // >>> np.insert(np.arange(300), np.array([0, 2], np.uint8), [100, 200])
             // OverflowError: Python integer 300 out of bounds for uint8

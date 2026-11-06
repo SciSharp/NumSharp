@@ -105,9 +105,10 @@ namespace NumSharp
         ///     <paramref name="out"/> when supplied).</returns>
         /// <exception cref="IncorrectTypeException">A <paramref name="dtype"/> other than float64 or
         ///     complex128 was requested (no such loop exists).</exception>
-        /// <exception cref="System.ArgumentException"><paramref name="where"/> is non-bool; a complex
-        ///     input cannot same_kind-cast to a requested float64 loop; <paramref name="out"/> is
-        ///     read-only or not same_kind-castable from the loop dtype; or the shapes do not broadcast.</exception>
+        /// <exception cref="TypeError">A complex input cannot same_kind-cast to a requested float64 loop, or the loop
+        ///     dtype cannot same_kind-cast into <paramref name="out"/>.</exception>
+        /// <exception cref="System.ArgumentException"><paramref name="where"/> is non-bool; <paramref name="out"/> is
+        ///     read-only; or the shapes do not broadcast.</exception>
         public abstract NDArray FloatPower(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray FloorDivide(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
 
@@ -169,7 +170,7 @@ namespace NumSharp
         ///     <paramref name="keepdims"/> or <paramref name="axis"/> given.</exception>
         /// <exception cref="AxisError">An <c>axes=</c> entry whose length is not its operand's core rank, or an axis out of
         ///     range.</exception>
-        /// <exception cref="ArgumentException">A cast <paramref name="casting"/> refuses (NumPy's UFuncTypeError
+        /// <exception cref="TypeError">A cast <paramref name="casting"/> refuses (NumPy's UFuncTypeError
         ///     text).</exception>
         /// <exception cref="IncorrectShapeException">Core dimensions that do not match, or loop axes that do not
         ///     broadcast (the product's texts).</exception>
@@ -208,7 +209,7 @@ namespace NumSharp
         /// <exception cref="ValueError">A 0-d operand; core axes of different lengths; an <c>axes=</c> list of the wrong
         ///     length; a read-only <paramref name="out"/>, or one the answer does not broadcast into.</exception>
         /// <exception cref="AxisError">An <c>axes=</c> entry of the wrong length, or an axis out of range.</exception>
-        /// <exception cref="ArgumentException">An input cannot be cast to the loop, or the answer into
+        /// <exception cref="TypeError">An input cannot be cast to the loop, or the answer into
         ///     <paramref name="out"/>, under <paramref name="casting"/> (NumPy's UFuncTypeError text).</exception>
         /// <exception cref="ValueError">A <paramref name="casting"/> or <paramref name="order"/> name NumPy refuses
         ///     (<c>casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe' (got '…')</c>, <c>order must be one
@@ -250,7 +251,7 @@ namespace NumSharp
         ///     <c>axes=</c> list without three entries; a read-only <paramref name="out"/>, or one the answer does not
         ///     broadcast into.</exception>
         /// <exception cref="AxisError">An <c>axes=</c> entry of the wrong length, or an axis out of range.</exception>
-        /// <exception cref="ArgumentException">An input cannot be cast to the loop, or the answer into
+        /// <exception cref="TypeError">An input cannot be cast to the loop, or the answer into
         ///     <paramref name="out"/>, under <paramref name="casting"/> (NumPy's UFuncTypeError text).</exception>
         /// <exception cref="ValueError">A <paramref name="casting"/> or <paramref name="order"/> name NumPy refuses
         ///     (<c>casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe' (got '…')</c>, <c>order must be one
@@ -293,7 +294,7 @@ namespace NumSharp
         ///     <c>axes=</c> list without three entries; a read-only <paramref name="out"/>, or one the answer does not
         ///     broadcast into.</exception>
         /// <exception cref="AxisError">An <c>axes=</c> entry of the wrong length, or an axis out of range.</exception>
-        /// <exception cref="ArgumentException">An input cannot be cast to the loop, or the answer into
+        /// <exception cref="TypeError">An input cannot be cast to the loop, or the answer into
         ///     <paramref name="out"/>, under <paramref name="casting"/> (NumPy's UFuncTypeError text).</exception>
         /// <exception cref="ValueError">A <paramref name="casting"/> or <paramref name="order"/> name NumPy refuses
         ///     (<c>casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe' (got '…')</c>, <c>order must be one
@@ -459,9 +460,9 @@ namespace NumSharp
         /// <exception cref="SystemError">A <c>U</c> operand holding a unit above U+10FFFF (NumPy's bool cast of the
         ///     text).</exception>
         /// <exception cref="ValueError">A read-only <paramref name="out"/>.</exception>
-        /// <exception cref="ArgumentException">A <paramref name="where"/> that is not bool, an <paramref name="out"/> the
-        ///     bool result cannot be cast into, or a mask or <paramref name="out"/> that does not broadcast with the
-        ///     operands (NumPy's ValueError text).</exception>
+        /// <exception cref="TypeError">An <paramref name="out"/> the bool result cannot be cast into.</exception>
+        /// <exception cref="ArgumentException">A <paramref name="where"/> that is not bool, or a mask or
+        ///     <paramref name="out"/> that does not broadcast with the operands (NumPy's ValueError text).</exception>
         /// <exception cref="IncorrectShapeException">Operands that do not broadcast together.</exception>
         /// <remarks>NumPy's loop is C (<c>@TYPE@_logical_and</c>), so the call is an engine member, as every ufunc's is; the
         ///     numpy.matrix and numpy.char.chararray boundaries stay with <c>np.logical_and</c>.</remarks>
@@ -486,9 +487,9 @@ namespace NumSharp
         ///     string loop refuses.</exception>
         /// <exception cref="SystemError">A <c>U</c> operand holding a unit above U+10FFFF.</exception>
         /// <exception cref="ValueError">A read-only <paramref name="out"/>.</exception>
-        /// <exception cref="ArgumentException">A <paramref name="where"/> that is not bool, an <paramref name="out"/> the
-        ///     bool result cannot be cast into, or a mask or <paramref name="out"/> that does not broadcast with the
-        ///     operands (NumPy's ValueError text).</exception>
+        /// <exception cref="TypeError">An <paramref name="out"/> the bool result cannot be cast into.</exception>
+        /// <exception cref="ArgumentException">A <paramref name="where"/> that is not bool, or a mask or
+        ///     <paramref name="out"/> that does not broadcast with the operands (NumPy's ValueError text).</exception>
         /// <exception cref="IncorrectShapeException">Operands that do not broadcast together.</exception>
         public abstract NDArray LogicalOr(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
 
@@ -511,9 +512,9 @@ namespace NumSharp
         ///     string loop refuses.</exception>
         /// <exception cref="SystemError">A <c>U</c> operand holding a unit above U+10FFFF.</exception>
         /// <exception cref="ValueError">A read-only <paramref name="out"/>.</exception>
-        /// <exception cref="ArgumentException">A <paramref name="where"/> that is not bool, an <paramref name="out"/> the
-        ///     bool result cannot be cast into, or a mask or <paramref name="out"/> that does not broadcast with the
-        ///     operands (NumPy's ValueError text).</exception>
+        /// <exception cref="TypeError">An <paramref name="out"/> the bool result cannot be cast into.</exception>
+        /// <exception cref="ArgumentException">A <paramref name="where"/> that is not bool, or a mask or
+        ///     <paramref name="out"/> that does not broadcast with the operands (NumPy's ValueError text).</exception>
         /// <exception cref="IncorrectShapeException">Operands that do not broadcast together.</exception>
         public abstract NDArray LogicalXor(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
 
@@ -538,10 +539,11 @@ namespace NumSharp
         ///     StringDType operand's text names the requested output class), or a detailed or non-legacy
         ///     <paramref name="dtype"/> descriptor.</exception>
         /// <exception cref="ValueError">A read-only <paramref name="out"/>.</exception>
-        /// <exception cref="ArgumentException">A <paramref name="where"/> that is not bool, an <paramref name="out"/> the
-        ///     bool result cannot be cast into, a fixed-width text operand under <c>dtype=bool</c> (the input cast NumPy
-        ///     refuses, its UFuncTypeError text), or a mask or <paramref name="out"/> that does not broadcast with the
-        ///     operand (NumPy's ValueError text).</exception>
+        /// <exception cref="TypeError">An <paramref name="out"/> the bool result cannot be cast into, or a fixed-width
+        ///     text operand under <c>dtype=bool</c> (the input cast NumPy refuses, its UFuncTypeError
+        ///     text).</exception>
+        /// <exception cref="ArgumentException">A <paramref name="where"/> that is not bool, or a mask or
+        ///     <paramref name="out"/> that does not broadcast with the operand (NumPy's ValueError text).</exception>
         public abstract NDArray LogicalNot(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
 
         // Bit shift operations (integer types only). dtype (ufunc dtype=) selects the loop among the

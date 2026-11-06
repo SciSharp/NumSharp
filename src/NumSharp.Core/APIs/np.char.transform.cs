@@ -207,7 +207,7 @@ namespace NumSharp
         ///     plus every other character's BYTES, so a <c>U</c> result is wider than its text).</returns>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <exception cref="TypeError">A non-text operand (NumPy's no-loop text).</exception>
-        /// <exception cref="ArgumentException">A tab size that cannot reach int64 by a same_kind cast (a float: <c>Cannot
+        /// <exception cref="TypeError">A tab size that cannot reach int64 by a same_kind cast (a float: <c>Cannot
         ///     cast ufunc '_expandtabs_length' input 1 from dtype('float64') to dtype('int64') with casting rule
         ///     'same_kind'</c>).</exception>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>

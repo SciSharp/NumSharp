@@ -751,9 +751,9 @@ namespace NumSharp.Tests.Fuzz
         ///     base classes, or the BCL class the house raises for it — <c>OverflowError</c> → <see cref="OverflowException"/>,
         ///     <c>ZeroDivisionError</c> → <see cref="DivideByZeroException"/>, <c>MemoryError</c> →
         ///     <see cref="OutOfMemoryException"/>, a broadcasting <c>ValueError</c> → <see cref="IncorrectShapeException"/>
-        ///     (the library-wide shape error), np.dot's alignment <c>ValueError</c> → <see cref="ArgumentException"/> (the
-        ///     class two of np.dot's branches raise it with), and a ufunc casting <c>TypeError</c> (NumPy's UFuncTypeError)
-        ///     → <see cref="ArgumentException"/> (the library's type for that check). Texts are compared verbatim either way.
+        ///     (the library-wide shape error), and np.dot's alignment <c>ValueError</c> → <see cref="ArgumentException"/> (the
+        ///     class two of np.dot's branches raise it with). A ufunc casting <c>TypeError</c> (NumPy's UFuncTypeError) is
+        ///     NumSharp's <see cref="TypeError"/> itself, matched by name. Texts are compared verbatim either way.
         /// </summary>
         /// <param name="caught">NumSharp's exception.</param>
         /// <param name="numpyType">NumPy's recorded class name.</param>
@@ -772,9 +772,9 @@ namespace NumSharp.Tests.Fuzz
                 // of its branches and IncorrectShapeException in the others; both stand for NumPy's ValueError.
                 "ValueError" => caught is IncorrectShapeException
                                 || (caught is ArgumentException && caught.Message.Contains(" not aligned: ", StringComparison.Ordinal)),
-                // NumPy's UFuncTypeError for a ufunc casting rule (`Cannot cast ufunc 'multiply' output from ...`) is the
-                // library's ArgumentException (DefaultEngine.UfuncOut's house type for that check), text verbatim.
-                "TypeError" => caught is ArgumentException && caught.Message.StartsWith("Cannot cast ufunc ", StringComparison.Ordinal),
+                // No TypeError arm: NumPy's UFuncTypeError for a ufunc casting rule (`Cannot cast ufunc 'multiply' output
+                // from ...`) is NumSharp's TypeError, which the class-name walk above already matched; an ArgumentException
+                // carrying that text is a regression and fails here.
                 _ => false,
             };
         }

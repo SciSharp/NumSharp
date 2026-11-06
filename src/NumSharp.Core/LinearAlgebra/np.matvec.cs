@@ -63,7 +63,7 @@ namespace NumSharp
         ///     <paramref name="keepdims"/>.</exception>
         /// <exception cref="AxisError">An <paramref name="axes"/> entry of the wrong length, or an axis out of
         ///     range.</exception>
-        /// <exception cref="System.ArgumentException">An input cannot be cast to the loop, or the answer into
+        /// <exception cref="TypeError">An input cannot be cast to the loop, or the answer into
         ///     <paramref name="out"/>, under <paramref name="casting"/> (NumPy's UFuncTypeError text: <c>Cannot cast ufunc
         ///     'matvec' input 0 from dtype('int32') to dtype('float64') with casting rule 'no'</c>).</exception>
         /// <exception cref="ValueError">A <paramref name="casting"/> or <paramref name="order"/> name NumPy

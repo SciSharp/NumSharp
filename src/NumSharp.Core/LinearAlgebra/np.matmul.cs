@@ -77,7 +77,7 @@ namespace NumSharp
         ///     refuses, with its texts.</exception>
         /// <exception cref="INumSharpException">A read-only <paramref name="out"/> (NumPy's ValueError "output array is
         ///     read-only").</exception>
-        /// <exception cref="ArgumentException">A cast <paramref name="casting"/> refuses (NumPy's UFuncTypeError text).</exception>
+        /// <exception cref="TypeError">A cast <paramref name="casting"/> refuses (NumPy's UFuncTypeError text).</exception>
         /// <exception cref="NullReferenceException"><paramref name="x1"/> or <paramref name="x2"/> is null.</exception>
         [NDScoped]
         public static NDArray matmul(NDArray x1, NDArray x2, NDArray @out = null, int[][] axes = null,

@@ -50,7 +50,7 @@ namespace NumSharp
         ///     <c>a.shape[axis]</c>: <c>tuple index out of range</c>).</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> out of range with <paramref name="n"/> given.</exception>
         /// <exception cref="DTypePromotionError">A text input (<c>result_type(a.real.dtype, 1.0)</c> has no common DType).</exception>
-        /// <exception cref="ArgumentException">An <paramref name="out"/> dtype the complex128 result cannot be cast to under
+        /// <exception cref="TypeError">An <paramref name="out"/> dtype the complex128 result cannot be cast to under
         ///     same_kind (NumPy's UFuncTypeError text).</exception>
         public abstract NDArray Fft(NDArray a, int? n = null, int axis = -1, string norm = null, NDArray @out = null);
 
@@ -70,7 +70,7 @@ namespace NumSharp
         /// <exception cref="IndexError"><paramref name="axis"/> out of range with <paramref name="n"/> omitted.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> out of range with <paramref name="n"/> given.</exception>
         /// <exception cref="DTypePromotionError">A text input.</exception>
-        /// <exception cref="ArgumentException">An <paramref name="out"/> dtype the complex128 result cannot be cast to under
+        /// <exception cref="TypeError">An <paramref name="out"/> dtype the complex128 result cannot be cast to under
         ///     same_kind.</exception>
         public abstract NDArray Ifft(NDArray a, int? n = null, int axis = -1, string norm = null, NDArray @out = null);
 
@@ -161,7 +161,7 @@ namespace NumSharp
         /// <exception cref="TypeError">A complex input (<c>ufunc 'rfft_n_even' not supported for the input types, ...</c>,
         ///     <c>rfft_n_odd</c> for an odd <paramref name="n"/>).</exception>
         /// <exception cref="DTypePromotionError">A text input.</exception>
-        /// <exception cref="ArgumentException">An <paramref name="out"/> dtype the complex128 result cannot be cast to under
+        /// <exception cref="TypeError">An <paramref name="out"/> dtype the complex128 result cannot be cast to under
         ///     same_kind.</exception>
         public abstract NDArray Rfft(NDArray a, int? n = null, int axis = -1, string norm = null, NDArray @out = null);
 
@@ -181,7 +181,7 @@ namespace NumSharp
         /// <exception cref="IndexError"><paramref name="axis"/> out of range with <paramref name="n"/> omitted.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> out of range with <paramref name="n"/> given.</exception>
         /// <exception cref="DTypePromotionError">A text input.</exception>
-        /// <exception cref="ArgumentException">An <paramref name="out"/> dtype the float64 result cannot be cast to under
+        /// <exception cref="TypeError">An <paramref name="out"/> dtype the float64 result cannot be cast to under
         ///     same_kind.</exception>
         public abstract NDArray Irfft(NDArray a, int? n = null, int axis = -1, string norm = null, NDArray @out = null);
 
@@ -289,7 +289,7 @@ namespace NumSharp
         /// <exception cref="AxisError"><paramref name="axis"/> out of range with <paramref name="n"/> given.</exception>
         /// <exception cref="TypeError">A complex input (rfft's refusal).</exception>
         /// <exception cref="DTypePromotionError">A text input.</exception>
-        /// <exception cref="ArgumentException">An <paramref name="out"/> dtype the complex128 result cannot be cast to.</exception>
+        /// <exception cref="TypeError">An <paramref name="out"/> dtype the complex128 result cannot be cast to.</exception>
         public abstract NDArray Ihfft(NDArray a, int? n = null, int axis = -1, string norm = null, NDArray @out = null);
 
         /// <summary>

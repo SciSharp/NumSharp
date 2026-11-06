@@ -445,9 +445,9 @@ namespace NumSharp
         /// <exception cref="OverflowException">A C# number literal outside the array dtype's range (NumPy's OverflowError),
         ///     or, for several positions, an axis length the index dtype cannot hold (<c>Python integer 300 out of bounds
         ///     for uint8</c>).</exception>
-        /// <exception cref="ArgumentException">Several positions in an UNSIGNED index array: NumPy's in-place shift cannot cast
+        /// <exception cref="TypeError">Several positions in an UNSIGNED index array: NumPy's in-place shift cannot cast
         ///     its int64 result back (<c>Cannot cast ufunc 'add' output from dtype('int64') to dtype('uint8') with casting
-        ///     rule 'same_kind'</c>, NumSharp's ufunc output-cast refusal); an empty one too.</exception>
+        ///     rule 'same_kind'</c>, NumPy's UFuncTypeError); an empty one too.</exception>
         /// <remarks>Covered by <c>[NDScopedCovered]</c>, as <see cref="insert(NDArray, long, NDArray, int?)"/>; the
         ///     boolean mask's flatnonzero temp is released by the same scope.</remarks>
         [NDScopedCovered]
@@ -573,9 +573,9 @@ namespace NumSharp
         /// <exception cref="OverflowException">The axis length does not fit the index dtype: <c>indices &lt; 0</c> meets the
         ///     Python int <c>N</c>, which NEP 50 packs into that dtype (<c>Python integer 300 out of bounds for uint8</c>);
         ///     also a C# number literal outside the array dtype's range.</exception>
-        /// <exception cref="ArgumentException">An unsigned index dtype: the in-place <c>indices[order] += np.arange(numnew)</c>
+        /// <exception cref="TypeError">An unsigned index dtype: the in-place <c>indices[order] += np.arange(numnew)</c>
         ///     cannot cast its int64 result back (<c>Cannot cast ufunc 'add' output from dtype('int64') to dtype('uint8')
-        ///     with casting rule 'same_kind'</c>; NumSharp's ufunc output-cast refusal, NumPy's UFuncTypeError).</exception>
+        ///     with casting rule 'same_kind'</c>, NumPy's UFuncTypeError).</exception>
         /// <exception cref="IndexOutOfRangeException">A shifted position is outside <c>[-M, M)</c>, <c>M = N + numnew</c>:
         ///     <c>index 14 is out of bounds for axis 0 with size 14</c> (the mask's axis 0, whatever the insertion axis),
         ///     the first such index in the array's order.</exception>

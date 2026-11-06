@@ -96,7 +96,7 @@ namespace NumSharp
         /// <exception cref="ValueError"><c>The order of derivation must be non-negative</c>, or an array scl whose
         ///     broadcast would stretch the series (NumPy's non-broadcastable-output text).</exception>
         /// <exception cref="AxisError">The axis is out of range.</exception>
-        /// <exception cref="ArgumentException">A scl the series cannot absorb — NumPy's UFuncTypeError text
+        /// <exception cref="TypeError">A scl the series cannot absorb — NumPy's UFuncTypeError text
         ///     (<c>Cannot cast ufunc 'multiply' output from dtype('complex128') to dtype('float64') ...</c>).</exception>
         /// <exception cref="IncorrectShapeException">An array scl that does not broadcast with the series.</exception>
         /// <exception cref="TypeError">A text series (S, U or <c>StringDType</c>): NumPy's string-ufunc TypeErrors at
@@ -193,7 +193,7 @@ namespace NumSharp
         /// <exception cref="IndexError">An empty series: <c>index 0 is out of bounds for axis 0 with size 0</c>.</exception>
         /// <exception cref="TypeError">An array constant for a complex 1-D series (<c>complex()</c>'s text); a str constant,
         ///     or a None constant of a 1-D series, when an order uses it (NumPy's no-loop / unsupported-operand texts).</exception>
-        /// <exception cref="ArgumentException">A scl, constant or lbnd value the series cannot absorb in place (NumPy's
+        /// <exception cref="TypeError">A scl, constant or lbnd value the series cannot absorb in place (NumPy's
         ///     UFuncTypeError text).</exception>
         /// <exception cref="IncorrectShapeException">Constants that do not broadcast with the series' columns.</exception>
         /// <exception cref="OverflowException">A Python-int scl / lbnd / constant too large for the series' float dtype
@@ -543,7 +543,7 @@ namespace NumSharp
         /// <param name="oneD">A 1-D series.</param>
         /// <exception cref="ValueError">An array constant into a real 1-D series, a stretching broadcast, or a ragged constant.</exception>
         /// <exception cref="TypeError">An array constant into a complex 1-D series.</exception>
-        /// <exception cref="ArgumentException">A constant the series cannot absorb in place (NumPy's UFuncTypeError text).</exception>
+        /// <exception cref="TypeError">A constant the series cannot absorb in place (NumPy's UFuncTypeError text).</exception>
         /// <exception cref="IncorrectShapeException">A constant that does not broadcast with the row.</exception>
         /// <exception cref="TypeError">A str constant (the add ufunc has no loop for a str dtype), or a None constant of a 1-D
         ///     series (the object loop's CPython addition).</exception>
@@ -601,7 +601,7 @@ namespace NumSharp
         /// <param name="operandIsComplex64">The operand is an ARRAY NumPy holds as complex64 (NumSharp carries it as
         ///     complex128, #569) — e.g. <c>k - {p}val(1j, tmp)</c> of a float32 series. It only renames the dtype in the
         ///     cast error: every such loop meets a float16/float32 target, which cannot hold a complex, so it always raises.</param>
-        /// <exception cref="ArgumentException">NumPy's UFuncTypeError: <c>Cannot cast ufunc '{name}' output from dtype(...)
+        /// <exception cref="TypeError">NumPy's UFuncTypeError: <c>Cannot cast ufunc '{name}' output from dtype(...)
         ///     to dtype(...) with casting rule 'same_kind'</c>.</exception>
         /// <exception cref="IncorrectShapeException">Shapes that do not broadcast (NumPy lists all three operands).</exception>
         /// <exception cref="ValueError">A broadcast that would stretch the target.</exception>
@@ -618,7 +618,7 @@ namespace NumSharp
                 bool c64 = PolyNumber.IsComplex64Loop(operand, t, bIsComplex64: false)
                            || (operandIsComplex64 && PolyNumber.IsComplex64Loop(PolyNumber.FromArray(target), NPTypeCode.Complex, bIsComplex64: true));
                 string loopName = loop == NPTypeCode.Complex && c64 ? "complex64" : loop.AsNumpyDtypeName();
-                throw new ArgumentException($"Cannot cast ufunc '{ufunc}' output from dtype('{loopName}') to " +
+                throw new TypeError($"Cannot cast ufunc '{ufunc}' output from dtype('{loopName}') to " +
                                             $"dtype('{t.AsNumpyDtypeName()}') with casting rule 'same_kind'");
             }
             if (operand.IsNdArray)
@@ -1066,7 +1066,7 @@ namespace NumSharp
         /// <param name="scaleLoop">The loop dtype the Fused kernel multiplies in (<paramref name="t"/>, or the wider loop);
         ///     <see cref="NPTypeCode.Empty"/> for the House route.</param>
         /// <returns>The route.</returns>
-        /// <exception cref="ArgumentException">A scl whose loop dtype cannot be cast back into the series (NumPy's
+        /// <exception cref="TypeError">A scl whose loop dtype cannot be cast back into the series (NumPy's
         ///     UFuncTypeError text).</exception>
         /// <exception cref="NotSupportedException">A string scl.</exception>
         /// <exception cref="ValueError">A ragged list / tuple scl.</exception>
@@ -1079,7 +1079,7 @@ namespace NumSharp
             {
                 string loopName = loop == NPTypeCode.Complex && PolyNumber.IsComplex64Loop(num, t, bIsComplex64: false)
                     ? "complex64" : loop.AsNumpyDtypeName();
-                throw new ArgumentException($"Cannot cast ufunc 'multiply' output from dtype('{loopName}') to " +
+                throw new TypeError($"Cannot cast ufunc 'multiply' output from dtype('{loopName}') to " +
                                             $"dtype('{t.AsNumpyDtypeName()}') with casting rule 'same_kind'");
             }
             if (!num.IsNdArray && (loop == t || PolyCalcKey.HasWidenedScale(t, loop)))

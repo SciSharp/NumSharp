@@ -113,18 +113,18 @@ namespace NumSharp.Tests.LinearAlgebra
             var c22 = F22.astype(np.complex128);
             // np.vecdot(c22, f22, dtype=np.float64) -> UFuncTypeError (NumSharp cast unsafely and computed)
             Action vecdot = () => np.vecdot(c22, F22, dtype: np.float64);
-            vecdot.Should().Throw<ArgumentException>().WithMessage(
+            vecdot.Should().Throw<TypeError>().WithMessage(
                 "Cannot cast ufunc 'vecdot' input 0 from dtype('complex128') to dtype('float64') with casting rule 'same_kind'");
             // np.vecdot(c22, np.ones((2,3)), dtype=np.float64): the cast before the core mismatch
             Action beforeCore = () => np.vecdot(c22, np.ones(new Shape(2L, 3L)), dtype: np.float64);
-            beforeCore.Should().Throw<ArgumentException>().WithMessage("Cannot cast ufunc 'vecdot' input 0 *");
+            beforeCore.Should().Throw<TypeError>().WithMessage("Cannot cast ufunc 'vecdot' input 0 *");
             // np.matvec(c22, np.ones(2), dtype=np.float64, axis=0): the cast before the axis refusal
             Action beforeAxis = () => np.matvec(c22, np.ones(new Shape(2L)), axis: 0, dtype: np.float64);
-            beforeAxis.Should().Throw<ArgumentException>().WithMessage("Cannot cast ufunc 'matvec' input 0 *");
+            beforeAxis.Should().Throw<TypeError>().WithMessage("Cannot cast ufunc 'matvec' input 0 *");
             // np.matmul(i32, f8, casting='no') -> input 0 refused even without dtype=; 'safe' computes
             var i22 = F22.astype(np.int32);
             Action no = () => np.matmul(i22, F22, casting: "no");
-            no.Should().Throw<ArgumentException>().WithMessage(
+            no.Should().Throw<TypeError>().WithMessage(
                 "Cannot cast ufunc 'matmul' input 0 from dtype('int32') to dtype('float64') with casting rule 'no'");
             np.matmul(i22, F22, casting: "safe").Should().BeOfValues(7.0, 10.0, 15.0, 22.0).And.BeShaped(2, 2);
         }
@@ -135,18 +135,18 @@ namespace NumSharp.Tests.LinearAlgebra
             // np.vecdot(f22, f22, out=np.zeros(2, np.int8)) -> UFuncTypeError (NumSharp: np.copyto's "Cannot cast array
             // data ..." after computing)
             Action vecdot = () => np.vecdot(F22, F22, np.zeros(new Shape(2L), np.int8));
-            vecdot.Should().Throw<ArgumentException>().WithMessage(
+            vecdot.Should().Throw<TypeError>().WithMessage(
                 "Cannot cast ufunc 'vecdot' output from dtype('float64') to dtype('int8') with casting rule 'same_kind'");
             // np.vecdot(f22, np.ones((2,3)), out=np.zeros(2, np.int8)): the cast before the core mismatch
             Action beforeCore = () => np.vecdot(F22, np.ones(new Shape(2L, 3L)), np.zeros(new Shape(2L), np.int8));
-            beforeCore.Should().Throw<ArgumentException>().WithMessage("Cannot cast ufunc 'vecdot' output *");
+            beforeCore.Should().Throw<TypeError>().WithMessage("Cannot cast ufunc 'vecdot' output *");
             // np.vecdot(f22, f22, out=U5) -> ['5.0', '25.0'] (a number to fixed-width text is same_kind)
             var text = np.zeros(new Shape(2L), np.dtype("U5"));
             np.vecdot(F22, F22, text);
             text.ToString().Should().Be("['5.0' '25.0']");
             // np.matmul(f22, f22, out=U5, casting='safe') -> refused (not safe)
             Action safe = () => np.matmul(F22, F22, np.zeros(new Shape(2L, 2L), np.dtype("U5")), casting: "safe");
-            safe.Should().Throw<ArgumentException>().WithMessage(
+            safe.Should().Throw<TypeError>().WithMessage(
                 "Cannot cast ufunc 'matmul' output from dtype('float64') to dtype('<U5') with casting rule 'safe'");
         }
 
@@ -155,11 +155,11 @@ namespace NumSharp.Tests.LinearAlgebra
         {
             // np.matmul(s, s, dtype=np.float64) -> the input cast refusal (NumSharp: the no-loop text)
             Action s1 = () => np.matmul(Text22("S1"), Text22("S1"), dtype: np.float64);
-            s1.Should().Throw<ArgumentException>().WithMessage(
+            s1.Should().Throw<TypeError>().WithMessage(
                 "Cannot cast ufunc 'matmul' input 0 from dtype('S1') to dtype('float64') with casting rule 'same_kind'");
             // np.matmul(f22, u, dtype=np.float64) -> input 1
             Action u1 = () => np.matmul(F22, Text22("U5"), dtype: np.float64);
-            u1.Should().Throw<ArgumentException>().WithMessage(
+            u1.Should().Throw<TypeError>().WithMessage(
                 "Cannot cast ufunc 'matmul' input 1 from dtype('<U5') to dtype('float64') with casting rule 'same_kind'");
             // np.matmul(u, u, dtype=np.float64, casting='unsafe') -> [[7., 10.], [15., 22.]]: the loop converts the text
             np.matmul(Text22("U5"), Text22("U5"), dtype: np.float64, casting: "unsafe")
@@ -278,19 +278,19 @@ namespace NumSharp.Tests.LinearAlgebra
             var f64 = np.arange(3.0);
             // np.vecdot(a_int32, b_f64, casting='no') -> UFuncTypeError: Cannot cast ufunc 'vecdot' input 0 from
             // dtype('int32') to dtype('float64') with casting rule 'no' (and 'equiv'); 'safe' / 'same_kind' / 'unsafe' -> 5.0
-            new Action(() => np.vecdot(i32, f64, casting: "no")).Should().Throw<ArgumentException>()
+            new Action(() => np.vecdot(i32, f64, casting: "no")).Should().Throw<TypeError>()
                 .WithMessage("Cannot cast ufunc 'vecdot' input 0 from dtype('int32') to dtype('float64') with casting rule 'no'");
-            new Action(() => np.vecdot(i32, f64, casting: "equiv")).Should().Throw<ArgumentException>()
+            new Action(() => np.vecdot(i32, f64, casting: "equiv")).Should().Throw<TypeError>()
                 .WithMessage("*with casting rule 'equiv'");
             foreach (var rule in new[] { "safe", "same_kind", "unsafe" })
                 np.vecdot(i32, f64, casting: rule).GetDouble().Should().Be(5.0, rule);
             // np.vecdot(a_int32, a_int32, dtype=np.float32, casting='safe') -> input 0 to float32 refused; same_kind -> 5.0
-            new Action(() => np.vecdot(i32, i32, dtype: np.float32, casting: "safe")).Should().Throw<ArgumentException>()
+            new Action(() => np.vecdot(i32, i32, dtype: np.float32, casting: "safe")).Should().Throw<TypeError>()
                 .WithMessage("Cannot cast ufunc 'vecdot' input 0 from dtype('int32') to dtype('float32') with casting rule 'safe'");
             np.vecdot(i32, i32, dtype: np.float32).GetSingle().Should().Be(5f);
             // a float64 answer into an int32 out: refused under same_kind, stored under unsafe
             var o = np.zeros(new Shape(), np.int32);
-            new Action(() => np.vecdot(f64, f64, o)).Should().Throw<ArgumentException>()
+            new Action(() => np.vecdot(f64, f64, o)).Should().Throw<TypeError>()
                 .WithMessage("Cannot cast ufunc 'vecdot' output from dtype('float64') to dtype('int32') with casting rule 'same_kind'");
             np.vecdot(f64, f64, o, casting: "unsafe").Should().BeSameAs(o);
             o.GetInt32().Should().Be(5);

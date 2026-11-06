@@ -137,18 +137,18 @@ namespace NumSharp.Tests.Math
             using var f64 = np.empty(new Shape(1));
 
             Action quotient = () => np.divmod(x, one, (i32, f64));
-            quotient.Should().Throw<ArgumentException>().WithMessage(
+            quotient.Should().Throw<TypeError>().WithMessage(
                 "Cannot cast ufunc 'divmod' output 2 from dtype('float64') to dtype('int32') with casting rule 'same_kind'");
             Action remainder = () => np.divmod(x, one, (f64, i32));
-            remainder.Should().Throw<ArgumentException>().WithMessage(
+            remainder.Should().Throw<TypeError>().WithMessage(
                 "Cannot cast ufunc 'divmod' output 3 from dtype('float64') to dtype('int32') with casting rule 'same_kind'");
 
             Action input0 = () => np.divmod(x, one, dtype: np.int32);
-            input0.Should().Throw<ArgumentException>().WithMessage(
+            input0.Should().Throw<TypeError>().WithMessage(
                 "Cannot cast ufunc 'divmod' input 0 from dtype('float64') to dtype('int32') with casting rule 'same_kind'");
             using var ione = np.array(new long[] { 1 });
             Action input1 = () => np.divmod(ione, one, dtype: np.int32);
-            input1.Should().Throw<ArgumentException>().WithMessage(
+            input1.Should().Throw<TypeError>().WithMessage(
                 "Cannot cast ufunc 'divmod' input 1 from dtype('float64') to dtype('int32') with casting rule 'same_kind'");
         }
 

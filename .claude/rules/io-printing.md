@@ -135,6 +135,15 @@ through `ToString("F"|"E"+precision)` (which rounds the true binary value half t
 string. NumSharp's `Char` dtype renders as strings (no NumPy equivalent). API: `array2string`, `array_repr`, `array_str`,
 `format_float_positional`, `format_float_scientific`, `get_printoptions`, `printoptions` (an IDisposable context),
 `set_printoptions`.
+- The print options and `np.setbufsize` are context-local, NumPy's `ContextVar`s under the oracle's Python 3.12 (parity
+  QA-40; `Utilities/NDContextVar.cs`): a value set with `set_printoptions` or inside `printoptions(...)` applies to the
+  setting flow and to the asynchronous work it starts (an `await` continuation, `Task.Run`, the thread pool: asyncio
+  copies the context into a task and into `asyncio.to_thread`), while a `new Thread` (or a long-running task) starts at
+  the defaults, as `threading.Thread` does, and a worker's own setting stays in the worker. The entry remembers its
+  setter's thread; a dedicated thread that inherited it drops it on its first read. `[Misaligned]`: the thread pool also
+  serves what Python's `ThreadPoolExecutor` does (its workers start fresh), and a queued work item inherits here
+  (`ThreadPool.UnsafeQueueUserWorkItem` or `ExecutionContext.SuppressFlow` give a clean slate). Gates:
+  `Backends/Printing/PrintOptionsContext.Test.cs`, `APIs/np.bufsize.Test.cs`.
 - The layout engine is NumPy's `_formatArray` text written by an explicit-stack WALK (`ArrayFormatter.FormatArray`,
   `FormatRow`, `CollectReducedValues`), not a recursion: elements are read at `Shape.offset + Σ index·stride`
   (`UnmanagedStorage.ElementAtResolvedOffset`, no view per level), the text goes in order into one buffer, a hanging

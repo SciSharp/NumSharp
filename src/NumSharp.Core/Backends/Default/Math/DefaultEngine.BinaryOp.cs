@@ -204,7 +204,7 @@ namespace NumSharp.Backends
         /// order (the operands' K order; C for C-contiguous operands).</returns>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast, or out= does not have the broadcast
         /// shape (NumPy's texts).</exception>
-        /// <exception cref="ArgumentException">out= cannot hold the loop dtype under same_kind casting.</exception>
+        /// <exception cref="TypeError">out= cannot hold the loop dtype under same_kind casting.</exception>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private unsafe NDArray ExecuteBinaryOpResolved(NDArray lhs, NDArray rhs, BinaryOp op, NPTypeCode lhsType,
                                                        NPTypeCode rhsType, NPTypeCode resultType, NDArray @out, NDArray where,

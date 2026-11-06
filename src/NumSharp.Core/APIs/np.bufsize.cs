@@ -6,13 +6,14 @@ namespace NumSharp
     {
         /// <summary>
         ///     Return the size of the buffer used in ufuncs (the default buffer size for buffered
-        ///     NDIter/ufunc iteration on the calling thread).
+        ///     NDIter/ufunc iteration in the caller's flow).
         /// </summary>
         /// <returns>Size of the ufunc buffer, in elements. Defaults to 8192 (NumPy's <c>NPY_BUFSIZE</c>).</returns>
         /// <remarks>
-        ///     Mirrors <c>numpy.getbufsize()</c>. The value is <b>thread-local</b>: it reflects the last
-        ///     <see cref="setbufsize(long)"/> call on the current thread (or the 8192 default if none),
-        ///     matching NumPy 2.x's context-local error/buffer state. The buffer size sets how buffered
+        ///     Mirrors <c>numpy.getbufsize()</c>. The value is <b>context-local</b>, as NumPy 2.x's extobj
+        ///     <c>ContextVar</c> is under Python 3.12: it reflects the last <see cref="setbufsize(long)"/> call in the
+        ///     caller's flow — an <c>await</c> continuation, <c>Task.Run</c> and the thread pool see their starter's size,
+        ///     a dedicated thread (<c>new Thread</c>) starts at the 8192 default until it sets its own. The buffer size sets how buffered
         ///     iteration is chunked. For almost every operation that is invisible, but — exactly as in NumPy —
         ///     a reduction that CASTS through the buffer sums chunk by chunk: <c>np.evaluate</c>'s flat
         ///     <c>Mean</c> of an integer / bool child adds one pairwise sum per chunk (NumPy's
@@ -35,7 +36,7 @@ namespace NumSharp
 
         /// <summary>
         ///     Set the size of the buffer used in ufuncs (the default buffer size for buffered
-        ///     NDIter/ufunc iteration on the calling thread) and return the previous size.
+        ///     NDIter/ufunc iteration in the caller's flow) and return the previous size.
         /// </summary>
         /// <param name="size">
         ///     New buffer size in elements. Must be non-negative, at most 10,000,000, at least 5, and a
@@ -50,9 +51,11 @@ namespace NumSharp
         ///     <c>"Buffer size, {size}, is not a multiple of 16"</c>.
         /// </exception>
         /// <remarks>
-        ///     Mirrors <c>numpy.setbufsize(size)</c>. The setting is <b>thread-local</b> (matching NumPy
-        ///     2.x's context-local buffer state) and persists until changed again on the same thread; it
-        ///     never affects other threads. Buffering is a performance/chunking knob: results are
+        ///     Mirrors <c>numpy.setbufsize(size)</c>. The setting is <b>context-local</b> (NumPy 2.x's extobj
+        ///     <c>ContextVar</c>, with Python 3.12's thread rule): it persists in the caller's flow until changed again,
+        ///     the asynchronous work the flow starts afterwards (<c>Task.Run</c>, the thread pool, <c>await</c>
+        ///     continuations) inherits it, and it never reaches a thread already running nor a dedicated thread, which
+        ///     starts at the default. Buffering is a performance/chunking knob: results are
         ///     unchanged EXCEPT where NumPy's own are — a reduction that casts through the buffer, or the flat
         ///     <c>np.sum</c> / <c>np.mean</c> of several short runs (see <see cref="getbufsize"/>), pairwise-sums per
         ///     chunk, so its last bits follow the size, as NumPy's do.
