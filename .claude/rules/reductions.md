@@ -248,7 +248,7 @@ for bool / int32 / U inputs, F, permuted, stepped, tuple axes) and the string or
 
 `TensorEngine.Average` (`TensorEngine.FunctionBase.cs`), whose `DefaultEngine` override holds NumPy's
 `numpy/lib/_function_base_impl.py` statements (`Backends/Default/Statistics/Default.Average.cs`); the facades keep the
-numpy.matrix boundary and the null check.
+null check, and their woven subclass path answers for a numpy.matrix operand (`NDSubclassRules.Average`).
 - `_weights_are_valid`: weights of another shape raise `TypeError("Axis must be specified when shapes of a and weights
   differ.")` without an axis and `ValueError("Shape of weights must be consistent with shape of a along specified
   axis.")` along one; weights along the axes are transposed and reshaped into the operand's frame. `result_dtype` is

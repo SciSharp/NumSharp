@@ -3,7 +3,7 @@ using NumSharp.Tests.Utilities;
 namespace NumSharp.Tests
 {
     /// <summary>
-    ///     Open gaps of the matrix boundary (<see cref="NDMatrixBoundary"/>) that the oracle tier
+    ///     Open gaps of numpy.matrix operands (<see cref="NDSubclass"/>) that the oracle tier
     ///     <c>matrix_operand.jsonl</c> cannot hold: functions whose result is a struct of arrays, where NumPy
     ///     2.4.2 returns <c>numpy.matrix</c> objects for a matrix operand and NumSharp returns plain arrays. Each
     ///     test asserts NumPy's answer, so it FAILS while the gap is open. Remove <c>[OpenBugs]</c> when it is

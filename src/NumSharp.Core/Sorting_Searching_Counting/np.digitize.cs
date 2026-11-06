@@ -52,7 +52,6 @@ namespace NumSharp
         public static NDArray digitize(NDArray x, NDArray bins, bool right = false)
         {
             if (x is null) throw new ArgumentNullException(nameof(x));
-            using var plain = NDMatrixBoundary.PlainFor(x, bins);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return x.TensorEngine.Digitize(x, bins, right);
         }
     }

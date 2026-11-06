@@ -27,7 +27,7 @@ namespace NumSharp
             /// <exception cref="LinAlgError">Fewer than two axes.</exception>
             /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
             /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
-            [NDScoped] // the class boundary's temporaries; the Linalg member scopes the computation's own
+            [NDScoped] // what the call leaves (the Linalg member and the woven subclass path scope their own)
             public static (NDArray Q, NDArray R) qr(NDArray a, string mode = "reduced")
             {
                 if (a is null) throw new ArgumentNullException(nameof(a));

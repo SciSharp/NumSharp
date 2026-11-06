@@ -167,8 +167,9 @@ namespace NumSharp
         public IBlasBackend Blas { get; set; }
 
         /// <summary>
-        ///     numpy.linalg's functions for the arrays bound to this engine: every <c>np.linalg</c> function applies its
-        ///     class boundary and calls one member of this sub-engine. <see cref="DefaultLinalgEngine"/> (NumPy's
+        ///     numpy.linalg's functions for the arrays bound to this engine: every <c>np.linalg</c> function calls one member
+        ///     of this sub-engine (a subclass operand handed in as its plain view). <see cref="DefaultLinalgEngine"/>
+        ///     (NumPy's
         ///     <c>_linalg.py</c> statements over kernels that ask <see cref="Blas"/> first) until something else is
         ///     assigned.
         /// </summary>

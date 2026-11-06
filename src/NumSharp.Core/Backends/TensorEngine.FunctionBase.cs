@@ -82,9 +82,10 @@ namespace NumSharp
         /// <remarks>
         ///     NumPy writes quantile in Python; DefaultEngine's override runs its statements in NumPy's order (the complex
         ///     check, q's checks, the weighted branch, the text routes, then <c>_ureduce</c> and the numeric quantile).
-        ///     <c>np.quantile</c> calls it after its class rules (a <c>numpy.char.chararray</c> operand takes DefaultEngine's
-        ///     internal form, which keeps the class boundary's flag); an override replaces it for every array whose engine
-        ///     it is. New in 0.71.0 (the np-layer dtype plan, phase PE); it was the internal class <c>QuantileEngine</c>.
+        ///     <c>np.quantile</c> calls it with plain views of subclass operands (a <c>numpy.char.chararray</c>
+        ///     operand's view remembers the class, which DefaultEngine reads for NumPy's text route); an override replaces
+        ///     it for every array whose engine it is. New in 0.71.0 (the np-layer dtype plan, phase PE); it was the
+        ///     internal class <c>QuantileEngine</c>.
         /// </remarks>
         [ReducesThrough(null)]
         [NewSubtype("a")]
@@ -233,8 +234,9 @@ namespace NumSharp
         /// <remarks>
         ///     NumPy writes cov in Python; DefaultEngine's override runs its statements (its product goes through
         ///     <c>np.dot</c>, so the OpenBLAS backend computes it when installed). <c>np.cov</c> (and <c>np.corrcoef</c>
-        ///     through it) calls this after the matrix boundary's plain region and the null check; an override replaces it
-        ///     for every array whose engine it is. New in 0.71.0 (the np-layer dtype plan, phase PE); it was the internal
+        ///     through it) calls this after the null check, a subclass operand handed in as its plain view; an override
+        ///     replaces it for every array whose engine it is. New in 0.71.0 (the np-layer dtype plan, phase PE); it
+        ///     was the internal
         ///     class <c>CovEngine</c>.
         /// </remarks>
         public abstract NDArray Cov(NDArray m, NDArray y = null, bool rowvar = true, bool bias = false, int? ddof = null,
@@ -273,8 +275,8 @@ namespace NumSharp
         ///     NumPy writes corrcoef in Python over cov (NumPy 2.x dropped its <c>bias</c> / <c>ddof</c>); DefaultEngine runs
         ///     its statements over the operand engine's <see cref="Cov"/>, <see cref="Sqrt"/>, <see cref="Divide"/> and
         ///     <see cref="ClipNDArray"/> and the array object's diagonal and real / imaginary lanes. <c>np.corrcoef</c> calls
-        ///     it after the matrix boundary's plain region and the null check; an override replaces it for every array whose
-        ///     engine it is.
+        ///     it after the null check, a subclass operand handed in as its plain view; an override replaces it for every
+        ///     array whose engine it is.
         /// </remarks>
         public abstract NDArray Corrcoef(NDArray x, NDArray y = null, bool rowvar = true, DType dtype = null);
 
@@ -311,9 +313,10 @@ namespace NumSharp
         ///     range.</exception>
         /// <remarks>
         ///     NumPy writes gradient in Python; DefaultEngine's override runs its statements, each in NumPy's dtype, so the
-        ///     components are bit-identical to NumPy's. <c>np.gradient</c>'s overloads spread their spacings into one list,
-        ///     apply the matrix boundary's plain region and call this; an override replaces it for every array whose engine
-        ///     it is. New in 0.71.0 (the np-layer dtype plan, phase PE); it was the internal class <c>GradientEngine</c>.
+        ///     components are bit-identical to NumPy's. <c>np.gradient</c>'s overloads spread their spacings into one list
+        ///     and call this, a subclass operand handed in as its plain view; an override replaces it for every array whose
+        ///     engine it is. New in 0.71.0 (the np-layer dtype plan, phase PE); it was the internal class
+        ///     <c>GradientEngine</c>.
         /// </remarks>
         public abstract np.GradientResult Gradient(NDArray f, object[] varargs, int[] axis = null, int edge_order = 1);
 
@@ -338,9 +341,9 @@ namespace NumSharp
         ///     statement that has no loop for it.</exception>
         /// <remarks>
         ///     NumPy writes trapezoid in Python; DefaultEngine's override runs its statements, the half and its sum fused
-        ///     into one pass where that gives NumPy's bits. <c>np.trapezoid</c> calls this after the matrix boundary and the
-        ///     null check; an override replaces it for every array whose engine it is. New in 0.71.0 (the np-layer dtype
-        ///     plan, phase PE); it was the internal class <c>TrapezoidEngine</c>.
+        ///     into one pass where that gives NumPy's bits. <c>np.trapezoid</c> calls this after the null check, a
+        ///     subclass operand handed in as its plain view; an override replaces it for every array whose engine it is.
+        ///     New in 0.71.0 (the np-layer dtype plan, phase PE); it was the internal class <c>TrapezoidEngine</c>.
         /// </remarks>
         [SubclassRule(typeof(NDSubclassRules), nameof(NDSubclassRules.Trapezoid))]
         public abstract NDArray Trapezoid(NDArray y, NDArray x = null, double dx = 1.0, int axis = -1);

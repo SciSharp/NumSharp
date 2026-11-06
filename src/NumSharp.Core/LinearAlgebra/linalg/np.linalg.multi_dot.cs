@@ -44,7 +44,7 @@ namespace NumSharp
             ///     fewer than two arrays.</exception>
             /// <exception cref="LinAlgError">With three or more arrays, an operand other than a vector end that is not
             ///     two-dimensional.</exception>
-            [NDScoped] // the class boundary's temporaries; the Linalg member scopes the computation's own
+            [NDScoped] // what the call leaves (the Linalg member and the woven subclass path scope their own)
             public static NDArray multi_dot(NDArray[] arrays, NDArray @out = null)
             {
                 // the first array's engine computes the chain; a null, empty or null-led list has no operand to decide,

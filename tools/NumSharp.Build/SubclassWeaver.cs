@@ -35,9 +35,8 @@ namespace NumSharp.Build;
 ///     producer that is a call resolves to: the called computation's declaration; the ufunc mechanism when the computation is
 ///     shaped like a ufunc call (only NDArray inputs, then an optional <c>dtype</c>, then <c>out</c> and <c>where</c>);
 ///     another public function's own mechanism (mapped through the call's arguments); a non-public helper's returns, traced
-///     the same way; otherwise the plain answer. An operand handed back and <c>null</c> are neutral, and the legacy
-///     boundary calls (<c>NDMatrixBoundary</c> / <c>NDCharArrayBoundary</c>, deleted with the migration) are skipped.
-///     Producers that disagree are an error, never a guess.
+///     the same way; otherwise the plain answer. An operand handed back and <c>null</c> are neutral, and so is a call of
+///     the runtime itself (<c>NDSubclass</c>). Producers that disagree are an error, never a guess.
 ///     </para>
 ///     <para>
 ///     <b>Report.</b> When the environment variable <c>NUMSHARP_SUBCLASS_REPORT</c> names a file, every API method's
@@ -81,12 +80,6 @@ internal static class SubclassWeaver
 
     private const string NDArrayFullName = "NumSharp.NDArray";
     private const string NDArrayArrayFullName = "NumSharp.NDArray[]";
-
-    /// <summary>The legacy boundary classes: their calls are the unconverted subclass path, skipped by the resolution.</summary>
-    private static readonly HashSet<string> LegacyBoundaries = new(StringComparer.Ordinal)
-    {
-        "NumSharp.NDMatrixBoundary", "NumSharp.NDCharArrayBoundary",
-    };
 
     /// <summary>The mechanism families a declaration resolves to.</summary>
     private enum Kind
@@ -205,13 +198,6 @@ internal static class SubclassWeaver
         public Dictionary<string, MethodDefinition> WrapArguments = new(StringComparer.Ordinal);
 
         /// <summary>
-        ///     MIGRATION: the rule comes through a public function that still decides its subclass answer with the legacy
-        ///     boundary (a Sees test). Weaving the caller would hand that function plain views and bypass its rule, so the
-        ///     caller stays unwoven until the callee is converted.
-        /// </summary>
-        public bool ThroughLegacy;
-
-        /// <summary>
         ///     A transparent function's forwarded mechanism, bound to ITS OWN parameters (the callee's rule re-bound through
         ///     the forwarding call): a different function that returns this one uses it.
         /// </summary>
@@ -319,6 +305,16 @@ internal static class SubclassWeaver
         if (dispatcher is null)
             return 0;   // not NumSharp.Core: nothing in this assembly declares the mechanisms
 
+        // Idempotent: an assembly this pass already wove (its marker deleted, an incremental check that misfired) carries
+        // the generated paths. Weaving it again would put a second prologue before the first and add a second method of
+        // the same name, so a woven module is left as it is.
+        if (IsAlreadyWoven(module))
+        {
+            if (verbose)
+                stdout.WriteLine("NumSharp.Build: the subclass paths are already woven; skipping the subclass weave");
+            return 0;
+        }
+
         var ctx = new Context
         {
             Module = module,
@@ -363,12 +359,9 @@ internal static class SubclassWeaver
                 ctx.Report.Add($"{m.DeclaringType.FullName}\t{Signature(m)}\tERROR\t{e.Code}: {e.Message}");
                 continue;
             }
-            // MIGRATION: a function that still decides its subclass answer with the legacy boundary (a Sees test) keeps it
-            // until its block is deleted; the woven path would bypass the block.
-            bool legacy = IsLegacyBody(m) || rule.ThroughLegacy;
-            ctx.Report.Add($"{m.DeclaringType.FullName}\t{Signature(m)}\t{(legacy ? "Legacy" : rule.Kind.ToString())}\t{rule.Describe()}\t" +
+            ctx.Report.Add($"{m.DeclaringType.FullName}\t{Signature(m)}\t{rule.Kind}\t{rule.Describe()}\t" +
                            $"{rule.Source}\t{(rule.BoundByCallSite ? "call-site" : "role")}");
-            if (rule.Kind is not (Kind.Transparent or Kind.Aware) && !legacy)
+            if (rule.Kind is not (Kind.Transparent or Kind.Aware))
                 plan.Add((m, rule, operands));
         }
 
@@ -565,7 +558,7 @@ internal static class SubclassWeaver
             producers.AddRange(flow.ValueSources(ret));
 
         var rules = new List<Rule>();
-        bool transparent = false, undeclared = false, aware = false, throughLegacy = false;
+        bool transparent = false, undeclared = false, aware = false;
         Rule forwarded = null;
         foreach (var p in producers.Distinct())
         {
@@ -573,11 +566,9 @@ internal static class SubclassWeaver
             {
                 case Code.Call or Code.Callvirt or Code.Newobj:
                     var callee = (MethodReference)p.Operand;
-                    if (LegacyBoundaries.Contains(callee.DeclaringType.FullName) ||
-                        callee.DeclaringType.FullName == DispatcherFullName)
-                        continue;   // the legacy subclass path (removed with the migration)
+                    if (callee.DeclaringType.FullName == DispatcherFullName)
+                        continue;   // the runtime (an alias handed back, a container's plain view): neutral
                     var r = RuleOfCall(ctx, m, flow, p, callee);
-                    throughLegacy |= r.ThroughLegacy;
                     if (r.Kind == Kind.Transparent && r.Forwarded is not null)
                         forwarded ??= r.Forwarded;
                     if (r.Kind == Kind.Aware)
@@ -600,12 +591,12 @@ internal static class SubclassWeaver
         }
 
         if (aware)
-            return new Rule { Kind = Kind.Aware, Source = "subclass-aware computation", ThroughLegacy = throughLegacy };
+            return new Rule { Kind = Kind.Aware, Source = "subclass-aware computation" };
         if (rules.Count == 0)
             return new Rule
             {
                 Kind = transparent && !undeclared ? Kind.Transparent : Kind.Undeclared, Source = transparent ? "forwards" : "",
-                ThroughLegacy = throughLegacy, Forwarded = forwarded,
+                Forwarded = forwarded,
             };
         var first = rules[0];
         foreach (var other in rules.Skip(1))
@@ -615,7 +606,6 @@ internal static class SubclassWeaver
                                                    "give each route one computation, or declare a [SubclassRule]");
         if (undeclared)
             first.Source += " (+undeclared routes)";
-        first.ThroughLegacy |= throughLegacy;
         return first;
     }
 
@@ -663,21 +653,17 @@ internal static class SubclassWeaver
                 return new Rule
                 {
                     Kind = Kind.Transparent, Source = target.FullName,
-                    ThroughLegacy = IsLegacyBody(target) || forwardedTo.ThroughLegacy,
                     Forwarded = effective is null || !effective.Declares || effective.Kind is Kind.Aware or Kind.Transparent
                         ? effective
                         : Rebind(ctx, effective, target, args, m, target.FullName),
                 };
             }
             var inner = Resolve(ctx, target);
-            bool legacy = IsLegacyBody(target) || inner.ThroughLegacy;
             if (inner.Kind == Kind.Transparent && inner.Forwarded is not null)
                 inner = inner.Forwarded;   // the overload it forwards to answers
             if (inner.Kind is Kind.Transparent or Kind.Aware || inner.Kind == Kind.Undeclared && !inner.Declares)
-                return new Rule { Kind = inner.Kind == Kind.Transparent ? Kind.Undeclared : inner.Kind, Source = target.FullName, ThroughLegacy = legacy };
-            var rebound = Rebind(ctx, inner, target, args, m, target.FullName);
-            rebound.ThroughLegacy |= legacy;
-            return rebound;
+                return new Rule { Kind = inner.Kind == Kind.Transparent ? Kind.Undeclared : inner.Kind, Source = target.FullName };
+            return Rebind(ctx, inner, target, args, m, target.FullName);
         }
 
         var declared = Declared(ctx, target, args, m);
@@ -688,12 +674,9 @@ internal static class SubclassWeaver
         if (target.HasBody && !target.IsPublic && IsWovenOwner(target.DeclaringType) && target != m)
         {
             var inner = Resolve(ctx, target);
-            bool legacy = IsLegacyBody(target) || inner.ThroughLegacy;
             if (inner.Kind is Kind.Transparent || inner.Kind == Kind.Undeclared && !inner.Declares)
-                return new Rule { Kind = Kind.Undeclared, Source = target.FullName, ThroughLegacy = legacy };
-            var rebound = Rebind(ctx, inner, target, args, m, target.FullName);
-            rebound.ThroughLegacy |= legacy;
-            return rebound;
+                return new Rule { Kind = Kind.Undeclared, Source = target.FullName };
+            return Rebind(ctx, inner, target, args, m, target.FullName);
         }
         return new Rule { Kind = Kind.Undeclared, Source = target.FullName };
     }
@@ -972,7 +955,6 @@ internal static class SubclassWeaver
             CustomCheck = inner.CustomCheck, DispatchMethod = inner.DispatchMethod, DispatchIsReduction = inner.DispatchIsReduction,
             WhenGiven = inner.WhenGiven, WrapArguments = inner.WrapArguments, BoundByCallSite = inner.BoundByCallSite,
             Source = source + " <- " + inner.Source,
-            ThroughLegacy = inner.ThroughLegacy,
             Out = OutParameter(m),
         };
         var roles = m.Parameters.Where(p => IsNDArray(p) && p.Name is not "out" and not "where").ToList();
@@ -1025,16 +1007,6 @@ internal static class SubclassWeaver
                 return false;
         return true;
     }
-
-    /// <summary>
-    ///     MIGRATION: whether a body still decides its subclass answer with the legacy boundary (it calls
-    ///     <c>NDMatrixBoundary.Sees</c> / <c>NDCharArrayBoundary.Sees</c> or <c>SeesNested</c>).
-    /// </summary>
-    /// <param name="m">The method.</param>
-    /// <returns>True for a function whose legacy rule block is still in place.</returns>
-    private static bool IsLegacyBody(MethodDefinition m)
-        => m.HasBody && m.Body.Instructions.Any(i => i.Operand is MethodReference r && LegacyBoundaries.Contains(r.DeclaringType.FullName) &&
-                                                     r.Name is "Sees" or "SeesNested");
 
     /// <summary>The function's <c>out=</c> parameter (an <c>NDArray</c> named <c>out</c>), or null.</summary>
     /// <param name="m">The function.</param>
@@ -1430,9 +1402,6 @@ internal static class SubclassWeaver
 
         // NDScope scope = NDScope.Open(); try { aliases; r = m(aliases); unalias; r = mechanism(r); r = scope.Returns(r); }
         // finally { scope.Dispose(); } return r;
-        var scopeType = module.ImportReference(ctx.Scope);
-        var scope = new VariableDefinition(scopeType);
-        body.Variables.Add(scope);
         // A void function (np.copyto, np.put) has no result: the subclass path only hands it plain views.
         bool isVoid = m.ReturnType.MetadataType == MetadataType.Void;
         VariableDefinition result = null;
@@ -1441,8 +1410,18 @@ internal static class SubclassWeaver
             result = new VariableDefinition(m.ReturnType);
             body.Variables.Add(result);
         }
-        il.Append(il.Create(OpCodes.Call, module.ImportReference(ctx.Scope.Methods.First(x => x.Name == "Open" && x.IsStatic && !x.HasParameters))));
-        il.Append(il.Create(OpCodes.Stloc, scope));
+        // A result that may hold arrays the scope cannot yield (an iterator over the operand, a broadcast object) gets no
+        // scope: the scope would dispose the plain views and intermediates the result still references.
+        var egress = isVoid ? Egress.Nothing : EgressOf(ctx, m.ReturnType);
+        bool scoped = egress != Egress.Unscoped;
+        VariableDefinition scope = null;
+        if (scoped)
+        {
+            scope = new VariableDefinition(module.ImportReference(ctx.Scope));
+            body.Variables.Add(scope);
+            il.Append(il.Create(OpCodes.Call, module.ImportReference(ctx.Scope.Methods.First(x => x.Name == "Open" && x.IsStatic && !x.HasParameters))));
+            il.Append(il.Create(OpCodes.Stloc, scope));
+        }
 
         var aliases = new Dictionary<ParameterDefinition, VariableDefinition>();
         Instruction tryStart = null;
@@ -1467,6 +1446,13 @@ internal static class SubclassWeaver
                     : rule.UfuncInputs && rule.Inputs.Contains(p) ? "PlainUfuncInput" : "Plain";
             il.Append(il.Create(OpCodes.Call, module.ImportReference(Runtime(ctx, plain, valueType.FullName))));
             il.Append(il.Create(OpCodes.Stloc, v));
+            if (!scoped)
+            {
+                // No scope of its own: keep an ambient scope (a scoped caller's) from disposing the view the result holds.
+                il.Append(il.Create(OpCodes.Ldloc, v));
+                LoadValue(il, P(p));
+                il.Append(il.Create(OpCodes.Call, module.ImportReference(Runtime(ctx, "KeepAlias", valueType.FullName, valueType.FullName))));
+            }
         }
 
         // A [PlainReceiver] member's receiver: its plain view (the re-call runs the member on it).
@@ -1480,6 +1466,12 @@ internal static class SubclassWeaver
             il.Append(load);
             il.Append(il.Create(OpCodes.Call, module.ImportReference(Runtime(ctx, "PlainView", NDArrayFullName))));
             il.Append(il.Create(OpCodes.Stloc, receiverAlias));
+            if (!scoped)
+            {
+                il.Append(il.Create(OpCodes.Ldloc, receiverAlias));
+                il.Append(il.Create(OpCodes.Ldarg, body.ThisParameter));
+                il.Append(il.Create(OpCodes.Call, module.ImportReference(Runtime(ctx, "KeepAlias", NDArrayFullName, NDArrayFullName))));
+            }
         }
 
         // The re-call: the plain views take the function's plain path.
@@ -1531,7 +1523,17 @@ internal static class SubclassWeaver
             EmitMechanism(ctx, m, rule, map, result, wrapit, il);
 
             // scope.Returns(result) for the shapes NDScope yields; a carrier struct yields its arrays itself.
-            EmitEgress(ctx, resultType, scope, result, il);
+            if (scoped)
+                EmitEgress(ctx, resultType, egress, scope, result, il);
+        }
+
+        if (!scoped)
+        {
+            // No scope: the plain result is the answer as it stands.
+            il.Append(il.Create(OpCodes.Ldloc, result));
+            il.Append(il.Create(OpCodes.Ret));
+            body.OptimizeMacros();
+            return;
         }
 
         var leaveTarget = isVoid ? il.Create(OpCodes.Ret) : il.Create(OpCodes.Ldloc, result);
@@ -2028,60 +2030,127 @@ internal static class SubclassWeaver
         return false;
     }
 
+    /// <summary>How the subclass path hands a result type out of its scope.</summary>
+    private enum Egress
+    {
+        /// <summary>Holds no array (a number, a bool, a string, a DType, a byte[]): nothing to yield.</summary>
+        Nothing,
+
+        /// <summary>An NDArray-derived object, a one-dimensional array of them, or a ValueTuple:
+        ///     <c>scope.Returns</c>.</summary>
+        Yield,
+
+        /// <summary>An <c>INDArrayCarrier</c> struct: its <c>YieldTo(scope)</c>.</summary>
+        Carrier,
+
+        /// <summary>
+        ///     Anything else (an iterator over the operand, a broadcast object, a struct that is no carrier): it may hold
+        ///     arrays the scope cannot yield, so the path runs without a scope (see <see cref="BuildSubclassPath"/>).
+        /// </summary>
+        Unscoped,
+    }
+
+    /// <summary>The egress kind of a woven function's result type.</summary>
+    /// <param name="ctx">The weave.</param>
+    /// <param name="t">The function's return type (not void).</param>
+    /// <returns>How the subclass path hands the result out.</returns>
+    private static Egress EgressOf(Context ctx, TypeReference t)
+    {
+        if (t.IsPrimitive || t.MetadataType == MetadataType.String)
+            return Egress.Nothing;
+        if (t is ArrayType array)
+        {
+            if (array.Rank == 1 && DerivesFromNDArray(array.ElementType))
+                return Egress.Yield;
+            // An array of numbers (np.save's byte[]) holds no NDArray; any other array may.
+            return array.ElementType.IsPrimitive ? Egress.Nothing : Egress.Unscoped;
+        }
+        if (DerivesFromNDArray(t))
+            return Egress.Yield;
+        if (t is GenericInstanceType tuple && tuple.ElementType.FullName.StartsWith("System.ValueTuple`"))
+            return Egress.Yield;   // NDScope.Returns(ITuple) yields whatever NDArray each component carries
+        var resolved = t.Resolve();
+        if (resolved is null)
+            return Egress.Unscoped;
+        if (resolved.IsEnum)
+            return Egress.Nothing;
+        if (resolved.IsValueType && resolved.Interfaces.Any(i => i.InterfaceType.FullName == ctx.Carrier.FullName))
+            return Egress.Carrier;
+        // The number structs and the dtype descriptors hold no array.
+        if (resolved.FullName is "System.Decimal" or "System.Half" or "System.Numerics.Complex" or "System.Numerics.BigInteger" or
+            "NumSharp.DType" or "System.Type")
+            return Egress.Nothing;
+        return Egress.Unscoped;
+    }
+
+    /// <summary>Whether a type is <c>NDArray</c> or derives from it (<c>NDArray&lt;T&gt;</c>, <c>NDMatrix</c>,
+    ///     ...).</summary>
+    /// <param name="t">The type.</param>
+    /// <returns>True for an array type of the library.</returns>
+    private static bool DerivesFromNDArray(TypeReference t)
+    {
+        for (var d = t.Resolve(); d is not null; d = d.BaseType?.Resolve())
+            if (d.FullName == NDArrayFullName)
+                return true;
+        return false;
+    }
+
     /// <summary>
-    ///     Emits <c>result = scope.Returns(result)</c> for the shapes NDScope yields (an NDArray, an array of them, a tuple of
-    ///     two to four), or <c>result.YieldTo(scope)</c> for a carrier struct; a C# number needs nothing.
+    ///     Emits the subclass path's egress: <c>result = scope.Returns&lt;T&gt;(result)</c> for an NDArray-derived result
+    ///     (<c>T</c> its own type, so an <c>NDArray&lt;bool&gt;</c> or an <c>NDMatrix</c> is yielded, never disposed), the
+    ///     array overload for a one-dimensional array of them, <c>Returns(ITuple)</c> over the boxed tuple for a ValueTuple
+    ///     (whatever arrays its components carry), or <c>result.YieldTo(scope)</c> for a carrier struct; a result holding no
+    ///     array needs nothing.
     /// </summary>
     /// <param name="ctx">The weave.</param>
     /// <param name="resultType">The function's return type.</param>
+    /// <param name="egress">Its egress kind (<see cref="EgressOf"/>; never <see cref="Egress.Unscoped"/> here).</param>
     /// <param name="scope">The scope local.</param>
     /// <param name="result">The result local.</param>
     /// <param name="il">The IL.</param>
-    private static void EmitEgress(Context ctx, TypeReference resultType, VariableDefinition scope, VariableDefinition result, ILProcessor il)
+    private static void EmitEgress(Context ctx, TypeReference resultType, Egress egress, VariableDefinition scope, VariableDefinition result,
+                                   ILProcessor il)
     {
         var module = il.Body.Method.Module;
-        MethodReference returns = null;
-        if (resultType.FullName == NDArrayFullName)
-        {
-            var g = new GenericInstanceMethod(module.ImportReference(ctx.Scope.Methods.First(x =>
-                x.Name == "Returns" && x.GenericParameters.Count == 1 && x.Parameters[0].ParameterType is not ArrayType)));
-            g.GenericArguments.Add(module.ImportReference(ctx.NDArray));
-            returns = g;
-        }
-        else if (resultType.FullName == NDArrayArrayFullName)
-        {
-            var g = new GenericInstanceMethod(module.ImportReference(ctx.Scope.Methods.First(x =>
-                x.Name == "Returns" && x.GenericParameters.Count == 1 && x.Parameters[0].ParameterType is ArrayType)));
-            g.GenericArguments.Add(module.ImportReference(ctx.NDArray));
-            returns = g;
-        }
-        else if (resultType is GenericInstanceType tuple && tuple.ElementType.FullName.StartsWith("System.ValueTuple`") &&
-                 tuple.GenericArguments.All(a => a.FullName == NDArrayFullName) && tuple.GenericArguments.Count is >= 2 and <= 4)
-        {
-            var g = new GenericInstanceMethod(module.ImportReference(ctx.Scope.Methods.First(x =>
-                x.Name == "Returns" && x.GenericParameters.Count == tuple.GenericArguments.Count)));
-            foreach (var a in tuple.GenericArguments)
-                g.GenericArguments.Add(a);
-            returns = g;
-        }
-
-        if (returns is not null)
-        {
-            il.Append(il.Create(OpCodes.Ldloc, scope));
-            il.Append(il.Create(OpCodes.Ldloc, result));
-            il.Append(il.Create(OpCodes.Callvirt, returns));
-            il.Append(il.Create(OpCodes.Stloc, result));
+        if (egress == Egress.Nothing)
             return;
-        }
-        var resolved = resultType.Resolve();
-        if (resolved is not null && resolved.IsValueType && resolved.Interfaces.Any(i => i.InterfaceType.FullName == ctx.Carrier.FullName))
+        if (egress == Egress.Carrier)
         {
             il.Append(il.Create(OpCodes.Ldloca, result));
             il.Append(il.Create(OpCodes.Ldloc, scope));
             il.Append(il.Create(OpCodes.Constrained, resultType));
             il.Append(il.Create(OpCodes.Callvirt, module.ImportReference(ctx.Carrier.Methods.First(x => x.Name == "YieldTo"))));
+            return;
         }
-        // A number, a bool, a string or a type without arrays: nothing to yield.
+        if (resultType is GenericInstanceType tuple && tuple.ElementType.FullName.StartsWith("System.ValueTuple`"))
+        {
+            // scope.Returns((ITuple)(object)result): the general tuple egress (every arity, any component mix).
+            var returnsTuple = ctx.Scope.Methods.First(x => x.Name == "Returns" && !x.HasGenericParameters && x.Parameters.Count == 1 &&
+                                                            x.Parameters[0].ParameterType.FullName == "System.Runtime.CompilerServices.ITuple");
+            il.Append(il.Create(OpCodes.Ldloc, scope));
+            il.Append(il.Create(OpCodes.Ldloc, result));
+            il.Append(il.Create(OpCodes.Box, module.ImportReference(resultType)));
+            il.Append(il.Create(OpCodes.Callvirt, module.ImportReference(returnsTuple)));
+            il.Append(il.Create(OpCodes.Pop));   // the tuple's arrays are re-parented in place; the value is unchanged
+            return;
+        }
+        GenericInstanceMethod returns;
+        if (resultType is ArrayType array)
+        {
+            returns = new GenericInstanceMethod(module.ImportReference(ctx.Scope.Methods.First(x =>
+                x.Name == "Returns" && x.GenericParameters.Count == 1 && x.Parameters[0].ParameterType is ArrayType)));
+            returns.GenericArguments.Add(module.ImportReference(array.ElementType));
+        }
+        else
+        {
+            returns = new GenericInstanceMethod(module.ImportReference(ctx.Scope.Methods.First(x =>
+                x.Name == "Returns" && x.GenericParameters.Count == 1 && x.Parameters[0].ParameterType is not ArrayType)));
+            returns.GenericArguments.Add(module.ImportReference(resultType));
+        }
+        il.Append(il.Create(OpCodes.Ldloc, scope));
+        il.Append(il.Create(OpCodes.Ldloc, result));
+        il.Append(il.Create(OpCodes.Callvirt, returns));
+        il.Append(il.Create(OpCodes.Stloc, result));
     }
 
     /// <summary>
@@ -2128,6 +2197,24 @@ internal static class SubclassWeaver
                 list.AddRange(many.Select(x => (string)x.Value));
         }
         return list;
+    }
+
+    /// <summary>
+    ///     Whether this pass already wove <paramref name="module"/>: a woven-module owner holds a generated subclass path
+    ///     (<c>&lt;name&gt;subclass</c>) or a <c>[PlainReceiver]</c> member's plain path (<c>&lt;name&gt;plain</c>),
+    ///     names the
+    ///     C# compiler never produces (an angle bracket is not an identifier character).
+    /// </summary>
+    /// <param name="module">The module about to be woven.</param>
+    /// <returns>True when a generated path is present.</returns>
+    private static bool IsAlreadyWoven(ModuleDefinition module)
+    {
+        foreach (var type in AllTypes(module))
+            foreach (var m in type.Methods)
+                if (m.Name.Length > 2 && m.Name[0] == '<' && (m.Name.EndsWith(">subclass", StringComparison.Ordinal) ||
+                                                             m.Name.EndsWith(">plain", StringComparison.Ordinal)))
+                    return true;
+        return false;
     }
 
     /// <summary>Every type of the module, nested ones included.</summary>

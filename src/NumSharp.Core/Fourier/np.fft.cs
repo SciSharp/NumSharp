@@ -20,7 +20,7 @@ namespace NumSharp
     ///
     ///     <para>The transforms and <c>fftfreq</c>/<c>rfftfreq</c> are members of the <see cref="TensorEngine.Fft"/>
     ///     sub-engine (<see cref="FftEngine"/>): each method here keeps its signature and its documentation and makes one
-    ///     call into the sub-engine of its operand's engine (hfft behind the class boundary its <c>np.conjugate</c> needs),
+    ///     call into the sub-engine of its operand's engine (hfft on the plain view its <c>np.conjugate</c> needs),
     ///     so an engine assigned to <see cref="TensorEngine.Fft"/> computes every function of this module. The default,
     ///     <see cref="Backends.DefaultFftEngine"/>, validates and resolves everything NumPy's Python layer does —
     ///     n/axis/norm/shape/dtype and the N-D→1-D decomposition — then computes through

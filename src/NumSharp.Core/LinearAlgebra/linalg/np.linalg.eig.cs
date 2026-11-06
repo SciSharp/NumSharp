@@ -25,7 +25,7 @@ namespace NumSharp
             /// <exception cref="LinAlgError">Fewer than two axes, a non-square operand, or an operand holding inf / NaN.</exception>
             /// <exception cref="TypeError">A text operand, or a float16, decimal or char operand.</exception>
             /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
-            [NDScoped] // the class boundary's temporaries; the Linalg member scopes the computation's own
+            [NDScoped] // what the call leaves (the Linalg member and the woven subclass path scope their own)
             public static (NDArray eigenvalues, NDArray eigenvectors) eig(NDArray a)
             {
                 if (a is null) throw new ArgumentNullException(nameof(a));
@@ -71,7 +71,7 @@ namespace NumSharp
             /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
             /// <exception cref="TypeError">A text operand (NumPy's gufunc input-cast refusal).</exception>
             /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
-            [NDScoped] // the class boundary's temporaries; the Linalg member scopes the computation's own
+            [NDScoped] // what the call leaves (the Linalg member and the woven subclass path scope their own)
             public static (NDArray eigenvalues, NDArray eigenvectors) eigh(NDArray a, char UPLO = 'L')
             {
                 if (a is null) throw new ArgumentNullException(nameof(a));

@@ -17,7 +17,9 @@
 // The members compute the function's array once and give it NumPy's final form directly (AsArrayOfFresh): the copy of a
 // str result is the array itself taken over (the computed array is private to the call, so no caller can tell a copy from
 // it: the same values, OWNDATA, strides), and the view of a bytes result is a view of it. NumPy's intermediate chararray
-// view is never made. At 1M U elements the copy was ~40 % of the call.
+// view is never made. At 1M U elements the copy was ~40 % of the call. THE PLAIN COMPUTATION: the function runs on the
+// chararray's plain view (NDSubclass.Plain; the pad members' ufunc inputs through NDSubclass.PlainUfuncInput, which also
+// marks them for NumPy's trivial-loop copy), so it takes its plain path and returns the array the member finishes.
 //
 // strip / lstrip / rstrip / replace are NumPy's rule 2: the member returns the function's result itself,
 //     strip(self, chars=None)            -> strip(self, chars)
@@ -66,11 +68,12 @@ namespace NumSharp
         [NDScoped]
         public NDCharArray center(object width, object fillchar = null)
         {
-            NDArray fresh;
             // NumPy's member calls center(self, width, fillchar): this chararray and a chararray fill are inputs of that
-            // ufunc call, so its trivial loop copies them into StringDType() beside a StringDType fill (the finalize error).
-            using (NDCharArrayBoundary.InsideUfunc(this, fillchar as NDArray))
-                fresh = np.@char.center(this, width, fillchar);
+            // ufunc call, so its trivial loop copies them into StringDType() beside a StringDType fill (the finalize
+            // error): both
+            // go in as plain views marked as the call's ufunc inputs (NDSubclass.PlainUfuncInput), which the guard reads.
+            object fill = fillchar is NDArray fillArray ? NDSubclass.PlainUfuncInput(fillArray) : fillchar;
+            NDArray fresh = np.@char.center(NDSubclass.PlainUfuncInput(this), width, fill);
             return AsArrayOfFresh(fresh);
         }
 
@@ -92,11 +95,12 @@ namespace NumSharp
         [NDScoped]
         public NDCharArray ljust(object width, object fillchar = null)
         {
-            NDArray fresh;
             // NumPy's member calls ljust(self, width, fillchar): this chararray and a chararray fill are inputs of that
-            // ufunc call, so its trivial loop copies them into StringDType() beside a StringDType fill (the finalize error).
-            using (NDCharArrayBoundary.InsideUfunc(this, fillchar as NDArray))
-                fresh = np.@char.ljust(this, width, fillchar);
+            // ufunc call, so its trivial loop copies them into StringDType() beside a StringDType fill (the finalize
+            // error): both
+            // go in as plain views marked as the call's ufunc inputs (NDSubclass.PlainUfuncInput), which the guard reads.
+            object fill = fillchar is NDArray fillArray ? NDSubclass.PlainUfuncInput(fillArray) : fillchar;
+            NDArray fresh = np.@char.ljust(NDSubclass.PlainUfuncInput(this), width, fill);
             return AsArrayOfFresh(fresh);
         }
 
@@ -118,11 +122,12 @@ namespace NumSharp
         [NDScoped]
         public NDCharArray rjust(object width, object fillchar = null)
         {
-            NDArray fresh;
             // NumPy's member calls rjust(self, width, fillchar): this chararray and a chararray fill are inputs of that
-            // ufunc call, so its trivial loop copies them into StringDType() beside a StringDType fill (the finalize error).
-            using (NDCharArrayBoundary.InsideUfunc(this, fillchar as NDArray))
-                fresh = np.@char.rjust(this, width, fillchar);
+            // ufunc call, so its trivial loop copies them into StringDType() beside a StringDType fill (the finalize
+            // error): both
+            // go in as plain views marked as the call's ufunc inputs (NDSubclass.PlainUfuncInput), which the guard reads.
+            object fill = fillchar is NDArray fillArray ? NDSubclass.PlainUfuncInput(fillArray) : fillchar;
+            NDArray fresh = np.@char.rjust(NDSubclass.PlainUfuncInput(this), width, fill);
             return AsArrayOfFresh(fresh);
         }
 
@@ -141,9 +146,7 @@ namespace NumSharp
         [NDScoped]
         public NDCharArray zfill(object width)
         {
-            NDArray fresh;
-            using (NDCharArrayBoundary.Inside())
-                fresh = np.@char.zfill(this, width);
+            NDArray fresh = np.@char.zfill(NDSubclass.Plain(this), width);   // the plain computation (file header)
             return AsArrayOfFresh(fresh);
         }
 
@@ -162,9 +165,7 @@ namespace NumSharp
         [NDScoped]
         public NDCharArray expandtabs(object tabsize = null)
         {
-            NDArray fresh;
-            using (NDCharArrayBoundary.Inside())
-                fresh = np.@char.expandtabs(this, tabsize);
+            NDArray fresh = np.@char.expandtabs(NDSubclass.Plain(this), tabsize);   // the plain computation (file header)
             return AsArrayOfFresh(fresh);
         }
 
@@ -221,7 +222,7 @@ namespace NumSharp
         ///     cannot hold (<c>np.char.strip</c> returns it).</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="chars"/> does not broadcast.</exception>
         /// <remarks>NumPy's member is <c>strip(self, chars)</c>; see <see cref="CharModule.strip"/> for the function. The
-        ///     member forwards without a scope or a region: the function's chararray rule makes the view NumPy returns, and
+        ///     member forwards without a scope: the function's chararray rule makes the view NumPy returns, and
         ///     it allocates nothing the member must reclaim.</remarks>
         public NDCharArray strip(object chars = null) => FunctionResult(np.@char.strip(this, chars), "strip");
 

@@ -52,9 +52,8 @@ namespace NumSharp.Backends
         // The four Array-API forms below are NumPy's one-statement wrappers of the main namespace's functions
         // (`return _core_matmul(x1, x2)`, ...): each override is that call and nothing else, so it opens no scope (there
         // is no temporary to reclaim; the result is the callee's own). The call is the member the main namespace's facade
-        // dispatches to (the operand engine's TensorEngine member), not the facade: the np.linalg facades apply the callee's
-        // class boundary before they call these, so a numpy.matrix operand arrives inside the facade's region and the
-        // facade's rule would only be skipped there anyway.
+        // dispatches to (the operand engine's TensorEngine member), not the facade: the np.linalg facades are woven, so a
+        // numpy.matrix operand arrives here as its plain view, on which the facade would compute plain anyway.
 
         /// <inheritdoc/>
         /// <remarks>NumPy's one statement <c>return _core_matmul(x1, x2)</c>: the member <see cref="np.matmul"/> dispatches

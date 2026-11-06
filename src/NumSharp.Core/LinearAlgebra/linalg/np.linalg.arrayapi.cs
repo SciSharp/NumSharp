@@ -141,7 +141,7 @@ namespace NumSharp
             ///     do not broadcast.</exception>
             /// <exception cref="TypeError">Either operand holds text (the multiply has no string loop).</exception>
             /// <exception cref="ArgumentNullException"><paramref name="x1"/> is null.</exception>
-            [NDScoped] // the class boundary's temporaries; the Linalg member scopes the computation's own
+            [NDScoped] // what the call leaves (the Linalg member and the woven subclass path scope their own)
             public static NDArray cross(NDArray x1, NDArray x2, int axis = -1)
             {
                 if (x1 is null) throw new ArgumentNullException(nameof(x1));

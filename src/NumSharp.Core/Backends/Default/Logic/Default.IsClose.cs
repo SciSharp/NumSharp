@@ -63,7 +63,6 @@ namespace NumSharp.Backends
         [NDScoped]
         public override NDArray<bool> IsClose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8, bool equal_nan = false)
         {
-            using var plain = NDMatrixBoundary.PlainFor(a, b);   // an engine method computes plain: no matrix rule may apply inside the operators and engine members below
             // NumPy promotes y with a weak Python float first (text refuses), then a string x meets subtract with no loop.
             Strings.NDStringUfuncs.ThrowIfIsClose(a, b);
             // NumPy implementation (from numpy/_core/numeric.py):

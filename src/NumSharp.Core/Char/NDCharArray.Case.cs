@@ -7,9 +7,10 @@
 //     translate(self, table, deletechars=None) -> asarray(translate(self, table, deletechars))
 // The function reads the STORED text (np.asarray of the chararray, never __getitem__'s stripped element) and returns a
 // PLAIN array; np.char.asarray then copies a str result (an owning chararray) and views a bytes one (OWNDATA false).
-// The members compute the plain result inside the boundary (the function's own chararray rule would otherwise be applied
-// to a call the member makes) and give it that final form directly (AsArrayOfFresh, NDCharArray.Transform.cs): a U result
-// is taken over instead of copied, an S result is viewed.
+// THE PLAIN COMPUTATION. The members call the function on the chararray's plain view (NDSubclass.Plain: handed the
+// chararray itself, the function would take its own subclass path and wrap a result the member only drops) and give the
+// plain result that final form directly (AsArrayOfFresh, NDCharArray.Transform.cs): a U result is taken over instead of
+// copied, an S result is viewed.
 // =============================================================================
 
 namespace NumSharp
@@ -27,9 +28,7 @@ namespace NumSharp
         [NDScoped]
         public NDCharArray capitalize()
         {
-            NDArray fresh;
-            using (NDCharArrayBoundary.Inside())
-                fresh = np.@char.capitalize(this);
+            NDArray fresh = np.@char.capitalize(NDSubclass.Plain(this));   // the plain computation (file header)
             return AsArrayOfFresh(fresh);
         }
 
@@ -44,9 +43,7 @@ namespace NumSharp
         [NDScoped]
         public NDCharArray lower()
         {
-            NDArray fresh;
-            using (NDCharArrayBoundary.Inside())
-                fresh = np.@char.lower(this);
+            NDArray fresh = np.@char.lower(NDSubclass.Plain(this));   // the plain computation (file header)
             return AsArrayOfFresh(fresh);
         }
 
@@ -61,9 +58,7 @@ namespace NumSharp
         [NDScoped]
         public NDCharArray swapcase()
         {
-            NDArray fresh;
-            using (NDCharArrayBoundary.Inside())
-                fresh = np.@char.swapcase(this);
+            NDArray fresh = np.@char.swapcase(NDSubclass.Plain(this));   // the plain computation (file header)
             return AsArrayOfFresh(fresh);
         }
 
@@ -78,9 +73,7 @@ namespace NumSharp
         [NDScoped]
         public NDCharArray title()
         {
-            NDArray fresh;
-            using (NDCharArrayBoundary.Inside())
-                fresh = np.@char.title(this);
+            NDArray fresh = np.@char.title(NDSubclass.Plain(this));   // the plain computation (file header)
             return AsArrayOfFresh(fresh);
         }
 
@@ -96,9 +89,7 @@ namespace NumSharp
         [NDScoped]
         public NDCharArray upper()
         {
-            NDArray fresh;
-            using (NDCharArrayBoundary.Inside())
-                fresh = np.@char.upper(this);
+            NDArray fresh = np.@char.upper(NDSubclass.Plain(this));   // the plain computation (file header)
             return AsArrayOfFresh(fresh);
         }
 
@@ -125,9 +116,8 @@ namespace NumSharp
         [NDScoped]
         public NDCharArray translate(object table, object deletechars = null)
         {
-            NDArray fresh;
-            using (NDCharArrayBoundary.Inside())
-                fresh = np.@char.translate(this, table, deletechars);
+            // The plain computation (file header).
+            NDArray fresh = np.@char.translate(NDSubclass.Plain(this), table, deletechars);
             return AsArrayOfFresh(fresh);
         }
     }

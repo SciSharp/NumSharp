@@ -18,7 +18,8 @@ namespace NumSharp
         ///     NumPy's <c>np.sum</c> (<c>np.add.reduce</c>), the whole call: the add reduction over <paramref name="axis_"/>
         ///     (every axis when null), started from the add identity or <paramref name="initial"/>, over the elements
         ///     <paramref name="where"/> selects, stored into <paramref name="out"/> when given. <c>np.sum</c> and
-        ///     <c>ndarray.sum</c> are this member after the numpy.matrix boundary.
+        ///     <c>ndarray.sum</c> are this member, a subclass operand handed in as its plain view (the declaration below
+        ///     answers for the class).
         /// </summary>
         /// <param name="arr">The array (any dtype, any layout; <c>StringDType</c> concatenates, fixed-width text is
         ///     refused).</param>
@@ -76,8 +77,9 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not have the result's shape.</exception>
         /// <remarks>
         ///     The engine owns NumPy's whole call, dtype decisions included (the np-layer dtype plan): the public
-        ///     <c>np.cumsum</c> only applies the matrix boundary and calls this. <paramref name="out"/> was added to the
-        ///     contract in 0.71.0 (a breaking change for a subclass, decision D2 of that plan).
+        ///     <c>np.cumsum</c> only calls this (a subclass operand arrives as its plain view; the declaration below answers
+        ///     for the class). <paramref name="out"/> was added to the contract in 0.71.0 (a breaking change for a
+        ///     subclass, decision D2 of that plan).
         /// </remarks>
         [ArrayWrap("arr")]
         public abstract NDArray ReduceCumAdd(NDArray arr, int? axis_, DType dtype = null, NDArray @out = null);
@@ -100,8 +102,9 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not have the result's shape.</exception>
         /// <remarks>
         ///     The engine owns NumPy's whole call, dtype decisions included (the np-layer dtype plan): the public
-        ///     <c>np.cumprod</c> only applies the matrix boundary and calls this. <paramref name="out"/> was added to the
-        ///     contract in 0.71.0 (a breaking change for a subclass, decision D2 of that plan).
+        ///     <c>np.cumprod</c> only calls this (a subclass operand arrives as its plain view; the declaration below
+        ///     answers for the class). <paramref name="out"/> was added to the contract in 0.71.0 (a breaking change for a
+        ///     subclass, decision D2 of that plan).
         /// </remarks>
         [ArrayWrap("arr")]
         public abstract NDArray ReduceCumMul(NDArray arr, int? axis_, DType dtype = null, NDArray @out = null);
@@ -268,7 +271,8 @@ namespace NumSharp
         /// <exception cref="SystemError">A <c>U</c> array holding a unit above U+10FFFF.</exception>
         /// <remarks>
         ///     The engine owns NumPy's whole call, dtype decisions included (the np-layer dtype plan, P1b): the public
-        ///     <c>np.all</c> only applies the matrix boundary and calls this. New in 0.71.0. A bare <c>null</c> axis is
+        ///     <c>np.all</c> only calls this (the declaration below dispatches a subclass operand to its method). New in
+        ///     0.71.0. A bare <c>null</c> axis is
         ///     ambiguous with the tuple member below: pass a typed <c>int?</c>.
         /// </remarks>
         [WrapReduction("all")]
@@ -368,7 +372,8 @@ namespace NumSharp
         /// <exception cref="SystemError">A <c>U</c> array holding a unit above U+10FFFF.</exception>
         /// <remarks>
         ///     The engine owns NumPy's whole call, dtype decisions included (the np-layer dtype plan, P1b): the public
-        ///     <c>np.any</c> only applies the matrix boundary and calls this. New in 0.71.0. A bare <c>null</c> axis is
+        ///     <c>np.any</c> only calls this (the declaration below dispatches a subclass operand to its method). New in
+        ///     0.71.0. A bare <c>null</c> axis is
         ///     ambiguous with the tuple member below: pass a typed <c>int?</c>.
         /// </remarks>
         [WrapReduction("any")]
@@ -719,9 +724,9 @@ namespace NumSharp
         ///     (<c>sorter must only contain integers</c>), or a StringDType haystack whose first comparison with the int
         ///     Python refuses (<c>'&lt;' not supported between instances of 'str' and 'int'</c>).</exception>
         /// <exception cref="NullReferenceException"><paramref name="a"/> is null.</exception>
-        /// <remarks>New in 0.71.0 (the np-layer dtype plan, P2): the public <c>np.searchsorted</c> opens the matrix boundary's
-        ///     plain region and calls this. A member of its own, not the array form over a 0-d key: the key stays on the
-        ///     stack, about 15x cheaper per call.</remarks>
+        /// <remarks>New in 0.71.0 (the np-layer dtype plan, P2): the public <c>np.searchsorted</c> calls this, a subclass
+        ///     operand handed in as its plain view. A member of its own, not the array form over a 0-d key: the key stays on
+        ///     the stack, about 15x cheaper per call.</remarks>
         public abstract long SearchSorted(NDArray a, int v, string side = "left", NDArray sorter = null);
 
         /// <summary>
@@ -743,8 +748,8 @@ namespace NumSharp
         ///     comparison with the float Python refuses (<c>'&lt;' not supported between instances of 'str' and
         ///     'float'</c>).</exception>
         /// <exception cref="NullReferenceException"><paramref name="a"/> is null.</exception>
-        /// <remarks>New in 0.71.0 (the np-layer dtype plan, P2): the public <c>np.searchsorted</c> opens the matrix boundary's
-        ///     plain region and calls this.</remarks>
+        /// <remarks>New in 0.71.0 (the np-layer dtype plan, P2): the public <c>np.searchsorted</c> calls this, a subclass
+        ///     operand handed in as its plain view.</remarks>
         public abstract long SearchSorted(NDArray a, double v, string side = "left", NDArray sorter = null);
 
         /// <summary>
@@ -771,8 +776,8 @@ namespace NumSharp
         ///     dtype.</exception>
         /// <exception cref="DTypePromotionError">Text with an operand that has no common dtype with it.</exception>
         /// <exception cref="NullReferenceException"><paramref name="a"/> or <paramref name="v"/> is null.</exception>
-        /// <remarks>New in 0.71.0 (the np-layer dtype plan, P2): the public <c>np.searchsorted</c> opens the matrix boundary's
-        ///     plain region and calls this.</remarks>
+        /// <remarks>New in 0.71.0 (the np-layer dtype plan, P2): the public <c>np.searchsorted</c> calls this, a subclass
+        ///     operand handed in as its plain view.</remarks>
         public abstract NDArray SearchSorted(NDArray a, NDArray v, string side = "left", NDArray sorter = null);
 
         public abstract NDArray<long>[] NonZero(NDArray a);
@@ -806,8 +811,8 @@ namespace NumSharp
         ///     text out for numbers, a string <paramref name="dtype"/>.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="out"/>'s length does not broadcast against the
         ///     diagonal (NumPy's "operands could not be broadcast together with remapped shapes" text).</exception>
-        /// <remarks>New in 0.71.0 (the np-layer dtype plan, P1b): the public <c>np.trace</c> opens the matrix boundary's
-        ///     plain region and calls this.</remarks>
+        /// <remarks>New in 0.71.0 (the np-layer dtype plan, P1b): the public <c>np.trace</c> calls this, a subclass operand
+        ///     handed in as its plain view.</remarks>
         public abstract NDArray Trace(NDArray a, int offset = 0, int axis1 = 0, int axis2 = 1, DType dtype = null,
             NDArray @out = null);
 

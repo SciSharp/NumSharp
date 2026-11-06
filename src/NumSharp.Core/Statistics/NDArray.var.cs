@@ -33,10 +33,10 @@ namespace NumSharp
         ///     C# scalar passed as <paramref name="out"/>; NumPy's text refusals.</exception>
         /// <remarks>The member keeps the plain-array meaning for a numpy.matrix object reached through an
         ///     <see cref="NDArray"/> reference.</remarks>
+        [PlainReceiver]
         public NDArray var(int? axis = null, DType dtype = null, NDArray @out = null, int ddof = 0, bool keepdims = false,
             NDArray @where = null, NDArray mean = null)
         {
-            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
             return TensorEngine.ReduceVar(this, axis, keepdims, ddof, dtype, @out, @where, mean);
         }
     }

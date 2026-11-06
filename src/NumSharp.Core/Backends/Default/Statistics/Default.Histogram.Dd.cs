@@ -13,7 +13,7 @@ namespace NumSharp.Backends
         // The bodies of NumPy's histogramdd and histogram2d (numpy/lib/_histograms_impl.py, numpy/lib/_twodim_base_impl.py):
         // the sample statement (np.atleast_2d(sample).T), the per-dimension bin specs and edges, the bin search, the
         // flattened bincount, the outlier strip and the density, and histogram2d's length check and bins dispatch. The
-        // public np.histogramdd / np.histogram2d overloads only open the matrix boundary's plain region and call the
+        // public np.histogramdd / np.histogram2d overloads (woven: a matrix operand arrives as its plain view) only call the
         // Histogramdd member (through SampleColumns or ColumnsFromSequence) / the Histogram2d member.
         //
         // Moved from Statistics/np.histogramdd.cs and Statistics/np.histogram2d.cs statement for statement by the np-layer

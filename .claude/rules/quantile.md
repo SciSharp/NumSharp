@@ -71,9 +71,9 @@ one builder per precision (`DirectILKernelGenerator.QuantilePlan`, cached per dt
   cdf first, `SearchEagerly`); rows count the cdf entries below each `q` in one vectorized pass, or search row by row past
   `CountingMaxWork`. The thread-static hooks `ForceRowByRowTestHook` / `ForceEagerSearchTestHook` and two oracle replays
   keep both alternate routes gated.
-- The computation runs in a plain region (`NDMatrixBoundary.PlainFor`): a chararray `a` keeps its class in the plain
-  forms and gets the plain text's `isnan` refusal in the nan forms; chararray WEIGHTS refuse at `weights < 0` with
-  compare_chararrays' `comparison of non-string arrays`.
+- The computation runs on the woven function's plain views: a chararray `a` keeps its class in the plain forms (the
+  woven rule) and gets the plain text's `isnan` refusal in the nan forms; chararray WEIGHTS refuse at `weights < 0` with
+  compare_chararrays' `comparison of non-string arrays` (the view remembers the class: `NDSubclass.StandsForCharArray`).
 - Known divergence: TIED numbers add their weights in NumPy's unstable argsort order (introsort / x86-simd-sort,
   host-dependent); NumSharp's argsort is stable; text is exact. The float64 flat cells are bound by the argsort.
 

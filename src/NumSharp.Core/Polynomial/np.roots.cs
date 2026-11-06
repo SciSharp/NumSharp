@@ -28,7 +28,6 @@ namespace NumSharp
             // to find overriding classes; a 0-d array (or None) is not iterable.
             if (p is null || p.ndim == 0)
                 throw new TypeError("dispatcher for __array_function__ did not return an iterable");
-            using var plain = NDMatrixBoundary.PlainFor(p);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return p.TensorEngine.Roots(p);
         }
     }

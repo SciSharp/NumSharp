@@ -63,8 +63,8 @@ namespace NumSharp
         ///     along <paramref name="axis"/>), with the optional first-occurrence indices, reconstruction indices and counts.
         /// </summary>
         /// <param name="ar">
-        ///     The operand, a plain array (only read; <c>np.unique</c> computes a <c>numpy.matrix</c> operand as a plain one,
-        ///     and a <c>numpy.char.chararray</c> operand after its own class boundary).
+        ///     The operand, a plain array (only read; <c>np.unique</c> hands a <c>numpy.matrix</c> or
+        ///     <c>numpy.char.chararray</c> operand in as its plain view).
         /// </param>
         /// <param name="return_index">Also return the index of each value's first occurrence (along the axis, if given).</param>
         /// <param name="return_inverse">Also return the indices that rebuild <paramref name="ar"/> from the values.</param>

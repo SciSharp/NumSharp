@@ -4,8 +4,8 @@ namespace NumSharp
     {
         // NumPy's logical_and/or/xor/not are C ufuncs, so their calls are TensorEngine members (LogicalAnd / LogicalOr /
         // LogicalXor / LogicalNot, Backends/Default/Logic/Default.Logical.cs: the text guard, the bool-only dtype= gate,
-        // the truth reduction and the bitwise combine). These facades keep what sits above the engine: the numpy.matrix
-        // boundary and the numpy.char.chararray boundary, which must see the operands' classes before any loop runs.
+        // the truth reduction and the bitwise combine). These facades keep what sits above the engine: they are woven, so
+        // a numpy.matrix or numpy.char.chararray operand's class is seen before any loop runs.
         // Return type is NDArray (not NDArray<bool>) to match the comparison-op shape: a plain call still yields a bool
         // array, but out=<numeric> returns that numeric out (True->1).
 

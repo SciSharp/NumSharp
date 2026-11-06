@@ -53,23 +53,24 @@ namespace NumSharp.Tests.Fuzz
         public void MatrixOperandHost_KnownGaps() => RunGapCorpus("matrix_operand_host_gaps.jsonl");
 
         /// <summary>
-        ///     The boundary's safety contract, measured over the whole corpus: no method of the library itself
-        ///     reaches the matrix rule of a public function. Every case of every ordinary tier that has a
+        ///     The plain-view contract, measured over the whole corpus: no method of the library itself reaches the
+        ///     subclass path of a public function with a matrix operand. Every case of every ordinary tier that has a
         ///     two-dimensional operand is replayed with those operands typed as matrices while
-        ///     <see cref="NDMatrixBoundary.AuditInternalCallers"/> is on, and the set of library callers the
-        ///     audit records must stay empty.
+        ///     <see cref="NDSubclass.AuditInternalCallers"/> is on, and the set of library callers the audit records
+        ///     must stay empty.
         /// </summary>
-        /// <exception cref="AssertFailedException">A library method called a public function that has a matrix
-        ///     rule, with a matrix operand, outside an open boundary region.</exception>
+        /// <exception cref="AssertFailedException">A library method called a public function with a matrix operand
+        ///     (the object itself, not its plain view).</exception>
         /// <remarks>
         ///     <para>
-        ///     Why it matters: a public function with a matrix rule returns NumPy's matrix shape (a 1 x N row
-        ///     where the plain function returns N elements) to whoever calls it at depth zero. The USER is meant
-        ///     to; library code is written for the plain result. The three ways library code gets there are an
-        ///     <see cref="NDArray"/> member or operator applied to a matrix object (it must keep the plain
-        ///     meaning), an engine method that calls back up into <c>np.*</c>, and a public function WITHOUT a
-        ///     rule that calls one WITH a rule on its own operand. The fix for a finding is a region
-        ///     (<c>NDMatrixBoundary.PlainFor</c> / <c>Inside</c>) or a rule for the calling function.
+        ///     Why it matters: a public function handed a matrix object takes its subclass path and returns NumPy's
+        ///     matrix answer (a 1 x N row where the plain function returns N elements). The USER is meant to get it;
+        ///     library code is written for the plain result. The ways library code gets there are an
+        ///     <see cref="NDArray"/> member or operator applied to a matrix object (it must keep the plain meaning:
+        ///     <c>[PlainReceiver]</c>), an engine method or container that calls back up into <c>np.*</c> with an
+        ///     operand it was handed, and a module that is not woven (numpy.polynomial) passing its operand on. The
+        ///     fix for a finding is a plain view where the operand is passed on (<c>NDSubclass.PlainView</c> /
+        ///     <c>LeasePlainView</c>, <c>NDMatrix.A</c>), or a <c>[PlainReceiver]</c> declaration for the member.
         ///     </para>
         ///     <para>
         ///     The outcomes of the replays are not compared (most of these calls have no NumPy answer recorded
@@ -84,8 +85,8 @@ namespace NumSharp.Tests.Fuzz
             var ignoredFailures = new System.Collections.Generic.List<string>();
             var ignoredDocumented = new System.Collections.Generic.Dictionary<string, int>();
             int replayed = 0;
-            NDMatrixBoundary.InternalCallers.Clear();
-            NDMatrixBoundary.AuditInternalCallers = true;
+            NDSubclass.InternalCallers.Clear();
+            NDSubclass.AuditInternalCallers = true;
             try
             {
                 foreach (string file in System.Linq.Enumerable.OrderBy(MinCases.Keys, k => k, System.StringComparer.Ordinal))
@@ -172,19 +173,19 @@ namespace NumSharp.Tests.Fuzz
             }
             finally
             {
-                NDMatrixBoundary.AuditInternalCallers = false;
+                NDSubclass.AuditInternalCallers = false;
             }
 
             var found = System.Linq.Enumerable.ToList(
-                System.Linq.Enumerable.OrderByDescending(NDMatrixBoundary.InternalCallers, kv => kv.Value));
-            System.Console.WriteLine($"[matrix boundary audit] {replayed} cases replayed with matrix operands, " +
-                                     $"{found.Count} library call paths reached a matrix rule");
-            DumpFailures("matrix-boundary-audit",
+                System.Linq.Enumerable.OrderByDescending(NDSubclass.InternalCallers, kv => kv.Value));
+            System.Console.WriteLine($"[matrix operand audit] {replayed} cases replayed with matrix operands, " +
+                                     $"{found.Count} library call paths reached a subclass path");
+            DumpFailures("matrix-operand-audit",
                 System.Linq.Enumerable.ToList(System.Linq.Enumerable.Select(found, kv => $"{kv.Value}\t{kv.Key}")));
             Assert.IsTrue(replayed >= MinBoundaryAuditCases,
                 $"only {replayed} cases replayed (floor {MinBoundaryAuditCases}): the corpus shrank or failed to copy");
             Assert.AreEqual(0, found.Count,
-                "library methods reached the matrix rule of a public function at depth zero:\n" +
+                "library methods handed a matrix object to a public function (its subclass path ran):\n" +
                 string.Join("\n", System.Linq.Enumerable.Select(System.Linq.Enumerable.Take(found, 60), kv => $"  {kv.Value,6} x {kv.Key}")));
         }
 

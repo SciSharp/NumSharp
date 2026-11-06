@@ -10,10 +10,11 @@ using NumSharp.Backends;
 // (TensorEngine.ArraySetOps.cs). NumPy writes unique in Python, with the C helper _unique_hash in unique.cpp; the
 // np-layer dtype plan's P2 moved the statements from NDArray.unique and the np.unique / np.unique_values facades into the
 // internal operation class UniqueEngine, and its phase PE (E1) made that class these DefaultEngine partials. The facades
-// and the public instance members NDArray.unique(...) keep their signatures, documentation and class boundaries
-// (numpy.char.chararray, numpy.matrix) and call the engine members. Nothing here opens a class boundary: every caller
-// has already decided the operand is a plain array (a chararray operand computes through NDCharArrayBoundary, a
-// numpy.matrix operand inside NDMatrixBoundary's plain region).
+// and the public instance members NDArray.unique(...) keep their signatures and documentation, and call the engine
+// members. Nothing here applies a subclass rule: every caller hands in plain arrays (the woven facade's plain view of a
+// numpy.char.chararray or numpy.matrix operand, a [PlainReceiver] member's plain receiver); the one answer that depends
+// on the class, the chararray's stripping comparison of runs, reads the view's provenance (NDSubclass.StandsForCharArray,
+// Default.Unique.Text.cs).
 //
 // Two helpers were renamed in the merge, because DefaultEngine shares one namespace of member names: Compute is
 // UniqueCompute (QuantileEngine had a Compute too, QuantileCompute since it joined DefaultEngine), and Splitmix is
@@ -35,7 +36,7 @@ namespace NumSharp.Backends
     public partial class DefaultEngine
     {
         /// <summary>
-        ///     DefaultEngine's <see cref="TensorEngine.Unique"/>: <c>np.unique</c>'s statements after its class boundary,
+        ///     DefaultEngine's <see cref="TensorEngine.Unique"/>: <c>np.unique</c>'s statements on its plain views,
         ///     the checks NumPy makes before it reads text, then the computation inside a boundary scope that keeps only
         ///     the returned outputs.
         /// </summary>
@@ -270,8 +271,8 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     DefaultEngine's <see cref="TensorEngine.UniqueInverse"/>: <c>np.unique_inverse</c>'s statements after its
-        ///     class boundary, <c>unique(x, return_inverse=True, equal_nan=False)</c>, the inverse reshaped to the operand's
+        ///     DefaultEngine's <see cref="TensorEngine.UniqueInverse"/>: <c>np.unique_inverse</c>'s statements on its
+        ///     plain views, <c>unique(x, return_inverse=True, equal_nan=False)</c>, the inverse reshaped to the operand's
         ///     shape.
         /// </summary>
         /// <param name="x">The plain operand (only read).</param>

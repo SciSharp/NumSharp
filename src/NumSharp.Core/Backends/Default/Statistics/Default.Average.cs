@@ -20,7 +20,8 @@ using NumSharp.Backends.Kernels;
 //
 // History: the np-layer dtype plan's P2 moved these statements from the public np.average / np.average_returned into the
 // internal operation class AverageEngine; its phase PE (E1) made that class this DefaultEngine partial. The facades keep
-// the numpy.matrix boundary and the null check. Its phase P6 made each np.* call of the statements (np.mean, np.sum,
+// the null check (their woven subclass path answers for a numpy.matrix operand). Its phase P6 made each np.* call of
+// the statements (np.mean, np.sum,
 // np.multiply, np.true_divide, np.broadcast_to, np.evaluate) the member its facade dispatches to, and moved the file
 // from beside the facades to Backends/Default/Statistics/.
 // =============================================================================

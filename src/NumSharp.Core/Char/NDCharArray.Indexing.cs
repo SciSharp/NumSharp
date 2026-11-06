@@ -73,7 +73,8 @@ namespace NumSharp
         ///     <b>Static, not virtual.</b> This indexer HIDES <see cref="NDArray.this[object[]]"/> instead of overriding it:
         ///     chararray's rule applies through an <see cref="NDCharArray"/> reference, and through an <see cref="NDArray"/>
         ///     reference a chararray is indexed as a plain array (the library's own code receives chararrays as
-        ///     <see cref="NDArray"/> and relies on that, see <see cref="NDCharArrayBoundary"/>).
+        ///     <see cref="NDArray"/> and relies on that; the public functions answer for the class, see <see
+        ///     cref="NDSubclass"/>).
         ///     </para>
         ///     <para>
         ///     <b>Dispatch.</b> One integer (a C# integer of any type C# converts to <see cref="long"/>) reads the element

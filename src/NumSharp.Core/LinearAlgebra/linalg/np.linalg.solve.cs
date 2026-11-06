@@ -31,7 +31,8 @@ namespace NumSharp
             /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
             /// <exception cref="TypeError">A text operand (NumPy's gufunc input-cast refusal).</exception>
             /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
-            // Scope: the class boundary's temporaries; the Linalg member reclaims the two ToCommon dtype-cast temps.
+            // Scope: what the call leaves (the woven subclass path scopes its plain views); the Linalg member reclaims the
+            // two ToCommon dtype-cast temps.
             [NDScoped]
             public static NDArray solve(NDArray a, NDArray b)
             {
@@ -76,7 +77,7 @@ namespace NumSharp
             /// <exception cref="TypeError">A text operand (solve's gufunc input cast, NumPy's UFuncTypeError).</exception>
             /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
             /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
-            [NDScoped] // the class boundary's temporaries; the Linalg member scopes the computation's own
+            [NDScoped] // what the call leaves (the Linalg member and the woven subclass path scope their own)
             public static NDArray tensorsolve(NDArray a, NDArray b, int[] axes = null)
             {
                 if (a is null) throw new ArgumentNullException(nameof(a));

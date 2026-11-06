@@ -10,7 +10,8 @@ namespace NumSharp
     /// <summary>
     ///     The contract of <c>numpy.fft</c>: one member per function that computes (16 of NumPy's 18; <c>fftshift</c> and
     ///     <c>ifftshift</c> are rolls of the array object). An engine reaches it through <see cref="TensorEngine.Fft"/>, and
-    ///     every public <c>np.fft</c> function applies NumPy's class boundary and C#'s conversions, then calls one member.
+    ///     every public <c>np.fft</c> function makes C#'s conversions and calls one member (woven: a subclass operand
+    ///     arrives as its plain view, and the declared mechanism answers for the class).
     /// </summary>
     /// <remarks>
     ///     <para><b>The default</b> is <see cref="Backends.DefaultFftEngine"/>: NumPy's statements in NumPy's order (the

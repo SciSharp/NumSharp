@@ -13,7 +13,7 @@ using NumSharp.Backends.Kernels;
 //
 // History: the np-layer dtype plan's P2 moved these statements from the public np.array_equal / np.array_equiv and the
 // member NDArray.array_equal into the internal operation class ArrayEqualEngine; its phase PE (E1) made that class this
-// DefaultEngine partial. The facades and the member keep the matrix boundary's plain region and one call. The calls
+// DefaultEngine partial. The facades and the member hand a subclass operand in as its plain view and make one call. The calls
 // NumPy's statements make (np.isnan, np.all, np.are_broadcastable) are the engine's members and Shape's broadcast
 // check, so the engine calls no np.* function.
 //
@@ -25,8 +25,10 @@ namespace NumSharp.Backends
     public partial class DefaultEngine
     {
         /// <summary>
-        ///     DefaultEngine's <see cref="TensorEngine.ArrayEqual"/>: <c>array_equal(a1, a2, equal_nan)</c> after its callers'
-        ///     plain region (np.array_equal's facade and the member <see cref="NDArray.array_equal(NDArray, bool)"/>): the
+        ///     DefaultEngine's <see cref="TensorEngine.ArrayEqual"/>: <c>array_equal(a1, a2, equal_nan)</c> on the
+        ///     plain views
+        ///     its callers hand in (np.array_equal's facade and the member <see cref="NDArray.array_equal(NDArray,
+        ///     bool)"/>): the
         ///     null convention, then NumPy's statements — the shape check; without <c>equal_nan</c>,
         ///     <c>bool((a1 == a2).all())</c>; with it, the same object is True, two dtypes that cannot hold NaN compare
         ///     plainly, and otherwise <c>isnan</c> runs on both, the NaN positions must agree and every other element must be
@@ -79,8 +81,8 @@ namespace NumSharp.Backends
                 return AllEqual(a1, a2);
 
             // `a1nan, a2nan = isnan(a1), isnan(a2)`, in this order, so an S / U first operand is the one refused (isnan has
-            // no string loop); a StringDType operand's isnan is True at a NaN-like NA. The callers' plain region covers a
-            // matrix or chararray operand here.
+            // no string loop); a StringDType operand's isnan is True at a NaN-like NA. A matrix or chararray operand is the
+            // plain view its caller handed in.
             using var a1nan = IsNan(a1);
             using var a2nan = IsNan(a2);
             // `if not (a1nan == a2nan).all(): return False`: NaN must occur at the SAME positions in both operands...

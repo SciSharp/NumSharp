@@ -7,9 +7,9 @@
         /// </summary>
         /// <returns>The index of the maximal value in the flattened array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.argmax.html</remarks>
+        [PlainReceiver]
         public long argmax()
         {
-            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
             return np.argmax(this);
         }
 
@@ -20,9 +20,9 @@
         /// <param name="keepdims">If this is set to True, the axes which are reduced are left in the result as dimensions with size one.</param>
         /// <returns>Array of indices into the array. It has the same shape as a.shape with the dimension along axis removed (unless keepdims is True).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.argmax.html</remarks>
+        [PlainReceiver]
         public NDArray argmax(int axis, bool keepdims = false)
         {
-            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
             return np.argmax(this, axis, keepdims);
         }
 
@@ -39,9 +39,9 @@
         /// <exception cref="ValueError">The reduced length is 0, or <paramref name="out"/> has another shape.</exception>
         /// <exception cref="TypeError"><paramref name="out"/>'s dtype does not cast safely to int64.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.argmax.html</remarks>
+        [PlainReceiver]
         public NDArray argmax(int? axis = null, NDArray @out = null, bool keepdims = false)
         {
-            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
             return np.argmax(this, axis, @out, keepdims);
         }
     }

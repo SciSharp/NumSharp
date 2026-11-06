@@ -29,8 +29,8 @@ namespace NumSharp
             /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
             /// <exception cref="TypeError">A text operand (NumPy's gufunc input-cast refusal).</exception>
             /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
-            // Scope: the class boundary's temporaries; the Linalg member reclaims the ToCommon dtype-cast temp. Matches
-            // the scoped siblings pinv/tensorinv.
+            // Scope: what the call leaves (the woven subclass path scopes its plain views); the Linalg member reclaims the
+            // ToCommon dtype-cast temp. Matches the scoped siblings pinv/tensorinv.
             [NDScoped]
             public static NDArray inv(NDArray a)
             {
@@ -61,7 +61,7 @@ namespace NumSharp
             /// <exception cref="TypeError">A text operand, or a float16, decimal or char operand.</exception>
             /// <exception cref="LinAlgError">Fewer than two axes, or a non-square operand with <paramref name="hermitian"/>.</exception>
             /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
-            [NDScoped] // the class boundary's temporaries; the Linalg member scopes the computation's own
+            [NDScoped] // what the call leaves (the Linalg member and the woven subclass path scope their own)
             public static NDArray pinv(NDArray a, double? rcond = null, bool hermitian = false, double? rtol = null)
             {
                 if (a is null) throw new ArgumentNullException(nameof(a));

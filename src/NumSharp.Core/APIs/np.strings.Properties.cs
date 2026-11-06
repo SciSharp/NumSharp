@@ -7,8 +7,8 @@ using NumSharp.Backends.Strings;
 //
 // NumPy's isalpha / isdigit / isspace / isalnum / islower / isupper / istitle / isdecimal / isnumeric are ufuncs of
 // numpy._core.umath (np.strings re-exports the ufunc objects): one input, a bool output, NumPy's out= / where= /
-// dtype=. Each public method keeps the chararray boundary's rule in its own body, so the boundary audit reads the
-// public name; the engine is NDStringMethods.Predicate (S / U) and NDVStringMethods.Predicate (StringDType).
+// dtype=. Each public method is woven as its own ufunc call (a chararray operand's subclass path wraps the result);
+// the engine is NDStringMethods.Predicate (S / U) and NDVStringMethods.Predicate (StringDType).
 // =============================================================================
 
 namespace NumSharp

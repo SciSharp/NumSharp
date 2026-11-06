@@ -27,7 +27,6 @@ namespace NumSharp {
         ///     pair).</exception>
         public static bool array_equiv(NDArray a1, NDArray a2)
         {
-            using var plain = NDMatrixBoundary.PlainFor(a1, a2);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // The body is NumPy's statements, TensorEngine.ArrayEquiv (DefaultEngine's in
             // Backends/Default/Logic/Default.ArrayEqual.cs), on the engine of the first operand that is not null. Two nulls
             // are equivalent (NumSharp's null convention) and have no engine to ask; one null reaches the engine, whose

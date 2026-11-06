@@ -61,7 +61,6 @@ namespace NumSharp
         public static NDArray histogram_bin_edges(NDArray a, int bins = 10, (double, double)? range = null, NDArray weights = null)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            using var plain = NDMatrixBoundary.PlainFor(a, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return a.TensorEngine.HistogramBinEdges(a, bins, range, weights);
         }
 
@@ -83,7 +82,6 @@ namespace NumSharp
         public static NDArray histogram_bin_edges(NDArray a, string bins, (double, double)? range = null, NDArray weights = null)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            using var plain = NDMatrixBoundary.PlainFor(a, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return a.TensorEngine.HistogramBinEdges(a, bins, range, weights);
         }
 
@@ -104,7 +102,6 @@ namespace NumSharp
         public static NDArray histogram_bin_edges(NDArray a, NDArray bins, (double, double)? range = null, NDArray weights = null)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            using var plain = NDMatrixBoundary.PlainFor(a, bins, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return a.TensorEngine.HistogramBinEdges(a, bins, range, weights);
         }
 
@@ -124,7 +121,6 @@ namespace NumSharp
         public static NDArray histogram_bin_edges(NDArray a, double[] bins, (double, double)? range = null, NDArray weights = null)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            using var plain = NDMatrixBoundary.PlainFor(a, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return a.TensorEngine.HistogramBinEdges(a, (NDArray)np.array(bins), range, weights);
         }
 
@@ -156,7 +152,6 @@ namespace NumSharp
         public static HistogramResult histogram(NDArray a, int bins = 10, (double, double)? range = null, bool density = false, NDArray weights = null)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            using var plain = NDMatrixBoundary.PlainFor(a, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return a.TensorEngine.Histogram(a, bins, range, density, weights);
         }
 
@@ -177,7 +172,6 @@ namespace NumSharp
         public static HistogramResult histogram(NDArray a, string bins, (double, double)? range = null, bool density = false, NDArray weights = null)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            using var plain = NDMatrixBoundary.PlainFor(a, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return a.TensorEngine.Histogram(a, bins, range, density, weights);
         }
 
@@ -200,7 +194,6 @@ namespace NumSharp
         public static HistogramResult histogram(NDArray a, NDArray bins, (double, double)? range = null, bool density = false, NDArray weights = null)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            using var plain = NDMatrixBoundary.PlainFor(a, bins, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return a.TensorEngine.Histogram(a, bins, range, density, weights);
         }
 
@@ -223,7 +216,6 @@ namespace NumSharp
         public static HistogramResult histogram(NDArray a, double[] bins, (double, double)? range = null, bool density = false, NDArray weights = null)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            using var plain = NDMatrixBoundary.PlainFor(a, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return a.TensorEngine.Histogram(a, (NDArray)np.array(bins), range, density, weights);
         }
     }

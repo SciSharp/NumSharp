@@ -13,16 +13,16 @@ namespace NumSharp
         /// <param name="axis">Axis along which elements are shifted.</param>
         /// <returns>Output array, with the same shape as the input.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.roll.html</remarks>
+        [PlainReceiver]
         public NDArray roll(long shift, int axis)
         {
-            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
             return np.roll(this, shift, axis);
         }
 
         /// <inheritdoc cref="roll(long, int)"/>
+        [PlainReceiver]
         public NDArray roll(int shift, int axis)
         {
-            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
             return np.roll(this, (long)shift, axis);
         }
 
@@ -35,16 +35,16 @@ namespace NumSharp
         /// <param name="shift">The number of places by which elements are shifted.</param>
         /// <returns>Output array, with the same shape as the input.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.roll.html</remarks>
+        [PlainReceiver]
         public NDArray roll(long shift)
         {
-            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
             return np.roll(this, shift);
         }
 
         /// <inheritdoc cref="roll(long)"/>
+        [PlainReceiver]
         public NDArray roll(int shift)
         {
-            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
             return np.roll(this, (long)shift);
         }
     }

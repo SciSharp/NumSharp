@@ -18,7 +18,6 @@ namespace NumSharp
         ///     required positional argument: 'N'</c>).</exception>
         public static NDArray tril(NDArray m, int k = 0)
         {
-            using var plain = NDMatrixBoundary.PlainFor(m);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // NumPy's statements (the 0-d refusal, the row-run blit or `where(tri(...), m, zeros(1, m.dtype))`) are the
             // array object's.
             return NDArray.tril(m, k);
@@ -38,7 +37,6 @@ namespace NumSharp
         ///     required positional argument: 'N'</c>).</exception>
         public static NDArray triu(NDArray m, int k = 0)
         {
-            using var plain = NDMatrixBoundary.PlainFor(m);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // NumPy's statements (the 0-d refusal, the row-run blit or `where(tri(..., k-1), zeros(1, m.dtype), m)`) are
             // the array object's.
             return NDArray.triu(m, k);

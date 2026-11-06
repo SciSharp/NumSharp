@@ -16,8 +16,9 @@ using NumSharp.Backends.Kernels;
 // override owns the [NDScoped] scope both run under.
 //
 // History: the np-layer dtype plan's P2 moved these statements from the public np.cov into the internal operation class
-// CovEngine; its phase PE (E1) made that class this DefaultEngine partial. The facade keeps the matrix boundary's plain
-// region and the null check. Its phase P6 made each np.* call of the statements (np.average, np.dot, np.concatenate,
+// CovEngine; its phase PE (E1) made that class this DefaultEngine partial. The facade keeps the null check (its woven
+// subclass path hands a matrix operand in as its plain view). Its phase P6 made each np.* call of the statements
+// (np.average, np.dot, np.concatenate,
 // ...) the member its facade dispatches to, and moved the file from beside the facade to Backends/Default/Statistics/.
 // =============================================================================
 

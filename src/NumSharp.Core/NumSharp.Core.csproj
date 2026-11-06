@@ -227,6 +227,25 @@
     <NumSharpBuildProject>$(MSBuildThisFileDirectory)..\..\tools\NumSharp.Build\NumSharp.Build.csproj</NumSharpBuildProject>
   </PropertyGroup>
 
+  <!-- A WEAVER EDIT RE-WEAVES A FRESH COMPILE. The weave rewrites the intermediate assembly in place, and the subclass weave
+       leaves a module it already wove alone (SubclassWeaver.IsAlreadyWoven: a second pass would add a second prologue), so
+       an edited weaver would otherwise keep the old weave until some Core source changed. The weaver's sources are
+       additional compile inputs: editing one reruns CoreCompile, whose fresh assembly is newer than the weave marker, so
+       _NumSharpCoreBuildWeaver builds the edited tool and NDScopeWeave runs it. -->
+  <ItemGroup Condition="'$(SkipNDScopeWeave)' != 'true'">
+    <CustomAdditionalCompileInputs Include="$(MSBuildThisFileDirectory)..\..\tools\NumSharp.Build\**\*.cs"
+                                   Exclude="$(MSBuildThisFileDirectory)..\..\tools\NumSharp.Build\obj\**;$(MSBuildThisFileDirectory)..\..\tools\NumSharp.Build\bin\**" />
+  </ItemGroup>
+
+  <!-- -p:SkipNDScopeWeave=true also skips NumPy's array-subclass weave (SubclassWeaver runs inside the same tool): every
+       np.* function then answers a numpy.matrix or numpy.char.chararray operand with the plain result. Said once per
+       build, as a warning (NDW030: the self-weave's own code, after the subclass weaver's NDW020..NDW029), so a test run
+       against such a build is not mistaken for the shipped behaviour. -->
+  <Target Name="_NumSharpCoreSubclassWeaveSkipped" BeforeTargets="CoreCompile"
+          Condition="'$(SkipNDScopeWeave)' == 'true' and '$(DesignTimeBuild)' != 'true'">
+    <Warning Code="NDW030" Text="NumSharp.Core is built with SkipNDScopeWeave=true: the array-subclass weave is skipped too, so the np.* functions answer numpy.matrix and numpy.char.chararray operands with plain results." />
+  </Target>
+
   <!-- The marker path is spelled inline (not via a body-level property): IntermediateOutputPath
        is assigned by the SDK's .targets, which import AFTER the project body — a body-level
        property would capture it EMPTY. Target Inputs/Outputs expand at target-execution time,

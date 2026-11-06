@@ -16,7 +16,6 @@ namespace NumSharp
         ///     (<c>TensorEngine.CountNonZero</c>).</remarks>
         public static long count_nonzero(NDArray a)
         {
-            using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // NumPy's count_nonzero over every element (multiarray.count_nonzero), text and empty arrays included, is the
             // engine's: DefaultEngine.CountNonZero.
             return a.TensorEngine.CountNonZero(a);
@@ -35,7 +34,6 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.count_nonzero.html</remarks>
         public static NDArray count_nonzero(NDArray a, int axis, bool keepdims = false)
         {
-            using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // NumPy's count_nonzero(a, axis, keepdims=) is `a_bool.sum(axis=axis, dtype=intp, keepdims=keepdims)` over the
             // truth values (text through a != ''); the whole call, the empty array included, is the engine's.
             return a.TensorEngine.CountNonZero(a, axis, keepdims);

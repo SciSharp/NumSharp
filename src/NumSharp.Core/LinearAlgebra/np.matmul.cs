@@ -64,7 +64,7 @@ namespace NumSharp
         ///     <para>
         ///     The whole call is the engine member
         ///     <c>TensorEngine.Matmul(x1, x2, out, axes, axis, keepdims, dtype, casting, order)</c> since the np-layer
-        ///     dtype plan's P2; this function keeps the numpy.matrix boundary.
+        ///     dtype plan's P2; this function's woven subclass path answers for a numpy.matrix operand.
         ///     </para>
         /// </remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>

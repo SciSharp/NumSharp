@@ -140,10 +140,8 @@ namespace NumSharp.Statistics
         internal static NDArray Compute(NDArray a, NDArray q, int[] axis, NDArray @out, bool keepdims, string method,
             NDArray weights)
         {
-            // Plain-array semantics for everything this computation calls: the public functions decided the subclass rules
-            // already (a chararray `a` came through NDCharArrayBoundary.Kept), and the statements below are NumPy's own,
-            // which meet the operands as plain arrays (the weights' comparison, the one exception, is in Prologue).
-            using var plain = NDMatrixBoundary.PlainFor(a, weights, @out);
+            // The operands are the plain views the woven public function hands in, so the statements below are NumPy's own
+            // and meet them as plain arrays (the weights' comparison, the one exception, is in Prologue).
             NDArray wgt = Prologue(a, axis, method, weights, out int[] reduced);
             return UReduce(a, q, reduced, @out, keepdims, wgt, nan: false);
         }
@@ -175,10 +173,9 @@ namespace NumSharp.Statistics
         internal static NDArray Compute<TState>(NDArray a, NDArray q, int[] axis, NDArray @out, bool keepdims,
             string method, NDArray weights, TState state, Func<TState, NDArray> emptyNanAnswer)
         {
-            // Plain-array semantics (see the plain overload). A chararray `a` reaches the nan forms with its class, and
-            // NumPy's answer for it is the plain text's: isnan refuses text, and empty text gets np.nanmean's refusal (the
-            // unweighted call, which computes plain inside this region too).
-            using var plain = NDMatrixBoundary.PlainFor(a, weights, @out);
+            // Plain views in (see the plain overload). A chararray `a` reaches the nan forms as its plain view, and NumPy's
+            // answer for it is the plain text's: isnan refuses text, and empty text gets np.nanmean's refusal (the
+            // unweighted call).
             NDArray wgt = Prologue(a, axis, method, weights, out int[] reduced);
             // _nanquantile_unchecked: `if a.size == 0: return np.nanmean(a, axis, out=out, keepdims=keepdims)` — the
             // caller's unweighted route gives exactly that answer before it reads q or the method.

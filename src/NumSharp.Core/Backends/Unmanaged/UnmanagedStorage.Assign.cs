@@ -14,7 +14,8 @@ namespace NumSharp.Backends
     // NumPy's array_assign_array.c and array_assign_scalar.c (PyArray_AssignArray, PyArray_AssignRawScalar) and
     // array_copyto's weak-scalar half: the assignment np.copyto runs, the array object's own memory work (the np-layer dtype
     // plan's D1). np.copyto's overloads are facades over these members: they keep the argument parsing (the casting name,
-    // the mask's conversion), the class boundary and the C# forms of the source (an array, None, a C# number as NumPy's
+    // the mask's conversion; a subclass operand arrives as its plain view) and the C# forms of the source (an array,
+    // None, a C# number as NumPy's
     // Python or NumPy scalar, a str). The text and StringDType routes are in UnmanagedStorage.Assign.Strings.cs and
     // UnmanagedStorage.Assign.VString.cs.
     //
@@ -360,10 +361,13 @@ namespace NumSharp.Backends
         /// <exception cref="TypeError">A None source into an integer (or <c>decimal</c>) destination with an element to
         ///     convert: Python's <c>int(None)</c> (<see cref="CopytoNone"/>).</exception>
         /// <remarks>
-        ///     <para><b>Matrix region.</b> The text routes of the assignment call public np.* functions (np.any, np.copyto,
+        ///     <para><b>Plain views.</b> The text routes of the assignment call public np.* functions (np.any, np.copyto,
         ///     np.broadcast_to, ...). A caller inside the engine may hold a <c>numpy.matrix</c> or chararray object (a user's
-        ///     <c>out=</c>), so the region np.copyto opens is opened here: those nested calls compute plain, as they do under
-        ///     the public facade (NDMatrixBoundary).</para>
+        ///     <c>out=</c>, an assigned value), so the copy runs on plain views of the operands (<see
+        ///     cref="NDSubclass.LeasePlainView"/>:
+        ///     the same memory, released on return): those nested calls compute plain, as they do under the woven public
+        ///     np.copyto, and never take a subclass path (a matrix broadcast to three axes would raise the finalize
+        ///     rule's error).</para>
         ///     <para><b>Operand roots.</b> <see cref="NDAnchoredAttribute"/>, as on the public np.copyto: the kernels read raw
         ///     addresses, so a temporary <paramref name="src"/> or <paramref name="where"/> the caller passed stays reachable
         ///     until the copy returns.</para>
@@ -371,22 +375,27 @@ namespace NumSharp.Backends
         [NDAnchored]
         internal static void Copyto(NDArray dst, NDArray src, NPY_CASTING casting, NDArray @where = null)
         {
-            using var plain = NDMatrixBoundary.PlainFor(dst, src, @where);   // nested public calls compute plain (NDMatrixBoundary)
             if (dst is null)
                 throw new ArgumentNullException(nameof(dst));
 
+            // Plain views of a subclass operand (the remarks): the same memory, so the copy writes the caller's array; each
+            // lease releases the view it made when the copy returns or throws, and passes a plain operand through.
+            using var plainDst = NDSubclass.LeasePlainView(dst);
+            using var plainWhere = NDSubclass.LeasePlainView(@where);
+
             // array_copyto converts the mask (PyArray_FromAny with a bool descr: the 'safe' rule) before
             // PyArray_AssignArray, so a bad mask wins over a read-only destination and over a bad cast.
-            DefaultEngine.ValidateWhereMask(@where);
+            DefaultEngine.ValidateWhereMask(plainWhere.Array);
 
             // A null source is Python's None, which PyArray_FromAny makes a 0-d OBJECT array (CopytoNone).
             if (src is null)
             {
-                CopytoNone(dst, @where, casting);
+                CopytoNone(plainDst.Array, plainWhere.Array, casting);
                 return;
             }
 
-            CopytoAssignArray(dst, src, @where, casting);
+            using var plainSrc = NDSubclass.LeasePlainView(src);
+            CopytoAssignArray(plainDst.Array, plainSrc.Array, plainWhere.Array, casting);
         }
 
         /// <summary>

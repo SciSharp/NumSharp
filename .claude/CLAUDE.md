@@ -350,7 +350,7 @@ Create issues on `SciSharp/NumSharp` with `gh issue create` (`GH_TOKEN` through 
 | `creation-manipulation.md` | `np.arange`, `np.ndarray`, the `as*` family, object-list coercion, full / ones / eye, `np.frombuffer`, linspace / logspace / geomspace, set routines, flips / transposes, stacking, resize / tolist, allocation and reshape guards, `np.copyto` |
 | `unique.md` | `np.unique` (`UniqueResult`, the axis path, NumPy's flat routes) and the Array-API unique family, the hash path |
 | `axis-arguments.md` | `Shape.check_and_adjust_axis` / `normalize_axis_tuple`, the rules every axis argument follows, NumPy's errors around axes |
-| `matrix.md` | `NDMatrix`: static type versus object (the matrix boundary), scalars, indexing, operators and scaling, reductions, construction, divergences, gates |
+| `matrix.md` | `NDMatrix`: static type versus object (woven mechanisms), scalars, indexing, operators and scaling, reductions, construction, divergences, gates |
 | `ufuncs.md` | the ufunc surface (`dtype=`, `out=`, `where=`), the result layout, fix, fabs, clip, divmod, float_power, power's float loops, gcd / lcm, bitwise |
 | `float-math.md` | correlate / convolve, inverse hyperbolic, sinc, the float32 kernels ported from NumPy, exp2, expm1 / log1p, complex128 NaN signs |
 | `reductions.md` | the reduce prologue, sum / mean, var / std, numpy.ma mean / var, max / min / ptp schedules and keywords, float16 HALF loops, the scans, cov, the NaN-aware family |
@@ -362,7 +362,7 @@ Create issues on `SciSharp/NumSharp` with `gh issue create` (`GH_TOKEN` through 
 | `strings.md` | the string dtypes: the refuse-or-compute rule, the C# boundary, movement, `StringDType` arrays, text ↔ number, gates |
 | `strings-compute.md` | the text kernels, `StringDType` computation and NA rules, text sorts / searches / set routines, ordering `T` |
 | `strings-methods.md` | the 46 `np.strings` functions: search / strip / pad, predicates, case maps, translate, mod, encode / decode |
-| `char-chararray.md` | `numpy.char`, `NDCharArray` and its boundary, the object path (`NDListArray`) |
+| `char-chararray.md` | `numpy.char`, `NDCharArray` and its woven functions, the object path (`NDListArray`) |
 | `selection-indexing.md` | the one indexer and its index forms, storing a C# literal, take / put / place / putmask, take_along_axis / put_along_axis / select, unravel_index / ravel_multi_index, the diagonal and triangular family |
 | `index-tricks.md` | the `r_` / `c_` / `ix_` / `s_` / `index_exp` DSL, `mgrid` / `ogrid` / `meshgrid`, `np.indices` |
 | `iteration.md` | NDIter, ndindex / ndenumerate / nditer and their traps, nested_iters, flatiter, typed iteration, `nd.Unsafe` and the .NET bridges |

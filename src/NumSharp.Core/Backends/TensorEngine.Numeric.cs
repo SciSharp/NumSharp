@@ -62,8 +62,8 @@ namespace NumSharp
         /// <exception cref="TypeError">A null <paramref name="mode"/> (<c>convolve/correlate mode not understood</c>), or a
         ///     <c>StringDType</c> operand's refusal or first-product error.</exception>
         /// <exception cref="NotSupportedException">A <c>StringDType</c> operand whose OBJECT product NumPy computes.</exception>
-        /// <remarks>NumPy's function is C, so the call is an engine member; the numpy.matrix boundary stays with
-        ///     <c>np.correlate</c>.</remarks>
+        /// <remarks>NumPy's function is C, so the call is an engine member; the subclass answer stays with
+        ///     <c>np.correlate</c>'s woven subclass path.</remarks>
         public abstract NDArray Correlate2(NDArray a, NDArray v, string mode = "valid");
 
         public abstract bool AllClose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8, bool equal_nan = false);
@@ -81,7 +81,7 @@ namespace NumSharp
         /// <param name="a">The array (any dtype, any layout).</param>
         /// <returns>The count.</returns>
         /// <exception cref="NullReferenceException"><paramref name="a"/> is null.</exception>
-        /// <remarks>The public <c>np.count_nonzero</c> only opens the matrix boundary's plain region and calls this (the
+        /// <remarks>The public <c>np.count_nonzero</c> only calls this, a subclass operand handed in as its plain view (the
         ///     np-layer dtype plan, P1b).</remarks>
         public abstract long CountNonZero(NDArray a);
 
@@ -95,7 +95,7 @@ namespace NumSharp
         /// <param name="keepdims">Whether the counted axis stays with length one.</param>
         /// <returns>The int64 counts, laid out as NumPy's sum allocates them.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range (the axis as given).</exception>
-        /// <remarks>The public <c>np.count_nonzero</c> only opens the matrix boundary's plain region and calls this (the
+        /// <remarks>The public <c>np.count_nonzero</c> only calls this, a subclass operand handed in as its plain view (the
         ///     np-layer dtype plan, P1b).</remarks>
         public abstract NDArray CountNonZero(NDArray a, int axis, bool keepdims = false);
 
@@ -119,8 +119,8 @@ namespace NumSharp
         /// <remarks>
         ///     NumPy writes array_equal in Python (<c>numpy/_core/numeric.py</c>); DefaultEngine's override runs those
         ///     statements for every dtype, text included, with a fused early-exiting equality scan for two dense operands of
-        ///     one dtype. <c>np.array_equal</c> and the member <see cref="NDArray.array_equal(NDArray, bool)"/> call it after
-        ///     the matrix boundary's plain region, on the engine of the first operand that is not null; an override replaces
+        ///     one dtype. <c>np.array_equal</c> and the member <see cref="NDArray.array_equal(NDArray, bool)"/> call it with
+        ///     plain views of subclass operands, on the engine of the first operand that is not null; an override replaces
         ///     both for every array whose engine it is. New in 0.71.0 (the np-layer dtype plan, phase PE); it was the internal
         ///     class <c>ArrayEqualEngine</c>.
         /// </remarks>
@@ -138,8 +138,9 @@ namespace NumSharp
         /// </returns>
         /// <exception cref="TypeError">Two <c>StringDType</c> operands whose NA objects differ.</exception>
         /// <remarks>
-        ///     NumPy writes array_equiv in Python (<c>numpy/_core/numeric.py</c>). <c>np.array_equiv</c> calls this after the
-        ///     matrix boundary's plain region, on the engine of the first operand that is not null; an override replaces it
+        ///     NumPy writes array_equiv in Python (<c>numpy/_core/numeric.py</c>). <c>np.array_equiv</c> calls this
+        ///     with plain
+        ///     views of subclass operands, on the engine of the first operand that is not null; an override replaces it
         ///     for every array whose engine it is. New in 0.71.0 (the np-layer dtype plan, phase PE); it was the internal
         ///     class <c>ArrayEqualEngine</c>.
         /// </remarks>
@@ -220,7 +221,7 @@ namespace NumSharp
         /// <remarks>
         ///     NumPy writes outer in Python (<c>numpy/_core/numeric.py</c>); DefaultEngine runs its one statement over the
         ///     array object's ravel and expand_dims and <paramref name="a"/>'s engine's <see cref="Multiply"/>.
-        ///     <c>np.outer</c> calls it inside the matrix boundary's plain region, and numpy.linalg's Array-API
+        ///     <c>np.outer</c> calls it with plain views of subclass operands, and numpy.linalg's Array-API
         ///     <c>outer</c> after its one-dimensional check; an override replaces both for every array whose engine it is.
         /// </remarks>
         public abstract NDArray Outer(NDArray a, NDArray b, NDArray @out = null);

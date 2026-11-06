@@ -424,8 +424,8 @@ namespace NumSharp.Backends.Strings
             }
             // NumPy's trivial loop copies a short input its loop casts, keeping the input's class: a chararray of the user's
             // call cast to StringDType (the comparisons, add) or to bool (the logical ufuncs) is refused by the finalize rule
-            // here, between the output cast and the broadcast (NDCharArrayBoundary.TrivialLoopCopyError).
-            var copy = NDCharArrayBoundary.TrivialLoopCopyError(x1, VStringLoopDescr(ufunc, x1), x2,
+            // here, between the output cast and the broadcast (NDCharArray.TrivialLoopCopyError).
+            var copy = NDCharArray.TrivialLoopCopyError(x1, VStringLoopDescr(ufunc, x1), x2,
                                                                  x2 is null ? null : VStringLoopDescr(ufunc, x2), where);
             if (copy is not null)
                 return copy;

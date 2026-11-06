@@ -43,7 +43,7 @@ namespace NumSharp
 
         /// <summary>
         ///     True while this alias is a chararray INPUT of the ufunc call the user made, for NumPy's trivial-loop copy
-        ///     (<see cref="NDCharArrayBoundary.TrivialLoopCopyError(NDArray, DType, NDArray, DType, NDArray)"/>): the guard
+        ///     (<see cref="NDCharArray.TrivialLoopCopyError(NDArray, DType, NDArray, DType, NDArray)"/>): the guard
         ///     of a string ufunc copies a short input that needs a cast AS ITS CLASS, and a chararray copy into a dtype that
         ///     is not string data raises the finalize error.
         /// </summary>

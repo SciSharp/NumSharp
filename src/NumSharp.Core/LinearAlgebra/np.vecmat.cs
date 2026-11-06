@@ -41,12 +41,12 @@ namespace NumSharp
         ///     </para>
         ///     <para>
         ///     NumPy's <c>subok</c> and <c>signature</c> keywords are absent: <c>subok</c> concerns ndarray
-        ///     subclasses, which the numpy.matrix boundary already decides, and <c>signature</c> is what
+        ///     subclasses, which the woven subclass path already decides, and <c>signature</c> is what
         ///     <paramref name="dtype"/> does.
         ///     </para>
         ///     <para>
         ///     The whole call is the engine member <c>TensorEngine.Vecmat(x1, x2, out, axes, axis, keepdims, dtype, casting, order)</c>
-        ///     since the np-layer dtype plan's P2; this function keeps the numpy.matrix boundary.
+        ///     since the np-layer dtype plan's P2; this function's woven subclass path answers for a numpy.matrix operand.
         ///     </para>
         /// </remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes

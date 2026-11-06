@@ -344,7 +344,7 @@ namespace NumSharp
             var cls = hasType ? (Type)type : typeof(NDListArray);
             // PyArray_View makes the subclass object first: its __array_finalize__ sees the object dtype.
             if (cls == typeof(NDCharArray))
-                throw NDCharArrayBoundary.FinalizeError();
+                throw NDCharArray.FinalizeError();
             if (cls == typeof(NDMatrix) && Ids.ndim != 2)
                 _ = Ids.Shape.AsMatrix(); // matrix's finalize rule: "shape too large to be a matrix." (no view is kept)
             // Then the dtype is assigned: _view_is_safe refuses every dtype but object for an array of references.

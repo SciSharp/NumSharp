@@ -130,7 +130,6 @@ namespace NumSharp
         public static unsafe void copyto<T>(NDArray dst, T src, string casting = "same_kind", NDArray @where = null)
             where T : unmanaged
         {
-            using var plain = NDMatrixBoundary.PlainFor(dst, @where);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             NPY_CASTING rule = CopytoCastingConverter(casting);
             if (dst is null)
                 throw new ArgumentNullException(nameof(dst));
@@ -188,7 +187,6 @@ namespace NumSharp
         [NDAnchored]
         public static void copyto(NDArray dst, BigInteger src, string casting = "same_kind", NDArray @where = null)
         {
-            using var plain = NDMatrixBoundary.PlainFor(dst, @where);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             NPY_CASTING rule = CopytoCastingConverter(casting);
             if (dst is null)
                 throw new ArgumentNullException(nameof(dst));

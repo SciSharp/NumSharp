@@ -625,7 +625,6 @@ namespace NumSharp.Backends
         [NDScoped]
         internal static void PutMaskCore(NDArray a, NDArray mask, object values)
         {
-            using var plain = NDMatrixBoundary.PlainFor(a, mask, values as NDArray);   // in place: the helpers below see a matrix as a plain array
             if (a is null) throw new ArgumentNullException(nameof(a));
             if (mask is null) throw new ArgumentNullException(nameof(mask));
 
@@ -770,7 +769,6 @@ namespace NumSharp.Backends
         [NDScoped]
         internal static void PlaceCore(NDArray arr, NDArray mask, object vals)
         {
-            using var plain = NDMatrixBoundary.PlainFor(arr, mask, vals as NDArray);   // in place: the helpers below see a matrix as a plain array
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (mask is null) throw new ArgumentNullException(nameof(mask));
 

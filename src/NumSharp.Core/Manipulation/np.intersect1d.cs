@@ -19,7 +19,6 @@ namespace NumSharp
         ///     nan-like value</c>.</exception>
         public static NDArray intersect1d(NDArray ar1, NDArray ar2)
         {
-            using var plain = NDMatrixBoundary.PlainFor(ar1, ar2);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return IntersectCore(ar1, ar2, false, false)[0];
         }
 
@@ -42,7 +41,6 @@ namespace NumSharp
         ///     nan-like value</c>.</exception>
         public static NDArray intersect1d(NDArray ar1, NDArray ar2, bool assume_unique)
         {
-            using var plain = NDMatrixBoundary.PlainFor(ar1, ar2);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return IntersectCore(ar1, ar2, assume_unique, false)[0];
         }
 
@@ -70,7 +68,6 @@ namespace NumSharp
         ///     nan-like value</c>.</exception>
         public static NDArray[] intersect1d(NDArray ar1, NDArray ar2, bool assume_unique = false, bool return_indices = false)
         {
-            using var plain = NDMatrixBoundary.PlainFor(ar1, ar2);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return IntersectCore(ar1, ar2, assume_unique, return_indices);
         }
 

@@ -7,9 +7,9 @@ namespace NumSharp
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ravel.html</remarks>
         /// <remarks><br></br>If this array's <see cref="Shape"/> is a slice, the a copy will be made.</remarks>
+        [PlainReceiver]
         public NDArray ravel()
         {
-            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
             return ravel(this, 'C');
         }
 
@@ -23,9 +23,9 @@ namespace NumSharp
         ///     'K' - memory order.
         /// </param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ravel.html</remarks>
+        [PlainReceiver]
         public NDArray ravel(char order)
         {
-            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
             return ravel(this, order);
         }
 
@@ -41,9 +41,8 @@ namespace NumSharp
         ///     <paramref name="a"/> itself.</returns>
         /// <exception cref="ArgumentException">An order code other than C, F, A or K (the house order
         ///     error).</exception>
-        /// <remarks>No class boundary runs here: np.ravel applies its numpy.char.chararray rule and ndarray.ravel its
-        ///     matrix region before they call this, and an engine caller sits inside its public function's
-        ///     boundary.</remarks>
+        /// <remarks>It sees plain arrays only: the woven public function hands it the plain view of a subclass operand
+        ///     and answers for the class itself (NDSubclass).</remarks>
         [NewSubtype("a")]
         [AsArrayFor(typeof(NDMatrix))]
         internal static NDArray ravel(NDArray a, char order)

@@ -69,7 +69,7 @@ namespace NumSharp
         ///     their own indexer instead of overriding: their rules (a stripped element, a matrix row or column) apply through
         ///     their static type, and through an <see cref="NDArray"/> reference they are indexed as plain arrays, which the
         ///     library's own code relies on (it receives such objects as <see cref="NDArray"/>, see
-        ///     <see cref="NDMatrixBoundary"/>).
+        ///     <see cref="PlainReceiverAttribute"/>).
         ///     </para>
         ///     <para>https://numpy.org/doc/stable/user/basics.indexing.html</para>
         /// </remarks>

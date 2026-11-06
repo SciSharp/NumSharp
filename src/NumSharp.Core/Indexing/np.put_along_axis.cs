@@ -60,7 +60,6 @@ namespace NumSharp
         [NDScoped]
         public static void put_along_axis(NDArray arr, NDArray indices, NDArray values, int? axis)
         {
-            using var plain = NDMatrixBoundary.PlainFor(arr, indices, values);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (indices is null) throw new ArgumentNullException(nameof(indices));
             // A null `values` is Python's None, converted where NumPy's fancy assignment converts values (NDArray.PutAlongAxisCore).

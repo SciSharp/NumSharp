@@ -57,7 +57,6 @@ namespace NumSharp
         public static Histogram2dResult histogram2d(NDArray x, NDArray y, int bins = 10, (double, double)?[] range = null, bool density = false, NDArray weights = null)
         {
             if (x is null) throw new ArgumentNullException(nameof(x));
-            using var plain = NDMatrixBoundary.PlainFor(x, y, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return x.TensorEngine.Histogram2d(x, y, bins, range, density, weights);
         }
 
@@ -75,7 +74,6 @@ namespace NumSharp
         public static Histogram2dResult histogram2d(NDArray x, NDArray y, int[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
         {
             if (x is null) throw new ArgumentNullException(nameof(x));
-            using var plain = NDMatrixBoundary.PlainFor(x, y, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return x.TensorEngine.Histogram2d(x, y, bins, range, density, weights);
         }
 
@@ -93,7 +91,6 @@ namespace NumSharp
         public static Histogram2dResult histogram2d(NDArray x, NDArray y, NDArray bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
         {
             if (x is null) throw new ArgumentNullException(nameof(x));
-            using var plain = NDMatrixBoundary.PlainFor(x, y, bins);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return x.TensorEngine.Histogram2d(x, y, bins, range, density, weights);
         }
 
@@ -111,8 +108,6 @@ namespace NumSharp
         public static Histogram2dResult histogram2d(NDArray x, NDArray y, NDArray[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
         {
             if (x is null) throw new ArgumentNullException(nameof(x));
-            using var plain = NDMatrixBoundary.PlainFor(x, y, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            using var plain2 = NDMatrixBoundary.PlainFor(bins);
             return x.TensorEngine.Histogram2d(x, y, bins, range, density, weights);
         }
 
@@ -130,7 +125,6 @@ namespace NumSharp
         public static Histogram2dResult histogram2d(NDArray x, NDArray y, object[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
         {
             if (x is null) throw new ArgumentNullException(nameof(x));
-            using var plain = NDMatrixBoundary.PlainFor(x, y, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return x.TensorEngine.Histogram2d(x, y, bins, range, density, weights);
         }
 
@@ -148,7 +142,6 @@ namespace NumSharp
         public static Histogram2dResult histogram2d(NDArray x, NDArray y, double[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
         {
             if (x is null) throw new ArgumentNullException(nameof(x));
-            using var plain = NDMatrixBoundary.PlainFor(x, y, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return x.TensorEngine.Histogram2d(x, y, bins, range, density, weights);
         }
     }

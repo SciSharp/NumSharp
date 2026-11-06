@@ -50,7 +50,7 @@ namespace NumSharp
     //
     // np.insert and np.delete join and split an array by position and compute no value, so their statements are internal
     // members of the array object, not TensorEngine members (the np-layer dtype plan's section 1 "Which O", E7):
-    //   * insert (NumPy's numpy.insert after the facade's class boundary): the axis context (axis=None ravels), the
+    //   * insert (NumPy's numpy.insert on the facade's plain views): the axis context (axis=None ravels), the
     //     positions in every C# form (a number, a slice, a sequence, an index array or a boolean mask), the single-index
     //     and multi-index branches, the values' conversion into the array's dtype, and the refusals of an index array that
     //     is neither integer nor boolean;
@@ -89,7 +89,8 @@ namespace NumSharp
         ///     one axis twice or through mixed signs (<c>Axes must be different.</c>, tested before the range), or is out of
         ///     range (<c>Axes=(a, b) out of range for array of ndim=n.</c>).</exception>
         /// <remarks>Scoped by <c>[NDScoped]</c>: the inner view of a two-step composition is released; the result is
-        ///     yielded. No class boundary runs here: the facade applies its rules before it calls this.</remarks>
+        ///     yielded. It sees plain arrays only: the woven public function hands it the plain view of a subclass
+        ///     operand and answers for the class itself (NDSubclass).</remarks>
         [NDScoped /* the inner flip or transpose of the two-step compositions is released; the result is yielded */]
         [NewSubtype("m")]
         internal static NDArray rot90(NDArray m, int k, int[] axes)
@@ -2132,7 +2133,10 @@ namespace NumSharp
                         break;
 
                     case NDArray a:
-                        mat = a;
+                        // A numpy.matrix or chararray choice is its plain view (np.select's result is a plain array, and
+                        // the np.copyto below must not take its subclass path for library code); this call's scope
+                        // reclaims the view. Its dtype is the operand's own.
+                        mat = NDSubclass.PlainView(a);
                         if (a.typecode == NPTypeCode.String)
                             anyString = true;
                         else if (!anyString)
@@ -2165,8 +2169,10 @@ namespace NumSharp
                     default:
                         // Strong by NumPy's rule `type(x) in (int, float, complex) else asarray(x)`:
                         // bool, char, Half, decimal, C# arrays and collections all take the asarray
-                        // branch and contribute their concrete dtype.
-                        mat = np.asanyarray(item);
+                        // branch and contribute their concrete dtype. A numpy.matrix or chararray choice is its
+                        // plain view (np.select's result is a plain array, and the np.copyto below must not take
+                        // its subclass path for library code); this call's scope reclaims the view.
+                        mat = NDSubclass.PlainView(np.asanyarray(item));
                         if (mat.typecode == NPTypeCode.String)
                             anyString = true;
                         else if (!anyString)
@@ -2953,8 +2959,8 @@ namespace NumSharp
         /// <exception cref="ValueError"><paramref name="indexing"/> is neither <c>"xy"</c> nor <c>"ij"</c> (<c>Valid values
         ///     for `indexing` are 'xy' and 'ij'.</c>), checked before the vectors.</exception>
         /// <exception cref="ArgumentNullException">A null vector (the parameter is named <c>xi[i]</c>).</exception>
-        /// <remarks>No class boundary runs here: the facade applies its rules (a chararray vector's grid kept as a chararray,
-        ///     a matrix computed plain) before it calls this. The reshapes and broadcast views a copy replaces are not
+        /// <remarks>It sees plain arrays only: the woven public function hands it the plain view of a subclass operand
+        ///     and answers for the class itself (NDSubclass). The reshapes and broadcast views a copy replaces are not
         ///     released here (they share the inputs' buffers until collected).</remarks>
         internal static NDArray[] meshgrid(NDArray[] xi, string indexing, bool sparse, bool copy)
         {
@@ -3025,7 +3031,8 @@ namespace NumSharp
         /// <exception cref="InvalidCastException">An input that does not cast to the result dtype.</exception>
         /// <remarks>Scoped by <c>[NDScoped]</c>: the ravels of a multi-dimensional input are released, exceptions included;
         ///     the result is yielded. A 1-D input passes to concatenate as it is (built before the scope opened, so never
-        ///     disposed). No class boundary runs here: the facade applies its rules before it calls this.</remarks>
+        ///     disposed). It sees plain arrays only: the woven public function hands it the plain view of a subclass
+        ///     operand and answers for the class itself (NDSubclass).</remarks>
         [NDScoped /* the ravels of multi-dimensional inputs are released; the concatenated result is yielded */]
         [SubclassRule(typeof(NDSubclassRules), nameof(NDSubclassRules.Append))]
         internal static NDArray append(NDArray arr, NDArray values, int? axis)

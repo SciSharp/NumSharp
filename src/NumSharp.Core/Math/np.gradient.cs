@@ -166,7 +166,6 @@ namespace NumSharp
         public static GradientResult gradient(NDArray f, object spacing = null, int? axis = null, int edge_order = 1)
         {
             if (f is null) throw new ArgumentNullException(nameof(f));
-            using var plain = NDMatrixBoundary.PlainFor(f);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return f.TensorEngine.Gradient(f,
                             spacing is null ? Array.Empty<object>() : new[] { spacing },
                             axis.HasValue ? new[] { axis.Value } : null,
@@ -187,7 +186,6 @@ namespace NumSharp
         public static GradientResult gradient(NDArray f, object spacing, int[] axis, int edge_order = 1)
         {
             if (f is null) throw new ArgumentNullException(nameof(f));
-            using var plain = NDMatrixBoundary.PlainFor(f);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return f.TensorEngine.Gradient(f, spacing is null ? Array.Empty<object>() : new[] { spacing }, axis, edge_order);
         }
 
@@ -196,7 +194,6 @@ namespace NumSharp
         public static GradientResult gradient(NDArray f, object spacing0, object spacing1, int[] axis = null, int edge_order = 1)
         {
             if (f is null) throw new ArgumentNullException(nameof(f));
-            using var plain = NDMatrixBoundary.PlainFor(f);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return f.TensorEngine.Gradient(f, new[] { spacing0, spacing1 }, axis, edge_order);
         }
 
@@ -205,7 +202,6 @@ namespace NumSharp
         public static GradientResult gradient(NDArray f, object spacing0, object spacing1, object spacing2, int[] axis = null, int edge_order = 1)
         {
             if (f is null) throw new ArgumentNullException(nameof(f));
-            using var plain = NDMatrixBoundary.PlainFor(f);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return f.TensorEngine.Gradient(f, new[] { spacing0, spacing1, spacing2 }, axis, edge_order);
         }
 
@@ -217,7 +213,6 @@ namespace NumSharp
         public static GradientResult gradient(NDArray f, object[] varargs, int[] axis = null, int edge_order = 1)
         {
             if (f is null) throw new ArgumentNullException(nameof(f));
-            using var plain = NDMatrixBoundary.PlainFor(f);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return f.TensorEngine.Gradient(f, varargs ?? Array.Empty<object>(), axis, edge_order);
         }
     }

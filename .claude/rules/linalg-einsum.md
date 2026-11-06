@@ -208,7 +208,7 @@ parser).
   `matrix_norm`'s `ord='fro'` and `vector_norm`'s `ord=2`. The four product gufuncs (`matmul`, `vecdot`, `matvec`,
   `vecmat`) take `casting` and `order` after `dtype` (`order` lays out an allocated result: `'K'` keeps the loop-order
   vote, `'C'` / `'F'` / `'A'` the whole result; `ApplyGufuncOrder`); two ufunc keywords are absent on purpose: `subok`
-  and `signature` (the numpy.matrix boundary decides the class, and `dtype` is what `signature` does).
+  and `signature` (the woven subclass path decides the class, and `dtype` is what `signature` does).
 - `LinearAlgebra/{BlasProductApiTests, LinAlgErrorParityTests, LinAlgEngineSeamTests, LinAlgSignatureParityTests,
   EinsumSubscriptParityTests}.cs`; `LinAlgEngineSeamTests` pins the no-backend contract (every factorisation raises
   `NotSupportedException` with Core alone).

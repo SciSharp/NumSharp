@@ -17,7 +17,7 @@ Indexing/np.take.FancyAxis.cs	0	1	# stays (index kind): a contiguous 1-D int64 i
 Logic/np.can_cast.cs	1	80	# stays (D): a dtype routine - np.can_cast's rules for a Python scalar's value
 Logic/np.common_type.cs	1	6	# stays (D): a dtype routine
 Logic/np.find_common_type.cs	2	5	# stays (D): a dtype routine (NumPy 1.26.4's search)
-Logic/np.isreal_iscomplex.cs	0	3	# stays (D): isrealobj / iscomplexobj test the dtype itself
+Logic/np.isreal_iscomplex.cs	0	2	# stays (D): isrealobj / iscomplexobj test the dtype itself
 Logic/np.min_scalar_type.cs	1	0	# stays (D): a dtype routine
 Logic/np.type_checks.cs	0	18	# stays (D): the isdtype family and the type characters (dtype routines); 3 of the numeric lines are np.issctype's NPTypeCode.Empty tests, one per spelling (NPTypeCode, Type, DType), counted as text while they also excluded the String lane
 Manipulation/np.asscalar.cs	0	1	# stays (C): np.asscalar<T>'s C# element-type check
@@ -39,6 +39,3 @@ Selection/NDArray.Indexing.Selection.cs	0	4	# stays (P3 batch 8): an index array
 Selection/NDArray.Indexing.Strings.cs	1	3	# stays (P3 batch 8): index-kind tests and the S / U route's None store
 Selection/NDArray.Indexing.VString.cs	5	0	# stays (P3 batch 8): the StringDType route bodies' calls into the text backend
 Selection/NDArray.Indexing.cs	2	1	# stays (P3 batch 8): the S / U route's unit view and a bool index's kind
-Statistics/np.nanmean.cs	0	1	# P7: the matrix rule's result dtype (the class boundary, D7's TODO)
-Statistics/np.nanstd.cs	0	1	# P7: the matrix rule's result dtype (the class boundary, D7's TODO)
-Statistics/np.nanvar.cs	0	1	# P7: the matrix rule's result dtype (the class boundary, D7's TODO)

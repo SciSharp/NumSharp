@@ -206,8 +206,7 @@ namespace NumSharp
             bool equal_nan = true,
             bool sorted = true)
         {
-            // NumPy's statements after the class boundary, TensorEngine.Unique (the text checks, the boundary scope, the
-            // computation).
+            // NumPy's statements on the plain views, TensorEngine.Unique (the text checks, the scope, the computation).
             NDArray[] outputs = ar.TensorEngine.Unique(ar, return_index, return_inverse, return_counts, axis, equal_nan, sorted);
             return new UniqueResult(outputs, return_index, return_inverse, return_counts);
         }

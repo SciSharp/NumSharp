@@ -26,11 +26,10 @@ namespace NumSharp
         ///     <para>A text <paramref name="a"/> is searched as text: the key is formatted into the common string dtype, as
         ///     NumPy converts it.</para>
         ///     <para>The whole call is the engine's (<see cref="TensorEngine.SearchSorted(NDArray, int, string, NDArray)"/>);
-        ///     this function applies the matrix boundary.</para>
+        ///     this function's woven subclass path hands a subclass operand in as its plain view.</para>
         /// </remarks>
         public static long searchsorted(NDArray a, int v, string side = "left", NDArray sorter = null)
         {
-            using var plain = NDMatrixBoundary.PlainFor(a, sorter);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // NumPy's searchsorted IS PyArray_SearchSorted (the descriptor resolution, the checks, the binary search), and
             // the whole call is the engine's: DefaultEngine.SearchSorted.
             return a.TensorEngine.SearchSorted(a, v, side, sorter);
@@ -50,10 +49,9 @@ namespace NumSharp
         ///     names <c>'float'</c>).</exception>
         /// <exception cref="NullReferenceException"><paramref name="a"/> is null.</exception>
         /// <remarks>The whole call is the engine's (<see cref="TensorEngine.SearchSorted(NDArray, double, string, NDArray)"/>);
-        ///     this function applies the matrix boundary.</remarks>
+        ///     this function's woven subclass path hands a subclass operand in as its plain view.</remarks>
         public static long searchsorted(NDArray a, double v, string side = "left", NDArray sorter = null)
         {
-            using var plain = NDMatrixBoundary.PlainFor(a, sorter);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return a.TensorEngine.SearchSorted(a, v, side, sorter);
         }
 
@@ -83,12 +81,11 @@ namespace NumSharp
         ///     — its monotonic carry and its sorter checks included, so an unsorted haystack gives NumPy's answer too
         ///     (<see cref="Backends.Sorting.TextSearch"/>).</para>
         ///     <para>The whole call is the engine's (<see cref="TensorEngine.SearchSorted(NDArray, NDArray, string, NDArray)"/>);
-        ///     this function applies the matrix boundary.</para>
+        ///     this function's woven subclass path hands a subclass operand in as its plain view.</para>
         /// </remarks>
-        [NDScoped] // the boundary of the plain region and the engine call (the engine reclaims its own temporaries)
+        [NDScoped] // what the engine call leaves (the engine reclaims its own temporaries)
         public static NDArray searchsorted(NDArray a, NDArray v, string side = "left", NDArray sorter = null)
         {
-            using var plain = NDMatrixBoundary.PlainFor(a, v, sorter);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return a.TensorEngine.SearchSorted(a, v, side, sorter);
         }
     }

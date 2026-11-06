@@ -64,7 +64,6 @@ namespace NumSharp
         /// </remarks>
         public static NDArray<long> ravel_multi_index(NDArray[] multi_index, int[] dims, string mode = "raise", char order = 'C')
         {
-            using var plain = NDMatrixBoundary.PlainFor(multi_index);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // The engine of the first coordinate array computes the call, its argument checks included; an empty, null or
             // null-led list has no operand to decide, so TensorEngine.Default's member reports NumPy's error for it. One
             // mode string serves every dimension.
@@ -98,7 +97,6 @@ namespace NumSharp
         /// <remarks>The body is <see cref="TensorEngine.RavelMultiIndex"/>, as for the single-mode overload.</remarks>
         public static NDArray<long> ravel_multi_index(NDArray[] multi_index, int[] dims, string[] modes, char order = 'C')
         {
-            using var plain = NDMatrixBoundary.PlainFor(multi_index);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // The engine of the first coordinate array computes the call (TensorEngine.Default's for an empty, null or
             // null-led list, which has no operand to decide); the modes array is NumPy's mode tuple (null is NumPy's
             // None, which raises on every dimension).

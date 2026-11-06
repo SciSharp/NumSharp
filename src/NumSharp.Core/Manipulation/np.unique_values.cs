@@ -231,7 +231,7 @@ namespace NumSharp
         [NDScoped]
         public static NDArray unique_values(NDArray x)
         {
-            // NumPy's statements after the class boundary (the text checks, the hash and sort routes).
+            // NumPy's statements on the plain views (the text checks, the hash and sort routes).
             return x.TensorEngine.UniqueValues(x);
         }
 
@@ -255,7 +255,7 @@ namespace NumSharp
         [NDScoped]
         public static UniqueCountsResult unique_counts(NDArray x)
         {
-            // NumPy's statements after the class boundary (the text checks, the hash and sort routes).
+            // NumPy's statements on the plain views (the text checks, the hash and sort routes).
             var r = x.TensorEngine.UniqueCounts(x);
             return new UniqueCountsResult(r[0], r[1]);
         }
@@ -284,7 +284,7 @@ namespace NumSharp
         [NDScoped]
         public static UniqueInverseResult unique_inverse(NDArray x)
         {
-            // NumPy's statements after the class boundary (the text checks, the computation, the inverse's reshape).
+            // NumPy's statements on the plain views (the text checks, the computation, the inverse's reshape).
             var r = x.TensorEngine.UniqueInverse(x);
             return new UniqueInverseResult(r[0], r[1]);
         }
@@ -311,7 +311,7 @@ namespace NumSharp
         [NDScoped]
         public static UniqueAllResult unique_all(NDArray x)
         {
-            // NumPy's statements after the class boundary (the text checks, the computation, the inverse's reshape).
+            // NumPy's statements on the plain views (the text checks, the computation, the inverse's reshape).
             var r = x.TensorEngine.UniqueAll(x);
             return new UniqueAllResult(r[0], r[1], r[2], r[3]);
         }

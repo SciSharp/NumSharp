@@ -38,7 +38,7 @@ using NumSharp.Generic;
 //
 // STATIC, NOT VIRTUAL. The indexer hides NDArray's (virtual) indexer instead of overriding it: the matrix rule applies
 // through an NDMatrix reference, and library code that receives a matrix as an NDArray indexes it as a plain 2-d array
-// (NDMatrixBoundary hands the matrix object itself to the computation it runs with plain-array semantics).
+// (an NDArray member reached through the matrix object computes on its plain view, [PlainReceiver]).
 //
 // =============================================================================
 
@@ -100,8 +100,8 @@ namespace NumSharp
         ///     <para>
         ///     <b>Static, not virtual.</b> This indexer HIDES <see cref="NDArray.this[object[]]"/> instead of overriding it: the
         ///     matrix rule applies through an <see cref="NDMatrix"/> reference, and through an <see cref="NDArray"/> reference a
-        ///     matrix is indexed as a plain 2-d array, which the library's own code relies on (<see cref="NDMatrixBoundary"/>
-        ///     hands the matrix object itself to the computation it runs with plain-array semantics).
+        ///     matrix is indexed as a plain 2-d array, which the library's own code relies on (an <see cref="NDArray"/>
+        ///     member reached through the matrix object computes on its plain view, <see cref="PlainReceiverAttribute"/>).
         ///     </para>
         ///     <para>
         ///     <b>Dispatch.</b> An index of integers, slices and slice strings takes the view route (one rule for the row /

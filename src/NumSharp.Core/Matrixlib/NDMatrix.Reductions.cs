@@ -49,6 +49,13 @@ using NumSharp.Backends;
 // twice (float32 sum to float16), and std with an integer dtype= raises the sqrt cast error where np.std of the same
 // data as a plain array returns a truncated scalar.
 //
+// THE PLAIN COMPUTATION. NumPy's method body is `N.ndarray.sum(self, ...)`: the ndarray computation runs, and the matrix
+// method shapes its result. Each member below computes on `self = A` (the matrix's plain base view) and a plain view of
+// a matrix out (NDSubclass.PlainView): a public function handed the matrix itself would take its own subclass path,
+// whose generated method dispatch calls this very member again (np.max(m) -> m.max(...) -> np.max(m) -> ...). The
+// views are made inside the member's NDScope, which disposes them on return; a result never views them (a reduction
+// allocates), and the member returns the caller's out, never its view.
+//
 // =============================================================================
 
 namespace NumSharp
@@ -163,18 +170,18 @@ namespace NumSharp
         [NumPyMethod]
         public NDArray sum(int? axis = null, DType dtype = null, NDArray @out = null)
         {
-            using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
+            NDArray self = A, outView = NDSubclass.PlainView(@out);   // the plain computation (file header)
             if (@out is null)
             {
                 if (axis is null)
-                    return TensorEngine.ReduceAdd(this, null, keepdims: false, dtype);
-                return FromWrapped(TensorEngine.ReduceAdd(this, axis, keepdims: true, dtype), this);
+                    return TensorEngine.ReduceAdd(self, null, keepdims: false, dtype);
+                return FromWrapped(TensorEngine.ReduceAdd(self, axis, keepdims: true, dtype), this);
             }
 
             // add.reduce(self, axis, dtype, out, keepdims=True) is the engine's out= route: the text loop resolution (the
             // concatenation computes into out, everything else is NumPy's refusal), the reduce prologue, the loop
             // promote_types(out, self) when dtype is null (the file header's out= rule), the unsafe store.
-            TensorEngine.ReduceAdd(this, axis, keepdims: true, dtype, @out);
+            TensorEngine.ReduceAdd(self, axis, keepdims: true, dtype, outView);
             // matrix._collapse(axis) on the out NumPy's reduction returned: a plain out has no _collapse (after the store)
             if (@out is not NDMatrix matrixOut)
                 throw new AttributeError("'numpy.ndarray' object has no attribute '_collapse'");
@@ -205,18 +212,18 @@ namespace NumSharp
         [NumPyMethod]
         public NDArray prod(int? axis = null, DType dtype = null, NDArray @out = null)
         {
-            using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
+            NDArray self = A, outView = NDSubclass.PlainView(@out);   // the plain computation (file header)
             if (@out is null)
             {
                 if (axis is null)
-                    return TensorEngine.ReduceProduct(this, null, keepdims: false, dtype);
-                return FromWrapped(TensorEngine.ReduceProduct(this, axis, keepdims: true, dtype), this);
+                    return TensorEngine.ReduceProduct(self, null, keepdims: false, dtype);
+                return FromWrapped(TensorEngine.ReduceProduct(self, axis, keepdims: true, dtype), this);
             }
 
             // multiply.reduce(self, axis, dtype, out, keepdims=True) is the engine's out= route: the text loop resolution
             // (integer counts into a text out repeat, everything else is NumPy's refusal), the reduce prologue, the loop
             // promote_types(out, self) when dtype is null (the file header's out= rule), the unsafe store.
-            TensorEngine.ReduceProduct(this, axis, keepdims: true, dtype, @out);
+            TensorEngine.ReduceProduct(self, axis, keepdims: true, dtype, outView);
             // matrix._collapse(axis) on the out NumPy's reduction returned: a plain out has no _collapse (after the store)
             if (@out is not NDMatrix matrixOut)
                 throw new AttributeError("'numpy.ndarray' object has no attribute '_collapse'");
@@ -250,11 +257,11 @@ namespace NumSharp
         [NumPyMethod]
         public NDArray mean(int? axis = null, DType dtype = null, NDArray @out = null)
         {
-            using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
+            NDArray self = A, outView = NDSubclass.PlainView(@out);   // the plain computation (file header)
             if (@out is null)
             {
                 // Always the array form (keepdims), see the file header: a float16 mean rounds twice there.
-                NDArray kept = TensorEngine.ReduceMean(this, axis, keepdims: true, dtype);
+                NDArray kept = TensorEngine.ReduceMean(self, axis, keepdims: true, dtype);
                 if (axis is null)
                     return Collapse(kept);
                 // _mean ends a float16 mean with `arr.dtype.type(ret)`, a conversion that allocates the matrix;
@@ -266,7 +273,7 @@ namespace NumSharp
             // _mean(self, axis, dtype, out, keepdims=True) is the engine's out= route: umr_sum(arr, axis, dtype, out,
             // keepdims) stores the sum into out (dtype=, else float64 for integers and bool, float32 for float16, else the
             // reduce rule for a missing dtype with an out), then true_divide(out, rcount, out=out, casting='unsafe').
-            TensorEngine.ReduceMean(this, axis, keepdims: true, dtype, @out);
+            TensorEngine.ReduceMean(self, axis, keepdims: true, dtype, outView);
             // matrix._collapse(axis) on the out NumPy's reduction returned: a plain out has no _collapse (after the store)
             if (@out is not NDMatrix matrixOut)
                 throw new AttributeError("'numpy.ndarray' object has no attribute '_collapse'");
@@ -311,16 +318,16 @@ namespace NumSharp
         [NumPyMethod]
         public NDArray var(int? axis = null, DType dtype = null, NDArray @out = null, int ddof = 0)
         {
-            using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
+            NDArray self = A, outView = NDSubclass.PlainView(@out);   // the plain computation (file header)
             if (@out is null)
             {
-                NDArray kept = TensorEngine.ReduceVar(this, axis, keepdims: true, ddof, dtype);
+                NDArray kept = TensorEngine.ReduceVar(self, axis, keepdims: true, ddof, dtype);
                 return axis is null ? Collapse(kept) : FromWrapped(kept, this);
             }
 
             // _var(self, axis, dtype, out, ddof, keepdims=True) is the engine's out= route: out joins the last sum only,
             // then is divided in place.
-            TensorEngine.ReduceVar(this, axis, keepdims: true, ddof, dtype, @out);
+            TensorEngine.ReduceVar(self, axis, keepdims: true, ddof, dtype, outView);
             // matrix._collapse(axis) on the out NumPy's reduction returned: a plain out has no _collapse (after the store)
             if (@out is not NDMatrix matrixOut)
                 throw new AttributeError("'numpy.ndarray' object has no attribute '_collapse'");
@@ -365,16 +372,16 @@ namespace NumSharp
         [NumPyMethod]
         public NDArray std(int? axis = null, DType dtype = null, NDArray @out = null, int ddof = 0)
         {
-            using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
+            NDArray self = A, outView = NDSubclass.PlainView(@out);   // the plain computation (file header)
             if (@out is null)
             {
-                NDArray kept = TensorEngine.ReduceStd(this, axis, keepdims: true, ddof, dtype);
+                NDArray kept = TensorEngine.ReduceStd(self, axis, keepdims: true, ddof, dtype);
                 return axis is null ? Collapse(kept) : FromWrapped(kept, this);
             }
 
             // _std(self, axis, dtype, out, ddof, keepdims=True) is the engine's out= route: _var into out, then
             // sqrt(out, out=out), whose ufunc refuses an integer or bool out after the variance is in it.
-            TensorEngine.ReduceStd(this, axis, keepdims: true, ddof, dtype, @out);
+            TensorEngine.ReduceStd(self, axis, keepdims: true, ddof, dtype, outView);
             // matrix._collapse(axis) on the out NumPy's reduction returned: a plain out has no _collapse (after the store)
             if (@out is not NDMatrix matrixOut)
                 throw new AttributeError("'numpy.ndarray' object has no attribute '_collapse'");
@@ -406,12 +413,12 @@ namespace NumSharp
         [NumPyMethod]
         public NDArray any(int? axis = null, NDArray @out = null)
         {
-            using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
+            NDArray self = A;   // the plain computation (file header)
             if (@out is not null)
                 throw new TypeError("Cannot construct a dtype from an array");
             if (axis is null)
-                return np.any((NDArray)this, axis: null, @out: null, keepdims: false);
-            return FromWrapped(np.any((NDArray)this, axis: axis, @out: null, keepdims: true), this);
+                return np.any(self, axis: null, @out: null, keepdims: false);
+            return FromWrapped(np.any(self, axis: axis, @out: null, keepdims: true), this);
         }
 
         /// <summary>NumPy's <c>matrix.all(axis)</c> for a given axis: whether every element along the axis is
@@ -434,12 +441,12 @@ namespace NumSharp
         [NumPyMethod]
         public NDArray all(int? axis = null, NDArray @out = null)
         {
-            using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
+            NDArray self = A;   // the plain computation (file header)
             if (@out is not null)
                 throw new TypeError("Cannot construct a dtype from an array");
             if (axis is null)
-                return np.all((NDArray)this, axis: null, @out: null, keepdims: false);
-            return FromWrapped(np.all((NDArray)this, axis: axis, @out: null, keepdims: true), this);
+                return np.all(self, axis: null, @out: null, keepdims: false);
+            return FromWrapped(np.all(self, axis: axis, @out: null, keepdims: true), this);
         }
 
         #endregion
@@ -470,15 +477,15 @@ namespace NumSharp
         [NumPyMethod]
         public NDArray max(int? axis = null, NDArray @out = null)
         {
-            using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
+            NDArray self = A, outView = NDSubclass.PlainView(@out);   // the plain computation (file header)
             if (@out is null)
             {
                 if (axis is null)
-                    return np.max((NDArray)this, axis: null, @out: null, keepdims: false);
-                return FromWrapped(np.max((NDArray)this, axis: axis, @out: null, keepdims: true), this);
+                    return np.max(self, axis: null, @out: null, keepdims: false);
+                return FromWrapped(np.max(self, axis: axis, @out: null, keepdims: true), this);
             }
 
-            np.max((NDArray)this, axis: axis, @out: @out, keepdims: true);
+            np.max(self, axis: axis, @out: outView, keepdims: true);
             // matrix._collapse(axis) on the out NumPy's reduction returned: a plain out has no _collapse (after the store)
             if (@out is not NDMatrix matrixOut)
                 throw new AttributeError("'numpy.ndarray' object has no attribute '_collapse'");
@@ -508,15 +515,15 @@ namespace NumSharp
         [NumPyMethod]
         public NDArray min(int? axis = null, NDArray @out = null)
         {
-            using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
+            NDArray self = A, outView = NDSubclass.PlainView(@out);   // the plain computation (file header)
             if (@out is null)
             {
                 if (axis is null)
-                    return np.min((NDArray)this, axis: null, @out: null, keepdims: false);
-                return FromWrapped(np.min((NDArray)this, axis: axis, @out: null, keepdims: true), this);
+                    return np.min(self, axis: null, @out: null, keepdims: false);
+                return FromWrapped(np.min(self, axis: axis, @out: null, keepdims: true), this);
             }
 
-            np.min((NDArray)this, axis: axis, @out: @out, keepdims: true);
+            np.min(self, axis: axis, @out: outView, keepdims: true);
             // matrix._collapse(axis) on the out NumPy's reduction returned: a plain out has no _collapse (after the store)
             if (@out is not NDMatrix matrixOut)
                 throw new AttributeError("'numpy.ndarray' object has no attribute '_collapse'");
@@ -599,8 +606,8 @@ namespace NumSharp
         [NDScopedCovered]
         private NDArray FlatArgReduce(NDArray @out, bool max)
         {
-            using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the result
-            NDArray index = max ? np.argmax((NDArray)this, (int?)null, @out) : np.argmin((NDArray)this, (int?)null, @out);
+            NDArray self = A, outView = NDSubclass.PlainView(@out);   // the plain computation (file header)
+            NDArray index = max ? np.argmax(self, (int?)null, outView) : np.argmin(self, (int?)null, outView);
             if (@out is null)
                 return index;
             // _align(None) is self[0, 0]: a plain out has no _align.
@@ -620,15 +627,15 @@ namespace NumSharp
         [NDScopedCovered]
         private NDMatrix ArgReduce(int axis, NDArray @out, bool max)
         {
-            using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
+            NDArray self = A, outView = NDSubclass.PlainView(@out);   // the plain computation (file header)
             // The plain reduction validates the axis first; only then does _align reject -1 / -2.
             DefaultEngine.NormalizeAxis(axis, ndim);
-            NDArray indices = max ? np.argmax((NDArray)this, axis) : np.argmin((NDArray)this, axis);
+            NDArray indices = max ? np.argmax(self, axis) : np.argmin(self, axis);
             if (@out is not null)
             {
                 if (!indices.Shape.Equals(@out.Shape))
                     throw new ValueError($"output array does not match result of np.{(max ? "argmax" : "argmin")}.");
-                np.copyto(@out, indices, casting: "unsafe");
+                np.copyto(outView, indices, casting: "unsafe");
                 throw new AttributeError("'numpy.ndarray' object has no attribute '_align'");
             }
 
@@ -660,7 +667,7 @@ namespace NumSharp
         [NDScoped]
         public NDArray ptp(int? axis = null, NDArray @out = null)
         {
-            using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
+            NDArray self = A, outView = NDSubclass.PlainView(@out);   // the plain computation (file header)
             if (axis is not null)
                 DefaultEngine.NormalizeAxis(axis.Value, ndim);
 
@@ -670,13 +677,13 @@ namespace NumSharp
                 // reduction has no keepdims, so it rejects an out of another rank; when it accepts the out it
                 // returns that plain array, and subtracting the (wrapped, two-dimensional) minima from it cannot
                 // be stored back into it.
-                np.max((NDArray)this, axis: axis, @out: @out, keepdims: false);
+                np.max(self, axis: axis, @out: outView, keepdims: false);
                 string wide = axis is null ? "(1,1)" : $"(1,{@out.size})";
                 throw new ValueError(
                     $"non-broadcastable output operand with shape {@out.Shape.ToPythonTuple()} doesn't match the broadcast shape {wide}");
             }
 
-            NDArray range = np.ptp((NDArray)this, axis);
+            NDArray range = np.ptp(self, axis);
             return axis is null ? range : Align(range, axis.Value, wrapped: true);
         }
 

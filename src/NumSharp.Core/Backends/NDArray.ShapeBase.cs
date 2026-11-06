@@ -34,8 +34,8 @@ namespace NumSharp
         ///     <see cref="Shape"/>), which NumPy has no analog of.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is outside the output's dimensions (NumPy's text,
         ///     <c>axis 5 is out of bounds for array of dimension 2</c>, naming the axis as given).</exception>
-        /// <remarks>No class boundary runs here: an engine caller sits inside its public function's boundary, and the
-        ///     facade applies its rules before it calls this.</remarks>
+        /// <remarks>It sees plain arrays only: the woven public function hands it the plain view of a subclass operand
+        ///     and answers for the class itself (NDSubclass).</remarks>
         [NewSubtype("a")]
         [AsArrayFor(typeof(NDMatrix))]
         internal static NDArray expand_dims(NDArray a, int axis)
@@ -839,9 +839,9 @@ namespace NumSharp
         ///     (concatenate's NumPy texts).</exception>
         /// <exception cref="InvalidCastException">An array that does not cast to the result dtype (concatenate's
         ///     refusal).</exception>
-        /// <remarks>No class boundary runs here: the facade applies its rules (a matrix result wrapped, a chararray operand
-        ///     computed plain) before it calls this. Every error but a null entry comes from concatenate, exactly as in NumPy,
-        ///     whose column_stack ends with <c>_nx.concatenate(arrays, 1)</c>.</remarks>
+        /// <remarks>It sees plain arrays only: the woven public function hands it the plain view of a subclass operand
+        ///     and answers for the class itself (NDSubclass). Every error but a null entry comes from concatenate,
+        ///     exactly as in NumPy, whose column_stack ends with <c>_nx.concatenate(arrays, 1)</c>.</remarks>
         [GetSubType("tup")]
         internal static NDArray column_stack(NDArray[] tup)
         {
@@ -932,10 +932,10 @@ namespace NumSharp
         ///     (concatenate's NumPy texts).</exception>
         /// <exception cref="InvalidCastException">An array that does not cast to the result dtype (concatenate's
         ///     refusal).</exception>
-        /// <remarks>No class boundary runs here: the facade applies its rules (a matrix result wrapped, a chararray operand
-        ///     computed plain) before it calls this, so the inner atleast_3d and concatenate are the members. The atleast_3d
-        ///     views are not released here, as <see cref="vstack_"/>'s atleast_2d views are not: each holds its input's buffer
-        ///     until it is collected. The trailing underscore is NumPy's convention for a name already taken (D18):
+        /// <remarks>It sees plain arrays only: the woven public function hands it the plain view of a subclass operand
+        ///     and answers for the class itself (NDSubclass). The atleast_3d views are not released here, as
+        ///     <see cref="vstack_"/>'s atleast_2d views are not: each holds its input's buffer until it is collected.
+        ///     The trailing underscore is NumPy's convention for a name already taken (D18):
         ///     <see cref="dstack(NDArray[])"/> is the array object's public instance method that stacks the array with
         ///     others.</remarks>
         [GetSubType("tup")]
@@ -970,7 +970,8 @@ namespace NumSharp
         ///     <c>ary.shape[axis]</c>, a Python tuple index, before anything else; a 0-d array refuses every axis).</exception>
         /// <exception cref="ValueError"><paramref name="indices_or_sections"/> is not positive ("number sections must be
         ///     larger than 0.").</exception>
-        /// <remarks>No class boundary runs here: np.array_split applies its rules before it calls this.</remarks>
+        /// <remarks>It sees plain arrays only: the woven public function hands it the plain view of a subclass operand
+        ///     and answers for the class itself (NDSubclass).</remarks>
         [NewSubtype("ary")]
         internal static NDArray[] array_split(NDArray ary, int indices_or_sections, int axis)
         {
@@ -996,8 +997,8 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="indices"/> is null.</exception>
         /// <exception cref="IndexError"><paramref name="axis"/> is out of range ("tuple index out of range"; a 0-d array
         ///     refuses every axis).</exception>
-        /// <remarks>No class boundary runs here: np.array_split, and np.split / np.hsplit / np.vsplit / np.dsplit through
-        ///     <see cref="split(NDArray, long[], int)"/>, apply their rules before they reach this.</remarks>
+        /// <remarks>It sees plain arrays only: the woven public function hands it the plain view of a subclass operand
+        ///     and answers for the class itself (NDSubclass).</remarks>
         [NewSubtype("ary")]
         internal static NDArray[] array_split(NDArray ary, long[] indices, int axis)
         {
@@ -1024,8 +1025,8 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="indices"/> is null.</exception>
         /// <exception cref="IndexError"><paramref name="axis"/> is out of range ("tuple index out of range"; a 0-d array
         ///     refuses every axis).</exception>
-        /// <remarks>No class boundary runs here: np.array_split, and np.split / np.hsplit / np.vsplit / np.dsplit through
-        ///     <see cref="split(NDArray, int[], int)"/>, apply their rules before they reach this.</remarks>
+        /// <remarks>It sees plain arrays only: the woven public function hands it the plain view of a subclass operand
+        ///     and answers for the class itself (NDSubclass).</remarks>
         [NewSubtype("ary")]
         internal static NDArray[] array_split(NDArray ary, int[] indices, int axis)
         {
@@ -1051,8 +1052,8 @@ namespace NumSharp
         /// <exception cref="ValueError"><paramref name="indices_or_sections"/> is not positive ("number sections must be
         ///     larger than 0.", checked before the division), or does not divide the axis ("array split does not result
         ///     in an equal division").</exception>
-        /// <remarks>No class boundary runs here: the facades (np.split, np.hsplit, np.vsplit, np.dsplit) apply their rules
-        ///     before they reach this.</remarks>
+        /// <remarks>It sees plain arrays only: the woven public function hands it the plain view of a subclass operand
+        ///     and answers for the class itself (NDSubclass).</remarks>
         [NewSubtype("ary")]
         internal static NDArray[] split(NDArray ary, int indices_or_sections, int axis)
         {
@@ -1083,7 +1084,8 @@ namespace NumSharp
         /// <returns><c>indices.Length + 1</c> views of <paramref name="ary"/>'s buffer, plain arrays.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="indices"/> is null (array_split's guard).</exception>
         /// <exception cref="IndexError"><paramref name="axis"/> is out of range ("tuple index out of range").</exception>
-        /// <remarks>No class boundary runs here: the facades apply their rules before they reach this.</remarks>
+        /// <remarks>It sees plain arrays only: the woven public function hands it the plain view of a subclass operand
+        ///     and answers for the class itself (NDSubclass).</remarks>
         [NewSubtype("ary")]
         internal static NDArray[] split(NDArray ary, long[] indices, int axis) => array_split(ary, indices, axis);
 
@@ -1097,7 +1099,8 @@ namespace NumSharp
         /// <returns><c>indices.Length + 1</c> views of <paramref name="ary"/>'s buffer, plain arrays.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="indices"/> is null (array_split's guard).</exception>
         /// <exception cref="IndexError"><paramref name="axis"/> is out of range ("tuple index out of range").</exception>
-        /// <remarks>No class boundary runs here: the facades apply their rules before they reach this.</remarks>
+        /// <remarks>It sees plain arrays only: the woven public function hands it the plain view of a subclass operand
+        ///     and answers for the class itself (NDSubclass).</remarks>
         [NewSubtype("ary")]
         internal static NDArray[] split(NDArray ary, int[] indices, int axis) => array_split(ary, indices, axis);
 
@@ -1491,7 +1494,8 @@ namespace NumSharp
         ///     dimensions"; NumPy raises the text as a ValueError).</exception>
         /// <exception cref="ValueError">The count is not positive, or does not divide the axis (split's texts).</exception>
         /// <exception cref="NullReferenceException"><paramref name="ary"/> is null.</exception>
-        /// <remarks>No class boundary runs here: np.hsplit applies its rules before it calls this.</remarks>
+        /// <remarks>It sees plain arrays only: the woven public function hands it the plain view of a subclass operand
+        ///     and answers for the class itself (NDSubclass).</remarks>
         [NewSubtype("ary")]
         internal static NDArray[] hsplit(NDArray ary, int indices_or_sections)
         {
@@ -1516,7 +1520,8 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="indices"/> is null (array_split's guard, after the rank
         ///     check).</exception>
         /// <exception cref="NullReferenceException"><paramref name="ary"/> is null.</exception>
-        /// <remarks>No class boundary runs here: np.hsplit applies its rules before it calls this.</remarks>
+        /// <remarks>It sees plain arrays only: the woven public function hands it the plain view of a subclass operand
+        ///     and answers for the class itself (NDSubclass).</remarks>
         [NewSubtype("ary")]
         internal static NDArray[] hsplit(NDArray ary, int[] indices)
         {
@@ -1538,7 +1543,8 @@ namespace NumSharp
         ///     arrays of 2 or more dimensions"; NumPy raises the text as a ValueError).</exception>
         /// <exception cref="ValueError">The count is not positive, or does not divide the axis (split's texts).</exception>
         /// <exception cref="NullReferenceException"><paramref name="ary"/> is null.</exception>
-        /// <remarks>No class boundary runs here: np.vsplit applies its rules before it calls this.</remarks>
+        /// <remarks>It sees plain arrays only: the woven public function hands it the plain view of a subclass operand
+        ///     and answers for the class itself (NDSubclass).</remarks>
         [NewSubtype("ary")]
         internal static NDArray[] vsplit(NDArray ary, int indices_or_sections)
         {
@@ -1561,7 +1567,8 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="indices"/> is null (array_split's guard, after the rank
         ///     check).</exception>
         /// <exception cref="NullReferenceException"><paramref name="ary"/> is null.</exception>
-        /// <remarks>No class boundary runs here: np.vsplit applies its rules before it calls this.</remarks>
+        /// <remarks>It sees plain arrays only: the woven public function hands it the plain view of a subclass operand
+        ///     and answers for the class itself (NDSubclass).</remarks>
         [NewSubtype("ary")]
         internal static NDArray[] vsplit(NDArray ary, int[] indices)
         {
@@ -1582,7 +1589,8 @@ namespace NumSharp
         ///     arrays of 3 or more dimensions"; NumPy raises the text as a ValueError).</exception>
         /// <exception cref="ValueError">The count is not positive, or does not divide the axis (split's texts).</exception>
         /// <exception cref="NullReferenceException"><paramref name="ary"/> is null.</exception>
-        /// <remarks>No class boundary runs here: np.dsplit applies its rules before it calls this.</remarks>
+        /// <remarks>It sees plain arrays only: the woven public function hands it the plain view of a subclass operand
+        ///     and answers for the class itself (NDSubclass).</remarks>
         [NewSubtype("ary")]
         internal static NDArray[] dsplit(NDArray ary, int indices_or_sections)
         {
@@ -1605,7 +1613,8 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="indices"/> is null (array_split's guard, after the rank
         ///     check).</exception>
         /// <exception cref="NullReferenceException"><paramref name="ary"/> is null.</exception>
-        /// <remarks>No class boundary runs here: np.dsplit applies its rules before it calls this.</remarks>
+        /// <remarks>It sees plain arrays only: the woven public function hands it the plain view of a subclass operand
+        ///     and answers for the class itself (NDSubclass).</remarks>
         [NewSubtype("ary")]
         internal static NDArray[] dsplit(NDArray ary, int[] indices)
         {
@@ -1638,9 +1647,9 @@ namespace NumSharp
         ///     Scoped by <c>[NDScoped]</c>: the interleaved reshape of <paramref name="A"/>, its broadcast view and the
         ///     materialized copy are released on return, and the final reshape (a view that holds its own reference on the
         ///     copy's buffer) is yielded; the all-ones path releases the reshape of a lower-rank <paramref name="A"/>, and the
-        ///     empty path the zero-filled array its returned view aliases. No class boundary runs here: both np.tile
-        ///     overloads apply their rules before they call this.
-        /// </remarks>
+        ///     empty path the zero-filled array its returned view aliases. It sees plain arrays only: the woven public
+        ///     function hands it the plain view of a subclass operand and answers for the class itself (NDSubclass).
+        ///     </remarks>
         [NDScoped /* the interleaved reshape, its broadcast view, the materialized copy and the empty path's zeros are released; the result is yielded */]
         [NewSubtype("A")]
         internal static NDArray tile(NDArray A, long[] reps)

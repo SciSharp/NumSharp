@@ -62,9 +62,9 @@ The module, the class and the object path, byte-identical to NumPy 2.4.2 (the st
   `np.asarray` drops the class; the oracle's one class excuse); an `itemsize=0` chararray (S0 / U0) is refused; a stripped
   value ending in NUL loses the NUL in the stand-in.
 
-## `chararray` behavior: the static rule and the boundary
+## `chararray` behavior: the static rule and the woven functions
 
-`Char/NDCharArray{.Operators,.Arg}.cs`, `Char/NDCharArrayBoundary.cs`.
+`Char/NDCharArray{.Operators,.Arg,.TrivialLoop}.cs`, `Backends/Subclass/` (the mechanisms; `matrix.md` has the weave).
 - The OPERATORS bind at compile time (`NDMatrix`'s rule): `==` `!=` `<` `<=` `>` `>=` `+` `*` `%` on `NDCharArray`, seven
   forms each (a chararray against a chararray / `NDArray` / `object` / `string`, both orders), replaying Python's dispatch.
   A chararray on the right runs its REFLECTED method before a plain array's, so `u == c` strips. An `S` / `U` mix
@@ -87,31 +87,36 @@ The module, the class and the object path, byte-identical to NumPy 2.4.2 (the st
   (`np.char.array(['ab  ']).center(6, '*')` is `'*ab  *'`, `.isalpha()` False, `.islower()` True); a 0-d chararray gives a
   0-d array; `isdecimal` / `isnumeric` refuse an `S` chararray (no bytes loop); `encode` / `decode` return the function's
   PLAIN `S` / `U` result as it is.
-- The np.* FUNCTIONS find a chararray at run time: `NDCharArrayBoundary.Sees(a)` at the outermost call, then a rule by
-  NumPy's mechanism:
-  - Kept (a method or an `np.asanyarray` view: `reshape`, `ravel`, `transpose`, `squeeze`, `sort`, `repeat`, `tile`, the
-    split family, the `*_like` family where a numeric dtype is the finalize error, `np.copy(subok=True)`, `np.take` (0-d:
-    the unstripped scalar), `np.flip` (0-d: the stripped element), `np.meshgrid` per input);
-  - Wrapped (`__array_wrap__`, a chararray VIEW: text ufunc results, `insert` / `delete` / `diagflat` / `kron` /
-    `take_along_axis` / `setdiff1d`, np.unique's values, which with a return flag merge stripped-equal runs);
-  - Plain (`np.asarray` converters: the stack family, `append`, `lexsort`, the linalg / fft / emath functions);
-  - IndexResult (the `np.argmax` family: the finalize error);
+- The np.* FUNCTIONS find a chararray at run time: the woven prologue sends the call to the generated subclass path, which
+  computes on plain views and applies the mechanism declared on the function's computation (`matrix.md`):
+  - kept (`[NewSubtype]`, a method or an `np.asanyarray` view: `reshape`, `ravel`, `transpose`, `squeeze`, `sort`,
+    `repeat`, `tile`, the split family, the `*_like` family where a numeric dtype is the finalize error,
+    `np.copy(subok=True)`, `np.take` (0-d: the unstripped scalar), `np.flip` (0-d: the stripped element), `np.meshgrid`
+    per input);
+  - wrapped (`[Ufunc]` / `[ArrayWrap]`, `__array_wrap__`, a chararray VIEW: text ufunc results, `insert` / `delete` /
+    `diagflat` / `kron` / `take_along_axis` / `setdiff1d`, np.unique's values, which with a return flag merge
+    stripped-equal runs);
+  - plain (`[AsArray]` / `[AsArrayFor]`, the `np.asarray` converters: the stack family, `append`, `lexsort`, the linalg /
+    fft / emath functions);
+  - the method dispatch (`[WrapFunc]` / `[WrapReduction]`: the `np.argmax` family calls `NDCharArray.argmax`, the
+    finalize error after NumPy's checks);
   - NumPy's trivial-loop copy (`check_for_trivial_loop`): a 0-d or ≤ `np.getbufsize()` 1-d chararray input cast to bool
     or StringDType is copied AS the subclass, so the logical ufuncs raise the finalize error; the same holds for every
     function with a second text input whose StringDType argument meets a short chararray (inputs in order, the first
     larger one stopping later copies); past it NumPy computes a PLAIN result, which a rule-2 member refuses
-    (`NotSupportedException`) and a pad member converts with `np.char.asarray`. The marks are
-    `NDCharArrayBoundary.WrappedUfunc` / `PlainUfunc` / `InsideUfunc`, the check `TrivialLoopCopyError` at NumPy's point
-    (after the input casts, before the broadcast). Only the C# literal `true` (marked `WasPythonBool`) is NumPy's
-    `where=True`.
-- TRAPS: the boundary shares `NDMatrixBoundary`'s depth, and `PlainFor` opens a region for a chararray receiver too, so a
-  function must decide its chararray rule BEFORE any `PlainFor`. A public function that passes a chararray to another
-  must compute plain: the test hook `AuditInternalCallers` (a stack walk at every rule) replays the string-oracle cases
-  with chararray operands and must find no library caller; the audit skips only frames named like the function, so a
-  function that forwards a chararray to a DIFFERENTLY named public function (partition → `np.stack`) computes inside
-  `NDCharArrayBoundary.Inside()`. A comparison operator's typed result must share the driver result's storage
-  (`AsGeneric` inside `using`): an untyped wrapper left to the finalizer stranded one buffer per comparison, and
-  `MakeGeneric` reports OWNDATA False.
+    (`NotSupportedException`) and a pad member converts with `np.char.asarray`. The marks ride the plain views: the
+    subclass path hands a chararray ufunc input in through `NDSubclass.PlainUfuncInput` (`NDArray.IsTextUfuncInput`), as
+    do the pad members for their receiver and an array fill; the check `NDCharArray.TrivialLoopCopyError` runs at
+    NumPy's point (after the input casts, before the broadcast) and consumes the marks. Only the C# literal `true`
+    (marked `WasPythonBool`) is NumPy's `where=True`.
+- TRAPS: library code never hands a chararray object to a public function: the test hook
+  `NDSubclass.AuditInternalCallers` (a stack walk at every subclass path) replays the string-oracle cases with
+  chararray operands and must find no library caller. The audit skips the frames of the function itself and of
+  `NDCharArray` / `NDMatrix`, so a function that forwards a chararray to a DIFFERENTLY named public function passes its
+  plain view (`np.char.partition` → `np.stack` stacks the parts' views), and a member that computes its function's
+  array itself calls it on `NDSubclass.Plain(this)`. A comparison operator's typed result must share the driver
+  result's storage (`AsGeneric` inside `using`): an untyped wrapper left to the finalizer stranded one buffer per
+  comparison, and `MakeGeneric` reports OWNDATA False.
 - Divergences (`[Misaligned]`, `CharArrayBehaviorTests`): the static rule; `c == null`; `np.squeeze`'s identity; a view of
   a stand-in is read-only; `chararray + StringDType` refused by the operator (call `np.add`); numpy.ma holds a chararray's
   data plain.
@@ -165,7 +170,7 @@ The module, the class and the object path, byte-identical to NumPy 2.4.2 (the st
 ## Gates and traps
 
 - String oracle sections `strchar`, `strchararray`, `strcharops`, `strcharfn` (99 functions), `strcharlist` (strict),
-  `strcharobj` (strict, expectation kind `lists`), `strcharmeth` (strict, with the boundary audit); unit tests
+  `strcharobj` (strict, expectation kind `lists`), `strcharmeth` (strict, with the operand audit); unit tests
   `CharModuleTests`, `CharArrayFastPathTests`, `CharArrayBehaviorTests`, `CharObjectPathTests`, `CharStringMethodsTests`,
   `ListArrayMembersTests` / `ListArrayComputeTests` / `ListArraySignatureTests`.
 - Under `DOTNET_TieredCompilation=0` CoreLib's ReadyToRun bodies are never re-optimized, and its `memmove` and span

@@ -39,14 +39,16 @@ using System.Runtime.CompilerServices;
 // matrix leaves, the unique family's stripping comparison, the trivial-loop copy of a ufunc's chararray input).
 //
 // THE SCOPE reclaims the aliases and the hidden plain result the mechanism wrapped (the subclass object holds its own
-// counted reference on the buffer), exactly as the hand-written rules this replaces did.
+// counted reference on the buffer).
 //
 // THE MECHANISMS below are NumPy's class selection (npy_find_array_wrap's priorities, PyArray_GetSubType's) followed by
 // the chosen class's own construction (NDMatrix.FromWrapped for a matrix, the chararray's finalize rule and view). They
 // return the plain result unchanged when no operand of their kind is a subclass.
 //
-// MIGRATION SHIM: while a legacy NDMatrixBoundary / NDCharArrayBoundary region is open (an unconverted member computes
-// plain below it), IsOperand is false, so a woven function called inside the region computes plain as it did before.
+// THE CLASS'S OWN CODE computes the same way. An NDMatrix / NDCharArray member or operator that computes its answer itself
+// hands the public functions it calls its plain view (NDMatrix.A, PlainView, Plain, PlainUfuncInput), never `this`: the
+// function would take its subclass path, whose generated method dispatch can call the very member again. An NDArray
+// member reached through a subclass object is [PlainReceiver]: woven to run on plain views of its receiver and operands.
 // =============================================================================
 
 namespace NumSharp
@@ -100,18 +102,16 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">The operand, or <c>null</c>.</param>
         /// <returns>True when the call takes the subclass path.</returns>
-        /// <remarks>MIGRATION SHIM: false while a legacy boundary region is open, so a woven function called by unconverted
-        ///     code inside such a region computes plain, as it did before the weave.</remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static bool IsOperand(NDArray a)
-            => KindOf(a) != NDSubclassKind.None && NDMatrixBoundary.AtOutermostCall;
+            => KindOf(a) != NDSubclassKind.None;
 
         /// <summary><see cref="IsOperand(NDArray)"/> for operands passed as one sequence: true when any element is one.</summary>
         /// <param name="arrays">The operands, or <c>null</c>; a <c>null</c> element is skipped.</param>
         /// <returns>True when the call takes the subclass path.</returns>
         internal static bool IsOperand(NDArray[] arrays)
         {
-            if (arrays is null || !NDMatrixBoundary.AtOutermostCall)
+            if (arrays is null)
                 return false;
             for (int i = 0; i < arrays.Length; i++)
                 if (KindOf(arrays[i]) != NDSubclassKind.None)
@@ -127,7 +127,7 @@ namespace NumSharp
         ///     anything else holds no operand.</param>
         /// <returns>True when the call takes the subclass path.</returns>
         internal static bool IsNestedOperand(object nested)
-            => NDMatrixBoundary.AtOutermostCall && HoldsOperand(nested);
+            => HoldsOperand(nested);
 
         /// <summary>
         ///     Whether a nested sequence holds a subclass operand of <paramref name="kind"/> at any depth: the class
@@ -324,6 +324,76 @@ namespace NumSharp
                 plain[i] = PlainView(arrays[i]);
             }
             return plain ?? arrays;
+        }
+
+        /// <summary>
+        ///     <see cref="PlainView(NDArray)"/> for code that holds no <see cref="NDScope"/> and calls woven public functions
+        ///     with a caller's operand (the numpy.polynomial package, which computes with plain arrays by design): the plain
+        ///     view of a subclass operand, released when the lease is disposed; a plain operand is handed through and never
+        ///     disposed.
+        /// </summary>
+        /// <param name="a">The operand, or <c>null</c>.</param>
+        /// <returns>The lease: compute with <see cref="PlainLease.Array"/>, and dispose the lease (<c>using</c>) once the
+        ///     computation is done.</returns>
+        /// <remarks>Releasing the view never frees a result that views it (every array holds its own counted reference on the
+        ///     buffer), but <see cref="PlainLease.Array"/> itself must not outlive the lease: never return it.</remarks>
+        internal static PlainLease LeasePlainView(NDArray a) => new PlainLease(a);
+
+        /// <summary>
+        ///     A plain view leased by <see cref="LeasePlainView"/>: the array to compute with, and whether the lease made it
+        ///     (and so releases it on <see cref="Dispose"/>).
+        /// </summary>
+        internal readonly struct PlainLease : IDisposable
+        {
+            /// <summary>The array to compute with: the operand's plain view, or the operand itself when it is
+            ///     plain.</summary>
+            internal readonly NDArray Array;
+
+            /// <summary>Whether <see cref="Array"/> is a view this lease made, released by <see cref="Dispose"/>.</summary>
+            private readonly bool _made;
+
+            /// <summary>Leases the plain view of <paramref name="operand"/>.</summary>
+            /// <param name="operand">The caller's operand, or <c>null</c>.</param>
+            internal PlainLease(NDArray operand)
+            {
+                Array = PlainView(operand);
+                _made = !ReferenceEquals(Array, operand);
+            }
+
+            /// <summary>Releases the view this lease made (its own counted reference on the buffer). A plain operand is the
+            ///     caller's and is left alone; a second call is harmless (<see cref="NDArray.Dispose"/> is
+            ///     idempotent).</summary>
+            public void Dispose()
+            {
+                if (_made)
+                    Array.Dispose();
+            }
+        }
+
+        /// <summary>
+        ///     For a subclass path that runs WITHOUT a scope (its result - an iterator over the operand, a broadcast object -
+        ///     may keep the plain view): detaches the view from any ambient scope, so a scoped caller cannot dispose it under
+        ///     the result; the finalizer reclaims it once nothing references it.
+        /// </summary>
+        /// <param name="alias">The plain view the path made (or the operand itself when it was plain).</param>
+        /// <param name="original">The caller's operand.</param>
+        internal static void KeepAlias(NDArray alias, NDArray original)
+        {
+            if (alias is not null && !ReferenceEquals(alias, original))
+                NDScope.Detach(alias);
+        }
+
+        /// <summary><see cref="KeepAlias(NDArray, NDArray)"/> for a sequence operand's plain copy: every element that is a
+        ///     view the path made (the caller's own elements are left to the caller's scope).</summary>
+        /// <param name="aliases">The plain sequence the path made.</param>
+        /// <param name="originals">The caller's sequence.</param>
+        internal static void KeepAlias(NDArray[] aliases, NDArray[] originals)
+        {
+            if (aliases is null || ReferenceEquals(aliases, originals))
+                return;
+            for (int i = 0; i < aliases.Length; i++)
+                if (originals is null || i >= originals.Length || !ReferenceEquals(aliases[i], originals[i]))
+                    NDScope.Detach(aliases[i]);
         }
 
         #endregion
@@ -935,8 +1005,7 @@ namespace NumSharp
             {
                 System.Reflection.MethodBase method = trace.GetFrame(i)?.GetMethod();
                 Type owner = method?.DeclaringType;
-                if (owner is null || owner == typeof(NDSubclass) || owner == typeof(NDMatrix) || owner == typeof(NDCharArray)
-                    || owner == typeof(NDMatrixBoundary) || owner == typeof(NDCharArrayBoundary))
+                if (owner is null || owner == typeof(NDSubclass) || owner == typeof(NDMatrix) || owner == typeof(NDCharArray))
                     continue;
                 if (method.Name == function || method.Name == woven)
                     continue;

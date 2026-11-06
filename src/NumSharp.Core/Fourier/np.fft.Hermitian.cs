@@ -33,9 +33,9 @@ namespace NumSharp
         ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
         ///     ends with <c>np.concatenate</c>), which drops the class.
         ///     <para>Computed by <see cref="TensorEngine.Fft"/> of the operand's engine (<see cref="FftEngine.Hfft"/>),
-        ///     after the class boundary: the member's <c>np.conjugate</c> would keep a matrix.</para>
+        ///     on the plain view of a subclass operand: the member's <c>np.conjugate</c> would keep a matrix.</para>
         /// </remarks>
-        [NDScoped] // the class boundary's temporaries; the Fft member scopes the computation's own
+        [NDScoped] // what the call leaves (the Fft member and the woven subclass path scope their own)
         public NDArray hfft(NDArray a, int? n = null, int axis = -1, string norm = null, NDArray @out = null)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));

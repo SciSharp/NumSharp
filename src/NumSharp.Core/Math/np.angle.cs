@@ -22,7 +22,9 @@ namespace NumSharp
         ///     with NumPy's per-dtype float tier: bool/int32+/float64/complex -&gt; float64, int8/uint8/float16
         ///     -&gt; float16, int16/uint16/float32 -&gt; float32.
         /// </returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.angle.html. The facade holds only the matrix boundary; NumPy's body is the engine's <see cref="TensorEngine.Angle(NDArray, bool)"/>.</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.angle.html. The facade only calls the
+        ///     engine's <see cref="TensorEngine.Angle(NDArray, bool)"/>, NumPy's body (the ufunc mechanism answers for
+        ///     a subclass operand).</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         /// <exception cref="TypeError">Text: <c>arctan2</c> has no string loop (NumPy's no-loop text for <c>StringDType</c>, the legacy resolver's text for <c>S</c> / <c>U</c>).</exception>
         [NDScoped]

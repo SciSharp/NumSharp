@@ -8,7 +8,7 @@ namespace NumSharp.Tests.Matrixlib
     ///     Unit tests of <see cref="NDMatrix"/> (NumPy's <c>numpy.matrix</c>). The first half ports NumPy 2.4.2's
     ///     own <c>numpy/matrixlib/tests/test_defmatrix.py</c>; the second half pins what is specific to NumSharp's
     ///     design: members and operators follow the STATIC type while the <c>np.*</c> functions follow the object
-    ///     (<c>NDMatrixBoundaryTests</c> holds the function rules), a C# number is a 0-d matrix scalar, and every
+    ///     (<c>NDMatrixOperandTests</c> holds the function mechanisms), a C# number is a 0-d matrix scalar, and every
     ///     member result has NumPy's class, shape and ownership. Every expected value is NumPy 2.4.2's answer for the
     ///     same call. The differential gate with 26,000 cases is <c>FuzzCorpusTests.Matrix</c>.
     /// </summary>
@@ -431,7 +431,7 @@ namespace NumSharp.Tests.Matrixlib
         ///     The operators and the members follow the STATIC type: the same object is a matrix through an
         ///     <see cref="NDMatrix"/> reference and a plain 2-D array through an <see cref="NDArray"/> one. The
         ///     public <c>np.*</c> functions follow the OBJECT: they return what NumPy returns for a matrix
-        ///     operand, typed <see cref="NDArray"/> (<see cref="NDMatrixBoundary"/>).
+        ///     operand, typed <see cref="NDArray"/> (<see cref="NDSubclass"/>).
         /// </summary>
         [TestMethod]
         public void Semantics_OperatorsAndMembersFollowTheStaticType_FunctionsFollowTheObject()

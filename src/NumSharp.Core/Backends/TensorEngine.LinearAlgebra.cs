@@ -77,7 +77,6 @@ namespace NumSharp
         [AsArray]
         public virtual NDArray Vdot(NDArray a, NDArray b)
         {
-            using var plain = NDMatrixBoundary.PlainFor(a, b);   // an engine method computes plain: np.ravel / np.reshape below must not apply its matrix rule
             // A StringDType operand: NumPy's legacy descriptor lookup refuses it, or falls back to an OBJECT product that
             // NumSharp cannot hold; VStringVdotAnswer gives NumPy's answer in NumPy's order.
             if (Backends.Strings.NDStringUfuncs.IsVString(a) || Backends.Strings.NDStringUfuncs.IsVString(b))

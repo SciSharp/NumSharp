@@ -45,13 +45,12 @@ namespace NumSharp
         ///     stranded the residual and singular-value buffers (2 pooled arrays per call) until a GC.
         ///     </para>
         ///     <para>The statements are <see cref="TensorEngine.Polyfit"/>, on <paramref name="x"/>'s engine (the default one
-        ///     for null), inside the matrix boundary's plain region.</para>
+        ///     for null), with plain views of subclass operands.</para>
         /// </remarks>
         public static PolyfitResult polyfit(NDArray x, NDArray y, int deg, double? rcond = null,
             bool full = false, NDArray w = null, object cov = null)
         {
             if (x is null) throw new ArgumentNullException(nameof(x));
-            using var plain = NDMatrixBoundary.PlainFor(x, y, w);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return x.TensorEngine.Polyfit(x, y, deg, rcond, full, w, cov);
         }
     }

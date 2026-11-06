@@ -62,7 +62,7 @@ has no operand to choose another) and keep the cephes `BesselI0` port behind kai
   ports verbatim. Each `FourierModule` function but the two shifts is one call into the `TensorEngine.Fft` sub-engine
   (`Backends/FftEngine.cs`; the default `DefaultFftEngine` in `Backends/Default/Fourier/DefaultFftEngine*.cs` holds
   NumPy's statements and calls members, never an np.* facade: its own `Irfft` / `Rfft` / `Rfftn` / `Irfftn`, the
-  operand engine's `Conjugate`, the array object's arange and concatenate; hfft keeps its class boundary in the facade;
+  operand engine's `Conjugate`, the array object's arange and concatenate; hfft's facade hands it a plain view;
   `openblas.md` for the seam). Three 1-D kernels do the work: `DefaultFftEngine`'s `protected virtual` `C2CKernel` /
   `R2CKernel` / `C2RKernel`, each a call into `PocketFFTDriver.Execute` (`c2c`/`r2c`/`c2r`); every N-D/2-D form
   composes 1-D transforms over `_raw_fftnd`, and `hfft`/`ihfft` compose `irfft`/`rfft` with the conjugate ufunc and the

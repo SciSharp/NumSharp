@@ -32,7 +32,7 @@ namespace NumSharp
         ///     cast check, the result's allocation in NumPy's layout, and the copy of every input into its slab (a memcpy, a
         ///     cast kernel, or the general copy). A fixed-width string anywhere takes the descriptor route
         ///     (<see cref="ConcatenateStrings"/>). The body of <see cref="np.concatenate(NDArray[], int?, NDArray, DType, string)"/>
-        ///     once its class boundary and null check have run.
+        ///     on its plain views, once its null check has run.
         /// </summary>
         /// <param name="arrays">The inputs, not null (an element may be: it is reported).</param>
         /// <param name="axis">The axis to join along, or null to join the flattened inputs.</param>
@@ -173,7 +173,9 @@ namespace NumSharp
             }
             else
             {
-                resultDescr = np.result_type(workArrays);
+                // np.result_type's computation: an operand may be a subclass object (np.bmat's blocks, np.r_'s matrix
+                // entries), which the public function would take its subclass path for.
+                resultDescr = np.ResultTypeOf(workArrays);
                 resultType = resultDescr.GetTypeCode();
             }
 
@@ -880,8 +882,8 @@ namespace NumSharp
         ///     range (<see cref="asarray"/>'s Python-scalar packing).</exception>
         /// <exception cref="ValueError">A NaN literal into an integer dtype.</exception>
         /// <exception cref="TypeError">A complex literal into a real dtype.</exception>
-        /// <remarks>No class boundary runs here: an engine caller sits inside its public function's boundary, and the
-        ///     facade applies its numpy.matrix and numpy.char.chararray rules before it calls this.</remarks>
+        /// <remarks>It sees plain arrays only: the woven public function hands it the plain view of a subclass operand
+        ///     and answers for the class itself (NDSubclass).</remarks>
         [AsArray]
         internal static NDArray ascontiguousarray(NDArray a, DType dtype)
         {

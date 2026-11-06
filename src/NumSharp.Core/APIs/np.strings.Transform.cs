@@ -70,8 +70,8 @@ namespace NumSharp
 
             /// <summary>
             ///     The three strip wrappers' shared body: <c>_{name}_whitespace(a)</c> when <paramref name="chars"/> is null,
-            ///     <c>_{name}_chars(a, chars)</c> otherwise. The public wrappers apply the chararray rule themselves: the rule
-            ///     belongs to the outermost public call, which the boundary audit identifies by its name.
+            ///     <c>_{name}_chars(a, chars)</c> otherwise. The public wrappers are woven, each answering for a chararray
+            ///     operand of the user's call (the declaration on this helper is the ufunc mechanism).
             /// </summary>
             /// <param name="stem">The ufunc name stem (<c>_strip</c>, <c>_lstrip</c>, <c>_rstrip</c>).</param>
             /// <param name="type">The strip type.</param>

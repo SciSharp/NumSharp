@@ -55,7 +55,6 @@ namespace NumSharp
         public static HistogramddResult histogramdd(NDArray sample, int bins = 10, (double, double)?[] range = null, bool density = false, NDArray weights = null)
         {
             if (sample is null) throw new ArgumentNullException(nameof(sample));
-            using var plain = NDMatrixBoundary.PlainFor(sample, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return sample.TensorEngine.Histogramdd(DefaultEngine.SampleColumns(sample), bins, range, density, weights);
         }
 
@@ -72,7 +71,6 @@ namespace NumSharp
         public static HistogramddResult histogramdd(NDArray sample, int[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
         {
             if (sample is null) throw new ArgumentNullException(nameof(sample));
-            using var plain = NDMatrixBoundary.PlainFor(sample, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return sample.TensorEngine.Histogramdd(DefaultEngine.SampleColumns(sample), bins, range, density, weights);
         }
 
@@ -89,8 +87,6 @@ namespace NumSharp
         public static HistogramddResult histogramdd(NDArray sample, NDArray[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
         {
             if (sample is null) throw new ArgumentNullException(nameof(sample));
-            using var plain = NDMatrixBoundary.PlainFor(sample, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            using var plain2 = NDMatrixBoundary.PlainFor(bins);
             return sample.TensorEngine.Histogramdd(DefaultEngine.SampleColumns(sample), bins, range, density, weights);
         }
 
@@ -107,7 +103,6 @@ namespace NumSharp
         public static HistogramddResult histogramdd(NDArray sample, object[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
         {
             if (sample is null) throw new ArgumentNullException(nameof(sample));
-            using var plain = NDMatrixBoundary.PlainFor(sample, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return sample.TensorEngine.Histogramdd(DefaultEngine.SampleColumns(sample), bins, range, density, weights);
         }
 
@@ -129,8 +124,6 @@ namespace NumSharp
         [NDScoped]
         public static HistogramddResult histogramdd(NDArray[] sample, int bins = 10, (double, double)?[] range = null, bool density = false, NDArray weights = null)
         {
-            using var plain = NDMatrixBoundary.PlainFor(weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            using var plain2 = NDMatrixBoundary.PlainFor(sample);
             return SequenceEngine(sample).Histogramdd(DefaultEngine.ColumnsFromSequence(sample), bins, range, density, weights);
         }
 
@@ -145,8 +138,6 @@ namespace NumSharp
         [NDScoped]
         public static HistogramddResult histogramdd(NDArray[] sample, int[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
         {
-            using var plain = NDMatrixBoundary.PlainFor(weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            using var plain2 = NDMatrixBoundary.PlainFor(sample);
             return SequenceEngine(sample).Histogramdd(DefaultEngine.ColumnsFromSequence(sample), bins, range, density, weights);
         }
 
@@ -161,9 +152,6 @@ namespace NumSharp
         [NDScoped]
         public static HistogramddResult histogramdd(NDArray[] sample, NDArray[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
         {
-            using var plain = NDMatrixBoundary.PlainFor(weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            using var plain2 = NDMatrixBoundary.PlainFor(sample);
-            using var plain3 = NDMatrixBoundary.PlainFor(bins);
             return SequenceEngine(sample).Histogramdd(DefaultEngine.ColumnsFromSequence(sample), bins, range, density, weights);
         }
 
@@ -178,8 +166,6 @@ namespace NumSharp
         [NDScoped]
         public static HistogramddResult histogramdd(NDArray[] sample, object[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
         {
-            using var plain = NDMatrixBoundary.PlainFor(weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            using var plain2 = NDMatrixBoundary.PlainFor(sample);
             return SequenceEngine(sample).Histogramdd(DefaultEngine.ColumnsFromSequence(sample), bins, range, density, weights);
         }
 

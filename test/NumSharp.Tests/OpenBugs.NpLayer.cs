@@ -29,10 +29,11 @@ namespace NumSharp.Tests
     //   NL6  FIXED by parity QA-45 (78b122b0): np.array of a ragged jagged C# array (int[][], double[][], ...) truncated or
     //        threw IndexOutOfRangeException where NumPy raises its inhomogeneous-shape ValueError; its test stays below as
     //        the regression pin, without [OpenBugs].
-    //   NL7  the plan's B3: user code that np.apply_along_axis / np.apply_over_axes call back runs with the subclass
-    //        boundary's depth raised, so a numpy.matrix or chararray the callback passes to an np.* function comes back
-    //        plain. P7 would have removed the depth; the owner dropped P7 the same day ("Drop because np.* uses the lhs
-    //        to pick which"), so B3 stays open and is pinned here with the six.
+    //   NL7  FIXED by the woven subclass paths: the plan's B3, user code that np.apply_along_axis / np.apply_over_axes
+    //        call back ran with the old subclass boundary's per-thread depth raised, so a numpy.matrix or chararray the
+    //        callback passed to an np.* function came back plain. The woven functions hand plain VIEWS to their
+    //        computations instead of raising a depth, so a callback is ordinary user code again; its tests stay below as
+    //        the regression pins, without [OpenBugs].
     //   NL8  np.sum's add.reduce step `*acc += pairwise_sum(call)` leaves the NaN of a NaN + NaN to the JIT: a Debug
     //        build of NumSharp.Core keeps the call's NaN where NumPy (and a Release build, by the JIT's operand order)
     //        keeps the accumulator's. Found by the journey4 merge's Debug gate, where it fails
@@ -54,11 +55,12 @@ namespace NumSharp.Tests
     //        shape text where NumPy raises "input operand has more dimensions than allowed by the axis remapping".
     //        np.mean / np.var / np.std with a where= mask that does not broadcast to the operand reach it, because
     //        _count_reduce_items broadcasts the mask first. Found by P10 item 1's reduce_kwargs cells.
-    //   NL13 np.max / np.min / np.amax / np.amin / np.nanmax / np.nanmin with a numpy.matrix operand: NumPy calls the
-    //        matrix method (matrix.max(axis, out)), so initial= / where= raise its TypeError ("matrix.max() got an
-    //        unexpected keyword argument 'initial'") where NumSharp computes, and a matrix out= returns the method's
-    //        out._collapse(None), out[0, 0], where NumSharp raises the plain reduction's rank error. Found by P10 item 1,
-    //        whose np.sum / np.prod / np.mean / np.var / np.std apply the method's rules.
+    //   NL13 FIXED by the woven [WrapReduction] dispatch (its test stays below as the regression pin, without
+    //        [OpenBugs]): np.max / np.min / np.amax / np.amin / np.nanmax / np.nanmin with a numpy.matrix operand.
+    //        NumPy calls the matrix method (matrix.max(axis, out)), so initial= / where= raise its TypeError
+    //        ("matrix.max() got an unexpected keyword argument 'initial'"), and a matrix out= returns the method's
+    //        out._collapse(None), out[0, 0]; NumSharp computed and raised the plain reduction's rank error. Found by P10
+    //        item 1, whose np.sum / np.prod / np.mean / np.var / np.std applied the method's rules.
     //   NL3 also covers the axis products: an axis np.prod of float32 / float64 multiplies a row in SIMD lane order too
     //        (and so does the out= route, which computes the plain product); np.prod with initial= or a mask runs
     //        NumPy's sequential loop and is exact. Found by P10 item 1's reduce_kwargs cells (carved there).
@@ -323,20 +325,18 @@ namespace NumSharp.Tests
         }
 
         // ------------------------------------------------------------------
-        // NL13 — the max / min family with a numpy.matrix operand
+        // NL13 — FIXED: the max / min family with a numpy.matrix operand follows the matrix method
         // ------------------------------------------------------------------
 
         /// <summary>
-        ///     NumPy's np.max hands a numpy.matrix to <c>matrix.max(axis, out)</c> with the keywords the caller passed, so
-        ///     <c>initial=</c> is the method's TypeError (probed), and a matrix out is the method's
-        ///     <c>out._collapse(None)</c>, the scalar <c>out[0, 0]</c> (<c>np.max(m, out=np.matrix([[0.0]]))</c> is 4.0).
-        ///     NumSharp's facades apply the plain reduction to the matrix: initial= computes, and the matrix out meets the
-        ///     plain reduction's rank check.
+        ///     Regression pin (np-layer NL13): NumPy's np.max hands a numpy.matrix to <c>matrix.max(axis, out)</c> with the
+        ///     keywords the caller passed, so <c>initial=</c> is the method's TypeError (probed), and a matrix out is the
+        ///     method's <c>out._collapse(None)</c>, the scalar <c>out[0, 0]</c> (<c>np.max(m, out=np.matrix([[0.0]]))</c> is
+        ///     4.0). The woven np.max's generated dispatch (<c>[WrapReduction]</c> on its computation) calls
+        ///     <see cref="NDMatrix.max(int?, NDArray)"/> the same way; before it, the facade applied the plain reduction to
+        ///     the matrix (initial= computed, and the matrix out met the plain reduction's rank check).
         /// </summary>
-        /// <remarks>Root cause: <c>np.max</c> / <c>np.min</c> / ... (src/NumSharp.Core/Sorting_Searching_Counting/
-        ///     np.max.Keywords.cs) pass every keyword through <c>NDMatrixBoundary.Reduced</c>; np.sum's facade shows the
-        ///     method rule (<c>KeywordError</c>, <c>ReducedInto</c>).</remarks>
-        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL13")]
+        [TestMethod]
         public void NpLayer_MaxMatrixOperand_FollowsTheMatrixMethod()
         {
             NDArray m = np.matrix(np.array(new[,] { { 1.0, 2.0 }, { 3.0, 4.0 } }));
@@ -499,19 +499,19 @@ namespace NumSharp.Tests
         }
 
         // ------------------------------------------------------------------
-        // NL7 — the boundary depth reaches user callbacks (the plan's B3)
+        // NL7 — FIXED: user callbacks see NumPy's classes (the plan's B3)
         // ------------------------------------------------------------------
 
         /// <summary>
         ///     <c>np.apply_along_axis(f, 1, matrix)</c> where <c>f</c> calls <c>np.sum(other_matrix, 0)</c> and
         ///     <c>np.ravel(chararray)</c>: in NumPy the callback is ordinary user code, so it gets a 1 x 2 matrix
         ///     <c>[[4, 6]]</c> and a chararray, exactly as outside (and as NumSharp gives with a PLAIN outer operand).
-        ///     NumSharp's callback gets a plain (2,) array and a plain array: <c>NDMatrixBoundary.Wrapped</c> raises the
-        ///     per-thread depth around the whole computation, the user's callback included, and every boundary rule reads
-        ///     a raised depth as "nested library call, stay plain". The plan's Appendix B3; its fix was P7 (rules on
-        ///     results, the depth deleted), which the owner dropped on 2026-10-31.
+        ///     Regression pin (np-layer NL7, the plan's Appendix B3): the old subclass boundary raised a per-thread depth
+        ///     around the whole computation, the user's callback included, so the callback got a plain (2,) array and a
+        ///     plain array. The woven functions hand their computations plain VIEWS instead of raising a depth, so the
+        ///     callback is ordinary user code and gets NumPy's classes.
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL7")]
+        [TestMethod]
         public void NpLayer_ApplyAlongAxis_MatrixOperand_CallbackShouldSeeNumPysClasses()
         {
             using var m = np.asmatrix(np.array(new double[,] { { 1, 2 }, { 3, 4 } }));
@@ -543,12 +543,12 @@ namespace NumSharp.Tests
 
         /// <summary>
         ///     <c>np.apply_over_axes(h, matrix, [0])</c> where <c>h</c> calls <c>np.sum(other_matrix, 0)</c>: NumPy's callback
-        ///     gets a 1 x 2 matrix; NumSharp's gets a plain (2,) array, because the call runs inside the boundary's plain
-        ///     region for the matrix operand (the depth raised, as in
+        ///     gets a 1 x 2 matrix, and so does NumSharp's: regression pin (np-layer NL7), where the old boundary's raised
+        ///     depth gave the callback a plain (2,) array (see
         ///     <see cref="NpLayer_ApplyAlongAxis_MatrixOperand_CallbackShouldSeeNumPysClasses"/>). The result itself agrees
         ///     (a plain (1, 3) array <c>[[5, 7, 9]]</c> in both).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL7")]
+        [TestMethod]
         public void NpLayer_ApplyOverAxes_MatrixOperand_CallbackShouldSeeNumPysClasses()
         {
             using var m = np.asmatrix(np.array(new double[,] { { 1, 2, 3 }, { 4, 5, 6 } }));

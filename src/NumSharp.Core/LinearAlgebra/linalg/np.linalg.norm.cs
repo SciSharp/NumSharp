@@ -53,7 +53,7 @@ namespace NumSharp
             ///     Matrix or vector norm reduced over an explicit axis tuple.
             /// </summary>
             /// <inheritdoc cref="norm(NDArray, object, int?, bool)"/>
-            [NDScoped] // the class boundary's temporaries; the Linalg member scopes the computation's own
+            [NDScoped] // what the call leaves (the Linalg member and the woven subclass path scope their own)
             public static NDArray norm(NDArray x, object ord, int[] axis, bool keepdims = false)
             {
                 if (x is null) throw new ArgumentNullException(nameof(x));
@@ -117,7 +117,7 @@ namespace NumSharp
             ///     to norm.".
             ///     </para>
             /// </remarks>
-            [NDScoped] // the class boundary's temporaries; the Linalg member scopes the computation's own
+            [NDScoped] // what the call leaves (the Linalg member and the woven subclass path scope their own)
             public static NDArray vector_norm(NDArray x, int[] axis = null, bool keepdims = false, object ord = null)
             {
                 if (x is null) throw new ArgumentNullException(nameof(x));

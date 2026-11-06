@@ -20,12 +20,11 @@ namespace NumSharp
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.polyder.html
         ///     <para>The statements are <see cref="TensorEngine.Polyder"/>, on <paramref name="p"/>'s engine (the default one
-        ///     for null, so the order check still comes first), inside the matrix boundary's plain region.</para>
+        ///     for null, so the order check still comes first), with plain views of subclass operands.</para>
         /// </remarks>
         public static NDArray polyder(NDArray p, int m = 1)
         {
             if (p is null) throw new ArgumentNullException(nameof(p));
-            using var plain = NDMatrixBoundary.PlainFor(p);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return p.TensorEngine.Polyder(p, m);
         }
     }

@@ -24,7 +24,7 @@ paths:
   through a per-lane `ExtractMostSignificantBits` plus a PDEP bool store; narrow, unsigned, Half and Decimal take the
   scalar route. `dtype=` is validate-only (bool loops only). Gates: `Logic/np.signbit.Test.cs`, the `logic` tier.
 - `np.isin(element, test_elements, assume_unique=false, invert=false, kind=null)` runs NumPy's `_isin`
-  (`numpy/lib/_arraysetops_impl.py`) after the facade's class boundary, as `TensorEngine.Isin`
+  (`numpy/lib/_arraysetops_impl.py`) on the facade's plain views, as `TensorEngine.Isin`
   (`Backends/Default/Manipulation/Default.Isin.cs`; `Default.Isin.VString.cs` holds the `StringDType` route). NumPy
   answers on one of three paths, and NumSharp takes the same one (`NumPyPath`):
   - the table method (an integer or bool pair, a char array being NumPy's uint16; `kind` None or `'table'`; the set's

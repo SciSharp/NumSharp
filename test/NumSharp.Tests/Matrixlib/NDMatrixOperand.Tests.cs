@@ -6,7 +6,7 @@ using NumSharp.Tests.Utilities;
 namespace NumSharp.Tests.Matrixlib
 {
     /// <summary>
-    ///     Unit tests of the matrix boundary (<see cref="NDMatrixBoundary"/>): a public <c>np.*</c> function that
+    ///     Unit tests of numpy.matrix operands (<see cref="NDSubclass"/>): a public <c>np.*</c> function that
     ///     receives a <see cref="NDMatrix"/> OBJECT through an <see cref="NDArray"/> reference returns the class
     ///     and the shape NumPy 2.4.2 returns for a <c>numpy.matrix</c> operand, while the operators, the indexers
     ///     and the members of the <see cref="NDArray"/> reference keep the plain-array meaning.
@@ -15,8 +15,8 @@ namespace NumSharp.Tests.Matrixlib
     ///     <para>
     ///     The differential gate is the oracle tier <c>matrix_operand.jsonl</c> (4,645 NumPy answers over 260
     ///     functions) and the caller audit <c>MatrixOperand_LibraryNeverReachesAMatrixRule</c>. These tests pin
-    ///     what that tier does not reach: the functions whose rule was taken from NumPy's source and a direct
-    ///     probe (tuple results, nested operands, the LU family), the mechanics of the boundary (nesting,
+    ///     what that tier does not reach: the functions whose mechanism was taken from NumPy's source and a direct
+    ///     probe (tuple results, nested operands, the LU family), the mechanics of the woven subclass path (nesting,
     ///     exceptions, <c>out=</c>), and the documented limits.
     ///     </para>
     ///     <para>
@@ -26,7 +26,7 @@ namespace NumSharp.Tests.Matrixlib
     ///     </para>
     /// </remarks>
     [TestClass]
-    public class NDMatrixBoundaryTests
+    public class NDMatrixOperandTests
     {
         /// <summary>The probe's 2 x 3 float matrix, as the <see cref="NDArray"/> reference a function receives.</summary>
         /// <returns>A new matrix object <c>[[1, 2, 3], [4, 5, 6]]</c> (float64) typed <see cref="NDArray"/>.</returns>
@@ -344,7 +344,8 @@ namespace NumSharp.Tests.Matrixlib
         // Mechanics
         // ================================================================================================
 
-        /// <summary>A function that calls other functions with rules wraps once: the inner calls compute plain.</summary>
+        /// <summary>A function that calls other functions with mechanisms wraps once: the inner calls receive plain
+        ///     views.</summary>
         [TestMethod]
         public void NestedCalls_WrapOnce()
         {
@@ -365,9 +366,10 @@ namespace NumSharp.Tests.Matrixlib
             counted.Should().BeOfValues(true, true, true);
         }
 
-        /// <summary>An exception inside a rule leaves the boundary open: the next call applies its rule again.</summary>
+        /// <summary>An exception inside a subclass path leaves no state behind: the next call applies its mechanism
+        ///     again.</summary>
         [TestMethod]
-        public void AnException_DoesNotLeaveTheThreadInsideARegion()
+        public void AnException_LeavesNoStateBehind()
         {
             Action keep = () => np.sum(M(), 0, keepdims: true);
             keep.Should().Throw<TypeError>().WithMessage("matrix.sum() got an unexpected keyword argument 'keepdims'");
@@ -394,6 +396,56 @@ namespace NumSharp.Tests.Matrixlib
             NDArray returned = np.add(M(), M(), @out: plainOut);
             ReferenceEquals(returned, plainOut).Should().BeTrue();
             (returned is NDMatrix).Should().BeFalse();
+        }
+
+        /// <summary>
+        ///     The subclass path computes inside an <see cref="NDScope"/> and must hand back every array its result holds,
+        ///     whatever the C# return type: an <see cref="NDArray"/>[] (<c>np.split</c>, <c>np.broadcast_arrays</c>), a
+        ///     typed array (<c>np.isclose</c>'s <see cref="NDArray{T}"/>, <c>np.nonzero</c>'s <c>NDArray&lt;long&gt;[]</c>),
+        ///     a tuple (<c>np.divmod</c>, <c>np.frexp</c>, the pair form of <c>np.broadcast_arrays</c>) and a result carrier
+        ///     (<c>np.meshgrid</c>, <c>np.unique_counts</c>, <c>np.histogram</c>). An array the scope disposed would read a
+        ///     released buffer, which the pool hands to the next allocation: a use after free that the values alone do not
+        ///     show until the buffer is reused.
+        /// </summary>
+        [TestMethod]
+        public void SubclassPath_EveryReturnShape_HandsBackLiveArrays()
+        {
+            static void Alive(NDArray r, string what)
+            {
+                r.IsDisposed.Should().BeFalse(what);
+                r.Storage.InternalArray.IsReleased.Should().BeFalse(what);
+            }
+
+            NDArray m = M();
+            foreach (NDArray part in np.split(m, 2))
+                Alive(part, "np.split");
+            foreach (NDArray part in np.broadcast_arrays(new[] { m, np.ones(new Shape(2, 3)) }))
+                Alive(part, "np.broadcast_arrays");
+            var (lhs, rhs) = np.broadcast_arrays(m, np.ones(new Shape(1, 3)));
+            Alive(lhs, "np.broadcast_arrays pair lhs");
+            Alive(rhs, "np.broadcast_arrays pair rhs");
+            Alive(np.isclose(m, m), "np.isclose");
+            NDArray<long>[] where = np.nonzero(m);
+            foreach (NDArray index in where)
+                Alive(index, "np.nonzero");
+            where[1].Should().BeOfValues(0L, 1L, 2L, 0L, 1L, 2L);
+
+            var (quotient, remainder) = np.divmod(m, m);
+            Alive(quotient, "np.divmod quotient");
+            Alive(remainder, "np.divmod remainder");
+            var (mantissa, exponent) = np.frexp(m);
+            Alive(mantissa, "np.frexp mantissa");
+            Alive(exponent, "np.frexp exponent");
+
+            NDArray row = np.matrix(np.array(new double[,] { { 1, 2, 3 } }));
+            foreach (NDArray grid in np.meshgrid(row, row).ToArray())
+                Alive(grid, "np.meshgrid");
+            var counts = np.unique_counts(m);
+            Alive(counts.values, "np.unique_counts values");
+            Alive(counts.counts, "np.unique_counts counts");
+            var histogram = np.histogram(m);
+            Alive(histogram.hist, "np.histogram hist");
+            Alive(histogram.bin_edges, "np.histogram bin_edges");
         }
 
         /// <summary>The operators, the indexers and the members of an NDArray reference keep the plain-array
@@ -437,9 +489,9 @@ namespace NumSharp.Tests.Matrixlib
         [TestMethod]
         public void CallerAudit_RecordsNothingForAUsersCall()
         {
-            NDMatrixBoundary.AuditInternalCallers.Should().BeFalse();
-            NDMatrixBoundary.InternalCallers.Clear();
-            NDMatrixBoundary.AuditInternalCallers = true;
+            NDSubclass.AuditInternalCallers.Should().BeFalse();
+            NDSubclass.InternalCallers.Clear();
+            NDSubclass.AuditInternalCallers = true;
             try
             {
                 Check(np.sum(M(), 0), true, 1, 3);
@@ -451,9 +503,9 @@ namespace NumSharp.Tests.Matrixlib
             }
             finally
             {
-                NDMatrixBoundary.AuditInternalCallers = false;
+                NDSubclass.AuditInternalCallers = false;
             }
-            NDMatrixBoundary.InternalCallers.Should().BeEmpty();
+            NDSubclass.InternalCallers.Should().BeEmpty();
         }
 
         // ================================================================================================
@@ -530,13 +582,15 @@ namespace NumSharp.Tests.Matrixlib
 
         /// <summary>
         ///     np.average of a plain operand with numpy.matrix WEIGHTS computes as a plain array: np.average's rule
-        ///     looks at the operand, and the facades open a plain region for the weights. NumPy returns a matrix there
+        ///     looks at the operand, and the woven np.average hands the weights in as a plain view. NumPy returns a
+        ///     matrix there
         ///     along an axis (its weight sum <c>wgt.sum(axis)</c> is the matrix method, and the product with the
         ///     weights is wrapped as a matrix): matrix semantics leaking into NumPy's own Python code, not reproduced.
         /// </summary>
-        /// <remarks>Without the region, the engine's own call of np.sum applied np.sum's matrix rule to the weights,
-        ///     a library call at depth zero: the weight sum came back as a (2, 1) / (1, 3) matrix, and the division
-        ///     into the (2,) / (3,) result raised the out= broadcast error (<c>non-broadcastable output operand with
+        /// <remarks>Were the weights handed on as the matrix object, the engine's own call of np.sum would apply np.sum's
+        ///     matrix mechanism to them, a library call: the weight sum would come back as a (2, 1) / (1, 3) matrix,
+        ///     and the division
+        ///     into the (2,) / (3,) result would raise the out= broadcast error (<c>non-broadcastable output operand with
         ///     shape (2,) doesn't match the broadcast shape (2,2)</c>).</remarks>
         [TestMethod]
         [Misaligned]

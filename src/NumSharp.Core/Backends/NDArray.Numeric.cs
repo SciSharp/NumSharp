@@ -445,7 +445,8 @@ namespace NumSharp
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range for <paramref name="a"/>'s rank (the axis as
         ///     given).</exception>
         /// <remarks>Scoped by <c>[NDScoped]</c>: the ravel, the inner roll, and the slice views of the two copies are released;
-        ///     the result is yielded. No class boundary runs here: the facades apply their rules before they call this.</remarks>
+        ///     the result is yielded. It sees plain arrays only: the woven public function hands it the plain view of a
+        ///     subclass operand and answers for the class itself (NDSubclass).</remarks>
         [NDScoped /* the ravel and the inner roll of the flat case, and the four slice views of the copies, are released; the result is yielded */]
         [NewSubtype("a")]
         internal static NDArray roll(NDArray a, long shift, int? axis)

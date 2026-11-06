@@ -408,7 +408,10 @@ namespace NumSharp
                     foreach (var op in ops)
                         if (op.Kind == IndexKind.Fancy || op.Kind == IndexKind.ZeroDBool)
                             advanced.Add(op.Array);
-                    if (advanced.Count > 1 && !np.are_broadcastable(advanced.ToArray()))
+                    // np.are_broadcastable's computation over the shapes: an index array may be a numpy.matrix object, which
+                    // the public function would take its subclass path for (library code hands the public functions plain
+                    // arrays only).
+                    if (advanced.Count > 1 && !Shape.AreBroadcastable(advanced.ConvertAll(a => a.Shape).ToArray()))
                     {
                         string Shp(NDArray a) => "(" + string.Join(",", a.Shape.dimensions) + (a.ndim == 1 ? ",) " : ") ");
                         throw new IndexError("shape mismatch: indexing arrays could not be broadcast together with shapes " +

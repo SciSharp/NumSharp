@@ -256,7 +256,7 @@ namespace NumSharp
         /// <summary>
         ///     A plain ndarray's own comparison with the chararray (Python's other method once the chararray's answered
         ///     <c>NotImplemented</c>): NDArray's operator of two arrays, so the chararray is compared as the plain string array
-        ///     it is (no stripping) and no public function sees it at the boundary.
+        ///     it is (no stripping) and no public function takes its subclass path for it.
         /// </summary>
         /// <param name="kind">The comparison, as the plain array's method makes it (<paramref name="left"/> first).</param>
         /// <param name="left">The plain array.</param>
@@ -388,9 +388,7 @@ namespace NumSharp
             if (left is null || right is null)
                 throw NoneConcatenation(leftReal ? leftChars : rightChars, noneOnLeft: left is null);
             // __add__(self, other) = add(self, other); __radd__(self, other) = add(other, self): both are np.char.add in
-            // the written order. np.add's chararray rule hands the text back as a chararray view; inside a boundary region
-            // (an operator used by a member that computes plain) the result is plain, and __array_wrap__'s view of it is
-            // the same answer.
+            // the written order. np.add's chararray rule hands the text back as a chararray view (__array_wrap__).
             NDArray sum = np.@char.add(left, right);
             if (sum is NDCharArray chars)
                 return chars;
@@ -576,11 +574,10 @@ namespace NumSharp
         [NDScoped]
         private static NDCharArray FormatElements(NDCharArray chars, object values)
         {
-            NDArray fresh;
-            // Inside a boundary region the module function computes the plain array (no chararray view of it is made just
-            // to be dropped), and asarray then gives the result its final form.
-            using (NDCharArrayBoundary.Inside())
-                fresh = np.@char.mod(chars, values);
+            // The module function on the chararray's plain view computes the plain array (handed the chararray itself
+            // it would
+            // make a chararray view of it, only to be dropped), and asarray then gives the result its final form.
+            NDArray fresh = np.@char.mod(NDSubclass.Plain(chars), values);
             return AsArrayOfFresh(fresh);
         }
 

@@ -32,8 +32,9 @@ namespace NumSharp.Backends
     ///     (<c>sum</c>, <c>matmul</c>, <c>abs</c>, ...), it calls the member that function's facade dispatches to - the
     ///     operand engine's <see cref="TensorEngine"/> member, or the array object's (<c>NDArray</c> /
     ///     <c>UnmanagedStorage</c>) for the allocations, copies and views. The operands are plain arrays: every
-    ///     <c>np.linalg</c> facade applies NumPy's class boundary before it calls in, so a facade's class rule would never
-    ///     fire on these calls. The exceptions are <c>np.outer</c> and <c>np.tensordot</c>, whose statements are still
+    ///     <c>np.linalg</c> facade is woven and hands a subclass operand in as its plain view, so a facade's subclass path
+    ///     would never run on these calls. The exceptions are <c>np.outer</c> and <c>np.tensordot</c>, whose statements
+    ///     are still
     ///     their facades' own (no engine member until the np-layer dtype plan's phase P8): their three calls are pinned
     ///     in ratchet R2's allowlist (np-layer dtype plan, P6b).</para>
     ///     <para>The statements were the internal operation class <c>LinalgEngine</c> (the np-layer dtype plan's P2) and

@@ -545,8 +545,8 @@ namespace NumSharp.Backends.Strings
                     $"Cannot cast ufunc '{ufunc}' output from {result.ToString(true)} to {@out.dtype.ToString(true)} with casting rule 'same_kind'");
             // NumPy's trivial loop copies a short input its loop casts, keeping the input's class: a chararray input of the
             // user's call cast to bool (the logical ufuncs) or a chararray repeat count cast to int64 is refused by the
-            // finalize rule here, between the output cast and the broadcast (NDCharArrayBoundary.TrivialLoopCopyError).
-            var copy = NDCharArrayBoundary.TrivialLoopCopyError(x1, FixedWidthLoopDescr(ufunc, x1), x2,
+            // finalize rule here, between the output cast and the broadcast (NDCharArray.TrivialLoopCopyError).
+            var copy = NDCharArray.TrivialLoopCopyError(x1, FixedWidthLoopDescr(ufunc, x1), x2,
                                                                  x2 is null ? null : FixedWidthLoopDescr(ufunc, x2), where);
             if (copy is not null)
                 return copy;

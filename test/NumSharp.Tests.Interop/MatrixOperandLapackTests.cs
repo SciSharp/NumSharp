@@ -16,8 +16,8 @@ namespace NumSharp.Tests.Interop
     ///     <c>sq = np.matrix([[2., 1.], [1., 3.]])</c>, <c>sa = np.asarray(sq)</c> and
     ///     <c>m = np.matrix([[1., 2., 3.], [4., 5., 6.]])</c>. The values themselves are the subject of the
     ///     live-parity classes of this project and of the <c>linalg_parity</c> oracle tier; here only what the
-    ///     matrix boundary adds is asserted. The functions with a managed fallback (solve, inv, det) are covered
-    ///     without a backend by <c>NDMatrixBoundaryTests</c> in the unit test project.
+    ///     matrix operand adds is asserted. The functions with a managed fallback (solve, inv, det) are covered
+    ///     without a backend by <c>NDMatrixOperandTests</c> in the unit test project.
     /// </remarks>
     [TestClass]
     public class MatrixOperandLapackTests

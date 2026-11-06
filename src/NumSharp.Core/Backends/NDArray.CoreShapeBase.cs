@@ -26,8 +26,8 @@ namespace NumSharp
         /// <returns><paramref name="a"/> itself when <c>a.ndim &gt;= 1</c> (so a caller must not dispose the result unless
         ///     it is not <paramref name="a"/>), else a <c>(1,)</c> VIEW of the 0-d array's element: it shares the
         ///     buffer, keeps it alive, and writes through.</returns>
-        /// <remarks>No class boundary runs here: an engine caller sits inside its public function's boundary, and the
-        ///     facade applies its rules before it calls this.</remarks>
+        /// <remarks>It sees plain arrays only: the woven public function hands it the plain view of a subclass operand
+        ///     and answers for the class itself (NDSubclass).</remarks>
         [NewSubtype("a")]
         internal static NDArray atleast_1d(NDArray a)
         {
@@ -51,8 +51,8 @@ namespace NumSharp
         /// <returns><paramref name="a"/> itself when <c>a.ndim &gt;= 2</c> (so a caller must not dispose the result
         ///     unless it is not <paramref name="a"/>), else a VIEW of <paramref name="a"/>'s elements with the leading
         ///     axes added: it shares the buffer, keeps it alive, and writes through.</returns>
-        /// <remarks>No class boundary runs here: an engine caller sits inside its public function's boundary, and the
-        ///     facade applies its rules before it calls this. The 1-d case is np.expand_dims(a, 0)'s statement
+        /// <remarks>It sees plain arrays only: the woven public function hands it the plain view of a subclass operand
+        ///     and answers for the class itself (NDSubclass). The 1-d case is np.expand_dims(a, 0)'s statement
         ///     (<see cref="expand_dims(NDArray, int)"/>) without that facade's chararray rule.</remarks>
         [NewSubtype("a")]
         internal static NDArray atleast_2d(NDArray a)
@@ -85,9 +85,8 @@ namespace NumSharp
         ///     reshaped to the padded dimensions.</returns>
         /// <exception cref="System.OutOfMemoryException">An <paramref name="ndim"/> too large to allocate a shape for, the
         ///     answer any other oversized NumSharp request gives.</exception>
-        /// <remarks>No class boundary runs here: an engine caller sits inside its public function's boundary, and the
-        ///     callers np.array's conversion, np.block (a matrix leaf passes unpadded) and np.r_ / np.c_ apply their
-        ///     rules before they call this.</remarks>
+        /// <remarks>It sees plain arrays only: the woven public function hands it the plain view of a subclass operand
+        ///     and answers for the class itself (NDSubclass).</remarks>
         internal static NDArray AtLeastNdView(NDArray a, int ndim)
         {
             if (a.ndim >= ndim)
@@ -126,9 +125,10 @@ namespace NumSharp
         /// <returns><paramref name="a"/> itself when <c>a.ndim &gt;= 3</c> (so a caller must not dispose the result unless it
         ///     is not <paramref name="a"/>), else a VIEW of <paramref name="a"/>'s elements with the axes added: it shares the
         ///     buffer, keeps it alive, and writes through.</returns>
-        /// <remarks>No class boundary runs here: the facades apply their rules before they call this. The 1-d case adds the
-        ///     trailing axis first, as NumPy's statements do; the inner view it goes through is this call's own and is
-        ///     reclaimed (the outer view keeps the buffer alive).</remarks>
+        /// <remarks>It sees plain arrays only: the woven public function hands it the plain view of a subclass operand
+        ///     and answers for the class itself (NDSubclass). The 1-d case adds the trailing axis first, as NumPy's
+        ///     statements do; the inner view it goes through is this call's own and is reclaimed (the outer view keeps
+        ///     the buffer alive).</remarks>
         [NDScoped /* reclaims the inner expand_dims alias of the 1-d arm; the ndim >= 3 passthrough is an untracked input */]
         [NewSubtype("a", KeepRank = true)]
         internal static NDArray atleast_3d(NDArray a)
@@ -215,7 +215,8 @@ namespace NumSharp
                         ret[i] = arr.reshape(1, 1);
                         continue;
                     case 1:
-                        ret[i] = np.expand_dims(arr, 0);
+                        // np.expand_dims(arr, 0)'s statement, the array object's member (a computation calls no np.* facade).
+                        ret[i] = expand_dims(arr, 0);
                         continue;
                     default:
                         ret[i] = arr;
@@ -270,10 +271,10 @@ namespace NumSharp
         ///     text).</exception>
         /// <exception cref="InvalidCastException">An array that does not cast to the result dtype (np.concatenate's
         ///     refusal).</exception>
-        /// <remarks>No class boundary runs here: the facade applies its rules (a matrix result wrapped, a chararray operand
-        ///     computed plain) before it calls this, so the inner atleast_2d and concatenate are the members. The trailing
-        ///     underscore is NumPy's convention for a name already taken (D18): <see cref="vstack(NDArray[])"/> is the
-        ///     array object's public instance method that stacks the array with others.</remarks>
+        /// <remarks>It sees plain arrays only: the woven public function hands it the plain view of a subclass operand
+        ///     and answers for the class itself (NDSubclass). The trailing underscore is NumPy's convention for a name
+        ///     already taken (D18): <see cref="vstack(NDArray[])"/> is the array object's public instance method that
+        ///     stacks the array with others.</remarks>
         [GetSubType("tup")]
         internal static NDArray vstack_(NDArray[] tup)
         {
@@ -299,9 +300,10 @@ namespace NumSharp
         ///     1-d is np.concatenate's rank error; a first array of more dimensions joins along its axis 1.</exception>
         /// <exception cref="IncorrectShapeException">Ranks or extents that np.concatenate refuses.</exception>
         /// <exception cref="InvalidCastException">An array that does not cast to the result dtype.</exception>
-        /// <remarks>No class boundary runs here: the facade applies its rules before it calls this. The trailing underscore
-        ///     is NumPy's convention for a name already taken (D18): <see cref="hstack(NDArray[])"/> is the array object's
-        ///     public instance method that stacks the array with others.</remarks>
+        /// <remarks>It sees plain arrays only: the woven public function hands it the plain view of a subclass operand
+        ///     and answers for the class itself (NDSubclass). The trailing underscore is NumPy's convention for a name
+        ///     already taken (D18): <see cref="hstack(NDArray[])"/> is the array object's public instance method that
+        ///     stacks the array with others.</remarks>
         [GetSubType("tup")]
         internal static NDArray hstack_(NDArray[] tup)
         {
@@ -332,8 +334,8 @@ namespace NumSharp
         /// <exception cref="NullReferenceException">A null entry.</exception>
         /// <exception cref="InvalidCastException">An array that does not cast to the result dtype (np.concatenate's
         ///     refusal).</exception>
-        /// <remarks>No class boundary runs here: the facade applies its rules before it calls this, so the inner expand_dims
-        ///     and concatenate are the members.</remarks>
+        /// <remarks>It sees plain arrays only: the woven public function hands it the plain view of a subclass operand
+        ///     and answers for the class itself (NDSubclass).</remarks>
         [GetSubType("arrays")]
         internal static NDArray stack(NDArray[] arrays, int axis)
         {
@@ -372,8 +374,8 @@ namespace NumSharp
         /// <exception cref="AxisError"><paramref name="axis"/> out of range (moveaxis' <c>source: axis ... is out of
         ///     bounds</c>).</exception>
         /// <exception cref="OverflowException">An axis longer than int.MaxValue (the result is a C# array).</exception>
-        /// <remarks>No class boundary runs here: the facade applies its rules (a matrix's rows, a chararray's rows or
-        ///     elements) before it calls this.</remarks>
+        /// <remarks>It sees plain arrays only: the woven public function hands it the plain view of a subclass operand
+        ///     and answers for the class itself (NDSubclass).</remarks>
         [SubclassRule(typeof(NDSubclassRules), nameof(NDSubclassRules.Unstack))]
         internal static NDArray[] unstack(NDArray x, int axis)
         {

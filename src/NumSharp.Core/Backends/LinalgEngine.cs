@@ -13,8 +13,9 @@ namespace NumSharp
     ///     <c>diagonal</c> and <c>matrix_transpose</c> are the array object's), plus a second C# form where NumPy's
     ///     argument is an int or a tuple (<see cref="Tensordot(NDArray, NDArray, int[], int[])"/>,
     ///     <see cref="VectorNorm(NDArray, int, bool, object)"/>). An engine reaches it through
-    ///     <see cref="TensorEngine.Linalg"/>, and every public <c>np.linalg</c> function applies NumPy's class boundary
-    ///     (<c>numpy.matrix</c>, <c>numpy.char.chararray</c>) and then calls one member.
+    ///     <see cref="TensorEngine.Linalg"/>, and every public <c>np.linalg</c> function calls one member (woven: a
+    ///     <c>numpy.matrix</c> or <c>numpy.char.chararray</c> operand arrives as its plain view, and the declared
+    ///     mechanism answers for the class).
     /// </summary>
     /// <remarks>
     ///     <para><b>The default</b> is <see cref="Backends.DefaultLinalgEngine"/>: NumPy's statements in NumPy's order (the

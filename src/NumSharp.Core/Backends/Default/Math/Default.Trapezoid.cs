@@ -90,8 +90,8 @@ namespace NumSharp.Backends
 
     // DefaultEngine's override of TensorEngine.Trapezoid (TensorEngine.FunctionBase.cs): the body of NumPy's trapezoid
     // (numpy/lib/_function_base_impl.py) - the spacing, the slices, the layout of the reduction input, the fused half
-    // `d * (y[1:] + y[:-1]) / 2.0`, its sum along the axis, and the text route. The public np.trapezoid only applies the
-    // matrix boundary, checks y for null and calls the member.
+    // `d * (y[1:] + y[:-1]) / 2.0`, its sum along the axis, and the text route. The public np.trapezoid only checks y for
+    // null and calls the member (its woven subclass path hands a matrix operand in as its plain view).
     //
     // History: moved from Math/np.trapezoid.cs statement for statement by the np-layer dtype plan's P2 into the internal
     // operation class TrapezoidEngine (decision D1: NumPy writes trapezoid in Python); its phase PE (E1) made that class
@@ -121,7 +121,7 @@ namespace NumSharp.Backends
         /// <remarks>Moved from <c>np.trapezoid</c> statement for statement by the np-layer dtype plan's P2. Until its phase
         ///     PE it ran under the facade's scope (<c>[NDScopedCovered]</c>); as a public entry point it owns its
         ///     <c>[NDScoped]</c> now, which reclaims what this body leaves at its own return (np.trapezoid keeps its scope
-        ///     for what the matrix boundary leaves).</remarks>
+        ///     for what its own body leaves).</remarks>
         [NDScoped]
         public override NDArray Trapezoid(NDArray y, NDArray x = null, double dx = 1.0, int axis = -1)
         {

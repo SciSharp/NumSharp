@@ -15,9 +15,9 @@ namespace NumSharp
         /// <param name="out">Optional destination array whose shape equals the broadcast result shape.</param>
         /// <param name="mode">Out-of-bounds behaviour: <c>"raise"</c> (default), <c>"wrap"</c> or <c>"clip"</c>.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.choose.html</remarks>
+        [PlainReceiver]
         public NDArray choose(object[] choices, NDArray @out = null, string mode = "raise")
         {
-            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
             return np.choose(this, choices, @out, mode);
         }
 
@@ -26,9 +26,9 @@ namespace NumSharp
         ///     choice is an <see cref="NDArray"/>). Refer to
         ///     <see cref="np.choose(NDArray,NDArray[],NDArray,string)"/> for full documentation.
         /// </summary>
+        [PlainReceiver]
         public NDArray choose(NDArray[] choices, NDArray @out = null, string mode = "raise")
         {
-            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
             return np.choose(this, choices, @out, mode);
         }
 
@@ -37,9 +37,9 @@ namespace NumSharp
         ///     outermost dimension is the sequence. Refer to
         ///     <see cref="np.choose(NDArray,NDArray,NDArray,string)"/> for full documentation.
         /// </summary>
+        [PlainReceiver]
         public NDArray choose(NDArray choices, NDArray @out = null, string mode = "raise")
         {
-            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
             return np.choose(this, choices, @out, mode);
         }
     }
