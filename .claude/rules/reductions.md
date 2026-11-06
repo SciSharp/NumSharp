@@ -448,7 +448,9 @@ index (`DONT_NEGATE_STRIDES`: a reversed run is visited from its high address do
 ### `np.nanmax` / `np.nanmin`: `np.fmax.reduce` / `np.fmin.reduce`
 
 The ±0 sign of a tie and which NaN an all-NaN slice returns (payload intact, never canonical) match NumPy 2.4.2 on every
-non-broadcast float layout (np.evaluate's `NanMax`/`NanMin` too).
+non-broadcast float layout (np.evaluate's `NanMax`/`NanMin` too). A numpy.matrix operand is not a base ndarray, so it
+takes NumPy's other branch (`_replace_nan`, `np.amax` / `np.amin` through the matrix method, `np.nan` written back into
+an all-NaN slice; `matrix.md`), whose bits are maximum's / minimum's.
 - fmax's loop has two per-element operations (the "P rules", header of `Default.Reduction.MinMax.Exact.cs`): the VECTOR
   op `npyv_maxp` (a tie keeps the later operand, two NaNs keep the FIRST) inside each inner-loop call's vector section,
   and the MSVC CRT `fmax` (a tie → bitwise AND, i.e. `+0`; fmin → OR, `-0`; two NaNs → the LAST) for the call's scalar

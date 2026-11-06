@@ -31,11 +31,17 @@ to `NumSharp.NDMatrix` (all members but `ctypes` / `dump` / `dumps`, which ndarr
     `shape too large to be a matrix.`, so `np.stack((m, m))` raises). `Reduced` is the matrix METHOD NumPy calls
     (`np.sum(m, 0)` is a 1 × N matrix, a scalar without an axis, and `keepdims: true` raises `TypeError: matrix.sum() got
     an unexpected keyword argument 'keepdims'`). `np.sum` / `np.prod` / `np.mean` / `np.var` / `np.std` hand the method
-    `axis`, `dtype`, `out` (and `ddof`, after `correction=` folded into it), so each other keyword passed (`keepdims`,
-    `initial`, `where`, `mean`) is its TypeError, the first in the function's signature order; `ReducedInto` is their
-    `out=`: a matrix out gets the method's answer, a plain out receives the values and then raises
-    `AttributeError: 'numpy.ndarray' object has no attribute '_collapse'`. `Plain` is `asarray` inside (`np.cross`,
-    `np.einsum`, the whole `np.fft`, `np.linalg.norm`). `WrappedAll` / `WrappedPair` / `WrappedTriple` /
+    `axis`, `dtype`, `out` (and `ddof`, after `correction=` folded into it), and `np.max` / `np.amax` / `np.min` /
+    `np.amin` hand `matrix.max` / `matrix.min` `axis` and `out`, so each other keyword passed (`keepdims`, `initial`,
+    `where`, `mean`) is its TypeError, the first in the function's signature order; `ReducedInto` is their `out=`: a
+    matrix out gets the method's answer, a plain out receives the values and then raises `AttributeError:
+    'numpy.ndarray' object has no attribute '_collapse'`. `np.nanmax` / `np.nanmin` take NumPy's branch for an operand
+    that is not a base ndarray (`np.max.Keywords.cs`, `MatrixNanExtreme`): the NaNs of a copy become `-inf` / `+inf`,
+    `np.amax` / `np.amin` reduce it with the method's rules, and an all-NaN slice gets `np.nan` (positive quiet, in the
+    result's dtype; `nan+0j`) — so a `±0` tie follows maximum / minimum, not fmax / fmin, an empty operand's error names
+    maximum / minimum, and a flat call's matrix out keeps the infinity while the returned scalar is NaN. `Plain` is
+    `asarray` inside (`np.cross`, `np.einsum`, the whole `np.fft`, `np.linalg.norm`). `WrappedAll` / `WrappedPair` /
+    `WrappedTriple` /
     `WrappedFirstTwoOfFour` are the functions with several results (`np.split`, `np.divmod`, `np.linalg.qr`: Q and R;
     `eig` / `eigh`: plain eigenvalues, matrix eigenvectors; `svd`: U and Vh; `lstsq`: x and the residuals). `WrappedIf` is
     `np.block`, whose class follows NumPy's route (repeated concatenation returns a matrix, the single-allocation route
@@ -66,9 +72,7 @@ to `NumSharp.NDMatrix` (all members but `ctypes` / `dump` / `dumps`, which ndarr
     `flags.owndata` parity for the functions NumPy allocates as the subclass). Where matrix semantics leak into NumPy's
     own Python code, NumSharp does not reproduce it: gaps MO02 to MO05, `np.linalg.vector_norm(m)` (an array of `|x|` in
     NumPy), `np.average(m, axis=1, weights=ndarray)` (an N × N matrix in NumPy), `np.apply_along_axis` when `func1d`
-    depends on the slice's rank (NumPy hands it a 1 × N matrix). Open (`OpenBugs.NpLayer.cs`, NL13): the max / min
-    family with a matrix operand computes `initial=` / `where=` and refuses a matrix `out=`, where NumPy calls the
-    method (its keyword TypeError; the method's answer in the out).
+    depends on the slice's rank (NumPy hands it a 1 × N matrix).
   - Cost: plain arrays pay one type test per call; a matrix operand pays the rule (the scope that reclaims the hidden
     plain result, the second call, the matrix view), about 300 ns, the same as the `NDMatrix` operators.
 

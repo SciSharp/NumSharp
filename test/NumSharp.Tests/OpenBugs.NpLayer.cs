@@ -58,11 +58,11 @@ namespace NumSharp.Tests
     //        np.mean / np.var / np.std with a where= mask that does not broadcast reached them through _count_reduce_items;
     //        its test stays below as the regression pin, without [OpenBugs], the more-axes refusal under the house type of a
     //        broadcast refusal (IncorrectShapeException, NumPy's ValueError) as the owner's QA-30 decision keeps it.
-    //   NL13 np.max / np.min / np.amax / np.amin / np.nanmax / np.nanmin with a numpy.matrix operand: NumPy calls the
-    //        matrix method (matrix.max(axis, out)), so initial= / where= raise its TypeError ("matrix.max() got an
-    //        unexpected keyword argument 'initial'") where NumSharp computes, and a matrix out= returns the method's
-    //        out._collapse(None), out[0, 0], where NumSharp raises the plain reduction's rank error. Found by P10 item 1,
-    //        whose np.sum / np.prod / np.mean / np.var / np.std apply the method's rules.
+    //   NL13 FIXED (the plan's D24, 2026-11-06): np.max / np.min / np.amax / np.amin / np.nanmax / np.nanmin with a
+    //        numpy.matrix operand computed initial= / where= and refused a matrix out= with the plain reduction's rank
+    //        error, where NumPy calls the matrix method (matrix.max(axis, out)); the nan forms now take NumPy's subclass
+    //        branch too. Its tests moved to MaxMinKeywordTests (MaxMinFamily_MatrixOperand_FollowsTheMatrixMethod,
+    //        NanMaxNanMin_MatrixOperand_TakesNumPysSubclassBranch).
     //   NL3 also covers the axis products: an axis np.prod of float32 / float64 multiplies a row in SIMD lane order too
     //        (and so does the out= route, which computes the plain product); np.prod with initial= or a mask runs
     //        NumPy's sequential loop and is exact. Found by P10 item 1's reduce_kwargs cells (carved there).
@@ -199,29 +199,6 @@ namespace NumSharp.Tests
                 .WithMessage("operands could not be broadcast together with remapped shapes [original->remapped]: (2,)  and requested shape (3,)");
             new Action(() => np.broadcast_to(np.ones(new Shape(2, 3)), new Shape(3))).Should().Throw<IncorrectShapeException>()
                 .WithMessage("input operand has more dimensions than allowed by the axis remapping");
-        }
-
-        // ------------------------------------------------------------------
-        // NL13 — the max / min family with a numpy.matrix operand
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     NumPy's np.max hands a numpy.matrix to <c>matrix.max(axis, out)</c> with the keywords the caller passed, so
-        ///     <c>initial=</c> is the method's TypeError (probed), and a matrix out is the method's
-        ///     <c>out._collapse(None)</c>, the scalar <c>out[0, 0]</c> (<c>np.max(m, out=np.matrix([[0.0]]))</c> is 4.0).
-        ///     NumSharp's facades apply the plain reduction to the matrix: initial= computes, and the matrix out meets the
-        ///     plain reduction's rank check.
-        /// </summary>
-        /// <remarks>Root cause: <c>np.max</c> / <c>np.min</c> / ... (src/NumSharp.Core/Sorting_Searching_Counting/
-        ///     np.max.Keywords.cs) pass every keyword through <c>NDMatrixBoundary.Reduced</c>; np.sum's facade shows the
-        ///     method rule (<c>KeywordError</c>, <c>ReducedInto</c>).</remarks>
-        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL13")]
-        public void NpLayer_MaxMatrixOperand_FollowsTheMatrixMethod()
-        {
-            NDArray m = np.matrix(np.array(new[,] { { 1.0, 2.0 }, { 3.0, 4.0 } }));
-            new Action(() => np.max(m, initial: 1)).Should().Throw<TypeError>()
-                .WithMessage("matrix.max() got an unexpected keyword argument 'initial'");
-            np.max(m, @out: np.matrix(np.array(new[,] { { 0.0 } }))).GetAtIndex<double>(0).Should().Be(4.0);
         }
 
         // ------------------------------------------------------------------

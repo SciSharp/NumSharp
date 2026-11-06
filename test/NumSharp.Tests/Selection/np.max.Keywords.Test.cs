@@ -425,9 +425,193 @@ namespace NumSharp.Tests
             }
         }
 
+        /// <summary>
+        ///     A <c>numpy.matrix</c> operand follows the matrix METHOD for every function of the family (the np-layer
+        ///     plan's NL13): NumPy's <c>_wrapreduction</c> hands it to <c>matrix.max(axis, out)</c> / <c>matrix.min(axis,
+        ///     out)</c> with the keywords the caller passed, so keepdims= / initial= / where= are the method's TypeError (the
+        ///     first one passed, in that order); the result is the scalar without an axis, else a row or a column matrix; a
+        ///     matrix out gets the method's answer (the out itself along an axis, its element without one), and a plain out
+        ///     receives the values, then <c>_collapse</c>'s AttributeError. The nan forms reach the same method through
+        ///     <c>np.amax</c> / <c>np.amin</c>, so their texts name max / min, and an empty operand's error names maximum /
+        ///     minimum, not fmax / fmin.
+        /// </summary>
+        /// <remarks>
+        ///     NumPy 2.4.2 probed on 2026-11-06 with <c>m = np.matrix([[1.0, 2.0], [3.0, 4.0]])</c>. Before the fix NumSharp
+        ///     computed initial= / where= and refused a matrix out with the plain reduction's rank error.
+        /// </remarks>
+        [TestMethod]
+        public void MaxMinFamily_MatrixOperand_FollowsTheMatrixMethod()
+        {
+            var fails = new List<string>();
+            foreach (var fn in NpMaxMin)
+            {
+                bool isMax = fn.EndsWith("max", StringComparison.Ordinal);
+                string method = isMax ? "max" : "min";
+                CheckRaises(fails, $"np.{fn}(m, keepdims=True, initial=1) (TypeError)", () => Np(fn, ("a", M2x2()), ("keepdims", true), ("initial", 1)),
+                    $"matrix.{method}() got an unexpected keyword argument 'keepdims'");
+                CheckRaises(fails, $"np.{fn}(m, initial=1, where=mask) (TypeError)", () => Np(fn, ("a", M2x2()), ("initial", 1), ("where", np.ones(new Shape(2, 2), np.@bool))),
+                    $"matrix.{method}() got an unexpected keyword argument 'initial'");
+                CheckRaises(fails, $"np.{fn}(m, where=mask) (TypeError)", () => Np(fn, ("a", M2x2()), ("where", np.ones(new Shape(2, 2), np.@bool))),
+                    $"matrix.{method}() got an unexpected keyword argument 'where'");
+
+                Check(fails, $"np.{fn}(m)", () => Np(fn, ("a", M2x2())), isMax ? "float64 () 4010000000000000" : "float64 () 3ff0000000000000");
+                CheckMatrix(fails, $"np.{fn}(m, axis=0)", () => Np(fn, ("a", M2x2()), ("axis", 0)),
+                    isMax ? "float64 (1,2) 4008000000000000 4010000000000000" : "float64 (1,2) 3ff0000000000000 4000000000000000");
+                CheckMatrix(fails, $"np.{fn}(m, axis=-1)", () => Np(fn, ("a", M2x2()), ("axis", -1)),
+                    isMax ? "float64 (2,1) 4000000000000000 4010000000000000" : "float64 (2,1) 3ff0000000000000 4008000000000000");
+
+                CheckOut(fails, $"np.{fn}(m, axis=0, out=matrix)", o => Np(fn, ("a", M2x2()), ("axis", 0), ("out", o)), np.matrix(np.zeros(new Shape(1, 2))),
+                    isMax ? "float64 (1,2) 4008000000000000 4010000000000000" : "float64 (1,2) 3ff0000000000000 4000000000000000");
+                Check(fails, $"np.{fn}(m, out=matrix([[0.0]])) is out[0, 0]", () => Np(fn, ("a", M2x2()), ("out", np.matrix(np.zeros(new Shape(1, 1))))),
+                    isMax ? "float64 () 4010000000000000" : "float64 () 3ff0000000000000");
+
+                var plain = np.zeros(new Shape(1, 2));
+                CheckRaises(fails, $"np.{fn}(m, axis=0, out=plain) (AttributeError)", () => Np(fn, ("a", M2x2()), ("axis", 0), ("out", plain)),
+                    "'numpy.ndarray' object has no attribute '_collapse'");
+                string stored = isMax ? "float64 (1,2) 4008000000000000 4010000000000000" : "float64 (1,2) 3ff0000000000000 4000000000000000";
+                if (Describe(plain) != stored)
+                    fails.Add($"np.{fn}(m, axis=0, out=plain): NumPy stores [{stored}] before the AttributeError, NumSharp left [{Describe(plain)}]");
+
+                CheckRaises(fails, $"np.{fn}(matrix(zeros((0, 2)))) (ValueError)", () => Np(fn, ("a", np.matrix(np.zeros(new Shape(0, 2))))),
+                    $"zero-size array to reduction operation {(isMax ? "maximum" : "minimum")} which has no identity");
+            }
+
+            AssertNoMismatch(fails, "NumPy hands a numpy.matrix to matrix.max / matrix.min, whose rules decide the keywords, the out and the result");
+        }
+
+        /// <summary>
+        ///     np.nanmax / np.nanmin of a <c>numpy.matrix</c> take NumPy's branch for an operand that is not a base ndarray
+        ///     (NL13): the NaNs of a copy become <c>-inf</c> / <c>+inf</c>, <c>np.amax</c> / <c>np.amin</c> reduce it through the
+        ///     matrix method, and a slice that was all NaN gets <c>np.nan</c> written back — Python's positive quiet NaN in
+        ///     the result's dtype, whatever NaN the slice held (complex: <c>nan+0j</c>). So the bits are not fmax's: a
+        ///     <c>±0</c> tie follows maximum / minimum; a flat call with a matrix out returns the NaN scalar while the out
+        ///     keeps the infinity the method stored; a plain out receives the infinities, then the AttributeError. An
+        ///     integer matrix has no NaN mask: the call is np.amax / np.amin.
+        /// </summary>
+        /// <remarks>NumPy 2.4.2 probed on 2026-11-06.</remarks>
+        [TestMethod]
+        public void NanMaxNanMin_MatrixOperand_TakesNumPysSubclassBranch()
+        {
+            var fails = new List<string>();
+            double nan = BitConverter.Int64BitsToDouble(0x7FF8000000000000);
+            // Column 1 is all NaN; row 0 holds one NaN.
+            NDArray Col() => np.matrix(np.array(new[,] { { 1.0, nan }, { 3.0, nan } }));
+            NDArray OneNaN() => np.matrix(np.array(new[,] { { 1.0, nan }, { 3.0, 4.0 } }));
+
+            void ExpectBits(string name, Func<NDArray> call, long index, ulong bits)
+            {
+                try
+                {
+                    ulong got = BitConverter.DoubleToUInt64Bits(call().flatten().GetAtIndex<double>(index));
+                    if (got != bits)
+                        fails.Add($"{name}: element {index} expected bits {bits:x16} but NumSharp returned {got:x16}");
+                }
+                catch (Exception e)
+                {
+                    fails.Add($"{name}: threw {e.GetType().Name}: {e.Message}");
+                }
+            }
+
+            CheckMatrix(fails, "np.nanmax(one_nan, axis=1)", () => np.nanmax(OneNaN(), 1), "float64 (2,1) 3ff0000000000000 4010000000000000");
+            CheckMatrix(fails, "np.nanmin(one_nan, axis=0)", () => np.nanmin(OneNaN(), 0), "float64 (1,2) 3ff0000000000000 4010000000000000");
+            CheckMatrix(fails, "np.nanmax(col, axis=0)", () => np.nanmax(Col(), 0), "float64 (1,2) 4008000000000000 nan");
+            CheckMatrix(fails, "np.nanmin(col, axis=0)", () => np.nanmin(Col(), 0), "float64 (1,2) 3ff0000000000000 nan");
+            ExpectBits("np.nanmax(col, axis=0)[0, 1]", () => np.nanmax(Col(), 0), 1, 0x7FF8000000000000);
+            ExpectBits("np.nanmin(col, axis=0)[0, 1]", () => np.nanmin(Col(), 0), 1, 0x7FF8000000000000);
+
+            // A flat all-NaN call: the returned scalar is np.nan; a matrix out keeps the method's -inf / +inf.
+            foreach (var (fn, inf) in new[] { ("nanmax", "fff0000000000000"), ("nanmin", "7ff0000000000000") })
+            {
+                var o = np.matrix(np.zeros(new Shape(1, 1)));
+                ExpectBits($"np.{fn}(matrix([[nan, nan]]), out=o)", () => Np(fn, ("a", np.matrix(np.array(new[,] { { nan, nan } }))), ("out", o)), 0, 0x7FF8000000000000);
+                if (Describe(o) != $"float64 (1,1) {inf}")
+                    fails.Add($"np.{fn}(matrix([[nan, nan]]), out=o): NumPy's out holds [float64 (1,1) {inf}], NumSharp's [{Describe(o)}]");
+            }
+
+            // Along an axis a matrix out is the result: np.copyto writes the all-NaN slice's NaN into it.
+            CheckOut(fails, "np.nanmax(col, axis=0, out=matrix)", o => np.nanmax(Col(), 0, o), np.matrix(np.zeros(new Shape(1, 2))), "float64 (1,2) 4008000000000000 nan");
+            CheckOut(fails, "np.nanmin(col, axis=0, out=matrix)", o => np.nanmin(Col(), 0, o), np.matrix(np.zeros(new Shape(1, 2))), "float64 (1,2) 3ff0000000000000 nan");
+
+            // A plain out: the method stores the replaced copy's extremes, then fails before the NaN is written back.
+            var pmax = np.zeros(new Shape(1, 2));
+            CheckRaises(fails, "np.nanmax(col, axis=0, out=plain) (AttributeError)", () => np.nanmax(Col(), 0, pmax), "'numpy.ndarray' object has no attribute '_collapse'");
+            if (Describe(pmax) != "float64 (1,2) 4008000000000000 fff0000000000000")
+                fails.Add($"np.nanmax(col, axis=0, out=plain): NumPy's out holds [3, -inf], NumSharp's [{Describe(pmax)}]");
+            var pmin = np.zeros(new Shape(1, 2));
+            CheckRaises(fails, "np.nanmin(col, axis=0, out=plain) (AttributeError)", () => np.nanmin(Col(), 0, pmin), "'numpy.ndarray' object has no attribute '_collapse'");
+            if (Describe(pmin) != "float64 (1,2) 3ff0000000000000 7ff0000000000000")
+                fails.Add($"np.nanmin(col, axis=0, out=plain): NumPy's out holds [1, inf], NumSharp's [{Describe(pmin)}]");
+
+            // ±0 ties follow maximum / minimum on the matrix, fmax / fmin on the plain array.
+            Check(fails, "np.nanmax(matrix([[0.0, -0.0]]))", () => np.nanmax(np.matrix(np.array(new[,] { { 0.0, -0.0 } }))), "float64 () 8000000000000000");
+            Check(fails, "np.nanmax(array([[0.0, -0.0]]))", () => np.nanmax(np.array(new[,] { { 0.0, -0.0 } })), "float64 () 0000000000000000");
+            Check(fails, "np.nanmax(matrix([[0.0, nan, -0.0]]))", () => np.nanmax(np.matrix(np.array(new[,] { { 0.0, nan, -0.0 } }))), "float64 () 8000000000000000");
+            Check(fails, "np.nanmin(matrix([[-0.0, 0.0]]))", () => np.nanmin(np.matrix(np.array(new[,] { { -0.0, 0.0 } }))), "float64 () 0000000000000000");
+            Check(fails, "np.nanmin(array([[-0.0, 0.0]]))", () => np.nanmin(np.array(new[,] { { -0.0, 0.0 } })), "float64 () 8000000000000000");
+
+            // The NaN written back is np.nan in the result's dtype, whatever NaN the slice held.
+            ExpectBits("np.nanmax(matrix([[-nan with a payload]]))", () => np.nanmax(np.matrix(np.array(new[,] { { BitConverter.Int64BitsToDouble(unchecked((long)0xFFF8000000000123)) } }))), 0, 0x7FF8000000000000);
+            foreach (var fn in new[] { "nanmax", "nanmin" })
+            {
+                var f32 = Np(fn, ("a", np.matrix(np.array(new float[,] { { float.NaN } }))));
+                uint f32Bits = BitConverter.SingleToUInt32Bits(f32.GetAtIndex<float>(0));
+                if (f32Bits != 0x7FC00000)
+                    fails.Add($"np.{fn}(float32 matrix([[nan]])): NumPy's NaN is 7fc00000, NumSharp's {f32Bits:x8}");
+                var f16 = Np(fn, ("a", np.matrix(np.array(new Half[,] { { Half.NaN, (Half)1 } }))), ("axis", 0)).flatten();
+                ushort f16Bits = BitConverter.HalfToUInt16Bits(f16.GetAtIndex<Half>(0));
+                if (f16Bits != 0x7E00)
+                    fails.Add($"np.{fn}(float16 matrix([[nan, 1]]), axis=0)[0, 0]: NumPy's NaN is 7e00, NumSharp's {f16Bits:x4}");
+                var c = Np(fn, ("a", np.matrix(np.array(new[,] { { new System.Numerics.Complex(nan, 1) } })))).GetAtIndex<System.Numerics.Complex>(0);
+                if (BitConverter.DoubleToUInt64Bits(c.Real) != 0x7FF8000000000000 || BitConverter.DoubleToUInt64Bits(c.Imaginary) != 0)
+                    fails.Add($"np.{fn}(matrix([[nan+1j]])): NumPy returns nan+0j, NumSharp {c}");
+                var partial = Np(fn, ("a", np.matrix(np.array(new[,]
+                {
+                    { new System.Numerics.Complex(nan, 1), new System.Numerics.Complex(2, 1) },
+                    { new System.Numerics.Complex(1, 5), new System.Numerics.Complex(nan, nan) },
+                }))), ("axis", 0)).flatten();
+                if (partial.GetAtIndex<System.Numerics.Complex>(0) != new System.Numerics.Complex(1, 5) || partial.GetAtIndex<System.Numerics.Complex>(1) != new System.Numerics.Complex(2, 1))
+                    fails.Add($"np.{fn}(complex matrix, axis=0): NumPy returns [[1+5j, 2+1j]], NumSharp [{partial.GetAtIndex<System.Numerics.Complex>(0)}, {partial.GetAtIndex<System.Numerics.Complex>(1)}]");
+            }
+
+            // No mask for an integer matrix: np.amax / np.amin of the operand itself.
+            Check(fails, "np.nanmax(int64 matrix)", () => np.nanmax(np.matrix(np.array(new long[,] { { 1, 2 }, { 3, 4 } }))), "int64 () 4");
+            CheckMatrix(fails, "np.nanmin(int64 matrix, axis=0)", () => np.nanmin(np.matrix(np.array(new long[,] { { 1, 2 }, { 3, 4 } })), 0), "int64 (1,2) 1 2");
+
+            AssertNoMismatch(fails, "NumPy's nanmax / nanmin of a numpy.matrix replace the NaNs, reduce with the matrix method and write np.nan back");
+        }
+
         // ======================================================================================================
         //  Helpers
         // ======================================================================================================
+
+        /// <summary>The <c>(2, 2)</c> float64 matrix <c>[[1, 2], [3, 4]]</c> the numpy.matrix cases reduce.</summary>
+        /// <returns>A fresh <see cref="NDMatrix"/>, so no case can see another case's writes.</returns>
+        private static NDArray M2x2() => np.matrix(np.array(new[,] { { 1.0, 2.0 }, { 3.0, 4.0 } }));
+
+        /// <summary>
+        ///     Runs one numpy.matrix value case: the result must be a <see cref="NDMatrix"/> (NumPy's method returns a
+        ///     matrix along an axis) with NumPy's <see cref="Describe"/> string.
+        /// </summary>
+        /// <param name="mismatches">Collects one line per failing case.</param>
+        /// <param name="name">The case label: the NumPy call it mirrors.</param>
+        /// <param name="call">The NumSharp call under test.</param>
+        /// <param name="expected">NumPy 2.4.2's result in <see cref="Describe"/>'s format.</param>
+        private static void CheckMatrix(List<string> mismatches, string name, Func<NDArray> call, string expected)
+        {
+            string actual;
+            try
+            {
+                var r = call();
+                actual = r is NDMatrix ? Describe(r) : $"a {r.GetType().Name} ({Describe(r)}), not a matrix";
+            }
+            catch (Exception e)
+            {
+                actual = $"threw {e.GetType().Name}: {e.Message}";
+            }
+
+            if (actual != expected)
+                mismatches.Add($"{name}: expected matrix [{expected}] but NumSharp returned [{actual}]");
+        }
 
         /// <summary>The <c>(2, 3)</c> float64 array <c>[[1, 5, 3], [4, 2, 6]]</c> most cases reduce.</summary>
         /// <returns>A fresh C-contiguous array, so no case can see another case's writes.</returns>
