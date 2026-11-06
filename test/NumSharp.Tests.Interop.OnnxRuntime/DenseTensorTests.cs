@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using AwesomeAssertions;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
@@ -293,6 +294,103 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
                 nd.typecode.Should().Be(NPTypeCode.Half);
                 ((float)nd.GetHalf(1)).Should().Be(-4f);
             }
+        }
+
+        /// <summary>
+        ///     F71: ORT's tutorial lines - <c>Tensor&lt;float&gt; output = results.First().AsTensor&lt;float&gt;()</c>, then
+        ///     <c>output.ToNDArray()</c> - compile and read a legacy run's output. The static type is the abstract
+        ///     <see cref="Tensor{T}"/> (the call used to fail with CS1929 naming the <c>OrtValue</c> overload); the runtime
+        ///     type is ORT's dense tensor, so the copy is the DenseTensor verb's.
+        /// </summary>
+        [TestMethod]
+        public void TensorOfT_ALegacyRunOutput_ReadsBackThroughTheTutorialLine()
+        {
+            using InferenceSession session = OpenSession("identity_float32");
+            var x = new DenseTensor<float>(new float[] { 1, 2, 3, 4, 5, 6 }, new[] { 2, 3 });
+            using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> results =
+                session.Run(new[] { NamedOnnxValue.CreateFromTensor("X", x) });
+
+            Tensor<float> output = results.First().AsTensor<float>();   // the tutorial's own declaration
+            using NDArray scores = output.ToNDArray();
+            scores.typecode.Should().Be(NPTypeCode.Single);
+            scores.shape.Should().Equal(2, 3);
+            scores.ToArray<float>().Should().Equal(1f, 2f, 3f, 4f, 5f, 6f);
+        }
+
+        /// <summary>
+        ///     A <see cref="Tensor{T}"/> that is not dense (a caller's own subclass) reads back through the
+        ///     <see cref="Tensor{T}"/> overload: densified by ORT's own <c>ToDenseTensor</c>, then copied - an owning
+        ///     array that does not alias the tensor, for the element types an ORT output has and for Half.
+        /// </summary>
+        [TestMethod]
+        public void TensorOfT_NonDense_IsDensifiedThenCopied()
+        {
+            Tensor<int> ints = new ArrayTensor<int>(new[] { 1, 2, 3, 4, 5, 6 }, new[] { 3, 2 });
+            using (NDArray nd = ints.ToNDArray())
+            {
+                nd.typecode.Should().Be(NPTypeCode.Int32);
+                nd.shape.Should().Equal(3, 2);
+                nd.ToArray<int>().Should().Equal(1, 2, 3, 4, 5, 6);
+                nd[0, 0] = 100;
+                ints.GetValue(0).Should().Be(1, "the result is a copy, never a view of the caller's tensor");
+            }
+
+            Tensor<Half> halves = new ArrayTensor<Half>(new[] { (Half)0.5f, (Half)(-4f) }, new[] { 2 });
+            using (NDArray nd = halves.ToNDArray())
+            {
+                nd.typecode.Should().Be(NPTypeCode.Half);
+                ((float)nd.GetHalf(1)).Should().Be(-4f);
+            }
+        }
+
+        /// <summary>
+        ///     An element type with no NumSharp dtype (BFloat16) is refused by the <see cref="Tensor{T}"/> overload BEFORE
+        ///     a non-dense tensor is densified: the tensor here throws if a single element is read.
+        /// </summary>
+        [TestMethod]
+        public void TensorOfT_ElementTypeWithoutADtype_IsRefusedBeforeDensifying()
+        {
+            Tensor<BFloat16> tensor = new UnreadableTensor<BFloat16>(new[] { 2, 2 });
+            new Action(() => tensor.ToNDArray()).Should().Throw<NotSupportedException>(
+                "the element type is refused first; densifying would have read the tensor and thrown InvalidOperationException");
+        }
+
+        /// <summary>
+        ///     A non-dense tensor whose elements must never be read: <see cref="GetValue"/> throws, so a test can prove a
+        ///     refusal came before any densifying copy. Everything else is the minimum the abstract type demands.
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        private sealed class UnreadableTensor<T> : Tensor<T>
+        {
+            /// <summary>An unreadable tensor of the given dimensions.</summary>
+            /// <param name="dimensions">The dimensions.</param>
+            internal UnreadableTensor(int[] dimensions) : base(dimensions, reverseStride: false) { }
+
+            /// <summary>Another unreadable tensor of the same dimensions.</summary>
+            /// <returns>The clone.</returns>
+            public override Tensor<T> Clone() => new UnreadableTensor<T>(Dimensions.ToArray());
+
+            /// <summary>An unreadable tensor of another element type.</summary>
+            /// <typeparam name="TResult">The new element type.</typeparam>
+            /// <param name="dimensions">The new dimensions.</param>
+            /// <returns>The empty tensor.</returns>
+            public override Tensor<TResult> CloneEmpty<TResult>(ReadOnlySpan<int> dimensions) => new UnreadableTensor<TResult>(dimensions.ToArray());
+
+            /// <summary>Always throws: reading an element is what the test forbids.</summary>
+            /// <param name="index">The flat index.</param>
+            /// <returns>Never returns.</returns>
+            /// <exception cref="InvalidOperationException">Always.</exception>
+            public override T GetValue(int index) => throw new InvalidOperationException("the tensor was read (densified)");
+
+            /// <summary>Ignores the write (nothing in the tests writes).</summary>
+            /// <param name="index">The flat index.</param>
+            /// <param name="value">The element.</param>
+            public override void SetValue(int index, T value) { }
+
+            /// <summary>An unreadable tensor of other dimensions.</summary>
+            /// <param name="dimensions">The new dimensions.</param>
+            /// <returns>The reshaped tensor.</returns>
+            public override Tensor<T> Reshape(ReadOnlySpan<int> dimensions) => new UnreadableTensor<T>(dimensions.ToArray());
         }
 
         /// <summary>

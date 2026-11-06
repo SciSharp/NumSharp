@@ -138,9 +138,12 @@ public abstract partial class TensorEngine
   "Package consumer:" steps of the `interop-test` CI job, which run `tools/verify_package_consumer.sh` and
   `tools/verify_build_override.sh` (under `src/NumSharp.Interop.OpenBLAS/`) on all three OSes: the real nupkg restored
   into a scratch consumer by PackageReference and loaded in the portable, read-only and flattened layouts. They run last
-  in that job, because both scripts `-t:Rebuild` Core/OpenBLAS in Release in the repo tree and evict this version from
-  `~/.nuget/packages`. That job's `env:` must never set `NUMSHARP_OPENBLAS_CACHE_DIR`: `verify_build_override.sh`
-  asserts the default per-user cache root on Linux/macOS.
+  in that job, because both scripts `-t:Rebuild` Core/OpenBLAS in Release in the repo tree. Every package gate (these
+  two and the ONNX Runtime / ML.NET ones) packs under a pre-release version unique to the run,
+  `<VersionPrefix>-gate.<epoch>.<pid>` (`-p:VersionSuffix` on each build and pack), and removes that version's entries
+  from `~/.nuget/packages` at exit: evicting the plain version and restoring the local pack there replaced a PUBLISHED
+  NumSharp (0.70.0 on `strings`) for every other project on the machine. That job's `env:` must never set
+  `NUMSHARP_OPENBLAS_CACHE_DIR`: `verify_build_override.sh` asserts the default per-user cache root on Linux/macOS.
 
 ## The build-time override
 

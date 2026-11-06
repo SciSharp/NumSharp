@@ -38,6 +38,7 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             "  static NDArray ToNDArray(this NamedOnnxValue value)",
             "  static NDArray ToNDArray(this OrtValue value)",
             "  static NDArray ToNDArray<T>(this DenseTensor<T> tensor)",
+            "  static NDArray ToNDArray<T>(this Tensor<T> tensor)",
             "  static NDArray[] ToNDArrays(this OrtValue sequence)",
             "  static NPTypeCode FromTensorElementType(TensorElementType type)",
             "  static OrtTensor AsOrtValue(this NDArray source, OnnxCodecMode mode = Auto)",

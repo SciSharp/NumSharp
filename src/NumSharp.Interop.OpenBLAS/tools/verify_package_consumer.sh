@@ -24,6 +24,9 @@
 #   6  the cache entry is self-verifying (macOS): a tampered dep is rebuilt, never mapped
 #
 # Needs: the .NET SDK, python3 (fetch_openblas.py is stdlib-only), network once (PyPI).
+# It packs under a pre-release version unique to the run (<VersionPrefix>-gate.<epoch>.<pid>), so the
+# global NuGet packages folder (NUGET_PACKAGES when set) is never written under a PUBLISHED version, and
+# it removes that run-only version's entries from the folder at exit.
 #
 #   bash src/NumSharp.Interop.OpenBLAS/tools/verify_package_consumer.sh
 # =============================================================================
@@ -42,7 +45,20 @@ WORK="$(mktemp -d)"
 # On Git Bash/MSYS mktemp yields a /tmp/... path the WINDOWS dotnet/NuGet processes cannot
 # resolve — normalize to a mixed C:/... form both worlds accept.
 command -v cygpath > /dev/null 2>&1 && WORK="$(cygpath -m "$WORK")"
-trap 'chmod -R u+w "$WORK" 2>/dev/null || true; rm -rf "$WORK"' EXIT
+# Exit cleanup: the scratch tree (made writable first: step 4 leaves a read-only copy in it), and this run's
+# OWN entries in the global packages folder - the gate version is unique to the run, so nothing else can be
+# restoring it. Both variables are checked first: an unset one must not widen the target (an empty VERSION
+# would name every cached NumSharp version).
+cleanup() {
+    chmod -R u+w "$WORK" 2>/dev/null || true
+    rm -rf "$WORK"
+    if [ -n "${NUGET_ROOT:-}" ] && [ -n "${VERSION:-}" ]; then
+        rm -rf "${NUGET_ROOT:?}/numsharp/${VERSION:?}" "${NUGET_ROOT:?}/numsharp.interop.openblas/${VERSION:?}"
+        # An id folder this run created holds nothing now; rmdir removes only an EMPTY one.
+        rmdir "${NUGET_ROOT:?}/numsharp.interop.openblas" 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT
 LOG="$WORK/build.log"
 run() { "$@" > "$LOG" 2>&1 || { cat "$LOG" >&2; fail "command failed: $*"; }; }
 step() { printf '\n== %s ==\n' "$*"; }
@@ -66,7 +82,13 @@ PY="$(command -v python3 || command -v python || true)"
 real() { "$PY" -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$1"; }
 under() { case "$(real "$1")/" in "$(real "$2")"/*) return 0 ;; *) return 1 ;; esac; }
 
-VERSION="$(cd "$REPO" && dotnet msbuild src/NumSharp.Core/NumSharp.Core.csproj -getProperty:Version | tr -d '\r')"
+# The pack's version must be one nothing else references (F86). The plain <VersionPrefix> may be PUBLISHED
+# (0.70.0 on strings): evicting it from the shared cache and restoring the local pack there left every other
+# project on the machine that restores NumSharp <VersionPrefix> with THIS build, silently. A SemVer pre-release
+# of numeric identifiers - the run's epoch and PID - never collides; it flows through every build and pack
+# below.
+GATE_SUFFIX="gate.$(date +%s).$$"
+VERSION="$(cd "$REPO" && dotnet msbuild src/NumSharp.Core/NumSharp.Core.csproj -getProperty:Version "-p:VersionSuffix=$GATE_SUFFIX" | tr -d '\r')"
 [ -n "$VERSION" ] || fail "could not read the package version"
 FEED="$WORK/feed"; mkdir -p "$FEED"
 CONS="$WORK/consumer"; mkdir -p "$CONS"
@@ -82,13 +104,13 @@ step "1. pack NumSharp $VERSION + NumSharp.Interop.OpenBLAS $VERSION into a loca
 # -t:Rebuild first: this repo's incremental build is known to declare stale outputs up-to-date
 # after source changes, and dotnet pack defaults to Release on .NET 8+.
 run dotnet build "$REPO/src/NumSharp.Core/NumSharp.Core.csproj" -t:Rebuild -c Release \
-    -v q --nologo "-clp:NoSummary;ErrorsOnly" -p:WarningLevel=0
+    -v q --nologo "-clp:NoSummary;ErrorsOnly" -p:WarningLevel=0 "-p:VersionSuffix=$GATE_SUFFIX"
 run dotnet build "$REPO/src/NumSharp.Interop.OpenBLAS/NumSharp.Interop.OpenBLAS.csproj" -t:Rebuild -c Release \
-    -v q --nologo "-clp:NoSummary;ErrorsOnly" -p:WarningLevel=0
+    -v q --nologo "-clp:NoSummary;ErrorsOnly" -p:WarningLevel=0 "-p:VersionSuffix=$GATE_SUFFIX"
 run dotnet pack "$REPO/src/NumSharp.Core/NumSharp.Core.csproj" --no-build -c Release -o "$FEED" \
-    -v q --nologo "-clp:ErrorsOnly"
+    -v q --nologo "-clp:ErrorsOnly" "-p:VersionSuffix=$GATE_SUFFIX"
 run dotnet pack "$REPO/src/NumSharp.Interop.OpenBLAS/NumSharp.Interop.OpenBLAS.csproj" --no-build -c Release -o "$FEED" \
-    -v q --nologo "-clp:ErrorsOnly" -p:RequireOpenBlasAssets=true
+    -v q --nologo "-clp:ErrorsOnly" -p:RequireOpenBlasAssets=true "-p:VersionSuffix=$GATE_SUFFIX"
 NUPKG="$FEED/NumSharp.Interop.OpenBLAS.$VERSION.nupkg"
 [ -f "$NUPKG" ] || fail "interop nupkg missing: $NUPKG"
 echo "ok"
@@ -120,10 +142,10 @@ done
 echo "ok"
 
 step "3. consumer by PackageReference: the bundle loads and computes NumPy's answer (portable layout)"
-# The scratch consumer must restore THIS pack, not a same-versioned cache entry.
+# The scratch consumer restores THIS pack: the run-unique version has no other cache entry to shadow it, so
+# nothing is evicted first. NUGET_ROOT is read here for the exit cleanup, which removes the run's own entries.
 NUGET_ROOT="$(dotnet nuget locals global-packages --list | sed 's/.*: //' | tr -d '\r')"
 command -v cygpath > /dev/null 2>&1 && NUGET_ROOT="$(cygpath -m "$NUGET_ROOT")"
-rm -rf "$NUGET_ROOT/numsharp/$VERSION" "$NUGET_ROOT/numsharp.interop.openblas/$VERSION"
 cat > "$CONS/nuget.config" <<EOF
 <?xml version="1.0" encoding="utf-8"?>
 <configuration>

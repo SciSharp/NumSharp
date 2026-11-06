@@ -155,7 +155,10 @@ element, so they import as the empty vector `(0,)`, never as a one-element 0-d a
   count: the lease fires (unpinning the array) when the *last* NumSharp view over the memory - slices
   derived from it included - is disposed or collected. The view roots the `Tensor<T>` so its backing cannot
   move underneath it, and does not own its data (`owndata == false`), so a size-changing `resize` refuses
-  instead of detaching. `LiveImports` counts open leases.
+  instead of detaching. `LiveImports` counts open leases. While a lease is open, its pinned bytes are booked
+  with NumSharp's memory accounting: the GC counts the backing array, but a forgotten view's pin keeps it
+  alive past the collection that found the view dead, and 5,000 forgotten views of fresh 602 KB tensors held
+  2.6 GB with nothing booked and 96 MB booked. Views you dispose cost nothing: the booking ends with the pin.
 - **No GIL, no interpreter, no native handles.** The verbs are plain managed calls; the one rule is the
   handle rule - **keep the `TensorSpanHandle<T>` alive while you use its span, and dispose it.**
 

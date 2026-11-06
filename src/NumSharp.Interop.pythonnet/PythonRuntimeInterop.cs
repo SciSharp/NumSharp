@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading;
 using NumSharp.Backends.Unmanaged;
+using NumSharp.Backends.Unmanaged.Pooling;
 using Python.Runtime;
 
 namespace NumSharp.Interop.PythonNet
@@ -804,17 +805,30 @@ namespace NumSharp.Interop.PythonNet
     {
         private readonly PyBuffer _buffer;  // PEP 3118 lease (null on the array-interface path)
         private readonly PyObject _holder;  // strong-ref container (null on the PyBuffer path)
-        private readonly long _bytes;       // GC memory-pressure registered for this lease
+        private readonly long _bytes;       // the Python-owned bytes this lease keeps alive, booked with the pool
         private int _released;              // NumSharp-side handoff happened (enqueue exactly once)
         private int _disposed;              // Python-side resources actually released
 
+        /// <summary>
+        ///     Opens a lease over a Python-owned buffer and books its bytes with NumSharp's memory accounting
+        ///     (<see cref="SizeBucketedBufferPool.BookForeign"/>) until the Python side is released.
+        /// </summary>
+        /// <remarks>
+        ///     The bytes are BOOKED, not reported with <see cref="GC.AddMemoryPressure"/>: the GC counts every addition toward
+        ///     its next full collection even after the matching removal, so 5,000 views of one 602 KB numpy array, each
+        ///     disposed at once, ran 8 / 15 gen-2 collections; booked, none (measured 2026-11-06, P8 of the bridge QA). A view
+        ///     dropped undisposed still gets collected: a growing booking paces a gen-0 collection, whose finalizers queue the
+        ///     lease's release.
+        /// </remarks>
+        /// <param name="buffer">The locked PEP 3118 buffer, or null on the array-interface path.</param>
+        /// <param name="holder">The strong reference that keeps the exporter alive, or null on the PyBuffer path.</param>
+        /// <param name="bytes">The bytes of Python memory the view addresses (nothing booked for zero or less).</param>
         internal ImportLease(PyBuffer buffer, PyObject holder, long bytes)
         {
             _buffer = buffer;
             _holder = holder;
             _bytes = bytes;
-            if (_bytes > 0)
-                GC.AddMemoryPressure(_bytes);
+            SizeBucketedBufferPool.BookForeign(_bytes);
         }
 
         /// <summary>
@@ -876,10 +890,13 @@ namespace NumSharp.Interop.PythonNet
             DisposeUnderGil();
         }
 
+        /// <summary>
+        ///     The lease's last step on every path (released under the GIL, or defused after engine death): gives the
+        ///     booking back and uncounts the lease. Counters only, so any thread and any engine phase is safe.
+        /// </summary>
         private void Complete()
         {
-            if (_bytes > 0)
-                GC.RemoveMemoryPressure(_bytes);
+            SizeBucketedBufferPool.ReturnForeign(_bytes);
             PythonRuntimeInterop.OnImportReleased(this);
         }
     }

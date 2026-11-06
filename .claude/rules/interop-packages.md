@@ -49,7 +49,8 @@ notes from merged PR titles, so PR titles stay free of it too), the website, the
 and README of every released package: a released package's IntelliSense must not point at a bridge nobody can install.
 To release it: delete its `IsPackable` property, write its page and add its `toc.yml` entry and its `interop/index.md`
 row and "See also" link (the two packages released for 0.80.0-beta1 got theirs back from git history). CI needs no
-edit.
+edit, but the package is a NEW id on nuget.org: check before the tag that the key behind `NUGETAPIKEY` may push new
+packages (`ci-release.md`).
 
 ## The conversion packages
 
@@ -61,20 +62,31 @@ None of these computes NumSharp operations: each converts tensors between NumSha
 - `NDArrayOnnxInterop` verbs, `InferenceSessionExtensions`, `Postprocess`. Sources (`src/NumSharp.Interop.OnnxRuntime/`):
   `NDArrayOnnxInterop.{cs,Export.cs,Import.cs,NonTensor.cs,Text.cs}` (dtype maps, the export and import verbs,
   non-tensor outputs, text tensors), `OnnxCodecMode.cs`, `OrtTensor.cs` (the `OrtTensor` / `OrtTensor<T>` handles and the
-  `ImportLease`), `UnmanagedMemoryManager.cs` (a `Memory<T>` over the unmanaged buffer),
-  `InferenceSessionExtensions{,.Async}.cs`; `Postprocess.cs` is one source file compiled into both bridges
-  (`src/NumSharp.Interop.Shared/`). ONNX Runtime's C# sources are vendored for reference at `refs/onnxruntime/csharp/` (a
+  `ImportLease`), `OrtDisposalProbe.cs` (reads ORT's private `_disposed` flags, so a disposed session or value throws
+  `ObjectDisposedException`), `OrtValueBooking.cs` (books a `ToOrtValue` result's bytes through an `IPinnable` token it
+  stores in ORT's private `OrtValue._memHandle`), `UnmanagedMemoryManager.cs` (a `Memory<T>` over the unmanaged buffer),
+  `InferenceSessionExtensions{,.Async}.cs`, `RunOutputs.cs` (the result dictionary, an `INDArrayCarrier`), `Postprocess.cs`
+  (the one public `Postprocess`: the ML.NET bridge references this package for it). ONNX Runtime's C# sources are vendored for reference at `refs/onnxruntime/csharp/` (a
   sparse submodule), its official samples at `refs/onnxruntime-inference-examples/c_sharp/`.
 - `OnnxCodecMode { Auto, View, Copy }` (the members of the pythonnet codec's `NumpyCodecMode`) on every entry that could
   share memory: Auto is a view when ORT can read the buffer in place (C-contiguous and a bit-exact dtype), else a copy
   the handle owns; View throws instead of copying; Copy always copies.
 - Export: `nd.AsOrtValue(mode)` (an `OrtValue` over the NumSharp buffer, held by the ARC-rooted handle `OrtTensor`, whose
-  `IsView` says view or copy), `nd.ToOrtValue()` (an ORT-allocated copy), `AsDenseTensor<T>(mode)` / `ToDenseTensor<T>`
+  `IsView` says view or copy), `nd.ToOrtValue()` (an ORT-allocated copy that ORT frees: NumSharp never frees memory a
+  native holder such as `OrtIoBinding` may still read, it only BOOKS the bytes until `Dispose(true)` releases the token's
+  `MemoryHandle` or the token's finalizer runs), `AsDenseTensor<T>(mode)` / `ToDenseTensor<T>`
   (ORT's legacy tier, always row-major).
-- Import: `ortValue.ToNDArray()` (an owning copy), `ortValue.AsNDArray(ownsValue, mode)` (a zero-copy lease over ORT's
+- Import: `ortValue.ToNDArray()` (an owning copy; the legacy tier's `DenseTensor<T>`, any `Tensor<T>` - what
+  `AsTensor<T>()` is declared to return, a non-dense one densified first - and `NamedOnnxValue` copy the same way),
+  `ortValue.AsNDArray(ownsValue, mode)` (a zero-copy lease over ORT's
   buffer, CPU only; a counted NumSharp alias for a value the package made). Imports of NumSharp memory (a value the
-  package made, a fed input passed through) are counted aliases that inherit read-only; only an OWNING view adds GC
-  memory pressure. Importing a tensor of 2 GB or more that ORT owns is refused up front: ORT exposes tensor memory only as
+  package made, a fed input passed through) are counted aliases that inherit read-only. A view books
+  (`SizeBucketedBufferPool.BookForeign`) the memory it keeps alive: an OWNING view its ORT buffer - not over a value that
+  carries a `MemoryHandle` (a `ToOrtValue` result is booked already; a `CreateTensorValueFromMemory` value's memory is
+  counted elsewhere or not freed with it) - and a `DenseTensor<T>` view the MANAGED array it pins (`MemoryMarshal.TryGetArray`;
+  a legacy output's native buffer books nothing). Every lease over a pinned managed array books (this one, ML.NET's,
+  Tensors'): the GC counts the array, but a forgotten view's pin keeps it alive past the collection that found the view
+  dead, and unbooked forgotten views of large arrays grew to 1.9-2.7 GB. Importing a tensor of 2 GB or more that ORT owns is refused up front: ORT exposes tensor memory only as
   an `int`-length Span.
 - `session.Run(NDArray…)`: input names from the model metadata (overridable initializers and `optional(tensor)` inputs
   included), NumPy-`casting` dtype coercion checked on every call, declared-shape validation, copy / owning-view outputs.
@@ -82,8 +94,13 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   refused under View). `session.RunIntoAsync` / `RunAsync` + `IsRunAsyncSupported` are ORT's native async (ORT 1.30.0 or
   later, a session with two or more intra-op threads; `RunAsync` allocates only a numeric output of a fixed declared
   shape). `Postprocess.{Softmax,LogSoftmax,Sigmoid,Argmax,TopK}`.
-- Depends on `Microsoft.ML.OnnxRuntime.Managed [1.16.0, 2.0.0)` only: the native flavours (CPU, Gpu, DirectML) are
-  mutually exclusive, so the consumer picks one.
+- Depends on `Microsoft.ML.OnnxRuntime.Managed` 1.16.0 or later, with NO upper bound (the form ORT's own packages
+  declare it in), only: the native flavours (CPU, Gpu, DirectML) are mutually exclusive, so the consumer picks one. A
+  cap below a consumer's ONNX Runtime is a restore ERROR (NU1107), and the ML.NET bridge references this package, so a
+  cap would fail ML.NET users too. The bridge uses ORT's public C# API plus the private `_disposed` flags
+  `OrtDisposalProbe` reads (a missing field turns its check off) and the private `OrtValue._memHandle` slot
+  `OrtValueBooking` writes (a missing or retyped field leaves `ToOrtValue` unbooked; `ToOrtValueBookingTests` asserts
+  the slot exists), so a breaking ORT major shows at run time; CI's advisory "newest" step (floating `*-*`) sees it first.
 - Dtypes: 12 zero-copy, including a Half↔Float16 bit reinterpretation; Char→UInt16; Decimal→Double through a temp the
   handle owns (Auto / Copy; `Run` needs `casting: "same_kind"`); text: fixed-width `U` / `S` ↔ ORT string tensors, always
   a copy (a trailing NUL is lost; the bridge casts no text ↔ number pair: the caller's `astype` does); a `StringDType`
@@ -121,8 +138,12 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   numeric output, `Run`, `RunAsync` / `RunIntoAsync` over the fixed-shape LabelEncoder model - `RunAsync` cannot allocate
   for an output declared without dimensions -, the declared rank validated, StringNormalizer stopwords removing elements
   down to one empty string, eight concurrent string runs). The `interop-test` CI job
-  runs it against ONNX Runtime 1.16.0 (the async tests Inconclusive, the refusal tested) and 1.31.0 (the only leg that
-  runs the async tests: never set it below 1.30.0), with no Python. Mutation runs restore a file from memory only: copy
+  runs it against ONNX Runtime 1.16.0 (the async tests Inconclusive, the refusal tested) and 1.31.1, the current
+  release (the only gating leg that runs the async tests: never set it below 1.30.0), and (advisory) against the newest
+  `Microsoft.ML.OnnxRuntime` on nuget.org, release candidates included, with no Python. Its "Package consumer:" steps
+  (`src/NumSharp.Interop.{OnnxRuntime,MLNet}/tools/verify_package_consumer.sh`) pack the two bridges into a throwaway
+  local feed under a pre-release version unique to the run (`openblas.md`) and run a consumer that restores them by
+  `PackageReference`, so the package that ships is the one gated. Mutation runs restore a file from memory only: copy
   untracked files out of the tree before one.
 - Docs: `docs/website-src/docs/interop/onnxruntime.md` (on the site's Interoperability toc since 0.80.0-beta1).
 - Example: `examples/NumSharpOnnxRuntimeExample` (regular csproj form over the published 0.80.0-beta1; no workflow runs
@@ -131,22 +152,35 @@ None of these computes NumSharp operations: each converts tensors between NumSha
 
 ### `NumSharp.Interop.MLNet` (released from 0.80.0-beta1)
 
-- `NDArrayMLNetInterop` verbs, `NDArrayDataView`, `Postprocess`. Sources (`src/NumSharp.Interop.MLNet/`):
+- `NDArrayMLNetInterop` verbs, `NDArrayDataView`; `Postprocess` is the ONNX Runtime bridge's, which this package
+  references (`NumSharp.Interop.OnnxRuntime.Postprocess`: one public type, no CS0104 in an app that uses both). Sources
+  (`src/NumSharp.Interop.MLNet/`):
   `NDArrayMLNetInterop.{cs,Export.cs,Import.cs}` (dtype maps, the export verbs, `ToNDArray` and the zero-copy
   `VBuffer.AsNDArray<T>` with `WrapExternal` / `Pin` / `LiveExports` / `LiveImports`), `NDArrayDataView.cs` (the
-  NDArray-backed `IDataView`, its strided lazy cursor and ARC-pin lifetime), `VBufferAccessor.cs` (the compiled-expression
-  getter for the private `VBuffer<T>._values`), `ImportLease.cs` (the GCHandle pin that the last view releases),
-  `Postprocess.cs`.
+  NDArray-backed `IDataView`, its strided lazy cursor - shuffled through a per-cursor permutation when ML.NET passes a
+  `Random`, `CanShuffle` true - and ARC-pin lifetime), `VBufferAccessor.cs` (the compiled-expression
+  getter for the private `VBuffer<T>._values`), `ImportLease.cs` (the GCHandle pin that the last view releases; it books
+  the pinned bytes with `SizeBucketedBufferPool.BookForeign`, never one `GC.AddMemoryPressure` per lease).
 - Export: `nd.AsDataView(colName)` (a vector column: a lazy `IDataView` that reads the NumSharp buffer through its
-  strides, any layout, ARC-pinned; `NDArrayDataView` is `IDisposable`), `nd.AsDataView(string[])` (one scalar column per
-  feature), `nd.ToDataView(…)` (a snapshot), `nd.ToVBuffer<T>()` (a copy).
+  strides, any layout, ARC-pinned; `NDArrayDataView` is `IDisposable`), `columns.AsDataView()` over an
+  `IReadOnlyDictionary<string, NDArray>` (one column per array, each its own dtype and strides, equal rows, every pin
+  taken or none; `NDArrayDataView` holds an array of `Source`s and each `ColumnPlan` names its source),
+  `nd.AsDataView(string[])` (one scalar column per
+  feature; a repeated name is refused, ordinal as in ML.NET, because ML.NET would hide the earlier column),
+  `nd.ToDataView(…)` (a snapshot), `nd.ToVBuffer<T>()` (a copy).
 - Import: `view.ToNDArray("col")` (a scalar column → `(R,)`, a fixed-size vector column → `(R,C)`),
   `vbuffer.AsNDArray<T>()` (zero-copy over a dense `VBuffer`'s private `T[]` through the compiled-expression accessor
   `VBufferAccessor<T>`: pinned, write-through, leased; sparse or empty → a copy), `vbuffer.ToNDArray()` (a copy).
 - Feeding a model: `transformer.Transform(nd.AsDataView("Features")).ToNDArray("Score")`. `IDataView` is the whole
   bridge, so there is no per-transformer runner and no `ITransformer` dependency.
-- Depends on `Microsoft.ML.DataView [2.0.0, 6.0.0)` only. There is no standalone `Microsoft.ML.Data` package:
-  `ITransformer`/`MLContext` are in the full `Microsoft.ML` the consumer brings, which NuGet unifies upward.
+- Depends on `Microsoft.ML.DataView` 2.0.0 or later, with NO upper bound (the form `Microsoft.ML` itself declares it
+  in), and on `NumSharp.Interop.OnnxRuntime` for `Postprocess` (bringing `Microsoft.ML.OnnxRuntime.Managed`, the C# API
+  only, about 250 KB, never loaded by `Postprocess`). A cap below a consumer's `Microsoft.ML` is a restore ERROR (NU1107, cousin ranges that do
+  not overlap): the former `[2.0.0, 6.0.0)` would have failed every user's restore the day they moved to ML.NET 6. The
+  bridge uses ML.NET's public data contract plus the private `VBuffer<T>._values`, whose accessor falls back to a copy,
+  so a breaking ML.NET major shows at run time; CI's advisory "newest" step (floating `*-*`) sees it first. There is no
+  standalone `Microsoft.ML.Data` package: `ITransformer`/`MLContext` are in the full `Microsoft.ML` the consumer
+  brings, which NuGet unifies upward.
 - Dtypes: 11 direct, plus Char→UInt16 one way; Half→Single (lossless) and Decimal→Double converted by the view verbs
   into an owned temp; Complex refused (ML.NET has no half, decimal or complex column type). Rank 1–2 only.
 - `VBuffer` zero-copy is one-directional. Import is zero-copy through reflected compiled-expression access to the
@@ -169,7 +203,8 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   lands on key 0 and the twin is `np.unique` over the non-empty texts; a `na_object=nan` NA is refused by `AsStringArray`,
   `tolist()` is the route; `TokenizeIntoWords` rows are `np.char.split`'s and ragged rows refuse `np.array` with
   numpy's `ValueError`; a `TextLoader` CSV's numbers cross the bridge as `np.loadtxt` reads them, quoted text by the
-  route). The `interop-test` CI job runs it against ML.NET 2.0.1 and 4.0.2, with no Python.
+  route). The `interop-test` CI job runs it against ML.NET 2.0.1 (the floor), 5.0.1 (current) and 4.0.2 (the previous
+  major), and (advisory) against the newest `Microsoft.ML` on nuget.org, previews included, with no Python.
 - Docs: `docs/website-src/docs/interop/mlnet.md` (on the site's Interoperability toc since 0.80.0-beta1).
 - Example: `examples/NumSharpMLNetExample` (regular csproj form over the published 0.80.0-beta1 and Microsoft.ML 5.0.1;
   no workflow runs it): a binary classifier trained from a `(rows, 5)` array as five scalar columns with the label
@@ -183,7 +218,8 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   NumSharp buffer for any non-negative-stride layout (strided, transposed and broadcast included), ARC-pinned. `.Span` /
   `.ReadOnlySpan` are rebuilt on each access, because a ref struct cannot be stored.
 - `nd.ToTensor<T>()` (a dense copy), `tensor.ToNDArray()` (an owning copy), `tensor.AsNDArray()` (a zero-copy view over
-  the tensor's pinned buffer), `span.ToNDArray()` (a copy).
+  the tensor's pinned buffer; its `ImportLease` in `TensorSpanHandle.cs` books the pinned bytes with `BookForeign` until
+  the last view releases the pin), `span.ToNDArray()` (a copy).
 - Routing NumSharp's kernels through `TensorPrimitives` would abandon bit parity with NumPy, so the package only converts.
 - Depends on `System.Numerics.Tensors [10.0.0, 11.0.0)` only, pinned to 10.x because `Tensor<T>`/`TensorSpan<T>` are
   `[Experimental("SYSLIB5001")]`; the package re-marks its surface `[Experimental("NUMSHARP_TENSORS")]`, so a consumer

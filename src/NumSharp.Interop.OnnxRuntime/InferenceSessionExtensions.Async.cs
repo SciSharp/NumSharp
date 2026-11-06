@@ -96,9 +96,10 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <exception cref="ArgumentNullException"><paramref name="session"/>, <paramref name="inputs"/> or <paramref name="outputs"/> is null, or a name or array in them is null.</exception>
         /// <exception cref="NotSupportedException">The loaded ONNX Runtime is older than 1.30.0; an input or an output is not a tensor of a dtype NumSharp has; or an input is a <c>StringDType</c> array (cast it to a sized <c>U</c> first).</exception>
         /// <exception cref="ArgumentException">
-        ///     <paramref name="outputs"/> is empty; the model has no input or output of a given name; a shape contradicts
-        ///     the declared one; two outputs overlap in memory; or the array for an output that is a fed input does not
-        ///     have that input's shape.
+        ///     <paramref name="outputs"/> is empty; the model has no input or output of a given name; a required input is
+        ///     missing from <paramref name="inputs"/> (checked before anything is read); a shape contradicts the declared
+        ///     one; two outputs overlap in memory; or the array for an output that is a fed input does not have that
+        ///     input's shape.
         /// </exception>
         /// <exception cref="ValueError"><paramref name="casting"/> is not one of the five rule names.</exception>
         /// <exception cref="TypeError"><paramref name="casting"/> is null, Python's None: NumPy's <c>casting must be str, not NoneType</c>.</exception>
@@ -108,7 +109,7 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     An output array is read-only, not C-contiguous, not of the declared dtype or text; or <paramref name="mode"/>
         ///     is <see cref="OnnxCodecMode.View"/> and an input needs a copy (a cast, a layout, or an overlap with an output).
         /// </exception>
-        /// <exception cref="ObjectDisposedException">An input's or an output's buffer has already been released.</exception>
+        /// <exception cref="ObjectDisposedException">An input's or an output's buffer has already been released, or the session has been disposed.</exception>
         public static Task RunIntoAsync(this InferenceSession session, IReadOnlyDictionary<string, NDArray> inputs,
             IReadOnlyDictionary<string, NDArray> outputs, RunOptions runOptions = null, string casting = "safe",
             OnnxCodecMode mode = OnnxCodecMode.Auto)
@@ -120,10 +121,13 @@ namespace NumSharp.Interop.OnnxRuntime
             if (outputs is null)
                 throw new ArgumentNullException(nameof(outputs));
             EnsureRunAsyncSupported(nameof(RunIntoAsync), nameof(RunInto));
+            OrtDisposalProbe.ThrowIfDisposed(session, nameof(RunIntoAsync));   // see Run: a disposed session would end the process
             NPY_CASTING rule = DTypeCasting.ParseCasting(casting);
             NDArrayOnnxInterop.EnsureDefined(mode);
             if (outputs.Count == 0)
                 throw new ArgumentException("no output was given: a run needs at least one output to write.", nameof(outputs));
+            // A required input the feed leaves out is refused before anything is read (it used to fail inside the graph).
+            RequireEveryInput(session, inputs.Keys);
 
             var run = new PendingRun(session, runOptions, inputs.Count, outputs.Count, allocated: null);
             try
@@ -158,11 +162,14 @@ namespace NumSharp.Interop.OnnxRuntime
         /// </summary>
         /// <remarks>
         ///     <para><b>Which outputs it can allocate.</b> A tensor of a numeric dtype whose declared shape is fixed (every
-        ///     dimension a number), and an output that is a fed input passed through, which takes the fed input's
-        ///     shape. For any other output the method throws <see cref="NotSupportedException"/> before it reads an
-        ///     input, and the message says what to do:</para>
-        ///     <para>- a dimension the model fixes only at run time (<c>'batch'</c>): allocate the array yourself, with
-        ///     the shape you expect, and call <see cref="RunIntoAsync"/>;</para>
+        ///     dimension a number) or whose run-time dimensions are NAMED in an input's declaration (<c>'batch_size'</c> on
+        ///     the input and the output: the fed array's extent is the output's, as ONNX gives one symbolic name one
+        ///     extent), and an output that is a fed input passed through, which takes the fed input's shape. For any other
+        ///     output the method throws <see cref="NotSupportedException"/> before it reads an input, and the message
+        ///     says what to do:</para>
+        ///     <para>- a dimension the model fixes only at run time that no input names (unnamed, as in the
+        ///     scikit-learn exports): allocate the array yourself, with the shape you expect, and call
+        ///     <see cref="RunIntoAsync"/>;</para>
         ///     <para>- a declaration without dimensions: it is a scalar or a tensor of unknown rank, and ONNX Runtime's
         ///     metadata does not tell which, so the method does not guess; <see cref="RunIntoAsync"/> takes a 0-d
         ///     array;</para>
@@ -189,13 +196,13 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     remarks); an input is not a tensor of a dtype NumSharp has; or an input is a <c>StringDType</c> array (cast it
         ///     to a sized <c>U</c> first).
         /// </exception>
-        /// <exception cref="ArgumentException"><paramref name="outputNames"/> is empty; the model has no input or output of a given name; or an input's shape contradicts the declared one.</exception>
+        /// <exception cref="ArgumentException"><paramref name="outputNames"/> is empty; the model has no input or output of a given name; a required input is missing from <paramref name="inputs"/> (checked before anything is read); the fed arrays give one symbolic dimension two extents; or an input's shape contradicts the declared one.</exception>
         /// <exception cref="ValueError"><paramref name="casting"/> is not one of the five rule names.</exception>
         /// <exception cref="TypeError"><paramref name="casting"/> is null, Python's None: NumPy's <c>casting must be str, not NoneType</c>.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a member of <see cref="OnnxCodecMode"/>.</exception>
         /// <exception cref="InvalidCastException">An input's dtype does not cast to the declared one under <paramref name="casting"/>.</exception>
         /// <exception cref="InvalidOperationException"><paramref name="mode"/> is <see cref="OnnxCodecMode.View"/> and an input needs a copy.</exception>
-        /// <exception cref="ObjectDisposedException">An input's buffer has already been released.</exception>
+        /// <exception cref="ObjectDisposedException">An input's buffer has already been released, or the session has been disposed.</exception>
         public static Task<IReadOnlyDictionary<string, NDArray>> RunAsync(this InferenceSession session, IReadOnlyDictionary<string, NDArray> inputs,
             IReadOnlyCollection<string> outputNames = null, RunOptions runOptions = null, string casting = "safe",
             OnnxCodecMode mode = OnnxCodecMode.Auto)
@@ -205,17 +212,25 @@ namespace NumSharp.Interop.OnnxRuntime
             if (inputs is null)
                 throw new ArgumentNullException(nameof(inputs));
             EnsureRunAsyncSupported(nameof(RunAsync), nameof(Run));
+            OrtDisposalProbe.ThrowIfDisposed(session, nameof(RunAsync));   // see Run: a disposed session would end the process
             NPY_CASTING rule = DTypeCasting.ParseCasting(casting);
             NDArrayOnnxInterop.EnsureDefined(mode);
 
             // Everything the model's declarations decide is decided here, before an input is read: an output that
             // cannot be allocated costs no cast and no copy.
+            // The feed first, as in every form: a required input the feed leaves out is refused before the outputs are
+            // judged and before anything is read (it used to fail inside the graph).
+            RequireEveryInput(session, inputs.Keys);
             string[] names = DistinctOutputNames(outputNames ?? session.OutputNames);
+            // The named run-time dimensions the fed arrays fix (their shapes only: no buffer is read here).
+            Dictionary<string, long> symbols = BindSymbols(session, inputs);
             var declared = new NodeMetadata[names.Length];
             for (int j = 0; j < names.Length; j++)
-                declared[j] = AllocatableOutput(session, names[j], isFed: inputs.ContainsKey(names[j]));
+                declared[j] = AllocatableOutput(session, names[j], isFed: inputs.ContainsKey(names[j]), symbols);
 
-            var allocated = new Dictionary<string, NDArray>(names.Length);
+            // Allocated HERE, inside any scope the caller has open: a carrier, so scope.ReturnsTask can hand the outputs
+            // back when the task completes instead of disposing them under the caller (RunOutputs).
+            var allocated = new RunOutputs(names.Length);
             var run = new PendingRun(session, runOptions, inputs.Count, names.Length, allocated);
             try
             {
@@ -226,7 +241,7 @@ namespace NumSharp.Interop.OnnxRuntime
                     // the dimensions; every other output has the fixed shape its declaration states.
                     OrtTensor fed = FedTensor(names[j], run.InNames, run.InHandles);
                     NDArray array = fed is null
-                        ? new NDArray(NDArrayOnnxInterop.FromTensorElementType(declared[j].ElementDataType), DeclaredShape(declared[j]), fillZeros: false)
+                        ? new NDArray(NDArrayOnnxInterop.FromTensorElementType(declared[j].ElementDataType), DeclaredShape(declared[j], symbols), fillZeros: false)
                         : new NDArray(NDArrayOnnxInterop.FromTensorElementType(fed.ElementType), NDArrayOnnxInterop.ShapeFrom(fed.ShapeNoCopy), fillZeros: false);
                     allocated.Add(names[j], array);   // from here on the run disposes it when it fails
                     run.OutHandles[j] = PrepareOutput(session, names[j], array);
@@ -307,13 +322,22 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     allocate it before the run: a tensor, of a numeric dtype NumSharp has, and either a fed input passed
         ///     through (its shape comes from what is fed) or declared with a fixed shape.
         /// </summary>
+        /// <remarks>
+        ///     A dimension the model fixes only at run time is known before the run when it is NAMED and the same name
+        ///     appears in an input's declaration: ONNX gives one symbolic name one extent in a graph, so the fed array's
+        ///     extent is the output's (<see cref="BindSymbols"/>). That is what the zoo's and Hugging Face's exports
+        ///     declare (ResNet50's <c>'N'</c>, MobileNetV2's and MiniLM's <c>'batch_size'</c> / <c>'sequence_length'</c>),
+        ///     which this method refused until it read the bindings. An unnamed dimension (the scikit-learn exports'), or a
+        ///     name no input declares, is still refused.
+        /// </remarks>
         /// <param name="session">The session whose metadata declares the output.</param>
         /// <param name="name">The output's name.</param>
         /// <param name="isFed"><c>true</c> when the caller feeds an input of this name, so the output is that input passed through.</param>
+        /// <param name="symbols">The extents of the named symbolic dimensions the fed inputs bind (<see cref="BindSymbols"/>).</param>
         /// <returns>The output's tensor declaration.</returns>
         /// <exception cref="ArgumentException">The model has no output named <paramref name="name"/>.</exception>
         /// <exception cref="NotSupportedException">The output is not a numeric tensor NumSharp has a dtype for, or its shape is not known before the run.</exception>
-        private static NodeMetadata AllocatableOutput(InferenceSession session, string name, bool isFed)
+        private static NodeMetadata AllocatableOutput(InferenceSession session, string name, bool isFed, IReadOnlyDictionary<string, long> symbols)
         {
             if (!session.OutputMetadata.TryGetValue(name, out NodeMetadata meta))
                 throw new ArgumentException($"the model has no output named '{name}'; its outputs are [{string.Join(", ", session.OutputNames)}].", nameof(name));
@@ -337,22 +361,96 @@ namespace NumSharp.Interop.OnnxRuntime
                     $"RunAsync: output '{name}' is declared without dimensions. That is a scalar or a tensor of unknown rank, and ONNX Runtime's " +
                     "metadata does not tell which, so its array cannot be allocated before the run. Allocate it yourself (a 0-d array for a scalar) " +
                     "and call RunIntoAsync.");
-            foreach (int d in dims)
+            for (int i = 0; i < dims.Length; i++)
             {
-                if (d < 0)
-                    throw new NotSupportedException(
-                        $"RunAsync: output '{name}' is declared with the shape {DescribeDims(meta)}, which has a dimension the model fixes only at run " +
-                        "time, so its array cannot be allocated before the run. Allocate it yourself, with the shape this run produces, and call RunIntoAsync.");
+                if (dims[i] >= 0 || SymbolOf(meta, i) is { } symbol && symbols.ContainsKey(symbol))
+                    continue;   // fixed, or a named dimension a fed input binds
+                throw new NotSupportedException(
+                    $"RunAsync: output '{name}' is declared with the shape {DescribeDims(meta)}, which has a dimension the model fixes only at run " +
+                    "time and no input names, so its array cannot be allocated before the run. Allocate it yourself, with the shape this run " +
+                    "produces, and call RunIntoAsync.");
             }
 
             return meta;
         }
 
-        /// <summary>The fixed shape a declaration states, as a NumSharp shape.</summary>
-        /// <param name="meta">A declaration <see cref="AllocatableOutput"/> accepted as fixed.</param>
-        /// <returns>The shape (ONNX Runtime reports the dimensions as 32-bit numbers).</returns>
-        private static Shape DeclaredShape(NodeMetadata meta) =>
-            NDArrayOnnxInterop.ShapeFrom(Array.ConvertAll(meta.Dimensions, d => (long)d));
+        /// <summary>
+        ///     The shape of the array <see cref="RunAsync"/> allocates for an output: each fixed dimension as declared, each
+        ///     named run-time dimension as the fed inputs bind it.
+        /// </summary>
+        /// <param name="meta">A declaration <see cref="AllocatableOutput"/> accepted.</param>
+        /// <param name="symbols">The bindings of <see cref="BindSymbols"/>.</param>
+        /// <returns>The shape (ONNX Runtime reports the fixed dimensions as 32-bit numbers).</returns>
+        private static Shape DeclaredShape(NodeMetadata meta, IReadOnlyDictionary<string, long> symbols)
+        {
+            int[] dims = meta.Dimensions;
+            var extents = new long[dims.Length];
+            for (int i = 0; i < dims.Length; i++)
+                extents[i] = dims[i] >= 0 ? dims[i] : symbols[SymbolOf(meta, i)];   // AllocatableOutput checked the binding
+            return NDArrayOnnxInterop.ShapeFrom(extents);
+        }
+
+        /// <summary>The name of a declaration's dimension <paramref name="i"/>, or null when it has none (a fixed or an unnamed one).</summary>
+        /// <param name="meta">A tensor declaration.</param>
+        /// <param name="i">The dimension's index.</param>
+        /// <returns>The symbolic name, or null.</returns>
+        private static string SymbolOf(NodeMetadata meta, int i)
+        {
+            string[] symbolic = meta.SymbolicDimensions;
+            return symbolic is not null && i < symbolic.Length && !string.IsNullOrEmpty(symbolic[i]) ? symbolic[i] : null;
+        }
+
+        /// <summary>
+        ///     The extent of every named run-time dimension the fed arrays fix: for each fed input whose array has the
+        ///     declared rank, each dimension declared with a symbolic name takes the array's extent along it.
+        /// </summary>
+        /// <remarks>
+        ///     Only the shapes are read, never a buffer, so a released input is still refused where its buffer is first
+        ///     read, as before. An input of another rank binds nothing (its preparation refuses it with the rank message).
+        ///     One name bound to two extents is refused here, before anything is read: ONNX Runtime would fail the run, and
+        ///     the arrays this method allocates would have the first extent.
+        /// </remarks>
+        /// <param name="session">The session whose metadata declares the inputs.</param>
+        /// <param name="inputs">The fed arrays by name (a null array binds nothing; the preparation refuses it).</param>
+        /// <returns>Symbol name → extent.</returns>
+        /// <exception cref="ArgumentException">A symbolic name is given two different extents by the fed arrays.</exception>
+        private static Dictionary<string, long> BindSymbols(InferenceSession session, IReadOnlyDictionary<string, NDArray> inputs)
+        {
+            var bound = new Dictionary<string, long>(StringComparer.Ordinal);
+            var boundBy = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (KeyValuePair<string, NDArray> input in inputs)
+            {
+                if (input.Key is null || input.Value is null)
+                    continue;
+                if (!session.InputMetadata.TryGetValue(input.Key, out NodeMetadata meta) &&
+                    !session.OverridableInitializerMetadata.TryGetValue(input.Key, out meta))
+                    continue;   // an unknown name is refused, with the list of inputs, by the feed check
+                if (meta.OnnxValueType == OnnxValueType.ONNX_TYPE_OPTIONAL)
+                    meta = meta.AsOptionalMetadata().ElementMeta;
+                if (!meta.IsTensor || meta.Dimensions is null)
+                    continue;
+                long[] shape = input.Value.Shape.Dimensions;
+                if (shape.Length != meta.Dimensions.Length)
+                    continue;
+                for (int i = 0; i < shape.Length; i++)
+                {
+                    if (meta.Dimensions[i] >= 0 || SymbolOf(meta, i) is not { } symbol)
+                        continue;
+                    if (bound.TryGetValue(symbol, out long extent))
+                    {
+                        if (extent != shape[i])
+                            throw new ArgumentException(
+                                $"RunAsync: the dimension '{symbol}' is {extent} in input '{boundBy[symbol]}' but {shape[i]} in input '{input.Key}'; " +
+                                "ONNX declares one extent per symbolic name, so the run would fail.", nameof(inputs));
+                        continue;
+                    }
+                    bound.Add(symbol, shape[i]);
+                    boundBy.Add(symbol, input.Key);
+                }
+            }
+
+            return bound;
+        }
 
         // ---- one run in flight ---------------------------------------------------------------------
 

@@ -40,7 +40,9 @@ namespace NumSharp
     ///     yielded array into the parent scope, so an enclosing scope still reclaims an inner
     ///     call's result if the caller drops it.</para>
     ///     <para><b>Threading.</b> The current scope is <c>[ThreadStatic]</c>: a scope is opened,
-    ///     used and disposed on ONE thread (asserted in debug builds; a HAND-WRITTEN scope must not
+    ///     used and disposed on ONE thread (a <see cref="Dispose"/> on another thread throws
+    ///     <see cref="InvalidOperationException"/> in every build and leaves the scope's arrays to the
+    ///     finalizer; the other members assert it in debug builds; a HAND-WRITTEN scope must not
     ///     span <c>await</c> — the weaver's state-machine seam (driven by <c>[NDScopedAsync]</c> for
     ///     async methods/iterators and by <c>[NDScoped]</c> for synchronous iterators) is the one
     ///     thing that may carry a scope across suspensions, because it uninstalls the scope before
@@ -79,8 +81,19 @@ namespace NumSharp
             _tracked = new List<NDArray>(16);
         }
 
-        /// <summary>The innermost open scope on the current thread, or <c>null</c>.</summary>
-        internal static NDScope Current => t_current;
+        /// <summary>
+        ///     The innermost LIVE scope on the current thread, or <c>null</c>. A scope a foreign-thread
+        ///     <see cref="Dispose"/> refused can still sit on top of this thread's chain; it is skipped (and popped, see
+        ///     <see cref="SkipRefused"/>), so nothing reads it as open.
+        /// </summary>
+        internal static NDScope Current
+        {
+            get
+            {
+                var s = t_current;
+                return s is null || !s._disposed ? s : SkipRefused();
+            }
+        }
 
         /// <summary>Opens a scope on the current thread; nests (the previous scope resumes on dispose).</summary>
         public static NDScope Open()
@@ -96,7 +109,30 @@ namespace NumSharp
 
             s._threadId = Environment.CurrentManagedThreadId;
             s._deferred = false;
-            s._parent = t_current;
+            s._parent = Current;   // never a refused scope: a child of one would re-track its yields into it
+            t_current = s;
+            return s;
+        }
+
+        /// <summary>
+        ///     Pops every scope a foreign-thread <see cref="Dispose"/> REFUSED off the top of the current thread's
+        ///     chain and returns the innermost live scope. Such a scope is still this thread's current one - the
+        ///     refusal ran on the other thread and could not touch this thread's <c>[ThreadStatic]</c> chain - but it
+        ///     must track nothing more: it will never be disposed, so whatever it held would be held forever.
+        /// </summary>
+        /// <remarks>
+        ///     The rare path of <see cref="Track"/>, <see cref="Open"/>, <see cref="Attach"/>, <see cref="Current"/> and
+        ///     the resume seam, kept out of line so the hot tracking path stays one null test and one flag test. A
+        ///     refused scope keeps its <c>_parent</c> (the refusal throws before the unlink), which is what lets the
+        ///     walk reach the opening thread's previous scope.
+        /// </remarks>
+        /// <returns>The innermost live scope on this thread (now also <c>t_current</c>), or <c>null</c> when none is open.</returns>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static NDScope SkipRefused()
+        {
+            var s = t_current;
+            while (s is not null && s._disposed)
+                s = s._parent;
             t_current = s;
             return s;
         }
@@ -112,6 +148,15 @@ namespace NumSharp
             var s = t_current;
             if (s is null)
                 return;
+            if (s._disposed)
+            {
+                // A scope a foreign-thread Dispose refused is still this thread's current one: skip past it. The flag
+                // is written by that other thread and read here without a barrier; a stale read only tracks one more
+                // array into the refused scope (left to the finalizer with the rest), it never frees one.
+                s = SkipRefused();
+                if (s is null)
+                    return;
+            }
             nd.TrackingScope = s;
             nd.TrackingIndex = s._tracked.Count;
             s._tracked.Add(nd);
@@ -135,6 +180,11 @@ namespace NumSharp
 
             _tracked[nd.TrackingIndex] = null;   // O(1) unregister; Dispose skips holes
             var parent = _parent;
+            // A parent a foreign-thread Dispose refused will never be disposed: re-tracking into it would hold the
+            // yielded array forever, so the yield goes to the nearest live ancestor instead (a normally disposed
+            // parent is spliced out of its children's chain, so only a refused one is met here).
+            while (parent is not null && parent._disposed)
+                parent = parent._parent;
             if (parent is null)
             {
                 nd.TrackingScope = null;
@@ -327,7 +377,7 @@ namespace NumSharp
         /// </summary>
         public static void Attach(NDArray nd)
         {
-            var s = t_current;
+            var s = Current;   // the live scope: a refused one adopts nothing (it is never disposed)
             if (nd is null || s is null || ReferenceEquals(nd.TrackingScope, s))
                 return;
             var old = nd.TrackingScope;
@@ -374,12 +424,44 @@ namespace NumSharp
         public static void Anchor(object reference) => GC.KeepAlive(reference);
 
         /// <summary>Disposes every tracked non-yielded array and reinstates the parent scope.</summary>
+        /// <remarks>
+        ///     Must run on the thread that opened the scope (or, for the weaver's seams, the thread that re-stamped it on
+        ///     resumption). On any other thread it is REFUSED in every build: the scope is marked disposed so its
+        ///     opening thread stops tracking into it, nothing is unlinked, freed or pooled, its tracked arrays are left
+        ///     to the finalizer, and the call throws.
+        /// </remarks>
+        /// <exception cref="InvalidOperationException">
+        ///     The call runs on a thread other than the scope's own - typically a hand-written scope held across an
+        ///     <c>await</c>, whose end runs on the continuation's thread. A second call on any thread is a no-op.
+        /// </exception>
         public void Dispose()
         {
             if (_disposed) return;
+            // Held across an `await`, a hand-written scope reaches its end on the CONTINUATION's thread (F83 of the
+            // bridge QA). Disposing it there unlinked nothing on the opening thread - its chain is [ThreadStatic] - so
+            // that thread kept the scope as its current one and tracked its later arrays into it; the scope was then
+            // pooled on the foreign thread, reused by the next scope opened there, and its close freed the opening
+            // thread's arrays (7.0 read back as 9.0): a cross-thread use-after-free that the Debug-only assert this
+            // replaces never caught in Release. So the foreign thread refuses, BEFORE anything is unlinked, freed or
+            // pooled:
+            //  - _disposed is set first: the opening thread skips the scope from now on (Track / Open / Attach /
+            //    Current / the resume seam via SkipRefused, Returns' parent walk);
+            //  - the tracked list is not touched, because the opening thread may still be appending to it: its arrays
+            //    fall to the finalizer backstop, safe and merely not eager;
+            //  - the scope is never pooled, so no scope opened on any thread can ever be this object again.
+            // The weaver's seams re-stamp _threadId before they dispose on a resuming thread (DisposeSlot and the
+            // ReturnsTask continuations), so this refuses only a scope carried across threads by hand.
+            if (_threadId != Environment.CurrentManagedThreadId)
+            {
+                _disposed = true;
+                throw new InvalidOperationException(
+                    "NDScope.Dispose ran on a different thread than the one that opened the scope: a hand-written scope " +
+                    "held across an 'await' ends on the continuation's thread. NumSharp refused to close it there, because " +
+                    "closing it would free arrays the opening thread still uses; its arrays are left to the finalizer. " +
+                    "Close the scope before the 'await' and open another after it, or mark the async method " +
+                    "[NDScopedAsync], which carries one scope across awaits correctly.");
+            }
             _disposed = true;
-            Debug.Assert(_threadId == Environment.CurrentManagedThreadId,
-                "NDScope must be disposed on the thread that opened it.");
 
             // Unlink from the thread's scope stack. In-order disposal — the weaver's
             // try/finally and every `using` — is the fast path: this IS the innermost
@@ -475,7 +557,7 @@ namespace NumSharp
         private static void Resume(NDScope s)
         {
             s._threadId = Environment.CurrentManagedThreadId;
-            s._parent = t_current;
+            s._parent = Current;   // never a refused scope (see SkipRefused)
             t_current = s;
         }
 

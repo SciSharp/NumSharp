@@ -76,16 +76,17 @@ namespace NumSharp.Interop.OnnxRuntime
         private static long _importPressureBytes;
 
         /// <summary>
-        ///     The bytes of ORT memory currently reported to the GC as memory pressure (<c>GC.AddMemoryPressure</c>) by
-        ///     import views that OWN their <see cref="OrtValue"/>. A diagnostic for the tests: the GC offers no way to read
-        ///     back what was reported, and the rule "only an owning view reports, once, and takes it back when it dies"
-        ///     has no other observable effect. A steady non-zero value with no live owning view is a pressure leak (the GC
-        ///     then collects more often for the life of the process).
+        ///     The bytes currently booked with NumSharp's memory accounting (<c>SizeBucketedBufferPool.BookForeign</c>: the
+        ///     GC hears about them as memory pressure) by import views: ORT memory of views that OWN their
+        ///     <see cref="OrtValue"/>, and the managed arrays <c>DenseTensor&lt;T&gt;</c> views pin. A diagnostic for the
+        ///     tests: the rule "a view books what it keeps alive, once, and gives it back when it dies" has no other
+        ///     observable effect. A steady non-zero value with no such live view is a booking leak (the GC then collects
+        ///     more often for the life of the process).
         /// </summary>
         internal static long ImportPressureBytes => Interlocked.Read(ref _importPressureBytes);
 
-        /// <summary>Records memory pressure added (positive) or removed (negative) by an import lease.</summary>
-        /// <param name="delta">The byte count just passed to <c>GC.AddMemoryPressure</c>, or minus the count just passed to <c>GC.RemoveMemoryPressure</c>.</param>
+        /// <summary>Records bytes booked (positive) or given back (negative) by an import lease.</summary>
+        /// <param name="delta">The byte count just booked, or minus the count just given back.</param>
         internal static void ImportPressureChanged(long delta) => Interlocked.Add(ref _importPressureBytes, delta);
 
         // ===================================  the dtype map  ===================================
@@ -379,18 +380,25 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     process, where a .NET caller expects <see cref="ObjectDisposedException"/>.
         /// </summary>
         /// <remarks>
-        ///     Only values THIS package made are known to it. A value of ONNX Runtime's own that the caller disposed cannot
-        ///     be recognized through the public API, and using it fails as it does anywhere in ONNX Runtime.
+        ///     A value THIS package made is known by its handle. Any other value - a <see cref="ToOrtValue"/> result, a
+        ///     value of ONNX Runtime's own <c>Run</c> - that the caller disposed is told by ONNX Runtime's private disposal
+        ///     flag (<see cref="OrtDisposalProbe"/>): reading such a value was an access violation in
+        ///     <c>OrtValue.GetTensorTypeAndShape()</c> that ended the process. On an ONNX Runtime without that field the
+        ///     second check is skipped and such a value fails as it does anywhere in ONNX Runtime.
         /// </remarks>
         /// <param name="value">The value an import verb was given (not null).</param>
         /// <param name="verb">The public verb, named in the message.</param>
-        /// <exception cref="ObjectDisposedException">The value belongs to an <see cref="OrtTensor"/> handle that has been disposed.</exception>
+        /// <exception cref="ObjectDisposedException">The value belongs to an <see cref="OrtTensor"/> handle that has been disposed, or has been disposed itself.</exception>
         internal static void EnsureNotOfADisposedHandle(OrtValue value, string verb)
         {
             if (OrtTensor.IsValueOfDisposedHandle(value))
                 throw new ObjectDisposedException(nameof(OrtTensor),
                     $"{verb}: this OrtValue belongs to an OrtTensor handle that has been disposed. ONNX Runtime has released the value, and the " +
                     "NumSharp buffer behind it is no longer pinned. Read or view the value before the handle is disposed.");
+            if (OrtDisposalProbe.IsDisposed(value))
+                throw new ObjectDisposedException(nameof(OrtValue),
+                    $"{verb}: this OrtValue has been disposed. ONNX Runtime has released the native value, and reading it would end the " +
+                    "process (ONNX Runtime does not check this itself). Read or view the value before it is disposed.");
         }
 
         /// <summary>The OrtValue must hold a dense tensor for any NDArray verb to apply.</summary>

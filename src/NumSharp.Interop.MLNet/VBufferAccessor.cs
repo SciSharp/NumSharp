@@ -12,7 +12,7 @@ namespace NumSharp.Interop.MLNet
     ///     <para><see cref="VBuffer{T}"/> exposes its values publicly only as a <see cref="ReadOnlySpan{T}"/>
     ///     (<see cref="VBuffer{T}.GetValues"/>) — a span cannot be rooted for the lifetime of an <see cref="NDArray"/>
     ///     view. But a dense <see cref="VBuffer{T}"/> is backed by a managed <c>T[]</c> in the private field
-    ///     <c>_values</c> (verified across ML.NET 2.0.0 / 3.0.0 / 4.0.2 — the layout has been stable since the 1.0
+    ///     <c>_values</c> (verified across ML.NET 2.0.0 / 3.0.0 / 4.0.2 / 5.0.1 and the 6.0 previews — the layout has been stable since the 1.0
     ///     redesign), and that array CAN be pinned and wrapped. This reads it through a delegate compiled ONCE per
     ///     <typeparamref name="T"/> from an expression tree (no per-call reflection, no boxing — a plain field load),
     ///     the same technique the pythonnet bridge uses to reach a foreign buffer.</para>

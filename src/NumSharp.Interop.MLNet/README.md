@@ -31,11 +31,12 @@ trainers, transforms) you already reference — NuGet unifies the DataView depen
 | Verb | Direction | What it does |
 |------|-----------|--------------|
 | `nd.AsDataView("Features")` | NumSharp → ML.NET | An `IDataView` with **one vector column**: a 2-D `(R, C)` array becomes `R` rows of a length-`C` `VBuffer`; a 1-D `(C,)` array becomes one row (a single sample). Read lazily through the array's strides (any layout), ARC-pinned. |
-| `nd.AsDataView(new[]{"a","b",...})` | NumSharp → ML.NET | An `IDataView` with **one scalar column per feature** (the tabular / training-data shape). |
-| `nd.ToDataView(...)` | NumSharp → ML.NET | Same, over an independent snapshot (no lifetime coupling to the source). |
+| `nd.AsDataView(new[]{"a","b",...})` | NumSharp → ML.NET | An `IDataView` with **one scalar column per feature** (the tabular / training-data shape); every name distinct (a repeat would hide the earlier column, so it throws). |
+| `columns.AsDataView()` | NumSharp → ML.NET | An `IDataView` with **one column per array** of an `IReadOnlyDictionary<string, NDArray>`: a 2-D array is a vector column, a 1-D array a scalar column, each in its own dtype and layout, all with the same rows (a `Features` matrix and a `Label` vector in one view). |
+| `nd.ToDataView(...)`, `columns.ToDataView()` | NumSharp → ML.NET | Same, over an independent snapshot (no lifetime coupling to the source). |
 | `nd.ToVBuffer<T>()` | NumSharp → ML.NET | A dense `VBuffer<T>` (a copy — see [zero-copy note](#zero-copy-and-vbuffer)). |
 | `view.ToNDArray("col")` | ML.NET → NumSharp | Materialize a column across all rows: a scalar column → 1-D `(R,)`; a fixed-size vector column → 2-D `(R, C)`. |
-| `vbuffer.AsNDArray<T>()` | ML.NET → NumSharp | A **zero-copy** 1-D view over a dense `VBuffer<T>`'s own backing array (write-through), pinned for the view's lifetime; sparse/empty fall back to a copy. |
+| `vbuffer.AsNDArray<T>()` | ML.NET → NumSharp | A **zero-copy** 1-D view over a dense `VBuffer<T>`'s own backing array (write-through), pinned for the view's lifetime and booked with NumSharp's memory accounting meanwhile (so a forgotten view is collected like a forgotten NumSharp array); sparse/empty fall back to a copy. |
 | `vbuffer.ToNDArray()` | ML.NET → NumSharp | A dense 1-D `NDArray` copy (sparse buffers are densified). |
 
 ### Zero-copy and VBuffer
@@ -47,13 +48,15 @@ valid only while that array is not refilled — a VBuffer from a cursor getter r
 so use `ToNDArray()` (a copy) there; zero-copy is safe for a standalone VBuffer you own.
 
 The **reverse** direction (`NDArray → VBuffer`) cannot be zero-copy: `VBuffer<T>` is backed by a managed
-`T[]` at every ML.NET version (verified 2.0.0 / 3.0.0 / 4.0.2 — no `ReadOnlyMemory<T>`, no non-public
+`T[]` at every ML.NET version (verified 2.0.0 / 3.0.0 / 4.0.2 / 5.0.1 and the 6.0 previews — no `ReadOnlyMemory<T>`, no non-public
 constructor), and a managed array cannot alias NumSharp's unmanaged buffer. `ToVBuffer<T>` copies. (The bulk
 NumSharp→ML.NET path — `AsDataView` — is already zero-copy on its source; the VBuffer is a per-vector
 convenience.)
 
 `Postprocess.{Softmax, LogSoftmax, Sigmoid, Argmax, TopK}` turn a score column into a prediction with
-`np.*` compositions instead of hand-written loops.
+`np.*` compositions instead of hand-written loops. The class is `NumSharp.Interop.OnnxRuntime.Postprocess`: this
+package references the ONNX Runtime bridge for it (`using NumSharp.Interop.OnnxRuntime;`), so an app that uses both
+bridges has one `Postprocess`, and calling it never loads ONNX Runtime.
 
 ## Dtypes
 

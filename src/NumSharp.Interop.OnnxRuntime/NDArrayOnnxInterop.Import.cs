@@ -40,7 +40,7 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <exception cref="NotSupportedException">Not a dense tensor; a BFloat16 element type; or a tensor of more than 2 GB.</exception>
         /// <exception cref="ArgumentException">The tensor's shape has a negative (symbolic) dimension.</exception>
         /// <exception cref="InvalidOperationException">The tensor lives in device memory the CPU cannot address, or ORT reports a byte count its shape contradicts.</exception>
-        /// <exception cref="ObjectDisposedException">The value is one this package made and its handle has been disposed (before the call, or while the value was read).</exception>
+        /// <exception cref="ObjectDisposedException">The value is one this package made and its handle has been disposed (before the call, or while the value was read), or the value itself has been disposed.</exception>
         public static unsafe NDArray ToNDArray(this OrtValue value)
         {
             if (value is null)
@@ -147,7 +147,7 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <exception cref="NotSupportedException">Not a dense tensor; a BFloat16 element type; or a tensor of more than 2 GB that ORT owns.</exception>
         /// <exception cref="ArgumentException">The tensor's shape has a negative (symbolic) dimension.</exception>
         /// <exception cref="InvalidOperationException">The tensor lives in device memory the CPU cannot address; or it is a string tensor and <paramref name="mode"/> is <see cref="OnnxCodecMode.View"/>.</exception>
-        /// <exception cref="ObjectDisposedException">The value is one this package made and its handle has been disposed (before the call, or while the view was built).</exception>
+        /// <exception cref="ObjectDisposedException">The value is one this package made and its handle has been disposed (before the call, or while the view was built), or the value itself has been disposed.</exception>
         public static unsafe NDArray AsNDArray(this OrtValue value, bool ownsValue = false, OnnxCodecMode mode = OnnxCodecMode.Auto)
         {
             if (value is null)
@@ -215,11 +215,14 @@ namespace NumSharp.Interop.OnnxRuntime
             // Owning: the last view disposes the OrtValue. Non-owning: the closure ROOTS the OrtValue for the
             // life of the lease (the lease is referenced from the memory block's dispose hook), so the value's
             // finalizer cannot free the buffer while a view still reads it.
-            // Only the owning lease reports the buffer to the GC: its bytes live exactly as long as the view. A
-            // non-owning view's bytes belong to the caller's OrtValue, and reporting them once per view made the GC
-            // collect more for memory no collection can free.
+            // Only the owning lease books the buffer with NumSharp's accounting: its bytes live exactly as long as the view.
+            // A non-owning view's bytes belong to the caller's OrtValue, and reporting them once per view made the GC
+            // collect more for memory no collection can free. Neither books a value that carries a MemoryHandle: a
+            // ToOrtValue result is booked already (its token is that handle), and a value made over memory ORT does not own
+            // (CreateTensorValueFromMemory) is counted elsewhere or not freed with the value at all.
             Action release = ownsValue ? value.Dispose : () => GC.KeepAlive(value);
-            var lease = new ImportLease(release, ownedBytes: ownsValue ? raw.Length : 0);
+            bool booksBytes = ownsValue && !OrtValueBooking.HasMemoryHandle(value);
+            var lease = new ImportLease(release, ownedBytes: booksBytes ? raw.Length : 0);
             try
             {
                 IArraySlice slice = WrapExternal(tc, data, count, lease.Release);
@@ -421,6 +424,40 @@ namespace NumSharp.Interop.OnnxRuntime
         }
 
         /// <summary>
+        ///     Copy any ORT legacy <see cref="Tensor{T}"/> into a fresh owning C-contiguous <see cref="NDArray"/> - the type
+        ///     <c>DisposableNamedOnnxValue.AsTensor&lt;T&gt;()</c> is DECLARED to return, so ORT's tutorial lines
+        ///     <c>Tensor&lt;float&gt; output = results.First().AsTensor&lt;float&gt;(); NDArray scores = output.ToNDArray();</c>
+        ///     compile as written.
+        /// </summary>
+        /// <remarks>
+        ///     <para>Every tensor ORT itself returns is a <see cref="DenseTensor{T}"/>: it takes
+        ///     <see cref="ToNDArray{T}(DenseTensor{T})"/>'s copy unchanged, column-major included (and an expression whose
+        ///     static type is <c>DenseTensor&lt;T&gt;</c> binds to that overload directly - it is the more specific match).
+        ///     Any other <see cref="Tensor{T}"/> - ORT ships none, but the type is public and abstract, so a caller can have
+        ///     one - is densified by its own <see cref="Tensor{T}.ToDenseTensor"/> (element by element through its
+        ///     <c>GetValue</c>) and that copy is copied, so the result never aliases the tensor; the
+        ///     <see cref="ToNDArray(NamedOnnxValue)"/> dispatch reads such a tensor the same way.</para>
+        ///     <para>Without this overload the call bound to nothing and C# reported CS1929 against the <c>OrtValue</c>
+        ///     overload, which pointed readers at the wrong verb (F71 of the bridge QA).</para>
+        /// </remarks>
+        /// <typeparam name="T">The tensor's element type: bool, the eight integers, <see cref="char"/>, <see cref="Float16"/>, <see cref="Half"/>, float or double.</typeparam>
+        /// <param name="tensor">The tensor to copy; any <see cref="Tensor{T}"/>, row- or column-major.</param>
+        /// <returns>A new owning C-contiguous array holding the tensor's elements in logical (row-major) order.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="tensor"/> is null.</exception>
+        /// <exception cref="NotSupportedException"><typeparamref name="T"/> has no NumSharp dtype (BFloat16, ...); refused before a non-dense tensor is densified.</exception>
+        /// <exception cref="ObjectDisposedException">The tensor's memory is a NumSharp buffer whose <see cref="OrtTensor{T}"/> handle has been disposed.</exception>
+        public static NDArray ToNDArray<T>(this Tensor<T> tensor) where T : unmanaged
+        {
+            if (tensor is null)
+                throw new ArgumentNullException(nameof(tensor));
+            if (tensor is DenseTensor<T> dense)
+                return dense.ToNDArray();
+            // Refuse an element type with no dtype BEFORE paying for the densifying copy of a tensor that cannot cross.
+            TypeCodeOf<T>();
+            return tensor.ToDenseTensor().ToNDArray();
+        }
+
+        /// <summary>
         ///     Copies <paramref name="nbytes"/> bytes from a pinned tensor buffer into a freshly allocated array — the one
         ///     copy both layouts of <see cref="ToNDArray{T}(DenseTensor{T})"/> share, with the byte count in a
         ///     <see cref="long"/> so a tensor past 2 GB crosses.
@@ -452,7 +489,11 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     <para><b>Modes.</b> A dense tensor can always be viewed, so <see cref="OnnxCodecMode.Auto"/> and
         ///     <see cref="OnnxCodecMode.View"/> do the same here; <see cref="OnnxCodecMode.Copy"/> returns what
         ///     <see cref="ToNDArray{T}(DenseTensor{T})"/> returns.</para>
-        ///     <para>The view reports no memory pressure to the GC: it never owns the tensor's memory.</para>
+        ///     <para><b>Memory accounting.</b> A view of a managed array books the array's viewed bytes with NumSharp's memory
+        ///     accounting until the pin is released: the pin keeps the array alive, and a forgotten view would otherwise keep
+        ///     it alive past the collection that found the view dead (5,000 forgotten views of fresh 602 KB tensors held
+        ///     +1.9-2.4 GB unbooked). A view of a legacy output books nothing: its results collection owns the memory. A
+        ///     view never owns or frees the tensor's memory either way.</para>
         /// </remarks>
         /// <typeparam name="T">The tensor's element type: bool, the eight integers, <see cref="Float16"/>, float or double.</typeparam>
         /// <param name="tensor">The tensor to view; row- or column-major.</param>
@@ -493,13 +534,16 @@ namespace NumSharp.Interop.OnnxRuntime
             // results, the OrtValue's finalizer freed the native buffer under the view and the next run's output showed
             // through it (20 of 20 rounds in a probe). The tensor holds its Memory, the Memory its manager, the manager
             // its OrtValue: keeping the tensor reachable keeps the buffer valid until the last view dies.
-            // No memory pressure: the view owns none of these bytes. A managed array is already counted by the GC, and a
-            // legacy output's native buffer belongs to its results collection.
+            // A pinned MANAGED array is booked with NumSharp's accounting: the GC counts the array, but the pin keeps it
+            // alive until the last view dies, so a forgotten view's array survives the collection that found the view dead
+            // and the GC collects less often (5,000 forgotten views of fresh 602 KB tensors held +1,880-2,373 MB unbooked;
+            // P8 Q3, 2026-11-06). A legacy output's native buffer is not booked: its results collection owns and frees it.
+            long pinnedBytes = MemoryMarshal.TryGetArray<T>(tensor.Buffer, out _) ? count * sizeof(T) : 0;
             var lease = new ImportLease(() =>
             {
                 handle.Dispose();
                 GC.KeepAlive(tensor);
-            }, ownedBytes: 0);
+            }, ownedBytes: pinnedBytes);
             try
             {
                 IArraySlice slice = WrapExternal(tc, handle.Pointer, count, lease.Release);

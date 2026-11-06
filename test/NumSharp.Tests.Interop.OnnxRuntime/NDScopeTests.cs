@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using AwesomeAssertions;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -242,6 +243,66 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
 
             lease.IsDisposed.Should().BeTrue();
             NDArrayOnnxInterop.LiveImports.Should().Be(baseline);
+        }
+        /// <summary>
+        ///     <c>RunAsync</c> allocates its outputs when the call STARTS, inside the caller's scope. Handed out with
+        ///     <see cref="NDScope.ReturnsTask{TResult}"/> - its deferral honored through <see cref="NDScope.CloseUnlessDeferred"/>,
+        ///     the form the weaver emits - the outputs reach the caller alive: the result dictionary is an
+        ///     <see cref="INDArrayCarrier"/>, so the scope yields them when the task completes instead of disposing them. As a
+        ///     plain dictionary they were disposed, and once the run let go of its reference the caller read freed memory (the
+        ///     pool's next array: 55.5 where relu's 0.5 belonged; F84 of the release QA).
+        /// </summary>
+        /// <returns>The test's task.</returns>
+        [TestMethod]
+        public async Task RunAsync_HandedOutWithReturnsTask_OutputsReachTheCaller()
+        {
+            if (!InferenceSessionExtensions.IsRunAsyncSupported)
+                Assert.Inconclusive($"ONNX Runtime {OrtEnv.Instance().GetVersionString()}: the asynchronous run needs 1.30.0 or newer. The suite's ORT 1.31.0 leg runs this test.");
+            using var options = new SessionOptions { IntraOpNumThreads = 2 };
+            using var session = new InferenceSession(Model("fixed_shape_f32"), options);
+            float[] values = Enumerable.Range(0, 48).Select(i => i - 24.5f).ToArray();
+            using NDArray x = np.array(values).reshape(1, 3, 4, 4);
+
+            Task<IReadOnlyDictionary<string, NDArray>> task;
+            NDScope scope = NDScope.Open();
+            try
+            {
+                task = scope.ReturnsTask(session.RunAsync(new Dictionary<string, NDArray> { ["data"] = x }));
+            }
+            finally
+            {
+                // A plain `using` would dispose the scope here and lose the deferral: only CloseUnlessDeferred reads it.
+                NDScope.CloseUnlessDeferred(scope);
+            }
+
+            IReadOnlyDictionary<string, NDArray> outputs = await task;
+            Churn(values.Length * sizeof(float));
+            using NDArray y = outputs["relu"];
+            y.IsDisposed.Should().BeFalse("the scope yielded the output to its caller");
+            y.ToArray<float>().Should().Equal(values.Select(v => Math.Max(v, 0f)));
+        }
+
+        /// <summary>
+        ///     The dictionary every <c>Run(dict)</c> form returns is a carrier too, so a woven <c>[NDScoped]</c> member - or a
+        ///     scope handing a task's result out - yields the outputs it returns.
+        /// </summary>
+        [TestMethod]
+        public void RunDictionary_IsAnNDArrayCarrier_InBothOutputForms()
+        {
+            using InferenceSession session = OpenSession("passthrough");
+            using NDArray x = np.array(new float[] { 1, -2, 3 });
+            IReadOnlyDictionary<string, NDArray> copied = session.Run(new Dictionary<string, NDArray> { ["X"] = x });
+            IReadOnlyDictionary<string, NDArray> viewed = session.Run(new Dictionary<string, NDArray> { ["X"] = x }, zeroCopyOutputs: true);
+            try
+            {
+                copied.Should().BeAssignableTo<INDArrayCarrier>();
+                viewed.Should().BeAssignableTo<INDArrayCarrier>();
+            }
+            finally
+            {
+                foreach (NDArray output in copied.Values.Concat(viewed.Values))
+                    output.Dispose();
+            }
         }
     }
 }

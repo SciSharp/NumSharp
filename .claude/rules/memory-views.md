@@ -151,5 +151,17 @@ Gate: `Manipulation/TypedReshapeViewShapeTests.cs`.
 - A cache line, not a page: a page boundary would cost up to 4 KB a buffer and put every stream of a many-operand kernel
   (`np.evaluate`, `np.where`) in the same cache set at each step; the distance between operands' page offsets does not
   change kernel speed.
+- Memory NumSharp did not allocate goes through the pool's accounting, never one `GC.AddMemoryPressure` per object: the
+  GC counts every addition toward its next full collection even after the matching removal, so add-and-remove per
+  object runs gen-2 collections in a loop that disposes everything (45 per 5,000 ORT owning views of 602 KB).
+  `AccountForeignAllocation` / `AccountForeignRelease` are for memory NumSharp allocates outside the buckets (VirtualAlloc
+  blocks, StringDType arenas) and count as hand-outs. `BookForeign` / `ReturnForeign` are for memory a foreign runtime
+  owns that NumSharp keeps alive or handed out (a `ToOrtValue` result, an ORT owning view's lease, a pythonnet view's
+  lease), and for a MANAGED array a view pins (the ML.NET, Tensors and ORT `DenseTensor<T>` leases: the GC counts the
+  array, but a forgotten view's pin keeps it alive past the collection that found the view dead, and unbooked forgotten
+  views of large arrays grew to 1.9-2.7 GB). They move the outstanding total and its 64 MiB pressure chunks, and pace one gen-0 collection per
+  `PaceThresholdBytes` of net GROWTH of the bookings, but are NOT hand-outs. A booking counted as a hand-out made the next
+  ordinary pool miss pace a collection in a loop that disposed every view. Gate:
+  `Backends/Unmanaged/ForeignBookingTests.cs`.
 - Gates: `Backends/Unmanaged/PoolBufferAlignmentTests.cs`, and the unit suite in a Debug build (where the `Debug.Assert`
   on the returned size is live).

@@ -1,16 +1,11 @@
 using System;
 
-// ONE source file, compiled into every inference bridge that offers post-processing. Each bridge project links this
-// file and defines the symbol that selects its namespace, so a fix lands once and every bridge gets it. The public
-// type keeps the same name in each bridge; a file that imports two bridges names the one it wants with a using alias
-// (using Post = NumSharp.Interop.OnnxRuntime.Postprocess;), because two types of one name are otherwise CS0104.
-#if NUMSHARP_INTEROP_ONNXRUNTIME
+// Post-processing lives in the ONNX Runtime bridge alone, where raw logits come from. The ML.NET bridge references this
+// package and so exposes the very same type: there is ONE public Postprocess (NumSharp.Interop.OnnxRuntime.Postprocess).
+// It used to be one source file compiled into both bridges under each bridge's namespace, which gave an app that
+// imports both namespaces two types of one name (CS0104), and an F# script the silent "last namespace opened wins".
+// The owner's decision of 2026-11-03 (the 0.80.0-beta1 QA's F16 / P6).
 namespace NumSharp.Interop.OnnxRuntime
-#elif NUMSHARP_INTEROP_MLNET
-namespace NumSharp.Interop.MLNet
-#else
-#error Postprocess.cs is compiled only into a bridge project that defines NUMSHARP_INTEROP_ONNXRUNTIME or NUMSHARP_INTEROP_MLNET.
-#endif
 {
     /// <summary>
     ///     The output side of inference as NumSharp compositions instead of hand-written loops: the softmax, argmax

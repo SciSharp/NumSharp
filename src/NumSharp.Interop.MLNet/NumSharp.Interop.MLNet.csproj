@@ -18,7 +18,7 @@
     <Product>NumSharp</Product>
     <Company>SciSharp STACK</Company>
     <Copyright>2021 © SciSharp STACK Team</Copyright>
-    <Description>Interop between NumSharp NDArray and ML.NET (Microsoft.ML) data. Expose an NDArray to an ML.NET pipeline as an IDataView over the very same unmanaged buffer (no row-by-row POCO fill, no copy — read lazily through the array's strides), read a transformer's output column back as an NDArray, and convert to/from ML.NET's VBuffer vector primitive. Conversion library only: no engine backend, no ModuleInitializer, no native dependency — depends on the standalone Microsoft.ML.DataView contract package, and composes with whatever Microsoft.ML (MLContext, trainers, transforms) you already reference.</Description>
+    <Description>Interop between NumSharp NDArray and ML.NET (Microsoft.ML) data. Expose an NDArray to an ML.NET pipeline as an IDataView over the very same unmanaged buffer (no row-by-row POCO fill, no copy — read lazily through the array's strides), read a transformer's output column back as an NDArray, and convert to/from ML.NET's VBuffer vector primitive. Conversion library only: no engine backend, no ModuleInitializer, no native dependency — depends on the standalone Microsoft.ML.DataView contract package (2.0.0 or later) and on NumSharp.Interop.OnnxRuntime for post-processing (Softmax, Argmax, TopK), and composes with whatever Microsoft.ML (MLContext, trainers, transforms) you already reference.</Description>
     <PackageTags>NumSharp;NumPy;MLNet;ML.NET;Microsoft.ML;IDataView;VBuffer;DataView;machine-learning;interop;scientific-computing</PackageTags>
     <PackageProjectUrl>https://scisharp.github.io/NumSharp/docs/interop/mlnet.html</PackageProjectUrl>
     <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
@@ -41,21 +41,21 @@
     <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
   </ItemGroup>
 
-  <!-- Post-processing (softmax, argmax, top-k) is ONE source file that every inference bridge compiles, so a fix
-       lands once. The symbol selects this bridge's namespace inside the shared file; without it the file stops the
-       build with an #error, so a new bridge cannot link it and silently land in the wrong namespace. -->
-  <PropertyGroup>
-    <DefineConstants>$(DefineConstants);NUMSHARP_INTEROP_MLNET</DefineConstants>
-  </PropertyGroup>
-  <ItemGroup>
-    <Compile Include="..\NumSharp.Interop.Shared\Postprocess.cs" Link="Postprocess.cs" />
-  </ItemGroup>
-
   <ItemGroup>
     <!-- In-repo: ProjectReference (packs as a NuGet dependency on "NumSharp" $(Version)). -->
     <ProjectReference Include="../NumSharp.Core/NumSharp.Core.csproj" />
 
-    <!-- The ONLY external dependency: the standalone `Microsoft.ML.DataView` package — the contract half of
+    <!-- Post-processing (Softmax, LogSoftmax, Sigmoid, Argmax, TopK) comes from the ONNX Runtime bridge: this package
+         references it (packs as a NuGet dependency on "NumSharp.Interop.OnnxRuntime" $(Version)), so an ML.NET user
+         calls NumSharp.Interop.OnnxRuntime.Postprocess - the one public Postprocess, where it used to be a second copy
+         compiled into this bridge (CS0104 in an app that imported both; the owner's decision of 2026-11-03, F16).
+         What it costs an ML.NET-only user: the ONNX Runtime bridge and its Microsoft.ML.OnnxRuntime.Managed - the C#
+         API only (about 250 KB, no native library), resolved at its floor 1.16.0 unless the app references another -
+         with System.Memory (and, from ONNX Runtime 1.2x, System.Numerics.Tensors 9). Postprocess touches no ONNX
+         Runtime type, so calling it never loads ONNX Runtime. -->
+    <ProjectReference Include="../NumSharp.Interop.OnnxRuntime/NumSharp.Interop.OnnxRuntime.csproj" />
+
+    <!-- The only ML.NET dependency: the standalone `Microsoft.ML.DataView` package — the contract half of
          ML.NET (IDataView, VBuffer<T>, DataViewSchema, DataViewType, the Number/Boolean/Vector types).
          Deliberately NOT the full `Microsoft.ML`: ML.NET's runtime, trainers and transforms
          (MLContext, ITransformer, the pipeline API) live in `Microsoft.ML`, and every consumer who runs a
@@ -66,12 +66,13 @@
          `transformer.Transform(nd.AsDataView("Features")).ToNDArray("Score")` bridges the whole pipeline with
          two conversions and no per-transformer runner.
 
-         The range is BOTH knobs (the same lesson as the ONNX Runtime and pythonnet pins):
+         The range is OPEN - 2.0.0 or later - the form Microsoft.ML itself declares this same dependency in
+         (Microsoft.ML 5.0.1's nuspec: Microsoft.ML.DataView version="5.0.1"). Its floor is BOTH knobs:
 
-         (a) FLOOR = what we compile against. The managed assembly is strong-named and bumps its
-             AssemblyVersion every release; .NET rolls FORWARD to a newer one but a consumer whose resolved
-             version is OLDER than the one we compiled against gets a hard FileLoadException. So the compiled
-             reference IS the real minimum. 2.0.0 (Nov 2022) exposes every member used here — IDataView,
+         (a) FLOOR = the API we compile against. Binding is never the issue: Microsoft.ML.DataView keeps
+             AssemblyVersion 1.0.0.0 in every release (2.0.0, 2.0.1, 4.0.2, 4.0.3, 5.0.1 and the 6.0 previews
+             checked; only the file version moves), so any resolved version binds. The floor is about members:
+             2.0.0 (Nov 2022) exposes every member used here — IDataView,
              DataViewSchema.Builder, NumberDataViewType / BooleanDataViewType / VectorDataViewType,
              DataViewRowCursor / DataViewRow.GetGetter, VBuffer<T>(int, T[]) and VBufferEditor, DataViewRowId —
              all of which have existed since 1.0.0; 2.0.0 is a conservative, widely-deployed floor.
@@ -80,9 +81,21 @@
              version, so NuGet unifies upward to THAT. In practice the consumer's ML.NET version wins; this
              floor only stops an ancient one from sneaking in.
 
-         The upper bound keeps a future ML.NET 6.x (free to break the API) from being resolved automatically.
-         Verified against 2.0.0 (the floor) and current by the test project's MLNetVersion matrix. -->
-    <PackageReference Include="Microsoft.ML.DataView" Version="[2.0.0,6.0.0)" />
+         (c) NO UPPER BOUND, on purpose. A cap below the consumer's Microsoft.ML is not a guard but a restore
+             ERROR: NuGet resolves cousin ranges that do not overlap as NU1107, so the former [2.0.0, 6.0.0) would
+             have failed every bridge user's restore the day they moved to Microsoft.ML 6.0.0 (the 0.80.0-beta1 QA,
+             F52: a stand-in capped at [2.0.0, 4.0.0) beside Microsoft.ML 4.0.2 fails restore with NU1107; its open
+             twin restores). Nor did a cap ever keep a future ML.NET from being resolved: NuGet resolves the lowest
+             applicable version, and a consumer gets a newer Microsoft.ML.DataView only through their own
+             Microsoft.ML. The bridge uses ML.NET's public data contract plus one private field, VBuffer<T>._values
+             (the zero-copy VBuffer import), and VBufferAccessor falls back to a copy if a future ML.NET renames or
+             retypes it. So a breaking ML.NET major would show at run time, not at restore - which is why CI's
+             advisory "ML.NET: Test newest (net10.0, advisory)" step runs the suite on the newest Microsoft.ML,
+             previews included, to see it first.
+
+         Verified against 2.0.0 (the floor), the current releases and the newest preview by the test project's
+         MLNetVersion matrix. -->
+    <PackageReference Include="Microsoft.ML.DataView" Version="2.0.0" />
   </ItemGroup>
 
 </Project>

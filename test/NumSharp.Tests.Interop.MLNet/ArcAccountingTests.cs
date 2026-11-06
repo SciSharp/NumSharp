@@ -41,7 +41,11 @@ namespace NumSharp.Tests.Interop.MLNet
                 ("AsDataView(column) of a 3-D Half (no conversion)", NPTypeCode.Half, new[] { 2, 3, 4 }, b => b.T, v => v.AsDataView("F")),
                 ("ToDataView(column) of a 3-D Decimal (no snapshot)", NPTypeCode.Decimal, new[] { 2, 3, 4 }, b => b.T, v => v.ToDataView("F")),
                 ("AsDataView(columns) with the wrong name count", NPTypeCode.Double, new[] { 4, 3 }, b => b.T, v => v.AsDataView(new[] { "a" })),
-                ("ToDataView(columns) with an empty name", NPTypeCode.Half, new[] { 4, 2 }, b => b.T, v => v.ToDataView(new[] { "a", "" })),
+                // (2, 4).T is (4, 2): two columns, two names - the name count matches, so the EMPTY name / the REPEAT is
+                // what refuses ((4, 2).T would have four columns, and the name count would refuse first).
+                ("ToDataView(columns) with an empty name", NPTypeCode.Half, new[] { 2, 4 }, b => b.T, v => v.ToDataView(new[] { "a", "" })),
+                ("ToDataView(columns) with a repeated name (no snapshot)", NPTypeCode.Half, new[] { 2, 4 }, b => b.T, v => v.ToDataView(new[] { "a", "a" })),
+                ("AsDataView(columns) of Decimal with a repeated name (no conversion)", NPTypeCode.Decimal, new[] { 2, 4 }, b => b.T, v => v.AsDataView(new[] { "a", "a" })),
                 ("ToDataView of Complex", NPTypeCode.Complex, new[] { 4, 3 }, b => b["::2"], v => v.ToDataView("F")),
                 ("ToVBuffer with the wrong T", NPTypeCode.Half, new[] { 4, 3 }, b => b.T, v => v.ToVBuffer<Half>()),
                 ("ToVBuffer of Complex", NPTypeCode.Complex, new[] { 4, 3 }, b => b.T, v => v.ToVBuffer<double>()),
