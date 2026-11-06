@@ -119,16 +119,29 @@ namespace NumSharp.Backends
                 return yy;
             }
 
-            // Horner accumulates `y = y*x + p[k]`. NumPy lets `y` (starting at zeros_like(x)) grow in
-            // dtype as wider coefficients arrive; the fixed common dtype below is bit-identical because
-            // every widening cast (int->wider, float32->float64, real->complex) is exact and `y` starts
-            // at zero. Computing in `result_type` up front lets the whole loop reuse two buffers.
+            // Horner accumulates `y = y*x + p[k]`. NumPy lets `y` (starting at zeros_like(x)) grow in dtype as wider
+            // coefficients arrive. Its FIRST product is therefore `zeros_like(x) * x` in x's own dtype - 0 * inf a real
+            // NaN, 0 * -3 an integer 0 - which the first add then widens: computed in a complex result_type it would be
+            // complex arithmetic's NaN + NaNj (np.polyval([1+1j], [inf]) is NumPy's nan+1j), in a float one from an
+            // integer x a -0.0. Every later product and add runs in result_type(p, x), which is bit-identical to
+            // NumPy's growing dtype (every widening cast - int->wider, float32->float64, real->complex - is exact once
+            // y holds the widened value), and lets the loop reuse two buffers.
             NPTypeCode t = DTypePromotion.ResultType(p, x);
             NDArray xc = x.astype(t);
-            NDArray y = NewArray(t, x.Shape, true);   // np.zeros(x.shape, t)
+            NDArray y;
+            if (x.typecode == t)
+            {
+                y = NewArray(t, x.Shape, true);   // np.zeros(x.shape, t): the first product already is x's dtype
+                Multiply(y, xc, null, y, null);
+            }
+            else
+            {
+                // NumPy's first y * x with y = zeros_like(x), in x's dtype, then widened for the add.
+                y = Multiply(PolyZerosLike(x), x, x.dtype, null, null).astype(t);
+            }
+            Add(y, p["0"], null, y, null);
 
-            // Iterate from k = 0 so the very first `0 * x` reproduces NumPy's `0*inf -> nan` edge.
-            for (long k = 0; k < n; k++)
+            for (long k = 1; k < n; k++)
             {
                 Multiply(y, xc, null, y, null);
                 Add(y, p[k.ToString()], null, y, null);

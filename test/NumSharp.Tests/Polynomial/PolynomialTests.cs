@@ -92,6 +92,42 @@ namespace NumSharp.Tests.Polynomial
             double.IsNaN(v).Should().BeTrue();
         }
 
+        /// <summary>
+        ///     NumPy's Horner loop starts from <c>y = zeros_like(x)</c>, so its FIRST product <c>y * x</c> is in x's own dtype
+        ///     and only the first add widens it: with complex coefficients and a real infinite x that product is the real
+        ///     NaN of <c>0 * inf</c> (the coefficient's imaginary part survives the add), and with float coefficients and an
+        ///     integer x it is an integer 0 (never -0.0). Raw bits, NumPy 2.4.2's (probed); the 1-D path used to take the
+        ///     first product in result_type(p, x) (the np-layer plan's NL4).
+        /// </summary>
+        [TestMethod]
+        public void Polyval_FirstProduct_IsInXsDtype()
+        {
+            static (long, long) Bits(Complex z) => (BitConverter.DoubleToInt64Bits(z.Real), BitConverter.DoubleToInt64Bits(z.Imaginary));
+            const long NumPyNaN = unchecked((long)0xFFF8000000000000);   // x86's default NaN: 0 * inf
+            using (var r = np.polyval(np.array(new[] { new Complex(1, 1) }), np.array(new[] { double.PositiveInfinity })))
+                Bits((Complex)r.GetValue(0)).Should().Be((NumPyNaN, BitConverter.DoubleToInt64Bits(1.0)), "[1+1j] at [inf] is nan+1j");
+            using (var r = np.polyval(np.array(new[] { new Complex(1, 0) }), np.array(new[] { double.PositiveInfinity })))
+                Bits((Complex)r.GetValue(0)).Should().Be((NumPyNaN, 0L), "[1+0j] at [inf] is nan+0j");
+            using (var r = np.polyval(np.array(new[] { new Complex(1, 1) }), np.array(new[] { double.NegativeInfinity })))
+                Bits((Complex)r.GetValue(0)).Should().Be((NumPyNaN, BitConverter.DoubleToInt64Bits(1.0)), "[1+1j] at [-inf] is nan+1j");
+            using (var r = np.polyval(np.array(new[] { new Complex(1, 1) }), np.array(new[] { float.PositiveInfinity })))
+                Bits((Complex)r.GetValue(0)).Should().Be((NumPyNaN, BitConverter.DoubleToInt64Bits(1.0)), "a float32 x: nan+1j");
+            // After the first add every product is complex: [2, 1+1j] at [inf] is nan+nanj, and [1+1j, 2] at [1, inf]
+            // is [3+1j, nan+nanj].
+            using (var r = np.polyval(np.array(new[] { new Complex(2, 0), new Complex(1, 1) }), np.array(new[] { double.PositiveInfinity })))
+                Bits((Complex)r.GetValue(0)).Should().Be((NumPyNaN, NumPyNaN), "[2, 1+1j] at [inf] is nan+nanj");
+            using (var r = np.polyval(np.array(new[] { new Complex(1, 1), new Complex(2, 0) }), np.array(new[] { 1.0, double.PositiveInfinity })))
+            {
+                Bits((Complex)r.GetValue(0)).Should().Be((BitConverter.DoubleToInt64Bits(3.0), BitConverter.DoubleToInt64Bits(1.0)));
+                Bits((Complex)r.GetValue(1)).Should().Be((NumPyNaN, NumPyNaN));
+            }
+            // An integer x with float coefficients: the first product is the integer 0, so -0.0 + 0 is +0.0.
+            using (var r = np.polyval(np.array(new[] { -0.0 }), np.array(new long[] { -3 })))
+                BitConverter.DoubleToInt64Bits((double)r.GetValue(0)).Should().Be(0L, "[-0.0] at int [-3] is +0.0");
+            using (var r = np.polyval(np.array(new[] { 1.5, -0.0 }), np.array(new long[] { 2, -2 })))
+                r.ToArray<double>().Should().Equal(3.0, -3.0);
+        }
+
         [TestMethod]
         public void Polyval_ZeroDCoeffs_Throws()
         {

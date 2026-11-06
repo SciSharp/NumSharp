@@ -24,8 +24,9 @@ namespace NumSharp.Tests
     //        (Median_Complex_WithANaN_*), and the oracle's complex-median excuse is gone.
     //   NL3  the flat np.prod of float32 / float64 multiplies in SIMD lane order, not NumPy's sequential order: values
     //        differ by an ULP, and a product that overflows before it meets a zero is NaN on one side and 0 on the other.
-    //   NL4  1-D np.polyval with complex coefficients and an infinite real x: NaN+NaNj where NumPy keeps the
-    //        coefficient's imaginary part.
+    //   NL4  FIXED (the plan's D24, 2026-11-06): 1-D np.polyval with complex coefficients and an infinite real x gave
+    //        NaN+NaNj where NumPy keeps the coefficient's imaginary part (its first product is in x's dtype); its tests
+    //        moved to PolynomialTests.Polyval_FirstProduct_IsInXsDtype.
     //   NL5  argument checks in another order than NumPy's: np.nested_iters' converters (and the type of its
     //        no-operand error), np.einsum's out= extent check after its cast check, np.einsum's explicit path not
     //        checked for completeness.
@@ -221,46 +222,6 @@ namespace NumSharp.Tests
             new Action(() => np.max(m, initial: 1)).Should().Throw<TypeError>()
                 .WithMessage("matrix.max() got an unexpected keyword argument 'initial'");
             np.max(m, @out: np.matrix(np.array(new[,] { { 0.0 } }))).GetAtIndex<double>(0).Should().Be(4.0);
-        }
-
-        // ------------------------------------------------------------------
-        // NL4 — 1-D np.polyval computes its first 0 * x in result_type(p, x)
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     <c>np.polyval([1+0j], [inf])</c>: NumPy's Horner loop starts from <c>y = zeros_like(x)</c>, a REAL zero, so its
-        ///     first <c>y * x</c> is the real NaN of <c>0 * inf</c> and <c>+ (1+0j)</c> gives <c>nan+0j</c>. NumSharp's 1-D path
-        ///     (<c>DefaultEngine.Polyval</c>, Backends/Default/Polynomial/Default.Polynomial.cs) allocates <c>y</c> in
-        ///     <c>result_type(p, x)</c>, complex, so the first product is the complex <c>(0+0j) * (inf+0j)</c> = NaN+NaNj.
-        ///     The N-D path already starts in x's dtype.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL4")]
-        public void NpLayer_Polyval_ComplexCoefficient_InfiniteX_ShouldKeepARealZeroImaginaryPart()
-        {
-            using var p = np.array(new[] { new Complex(1, 0) });
-            using var x = np.array(new[] { double.PositiveInfinity });
-            using var r = np.polyval(p, x);
-
-            var z = (Complex)r.GetValue(0);
-            BitConverter.DoubleToInt64Bits(z.Real).Should().Be(unchecked((long)0xFFF8000000000000));
-            BitConverter.DoubleToInt64Bits(z.Imaginary).Should().Be(0L);
-        }
-
-        /// <summary>
-        ///     <c>np.polyval([1+1j], [inf])</c>: NumPy gives <c>nan+1j</c> (the real NaN of <c>0 * inf</c> plus the
-        ///     coefficient); NumSharp gives NaN+NaNj, for the reason of
-        ///     <see cref="NpLayer_Polyval_ComplexCoefficient_InfiniteX_ShouldKeepARealZeroImaginaryPart"/>.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL4")]
-        public void NpLayer_Polyval_ComplexCoefficient_InfiniteX_ShouldKeepTheCoefficientsImaginaryPart()
-        {
-            using var p = np.array(new[] { new Complex(1, 1) });
-            using var x = np.array(new[] { double.PositiveInfinity });
-            using var r = np.polyval(p, x);
-
-            var z = (Complex)r.GetValue(0);
-            BitConverter.DoubleToInt64Bits(z.Real).Should().Be(unchecked((long)0xFFF8000000000000));
-            z.Imaginary.Should().Be(1.0);
         }
 
         // ------------------------------------------------------------------
