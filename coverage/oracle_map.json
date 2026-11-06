@@ -96,6 +96,7 @@
       "matmul_ata": {"ids": ["numpy.matmul"], "note": "a.T @ a - NumPy's syrk shortcut."},
       "maximum_out": {"ids": ["numpy.maximum"], "note": "Aliasing tier: np.maximum with out= aliasing an input."},
       "minimum_out": {"ids": ["numpy.minimum"], "note": "Aliasing tier: np.minimum with out= aliasing an input."},
+      "mintypecode_array": {"ids": ["numpy.mintypecode"], "note": "np.mintypecode(x) of an array (NumPy's docstring form): every element along the first axis gives the array's dtype.char, an empty first axis gives none, and a 0-d array raises NumPy's TypeError (not iterable)."},
       "modf_frac": {"ids": ["numpy.modf"], "note": "The fractional slot of np.modf."},
       "modf_int": {"ids": ["numpy.modf"], "note": "The integral slot of np.modf."},
       "ndarray": {"ids": ["numpy.ndarray"], "note": "np.ndarray(shape, dtype, buffer, offset, strides, order): the ndarray type's constructor (ndarray.__new__), gated by ndarray_ctor.jsonl. The catalog row is the class, which the namespace rules skip."},
