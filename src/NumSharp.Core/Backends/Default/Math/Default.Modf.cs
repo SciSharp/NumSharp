@@ -35,8 +35,9 @@ namespace NumSharp.Backends
         /// <param name="where">Optional bool write mask; masked-off slots of BOTH provided outputs keep
         /// their prior contents.</param>
         /// <returns>The (fractional, integral) pair — a provided output is returned as-is (reference
-        /// identity), an omitted one is a fresh loop-dtype array whose layout follows the input (an
-        /// F-contiguous input yields F-contiguous fresh outputs, matching NumPy).</returns>
+        /// identity); when neither output is provided, both are fresh loop-dtype arrays in NumPy's ufunc
+        /// output layout (the K order of the input and the mask: an F-contiguous input yields F-contiguous
+        /// outputs, a permuted one keeps its memory order; parity QA-36).</returns>
         /// <exception cref="TypeError">Complex input (no loop), or a non-float <paramref name="dtype"/>.</exception>
         /// <exception cref="ValueError">A read-only provided output; a text output under <paramref name="where"/> whose
         /// current text does not parse into the loop dtype (a text output receives the parts as text otherwise).</exception>
@@ -47,6 +48,30 @@ namespace NumSharp.Backends
         public override (NDArray Fractional, NDArray Integral) ModF(
             NDArray nd, DType dtype = null,
             NDArray outFrac = null, NDArray outIntegral = null, NDArray where = null)
+            // Fresh outputs take NumPy's K layout (the kernel writes C, so a non-C K order runs over the transposed input
+            // and both results are relabelled); a caller's out keeps its own layout.
+            => outFrac is null && outIntegral is null
+                ? KOrderUnaryPair(nd, where, (engine: this, dtype), static (s, a, w) => s.engine.ModFCore(a, s.dtype, null, null, w))
+                : ModFCore(nd, dtype, outFrac, outIntegral, where);
+
+        /// <summary>
+        ///     The body of <see cref="ModF"/>: the split into C-ordered fresh outputs (or into the given ones).
+        /// </summary>
+        /// <param name="nd">Input array.</param>
+        /// <param name="dtype">Optional loop dtype override.</param>
+        /// <param name="outFrac">The fractional output, or null.</param>
+        /// <param name="outIntegral">The integral output, or null.</param>
+        /// <param name="where">The bool write mask, or null.</param>
+        /// <returns>The (fractional, integral) pair: fresh C-contiguous arrays of the iteration shape, or the given
+        ///     outputs.</returns>
+        /// <exception cref="TypeError">Complex input (no loop), or a non-float <paramref name="dtype"/>.</exception>
+        /// <exception cref="ValueError">A read-only provided output, or a masked text output whose text does not parse.</exception>
+        /// <exception cref="INumSharpException">The read-only output's ValueError.</exception>
+        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>, an out not same_kind-castable from the
+        ///     loop dtype, or an output that would have to be broadcast/stretched.</exception>
+        private (NDArray Fractional, NDArray Integral) ModFCore(
+            NDArray nd, DType dtype,
+            NDArray outFrac, NDArray outIntegral, NDArray where)
         {
             // NumPy parses both outputs, then where=, before it resolves the loop: with text involved a read-only out or a
             // non-bool mask is reported first; a string dtype= request is then the no-loop text.
@@ -92,8 +117,8 @@ namespace NumSharp.Backends
 
             // The OUT-OF-PLACE kernel reads `source[i]` and writes `frac[i]`/`integral[i]` at the SAME
             // linear index, so `source` AND every write target must share ONE memory layout for the logical
-            // positions to align — the whole family is made C-CONTIGUOUS (an F-contiguous fresh output is
-            // relabelled afterward by np.modf's PreserveFContig). iterShape can carry F/broadcast strides,
+            // positions to align — the whole family is made C-CONTIGUOUS (ModF relabels fresh outputs into
+            // NumPy's layout afterward, KOrderUnaryPair). iterShape can carry F/broadcast strides,
             // so a fresh temp is built from its DIMENSIONS only.
 
             // READ source: a C-contiguous, loop-dtype view in logical order. ascontiguousarray RETURNS THE
@@ -403,7 +428,7 @@ namespace NumSharp.Backends
         /// Route one modf part into its provided output or return the fresh temp. A provided output takes a
         /// masked/cast write (<see cref="np.copyto"/> — same_kind cast, mask honoured) and is returned as-is
         /// (reference identity), disposing the temp; an omitted output returns the fresh temp unchanged
-        /// (the np layer relabels it to the input's F-contiguity via <c>PreserveFContig</c>).
+        /// (<see cref="ModF"/> relabels a fresh pair into NumPy's K layout via <see cref="KOrderUnaryPair{TState}"/>).
         /// </summary>
         /// <param name="temp">The computed part (contiguous, loop dtype).</param>
         /// <param name="output">The provided output, or null.</param>

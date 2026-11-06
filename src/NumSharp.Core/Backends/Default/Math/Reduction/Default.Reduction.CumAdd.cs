@@ -99,7 +99,10 @@ namespace NumSharp.Backends
             // Convert boolean input to int64 to match NumPy behavior
             if (arr.GetTypeCode == NPTypeCode.Boolean)
             {
-                var int64Arr = arr.astype(NPTypeCode.Int64, copy: true);
+                // In NumPy's ufunc layout of the bool input, not astype's K copy: NumPy casts in the accumulate
+                // iterator's buffers, which never vote, so a broadcast bool input still accumulates into C (parity
+                // QA-36; the matrix tier's broadcast cases).
+                var int64Arr = CastInUfuncLayout(arr, NPTypeCode.Int64);
                 var cum = CumSumCore(int64Arr, axis_, (typeCode ?? NPTypeCode.Int64).AsType());
                 int64Arr.Dispose();
                 return cum;
@@ -149,11 +152,15 @@ namespace NumSharp.Backends
 
             // NumPy-aligned accumulate: np.cumsum IS np.add.accumulate. NumPy allocates the
             // output through the iterator with KEEPORDER, so its memory layout follows the
-            // source (C-contig source -> C output, F-contig -> F). NumSharp models two physical
-            // layouts, so 'K' resolves to C or F via OrderResolver. This is what fixes the
+            // source (C-contig source -> C output, F-contig -> F, a permuted source -> its own
+            // axis order: AccumulateOutputLayout, parity QA-36). This is what fixes the
             // long-standing C-only output (the old post-hoc copy('F') in np.cumsum) and removes
             // the per-dtype AxisCumSum* tree in favor of one NDIter-driven generic kernel.
-            char order = OrderResolver.Resolve('K', shape);
+            Shape layout = AccumulateOutputLayout(shape);
+            // A scan axis that is not innermost in memory over a dense operand of the accumulator's own dtype runs by whole
+            // rows (TryScanRows): the same per-position additions, streamed instead of one strided walk per position.
+            if (TryScanRows(arr, axis, retTypeCode, layout, multiply: false, out var rows))
+                return rows;
             // A complex128 accumulator over another dtype: the axis loops have no converting complex kernel (the
             // complex add loop reads complex operands only, and the legacy kernels refuse the conversion), so NumPy's
             // buffered cast of the input to the loop dtype is done up front, in the input's own memory order. The
@@ -167,13 +174,13 @@ namespace NumSharp.Backends
             {
                 try
                 {
-                    return AccumulateAxis(arr, axis, retTypeCode, order);
+                    return AccumulateAxis(arr, axis, retTypeCode, layout);
                 }
                 catch (Exception ex) when (ex is not OutOfMemoryException)
                 {
                     // Defensive fallback to the legacy whole-array axis path. Only reachable if the
                     // NDIter accumulate construction fails for an exotic view; the legacy path
-                    // allocates a C-contiguous output, so relay it to F when the source asked for it.
+                    // allocates a C-contiguous output, so relay it into NumPy's layout when that is not C.
                     System.Diagnostics.Debug.WriteLine($"[cumsum] AccumulateAxis fallback: {ex.GetType().Name}: {ex.Message}");
                     var ret = NewArray(retTypeCode, Shape.Adopt(shape.dimensions), false);
                     if (DirectILKernelGenerator.Enabled && !shape.IsBroadcasted && shape.IsContiguous && shape.offset == 0)
@@ -186,11 +193,11 @@ namespace NumSharp.Backends
                             fixed (long* inputStrides = arr.Shape.strides)
                             fixed (long* shapePtr = arr.Shape.dimensions)
                                 kernel((void*)arr.Address, (void*)ret.Address, inputStrides, shapePtr, axis, arr.ndim, arr.size);
-                            return order == 'F' && ret.Shape.NDim > 1 ? ret.copy('F') : ret;
+                            return IntoScanLayout(ret, layout);
                         }
                     }
                     var fb = ExecuteAxisCumSumFallback(arr, ret, axis);
-                    return order == 'F' && fb.Shape.NDim > 1 ? fb.copy('F') : fb;
+                    return IntoScanLayout(fb, layout);
                 }
             }
             finally
@@ -201,23 +208,74 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
+        ///     The layout NumPy's <c>PyUFunc_Accumulate</c> gives a fresh accumulation of an array of more than one axis:
+        ///     its outer iterator (KEEPORDER over every axis, the scan axis included) allocates the output, so the output
+        ///     takes <c>npyiter_find_best_axis_ordering</c>'s order of the input alone — the input's memory order (parity
+        ///     QA-36: a permuted input keeps it, a reversed axis is laid out forwards, an F input is F).
+        /// </summary>
+        /// <param name="input">The accumulated array's shape (any layout; broadcast axes abstain).</param>
+        /// <returns>A dense, offset-0 layout of the input's dims: the K layout, or C when that is NumPy's answer.</returns>
+        /// <remarks>Shared by np.cumsum and np.cumprod (np.nancumsum / np.nancumprod reach them after the NaN fill). A
+        ///     1-D accumulation has one layout, so it is C; ranks past 64 sort only their longer axes
+        ///     (<see cref="TryKOrderPlan"/>), so a deep input stays linear.</remarks>
+        private static Shape AccumulateOutputLayout(in Shape input)
+            => TryKOrderPlan(input.dimensions, new[] { input }, out var layout, out _)
+                ? layout
+                : Shape.Adopt((long[])input.dimensions.Clone());
+
+        /// <summary>
+        ///     Moves a C-ordered scan result into <paramref name="layout"/> when that is not C: the defensive fallbacks of
+        ///     the scans write C, and a fresh array in NumPy's layout receives their values.
+        /// </summary>
+        /// <param name="c">The C-ordered result. Consumed: returned itself, or disposed after its values are copied out.</param>
+        /// <param name="layout">The target layout (<see cref="AccumulateOutputLayout"/>'s).</param>
+        /// <returns><paramref name="c"/> when the layout is C, else a fresh array laid out as <paramref name="layout"/>.</returns>
+        /// <remarks>Only the fallbacks pay this copy: the main routes write the layout directly
+        ///     (<see cref="AccumulateAxis"/>) or relabel a transposed C pass (<see cref="NDArray.AdoptLayout"/>).</remarks>
+        private static NDArray IntoScanLayout(NDArray c, Shape layout)
+        {
+            if (layout.IsContiguous || c.ndim < 2)
+                return c;
+            var o = new NDArray(c.typecode, layout, false);
+            try
+            {
+                UnmanagedStorage.Copyto(o, c, NPY_CASTING.NPY_NO_CASTING);
+            }
+            catch
+            {
+                // The copy failed: the fresh array must not outlive the call; the caller still sees the error.
+                o.Dispose();
+                throw;
+            }
+            finally
+            {
+                // The C result is consumed either way (its values now live in o, or the call is failing).
+                c.Dispose();
+            }
+            return o;
+        }
+
+        /// <summary>
         /// NumPy-aligned axis cumulative sum — the np.add.accumulate structure
         /// (numpy/_core/src/umath/ufunc_object.c : PyUFunc_Accumulate). Builds a 2-operand
         /// [input, output] iterator (KEEPORDER, MULTI_INDEX), removes the scan axis
         /// (<see cref="NDIterRef.RemoveAxis"/>) so the iterator walks every OTHER axis, then
         /// drives a single generic running-sum kernel along the removed axis per outer position.
         /// Handles every layout (contiguous / strided / transposed / broadcast / reversed) through
-        /// the iterator and honors the chosen <paramref name="order"/> output layout exactly (the
+        /// the iterator and honors the chosen <paramref name="layout"/> exactly (the
         /// kernel reads the output's own scan-axis stride), replacing the legacy per-dtype tree.
         /// </summary>
-        private unsafe NDArray AccumulateAxis(NDArray input, int axis, NPTypeCode retType, char order)
+        /// <param name="input">The array, in the form the kernel reads (a complex accumulator's up-front cast done).</param>
+        /// <param name="axis">The scan axis, already normalized.</param>
+        /// <param name="retType">The accumulator dtype.</param>
+        /// <param name="layout">The output layout (<see cref="AccumulateOutputLayout"/>: NumPy's K order of the input).</param>
+        /// <returns>A fresh array laid out as <paramref name="layout"/>.</returns>
+        /// <exception cref="Exception">Whatever the iterator's construction raises for a view it cannot walk: the caller
+        ///     catches it and takes the legacy fallback.</exception>
+        private unsafe NDArray AccumulateAxis(NDArray input, int axis, NPTypeCode retType, Shape layout)
         {
             var shape = input.Shape;
-            int ndim = input.ndim;
-
-            long[] dims = new long[ndim];
-            for (int i = 0; i < ndim; i++) dims[i] = shape.dimensions[i];
-            var ret = NewArray(retType, Shape.Adopt(dims, order), false);
+            var ret = NewArray(retType, layout, false);
 
             // Scan-axis geometry (bytes). Negative for reversed views — the iterator base points
             // at scan-axis index 0 and the kernel walks forward in logical order regardless.

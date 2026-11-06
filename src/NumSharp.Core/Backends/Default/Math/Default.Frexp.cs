@@ -17,8 +17,9 @@ namespace NumSharp.Backends
         /// preserved and Decimal is a NumSharp extension (computed through the double bridge). Complex is rejected.</param>
         /// <returns>
         ///     A tuple <c>(Mantissa, Exponent)</c>: the mantissa in the promoted float dtype and the int32
-        ///     exponent, both C-contiguous with the shape of <paramref name="x"/>. (The public
-        ///     <see cref="np.frexp"/> wrapper restores F-order when the input was F-contiguous.)
+        ///     exponent, both with the shape of <paramref name="x"/> and, when fresh, in NumPy's ufunc output
+        ///     layout (the K order of the input and the mask: an F input gives F outputs, a permuted one keeps
+        ///     its memory order; parity QA-36); the given outputs otherwise.
         /// </returns>
         /// <param name="out1">The mantissa output, or null (a TEXT output receives the mantissas as text).</param>
         /// <param name="out2">The exponent output, or null (a TEXT output receives the exponents as text).</param>
@@ -36,6 +37,27 @@ namespace NumSharp.Backends
         ///     (not 0), and a signalling NaN mantissa is quieted. See <see cref="DirectILKernelGenerator.FrexpHelper(double*,double*,int*,long)"/>.
         /// </remarks>
         public override (NDArray Mantissa, NDArray Exponent) Frexp(NDArray x, NDArray out1 = null, NDArray out2 = null, NDArray where = null)
+            // Fresh outputs take NumPy's K layout (the kernel writes C, so a non-C K order runs over the transposed input
+            // and both results are relabelled); a caller's out keeps its own layout.
+            => out1 is null && out2 is null
+                ? KOrderUnaryPair(x, where, this, static (engine, a, w) => engine.FrexpCore(a, null, null, w))
+                : FrexpCore(x, out1, out2, where);
+
+        /// <summary>
+        ///     The body of <see cref="Frexp"/>: the decomposition into C-ordered fresh outputs (or into the given ones).
+        /// </summary>
+        /// <param name="x">The input.</param>
+        /// <param name="out1">The mantissa output, or null.</param>
+        /// <param name="out2">The exponent output, or null.</param>
+        /// <param name="where">The bool write mask, or null.</param>
+        /// <returns>The (mantissa, exponent) pair: fresh C-contiguous arrays of <paramref name="x"/>'s dims, or the given
+        ///     outputs.</returns>
+        /// <exception cref="IncorrectTypeException"><paramref name="x"/> is complex.</exception>
+        /// <exception cref="ArgumentException">An output its loop dtype cannot be cast to under same_kind, or a non-bool
+        ///     <paramref name="where"/>.</exception>
+        /// <exception cref="ValueError">A text output under <paramref name="where"/> whose current text does not parse.</exception>
+        /// <exception cref="NotSupportedException">A dtype the frexp kernels do not handle.</exception>
+        private (NDArray Mantissa, NDArray Exponent) FrexpCore(NDArray x, NDArray out1, NDArray out2, NDArray where)
         {
             // NumPy validation order: where parse -> input coercion / loop resolution -> out cast.
             ValidateWhereMask(where);
@@ -64,7 +86,7 @@ namespace NumSharp.Backends
             // already IS that contiguous dtype). The kernel is OUT OF PLACE (src -> mant, exp) so the two
             // outputs share one fresh C-contiguous layout: writing them in place off an F-contiguous Cast copy
             // would misalign the mantissa and exponent buffers (Cast preserves the input's contiguity, but a
-            // fresh int32 exponent is always C-contiguous). np.frexp then relabels both to F together.
+            // fresh int32 exponent is always C-contiguous). Frexp relabels both into NumPy's layout together.
             var cShape = Shape.Adopt(x.Shape.dimensions);
             var src = MaterializeContiguous(x, cShape, floatType);
             var mant = NewArray(floatType, cShape, fillZeros: false);

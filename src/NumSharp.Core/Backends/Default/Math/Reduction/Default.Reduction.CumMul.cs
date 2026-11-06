@@ -99,7 +99,10 @@ namespace NumSharp.Backends
             // Convert boolean input to int64 to match NumPy behavior
             if (arr.GetTypeCode == NPTypeCode.Boolean)
             {
-                var int64Arr = arr.astype(NPTypeCode.Int64, copy: true);
+                // In NumPy's ufunc layout of the bool input, not astype's K copy: NumPy casts in the accumulate
+                // iterator's buffers, which never vote, so a broadcast bool input still accumulates into C (parity
+                // QA-36; the matrix tier's broadcast cases).
+                var int64Arr = CastInUfuncLayout(arr, NPTypeCode.Int64);
                 var cum = CumProdCore(int64Arr, axis_, (typeCode ?? NPTypeCode.Int64).AsType());
                 int64Arr.Dispose();
                 return cum;
@@ -148,10 +151,58 @@ namespace NumSharp.Backends
 
             if (shape[axis] == 1)
             {
-                //if the given div axis is 1 - cumprod is just the value itself
-                //Return a copy to avoid sharing memory with the original (NumPy behavior)
-                return arr.copy();
+                // An axis of length 1: the values are unchanged, but multiply.accumulate still has its NEP 50 accumulator
+                // dtype (signed integers narrower than int64 -> int64, unsigned -> uint64) whatever the axis length, and the
+                // result is a fresh copy. It returned an un-promoted copy (cumprod(int32 (2, 1, 3), axis=1) int32 where NumPy
+                // gives int64; parity QA-09), np.cumsum's twin branch was already fixed the same way.
+                return Cast(arr, typeCode ?? arr.GetTypeCode.GetAccumulatingType(), copy: true);
             }
+
+            var retTypeCode = typeCode ?? arr.GetTypeCode.GetAccumulatingType();
+
+            // NumPy's accumulate output layout (PyUFunc_Accumulate's KEEPORDER outer iterator: the input's own memory
+            // order, parity QA-36). The axis routes below write C, so when that order is not C they run over the input
+            // transposed into it (a view; C-contiguous for a dense permuted or F input, so the IL kernel still takes it),
+            // with the scan axis renumbered to its place in the permutation, and the C result is relabelled in place.
+            bool permuted = TryKOrderPlan(shape.dimensions, new[] { shape }, out var kLayout, out var kPerm);
+
+            // A scan axis that is not innermost in memory over a dense operand of the accumulator's own dtype runs by whole
+            // rows (TryScanRows), straight into that layout: the same per-position products, streamed instead of one
+            // strided walk per position.
+            if (TryScanRows(arr, axis, retTypeCode, permuted ? kLayout : Shape.Adopt((long[])shape.dimensions.Clone()),
+                    multiply: true, out var rows))
+                return rows;
+
+            if (permuted)
+            {
+                NDArray t = IntoKOrder(arr, arr.ndim, kPerm);
+                try
+                {
+                    return NDArray.AdoptLayout(CumProdAxis(t, Array.IndexOf(kPerm, axis), retTypeCode), kLayout);
+                }
+                finally
+                {
+                    // The transposed view only fed the scan; its result is a fresh array.
+                    t.Dispose();
+                }
+            }
+
+            return CumProdAxis(arr, axis, retTypeCode);
+        }
+
+        /// <summary>
+        ///     The axis scan of <see cref="CumProdCore"/>: the running products along <paramref name="axis"/> into a fresh
+        ///     C-ordered result, through the contiguous IL axis kernel or the iterator fallback.
+        /// </summary>
+        /// <param name="arr">The array (any layout; a broadcast or strided view takes the fallback).</param>
+        /// <param name="axis">The scan axis, already normalized, of extent above 1.</param>
+        /// <param name="retTypeCode">The accumulator dtype.</param>
+        /// <returns>A fresh C-contiguous array of <paramref name="arr"/>'s dims.</returns>
+        /// <remarks>C order is this route's contract (the IL kernel writes its output linearly): the caller turns it into
+        ///     NumPy's layout by transposing the input first and relabelling the result.</remarks>
+        private unsafe NDArray CumProdAxis(NDArray arr, int axis, NPTypeCode retTypeCode)
+        {
+            var shape = arr.Shape;
 
             // For broadcast arrays, we iterate over the input (which has stride=0 for broadcast dims)
             // but write to a contiguous output array.
@@ -159,7 +210,6 @@ namespace NumSharp.Backends
 
             // Create output with CONTIGUOUS strides even if input is broadcast.
             var outputShape = Shape.Adopt(shape.dimensions);  // Fresh contiguous shape
-            var retTypeCode = typeCode ?? (inputArr.GetTypeCode.GetAccumulatingType());
             var ret = NewArray(retTypeCode, outputShape, false);
 
             // Fast path: use IL-generated axis kernel when available

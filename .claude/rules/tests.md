@@ -146,8 +146,8 @@ mapped memory ends. Two tools make it fail:
   NaN in `k`, `lagint` float64 `scl=+inf`; raw-bit asserts, win-amd64), `OpenBugs.SortUniqueNaN.cs` (regression pins
   only: the unique family's value routes write NumPy's sort NaN, the positive quiet NaN, for float32 / float64, and
   `np.sort`'s `stable`/`mergesort` keep every NaN's bits), `OpenBugs.Matrix.cs` (the array library below numpy.matrix: a
-  fancy assignment into an offset view throws, and three result-layout gaps: cumprod, round of a broadcast operand,
-  conjugate of a transposed strided view; the imag-of-a-real-F-array pin is a regression test), `OpenBugs.ErrorParity.cs`
+  fancy assignment into an offset view throws; the result-layout pins — cumprod, round of a broadcast operand, conjugate
+  of a transposed strided view, imag of a real F array — are regression tests), `OpenBugs.ErrorParity.cs`
   (regression pins only: the stacking family's empty-list texts, the moveaxis / rollaxis / swapaxes / squeeze AxisError
   texts, moveaxis' length mismatch as NumPy's ValueError), `OpenBugs.NaNOperandOrder.cs`, `OpenBugs.Surface.cs`,
   `OpenBugs.MaSurface.cs`, `OpenBugs.Relayout.cs`, `OpenBugs.ViewFlags.cs`.

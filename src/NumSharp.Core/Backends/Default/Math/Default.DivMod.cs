@@ -85,6 +85,25 @@ namespace NumSharp.Backends
             if (resultType == NPTypeCode.Boolean)
                 resultType = NPTypeCode.SByte;
 
+            // NumPy's ufunc output layout for both fresh results (parity QA-36): the fused kernel writes C, so operands
+            // whose K order is not C (a permuted or F pair) are computed transposed into it and both results relabelled.
+            return KOrderBinaryPair(lhs, rhs, (engine: this, resultType),
+                static (s, a, b) => s.engine.DivModFused(a, b, s.resultType));
+        }
+
+        /// <summary>
+        ///     np.divmod's no-out route: the fused IL kernel over both operands materialized C-contiguous, writing a fresh
+        ///     C-ordered quotient and remainder (the compose path for 0-d and empty results).
+        /// </summary>
+        /// <param name="lhs">The dividends.</param>
+        /// <param name="rhs">The divisors; broadcasts against <paramref name="lhs"/>.</param>
+        /// <param name="resultType">The loop dtype (the NEP 50 promotion, bool already bumped to int8).</param>
+        /// <returns>The fresh (quotient, remainder) pair of the broadcast shape: C-ordered from the kernel (F only when
+        ///     every operand is strictly F, a case <see cref="DivMod"/> already routes through the K order), or the
+        ///     compose path's results for a 0-d or empty broadcast.</returns>
+        /// <exception cref="IncorrectShapeException">The operands do not broadcast together.</exception>
+        private (NDArray Quotient, NDArray Remainder) DivModFused(NDArray lhs, NDArray rhs, NPTypeCode resultType)
+        {
             // Broadcast to the common result shape.
             var (leftShape, rightShape) = Broadcast(lhs.Shape, rhs.Shape);
             var cleanShape = leftShape.Clean();

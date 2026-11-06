@@ -351,9 +351,9 @@ Create issues on `SciSharp/NumSharp` with `gh issue create` (`GH_TOKEN` through 
 | `unique.md` | `np.unique` (`UniqueResult`, the axis path, NumPy's flat routes) and the Array-API unique family, the hash path |
 | `axis-arguments.md` | `Shape.check_and_adjust_axis` / `normalize_axis_tuple`, the rules every axis argument follows, NumPy's errors around axes |
 | `matrix.md` | `NDMatrix`: static type versus object (the matrix boundary), scalars, indexing, operators and scaling, reductions, construction, divergences, gates |
-| `ufuncs.md` | the ufunc surface (`dtype=`, `out=`, `where=`), fix, fabs, clip, divmod, float_power, power's float loops, gcd / lcm, bitwise |
+| `ufuncs.md` | the ufunc surface (`dtype=`, `out=`, `where=`), the result layout, fix, fabs, clip, divmod, float_power, power's float loops, gcd / lcm, bitwise |
 | `float-math.md` | correlate / convolve, inverse hyperbolic, sinc, the float32 kernels ported from NumPy, exp2, expm1 / log1p, complex128 NaN signs |
-| `reductions.md` | the reduce prologue, sum / mean, var / std, numpy.ma mean / var, max / min / ptp schedules and keywords, float16 HALF loops, cov, the NaN-aware family |
+| `reductions.md` | the reduce prologue, sum / mean, var / std, numpy.ma mean / var, max / min / ptp schedules and keywords, float16 HALF loops, the scans, cov, the NaN-aware family |
 | `quantile.md` | the quantile family: `q`'s dtype and the lerp, `out=`, the nan forms, `weights=`, the partition |
 | `masked-arrays.md` | numpy.ma: semantics by result kind, the fill value, the set routines, `ma.put`, text and `StringDType` |
 | `comparison.md` | signbit, isin, iterable, the comparison ufuncs (NEP 50 weak scalars), the logical ufuncs, the comparison engine |

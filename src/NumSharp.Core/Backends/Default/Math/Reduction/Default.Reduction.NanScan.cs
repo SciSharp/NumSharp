@@ -1,3 +1,4 @@
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 
 namespace NumSharp.Backends
@@ -95,10 +96,11 @@ namespace NumSharp.Backends
         /// <param name="val">The replacement (0 for nancumsum, 1 for nancumprod).</param>
         /// <returns>The NaN-replaced copy (float16 / float32 / float64 / complex128), or <paramref name="a"/>
         ///     itself.</returns>
-        /// <remarks>Moved from <c>np._replace_nan_for_scan</c> by the np-layer dtype plan's P1b. The mask still goes
-        ///     through <c>np.isnan</c>'s engine member and the select through <c>np.where</c>, a computational call into the
-        ///     facade that the plan's P6 replaces with an engine select; the up-call ratchet pins it with that
-        ///     reason.</remarks>
+        /// <remarks>Moved from <c>np._replace_nan_for_scan</c> by the np-layer dtype plan's P1b. Outside the fused
+        ///     C-contiguous fill these are NumPy's statements (parity QA-36): the mask through the engine's
+        ///     <see cref="IsNan"/>, a K-order copy (<c>np.array(a, copy=True)</c>), then the masked copy of the fill into it
+        ///     (<c>np.copyto(a, val, where=mask)</c>, <see cref="UnmanagedStorage.Copyto"/>) — so the copy keeps NumPy's
+        ///     layout, which the scan's result then inherits.</remarks>
         [NDScopedCovered] // only callers: NanCumSum / NanCumProd, [NDScoped] (the isnan mask and the superseded fill are scope-reclaimed)
         private NDArray ReplaceNanForScan(NDArray a, int val)
         {
@@ -120,7 +122,14 @@ namespace NumSharp.Backends
                     NDArray fill = NewScalar(val);
                     if (fill.typecode != a.typecode)
                         fill = fill.astype(a.typecode);   // 0/1 -> (Half)0/1, 0+0j/1+0j — dtype-preserving
-                    return NDArray.where(a.TensorEngine.IsNan(a), fill, a);
+                    // NumPy's statements: mask = isnan(a); a = np.array(a, subok=True, copy=True) — a K-order copy, so
+                    // the scan that follows meets NumPy's layout (a broadcast input's copy is laid out by its stride
+                    // ranking: (24, 8, 48) for a row broadcast to (2, 3, 4), where np.where's iterator would give C;
+                    // parity QA-36); then np.copyto(a, val, where=mask) writes the fill into the copy's NaN slots.
+                    NDArray mask = a.TensorEngine.IsNan(a);
+                    NDArray replaced = a.copy('K');
+                    UnmanagedStorage.Copyto(replaced, fill, NPY_CASTING.NPY_SAME_KIND_CASTING, mask);
+                    return replaced;
                 default:
                     return a;                             // integer / bool / decimal / char cannot be NaN
             }

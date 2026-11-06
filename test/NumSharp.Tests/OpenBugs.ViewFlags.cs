@@ -49,6 +49,12 @@ namespace NumSharp.Tests
     // a view from its offset (VF30); its two pins are untagged, the generator's VF30 rule is dropped and its 8 cells are
     // back in the gate.
     //
+    // FIXED 2026-11-05 (parity QA-36): fresh ufunc results, np.where, np.cumsum / np.cumprod, np.diff, np.nan_to_num and
+    // np.round take NumPy's layouts (NpyIter's K order, np.array's K copy, PyArray_Round's ISFORTRAN rule), so VF06, VF07,
+    // VF09, VF10, VF32, VF34 and VF38 match NumPy; the generator's rules are dropped and their 55 cells are back in the
+    // gate. They had no pin here: QA-36's pin covered the class, and NumSharp.Tests/Math/UfuncResultLayout.Test.cs holds
+    // it now.
+    //
     // Every expected value below is NumPy 2.4.2's answer for the same call. EXPECTED (when fixed): each test passes;
     // remove its [OpenBugs], move it next to its API's tests, and drop the gap's carve rule from the generator
     // (_gap_of) so the case returns to the gate.

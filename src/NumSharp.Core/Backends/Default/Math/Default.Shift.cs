@@ -156,6 +156,25 @@ namespace NumSharp.Backends
             // ExecuteBinaryOp call above runs the same check.
             CheckWeakPyIntOperand(lhs, rhs, resultType, loopFromPromotion: true);
 
+            // NumPy's ufunc output layout for the fresh result (parity QA-36): every route below writes C (F for an all-F
+            // pair), so operands whose K order is anything else are shifted transposed into it and the result relabelled.
+            return KOrderBinary(lhs, rhs, (engine: this, isLeftShift),
+                static (s, a, b) => s.engine.ExecuteShiftBare(a, b, s.isLeftShift));
+        }
+
+        /// <summary>
+        ///     The bare-call routes of <see cref="ExecuteShift"/> once its checks passed: the bool zero fill, the contiguous
+        ///     uniform-count SIMD kernel, the NDIter Tier-3B kernel, then the unified binary pipeline.
+        /// </summary>
+        /// <param name="lhs">The values.</param>
+        /// <param name="rhs">The shift counts.</param>
+        /// <param name="isLeftShift">True for <c>left_shift</c>, false for <c>right_shift</c>.</param>
+        /// <returns>A fresh C-ordered result (F for an all-F operand pair) of the broadcast shape.</returns>
+        /// <exception cref="IncorrectShapeException">The operands do not broadcast together.</exception>
+        private NDArray ExecuteShiftBare(NDArray lhs, NDArray rhs, bool isLeftShift)
+        {
+            var op = isLeftShift ? BinaryOp.LeftShift : BinaryOp.RightShift;
+
             // Algebraic fast path: `bool_array >> scalar` with a nonzero count is ALL ZEROS —
             // the loop dtype's value set is {0, 1} (NumPy casts bool normalized, probed 2.4.2),
             // so 1 >> s == 0 for s in [1, bits-1] and every overflow count (s < 0, s >= bits)

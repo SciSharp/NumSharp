@@ -77,6 +77,31 @@ makes is part of the answer:
 - Gates: `Math/np.prod.ComplexAndHalfLoops.Test.cs` (NumPy-probed bits: every call form, a cast loop whose buffer fills
   change the last bit), the `reduce_kwargs` tier's prod cells.
 
+## `np.cumsum` / `np.cumprod` along an axis: the accumulate layout and the row route
+
+- Dtype: multiply.accumulate and add.accumulate keep their NEP 50 accumulator at every axis length, a length-1 axis
+  included (bool and the narrow signed integers → int64, the unsigned ones and char → uint64; parity QA-09), through
+  np.cumprod, ndarray.cumprod and np.nancumprod; the result is a fresh copy.
+- Layout (parity QA-36): `PyUFunc_Accumulate`'s outer iterator (KEEPORDER over every axis) allocates the output in the
+  input's K order (`AccumulateOutputLayout`, `DefaultEngine.TryKOrderPlan`): a permuted input keeps its memory order, F
+  stays F, a reversed axis is laid out forwards. cumsum's NDIter route writes that layout directly; cumprod's routes write
+  C, so they run over the input transposed into it (the scan axis renumbered) and relabel (`NDArray.AdoptLayout`). The
+  bool → int64 cast of a bool input is laid out as NumPy's ufunc would lay out the bool operand
+  (`DefaultEngine.CastInUfuncLayout`: NumPy casts in the iterator's buffers, which never vote, so a broadcast bool input
+  still accumulates into C, where astype's K copy would rank its stride-0 axes innermost). The NaN scans inherit the
+  layout from NumPy's `_replace_nan` statements (a K copy, then a masked copyto of the fill).
+- The row route (`Default.Reduction.ScanRows.cs`, `TryScanRows`): a scan axis that is not innermost in memory, over an
+  operand dense in the output's memory order and of the accumulator's own dtype (the eight integer widths, float32,
+  float64), runs by whole rows: the first block copied (accumulate copies element 0: a -0.0 or a signalling NaN arrives as
+  it is), then `out[j] = out[j-1] op in[j]` as a vector loop over each contiguous block of at least 32 positions. Each
+  position sees NumPy's sequential scan, the running value first, so the bytes are the per-position kernels'; only the
+  order across positions changes (np.cumsum of a (100, 100, 100) C array along axis 0: 0.6 ms by rows against 2.3 ms
+  for the per-position walk; NumPy, which walks per position, 6.8 ms). float16, bool, char, decimal and complex128 keep
+  the per-position kernels (complex128's product is NumPy's contracted loop_scalar form).
+- Gates: `Math/np.cumsum.RowScan.Test.cs` (every vector dtype × C / F / permuted / 4-D × every axis, byte for byte
+  against the per-position route, with NaN, ±inf, -0.0 and wrapping integers), `Math/UfuncResultLayout.Test.cs`,
+  `Math/NDArray.cumprod.Test.cs`, the `scan` tier and the array-object tiers' scan rows.
+
 ## `np.sum` / `np.mean`: the add identity and NumPy's add.reduce
 
 `Backends/Default/Math/Reduction/Default.Reduction.Add{,.Exact,.Identity}.cs`.
@@ -261,8 +286,8 @@ numpy.matrix boundary and the null check.
   `count - ddof < 0` is a plain negative scalar. std is ma.sqrt of the variance and ignores `mean=`. anom is
   `self - mean`, the mean expanded only for a nonzero axis.
 - Layout: every intermediate a later sum walks is allocated in NumPy's ufunc layout (`UfuncResultBuffer`,
-  `Shape.NpyIterOutputShape`) and written in place, because NumSharp's eager ufuncs write C order for a permuted input,
-  which adds in another order. np.power's result is computed by the plain call and copied.
+  `Shape.NpyIterOutputShape`) and written in place, so its sum adds in NumPy's order (the eager ufuncs take the same
+  layout since parity QA-36). np.power's result is computed by the plain call and copied.
 - Gates: `ma_meanvar.jsonl` (zero excuses, valueclass `mameanvar`: raw data at every slot and the result's form —
   singleton / scalar / nomask / mask array — beside `filled(0)` and `getmaskarray`; NumPy's errors; no carve: the
   reversed and broadcast layouts are in the gate); `ma_reduce` holds the four strict; `Ma/np.ma.meanvar.NumPyPort.Test.cs`.
@@ -293,8 +318,6 @@ NumPy's:
   Decimal/Bool/Char use the IL kernels (value-exact; bool along its innermost axis → the keyword path's early-exit
   `logical_or` loop); `dtype=` casts; rank > 64. float16 has its own route (below). Hooks `NDExpr.DisableExactMinMax` /
   `ExactMinMaxRuns` (shared with np.evaluate).
-- Open: `np.max(x * 1, axis)` over a permuted input differs, because NumSharp's eager elementwise writes C order where
-  NumPy's ufunc keeps the K-order layout.
 - Gates: `Backends/Kernels/MinMaxExactScheduleTests.cs` (NumPy-probed literals, including the every-lane-pair tie test and
   a ±0 tie / NaN pair on every node of the slab tree) and three NumPy replay oracles.
 

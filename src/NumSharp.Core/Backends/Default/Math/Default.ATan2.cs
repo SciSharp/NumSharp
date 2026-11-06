@@ -67,8 +67,9 @@ namespace NumSharp.Backends
                 return EmptyBinaryResult(y, x, typeCode ?? PromoteATan2Binary(y, x));
 
             // Execute using IL kernel infrastructure
-            // ATan2 is a binary operation: atan2(y, x)
-            return ExecuteATan2Op(y, x, typeCode);
+            // ATan2 is a binary operation: atan2(y, x). NumPy's ufunc output layout (parity QA-36): the route writes C,
+            // so a permuted or F operand is computed in its K order and relabelled.
+            return KOrderBinary(y, x, (engine: this, typeCode), static (s, a, b) => s.engine.ExecuteATan2Op(a, b, s.typeCode));
         }
 
         /// <summary>
@@ -156,15 +157,21 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// Maps a single input dtype to its NumPy arctan2 output target.
-        /// NumPy 2.x rules: bool/i8/u8 → f16, i16/u16 → f32, i32+/i64+/char → f64,
+        /// Maps a single input dtype to its NumPy arctan2 output target: the float loop table every float-tier binary ufunc
+        /// (arctan2, hypot, copysign, heaviside, logaddexp, logaddexp2, nextafter) reads.
+        /// NumPy 2.x rules: bool/i8/u8 → f16, i16/u16/char → f32, i32+/i64+ → f64,
         /// float types preserved, decimal preserved (NumSharp extension).
         /// </summary>
+        /// <param name="t">One operand's dtype.</param>
+        /// <returns>The float loop that operand reaches safely.</returns>
+        /// <remarks>NumSharp's char is uint16 to every promotion table (the "uint16 masquerade"); it ranked with the 32/64-bit
+        ///     integers here, so <c>np.hypot(char, float32)</c> and <c>np.arctan2(char, char)</c> were float64 where uint16's
+        ///     NumPy answer is float32 (parity QA-17).</remarks>
         private static NPTypeCode PromoteATan2Single(NPTypeCode t) => t switch
         {
             NPTypeCode.Boolean or NPTypeCode.SByte or NPTypeCode.Byte => NPTypeCode.Half,
-            NPTypeCode.Int16 or NPTypeCode.UInt16 => NPTypeCode.Single,
-            NPTypeCode.Int32 or NPTypeCode.UInt32 or NPTypeCode.Int64 or NPTypeCode.UInt64 or NPTypeCode.Char => NPTypeCode.Double,
+            NPTypeCode.Int16 or NPTypeCode.UInt16 or NPTypeCode.Char => NPTypeCode.Single,
+            NPTypeCode.Int32 or NPTypeCode.UInt32 or NPTypeCode.Int64 or NPTypeCode.UInt64 => NPTypeCode.Double,
             NPTypeCode.Half => NPTypeCode.Half,
             NPTypeCode.Single => NPTypeCode.Single,
             NPTypeCode.Double => NPTypeCode.Double,

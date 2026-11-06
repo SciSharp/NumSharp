@@ -176,6 +176,9 @@ Every operand layout and dtype pair runs the vector kernels, for the operators a
   Two more forms belong to a whole iteration of rows (`RunRows`): tiled (an operand whose successive rows are adjacent
   elements, such as an F-ordered matrix beside a C-ordered one, or a matrix against its transpose) and repeated (a
   matrix against one short row, several rows per kernel call).
+- The bool result takes NumPy's ufunc output layout first (parity QA-36, `ufuncs.md` "The result layout"): a permuted
+  operand pair is compared transposed into its K order (C-contiguous views) and the C result relabelled, so the callers
+  below see C-ordered or all-F operands.
 - Three callers:
   - `TryTrivialContiguousComparisonOp` → `Run`: two contiguous arrays of one shape, or an array and one value, of any two
     dtypes; also two one-element operands of different rank.

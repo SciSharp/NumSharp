@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Numerics;
 
 namespace NumSharp.Tests.Math
@@ -7,7 +8,7 @@ namespace NumSharp.Tests.Math
     /// np.logaddexp / np.logaddexp2 / np.nextafter. All expected values probed from NumPy 2.4.2.
     ///
     /// These are float-tier binary ufuncs with arctan2's promotion (ee->e, ff->f, dd->d, gg->g):
-    /// bool/int8/uint8 -> float16, int16/uint16 -> float32, int32+/int64+/char -> float64.
+    /// bool/int8/uint8 -> float16, int16/uint16/char -> float32 (char is uint16), int32+/int64+ -> float64.
     ///
     /// nextafter is BIT-EXACT with NumPy (Math.BitIncrement/BitDecrement compose to ucrtbase
     /// nextafter). logaddexp/logaddexp2 are &lt;=2 ULP (managed fdlibm log1p vs NumPy's closed
@@ -16,6 +17,70 @@ namespace NumSharp.Tests.Math
     [TestClass]
     public class LogAddExpNextAfterTests
     {
+        // ---------------------------------------------------------------- char: uint16's loop
+
+        /// <summary>
+        ///     The seven float-tier binary ufuncs promote a Char operand as uint16 (parity QA-17, the masquerade every other
+        ///     ufunc already follows). NumPy 2.4.2 with uint16 standing for char: <c>(u16, f32)</c>, <c>(u16, f16)</c>,
+        ///     <c>(u16, u16)</c> and <c>(f16, u16)</c> are float32 and <c>(u16, i32)</c> float64 for hypot, arctan2, copysign,
+        ///     heaviside, logaddexp, logaddexp2 and nextafter; and a char operand computes the uint16 operand's bits.
+        /// </summary>
+        [TestMethod]
+        public void FloatTier_CharOperand_TakesUInt16sLoop()
+        {
+            using var ch = np.array(new[] { 'a', 'b', 'c' });
+            using var u16 = np.array(new ushort[] { 97, 98, 99 });
+            using var f32 = np.array(new[] { 1.5f, -2.0f, 0.25f });
+            using var f16 = f32.astype(np.float16);
+            using var i32 = np.array(new[] { 1, 2, 3 });
+            var ufuncs = new (string Name, Func<NDArray, NDArray, NDArray> F)[]
+            {
+                ("hypot", (a, b) => np.hypot(a, b)), ("arctan2", (a, b) => np.arctan2(a, b)),
+                ("copysign", (a, b) => np.copysign(a, b)), ("heaviside", (a, b) => np.heaviside(a, b)),
+                ("logaddexp", (a, b) => np.logaddexp(a, b)), ("logaddexp2", (a, b) => np.logaddexp2(a, b)),
+                ("nextafter", (a, b) => np.nextafter(a, b)),
+            };
+            foreach (var (name, f) in ufuncs)
+            {
+                using var withF32 = f(ch, f32);
+                using var withF16 = f(ch, f16);
+                using var withChar = f(ch, ch);
+                using var f16First = f(f16, ch);
+                using var withI32 = f(ch, i32);
+                withF32.typecode.Should().Be(NPTypeCode.Single, $"{name}(char, float32) is uint16's float32");
+                withF16.typecode.Should().Be(NPTypeCode.Single, $"{name}(char, float16) is uint16's float32");
+                withChar.typecode.Should().Be(NPTypeCode.Single, $"{name}(char, char) is uint16's float32");
+                f16First.typecode.Should().Be(NPTypeCode.Single, $"{name}(float16, char) is uint16's float32");
+                withI32.typecode.Should().Be(NPTypeCode.Double, $"{name}(char, int32) is float64");
+
+                using var asUInt16 = f(u16, f32);
+                withF32.ToArray<float>().Select(BitConverter.SingleToInt32Bits).Should()
+                    .Equal(asUInt16.ToArray<float>().Select(BitConverter.SingleToInt32Bits), $"{name} reads char as uint16");
+            }
+        }
+
+        /// <summary>
+        ///     NumPy 2.4.2's bits for <c>(uint16 [97, 98, 99], float32 [1.5, -2, 0.25])</c>, which the char operand above
+        ///     must reproduce: hypot and nextafter are exact (nextafter steps one ULP toward the float32 operand).
+        /// </summary>
+        [TestMethod]
+        public void FloatTier_CharOperand_NumPysFloat32Bits()
+        {
+            using var ch = np.array(new[] { 'a', 'b', 'c' });
+            using var f32 = np.array(new[] { 1.5f, -2.0f, 0.25f });
+
+            using var hypot = np.hypot(ch, f32);
+            using var copysign = np.copysign(ch, f32);
+            using var nextafter = np.nextafter(ch, f32);
+
+            hypot.ToArray<float>().Select(BitConverter.SingleToInt32Bits).Should()
+                .Equal(unchecked((int)0x42c205f0), unchecked((int)0x42c40a73), unchecked((int)0x42c60029));
+            copysign.ToArray<float>().Select(BitConverter.SingleToInt32Bits).Should()
+                .Equal(0x42c20000, unchecked((int)0xc2c40000), 0x42c60000);
+            nextafter.ToArray<float>().Select(BitConverter.SingleToInt32Bits).Should()
+                .Equal(0x42c1ffff, 0x42c3ffff, 0x42c5ffff);
+        }
+
         // ---------------------------------------------------------------- logaddexp
 
         [TestMethod]

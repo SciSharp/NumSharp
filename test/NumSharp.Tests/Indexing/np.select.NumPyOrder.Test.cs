@@ -107,4 +107,74 @@ public class SelectNumPyOrderTests
         f.dtype.Should().Be(np.float32);
         f.ToArray<float>().Should().Equal(0f, 2.5f, 2f, 2.5f);
     }
+
+    /// <summary>
+    ///     The three dtype triples NumPy 2.4.2 answers with one dtype in every order of the choices
+    ///     (<c>{np.select(conds, perm).dtype for perm in itertools.permutations(t)}</c> is a single dtype), with that
+    ///     dtype. A pairwise fold from the left gave float64 for <c>[int16, uint16, float16]</c> and float32 for
+    ///     <c>[uint8, int8, float16]</c>.
+    /// </summary>
+    internal static readonly (NPTypeCode[] Types, NPTypeCode Expected)[] ThreeDtypeTriples =
+    {
+        (new[] { NPTypeCode.Int16, NPTypeCode.UInt16, NPTypeCode.Half }, NPTypeCode.Single),
+        (new[] { NPTypeCode.Byte, NPTypeCode.SByte, NPTypeCode.Half }, NPTypeCode.Half),
+        (new[] { NPTypeCode.Boolean, NPTypeCode.SByte, NPTypeCode.Byte }, NPTypeCode.Int16),
+        (new[] { NPTypeCode.Int32, NPTypeCode.UInt32, NPTypeCode.Single }, NPTypeCode.Double),
+        (new[] { NPTypeCode.Int64, NPTypeCode.UInt64, NPTypeCode.Half }, NPTypeCode.Double),
+        (new[] { NPTypeCode.UInt16, NPTypeCode.SByte, NPTypeCode.Half }, NPTypeCode.Single),
+    };
+
+    /// <summary>The six orders of three items.</summary>
+    /// <param name="t">The three items.</param>
+    /// <returns>Every permutation of <paramref name="t"/>.</returns>
+    internal static NPTypeCode[][] OrdersOf(NPTypeCode[] t) => new[]
+    {
+        new[] { t[0], t[1], t[2] }, new[] { t[0], t[2], t[1] }, new[] { t[1], t[0], t[2] },
+        new[] { t[1], t[2], t[0] }, new[] { t[2], t[0], t[1] }, new[] { t[2], t[1], t[0] },
+    };
+
+    /// <summary>
+    ///     The result dtype is <c>np.result_type(*choicelist, default)</c>: one order-independent NEP 50 reduction (parity
+    ///     QA-51), so every order of three choices gives NumPy's single answer.
+    /// </summary>
+    [TestMethod]
+    public void ResultDtype_EveryOrderOfThreeChoices_IsNumPysResultType()
+    {
+        var conds = new[]
+        {
+            np.array(new[] { true, false, false }), np.array(new[] { false, true, false }), np.array(new[] { false, false, true }),
+        };
+        foreach (var (types, expected) in ThreeDtypeTriples)
+            foreach (var order in OrdersOf(types))
+            {
+                var choices = new NDArray[3];
+                for (int i = 0; i < 3; i++)
+                    choices[i] = np.array(new long[] { 1, 0, 1 }).astype(order[i]);
+                using var r = np.select(conds, choices);
+                r.typecode.Should().Be(expected, $"np.select over [{string.Join(", ", order)}] is result_type's answer");
+                foreach (var c in choices)
+                    c.Dispose();
+            }
+    }
+
+    /// <summary>
+    ///     The values arrive in that dtype: NumPy 2.4.2's <c>np.select(conds, [f16, i16, u16])</c> is float32
+    ///     <c>[0.5, 2.0, 6.0]</c>.
+    /// </summary>
+    [TestMethod]
+    public void ResultValues_ThreeDtypes_AreCastIntoResultType()
+    {
+        using var i16 = np.array(new short[] { 1, 2, 3 });
+        using var u16 = np.array(new ushort[] { 4, 5, 6 });
+        using var f16 = np.array(new[] { 0.5, 1.5, 2.5 }).astype(np.float16);
+        var conds = new[]
+        {
+            np.array(new[] { true, false, false }), np.array(new[] { false, true, false }), np.array(new[] { false, false, true }),
+        };
+
+        using var r = np.select(conds, new object[] { f16, i16, u16 });
+
+        r.dtype.Should().Be(np.float32);
+        r.ToArray<float>().Should().Equal(0.5f, 2f, 6f);
+    }
 }

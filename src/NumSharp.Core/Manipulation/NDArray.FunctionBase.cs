@@ -2080,6 +2080,10 @@ namespace NumSharp
             bool anyString = false; // a fixed-width string choice or default: the dtype is resolved by DESCRIPTOR below
             int weakRank = 0; // 0 none, 1 int, 2 float, 3 complex (ordered by NEP50 dominance)
             NPTypeCode strong = NPTypeCode.Empty;
+            // Every strong operand's dtype, promoted ONCE after the loop: NumPy's result_type(*choicelist, default) is one
+            // order-independent NEP 50 reduction, and a pairwise fold from the left gave [int16, uint16, float16] float64
+            // where NumPy gives float32 (parity QA-51, np.choose's QA-07 twin).
+            var strongTypes = new System.Collections.Generic.List<NPTypeCode>(n + 1);
 
             for (int i = 0; i <= n; i++)
             {
@@ -2116,7 +2120,7 @@ namespace NumSharp
                         if (a.typecode == NPTypeCode.String)
                             anyString = true;
                         else if (!anyString)
-                            strong = anyStrong ? NDExprTypeRules.PromoteStrong(strong, a.GetTypeCode) : a.GetTypeCode;
+                            strongTypes.Add(a.GetTypeCode);
                         anyStrong = true;
                         break;
 
@@ -2150,13 +2154,17 @@ namespace NumSharp
                         if (mat.typecode == NPTypeCode.String)
                             anyString = true;
                         else if (!anyString)
-                            strong = anyStrong ? NDExprTypeRules.PromoteStrong(strong, mat.GetTypeCode) : mat.GetTypeCode;
+                            strongTypes.Add(mat.GetTypeCode);
                         anyStrong = true;
                         break;
                 }
 
                 mats[i] = mat;
             }
+
+            // The order-independent common dtype of the strong operands (a text result decides by descriptor below).
+            if (!anyString && strongTypes.Count > 0)
+                strong = NDExprTypeRules.PromoteStrongSequence(strongTypes);
 
             // Fixed-width strings: NumPy's two result_type calls over DESCRIPTORS (the widest choice's width; S + U → U),
             // each refusal wrapped in select's own TypeError text. A Python number default next to strings has no common

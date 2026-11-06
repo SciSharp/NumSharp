@@ -198,13 +198,17 @@ namespace NumSharp.Backends
         /// <param name="resultType">The final loop dtype.</param>
         /// <param name="out">The out= array (writeability already checked), or null.</param>
         /// <param name="where">The where= mask (already validated as bool), or null.</param>
-        /// <returns>The result: <paramref name="out"/> when given, else a fresh array.</returns>
+        /// <param name="kOrderResolved">True when the operands were already transposed into NumPy's output order by this
+        /// method's own K-order step (its recursive call): the step is not taken twice.</param>
+        /// <returns>The result: <paramref name="out"/> when given, else a fresh array, laid out in NumPy's ufunc output
+        /// order (the operands' K order; C for C-contiguous operands).</returns>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast, or out= does not have the broadcast
         /// shape (NumPy's texts).</exception>
         /// <exception cref="ArgumentException">out= cannot hold the loop dtype under same_kind casting.</exception>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private unsafe NDArray ExecuteBinaryOpResolved(NDArray lhs, NDArray rhs, BinaryOp op, NPTypeCode lhsType,
-                                                       NPTypeCode rhsType, NPTypeCode resultType, NDArray @out, NDArray where)
+                                                       NPTypeCode rhsType, NPTypeCode resultType, NDArray @out, NDArray where,
+                                                       bool kOrderResolved = false)
         {
 
             // ufunc out=/where= path (Wave 2.1): the loop dtype above is final
@@ -226,6 +230,32 @@ namespace NumSharp.Backends
             if (lhs.Shape.IsScalar && rhs.Shape.IsScalar)
             {
                 return ExecuteScalarScalar(lhs, rhs, op, resultType);
+            }
+
+            // NumPy's ufunc output layout (parity QA-36): a fresh result follows the operands' K order, so a permuted or F
+            // operand keeps its memory order. The routes below write C (or F for an all-F set), so when the K layout is
+            // something else the operands are transposed into it (views: a dense permuted operand becomes C-contiguous) and
+            // the C result is relabelled. C-ordered operands (MayNeedKOrder) and an all-F pair, which the routes lay out F
+            // themselves (IsAllStrictF), skip it without a broadcast or a plan.
+            if (!kOrderResolved && MayNeedKOrder(lhs.Shape, rhs.Shape) && !IsAllStrictF(lhs.Shape, rhs.Shape))
+            {
+                var (kl, _) = Broadcast(lhs.Shape, rhs.Shape);
+                if (TryKOrderPlan(kl.dimensions, new[] { lhs.Shape, rhs.Shape }, out var kLayout, out var kPerm))
+                {
+                    int knd = kl.NDim;
+                    NDArray lt = IntoKOrder(lhs, knd, kPerm), rt = IntoKOrder(rhs, knd, kPerm);
+                    try
+                    {
+                        var kr = ExecuteBinaryOpResolved(lt ?? lhs, rt ?? rhs, op, lhsType, rhsType, resultType, null, null,
+                            kOrderResolved: true);
+                        return NDArray.AdoptLayout(kr, kLayout);
+                    }
+                    finally
+                    {
+                        lt?.Dispose();
+                        rt?.Dispose();
+                    }
+                }
             }
 
             // NEP50 weak-scalar fast-path enablement. A Python-scalar literal arrives wrapped at

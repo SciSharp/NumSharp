@@ -200,24 +200,31 @@ namespace NumSharp.Backends
         /// <summary>
         ///     Lean NDIter subtract used by the diff loop: computes
         ///     <c>hi - lo</c> into a freshly-allocated, <b>uninitialised</b>
-        ///     C-contiguous output via the NDIter Tier-3B inner-loop kernel
+        ///     output in NumPy's ufunc layout via the NDIter Tier-3B inner-loop kernel
         ///     (4×-unrolled SIMD + scalar-strided shell). <paramref name="hi"/>
         ///     and <paramref name="lo"/> are always equal-shape, equal-dtype and
-        ///     non-broadcast, so this skips the type-promotion, broadcast
-        ///     resolution and F-contig analysis that <see cref="DefaultEngine"/>'s
+        ///     non-broadcast, so this skips the type-promotion and broadcast
+        ///     resolution that <see cref="DefaultEngine"/>'s
         ///     general binary path performs. Returns <c>null</c> when the kernel
         ///     emitter rejects the dtype, signalling the caller to fall back to
         ///     the <c>-</c> operator.
         /// </summary>
+        /// <param name="hi">The later slice, <c>a[1:]</c> along the diff axis.</param>
+        /// <param name="lo">The earlier slice, <c>a[:-1]</c>: the same dims, dtype and strides as <paramref name="hi"/>.</param>
+        /// <returns>A fresh array of the difference, or null when the subtract kernel has no loop for the dtype.</returns>
+        /// <remarks>NumPy's diff is <c>subtract(a[slice1], a[slice2])</c>, a ufunc whose NpyIter allocates the result in the
+        ///     K order of the two slices (parity QA-36): an F or permuted input keeps its memory order, a reversed axis is
+        ///     laid out forwards. The iterator walks K order too, so slices that share a dense layout coalesce.</remarks>
         private unsafe NDArray DiffSubtractViaNDIter(NDArray hi, NDArray lo)
         {
             NPTypeCode dt = hi.GetTypeCode;
 
-            // Fresh C-contiguous, uninitialised output with hi's dimensions.
+            // Fresh uninitialised output with hi's dimensions, in the slices' K layout (C unless they vote otherwise).
             int nd = hi.ndim;
             long[] dims = new long[nd];
             for (int i = 0; i < nd; i++) dims[i] = hi.Shape.dimensions[i];
-            var outp = NewArray(hi.dtype, Shape.Adopt(dims), false);
+            var outp = NewArray(hi.dtype,
+                TryKOrderPlan(dims, new[] { hi.Shape, lo.Shape }, out var kLayout, out _) ? kLayout : Shape.Adopt(dims), false);
 
             // Empty result: the NDIter element-wise path must not run over zero
             // elements (it walks broadcast dims as if non-empty). Nothing to do.
@@ -233,10 +240,12 @@ namespace NumSharp.Backends
 
             try
             {
+                // KEEPORDER, the ufunc's own order: elementwise into a fresh output, so the visiting order changes no
+                // element, and a permuted or F layout shared by all three coalesces instead of walking logical rows.
                 using var iter = NDIterRef.MultiNew(
                     3, new[] { hi, lo, outp },
                     NDIterGlobalFlags.EXTERNAL_LOOP,
-                    NPY_ORDER.NPY_CORDER,
+                    NPY_ORDER.NPY_KEEPORDER,
                     NPY_CASTING.NPY_SAFE_CASTING,
                     _diffRRW);
 

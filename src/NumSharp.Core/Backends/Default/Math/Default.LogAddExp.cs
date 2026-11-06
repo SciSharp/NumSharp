@@ -98,7 +98,10 @@ namespace NumSharp.Backends
             if (x1.size == 0 || x2.size == 0)
                 return EmptyBinaryResult(x1, x2, typeCode ?? PromoteATan2Binary(x1, x2));
 
-            return ExecuteFloatTierBinaryPlain(x1, x2, op, typeCode);
+            // NumPy's ufunc output layout (parity QA-36): the route writes C, so a permuted or F operand is computed in its
+            // K order and relabelled.
+            return KOrderBinary(x1, x2, (engine: this, op, typeCode),
+                static (s, a, b) => s.engine.ExecuteFloatTierBinaryPlain(a, b, s.op, s.typeCode));
         }
 
         /// <summary>

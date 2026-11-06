@@ -827,9 +827,15 @@ namespace NumSharp
 
             // The copies keep NumPy's order code as given: astype / copy resolve 'K' to the source's own axis order
             // (a transposed or broadcast source keeps its layout), which resolving to C-or-F first would lose.
+            // A CAST under 'A' is a K-order cast (parity QA-36): NumPy's fast exit (the same or an equivalent descriptor)
+            // copies with PyArray_NewCopy(order='A') - F for an F-only array, else C - but a dtype change reaches
+            // PyArray_FromArray, whose flags carry F_CONTIGUOUS only for an F-only array and nothing otherwise, so its
+            // copy is NPY_KEEPORDER: a permuted float64 source cast to float32 keeps strides (16, 32, 4). K also gives
+            // F for an F-only source, so 'A' and 'K' agree on every cast.
+            char castOrder = order == 'A' ? 'K' : order;
             if (copy == true)
             {
-                NDArray copied = !typeMatches ? a.astype(dtype, copy: true, order: order) : a.copy(order);
+                NDArray copied = !typeMatches ? a.astype(dtype, copy: true, order: castOrder) : a.copy(order);
                 return explicitZeroDim ? copied.MarkExplicitZeroDimArray() : copied;
             }
 
@@ -850,8 +856,8 @@ namespace NumSharp
                 return explicitZeroDim ? view.MarkExplicitZeroDimArray() : view;
             }
 
-            // copy == null && !noCopyNeeded: copy / cast as required.
-            NDArray converted = !typeMatches ? a.astype(dtype, copy: true, order: order) : a.copy(order);
+            // copy == null && !noCopyNeeded: copy / cast as required (a cast under 'A' in K order, as above).
+            NDArray converted = !typeMatches ? a.astype(dtype, copy: true, order: castOrder) : a.copy(order);
             return explicitZeroDim ? converted.MarkExplicitZeroDimArray() : converted;
         }
 
@@ -1303,8 +1309,9 @@ namespace NumSharp
         /// <param name="x">The values where <paramref name="condition"/> is true, an array (a weak 0-d array for a Python
         ///     scalar: the facades convert C# values with <see cref="FromPythonOperand"/>).</param>
         /// <param name="y">The values where <paramref name="condition"/> is false.</param>
-        /// <returns>A new array of the broadcast shape in NumPy's iterator layout (F order when every full-size operand is
-        ///     F-contiguous, C otherwise).</returns>
+        /// <returns>A new array of the broadcast shape in NumPy's iterator layout: the K order of (condition, x, y), so a
+        ///     permuted operand set keeps its memory order, an all-F set gives F, and a C operand or an ambiguous vote gives
+        ///     C (parity QA-36).</returns>
         /// <exception cref="IncorrectShapeException">The three operands do not broadcast together: NumPy's iterator text,
         ///     "operands could not be broadcast together with shapes (3,4) (7,) (3,4) " (see BroadcastWhereOperands).
         ///     Raised after the dtype check, as in NumPy.</exception>
@@ -1365,8 +1372,15 @@ namespace NumSharp
 
             // Resolve output layout before dtype casts. Casts of broadcasted scalars can
             // materialize C-contiguous temporaries, but NumPy's iterator ignores those for
-            // output-order selection.
-            char resultOrder = ResolveWhereOrder(cond, xArr, yArr);
+            // output-order selection. NumPy's PyArray_Where allocates through a KEEPORDER NpyIter over
+            // (condition, x, y) as given (the casts are its buffering, which does not vote), so the result takes
+            // npyiter_find_best_axis_ordering's layout of those three (parity QA-36: a permuted operand set keeps its
+            // memory order). The operands as given, not the broadcast views: an absent axis abstains either way, and
+            // a stride-0 axis abstains in NpyIter exactly as it does here.
+            Shape resultLayout = Backends.DefaultEngine.TryKOrderPlan(dims, new[] { condition.Shape, x.Shape, y.Shape },
+                out var kLayout, out _)
+                ? kLayout
+                : Shape.Adopt((long[])dims.Clone());
 
             // Coerce the condition to boolean using NumPy's truthiness rules
             // (0/0.0 → False, everything else including NaN/±Inf → True). The
@@ -1383,10 +1397,11 @@ namespace NumSharp
             if (yArr.GetTypeCode != outType)
                 yArr = yArr.astype(outType, copy: false);
 
-            // Use cond.shape (dimensions only) not cond.Shape (which may have broadcast strides).
-            // NumPy's iterator allocation preserves F-order when all full-size operands agree
-            // on F layout; any full C-contiguous or non-contiguous operand falls back to C.
-            var result = np.empty(Shape.Adopt((long[])cond.Shape.dimensions.Clone(), resultOrder), outType);
+            // The K layout resolved above (dense, offset 0; C unless an operand moved the vote). The kernel fast paths
+            // below run only for C-contiguous operands, whose vote is C by construction, so they always write a C
+            // result linearly; every other layout is written by WhereImpl's iterator, which walks the result's own
+            // strides.
+            var result = np.empty(resultLayout, outType);
 
             // Handle empty arrays - nothing to iterate
             if (result.size == 0)
@@ -1492,9 +1507,11 @@ namespace NumSharp
         {
             // Drive cond + x + y + result in lockstep via a 4-operand NDIter and a
             // dedicated per-chunk multi-operand kernel (Backends.Kernels.ILKernelGenerator.Where).
-            // C-order traversal matches NumPy element semantics; WRITEONLY on the
-            // output. Operands already share dtypes by here (cond is Boolean, x/y/
-            // result are the resolved output dtype), so no casting/buffering occurs.
+            // KEEPORDER traversal, NumPy's PyArray_Where order: the selection is elementwise into a fresh result, so
+            // the visiting order cannot change an element, and walking memory order lets operands that share a
+            // permuted K layout (the result included, parity QA-36) coalesce into one contiguous run instead of one
+            // run per innermost logical row; WRITEONLY on the output. Operands already share dtypes by here (cond is
+            // Boolean, x/y/result are the resolved output dtype), so no casting/buffering occurs.
             //
             // The kernel SIMD-selects (Vector.ConditionalSelect over an expanded
             // bool mask) whenever the inner loop is contiguous for all four operands
@@ -1505,7 +1522,7 @@ namespace NumSharp
             using var iter = NDIterRef.MultiNew(
                 4, new[] { cond, x, y, result },
                 NDIterGlobalFlags.EXTERNAL_LOOP,
-                NPY_ORDER.NPY_CORDER,
+                NPY_ORDER.NPY_KEEPORDER,
                 NPY_CASTING.NPY_SAFE_CASTING,
                 new[]
                 {
@@ -1516,44 +1533,6 @@ namespace NumSharp
                 });
 
             iter.ForEach(Backends.Kernels.ILKernelGenerator.GetWhereInnerLoop(dtype));
-        }
-
-        /// <summary>
-        ///     The layout NumPy's iterator gives <see cref="where"/>'s result: F when every full-size operand that has a
-        ///     preference is F-contiguous only, C when any is C-contiguous only or neither; scalars, 1-D and broadcast
-        ///     operands do not vote.
-        /// </summary>
-        /// <param name="operands">The broadcast condition, x and y.</param>
-        /// <returns><c>'F'</c> or <c>'C'</c>.</returns>
-        private static char ResolveWhereOrder(params NDArray[] operands)
-        {
-            bool sawStrictF = false;
-
-            foreach (var operand in operands)
-            {
-                var shape = operand.Shape;
-
-                // Scalar, 1-D, and broadcasted operands don't force the output layout.
-                if (shape.IsScalar || shape.NDim <= 1 || shape.IsBroadcasted)
-                    continue;
-
-                bool isC = shape.IsContiguous;
-                bool isF = shape.IsFContiguous;
-
-                if (isC && !isF)
-                    return 'C';
-
-                if (isF && !isC)
-                {
-                    sawStrictF = true;
-                    continue;
-                }
-
-                if (!isC && !isF)
-                    return 'C';
-            }
-
-            return sawStrictF ? 'F' : 'C';
         }
 
         /// <summary>

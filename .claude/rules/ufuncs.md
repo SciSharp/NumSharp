@@ -35,7 +35,42 @@ paths:
   `sign`/`positive` reject bool with the no-loop text. Bitwise and invert raise the no-loop TypeError for float inputs.
 - Positional-dtype overloads (`np.sqrt(x, NPTypeCode.Single)`, `(x, Type)`) exist for source compatibility; they are not
   NumPy call forms (NumPy's second positional is `out`).
+- The float-tier binaries (`arctan2`, `hypot`, `copysign`, `heaviside`, `logaddexp`, `logaddexp2`, `nextafter`) promote
+  a char operand as uint16 (parity QA-17): float32 beside float16, float32 or char, float64 beside int32 and wider, with
+  uint16's bits.
 - Tests: `Math/UfuncDtypeOverloadTests.cs`.
+
+## The result layout: NumPy's K order
+
+A fresh ufunc result is laid out as NumPy's NpyIter allocates it (parity QA-36): `npyiter_find_best_axis_ordering` over
+the operands (|strides| compared pairwise, a stride-0 axis abstaining, C kept on a tie or a conflict) and
+`npyiter_new_temp_array`, so a permuted operand keeps its memory order, an F set stays F, a flipped F operand comes out
+F with positive strides, and a C, stepped, reversed or broadcast-row set gives C. `DefaultEngine.KOrder.cs`:
+- `TryKOrderPlan(dims, operands)` answers whether that layout differs from C and how to produce it: up to 64 dimensions
+  it is `Shape.NpyIterOutputShape` (NumPy's sort, ported); above, only the axes longer than 1 are sorted (the extent-1
+  axes take strides that keep the sequence non-increasing), so a plan stays linear at any rank (200,000 dimensions are
+  tested). `IsKOrderCVoter` (a C-contiguous, 0-d / one-element, or C-ordered stepped / reversed / broadcast operand) and
+  `MayNeedKOrder` decide the common case without a broadcast or an allocation.
+- The kernels write C, so the routes transpose every operand into the layout's memory order (`IntoKOrder`: views; a dense
+  permuted operand becomes C-contiguous, so the SIMD kernels still take it), compute, and relabel the C result in place
+  (`NDArray.AdoptLayout`). `KOrderBinary` / `KOrderBinaryPair` / `KOrderUnaryPair` wrap a route for that; the binary
+  operator, comparison and unary routes carry it inline (a `kOrderResolved` flag stops the recursion), and skip it for
+  an all-F pair they already lay out F (`IsAllStrictF`).
+- Covered: arithmetic, comparison and logical ufuncs, the float-tier family, the unary ufuncs, `positive`, `ldexp`, the
+  shifts, the two-output ufuncs (`frexp` / `modf` / `divmod`, both outputs), `np.where` (a KEEPORDER iterator over
+  condition, x and y), `np.diff` (its subtract), `np.isclose`, the scans (`reductions.md`) and `np.nan_to_num`
+  (np.array's K copy). A cast an operand needs up front is laid out as the ufunc would lay out the operand
+  (`CastInUfuncLayout`: NumPy's buffered cast never votes, so a broadcast operand does not become an F copy).
+- The other direction: `np.round` with decimals != 0 allocates `PyArray_Empty(..., ISFORTRAN(a))` (C, or F for an
+  F-only input) and a complex input at any decimals is `PyArray_Round`'s `NewCopy(KEEPORDER)`; `np.asarray` /
+  `np.asanyarray` with a dtype change under `order='A'` cast in K order (PyArray_FromArray without a contiguity flag),
+  while the same dtype copies under `'A'` (C, F for an F-only array).
+- A fresh result under `where=` (no `out=`) takes the iterator route's allocation, where the mask votes, as NumPy's.
+- Not ported: the stride of a length-1 axis of a keepdims reduction (flags agree), np.median / np.nanmedian over an F
+  input (np.partition's C copy), np.tril / np.triu of a permuted input whose last axis is unit-stride (the direct row
+  fill writes C).
+- Gates: `Math/UfuncResultLayout.Test.cs` (NumPy's flags and strides for every route above, a 70- and a 200,000-dimension
+  operand), the array-object tiers' layout facets (`view_flags`, `matrix`), the matrix-operand tier.
 
 ## `out=` and `where=`
 

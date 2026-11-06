@@ -19,8 +19,9 @@ namespace NumSharp.Backends
         /// <param name="x2">Integer exponents (bool, int8/16/32/64, uint8/16/32, or char). An exponent outside
         /// the C-int range is clamped, so a huge magnitude overflows to ±inf / underflows to ±0 exactly as
         /// NumPy's int64 loop does. uint64, float and complex exponents are rejected.</param>
-        /// <returns><c>x1 * 2^x2</c> broadcast to the common shape, in <paramref name="x1"/>'s float tier.
-        /// F-contiguous inputs yield an F-contiguous result.</returns>
+        /// <returns><c>x1 * 2^x2</c> broadcast to the common shape, in <paramref name="x1"/>'s float tier: a fresh
+        /// result in NumPy's ufunc output layout (the operands' K order: F inputs give F, a permuted input keeps its
+        /// memory order; parity QA-36), or <paramref name="out"/> written.</returns>
         /// <exception cref="IncorrectTypeException"><paramref name="x1"/> is complex, or <paramref name="x2"/> is
         /// not a supported integer exponent (uint64/float/complex) — NumPy raises the same "not supported for
         /// the input types" TypeError.</exception>
@@ -42,6 +43,28 @@ namespace NumSharp.Backends
             if (@out is not null)
                 ValidateOutCast(floatType, @out.typecode, "ldexp");
 
+            // A fresh result takes NumPy's ufunc output layout (parity QA-36): the kernels write C, so a non-C K order of
+            // the operands is computed over the operands transposed into it and relabelled. After every check above, so
+            // NumPy's error order holds; a caller's out keeps its own layout.
+            if (@out is null)
+                return KOrderBinary(x1, x2, (engine: this, floatType, where),
+                    static (s, a, b) => s.engine.LdexpCompute(a, b, s.floatType, null, s.where));
+            return LdexpCompute(x1, x2, floatType, @out, where);
+        }
+
+        /// <summary>
+        ///     The computation of <see cref="Ldexp"/> once its checks passed: <c>x1 * 2^x2</c> into a fresh C-ordered result
+        ///     (F only for an all-F operand set), then into <paramref name="out"/> when one is given.
+        /// </summary>
+        /// <param name="x1">The mantissas.</param>
+        /// <param name="x2">The integer exponents (already validated).</param>
+        /// <param name="floatType">The loop dtype (x1's float tier).</param>
+        /// <param name="out">The output, or null for the fresh result.</param>
+        /// <param name="where">The write mask for <paramref name="out"/>, or null.</param>
+        /// <returns>The fresh result, or <paramref name="out"/> written.</returns>
+        /// <exception cref="IncorrectShapeException">The operands do not broadcast together.</exception>
+        private NDArray LdexpCompute(NDArray x1, NDArray x2, NPTypeCode floatType, NDArray @out, NDArray where)
+        {
             // Broadcast to the common result shape (the exponent never widens the mantissa's dtype).
             var (xShape, _) = Broadcast(x1.Shape, x2.Shape);
             var cleanShape = xShape.Clean();

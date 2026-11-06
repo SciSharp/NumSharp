@@ -73,6 +73,11 @@ paths:
   mark carried over (parity QA-35; it was a storage clone keeping the source's flags, C order for a broadcast).
   `copy=false` shares the storage. Gate: `Creation/np.array.BattleTests.cs` (`Array_FromReadOnlySources_*`,
   `Array_CopyKeepsTheSourcesMemoryOrder`).
+- `np.asarray` / `np.asanyarray` of an array with a dtype CHANGE under `order='A'` cast in K order (NumPy's
+  `PyArray_FromArray` gets no contiguity flag for a non-Fortran input, so its copy is NPY_KEEPORDER: a permuted float64
+  array cast to float32 keeps strides (16, 32, 4)); the same or an equivalent dtype copies under `'A'` as
+  `PyArray_NewCopy(order='A')` (C, F for an F-only array). Parity QA-36; gate `Math/UfuncResultLayout.Test.cs`
+  (`AsarrayOrderA_CastCopiesInKOrder`).
 - `asarray_chkfinite(a, dtype=None, order='K')` is `asarray`, then `ValueError("array must not contain infs or NaNs")`
   when a float-family dtype (Half/Single/Double/Complex, NumPy's `typecodes['AllFloat']`; Decimal, integers and bool skip
   the check) holds an inf or NaN. The check is a fused single-pass NaN-poison SIMD reduction

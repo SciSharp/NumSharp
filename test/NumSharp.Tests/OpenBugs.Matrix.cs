@@ -19,8 +19,11 @@ namespace NumSharp.Tests
     // This file reproduces the gaps through PUBLIC calls on plain arrays, so each can be fixed where it lives:
     //
     //   * A crash: fancy assignment with two index entries into a C-contiguous view at an offset (MX07).
-    //   * Result LAYOUT (values equal): np.cumsum / np.cumprod (MX02), ndarray.round of a broadcast operand (MX04),
-    //     np.conjugate of a transposed strided view (MX05).
+    //
+    // FIXED 2026-11-05 (parity QA-36): the result LAYOUT gaps — np.cumsum / np.cumprod (MX02), ndarray.round of a
+    // broadcast operand (MX04), np.conjugate of a transposed strided view (MX05) — take NumPy's layouts (NpyIter's K
+    // order, PyArray_Round's complex KEEPORDER copy); their pins stay below as regression tests, untagged, their summaries
+    // opening with "FIXED", and the gaps' 43 cases are back in matrix.jsonl.
     //
     // FIXED 2026-10-15 (the numpy.char phase-2 work): ndarray.imag of a real F array is F-ordered (MX03); its pin stays
     // below as a regression test, untagged, its summary opening with "FIXED".
@@ -65,11 +68,12 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>np.cumprod(a, 0)</c> of an F-contiguous (2, 3) int64 array: NumPy's accumulate allocates the
-        ///     result in the operand's order (F-contiguous, strides (8, 16)). NumSharp returns a C-ordered array
-        ///     (gap MX02). The values are equal.
+        ///     FIXED by parity QA-36 (2026-11-05: np.cumsum / np.cumprod allocate in the accumulate iterator's K order):
+        ///     NumSharp gives NumPy's answer now, and this test pins it; the matrix tier's 36 MX02 cells are back in the
+        ///     gate. <c>np.cumprod(a, 0)</c> of an F-contiguous (2, 3) int64 array is F-contiguous (strides (8, 16)), as
+        ///     NumPy's accumulate allocates it in the operand's order; before the fix it came back C-ordered (gap MX02).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "matrix-MX02")]
+        [TestMethod]
         public void Matrix_Cumprod_OfAnFOrderedOperand_ShouldKeepTheOrder()
         {
             using var c = np.arange(1, 7).reshape(2, 3);
@@ -100,11 +104,12 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>a.round()</c> of a complex128 array broadcast from one row to (3, 2): NumPy rounds a KEEPORDER
-        ///     copy, which is F-contiguous for a row broadcast (the stride-0 axis is innermost). NumSharp returns a
-        ///     C-ordered array (gap MX04). The values are equal.
+        ///     FIXED by parity QA-36 (2026-11-05: np.round of a complex input is PyArray_Round's KEEPORDER copy whatever
+        ///     the decimals): NumSharp gives NumPy's answer now, and this test pins it; the matrix tier's 5 MX04 cells are
+        ///     back in the gate. <c>a.round()</c> of a complex128 array broadcast from one row to (3, 2) is F-contiguous
+        ///     (the K copy puts the stride-0 axis innermost); before the fix it came back C-ordered (gap MX04).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "matrix-MX04")]
+        [TestMethod]
         public void Matrix_RoundOfABroadcastComplexOperand_ShouldKeepTheOrder()
         {
             using var row = np.array(new[] { new Complex(1.5, 2.5), new Complex(2.5, -0.5) });
@@ -117,11 +122,13 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>np.conjugate(v)</c> where <c>v</c> is the transpose of a stepped (2, 3) view of a (4, 6)
-        ///     complex128 array: NumPy's ufunc output keeps the operand's memory order (F-contiguous, strides
-        ///     (16, 48)). NumSharp writes C order (gap MX05, reached through <c>matrix.H</c>). The values are equal.
+        ///     FIXED by parity QA-36 (2026-11-05: a fresh unary ufunc result takes NpyIter's K layout of its operand):
+        ///     NumSharp gives NumPy's answer now, and this test pins it; the matrix tier's 2 MX05 cells are back in the
+        ///     gate. <c>np.conjugate(v)</c> where <c>v</c> is the transpose of a stepped (2, 3) view of a (4, 6) complex128
+        ///     array keeps the operand's memory order (F-contiguous, strides (16, 48)); before the fix it was written in C
+        ///     order (gap MX05, reached through <c>matrix.H</c>).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "matrix-MX05")]
+        [TestMethod]
         public void Matrix_ConjugateOfATransposedSteppedView_ShouldKeepTheOrder()
         {
             using var owner = np.arange(24).reshape(4, 6).astype(np.complex128) * new Complex(1, 1);

@@ -29,10 +29,13 @@ namespace NumSharp.Backends
         /// <param name="typeCode">Optional output type (null = same as input or float for trig/sqrt)</param>
         /// <param name="@out">Optional provided output (NumPy ufunc out=).</param>
         /// <param name="where">Optional bool write mask (NumPy ufunc where=).</param>
-        /// <returns>Result array with specified or promoted type (or <paramref name="@out"/>)</returns>
+        /// <param name="kOrderResolved">True on the K-order step's own recursive call (the operand is already in NumPy's
+        /// output order): the step is not taken twice.</param>
+        /// <returns>Result array with specified or promoted type (or <paramref name="@out"/>); a fresh result is laid out in
+        /// NumPy's ufunc output order (the operand's K order: a permuted or flipped-F input keeps its memory order).</returns>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         internal unsafe NDArray ExecuteUnaryOp(NDArray nd, UnaryOp op, NPTypeCode? typeCode = null,
-            NDArray @out = null, NDArray where = null)
+            NDArray @out = null, NDArray where = null, bool kOrderResolved = false)
         {
             // No unary numeric ufunc has a string loop: NumPy refuses before it looks at the size, so an empty or 0-d
             // string array raises too. The dtype= request is not known here (typeCode is the caller's resolved output
@@ -84,6 +87,23 @@ namespace NumSharp.Backends
             if (nd.Shape.IsScalar)
             {
                 return ExecuteScalarUnary(nd, op, outputType);
+            }
+
+            // NumPy's ufunc output layout (parity QA-36): the result follows the operand's K order. A C or F-contiguous
+            // operand already gets it (the trivial bypass writes in the input's layout); any other layout NumPy keeps (a
+            // permuted view, a flipped F array) is computed over the operand transposed into that order and relabelled.
+            if (!kOrderResolved && !IsKOrderCVoter(nd.Shape) && !nd.Shape.IsFContiguous
+                && TryKOrderPlan(nd.Shape.dimensions, new[] { nd.Shape }, out var kLayout, out var kPerm))
+            {
+                NDArray t = IntoKOrder(nd, nd.ndim, kPerm);
+                try
+                {
+                    return NDArray.AdoptLayout(ExecuteUnaryOp(t, op, typeCode, null, null, kOrderResolved: true), kLayout);
+                }
+                finally
+                {
+                    t?.Dispose();
+                }
             }
 
             // -------- O(1) trivial-loop bypass -----------------------------

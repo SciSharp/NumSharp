@@ -1254,16 +1254,16 @@ def gen_text(em):
 # product runs NumPy's reduction iterator, which visits a reversed view in NumPy's order, so npy_cmul meets the zero
 # parts in the same order. Matrix_KnownGaps reported its 4 cases matching on 2026-11-05; its rule is dropped and its 4
 # cases were moved back into matrix.jsonl as they were.
+#
+# MX02 (np.cumsum / np.cumprod result layout), MX04 (ndarray.round of a broadcast operand) and MX05 (np.conjugate of a
+# transposed strided or reversed view) match NumPy since parity QA-36 (2026-11-05): a fresh ufunc or accumulate result
+# takes NpyIter's K layout of its operands (a cast done up front for a bool scan is laid out the same way, since NumPy's
+# buffered cast never votes), and PyArray_Round's complex branch is a KEEPORDER copy whatever the decimals, its real
+# branch PyArray_Empty(ISFORTRAN). Matrix_KnownGaps reported their 36 + 5 + 2 cases matching; their rules are dropped
+# and the 43 cases were moved back into matrix.jsonl as they were.
 GAPS = {
     "MX01": "a[:, index_array]: NumPy returns its transposed MapIter view (F-contiguous for two axes); NumSharp's "
             "fancy getter returns a C-ordered array. Values equal. Library-wide (OpenBugs.FancyIndex.cs).",
-    "MX02": "np.cumsum / np.cumprod result layout for an operand that is not C-contiguous: NumPy's accumulate "
-            "allocates in the operand's order (F for an F or transposed operand), NumSharp in C order; a "
-            "broadcast bool operand goes the other way. Values equal.",
-    "MX04": "ndarray.round of a broadcast (stride-0) operand: the result layout differs (NumPy's KEEPORDER copy "
-            "/ PyArray_Empty(ISFORTRAN) against NumSharp's). Values equal.",
-    "MX05": "np.conjugate of a transposed strided or reversed complex128 view: NumPy's ufunc keeps the operand's "
-            "K order, NumSharp writes C order. Reached through matrix.H. Values equal.",
     "MX07": "fancy assignment with two index entries into a C-contiguous view at a non-zero offset "
             "(a[rows, cols] = v, a[:, cols] = v) throws IndexOutOfRangeException: the offsets include the view's "
             "offset and the bound does not. The offset-view class of the array-object oracle.",
@@ -1311,21 +1311,6 @@ def _gap_of(case):
         index = p.get("index") or []
         if len(index) == 2 and any(_is_advanced(e) for e in index) and not all(_is_advanced(e) for e in index):
             return "MX01"
-
-    if not raises and p.get("axis") in (0, 1):
-        if op == "matrix.cumprod" and layout in ("f", "t"):
-            return "MX02"
-        if op == "matrix.cumsum" and layout == "bcast" and dt == "bool":
-            return "MX02"
-
-    if op == "matrix.round" and layout == "bcast" and not raises:
-        decimals = p.get("decimals", 0)
-        if (dt == "complex128" and decimals == 0) or (dt == "float64" and decimals in (-1, 1)) \
-                or (dt == "int64" and decimals == -1):
-            return "MX04"
-
-    if op in ("matrix.H", "matrix.getH") and layout in ("rev", "step") and dt == "complex128":
-        return "MX05"
 
     if op == "matrix.__setitem__" and layout.startswith("off:") and not raises:
         # Only the assignments NumPy accepts reach the scatter that computes the offsets; a value NumPy refuses is

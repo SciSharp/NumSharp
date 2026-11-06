@@ -21,9 +21,13 @@ namespace NumSharp.Backends
         /// <param name="lhs">Left operand</param>
         /// <param name="rhs">Right operand</param>
         /// <param name="op">Comparison operation to perform</param>
-        /// <returns>Result array with bool type</returns>
+        /// <param name="kOrderResolved">True on the K-order step's own recursive call (the operands are already in NumPy's
+        /// output order): the step is not taken twice.</param>
+        /// <returns>Result array with bool type, laid out in NumPy's ufunc output order (the operands' K order)</returns>
+        /// <exception cref="InvalidOperationException">The relabelled result is not a bool array (a kernel-dtype contract
+        /// break; never expected).</exception>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        internal unsafe NDArray<bool> ExecuteComparisonOp(NDArray lhs, NDArray rhs, ComparisonOp op)
+        internal unsafe NDArray<bool> ExecuteComparisonOp(NDArray lhs, NDArray rhs, ComparisonOp op, bool kOrderResolved = false)
         {
             // Two strings of one class compare their text (the guard runs NDStringComparison and returns its result; an
             // empty result compares nothing); any other pair with a string operand has no comparison loop (NumPy's
@@ -38,6 +42,32 @@ namespace NumSharp.Backends
             if (lhs.Shape.IsScalar && rhs.Shape.IsScalar)
             {
                 return ExecuteComparisonScalarScalar(lhs, rhs, op);
+            }
+
+            // NumPy's ufunc output layout (parity QA-36): the bool result follows the operands' K order. The routes below
+            // write C (or F for an all-F pair), so a permuted operand is computed over the operands transposed into the K
+            // order (views) and the C result relabelled; C-ordered operands and an all-F pair skip it (MayNeedKOrder,
+            // IsAllStrictF).
+            if (!kOrderResolved && MayNeedKOrder(lhs.Shape, rhs.Shape) && !IsAllStrictF(lhs.Shape, rhs.Shape))
+            {
+                var (kl, _) = Broadcast(lhs.Shape, rhs.Shape);
+                if (TryKOrderPlan(kl.dimensions, new[] { lhs.Shape, rhs.Shape }, out var kLayout, out var kPerm))
+                {
+                    int knd = kl.NDim;
+                    NDArray lt = IntoKOrder(lhs, knd, kPerm), rt = IntoKOrder(rhs, knd, kPerm);
+                    try
+                    {
+                        var adopted = NDArray.AdoptLayout(ExecuteComparisonOp(lt ?? lhs, rt ?? rhs, op, kOrderResolved: true), kLayout);
+                        // The relabel returns the comparison's own NDArray<bool>; the copy fallback a fresh untyped array.
+                        return adopted as NDArray<bool> ?? adopted.AsGeneric<bool>()
+                               ?? throw new InvalidOperationException("comparison result is not a bool array");
+                    }
+                    finally
+                    {
+                        lt?.Dispose();
+                        rt?.Dispose();
+                    }
+                }
             }
 
             // -------- O(1) trivial-loop bypass -----------------------------

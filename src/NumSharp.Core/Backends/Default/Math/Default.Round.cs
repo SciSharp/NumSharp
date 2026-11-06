@@ -1,5 +1,6 @@
 using System;
 using System.Numerics;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
 
@@ -106,6 +107,13 @@ namespace NumSharp.Backends
                     : decimals > 0 ? Strings.NDStringUfuncs.NoLoop("multiply", nd.dtype, np.float64)
                     : Strings.NDStringUfuncs.NotSupportedForInputTypes("divide");
 
+            // A complex input takes PyArray_Round's complex branch whatever the decimals: a K-order copy whose real and
+            // imaginary parts are rounded (decimals 0 rints each part), so its layout is the K copy's, not the rint
+            // ufunc's (they differ for a broadcast input: parity QA-36, the matrix tier's MX04). RoundScaleCore at 0
+            // decimals scales by 10^0 = 1, exact, so each part is Math.Round's half-to-even rint, the same values.
+            if (decimals == 0 && @out is null && dtype is null && nd.GetTypeCode == NPTypeCode.Complex)
+                return RoundScaleCore(nd, 0, NPTypeCode.Complex);
+
             // decimals==0 is the rint ufunc (round-half-to-even), a wholly separate dtype contract handled above.
             if (decimals == 0)
                 return Round(nd, dtype, @out, null);
@@ -202,7 +210,9 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// Core of the <c>decimals != 0</c> round: materialise <paramref name="nd"/> as a fresh contiguous copy at
+        /// Core of the <c>decimals != 0</c> round (and of a complex input's at 0 decimals): materialise
+        /// <paramref name="nd"/> as a fresh C-contiguous copy (F for an F-only input, NumPy's <c>PyArray_ISFORTRAN</c>
+        /// rule; a K-order copy for a complex input, PyArray_Round's complex branch) at
         /// the working dtype <paramref name="work"/> (which also densifies any layout, widens an integer to double,
         /// and yields an empty array for an empty input), then apply <c>op2(rint(op1(x, f)), f)</c> in place at that
         /// precision. The per-element bodies are the SAME primitives the engine's own multiply/rint/divide kernels
@@ -215,7 +225,8 @@ namespace NumSharp.Backends
         /// collapsed to a contiguous buffer by the <see cref="Cast"/>.
         /// </summary>
         /// <param name="nd">Input array (any dtype/layout).</param>
-        /// <param name="decimals">The non-zero decimals (sign selects mul→div vs div→mul).</param>
+        /// <param name="decimals">The decimals (sign selects mul→div vs div→mul); 0 only for a complex input, which
+        /// then rints each part (a scale of exactly 1).</param>
         /// <param name="work">The working/loop dtype: a float (Half/Single/Double), Complex, Decimal, or Double for
         /// an integer input.</param>
         /// <returns>A fresh, contiguous, writeable array of dtype <paramref name="work"/> holding the rounded values.</returns>
@@ -224,9 +235,18 @@ namespace NumSharp.Backends
         /// no longer fits (an edge with no NumPy analog).</exception>
         private unsafe NDArray RoundScaleCore(NDArray nd, int decimals, NPTypeCode work)
         {
-            // copy:true -> a fresh, owned, C-contiguous buffer at `work` we may overwrite in place. This is also the
-            // int->double widen and the layout-densification, so the loops below never see strides.
-            var res = Cast(nd, work, copy: true);
+            // A fresh, owned, dense buffer at `work` we may overwrite in place. This is also the int->double widen and
+            // the layout-densification, so the loops below never see strides. Its layout is PyArray_Round's (parity
+            // QA-36): a COMPLEX input takes its first branch, `PyArray_NewCopy(a, NPY_KEEPORDER)` with the real and
+            // imaginary parts rounded into it — the K copy, which lays a broadcast input out by its stride ranking;
+            // every other input `PyArray_Empty(..., PyArray_ISFORTRAN(a))`: C, or F for an input that is F-contiguous and
+            // not C-contiguous — never the input's K order (the integer route's cast back keeps this layout, as
+            // PyArray_CastToType(..., ISFORTRAN(a)) does). An empty input keeps Cast's own empty result.
+            char order = nd.GetTypeCode == NPTypeCode.Complex ? 'K'
+                : nd.Shape.IsFContiguous && !nd.Shape.IsContiguous ? 'F' : 'C';
+            var res = nd.size == 0 || nd.Shape.IsEmpty
+                ? Cast(nd, work, copy: true)
+                : NDIter.CopyAs(work, nd, order, nd.TensorEngine);
             long len = res.size;
             if (len == 0)
                 return res; // empty input: no elements to round (Cast already produced the right dtype/shape)

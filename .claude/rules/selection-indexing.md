@@ -297,7 +297,8 @@ Every store entry point packs a C# literal as NumPy's `PyArray_Pack` of a Python
   `double` and `Complex` literal is weak (it adopts the other operands' dtype); `bool`, `char`, `Half`, `decimal`, arrays
   and every `NDArray` are strong (NumPy's `type(x) in (int,float,complex) else asarray(x)`), so a weak-int default that
   overflows the resolved dtype WRAPS (`int8` choice + `1000` default → -24); the result dtype is
-  `result_type(*choices, default)` through `NDExprTypeRules.PromoteStrong`. The copies receive what NumPy's
+  `result_type(*choices, default)`, one order-independent reduction (`NDExprTypeRules.PromoteStrongSequence`, never a
+  left fold: `[int16, uint16, float16]` is float32 in every order; parity QA-51). The copies receive what NumPy's
   `np.broadcast_arrays` makes of a weak literal (`np.asarray` of the Python scalar: int64 / float64 / complex128, of the
   choice group's shape), so a C# `byte` beside a uint8 array is refused as NumPy's Python int is (`Cannot cast array data
   from dtype('int64') to dtype('uint8') according to the rule 'same_kind'`). Conditions and choices broadcast in two

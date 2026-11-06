@@ -55,7 +55,9 @@ in the `manip` tier. Sources `Creation/np.{r_,c_}.cs`, `Indexing/np.{ix_,s_}.cs`
   (`NDArray.AsStoreValue`, NumPy's `PyArray_Pack` with the LP64 texts): an integer that does not fit raises
   `OverflowException("Python integer 1000 out of bounds for int8")`, past the C long "Python int too large to convert to
   C long" (`np.r_[i8, ulong.MaxValue]`); a weak float saturates to ±inf. An all-literal key whose integer does not fit
-  int64 lifts the default to uint64. One complex width: `result_type(float32, 1j)` is complex128.
+  int64 lifts the default to uint64. One complex width: `result_type(float32, 1j)` is complex128. The result dtype is
+  one `result_type` over every array and scalar (`NDExprTypeRules.PromoteStrongSequence`, never a left fold:
+  `np.r_[i16, u16, f16]` is float32 in every order; parity QA-51).
 - Matched, no need to re-prove: `-0.0` keeps its sign; NaN/±inf/subnormals round-trip; the weak-integer boundaries are
   exact (`i8+127` fits, `+128` raises); `9e18:9e18+2` collapses to empty; huge slice expressions raise
   `OutOfMemoryException`; NumPy's error order holds. `np.r_`/`np.c_` are stateless singletons (a directive is copied to

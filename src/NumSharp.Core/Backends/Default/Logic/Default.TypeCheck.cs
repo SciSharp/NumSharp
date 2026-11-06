@@ -18,8 +18,10 @@ namespace NumSharp.Backends
             if (x is null)
                 throw new ArgumentNullException(nameof(x));
 
-            // NumPy: x = array(x, copy=copy). copy=True -> C-contiguous copy; copy=False operates on x.
-            var work = copy ? x.copy() : x;
+            // NumPy: x = array(x, subok=True, copy=copy). np.array's order is 'K', so copy=True is a copy in x's memory
+            // order (an F or permuted input keeps its layout, a reversed or stepped view is laid out densely; parity
+            // QA-36); copy=False operates on x.
+            var work = copy ? x.copy('K') : x;
             var tc = work.typecode;
 
             // Only inexact dtypes (Half/Single/Double/Complex) are touched; anything else has no
@@ -34,9 +36,12 @@ namespace NumSharp.Backends
 
             bool anyCompositionFill = IsCompositionFill(nan) || IsCompositionFill(posinf) || IsCompositionFill(neginf);
 
-            // Fast fused path: scalar fills into a contiguous target. Complex rides the Double kernel
-            // over the raw interleaved buffer (real & imag each get the same scalar fill).
-            if (!anyCompositionFill && work.Shape.IsContiguous && work.Shape.Offset == 0)
+            // Fast fused path: scalar fills into a dense target (C, F or any permuted dense layout, offset 0: the
+            // replacement is elementwise, so the kernel may walk the buffer in memory order whatever the axis order, and
+            // the K copy above is always dense). Complex rides the Double kernel over the raw interleaved buffer (real &
+            // imag each get the same scalar fill).
+            if (!anyCompositionFill && work.Shape.Offset == 0
+                && (work.Shape.IsContiguous || work.Shape.IsDenseInSomeAxisOrder()))
                 RunNanToNumFused(work, tc, realTc, nan, posinf, neginf);
             else
                 RunNanToNumComposition(work, tc, realTc, nan, posinf, neginf);

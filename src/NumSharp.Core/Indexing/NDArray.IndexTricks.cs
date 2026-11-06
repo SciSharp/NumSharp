@@ -865,18 +865,24 @@ namespace NumSharp
         ///     NumPy's <c>result_type(*result_type_objs)</c>: arrays and NumSharp-only scalars contribute
         ///     their dtype, C# literals contribute a weak kind that adopts it.
         /// </summary>
+        /// <param name="objs">The entries, in order.</param>
+        /// <returns>The result dtype.</returns>
+        /// <remarks>The strong dtypes are promoted ONCE, order-independently (<see cref="NDExprTypeRules.PromoteStrongSequence"/>):
+        ///     NumPy's result_type is one NEP 50 reduction, and a pairwise fold from the left gave
+        ///     <c>np.r_[int16, uint16, float16]</c> float64 where NumPy gives float32 (parity QA-51).</remarks>
         private static NPTypeCode ResolveDtype(List<ConcatOperand> objs)
         {
             bool anyStrong = false;
             bool anyBeyondInt64 = false;
             NPTypeCode strong = NPTypeCode.Empty;
             ConcatWeakKind weak = ConcatWeakKind.Strong;
+            var strongTypes = new List<NPTypeCode>(objs.Count);
 
             foreach (var op in objs)
             {
                 if (op.IsStrong)
                 {
-                    strong = anyStrong ? NDExprTypeRules.PromoteStrong(strong, op.Code) : op.Code;
+                    strongTypes.Add(op.Code);
                     anyStrong = true;
                 }
                 else
@@ -886,6 +892,9 @@ namespace NumSharp
                     anyBeyondInt64 |= op.ExceedsInt64;
                 }
             }
+
+            if (anyStrong)
+                strong = NDExprTypeRules.PromoteStrongSequence(strongTypes);
 
             if (!anyStrong)
             {

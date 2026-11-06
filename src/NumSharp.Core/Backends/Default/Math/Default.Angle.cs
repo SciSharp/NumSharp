@@ -50,7 +50,7 @@ namespace NumSharp.Backends
                 // {+0, pi, nan} (the sign of z decides), so computing arctan2 in float64 then casting to
                 // NumPy's angle tier is bit-exact with NumPy computing directly at that tier (verified);
                 // this also reuses the existing arctan2 kernel per NumPy's own composition.
-                var x = z.astype(NPTypeCode.Double);
+                var x = AngleFloat64Operand(z);
                 a = x.TensorEngine.ATan2(NewScalar(0.0), x);
                 NPTypeCode tier = AngleRealTier(z.typecode);
                 if (tier != NPTypeCode.Double)
@@ -69,6 +69,21 @@ namespace NumSharp.Backends
             }
 
             return a;
+        }
+
+        /// <summary>
+        ///     The real input of <see cref="Angle"/> as the float64 operand its <c>arctan2(0, z)</c> runs on, laid out as
+        ///     NumPy's ufunc would lay out <c>z</c> itself (parity QA-36): in NumPy the cast is arctan2's own buffering,
+        ///     which never moves the output's layout, so the copy takes <see cref="TryKOrderPlan"/>'s layout of z — a
+        ///     broadcast z gives C, where astype's K copy would rank its stride-0 axes and hand arctan2 a permuted operand.
+        /// </summary>
+        /// <param name="z">The real input (any non-complex, non-text dtype; any layout).</param>
+        /// <returns><paramref name="z"/> itself when it already is float64, else a fresh float64 copy in that layout.</returns>
+        /// <remarks>A fresh copy is reclaimed by <see cref="Angle"/>'s scope.</remarks>
+        private static NDArray AngleFloat64Operand(NDArray z)
+        {
+            // Unsafe like astype: every real dtype converts to float64 (decimal rounds to the nearest double).
+            return z.typecode == NPTypeCode.Double ? z : CastInUfuncLayout(z, NPTypeCode.Double);
         }
 
         /// <summary>

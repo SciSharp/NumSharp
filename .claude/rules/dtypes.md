@@ -106,8 +106,7 @@ lane and reports its own type number, character, scalar type and class (`np.dtyp
   left fold gives float32); only the public `np.find_common_type` is NumPy 1.26.4's search (below). Never fold
   `PromoteStrong` over three or more operands: NEP 50 is not associative. `NDExprTypeRules.PromoteStrongSequence` is the
   order-independent form with `PromoteStrong`'s NumSharp rules (complex, then decimal, win; char promotes as uint16 and a
-  uint16 answer of the char's own width is char), used by `np.choose` (parity QA-07); `np.select` and `np.r_` still fold
-  (parity QA-51, open).
+  uint16 answer of the char's own width is char), used by `np.choose`, `np.select` and `np.r_` (parity QA-07, QA-51).
 - `DTypeCasting` is `PyArray_CanCastTypeTo`/`CheckCastSafety`/`GetCastInfo`/`EquivTypes`/`MinCastSafety` over the impl
   table. The builtin impls: same class → `equiv`; `promote(from, to) == to` → `safe`; kind order `b<u<i<f<c` →
   `same_kind`; else `unsafe` (Char↔UInt16 are distinct classes, never `equiv`). The table also expresses byte order
