@@ -151,9 +151,9 @@ reduction-row cells, the other two equal. PA2c is done (`ddfe2d3f`): the reducti
 loops are calls of the binary ufunc's own add kernels - one inner-loop call per elementwise call, the stationary-out
 variant for several rows, which gains row blocks and an x86 next-block prefetch - so NumPy's NaN operand order has
 one copy; the same bytes over 840 cases, np.average over an axis pair 1.91–1.96×, no cell of the 35 slower. PA2 is
-done. PA2a, PA2b and PA2c wait to land on `strings`, where another session holds an uncommitted edit of
-`DefaultEngine.UnaryOp.cs`, a file PA2a changes. Next, the owner's call (not asked yet): P10 item 6, PA5, PA6, the
-fixes of the pinned divergences.
+done. PA2a, PA2b and PA2c landed on `strings` together, picked onto `3420f43a` and re-gated there; another session's
+uncommitted edits of four of their files had held them in a scratch worktree. Next, the owner's call (not asked
+yet): P10 item 6, PA5, PA6, the fixes of the pinned divergences.
 
 **The owner's decisions of 2026-10-31** ([§5](#5-decisions-for-the-owner), D7 to D22, asked with each option's code):
 - P7 is dropped. D7's first answer ("Rule on the result") gave it a design; in the step round the same day the owner
@@ -1791,8 +1791,9 @@ breaks a subclass or a direct caller for a layering reason alone.
 ## 9. State log
 
 - **2026-11-05, PA2c (D23): the reduction's add loops are calls of the binary ufunc's own add kernels; PA2c is done,
-  and with it PA2.** One commit on top of PA2b's, `ddfe2d3f` (with PA2a's and PA2b's, waiting to land: the `strings`
-  worktree holds another session's uncommitted edit of `DefaultEngine.UnaryOp.cs`, a file PA2a changes).
+  and with it PA2.** One commit on top of PA2b's, `ddfe2d3f` (with PA2a's and PA2b's; the three waited in a scratch
+  worktree while the `strings` worktree carried another session's uncommitted edits of four of their files, then
+  were picked onto `3420f43a` together and re-gated there: unit 23,267 / 23,266 on net10.0 / net8.0, the kernel and reduction classes under guard pages, the oracle 419).
   - The moves, and the stationary-out mode's row blocks and prefetch: see PA2c in §7.
   - The effort the rule asked for, in order: PA2b's mode as it stood (the axis pair 1.09–1.26× of the hand form,
     where the prototype's plain 2-D kernel measured 2.00× / 1.91×); a shape rule sending such rows to the plain
@@ -1812,8 +1813,8 @@ breaks a subclass or a direct caller for a layering reason alone.
     0.91–1.04× across runs and 1.006× with the harness's two places swapped (it prepares its first side first).
 
 - **2026-11-05, PA2b (D23): the 2-D block kernel's stationary-out mode - a reduction's out row held in registers across
-  the rows; PA2b is done.** One commit on top of PA2a's, `da886b5d` (with PA2a's two, waiting to land: the `strings`
-  worktree holds another session's uncommitted edit of `DefaultEngine.UnaryOp.cs`, a file PA2a changes).
+  the rows; PA2b is done.** One commit on top of PA2a's, `da886b5d` (landed with PA2a's two and PA2c's; see PA2c's
+  entry).
   - Measured on its own (no route calls the variant until PA2c): the plain 2-D kernel driving a reduction's `{o, x, o}`
     against the stationary-out variant, both in one process; float64, float32, int32, int16, uint8 over seven
     (rows, n) shapes from (1000, 3) to (10, 100000) and (100000, 4), with contiguous, reversed and broadcast rows: 105
@@ -1828,7 +1829,7 @@ breaks a subclass or a direct caller for a layering reason alone.
 - **2026-11-05, PA2a (D23): the reversed-run load - a reversed operand loads each vector with one contiguous load and a
   lane reversal in the shared kernels; PA2a is done.** One commit on `strings` (not pushed), `d1754bca` (developed on
   `4c78d673` as `7d408bc0`, picked onto `33d6ae44` when `strings` moved and re-gated there, then onto `b3551b9c`, a
-  release-notes-only commit).
+  release-notes-only commit, and with PA2b and PA2c onto `3420f43a`).
   - The owner's cells and more: `a[::-1] + b`, `a + b[::-1]`, `a[::-1] + b[::-1]`, `a[::-1] * s`,
     `np.maximum(a[::-1], s)`, `np.negative` / `np.absolute` / `np.sqrt(a[::-1])`, `np.clip(a[::-1], lo, hi)` for float64,
     float32, int32, int16 and uint8 at 1K / 100K / 1M; `m[:, ::-1] + n`, `m[:, ::-1] * s`, `np.sqrt(m[:, ::-1])` at
