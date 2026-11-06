@@ -139,13 +139,14 @@ namespace NumSharp
         ///     Returns true incase of a number, bool or string. If null, returns false.
         /// </summary>
         /// <param name="obj">Any object, null included.</param>
-        /// <returns>True for a C# number (a primitive, a decimal, a <see cref="Complex"/>), a bool, a string and a 0-d
-        ///     one-element NDArray (NumSharp's stand-in for a NumPy scalar); false for null, any other NDArray, a C# array
-        ///     and any other object.</returns>
+        /// <returns>True for a C# number (a primitive, a decimal, a <see cref="Complex"/>, a <see cref="Half"/>, a
+        ///     <see cref="System.Numerics.BigInteger"/>), a bool, a string, a <see cref="Char8"/>, a <see cref="DateTime64"/>
+        ///     and a 0-d one-element NDArray (NumSharp's stand-in for a NumPy scalar); false for null, any other NDArray, a C#
+        ///     array, a <see cref="Type"/> (NumPy's <c>isscalar(int)</c> is False) and any other object.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.isscalar.html
-        ///     <para>NumPy's statement is the array object's (<c>NDArray.isscalar</c>, whose remarks list the answers that
-        ///     differ from NumPy's: a <see cref="Type"/>, a <see cref="Half"/>, a <see cref="System.Numerics.BigInteger"/>).
-        ///     The object has no array class to decide, so no class rule applies.</para></remarks>
+        ///     <para>NumPy's statement is the array object's (<c>NDArray.isscalar</c>, whose remarks hold the one answer that
+        ///     differs from NumPy's: a 0-d NDArray is a scalar, because it is what a NumPy scalar becomes). The object has no
+        ///     array class to decide, so no class rule applies.</para></remarks>
         public static bool isscalar(object obj) => NDArray.isscalar(obj);
 
         /// <summary>

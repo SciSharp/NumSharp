@@ -53,10 +53,10 @@ namespace NumSharp.Tests
     //        an explicit path past the operands leaked ArgumentOutOfRangeException where NumPy's pop raises IndexError("pop
     //        index out of range"). Its tests moved to EinsumPathTests (EllipsisWithoutItsOperand_RaisesIndexError,
     //        ExplicitPathPastTheOperands_RaisesIndexError).
-    //   NL11 np.isscalar answers False for a Half (NumPy's float16 scalar) and a BigInteger (a Python int past int64),
-    //        where NumPy answers True, and True for a Type object of a primitive (typeof(int)), where NumPy's isscalar(int)
-    //        is False. Found by P8's snapshot tool, whose object operand (18835e6b) first ran np.isscalar over them; the
-    //        move onto the array object (4cea01d6) kept the behaviour.
+    //   NL11 FIXED (the plan's D24, 2026-11-06): np.isscalar answered False for a Half and a BigInteger (and a Char8 and a
+    //        DateTime64), where NumPy's float16 scalar, Python int, bytes_ and datetime64 are scalars, and True for a Type
+    //        object (typeof(int)), where NumPy's isscalar(int) is False. Its tests moved to np_isscalar_tests
+    //        (ScalarStandIns_AreScalars, TypeObjects_AreNotScalars).
     //   NL12 FIXED by parity QA-30 (batch 13): np.broadcast_to's refusals were not NumPy's texts (a 1-tuple without its
     //        comma, one space before "and requested shape", the shape text for a source with more axes than the target), and
     //        np.mean / np.var / np.std with a where= mask that does not broadcast reached them through _count_reduce_items;
@@ -357,51 +357,6 @@ namespace NumSharp.Tests
             using var f = np.array(new[] { N32(1), 2f, N32(2) });
             using var sf = np.sum(f);
             BitConverter.SingleToInt32Bits(sf.GetSingle()).Should().Be(0x7FC00001, "float32 run: the first element's NaN");
-        }
-
-        // ------------------------------------------------------------------
-        // NL11 — np.isscalar: Half, BigInteger and Type objects
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     NumPy's isscalar is <c>isinstance(element, generic) or type(element) in ScalarType or isinstance(element,
-        ///     numbers.Number)</c>: a float16 scalar is a <c>generic</c>, so <c>np.isscalar(np.float16(1.5))</c> is True
-        ///     (probed). <see cref="Half"/> is NumSharp's float16 scalar, but it is no CLR primitive, so NumSharp's
-        ///     <c>type.IsPrimitive || obj is decimal</c> answers False.
-        /// </summary>
-        /// <remarks>Root cause: <c>NDArray.isscalar</c> (src/NumSharp.Core/Backends/NDArray.Numeric.cs) has no Half
-        ///     case.</remarks>
-        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL11")]
-        public void NpLayer_Isscalar_Half_ShouldBeAScalar()
-        {
-            np.isscalar((Half)1.5).Should().BeTrue("np.isscalar(np.float16(1.5)) is True");
-        }
-
-        /// <summary>
-        ///     A Python int of any size is a <c>numbers.Number</c>, so <c>np.isscalar(2**70)</c> is True (probed).
-        ///     <see cref="BigInteger"/> is how a C# caller spells a Python int past int64 (the house map), but it is no CLR
-        ///     primitive, so NumSharp answers False.
-        /// </summary>
-        /// <remarks>Root cause: <c>NDArray.isscalar</c> has no BigInteger case.</remarks>
-        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL11")]
-        public void NpLayer_Isscalar_BigInteger_ShouldBeAScalar()
-        {
-            np.isscalar(BigInteger.Pow(2, 70)).Should().BeTrue("np.isscalar(2**70) is True");
-        }
-
-        /// <summary>
-        ///     A type is not a scalar: <c>np.isscalar(int)</c> and <c>np.isscalar(np.float64)</c> are False (probed; a class
-        ///     object is neither a <c>generic</c> nor a <c>numbers.Number</c>). NumSharp reads a <see cref="Type"/> argument
-        ///     as the type it names (<c>obj as Type ?? obj.GetType()</c>), so <c>np.isscalar(typeof(int))</c> answers for an
-        ///     int: True.
-        /// </summary>
-        /// <remarks>Root cause: <c>NDArray.isscalar</c>'s <c>case Type _: break;</c>, which sends a Type object to the
-        ///     primitive test of the type it names.</remarks>
-        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL11")]
-        public void NpLayer_Isscalar_TypeObject_ShouldNotBeAScalar()
-        {
-            np.isscalar(typeof(int)).Should().BeFalse("np.isscalar(int) is False");
-            np.isscalar(typeof(double)).Should().BeFalse("np.isscalar(float) is False");
         }
 
         // ------------------------------------------------------------------

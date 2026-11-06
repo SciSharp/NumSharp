@@ -603,41 +603,44 @@ namespace NumSharp
         /// <summary>
         ///     NumPy's <c>np.isscalar</c> (<c>numeric.py</c>: <c>isinstance(element, generic) or type(element) in ScalarType
         ///     or isinstance(element, numbers.Number)</c>) over C# values: a 0-d one-element NDArray (NumSharp's stand-in for
-        ///     a NumPy scalar), a <see cref="System.Numerics.Complex"/>, a string, a bool, a primitive or a decimal.
+        ///     a NumPy scalar), a <see cref="System.Numerics.Complex"/>, a string, a bool, a primitive, a decimal, and the C#
+        ///     spellings of the other NumPy and Python scalars — a <see cref="Half"/> (<c>np.float16</c>), a
+        ///     <see cref="BigInteger"/> (a Python int of any size), a <see cref="Char8"/> (<c>np.bytes_</c> / <c>bytes</c> of
+        ///     length 1) and a <see cref="DateTime64"/> (<c>np.datetime64</c>).
         /// </summary>
         /// <param name="obj">Any object, null included.</param>
-        /// <returns>True for the scalars above; false for null, any other NDArray, a C# array and any other object.</returns>
+        /// <returns>True for the scalars above; false for null, any other NDArray, a C# array, a <see cref="Type"/> and any
+        ///     other object.</returns>
         /// <remarks>
-        ///     A <see cref="Type"/> is read as the type it names: <c>isscalar(typeof(int))</c> answers for an int, where NumPy's
-        ///     <c>isscalar(int)</c> is False. A <see cref="Half"/> (NumPy's float16 scalar) and a <see cref="BigInteger"/> (a
-        ///     Python int) answer False, where NumPy's answer True. These three divergences are pinned as open bugs (D21). A
-        ///     0-d NDArray answers True where NumPy's 0-d array does not: NumSharp has no scalar objects, so a 0-d array is
-        ///     what a NumPy scalar becomes.
+        ///     A <see cref="Type"/> is a class object, never a scalar: <c>isscalar(typeof(int))</c> is False, as NumPy's
+        ///     <c>isscalar(int)</c> and <c>isscalar(np.float64)</c> are (a class is neither a <c>generic</c> nor a
+        ///     <c>numbers.Number</c>). A 0-d NDArray answers True where NumPy's 0-d array does not: NumSharp has no scalar
+        ///     objects, so a 0-d array is what a NumPy scalar becomes.
         /// </remarks>
         internal static bool isscalar(object obj)
         {
-            switch (obj)
-            {
-                case null:
-                    return false;
-                case NDArray nd:
-                    return nd.ndim == 0 && nd.size == 1;
-                case Type _:
-                    break;
-                case Complex _:
-                case string _:
-                case bool _:
-                    return true;
-            }
-
-            var type = obj as Type ?? obj.GetType();
-            if (type.IsArray)
-            {
+            if (obj is null)
                 return false;
-            }
 
-            //type.IsPrimitive checks for: Boolean, Byte, SByte, Int16, UInt16, Int32, UInt32, Int64, UInt64, IntPtr, UIntPtr, Char, Double, and Single.
-            return type.IsPrimitive || obj is decimal;
+            // The common answers first, each a method-table compare: type.IsPrimitive checks for Boolean, Byte, SByte, Int16,
+            // UInt16, Int32, UInt32, Int64, UInt64, IntPtr, UIntPtr, Char, Double and Single; then the other scalar types,
+            // none of which can have a subclass, so exact type tests decide them. NumPy's float16 scalar (a generic), a
+            // Python int of any size (a numbers.Number), np.bytes_ / bytes and np.datetime64 (generics) are among them: no
+            // CLR primitive, they answered False before the np-layer plan's NL11. Only an NDArray needs the hierarchy walk
+            // of a class test (its subclasses), so it comes last.
+            Type type = obj.GetType();
+            if (type.IsPrimitive)
+                return true;
+            if (type == typeof(string) || type == typeof(Complex) || type == typeof(decimal) || type == typeof(Half)
+                || type == typeof(BigInteger) || type == typeof(Char8) || type == typeof(DateTime64))
+                return true;
+            if (obj is NDArray nd)
+                return nd.ndim == 0 && nd.size == 1;
+
+            // Everything else: a C# array (a Python list), any other object, and a Type - a class object, which NumPy's
+            // isscalar(int) answers False for. A Type used to be read as the type it names, so typeof(int) answered True
+            // (NL11).
+            return false;
         }
     }
 }
