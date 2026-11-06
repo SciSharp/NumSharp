@@ -453,25 +453,21 @@ namespace NumSharp
         private static NDArray MatrixNanExtreme(NDArray a, int? axis, NDArray @out, bool keepdims, object initial,
             NDArray @where, bool isMax)
         {
-            // _replace_nan: only an inexact dtype has a mask (decimal holds no NaN; text, bool and the integers have none),
-            // and without one nanmax IS np.amax of the operand itself.
-            if (a.GetTypeCode is not (NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Complex))
-                return MatrixExtreme(a, axis, @out, keepdims, initial, @where, isMax);
-
             // The steps below compute plain and build the matrix answer here, where NumPy's statements pass matrices from
             // call to call: the boundary's contract is that no library method reaches a public function's matrix rule at
             // depth zero (NDMatrixBoundary's caller audit), so every np.* call runs inside this region.
             using var plain = NDMatrixBoundary.Inside();
 
-            // mask = np.isnan(a); a = np.array(a, subok=True, copy=True), the copy in K order; np.copyto(a, -inf / +inf,
-            // where=mask) under same_kind (a Python float into an inexact dtype: -inf+0j for complex). The copy reaches the
-            // method rules below as a matrix view, as NumPy's subok copy is a matrix.
-            NDArray mask = isnan(a);
-            NDArray replaced = copy(a, 'K');
-            copyto(replaced, isMax ? double.NegativeInfinity : double.PositiveInfinity, where: mask);
+            // a, mask = _replace_nan(a, -inf / +inf): the array object's statement (NDArray.ReplaceNaN) makes the mask, the
+            // K-order copy and the replacement for an inexact dtype - the dtype decision lives there, below the facade
+            // (ratchet R1). Without a mask nanmax IS np.amax of the operand itself.
+            NDArray replaced = NDArray.ReplaceNaN(a, isMax ? double.NegativeInfinity : double.PositiveInfinity, out NDArray mask);
+            if (mask is null)
+                return MatrixExtreme(a, axis, @out, keepdims, initial, @where, isMax);
 
             // res = np.amax(a, axis=axis, out=out, **kwargs): the matrix method's rules, its TypeErrors and its
-            // AttributeError for a plain out (raised before the all-NaN check below, so such an out keeps -inf / +inf).
+            // AttributeError for a plain out (raised before the all-NaN check below, so such an out keeps -inf / +inf). The
+            // copy reaches them as a matrix view, as NumPy's subok copy is a matrix.
             NDArray res = MatrixExtreme(NDMatrix.FromWrapped(replaced), axis, @out, keepdims, initial, @where, isMax);
 
             // mask = np.all(mask, axis=axis): matrix.all is ndarray.all(keepdims=True)._collapse(axis), the scalar without
