@@ -102,6 +102,42 @@ namespace NumSharp.Tests.APIs
         }
 
         /// <summary>
+        ///     <c>np.nested_iters([], [[0], [1]])</c> is NumPy's <c>ValueError: Must provide at least one operand</c>
+        ///     (<c>npyiter_prepare_ops</c>). It used to be a plain <see cref="ArgumentException"/>, the base class of
+        ///     NumSharp's <see cref="ValueError"/>, so a caller catching ValueError missed it (the np-layer plan's NL5).
+        /// </summary>
+        [TestMethod]
+        public void NoOperand_IsNumPysValueError()
+        {
+            var e = Assert.ThrowsException<ValueError>(() => np.nested_iters(new NDArray[0], new[] { new[] { 0 }, new[] { 1 } }));
+            Assert.AreEqual("Must provide at least one operand", e.Message);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>NpyIter_NestedIters</c> converts <c>flags</c>, <c>order</c> and <c>casting</c> while it parses its
+        ///     arguments (<c>PyArg_ParseTupleAndKeywords</c> with <c>NpyIter_GlobalFlagsConverter</c>,
+        ///     <c>PyArray_OrderConverter</c>, <c>PyArray_CastingConverter</c>), BEFORE it reads <c>axes</c> or the operands, so a
+        ///     bad converter value wins over a one-level <c>axes</c> (NumPy's "axes must have at least 2 entries") and over an
+        ///     empty operand list. NumPy 2.4.2 probed; NumSharp checked axes, then the operands, then the converters (NL5).
+        /// </summary>
+        [TestMethod]
+        public void Converters_RunBeforeTheAxesAndOperandChecks()
+        {
+            var a = np.arange(6).reshape(2, 3);
+            int[][] oneLevel = { new[] { 0 } };
+
+            var flag = Assert.ThrowsException<ValueError>(() => np.nested_iters(a, oneLevel, flags: new[] { "bogus" }));
+            Assert.AreEqual("Unexpected iterator global flag \"bogus\"", flag.Message);
+            var order = Assert.ThrowsException<ValueError>(() => np.nested_iters(a, oneLevel, order: 'Q'));
+            Assert.AreEqual("order must be one of 'C', 'F', 'A', or 'K' (got 'Q')", order.Message);
+            var casting = Assert.ThrowsException<ValueError>(() => np.nested_iters(a, oneLevel, casting: "bogus"));
+            Assert.AreEqual("casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe' (got 'bogus')", casting.Message);
+            var flagNoOperand = Assert.ThrowsException<ValueError>(
+                () => np.nested_iters(new NDArray[0], new[] { new[] { 0 }, new[] { 1 } }, flags: new[] { "bogus" }));
+            Assert.AreEqual("Unexpected iterator global flag \"bogus\"", flagNoOperand.Message);
+        }
+
+        /// <summary>
         ///     An axis past the operand's rank is refused when that level's iterator is built, with NumPy's shape-pass
         ///     ValueError (<c>npyiter_fill_axisdata</c>, trailing space included). It used to be the engine's
         ///     IncorrectShapeException with a house text; np.nditer's wrapper now runs NumPy's shape pass first.

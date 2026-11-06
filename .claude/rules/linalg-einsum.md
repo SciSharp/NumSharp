@@ -150,14 +150,20 @@ parser).
   1 dtype, according to the rule 'safe'`; out is operand `nop` in NumPy's numbering), all before anything is computed.
   A text `out=` goes to the text refusal, which takes the out into the common dtype and its casts. A same-rank `out=`
   extent mismatch is worded about the contraction (`einsum() output parameter has shape (…) but the contraction
-  produces (…)`) where NumPy leaks NpyIter's "remapped shapes" text.
+  produces (…)`) where NumPy leaks NpyIter's "remapped shapes" text; an extent that conflicts with an output label's
+  (one other than 1) is refused right after the read-only check, before every cast check, as NumPy's iterator broadcasts
+  the out first. Open (`OpenBugs.NpLayer.cs`, NL14): NumPy broadcasts an output label of extent 1 up to the out's
+  extent, and with `optimize=` other than False hands the out to its last contraction step (an int32 out of a float64
+  contraction is accepted there).
 - `order=` resolves the computed result's layout: `'A'` and `'K'` give F-contiguous when every input is F-contiguous (an
   all-F matmul, hadamard or 3-operand chain is F even at the default `'K'`), C otherwise.
 - The grammar half of the parse is cached by `(subscripts, operand ranks)` in a 4096-entry `ConcurrentDictionary`
   (NumPy caches its equation parse the same way, `lru_cache(2**12)`); the extent/diagonal validation runs per call
   against the shared immutable grammar.
 - NumPy has two einsum parsers (the C one behind `optimize=False`, a Python one in `einsumfunc.py`) that word the same
-  rejection differently; NumSharp reproduces the C one whatever `optimize` says.
+  rejection differently; NumSharp reproduces the C one whatever `optimize` says, except that an explicit path is planned
+  first (`EinsumPathPlanner.Compute`, as NumPy's einsum calls `einsum_path` before anything else), so the planner's texts
+  and errors come first for it.
 - The label encoding is NumPy's: one `sbyte` per operand dimension; positive = the label's ASCII code at first
   occurrence, negative = the offset back to that first occurrence (a repeated label, a diagonal), 0 = a broadcast
   dimension from an ellipsis (`"abbcbc"` → `[97,98,-1,99,-3,-2]`).
@@ -192,7 +198,9 @@ parser).
   no len()"; a bool memory limit is Python's int, accepted). `np.einsum` runs the same resolution
   (`EinsumPathPlanner.ResolveOptimize`) for any `optimize` but `False`, first, before the operands, `order=` and
   `casting=`, as NumPy's `einsum` calls `einsum_path` before `c_einsum`. The returned `EinsumPath` round-trips into
-  `np.einsum(…, optimize: path)`, which validates it but still contracts pairwise left to right. The cost model is `BigInteger` (NumPy uses Python ints: products past `long` would
+  `np.einsum(…, optimize: path)`, which plans it first (an incomplete path's `RuntimeError`, a position past the operands'
+  `IndexError: pop index out of range`, an ellipsis without its operand's `IndexError: list index out of range`) but
+  still contracts pairwise left to right. The cost model is `BigInteger` (NumPy uses Python ints: products past `long` would
   wrap and derail the comparisons); extents stay `long`. The `.3e` FLOP/size formatting rounds half to even like Python
   (.NET's `"0.000e+00"` rounds half away). Ellipsis placeholder letters are drawn deterministically (NumPy's come from a
   hash-randomized set; only those display letters differ). `einsum_call=True` is not ported (NumPy-internal).

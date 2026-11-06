@@ -25,11 +25,19 @@ namespace NumSharp.Backends
 
             // NumPy's einsum hands any optimize= but False to einsum_path, whose path_type check runs before c_einsum
             // looks at the operands, order= or casting=.
-            RequireOptimize(optimize);
+            EinsumPathPlanner.Directive? directive = RequireOptimize(optimize);
 
             if (operands is null || operands.Length == 0)
                 throw new ValueError(
                     "must specify the einstein sum subscripts string and at least one operand");
+
+            // An explicit path (optimize=['einsum_path', ...] or an EinsumPath): einsum_path builds its contraction list
+            // before c_einsum runs, and refuses a path that leaves more than one operand ("Invalid einsum_path is
+            // specified: 1 more operands has to be contracted.", a RuntimeError) - so that check, and the planner's own,
+            // come before order=, casting= and out=. NumSharp contracts left to right whatever the path says, so only the
+            // plan's checks are used.
+            if (directive is { ExplicitPath: not null } explicitPath)
+                EinsumPathPlanner.Compute(subscripts, EinsumPathShapes(operands), explicitPath);
 
             order = Backends.GufuncGuard.RequireOrder(order);   // a lowercase letter is NumPy's too
             Backends.GufuncGuard.RequireCasting(casting);
@@ -77,6 +85,15 @@ namespace NumSharp.Backends
             // resolved: a read-only out raises NpyIter's text, not np.copyto's at the end.
             if (@out is not null)
                 NumSharpException.ThrowIfNotWriteable(@out.Shape, "operand array with iterator write flag set");
+
+            // The iterator then broadcasts the out with the operands (npyiter_fill_axisdata) - before it resolves the common
+            // dtype or checks a cast. An out extent that conflicts with an output label's extent (one other than 1; NumPy
+            // would broadcast an extent of 1 up to the out's) is that broadcast error, so it precedes every TypeError below.
+            // NumPy leaks the iterator's "remapped shapes" text; NumSharp words it about the contraction, as below.
+            if (@out is not null && plan.OutConflicts(@out.Shape.dimensions))
+                throw new ValueError(
+                    $"einsum() output parameter has shape ({string.Join(",", @out.Shape.dimensions)}) " +
+                    $"but the contraction produces ({string.Join(",", plan.OutputDims())})");
 
             // Text (an operand, a string dtype= request, or a text out=) has no sum-of-products: after the parse and
             // the view path above (which hands text back as a view, as NumPy does), NumPy's common dtype, its
@@ -668,16 +685,17 @@ namespace NumSharp.Backends
         ///     <c>True</c>, any string, an explicit path (an <see cref="EinsumPath"/> or a list headed
         ///     <c>'einsum_path'</c>) and a <c>(string, int | float)</c> pair (a bool is an int there), and refuse the rest:
         ///     the same resolution <c>np.einsum_path</c> runs (<c>EinsumPathPlanner.ResolveOptimize</c>). NumSharp contracts left to right
-        ///     whatever the path says, so the resolved directive is dropped.
+        ///     whatever the path says; the caller uses the directive only to check an explicit path as NumPy does.
         /// </summary>
         /// <param name="optimize">The <c>optimize=</c> argument.</param>
+        /// <returns>The resolved directive, or null for <c>False</c> / null (no planning).</returns>
         /// <exception cref="TypeError">A number (<c>object of type 'int' has no len()</c>: NumPy's <c>len(path_type)</c>),
         ///     or any other value NumPy does not understand (<c>Did not understand the path: ...</c>).</exception>
-        private static void RequireOptimize(object optimize)
+        private static EinsumPathPlanner.Directive? RequireOptimize(object optimize)
         {
             if (optimize is null || optimize is false)
-                return;
-            EinsumPathPlanner.ResolveOptimize(optimize);
+                return null;
+            return EinsumPathPlanner.ResolveOptimize(optimize);
         }
 
         /// <summary>

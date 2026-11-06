@@ -23,6 +23,11 @@ namespace NumSharp
         /// <param name="order">Iteration order ('C'/'F'/'A'/'K').</param>
         /// <param name="casting">Casting rule.</param>
         /// <param name="buffersize">Buffer size (applied to the innermost level only, as in NumPy).</param>
+        /// <returns>One iterator per level of <paramref name="axes"/>, outermost first.</returns>
+        /// <exception cref="ValueError">In NumPy's order: a flag, order or casting value its converters refuse (they run
+        ///     while the arguments are parsed, before anything else); <paramref name="axes"/> that is null, has fewer than
+        ///     two entries, a null entry, a negative axis or an axis used twice; no operand (<c>Must provide at least one
+        ///     operand</c>); then the iterator construction's own errors.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.nested_iters.html
         ///     <para>
@@ -45,6 +50,13 @@ namespace NumSharp
             string[] flags = null, string[][] op_flags = null, DType[] op_dtypes = null,
             char order = 'K', string casting = "safe", long buffersize = 0)
         {
+            // NumPy's PyArg_ParseTupleAndKeywords runs the flags, order and casting converters (NpyIter_GlobalFlagsConverter,
+            // PyArray_OrderConverter, PyArray_CastingConverter) while it parses the arguments, so their errors come before
+            // every axes and operand check. The parsed values are re-derived where the levels are built.
+            NDIterator.ParseGlobalFlags(flags);
+            NDIterator.ParseOrder(order);
+            NDIterator.ParseCasting(casting);
+
             // --- axes validation (verbatim NumPy messages, NpyIter_NestedIters order) ---
             if (axes == null)
                 throw new ValueError("axes must be a tuple of axis arrays");
@@ -68,8 +80,10 @@ namespace NumSharp
                 }
             }
 
+            // npyiter_prepare_ops' error is a ValueError (NumSharp's ValueError derives from ArgumentException, so a caller
+            // catching either catches it).
             if (op == null || op.Length == 0)
-                throw new ArgumentException("Must provide at least one operand");
+                throw new ValueError("Must provide at least one operand");
             int nop = op.Length;
 
             // Only the innermost level is buffered (and keeps external_loop): NpyIter_NestedIters splits flags_inner

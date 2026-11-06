@@ -99,8 +99,15 @@ namespace NumSharp
         ///     or a result that cannot reach <paramref name="out"/>'s dtype, under <paramref name="casting"/>; text
         ///     outside the view path.</exception>
         /// <exception cref="ValueError">No operand; an <paramref name="order"/> letter or a <paramref name="casting"/>
-        ///     name NumPy refuses, with its texts; malformed subscripts; an <paramref name="out"/> of another shape, or
-        ///     a read-only one. The full list is <see cref="TensorEngine.Einsum"/>'s.</exception>
+        ///     name NumPy refuses, with its texts; malformed subscripts; an <paramref name="out"/> of another shape (before
+        ///     any cast check, as NumPy's iterator broadcasts the out first), or a read-only one. The full list is
+        ///     <see cref="TensorEngine.Einsum"/>'s.</exception>
+        /// <exception cref="RuntimeError">An explicit path (<c>optimize: new object[] { "einsum_path", ... }</c> or an
+        ///     <see cref="EinsumPath"/>) that leaves operands uncontracted: <c>np.einsum_path</c>'s text, checked before
+        ///     <paramref name="order"/>, <paramref name="casting"/> and <paramref name="out"/>, as NumPy's einsum plans
+        ///     first.</exception>
+        /// <exception cref="IndexError">An explicit path, or an ellipsis, naming an operand that is not there
+        ///     (<c>np.einsum_path</c>'s <c>pop index out of range</c> / <c>list index out of range</c>).</exception>
         public static NDArray einsum(string subscripts, NDArray[] operands, NDArray @out = null,
             DType dtype = null, char order = 'K', string casting = "safe", object optimize = null)
         {

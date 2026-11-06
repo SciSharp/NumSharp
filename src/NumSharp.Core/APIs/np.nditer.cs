@@ -335,7 +335,9 @@ namespace NumSharp
             /// <param name="flags">The flag strings, or null for none.</param>
             /// <returns>The flags.</returns>
             /// <exception cref="ValueError"><c>Unexpected iterator global flag "x"</c> (per-operand flags included).</exception>
-            private static NDIterGlobalFlags ParseGlobalFlags(string[] flags)
+            /// <remarks>Internal for <see cref="nested_iters(NDArray[], int[][], string[], string[][], DType[], char, string, long)"/>,
+            ///     whose argument parser runs the converters before any other check, as NumPy's does.</remarks>
+            internal static NDIterGlobalFlags ParseGlobalFlags(string[] flags)
             {
                 var result = NDIterGlobalFlags.None;
                 if (flags == null)
@@ -1016,14 +1018,16 @@ namespace NumSharp
             /// <returns>The order.</returns>
             /// <exception cref="ValueError"><c>order must be one of 'C', 'F', 'A', or 'K' (got '…')</c>.</exception>
             /// <remarks>It refused the lowercase letters, which NumPy's parser accepts (probed 2.4.2:
-            ///     <c>np.nditer(a, order='f')</c> iterates in F order).</remarks>
-            private static NPY_ORDER ParseOrder(char order) => OrderResolver.Convert(order);
+            ///     <c>np.nditer(a, order='f')</c> iterates in F order). Internal for np.nested_iters, whose argument parser
+            ///     runs the converters before any other check.</remarks>
+            internal static NPY_ORDER ParseOrder(char order) => OrderResolver.Convert(order);
 
             /// <summary>NumPy's <c>PyArray_CastingConverter</c> for the casting rule.</summary>
             /// <param name="casting">The casting string.</param>
             /// <returns>The rule.</returns>
             /// <exception cref="ValueError"><c>casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe' (got '…')</c>.</exception>
-            private static NPY_CASTING ParseCasting(string casting)
+            /// <remarks>Internal for np.nested_iters, whose argument parser runs the converters before any other check.</remarks>
+            internal static NPY_CASTING ParseCasting(string casting)
             {
                 switch (casting)
                 {

@@ -27,9 +27,11 @@ namespace NumSharp.Tests
     //   NL4  FIXED (the plan's D24, 2026-11-06): 1-D np.polyval with complex coefficients and an infinite real x gave
     //        NaN+NaNj where NumPy keeps the coefficient's imaginary part (its first product is in x's dtype); its tests
     //        moved to PolynomialTests.Polyval_FirstProduct_IsInXsDtype.
-    //   NL5  argument checks in another order than NumPy's: np.nested_iters' converters (and the type of its
-    //        no-operand error), np.einsum's out= extent check after its cast check, np.einsum's explicit path not
-    //        checked for completeness.
+    //   NL5  FIXED (the plan's D24, 2026-11-06): argument checks in another order than NumPy's - np.nested_iters ran its
+    //        converters after the axes and operand checks (and raised its no-operand error as a plain ArgumentException),
+    //        np.einsum checked its out= extent after the cast, and contracted an explicit path without planning it. Its
+    //        tests moved to np_nested_iters_tests (NoOperand_IsNumPysValueError, Converters_RunBeforeTheAxesAndOperandChecks)
+    //        and EinsumPathTests (Einsum_ExplicitPath_IsPlannedFirst, Einsum_OutExtentError_PrecedesTheCastError).
     //   NL6  FIXED by parity QA-45 (78b122b0): np.array of a ragged jagged C# array (int[][], double[][], ...) truncated or
     //        threw IndexOutOfRangeException where NumPy raises its inhomogeneous-shape ValueError; its test stays below as
     //        the regression pin, without [OpenBugs].
@@ -65,6 +67,14 @@ namespace NumSharp.Tests
     //        error, where NumPy calls the matrix method (matrix.max(axis, out)); the nan forms now take NumPy's subclass
     //        branch too. Its tests moved to MaxMinKeywordTests (MaxMinFamily_MatrixOperand_FollowsTheMatrixMethod,
     //        NanMaxNanMin_MatrixOperand_TakesNumPysSubclassBranch).
+    //   NL14 np.einsum's out= rules are c_einsum's iterator rules minus its broadcast, whatever optimize= says: NumPy's
+    //        iterator broadcasts an output label of extent 1 up to the out's extent (np.einsum('ij->ij', ones((1, 4)),
+    //        out=empty((3, 4))) fills every row) where NumSharp refuses with its contraction-shape text; and with optimize=
+    //        other than False NumPy plans first (einsum_path's parser texts for every parse error) and hands the out to the
+    //        last contraction step (bmm_einsum / c_einsum), which accepts an int32 out of a float64 contraction under
+    //        casting='safe' and refuses a misshapen out with "could not broadcast input array from shape (2,4) into shape
+    //        (2,5)". NumSharp keeps the C parser's texts (linalg-einsum.md) and c_einsum's out checks for every optimize=;
+    //        an explicit path is planned first since NL5. Found by NL5's fix (2026-11-06).
     //   NL3 also covers the axis products: an axis np.prod of float32 / float64 multiplies a row in SIMD lane order too
     //        (and so does the out= route, which computes the plain product); np.prod with initial= or a mask runs
     //        NumPy's sequential loop and is exact. Found by P10 item 1's reduce_kwargs cells (carved there).
@@ -201,89 +211,6 @@ namespace NumSharp.Tests
                 .WithMessage("operands could not be broadcast together with remapped shapes [original->remapped]: (2,)  and requested shape (3,)");
             new Action(() => np.broadcast_to(np.ones(new Shape(2, 3)), new Shape(3))).Should().Throw<IncorrectShapeException>()
                 .WithMessage("input operand has more dimensions than allowed by the axis remapping");
-        }
-
-        // ------------------------------------------------------------------
-        // NL5 — argument checks in another order than NumPy's
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     <c>np.nested_iters([], [[0], [1]])</c>: NumPy raises <c>ValueError: Must provide at least one operand</c>.
-        ///     NumSharp raises the same text as an <see cref="ArgumentException"/> (APIs/np.nested_iters.cs), the base class
-        ///     of NumSharp's <see cref="ValueError"/>, so a caller catching ValueError misses it.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL5")]
-        public void NpLayer_NestedIters_NoOperand_ShouldRaiseValueError()
-        {
-            Action act = () => np.nested_iters(new NDArray[0], new[] { new[] { 0 }, new[] { 1 } });
-
-            act.Should().Throw<ValueError>().WithMessage("Must provide at least one operand");
-        }
-
-        /// <summary>
-        ///     NumPy's <c>NpyIter_NestedIters</c> converts <c>flags</c>, <c>order</c> and <c>casting</c> while it parses its
-        ///     arguments (<c>PyArg_ParseTupleAndKeywords</c> with <c>NpyIter_GlobalFlagsConverter</c>,
-        ///     <c>PyArray_OrderConverter</c>, <c>PyArray_CastingConverter</c>), BEFORE it reads <c>axes</c> or the operands. So
-        ///     a bad converter value wins over a bad <c>axes</c> and over an empty operand list. NumSharp checks <c>axes</c>
-        ///     first, then the operands, and only then the converters: each call below raises the axes error or the
-        ///     no-operand error instead.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL5")]
-        public void NpLayer_NestedIters_ConvertersShouldRunBeforeTheAxesAndOperandChecks()
-        {
-            using var a = np.arange(6).reshape(2, 3);
-            int[][] oneLevel = { new[] { 0 } };   // NumPy: "axes must have at least 2 entries for nested iteration"
-
-            Action badFlag = () => np.nested_iters(a, oneLevel, flags: new[] { "bogus" });
-            Action badOrder = () => np.nested_iters(a, oneLevel, order: 'Q');
-            Action badCasting = () => np.nested_iters(a, oneLevel, casting: "bogus");
-            Action badFlagNoOperand = () => np.nested_iters(new NDArray[0], new[] { new[] { 0 }, new[] { 1 } }, flags: new[] { "bogus" });
-
-            badFlag.Should().Throw<ValueError>().WithMessage("Unexpected iterator global flag \"bogus\"");
-            badOrder.Should().Throw<ValueError>().WithMessage("order must be one of 'C', 'F', 'A', or 'K' (got 'Q')");
-            badCasting.Should().Throw<ValueError>().WithMessage("casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe' (got 'bogus')");
-            badFlagNoOperand.Should().Throw<ValueError>().WithMessage("Unexpected iterator global flag \"bogus\"");
-        }
-
-        /// <summary>
-        ///     <c>np.einsum('ij->i', ones((3, 4)), out=empty(5, int32))</c>: the out has both a wrong extent and a dtype the
-        ///     result may not be cast to under 'safe'. NumPy's iterator reports the broadcast first (<c>ValueError: operands
-        ///     could not be broadcast together with remapped shapes [original->remapped]: (3,4)->(3,4) (5,)->(5,newaxis)</c>).
-        ///     NumSharp raises the cast's <see cref="TypeError"/>: its extent check runs after the contraction and after the
-        ///     cast check (<c>DefaultEngine.Einsum</c>, Backends/Default/LinearAlgebra/Default.Einsum.cs). The test asserts
-        ///     the exception type only: for an extent alone NumSharp words the error about the contraction on purpose
-        ///     ("einsum() output parameter has shape (5) but the contraction produces (3)").
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL5")]
-        public void NpLayer_Einsum_OutExtentError_ShouldPrecedeTheCastError()
-        {
-            using var a = np.ones(new Shape(3, 4));
-            using var o = np.empty(new Shape(5), np.int32);
-
-            Action act = () => np.einsum("ij->i", new[] { a }, @out: o);
-
-            act.Should().Throw<ValueError>();
-        }
-
-        /// <summary>
-        ///     An explicit <c>optimize=['einsum_path', (0, 1)]</c> for three operands contracts only two of them. NumPy's
-        ///     <c>einsum_path</c> checks that one operand is left after the path and raises <c>RuntimeError: Invalid
-        ///     einsum_path is specified: 1 more operands has to be contracted.</c>; so does a path of no steps for two
-        ///     operands. NumSharp's np.einsum returns the full contraction for both (np.einsum_path itself raises NumPy's
-        ///     error; np.einsum does not ask it).
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL5")]
-        public void NpLayer_Einsum_IncompleteExplicitPath_ShouldRaiseRuntimeError()
-        {
-            using var a = np.ones(new Shape(2, 3));
-            using var b = np.ones(new Shape(3, 4));
-            using var c = np.ones(new Shape(4, 5));
-
-            Action threeOperands = () => np.einsum("ij,jk,kl->il", new[] { a, b, c }, optimize: new object[] { "einsum_path", new[] { 0, 1 } });
-            Action noStep = () => np.einsum("ij,jk->ik", new[] { a, b }, optimize: new object[] { "einsum_path" });
-
-            threeOperands.Should().Throw<RuntimeError>().WithMessage("Invalid einsum_path is specified: 1 more operands has to be contracted.");
-            noStep.Should().Throw<RuntimeError>().WithMessage("Invalid einsum_path is specified: 1 more operands has to be contracted.");
         }
 
         // ------------------------------------------------------------------
@@ -543,6 +470,57 @@ namespace NumSharp.Tests
         {
             np.isscalar(typeof(int)).Should().BeFalse("np.isscalar(int) is False");
             np.isscalar(typeof(double)).Should().BeFalse("np.isscalar(float) is False");
+        }
+
+        // ------------------------------------------------------------------
+        // NL14 — np.einsum's out= rules
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's c_einsum runs one iterator over the operands and the out, which broadcasts an output label of extent 1
+        ///     up to the out's extent: <c>np.einsum('ij-&gt;ij', np.ones((1, 4)), out=np.zeros((3, 4)))</c> fills all three
+        ///     rows with ones, and <c>np.einsum('ij-&gt;i', np.arange(4.).reshape(1, 4), out=np.zeros(3))</c> is
+        ///     <c>[6, 6, 6]</c> (probed). NumSharp refuses both: "einsum() output parameter has shape (3,4) but the
+        ///     contraction produces (1,4)".
+        /// </summary>
+        /// <remarks>Root cause: <c>DefaultEngine.Einsum</c> (src/NumSharp.Core/Backends/Default/LinearAlgebra/
+        ///     Default.Einsum.cs) compares the out's shape with the contraction's and never broadcasts the result into
+        ///     it.</remarks>
+        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL14")]
+        public void NpLayer_Einsum_OutBroadcastsALengthOneOutputLabel()
+        {
+            using var rows = np.zeros(new Shape(3, 4));
+            np.einsum("ij->ij", new[] { np.ones(new Shape(1, 4)) }, @out: rows);
+            rows.ToArray<double>().Should().AllBeEquivalentTo(1.0);
+
+            using var sums = np.zeros(new Shape(3));
+            np.einsum("ij->i", new[] { np.arange(4.0).reshape(1, 4) }, @out: sums);
+            sums.ToArray<double>().Should().Equal(6.0, 6.0, 6.0);
+        }
+
+        /// <summary>
+        ///     With <c>optimize=True</c> NumPy's einsum runs <c>einsum_path</c> first and hands the out to the last
+        ///     contraction step (<c>bmm_einsum</c>), so <c>np.einsum('ij,jk-&gt;ik', ones((2, 3)), ones((3, 4)),
+        ///     out=zeros((2, 4), int32), optimize=True)</c> fills the out with 3 (probed) where the default optimize=False
+        ///     raises the cast TypeError, and two operands for one term are einsum_path's "Number of einsum subscripts must be
+        ///     equal to the number of operands." NumSharp raises the c_einsum TypeError and its C parser's text
+        ///     ("fewer operands provided to einstein sum function than specified in the subscripts string") for every
+        ///     optimize=.
+        /// </summary>
+        /// <remarks>Root cause: <c>DefaultEngine.Einsum</c> applies the c_einsum rules whatever optimize= says, and plans only
+        ///     an explicit path (NL5).</remarks>
+        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL14")]
+        public void NpLayer_Einsum_OptimizeTrue_PlansFirstAndHandsTheOutToTheLastStep()
+        {
+            using var a = np.ones(new Shape(2, 3));
+            using var b = np.ones(new Shape(3, 4));
+            using var o = np.zeros(new Shape(2, 4), np.int32);
+
+            np.einsum("ij,jk->ik", new[] { a, b }, @out: o, optimize: true);
+            o.ToArray<int>().Should().AllBeEquivalentTo(3);
+
+            new Action(() => np.einsum("ij->i", new[] { a, b }, optimize: true))
+                .Should().Throw<ValueError>().WithMessage("Number of einsum subscripts must be equal to the number of operands.");
         }
     }
 }

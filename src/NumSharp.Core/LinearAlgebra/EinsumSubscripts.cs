@@ -23,10 +23,74 @@ namespace NumSharp
         /// </summary>
         internal readonly bool SingleOperandView;
 
-        internal EinsumPlan(EinsumSubscripts grammar, bool singleOperandView)
+        /// <summary>
+        ///     Each label's resolved extent across the operands, indexed by the label's code (-1 for a label no operand
+        ///     carries): the validation's own per-call array, kept so the output's extents can be read without allocating.
+        /// </summary>
+        private readonly long[] _labelExtents;
+
+        /// <summary>The ellipsis block's broadcast extents, in order: the validation's own per-call array.</summary>
+        private readonly long[] _broadcastShape;
+
+        /// <summary>Builds a call's plan.</summary>
+        /// <param name="grammar">The cached grammar.</param>
+        /// <param name="singleOperandView">Whether NumPy answers with a view.</param>
+        /// <param name="labelExtents">The validation's label extents (see <see cref="_labelExtents"/>).</param>
+        /// <param name="broadcastShape">The validation's broadcast extents.</param>
+        internal EinsumPlan(EinsumSubscripts grammar, bool singleOperandView, long[] labelExtents, long[] broadcastShape)
         {
             Grammar = grammar;
             SingleOperandView = singleOperandView;
+            _labelExtents = labelExtents;
+            _broadcastShape = broadcastShape;
+        }
+
+        /// <summary>
+        ///     Whether an <c>out=</c> of these dimensions conflicts with the output the operands give: an output axis whose
+        ///     extent is not 1 and differs from the out's. An extent of 1 never conflicts here, because NumPy's iterator would
+        ///     broadcast it up to the out's (np-layer NL14 pins that NumSharp still refuses it later). Allocation-free: it runs
+        ///     on every <c>np.einsum</c> call with an out.
+        /// </summary>
+        /// <param name="outDims">The out's dimensions; the caller has checked their count (the out's rank).</param>
+        /// <returns>True when NumPy's iterator would refuse the out while it broadcasts it with the operands.</returns>
+        internal bool OutConflicts(long[] outDims)
+        {
+            int broadcastSeen = 0;
+            for (int k = 0; k < outDims.Length; k++)
+            {
+                long expected = OutputExtent(k, ref broadcastSeen);
+                if (expected != 1 && outDims[k] != expected)
+                    return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        ///     The output's extents as the operands give them: each output label's resolved extent, the ellipsis block's
+        ///     broadcast extents in its place. Allocates a new array: use it for an error text, not on the hot path.
+        /// </summary>
+        /// <returns>One extent per output axis.</returns>
+        internal long[] OutputDims()
+        {
+            var dims = new long[Grammar.OutputLabels.Length];
+            int broadcastSeen = 0;
+            for (int k = 0; k < dims.Length; k++)
+                dims[k] = OutputExtent(k, ref broadcastSeen);
+            return dims;
+        }
+
+        /// <summary>The extent of output axis <paramref name="k"/>; output axes must be visited in order.</summary>
+        /// <param name="k">The output axis.</param>
+        /// <param name="broadcastSeen">How many ellipsis axes the earlier output axes took (the output's ellipsis axes are
+        ///     the broadcast block, in order); advanced past this axis when it is one.</param>
+        /// <returns>The extent; 1 for a label no operand gives an extent to.</returns>
+        private long OutputExtent(int k, ref int broadcastSeen)
+        {
+            sbyte label = Grammar.OutputLabels[k];
+            if (label == 0)
+                return _broadcastShape[broadcastSeen++];
+            long extent = _labelExtents[label];
+            return extent < 0 ? 1 : extent;
         }
     }
 
@@ -149,8 +213,8 @@ namespace NumSharp
                     $"but should have {grammar.OutputLabels.Length}"));
 
             bool singleOperandView = operands.Length == 1 && @out is null && grammar.NothingSummed;
-            grammar.ValidateExtents(operands, singleOperandView);
-            return new EinsumPlan(grammar, singleOperandView);
+            var (labelExtents, broadcastShape) = grammar.ValidateExtents(operands, singleOperandView);
+            return new EinsumPlan(grammar, singleOperandView, labelExtents, broadcastShape);
         }
 
         /// <summary>
@@ -498,7 +562,13 @@ namespace NumSharp
         ///     nothing summed) — that attempt has its OWN wording for a bad diagonal, so which of
         ///     the two messages a caller sees depends on all three conditions.
         /// </param>
-        private void ValidateExtents(NDArray[] operands, bool singleOperandView)
+        /// <param name="operands">The call's operands.</param>
+        /// <returns>The arrays the validation filled - each label's resolved extent (indexed by the label's code, -1 for none)
+        ///     and the ellipsis block's broadcast extents - which <see cref="EinsumPlan"/> keeps to read the output's extents
+        ///     without another allocation.</returns>
+        /// <exception cref="ValueError">A diagonal whose dimensions differ, a label whose extents conflict across
+        ///     operands, or ellipsis dimensions that do not broadcast (NumPy's wording, in NumPy's order).</exception>
+        private (long[] labelExtents, long[] broadcastShape) ValidateExtents(NDArray[] operands, bool singleOperandView)
         {
             var extents = new long[128];
             for (int i = 0; i < extents.Length; i++)
@@ -589,6 +659,8 @@ namespace NumSharp
                 }
             }
 
+            // Both arrays are this call's own: the plan keeps them to read the output's extents (EinsumPlan.OutConflicts).
+            return (extents, broadcastShape);
         }
 
         /// <summary>
