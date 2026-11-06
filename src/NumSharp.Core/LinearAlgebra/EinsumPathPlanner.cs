@@ -71,6 +71,18 @@ namespace NumSharp
         ///     individual DIMENSION extents stay <c>long</c> (a single array dimension always fits an
         ///     int64, as it does in NumPy's <c>intp</c> shapes); only the PRODUCTS need bignum.
         /// </remarks>
+        /// <param name="subscripts">The raw subscripts, as the caller wrote them.</param>
+        /// <param name="shapes">Each operand's shape, in operand order.</param>
+        /// <param name="opt">The resolved <c>optimize=</c> (<see cref="ResolveOptimize"/>).</param>
+        /// <returns>The path (NumPy's list of contraction tuples, without the <c>'einsum_path'</c> head) and the info
+        ///     string <c>np.einsum_path</c> prints.</returns>
+        /// <exception cref="ValueError">The parser's rejections and a label whose extents disagree (NumPy's
+        ///     <c>einsumfunc.py</c> texts).</exception>
+        /// <exception cref="IndexError">An ellipsis term with no operand behind it (<c>list index out of range</c>), or an
+        ///     explicit path naming an operand that is not there (<c>pop index out of range</c>).</exception>
+        /// <exception cref="KeyError">An unknown path name (NumPy's verbatim <c>('Path name %s not found', '…')</c>).</exception>
+        /// <exception cref="RuntimeError">An explicit path that leaves more than one operand (<c>Invalid einsum_path is
+        ///     specified: 1 more operands has to be contracted.</c>).</exception>
         internal static (int[][] path, string repr) Compute(string subscripts, long[][] shapes, Directive opt)
         {
             var (inputSubscripts, outputSubscript) = ParseEinsumInput(subscripts, shapes);
@@ -180,8 +192,14 @@ namespace NumSharp
                 var tmpInputs = new List<string>(contractInds.Length);
                 foreach (int x in contractInds)
                 {
-                    tmpInputs.Add(workingList[x]);
-                    workingList.RemoveAt(x);
+                    // NumPy's `input_list.pop(x)`: a negative position counts from the end of the CURRENT list, and one
+                    // outside it is Python's IndexError (an explicit path naming an operand that is not there, e.g. (0, 1)
+                    // for one operand). _find_contraction above ignores such a position, as NumPy's does.
+                    int at = x < 0 ? x + workingList.Count : x;
+                    if ((uint)at >= (uint)workingList.Count)
+                        throw new IndexError("pop index out of range");
+                    tmpInputs.Add(workingList[at]);
+                    workingList.RemoveAt(at);
                 }
 
                 string idxResult;
@@ -331,6 +349,12 @@ namespace NumSharp
         ///     are deterministic (einsum_symbols order); NumPy's are per-process random (see the class
         ///     remarks), but the resolved shape and the path are identical either way.
         /// </summary>
+        /// <param name="subscripts">The subscripts, spaces removed.</param>
+        /// <param name="shapes">The operands' shapes, one per operand.</param>
+        /// <returns>The expanded "in-&gt;out" subscripts.</returns>
+        /// <exception cref="ValueError"><c>Invalid Ellipses.</c>, <c>Ellipses lengths do not match.</c> (NumPy's texts).</exception>
+        /// <exception cref="IndexError"><c>list index out of range</c>: an ellipsis term with no operand behind it (NumPy reads
+        ///     <c>operands[num].shape</c> before einsum_path counts the operands).</exception>
         private static string ExpandEllipses(string subscripts, long[][] shapes)
         {
             string used = subscripts.Replace(".", "").Replace(",", "").Replace("->", "");
@@ -369,6 +393,11 @@ namespace NumSharp
 
                 if (CountChar(sub, '.') != 3 || CountSubstring(sub, "...") != 1)
                     throw new ValueError("Invalid Ellipses.");
+
+                // NumPy reads operands[num].shape here, before einsum_path compares the number of terms with the number
+                // of operands: a term with no operand behind it is Python's IndexError on the operand list.
+                if (num >= shapes.Length)
+                    throw new IndexError("list index out of range");
 
                 int ellipseCount;
                 if (shapes[num].Length == 0)

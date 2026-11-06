@@ -296,6 +296,37 @@ namespace NumSharp.Tests.LinearAlgebra
                 .WithMessage("Invalid einsum_path is specified: 1 more operands has to be contracted.");
         }
 
+        /// <summary>
+        ///     NumPy's <c>_parse_einsum_input</c> expands an ellipsis by reading <c>operands[num].shape</c> for each term that
+        ///     holds one, before einsum_path compares the number of terms with the number of operands, so a term with no
+        ///     operand behind it is Python's <c>IndexError: list index out of range</c> (probed: <c>np.einsum_path("...-&gt;...")</c>
+        ///     and <c>np.einsum_path("...a,...-&gt;...", np.ones(3))</c>). NumSharp's planner let .NET's
+        ///     <see cref="IndexOutOfRangeException"/> escape (the np-layer plan's NL10).
+        /// </summary>
+        [TestMethod]
+        public void EllipsisWithoutItsOperand_RaisesIndexError()
+        {
+            new Action(() => np.einsum_path("...->...", new NDArray[0]))
+                .Should().Throw<IndexError>().WithMessage("list index out of range");
+            new Action(() => np.einsum_path("...a,...->...", new[] { Z(3) }))
+                .Should().Throw<IndexError>().WithMessage("list index out of range");
+        }
+
+        /// <summary>
+        ///     An explicit path naming an operand that is not there: NumPy's <c>_find_contraction</c> skips the position and
+        ///     <c>input_list.pop(x)</c> raises <c>IndexError: pop index out of range</c> (probed:
+        ///     <c>np.einsum_path('ij-&gt;ij', np.ones((1, 4)), optimize=['einsum_path', (0, 1)])</c>). The planner's
+        ///     <c>List.RemoveAt</c> used to leak <see cref="ArgumentOutOfRangeException"/>.
+        /// </summary>
+        [TestMethod]
+        public void ExplicitPathPastTheOperands_RaisesIndexError()
+        {
+            new Action(() => np.einsum_path("ij->ij", new[] { Z(1, 4) }, new EinsumPath(new[] { new[] { 0, 1 } })))
+                .Should().Throw<IndexError>().WithMessage("pop index out of range");
+            new Action(() => np.einsum_path("ij,jk->ik", new[] { Z(2, 3), Z(3, 4) }, new EinsumPath(new[] { new[] { 0, 2 } })))
+                .Should().Throw<IndexError>().WithMessage("pop index out of range");
+        }
+
         [TestMethod]
         public void UnknownPathName_RaisesKeyError()
         {

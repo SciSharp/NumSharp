@@ -46,9 +46,11 @@ namespace NumSharp.Tests
     //        differentiated along its rows in NumPy and refused here, a 0-d p raises len()'s TypeError in NumPy at every
     //        order (0 included), and an N-D p whose extra product does not broadcast raises in NumPy, also at m == 0.
     //        Found by P8's move of polyder onto TensorEngine (434cc8d4), which kept the behaviour.
-    //   NL10 np.einsum_path with an ellipsis and too few operands fails indexing the operand list with .NET's
-    //        IndexOutOfRangeException where NumPy's _parse_einsum_input raises IndexError("list index out of range").
-    //        Found by P8's move of einsum_path onto TensorEngine (d0c7a582), which kept the behaviour.
+    //   NL10 FIXED (the plan's D24, 2026-11-06): np.einsum_path with an ellipsis and too few operands leaked .NET's
+    //        IndexOutOfRangeException where NumPy's _parse_einsum_input raises IndexError("list index out of range"), and
+    //        an explicit path past the operands leaked ArgumentOutOfRangeException where NumPy's pop raises IndexError("pop
+    //        index out of range"). Its tests moved to EinsumPathTests (EllipsisWithoutItsOperand_RaisesIndexError,
+    //        ExplicitPathPastTheOperands_RaisesIndexError).
     //   NL11 np.isscalar answers False for a Half (NumPy's float16 scalar) and a BigInteger (a Python int past int64),
     //        where NumPy answers True, and True for a Type object of a primitive (typeof(int)), where NumPy's isscalar(int)
     //        is False. Found by P8's snapshot tool, whose object operand (18835e6b) first ran np.isscalar over them; the
@@ -496,31 +498,6 @@ namespace NumSharp.Tests
 
             orderZero.Should().Throw<IncorrectShapeException>().WithMessage("operands could not be broadcast together with shapes (2,4) (2,) ");
             orderTwo.Should().Throw<IncorrectShapeException>().WithMessage("operands could not be broadcast together with shapes (0,2) (0,) ");
-        }
-
-        // ------------------------------------------------------------------
-        // NL10 — np.einsum_path with an ellipsis and too few operands
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     NumPy's <c>_parse_einsum_input</c> expands an ellipsis by reading <c>operands[num].shape</c> for each term that
-        ///     holds one, before einsum_path compares the number of terms with the number of operands; a term with no operand
-        ///     behind it raises <c>IndexError: list index out of range</c>. Probed: <c>np.einsum_path("...-&gt;...")</c> and
-        ///     <c>np.einsum_path("...a,...-&gt;...", np.ones(3))</c>. NumSharp's planner indexes its shape array the same way
-        ///     and lets .NET's <see cref="IndexOutOfRangeException"/> ("Index was outside the bounds of the array.") escape.
-        /// </summary>
-        /// <remarks>Root cause: <c>EinsumPathPlanner</c>'s port of <c>_parse_einsum_input</c>
-        ///     (src/NumSharp.Core/LinearAlgebra/EinsumPathPlanner*.cs), reached through <c>DefaultEngine.EinsumPath</c>.</remarks>
-        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL10")]
-        public void NpLayer_EinsumPath_EllipsisWithoutItsOperand_ShouldRaiseIndexError()
-        {
-            using var v = np.ones(new Shape(3));
-
-            Action none = () => np.einsum_path("...->...", new NDArray[0]);
-            Action tooFew = () => np.einsum_path("...a,...->...", new[] { v });
-
-            none.Should().Throw<IndexError>().WithMessage("list index out of range");
-            tooFew.Should().Throw<IndexError>().WithMessage("list index out of range");
         }
 
         // ------------------------------------------------------------------

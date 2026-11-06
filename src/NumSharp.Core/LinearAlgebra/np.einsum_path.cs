@@ -44,7 +44,9 @@ namespace NumSharp
         /// <exception cref="RuntimeError">An explicit path that does not contract every operand.</exception>
         /// <exception cref="TypeError">An <c>optimize</c> NumPy does not understand; the variadic overload's operand that is
         ///     not an NDArray.</exception>
-        /// <exception cref="IndexOutOfRangeException">An ellipsis with no operand to read its rank from.</exception>
+        /// <exception cref="IndexError">An ellipsis with no operand to read its rank from (<c>list index out of
+        ///     range</c>: NumPy's parser reads the operand before it counts them), or an explicit path naming an operand
+        ///     that is not there (<c>pop index out of range</c>).</exception>
         public static (EinsumPath path, string repr) einsum_path(string subscripts, NDArray[] operands)
             => EinsumPathOnEngine(subscripts, operands, "greedy");
 
@@ -109,7 +111,9 @@ namespace NumSharp
         /// <exception cref="KeyError">An unknown path name.</exception>
         /// <exception cref="RuntimeError">An explicit path that does not contract every operand.</exception>
         /// <exception cref="TypeError">An <paramref name="optimize"/> NumPy does not understand.</exception>
-        /// <exception cref="IndexOutOfRangeException">An ellipsis with no operand to read its rank from.</exception>
+        /// <exception cref="IndexError">An ellipsis with no operand to read its rank from (<c>list index out of
+        ///     range</c>: NumPy's parser reads the operand before it counts them), or an explicit path naming an operand
+        ///     that is not there (<c>pop index out of range</c>).</exception>
         private static (EinsumPath path, string repr) EinsumPathOnEngine(string subscripts, NDArray[] operands, object optimize)
         {
             // the first operand's engine; with none (or a null first one) no operand decides, and TensorEngine.Default's
