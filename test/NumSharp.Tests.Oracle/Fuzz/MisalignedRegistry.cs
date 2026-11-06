@@ -744,29 +744,23 @@ namespace NumSharp.Tests.Fuzz
             //       midpoint now uses next = prev+1 (never the ceil collapse) so an inf neighbour
             //       yields NaN exactly as NumPy does. np.median/nanmedian use the mean-of-middle
             //       reduction (not the q=0.5 lerp), matching NumPy's distinct code path.
-            //   Two narrow residuals remain, both non-contractual:
+            //   One narrow residual remains, non-contractual:
             //   (1) the SIGN of a ±0 float result — NumPy's introselect partition orders -0.0 before
             //       +0.0 (a non-IEEE total order NumSharp's QuickSelect does not replicate) and its
             //       clamped-index fix_gamma picks the opposite _lerp branch for
             //       midpoint/averaged_inverted_cdf on a ±0 endpoint; in every such case the VALUE is
             //       zero on both sides, only the sign bit differs (exactly like the fmax/fmin ±0-tie
             //       sign above).
-            //   (2) COMPLEX np.median on a slice carrying a NaN — NumPy's `_median_nancheck`
-            //       propagates NaN through the sort/mean in a way (`nan+0j`, `nan+<imag>j`, …) that
-            //       NumSharp's mean-of-middle complex path does not reproduce. This is median-ONLY:
-            //       complex is not a NumPy percentile/quantile dtype (those raise TypeError), and a
-            //       finite complex median is bit-exact — so the excuse fires only when every
-            //       differing element carries a NaN.
-            //   Both are scoped razor-tight, so any real value divergence still fails the gate.
+            //   (FIXED 2026-11-06, the np-layer plan's NL2) COMPLEX np.median on a slice carrying a NaN
+            //       runs NumPy's `_median_nancheck`: the element NumPy's complex order puts last
+            //       (DefaultEngine.LastNaNInNumPyOrder), so its excuse is gone and every complex median
+            //       case is compared bit for bit.
+            //   It is scoped razor-tight, so any real value divergence still fails the gate.
             if (QuantileOps.Contains(c.Op) && kind == DivergenceKind.Value && diffs.Count > 0)
             {
                 if (diffs.All(d => IsSignedZeroPairFloat(d, tc)))
                     return "median/percentile/quantile: sign of a ±0 result (NumPy's -0<+0 partition "
                          + "order / clamped-index fix_gamma branch) [documented non-contractual]";
-                if (tc == NPTypeCode.Complex
-                    && diffs.All(d => d.Expected.Contains("NaN") || d.Actual.Contains("NaN")))
-                    return "complex median: NumPy _median_nancheck NaN-propagation vs NumSharp "
-                         + "mean-of-middle [documented non-contractual]";
             }
             // (W6-C REMOVED 2026-10-27) np.average's summation-order excuse: its sums are np.sum's add.reduce since step 2
             // of the np.average family (NumPy's composition; the fused weighted-sum kernel's own order is gone), and its

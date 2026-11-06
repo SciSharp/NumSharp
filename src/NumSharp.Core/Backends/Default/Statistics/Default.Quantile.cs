@@ -557,13 +557,15 @@ namespace NumSharp.Backends
                         // on Complex × double which is well-defined).
                         if (a.typecode == NPTypeCode.Complex)
                         {
+                            // np.median (not the NaN-ignoring median) runs NumPy's _median_nancheck per row.
                             ComputeComplexQuantile(
                                 srcBase: (System.Numerics.Complex*)stagedBase,
                                 outer: outerSize, n: n,
                                 method: method,
                                 q: qPtr, nQs: qCopy.Length,
                                 dstBase: (System.Numerics.Complex*)resultRaw.Address,
-                                dstOuterStride: dstOuterStride);
+                                dstOuterStride: dstOuterStride,
+                                medianNaNCheck: medianMean && !ignoreNaN);
                         }
                         else
                         {
@@ -1025,7 +1027,7 @@ namespace NumSharp.Backends
         /// <summary>
         ///     Managed quantile path for <see cref="System.Numerics.Complex"/> inputs.
         ///     Sorts each outer row lexicographically (Real first, Imaginary as
-        ///     tie-break — matches NumPy's complex ordering) then computes each
+        ///     tie-break — matches NumPy's complex ordering for finite values) then computes each
         ///     <paramref name="q"/> via the requested <paramref name="method"/>.
         ///     Continuous methods interpolate between two adjacent sorted values
         ///     via <c>(1-γ)·a + γ·b</c>, which is well-defined for Complex.
@@ -1035,15 +1037,44 @@ namespace NumSharp.Backends
         ///     adequate for typical quantile workloads (np.median, np.percentile)
         ///     which are not in the hot path for most callers.
         /// </summary>
+        /// <param name="srcBase">The staged rows, <paramref name="n"/> contiguous elements each.</param>
+        /// <param name="outer">The row count.</param>
+        /// <param name="n">The elements per row.</param>
+        /// <param name="method">The quantile method.</param>
+        /// <param name="q">The quantiles (fractions).</param>
+        /// <param name="nQs">The quantile count.</param>
+        /// <param name="dstBase">The result: quantile <c>qi</c> of row <c>r</c> at <c>qi * dstOuterStride + r</c>.</param>
+        /// <param name="dstOuterStride">The distance between two quantiles' results (0 for a scalar q).</param>
+        /// <param name="medianNaNCheck">True for <c>np.median</c> (not the NaN-ignoring median): NumPy's
+        ///     <c>_median_nancheck</c> - a row holding a NaN in either part gives the element NumPy's complex order puts last
+        ///     (see <see cref="LastNaNInNumPyOrder"/>) instead of the mean of the middle values.</param>
+        /// <remarks>
+        ///     NumPy's <c>_median</c> partitions with <c>kth</c> including -1 when the dtype supports NaN, so the largest element
+        ///     of its complex order (<c>CDOUBLE_LT</c>: <c>[R + Rj, R + nanj, nan + Rj, nan + nanj]</c>, NaNs last) sits last, and
+        ///     <c>_median_nancheck</c> returns it when it is NaN. .NET's <see cref="double.CompareTo(double)"/> sorts a NaN FIRST,
+        ///     so the sorted row's ends cannot answer it; the NaN element is found by its own scan (a NaN-free row is ordered the
+        ///     same both ways, so its median is unchanged).
+        /// </remarks>
         private static unsafe void ComputeComplexQuantile(
             System.Numerics.Complex* srcBase, long outer, int n,
             QuantileMethod method, double* q, int nQs,
-            System.Numerics.Complex* dstBase, long dstOuterStride)
+            System.Numerics.Complex* dstBase, long dstOuterStride, bool medianNaNCheck = false)
         {
             var scratch = new System.Numerics.Complex[n];
             for (long row = 0; row < outer; row++)
             {
                 System.Numerics.Complex* srcRow = srcBase + row * n;
+                // _median_nancheck: a NaN anywhere in the row makes the median the element NumPy's order puts last.
+                if (medianNaNCheck && n > 0)
+                {
+                    int last = LastNaNInNumPyOrder(srcRow, n);
+                    if (last >= 0)
+                    {
+                        for (int qi = 0; qi < nQs; qi++)
+                            dstBase[qi * dstOuterStride + row] = srcRow[last];
+                        continue;
+                    }
+                }
                 for (int i = 0; i < n; i++) scratch[i] = srcRow[i];
                 Array.Sort(scratch, ComplexLexicographicComparer.Instance);
 
@@ -1054,6 +1085,42 @@ namespace NumSharp.Backends
                     dstBase[qi * dstOuterStride + row] = result;
                 }
             }
+        }
+
+        /// <summary>
+        ///     The position of the element NumPy's complex order puts LAST among a row's NaN-carrying elements (NumPy's
+        ///     <c>CDOUBLE_LT</c>: <c>R + nanj</c> &lt; <c>nan + Rj</c> &lt; <c>nan + nanj</c>, all after every NaN-free value; within
+        ///     <c>R + nanj</c> by the real part, within <c>nan + Rj</c> by the imaginary part), or -1 when the row holds no NaN.
+        /// </summary>
+        /// <param name="row">The row's first element.</param>
+        /// <param name="n">The row's length (at least 1).</param>
+        /// <returns>The index of the NaN element <c>_median_nancheck</c> returns, or -1.</returns>
+        /// <remarks>
+        ///     Probed against NumPy 2.4.2: <c>median([1+nanj, nan+1j, 2+3j])</c> is <c>nan+1j</c>, <c>median([nan+5j, nan+1j, 2])</c>
+        ///     <c>nan+5j</c>, <c>median([1+nanj, 3+nanj, 2])</c> <c>3+nanj</c>, <c>median([nan+nanj, nan+1j, 2])</c> <c>nan+nanj</c>.
+        ///     Between equal keys (the same class and the same non-NaN part, NaN payloads aside) NumPy's partition picks one
+        ///     by its own swaps; this takes the last such element in memory order.
+        /// </remarks>
+        private static unsafe int LastNaNInNumPyOrder(System.Numerics.Complex* row, int n)
+        {
+            int best = -1, bestClass = 0;
+            double bestKey = double.NegativeInfinity;
+            for (int i = 0; i < n; i++)
+            {
+                bool realNaN = double.IsNaN(row[i].Real), imagNaN = double.IsNaN(row[i].Imaginary);
+                if (!realNaN && !imagNaN)
+                    continue;
+                // 1: R + nanj (keyed by the real part), 2: nan + Rj (by the imaginary part), 3: nan + nanj (all equal).
+                int cls = realNaN ? (imagNaN ? 3 : 2) : 1;
+                double key = cls == 1 ? row[i].Real : cls == 2 ? row[i].Imaginary : 0.0;
+                if (cls > bestClass || (cls == bestClass && key >= bestKey))
+                {
+                    best = i;
+                    bestClass = cls;
+                    bestKey = key;
+                }
+            }
+            return best;
         }
 
         private static System.Numerics.Complex ComplexQuantileAtMethod(

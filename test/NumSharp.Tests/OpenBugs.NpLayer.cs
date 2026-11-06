@@ -19,7 +19,9 @@ namespace NumSharp.Tests
     //        xor / not), whose temporary leaves its masked-off slots uninitialized, raised "invalid value encountered in
     //        bool to string cast" at random. Only the selected elements are converted now; its tests moved to
     //        StringDTypeMovementTests.Copyto_WhereMask_ConvertsOnlyTheSelectedElements.
-    //   NL2  np.median of complex data holding a NaN returns the mean of the middle values, not NumPy's NaN element.
+    //   NL2  FIXED (the plan's D24, 2026-11-06): np.median of complex data holding a NaN returned the mean of the middle
+    //        values, not NumPy's NaN element (_median_nancheck); its tests moved to np_median_BattleTests
+    //        (Median_Complex_WithANaN_*), and the oracle's complex-median excuse is gone.
     //   NL3  the flat np.prod of float32 / float64 multiplies in SIMD lane order, not NumPy's sequential order: values
     //        differ by an ULP, and a product that overflows before it meets a zero is NaN on one side and 0 on the other.
     //   NL4  1-D np.polyval with complex coefficients and an infinite real x: NaN+NaNj where NumPy keeps the
@@ -70,71 +72,6 @@ namespace NumSharp.Tests
     // =====================================================================
     public partial class OpenBugs
     {
-        /// <summary>
-        ///     Python's <c>float('nan')</c>: the POSITIVE quiet NaN (0x7FF8000000000000). .NET's <see cref="double.NaN"/> is
-        ///     the negative one (0xFFF8000000000000), so a test that hands NumPy's input to NumSharp builds its NaN from these
-        ///     bits; otherwise an element-returning function (np.median's NaN check) would answer with the other sign.
-        /// </summary>
-        private static readonly double NpLayerPositiveNaN = BitConverter.Int64BitsToDouble(0x7FF8000000000000);
-
-        // ------------------------------------------------------------------
-        // NL2 — complex np.median skips NumPy's _median_nancheck
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     <c>np.median([1+2j, nan+1j, 3, 4+1j])</c>: NumPy 2.4.2 returns <c>nan+1j</c>, the NaN element itself
-        ///     (<c>_median_nancheck</c>: after the partition the complex sort order puts a NaN-carrying element last, and
-        ///     a NaN there replaces the result). NumSharp returns <c>2+1j</c>, the mean of the two middle values, because
-        ///     its complex median path never runs the NaN check. The oracle excuses it today (MisalignedRegistry, "complex
-        ///     median: NumPy _median_nancheck NaN-propagation vs NumSharp mean-of-middle"); drop that excuse with the fix.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL2")]
-        public void NpLayer_Median_ComplexWithANaN_ShouldReturnTheNaNElement()
-        {
-            using var a = np.array(new[] { new Complex(1, 2), new Complex(NpLayerPositiveNaN, 1), new Complex(3, 0), new Complex(4, 1) });
-            using var m = np.median(a);
-
-            var z = (Complex)m.GetValue();
-            BitConverter.DoubleToInt64Bits(z.Real).Should().Be(0x7FF8000000000000);
-            z.Imaginary.Should().Be(1.0);
-        }
-
-        /// <summary>
-        ///     <c>np.median([1+nanj, 2, 3])</c>: the NaN is in the IMAGINARY part. NumPy returns <c>1+nanj</c> (the element);
-        ///     NumSharp returns <c>2+0j</c>, the middle value of the sort with the NaN ignored.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL2")]
-        public void NpLayer_Median_ComplexWithANaNImaginaryPart_ShouldReturnTheNaNElement()
-        {
-            using var a = np.array(new[] { new Complex(1, NpLayerPositiveNaN), new Complex(2, 0), new Complex(3, 0) });
-            using var m = np.median(a);
-
-            var z = (Complex)m.GetValue();
-            z.Real.Should().Be(1.0);
-            BitConverter.DoubleToInt64Bits(z.Imaginary).Should().Be(0x7FF8000000000000);
-        }
-
-        /// <summary>
-        ///     <c>np.median([[1+2j, nan+1j, 3], [4+1j, 5, 6]], axis=1)</c>: NumPy checks every row, giving
-        ///     <c>[nan+1j, 5+0j]</c>; the row without a NaN keeps its median. NumSharp's first row is the middle value of
-        ///     the sort with the NaN ignored.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL2")]
-        public void NpLayer_Median_ComplexWithANaN_AlongAnAxis_ShouldReturnTheNaNElementPerRow()
-        {
-            using var a = np.array(new[,]
-            {
-                { new Complex(1, 2), new Complex(NpLayerPositiveNaN, 1), new Complex(3, 0) },
-                { new Complex(4, 1), new Complex(5, 0), new Complex(6, 0) },
-            });
-            using var m = np.median(a, axis: 1);
-
-            var first = (Complex)m.GetValue(0);
-            BitConverter.DoubleToInt64Bits(first.Real).Should().Be(0x7FF8000000000000);
-            first.Imaginary.Should().Be(1.0);
-            ((Complex)m.GetValue(1)).Should().Be(new Complex(5, 0));
-        }
-
         // ------------------------------------------------------------------
         // NL3 — the flat float32 / float64 np.prod multiplies in SIMD lane order
         // ------------------------------------------------------------------
