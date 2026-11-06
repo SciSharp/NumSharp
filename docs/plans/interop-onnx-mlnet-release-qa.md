@@ -761,9 +761,14 @@ last option "Defer").
 ## 8. Carrying the results to the release
 
 **The follow-ups are merged into `strings` (2026-11-06, the owner: "Merge to strings").** `qa/interop-followups` (33
-commits on `strings` `1bb64586`, P8 and its verification included) merged into `strings` `a88da1d0` as `745ecee2`: made in
-a detached worktree, one conflict (`.claude/rules/interop-packages.md`: `strings`' release state kept, the follow-ups'
-facts carried over), then verified there before `strings` moved - Core unit 23,332 / 23,331 (net10.0 / net8.0, 0 failed),
+commits on `strings` `1bb64586`, P8 and its verification included) merged into `strings` as `ea99ed85` (on
+`ce057928`), followed by `d51ab34c` (NDW021, below). Made in a detached worktree: first at `a88da1d0` (`745ecee2`, one
+conflict - `.claude/rules/interop-packages.md`: `strings`' release state kept, the follow-ups' facts carried over - and
+verified there); `strings` moved 12 commits meanwhile (the np-layer divergence round, Core only, overlapping these
+commits only in the release notes), so the merge was redone on `ce057928`, git's recorded resolution replaying the
+conflict line for line, and verified again: Core unit 23,353 / 23,352 (net10.0 / net8.0, 0 failed), ORT 1.31.1 366 /
+366 (net10.0) and 1.16.0 343 + 23 Inconclusive (net8.0), ML.NET 5.0.1 241 / 241, Tensors 114 / 114, ParquetNet 39 / 39,
+the build analyzers 476 / 476, pythonnet 817 / 817 with CI's filter (net10.0). The first verification - Core unit 23,332 / 23,331 (net10.0 / net8.0, 0 failed),
 ORT 1.16.0 343 + 23 Inconclusive and 1.31.1 366 / 366, ML.NET 2.0.1 241 / 241 and 5.0.1 241 / 241, Tensors 114 / 114,
 ParquetNet 39 / 39, the build analyzers 476 / 476, pythonnet 817 / 819 (the two failures are `strings`' own
 `[OpenBugs]` pins in `ProductsLiveParityTests`, which CI's filter excludes). One clash no text merge could see: the
